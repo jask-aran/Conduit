@@ -66,10 +66,14 @@ sudo apt install -y build-essential python3
 ## Install the recommended PI WEB version
 
 ```bash
-git clone https://github.com/jask-aran/Conduit.git
+git clone --branch agent/add-phase-0-implementations --single-branch https://github.com/jask-aran/Conduit.git
 cd Conduit/phase-0-pi-web
 npm install
 ```
+
+The explicit branch is needed while the implementation is in draft PR #1. After
+the PR is merged, a normal `git clone https://github.com/jask-aran/Conduit.git`
+will contain these folders.
 
 This checkout pins `@jmfederico/pi-web` to `1.202607.0` so the evaluation is
 repeatable.
@@ -272,4 +276,3 @@ npm start
 
 Upstream PI WEB documentation: <https://pi-web.dev/>  
 Upstream source: <https://github.com/jmfederico/pi-web>
-
