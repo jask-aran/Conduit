@@ -8,6 +8,18 @@ LOG_FILE="$STATE_DIR/pi-web.log"
 
 mkdir -p "$STATE_DIR"
 
+if [[ "${1:-}" == "restart" && -f "$PID_FILE" ]]; then
+  old_pid="$(cat "$PID_FILE")"
+  if kill -0 "$old_pid" 2>/dev/null; then
+    kill "$old_pid"
+    for _ in {1..20}; do
+      kill -0 "$old_pid" 2>/dev/null || break
+      sleep 0.25
+    done
+  fi
+  rm -f "$PID_FILE"
+fi
+
 if [[ -f "$PID_FILE" ]]; then
   pid="$(cat "$PID_FILE")"
   if kill -0 "$pid" 2>/dev/null; then
@@ -42,4 +54,3 @@ for _ in {1..30}; do
 done
 
 echo "PI WEB is still starting. Follow logs with: tail -f $LOG_FILE"
-

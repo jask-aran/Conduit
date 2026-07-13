@@ -57,9 +57,15 @@ pi
 /login
 ```
 
-Choose the desired provider and complete its browser authentication. Then open
-the forwarded **Conduit · PI WEB** port from the Codespace's Ports panel. The
-forwarded port is private to your GitHub account by default; keep it private.
+Choose the desired provider and complete its browser authentication. Exit Pi,
+then restart PI WEB so it reloads the authenticated model registry:
+
+```bash
+bash .devcontainer/start-pi-web.sh restart
+```
+
+Open the forwarded **Conduit · PI WEB** port from the Codespace's Ports panel.
+The forwarded port is private to your GitHub account by default; keep it private.
 
 The Codespace is an evaluation host, not an always-on VPS. Its filesystem and Pi
 authentication persist while the Codespace exists, but agents do not continue
