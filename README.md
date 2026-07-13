@@ -38,7 +38,7 @@ Open it from the Windows browser through WSL's localhost forwarding.
 For a disposable web-accessible evaluation environment, create a Codespace from
 the branch containing this README:
 
-<https://codespaces.new/jask-aran/Conduit?ref=agent/add-phase-0-implementations&quickstart=1>
+<https://codespaces.new/jask-aran/Conduit?quickstart=1>
 
 The included devcontainer automatically:
 
@@ -99,14 +99,10 @@ sudo apt install -y build-essential python3
 ## Install the recommended PI WEB version
 
 ```bash
-git clone --branch agent/add-phase-0-implementations --single-branch https://github.com/jask-aran/Conduit.git
+git clone https://github.com/jask-aran/Conduit.git
 cd Conduit/phase-0-pi-web
 npm install
 ```
-
-The explicit branch is needed while the implementation is in draft PR #1. After
-the PR is merged, a normal `git clone https://github.com/jask-aran/Conduit.git`
-will contain these folders.
 
 This checkout pins `@jmfederico/pi-web` to `1.202607.0` so the evaluation is
 repeatable.
