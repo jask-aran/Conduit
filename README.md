@@ -33,6 +33,39 @@ and JSONL bridge—not a byte-for-byte archive.
 Run PI WEB inside WSL2 Ubuntu, where Pi is already installed and authenticated.
 Open it from the Windows browser through WSL's localhost forwarding.
 
+### Fastest path: private GitHub Codespace
+
+For a disposable web-accessible evaluation environment, create a Codespace from
+the branch containing this README:
+
+<https://codespaces.new/jask-aran/Conduit?ref=agent/add-phase-0-implementations&quickstart=1>
+
+The included devcontainer automatically:
+
+- creates a Node.js 22 Debian environment;
+- installs native build tools;
+- installs Pi `0.80.6` from its official npm package;
+- installs the pinned PI WEB dependency;
+- starts the PI WEB session daemon and web server;
+- forwards port `8504` as **Conduit · PI WEB**.
+
+When setup finishes, use the Codespace terminal for the only credential-bearing
+step:
+
+```text
+pi
+/login
+```
+
+Choose the desired provider and complete its browser authentication. Then open
+the forwarded **Conduit · PI WEB** port from the Codespace's Ports panel. The
+forwarded port is private to your GitHub account by default; keep it private.
+
+The Codespace is an evaluation host, not an always-on VPS. Its filesystem and Pi
+authentication persist while the Codespace exists, but agents do not continue
+running while GitHub has stopped the Codespace. PI WEB restarts automatically
+when the Codespace starts again.
+
 ### Prerequisites
 
 - WSL2 with Ubuntu;
