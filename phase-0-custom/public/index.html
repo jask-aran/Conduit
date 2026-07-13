@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Conduit · Pi</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main>
+      <header><span class="mark">C</span><div><h1>Conduit</h1><p>Custom Pi RPC runtime</p></div><button id="new">New chat</button></header>
+      <section id="empty"><h2>Your Pi sessions, through one quiet surface.</h2><p>Start a chat. The agent process remains owned by this server when the browser disconnects.</p></section>
+      <section id="chat" hidden><div id="events"></div><form id="composer"><textarea id="prompt" rows="3" placeholder="Ask Pi…"></textarea><button>Send</button></form></section>
+    </main>
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>
+
