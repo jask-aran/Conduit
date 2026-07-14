@@ -25,7 +25,7 @@ if [[ ! -f dist/index.html ]] || find index.html vite.config.js package.json pac
   echo "Building the current Conduit frontend."
   npm run build
 fi
-nohup npm start >"$LOG_FILE" 2>&1 & pid=$!; echo "$pid" >"$PID_FILE"
+nohup setsid node src/server.js >"$LOG_FILE" 2>&1 </dev/null & pid=$!; echo "$pid" >"$PID_FILE"
 for _ in {1..30}; do
   if is_healthy; then echo "Conduit is ready on forwarded port ${CONDUIT_PORT} (PID $pid)."; echo "Logs: $LOG_FILE"; exit 0; fi
   kill -0 "$pid" 2>/dev/null || { tail -n 100 "$LOG_FILE" >&2; exit 1; }

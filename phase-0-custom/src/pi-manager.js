@@ -3,7 +3,7 @@ import { spawn } from "node:child_process";
 import crypto from "node:crypto";
 import path from "node:path";
 
-export function buildPiArgs({ project, sessionFile = null, model = "", profile }) {
+export function buildPiArgs({ project, sessionFile = null, model = "", thinkingLevel = "", profile }) {
   const args = [
     "--mode", "rpc",
     "--session-dir", project.sessionsDir,
@@ -20,6 +20,7 @@ export function buildPiArgs({ project, sessionFile = null, model = "", profile }
   for (const template of profile.promptTemplates) args.push("--prompt-template", template);
   if (sessionFile) args.push("--session", path.resolve(sessionFile));
   if (model.trim()) args.push("--model", model.trim());
+  if (thinkingLevel.trim()) args.push("--thinking", thinkingLevel.trim());
   return args;
 }
 
@@ -33,7 +34,7 @@ export class PiManager extends EventEmitter {
     this.bySessionFile = new Map();
   }
 
-  create({ project, sessionFile = null, model = "" }) {
+  create({ project, sessionFile = null, model = "", thinkingLevel = "" }) {
     const resolvedFile = sessionFile ? path.resolve(sessionFile) : null;
     if (resolvedFile && this.bySessionFile.has(resolvedFile)) {
       return this.processes.get(this.bySessionFile.get(resolvedFile));
@@ -42,7 +43,7 @@ export class PiManager extends EventEmitter {
       ? crypto.createHash("sha256").update(resolvedFile).digest("hex").slice(0, 24)
       : crypto.randomUUID().replaceAll("-", "").slice(0, 24);
 
-    const args = buildPiArgs({ project, sessionFile: resolvedFile, model, profile: this.profile });
+    const args = buildPiArgs({ project, sessionFile: resolvedFile, model, thinkingLevel, profile: this.profile });
     const child = this.spawnImpl(this.command, args, {
       cwd: project.path,
       stdio: ["pipe", "pipe", "pipe"],
@@ -56,6 +57,7 @@ export class PiManager extends EventEmitter {
       sessionDir: project.sessionsDir,
       sessionFile: resolvedFile,
       model: model.trim() || null,
+      thinkingLevel: thinkingLevel.trim() || null,
       child,
       status: "starting",
       active: false,

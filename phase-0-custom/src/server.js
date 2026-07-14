@@ -1,23 +1,21 @@
-import { execFile } from "node:child_process";
 import http from "node:http";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { promisify } from "node:util";
 import express from "express";
 import { WebSocketServer } from "ws";
 import { loadConfig } from "./config.js";
+import { PiModelCatalog } from "./pi-model-catalog.js";
 import { ProjectStore } from "./project-store.js";
 import { discoverProjectSessions, findSession, messagesFromEntries, projectSessionView } from "./session-store.js";
 import { PiManager } from "./pi-manager.js";
 
-const run = promisify(execFile);
 const config = loadConfig();
 const projects = new ProjectStore(config);
 await projects.initialize();
 const manager = new PiManager({ command: config.piCommand, profile: config.piProfile });
+const modelCatalog = new PiModelCatalog();
 const app = express();
 const dist = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../dist");
-let modelCache = null;
 
 app.use(express.json({ limit: "128kb" }));
 app.get("/healthz", (_request, response) => response.json({ ok: true, filesRoot: config.filesRoot }));
@@ -48,15 +46,13 @@ app.post("/v0/projects", async (request, response, next) => {
   } catch (error) { next(error); }
 });
 
-app.get("/v0/models", async (_request, response) => {
-  if (modelCache) return response.json({ models: modelCache });
+app.get("/v0/models", async (request, response, next) => {
   try {
-    const { stdout } = await run(config.piCommand, ["--list-models"], { timeout: 15_000, maxBuffer: 1024 * 1024 });
-    modelCache = stdout.split("\n").slice(1).map((line) => line.trim().split(/\s{2,}/)).filter((columns) => columns.length >= 2)
-      .map(([provider, id]) => ({ provider, id, spec: `${provider}/${id}`, label: id }));
-    response.json({ models: modelCache });
+    const project = await projects.get(request.query.projectId || "chat");
+    if (!project) return response.status(404).json({ error: "project_not_found" });
+    response.json(await modelCatalog.list(project.path));
   } catch (error) {
-    response.json({ models: [], warning: error.message });
+    next(error);
   }
 });
 
@@ -77,7 +73,12 @@ app.post("/v0/live-sessions", async (request, response, next) => {
     const session = requestedId ? await findSession(await projects.list(), requestedId) : null;
     if (requestedId && !session) return response.status(404).json({ error: "session_not_found" });
     if (session && session.projectId !== project.id) return response.status(409).json({ error: "session_project_mismatch" });
-    const live = manager.create({ project, sessionFile: session?.file, model: request.body?.model || "" });
+    const live = manager.create({
+      project,
+      sessionFile: session?.file,
+      model: request.body?.model || "",
+      thinkingLevel: request.body?.thinkingLevel || "",
+    });
     response.status(201).json({ ...manager.view(live), streamUrl: `/v0/live-sessions/${live.id}/stream` });
   } catch (error) { next(error); }
 });

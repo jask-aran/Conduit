@@ -12,7 +12,7 @@ test("Pi launch arguments disable ambient discovery and load only the repo profi
     skills: ["/repo/phase-0-custom/pi/skills/example"],
     promptTemplates: [],
   };
-  const args = buildPiArgs({ project, profile, model: "openai/gpt:high" });
+  const args = buildPiArgs({ project, profile, model: "openai/gpt", thinkingLevel: "high" });
   for (const flag of ["--no-extensions", "--no-skills", "--no-prompt-templates", "--no-themes", "--no-context-files"]) {
     assert.ok(args.includes(flag), `missing ${flag}`);
   }
@@ -20,6 +20,7 @@ test("Pi launch arguments disable ambient discovery and load only the repo profi
   assert.ok(args.includes("/repo/phase-0-custom/pi/extensions/example.ts"));
   assert.ok(args.includes("/repo/phase-0-custom/pi/skills/example"));
   assert.equal(args[args.indexOf("--tools") + 1], "read,bash");
-  assert.equal(args[args.indexOf("--model") + 1], "openai/gpt:high");
+  assert.equal(args[args.indexOf("--model") + 1], "openai/gpt");
+  assert.equal(args[args.indexOf("--thinking") + 1], "high");
   assert.equal(args.includes(path.join(process.env.HOME || "", ".pi/agent/extensions")), false);
 });
