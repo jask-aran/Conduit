@@ -1,5 +1,7 @@
 # Conduit
 
+[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/jask-aran/Conduit?quickstart=1)
+
 ![architecture](interface_first_platform_architecture.svg)
 
 Conduit is an interface-first personal agent platform. The long-term thesis is
@@ -35,10 +37,14 @@ Open it from the Windows browser through WSL's localhost forwarding.
 
 ### Fastest path: private GitHub Codespace
 
-For a disposable web-accessible evaluation environment, create a Codespace from
-the branch containing this README:
+Use the button above—or this permanent link—to open the evaluation environment:
 
 <https://codespaces.new/jask-aran/Conduit?quickstart=1>
+
+GitHub resumes a matching existing Codespace when one is available and creates
+a fresh one from this repository's devcontainer when it is not. The link remains
+usable after an old Codespace has been stopped or deleted; a newly created
+Codespace will require Pi authentication again.
 
 The included devcontainer automatically:
 
@@ -47,6 +53,8 @@ The included devcontainer automatically:
 - installs Pi `0.80.6` from its official npm package;
 - installs the pinned PI WEB dependency;
 - starts the PI WEB session daemon and web server;
+- verifies PI WEB is healthy on every Codespace start and replaces stale
+  processes automatically;
 - forwards port `8504` as **Conduit · PI WEB**.
 
 When setup finishes, use the Codespace terminal for the only credential-bearing
@@ -58,7 +66,9 @@ pi
 ```
 
 Choose the desired provider and complete its browser authentication. Exit Pi,
-then restart PI WEB so it reloads the authenticated model registry:
+then restart PI WEB so it reloads the authenticated model registry. This
+restart is needed for newly authenticated models to appear; authentication is
+not required for the web UI itself to start:
 
 ```bash
 bash .devcontainer/start-pi-web.sh restart
