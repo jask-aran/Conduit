@@ -1,5 +1,5 @@
 {
-  "name": "Conduit Phase 0 — PI WEB",
+  "name": "Conduit Phase 0 — Pi Tau",
   "image": "mcr.microsoft.com/devcontainers/javascript-node:1-22-bookworm",
   "features": {
     "ghcr.io/devcontainers/features/common-utils:2": {
@@ -8,21 +8,28 @@
       "upgradePackages": false
     }
   },
-  "forwardPorts": [8504],
+  "forwardPorts": [3001, 8504],
   "portsAttributes": {
+    "3001": {
+      "label": "Conduit · Pi Tau",
+      "onAutoForward": "openBrowser",
+      "protocol": "http"
+    },
     "8504": {
       "label": "Conduit · PI WEB",
-      "onAutoForward": "openBrowser",
+      "onAutoForward": "silent",
       "protocol": "http"
     }
   },
   "containerEnv": {
     "PI_WEB_HOST": "0.0.0.0",
     "PI_WEB_PORT": "8504",
-    "PI_WEB_ALLOWED_HOSTS": "true"
+    "PI_WEB_ALLOWED_HOSTS": "true",
+    "TAU_HOST": "0.0.0.0",
+    "TAU_PORT": "3001",
+    "TAU_PROJECTS_DIR": "/workspaces"
   },
   "postCreateCommand": "bash .devcontainer/setup.sh",
-  "postStartCommand": "bash .devcontainer/start-pi-web.sh",
+  "postStartCommand": "bash .devcontainer/start-pi-tau.sh && bash .devcontainer/start-pi-web.sh",
   "remoteUser": "node"
 }
-
