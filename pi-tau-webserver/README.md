@@ -1,4 +1,4 @@
-# Phase 0: Pi Tau Web Server
+# Pi Tau Web Server evaluation
 
 This folder evaluates
 [`milanglacier/pi-tau-web-server`](https://github.com/milanglacier/pi-tau-web-server)
