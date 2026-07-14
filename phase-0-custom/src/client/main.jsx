@@ -10,6 +10,20 @@ const api = async (url, options) => {
 };
 const Icon = ({ children, size = 18 }) => <span className="icon" style={{ fontSize: size }}>{children}</span>;
 const time = (value) => value ? new Date(value).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "";
+const findLastMessage = (items, predicate) => {
+  for (let index = items.length - 1; index >= 0; index -= 1) if (predicate(items[index])) return index;
+  return -1;
+};
+
+class AppErrorBoundary extends React.Component {
+  constructor(props) { super(props); this.state = { error: null }; }
+  static getDerivedStateFromError(error) { return { error }; }
+  componentDidCatch(error, details) { console.error("Conduit UI crashed", error, details); }
+  render() {
+    if (!this.state.error) return this.props.children;
+    return <div className="crash-screen"><div><i /><h1>Conduit hit a UI error</h1><p>{this.state.error.message || "The interface could not continue."}</p><button onClick={() => location.reload()}>Reload Conduit</button></div></div>;
+  }
+}
 
 function RichText({ text = "" }) {
   const parts = text.split(/```([\w-]*)\n([\s\S]*?)```/g);
@@ -60,7 +74,9 @@ function App() {
     })().catch((e) => setError(e.message));
     api("/v0/models").then((x) => setModels(x.models)).catch(() => {});
   }, []);
-  useEffect(() => bottom.current?.scrollIntoView({ behavior: "smooth" }), [messages, tools, streaming]);
+  useEffect(() => {
+    if (typeof bottom.current?.scrollIntoView === "function") bottom.current.scrollIntoView({ behavior: "smooth" });
+  }, [messages, tools, streaming]);
   useEffect(() => () => ws.current?.close(), []);
   const project = data.projects.find((item) => item.id === projectId) || data.projects[0];
   const selected = data.projects.flatMap((item) => item.sessions).find((item) => item.id === selectedId);
@@ -73,11 +89,11 @@ function App() {
     }
     const delta = event.assistantMessageEvent;
     if (event.type === "message_update" && delta?.type === "text_delta") {
-      setMessages((old) => { const copy = [...old]; const i = copy.findLastIndex((x) => x.role === "assistant"); if (i >= 0) copy[i] = { ...copy[i], content: copy[i].content + delta.delta }; return copy; });
+      setMessages((old) => { const copy = [...old]; const i = findLastMessage(copy, (x) => x.role === "assistant"); if (i >= 0) copy[i] = { ...copy[i], content: copy[i].content + delta.delta }; return copy; });
     }
     if (event.type === "message_end" && event.message?.role === "assistant") {
       const content = Array.isArray(event.message.content) ? event.message.content.filter((x) => x.type === "text").map((x) => x.text).join("\n") : String(event.message.content || "");
-      setMessages((old) => { const copy = [...old]; const i = copy.findLastIndex((x) => x.role === "assistant"); if (i >= 0) copy[i] = { ...copy[i], content }; else copy.push({ id: `end_${Date.now()}`, role: "assistant", content }); return copy; });
+      setMessages((old) => { const copy = [...old]; const i = findLastMessage(copy, (x) => x.role === "assistant"); if (i >= 0) copy[i] = { ...copy[i], content }; else copy.push({ id: `end_${Date.now()}`, role: "assistant", content }); return copy; });
     }
     if (event.type === "tool_execution_start") setTools((old) => [...old, { id: event.toolCallId, name: event.toolName, args: event.args, done: false }]);
     if (event.type === "tool_execution_end") setTools((old) => old.map((x) => x.id === event.toolCallId ? { ...x, done: true, result: event.result } : x));
@@ -149,14 +165,14 @@ function App() {
       <div className="transcript">
         {!messages.length && !tools.length && <div className="welcome"><i /><h1>What are we working on?</h1><p>Start an unstructured chat, or choose a project to give Pi a working directory.</p></div>}
         <div className="thread">
-          {messages.map((message) => message.role === "user" ? <div className="user-row" key={message.id}><time>{time(message.timestamp)}</time><div>{message.content}</div></div> : message.role === "assistant" ? <div className="assistant-row" key={message.id}><time>{time(message.timestamp)}</time><div><RichText text={message.content} />{streaming && message === messages.at(-1) && <span className="caret" />}</div></div> : null)}
+          {messages.map((message) => message.role === "user" ? <div className="user-row" key={message.id}><time>{time(message.timestamp)}</time><div>{message.content}</div></div> : message.role === "assistant" ? <div className="assistant-row" key={message.id}><time>{time(message.timestamp)}</time><div><RichText text={message.content} />{streaming && message === messages[messages.length - 1] && <span className="caret" />}</div></div> : null)}
           {tools.map((tool) => <ToolCard tool={tool} key={tool.id} />)}<div ref={bottom} />
         </div>
       </div>
       <div className="composer-wrap"><div className="composer">
         <div className="menu-anchor"><button onClick={() => setPlusOpen(!plusOpen)}>＋</button>{plusOpen && <div className="plus-menu"><button disabled>⌕ Attach files <small>Coming later</small></button><button onClick={() => { addProject(); setPlusOpen(false); }}>▰ New project</button></div>}</div>
         <textarea rows="1" value={draft} onChange={(e) => setDraft(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }} placeholder={`Message Pi in ${project?.name || "Chats"}`} />
-        <div className="model-anchor"><button className="model-button" onClick={() => setModelOpen(!modelOpen)}>{model ? model.split("/").at(-1) : "Default model"}<small>{effort}</small>⌄</button>
+        <div className="model-anchor"><button className="model-button" onClick={() => setModelOpen(!modelOpen)}>{model ? model.split("/").slice(-1)[0] : "Default model"}<small>{effort}</small>⌄</button>
           {modelOpen && <div className="model-menu"><div><label>Model</label><button className={!model ? "chosen" : ""} onClick={() => setModel("")}>Pi default</button>{models.map((item) => <button className={model === item.spec ? "chosen" : ""} key={item.spec} onClick={() => setModel(item.spec)}>{item.label}<small>{item.provider}</small></button>)}</div><div><label>Thinking</label>{["Low", "Medium", "High"].map((level) => <button className={effort === level ? "chosen" : ""} key={level} onClick={() => { setEffort(level); setModelOpen(false); }}>{level}</button>)}</div></div>}
         </div>
         <button className="send" disabled={!draft.trim() && !streaming} onClick={send}>{streaming ? "■" : "↑"}</button>
@@ -165,4 +181,4 @@ function App() {
   </div>;
 }
 
-createRoot(document.getElementById("root")).render(<App />);
+createRoot(document.getElementById("root")).render(<AppErrorBoundary><App /></AppErrorBoundary>);

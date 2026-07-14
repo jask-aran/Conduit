@@ -21,6 +21,10 @@ if [[ -f "$PID_FILE" ]]; then
   rm -f "$PID_FILE"
 fi
 cd "$ROOT/phase-0-custom"
+if [[ ! -f dist/index.html ]] || find index.html vite.config.js package.json package-lock.json src -type f -newer dist/index.html -print -quit | grep -q .; then
+  echo "Building the current Conduit frontend."
+  npm run build
+fi
 nohup npm start >"$LOG_FILE" 2>&1 & pid=$!; echo "$pid" >"$PID_FILE"
 for _ in {1..30}; do
   if is_healthy; then echo "Conduit is ready on forwarded port ${CONDUIT_PORT} (PID $pid)."; echo "Logs: $LOG_FILE"; exit 0; fi
