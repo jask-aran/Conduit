@@ -1,5 +1,7 @@
 # Conduit
 
+[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/jask-aran/Conduit?quickstart=1)
+
 ![architecture](interface_first_platform_architecture.svg)
 
 Conduit is an interface-first personal agent platform. The long-term thesis is
@@ -32,6 +34,53 @@ and JSONL bridge—not a byte-for-byte archive.
 
 Run PI WEB inside WSL2 Ubuntu, where Pi is already installed and authenticated.
 Open it from the Windows browser through WSL's localhost forwarding.
+
+### Fastest path: private GitHub Codespace
+
+Use the button above—or this permanent link—to open the evaluation environment:
+
+<https://codespaces.new/jask-aran/Conduit?quickstart=1>
+
+GitHub resumes a matching existing Codespace when one is available and creates
+a fresh one from this repository's devcontainer when it is not. The link remains
+usable after an old Codespace has been stopped or deleted; a newly created
+Codespace will require Pi authentication again.
+
+The included devcontainer automatically:
+
+- creates a Node.js 22 Debian environment;
+- installs native build tools;
+- installs Pi `0.80.6` from its official npm package;
+- installs the pinned PI WEB dependency;
+- starts the PI WEB session daemon and web server;
+- verifies PI WEB is healthy on every Codespace start and replaces stale
+  processes automatically;
+- forwards port `8504` as **Conduit · PI WEB**.
+
+When setup finishes, use the Codespace terminal for the only credential-bearing
+step:
+
+```text
+pi
+/login
+```
+
+Choose the desired provider and complete its browser authentication. Exit Pi,
+then restart PI WEB so it reloads the authenticated model registry. This
+restart is needed for newly authenticated models to appear; authentication is
+not required for the web UI itself to start:
+
+```bash
+bash .devcontainer/start-pi-web.sh restart
+```
+
+Open the forwarded **Conduit · PI WEB** port from the Codespace's Ports panel.
+The forwarded port is private to your GitHub account by default; keep it private.
+
+The Codespace is an evaluation host, not an always-on VPS. Its filesystem and Pi
+authentication persist while the Codespace exists, but agents do not continue
+running while GitHub has stopped the Codespace. PI WEB restarts automatically
+when the Codespace starts again.
 
 ### Prerequisites
 
@@ -66,14 +115,10 @@ sudo apt install -y build-essential python3
 ## Install the recommended PI WEB version
 
 ```bash
-git clone --branch agent/add-phase-0-implementations --single-branch https://github.com/jask-aran/Conduit.git
+git clone https://github.com/jask-aran/Conduit.git
 cd Conduit/phase-0-pi-web
 npm install
 ```
-
-The explicit branch is needed while the implementation is in draft PR #1. After
-the PR is merged, a normal `git clone https://github.com/jask-aran/Conduit.git`
-will contain these folders.
 
 This checkout pins `@jmfederico/pi-web` to `1.202607.0` so the evaluation is
 repeatable.

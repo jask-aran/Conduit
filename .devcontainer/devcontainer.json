@@ -1,0 +1,28 @@
+{
+  "name": "Conduit Phase 0 — PI WEB",
+  "image": "mcr.microsoft.com/devcontainers/javascript-node:1-22-bookworm",
+  "features": {
+    "ghcr.io/devcontainers/features/common-utils:2": {
+      "installZsh": false,
+      "installOhMyZsh": false,
+      "upgradePackages": false
+    }
+  },
+  "forwardPorts": [8504],
+  "portsAttributes": {
+    "8504": {
+      "label": "Conduit · PI WEB",
+      "onAutoForward": "openBrowser",
+      "protocol": "http"
+    }
+  },
+  "containerEnv": {
+    "PI_WEB_HOST": "0.0.0.0",
+    "PI_WEB_PORT": "8504",
+    "PI_WEB_ALLOWED_HOSTS": "true"
+  },
+  "postCreateCommand": "bash .devcontainer/setup.sh",
+  "postStartCommand": "bash .devcontainer/start-pi-web.sh",
+  "remoteUser": "node"
+}
+
