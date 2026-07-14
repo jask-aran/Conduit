@@ -9,10 +9,14 @@ LOG_FILE="$STATE_DIR/pi-web.log"
 export PI_WEB_HOST="${PI_WEB_HOST:-0.0.0.0}"
 export PI_WEB_PORT="${PI_WEB_PORT:-8504}"
 export PI_WEB_ALLOWED_HOSTS="${PI_WEB_ALLOWED_HOSTS:-true}"
+export CONDUIT_FILES_ROOT="${CONDUIT_FILES_ROOT:-$ROOT/app/files}"
+export CONDUIT_STATE_DIR="${CONDUIT_STATE_DIR:-$ROOT/app/state}"
+export PI_WEB_PROJECTS_FILE="${PI_WEB_PROJECTS_FILE:-$CONDUIT_STATE_DIR/pi-web-projects.json}"
 
 HEALTH_URL="http://127.0.0.1:${PI_WEB_PORT}/api/pi-web/status"
 
 mkdir -p "$STATE_DIR"
+mkdir -p "$CONDUIT_FILES_ROOT" "$CONDUIT_STATE_DIR"
 
 is_healthy() {
   curl --silent --fail --max-time 2 "$HEALTH_URL" >/dev/null

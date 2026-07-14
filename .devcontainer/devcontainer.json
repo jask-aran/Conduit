@@ -1,5 +1,5 @@
 {
-  "name": "Conduit — Pi web UI evaluation",
+  "name": "Conduit Phase 0 — Chat evaluation",
   "image": "mcr.microsoft.com/devcontainers/javascript-node:1-22-bookworm",
   "features": {
     "ghcr.io/devcontainers/features/common-utils:2": {
@@ -8,11 +8,16 @@
       "upgradePackages": false
     }
   },
-  "forwardPorts": [3001, 8504],
+  "forwardPorts": [4310, 3001, 8504],
   "portsAttributes": {
+    "4310": {
+      "label": "Conduit · Custom",
+      "onAutoForward": "openBrowser",
+      "protocol": "http"
+    },
     "3001": {
       "label": "Conduit · Pi Tau",
-      "onAutoForward": "openBrowser",
+      "onAutoForward": "silent",
       "protocol": "http"
     },
     "8504": {
@@ -27,7 +32,12 @@
     "PI_WEB_ALLOWED_HOSTS": "true",
     "TAU_HOST": "0.0.0.0",
     "TAU_PORT": "3001",
-    "TAU_PROJECTS_DIR": "/workspaces"
+    "TAU_PROJECTS_DIR": "/workspaces/Conduit/app/files",
+    "CONDUIT_HOST": "0.0.0.0",
+    "CONDUIT_PORT": "4310",
+    "CONDUIT_FILES_ROOT": "/workspaces/Conduit/app/files",
+    "CONDUIT_STATE_DIR": "/workspaces/Conduit/app/state",
+    "PI_WEB_PROJECTS_FILE": "/workspaces/Conduit/app/state/pi-web-projects.json"
   },
   "postCreateCommand": "bash .devcontainer/setup.sh",
   "postStartCommand": "bash .devcontainer/start-evaluation.sh",

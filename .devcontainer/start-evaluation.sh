@@ -1,24 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
-
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-MODE="${1:-}"
-
-cd "$ROOT"
-
-if [[ "$MODE" == "restart" ]]; then
-  bash .devcontainer/start-pi-tau.sh restart
-  bash .devcontainer/start-pi-web.sh restart
-else
-  bash .devcontainer/start-pi-tau.sh
-  bash .devcontainer/start-pi-web.sh
-fi
-
-curl --silent --fail --max-time 5 http://127.0.0.1:3001/ >/dev/null
-curl --silent --fail --max-time 5 http://127.0.0.1:8504/api/pi-web/status >/dev/null
-
+mode="${1:-}"
+bash "$ROOT/.devcontainer/start-conduit.sh" "$mode"
+bash "$ROOT/.devcontainer/start-pi-tau.sh" "$mode"
+bash "$ROOT/.devcontainer/start-pi-web.sh" "$mode"
 printf '%s\n' \
-  'Both evaluation applications are ready:' \
-  '  Pi Tau Web Server: http://127.0.0.1:3001' \
-  '  PI WEB:            http://127.0.0.1:8504' \
-  'Open their forwarded ports from the Codespace Ports panel.'
+  'All three Phase 0 surfaces are running:' \
+  '  4310  Conduit custom chat (primary)' \
+  '  3001  Pi Tau (comparator)' \
+  '  8504  PI WEB (comparator)'

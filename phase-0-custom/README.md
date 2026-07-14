@@ -1,40 +1,84 @@
-# Conduit custom Pi runtime (reference)
+# Conduit Chat — Phase 0 custom
 
-This folder preserves the earlier Phase 0 direction: Conduit owns one
-`pi --mode rpc` process per live chat and exposes it to a small browser client.
-It is retained as an architectural reference now that PI WEB is the default.
+This is the primary Phase 0 Conduit surface: a first-party chat interface backed
+by a Conduit-owned `pi --mode rpc` process. Chat is functional. Assist, Remote,
+Dashboard, Settings, sharing, and attachments are deliberately visible only as
+future seams rather than simulated features.
 
-## Run on WSL2 Ubuntu
+## Run it
 
-Requirements: Node.js 20+, npm, and an authenticated `pi` command on `PATH`.
+Requirements: Node.js 22+, npm, and an installed/authenticated `pi` command.
 
 ```bash
-cp .env.example .env.local
-npm install
+npm ci
+npm run build
 npm start
 ```
 
-Open <http://127.0.0.1:4310>. The server binds to loopback by default.
+Open <http://127.0.0.1:4310>. For development, run `npm run dev:server` and
+`npm run dev` in separate terminals.
 
-## Runtime contract
+## Project and session model
+
+Every chat belongs to a project. The reserved `chat` project is the default
+unstructured chat experience.
+
+```text
+app/files/
+  chat/
+    .conduit/project.json
+    .conduit/sessions/*.jsonl
+    .pi/settings.json
+  project-name/
+    .conduit/project.json
+    .conduit/sessions/*.jsonl
+    .pi/settings.json
+    ...working files...
+```
+
+The project directory is Pi's working directory. Pi's native JSONL is the
+authoritative Phase 0 session transcript and is stored under that project's
+`.conduit/sessions`. Conduit maintains its own project identity around the Pi
+record so the runtime transcript does not become the final application schema.
+
+The server owns live Pi processes. Closing the browser does not terminate one;
+reopening a persisted session resumes from its JSONL. Do not open the same JSONL
+for writing in two apps at once. Different chats within one project are safe.
+
+## Shared evaluation
+
+From the repository root, this starts all three interfaces:
+
+```bash
+bash .devcontainer/start-evaluation.sh restart
+```
+
+| Port | Surface | Role |
+| --- | --- | --- |
+| 4310 | Conduit custom | Primary implementation |
+| 3001 | Pi Tau | Server/process comparator |
+| 8504 | PI WEB | Projects/session UX comparator |
+
+Project creation writes `app/state/pi-web-projects.json`, the registry consumed
+by PI WEB. Each project also gets `.pi/settings.json` pointing Pi at the same
+session directory. As a result, Conduit and PI WEB discover the same project
+sessions and Pi processes spawned by Tau in a project write there too.
+
+Pi Tau's own saved-history sidebar scans Pi's global catalog rather than these
+nested project stores, so it does not provide a complete cross-project listing.
+This is an upstream Tau UI limitation, not a separate session format.
+
+## Runtime API
 
 - `GET /healthz`
 - `GET /v0/capabilities`
-- `GET /v0/sessions`
-- `POST /v0/sessions`
-- `DELETE /v0/sessions/:id/process`
-- `WS /v0/sessions/:id/stream`
+- `GET|POST /v0/projects`
+- `GET /v0/models`
+- `GET /v0/sessions/:id`
+- `GET|POST /v0/live-sessions`
+- `GET /v0/live-sessions/:id/snapshot`
+- `DELETE /v0/live-sessions/:id/process`
+- `WS /v0/live-sessions/:id/stream`
 
-The WebSocket accepts Pi RPC JSON objects. Convenience browser messages of
-`{ "type": "prompt", "message": "..." }` are passed to Pi as JSONL. Pi events
-are streamed back unchanged. A browser disconnect does not terminate Pi.
-
-Session discovery uses Pi's JSONL session files. The stable public ID is derived
-from the session file path; arbitrary browser-supplied paths are never accepted.
-
-## Provenance
-
-The original transient checkout was no longer available when this repository was
-prepared. This is a faithful reconstruction of the implemented process ownership,
-HTTP contract, session discovery, and JSONL bridge, not a byte-for-byte recovery.
-
+The WebSocket accepts Pi RPC JSON objects and streams Pi events without
+inventing a second agent protocol.

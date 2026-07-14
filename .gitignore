@@ -3,4 +3,6 @@ node_modules/
 .env.local
 coverage/
 *.log
-
+app/files/
+app/state/
+phase-0-custom/dist/

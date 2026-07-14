@@ -1,70 +1,125 @@
+import { execFile } from "node:child_process";
 import http from "node:http";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { promisify } from "node:util";
 import express from "express";
 import { WebSocketServer } from "ws";
 import { loadConfig } from "./config.js";
-import { discoverSessions, findSession } from "./session-store.js";
+import { ProjectStore } from "./project-store.js";
+import { discoverProjectSessions, findSession, messagesFromEntries, projectSessionView } from "./session-store.js";
 import { PiManager } from "./pi-manager.js";
 
+const run = promisify(execFile);
 const config = loadConfig();
+const projects = new ProjectStore(config);
+await projects.initialize();
 const manager = new PiManager({ command: config.piCommand });
 const app = express();
-app.use(express.json({ limit: "64kb" }));
-app.use(express.static(path.join(path.dirname(fileURLToPath(import.meta.url)), "../public")));
+const dist = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../dist");
+let modelCache = null;
 
-app.get("/healthz", (_request, response) => response.json({ ok: true }));
+app.use(express.json({ limit: "128kb" }));
+app.get("/healthz", (_request, response) => response.json({ ok: true, filesRoot: config.filesRoot }));
 app.get("/v0/capabilities", (_request, response) => response.json({
-  runtime: "pi-rpc",
-  create: true,
-  resume: true,
-  stream: "websocket",
-  processOwner: "conduit-runtime",
+  runtime: "pi-rpc", create: true, resume: true, projects: true,
+  stream: "websocket", processOwner: "conduit-server", sessionAuthority: "pi-jsonl",
 }));
 
-app.get("/v0/sessions", async (_request, response, next) => {
+app.get("/v0/projects", async (_request, response, next) => {
   try {
-    const persisted = await discoverSessions(config.sessionsDir);
-    const liveById = new Map(manager.list().map((session) => [session.id, session]));
-    response.json({ sessions: persisted.map((session) => ({ ...session, file: undefined, status: liveById.get(session.id)?.status || session.status })), live: manager.list() });
+    const items = await projects.list();
+    const live = manager.list();
+    response.json({ projects: await Promise.all(items.map(async (project) => ({
+      ...project,
+      sessions: (await discoverProjectSessions(project)).map((session) => {
+        const process = live.find((item) => item.sessionFile === session.file);
+        return { ...projectSessionView(session), status: process?.status || session.status, liveId: process?.id || null };
+      }),
+    }))), live });
   } catch (error) { next(error); }
 });
 
-app.post("/v0/sessions", async (request, response, next) => {
+app.post("/v0/projects", async (request, response, next) => {
   try {
+    const name = String(request.body?.name || "").trim();
+    if (!name) return response.status(400).json({ error: "project_name_required" });
+    response.status(201).json(await projects.create({ name }));
+  } catch (error) { next(error); }
+});
+
+app.get("/v0/models", async (_request, response) => {
+  if (modelCache) return response.json({ models: modelCache });
+  try {
+    const { stdout } = await run(config.piCommand, ["--list-models"], { timeout: 15_000, maxBuffer: 1024 * 1024 });
+    modelCache = stdout.split("\n").slice(1).map((line) => line.trim().split(/\s{2,}/)).filter((columns) => columns.length >= 2)
+      .map(([provider, id]) => ({ provider, id, spec: `${provider}/${id}`, label: id }));
+    response.json({ models: modelCache });
+  } catch (error) {
+    response.json({ models: [], warning: error.message });
+  }
+});
+
+app.get("/v0/sessions/:id", async (request, response, next) => {
+  try {
+    const session = await findSession(await projects.list(), request.params.id);
+    if (!session) return response.status(404).json({ error: "session_not_found" });
+    response.json({ ...projectSessionView(session), messages: messagesFromEntries(session.entries) });
+  } catch (error) { next(error); }
+});
+
+app.get("/v0/live-sessions", (_request, response) => response.json({ sessions: manager.list() }));
+app.post("/v0/live-sessions", async (request, response, next) => {
+  try {
+    const project = await projects.get(request.body?.projectId || "chat");
+    if (!project) return response.status(404).json({ error: "project_not_found" });
     const requestedId = request.body?.resumeSessionId;
-    const session = requestedId ? await findSession(config.sessionsDir, requestedId) : null;
+    const session = requestedId ? await findSession(await projects.list(), requestedId) : null;
     if (requestedId && !session) return response.status(404).json({ error: "session_not_found" });
-    const live = manager.create({ sessionFile: session?.file });
-    response.status(201).json({ id: live.id, status: live.status, streamUrl: `/v0/sessions/${live.id}/stream` });
+    if (session && session.projectId !== project.id) return response.status(409).json({ error: "session_project_mismatch" });
+    const live = manager.create({ project, sessionFile: session?.file, model: request.body?.model || "" });
+    response.status(201).json({ ...manager.view(live), streamUrl: `/v0/live-sessions/${live.id}/stream` });
   } catch (error) { next(error); }
 });
 
-app.delete("/v0/sessions/:id/process", (request, response) => {
-  response.status(manager.stop(request.params.id) ? 202 : 404).json({ stopped: true });
+app.get("/v0/live-sessions/:id/snapshot", async (request, response, next) => {
+  try {
+    const live = manager.get(request.params.id);
+    if (!live) return response.status(404).json({ error: "live_session_not_found" });
+    const persisted = live.sessionFile ? await findSession(await projects.list(), live.sessionFile) : null;
+    response.json({ live: manager.view(live), events: live.events, messages: persisted ? messagesFromEntries(persisted.entries) : [] });
+  } catch (error) { next(error); }
 });
 
+app.delete("/v0/live-sessions/:id/process", (request, response) => {
+  const stopped = manager.stop(request.params.id);
+  response.status(stopped ? 202 : 404).json({ stopped });
+});
+
+app.use(express.static(dist));
+app.get("*", (request, response, next) => {
+  if (request.path.startsWith("/v0/") || request.path === "/healthz") return next();
+  response.sendFile(path.join(dist, "index.html"));
+});
 app.use((error, _request, response, _next) => {
   console.error(error);
-  response.status(500).json({ error: "runtime_error", message: error.message });
+  response.status(error.message?.includes("Project names") ? 400 : 500).json({ error: "runtime_error", message: error.message });
 });
 
 const server = http.createServer(app);
 const wss = new WebSocketServer({ noServer: true });
 server.on("upgrade", (request, socket, head) => {
-  const match = new URL(request.url, "http://localhost").pathname.match(/^\/v0\/sessions\/([a-f0-9]{24})\/stream$/);
-  if (!match || !manager.processes.has(match[1])) return socket.destroy();
+  const match = new URL(request.url, "http://localhost").pathname.match(/^\/v0\/live-sessions\/([a-f0-9]{24})\/stream$/);
+  if (!match || !manager.get(match[1])) return socket.destroy();
   wss.handleUpgrade(request, socket, head, (ws) => {
+    const record = manager.get(match[1]);
     manager.attach(match[1], ws);
+    ws.send(JSON.stringify({ type: "runtime_snapshot", session: manager.view(record), events: record.events }));
     ws.on("message", (data) => {
       try { manager.send(match[1], JSON.parse(String(data))); }
       catch (error) { ws.send(JSON.stringify({ type: "client_error", message: error.message })); }
     });
-    ws.send(JSON.stringify({ type: "runtime_connected", sessionId: match[1] }));
   });
 });
 
-server.listen(config.port, config.host, () => {
-  console.log(`Conduit custom runtime listening on http://${config.host}:${config.port}`);
-});
-
+server.listen(config.port, config.host, () => console.log(`Conduit listening on http://${config.host}:${config.port}`));

@@ -5,23 +5,17 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 STATE_DIR="$HOME/.conduit"
 PID_FILE="$STATE_DIR/pi-tau.pid"
 LOG_FILE="$STATE_DIR/pi-tau.log"
-PI_TAU_DIR="${PI_TAU_DIR:-$HOME/.conduit/upstream/pi-tau-web-server}"
 
 export TAU_HOST="${TAU_HOST:-0.0.0.0}"
 export TAU_PORT="${TAU_PORT:-3001}"
-export TAU_PROJECTS_DIR="${TAU_PROJECTS_DIR:-$ROOT}"
-# The compiled entry point lives below bin/server, so Tau's bundled static-path
-# fallback can resolve to bin/public when run from another working directory.
-export TAU_STATIC_DIR="${TAU_STATIC_DIR:-$PI_TAU_DIR/public}"
+export TAU_PROJECTS_DIR="${TAU_PROJECTS_DIR:-$ROOT/app/files}"
 
 HEALTH_URL="http://127.0.0.1:${TAU_PORT}/api/health"
-APP_URL="http://127.0.0.1:${TAU_PORT}/"
 
 mkdir -p "$STATE_DIR"
 
 is_healthy() {
-  curl --silent --fail --max-time 2 "$HEALTH_URL" >/dev/null &&
-    curl --silent --fail --max-time 2 "$APP_URL" >/dev/null
+  curl --silent --fail --max-time 2 "$HEALTH_URL" >/dev/null
 }
 
 stop_managed_pid() {
@@ -58,13 +52,9 @@ if [[ -f "$PID_FILE" ]]; then
   rm -f "$PID_FILE"
 fi
 
-if [[ ! -f "$TAU_STATIC_DIR/index.html" ]]; then
-  echo "Pi Tau web assets are missing: $TAU_STATIC_DIR/index.html" >&2
-  echo "Run bash .devcontainer/setup.sh, then retry." >&2
-  exit 1
-fi
-
 cd "$ROOT/pi-tau-webserver"
+
+PI_TAU_DIR="${PI_TAU_DIR:-$HOME/.conduit/upstream/pi-tau-web-server}"
 
 nohup node "$PI_TAU_DIR/bin/tau.js" \
   --host "$TAU_HOST" \

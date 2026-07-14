@@ -25,10 +25,14 @@ npm ci --prefix "$PI_TAU_DIR" --no-audit --no-fund
 cd "$ROOT/phase-0-pi-web"
 npm ci
 
-mkdir -p "$HOME/.conduit"
+cd "$ROOT/phase-0-custom"
+npm ci
+npm run build
+
+mkdir -p "$HOME/.conduit" "$ROOT/app/files" "$ROOT/app/state"
 printf '%s\n' \
   'Conduit setup complete.' \
   'Authenticate Pi in this terminal with: pi' \
   'Then enter: /login' \
-  'Pi Tau will be available on the forwarded port named Conduit · Pi Tau.' \
-  'PI WEB remains available on the forwarded port named Conduit · PI WEB.'
+  'The custom chat opens on Conduit · Custom.' \
+  'Pi Tau and PI WEB remain available as comparison surfaces.'
