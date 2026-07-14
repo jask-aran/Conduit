@@ -1,0 +1,14 @@
+{
+  "name": "@conduit/pi-tau-webserver",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Pinned Pi Tau Web Server evaluation for Conduit",
+  "scripts": {
+    "start": "node \"${PI_TAU_DIR:-$HOME/.conduit/upstream/pi-tau-web-server}/bin/tau.js\"",
+    "verify": "node --check \"${PI_TAU_DIR:-$HOME/.conduit/upstream/pi-tau-web-server}/bin/tau.js\""
+  },
+  "conduit": {
+    "upstream": "https://github.com/milanglacier/pi-tau-web-server.git",
+    "upstreamCommit": "af1f3dee7784e50c58176f3932efbda9601b4ff6"
+  }
+}
