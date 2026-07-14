@@ -64,7 +64,7 @@ if [[ ! -f "$TAU_STATIC_DIR/index.html" ]]; then
   exit 1
 fi
 
-cd "$ROOT/phase-0-pi-tau"
+cd "$ROOT/pi-tau-webserver"
 
 nohup node "$PI_TAU_DIR/bin/tau.js" \
   --host "$TAU_HOST" \
