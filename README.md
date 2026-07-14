@@ -16,7 +16,7 @@ compare ownership models, and decide what Conduit should build next.
 
 | Folder | What it is | State | Use it for |
 | --- | --- | --- | --- |
-| [`phase-0-pi-tau`](phase-0-pi-tau) | Tau UI with a server-owned `pi --mode rpc` process per live tab | **Recommended default** | Evaluate the intended Phase 0 process boundary and richer chat UX |
+| [`pi-tau-webserver`](pi-tau-webserver) | Tau UI with a server-owned `pi --mode rpc` process per live tab | **Recommended default** | Evaluate the intended Phase 0 process boundary and richer chat UX |
 | [`phase-0-pi-web`](phase-0-pi-web) | PI WEB used as the complete application | Comparator | Evaluate its session daemon, workspaces and remote-machine model |
 | [`phase-0-custom`](phase-0-custom) | Conduit-owned `pi --mode rpc` runtime and minimal chat UI | Reference prototype | Evaluating the alternative process-ownership boundary |
 
@@ -75,8 +75,11 @@ process sees the authenticated model registry. Authentication is not required
 for the web UI itself to start:
 
 ```bash
-bash .devcontainer/start-pi-tau.sh restart
+bash .devcontainer/start-evaluation.sh restart
 ```
+
+That one command starts and verifies Pi Tau on port `3001` and PI WEB on port `8504`.
+Open either forwarded port from the Codespace Ports panel.
 
 Open the forwarded **Conduit · Pi Tau** port from the Codespace's Ports panel.
 The forwarded port is private to your GitHub account by default; keep it private.
@@ -120,7 +123,7 @@ sudo apt install -y build-essential python3
 
 ```bash
 git clone https://github.com/jask-aran/Conduit.git
-cd Conduit/phase-0-pi-tau
+cd Conduit/pi-tau-webserver
 git clone https://github.com/milanglacier/pi-tau-web-server.git \
   ~/.conduit/upstream/pi-tau-web-server
 git -C ~/.conduit/upstream/pi-tau-web-server checkout \
@@ -347,7 +350,13 @@ contract. PI WEB remains a comparator rather than an underlying data model.
 
 ## Useful commands
 
-From `phase-0-pi-tau`:
+Start or restart both evaluation applications from the repository root:
+
+```bash
+bash .devcontainer/start-evaluation.sh restart
+```
+
+From `pi-tau-webserver`:
 
 ```bash
 npm start
