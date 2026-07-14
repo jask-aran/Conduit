@@ -1,5 +1,5 @@
 {
-  "name": "Conduit Phase 0 — Pi Tau",
+  "name": "Conduit — Pi web UI evaluation",
   "image": "mcr.microsoft.com/devcontainers/javascript-node:1-22-bookworm",
   "features": {
     "ghcr.io/devcontainers/features/common-utils:2": {
@@ -30,6 +30,6 @@
     "TAU_PROJECTS_DIR": "/workspaces"
   },
   "postCreateCommand": "bash .devcontainer/setup.sh",
-  "postStartCommand": "bash .devcontainer/start-pi-tau.sh && bash .devcontainer/start-pi-web.sh",
+  "postStartCommand": "bash .devcontainer/start-evaluation.sh",
   "remoteUser": "node"
 }
