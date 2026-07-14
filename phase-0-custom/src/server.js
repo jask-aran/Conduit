@@ -114,7 +114,9 @@ server.on("upgrade", (request, socket, head) => {
   wss.handleUpgrade(request, socket, head, (ws) => {
     const record = manager.get(match[1]);
     manager.attach(match[1], ws);
-    ws.send(JSON.stringify({ type: "runtime_snapshot", session: manager.view(record), events: record.events }));
+    const turnStart = record.events.findLastIndex((event) => event.type === "agent_start");
+    const pendingEvents = record.active && turnStart >= 0 ? record.events.slice(turnStart) : [];
+    ws.send(JSON.stringify({ type: "runtime_snapshot", session: manager.view(record), events: pendingEvents }));
     ws.on("message", (data) => {
       try { manager.send(match[1], JSON.parse(String(data))); }
       catch (error) { ws.send(JSON.stringify({ type: "client_error", message: error.message })); }

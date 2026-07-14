@@ -39,6 +39,7 @@ export class PiManager extends EventEmitter {
       model: model.trim() || null,
       child,
       status: "starting",
+      active: false,
       clients: new Set(),
       events: [],
       createdAt: new Date().toISOString(),
@@ -79,6 +80,8 @@ export class PiManager extends EventEmitter {
       if (!line.trim()) continue;
       try {
         const event = JSON.parse(line);
+        if (event.type === "agent_start") record.active = true;
+        if (event.type === "agent_end") record.active = false;
         const sessionFile = event.sessionFile || event.data?.sessionFile || event.result?.sessionFile;
         if (sessionFile && !record.sessionFile) {
           record.sessionFile = path.resolve(sessionFile);
@@ -99,6 +102,11 @@ export class PiManager extends EventEmitter {
     if (!record || !["starting", "running"].includes(record.status)) throw new Error("Pi session process is not running");
     const line = typeof value === "string" ? value : JSON.stringify(value);
     record.child.stdin.write(`${line}\n`);
+    if (typeof value === "object" && value?.type === "prompt") {
+      setTimeout(() => {
+        if (record.status === "running") this.send(record.id, { type: "get_state" });
+      }, 250);
+    }
   }
 
   attach(id, socket) {

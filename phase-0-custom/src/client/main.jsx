@@ -47,7 +47,19 @@ function App() {
   const bottom = useRef(null);
 
   const refresh = async () => setData(await api("/v0/projects"));
-  useEffect(() => { refresh().catch((e) => setError(e.message)); api("/v0/models").then((x) => setModels(x.models)).catch(() => {}); }, []);
+  useEffect(() => {
+    (async () => {
+      await refresh();
+      const remembered = localStorage.getItem("conduit.liveId");
+      if (!remembered) return;
+      try {
+        const snapshot = await api(`/v0/live-sessions/${remembered}/snapshot`);
+        setLive(snapshot.live); setProjectId(snapshot.live.projectId); setMessages(snapshot.messages || []);
+        connect({ ...snapshot.live, streamUrl: `/v0/live-sessions/${remembered}/stream` });
+      } catch { localStorage.removeItem("conduit.liveId"); }
+    })().catch((e) => setError(e.message));
+    api("/v0/models").then((x) => setModels(x.models)).catch(() => {});
+  }, []);
   useEffect(() => bottom.current?.scrollIntoView({ behavior: "smooth" }), [messages, tools, streaming]);
   useEffect(() => () => ws.current?.close(), []);
   const project = data.projects.find((item) => item.id === projectId) || data.projects[0];
@@ -76,8 +88,9 @@ function App() {
     ws.current?.close();
     const socket = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}${record.streamUrl || `/v0/live-sessions/${record.id}/stream`}`);
     ws.current = socket;
-    socket.onmessage = ({ data }) => { const event = JSON.parse(data); if (event.type === "runtime_snapshot") event.events?.forEach(consume); else consume(event); };
+    socket.onmessage = ({ data }) => { const event = JSON.parse(data); if (event.type === "runtime_snapshot") { if (event.session?.active) event.events?.forEach(consume); } else consume(event); };
     socket.onerror = () => setError("Lost connection to the Conduit runtime");
+    localStorage.setItem("conduit.liveId", record.id);
   }
 
   async function openSession(session, owningProject) {
@@ -88,7 +101,7 @@ function App() {
   }
 
   function newChat(target = project || data.projects[0]) {
-    ws.current?.close(); setLive(null); setSelectedId(null); setMessages([]); setTools([]); setStreaming(false); setError("");
+    ws.current?.close(); localStorage.removeItem("conduit.liveId"); setLive(null); setSelectedId(null); setMessages([]); setTools([]); setStreaming(false); setError("");
     if (target) setProjectId(target.id); setMobileOpen(false);
   }
 
