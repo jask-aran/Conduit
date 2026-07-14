@@ -29,6 +29,11 @@ unstructured chat project. Every project stores Pi JSONL sessions in
 `.conduit/sessions` and includes `.pi/settings.json`, allowing Pi instances
 launched in that working directory to continue the same session files.
 
+The custom Conduit runtime also has a repository-owned Pi profile at
+`phase-0-custom/pi/profile.json`. It disables ambient extension, skill, prompt,
+theme, and context-file discovery and loads only the resources declared there.
+User authentication remains shared with the installed Pi CLI.
+
 The original custom-app checkout lived in transient storage and was not
 recoverable when this repository was prepared. `phase-0-custom` is a faithful
 reconstruction of the implemented lifecycle, HTTP endpoints, session discovery,

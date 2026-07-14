@@ -14,7 +14,7 @@ const run = promisify(execFile);
 const config = loadConfig();
 const projects = new ProjectStore(config);
 await projects.initialize();
-const manager = new PiManager({ command: config.piCommand });
+const manager = new PiManager({ command: config.piCommand, profile: config.piProfile });
 const app = express();
 const dist = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../dist");
 let modelCache = null;

@@ -18,6 +18,33 @@ npm start
 Open <http://127.0.0.1:4310>. For development, run `npm run dev:server` and
 `npm run dev` in separate terminals.
 
+## Repository-owned Pi profile
+
+Conduit does not use Pi's ambient extension or context discovery. Every Pi RPC
+process is launched with discovery disabled for extensions, skills, prompt
+templates, themes, `AGENTS.md`, and `CLAUDE.md`, then given the resources listed
+in [`pi/profile.json`](pi/profile.json) explicitly.
+
+The current profile contains:
+
+- system prompt: `pi/SYSTEM.md`;
+- tools: `read`, `bash`, `edit`, and `write`;
+- extensions: none;
+- skills: none;
+- prompt templates: none.
+
+Add repository-owned resources to `phase-0-custom/pi/` and list their paths in
+`profile.json`. Paths are resolved relative to the profile file. Restart
+Conduit after changing the profile:
+
+```bash
+bash .devcontainer/start-conduit.sh restart
+```
+
+Pi still reads the user's authentication and model credentials, so an existing
+`/login` remains usable. Global Pi extensions, skills, prompts, and context do
+not enter Conduit sessions.
+
 ## Project and session model
 
 Every chat belongs to a project. The reserved `chat` project is the default

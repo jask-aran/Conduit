@@ -1,0 +1,7 @@
+{
+  "systemPrompt": "SYSTEM.md",
+  "tools": ["read", "bash", "edit", "write"],
+  "extensions": [],
+  "skills": [],
+  "promptTemplates": []
+}

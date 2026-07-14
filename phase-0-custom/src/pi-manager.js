@@ -3,11 +3,32 @@ import { spawn } from "node:child_process";
 import crypto from "node:crypto";
 import path from "node:path";
 
+export function buildPiArgs({ project, sessionFile = null, model = "", profile }) {
+  const args = [
+    "--mode", "rpc",
+    "--session-dir", project.sessionsDir,
+    "--no-extensions",
+    "--no-skills",
+    "--no-prompt-templates",
+    "--no-themes",
+    "--no-context-files",
+    "--system-prompt", profile.systemPrompt,
+    "--tools", profile.tools.join(","),
+  ];
+  for (const extension of profile.extensions) args.push("--extension", extension);
+  for (const skill of profile.skills) args.push("--skill", skill);
+  for (const template of profile.promptTemplates) args.push("--prompt-template", template);
+  if (sessionFile) args.push("--session", path.resolve(sessionFile));
+  if (model.trim()) args.push("--model", model.trim());
+  return args;
+}
+
 export class PiManager extends EventEmitter {
-  constructor({ command = "pi", spawnImpl = spawn } = {}) {
+  constructor({ command = "pi", profile, spawnImpl = spawn } = {}) {
     super();
     this.command = command;
     this.spawnImpl = spawnImpl;
+    this.profile = profile;
     this.processes = new Map();
     this.bySessionFile = new Map();
   }
@@ -21,9 +42,7 @@ export class PiManager extends EventEmitter {
       ? crypto.createHash("sha256").update(resolvedFile).digest("hex").slice(0, 24)
       : crypto.randomUUID().replaceAll("-", "").slice(0, 24);
 
-    const args = ["--mode", "rpc", "--session-dir", project.sessionsDir];
-    if (resolvedFile) args.push("--session", resolvedFile);
-    if (model.trim()) args.push("--model", model.trim());
+    const args = buildPiArgs({ project, sessionFile: resolvedFile, model, profile: this.profile });
     const child = this.spawnImpl(this.command, args, {
       cwd: project.path,
       stdio: ["pipe", "pipe", "pipe"],
