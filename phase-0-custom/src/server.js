@@ -12,8 +12,8 @@ import { PiManager } from "./pi-manager.js";
 const config = loadConfig();
 const projects = new ProjectStore(config);
 await projects.initialize();
-const manager = new PiManager({ command: config.piCommand, profile: config.piProfile });
-const modelCatalog = new PiModelCatalog();
+const manager = new PiManager({ command: config.piCommand, agentDir: config.piAgentDir, profile: config.piProfile });
+const modelCatalog = new PiModelCatalog({ agentDir: config.piAgentDir, modelPatterns: config.piProfile.models });
 const app = express();
 const dist = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../dist");
 

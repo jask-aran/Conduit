@@ -6,24 +6,29 @@ import {
   SettingsManager,
 } from "@earendil-works/pi-coding-agent";
 import { clampThinkingLevel, getSupportedThinkingLevels } from "@earendil-works/pi-ai";
+import path from "node:path";
 
 export class PiModelCatalog {
   constructor({
     agentDir = getAgentDir(),
-    authStorage = AuthStorage.create(),
+    authStorage,
     modelRegistry,
-    settingsFactory = (cwd) => SettingsManager.create(cwd, agentDir, { projectTrusted: true }),
+    modelPatterns = [],
+    settingsFactory = (cwd) => SettingsManager.create(cwd, agentDir, { projectTrusted: false }),
   } = {}) {
     this.agentDir = agentDir;
-    this.modelRegistry = modelRegistry || ModelRegistry.create(authStorage);
+    this.authStorage = authStorage || (modelRegistry ? null : AuthStorage.create(path.join(agentDir, "auth.json")));
+    this.modelRegistry = modelRegistry || ModelRegistry.create(this.authStorage, path.join(agentDir, "models.json"));
+    this.modelPatterns = modelPatterns;
     this.settingsFactory = settingsFactory;
   }
 
   async list(cwd) {
     const settings = this.settingsFactory(cwd);
+    this.authStorage?.reload();
     this.modelRegistry.refresh();
 
-    const patterns = settings.getEnabledModels() || [];
+    const patterns = this.modelPatterns;
     const scope = patterns.length
       ? await resolveModelScopeWithDiagnostics(patterns, this.modelRegistry)
       : { scopedModels: [], diagnostics: [] };
@@ -54,6 +59,7 @@ export class PiModelCatalog {
       })),
       defaultModel: defaultEntry ? `${defaultEntry.model.provider}/${defaultEntry.model.id}` : null,
       defaultThinkingLevel,
+      requiresAuthentication: entries.length === 0,
       warnings: [...settingsWarnings, ...scope.diagnostics],
     };
   }

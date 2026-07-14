@@ -7,7 +7,8 @@ future seams rather than simulated features.
 
 ## Run it
 
-Requirements: Node.js 22+, npm, and an installed/authenticated `pi` command.
+Requirements: Node.js 22+, npm, and an installed `pi` command authenticated for
+Conduit's isolated runtime.
 
 ```bash
 npm ci
@@ -18,32 +19,45 @@ npm start
 Open <http://127.0.0.1:4310>. For development, run `npm run dev:server` and
 `npm run dev` in separate terminals.
 
-## Repository-owned Pi profile
+Authenticate that runtime from the repository root, then enter `/login`:
+
+```bash
+conduit-pi
+```
+
+The devcontainer provides that command from any working directory. Outside it,
+run `./scripts/conduit-pi.mjs` from the repository root.
+
+## Repository-owned Pi experiences
 
 Conduit does not use Pi's ambient extension or context discovery. Every Pi RPC
-process is launched with discovery disabled for extensions, skills, prompt
-templates, themes, `AGENTS.md`, and `CLAUDE.md`, then given the resources listed
-in [`pi/profile.json`](pi/profile.json) explicitly.
+process is launched with global and project configuration/resource discovery
+disabled, then given the resources listed in the root-owned
+[`chat` experience](../.pi/experiences/chat/profile.json) explicitly.
 
 The current profile contains:
 
-- system prompt: `pi/SYSTEM.md`;
+- system prompt: `.pi/experiences/chat/SYSTEM.md`;
 - tools: `read`, `bash`, `edit`, and `write`;
+- model scope: the four patterns declared by the experience manifest;
 - extensions: none;
 - skills: none;
 - prompt templates: none.
 
-Add repository-owned resources to `phase-0-custom/pi/` and list their paths in
-`profile.json`. Paths are resolved relative to the profile file. Restart
-Conduit after changing the profile:
+Add repository-owned resources beneath `.pi/experiences/<experience>/` and list
+their paths in that experience's `profile.json`. Paths are resolved relative to
+the manifest. Restart Conduit after changing the selected experience:
 
 ```bash
 bash .devcontainer/start-conduit.sh restart
 ```
 
-Pi still reads the user's authentication and model credentials, so an existing
-`/login` remains usable. Global Pi extensions, skills, prompts, and context do
-not enter Conduit sessions.
+Conduit sets `PI_CODING_AGENT_DIR` to the ignored `app/state/pi-agent/` runtime
+home. Its authentication, settings, model overrides, and package state are
+therefore separate from `~/.pi/agent`. Project `.pi/settings.json`, parent
+`AGENTS.md`, and machine-level Pi resources do not enter custom Conduit
+sessions. The terminal launcher above uses the same isolation and experience
+manifest as the webserver.
 
 ## Project and session model
 

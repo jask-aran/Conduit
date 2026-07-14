@@ -75,6 +75,7 @@ header > button:last-child { margin-left: auto; width: 34px; height: 34px; borde
 .model-button { padding: 0 9px; color: #18181b; font: 600 12px ui-monospace, monospace; }.model-button small { color: #a1a1aa; margin: 0 6px; font-family: inherit; font-weight: 400; }
 .model-menu { right: 0; display: grid; grid-template-columns: 250px 130px; max-height: 330px; overflow: auto; }
 .model-menu > div { padding: 3px; }.model-menu > div + div { border-left: 1px solid #e4e4e7; }.model-menu label { display: block; color: #a1a1aa; padding: 7px 9px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; }
+.model-menu .model-notice { color: #8c5b2d; display: block; font-size: 12px; line-height: 1.35; padding: 6px 9px 10px; width: 210px; }
 .model-menu button { display: flex; width: 100%; border: 0; background: transparent; border-radius: 7px; padding: 8px 9px; text-align: left; font: 12px ui-monospace, monospace; }.model-menu button:hover, .model-menu button.chosen { background: #f4f4f5; }.model-menu button.chosen::before { content: "✓"; color: #6366f1; margin-right: 7px; }.model-menu small { margin-left: auto; color: #a1a1aa; }
 .send { width: 34px; height: 34px; border: 0; border-radius: 9px; color: #fff; background: #6366f1; font-weight: 800; }.send:disabled { background: #d4d4d8; }
 .error { position: absolute; right: 30px; bottom: 82px; background: #18181b; color: #fff; padding: 10px 14px; max-width: 380px; border-radius: 9px; font-size: 12px; cursor: pointer; box-shadow: 0 8px 30px #0003; }

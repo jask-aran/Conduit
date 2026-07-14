@@ -29,10 +29,13 @@ cd "$ROOT/phase-0-custom"
 npm ci
 npm run build
 
-mkdir -p "$HOME/.conduit" "$ROOT/app/files" "$ROOT/app/state"
+mkdir -p "$HOME/.conduit" "$ROOT/app/files" "$ROOT/app/state/pi-agent"
+mkdir -p "$HOME/.local/bin"
+ln -sfn "$ROOT/scripts/conduit-pi.mjs" "$HOME/.local/bin/conduit-pi"
 printf '%s\n' \
   'Conduit setup complete.' \
-  'Authenticate Pi in this terminal with: pi' \
+  'Authenticate the isolated Conduit runtime with: conduit-pi' \
   'Then enter: /login' \
+  'Authenticate plain pi separately only when evaluating Pi Tau or PI WEB.' \
   'The custom chat opens on Conduit · Custom.' \
   'Pi Tau and PI WEB remain available as comparison surfaces.'

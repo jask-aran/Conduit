@@ -45,6 +45,7 @@ function ToolCard({ tool }) {
 function App() {
   const [projects, setProjects] = useState([]);
   const [models, setModels] = useState([]);
+  const [modelNotice, setModelNotice] = useState("");
   const [defaultModel, setDefaultModel] = useState("");
   const [projectId, setProjectId] = useState("project_chat");
   const [selectedId, setSelectedId] = useState(null);
@@ -86,6 +87,7 @@ function App() {
         const selectedModel = nextModels.find((item) => item.spec === (requestedModel || nextDefault));
         const levels = list(selectedModel?.thinkingLevels);
         setModels(nextModels);
+        setModelNotice(payload.requiresAuthentication ? "Authenticate with conduit-pi, then run /login." : "");
         setDefaultModel(nextDefault);
         setModel(requestedModel);
         setEffort((current) => levels.includes(current)
@@ -207,7 +209,7 @@ function App() {
         <div className="menu-anchor"><button onClick={() => setPlusOpen(!plusOpen)}>＋</button>{plusOpen && <div className="plus-menu"><button disabled>⌕ Attach files <small>Coming later</small></button><button onClick={() => { addProject(); setPlusOpen(false); }}>▰ New project</button></div>}</div>
         <textarea rows="1" value={draft} onChange={(e) => setDraft(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }} placeholder={`Message Pi in ${project?.name || "Chats"}`} />
         <div className="model-anchor"><button className="model-button" onClick={() => setModelOpen(!modelOpen)}>{model ? model.split("/").pop() : "Default model"}<small>{effort || "off"}</small>⌄</button>
-          {modelOpen && <div className="model-menu"><div><label>Model</label><button className={!model ? "chosen" : ""} onClick={() => chooseModel("")}>Pi default</button>{models.map((item) => <button className={model === item.spec ? "chosen" : ""} key={item.spec} onClick={() => chooseModel(item.spec)}>{item.label}<small>{item.provider}</small></button>)}</div><div><label>Thinking</label>{thinkingLevels.map((level) => <button className={effort === level ? "chosen" : ""} key={level} onClick={() => { setEffort(level); setModelOpen(false); }}>{level === "xhigh" ? "XHigh" : level[0].toUpperCase() + level.slice(1)}</button>)}</div></div>}
+          {modelOpen && <div className="model-menu"><div><label>Model</label>{modelNotice && <span className="model-notice">{modelNotice}</span>}<button className={!model ? "chosen" : ""} onClick={() => chooseModel("")}>Pi default</button>{models.map((item) => <button className={model === item.spec ? "chosen" : ""} key={item.spec} onClick={() => chooseModel(item.spec)}>{item.label}<small>{item.provider}</small></button>)}</div><div><label>Thinking</label>{thinkingLevels.map((level) => <button className={effort === level ? "chosen" : ""} key={level} onClick={() => { setEffort(level); setModelOpen(false); }}>{level === "xhigh" ? "XHigh" : level[0].toUpperCase() + level.slice(1)}</button>)}</div></div>}
         </div>
         <button className="send" disabled={!draft.trim() && !streaming} onClick={send}>{streaming ? "■" : "↑"}</button>
       </div><p>Conduit can make mistakes. Verify important output.</p>{error && <div className="error" onClick={() => setError("")}>{error} ×</div>}</div>

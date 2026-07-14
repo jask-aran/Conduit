@@ -2,22 +2,14 @@ import { EventEmitter } from "node:events";
 import { spawn } from "node:child_process";
 import crypto from "node:crypto";
 import path from "node:path";
+import { buildPiEnvironment, buildPiResourceArgs } from "../../scripts/pi-runtime.mjs";
 
 export function buildPiArgs({ project, sessionFile = null, model = "", thinkingLevel = "", profile }) {
   const args = [
     "--mode", "rpc",
     "--session-dir", project.sessionsDir,
-    "--no-extensions",
-    "--no-skills",
-    "--no-prompt-templates",
-    "--no-themes",
-    "--no-context-files",
-    "--system-prompt", profile.systemPrompt,
-    "--tools", profile.tools.join(","),
+    ...buildPiResourceArgs(profile),
   ];
-  for (const extension of profile.extensions) args.push("--extension", extension);
-  for (const skill of profile.skills) args.push("--skill", skill);
-  for (const template of profile.promptTemplates) args.push("--prompt-template", template);
   if (sessionFile) args.push("--session", path.resolve(sessionFile));
   if (model.trim()) args.push("--model", model.trim());
   if (thinkingLevel.trim()) args.push("--thinking", thinkingLevel.trim());
@@ -25,10 +17,12 @@ export function buildPiArgs({ project, sessionFile = null, model = "", thinkingL
 }
 
 export class PiManager extends EventEmitter {
-  constructor({ command = "pi", profile, spawnImpl = spawn } = {}) {
+  constructor({ command = "pi", agentDir, profile, spawnImpl = spawn } = {}) {
     super();
+    if (!agentDir) throw new Error("PiManager requires an isolated agent directory");
     this.command = command;
     this.spawnImpl = spawnImpl;
+    this.agentDir = agentDir;
     this.profile = profile;
     this.processes = new Map();
     this.bySessionFile = new Map();
@@ -47,7 +41,7 @@ export class PiManager extends EventEmitter {
     const child = this.spawnImpl(this.command, args, {
       cwd: project.path,
       stdio: ["pipe", "pipe", "pipe"],
-      env: process.env,
+      env: buildPiEnvironment(this.agentDir),
     });
     const record = {
       id,
@@ -58,6 +52,7 @@ export class PiManager extends EventEmitter {
       sessionFile: resolvedFile,
       model: model.trim() || null,
       thinkingLevel: thinkingLevel.trim() || null,
+      experience: { id: this.profile.id, version: this.profile.version },
       child,
       status: "starting",
       active: false,

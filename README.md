@@ -29,10 +29,11 @@ unstructured chat project. Every project stores Pi JSONL sessions in
 `.conduit/sessions` and includes `.pi/settings.json`, allowing Pi instances
 launched in that working directory to continue the same session files.
 
-The custom Conduit runtime also has a repository-owned Pi profile at
-`phase-0-custom/pi/profile.json`. It disables ambient extension, skill, prompt,
-theme, and context-file discovery and loads only the resources declared there.
-User authentication remains shared with the installed Pi CLI.
+The custom Conduit runtime uses versioned Pi experiences under
+`.pi/experiences/`. It disables global and project settings/resource discovery,
+loads only the selected experience, and stores authentication and generated Pi
+state in the ignored `app/state/pi-agent/` runtime home. The Phase 0 server and
+future top-level webapp therefore share stable root-owned runtime paths.
 
 The original custom-app checkout lived in transient storage and was not
 recoverable when this repository was prepared. `phase-0-custom` is a faithful
@@ -83,18 +84,21 @@ The included devcontainer automatically:
   processes automatically;
 - forwards port `8504` as the optional **Conduit · PI WEB** comparator.
 
-When setup finishes, use the Codespace terminal for the only credential-bearing
-step:
+When setup finishes, authenticate the isolated custom Conduit runtime:
 
-```text
-pi
-/login
+```bash
+conduit-pi
 ```
 
-Choose the desired provider and complete its browser authentication. Exit Pi,
-then restart Pi Tau before creating the first live tab so every spawned Pi
-process sees the authenticated model registry. Authentication is not required
-for the web UI itself to start:
+Then enter `/login`, choose the desired provider, and complete browser
+authentication. This does not read or modify `~/.pi/agent`.
+
+The devcontainer installs `conduit-pi` into `~/.local/bin`; outside it, invoke
+the repository-owned launcher as `./scripts/conduit-pi.mjs` from the root.
+
+Pi Tau and PI WEB remain upstream comparators and use plain Pi's normal runtime.
+Authenticate plain `pi` separately before evaluating them, then restart Pi Tau
+so newly spawned processes see that model registry:
 
 ```bash
 bash .devcontainer/start-pi-tau.sh restart
