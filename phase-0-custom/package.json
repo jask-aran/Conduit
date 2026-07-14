@@ -1,17 +1,28 @@
 {
   "name": "@conduit/phase-0-custom",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
-  "engines": { "node": ">=20" },
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
-    "dev": "node --watch src/server.js",
+    "build": "vite build",
+    "dev": "vite --host 0.0.0.0",
+    "dev:server": "node --watch src/server.js",
     "start": "node src/server.js",
     "test": "node --test"
   },
   "dependencies": {
+    "@earendil-works/pi-ai": "0.80.6",
+    "@earendil-works/pi-coding-agent": "0.80.6",
     "express": "4.21.2",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
     "ws": "8.18.3"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "4.4.1",
+    "vite": "6.1.0"
   }
 }
-

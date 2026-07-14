@@ -9,9 +9,9 @@ PI_TAU_DIR="${PI_TAU_DIR:-$HOME/.conduit/upstream/pi-tau-web-server}"
 
 export TAU_HOST="${TAU_HOST:-0.0.0.0}"
 export TAU_PORT="${TAU_PORT:-3001}"
-export TAU_PROJECTS_DIR="${TAU_PROJECTS_DIR:-$ROOT}"
-# The compiled entry point lives below bin/server, so Tau's bundled static-path
-# fallback can resolve to bin/public when run from another working directory.
+export TAU_PROJECTS_DIR="${TAU_PROJECTS_DIR:-$ROOT/app/files}"
+# Tau's compiled entry point cannot reliably infer the web-assets directory
+# when launched from a project-specific working directory.
 export TAU_STATIC_DIR="${TAU_STATIC_DIR:-$PI_TAU_DIR/public}"
 
 HEALTH_URL="http://127.0.0.1:${TAU_PORT}/api/health"
@@ -64,7 +64,7 @@ if [[ ! -f "$TAU_STATIC_DIR/index.html" ]]; then
   exit 1
 fi
 
-cd "$ROOT/phase-0-pi-tau"
+cd "$ROOT/pi-tau-webserver"
 
 nohup node "$PI_TAU_DIR/bin/tau.js" \
   --host "$TAU_HOST" \
