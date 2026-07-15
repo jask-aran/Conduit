@@ -4,397 +4,150 @@
 
 ![architecture](interface_first_platform_architecture.svg)
 
-Conduit is an interface-first personal agent platform. The long-term thesis is
-that an agent session is the common primitive while its interface, execution
-target, harness, tools, and autonomy posture can vary.
+Conduit is an interface-first personal agent platform. The web application owns
+one `pi --mode rpc` process per live chat while Pi remains authoritative for
+authentication, models, tools, and JSONL session history.
 
-The repository is currently at **Phase 0: build and evaluate the Pi web-chat
-experience**. It contains a first-party Conduit chat and two upstream comparators,
-all pointed at one project filesystem.
+## Repository structure
 
-## Current state
+```text
+conduit-web/
+  src/                 Express server and Pi RPC lifecycle
+  src/client/          React/Vite interface
+  test/                Node test suites
 
-| Folder | What it is | State | Use it for |
-| --- | --- | --- | --- |
-| [`phase-0-custom`](phase-0-custom) | First-party Conduit chat with a server-owned `pi --mode rpc` process | **Primary** | Build the Phase 0 chat and application seams |
-| [`pi-tau-webserver`](pi-tau-webserver) | Tau UI with a server-owned Pi process per live tab | Comparator | Evaluate Tau's runtime boundary and behavior |
-| [`phase-0-pi-web`](phase-0-pi-web) | PI WEB used as the complete application | Comparator | Evaluate its session daemon, workspaces and remote-machine model |
+templates/
+  chat/                selected Pi system prompt and resource manifest
 
-The custom surface is now the product direction. Pi Tau remains useful for
-comparing its standalone server and RPC behavior; PI WEB remains useful for its
-project/session hierarchy and remote-machine model.
+scripts/
+  conduit-pi.mjs       template-aware terminal launcher
+  pi-runtime.mjs       template loading and Pi argument construction
 
-All three use directories under `app/files`. The default `app/files/chat` is the
-unstructured chat project. Every project stores Pi JSONL sessions in
-`.conduit/sessions` and includes `.pi/settings.json`, allowing Pi instances
-launched in that working directory to continue the same session files.
-
-The custom Conduit runtime uses versioned Pi experiences under
-`.pi/experiences/`. It disables global and project settings/resource discovery,
-loads only the selected experience, and stores authentication and generated Pi
-state in the ignored `app/state/pi-agent/` runtime home. The Phase 0 server and
-future top-level webapp therefore share stable root-owned runtime paths.
-
-The original custom-app checkout lived in transient storage and was not
-recoverable when this repository was prepared. `phase-0-custom` is a faithful
-reconstruction of the implemented lifecycle, HTTP endpoints, session discovery,
-and JSONL bridge—not a byte-for-byte archive.
-
-## Recommended evaluation setup
-
-In a Codespace, one command starts or restarts all three surfaces on separate
-ports:
-
-```bash
-bash .devcontainer/start-evaluation.sh restart
+data/
+  chat/files/          chat working directories and agent-visible files
+  pi/                  isolated Pi agent home
+  conduit.json         Conduit project catalog
 ```
 
-- **Conduit · Custom** — port 4310, opened automatically;
-- **Conduit · Pi Tau** — port 3001;
-- **Conduit · PI WEB** — port 8504.
+`conduit-web/`, `templates/`, and `scripts/` are tracked product source.
+`data/` is ignored mutable application data and forms one backup or mount
+boundary for working files, project metadata, credentials, preferences, and
+session history.
 
-Do not have two surfaces write to the same JSONL simultaneously. Parallel chats
-in the same project are safe.
+## Data model
 
-Run Pi Tau inside WSL2 Ubuntu, where Pi is already installed and authenticated.
-Open it from the Windows browser through WSL's localhost forwarding.
+### Projects and working files
 
-### Fastest path: private GitHub Codespace
+`data/conduit.json` is the Conduit-owned project catalog. Each project contains:
 
-Use the button above—or this permanent link—to open the evaluation environment:
-
-<https://codespaces.new/jask-aran/Conduit?quickstart=1>
-
-GitHub resumes a matching existing Codespace when one is available and creates
-a fresh one from this repository's devcontainer when it is not. The link remains
-usable after an old Codespace has been stopped or deleted; a newly created
-Codespace will require Pi authentication again.
-
-The included devcontainer automatically:
-
-- creates a Node.js 22 Debian environment;
-- installs native build tools;
-- installs Pi `0.80.6` from its official npm package;
-- installs Pi Tau pinned to upstream commit `af1f3dee`;
-- starts Pi Tau and verifies its health on every Codespace start;
-- forwards port `3001` as **Conduit · Pi Tau** and opens it automatically;
-- installs the pinned PI WEB dependency;
-- starts the PI WEB session daemon and web server;
-- verifies PI WEB is healthy on every Codespace start and replaces stale
-  processes automatically;
-- forwards port `8504` as the optional **Conduit · PI WEB** comparator.
-
-When setup finishes, authenticate the isolated custom Conduit runtime:
-
-```bash
-conduit-pi
+```json
+{
+  "id": "project_…",
+  "slug": "example",
+  "name": "Example",
+  "kind": "project",
+  "createdAt": "2026-01-01T00:00:00.000Z"
+}
 ```
 
-Then enter `/login`, choose the desired provider, and complete browser
-authentication. This does not read or modify `~/.pi/agent`.
+The reserved `chat` project has ID `project_chat`, kind `unstructured`, and
+working directory `data/chat/files`. Every named project uses
+`data/chat/files/<slug>`. Working directories contain only files available to
+the corresponding chats; they do not contain Conduit metadata, Pi configuration,
+or session JSONL.
 
-The devcontainer installs `conduit-pi` into `~/.local/bin`; outside it, invoke
-the repository-owned launcher as `./scripts/conduit-pi.mjs` from the root.
+All unstructured chats share `data/chat/files` and therefore share access to its
+files. Named projects provide separate filesystem scopes beneath that root.
 
-Pi Tau and PI WEB remain upstream comparators and use plain Pi's normal runtime.
-Authenticate plain `pi` separately before evaluating them, then restart Pi Tau
-so newly spawned processes see that model registry:
+### Pi runtime and sessions
 
-```bash
-bash .devcontainer/start-pi-tau.sh restart
+`data/pi` is Conduit's app-wide Pi agent home:
+
+```text
+data/pi/
+  auth.json
+  settings.json
+  trust.json                 when Pi creates it
+  sessions/
+    <encoded-cwd>/
+      <timestamp>_<id>.jsonl
 ```
 
-Open the forwarded **Conduit · Pi Tau** port from the Codespace's Ports panel.
-The forwarded port is private to your GitHub account by default; keep it private.
+Conduit sets `PI_CODING_AGENT_DIR=data/pi` but does not set
+`PI_CODING_AGENT_SESSION_DIR` or pass `--session-dir`. Pi derives its native
+session directory from the process working directory and records the canonical
+`cwd` in every JSONL header. Conduit associates a session with a project by
+matching that header exactly, rather than trusting the lossy encoded directory
+name.
 
-The Codespace is an evaluation host, not an always-on VPS. Its filesystem and Pi
-authentication persist while the Codespace exists, but agents do not continue
-running while GitHub has stopped the Codespace. Pi Tau and PI WEB restart
-automatically when the Codespace starts again.
+Pi JSONL is the authoritative transcript. `data/conduit.json` stores only
+application metadata Pi does not model: stable project IDs, display names,
+kinds, and creation times. Live process state, connected WebSockets, and recent
+RPC events are held in server memory; persisted sessions remain resumable after
+a server restart.
 
-### Prerequisites
+Do not let two Pi processes write the same JSONL simultaneously.
 
-- WSL2 with Ubuntu;
-- Node.js 22 or newer and npm;
-- `git`;
-- Pi Coding Agent installed as `pi`;
-- Pi already authenticated with at least one usable model;
-- build tools for native Node modules (`build-essential` and Python).
+### Templates
 
-Check the environment:
+Templates are tracked Conduit launch presets, not project-local `.pi`
+directories. `templates/chat/template.json` selects a system prompt, allowed
+tools and models, extensions, skills, and prompt templates. The web server and
+`conduit-pi` translate the selected template into explicit Pi arguments while
+independently selecting the Pi home, working directory, and session.
 
-```bash
-node --version
-npm --version
-git --version
-pi --version
-pi
-```
+The configured template is applied when a session process starts or resumes.
+Template identity is present in live process state but is not persisted as part
+of the current project catalog.
 
-Start and exit an ordinary Pi session once before installing either web app. This proves
-that authentication, model discovery, shell startup, and Pi's state directory all
-work independently of Conduit.
+## Interface development
 
-On Ubuntu, install native build prerequisites if they are missing:
+The interface uses a Shadcn-first component policy. New controls, dialogs,
+menus, forms, navigation, feedback, and layout primitives should use Shadcn
+components whenever an appropriate component exists. Compose and theme those
+primitives before writing bespoke interaction code; custom components are for
+Conduit-specific behavior that the component set does not cover.
 
-```bash
-sudo apt update
-sudo apt install -y build-essential python3
-```
+Shadcn components are added to the repository as source when needed, keeping
+their standard accessibility and interaction behavior intact. Application tests
+remain necessary for Conduit-specific state, RPC, and composition behavior.
 
-## Install the recommended Pi Tau version
+## Setup and development
 
-```bash
-git clone https://github.com/jask-aran/Conduit.git
-cd Conduit/pi-tau-webserver
-git clone https://github.com/milanglacier/pi-tau-web-server.git \
-  ~/.conduit/upstream/pi-tau-web-server
-git -C ~/.conduit/upstream/pi-tau-web-server checkout \
-  af1f3dee7784e50c58176f3932efbda9601b4ff6
-npm ci --prefix ~/.conduit/upstream/pi-tau-web-server
-TAU_HOST=127.0.0.1 TAU_PORT=3001 TAU_PROJECTS_DIR="$HOME" npm start
-```
-
-Open <http://127.0.0.1:3001>. The checkout pins Pi Tau to upstream commit
-`af1f3dee7784e50c58176f3932efbda9601b4ff6` so the evaluation is repeatable.
-
-### First Pi Tau evaluation
-
-1. Create a live tab and choose a disposable repository as its working directory.
-2. Confirm the expected model and thinking controls are available.
-3. Send a request that reads files and another that edits a file.
-4. Start a second live tab in another directory and confirm both agents run in
-   parallel.
-5. Refresh or close the browser during a response, reopen it and confirm the
-   server-owned live tab reconnects.
-6. Search saved Pi session history and inspect the session tree/branching UI.
-7. Try the interface on a phone or narrow browser window.
-8. Stop and restart the Pi Tau server, then distinguish resumable Pi history
-   from live child-process persistence.
-
-The important question is whether this feels like a credible starting chat
-surface while preserving Conduit's desired server-owned Pi process boundary.
-
-## Install the PI WEB comparator
+Requirements: Node.js 22+, npm, and Pi Coding Agent 0.80.6 available as `pi`.
 
 ```bash
-git clone https://github.com/jask-aran/Conduit.git
-cd Conduit/phase-0-pi-web
-npm install
-```
-
-This checkout pins `@jmfederico/pi-web` to `1.202607.0` so the comparison is
-repeatable.
-
-### Option A: WSL2 with systemd
-
-Check whether systemd is active:
-
-```bash
-systemctl --user status
-```
-
-If that succeeds, install PI WEB as two per-user services:
-
-```bash
-npm run install:service
-npm run doctor
-npm run status
-```
-
-Open <http://127.0.0.1:8504> in the Windows browser.
-
-To keep the user services running across logout or reboot:
-
-```bash
-sudo loginctl enable-linger "$USER"
-```
-
-If WSL reports that systemd is not running, either use Option B or enable systemd
-in `/etc/wsl.conf`:
-
-```ini
-[boot]
-systemd=true
-```
-
-Then run `wsl --shutdown` from Windows PowerShell and reopen Ubuntu.
-
-### Option B: WSL2 without systemd
-
-The repository includes a launcher that supervises the PI WEB session daemon and
-web server as two child processes:
-
-```bash
-npm run verify
-npm run dev
-```
-
-Open <http://127.0.0.1:8504>. Keep the terminal open during evaluation. Ctrl-C
-stops both processes cleanly.
-
-### If localhost forwarding is unavailable
-
-Find the WSL address with `hostname -I` and use the first address with port 8504.
-Do not bind PI WEB to `0.0.0.0` on an untrusted network. For access from another
-machine, prefer an SSH tunnel, private VPN address, or authenticated reverse
-proxy.
-
-## First PI WEB evaluation
-
-Use a disposable or clean Git repository for the first run.
-
-1. Open PI WEB and add the repository as a project.
-2. Select the project folder or create a git worktree.
-3. Start a Pi session.
-4. Confirm that the expected authenticated models are available.
-5. Send a small request that reads files and another that edits a file.
-6. Observe streaming, tool calls, cost/context information, and changed files.
-7. Close the browser while a session is running, reopen it, and resume the same
-   session.
-8. Start a second session and confirm both remain independently usable.
-9. Restart only the PI WEB web service and confirm `sessiond` keeps the agent
-   session alive.
-10. Try the interface from a phone or second browser through a trusted connection.
-
-The evaluation is successful when PI WEB is comfortable enough to use for real
-work and process/session persistence behaves as promised.
-
-## Evaluate the custom runtime
-
-The custom implementation is intentionally much smaller. It is useful for
-testing whether Conduit should directly own Pi RPC processes, not for comparing
-feature polish with PI WEB.
-
-```bash
-cd ../phase-0-custom
-cp .env.example .env.local
-npm install
+cd conduit-web
+npm ci
 npm test
-npm start
+npm run build
 ```
 
-Open <http://127.0.0.1:4310>, create a chat, and send a prompt. Then close and
-reopen the browser. The server-owned Pi process should not terminate merely
-because the WebSocket disconnected.
-
-The reconstructed implementation has not yet completed a real authenticated Pi
-round-trip on the target WSL2 host. Its tests currently cover stable session IDs,
-nested Pi session discovery, and rejection of path-like user input.
-
-## What to record during evaluation
-
-Keep notes against these questions rather than making the next architectural
-decision from the feature list alone.
-
-### Product experience
-
-- Is Pi Tau's chat experience materially closer to the intended Conduit interface
-  than PI WEB's workspace-first experience?
-- Which screens or workflows feel essential, distracting, or missing?
-- Do projects, workspaces, files, terminals, and sessions match the way you work?
-- Does mobile supervision feel genuinely useful?
-
-### Runtime ownership
-
-- Do Pi Tau's server-owned RPC children survive browser disconnects reliably?
-- Which guarantees from PI WEB's `sessiond` are still missing after a Pi Tau
-  server restart?
-- Can multiple long-running sessions be trusted without manual babysitting?
-- Are logs, failure states, cancellation, and reconnection understandable?
-- Is there a concrete capability that requires Conduit to own `pi --mode rpc`
-  directly?
-
-### Extensibility
-
-- Can a PI WEB browser plugin supply the first Conduit-specific UI additions?
-- Are its machine and fleet concepts sufficient for the next remote-runtime step?
-- Can Conduit observe or translate session events without patching core PI WEB?
-- Which required behavior is blocked by an internal or unstable PI WEB API?
-
-### State and portability
-
-- Where are projects, session history, configuration, and credentials stored?
-- Can the state be backed up and restored predictably?
-- Which state belongs to Pi/PI WEB, and what future metadata must Conduit own?
-- Can a session be handed to another machine or harness with useful continuity?
-
-### Security
-
-- Is loopback/private-network access sufficient for current use?
-- What authentication is needed before exposing a gateway beyond one trusted user?
-- Are allowed filesystem roots and machine credentials understandable and narrow?
-
-## Decision after evaluation
-
-Choose the next direction based on observed constraints:
-
-| Finding | Likely next step |
-| --- | --- |
-| Pi Tau's UX and server-owned RPC lifecycle both work well | Use it as the starting vertical slice and introduce Conduit-owned chat IDs/events behind the UI |
-| Pi Tau's UX works but live-session recovery is inadequate | Retain the useful UI patterns while replacing its runtime manager behind a Conduit adapter |
-| Pi Tau's UX is still too far from the intended interface | Build the first-party shell using official Pi web components and the custom RPC adapter |
-| PI WEB provides a stronger isolated runtime behavior | Reimplement that behavior in Conduit's runtime layer rather than adopting PI WEB's app model |
-| Remote machines work well | Reuse PI WEB's fleet model before building a separate target daemon |
-| Remote or cross-harness requirements cannot fit PI WEB | Define the normalized event and runtime contracts, then add a second adapter |
-
-Do not start the general control broker, plugin marketplace, cross-harness
-orchestration, platform memory, or VPS management merely because they appear in
-the long-term architecture. The next build should answer a limitation observed
-during this evaluation.
-
-## Architectural boundary
-
-Pi Tau is the current Phase 0 default, not Conduit's permanent platform
-contract. PI WEB remains a comparator rather than an underlying data model.
-
-- Pi remains authoritative for native Pi history; Pi Tau currently owns its live
-  child-process state.
-- Pi Tau tab/session IDs and PI WEB project, workspace, session and machine IDs
-  are runtime references—not universal Conduit identities.
-- Both applications' WebSocket protocols and internal stores are implementation
-  details.
-- Future Conduit identity, lineage, normalized events, portable state, approvals,
-  grants, and long-term memory must remain separate.
-- A later runtime adapter may translate PI WEB into the platform contract; Phase 0
-  does not need to implement that abstraction prematurely.
-
-## Known limitations
-
-- The custom app is reconstructed rather than byte-identical to the transient
-  original.
-- A full PI WEB native-module install could not run in the build sandbox because
-  `node-pty` header extraction attempted unsupported ownership changes. The npm
-  dependency graph and lockfile resolved successfully; WSL2 remains the intended
-  verification environment.
-- PI WEB has completed an authenticated Codespaces smoke test; Pi Tau has not yet
-  completed the same user-run smoke test from this repository.
-- Neither implementation should be exposed directly to the public internet.
-
-## Useful commands
-
-From `pi-tau-webserver`:
+Authenticate Conduit's isolated Pi runtime from the repository root:
 
 ```bash
-npm start
-bash ../.devcontainer/start-pi-tau.sh restart
-tail -f ~/.conduit/pi-tau.log
+./scripts/conduit-pi.mjs
 ```
 
-From `phase-0-pi-web`:
+Enter `/login`. The launcher uses the current directory as Pi's working
+directory. To share a named project's native history with the web app:
 
 ```bash
-npm run doctor
-npm run status
-npm run dev
+cd data/chat/files/project-name
+../../../../scripts/conduit-pi.mjs
 ```
 
-From `phase-0-custom`:
+Run the production server from `conduit-web/` with `npm start`, then open
+<http://127.0.0.1:4310>. For development, run `npm run dev:server` and
+`npm run dev` in separate terminals.
+
+The devcontainer installs Pi and project dependencies, builds the client,
+installs `conduit-pi` in `~/.local/bin`, starts Conduit, and forwards port 4310.
+
+## Verification
 
 ```bash
+cd conduit-web
 npm test
-npm start
+npm run build
 ```
-
-Upstream PI WEB documentation: <https://pi-web.dev/>  
-Upstream source: <https://github.com/jmfederico/pi-web>

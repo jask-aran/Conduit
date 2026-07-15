@@ -2,6 +2,12 @@ import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
 
+export function sessionDirectoryFor(cwd, agentDir) {
+  const resolvedCwd = path.resolve(cwd);
+  const encodedCwd = `--${resolvedCwd.replace(/^[/\\]/, "").replace(/[/\\:]/g, "-")}--`;
+  return path.join(path.resolve(agentDir), "sessions", encodedCwd);
+}
+
 export function sessionIdFor(filePath, nativeId = "") {
   return nativeId || crypto.createHash("sha256").update(path.resolve(filePath)).digest("hex").slice(0, 24);
 }
@@ -57,8 +63,10 @@ export async function discoverProjectSessions(project) {
   const sessions = [];
   for (const entry of entries) {
     if (!entry.isFile() || !entry.name.endsWith(".jsonl")) continue;
-    try { sessions.push(await parseSession(path.join(project.sessionsDir, entry.name), project)); }
-    catch {}
+    try {
+      const session = await parseSession(path.join(project.sessionsDir, entry.name), project);
+      if (path.resolve(session.cwd) === path.resolve(project.path)) sessions.push(session);
+    } catch {}
   }
   return sessions.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
 }
@@ -86,7 +94,7 @@ export function messagesFromEntries(entries) {
   return entries.flatMap((entry, index) => {
     if (entry.type !== "message" || !entry.message?.role) return [];
     const role = entry.message.role;
-    if (!['user', 'assistant', 'toolResult'].includes(role)) return [];
+    if (!["user", "assistant", "toolResult"].includes(role)) return [];
     return [{
       id: entry.id || `entry_${index}`,
       role,

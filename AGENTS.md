@@ -1,0 +1,139 @@
+# Repository Guidelines
+
+## Documentation Contract
+
+Repository documentation is stateless: describe the current system, current
+commands, and current constraints only. Do not use README files or `AGENTS.md`
+as change logs, migration narratives, or records of removed experiments. Replace
+obsolete statements instead of appending historical qualifications. History
+belongs in Git commits, pull requests, and issues.
+
+`README.md` is the product, architecture, data-model, and onboarding reference.
+`AGENTS.md` is the implementation contract for contributors and coding agents.
+Keep both synchronized with the repository they describe.
+
+## Project Structure
+
+`conduit-web/` contains the product implementation: the Express server and Pi
+RPC lifecycle live in `src/`, the React/Vite interface lives in `src/client/`,
+and Node tests live in `test/`.
+
+`templates/` contains tracked Pi launch presets. Each template owns its manifest,
+system prompt, extensions, skills, and prompt templates. `scripts/pi-runtime.mjs`
+translates a selected manifest into explicit Pi arguments;
+`scripts/conduit-pi.mjs` provides the equivalent interactive terminal launch.
+
+`data/` is ignored mutable application data:
+
+```text
+data/chat/files/      working files visible to chats
+data/pi/              isolated Pi credentials, settings, and native sessions
+data/conduit.json     stable project identity and display metadata
+```
+
+The reserved unstructured project uses `data/chat/files` itself as its working
+directory. Named projects use `data/chat/files/<slug>`. Keep these working
+directories free of generated `.pi`, `.conduit`, and session files.
+
+The root SVG is architecture documentation. `.devcontainer/` contains the
+development environment setup and Conduit launch scripts.
+
+## Runtime and Data Ownership
+
+Pi owns authentication, settings, model behavior, and JSONL transcript contents.
+Conduit owns project IDs, names, kinds, creation times, live process records,
+browser connections, and template selection.
+
+Conduit sets `PI_CODING_AGENT_DIR` to `data/pi` and lets Pi derive its native
+session directory from `cwd`. Do not add `PI_CODING_AGENT_SESSION_DIR`,
+`--session-dir`, or project-local `.pi/settings.json` redirects. Associate
+sessions with projects using the canonical `cwd` in each JSONL header; Pi's
+encoded directory name is lossy and can collide.
+
+`data/conduit.json` is the central project catalog. The `chat` project maps to
+`data/chat/files`; other project slugs map to direct children. Do not duplicate
+catalog metadata in working directories or make Pi JSONL the owner of Conduit
+application identity.
+
+The server owns live Pi processes. A browser disconnect must not terminate its
+process. Persisted JSONL is resumable after server restart, while live process
+records and buffered RPC events are in-memory state. Never allow two Pi
+processes to write the same JSONL simultaneously.
+
+## Interface Standard: Shadcn First
+
+Use Shadcn components as the default building blocks for interface development.
+Before implementing a control or interaction, check for an appropriate Shadcn
+component and use its standard structure, accessibility behavior, keyboard
+handling, and states. This applies especially to buttons, forms, dialogs,
+drawers, dropdowns, command menus, tabs, tooltips, navigation, notifications,
+tables, and loading or empty states.
+
+Add Shadcn components as repository-owned source through the standard Shadcn
+workflow when they are needed. Preserve the upstream component shape initially;
+customize through composition, variants, and shared design tokens. Do not build
+a bespoke primitive merely to obtain different styling. Create custom components
+when the behavior is Conduit-specific or no suitable Shadcn primitive exists,
+and keep generic interaction mechanics delegated to tested primitives beneath
+them.
+
+Shadcn lowers primitive interaction risk but does not replace application tests.
+Test Conduit-specific state transitions, RPC behavior, data mapping, responsive
+composition, and regressions introduced by customization.
+
+## Build, Test, and Development Commands
+
+Use Node.js 22+ and install dependencies in `conduit-web/`:
+
+```bash
+cd conduit-web
+npm ci
+npm run dev:server       # watch the API server on port 4310
+npm run dev              # run the Vite client in another terminal
+npm test                 # execute all node:test suites
+npm run build            # create the production Vite bundle
+```
+
+From the repository root, `bash .devcontainer/start-conduit.sh restart` builds
+when necessary and restarts the Conduit web surface.
+
+## Coding Style
+
+Use ES modules, two-space indentation, semicolons, and double-quoted JavaScript
+imports and strings. Use `camelCase` for variables and functions, `PascalCase`
+for React components and classes, and kebab-case filenames such as
+`project-store.js`.
+
+Keep configuration in environment variables documented by `.env.example`.
+No repository-wide linter or formatter is configured, so review diffs for local
+consistency. Avoid repository-wide formatting changes unrelated to the task.
+
+## Testing
+
+Server tests use `node:test` and `node:assert/strict`. Name files `*.test.js`,
+isolate filesystem behavior with temporary directories, and place regression
+coverage beside the affected store or lifecycle behavior. Every behavior change
+requires focused coverage; there is no numeric coverage threshold.
+
+Run `npm test` and `npm run build` before submission. Interface changes require
+responsive verification and screenshots in pull requests in addition to any
+appropriate automated interaction tests.
+
+## Commits and Pull Requests
+
+Use short, imperative, sentence-case commit subjects. Keep each commit scoped to
+one coherent change. Pull requests must explain user-visible behavior, identify
+the affected surface, list verification commands, and link relevant issues.
+Include screenshots for interface changes and call out configuration,
+data-format, dependency, template, or session-lifecycle effects.
+
+## Security and Ignored State
+
+Never commit `.env`, `.env.local`, `data/pi/`, `data/conduit.json`,
+`data/chat/files/`, credentials, logs, generated `dist/`, `node_modules/`, or
+runtime session data. Sanitized `.env.example` files are documentation.
+
+Bind development services to loopback unless the documented Codespaces or an
+authenticated tunnel flow requires otherwise. Treat Pi extensions and skills as
+trusted executable configuration and review them before adding them to a
+template.
