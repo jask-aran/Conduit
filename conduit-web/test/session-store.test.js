@@ -3,12 +3,53 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { discoverSessions, findSession, messagesFromEntries, removeSession, sessionDirectoryFor, sessionIdFor } from "../src/session-store.js";
+import { discoverSessions, findSession, messagesFromEntries, removeSession, sessionDirectoryFor, sessionIdFor, settingsFromEntries, toolsFromEntries } from "../src/session-store.js";
 
 test("session IDs prefer Pi's native ID and otherwise remain stable", () => {
   assert.equal(sessionIdFor("/tmp/a.jsonl", "native-123"), "native-123");
   assert.equal(sessionIdFor("/tmp/a.jsonl"), sessionIdFor("/tmp/a.jsonl"));
   assert.notEqual(sessionIdFor("/tmp/a.jsonl"), sessionIdFor("/tmp/b.jsonl"));
+});
+
+test("restores completed tool calls from persisted messages", () => {
+  const entries = [{
+    type: "message",
+    message: {
+      role: "assistant",
+      content: [{ type: "toolCall", id: "call_1", name: "write", arguments: { path: "note.md" } }],
+    },
+  }, {
+    type: "message",
+    message: {
+      role: "toolResult",
+      toolCallId: "call_1",
+      toolName: "write",
+      content: [{ type: "text", text: "Successfully wrote note.md" }],
+    },
+  }];
+
+  assert.deepEqual(toolsFromEntries(entries), [{
+    id: "call_1",
+    name: "write",
+    args: { path: "note.md" },
+    done: true,
+    result: "Successfully wrote note.md",
+    timestamp: null,
+  }]);
+});
+
+test("restores the latest model and thinking level from a session", () => {
+  const entries = [
+    { type: "model_change", provider: "anthropic", modelId: "haiku" },
+    { type: "thinking_level_change", thinkingLevel: "low" },
+    { type: "message", message: { role: "assistant", provider: "openai-codex", model: "gpt-5.6-luna" } },
+    { type: "thinking_level_change", thinkingLevel: "high" },
+  ];
+
+  assert.deepEqual(settingsFromEntries(entries), {
+    model: "openai-codex/gpt-5.6-luna",
+    thinkingLevel: "high",
+  });
 });
 
 test("discovers cwd-matched sessions in Pi's native agent-home layout", async () => {

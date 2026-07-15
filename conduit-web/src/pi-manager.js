@@ -4,10 +4,10 @@ import crypto from "node:crypto";
 import path from "node:path";
 import { buildPiEnvironment, buildPiResourceArgs } from "../../scripts/pi-runtime.mjs";
 
-export function buildPiArgs({ sessionFile = null, model = "", thinkingLevel = "", template }) {
+export function buildPiArgs({ sessionFile = null, model = "", thinkingLevel = "", models, template }) {
   const args = [
     "--mode", "rpc",
-    ...buildPiResourceArgs(template),
+    ...buildPiResourceArgs(models ? { ...template, models } : template),
   ];
   if (sessionFile) args.push("--session", path.resolve(sessionFile));
   if (model.trim()) args.push("--model", model.trim());
@@ -27,7 +27,7 @@ export class PiManager extends EventEmitter {
     this.bySessionFile = new Map();
   }
 
-  create({ project, sessionFile = null, model = "", thinkingLevel = "" }) {
+  create({ project, sessionFile = null, model = "", thinkingLevel = "", models }) {
     const resolvedFile = sessionFile ? path.resolve(sessionFile) : null;
     if (resolvedFile && this.bySessionFile.has(resolvedFile)) {
       return this.processes.get(this.bySessionFile.get(resolvedFile));
@@ -36,7 +36,7 @@ export class PiManager extends EventEmitter {
       ? crypto.createHash("sha256").update(resolvedFile).digest("hex").slice(0, 24)
       : crypto.randomUUID().replaceAll("-", "").slice(0, 24);
 
-    const args = buildPiArgs({ sessionFile: resolvedFile, model, thinkingLevel, template: this.template });
+    const args = buildPiArgs({ sessionFile: resolvedFile, model, thinkingLevel, models, template: this.template });
     const child = this.spawnImpl(this.command, args, {
       cwd: project.path,
       stdio: ["pipe", "pipe", "pipe"],
