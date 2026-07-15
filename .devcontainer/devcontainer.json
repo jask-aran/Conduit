@@ -1,5 +1,5 @@
 {
-  "name": "Conduit Phase 0 — Chat evaluation",
+  "name": "Conduit",
   "image": "mcr.microsoft.com/devcontainers/javascript-node:1-22-bookworm",
   "features": {
     "ghcr.io/devcontainers/features/common-utils:2": {
@@ -8,40 +8,23 @@
       "upgradePackages": false
     }
   },
-  "forwardPorts": [4310, 3001, 8504],
+  "forwardPorts": [4310],
   "portsAttributes": {
     "4310": {
-      "label": "Conduit · Custom",
+      "label": "Conduit",
       "onAutoForward": "openBrowser",
-      "protocol": "http"
-    },
-    "3001": {
-      "label": "Conduit · Pi Tau",
-      "onAutoForward": "silent",
-      "protocol": "http"
-    },
-    "8504": {
-      "label": "Conduit · PI WEB",
-      "onAutoForward": "silent",
       "protocol": "http"
     }
   },
   "containerEnv": {
-    "PI_WEB_HOST": "0.0.0.0",
-    "PI_WEB_PORT": "8504",
-    "PI_WEB_ALLOWED_HOSTS": "true",
-    "TAU_HOST": "0.0.0.0",
-    "TAU_PORT": "3001",
-    "TAU_PROJECTS_DIR": "/workspaces/Conduit/app/files",
     "CONDUIT_HOST": "0.0.0.0",
     "CONDUIT_PORT": "4310",
-    "CONDUIT_FILES_ROOT": "/workspaces/Conduit/app/files",
-    "CONDUIT_STATE_DIR": "/workspaces/Conduit/app/state",
-    "CONDUIT_PI_AGENT_DIR": "/workspaces/Conduit/app/state/pi-agent",
-    "CONDUIT_PI_PROFILE": "/workspaces/Conduit/.pi/experiences/chat/profile.json",
-    "PI_WEB_PROJECTS_FILE": "/workspaces/Conduit/app/state/pi-web-projects.json"
+    "CONDUIT_FILES_ROOT": "/workspaces/Conduit/data/chat/files",
+    "CONDUIT_CATALOG_FILE": "/workspaces/Conduit/data/conduit.json",
+    "CONDUIT_PI_AGENT_DIR": "/workspaces/Conduit/data/pi",
+    "CONDUIT_PI_TEMPLATE": "/workspaces/Conduit/templates/chat/template.json"
   },
   "postCreateCommand": "bash .devcontainer/setup.sh",
-  "postStartCommand": "bash .devcontainer/start-evaluation.sh",
+  "postStartCommand": "bash .devcontainer/start-conduit.sh",
   "remoteUser": "node"
 }

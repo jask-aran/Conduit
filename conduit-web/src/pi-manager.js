@@ -4,11 +4,10 @@ import crypto from "node:crypto";
 import path from "node:path";
 import { buildPiEnvironment, buildPiResourceArgs } from "../../scripts/pi-runtime.mjs";
 
-export function buildPiArgs({ project, sessionFile = null, model = "", thinkingLevel = "", profile }) {
+export function buildPiArgs({ sessionFile = null, model = "", thinkingLevel = "", template }) {
   const args = [
     "--mode", "rpc",
-    "--session-dir", project.sessionsDir,
-    ...buildPiResourceArgs(profile),
+    ...buildPiResourceArgs(template),
   ];
   if (sessionFile) args.push("--session", path.resolve(sessionFile));
   if (model.trim()) args.push("--model", model.trim());
@@ -17,13 +16,13 @@ export function buildPiArgs({ project, sessionFile = null, model = "", thinkingL
 }
 
 export class PiManager extends EventEmitter {
-  constructor({ command = "pi", agentDir, profile, spawnImpl = spawn } = {}) {
+  constructor({ command = "pi", agentDir, template, spawnImpl = spawn } = {}) {
     super();
     if (!agentDir) throw new Error("PiManager requires an isolated agent directory");
     this.command = command;
     this.spawnImpl = spawnImpl;
     this.agentDir = agentDir;
-    this.profile = profile;
+    this.template = template;
     this.processes = new Map();
     this.bySessionFile = new Map();
   }
@@ -37,7 +36,7 @@ export class PiManager extends EventEmitter {
       ? crypto.createHash("sha256").update(resolvedFile).digest("hex").slice(0, 24)
       : crypto.randomUUID().replaceAll("-", "").slice(0, 24);
 
-    const args = buildPiArgs({ project, sessionFile: resolvedFile, model, thinkingLevel, profile: this.profile });
+    const args = buildPiArgs({ sessionFile: resolvedFile, model, thinkingLevel, template: this.template });
     const child = this.spawnImpl(this.command, args, {
       cwd: project.path,
       stdio: ["pipe", "pipe", "pipe"],
@@ -52,7 +51,7 @@ export class PiManager extends EventEmitter {
       sessionFile: resolvedFile,
       model: model.trim() || null,
       thinkingLevel: thinkingLevel.trim() || null,
-      experience: { id: this.profile.id, version: this.profile.version },
+      template: { id: this.template.id, version: this.template.version },
       child,
       status: "starting",
       active: false,

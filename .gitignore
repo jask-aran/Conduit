@@ -3,6 +3,7 @@ node_modules/
 .env.local
 coverage/
 *.log
-app/files/
-app/state/
-phase-0-custom/dist/
+data/chat/files/
+data/pi/
+data/conduit.json
+conduit-web/dist/
