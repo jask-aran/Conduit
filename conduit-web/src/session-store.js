@@ -118,3 +118,52 @@ export function messagesFromEntries(entries) {
     }];
   });
 }
+
+export function toolsFromEntries(entries) {
+  const tools = new Map();
+  for (const entry of entries) {
+    if (entry.type !== "message") continue;
+    const message = entry.message;
+    if (message?.role === "assistant" && Array.isArray(message.content)) {
+      for (const block of message.content) {
+        if (block?.type !== "toolCall" || !block.id) continue;
+        tools.set(block.id, {
+          id: block.id,
+          name: block.name,
+          args: block.arguments,
+          done: false,
+          timestamp: entry.timestamp || null,
+        });
+      }
+    }
+    if (message?.role === "toolResult" && message.toolCallId) {
+      const current = tools.get(message.toolCallId) || {
+        id: message.toolCallId,
+        name: message.toolName,
+        args: {},
+      };
+      tools.set(message.toolCallId, {
+        ...current,
+        name: current.name || message.toolName,
+        done: true,
+        result: textContent(message.content),
+      });
+    }
+  }
+  return [...tools.values()];
+}
+
+export function settingsFromEntries(entries) {
+  let model = null;
+  let thinkingLevel = "";
+  for (const entry of entries) {
+    if (entry.type === "model_change" && entry.provider && entry.modelId) {
+      model = `${entry.provider}/${entry.modelId}`;
+    }
+    if (entry.type === "thinking_level_change") thinkingLevel = entry.thinkingLevel || "";
+    if (entry.type === "message" && entry.message?.role === "assistant" && entry.message.provider && entry.message.model) {
+      model = `${entry.message.provider}/${entry.message.model}`;
+    }
+  }
+  return { model, thinkingLevel };
+}

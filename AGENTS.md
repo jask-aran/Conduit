@@ -48,6 +48,11 @@ Pi owns authentication, settings, model behavior, and JSONL transcript contents.
 Conduit owns project IDs, names, kinds, creation times, live process records,
 browser connections, and template selection.
 
+`data/pi/settings.json` is authoritative for scoped models. Terminal and web
+saves share it, the latest successful save wins, and Conduit reloads it for
+model requests and new processes. The template model list is only the fallback
+when Pi has no saved `enabledModels` value.
+
 Conduit sets `PI_CODING_AGENT_DIR` to `data/pi` and lets Pi derive its native
 session directory from `cwd`. Do not add `PI_CODING_AGENT_SESSION_DIR`,
 `--session-dir`, or project-local `.pi/settings.json` redirects. Associate
@@ -113,7 +118,7 @@ npm test                 # execute all node:test suites
 npm run test:browser     # deterministic desktop and mobile Chromium checks
 npm run test:browser:headed  # show Chromium while debugging interactions
 npm run build            # create the production Vite bundle
-npm run ui:add -- button     # add a Shadcn primitive as owned source
+npm run ui:add -- button     # add a Shadcn primitive using the latest CLI
 npm run ui:add -- @magicui/animated-beam # add a Magic UI effect
 ```
 
@@ -130,6 +135,9 @@ for React components and classes, and kebab-case filenames such as
 Files generated under `src/components/ui/` retain Shadcn's upstream formatting
 so future `shadcn add` and `shadcn diff` operations remain reviewable. Apply the
 repository JavaScript style to application-owned files around those primitives.
+The `ui:add` script invokes `npx shadcn@latest`; keep React, React DOM, and the
+locally imported Shadcn package pinned exactly, and commit lockfile changes from
+each component addition.
 Add Magic UI effects through the configured `@magicui` registry and keep them
 under `src/components/ui/`; prefer Shadcn for interaction mechanics and reserve
 Magic UI for purposeful motion or visual effects.

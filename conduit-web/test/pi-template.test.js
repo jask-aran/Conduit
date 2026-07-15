@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
+import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { buildPiArgs } from "../src/pi-manager.js";
-import { buildPiEnvironment } from "../../scripts/pi-runtime.mjs";
+import { buildPiEnvironment, loadPiModelPatterns } from "../../scripts/pi-runtime.mjs";
 
 test("Pi launch arguments use native session storage and load only the selected template", () => {
   const template = {
@@ -39,4 +41,31 @@ test("Pi runtime environment uses the Conduit-owned agent directory", () => {
   assert.equal(env.PI_CODING_AGENT_DIR, "/repo/data/pi");
   assert.equal("PI_CODING_AGENT_SESSION_DIR" in env, false);
   assert.equal(env.PATH, "/bin");
+});
+
+test("Pi launch arguments can narrow the template model scope", () => {
+  const template = {
+    id: "test",
+    version: "1",
+    systemPrompt: "/tmp/SYSTEM.md",
+    tools: ["read"],
+    models: ["openai/gpt", "anthropic/claude"],
+    extensions: [],
+    skills: [],
+    promptTemplates: [],
+  };
+
+  const args = buildPiArgs({ template, models: ["anthropic/claude"] });
+
+  assert.equal(args[args.indexOf("--models") + 1], "anthropic/claude");
+});
+
+test("terminal launcher model patterns prefer Pi's latest saved scope", () => {
+  const agentDir = fs.mkdtempSync(path.join(os.tmpdir(), "conduit-pi-models-"));
+  fs.writeFileSync(path.join(agentDir, "settings.json"), JSON.stringify({
+    enabledModels: ["anthropic/haiku"],
+  }));
+
+  assert.deepEqual(loadPiModelPatterns(agentDir, ["openai/gpt"]), ["anthropic/haiku"]);
+  assert.deepEqual(loadPiModelPatterns(path.join(agentDir, "missing"), ["openai/gpt"]), ["openai/gpt"]);
 });

@@ -3,7 +3,12 @@ import { spawn } from "node:child_process";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { buildPiEnvironment, buildPiResourceArgs, loadPiTemplate } from "./pi-runtime.mjs";
+import {
+  buildPiEnvironment,
+  buildPiResourceArgs,
+  loadPiModelPatterns,
+  loadPiTemplate,
+} from "./pi-runtime.mjs";
 
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const agentDir = path.resolve(process.env.CONDUIT_PI_AGENT_DIR || path.join(repositoryRoot, "data/pi"));
@@ -11,7 +16,11 @@ const templateFile = path.resolve(process.env.CONDUIT_PI_TEMPLATE || path.join(r
 const template = loadPiTemplate(templateFile);
 
 await fs.mkdir(agentDir, { recursive: true });
-const child = spawn(process.env.PI_COMMAND || "pi", [...buildPiResourceArgs(template), ...process.argv.slice(2)], {
+const models = loadPiModelPatterns(agentDir, template.models);
+const child = spawn(process.env.PI_COMMAND || "pi", [
+  ...buildPiResourceArgs({ ...template, models }),
+  ...process.argv.slice(2),
+], {
   cwd: process.cwd(),
   env: buildPiEnvironment(agentDir),
   stdio: "inherit",

@@ -101,11 +101,15 @@ Do not let two Pi processes write the same JSONL simultaneously.
 
 Templates are tracked Conduit launch presets, not project-local `.pi`
 directories. `templates/chat/template.json` selects a system prompt, allowed
-tools and models, extensions, skills, and prompt templates. The web server and
+tools, fallback models, extensions, skills, and prompt templates. The web server and
 `conduit-pi` translate the selected template into explicit Pi arguments while
 independently selecting the Pi home, working directory, and session.
 
 The configured template is applied when a session process starts or resumes.
+Pi's global `enabledModels` setting is the authoritative model scope shared by
+the terminal and web interface. Conduit reloads `data/pi/settings.json` for
+model and settings requests and uses the saved scope for new Pi processes. The
+template model list applies only when Pi has no saved `enabledModels` value.
 Template identity is present in live process state but is not persisted as part
 of the current project catalog.
 
@@ -114,16 +118,25 @@ of the current project catalog.
 The interface uses Shadcn's Radix Nova component preset with Tailwind CSS v4,
 Lucide icons, Geist, and dark neutral design tokens. Generated component source
 lives under `conduit-web/src/components/ui/`; `components.json` defines its
-registries, CSS, and import aliases. Add Shadcn primitives with
-`npm run ui:add -- button` and Magic UI effects with
-`npm run ui:add -- @magicui/animated-beam`; both commands add repository-owned
-source rather than a runtime component dependency.
+registries, CSS, and import aliases. React, React DOM, and the locally imported
+Shadcn package are pinned to exact releases for reproducible builds. Add
+Shadcn primitives with `npm run ui:add -- button` and Magic UI effects with
+`npm run ui:add -- @magicui/animated-beam`; the script invokes
+`npx shadcn@latest` so new source comes from the current registry and the
+resulting dependency versions are recorded in the lockfile.
 
 New controls, dialogs, menus, forms, navigation, feedback, and layout primitives
 use Shadcn components whenever an appropriate component exists. Compose and
 theme those primitives before writing bespoke interaction code; custom
 components are for Conduit-specific behavior that the component set does not
 cover.
+
+The application shell composes Shadcn Sidebar, Button Group, Dropdown Menu,
+Context Menu, Input Group, Field, and Card primitives. Chat transcripts use the
+first-party Message Scroller, Message, and Bubble components: Message Scroller
+owns streaming follow, turn anchoring, and jump-to-latest behavior while Pi RPC
+continues to own transport and message state. The settings surface writes Pi's
+global scoped-model setting through the Conduit server.
 
 Shadcn components are added to the repository as source when needed, keeping
 their standard accessibility and interaction behavior intact. Application tests

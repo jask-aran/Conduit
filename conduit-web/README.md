@@ -45,6 +45,8 @@ when associating sessions with projects.
 - `GET /v0/capabilities`
 - `GET|POST /v0/projects`
 - `GET /v0/models`
+- `GET|PATCH /v0/settings` reads and updates Pi's shared global model scope;
+  terminal and web saves use the same isolated settings file.
 - `GET /v0/sessions/:id`
 - `GET|POST /v0/live-sessions`
 - `GET /v0/live-sessions/:id/snapshot`
