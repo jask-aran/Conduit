@@ -19,5 +19,11 @@ inside working directories.
 not require reading every JSONL and is reconciled against native session files
 when Conduit starts. Pi JSONL remains authoritative if the registry is missing
 or stale after an interrupted response.
+`pi/settings.json` is the shared authority for web and terminal model scope and
+the next-chat default model. Native session JSONL remains authoritative for each
+chat's transcript, tool calls, model, and thinking level. `conduit.json` contains
+only Conduit-owned project identity and display metadata.
 
 Repository-owned behavior belongs in `../templates/`, not in runtime data.
+Back up or mount this directory as one unit to preserve files, project identity,
+Pi credentials and preferences, and session history.

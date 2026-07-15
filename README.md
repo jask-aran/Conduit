@@ -105,6 +105,10 @@ after a browser or server restart.
 Opening a chat returns at most ten recent complete turns with a 50,000-character
 soft limit. Older ten-turn pages load when the transcript is scrolled upward.
 Large tool results are fetched only when their card is expanded.
+Reopening a chat restores its recorded model, thinking level, messages, and tool
+calls from JSONL. Selecting a model updates the active Pi process and
+`data/pi/settings.json`, making it the default for the next chat without
+replacing the model recorded by existing chats.
 
 Chat renames append Pi's native `session_info` entry. Duplication uses Pi's
 native cross-directory fork operation and assigns a new session ID. Moving a
@@ -164,6 +168,21 @@ HTML and rerenders only the unfinished tail at a 40 ms cadence. Final Markdown,
 KaTeX HTML plus MathML, sanitization, and limited-language Shiki highlighting run
 on the server. Incomplete maths and Markdown continue to render through a lazy
 client tail renderer; KaTeX browser CSS loads only when maths is present.
+The icon-collapsible sidebar presents Chats and Projects as separate groups.
+Chats are direct menu items; projects expand to session subitems. Group actions
+create chats and folders. Chat context menus provide rename, move, duplicate,
+transcript copy, and confirmed deletion. Project context menus provide new chat,
+rename, native directory opening, bulk chat movement, and confirmed deletion.
+An unsent draft is not listed; its persisted session appears selected after the
+first message creates the JSONL.
+
+Assistant text is rendered by the server for completed messages and by
+Streamdown for the unfinished streaming tail. It supports GFM, copyable
+Shiki-highlighted fenced code with line numbers, and KaTeX math using `$...$`
+or `$$...$$`. The code plugin loads only when a fence appears. Sanitization
+permits safe web and email links, confirms external navigation with a Shadcn
+Alert Dialog, and replaces remote images with their alt text. User messages
+remain literal text.
 
 Shadcn components are added to the repository as source when needed, keeping
 their standard accessibility and interaction behavior intact. Application tests
