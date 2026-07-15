@@ -3,7 +3,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { discoverSessions, findSession, messagesFromEntries, sessionDirectoryFor, sessionIdFor } from "../src/session-store.js";
+import { discoverSessions, findSession, messagesFromEntries, removeSession, sessionDirectoryFor, sessionIdFor } from "../src/session-store.js";
 
 test("session IDs prefer Pi's native ID and otherwise remain stable", () => {
   assert.equal(sessionIdFor("/tmp/a.jsonl", "native-123"), "native-123");
@@ -44,5 +44,14 @@ test("filters cwd collisions from Pi's encoded session directories", async () =>
   const projects = [{ id: "project_first", slug: "first", path: firstPath, sessionsDir }];
   const sessions = await discoverSessions(projects);
   assert.deepEqual(sessions.map((session) => session.id), ["session-first"]);
+  await fs.rm(root, { recursive: true, force: true });
+});
+
+test("deletes a discovered native session file", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-session-delete-test-"));
+  const file = path.join(root, "session.jsonl");
+  await fs.writeFile(file, "{}\n");
+  await removeSession({ file });
+  await assert.rejects(fs.access(file), { code: "ENOENT" });
   await fs.rm(root, { recursive: true, force: true });
 });
