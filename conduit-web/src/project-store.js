@@ -98,6 +98,22 @@ export class ProjectStore {
     return this.ensure({ slug: input.slug || input.name, name: input.name, kind: "project" });
   }
 
+  async rename(idOrSlug, name) {
+    const nextName = String(name || "").trim();
+    if (!nextName) throw new Error("Project names must contain letters or numbers");
+    const catalog = await this.readCatalog();
+    const project = catalog.projects.find((item) => item.id === idOrSlug || item.slug === idOrSlug);
+    if (!project) return null;
+    if (project.slug === "chat") {
+      const error = new Error("The unstructured Chats project cannot be renamed");
+      error.code = "reserved_project";
+      throw error;
+    }
+    project.name = nextName;
+    await writeJson(this.catalogFile, catalog);
+    return this.projectView(project);
+  }
+
   async remove(idOrSlug) {
     const catalog = await this.readCatalog();
     const project = catalog.projects.find((item) => item.id === idOrSlug || item.slug === idOrSlug);

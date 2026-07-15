@@ -3,7 +3,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { discoverSessions, findSession, messagesFromEntries, removeSession, sessionDirectoryFor, sessionIdFor, settingsFromEntries, toolsFromEntries } from "../src/session-store.js";
+import { discoverSessions, duplicateSession, findSession, messagesFromEntries, moveSession, moveSessions, removeSession, renameSession, sessionDirectoryFor, sessionIdFor, settingsFromEntries, toolsFromEntries, transcriptFromEntries } from "../src/session-store.js";
 
 test("session IDs prefer Pi's native ID and otherwise remain stable", () => {
   assert.equal(sessionIdFor("/tmp/a.jsonl", "native-123"), "native-123");
@@ -94,5 +94,54 @@ test("deletes a discovered native session file", async () => {
   await fs.writeFile(file, "{}\n");
   await removeSession({ file });
   await assert.rejects(fs.access(file), { code: "ENOENT" });
+  await fs.rm(root, { recursive: true, force: true });
+});
+
+test("renames, duplicates, and moves sessions through Pi's native session manager", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-session-mutation-test-"));
+  const piAgentDir = path.join(root, "pi");
+  const source = {
+    id: "project_source",
+    slug: "source",
+    path: path.join(root, "source"),
+    sessionsDir: sessionDirectoryFor(path.join(root, "source"), piAgentDir),
+  };
+  const target = {
+    id: "project_target",
+    slug: "target",
+    path: path.join(root, "target"),
+    sessionsDir: sessionDirectoryFor(path.join(root, "target"), piAgentDir),
+  };
+  await fs.mkdir(source.sessionsDir, { recursive: true });
+  await fs.mkdir(target.sessionsDir, { recursive: true });
+  const file = path.join(source.sessionsDir, "session.jsonl");
+  await fs.writeFile(file, [
+    JSON.stringify({ type: "session", version: 3, id: "session-source", timestamp: "2026-01-01T00:00:00Z", cwd: source.path }),
+    JSON.stringify({ type: "message", id: "entry-user", parentId: null, timestamp: "2026-01-01T00:00:01Z", message: { role: "user", content: [{ type: "text", text: "Original question" }] } }),
+    JSON.stringify({ type: "message", id: "entry-assistant", parentId: "entry-user", timestamp: "2026-01-01T00:00:02Z", message: { role: "assistant", content: [{ type: "text", text: "Original answer" }] } }),
+  ].join("\n") + "\n");
+
+  const session = (await discoverSessions([source]))[0];
+  const renamed = await renameSession(session, source, "Research notes");
+  assert.equal(renamed.title, "Research notes");
+
+  const duplicate = await duplicateSession(renamed, source, "Research notes copy");
+  assert.notEqual(duplicate.id, renamed.id);
+  assert.equal(duplicate.title, "Research notes copy");
+  assert.equal(duplicate.cwd, source.path);
+
+  const moved = await moveSession(renamed, target);
+  assert.notEqual(moved.id, renamed.id);
+  assert.equal(moved.title, "Research notes");
+  assert.equal(moved.cwd, target.path);
+  await assert.rejects(fs.access(file), { code: "ENOENT" });
+  assert.equal((await discoverSessions([target]))[0].id, moved.id);
+  assert.equal(transcriptFromEntries(moved.entries), "## User\n\nOriginal question\n\n## Assistant\n\nOriginal answer");
+
+  const bulkMoved = await moveSessions([duplicate], target);
+  assert.equal(bulkMoved.length, 1);
+  assert.equal(bulkMoved[0].title, "Research notes copy");
+  await assert.rejects(fs.access(duplicate.file), { code: "ENOENT" });
+  assert.equal((await discoverSessions([target])).length, 2);
   await fs.rm(root, { recursive: true, force: true });
 });

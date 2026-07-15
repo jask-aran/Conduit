@@ -61,6 +61,9 @@ or session JSONL.
 
 All unstructured chats share `data/chat/files` and therefore share access to its
 files. Named projects provide separate filesystem scopes beneath that root.
+Renaming a named project changes its catalog display name while preserving its
+stable slug and working-directory path. The web interface can ask the host
+desktop to open a named project's working directory.
 Deleting a named project deletes its catalog entry, working directory, and
 native Pi sessions. The reserved unstructured project cannot be deleted.
 
@@ -90,6 +93,12 @@ application metadata Pi does not model: stable project IDs, display names,
 kinds, and creation times. Live process state, connected WebSockets, and recent
 RPC events are held in server memory; persisted sessions remain resumable after
 a server restart.
+
+Chat renames append Pi's native `session_info` entry. Duplication uses Pi's
+native cross-directory fork operation and assigns a new session ID. Moving a
+chat creates that fork with the destination project's canonical `cwd`, then
+deletes the source only after the destination JSONL has been created. Moving all
+chats from a project follows the same rule as one batch.
 
 Deleting a chat stops any live process writing that session and deletes its
 authoritative JSONL. Both chat and project deletion require interface

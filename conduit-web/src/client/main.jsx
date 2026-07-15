@@ -1,9 +1,9 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { CableIcon, ShareIcon } from "lucide-react";
+import { ShareIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Meteors } from "@/components/ui/meteors";
-import { SidebarInset, SidebarProvider, useSidebar } from "@/components/ui/sidebar";
+import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AppSidebar } from "./app-sidebar";
 import { ChatComposer } from "./chat-composer";
@@ -35,19 +35,13 @@ class AppErrorBoundary extends React.Component {
   }
 }
 
-function MobileSidebarBrand() {
-  const { toggleSidebar } = useSidebar();
-  return <Button className="mobile-sidebar-brand z-10" variant="ghost" size="icon-sm" aria-label="Conduit" onClick={toggleSidebar}>
-    <CableIcon />
-  </Button>;
-}
-
-function ChatHeader({ title }) {
+function ChatHeader({ title, share = false }) {
   return <header className="chat-header">
-    <span className="chat-header-title">{title}</span>
-    <Button variant="ghost" size="icon-sm" className="ml-auto" aria-label="Share chat">
+    <SidebarTrigger className="-ml-1" />
+    {title && <span className="chat-header-title">{title}</span>}
+    {share && <Button variant="ghost" size="icon-sm" className="ml-auto" aria-label="Share chat">
       <ShareIcon />
-    </Button>
+    </Button>}
   </header>;
 }
 
@@ -198,7 +192,12 @@ function App() {
     if (live && ws.current?.readyState === WebSocket.OPEN) return live;
     const record = await api("/v0/live-sessions", {
       method: "POST",
-      body: JSON.stringify({ projectId: project?.id || "project_chat", model, thinkingLevel: effort }),
+      body: JSON.stringify({
+        projectId: project?.id || "project_chat",
+        resumeSessionId: selectedId || undefined,
+        model,
+        thinkingLevel: effort,
+      }),
     });
     setLive(record); connect(record); await new Promise((resolve) => { if (ws.current.readyState === WebSocket.OPEN) resolve(); else ws.current.addEventListener("open", resolve, { once: true }); });
     return record;
@@ -235,6 +234,83 @@ function App() {
     } catch (e) { setError(e.message); }
   }
 
+  async function renameSession(session, _owningProject, name) {
+    try {
+      await api(`/v0/sessions/${session.id}`, { method: "PATCH", body: JSON.stringify({ name }) });
+      if (selectedId === session.id) {
+        ws.current?.close();
+        setLive(null);
+        setStreaming(false);
+      }
+      await refresh();
+      return true;
+    } catch (e) { setError(e.message); return false; }
+  }
+
+  async function renameProject(target, name) {
+    try {
+      await api(`/v0/projects/${target.id}`, { method: "PATCH", body: JSON.stringify({ name }) });
+      await refresh();
+      return true;
+    } catch (e) { setError(e.message); return false; }
+  }
+
+  async function duplicateSession(session) {
+    try {
+      await api(`/v0/sessions/${session.id}/duplicate`, { method: "POST" });
+      await refresh();
+    } catch (e) { setError(e.message); }
+  }
+
+  async function moveSession(session, _source, target) {
+    try {
+      const moved = await api(`/v0/sessions/${session.id}/move`, {
+        method: "POST",
+        body: JSON.stringify({ projectId: target.id }),
+      });
+      if (selectedId === session.id) {
+        ws.current?.close();
+        setLive(null);
+        setStreaming(false);
+        setProjectId(target.id);
+        setSelectedId(moved.id);
+      }
+      await refresh();
+    } catch (e) { setError(e.message); }
+  }
+
+  async function moveProjectSessions(source, target) {
+    try {
+      const payload = await api(`/v0/projects/${source.id}/move-sessions`, {
+        method: "POST",
+        body: JSON.stringify({ projectId: target.id }),
+      });
+      const selectedMove = list(payload.moved).find((item) => item.sourceId === selectedId);
+      if (selectedMove) {
+        ws.current?.close();
+        setLive(null);
+        setStreaming(false);
+        setProjectId(target.id);
+        setSelectedId(selectedMove.session.id);
+      }
+      await refresh();
+    } catch (e) { setError(e.message); }
+  }
+
+  async function copyTranscript(session) {
+    try {
+      const response = await fetch(`/v0/sessions/${session.id}/transcript`);
+      if (!response.ok) throw new Error("Could not load the transcript");
+      await navigator.clipboard.writeText(await response.text());
+    } catch (e) { setError(e.message); }
+  }
+
+  async function openDirectory(target) {
+    try {
+      await api(`/v0/projects/${target.id}/open`, { method: "POST" });
+    } catch (e) { setError(e.message); }
+  }
+
   const loadSettings = useCallback((targetProjectId) => api(`/v0/settings?projectId=${encodeURIComponent(targetProjectId)}`), []);
   const saveSettings = useCallback((targetProjectId, enabledModels) => api("/v0/settings", {
     method: "PATCH",
@@ -256,24 +332,31 @@ function App() {
   const emptyChat = view === "chat" && messages.length === 0 && tools.length === 0;
 
   return <TooltipProvider>
-    <SidebarProvider open>
+    <SidebarProvider defaultOpen>
       <AppSidebar
         projects={projects}
         projectId={projectId}
         selectedId={selectedId}
         view={view}
         onAddProject={addProject}
+        onCopyTranscript={copyTranscript}
         onDeleteProject={deleteProject}
         onDeleteSession={deleteSession}
+        onDuplicateSession={duplicateSession}
+        onMoveProjectSessions={moveProjectSessions}
+        onMoveSession={moveSession}
         onNewChat={newChat}
+        onOpenDirectory={openDirectory}
         onOpenSettings={() => setView("settings")}
         onOpenSession={(session, owningProject) => openSession(session, owningProject).catch((e) => setError(e.message))}
+        onRenameProject={renameProject}
+        onRenameSession={renameSession}
       />
       <SidebarInset className={`chat-main${emptyChat ? " chat-main-empty" : ""}`}>
         {view === "chat" && <div className="chat-meteors" aria-hidden="true">
           <Meteors number={30} minDelay={0} maxDelay={1} minDuration={12} maxDuration={20} />
         </div>}
-        <MobileSidebarBrand />
+        <ChatHeader title={view === "chat" ? chatTitle : ""} share={view === "chat"} />
         {view === "settings" ? <SettingsPage
           projectId={projectId}
           loadSettings={loadSettings}
@@ -281,7 +364,6 @@ function App() {
           onError={showError}
           onSaved={applyModelSettings}
         /> : <>
-          <ChatHeader title={chatTitle} />
           <ChatThread messages={messages} tools={tools} streaming={streaming} />
           <ChatComposer
             draft={draft}

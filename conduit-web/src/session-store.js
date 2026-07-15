@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
+import { SessionManager } from "@earendil-works/pi-coding-agent";
 
 export function sessionDirectoryFor(cwd, agentDir) {
   const resolvedCwd = path.resolve(cwd);
@@ -89,6 +90,41 @@ export async function removeSession(session) {
   await fs.rm(session.file, { force: true });
 }
 
+export async function renameSession(session, project, name) {
+  const manager = SessionManager.open(session.file, project.sessionsDir, project.path);
+  manager.appendSessionInfo(name);
+  return parseSession(session.file, project);
+}
+
+export async function duplicateSession(session, targetProject, name = "") {
+  const manager = SessionManager.forkFrom(session.file, targetProject.path, targetProject.sessionsDir);
+  if (name.trim()) manager.appendSessionInfo(name);
+  return parseSession(manager.getSessionFile(), targetProject);
+}
+
+export async function moveSession(session, targetProject) {
+  const duplicate = await duplicateSession(session, targetProject);
+  try {
+    await removeSession(session);
+  } catch (error) {
+    await removeSession(duplicate);
+    throw error;
+  }
+  return duplicate;
+}
+
+export async function moveSessions(sessions, targetProject) {
+  const duplicates = [];
+  try {
+    for (const session of sessions) duplicates.push(await duplicateSession(session, targetProject));
+  } catch (error) {
+    await Promise.all(duplicates.map(removeSession));
+    throw error;
+  }
+  await Promise.all(sessions.map(removeSession));
+  return duplicates;
+}
+
 export async function removeProjectSessions(project) {
   const sessions = await discoverProjectSessions(project);
   await Promise.all(sessions.map(removeSession));
@@ -117,6 +153,16 @@ export function messagesFromEntries(entries) {
       timestamp: entry.timestamp || null,
     }];
   });
+}
+
+export function transcriptFromEntries(entries) {
+  return messagesFromEntries(entries)
+    .filter((message) => message.content.trim())
+    .map((message) => {
+      const role = message.role === "user" ? "User" : message.role === "assistant" ? "Assistant" : "Tool result";
+      return `## ${role}\n\n${message.content.trim()}`;
+    })
+    .join("\n\n");
 }
 
 export function toolsFromEntries(entries) {

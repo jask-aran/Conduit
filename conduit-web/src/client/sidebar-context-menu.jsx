@@ -1,0 +1,129 @@
+import {
+  ClipboardCopyIcon,
+  CopyPlusIcon,
+  FolderInputIcon,
+  FolderOpenIcon,
+  MessageSquarePlusIcon,
+  PencilIcon,
+  Trash2Icon,
+} from "lucide-react";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuGroup,
+  ContextMenuItem,
+  ContextMenuRadioGroup,
+  ContextMenuRadioItem,
+  ContextMenuSeparator,
+  ContextMenuSub,
+  ContextMenuSubContent,
+  ContextMenuSubTrigger,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu";
+
+function MoveTargets({ currentProject, projects, onMove }) {
+  return <ContextMenuGroup>
+    <ContextMenuRadioGroup
+      value={currentProject.id}
+      onValueChange={(projectId) => onMove(projects.find((project) => project.id === projectId))}
+    >
+      {projects.map((project) => <ContextMenuRadioItem key={project.id} value={project.id}>
+        {project.name}
+      </ContextMenuRadioItem>)}
+    </ContextMenuRadioGroup>
+  </ContextMenuGroup>;
+}
+
+export function ChatContextMenu({
+  children,
+  currentProject,
+  projects,
+  onCopyTranscript,
+  onDelete,
+  onDuplicate,
+  onMove,
+  onRename,
+}) {
+  return <ContextMenu>
+    <ContextMenuTrigger asChild>{children}</ContextMenuTrigger>
+    <ContextMenuContent className="w-60 sidebar-context-menu">
+      <ContextMenuGroup>
+        <ContextMenuItem onSelect={onRename}>
+          <PencilIcon absoluteStrokeWidth />
+          Rename
+        </ContextMenuItem>
+        <ContextMenuSub>
+          <ContextMenuSubTrigger>
+            <FolderInputIcon absoluteStrokeWidth />
+            Move to folder…
+          </ContextMenuSubTrigger>
+          <ContextMenuSubContent className="w-48 sidebar-context-menu">
+            <MoveTargets currentProject={currentProject} projects={projects} onMove={onMove} />
+          </ContextMenuSubContent>
+        </ContextMenuSub>
+        <ContextMenuItem onSelect={onDuplicate}>
+          <CopyPlusIcon absoluteStrokeWidth />
+          Duplicate
+        </ContextMenuItem>
+        <ContextMenuItem onSelect={onCopyTranscript}>
+          <ClipboardCopyIcon absoluteStrokeWidth />
+          Copy transcript
+        </ContextMenuItem>
+      </ContextMenuGroup>
+      <ContextMenuSeparator />
+      <ContextMenuGroup>
+        <ContextMenuItem variant="destructive" onSelect={onDelete}>
+          <Trash2Icon absoluteStrokeWidth />
+          Delete chat
+        </ContextMenuItem>
+      </ContextMenuGroup>
+    </ContextMenuContent>
+  </ContextMenu>;
+}
+
+export function ProjectContextMenu({
+  children,
+  currentProject,
+  projects,
+  onDelete,
+  onMoveChats,
+  onNewChat,
+  onOpenDirectory,
+  onRename,
+}) {
+  return <ContextMenu>
+    <ContextMenuTrigger asChild>{children}</ContextMenuTrigger>
+    <ContextMenuContent className="w-60 sidebar-context-menu">
+      <ContextMenuGroup>
+        <ContextMenuItem onSelect={onNewChat}>
+          <MessageSquarePlusIcon absoluteStrokeWidth />
+          New chat
+        </ContextMenuItem>
+        <ContextMenuItem onSelect={onRename}>
+          <PencilIcon absoluteStrokeWidth />
+          Rename folder
+        </ContextMenuItem>
+        <ContextMenuItem onSelect={onOpenDirectory}>
+          <FolderOpenIcon absoluteStrokeWidth />
+          Open working directory
+        </ContextMenuItem>
+        <ContextMenuSub>
+          <ContextMenuSubTrigger disabled={!currentProject.sessions.length}>
+            <FolderInputIcon absoluteStrokeWidth />
+            Move chats to…
+          </ContextMenuSubTrigger>
+          <ContextMenuSubContent className="w-48 sidebar-context-menu">
+            <MoveTargets currentProject={currentProject} projects={projects} onMove={onMoveChats} />
+          </ContextMenuSubContent>
+        </ContextMenuSub>
+      </ContextMenuGroup>
+      <ContextMenuSeparator />
+      <ContextMenuGroup>
+        <ContextMenuItem variant="destructive" onSelect={onDelete}>
+          <Trash2Icon absoluteStrokeWidth />
+          Delete folder
+        </ContextMenuItem>
+      </ContextMenuGroup>
+    </ContextMenuContent>
+  </ContextMenu>;
+}

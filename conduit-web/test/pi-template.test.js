@@ -1,9 +1,11 @@
 import assert from "node:assert/strict";
+import { EventEmitter } from "node:events";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { PassThrough } from "node:stream";
 import test from "node:test";
-import { buildPiArgs } from "../src/pi-manager.js";
+import { buildPiArgs, PiManager } from "../src/pi-manager.js";
 import { buildPiEnvironment, loadPiModelPatterns } from "../../scripts/pi-runtime.mjs";
 
 test("Pi launch arguments use native session storage and load only the selected template", () => {
@@ -68,4 +70,33 @@ test("terminal launcher model patterns prefer Pi's latest saved scope", () => {
 
   assert.deepEqual(loadPiModelPatterns(agentDir, ["openai/gpt"]), ["anthropic/haiku"]);
   assert.deepEqual(loadPiModelPatterns(path.join(agentDir, "missing"), ["openai/gpt"]), ["openai/gpt"]);
+});
+
+test("a stopped persisted session can be resumed in a fresh Pi process", async () => {
+  const children = [];
+  const spawnImpl = () => {
+    const child = new EventEmitter();
+    child.stdout = new PassThrough();
+    child.stderr = new PassThrough();
+    child.stdin = { write() {} };
+    child.kill = (signal) => {
+      queueMicrotask(() => child.emit("exit", 0, signal));
+      return true;
+    };
+    children.push(child);
+    return child;
+  };
+  const manager = new PiManager({
+    agentDir: "/tmp/conduit-pi-manager-test",
+    spawnImpl,
+    template: { id: "test", version: "1", models: [], tools: [], extensions: [], skills: [], promptTemplates: [] },
+  });
+  const project = { id: "project_test", slug: "test", path: "/tmp/project", sessionsDir: "/tmp/sessions" };
+  const first = manager.create({ project, sessionFile: "/tmp/sessions/session.jsonl" });
+  await manager.stopAndWait(first.id);
+  const second = manager.create({ project, sessionFile: "/tmp/sessions/session.jsonl" });
+
+  assert.equal(children.length, 2);
+  assert.notEqual(second.child, first.child);
+  assert.equal(manager.list().length, 1);
 });

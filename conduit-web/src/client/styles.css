@@ -3,6 +3,10 @@
 @import "shadcn/tailwind.css";
 @import "@fontsource-variable/geist";
 
+@source "../../node_modules/streamdown/dist/*.js";
+@source "../../node_modules/@streamdown/code/dist/*.js";
+@source "../../node_modules/@streamdown/math/dist/*.js";
+
 @custom-variant dark (&:is(.dark *));
 
 :root {
@@ -126,6 +130,46 @@ html, body, #root { height: 100%; }
 body { margin: 0; overflow: hidden; }
 button, textarea { font: inherit; }
 
+.conduit-sidebar [data-sidebar="group-label"] {
+  font-size: 13px;
+}
+
+.conduit-sidebar [data-sidebar="group-action"],
+.conduit-sidebar [data-sidebar="menu-action"] {
+  width: 22px;
+}
+
+.conduit-sidebar [data-sidebar="group-action"] svg,
+.conduit-sidebar [data-sidebar="menu-action"] svg,
+.conduit-sidebar [data-sidebar="menu-button"] svg,
+.conduit-sidebar [data-sidebar="menu-sub-button"] svg {
+  width: 18px;
+  height: 18px;
+}
+
+.conduit-sidebar [data-sidebar="menu-button"],
+.conduit-sidebar [data-sidebar="menu-sub-button"] {
+  font-size: 15px;
+}
+
+.conduit-sidebar [data-sidebar="header"] [data-sidebar="menu-button"] svg {
+  width: 24px;
+  height: 24px;
+}
+
+.sidebar-context-menu [data-slot="context-menu-item"],
+.sidebar-context-menu [data-slot="context-menu-radio-item"],
+.sidebar-context-menu [data-slot="context-menu-sub-trigger"] {
+  font-size: 15px;
+}
+
+.sidebar-context-menu [data-slot="context-menu-item"] svg,
+.sidebar-context-menu [data-slot="context-menu-radio-item"] svg,
+.sidebar-context-menu [data-slot="context-menu-sub-trigger"] svg {
+  width: 18px;
+  height: 18px;
+}
+
 .chat-main {
   position: relative;
   height: 100dvh;
@@ -150,8 +194,6 @@ button, textarea { font: inherit; }
   font-size: 14px;
   font-weight: 600;
 }
-
-.mobile-sidebar-brand { display: none; }
 
 .transcript {
   position: relative;
@@ -216,50 +258,22 @@ button, textarea { font: inherit; }
   white-space: pre-wrap;
 }
 
-.message-copy {
-  white-space: pre-wrap;
+.chat-markdown {
+  width: 100%;
   font-size: 15px;
   line-height: 1.66;
 }
 
-.code {
-  margin: 12px 0;
-  overflow: hidden;
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  background: var(--card);
-}
-
-.code > div {
-  display: flex;
-  align-items: center;
-  padding: 6px 8px 6px 12px;
-  border-bottom: 1px solid var(--border);
-  color: var(--muted-foreground);
-  font: 11px ui-monospace, monospace;
-  text-transform: uppercase;
-}
-
-.code button { margin-left: auto; }
-.code pre {
-  margin: 0;
-  padding: 16px;
+.external-link-url {
+  max-height: 8rem;
   overflow: auto;
+  border-radius: var(--radius-sm);
+  background: var(--muted);
+  padding: 0.75rem;
   color: var(--foreground);
-  font: 12.5px/1.7 ui-monospace, monospace;
+  font: 0.8125rem/1.5 ui-monospace, monospace;
+  overflow-wrap: anywhere;
 }
-
-.caret {
-  display: inline-block;
-  width: 7px;
-  height: 1em;
-  margin-left: 3px;
-  border-radius: 2px;
-  background: var(--primary);
-  animation: blink 1s steps(1) infinite;
-}
-
-@keyframes blink { 50% { opacity: 0; } }
 
 .tool-card { margin-left: 42px; }
 .tool-card pre {
@@ -288,33 +302,6 @@ button, textarea { font: inherit; }
   border-radius: 14px;
   background: var(--secondary);
   box-shadow: 0 10px 32px rgb(0 0 0 / 14%);
-}
-
-.sidebar-brand {
-  display: flex;
-  height: 48px;
-  align-items: center;
-  gap: 8px;
-  padding: 8px;
-}
-
-.sidebar-brand > span {
-  font-size: 1.5rem;
-  font-weight: 700;
-  line-height: 1;
-  letter-spacing: -0.02em;
-}
-
-.sidebar-brand svg {
-  flex: none;
-  width: 24px !important;
-  height: 24px !important;
-}
-
-.conduit-sidebar [data-sidebar="group-label"] {
-  transition: opacity 200ms ease-linear;
-  font-size: 1rem;
-  font-weight: 650;
 }
 
 .chat-meteors {
@@ -423,21 +410,10 @@ button, textarea { font: inherit; }
 .crash-screen button { margin-top: 12px; padding: 10px 16px; border: 0; border-radius: 9px; background: var(--primary); color: var(--primary-foreground); font-weight: 650; }
 
 @media (max-width: 760px) {
-  .mobile-sidebar-brand {
-    position: absolute;
-    top: 8px;
-    left: 8px;
-    display: inline-flex;
-  }
-  .chat-header { padding-left: 48px; }
   .thread { width: 100%; padding: 40px 16px 20px; }
   .composer-wrap { padding: 10px 12px 16px; }
   .chat-main-empty .composer-wrap { width: calc(100% - 24px); }
   .tool-card { margin-left: 0; }
   .settings-page { width: calc(100% - 24px); padding-block: 32px; }
   .error { right: 12px; bottom: 92px; max-width: calc(100% - 24px); }
-}
-
-@media (min-width: 768px) {
-  .chat-main { height: calc(100dvh - 16px); }
 }

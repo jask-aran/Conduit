@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { lazy, Suspense, useState } from "react";
 import { CheckIcon, ChevronDownIcon, ChevronUpIcon } from "lucide-react";
 import { Bubble, BubbleContent } from "@/components/ui/bubble";
 import { Button } from "@/components/ui/button";
@@ -16,20 +16,15 @@ import {
   MessageScrollerProvider,
   MessageScrollerViewport,
 } from "@/components/ui/message-scroller";
+import { Skeleton } from "@/components/ui/skeleton";
+
+const ChatMarkdown = lazy(() => import("./chat-markdown").then((module) => ({
+  default: module.ChatMarkdown,
+})));
 
 const time = (value) => value
   ? new Date(value).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
   : "";
-
-function RichText({ text = "" }) {
-  const parts = String(text || "").split(/```([\w-]*)\n([\s\S]*?)```/g);
-  return <>{parts.map((part, index) => index % 3 === 2
-    ? <div className="code" key={index}>
-      <div><span>{parts[index - 1] || "text"}</span><Button variant="ghost" size="xs" onClick={() => navigator.clipboard.writeText(part)}>Copy</Button></div>
-      <pre>{part}</pre>
-    </div>
-    : index % 3 === 0 && part ? <div className="message-copy" key={index}>{part}</div> : null)}</>;
-}
 
 function ToolCard({ tool }) {
   const [open, setOpen] = useState(false);
@@ -92,8 +87,11 @@ export function ChatThread({ messages, tools, streaming }) {
                   {message.timestamp && <MessageHeader>{time(message.timestamp)}</MessageHeader>}
                   <Bubble align={isUser ? "end" : "start"} variant={isUser ? "muted" : "ghost"}>
                     <BubbleContent>
-                      {isUser ? String(message.content || "") : <RichText text={message.content} />}
-                      {isStreamingMessage && <span className="caret" />}
+                      {isUser
+                        ? String(message.content || "")
+                        : <Suspense fallback={<Skeleton className="h-16 w-full" />}>
+                          <ChatMarkdown streaming={isStreamingMessage}>{message.content}</ChatMarkdown>
+                        </Suspense>}
                     </BubbleContent>
                   </Bubble>
                 </MessageContent>
