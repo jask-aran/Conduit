@@ -85,6 +85,19 @@ export async function findSession(projects, id) {
   return (await discoverSessions(projects)).find((session) => session.id === id) || null;
 }
 
+export async function removeSession(session) {
+  await fs.rm(session.file, { force: true });
+}
+
+export async function removeProjectSessions(project) {
+  const sessions = await discoverProjectSessions(project);
+  await Promise.all(sessions.map(removeSession));
+  try { await fs.rmdir(project.sessionsDir); }
+  catch (error) {
+    if (!["ENOENT", "ENOTEMPTY"].includes(error.code)) throw error;
+  }
+}
+
 export function projectSessionView(session) {
   const { file, entries, ...safe } = session;
   return safe;

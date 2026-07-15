@@ -1,5 +1,9 @@
 import React, { useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
+import { CheckIcon, ChevronDownIcon, ChevronUpIcon } from "lucide-react";
+import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
+import { TooltipProvider } from "@/components/ui/tooltip";
+import { AppSidebar } from "./app-sidebar";
 import "./styles.css";
 
 const api = async (url, options) => {
@@ -10,7 +14,6 @@ const api = async (url, options) => {
   return body;
 };
 const list = (value) => Array.isArray(value) ? value : [];
-const Icon = ({ children, size = 18 }) => <span className="icon" style={{ fontSize: size }}>{children}</span>;
 const time = (value) => value ? new Date(value).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "";
 const findLastMessage = (items, predicate) => {
   for (let index = items.length - 1; index >= 0; index -= 1) if (predicate(items[index])) return index;
@@ -37,7 +40,7 @@ function RichText({ text = "" }) {
 function ToolCard({ tool }) {
   const [open, setOpen] = useState(false);
   return <button className={`tool ${tool.done ? "done" : ""}`} onClick={() => setOpen(!open)}>
-    <span>{tool.done ? "✓" : "·"}</span><strong>{tool.name || "Tool"}</strong><small>{tool.done ? "Complete" : "Running"}</small><span>{open ? "⌃" : "⌄"}</span>
+    <span>{tool.done ? <CheckIcon /> : "·"}</span><strong>{tool.name || "Tool"}</strong><small>{tool.done ? "Complete" : "Running"}</small><span>{open ? <ChevronUpIcon /> : <ChevronDownIcon />}</span>
     {open && <pre>{JSON.stringify(tool.result || tool.args || {}, null, 2)}</pre>}
   </button>;
 }
@@ -58,8 +61,6 @@ function App() {
   const [effort, setEffort] = useState("");
   const [modelOpen, setModelOpen] = useState(false);
   const [plusOpen, setPlusOpen] = useState(false);
-  const [collapsed, setCollapsed] = useState(false);
-  const [mobileOpen, setMobileOpen] = useState(false);
   const [error, setError] = useState("");
   const ws = useRef(null);
   const bottom = useRef(null);
@@ -98,7 +99,6 @@ function App() {
     return () => { active = false; };
   }, [projectId]);
   const project = projects.find((item) => item.id === projectId) || projects[0];
-  const selected = projects.reduce((found, item) => found || item.sessions.find((session) => session.id === selectedId), null);
   const selectedModel = models.find((item) => item.spec === (model || defaultModel));
   const thinkingLevels = list(selectedModel?.thinkingLevels);
 
@@ -144,7 +144,7 @@ function App() {
   }
 
   async function openSession(session, owningProject) {
-    setError(""); setProjectId(owningProject.id); setSelectedId(session.id); setTools([]); setMobileOpen(false);
+    setError(""); setProjectId(owningProject.id); setSelectedId(session.id); setTools([]);
     const detail = await api(`/v0/sessions/${session.id}`); setMessages(list(detail.messages));
     const record = await api("/v0/live-sessions", { method: "POST", body: JSON.stringify({ projectId: owningProject.id, resumeSessionId: session.id }) });
     setLive(record); connect(record);
@@ -153,7 +153,7 @@ function App() {
   function newChat(target) {
     const nextProject = target || project || projects[0];
     ws.current?.close(); setLive(null); setSelectedId(null); setMessages([]); setTools([]); setStreaming(false); setError("");
-    if (nextProject) setProjectId(nextProject.id); setMobileOpen(false);
+    if (nextProject) setProjectId(nextProject.id);
   }
 
   async function ensureLive() {
@@ -174,30 +174,43 @@ function App() {
     catch (e) { setError(e.message); setDraft(text); }
   }
 
-  async function addProject() {
-    const name = window.prompt("Project name"); if (!name?.trim()) return;
-    try { const created = await api("/v0/projects", { method: "POST", body: JSON.stringify({ name }) }); await refresh(); setProjectId(created.id); newChat(created); }
-    catch (e) { setError(e.message); }
+  async function addProject(name) {
+    try {
+      const created = await api("/v0/projects", { method: "POST", body: JSON.stringify({ name }) });
+      await refresh(); setProjectId(created.id); newChat(created); return true;
+    } catch (e) { setError(e.message); return false; }
   }
 
-  const title = selected?.title || (messages[0]?.role === "user" ? messages[0].content.slice(0, 60) : "New chat");
-  return <div className={`app ${collapsed ? "collapsed" : ""}`}>
-    <aside className={mobileOpen ? "mobile-open" : ""}>
-      <div className="modes"><button className="active">Chat</button><button disabled>Assist</button><button disabled>Remote</button></div>
-      <div className="brand"><i /> <strong>Conduit</strong><button onClick={() => newChat()} title="New chat"><Icon>＋</Icon></button><button onClick={() => setCollapsed(true)} title="Collapse"><Icon>◧</Icon></button></div>
-      <div className="projects">
-        {projects.map((group) => <section key={group.id}>
-          <div className="project-title" onClick={() => { setProjectId(group.id); newChat(group); }}><Icon size={14}>⌄</Icon><Icon size={14}>▰</Icon><strong>{group.name}</strong><button onClick={(e) => { e.stopPropagation(); setProjectId(group.id); newChat(group); }}>＋</button></div>
-          {group.sessions.map((session) => <button className={`session ${selectedId === session.id ? "active" : ""}`} key={session.id} onClick={() => openSession(session, group).catch((e) => setError(e.message))}>{session.title}<small>{time(session.updatedAt)}</small></button>)}
-          {!group.sessions.length && <span className="empty-group">No chats yet</span>}
-        </section>)}
-        <button className="add-project" onClick={addProject}>＋ New project</button>
-      </div>
-      <div className="account"><b>C</b><span>Conduit</span><button disabled title="Settings coming later">⚙</button></div>
-    </aside>
-    {mobileOpen && <button className="scrim" onClick={() => setMobileOpen(false)} />}
-    <main>
-      <header><button className="sidebar-open" onClick={() => { setCollapsed(false); setMobileOpen(true); }}>☰</button><strong>{title}</strong><span>{project?.name || "Chats"} · {streaming ? "Running" : live ? live.status : "Ready"}</span><button disabled title="Sharing comes later">⇧</button></header>
+  async function deleteSession(session, owningProject) {
+    try {
+      await api(`/v0/sessions/${session.id}`, { method: "DELETE" });
+      if (selectedId === session.id) newChat(owningProject);
+      await refresh();
+    } catch (e) { setError(e.message); }
+  }
+
+  async function deleteProject(target) {
+    try {
+      await api(`/v0/projects/${target.id}`, { method: "DELETE" });
+      if (projectId === target.id) newChat(projects.find((item) => item.slug === "chat"));
+      await refresh();
+    } catch (e) { setError(e.message); }
+  }
+
+  return <TooltipProvider>
+    <SidebarProvider>
+      <AppSidebar
+        projects={projects}
+        projectId={projectId}
+        selectedId={selectedId}
+        onAddProject={addProject}
+        onDeleteProject={deleteProject}
+        onDeleteSession={deleteSession}
+        onNewChat={newChat}
+        onOpenSession={(session, owningProject) => openSession(session, owningProject).catch((e) => setError(e.message))}
+      />
+      <SidebarInset className="chat-main">
+        <SidebarTrigger className="sidebar-floating-trigger" />
       <div className="transcript">
         {!messages.length && !tools.length && <div className="welcome"><i /><h1>What are we working on?</h1><p>Start an unstructured chat, or choose a project to give Pi a working directory.</p></div>}
         <div className="thread">
@@ -206,15 +219,16 @@ function App() {
         </div>
       </div>
       <div className="composer-wrap"><div className="composer">
-        <div className="menu-anchor"><button onClick={() => setPlusOpen(!plusOpen)}>＋</button>{plusOpen && <div className="plus-menu"><button disabled>⌕ Attach files <small>Coming later</small></button><button onClick={() => { addProject(); setPlusOpen(false); }}>▰ New project</button></div>}</div>
+        <div className="menu-anchor"><button onClick={() => setPlusOpen(!plusOpen)}>＋</button>{plusOpen && <div className="plus-menu"><button disabled>⌕ Attach files <small>Coming later</small></button></div>}</div>
         <textarea rows="1" value={draft} onChange={(e) => setDraft(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }} placeholder={`Message Pi in ${project?.name || "Chats"}`} />
-        <div className="model-anchor"><button className="model-button" onClick={() => setModelOpen(!modelOpen)}>{model ? model.split("/").pop() : "Default model"}<small>{effort || "off"}</small>⌄</button>
+        <div className="model-anchor"><button className="model-button" onClick={() => setModelOpen(!modelOpen)}>{model ? model.split("/").pop() : "Default model"}<small>{effort || "off"}</small><ChevronDownIcon className="model-chevron" /></button>
           {modelOpen && <div className="model-menu"><div><label>Model</label>{modelNotice && <span className="model-notice">{modelNotice}</span>}<button className={!model ? "chosen" : ""} onClick={() => chooseModel("")}>Pi default</button>{models.map((item) => <button className={model === item.spec ? "chosen" : ""} key={item.spec} onClick={() => chooseModel(item.spec)}>{item.label}<small>{item.provider}</small></button>)}</div><div><label>Thinking</label>{thinkingLevels.map((level) => <button className={effort === level ? "chosen" : ""} key={level} onClick={() => { setEffort(level); setModelOpen(false); }}>{level === "xhigh" ? "XHigh" : level[0].toUpperCase() + level.slice(1)}</button>)}</div></div>}
         </div>
         <button className="send" disabled={!draft.trim() && !streaming} onClick={send}>{streaming ? "■" : "↑"}</button>
       </div><p>Conduit can make mistakes. Verify important output.</p>{error && <div className="error" onClick={() => setError("")}>{error} ×</div>}</div>
-    </main>
-  </div>;
+      </SidebarInset>
+    </SidebarProvider>
+  </TooltipProvider>;
 }
 
 createRoot(document.getElementById("root")).render(<AppErrorBoundary><App /></AppErrorBoundary>);

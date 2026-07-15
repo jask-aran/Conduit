@@ -16,7 +16,11 @@ Keep both synchronized with the repository they describe.
 
 `conduit-web/` contains the product implementation: the Express server and Pi
 RPC lifecycle live in `src/`, the React/Vite interface lives in `src/client/`,
-and Node tests live in `test/`.
+generated Shadcn primitives live in `src/components/ui/`, Node tests live in
+`test/`, and Playwright interface tests live in `test/browser/`.
+`components.json` configures the Shadcn Radix Nova and Magic UI registries,
+aliases, CSS variables, and Lucide icon library. Tailwind CSS v4 supplies
+component and application styling.
 
 `templates/` contains tracked Pi launch presets. Each template owns its manifest,
 system prompt, extensions, skills, and prompt templates. `scripts/pi-runtime.mjs`
@@ -55,6 +59,12 @@ encoded directory name is lossy and can collide.
 catalog metadata in working directories or make Pi JSONL the owner of Conduit
 application identity.
 
+Deleting a named project removes its catalog entry, working directory, and
+native session directory. The reserved `chat` project cannot be deleted.
+Deleting an individual chat removes its authoritative JSONL. Stop matching live
+processes before either destructive operation and require confirmation in the
+interface.
+
 The server owns live Pi processes. A browser disconnect must not terminate its
 process. Persisted JSONL is resumable after server restart, while live process
 records and buffered RPC events are in-memory state. Never allow two Pi
@@ -83,15 +93,28 @@ composition, and regressions introduced by customization.
 
 ## Build, Test, and Development Commands
 
-Use Node.js 22+ and install dependencies in `conduit-web/`:
+The dev container runs `.devcontainer/setup.sh`, which installs system build
+tools, Pi Coding Agent 0.80.6, npm dependencies, Playwright Chromium and its
+Linux libraries, then builds the client. For local Linux setup with Node.js 22+:
 
 ```bash
+sudo npm install -g --ignore-scripts @earendil-works/pi-coding-agent@0.80.6
 cd conduit-web
 npm ci
+npx playwright install --with-deps chromium
+```
+
+Use these commands from `conduit-web/`:
+
+```bash
 npm run dev:server       # watch the API server on port 4310
 npm run dev              # run the Vite client in another terminal
 npm test                 # execute all node:test suites
+npm run test:browser     # deterministic desktop and mobile Chromium checks
+npm run test:browser:headed  # show Chromium while debugging interactions
 npm run build            # create the production Vite bundle
+npm run ui:add -- button     # add a Shadcn primitive as owned source
+npm run ui:add -- @magicui/animated-beam # add a Magic UI effect
 ```
 
 From the repository root, `bash .devcontainer/start-conduit.sh restart` builds
@@ -104,20 +127,34 @@ imports and strings. Use `camelCase` for variables and functions, `PascalCase`
 for React components and classes, and kebab-case filenames such as
 `project-store.js`.
 
+Files generated under `src/components/ui/` retain Shadcn's upstream formatting
+so future `shadcn add` and `shadcn diff` operations remain reviewable. Apply the
+repository JavaScript style to application-owned files around those primitives.
+Add Magic UI effects through the configured `@magicui` registry and keep them
+under `src/components/ui/`; prefer Shadcn for interaction mechanics and reserve
+Magic UI for purposeful motion or visual effects.
+
 Keep configuration in environment variables documented by `.env.example`.
 No repository-wide linter or formatter is configured, so review diffs for local
 consistency. Avoid repository-wide formatting changes unrelated to the task.
 
 ## Testing
 
-Server tests use `node:test` and `node:assert/strict`. Name files `*.test.js`,
-isolate filesystem behavior with temporary directories, and place regression
-coverage beside the affected store or lifecycle behavior. Every behavior change
-requires focused coverage; there is no numeric coverage threshold.
+Server tests use `node:test` and `node:assert/strict`. Name files `*.test.js`
+directly under `test/` so the Node test command does not collect Playwright
+specifications from `test/browser/`. Isolate filesystem behavior with temporary
+directories and place regression coverage beside the affected store or lifecycle
+behavior. Every behavior change requires focused coverage; there is no numeric
+coverage threshold.
 
 Run `npm test` and `npm run build` before submission. Interface changes require
-responsive verification and screenshots in pull requests in addition to any
-appropriate automated interaction tests.
+`npm run test:browser`, responsive verification, and screenshots in pull
+requests. Browser tests use the Playwright CLI rather than MCP, mock the API when
+testing client behavior, and retain traces and screenshots only on failure under
+`test-results/`. Use the command printed by a failure—normally
+`npx playwright show-trace test-results/<test>/trace.zip`—to inspect DOM state,
+network activity, console output, and actions. Use a real server-backed browser
+test only when the API or WebSocket boundary is itself under test.
 
 ## Commits and Pull Requests
 

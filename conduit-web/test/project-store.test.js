@@ -28,3 +28,29 @@ test("stores project metadata centrally and keeps working directories clean", as
   assert.deepEqual(catalog.projects.map((item) => item.slug), ["chat", "conduit-core"]);
   await fs.rm(root, { recursive: true, force: true });
 });
+
+test("deletes named project files, native sessions, and catalog metadata", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-project-delete-test-"));
+  const store = new ProjectStore({
+    filesRoot: path.join(root, "data/chat/files"),
+    catalogFile: path.join(root, "data/conduit.json"),
+    piAgentDir: path.join(root, "data/pi"),
+  });
+  await store.initialize();
+  const project = await store.create({ name: "Disposable" });
+  await fs.writeFile(path.join(project.path, "work.txt"), "temporary");
+  await fs.mkdir(project.sessionsDir, { recursive: true });
+  const projectSession = path.join(project.sessionsDir, "session.jsonl");
+  await fs.writeFile(projectSession, `${JSON.stringify({ type: "session", cwd: project.path })}\n`);
+  const foreignSession = path.join(project.sessionsDir, "collision.jsonl");
+  await fs.writeFile(foreignSession, `${JSON.stringify({ type: "session", cwd: path.join(root, "foreign") })}\n`);
+
+  await store.remove(project.id);
+
+  await assert.rejects(fs.access(project.path), { code: "ENOENT" });
+  await assert.rejects(fs.access(projectSession), { code: "ENOENT" });
+  assert.equal(await fs.readFile(foreignSession, "utf8"), `${JSON.stringify({ type: "session", cwd: path.join(root, "foreign") })}\n`);
+  assert.equal(await store.get(project.id), null);
+  await assert.rejects(store.remove("project_chat"), { code: "reserved_project" });
+  await fs.rm(root, { recursive: true, force: true });
+});

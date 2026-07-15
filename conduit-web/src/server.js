@@ -6,7 +6,7 @@ import { WebSocketServer } from "ws";
 import { loadConfig } from "./config.js";
 import { PiModelCatalog } from "./pi-model-catalog.js";
 import { ProjectStore } from "./project-store.js";
-import { discoverProjectSessions, findSession, messagesFromEntries, projectSessionView } from "./session-store.js";
+import { discoverProjectSessions, findSession, messagesFromEntries, projectSessionView, removeSession } from "./session-store.js";
 import { PiManager } from "./pi-manager.js";
 
 const config = loadConfig();
@@ -46,6 +46,16 @@ app.post("/v0/projects", async (request, response, next) => {
   } catch (error) { next(error); }
 });
 
+app.delete("/v0/projects/:id", async (request, response, next) => {
+  try {
+    const project = await projects.get(request.params.id);
+    if (!project) return response.status(404).json({ error: "project_not_found" });
+    for (const live of manager.list().filter((item) => item.projectId === project.id)) manager.stop(live.id);
+    await projects.remove(project.id);
+    response.status(204).end();
+  } catch (error) { next(error); }
+});
+
 app.get("/v0/models", async (request, response, next) => {
   try {
     const project = await projects.get(request.query.projectId || "chat");
@@ -61,6 +71,16 @@ app.get("/v0/sessions/:id", async (request, response, next) => {
     const session = await findSession(await projects.list(), request.params.id);
     if (!session) return response.status(404).json({ error: "session_not_found" });
     response.json({ ...projectSessionView(session), messages: messagesFromEntries(session.entries) });
+  } catch (error) { next(error); }
+});
+
+app.delete("/v0/sessions/:id", async (request, response, next) => {
+  try {
+    const session = await findSession(await projects.list(), request.params.id);
+    if (!session) return response.status(404).json({ error: "session_not_found" });
+    for (const live of manager.list().filter((item) => item.sessionFile === session.file)) manager.stop(live.id);
+    await removeSession(session);
+    response.status(204).end();
   } catch (error) { next(error); }
 });
 
@@ -104,7 +124,8 @@ app.get("*", (request, response, next) => {
 });
 app.use((error, _request, response, _next) => {
   console.error(error);
-  response.status(error.message?.includes("Project names") ? 400 : 500).json({ error: "runtime_error", message: error.message });
+  const status = error.code === "reserved_project" ? 409 : error.message?.includes("Project names") ? 400 : 500;
+  response.status(status).json({ error: error.code || "runtime_error", message: error.message });
 });
 
 const server = http.createServer(app);

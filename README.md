@@ -14,7 +14,10 @@ authentication, models, tools, and JSONL session history.
 conduit-web/
   src/                 Express server and Pi RPC lifecycle
   src/client/          React/Vite interface
+  src/components/ui/   Shadcn component source
+  test/browser/        Playwright browser smoke tests
   test/                Node test suites
+  components.json      Shadcn registry and alias configuration
 
 templates/
   chat/                selected Pi system prompt and resource manifest
@@ -58,6 +61,8 @@ or session JSONL.
 
 All unstructured chats share `data/chat/files` and therefore share access to its
 files. Named projects provide separate filesystem scopes beneath that root.
+Deleting a named project deletes its catalog entry, working directory, and
+native Pi sessions. The reserved unstructured project cannot be deleted.
 
 ### Pi runtime and sessions
 
@@ -86,6 +91,10 @@ kinds, and creation times. Live process state, connected WebSockets, and recent
 RPC events are held in server memory; persisted sessions remain resumable after
 a server restart.
 
+Deleting a chat stops any live process writing that session and deletes its
+authoritative JSONL. Both chat and project deletion require interface
+confirmation.
+
 Do not let two Pi processes write the same JSONL simultaneously.
 
 ### Templates
@@ -102,26 +111,63 @@ of the current project catalog.
 
 ## Interface development
 
-The interface uses a Shadcn-first component policy. New controls, dialogs,
-menus, forms, navigation, feedback, and layout primitives should use Shadcn
-components whenever an appropriate component exists. Compose and theme those
-primitives before writing bespoke interaction code; custom components are for
-Conduit-specific behavior that the component set does not cover.
+The interface uses Shadcn's Radix Nova component preset with Tailwind CSS v4,
+Lucide icons, Geist, and dark neutral design tokens. Generated component source
+lives under `conduit-web/src/components/ui/`; `components.json` defines its
+registries, CSS, and import aliases. Add Shadcn primitives with
+`npm run ui:add -- button` and Magic UI effects with
+`npm run ui:add -- @magicui/animated-beam`; both commands add repository-owned
+source rather than a runtime component dependency.
+
+New controls, dialogs, menus, forms, navigation, feedback, and layout primitives
+use Shadcn components whenever an appropriate component exists. Compose and
+theme those primitives before writing bespoke interaction code; custom
+components are for Conduit-specific behavior that the component set does not
+cover.
 
 Shadcn components are added to the repository as source when needed, keeping
 their standard accessibility and interaction behavior intact. Application tests
-remain necessary for Conduit-specific state, RPC, and composition behavior.
+cover the behavior introduced by their composition. Magic UI is the secondary
+registry for purposeful animation and visual effects; it does not replace
+Shadcn interaction primitives.
+
+Browser verification uses the Playwright test runner directly, without a browser
+MCP server:
+
+```bash
+cd conduit-web
+npm run test:browser
+npm run test:browser:headed
+```
+
+The test runner starts Vite, mocks the API boundary for deterministic interface
+tests, covers desktop and mobile Chromium, emits concise line output, and retains
+screenshots and traces only for failures. Use `npm run test:browser:headed` when
+watching an interaction is useful. Dev-container setup installs the pinned
+browser and its Linux libraries automatically.
 
 ## Setup and development
 
 Requirements: Node.js 22+, npm, and Pi Coding Agent 0.80.6 available as `pi`.
 
+The dev container performs the complete setup through
+`.devcontainer/setup.sh`: system build tools, the pinned Pi CLI, npm
+dependencies, Chromium and its Linux libraries, and the initial production
+build. For a local Linux environment, run the equivalent commands:
+
 ```bash
+sudo npm install -g --ignore-scripts @earendil-works/pi-coding-agent@0.80.6
 cd conduit-web
 npm ci
+npx playwright install --with-deps chromium
 npm test
+npm run test:browser
 npm run build
 ```
+
+On macOS or Windows, install Node.js 22+ and the pinned Pi CLI, run `npm ci`,
+then run `npx playwright install chromium`; Playwright's `--with-deps` option is
+for supported Linux package managers.
 
 Authenticate Conduit's isolated Pi runtime from the repository root:
 
@@ -137,17 +183,33 @@ cd data/chat/files/project-name
 ../../../../scripts/conduit-pi.mjs
 ```
 
-Run the production server from `conduit-web/` with `npm start`, then open
-<http://127.0.0.1:4310>. For development, run `npm run dev:server` and
-`npm run dev` in separate terminals.
+For application development, run the API and Vite servers in separate terminals
+from `conduit-web/`:
 
-The devcontainer installs Pi and project dependencies, builds the client,
-installs `conduit-pi` in `~/.local/bin`, starts Conduit, and forwards port 4310.
+```bash
+npm run dev:server       # Express API on http://127.0.0.1:4310
+npm run dev              # Vite UI with API/WebSocket proxying
+```
+
+Use `npm test` for server/store behavior and `npm run test:browser` for interface
+behavior. A failed browser test writes its screenshot, error context, and trace
+under `conduit-web/test-results/`; inspect a trace with the command printed by
+the failure, normally `npx playwright show-trace test-results/<test>/trace.zip`.
+Keep browser tests deterministic by intercepting API requests when the behavior
+under test is purely client-side. Use the real Express server only for an
+end-to-end boundary that cannot be represented by a fixture.
+
+Run the production server from `conduit-web/` with `npm start`, then open
+<http://127.0.0.1:4310>.
+
+The dev container also installs `conduit-pi` in `~/.local/bin`, starts Conduit,
+and forwards port 4310.
 
 ## Verification
 
 ```bash
 cd conduit-web
 npm test
+npm run test:browser
 npm run build
 ```

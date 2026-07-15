@@ -12,6 +12,7 @@ sudo npm install -g --ignore-scripts @earendil-works/pi-coding-agent@0.80.6
 
 cd "$ROOT/conduit-web"
 npm ci
+npx playwright install --with-deps chromium
 npm run build
 
 mkdir -p "$HOME/.conduit" "$ROOT/data/chat/files" "$ROOT/data/pi"

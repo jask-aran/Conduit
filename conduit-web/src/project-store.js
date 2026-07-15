@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
-import { sessionDirectoryFor } from "./session-store.js";
+import { removeProjectSessions, sessionDirectoryFor } from "./session-store.js";
 
 const SLUG = /^[a-z0-9](?:[a-z0-9-]{0,46}[a-z0-9])?$/;
 
@@ -96,6 +96,23 @@ export class ProjectStore {
 
   async create(input) {
     return this.ensure({ slug: input.slug || input.name, name: input.name, kind: "project" });
+  }
+
+  async remove(idOrSlug) {
+    const catalog = await this.readCatalog();
+    const project = catalog.projects.find((item) => item.id === idOrSlug || item.slug === idOrSlug);
+    if (!project) return null;
+    if (project.slug === "chat") {
+      const error = new Error("The unstructured Chats project cannot be deleted");
+      error.code = "reserved_project";
+      throw error;
+    }
+    const view = this.projectView(project);
+    await fs.rm(view.path, { recursive: true, force: true });
+    await removeProjectSessions(view);
+    catalog.projects = catalog.projects.filter((item) => item.id !== project.id);
+    await writeJson(this.catalogFile, catalog);
+    return view;
   }
 }
 
