@@ -44,10 +44,16 @@ when associating sessions with projects.
 - `GET /healthz`
 - `GET /v0/capabilities`
 - `GET|POST /v0/projects`
+- `PATCH|DELETE /v0/projects/:id`
+- `POST /v0/projects/:id/open`
+- `POST /v0/projects/:id/move-sessions`
 - `GET /v0/models`
 - `GET|PATCH /v0/settings` reads and updates Pi's shared global model scope;
   terminal and web saves use the same isolated settings file.
-- `GET /v0/sessions/:id`
+- `GET|PATCH|DELETE /v0/sessions/:id`
+- `GET /v0/sessions/:id/transcript`
+- `POST /v0/sessions/:id/duplicate`
+- `POST /v0/sessions/:id/move`
 - `GET|POST /v0/live-sessions`
 - `GET /v0/live-sessions/:id/snapshot`
 - `DELETE /v0/live-sessions/:id/process`

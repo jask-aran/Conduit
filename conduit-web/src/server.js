@@ -6,8 +6,9 @@ import { WebSocketServer } from "ws";
 import { loadConfig } from "./config.js";
 import { PiModelCatalog } from "./pi-model-catalog.js";
 import { ProjectStore } from "./project-store.js";
-import { discoverProjectSessions, findSession, messagesFromEntries, projectSessionView, removeSession, settingsFromEntries, toolsFromEntries } from "./session-store.js";
+import { discoverProjectSessions, duplicateSession, findSession, messagesFromEntries, moveSession, moveSessions, projectSessionView, removeSession, renameSession, settingsFromEntries, toolsFromEntries, transcriptFromEntries } from "./session-store.js";
 import { PiManager } from "./pi-manager.js";
+import { openWorkingDirectory } from "./workspace-opener.js";
 
 const config = loadConfig();
 const projects = new ProjectStore(config);
@@ -21,8 +22,14 @@ app.use(express.json({ limit: "128kb" }));
 app.get("/healthz", (_request, response) => response.json({ ok: true, filesRoot: config.filesRoot }));
 app.get("/v0/capabilities", (_request, response) => response.json({
   runtime: "pi-rpc", create: true, resume: true, projects: true,
+  sessionManagement: true, workspaceOpen: true,
   stream: "websocket", processOwner: "conduit-server", sessionAuthority: "pi-jsonl",
 }));
+
+async function stopSessionProcesses(session) {
+  const matching = manager.list().filter((item) => item.sessionFile === session.file);
+  await Promise.all(matching.map((item) => manager.stopAndWait(item.id)));
+}
 
 app.get("/v0/projects", async (_request, response, next) => {
   try {
@@ -46,11 +53,47 @@ app.post("/v0/projects", async (request, response, next) => {
   } catch (error) { next(error); }
 });
 
+app.patch("/v0/projects/:id", async (request, response, next) => {
+  try {
+    const name = String(request.body?.name || "").trim();
+    if (!name) return response.status(400).json({ error: "project_name_required" });
+    const project = await projects.rename(request.params.id, name);
+    if (!project) return response.status(404).json({ error: "project_not_found" });
+    response.json(project);
+  } catch (error) { next(error); }
+});
+
+app.post("/v0/projects/:id/open", async (request, response, next) => {
+  try {
+    const project = await projects.get(request.params.id);
+    if (!project) return response.status(404).json({ error: "project_not_found" });
+    await openWorkingDirectory(project.path);
+    response.status(202).json({ opened: true, path: project.path });
+  } catch (error) { next(error); }
+});
+
+app.post("/v0/projects/:id/move-sessions", async (request, response, next) => {
+  try {
+    const source = await projects.get(request.params.id);
+    const target = await projects.get(request.body?.projectId || "");
+    if (!source || !target) return response.status(404).json({ error: "project_not_found" });
+    if (source.id === target.id) return response.status(409).json({ error: "project_target_unchanged" });
+    const sessions = await discoverProjectSessions(source);
+    await Promise.all(sessions.map(stopSessionProcesses));
+    const moved = await moveSessions(sessions, target);
+    response.json({ moved: moved.map((session, index) => ({
+      sourceId: sessions[index].id,
+      session: projectSessionView(session),
+    })) });
+  } catch (error) { next(error); }
+});
+
 app.delete("/v0/projects/:id", async (request, response, next) => {
   try {
     const project = await projects.get(request.params.id);
     if (!project) return response.status(404).json({ error: "project_not_found" });
-    for (const live of manager.list().filter((item) => item.projectId === project.id)) manager.stop(live.id);
+    const matching = manager.list().filter((item) => item.projectId === project.id);
+    await Promise.all(matching.map((item) => manager.stopAndWait(item.id)));
     await projects.remove(project.id);
     response.status(204).end();
   } catch (error) { next(error); }
@@ -99,11 +142,56 @@ app.get("/v0/sessions/:id", async (request, response, next) => {
   } catch (error) { next(error); }
 });
 
+app.get("/v0/sessions/:id/transcript", async (request, response, next) => {
+  try {
+    const session = await findSession(await projects.list(), request.params.id);
+    if (!session) return response.status(404).json({ error: "session_not_found" });
+    response.type("text/markdown").send(transcriptFromEntries(session.entries));
+  } catch (error) { next(error); }
+});
+
+app.patch("/v0/sessions/:id", async (request, response, next) => {
+  try {
+    const name = String(request.body?.name || "").trim();
+    if (!name) return response.status(400).json({ error: "session_name_required" });
+    const projectList = await projects.list();
+    const session = await findSession(projectList, request.params.id);
+    if (!session) return response.status(404).json({ error: "session_not_found" });
+    const project = projectList.find((item) => item.id === session.projectId);
+    await stopSessionProcesses(session);
+    response.json(projectSessionView(await renameSession(session, project, name)));
+  } catch (error) { next(error); }
+});
+
+app.post("/v0/sessions/:id/duplicate", async (request, response, next) => {
+  try {
+    const projectList = await projects.list();
+    const session = await findSession(projectList, request.params.id);
+    if (!session) return response.status(404).json({ error: "session_not_found" });
+    const project = projectList.find((item) => item.id === session.projectId);
+    const duplicate = await duplicateSession(session, project, `${session.title} copy`);
+    response.status(201).json(projectSessionView(duplicate));
+  } catch (error) { next(error); }
+});
+
+app.post("/v0/sessions/:id/move", async (request, response, next) => {
+  try {
+    const projectList = await projects.list();
+    const session = await findSession(projectList, request.params.id);
+    const target = projectList.find((item) => item.id === request.body?.projectId || item.slug === request.body?.projectId);
+    if (!session) return response.status(404).json({ error: "session_not_found" });
+    if (!target) return response.status(404).json({ error: "project_not_found" });
+    if (session.projectId === target.id) return response.status(409).json({ error: "session_project_unchanged" });
+    await stopSessionProcesses(session);
+    response.json(projectSessionView(await moveSession(session, target)));
+  } catch (error) { next(error); }
+});
+
 app.delete("/v0/sessions/:id", async (request, response, next) => {
   try {
     const session = await findSession(await projects.list(), request.params.id);
     if (!session) return response.status(404).json({ error: "session_not_found" });
-    for (const live of manager.list().filter((item) => item.sessionFile === session.file)) manager.stop(live.id);
+    await stopSessionProcesses(session);
     await removeSession(session);
     response.status(204).end();
   } catch (error) { next(error); }

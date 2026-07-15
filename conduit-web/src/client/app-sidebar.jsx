@@ -1,12 +1,5 @@
 import { useState } from "react";
-import {
-  CableIcon,
-  FolderIcon,
-  FolderPlusIcon,
-  MessageSquarePlusIcon,
-  SettingsIcon,
-  Trash2Icon,
-} from "lucide-react";
+import { CableIcon } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -18,15 +11,6 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
-import { ButtonGroup } from "@/components/ui/button-group";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import {
-  ContextMenu,
-  ContextMenuContent,
-  ContextMenuGroup,
-  ContextMenuItem,
-  ContextMenuTrigger,
-} from "@/components/ui/context-menu";
 import {
   Dialog,
   DialogContent,
@@ -41,27 +25,30 @@ import {
   Sidebar,
   SidebarContent,
   SidebarFooter,
-  SidebarGroup,
-  SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  SidebarRail,
   useSidebar,
 } from "@/components/ui/sidebar";
+import { NavChats } from "./nav-chats";
+import { NavProjects } from "./nav-projects";
+import { NavUser } from "./nav-user";
 
-function DeleteContextMenu({ children, disabled = false, label, onDelete }) {
-  return <ContextMenu>
-    <ContextMenuTrigger asChild>{children}</ContextMenuTrigger>
-    <ContextMenuContent>
-      <ContextMenuGroup>
-        <ContextMenuItem variant="destructive" disabled={disabled} onSelect={onDelete}>
-          <Trash2Icon />
-          {label}
-        </ContextMenuItem>
-      </ContextMenuGroup>
-    </ContextMenuContent>
-  </ContextMenu>;
+function ConduitBrand({ onClick }) {
+  return <SidebarMenu>
+    <SidebarMenuItem>
+      <SidebarMenuButton size="lg" tooltip="Conduit" onClick={onClick}>
+        <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
+          <CableIcon className="size-6" absoluteStrokeWidth />
+        </div>
+        <div className="grid flex-1 text-left leading-tight">
+          <span className="truncate text-2xl leading-6 font-medium">Conduit</span>
+        </div>
+      </SidebarMenuButton>
+    </SidebarMenuItem>
+  </SidebarMenu>;
 }
 
 export function AppSidebar({
@@ -70,13 +57,22 @@ export function AppSidebar({
   selectedId,
   view,
   onAddProject,
+  onCopyTranscript,
   onDeleteProject,
   onDeleteSession,
+  onDuplicateSession,
+  onMoveProjectSessions,
+  onMoveSession,
   onNewChat,
+  onOpenDirectory,
   onOpenSession,
   onOpenSettings,
+  onRenameProject,
+  onRenameSession,
 }) {
   const [pendingDelete, setPendingDelete] = useState(null);
+  const [pendingRename, setPendingRename] = useState(null);
+  const [renameName, setRenameName] = useState("");
   const [newFolderOpen, setNewFolderOpen] = useState(false);
   const [newFolderName, setNewFolderName] = useState("");
   const { setOpenMobile } = useSidebar();
@@ -105,6 +101,23 @@ export function AppSidebar({
     setPendingDelete(null);
   };
 
+  const requestRename = (target) => {
+    setPendingRename(target);
+    setRenameName(target.type === "project" ? target.project.name : target.session.title);
+  };
+
+  const submitRename = async (event) => {
+    event.preventDefault();
+    const name = renameName.trim();
+    if (!name || !pendingRename) return;
+    const saved = pendingRename.type === "project"
+      ? await onRenameProject(pendingRename.project, name)
+      : await onRenameSession(pendingRename.session, pendingRename.project, name);
+    if (!saved) return;
+    setPendingRename(null);
+    setRenameName("");
+  };
+
   const createFolder = async (event) => {
     event.preventDefault();
     const name = newFolderName.trim();
@@ -115,104 +128,49 @@ export function AppSidebar({
   };
 
   return <>
-    <Sidebar collapsible="offcanvas" variant="inset" className="conduit-sidebar">
+    <Sidebar collapsible="icon" className="conduit-sidebar">
       <SidebarHeader>
-        <SidebarMenu>
-          <SidebarMenuItem>
-            <div className="sidebar-brand">
-              <CableIcon />
-              <span>Conduit</span>
-            </div>
-          </SidebarMenuItem>
-        </SidebarMenu>
+        <ConduitBrand onClick={() => chooseNewChat(chatsProject)} />
       </SidebarHeader>
 
       <SidebarContent>
-        <SidebarGroup className="gap-2 py-4">
-          <SidebarGroupLabel className="h-7 px-2 text-base font-semibold text-sidebar-foreground">Chats</SidebarGroupLabel>
-          <SidebarMenu className="gap-1">
-            {chatsProject && <>
-              {chatsProject.sessions.map((session) => <SidebarMenuItem key={session.id}>
-                <DeleteContextMenu
-                  label="Delete chat"
-                  onDelete={() => setPendingDelete({ type: "session", session, project: chatsProject })}
-                >
-                  <SidebarMenuButton
-                    size="sm"
-                    isActive={view === "chat" && selectedId === session.id}
-                    aria-current={view === "chat" && selectedId === session.id ? "page" : undefined}
-                    tooltip={session.title}
-                    onClick={() => chooseSession(session, chatsProject)}
-                  >
-                    <span>{session.title}</span>
-                  </SidebarMenuButton>
-                </DeleteContextMenu>
-              </SidebarMenuItem>)}
-            </>}
-          </SidebarMenu>
-        </SidebarGroup>
-
-        {folderProjects.length > 0 && <SidebarGroup className="gap-2 py-4 pt-0">
-          <SidebarGroupLabel className="h-7 px-2 text-base font-semibold text-sidebar-foreground">Projects</SidebarGroupLabel>
-          <SidebarMenu className="gap-1">
-            {folderProjects.map((project) => {
-              return <Collapsible key={project.id} defaultOpen asChild>
-                <SidebarMenuItem>
-                  <DeleteContextMenu
-                    label="Delete folder"
-                    onDelete={() => setPendingDelete({ type: "project", project })}
-                  >
-                    <CollapsibleTrigger asChild>
-                      <SidebarMenuButton size="sm" className="font-normal" tooltip={project.name}>
-                        <FolderIcon />
-                        <span className="font-semibold">{project.name}</span>
-                      </SidebarMenuButton>
-                    </CollapsibleTrigger>
-                  </DeleteContextMenu>
-                  <CollapsibleContent>
-                    <SidebarMenu className="mt-1 gap-1 pl-4">
-                      {project.sessions.map((session) => <SidebarMenuItem key={session.id}>
-                        <DeleteContextMenu
-                          label="Delete chat"
-                          onDelete={() => setPendingDelete({ type: "session", session, project })}
-                        >
-                          <SidebarMenuButton
-                            size="sm"
-                            isActive={view === "chat" && selectedId === session.id}
-                            aria-current={view === "chat" && selectedId === session.id ? "page" : undefined}
-                            tooltip={session.title}
-                            onClick={() => chooseSession(session, project)}
-                          >
-                            <span>{session.title}</span>
-                          </SidebarMenuButton>
-                        </DeleteContextMenu>
-                      </SidebarMenuItem>)}
-                      {!project.sessions.length && <li className="px-2 py-1.5 text-xs text-sidebar-foreground/45">No chats</li>}
-                    </SidebarMenu>
-                  </CollapsibleContent>
-                </SidebarMenuItem>
-              </Collapsible>;
-            })}
-          </SidebarMenu>
-        </SidebarGroup>}
+        <NavChats
+          project={chatsProject}
+          projects={projects}
+          selectedId={selectedId}
+          view={view}
+          onCopyTranscript={onCopyTranscript}
+          onDuplicateSession={onDuplicateSession}
+          onMoveSession={onMoveSession}
+          onNewChat={chooseNewChat}
+          onOpenSession={chooseSession}
+          onRenameSession={(session, project) => requestRename({ type: "session", session, project })}
+          onDeleteSession={(session, project) => setPendingDelete({ type: "session", session, project })}
+        />
+        <NavProjects
+          allProjects={projects}
+          projects={folderProjects}
+          selectedId={selectedId}
+          view={view}
+          onAddProject={() => setNewFolderOpen(true)}
+          onCopyTranscript={onCopyTranscript}
+          onDuplicateSession={onDuplicateSession}
+          onMoveProjectSessions={onMoveProjectSessions}
+          onMoveSession={onMoveSession}
+          onNewChat={chooseNewChat}
+          onOpenDirectory={onOpenDirectory}
+          onOpenSession={chooseSession}
+          onRenameProject={(project) => requestRename({ type: "project", project })}
+          onRenameSession={(session, project) => requestRename({ type: "session", session, project })}
+          onDeleteProject={(project) => setPendingDelete({ type: "project", project })}
+          onDeleteSession={(session, project) => setPendingDelete({ type: "session", session, project })}
+        />
       </SidebarContent>
 
       <SidebarFooter>
-        <ButtonGroup aria-label="Sidebar actions" orientation="vertical" className="w-full">
-          <Button variant="outline" size="lg" className="w-full justify-start" onClick={() => chooseNewChat()}>
-            <MessageSquarePlusIcon data-icon="inline-start" />
-            <span>New chat</span>
-          </Button>
-          <Button variant="outline" size="lg" className="w-full justify-start" onClick={() => setNewFolderOpen(true)}>
-            <FolderPlusIcon data-icon="inline-start" />
-            <span>New folder</span>
-          </Button>
-          <Button variant="outline" size="lg" className="w-full justify-start" aria-current={view === "settings" ? "page" : undefined} onClick={chooseSettings}>
-            <SettingsIcon data-icon="inline-start" />
-            <span>Settings</span>
-          </Button>
-        </ButtonGroup>
+        <NavUser onOpenSettings={chooseSettings} />
       </SidebarFooter>
+      <SidebarRail />
     </Sidebar>
 
     <AlertDialog open={Boolean(pendingDelete)} onOpenChange={(open) => !open && setPendingDelete(null)}>
@@ -256,6 +214,36 @@ export function AppSidebar({
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setNewFolderOpen(false)}>Cancel</Button>
             <Button type="submit" disabled={!newFolderName.trim()}>Create folder</Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+
+    <Dialog open={Boolean(pendingRename)} onOpenChange={(open) => !open && setPendingRename(null)}>
+      <DialogContent>
+        <form onSubmit={submitRename}>
+          <DialogHeader>
+            <DialogTitle>{pendingRename?.type === "project" ? "Rename folder" : "Rename chat"}</DialogTitle>
+            <DialogDescription>
+              {pendingRename?.type === "project"
+                ? "Change the folder's display name without changing its working-directory path."
+                : "Set the display name stored in the Pi session."}
+            </DialogDescription>
+          </DialogHeader>
+          <FieldGroup className="my-4">
+            <Field>
+              <FieldLabel htmlFor="rename-name">Name</FieldLabel>
+              <Input
+                id="rename-name"
+                autoFocus
+                value={renameName}
+                onChange={(event) => setRenameName(event.target.value)}
+              />
+            </Field>
+          </FieldGroup>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setPendingRename(null)}>Cancel</Button>
+            <Button type="submit" disabled={!renameName.trim()}>Rename</Button>
           </DialogFooter>
         </form>
       </DialogContent>

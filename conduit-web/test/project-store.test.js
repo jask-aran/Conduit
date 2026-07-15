@@ -24,8 +24,15 @@ test("stores project metadata centrally and keeps working directories clean", as
   assert.equal(project.path, path.join(filesRoot, "conduit-core"));
   assert.deepEqual(await fs.readdir(project.path), []);
 
+  const renamed = await store.rename(project.id, "Conduit Platform");
+  assert.equal(renamed.name, "Conduit Platform");
+  assert.equal(renamed.slug, "conduit-core");
+  assert.equal(renamed.path, project.path);
+
   const catalog = JSON.parse(await fs.readFile(catalogFile, "utf8"));
   assert.deepEqual(catalog.projects.map((item) => item.slug), ["chat", "conduit-core"]);
+  assert.equal(catalog.projects[1].name, "Conduit Platform");
+  await assert.rejects(store.rename("project_chat", "Inbox"), { code: "reserved_project" });
   await fs.rm(root, { recursive: true, force: true });
 });
 

@@ -30,7 +30,11 @@ export class PiManager extends EventEmitter {
   create({ project, sessionFile = null, model = "", thinkingLevel = "", models }) {
     const resolvedFile = sessionFile ? path.resolve(sessionFile) : null;
     if (resolvedFile && this.bySessionFile.has(resolvedFile)) {
-      return this.processes.get(this.bySessionFile.get(resolvedFile));
+      const existingId = this.bySessionFile.get(resolvedFile);
+      const existing = this.processes.get(existingId);
+      if (existing && ["starting", "running"].includes(existing.status)) return existing;
+      this.bySessionFile.delete(resolvedFile);
+      this.processes.delete(existingId);
     }
     const id = resolvedFile
       ? crypto.createHash("sha256").update(resolvedFile).digest("hex").slice(0, 24)
@@ -151,6 +155,20 @@ export class PiManager extends EventEmitter {
     if (!record || record.status === "stopped") return false;
     record.child.kill("SIGTERM");
     return true;
+  }
+
+  async stopAndWait(id) {
+    const record = this.processes.get(id);
+    if (!record || !["starting", "running"].includes(record.status)) return false;
+    return new Promise((resolve) => {
+      const timeout = setTimeout(() => record.child.kill("SIGKILL"), 3000);
+      timeout.unref();
+      record.child.once("exit", () => {
+        clearTimeout(timeout);
+        resolve(true);
+      });
+      record.child.kill("SIGTERM");
+    });
   }
 
   view(record) {
