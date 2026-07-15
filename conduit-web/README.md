@@ -42,6 +42,30 @@ No session-directory override is supplied. Pi writes native JSONL sessions to
 `data/pi/sessions/<encoded-cwd>/`, and Conduit verifies each JSONL header's `cwd`
 when associating sessions with projects.
 
+JSONL remains authoritative for persisted messages, tool calls, model changes,
+and thinking-level changes. Opening a chat reconstructs that state from its
+entries. Selecting a model updates the active process and Pi's shared
+`defaultModel`; a new chat starts with that saved model while an existing chat
+retains its recorded model.
+
+## Client composition
+
+The Shadcn icon-collapsible sidebar separates first-class Chats from expandable
+Projects. Draft chats stay out of navigation until their first message creates a
+session, after which the new session is selected. Context menus expose chat
+rename, move, duplicate, transcript copy, and delete operations, plus project
+chat creation, rename, directory opening, bulk move, and delete operations.
+
+Assistant messages pass through `src/client/chat-markdown.jsx`, which configures
+Streamdown for live and restored content. GFM, partial streaming Markdown,
+KaTeX math, and lazily loaded Shiki fenced-code highlighting share one renderer.
+HTML is sanitized, unsafe URLs are removed, remote images become alt text, and
+external links require confirmation. User messages are displayed literally.
+
+The single-line composer owns the current model and thinking controls. A model
+selection is sent to an attached live process and saved as Pi's next-chat
+default; opening a persisted session restores its own model and thinking level.
+
 ## Runtime API
 
 - `GET /healthz`
@@ -63,3 +87,14 @@ when associating sessions with projects.
 - `GET /v0/live-sessions/:id/snapshot`
 - `DELETE /v0/live-sessions/:id/process`
 - `WS /v0/live-sessions/:id/stream`
+
+## Verification
+
+```bash
+npm test
+npm run test:browser
+npm run build
+```
+
+Browser tests mock the API for deterministic desktop and mobile coverage and
+write screenshots and traces under `test-results/` only when a test fails.

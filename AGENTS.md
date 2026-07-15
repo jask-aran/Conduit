@@ -54,6 +54,12 @@ saves share it, the latest successful save wins, and Conduit reloads it for
 model requests and new processes. The template model list is only the fallback
 when Pi has no saved `enabledModels` value.
 
+Pi JSONL entries are authoritative for an existing session's model, thinking
+level, messages, and tool calls. Opening a session must reconstruct those values
+from JSONL. The saved `defaultModel` seeds new chats; choosing a model updates
+both the attached live process and Pi settings, but must not overwrite the model
+recorded by another session.
+
 Conduit sets `PI_CODING_AGENT_DIR` to `data/pi` and lets Pi derive its native
 session directory from `cwd`. Do not add `PI_CODING_AGENT_SESSION_DIR`,
 `--session-dir`, or project-local `.pi/settings.json` redirects. Associate
@@ -108,6 +114,19 @@ them.
 Shadcn lowers primitive interaction risk but does not replace application tests.
 Test Conduit-specific state transitions, RPC behavior, data mapping, responsive
 composition, and regressions introduced by customization.
+
+Keep the application sidebar composed from Shadcn `Sidebar`, `SidebarGroup`,
+`SidebarGroupLabel`, `SidebarGroupAction`, `SidebarMenu`, and submenu primitives
+with `collapsible="icon"`. Use Shadcn Context Menu for chat and project actions;
+do not recreate collapse, focus, keyboard, padding, or menu behavior in custom
+controls. A new-chat draft is transient navigation state: omit it from Chats
+until the first message persists a session, then select that session.
+
+Render assistant Markdown only through `src/client/chat-markdown.jsx` and
+Streamdown; user prompts remain literal text. Preserve static and streaming
+modes, the always-present KaTeX plugin, fence-triggered lazy Shiki loading, URL
+sanitization, image blocking, and the Shadcn external-link confirmation dialog.
+Do not introduce a parallel Markdown parser or raw HTML rendering path.
 
 ## Build, Test, and Development Commands
 
