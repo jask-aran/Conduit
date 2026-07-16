@@ -14,7 +14,6 @@ import { ChatStore, chatView, isChatId } from "./chat-store.js";
 import { AttachmentStore } from "./attachment-store.js";
 import { announcedAttachmentIds, serializeAttachmentEnvelope } from "./attachment-envelope.js";
 import { CONTINUE_PROMPT } from "./continuation.js";
-import { openWorkingDirectory } from "./workspace-opener.js";
 
 const config = loadConfig();
 const projects = new ProjectStore(config);
@@ -85,7 +84,7 @@ manager.on("event", ({ record, event }) => {
 app.get("/healthz", (_request, response) => response.json({ ok: true, filesRoot: config.filesRoot }));
 app.get("/v0/capabilities", (_request, response) => response.json({
   runtime: "pi-rpc", create: true, resume: true, projects: true,
-  sessionManagement: true, workspaceOpen: true, chatIdentity: "conduit", attachments: "raw-http",
+  sessionManagement: true, chatIdentity: "conduit", attachments: "raw-http",
   partialContinue: config.enablePartialContinue,
   stream: "websocket", processOwner: "conduit-server", sessionAuthority: "pi-jsonl",
 }));
@@ -126,15 +125,6 @@ app.patch("/v0/projects/:id", async (request, response, next) => {
     const project = await projects.rename(request.params.id, name);
     if (!project) return response.status(404).json({ error: "project_not_found" });
     response.json(project);
-  } catch (error) { next(error); }
-});
-
-app.post("/v0/projects/:id/open", async (request, response, next) => {
-  try {
-    const project = await projects.get(request.params.id);
-    if (!project) return response.status(404).json({ error: "project_not_found" });
-    await openWorkingDirectory(project.path);
-    response.status(202).json({ opened: true, path: project.path });
   } catch (error) { next(error); }
 });
 

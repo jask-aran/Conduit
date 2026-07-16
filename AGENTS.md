@@ -176,10 +176,15 @@ npm ci
 npx playwright install --with-deps chromium
 ```
 
-Use these commands from `conduit-web/`:
+Always start or restart the local Conduit server from the repository root with
+`bash .devcontainer/start-conduit.sh restart`. This command applies the
+forwardable `0.0.0.0` host binding, rebuilds the frontend when needed, and
+manages the server PID and log. Do not launch `node src/server.js`, `npm run
+start`, or `npm run dev:server` directly.
+
+Use these commands from `conduit-web/` for development and verification:
 
 ```bash
-npm run dev:server       # watch the API server on port 4310
 npm run dev              # run the Vite client in another terminal
 npm test                 # execute all node:test suites
 npm run test:browser     # deterministic desktop and mobile Chromium checks
