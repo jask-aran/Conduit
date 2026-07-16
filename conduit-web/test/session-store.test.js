@@ -3,6 +3,8 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
+import { serializeAttachmentEnvelope } from "../src/attachment-envelope.js";
+import { CONTINUE_PROMPT } from "../src/continuation.js";
 import { discoverSessions, duplicateSession, findSession, messagesFromEntries, moveSession, moveSessions, pageSessionEntries, removeSession, renameSession, sessionDirectoryFor, sessionIdFor, settingsFromEntries, toolsFromEntries, transcriptFromEntries } from "../src/session-store.js";
 
 test("session IDs prefer Pi's native ID and otherwise remain stable", () => {
@@ -52,6 +54,28 @@ test("restores the latest model and thinking level from a session", () => {
   });
 });
 
+test("presents attachment labels separately and merges hidden continuation turns", () => {
+  const envelope = serializeAttachmentEnvelope({
+    chatId: "550e8400-e29b-41d4-a716-446655440099",
+    attachments: [{ id: "550e8400-e29b-41d4-a716-446655440000", name: "note.txt", storedName: "550e8400-e29b-41d4-a716-446655440000--note.txt" }],
+    message: "Summarise this",
+  });
+  const messages = messagesFromEntries([
+    { type: "message", id: "user", message: { role: "user", content: envelope } },
+    { type: "message", id: "partial", message: { role: "assistant", content: "Part one", stopReason: "aborted" } },
+    { type: "message", id: "hidden", message: { role: "user", content: CONTINUE_PROMPT } },
+    { type: "message", id: "tool-call", message: { role: "assistant", content: [{ type: "toolCall", id: "call", name: "read", arguments: {} }] } },
+    { type: "message", id: "tool-result", message: { role: "toolResult", toolCallId: "call", content: "context" } },
+    { type: "message", id: "continued", message: { role: "assistant", content: "Part one and two", stopReason: "stop" } },
+  ]);
+  assert.equal(messages.filter((message) => message.role !== "toolResult").length, 2);
+  assert.equal(messages[0].content, "Summarise this");
+  assert.equal(messages[0].attachments[0].name, "note.txt");
+  assert.equal(messages[1].content, "Part one and two");
+  assert.equal(messages[1].continued, true);
+  assert.equal(messages[1].stopped, false);
+});
+
 test("pages complete recent turns with a character soft limit", () => {
   const entries = Array.from({ length: 12 }, (_, index) => ([
     { type: "message", message: { role: "user", content: `Question ${index}` } },
@@ -67,6 +91,15 @@ test("pages complete recent turns with a character soft limit", () => {
 
   const oversized = pageSessionEntries(entries, { turnLimit: 10, characterLimit: 5 });
   assert.equal(oversized.entries.length, 2, "the latest complete turn is retained even above the soft limit");
+
+  const continued = pageSessionEntries([
+    { type: "message", message: { role: "user", content: "Question" } },
+    { type: "message", message: { role: "assistant", content: "Part", stopReason: "aborted" } },
+    { type: "message", message: { role: "user", content: CONTINUE_PROMPT } },
+    { type: "message", message: { role: "assistant", content: "Finish" } },
+  ], { turnLimit: 1 });
+  assert.equal(continued.start, 0);
+  assert.equal(continued.entries.length, 4);
 });
 
 test("discovers cwd-matched sessions in Pi's native agent-home layout", async () => {

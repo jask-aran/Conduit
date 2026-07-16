@@ -101,6 +101,28 @@ test("a stopped persisted session can be resumed in a fresh Pi process", async (
   assert.equal(manager.list().length, 1);
 });
 
+test("one Conduit chat cannot start two live Pi writers", () => {
+  let spawns = 0;
+  const manager = new PiManager({
+    agentDir: "/tmp/conduit-pi-single-writer-test",
+    spawnImpl: () => {
+      spawns += 1;
+      const child = new EventEmitter();
+      child.stdout = new PassThrough();
+      child.stderr = new PassThrough();
+      child.stdin = { write() {} };
+      child.kill = () => true;
+      return child;
+    },
+    template: { id: "test", version: "1", models: [], tools: [], extensions: [], skills: [], promptTemplates: [] },
+  });
+  const project = { id: "project_test", slug: "test", path: "/tmp/project", sessionsDir: "/tmp/sessions" };
+  const first = manager.create({ project, chatId: "chat-stable" });
+  const second = manager.create({ project, chatId: "chat-stable" });
+  assert.equal(second, first);
+  assert.equal(spawns, 1);
+});
+
 test("keeps the full live tail visible until stable blocks finish rendering", async () => {
   let finishRender;
   const manager = new PiManager({
@@ -125,4 +147,80 @@ test("keeps the full live tail visible until stable blocks finish rendering", as
   await record.renderQueue;
   assert.equal(record.events.at(-1).type, "assistant_stream_block");
   assert.equal(record.events.at(-1).tail, "Tail");
+});
+
+function rpcFixture(onCommand) {
+  const child = new EventEmitter();
+  child.stdout = new PassThrough();
+  child.stderr = new PassThrough();
+  child.stdin = { write(line) { onCommand?.(JSON.parse(line), child); } };
+  child.kill = (signal) => { queueMicrotask(() => child.emit("exit", 0, signal)); return true; };
+  const manager = new PiManager({
+    agentDir: "/tmp/conduit-pi-rpc-test",
+    spawnImpl: () => child,
+    template: { id: "test", version: "1", models: [], tools: [], extensions: [], skills: [], promptTemplates: [] },
+  });
+  const project = { id: "project_test", slug: "test", path: "/tmp/project", sessionsDir: "/tmp/sessions" };
+  const record = manager.create({ project, chatId: "chat-test", sessionFile: "/tmp/sessions/original.jsonl" });
+  child.emit("spawn");
+  return { manager, child, record };
+}
+
+test("normal abort closes the generation before late deltas can be published", async () => {
+  const { manager, child, record } = rpcFixture((command, process) => {
+    if (command.type === "abort") queueMicrotask(() => process.stdout.write(`${JSON.stringify({
+      id: command.id, type: "response", command: "abort", success: true,
+    })}\n`));
+  });
+  const generationId = manager.prompt(record.id, "Hello");
+  const stopping = manager.abortGeneration(record.id, generationId);
+  child.stdout.write(`${JSON.stringify({ type: "message_start", message: { role: "assistant" } })}\n`);
+  child.stdout.write(`${JSON.stringify({ type: "message_update", assistantMessageEvent: { type: "text_delta", delta: "too late" } })}\n`);
+  const result = await stopping;
+
+  assert.equal(result.processTerminated, false);
+  assert.equal(record.events.some((event) => event.type === "message_start"), false);
+  assert.equal(record.events.at(-1).type, "generation_stopped");
+  assert.equal(record.generation.closed, true);
+});
+
+test("a new prompt cannot race an in-flight abort", async () => {
+  const { manager, record } = rpcFixture((command, process) => {
+    if (command.type === "abort") setTimeout(() => process.stdout.write(`${JSON.stringify({
+      id: command.id, type: "response", command: "abort", success: true,
+    })}\n`), 50);
+  });
+  const generationId = manager.prompt(record.id, "Hello");
+  const stopping = manager.abortGeneration(record.id, generationId);
+  assert.throws(() => manager.prompt(record.id, "Too soon"), { code: "generation_stopping" });
+  await stopping;
+  assert.equal(manager.prompt(record.id, "After stop"), "g2");
+});
+
+test("a hung abort terminates Pi at the deadline and leaves the persisted file resumable", async () => {
+  const { manager, record } = rpcFixture(() => {});
+  const generationId = manager.prompt(record.id, "Hello");
+  const result = await manager.abortGeneration(record.id, generationId);
+  assert.equal(result.processTerminated, true);
+  assert.equal(record.status, "stopped");
+  assert.equal(manager.bySessionFile.has(path.resolve("/tmp/sessions/original.jsonl")), false);
+});
+
+test("fork uses Pi's public RPC and updates the live native session mapping", async () => {
+  const nextFile = "/tmp/sessions/forked.jsonl";
+  const { manager, record } = rpcFixture((command, process) => {
+    if (command.type === "fork") queueMicrotask(() => process.stdout.write(`${JSON.stringify({
+      id: command.id, type: "response", command: "fork", success: true,
+      data: { text: "Original question", cancelled: false },
+    })}\n`));
+    if (command.type === "get_state" && command.id) queueMicrotask(() => process.stdout.write(`${JSON.stringify({
+      id: command.id, type: "response", command: "get_state", success: true,
+      data: { sessionFile: nextFile, sessionId: "forked-native" },
+    })}\n`));
+  });
+  const forked = await manager.fork(record.id, "entry-user");
+  assert.equal(forked.text, "Original question");
+  assert.equal(record.sessionFile, path.resolve(nextFile));
+  assert.equal(record.sessionId, "forked-native");
+  assert.equal(manager.bySessionFile.has(path.resolve("/tmp/sessions/original.jsonl")), false);
 });
