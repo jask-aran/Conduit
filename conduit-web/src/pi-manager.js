@@ -241,7 +241,6 @@ export class PiManager extends EventEmitter {
         error.code = "rpc_timeout";
         reject(error);
       }, timeout);
-      timer.unref();
       record.pendingRequests.set(requestId, { resolve, reject, timer });
       try { this.send(id, { ...value, id: requestId }); }
       catch (error) {
