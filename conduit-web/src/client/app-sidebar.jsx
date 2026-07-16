@@ -68,7 +68,6 @@ export function AppSidebar({
   onMoveProjectSessions,
   onMoveSession,
   onNewChat,
-  onOpenDirectory,
   onOpenSession,
   onOpenSettings,
   onRenameProject,
@@ -177,7 +176,6 @@ export function AppSidebar({
           onMoveProjectSessions={onMoveProjectSessions}
           onMoveSession={onMoveSession}
           onNewChat={chooseNewChat}
-          onOpenDirectory={onOpenDirectory}
           onOpenSession={chooseSession}
           onRenameProject={(project) => requestRename({ type: "project", project })}
           onRenameSession={(session, project) => requestRename({ type: "session", session, project })}

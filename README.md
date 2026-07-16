@@ -67,8 +67,7 @@ paths. Pi configuration and native session JSONL remain outside working trees.
 All unstructured chats share `data/chat/files` and therefore share access to its
 files. Named projects provide separate filesystem scopes beneath that root.
 Renaming a named project changes its catalog display name while preserving its
-stable slug and working-directory path. The web interface can ask the host
-desktop to open a named project's working directory.
+stable slug and working-directory path.
 Deleting a named project deletes its catalog entry, working directory, and
 native Pi sessions. The reserved unstructured project cannot be deleted.
 
@@ -211,7 +210,7 @@ The icon-collapsible sidebar presents Chats and Projects as separate groups.
 Chats are direct menu items; projects expand to session subitems. Group actions
 create chats and folders. Chat context menus provide rename, move, duplicate,
 transcript copy, and confirmed deletion. Project context menus provide new chat,
-rename, native directory opening, bulk chat movement, and confirmed deletion.
+rename, bulk chat movement, and confirmed deletion.
 An unsent draft is not listed; its persisted session appears selected after the
 first message creates the JSONL.
 
@@ -286,11 +285,12 @@ cd data/chat/files/project-name
 ../../../../scripts/conduit-pi.mjs
 ```
 
-For application development, run the API and Vite servers in separate terminals
-from `conduit-web/`:
+Start or restart the managed Conduit server from the repository root, then run
+Vite from `conduit-web/` when developing the client:
 
 ```bash
-npm run dev:server       # Express API on http://127.0.0.1:4310
+bash .devcontainer/start-conduit.sh restart
+cd conduit-web
 npm run dev              # Vite UI with API/WebSocket proxying
 ```
 
@@ -302,8 +302,8 @@ Keep browser tests deterministic by intercepting API requests when the behavior
 under test is purely client-side. Use the real Express server only for an
 end-to-end boundary that cannot be represented by a fixture.
 
-Run the production server from `conduit-web/` with `npm start`, then open
-<http://127.0.0.1:4310>.
+The managed restart command builds the client when necessary, owns the server
+PID and log, and serves Conduit on port 4310.
 
 The dev container also installs `conduit-pi` in `~/.local/bin`, starts Conduit,
 and forwards port 4310.

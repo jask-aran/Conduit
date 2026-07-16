@@ -9,16 +9,17 @@ processes, and a React/Vite client.
 npm ci
 npm test
 npm run build
-npm start
+cd ..
+bash .devcontainer/start-conduit.sh restart
 ```
 
 Open <http://127.0.0.1:4310>. Authenticate the isolated Pi runtime from the
 repository root with `./scripts/conduit-pi.mjs`, then enter `/login`.
 
-For development, run these in separate terminals:
+For client development, keep the managed server running and start Vite from
+this directory:
 
 ```bash
-npm run dev:server
 npm run dev
 ```
 
@@ -70,7 +71,7 @@ The Shadcn icon-collapsible sidebar separates first-class Chats from expandable
 Projects. Draft chats stay out of navigation until their first message creates a
 session, after which the new session is selected. Context menus expose chat
 rename, move, duplicate, transcript copy, and delete operations, plus project
-chat creation, rename, directory opening, bulk move, and delete operations.
+chat creation, rename, bulk move, and delete operations.
 
 Assistant messages pass through `src/client/chat-markdown.jsx`, which configures
 Streamdown for live and restored content. GFM, partial streaming Markdown,
@@ -94,7 +95,6 @@ default; opening a persisted session restores its own model and thinking level.
 - `DELETE /v0/chats/:id/attachments/:attachment-id`
 - `GET|POST /v0/projects`
 - `PATCH|DELETE /v0/projects/:id`
-- `POST /v0/projects/:id/open`
 - `POST /v0/projects/:id/move-sessions`
 - `GET /v0/models`
 - `GET|PATCH /v0/settings` reads and updates Pi's shared global model scope;

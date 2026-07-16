@@ -136,9 +136,6 @@ test.beforeEach(async ({ page }) => {
   await page.route("**/v0/projects/project_research", async (route) => {
     await route.fulfill({ json: { ...projects[1], name: route.request().postDataJSON()?.name || projects[1].name } });
   });
-  await page.route("**/v0/projects/project_research/open", async (route) => {
-    await route.fulfill({ status: 202, json: { opened: true, path: "/tmp/research" } });
-  });
   await page.route("**/v0/projects/project_research/move-sessions", async (route) => {
     await route.fulfill({ json: { moved: [] } });
   });
@@ -415,7 +412,6 @@ test("hides transient new chats and provides complete right-click menus", async 
   await expect(page.getByRole("menuitem")).toHaveText([
     "New chat",
     "Rename folder",
-    "Open working directory",
     "Move chats to…",
     "Delete folder",
   ]);

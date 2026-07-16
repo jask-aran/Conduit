@@ -495,11 +495,6 @@ function App() {
     } catch (caught) { setError(caught.message); }
   }
 
-  async function openDirectory(target) {
-    try { await api(`/v0/projects/${target.id}/open`, { method: "POST" }); }
-    catch (caught) { setError(caught.message); }
-  }
-
   const lastAssistant = messages.findLast((message) => message.role === "assistant");
   const lastAssistantIndex = lastAssistant ? messages.indexOf(lastAssistant) : -1;
   const precedingUser = lastAssistantIndex >= 0
@@ -548,7 +543,6 @@ function App() {
         onMoveProjectSessions={moveProjectSessions}
         onMoveSession={moveSession}
         onNewChat={(project) => newChat(project).catch((caught) => setError(caught.message))}
-        onOpenDirectory={openDirectory}
         onOpenSettings={() => openSettings("models")}
         onOpenSession={(session, project) => openSession(session, project).catch((caught) => setError(caught.message))}
         onRenameProject={renameProject}

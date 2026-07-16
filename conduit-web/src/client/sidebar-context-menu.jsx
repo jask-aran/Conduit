@@ -1,7 +1,6 @@
 import {
   ClipboardCopyIcon,
   FolderInputIcon,
-  FolderOpenIcon,
   MessageSquarePlusIcon,
   PencilIcon,
   Trash2Icon,
@@ -82,7 +81,6 @@ export function ProjectContextMenu({
   onDelete,
   onMoveChats,
   onNewChat,
-  onOpenDirectory,
   onRename,
 }) {
   return <ContextMenu>
@@ -96,10 +94,6 @@ export function ProjectContextMenu({
         <ContextMenuItem onSelect={onRename}>
           <PencilIcon absoluteStrokeWidth />
           Rename folder
-        </ContextMenuItem>
-        <ContextMenuItem onSelect={onOpenDirectory}>
-          <FolderOpenIcon absoluteStrokeWidth />
-          Open working directory
         </ContextMenuItem>
         <ContextMenuSub>
           <ContextMenuSubTrigger disabled={!currentProject.sessions.length}>
