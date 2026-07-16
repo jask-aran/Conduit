@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from "react";
-import { CheckIcon, CopyIcon } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -20,15 +19,20 @@ export function RenderedMarkdown({ html = "" }) {
     if (html.includes('class="katex')) import("katex/dist/katex.min.css");
     const element = root.current;
     if (!element) return undefined;
-    for (const pre of element.querySelectorAll("pre")) {
-      if (pre.querySelector(":scope > .server-code-copy")) continue;
-      const button = document.createElement("button");
-      button.type = "button";
-      button.className = "server-code-copy";
-      button.setAttribute("aria-label", "Copy code");
-      button.textContent = "Copy";
-      pre.append(button);
-    }
+    const enhanceCodeBlocks = () => {
+      for (const pre of element.querySelectorAll("pre")) {
+        if (pre.querySelector(".server-code-copy")) continue;
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "server-code-copy";
+        button.setAttribute("aria-label", "Copy code");
+        button.textContent = "Copy";
+        pre.append(button);
+      }
+    };
+    enhanceCodeBlocks();
+    const observer = new MutationObserver(enhanceCodeBlocks);
+    observer.observe(element, { childList: true, subtree: true });
     const click = async (event) => {
       const anchor = event.target.closest("a[data-conduit-link]");
       if (anchor) {
@@ -48,7 +52,10 @@ export function RenderedMarkdown({ html = "" }) {
       }
     };
     element.addEventListener("click", click);
-    return () => element.removeEventListener("click", click);
+    return () => {
+      observer.disconnect();
+      element.removeEventListener("click", click);
+    };
   }, [html]);
 
   return <>
