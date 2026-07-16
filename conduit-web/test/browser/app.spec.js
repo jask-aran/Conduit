@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { createMarkdownRenderer } from "../../src/markdown-renderer.js";
 
 const projects = [{
   id: "project_chat",
@@ -159,7 +160,7 @@ test("renders persisted assistant Markdown with safe interactive controls", asyn
     "## Markdown sample",
     "",
     "This is **strong**, *emphasized*, and `inline code`.",
-    "Inline math: $$E = mc^2$$.",
+    "Inline math: $E = mc^2$.",
     "",
     "$$",
     "\\int_0^1 x^2 \\, dx = \\frac{1}{3}",
@@ -186,11 +187,12 @@ test("renders persisted assistant Markdown with safe interactive controls", asyn
     "[Unsafe link](javascript:window.__markdownXss=true)",
     "[Unsupported protocol](irc://example.com/channel)",
   ].join("\n");
+  const html = await (await createMarkdownRenderer())(markdown);
   await page.route("**/v0/sessions/session_existing", async (route) => {
     await route.fulfill({ json: {
       messages: [
         { id: "message_existing", role: "user", content: "Show Markdown" },
-        { id: "message_markdown", role: "assistant", content: markdown },
+        { id: "message_markdown", role: "assistant", content: markdown, html },
       ],
       tools: [],
     } });
@@ -200,14 +202,14 @@ test("renders persisted assistant Markdown with safe interactive controls", asyn
   await page.getByRole("button", { name: "Existing chat" }).click();
 
   await expect(page.getByRole("heading", { name: "Markdown sample" })).toBeVisible();
-  await expect(page.locator('[data-streamdown="strong"]')).toHaveText("strong");
-  await expect(page.locator('[data-streamdown="unordered-list"] li')).toHaveCount(2);
-  await expect(page.locator('[data-streamdown="blockquote"]')).toContainText("useful quotation");
-  await expect(page.locator('[data-streamdown="table"]')).toContainText("Tables");
-  await expect(page.locator('[data-streamdown="inline-code"]')).toHaveText("inline code");
+  await expect(page.locator(".server-markdown strong")).toHaveText("strong");
+  await expect(page.locator(".server-markdown ul li")).toHaveCount(2);
+  await expect(page.locator(".server-markdown blockquote")).toContainText("useful quotation");
+  await expect(page.locator(".server-markdown table")).toContainText("Tables");
+  await expect(page.locator(".server-markdown p > code")).toHaveText("inline code");
   await expect(page.locator(".katex")).toHaveCount(2);
   await expect(page.locator(".katex-display")).toHaveCount(1);
-  await expect(page.locator('[data-streamdown="code-block-copy-button"]')).toBeVisible();
+  await expect(page.getByRole("button", { name: "Copy code" })).toBeVisible();
   await expect(page.locator("img")).toHaveCount(0);
   await expect(page.getByText("Tracking image", { exact: true })).toBeVisible();
   await expect(page.locator('a[href^="javascript:"]')).toHaveCount(0);
@@ -273,7 +275,7 @@ test("repairs unfinished Markdown while an assistant response streams", async ({
 
   await expect(page.getByRole("heading", { name: "Live response" })).toBeVisible();
   await expect(page.locator('[data-streamdown="strong"]')).toHaveText("still streaming");
-  await expect(page.locator(".chat-markdown")).toContainText("still streaming");
+  await expect(page.locator(".chat-markdown:not(.server-markdown)")).toContainText("still streaming");
 });
 
 test("hides transient new chats and provides complete right-click menus", async ({ page }, testInfo) => {
