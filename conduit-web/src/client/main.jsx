@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { ShareIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -8,9 +8,10 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { AppSidebar } from "./app-sidebar";
 import { ChatComposer } from "./chat-composer";
 import { ChatThread } from "./chat-thread";
-import { SettingsPage } from "./settings-page";
 import { sessionIdForLive } from "./session-selection";
 import "./styles.css";
+
+const SettingsPage = lazy(() => import("./settings-page").then((module) => ({ default: module.SettingsPage })));
 
 const api = async (url, options) => {
   const response = await fetch(url, { headers: { "content-type": "application/json" }, ...options });
@@ -55,6 +56,8 @@ function App() {
   const [live, setLive] = useState(null);
   const [messages, setMessages] = useState([]);
   const [tools, setTools] = useState([]);
+  const [pageBefore, setPageBefore] = useState(null);
+  const [loadingOlder, setLoadingOlder] = useState(false);
   const [draft, setDraft] = useState("");
   const [streaming, setStreaming] = useState(false);
   const [model, setModel] = useState("");
@@ -120,17 +123,23 @@ function App() {
 
   function consume(event, liveId = "") {
     if (event.type === "agent_start") setStreaming(true);
-    if (event.type === "agent_end" || event.type === "runtime_exit") { setStreaming(false); refresh(liveId).catch(() => {}); }
+    if (event.type === "agent_end" || event.type === "runtime_exit") setStreaming(false);
+    if (event.type === "session_checkpoint") refresh(liveId).catch(() => {});
     if (event.type === "message_start" && event.message?.role === "assistant") {
-      setMessages((old) => [...old, { id: `live_${Date.now()}`, role: "assistant", content: "", timestamp: new Date().toISOString() }]);
+      setMessages((old) => [...old, { id: `live_${Date.now()}`, role: "assistant", content: "", streamBlocks: [], tail: "", timestamp: new Date().toISOString() }]);
     }
-    const delta = event.assistantMessageEvent;
-    if (event.type === "message_update" && delta?.type === "text_delta") {
-      setMessages((old) => { const copy = [...old]; const i = findLastMessage(copy, (x) => x.role === "assistant"); if (i >= 0) copy[i] = { ...copy[i], content: String(copy[i].content || "") + delta.delta }; return copy; });
+    if (event.type === "assistant_stream_block") {
+      setMessages((old) => { const copy = [...old]; const i = findLastMessage(copy, (x) => x.role === "assistant"); if (i >= 0) copy[i] = {
+        ...copy[i],
+        streamBlocks: [...list(copy[i].streamBlocks), { block: event.block, content: event.content, html: event.html }],
+        tail: event.tail || "",
+      }; return copy; });
     }
-    if (event.type === "message_end" && event.message?.role === "assistant") {
-      const content = Array.isArray(event.message.content) ? event.message.content.filter((x) => x.type === "text").map((x) => x.text).join("\n") : String(event.message.content || "");
-      setMessages((old) => { const copy = [...old]; const i = findLastMessage(copy, (x) => x.role === "assistant"); if (i >= 0) copy[i] = { ...copy[i], content }; else copy.push({ id: `end_${Date.now()}`, role: "assistant", content }); return copy; });
+    if (event.type === "assistant_stream_tail") {
+      setMessages((old) => { const copy = [...old]; const i = findLastMessage(copy, (x) => x.role === "assistant"); if (i >= 0) copy[i] = { ...copy[i], tail: event.content }; return copy; });
+    }
+    if (event.type === "assistant_stream_final") {
+      setMessages((old) => { const copy = [...old]; const i = findLastMessage(copy, (x) => x.role === "assistant"); const final = { content: event.content, html: event.html, streamBlocks: [], tail: "" }; if (i >= 0) copy[i] = { ...copy[i], ...final }; else copy.push({ id: `end_${Date.now()}`, role: "assistant", ...final }); return copy; });
     }
     if (event.type === "message_end" && event.message?.role === "user") refresh(liveId).catch(() => {});
     if (event.type === "tool_execution_start") setTools((old) => {
@@ -158,7 +167,15 @@ function App() {
       try {
         const event = JSON.parse(data);
         if (event.type === "runtime_snapshot") {
-          if (event.session?.active) list(event.events).forEach((item) => consume(item, record.id));
+          if (event.session?.active) {
+            const events = list(event.events);
+            const hasAssistantStart = events.some((item) => item.type === "message_start" && item.message?.role === "assistant");
+            const hasAssistantStream = events.some((item) => item.type.startsWith("assistant_stream_"));
+            if (hasAssistantStream && !hasAssistantStart) {
+              setMessages((old) => [...old, { id: `live_${Date.now()}`, role: "assistant", content: "", streamBlocks: [], tail: "", timestamp: new Date().toISOString() }]);
+            }
+            events.forEach((item) => consume(item, record.id));
+          }
         } else consume(event, record.id);
       } catch (e) { setError(e.message); }
     };
@@ -170,6 +187,7 @@ function App() {
     const detail = await api(`/v0/sessions/${session.id}`);
     setMessages(list(detail.messages));
     setTools(list(detail.tools));
+    setPageBefore(detail.page?.before || null);
     if (detail.model) {
       setModel(detail.model);
       const sessionModel = models.find((item) => item.spec === detail.model);
@@ -182,9 +200,21 @@ function App() {
     setLive(record); connect(record);
   }
 
+  async function loadOlder() {
+    if (!selectedId || !pageBefore || loadingOlder) return;
+    setLoadingOlder(true);
+    try {
+      const detail = await api(`/v0/sessions/${selectedId}?before=${encodeURIComponent(pageBefore)}`);
+      setMessages((current) => [...list(detail.messages), ...current]);
+      setTools((current) => [...list(detail.tools), ...current]);
+      setPageBefore(detail.page?.before || null);
+    } catch (e) { setError(e.message); }
+    finally { setLoadingOlder(false); }
+  }
+
   function newChat(target) {
     const nextProject = target || project || projects[0];
-    ws.current?.close(); setView("chat"); setLive(null); setSelectedId(null); setMessages([]); setTools([]); setStreaming(false); setError("");
+    ws.current?.close(); setView("chat"); setLive(null); setSelectedId(null); setMessages([]); setTools([]); setPageBefore(null); setStreaming(false); setError("");
     if (nextProject) setProjectId(nextProject.id);
   }
 
@@ -357,14 +387,22 @@ function App() {
           <Meteors number={30} minDelay={0} maxDelay={1} minDuration={12} maxDuration={20} />
         </div>}
         <ChatHeader title={view === "chat" ? chatTitle : ""} share={view === "chat"} />
-        {view === "settings" ? <SettingsPage
+        {view === "settings" ? <Suspense fallback={<div className="settings-page">Loading settings…</div>}><SettingsPage
           projectId={projectId}
           loadSettings={loadSettings}
           saveSettings={saveSettings}
           onError={showError}
           onSaved={applyModelSettings}
-        /> : <>
-          <ChatThread messages={messages} tools={tools} streaming={streaming} />
+        /></Suspense> : <>
+          <ChatThread
+            messages={messages}
+            tools={tools}
+            streaming={streaming}
+            sessionId={selectedId}
+            hasOlder={Boolean(pageBefore)}
+            loadingOlder={loadingOlder}
+            onLoadOlder={loadOlder}
+          />
           <ChatComposer
             draft={draft}
             streaming={streaming}

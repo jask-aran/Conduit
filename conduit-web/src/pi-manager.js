@@ -16,13 +16,15 @@ export function buildPiArgs({ sessionFile = null, model = "", thinkingLevel = ""
 }
 
 export class PiManager extends EventEmitter {
-  constructor({ command = "pi", agentDir, template, spawnImpl = spawn } = {}) {
+  constructor({ command = "pi", agentDir, template, renderMarkdown = async (value) => value, stableBoundary = () => 0, spawnImpl = spawn } = {}) {
     super();
     if (!agentDir) throw new Error("PiManager requires an isolated agent directory");
     this.command = command;
     this.spawnImpl = spawnImpl;
     this.agentDir = agentDir;
     this.template = template;
+    this.renderMarkdown = renderMarkdown;
+    this.stableBoundary = stableBoundary;
     this.processes = new Map();
     this.bySessionFile = new Map();
   }
@@ -64,6 +66,8 @@ export class PiManager extends EventEmitter {
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
       stdoutBuffer: "",
+      stream: null,
+      renderQueue: Promise.resolve(),
     };
     this.processes.set(id, record);
     if (resolvedFile) this.bySessionFile.set(resolvedFile, id);
@@ -106,6 +110,20 @@ export class PiManager extends EventEmitter {
           record.sessionFile = path.resolve(sessionFile);
           this.bySessionFile.set(record.sessionFile, record.id);
         }
+        if (event.type === "message_start" && event.message?.role === "assistant") {
+          record.stream = { raw: "", committedLength: 0, renderedLength: 0, block: 0, timer: null };
+          this.publish(record, event);
+          continue;
+        }
+        const delta = event.assistantMessageEvent;
+        if (event.type === "message_update" && delta?.type === "text_delta" && record.stream) {
+          this.handleTextDelta(record, delta.delta || "");
+          continue;
+        }
+        if (event.type === "message_end" && event.message?.role === "assistant") {
+          this.finishAssistantMessage(record, event);
+          continue;
+        }
         this.publish(record, event);
         if (event.type === "agent_end" && record.status === "running") {
           this.send(record.id, { type: "get_state" });
@@ -114,6 +132,49 @@ export class PiManager extends EventEmitter {
         this.publish(record, { type: "runtime_stdout", message: line });
       }
     }
+  }
+
+  handleTextDelta(record, delta) {
+    const stream = record.stream;
+    stream.raw += delta;
+    const boundary = this.stableBoundary?.(stream.raw) || 0;
+    if (boundary > stream.committedLength) {
+      const start = stream.committedLength;
+      const content = stream.raw.slice(start, boundary);
+      const block = stream.block++;
+      stream.committedLength = boundary;
+      record.renderQueue = record.renderQueue.then(async () => {
+        const html = await this.renderMarkdown(content);
+        stream.renderedLength = boundary;
+        this.publish(record, {
+          type: "assistant_stream_block",
+          block,
+          content,
+          html,
+          tail: stream.raw.slice(boundary),
+        });
+      }).catch((error) => this.publish(record, { type: "runtime_error", message: error.message }));
+    }
+    clearTimeout(stream.timer);
+    stream.timer = setTimeout(() => {
+      this.publish(record, {
+        type: "assistant_stream_tail",
+        content: stream.raw.slice(stream.renderedLength),
+      });
+    }, 40);
+  }
+
+  finishAssistantMessage(record, event) {
+    const stream = record.stream;
+    if (stream?.timer) clearTimeout(stream.timer);
+    const content = Array.isArray(event.message.content)
+      ? event.message.content.filter((block) => block.type === "text").map((block) => block.text).join("\n")
+      : String(event.message.content || stream?.raw || "");
+    record.renderQueue = record.renderQueue.then(async () => {
+      const html = await this.renderMarkdown(content);
+      this.publish(record, { type: "assistant_stream_final", message: event.message, content, html });
+    }).catch((error) => this.publish(record, { type: "runtime_error", message: error.message }));
+    record.stream = null;
   }
 
   send(id, value) {
@@ -172,7 +233,7 @@ export class PiManager extends EventEmitter {
   }
 
   view(record) {
-    const { child, clients, stdoutBuffer, events, ...safe } = record;
+    const { child, clients, stdoutBuffer, events, stream, renderQueue, ...safe } = record;
     return { ...safe, clientCount: clients.size };
   }
 

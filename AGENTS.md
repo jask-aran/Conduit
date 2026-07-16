@@ -33,6 +33,7 @@ translates a selected manifest into explicit Pi arguments;
 data/chat/files/      working files visible to chats
 data/pi/              isolated Pi credentials, settings, and native sessions
 data/conduit.json     stable project identity and display metadata
+data/sessions.json    rebuildable lightweight session registry
 ```
 
 The reserved unstructured project uses `data/chat/files` itself as its working
@@ -64,6 +65,12 @@ encoded directory name is lossy and can collide.
 catalog metadata in working directories or make Pi JSONL the owner of Conduit
 application identity.
 
+`data/sessions.json` is an atomic cache of lightweight sidebar metadata. Pi
+JSONL remains authoritative. Update the registry only at completed-response and
+explicit session-mutation checkpoints, reconcile file presence at startup, and
+never parse every transcript to serve an ordinary project or sidebar request.
+Browser and incomplete-stream state is disposable.
+
 Deleting a named project removes its catalog entry, working directory, and
 native session directory. The reserved `chat` project cannot be deleted.
 Deleting an individual chat removes its authoritative JSONL. Stop matching live
@@ -74,6 +81,12 @@ The server owns live Pi processes. A browser disconnect must not terminate its
 process. Persisted JSONL is resumable after server restart, while live process
 records and buffered RPC events are in-memory state. Never allow two Pi
 processes to write the same JSONL simultaneously.
+
+Transcript APIs return ten complete turns at a time with a 50,000-character soft
+limit. Preserve turn boundaries when paging. Stream assistant output by freezing
+complete server-rendered Markdown blocks, updating only the unfinished tail at a
+bounded cadence, and replacing it with canonical server-rendered output when the
+message completes. Final Markdown sanitization, KaTeX, and Shiki run server-side.
 
 ## Interface Standard: Shadcn First
 
@@ -121,6 +134,10 @@ npm run build            # create the production Vite bundle
 npm run ui:add -- button     # add a Shadcn primitive using the latest CLI
 npm run ui:add -- @magicui/animated-beam # add a Magic UI effect
 ```
+
+`npm run build` also emits `dist/bundle-report.json` and fails when compressed
+initial or lazy chunks exceed the configured budgets. Treat budget increases as
+reviewed architectural changes, not incidental dependency updates.
 
 From the repository root, `bash .devcontainer/start-conduit.sh restart` builds
 when necessary and restarts the Conduit web surface.
@@ -175,7 +192,7 @@ data-format, dependency, template, or session-lifecycle effects.
 ## Security and Ignored State
 
 Never commit `.env`, `.env.local`, `data/pi/`, `data/conduit.json`,
-`data/chat/files/`, credentials, logs, generated `dist/`, `node_modules/`, or
+`data/sessions.json`, `data/chat/files/`, credentials, logs, generated `dist/`, `node_modules/`, or
 runtime session data. Sanitized `.env.example` files are documentation.
 
 Bind development services to loopback unless the documented Codespaces or an
