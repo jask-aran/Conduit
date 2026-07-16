@@ -32,6 +32,7 @@ data/
   chat/files/          chat working directories and agent-visible files
   pi/                  isolated Pi agent home
   conduit.json         Conduit project catalog
+  sessions.json        rebuildable lightweight session registry
 ```
 
 `conduit-web/`, `templates/`, and `scripts/` are tracked product source.
@@ -92,9 +93,18 @@ name.
 
 Pi JSONL is the authoritative transcript. `data/conduit.json` stores only
 application metadata Pi does not model: stable project IDs, display names,
-kinds, and creation times. Live process state, connected WebSockets, and recent
-RPC events are held in server memory; persisted sessions remain resumable after
-a server restart.
+kinds, and creation times. `data/sessions.json` is an atomic, rebuildable index
+of session IDs, titles, project associations, file paths, and checkpoint times.
+Normal sidebar requests read the complete lightweight registry without parsing
+transcripts. The server reconciles missing and new native files at startup and
+updates the registry after completed responses and explicit session mutations.
+Live process state, connected WebSockets, incomplete response state, and recent
+RPC events remain disposable server memory; persisted sessions remain resumable
+after a browser or server restart.
+
+Opening a chat returns at most ten recent complete turns with a 50,000-character
+soft limit. Older ten-turn pages load when the transcript is scrolled upward.
+Large tool results are fetched only when their card is expanded.
 
 Chat renames append Pi's native `session_info` entry. Duplication uses Pi's
 native cross-directory fork operation and assigns a new session ID. Moving a
@@ -149,6 +159,12 @@ owns streaming follow, turn anchoring, and jump-to-latest behavior while Pi RPC
 continues to own transport and message state. The settings surface writes Pi's
 global scoped-model setting through the Conduit server.
 
+Assistant streaming commits complete Markdown blocks as immutable server-rendered
+HTML and rerenders only the unfinished tail at a 40 ms cadence. Final Markdown,
+KaTeX HTML plus MathML, sanitization, and limited-language Shiki highlighting run
+on the server. Incomplete maths and Markdown continue to render through a lazy
+client tail renderer; KaTeX browser CSS loads only when maths is present.
+
 Shadcn components are added to the repository as source when needed, keeping
 their standard accessibility and interaction behavior intact. Application tests
 cover the behavior introduced by their composition. Magic UI is the secondary
@@ -169,6 +185,11 @@ tests, covers desktop and mobile Chromium, emits concise line output, and retain
 screenshots and traces only for failures. Use `npm run test:browser:headed` when
 watching an interaction is useful. Dev-container setup installs the pinned
 browser and its Linux libraries automatically.
+
+Production builds write `dist/bundle-report.json` and enforce gzip budgets for
+initial JavaScript, initial CSS, and the largest lazy JavaScript chunk. Hashed
+assets receive immutable cache headers; HTML revalidates, and HTTP responses are
+compressed by the application or its outer proxy.
 
 ## Setup and development
 

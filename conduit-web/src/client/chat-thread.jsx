@@ -1,4 +1,4 @@
-import { lazy, Suspense, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { CheckIcon, ChevronDownIcon, ChevronUpIcon } from "lucide-react";
 import { Bubble, BubbleContent } from "@/components/ui/bubble";
 import { Button } from "@/components/ui/button";
@@ -17,6 +17,7 @@ import {
   MessageScrollerViewport,
 } from "@/components/ui/message-scroller";
 import { Skeleton } from "@/components/ui/skeleton";
+import { RenderedMarkdown } from "./rendered-markdown";
 
 const ChatMarkdown = lazy(() => import("./chat-markdown").then((module) => ({
   default: module.ChatMarkdown,
@@ -26,8 +27,22 @@ const time = (value) => value
   ? new Date(value).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
   : "";
 
-function ToolCard({ tool }) {
+function ToolCard({ tool, sessionId }) {
   const [open, setOpen] = useState(false);
+  const [result, setResult] = useState(tool.result);
+  const [loading, setLoading] = useState(false);
+  useEffect(() => {
+    if (tool.result != null) setResult(tool.result);
+  }, [tool.result]);
+  useEffect(() => {
+    if (!open || !tool.resultDeferred || result != null || loading || !sessionId) return;
+    setLoading(true);
+    fetch(`/v0/sessions/${encodeURIComponent(sessionId)}/tools/${encodeURIComponent(tool.id)}`)
+      .then((response) => response.ok ? response.json() : Promise.reject(new Error("Could not load tool output")))
+      .then((payload) => setResult(payload.result || ""))
+      .catch(() => setResult("Could not load tool output"))
+      .finally(() => setLoading(false));
+  }, [loading, open, result, sessionId, tool.id, tool.resultDeferred]);
   return <Collapsible open={open} onOpenChange={setOpen} className="tool-card">
     <CollapsibleTrigger asChild>
       <Button variant="outline" className="w-full justify-start">
@@ -38,12 +53,21 @@ function ToolCard({ tool }) {
       </Button>
     </CollapsibleTrigger>
     <CollapsibleContent>
-      <pre>{JSON.stringify(tool.result || tool.args || {}, null, 2)}</pre>
+      <pre>{loading ? "Loading…" : typeof result === "string" ? result : JSON.stringify(result || tool.args || {}, null, 2)}</pre>
     </CollapsibleContent>
   </Collapsible>;
 }
 
-export function ChatThread({ messages, tools, streaming }) {
+export function ChatThread({ messages, tools, streaming, sessionId, hasOlder, loadingOlder, onLoadOlder }) {
+  const older = useRef(null);
+  useEffect(() => {
+    if (!hasOlder || !older.current || !onLoadOlder) return undefined;
+    const observer = new IntersectionObserver((entries) => {
+      if (entries.some((entry) => entry.isIntersecting)) onLoadOlder();
+    }, { rootMargin: "240px" });
+    observer.observe(older.current);
+    return () => observer.disconnect();
+  }, [hasOlder, onLoadOlder]);
   const lastMessage = messages[messages.length - 1];
   const timeline = [
     ...messages.flatMap((message, index) => {
@@ -65,6 +89,11 @@ export function ChatThread({ messages, tools, streaming }) {
     <MessageScroller className="transcript">
       <MessageScrollerViewport>
         <MessageScrollerContent className="thread">
+          {hasOlder && <MessageScrollerItem>
+            <Button ref={older} variant="ghost" className="mx-auto" onClick={onLoadOlder} disabled={loadingOlder}>
+              {loadingOlder ? "Loading earlier messages…" : "Load earlier messages"}
+            </Button>
+          </MessageScrollerItem>}
           {empty && <MessageScrollerItem className="empty-thread">
             <div className="welcome">
               <h1>How can I help you today?</h1>
@@ -72,7 +101,7 @@ export function ChatThread({ messages, tools, streaming }) {
           </MessageScrollerItem>}
           {timeline.map((item) => {
             if (item.type === "tool") return <MessageScrollerItem key={`tool_${item.value.id}`}>
-              <ToolCard tool={item.value} />
+              <ToolCard tool={item.value} sessionId={sessionId} />
             </MessageScrollerItem>;
             const message = item.value;
             const isUser = message.role === "user";
@@ -87,11 +116,18 @@ export function ChatThread({ messages, tools, streaming }) {
                   {message.timestamp && <MessageHeader>{time(message.timestamp)}</MessageHeader>}
                   <Bubble align={isUser ? "end" : "start"} variant={isUser ? "muted" : "ghost"}>
                     <BubbleContent>
-                      {isUser
-                        ? String(message.content || "")
-                        : <Suspense fallback={<Skeleton className="h-16 w-full" />}>
-                          <ChatMarkdown streaming={isStreamingMessage}>{message.content}</ChatMarkdown>
-                        </Suspense>}
+                      {isUser ? String(message.content || "") : message.html
+                        ? <RenderedMarkdown html={message.html} />
+                        : isStreamingMessage && (message.streamBlocks?.length || message.tail != null)
+                          ? <>
+                            {message.streamBlocks?.map((block) => <RenderedMarkdown key={block.block} html={block.html} />)}
+                            {message.tail && <Suspense fallback={<Skeleton className="h-16 w-full" />}>
+                              <ChatMarkdown streaming>{message.tail}</ChatMarkdown>
+                            </Suspense>}
+                          </>
+                          : <Suspense fallback={<Skeleton className="h-16 w-full" />}>
+                            <ChatMarkdown streaming={isStreamingMessage}>{message.content}</ChatMarkdown>
+                          </Suspense>}
                     </BubbleContent>
                   </Bubble>
                 </MessageContent>

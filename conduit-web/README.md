@@ -28,6 +28,9 @@ The reserved `chat` project uses `data/chat/files` as its working directory.
 Named projects use direct children such as `data/chat/files/example`. Project
 metadata lives centrally in ignored `data/conduit.json`; working directories
 contain only agent-visible files.
+Ignored `data/sessions.json` holds the complete lightweight sidebar registry.
+It is atomically checkpointed after completed responses and session mutations,
+and shallowly reconciled with native session files at startup.
 
 Every Pi process receives:
 
@@ -51,7 +54,9 @@ when associating sessions with projects.
 - `GET|PATCH /v0/settings` reads and updates Pi's shared global model scope;
   terminal and web saves use the same isolated settings file.
 - `GET|PATCH|DELETE /v0/sessions/:id`
+- `GET /v0/sessions/:id?before=<entry-index>` returns a ten-turn transcript page
 - `GET /v0/sessions/:id/transcript`
+- `GET /v0/sessions/:id/tools/:tool-id` fetches deferred large tool output
 - `POST /v0/sessions/:id/duplicate`
 - `POST /v0/sessions/:id/move`
 - `GET|POST /v0/live-sessions`

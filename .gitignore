@@ -6,6 +6,8 @@ coverage/
 data/chat/files/
 data/pi/
 data/conduit.json
+data/sessions.json
+data/sessions.json.tmp
 conduit-web/dist/
 conduit-web/playwright-report/
 conduit-web/test-results/

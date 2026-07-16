@@ -16,5 +16,6 @@ test("default runtime paths are owned by the repository root", () => {
   assert.equal(config.piTemplate.templateFile.endsWith(path.join("templates", "chat", "template.json")), true);
   assert.equal(config.filesRoot.endsWith(path.join("data", "chat", "files")), true);
   assert.equal(config.catalogFile.endsWith(path.join("data", "conduit.json")), true);
+  assert.equal(config.sessionRegistryFile.endsWith(path.join("data", "sessions.json")), true);
   assert.equal(config.piAgentDir.endsWith(path.join("data", "pi")), true);
 });
