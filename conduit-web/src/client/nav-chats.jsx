@@ -17,7 +17,6 @@ export function NavChats({
   view,
   onCopyTranscript,
   onDeleteSession,
-  onDuplicateSession,
   onMoveSession,
   onNewChat,
   onOpenSession,
@@ -38,7 +37,6 @@ export function NavChats({
             projects={projects}
             onCopyTranscript={() => onCopyTranscript(session)}
             onDelete={() => onDeleteSession(session, project)}
-            onDuplicate={() => onDuplicateSession(session, project)}
             onMove={(target) => onMoveSession(session, project, target)}
             onRename={() => onRenameSession(session, project)}
           >

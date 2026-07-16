@@ -68,7 +68,12 @@ export async function createMarkdownRenderer() {
     },
     allowedSchemes: ["http", "https", "mailto"],
     allowedStyles: {
-      pre: { "background-color": [/^#[0-9a-f]{3,8}$/i], color: [/^#[0-9a-f]{3,8}$/i] },
+      pre: {
+        "background-color": [/^#[0-9a-f]{3,8}$/i],
+        color: [/^#[0-9a-f]{3,8}$/i],
+        "--shiki-dark-bg": [/^#[0-9a-f]{3,8}$/i],
+        "--shiki-dark": [/^#[0-9a-f]{3,8}$/i],
+      },
       span: { color: [/^#[0-9a-f]{3,8}$/i], "--shiki-dark": [/^#[0-9a-f]{3,8}$/i] },
     },
     disallowedTagsMode: "escape",

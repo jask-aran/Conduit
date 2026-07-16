@@ -8,16 +8,20 @@ import { loadConfig } from "./config.js";
 import { createMarkdownRenderer, stableMarkdownBoundary } from "./markdown-renderer.js";
 import { PiModelCatalog } from "./pi-model-catalog.js";
 import { ProjectStore } from "./project-store.js";
-import { duplicateSession, messagesFromEntries, moveSession, moveSessions, pageSessionEntries, projectSessionView, removeSession, renameSession, settingsFromEntries, toolsFromEntries, transcriptFromEntries } from "./session-store.js";
+import { messagesFromEntries, moveSession, pageSessionEntries, removeSession, renameSession, settingsFromEntries, toolsFromEntries, transcriptFromEntries } from "./session-store.js";
 import { PiManager } from "./pi-manager.js";
-import { SessionRegistry } from "./session-registry.js";
+import { ChatStore, chatView, isChatId } from "./chat-store.js";
+import { AttachmentStore } from "./attachment-store.js";
+import { announcedAttachmentIds, serializeAttachmentEnvelope } from "./attachment-envelope.js";
+import { CONTINUE_PROMPT } from "./continuation.js";
 import { openWorkingDirectory } from "./workspace-opener.js";
 
 const config = loadConfig();
 const projects = new ProjectStore(config);
 await projects.initialize();
-const registry = new SessionRegistry(config.sessionRegistryFile);
+const registry = new ChatStore(config.sessionRegistryFile);
 await registry.initialize(await projects.list());
+const attachments = new AttachmentStore(registry);
 const renderMarkdown = await createMarkdownRenderer();
 const manager = new PiManager({
   command: config.piCommand,
@@ -31,24 +35,49 @@ const app = express();
 const dist = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../dist");
 
 app.use(compression());
-app.use(express.json({ limit: "128kb" }));
 
 async function findRegisteredSession(id) {
   return registry.find(await projects.list(), id);
 }
 
+async function findChatContext(chatId) {
+  if (!isChatId(chatId)) return null;
+  const chat = registry.metadata(chatId);
+  if (!chat) return null;
+  const project = await projects.get(chat.projectId);
+  return project ? { chat, project } : null;
+}
+
+app.put("/v0/chats/:chatId/attachments/:attachmentId", async (request, response, next) => {
+  try {
+    const context = await findChatContext(request.params.chatId);
+    if (!context) return response.status(404).json({ error: "chat_not_found" });
+    const attachment = await attachments.write(
+      context.project,
+      context.chat.id,
+      request.params.attachmentId,
+      request.query.name,
+      request,
+    );
+    response.status(201).json(attachment);
+  } catch (error) {
+    if (error.code === "EEXIST") return response.status(409).json({ error: "attachment_exists" });
+    next(error);
+  }
+});
+
+app.use(express.json({ limit: "128kb" }));
+
 const pendingCheckpoints = new Set();
-const registeredFiles = new Set(registry.list().map((session) => session.file));
-manager.on("event", ({ record }) => {
-  if (!record.sessionFile || pendingCheckpoints.has(record.id)) return;
-  const initialSave = !registeredFiles.has(record.sessionFile);
-  if (record.active && !initialSave) return;
-  registeredFiles.add(record.sessionFile);
+manager.on("event", ({ record, event }) => {
+  const chat = record.chatId ? registry.metadata(record.chatId) : null;
+  if (!["agent_end", "generation_stopped"].includes(event.type)
+    || !chat || chat.status !== "active" || !record.sessionFile || pendingCheckpoints.has(record.id) || record.active) return;
   pendingCheckpoints.add(record.id);
   setTimeout(() => {
     projects.get(record.projectId)
-      .then((project) => project && registry.syncFile(record.sessionFile, project))
-      .then((session) => session && manager.publish(record, { type: "session_checkpoint", session }))
+      .then((project) => project && registry.syncFile(record.chatId, record.sessionFile, project, { waitForFileMs: 2000 }))
+      .then((session) => session && manager.publish(record, { type: "session_checkpoint", chat: chatView(registry.metadata(record.chatId)) }))
       .catch((error) => console.error("Could not checkpoint the session registry", error))
       .finally(() => pendingCheckpoints.delete(record.id));
   }, 50).unref();
@@ -56,12 +85,15 @@ manager.on("event", ({ record }) => {
 app.get("/healthz", (_request, response) => response.json({ ok: true, filesRoot: config.filesRoot }));
 app.get("/v0/capabilities", (_request, response) => response.json({
   runtime: "pi-rpc", create: true, resume: true, projects: true,
-  sessionManagement: true, workspaceOpen: true,
+  sessionManagement: true, workspaceOpen: true, chatIdentity: "conduit", attachments: "raw-http",
+  partialContinue: config.enablePartialContinue,
   stream: "websocket", processOwner: "conduit-server", sessionAuthority: "pi-jsonl",
 }));
 
 async function stopSessionProcesses(session) {
-  const matching = manager.list().filter((item) => item.sessionFile === session.file);
+  const chatId = session.chatId || session.id;
+  const sessionFile = session.piSessionFile || session.file;
+  const matching = manager.list().filter((item) => item.chatId === chatId || (sessionFile && item.sessionFile === sessionFile));
   await Promise.all(matching.map((item) => manager.stopAndWait(item.id)));
 }
 
@@ -71,9 +103,9 @@ app.get("/v0/projects", async (_request, response, next) => {
     const live = manager.list();
     response.json({ projects: await Promise.all(items.map(async (project) => ({
       ...project,
-      sessions: registry.listProject(project.id).map((session) => {
-        const process = live.find((item) => item.sessionFile === session.file);
-        return { ...projectSessionView(session), status: process?.status || session.status, liveId: process?.id || null };
+      sessions: registry.listProject(project.id).map((chat) => {
+        const process = live.find((item) => item.chatId === chat.id);
+        return { ...chatView(chat), liveStatus: process?.status || null, liveId: process?.id || null };
       }),
     }))), live });
   } catch (error) { next(error); }
@@ -113,17 +145,17 @@ app.post("/v0/projects/:id/move-sessions", async (request, response, next) => {
     if (!source || !target) return response.status(404).json({ error: "project_not_found" });
     if (source.id === target.id) return response.status(409).json({ error: "project_target_unchanged" });
     const projectList = await projects.list();
-    const sessions = (await Promise.all(registry.listProject(source.id).map((session) => registry.find(projectList, session.id)))).filter(Boolean);
-    await Promise.all(sessions.map(stopSessionProcesses));
-    const moved = await moveSessions(sessions, target);
-    for (let index = 0; index < sessions.length; index += 1) {
-      await registry.remove(sessions[index].id);
-      await registry.upsert(moved[index]);
+    const chats = registry.listProject(source.id, { includeHidden: true });
+    const moved = [];
+    for (const chat of chats) {
+      await stopSessionProcesses(chat);
+      let session = chat.piSessionFile ? await registry.find(projectList, chat.id) : null;
+      if (session) session = await moveSession(session, target);
+      await registry.move(chat.id, source, target);
+      if (session) await registry.commitSession(chat.id, session);
+      moved.push({ sourceId: chat.id, session: chatView(registry.metadata(chat.id)) });
     }
-    response.json({ moved: moved.map((session, index) => ({
-      sourceId: sessions[index].id,
-      session: projectSessionView(session),
-    })) });
+    response.json({ moved });
   } catch (error) { next(error); }
 });
 
@@ -133,7 +165,10 @@ app.delete("/v0/projects/:id", async (request, response, next) => {
     if (!project) return response.status(404).json({ error: "project_not_found" });
     const matching = manager.list().filter((item) => item.projectId === project.id);
     await Promise.all(matching.map((item) => manager.stopAndWait(item.id)));
-    await Promise.all(registry.listProject(project.id).map(removeSession));
+    const projectList = await projects.list();
+    const sessions = (await Promise.all(registry.listProject(project.id, { includeHidden: true })
+      .map((chat) => registry.find(projectList, chat.id)))).filter(Boolean);
+    await Promise.all(sessions.map(removeSession));
     await registry.removeProject(project.id);
     await projects.remove(project.id);
     response.status(204).end();
@@ -170,14 +205,83 @@ app.patch("/v0/settings", async (request, response, next) => {
   }
 });
 
+app.post("/v0/chats", async (request, response, next) => {
+  try {
+    const project = await projects.get(request.body?.projectId || "chat");
+    if (!project) return response.status(404).json({ error: "project_not_found" });
+    response.status(201).json(chatView(await registry.create(project)));
+  } catch (error) { next(error); }
+});
+
+app.get("/v0/chats/:chatId", async (request, response, next) => {
+  try {
+    const context = await findChatContext(request.params.chatId);
+    if (!context) return response.status(404).json({ error: "chat_not_found" });
+    response.json(chatView(context.chat));
+  } catch (error) { next(error); }
+});
+
+app.delete("/v0/chats/:chatId", async (request, response, next) => {
+  try {
+    const context = await findChatContext(request.params.chatId);
+    if (!context) return response.status(404).json({ error: "chat_not_found" });
+    if (request.query.ifEmpty !== "true") return response.status(409).json({ error: "use_chat_delete_route" });
+    await stopSessionProcesses(context.chat);
+    const removed = await registry.removeEmptyDraft(context.chat.id, context.project);
+    response.status(removed ? 204 : 409).end();
+  } catch (error) { next(error); }
+});
+
+app.get("/v0/chats/:chatId/attachments", async (request, response, next) => {
+  try {
+    const context = await findChatContext(request.params.chatId);
+    if (!context) return response.status(404).json({ error: "chat_not_found" });
+    const session = await registry.find(await projects.list(), context.chat.id);
+    const announced = session ? announcedAttachmentIds(session.entries) : new Set();
+    response.json({ attachments: (await attachments.list(context.project, context.chat.id))
+      .map((attachment) => ({ ...attachment, announced: announced.has(attachment.id) })) });
+  } catch (error) { next(error); }
+});
+
+app.get("/v0/chats/:chatId/attachments/:attachmentId", async (request, response, next) => {
+  try {
+    const context = await findChatContext(request.params.chatId);
+    if (!context) return response.status(404).json({ error: "chat_not_found" });
+    const attachment = await attachments.open(context.project, context.chat.id, request.params.attachmentId);
+    if (!attachment) return response.status(404).json({ error: "attachment_not_found" });
+    const preview = request.query.preview === "1" && /^image\/(png|jpeg|gif|webp)$/.test(attachment.type);
+    response.setHeader("Content-Type", preview ? attachment.type : "application/octet-stream");
+    const downloadName = encodeURIComponent(attachment.name).replace(/[!'()*]/g, (character) => `%${character.charCodeAt(0).toString(16).toUpperCase()}`);
+    response.setHeader("Content-Disposition", `${preview ? "inline" : "attachment"}; filename*=UTF-8''${downloadName}`);
+    response.setHeader("X-Content-Type-Options", "nosniff");
+    response.setHeader("Content-Length", attachment.size);
+    const stream = attachment.stream();
+    stream.once("error", next);
+    stream.pipe(response);
+  } catch (error) { next(error); }
+});
+
+app.delete("/v0/chats/:chatId/attachments/:attachmentId", async (request, response, next) => {
+  try {
+    const context = await findChatContext(request.params.chatId);
+    if (!context) return response.status(404).json({ error: "chat_not_found" });
+    const removed = await attachments.delete(context.project, context.chat.id, request.params.attachmentId);
+    response.status(removed ? 204 : 404).end();
+  } catch (error) { next(error); }
+});
+
 app.get("/v0/sessions/:id", async (request, response, next) => {
   try {
+    const context = await findChatContext(request.params.id);
+    if (!context) return response.status(404).json({ error: "chat_not_found" });
     const session = await findRegisteredSession(request.params.id);
-    if (!session) return response.status(404).json({ error: "session_not_found" });
+    if (!session) return response.json({
+      ...chatView(context.chat), messages: [], tools: [], attachments: [], page: { before: null },
+    });
     const page = pageSessionEntries(session.entries, { before: request.query.before });
     const messages = messagesFromEntries(page.entries).filter((message) => ["user", "assistant"].includes(message.role));
     response.json({
-      ...projectSessionView(session),
+      ...chatView(context.chat),
       ...settingsFromEntries(session.entries),
       messages: await Promise.all(messages.map(async (message) => message.role === "assistant"
         ? { ...message, html: await renderMarkdown(message.content) }
@@ -190,9 +294,10 @@ app.get("/v0/sessions/:id", async (request, response, next) => {
 
 app.get("/v0/sessions/:id/transcript", async (request, response, next) => {
   try {
+    const context = await findChatContext(request.params.id);
+    if (!context) return response.status(404).json({ error: "chat_not_found" });
     const session = await findRegisteredSession(request.params.id);
-    if (!session) return response.status(404).json({ error: "session_not_found" });
-    response.type("text/markdown").send(transcriptFromEntries(session.entries));
+    response.type("text/markdown").send(session ? transcriptFromEntries(session.entries) : "");
   } catch (error) { next(error); }
 });
 
@@ -211,51 +316,49 @@ app.patch("/v0/sessions/:id", async (request, response, next) => {
     const name = String(request.body?.name || "").trim();
     if (!name) return response.status(400).json({ error: "session_name_required" });
     const projectList = await projects.list();
+    const context = await findChatContext(request.params.id);
+    if (!context) return response.status(404).json({ error: "chat_not_found" });
     const session = await registry.find(projectList, request.params.id);
-    if (!session) return response.status(404).json({ error: "session_not_found" });
-    const project = projectList.find((item) => item.id === session.projectId);
-    await stopSessionProcesses(session);
-    const renamed = await renameSession(session, project, name);
-    await registry.upsert(renamed);
-    response.json(projectSessionView(renamed));
+    if (session) {
+      await stopSessionProcesses(context.chat);
+      const renamed = await renameSession(session, context.project, name);
+      await registry.commitSession(context.chat.id, renamed);
+    } else {
+      await registry.update(context.chat.id, { title: name });
+    }
+    response.json(chatView(registry.metadata(context.chat.id)));
   } catch (error) { next(error); }
 });
 
-app.post("/v0/sessions/:id/duplicate", async (request, response, next) => {
-  try {
-    const projectList = await projects.list();
-    const session = await registry.find(projectList, request.params.id);
-    if (!session) return response.status(404).json({ error: "session_not_found" });
-    const project = projectList.find((item) => item.id === session.projectId);
-    const duplicate = await duplicateSession(session, project, `${session.title} copy`);
-    await registry.upsert(duplicate);
-    response.status(201).json(projectSessionView(duplicate));
-  } catch (error) { next(error); }
+app.post("/v0/sessions/:id/duplicate", (_request, response) => {
+  response.status(409).json({ error: "chat_duplication_deferred", message: "Chat duplication is unavailable while attachment ownership is unsettled." });
 });
 
 app.post("/v0/sessions/:id/move", async (request, response, next) => {
   try {
     const projectList = await projects.list();
+    const context = await findChatContext(request.params.id);
     const session = await registry.find(projectList, request.params.id);
     const target = projectList.find((item) => item.id === request.body?.projectId || item.slug === request.body?.projectId);
-    if (!session) return response.status(404).json({ error: "session_not_found" });
+    if (!context) return response.status(404).json({ error: "chat_not_found" });
     if (!target) return response.status(404).json({ error: "project_not_found" });
-    if (session.projectId === target.id) return response.status(409).json({ error: "session_project_unchanged" });
-    await stopSessionProcesses(session);
-    const moved = await moveSession(session, target);
-    await registry.remove(session.id);
-    await registry.upsert(moved);
-    response.json(projectSessionView(moved));
+    if (context.chat.projectId === target.id) return response.status(409).json({ error: "session_project_unchanged" });
+    await stopSessionProcesses(context.chat);
+    const moved = session ? await moveSession(session, target) : null;
+    await registry.move(context.chat.id, context.project, target);
+    if (moved) await registry.commitSession(context.chat.id, moved);
+    response.json(chatView(registry.metadata(context.chat.id)));
   } catch (error) { next(error); }
 });
 
 app.delete("/v0/sessions/:id", async (request, response, next) => {
   try {
+    const context = await findChatContext(request.params.id);
+    if (!context) return response.status(404).json({ error: "chat_not_found" });
     const session = await findRegisteredSession(request.params.id);
-    if (!session) return response.status(404).json({ error: "session_not_found" });
-    await stopSessionProcesses(session);
-    await removeSession(session);
-    await registry.remove(session.id);
+    await stopSessionProcesses(context.chat);
+    if (session) await removeSession(session);
+    await registry.remove(context.chat.id, context.project);
     response.status(204).end();
   } catch (error) { next(error); }
 });
@@ -263,19 +366,28 @@ app.delete("/v0/sessions/:id", async (request, response, next) => {
 app.get("/v0/live-sessions", (_request, response) => response.json({ sessions: manager.list() }));
 app.post("/v0/live-sessions", async (request, response, next) => {
   try {
-    const project = await projects.get(request.body?.projectId || "chat");
-    if (!project) return response.status(404).json({ error: "project_not_found" });
-    const requestedId = request.body?.resumeSessionId;
-    const session = requestedId ? await findRegisteredSession(requestedId) : null;
-    if (requestedId && !session) return response.status(404).json({ error: "session_not_found" });
-    if (session && session.projectId !== project.id) return response.status(409).json({ error: "session_project_mismatch" });
+    const chatId = request.body?.chatId || request.body?.resumeSessionId;
+    const context = await findChatContext(chatId);
+    if (!context) return response.status(404).json({ error: "chat_not_found" });
+    const requestedProject = request.body?.projectId;
+    if (requestedProject && ![context.project.id, context.project.slug].includes(requestedProject)) {
+      return response.status(409).json({ error: "session_project_mismatch" });
+    }
     const live = manager.create({
-      project,
-      sessionFile: session?.file,
+      project: context.project,
+      chatId: context.chat.id,
+      sessionFile: context.chat.piSessionFile,
       model: request.body?.model || "",
       thinkingLevel: request.body?.thinkingLevel || "",
-      models: modelCatalog.getLaunchModels(project.path),
+      models: modelCatalog.getLaunchModels(context.project.path),
     });
+    await manager.waitForSession(live.id);
+    if (context.chat.status === "draft") {
+      await registry.update(context.chat.id, {
+        piSessionId: live.sessionId || null,
+        piSessionFile: live.sessionFile,
+      });
+    }
     response.status(201).json({ ...manager.view(live), streamUrl: `/v0/live-sessions/${live.id}/stream` });
   } catch (error) { next(error); }
 });
@@ -284,7 +396,7 @@ app.get("/v0/live-sessions/:id/snapshot", async (request, response, next) => {
   try {
     const live = manager.get(request.params.id);
     if (!live) return response.status(404).json({ error: "live_session_not_found" });
-    const persisted = live.sessionFile ? await findRegisteredSession(live.sessionFile) : null;
+    const persisted = live.chatId ? await findRegisteredSession(live.chatId) : null;
     response.json({ live: manager.view(live), events: live.events, messages: persisted ? messagesFromEntries(persisted.entries) : [] });
   } catch (error) { next(error); }
 });
@@ -307,16 +419,81 @@ app.get("*", (request, response, next) => {
 });
 app.use((error, _request, response, _next) => {
   console.error(error);
-  const status = error.code === "reserved_project"
-    ? 409
-    : ["enabled_models_required", "invalid_enabled_model", "invalid_default_model"].includes(error.code) || error.message?.includes("Project names")
-      ? 400
-      : 500;
+  let status = 500;
+  if (error.code === "reserved_project") status = 409;
+  if (error.code === "attachment_not_found") status = 404;
+  if (error.code === "invalid_attachment_id"
+    || ["enabled_models_required", "invalid_enabled_model", "invalid_default_model"].includes(error.code)
+    || error.message?.includes("Project names")) status = 400;
   response.status(status).json({ error: error.code || "runtime_error", message: error.message });
 });
 
 const server = http.createServer(app);
 const wss = new WebSocketServer({ noServer: true });
+
+async function promptForChat(record, command, message) {
+  const context = await findChatContext(record.chatId);
+  if (!context) throw new Error("Chat no longer exists");
+  const selectedAttachments = await attachments.resolveMany(context.project, context.chat.id, command.attachmentIds);
+  const prompt = serializeAttachmentEnvelope({ chatId: context.chat.id, attachments: selectedAttachments, message });
+  return { context, prompt };
+}
+
+async function sendPrompt(record, prepared, options) {
+  const generationId = manager.prompt(record.id, prepared.prompt, options);
+  if (prepared.context.chat.status === "draft") {
+    await registry.update(prepared.context.chat.id, {
+      status: "active",
+      piSessionId: record.sessionId || null,
+      piSessionFile: record.sessionFile,
+    });
+  }
+  return generationId;
+}
+
+async function syncForkedChat(record) {
+  const context = await findChatContext(record.chatId);
+  if (!context) throw new Error("Chat no longer exists");
+  await registry.update(context.chat.id, {
+    piSessionId: record.sessionId || context.chat.piSessionId,
+    piSessionFile: record.sessionFile,
+  });
+  manager.publish(record, { type: "history_forked", chat: chatView(registry.metadata(context.chat.id)) });
+  return registry.metadata(context.chat.id);
+}
+
+async function handleClientCommand(record, command) {
+  if (command.type === "prompt") {
+    const prepared = await promptForChat(record, command, String(command.message || ""));
+    return sendPrompt(record, prepared);
+  }
+  if (command.type === "stop_generation" || command.type === "abort") {
+    return manager.abortGeneration(record.id, command.generationId || null);
+  }
+  if (command.type === "fork_and_prompt") {
+    await manager.fork(record.id, command.entryId);
+    await syncForkedChat(record);
+    const prepared = await promptForChat(record, command, String(command.message || ""));
+    return sendPrompt(record, prepared);
+  }
+  if (command.type === "regenerate") {
+    const forked = await manager.fork(record.id, command.entryId);
+    await syncForkedChat(record);
+    return manager.prompt(record.id, forked.text);
+  }
+  if (command.type === "continue") {
+    if (!config.enablePartialContinue) throw Object.assign(new Error("Partial continuation is disabled"), { code: "partial_continue_disabled" });
+    const persisted = await findRegisteredSession(record.chatId);
+    const previous = persisted ? messagesFromEntries(persisted.entries).findLast((message) => message.role === "assistant") : null;
+    const partial = previous?.content || record.generation?.partial || "";
+    if (!partial || (!previous?.stopped && !record.generation?.closed)) throw new Error("There is no stopped response to continue");
+    // Experimental and intentionally removable: this is an ordinary hidden user prompt, not assistant prefill.
+    return manager.prompt(record.id, CONTINUE_PROMPT, { continuationBase: partial });
+  }
+  manager.send(record.id, command);
+  return null;
+}
+
 server.on("upgrade", (request, socket, head) => {
   const match = new URL(request.url, "http://localhost").pathname.match(/^\/v0\/live-sessions\/([a-f0-9]{24})\/stream$/);
   if (!match || !manager.get(match[1])) return socket.destroy();
@@ -327,8 +504,9 @@ server.on("upgrade", (request, socket, head) => {
     const pendingEvents = record.active && turnStart >= 0 ? record.events.slice(turnStart) : [];
     ws.send(JSON.stringify({ type: "runtime_snapshot", session: manager.view(record), events: pendingEvents }));
     ws.on("message", (data) => {
-      try { manager.send(match[1], JSON.parse(String(data))); }
-      catch (error) { ws.send(JSON.stringify({ type: "client_error", message: error.message })); }
+      Promise.resolve()
+        .then(() => handleClientCommand(record, JSON.parse(String(data))))
+        .catch((error) => ws.send(JSON.stringify({ type: "client_error", code: error.code, message: error.message })));
     });
   });
 });

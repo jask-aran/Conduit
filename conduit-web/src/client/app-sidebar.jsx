@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { CableIcon } from "lucide-react";
 import {
   AlertDialog,
@@ -11,6 +11,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import {
   Dialog,
   DialogContent,
@@ -53,14 +54,17 @@ function ConduitBrand({ onClick }) {
 
 export function AppSidebar({
   projects,
+  commandRequest,
   projectId,
   selectedId,
+  selectedStatus,
+  selectedTitle,
   view,
   onAddProject,
   onCopyTranscript,
   onDeleteProject,
   onDeleteSession,
-  onDuplicateSession,
+  onCommandHandled,
   onMoveProjectSessions,
   onMoveSession,
   onNewChat,
@@ -75,10 +79,27 @@ export function AppSidebar({
   const [renameName, setRenameName] = useState("");
   const [newFolderOpen, setNewFolderOpen] = useState(false);
   const [newFolderName, setNewFolderName] = useState("");
+  const [pendingMove, setPendingMove] = useState(null);
   const { setOpenMobile } = useSidebar();
 
   const chatsProject = projects.find((project) => project.slug === "chat") || projects[0];
   const folderProjects = projects.filter((project) => project.slug !== "chat");
+  const selectedTarget = projects.flatMap((project) => project.sessions.map((session) => ({ session, project })))
+    .find((item) => item.session.id === selectedId)
+    || (selectedId && projects.find((project) => project.id === projectId)
+      ? {
+        session: { id: selectedId, projectId, status: selectedStatus, title: selectedTitle || "New chat" },
+        project: projects.find((project) => project.id === projectId),
+      }
+      : null);
+
+  useEffect(() => {
+    if (!commandRequest || !selectedTarget) return;
+    if (commandRequest.type === "rename") requestRename({ type: "session", ...selectedTarget });
+    if (commandRequest.type === "move") setPendingMove(selectedTarget);
+    if (commandRequest.type === "delete") setPendingDelete({ type: "session", ...selectedTarget });
+    onCommandHandled?.();
+  }, [commandRequest, selectedTarget]);
 
   const chooseSession = (session, project) => {
     setOpenMobile(false);
@@ -140,7 +161,6 @@ export function AppSidebar({
           selectedId={selectedId}
           view={view}
           onCopyTranscript={onCopyTranscript}
-          onDuplicateSession={onDuplicateSession}
           onMoveSession={onMoveSession}
           onNewChat={chooseNewChat}
           onOpenSession={chooseSession}
@@ -154,7 +174,6 @@ export function AppSidebar({
           view={view}
           onAddProject={() => setNewFolderOpen(true)}
           onCopyTranscript={onCopyTranscript}
-          onDuplicateSession={onDuplicateSession}
           onMoveProjectSessions={onMoveProjectSessions}
           onMoveSession={onMoveSession}
           onNewChat={chooseNewChat}
@@ -182,7 +201,7 @@ export function AppSidebar({
           <AlertDialogDescription>
             {pendingDelete?.type === "project"
               ? `This permanently deletes ${pendingDelete.project.name}, its working files, and all of its chats.`
-              : "This permanently deletes the Pi session transcript."}
+              : "This permanently deletes the Pi session transcript and this chat's attached files."}
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
@@ -246,6 +265,31 @@ export function AppSidebar({
             <Button type="submit" disabled={!renameName.trim()}>Rename</Button>
           </DialogFooter>
         </form>
+      </DialogContent>
+    </Dialog>
+
+    <Dialog open={Boolean(pendingMove)} onOpenChange={(open) => !open && setPendingMove(null)}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Move chat</DialogTitle>
+          <DialogDescription>Choose the working folder for this chat and its attachments.</DialogDescription>
+        </DialogHeader>
+        <Command className="border">
+          <CommandInput placeholder="Search folders…" />
+          <CommandList>
+            <CommandEmpty>No matching folders.</CommandEmpty>
+            <CommandGroup heading="Folders">
+          {projects.filter((item) => item.id !== pendingMove?.project.id).map((target) => <CommandItem
+            key={target.id}
+            value={`${target.name} ${target.slug}`}
+            onSelect={() => {
+              onMoveSession(pendingMove.session, pendingMove.project, target);
+              setPendingMove(null);
+            }}
+          >{target.name}</CommandItem>)}
+            </CommandGroup>
+          </CommandList>
+        </Command>
       </DialogContent>
     </Dialog>
   </>;

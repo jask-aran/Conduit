@@ -3,6 +3,7 @@ import { CheckIcon, ChevronDownIcon, ChevronUpIcon } from "lucide-react";
 import { Bubble, BubbleContent } from "@/components/ui/bubble";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Empty, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
 import {
   Message,
   MessageContent,
@@ -16,8 +17,12 @@ import {
   MessageScrollerProvider,
   MessageScrollerViewport,
 } from "@/components/ui/message-scroller";
+import { Marker, MarkerContent } from "@/components/ui/marker";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Spinner } from "@/components/ui/spinner";
 import { RenderedMarkdown } from "./rendered-markdown";
+import { ResponseActions } from "./response-actions";
+import { AttachmentCards } from "./attachment-tray";
 
 const ChatMarkdown = lazy(() => import("./chat-markdown").then((module) => ({
   default: module.ChatMarkdown,
@@ -53,12 +58,15 @@ function ToolCard({ tool, sessionId }) {
       </Button>
     </CollapsibleTrigger>
     <CollapsibleContent>
-      <pre>{loading ? "Loading…" : typeof result === "string" ? result : JSON.stringify(result || tool.args || {}, null, 2)}</pre>
+      <pre>{loading ? <span className="flex items-center gap-2"><Spinner />Loading…</span> : typeof result === "string" ? result : JSON.stringify(result || tool.args || {}, null, 2)}</pre>
     </CollapsibleContent>
   </Collapsible>;
 }
 
-export function ChatThread({ messages, tools, streaming, sessionId, hasOlder, loadingOlder, onLoadOlder }) {
+export function ChatThread({
+  messages, tools, streaming, sessionId, hasOlder, loadingOlder, partialContinue,
+  editingEntryId, onLoadOlder, onCopyMessage, onEditMessage, onRegenerate, onContinue,
+}) {
   const older = useRef(null);
   useEffect(() => {
     if (!hasOlder || !older.current || !onLoadOlder) return undefined;
@@ -91,13 +99,11 @@ export function ChatThread({ messages, tools, streaming, sessionId, hasOlder, lo
         <MessageScrollerContent className="thread">
           {hasOlder && <MessageScrollerItem>
             <Button ref={older} variant="ghost" className="mx-auto" onClick={onLoadOlder} disabled={loadingOlder}>
-              {loadingOlder ? "Loading earlier messages…" : "Load earlier messages"}
+              {loadingOlder && <Spinner data-icon="inline-start" />}{loadingOlder ? "Loading earlier messages…" : "Load earlier messages"}
             </Button>
           </MessageScrollerItem>}
           {empty && <MessageScrollerItem className="empty-thread">
-            <div className="welcome">
-              <h1>How can I help you today?</h1>
-            </div>
+            <Empty className="welcome"><EmptyHeader><EmptyTitle><h1>How can I help you today?</h1></EmptyTitle></EmptyHeader></Empty>
           </MessageScrollerItem>}
           {timeline.map((item) => {
             if (item.type === "tool") return <MessageScrollerItem key={`tool_${item.value.id}`}>
@@ -105,7 +111,9 @@ export function ChatThread({ messages, tools, streaming, sessionId, hasOlder, lo
             </MessageScrollerItem>;
             const message = item.value;
             const isUser = message.role === "user";
+            const isEditing = message.id === editingEntryId;
             const isStreamingMessage = streaming && message === lastMessage && !isUser;
+            const precedingUser = !isUser ? messages.slice(0, item.index).findLast((candidate) => candidate.role === "user") : null;
             return <MessageScrollerItem
               key={`message_${message.id}`}
               messageId={message.id}
@@ -114,9 +122,14 @@ export function ChatThread({ messages, tools, streaming, sessionId, hasOlder, lo
               <Message align={isUser ? "end" : "start"}>
                 <MessageContent>
                   {message.timestamp && <MessageHeader>{time(message.timestamp)}</MessageHeader>}
-                  <Bubble align={isUser ? "end" : "start"} variant={isUser ? "muted" : "ghost"}>
+                  <Bubble
+                    align={isUser ? "end" : "start"}
+                    variant={isUser ? "muted" : "ghost"}
+                    data-editing={isEditing}
+                    className="data-[editing=true]:outline-2 data-[editing=true]:outline-offset-2 data-[editing=true]:outline-ring"
+                  >
                     <BubbleContent>
-                      {isUser ? String(message.content || "") : message.html
+                      {isUser ? <span className="user-message-text">{String(message.content || "")}</span> : message.html
                         ? <RenderedMarkdown html={message.html} />
                         : isStreamingMessage && (message.streamBlocks?.length || message.tail != null)
                           ? <>
@@ -130,6 +143,23 @@ export function ChatThread({ messages, tools, streaming, sessionId, hasOlder, lo
                           </Suspense>}
                     </BubbleContent>
                   </Bubble>
+                  {isUser && <AttachmentCards
+                    items={message.attachments || []}
+                    chatId={sessionId}
+                    className="message-attachments"
+                    label="Message attachments"
+                  />}
+                  {message.stopped && <Marker><MarkerContent>{message.status === "stopping" ? "Stopping…" : "Stopped"}</MarkerContent></Marker>}
+                  {!streaming && <ResponseActions
+                    message={message}
+                    precedingUserId={precedingUser?.id}
+                    partialContinue={partialContinue}
+                    editing={isEditing}
+                    onCopy={onCopyMessage}
+                    onEdit={onEditMessage}
+                    onRegenerate={onRegenerate}
+                    onContinue={onContinue}
+                  />}
                 </MessageContent>
               </Message>
             </MessageScrollerItem>;

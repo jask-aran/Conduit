@@ -18,4 +18,6 @@ test("default runtime paths are owned by the repository root", () => {
   assert.equal(config.catalogFile.endsWith(path.join("data", "conduit.json")), true);
   assert.equal(config.sessionRegistryFile.endsWith(path.join("data", "sessions.json")), true);
   assert.equal(config.piAgentDir.endsWith(path.join("data", "pi")), true);
+  assert.equal(config.enablePartialContinue, true);
+  assert.equal(loadConfig({ ENABLE_PARTIAL_CONTINUE: "false" }).enablePartialContinue, false);
 });

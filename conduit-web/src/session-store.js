@@ -2,6 +2,8 @@ import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { SessionManager } from "@earendil-works/pi-coding-agent";
+import { parseAttachmentEnvelope } from "./attachment-envelope.js";
+import { CONTINUE_PROMPT, mergeContinuation } from "./continuation.js";
 
 export function sessionDirectoryFor(cwd, agentDir) {
   const resolvedCwd = path.resolve(cwd);
@@ -33,7 +35,8 @@ export async function parseSession(file, project) {
       if (entry.type === "session") header = entry;
       if (entry.type === "session_info" && entry.name) name = entry.name;
       if (!firstMessage && entry.type === "message" && entry.message?.role === "user") {
-        firstMessage = textContent(entry.message.content).trim();
+        const content = textContent(entry.message.content).trim();
+        if (content !== CONTINUE_PROMPT) firstMessage = parseAttachmentEnvelope(content).message.trim();
       }
     } catch {}
   }
@@ -140,19 +143,46 @@ export function projectSessionView(session) {
 }
 
 export function messagesFromEntries(entries) {
-  return entries.flatMap((entry, index) => {
+  const messages = [];
+  let continuation = false;
+  entries.forEach((entry, index) => {
     if (entry.type !== "message" || !entry.message?.role) return [];
     const role = entry.message.role;
     if (!["user", "assistant", "toolResult"].includes(role)) return [];
-    return [{
+    const rawContent = textContent(entry.message.content);
+    if (role === "user" && rawContent.trim() === CONTINUE_PROMPT) {
+      continuation = true;
+      return;
+    }
+    const envelope = role === "user" ? parseAttachmentEnvelope(rawContent) : null;
+    const message = {
       id: entry.id || `entry_${index}`,
       role,
-      content: textContent(entry.message.content),
+      content: envelope?.message ?? rawContent,
       blocks: Array.isArray(entry.message.content) ? entry.message.content : [],
       usage: entry.message.usage || null,
       timestamp: entry.timestamp || null,
-    }];
+      stopReason: entry.message.stopReason || null,
+      stopped: entry.message.stopReason === "aborted",
+      attachments: envelope?.attachments || [],
+    };
+    if (role === "assistant" && continuation) {
+      if (!message.content) return;
+      const previous = messages.findLast((item) => item.role === "assistant");
+      if (previous) {
+        previous.content = mergeContinuation(previous.content, message.content);
+        previous.stopReason = message.stopReason;
+        previous.stopped = message.stopped;
+        previous.continued = true;
+        previous.timestamp = message.timestamp || previous.timestamp;
+        continuation = false;
+        return;
+      }
+    }
+    if (role !== "toolResult") continuation = false;
+    messages.push(message);
   });
+  return messages;
 }
 
 export function pageSessionEntries(entries, { before, turnLimit = 10, characterLimit = 50_000 } = {}) {
@@ -160,7 +190,9 @@ export function pageSessionEntries(entries, { before, turnLimit = 10, characterL
   const end = Number.isInteger(requestedEnd) ? Math.max(0, Math.min(requestedEnd, entries.length)) : entries.length;
   const starts = [];
   for (let index = 0; index < end; index += 1) {
-    if (entries[index].type === "message" && entries[index].message?.role === "user") starts.push(index);
+    if (entries[index].type === "message"
+      && entries[index].message?.role === "user"
+      && textContent(entries[index].message.content).trim() !== CONTINUE_PROMPT) starts.push(index);
   }
   if (!starts.length) return { entries: entries.slice(0, end), start: 0, end, hasMore: false };
 

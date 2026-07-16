@@ -27,10 +27,26 @@ npm run dev
 The reserved `chat` project uses `data/chat/files` as its working directory.
 Named projects use direct children such as `data/chat/files/example`. Project
 metadata lives centrally in ignored `data/conduit.json`; working directories
-contain only agent-visible files.
-Ignored `data/sessions.json` holds the complete lightweight sidebar registry.
-It is atomically checkpointed after completed responses and session mutations,
-and shallowly reconciled with native session files at startup.
+also contain `.conduit/chats/<chat-id>/{attachments,.partial}`. Pi runs from the
+project root and native JSONL remains outside the working tree. Ignored
+`data/sessions.json` holds the atomic lightweight Conduit chat registry. Draft
+chats exist before Pi; the first message attaches a private Pi mapping and makes
+the same public chat ID active. Active mappings are checkpointed after completed
+responses and explicit mutations and reconciled with native files at startup.
+
+Raw attachment bodies stream to exclusive `.part` files and publish by atomic
+rename. The filesystem is the durable attachment registry. Prompt envelopes
+contain validated relative paths rather than file bytes. Generation IDs gate
+late output after stop; Pi receives public `abort` and `fork` RPC commands, and
+a hung abort terminates the process after 250 ms for clean resumption.
+
+The interface keeps uploaded Attachment cards above the bounded native
+textarea until send, then renders the same cards beneath their user message.
+Persisted image cards use the attachment preview route, including when restored
+for edit. The compact composer model menu remains separate from Settings'
+searchable, grouped multi-model Combobox. Cmd/Ctrl+K opens the application
+Command palette; the composer slash Popover contains only `/attach`. A
+project-aware breadcrumb identifies where each chat belongs.
 
 Every Pi process receives:
 
@@ -70,6 +86,12 @@ default; opening a persisted session restores its own model and thinking level.
 
 - `GET /healthz`
 - `GET /v0/capabilities`
+- `POST /v0/chats`
+- `GET|DELETE /v0/chats/:id` (draft cleanup requires `?ifEmpty=true`)
+- `PUT|GET /v0/chats/:id/attachments/:attachment-id` uploads raw bytes or downloads;
+  `?preview=1` serves supported raster images inline
+- `GET /v0/chats/:id/attachments`
+- `DELETE /v0/chats/:id/attachments/:attachment-id`
 - `GET|POST /v0/projects`
 - `PATCH|DELETE /v0/projects/:id`
 - `POST /v0/projects/:id/open`
@@ -81,7 +103,7 @@ default; opening a persisted session restores its own model and thinking level.
 - `GET /v0/sessions/:id?before=<entry-index>` returns a ten-turn transcript page
 - `GET /v0/sessions/:id/transcript`
 - `GET /v0/sessions/:id/tools/:tool-id` fetches deferred large tool output
-- `POST /v0/sessions/:id/duplicate`
+- `POST /v0/sessions/:id/duplicate` returns `409` while chat-file ownership is deferred
 - `POST /v0/sessions/:id/move`
 - `GET|POST /v0/live-sessions`
 - `GET /v0/live-sessions/:id/snapshot`
