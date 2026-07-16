@@ -1,6 +1,9 @@
-import { memo, useEffect, useMemo, useState } from "react";
-import { CheckIcon, CopyIcon } from "lucide-react";
-import { Streamdown, defaultRehypePlugins } from "streamdown";
+import { memo, useMemo } from "react";
+import { createMathPlugin } from "@streamdown/math";
+import "katex/dist/katex.min.css";
+import { Streamdown } from "streamdown";
+import { Artifact, ArtifactActions, ArtifactContent, ArtifactHeader, ArtifactTitle } from "@/components/ai-elements/artifact";
+import { CodeBlockContent, CodeBlockCopyButton, CodeBlockProvider } from "@/components/ai-elements/code-block";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -12,18 +15,8 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 
-const controls = {
-  code: { copy: true, download: false },
-  table: false,
-  mermaid: false,
-};
-
-const icons = { CheckIcon, CopyIcon };
 const allowedProtocols = new Set(["http:", "https:", "mailto:"]);
-let mathPluginPromise;
-const rehypePlugins = [
-  defaultRehypePlugins.sanitize,
-];
+const mathPlugin = createMathPlugin({ singleDollarTextMath: true });
 
 function safeUrlTransform(url, key) {
   if (key === "src") return null;
@@ -36,12 +29,32 @@ function safeUrlTransform(url, key) {
   }
 }
 
-function loadMathPlugin() {
-  mathPluginPromise ||= Promise.all([
-    import("@streamdown/math"),
-    import("katex/dist/katex.min.css"),
-  ]).then(([module]) => module.createMathPlugin({ singleDollarTextMath: true }));
-  return mathPluginPromise;
+const languageAliases = { js: "javascript", ts: "typescript", py: "python", sh: "bash", md: "markdown", yml: "yaml" };
+
+function AiCodeBlock({ children, node, ...props }) {
+  const className = node?.properties?.className;
+  const languageClass = Array.isArray(className) ? className.find((value) => String(value).startsWith("language-")) : className;
+  const languageName = String(languageClass || "").replace(/^language-/, "").toLowerCase();
+  const language = languageAliases[languageName] || languageName || "text";
+  const code = String(children || "").replace(/\n$/, "");
+  if (!("data-block" in props) && !languageClass) return <code {...props}>{children}</code>;
+  return <Artifact data-language={language}>
+    <ArtifactHeader>
+      <ArtifactTitle>{language}</ArtifactTitle>
+      <ArtifactActions>
+        <CodeBlockProvider code={code}>
+          <CodeBlockCopyButton
+            aria-label="Copy code"
+            className="size-8 p-0 text-muted-foreground hover:text-foreground"
+            size="sm"
+          />
+        </CodeBlockProvider>
+      </ArtifactActions>
+    </ArtifactHeader>
+    <ArtifactContent className="p-0">
+      <CodeBlockContent code={code} language={language} showLineNumbers />
+    </ArtifactContent>
+  </Artifact>;
 }
 
 function ExternalLinkDialog({ isOpen, onClose, onConfirm, url }) {
@@ -82,29 +95,16 @@ const linkSafety = {
 
 export const ChatMarkdown = memo(function ChatMarkdown({ children = "", streaming = false }) {
   const text = String(children || "");
-  const hasMath = /(^|[^\\])\$/.test(text);
-  const [mathPlugin, setMathPlugin] = useState(null);
-  useEffect(() => {
-    if (!hasMath || mathPlugin) return undefined;
-    let active = true;
-    loadMathPlugin().then((plugin) => active && setMathPlugin(plugin));
-    return () => { active = false; };
-  }, [hasMath, mathPlugin]);
-  const plugins = useMemo(() => ({
-    ...(mathPlugin ? { math: mathPlugin } : {}),
-  }), [mathPlugin]);
+  const plugins = useMemo(() => ({ math: mathPlugin }), []);
 
   return <Streamdown
     caret="block"
     className="chat-markdown"
-    controls={controls}
-    icons={icons}
+    components={{ code: AiCodeBlock }}
     isAnimating={streaming}
-    lineNumbers
     linkSafety={linkSafety}
     mode={streaming ? "streaming" : "static"}
     plugins={plugins}
-    rehypePlugins={rehypePlugins}
     urlTransform={safeUrlTransform}
   >
     {text}

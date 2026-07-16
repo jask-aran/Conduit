@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useRef, useState } from "react";
+import { lazy, memo, Suspense, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { CheckIcon, ChevronDownIcon, ChevronUpIcon } from "lucide-react";
 import { Bubble, BubbleContent } from "@/components/ui/bubble";
 import { Button } from "@/components/ui/button";
@@ -20,7 +20,6 @@ import {
 import { Marker, MarkerContent } from "@/components/ui/marker";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
-import { RenderedMarkdown } from "./rendered-markdown";
 import { ResponseActions } from "./response-actions";
 import { AttachmentCards } from "./attachment-tray";
 
@@ -63,9 +62,14 @@ function ToolCard({ tool, sessionId }) {
   </Collapsible>;
 }
 
-export function ChatThread({
+export function StreamingAssistantMessage({ message, liveStore }) {
+  const stream = useSyncExternalStore(liveStore.subscribe, liveStore.getSnapshot, liveStore.getServerSnapshot);
+  return <ChatMarkdown streaming>{`${message.content || ""}${stream.content}`}</ChatMarkdown>;
+}
+
+export const ChatThread = memo(function ChatThread({
   messages, tools, streaming, sessionId, hasOlder, loadingOlder, partialContinue,
-  editingEntryId, onLoadOlder, onCopyMessage, onEditMessage, onRegenerate, onContinue,
+  editingEntryId, onLoadOlder, onCopyMessage, onEditMessage, onRegenerate, onContinue, liveStore,
 }) {
   const older = useRef(null);
   useEffect(() => {
@@ -129,17 +133,13 @@ export function ChatThread({
                     className="data-[editing=true]:outline-2 data-[editing=true]:outline-offset-2 data-[editing=true]:outline-ring"
                   >
                     <BubbleContent>
-                      {isUser ? <span className="user-message-text">{String(message.content || "")}</span> : message.html
-                        ? <RenderedMarkdown html={message.html} />
-                        : isStreamingMessage && (message.streamBlocks?.length || message.tail != null)
-                          ? <>
-                            {message.streamBlocks?.map((block) => <RenderedMarkdown key={block.block} html={block.html} />)}
-                            {message.tail && <Suspense fallback={<Skeleton className="h-16 w-full" />}>
-                              <ChatMarkdown streaming>{message.tail}</ChatMarkdown>
-                            </Suspense>}
-                          </>
+                      {isUser ? <span className="user-message-text">{String(message.content || "")}</span>
+                        : isStreamingMessage
+                          ? <Suspense fallback={<Skeleton className="h-16 w-full" />}>
+                            <StreamingAssistantMessage message={message} liveStore={liveStore} />
+                          </Suspense>
                           : <Suspense fallback={<Skeleton className="h-16 w-full" />}>
-                            <ChatMarkdown streaming={isStreamingMessage}>{message.content}</ChatMarkdown>
+                            <ChatMarkdown>{message.content}</ChatMarkdown>
                           </Suspense>}
                     </BubbleContent>
                   </Bubble>
@@ -169,4 +169,4 @@ export function ChatThread({
       <MessageScrollerButton />
     </MessageScroller>
   </MessageScrollerProvider>;
-}
+});

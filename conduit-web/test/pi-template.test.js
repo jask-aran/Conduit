@@ -123,30 +123,25 @@ test("one Conduit chat cannot start two live Pi writers", () => {
   assert.equal(spawns, 1);
 });
 
-test("keeps the full live tail visible until stable blocks finish rendering", async () => {
-  let finishRender;
+test("forwards each text delta immediately and preserves chunk ordering", () => {
   const manager = new PiManager({
     agentDir: "/tmp/conduit-pi-stream-test",
-    renderMarkdown: () => new Promise((resolve) => { finishRender = () => resolve("<p>Block</p>"); }),
-    stableBoundary: () => 7,
   });
   const record = {
-    stream: { raw: "", committedLength: 0, renderedLength: 0, block: 0, timer: null },
-    renderQueue: Promise.resolve(),
+    stream: { chunks: [], generationId: "g1" },
+    generation: { id: "g1", closed: false },
     events: [],
     clients: new Set(),
     updatedAt: "",
   };
 
-  manager.handleTextDelta(record, "Block\n\nTail");
-  await new Promise((resolve) => setTimeout(resolve, 55));
-  assert.equal(record.events.at(-1).type, "assistant_stream_tail");
-  assert.equal(record.events.at(-1).content, "Block\n\nTail");
-
-  finishRender();
-  await record.renderQueue;
-  assert.equal(record.events.at(-1).type, "assistant_stream_block");
-  assert.equal(record.events.at(-1).tail, "Tail");
+  manager.handleTextDelta(record, "Block\n");
+  manager.handleTextDelta(record, "\nTail");
+  assert.deepEqual(record.stream.chunks, ["Block\n", "\nTail"]);
+  assert.deepEqual(record.events.map(({ type, delta }) => ({ type, delta })), [
+    { type: "assistant_stream_delta", delta: "Block\n" },
+    { type: "assistant_stream_delta", delta: "\nTail" },
+  ]);
 });
 
 function rpcFixture(onCommand) {

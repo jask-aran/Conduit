@@ -5,7 +5,6 @@ import express from "express";
 import compression from "compression";
 import { WebSocketServer } from "ws";
 import { loadConfig } from "./config.js";
-import { createMarkdownRenderer, stableMarkdownBoundary } from "./markdown-renderer.js";
 import { PiModelCatalog } from "./pi-model-catalog.js";
 import { ProjectStore } from "./project-store.js";
 import { messagesFromEntries, moveSession, pageSessionEntries, removeSession, renameSession, settingsFromEntries, toolsFromEntries, transcriptFromEntries } from "./session-store.js";
@@ -21,13 +20,10 @@ await projects.initialize();
 const registry = new ChatStore(config.sessionRegistryFile);
 await registry.initialize(await projects.list());
 const attachments = new AttachmentStore(registry);
-const renderMarkdown = await createMarkdownRenderer();
 const manager = new PiManager({
   command: config.piCommand,
   agentDir: config.piAgentDir,
   template: config.piTemplate,
-  renderMarkdown,
-  stableBoundary: stableMarkdownBoundary,
 });
 const modelCatalog = new PiModelCatalog({ agentDir: config.piAgentDir, modelPatterns: config.piTemplate.models });
 const app = express();
@@ -273,9 +269,7 @@ app.get("/v0/sessions/:id", async (request, response, next) => {
     response.json({
       ...chatView(context.chat),
       ...settingsFromEntries(session.entries),
-      messages: await Promise.all(messages.map(async (message) => message.role === "assistant"
-        ? { ...message, html: await renderMarkdown(message.content) }
-        : message)),
+      messages,
       tools: toolsFromEntries(page.entries).map((tool) => ({ ...tool, result: tool.result?.length > 4000 ? null : tool.result, resultDeferred: tool.result?.length > 4000 })),
       page: { before: page.hasMore ? String(page.start) : null },
     });
@@ -491,8 +485,13 @@ server.on("upgrade", (request, socket, head) => {
     const record = manager.get(match[1]);
     manager.attach(match[1], ws);
     const turnStart = record.events.findLastIndex((event) => event.type === "agent_start");
-    const pendingEvents = record.active && turnStart >= 0 ? record.events.slice(turnStart) : [];
-    ws.send(JSON.stringify({ type: "runtime_snapshot", session: manager.view(record), events: pendingEvents }));
+    const pendingEvents = record.active && turnStart >= 0
+      ? record.events.slice(turnStart).filter((event) => event.type !== "assistant_stream_delta")
+      : [];
+    const stream = record.stream
+      ? { generationId: record.stream.generationId, content: record.stream.chunks.join("") }
+      : null;
+    ws.send(JSON.stringify({ type: "runtime_snapshot", session: manager.view(record), stream, events: pendingEvents }));
     ws.on("message", (data) => {
       Promise.resolve()
         .then(() => handleClientCommand(record, JSON.parse(String(data))))

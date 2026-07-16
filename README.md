@@ -6,9 +6,18 @@
 
 ![architecture](interface_first_platform_architecture.svg)
 
-Conduit is an interface-first personal agent platform. The web application owns
-one `pi --mode rpc` process per live chat while Pi remains authoritative for
-authentication, models, tools, and JSONL session history.
+Conduit is an interface-first personal agent platform: one self-hosted web
+address for conversational and execution-heavy agent work. The design vision
+lives in `personal-agent-platform-design.md`; the surface that exists today is
+Chat — a web chat interface over the Pi coding agent with projects,
+attachments, history forking, response controls, and model management. Remotes,
+Assistant, and Dashboard surfaces are described by the vision document and are
+not yet implemented.
+
+The web application owns one `pi --mode rpc` process per live chat while Pi
+remains authoritative for authentication, models, tools, and JSONL session
+history. Sessions outlive browser connections and server restarts; the browser
+is a reconnectable client of server-owned processes.
 
 ## Repository structure
 
@@ -201,11 +210,13 @@ session can be resumed by a single fresh writer. Browser disconnect alone never
 terminates the server-owned process. Experimental partial continuation is
 controlled by `ENABLE_PARTIAL_CONTINUE` and defaults to enabled.
 
-Assistant streaming commits complete Markdown blocks as immutable server-rendered
-HTML and rerenders only the unfinished tail at a 40 ms cadence. Final Markdown,
-KaTeX HTML plus MathML, sanitization, and limited-language Shiki highlighting run
-on the server. Incomplete maths and Markdown continue to render through a lazy
-client tail renderer; KaTeX browser CSS loads only when maths is present.
+Assistant streaming relays Pi's raw text deltas over the session WebSocket. The
+browser appends them to a per-generation live stream store and coalesces
+interface updates with requestAnimationFrame, so rendering follows the display's
+refresh rate without a tuned cadence. Reconnecting mid-response restores the
+accumulated stream from the runtime snapshot instead of replaying deltas. All
+Markdown rendering runs in the browser; KaTeX styles load with the application
+shell inside the CSS budget.
 The icon-collapsible sidebar presents Chats and Projects as separate groups.
 Chats are direct menu items; projects expand to session subitems. Group actions
 create chats and folders. Chat context menus provide rename, move, duplicate,
@@ -214,13 +225,15 @@ rename, bulk chat movement, and confirmed deletion.
 An unsent draft is not listed; its persisted session appears selected after the
 first message creates the JSONL.
 
-Assistant text is rendered by the server for completed messages and by
-Streamdown for the unfinished streaming tail. It supports GFM, copyable
-Shiki-highlighted fenced code with line numbers, and KaTeX math using `$...$`
-or `$$...$$`. The code plugin loads only when a fence appears. Sanitization
-permits safe web and email links, confirms external navigation with a Shadcn
-Alert Dialog, and replaces remote images with their alt text. User messages
-remain literal text.
+Assistant text renders through Streamdown in streaming mode while a response is
+live and static mode once it completes. It supports GFM, KaTeX math using
+`$...$` or `$$...$$`, and fenced code presented in an Artifact card with Shiki
+highlighting, line numbers, and a copy action; highlighting uses the
+fine-grained Shiki core with a JavaScript regex engine and a pinned language
+set. Raw HTML in assistant output renders only through Streamdown's
+sanitize-and-harden pipeline. Sanitization permits safe web and email links,
+confirms external navigation with a Shadcn Alert Dialog, and replaces remote
+images with their alt text. User messages remain literal text.
 
 Shadcn components are added to the repository as source when needed, keeping
 their standard accessibility and interaction behavior intact. Application tests

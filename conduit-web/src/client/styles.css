@@ -4,7 +4,6 @@
 @import "@fontsource-variable/geist";
 
 @source "../../node_modules/streamdown/dist/*.js";
-@source "../../node_modules/@streamdown/code/dist/*.js";
 @source "../../node_modules/@streamdown/math/dist/*.js";
 
 @custom-variant dark (&:is(.dark *));
@@ -262,40 +261,6 @@ button, textarea { font: inherit; }
   font-size: 15px;
   line-height: 1.66;
 }
-
-.server-markdown > :first-child { margin-top: 0; }
-.server-markdown > :last-child { margin-bottom: 0; }
-.server-markdown p, .server-markdown ul, .server-markdown ol, .server-markdown blockquote,
-.server-markdown pre, .server-markdown table { margin-block: 0.9em; }
-.server-markdown h1, .server-markdown h2, .server-markdown h3 { margin: 1.2em 0 0.55em; line-height: 1.25; }
-.server-markdown h1 { font-size: 1.6em; }
-.server-markdown h2 { font-size: 1.35em; }
-.server-markdown h3 { font-size: 1.15em; }
-.server-markdown ul, .server-markdown ol { padding-left: 1.5em; }
-.server-markdown blockquote { border-left: 3px solid var(--border); padding-left: 1em; color: var(--muted-foreground); }
-.server-markdown table { width: 100%; border-collapse: collapse; }
-.server-markdown th, .server-markdown td { border: 1px solid var(--border); padding: 0.45em 0.65em; text-align: left; }
-.server-markdown pre {
-  position: relative;
-  overflow: auto;
-  border-radius: var(--radius);
-  background-color: var(--shiki-dark-bg, var(--muted)) !important;
-  padding: 1em;
-  color: var(--shiki-dark, var(--foreground)) !important;
-}
-.server-markdown pre span { color: var(--shiki-dark, inherit) !important; }
-.server-code-copy {
-  position: absolute;
-  top: 8px;
-  right: 8px;
-  border: 1px solid rgb(255 255 255 / 12%);
-  border-radius: 6px;
-  background: rgb(0 0 0 / 30%);
-  padding: 4px 8px;
-  color: inherit;
-  font-size: 12px;
-}
-
 
 .external-link-url {
   max-height: 8rem;

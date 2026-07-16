@@ -75,7 +75,10 @@ chat creation, rename, bulk move, and delete operations.
 
 Assistant messages pass through `src/client/chat-markdown.jsx`, which configures
 Streamdown for live and restored content. GFM, partial streaming Markdown,
-KaTeX math, and lazily loaded Shiki fenced-code highlighting share one renderer.
+KaTeX math, and Artifact-carded Shiki fenced-code highlighting (fine-grained
+core, JavaScript regex engine, pinned languages) share one renderer. Live
+responses stream as raw deltas coalesced per animation frame by
+`src/client/live-stream-store.js`.
 HTML is sanitized, unsafe URLs are removed, remote images become alt text, and
 external links require confirmation. User messages are displayed literally.
 
@@ -109,6 +112,52 @@ default; opening a persisted session restores its own model and thinking level.
 - `GET /v0/live-sessions/:id/snapshot`
 - `DELETE /v0/live-sessions/:id/process`
 - `WS /v0/live-sessions/:id/stream`
+
+## Live session protocol
+
+`WS /v0/live-sessions/:id/stream` carries newline-free JSON objects in both
+directions. This is the v0 event vocabulary: Pi JSONL remains the authoritative
+record, the rendered transcript is a projection of it, and changes to this
+vocabulary are additive and must update this section in the same change.
+
+Client commands:
+
+| Command | Fields | Effect |
+|---|---|---|
+| `prompt` | `message`, `attachmentIds[]` | Send a user prompt wrapped in the attachment envelope |
+| `stop_generation` / `abort` | `generationId` | Close the generation gate, then ask Pi to abort |
+| `fork_and_prompt` | `entryId`, `message`, `attachmentIds[]` | Fork history at an entry, then prompt |
+| `regenerate` | `entryId` | Fork at an entry and resend its recorded prompt |
+| `continue` | — | Experimental hidden-prompt continuation of a stopped response |
+
+Any other object is forwarded verbatim to Pi's RPC stdin. A failed command
+produces `client_error` with `code` and `message`.
+
+Server events. On connect the server sends one `runtime_snapshot` containing
+the session view, the accumulated `stream` content for any open generation
+(`{ generationId, content }` or `null`), and the current turn's replayable
+events; individual `assistant_stream_delta` events are never replayed.
+Conduit-origin events thereafter:
+
+| Event | Fields | Meaning |
+|---|---|---|
+| `runtime_state` | `session` | Process/session status changed |
+| `generation_started` | `generationId`, `continuation` | A response began; deltas follow |
+| `assistant_stream_delta` | `generationId`, `delta` | Raw assistant text delta, relayed unthrottled |
+| `assistant_stream_final` | `generationId`, `message`, `content` | Canonical completed message text |
+| `generation_stopped` | `generationId`, `status`, `processTerminated` | Stop completed; late output was gated |
+| `session_checkpoint` | `chat` | Registry row checkpointed after a completed response |
+| `history_forked` | `chat` | The chat advanced to a forked native session |
+| `runtime_stderr` / `runtime_stdout` | `message` | Non-JSON process output |
+| `runtime_error` | `message` | Process or rendering failure |
+| `runtime_exit` | `code`, `signal` | The Pi process exited |
+| `client_error` | `code`, `message` | A client command failed |
+
+Pi RPC events that Conduit does not transform (`agent_start`, `agent_end`,
+`message_end`, `tool_execution_start`, `tool_execution_end`, `response`, …)
+are relayed as-is; during a generation every relayed event is stamped with the
+active `generationId`, and events for a closed generation are suppressed at
+the source.
 
 ## Verification
 

@@ -114,10 +114,17 @@ ordinary hidden user prompt behind `ENABLE_PARTIAL_CONTINUE`; keep it isolated
 and removable.
 
 Transcript APIs return ten complete turns at a time with a 50,000-character soft
-limit. Preserve turn boundaries when paging. Stream assistant output by freezing
-complete server-rendered Markdown blocks, updating only the unfinished tail at a
-bounded cadence, and replacing it with canonical server-rendered output when the
-message completes. Final Markdown sanitization, KaTeX, and Shiki run server-side.
+limit. Preserve turn boundaries when paging. Stream assistant output as raw text
+deltas relayed unthrottled to the browser; the client appends them to the
+per-generation live stream store and coalesces published updates with
+requestAnimationFrame, then replaces the stream with the canonical completed
+message when the generation ends. Runtime snapshots carry the accumulated stream
+content for reconnecting clients; never replay individual deltas. All Markdown
+rendering, sanitization, KaTeX, and Shiki highlighting run in the browser.
+
+The live-session WebSocket vocabulary documented in `conduit-web/README.md` is
+a contract: keep changes additive where possible, and update that section in
+the same change as any event or command shape it describes.
 
 ## Interface Standard: Shadcn First
 
@@ -148,10 +155,14 @@ controls. A new-chat draft is transient navigation state: omit it from Chats
 until the first message persists a session, then select that session.
 
 Render assistant Markdown only through `src/client/chat-markdown.jsx` and
-Streamdown; user prompts remain literal text. Preserve static and streaming
-modes, the always-present KaTeX plugin, fence-triggered lazy Shiki loading, URL
-sanitization, image blocking, and the Shadcn external-link confirmation dialog.
-Do not introduce a parallel Markdown parser or raw HTML rendering path.
+Streamdown's default hardened pipeline; user prompts remain literal text.
+Preserve streaming mode for the live message and static mode for completed
+messages, the eager KaTeX plugin, URL sanitization, image blocking, and the
+Shadcn external-link confirmation dialog. Fenced code renders through the
+ai-elements Artifact and CodeBlock components using the fine-grained Shiki core
+with the JavaScript regex engine and a pinned language set; do not import the
+full `shiki` bundle. Do not introduce a parallel Markdown parser; raw HTML in
+assistant output renders only through Streamdown's sanitize-and-harden plugins.
 
 Keep the composer a bounded native textarea. Keep palette commands and composer
 commands as explicit registries: the lazy Shadcn Command dialog owns persistent

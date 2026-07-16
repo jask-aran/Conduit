@@ -17,15 +17,13 @@ export function buildPiArgs({ sessionFile = null, model = "", thinkingLevel = ""
 }
 
 export class PiManager extends EventEmitter {
-  constructor({ command = "pi", agentDir, template, renderMarkdown = async (value) => value, stableBoundary = () => 0, spawnImpl = spawn } = {}) {
+  constructor({ command = "pi", agentDir, template, spawnImpl = spawn } = {}) {
     super();
     if (!agentDir) throw new Error("PiManager requires an isolated agent directory");
     this.command = command;
     this.spawnImpl = spawnImpl;
     this.agentDir = agentDir;
     this.template = template;
-    this.renderMarkdown = renderMarkdown;
-    this.stableBoundary = stableBoundary;
     this.processes = new Map();
     this.bySessionFile = new Map();
     this.requestSequence = 0;
@@ -78,7 +76,6 @@ export class PiManager extends EventEmitter {
       updatedAt: new Date().toISOString(),
       stdoutBuffer: "",
       stream: null,
-      renderQueue: Promise.resolve(),
       generationSequence: 0,
       generation: null,
       stopping: false,
@@ -135,7 +132,7 @@ export class PiManager extends EventEmitter {
         if (event.type === "agent_end") record.active = false;
         if (event.type === "message_start" && event.message?.role === "assistant") {
           if (record.generation?.closed) continue;
-          record.stream = { raw: "", committedLength: 0, renderedLength: 0, block: 0, timer: null, generationId: record.generation?.id || null };
+          record.stream = { chunks: [], generationId: record.generation?.id || null };
           this.publishGeneration(record, event);
           continue;
         }
@@ -173,48 +170,22 @@ export class PiManager extends EventEmitter {
   handleTextDelta(record, delta) {
     const stream = record.stream;
     const generation = record.generation;
-    stream.raw += delta;
-    const boundary = this.stableBoundary?.(stream.raw) || 0;
-    if (boundary > stream.committedLength) {
-      const start = stream.committedLength;
-      const content = stream.raw.slice(start, boundary);
-      const block = stream.block++;
-      stream.committedLength = boundary;
-      record.renderQueue = record.renderQueue.then(async () => {
-        const html = await this.renderMarkdown(content);
-        stream.renderedLength = boundary;
-        this.publishGeneration(record, {
-          type: "assistant_stream_block",
-          block,
-          content,
-          html,
-          tail: stream.raw.slice(boundary),
-        }, generation);
-      }).catch((error) => this.publish(record, { type: "runtime_error", message: error.message }));
-    }
-    clearTimeout(stream.timer);
-    stream.timer = setTimeout(() => {
-      this.publishGeneration(record, {
-        type: "assistant_stream_tail",
-        content: stream.raw.slice(stream.renderedLength),
-      }, generation);
-    }, 40);
+    stream.chunks.push(delta);
+    this.publishGeneration(record, { type: "assistant_stream_delta", delta }, generation);
   }
 
   finishAssistantMessage(record, event) {
     const stream = record.stream;
     const generation = record.generation;
-    if (stream?.timer) clearTimeout(stream.timer);
+    const streamedContent = stream?.chunks.join("") || "";
     const content = Array.isArray(event.message.content)
       ? event.message.content.filter((block) => block.type === "text").map((block) => block.text).join("\n")
-      : String(event.message.content || stream?.raw || "");
+      : String(event.message.content || streamedContent);
+    const responseContent = content || streamedContent;
     const finalContent = generation?.continuationBase
-      ? mergeContinuation(generation.continuationBase, content)
-      : content;
-    record.renderQueue = record.renderQueue.then(async () => {
-      const html = await this.renderMarkdown(finalContent);
-      this.publishGeneration(record, { type: "assistant_stream_final", message: event.message, content: finalContent, html }, generation);
-    }).catch((error) => this.publish(record, { type: "runtime_error", message: error.message }));
+      ? mergeContinuation(generation.continuationBase, responseContent)
+      : responseContent;
+    this.publishGeneration(record, { type: "assistant_stream_final", message: event.message, content: finalContent }, generation);
     record.stream = null;
   }
 
@@ -282,8 +253,7 @@ export class PiManager extends EventEmitter {
     if (!record || !generation || (generationId && generation.id !== generationId)) return null;
     generation.closed = true;
     record.stopping = true;
-    generation.partial = record.stream?.raw || generation.partial || "";
-    if (record.stream?.timer) clearTimeout(record.stream.timer);
+    generation.partial = record.stream?.chunks.join("") || generation.partial || "";
     record.stream = null;
     let processTerminated = false;
     try {
@@ -359,7 +329,7 @@ export class PiManager extends EventEmitter {
   }
 
   view(record) {
-    const { child, clients, stdoutBuffer, events, stream, renderQueue, pendingRequests, generation, ...safe } = record;
+    const { child, clients, stdoutBuffer, events, stream, pendingRequests, generation, ...safe } = record;
     return { ...safe, generation: generation ? { id: generation.id, closed: generation.closed } : null, clientCount: clients.size };
   }
 
