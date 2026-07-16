@@ -1,10 +1,15 @@
 import React, { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { ShareIcon } from "lucide-react";
+import { ShareIcon, TriangleAlertIcon } from "lucide-react";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Breadcrumb, BreadcrumbItem, BreadcrumbList, BreadcrumbPage, BreadcrumbSeparator } from "@/components/ui/breadcrumb";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Meteors } from "@/components/ui/meteors";
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
+import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { toast } from "sonner";
 import { AppSidebar } from "./app-sidebar";
 import { ChatComposer } from "./chat-composer";
 import { ChatDropOverlay, useChatDrop } from "./chat-drop-overlay";
@@ -36,14 +41,27 @@ class AppErrorBoundary extends React.Component {
   componentDidCatch(error, details) { console.error("Conduit UI crashed", error, details); }
   render() {
     if (!this.state.error) return this.props.children;
-    return <div className="crash-screen"><div><i /><h1>Conduit hit a UI error</h1><p>{this.state.error.message || "The interface could not continue."}</p><button onClick={() => location.reload()}>Reload Conduit</button></div></div>;
+    return <div className="crash-screen">
+      <Card className="w-full max-w-md">
+        <CardHeader><CardTitle>Conduit hit a UI error</CardTitle><CardDescription>The interface could not continue.</CardDescription></CardHeader>
+        <CardContent><Alert variant="destructive"><TriangleAlertIcon /><AlertTitle>Unexpected error</AlertTitle><AlertDescription>{this.state.error.message || "Unknown interface error"}</AlertDescription></Alert></CardContent>
+        <CardFooter><Button onClick={() => location.reload()}>Reload Conduit</Button></CardFooter>
+      </Card>
+    </div>;
   }
 }
 
-function ChatHeader({ title }) {
+function ChatHeader({ project, title }) {
+  const projectLabel = project?.slug === "chat" ? "Chats" : project?.slug || project?.name || "Chats";
   return <header className="chat-header">
     <SidebarTrigger className="-ml-1" />
-    {title && <span className="chat-header-title">{title}</span>}
+    {title && <Breadcrumb className="chat-header-title">
+      <BreadcrumbList className="flex-nowrap">
+        <BreadcrumbItem><span className="truncate">{projectLabel}</span></BreadcrumbItem>
+        <BreadcrumbSeparator />
+        <BreadcrumbItem className="min-w-0"><BreadcrumbPage className="truncate font-semibold">{title}</BreadcrumbPage></BreadcrumbItem>
+      </BreadcrumbList>
+    </Breadcrumb>}
     <Button variant="ghost" size="icon-sm" className="ml-auto" aria-label="Share chat"><ShareIcon /></Button>
   </header>;
 }
@@ -78,6 +96,11 @@ function App() {
   selectedIdRef.current = selectedId;
 
   const showError = useCallback((message) => setError(message), []);
+  useEffect(() => {
+    if (!error) return;
+    toast.error(error);
+    setError("");
+  }, [error]);
   const modelSettings = useModelSettings(projectId, { onError: showError, socketRef: ws });
   const attachmentState = useAttachments(selectedId, showError);
   const drop = useChatDrop(attachmentState.addFiles);
@@ -341,24 +364,41 @@ function App() {
     const text = draft.trim();
     if (!text) return;
     const attachmentIds = attachmentState.pendingIds;
+    const previousMessages = messages;
+    const previousEditEntryId = editEntryId;
+    const sentAttachments = attachmentState.items
+      .filter((item) => attachmentIds.includes(item.id))
+      .map(({ id, name, size, type, objectUrl }) => ({ id, name, size, type, objectUrl }));
     setDraft("");
-    const localMessage = { id: `user_${Date.now()}`, role: "user", content: text, timestamp: new Date().toISOString() };
+    const localMessage = {
+      id: `user_${Date.now()}`,
+      role: "user",
+      content: text,
+      timestamp: new Date().toISOString(),
+      attachments: sentAttachments,
+    };
     if (editEntryId) {
       setMessages((current) => {
         const index = current.findIndex((message) => message.id === editEntryId);
         return index >= 0 ? [...current.slice(0, index), localMessage] : [...current, localMessage];
       });
     } else setMessages((current) => [...current, localMessage]);
+    attachmentState.markAnnounced(attachmentIds);
     try {
       await ensureLive();
       ws.current.send(JSON.stringify(editEntryId
         ? { type: "fork_and_prompt", entryId: editEntryId, message: text, attachmentIds }
         : { type: "prompt", message: text, attachmentIds }));
-      attachmentState.markAnnounced(attachmentIds);
       setChatStatus("active");
       setStreaming(true);
       setEditEntryId(null);
-    } catch (caught) { setError(caught.message); setDraft(text); }
+    } catch (caught) {
+      setMessages(previousMessages);
+      setEditEntryId(previousEditEntryId);
+      attachmentState.restoreDraft(sentAttachments);
+      setError(caught.message);
+      setDraft(text);
+    }
   }
 
   async function regenerate(entryId) {
@@ -476,7 +516,6 @@ function App() {
   const commandActions = {
     newChat: () => newChat(),
     attach: attachmentState.openPicker,
-    attachments: () => attachmentState.setOpen(true),
     settings: () => openSettings("general"),
     model: () => openSettings("models"),
     rename: () => setSidebarCommand({ type: "rename", nonce: Date.now() }),
@@ -489,7 +528,9 @@ function App() {
   };
 
   const emptyChat = messages.length === 0 && tools.length === 0;
+  const selectedProject = projects.find((project) => project.id === projectId);
   return <TooltipProvider>
+    <Toaster richColors />
     <SidebarProvider defaultOpen>
       <AppSidebar
         projects={projects}
@@ -516,7 +557,7 @@ function App() {
       <SidebarInset className={`chat-main${emptyChat ? " chat-main-empty" : ""}`} {...drop.handlers}>
         <ChatDropOverlay active={drop.active} />
         <div className="chat-meteors" aria-hidden="true"><Meteors number={30} minDelay={0} maxDelay={1} minDuration={12} maxDuration={20} /></div>
-        <ChatHeader title={chatTitle} />
+        <ChatHeader project={selectedProject} title={chatTitle} />
         <ChatThread
           messages={messages}
           tools={tools}
@@ -525,9 +566,20 @@ function App() {
           hasOlder={Boolean(pageBefore)}
           loadingOlder={loadingOlder}
           partialContinue={partialContinue}
+          editingEntryId={editEntryId}
           onLoadOlder={loadOlder}
           onCopyMessage={(message) => navigator.clipboard.writeText(message.content || "")}
-          onEditMessage={(message) => { setDraft(message.content || ""); setEditEntryId(message.id); }}
+          onEditMessage={(message) => {
+            if (editEntryId === message.id) {
+              setDraft("");
+              setEditEntryId(null);
+              attachmentState.clear();
+              return;
+            }
+            setDraft(message.content || "");
+            setEditEntryId(message.id);
+            attachmentState.restore(message.attachments);
+          }}
           onRegenerate={regenerate}
           onContinue={continueResponse}
         />
@@ -540,6 +592,7 @@ function App() {
           effort={modelSettings.effort}
           modelNotice={modelSettings.notice}
           attachments={attachmentState}
+          chatId={selectedId}
           commandContext={commandContext}
           commandActions={commandActions}
           onDraftChange={setDraft}
@@ -547,10 +600,17 @@ function App() {
           onChooseEffort={modelSettings.chooseEffort}
           onSend={send}
         />
-        {error && <Button className="error" variant="destructive" onClick={() => setError("")}>{error} ×</Button>}
       </SidebarInset>
       <Suspense fallback={null}>
-        {commandOpen && <CommandMenu open={commandOpen} onOpenChange={setCommandOpen} context={commandContext} actions={commandActions} />}
+        {commandOpen && <CommandMenu
+          open={commandOpen}
+          onOpenChange={setCommandOpen}
+          context={commandContext}
+          actions={commandActions}
+          models={modelSettings.models}
+          model={modelSettings.model}
+          onChooseModel={modelSettings.chooseModel}
+        />}
         {settingsOpen && <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} initialSection={settingsSection} modelSettings={modelSettings} />}
       </Suspense>
     </SidebarProvider>

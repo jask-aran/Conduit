@@ -1,38 +1,39 @@
-import { FilePlus2Icon, ListIcon, PlayIcon, RefreshCwIcon, SettingsIcon, SlidersHorizontalIcon, SquareIcon, CopyIcon } from "lucide-react";
-import { Item, ItemContent, ItemDescription, ItemGroup, ItemMedia, ItemTitle } from "@/components/ui/item";
+import { FilePlus2Icon } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { PopoverContent } from "@/components/ui/popover";
-
-const icons = {
-  attach: FilePlus2Icon, attachments: ListIcon, settings: SettingsIcon, model: SlidersHorizontalIcon,
-  stop: SquareIcon, regenerate: RefreshCwIcon, continue: PlayIcon, copy: CopyIcon,
-};
 
 export function SlashSuggestions({ commands, activeIndex, onSelect }) {
   return <PopoverContent
-    id="slash-command-list"
-    role="listbox"
     side="top"
     align="start"
     className="slash-suggestions"
     onOpenAutoFocus={(event) => event.preventDefault()}
   >
-    <ItemGroup role="presentation">
-      {commands.map((command, index) => {
-        const Icon = icons[command.icon];
-        return <Item
-          key={command.id}
-          id={`slash-command-${command.id}`}
-          role="option"
-          aria-selected={index === activeIndex}
-          data-active={index === activeIndex ? "true" : undefined}
-          size="sm"
-          onPointerDown={(event) => event.preventDefault()}
-          onClick={() => onSelect(command)}
-        >
-          <ItemMedia variant="icon">{Icon && <Icon />}</ItemMedia>
-          <ItemContent><ItemTitle>/{command.slash}</ItemTitle><ItemDescription>{command.description}</ItemDescription></ItemContent>
-        </Item>;
-      })}
-    </ItemGroup>
+    <div
+      id="slash-command-list"
+      role="listbox"
+      aria-label="Suggestions"
+      data-slot="composer-trigger-popover-items"
+      className="flex flex-col py-1"
+    >
+      {commands.map((command, index) => <Button
+        key={command.id}
+        id={`slash-command-${command.id}`}
+        type="button"
+        role="option"
+        variant="ghost"
+        aria-selected={index === activeIndex}
+        data-highlighted={index === activeIndex ? "" : undefined}
+        className="h-auto w-full justify-start rounded-none px-3 py-2 text-start data-[highlighted]:bg-accent"
+        onPointerDown={(event) => event.preventDefault()}
+        onClick={() => onSelect(command)}
+      >
+        <FilePlus2Icon />
+        <span className="flex min-w-0 flex-col items-start gap-0.5">
+          <span className="font-medium">/{command.slash}</span>
+          <span className="text-xs leading-tight text-muted-foreground">{command.description}</span>
+        </span>
+      </Button>)}
+    </div>
   </PopoverContent>;
 }

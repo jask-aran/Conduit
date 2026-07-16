@@ -191,8 +191,7 @@ button, textarea { font: inherit; }
 }
 
 .chat-header-title {
-  font-size: 14px;
-  font-weight: 600;
+  min-width: 0;
 }
 
 .transcript {
@@ -276,7 +275,14 @@ button, textarea { font: inherit; }
 .server-markdown blockquote { border-left: 3px solid var(--border); padding-left: 1em; color: var(--muted-foreground); }
 .server-markdown table { width: 100%; border-collapse: collapse; }
 .server-markdown th, .server-markdown td { border: 1px solid var(--border); padding: 0.45em 0.65em; text-align: left; }
-.server-markdown pre { position: relative; overflow: auto; border-radius: var(--radius); padding: 1em; }
+.server-markdown pre {
+  position: relative;
+  overflow: auto;
+  border-radius: var(--radius);
+  background-color: var(--shiki-dark-bg, var(--muted)) !important;
+  padding: 1em;
+  color: var(--shiki-dark, var(--foreground)) !important;
+}
 .server-markdown pre span { color: var(--shiki-dark, inherit) !important; }
 .server-code-copy {
   position: absolute;
@@ -352,29 +358,15 @@ button, textarea { font: inherit; }
   gap: 2px;
 }
 
-.attachment-count {
-  position: absolute;
-  top: -2px;
-  right: -2px;
-  min-width: 15px;
-  height: 15px;
-  padding-inline: 3px;
-  border: 2px solid var(--secondary);
-  border-radius: 999px;
-  background: var(--primary);
-  color: var(--primary-foreground);
-  font-size: 9px;
-  line-height: 11px;
-  text-align: center;
+.attachment-tray {
+  display: flex;
+  width: min(760px, 100%);
+  max-height: min(320px, 40dvh);
+  flex-direction: column;
+  gap: 8px;
+  margin: 0 auto 10px;
+  overflow-y: auto;
 }
-
-.attachment-popover { width: min(360px, calc(100vw - 24px)); }
-.attachment-popover-heading { display: flex; align-items: center; justify-content: space-between; padding: 2px 3px 6px; }
-.attachment-popover-heading button { border: 0; background: transparent; color: var(--primary); font-size: 12px; }
-.attachment-scroll { max-height: min(340px, 52dvh); }
-.attachment-list { display: grid; gap: 6px; padding-right: 8px; }
-.attachment-row { width: 100%; flex-wrap: nowrap; }
-.attachment-empty { margin: 12px 4px; color: var(--muted-foreground); font-size: 12px; }
 
 .chat-drop-overlay {
   position: absolute;
@@ -412,36 +404,20 @@ button, textarea { font: inherit; }
 [data-slot="message-scroller-item"]:hover .response-actions,
 .response-actions:focus-within { opacity: 1; }
 .response-actions-user { justify-content: flex-end; }
-.stopped-label { display: block; margin-top: 8px; color: var(--muted-foreground); font-size: 12px; font-weight: 550; }
 
 .message-attachments {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 8px;
+  width: fit-content;
+  max-width: 100%;
+  align-self: flex-end;
+  margin: 0;
 }
 
-.message-attachments span {
-  display: inline-flex;
-  max-width: 220px;
-  align-items: center;
-  gap: 4px;
-  padding: 3px 7px;
+.slash-suggestions {
+  width: min(256px, calc(100vw - 24px));
   overflow: hidden;
-  border: 1px solid color-mix(in srgb, currentColor 18%, transparent);
-  border-radius: 999px;
-  font-size: 11px;
-  opacity: .78;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  padding: 0;
+  border-radius: 12px;
 }
-
-.message-attachments svg { width: 12px; height: 12px; flex: none; }
-
-.slash-suggestions { width: min(360px, calc(100vw - 24px)); padding: 6px; }
-.slash-suggestions [data-slot="item-group"] { gap: 2px; }
-.slash-suggestions [data-slot="item"] { cursor: default; }
-.slash-suggestions [data-slot="item"][data-active="true"] { background: var(--muted); }
 
 .settings-dialog {
   width: min(900px, calc(100vw - 32px));
@@ -467,11 +443,14 @@ button, textarea { font: inherit; }
 .settings-label-short { display: none; }
 .settings-panel { min-width: 0; height: 100%; }
 .settings-panel [data-slot="scroll-area-viewport"] { padding: 6px 12px 18px 6px; }
+.model-scope-list {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
 .settings-section-heading { margin-bottom: 20px; }
-.settings-section-heading h2, .settings-placeholder h2 { margin: 0; font-size: 22px; letter-spacing: -0.025em; }
-.settings-section-heading p, .settings-placeholder p { margin: 6px 0 0; color: var(--muted-foreground); line-height: 1.5; }
+.settings-section-heading h2 { margin: 0; font-size: 22px; letter-spacing: -0.025em; }
+.settings-section-heading p { margin: 6px 0 0; color: var(--muted-foreground); line-height: 1.5; }
 .settings-save { display: flex; justify-content: flex-end; margin-top: 22px; padding-top: 16px; border-top: 1px solid var(--border); }
-.settings-placeholder { padding: 4px; }
 
 .chat-meteors {
   position: absolute;
@@ -517,16 +496,6 @@ button, textarea { font: inherit; }
   box-shadow: none;
 }
 
-.error {
-  position: absolute;
-  right: 24px;
-  bottom: 88px;
-  max-width: min(380px, calc(100% - 48px));
-  height: auto;
-  white-space: normal;
-  text-align: left;
-}
-
 .crash-screen {
   min-height: 100dvh;
   padding: 24px;
@@ -536,34 +505,11 @@ button, textarea { font: inherit; }
   color: var(--foreground);
 }
 
-.crash-screen > div {
-  width: min(440px, 100%);
-  padding: 32px;
-  border: 1px solid var(--border);
-  border-radius: 16px;
-  background: var(--card);
-  text-align: center;
-  box-shadow: 0 12px 40px rgb(0 0 0 / 25%);
-}
-
-.crash-screen i {
-  display: inline-block;
-  width: 28px;
-  height: 28px;
-  border-radius: 8px;
-  background: var(--sidebar-primary);
-}
-
-.crash-screen h1 { margin: 16px 0 8px; font-size: 20px; }
-.crash-screen p { color: var(--muted-foreground); font: 12px/1.5 ui-monospace, monospace; overflow-wrap: anywhere; }
-.crash-screen button { margin-top: 12px; padding: 10px 16px; border: 0; border-radius: 9px; background: var(--primary); color: var(--primary-foreground); font-weight: 650; }
-
 @media (max-width: 760px) {
   .thread { width: 100%; padding: 40px 16px 20px; }
   .composer-wrap { padding: 10px 12px 16px; }
   .chat-main-empty .composer-wrap { width: calc(100% - 24px); }
   .tool-card { margin-left: 0; }
-  .error { right: 12px; bottom: 92px; max-width: calc(100% - 24px); }
   .response-actions { opacity: 1; }
   .settings-dialog { width: calc(100vw - 24px); max-width: calc(100vw - 24px); height: calc(100dvh - 24px); max-height: calc(100dvh - 24px); padding: 14px; }
   .settings-tabs { gap: 8px; }

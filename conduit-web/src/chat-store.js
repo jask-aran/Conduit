@@ -215,8 +215,17 @@ export class ChatStore {
     return chat;
   }
 
-  async syncFile(chatId, file, project) {
-    const session = await parseSession(file, project);
+  async syncFile(chatId, file, project, { waitForFileMs = 0 } = {}) {
+    const deadline = Date.now() + waitForFileMs;
+    let session;
+    while (!session) {
+      try {
+        session = await parseSession(file, project);
+      } catch (error) {
+        if (error.code !== "ENOENT" || Date.now() >= deadline) throw error;
+        await new Promise((resolve) => setTimeout(resolve, 20));
+      }
+    }
     if (path.resolve(session.cwd) !== path.resolve(project.path)) return null;
     await this.commitSession(chatId, session);
     return session;

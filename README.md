@@ -181,12 +181,15 @@ owns streaming follow, turn anchoring, and jump-to-latest behavior while Pi RPC
 continues to own transport and message state. The settings surface writes Pi's
 global scoped-model setting through the Conduit server.
 
-The composer is a bounded native textarea with a Shadcn attachment Popover and
-shared model selector. Cmd/Ctrl+K lazy-loads the global Shadcn Command palette;
-slash suggestions use a non-modal Popover while focus remains in the textarea.
-Settings opens as a centered Dialog with fixed vertical Tabs at all viewport
-sizes. Response controls copy source Markdown, fork for edit/regenerate, stop a
-generation immediately, and optionally continue an aborted partial response.
+The composer is a bounded native textarea with a compact model selector and
+Shadcn Attachment cards above it. Upload progress appears in those cards; after
+send, the same cards move beneath their user message. Cmd/Ctrl+K lazy-loads the
+global Shadcn Command palette, while the textarea-focused slash Popover exposes
+only composition commands. Settings opens as a centered Dialog with fixed
+vertical Tabs and a searchable, grouped multi-model Combobox. The chat header
+uses a project-aware breadcrumb. Response controls copy source Markdown, fork
+for edit/regenerate, stop a generation immediately, and optionally continue an
+aborted partial response.
 
 Every response generation has a server-issued ID. Stop freezes the browser's
 visible partial synchronously and rejects later deltas for that ID. Conduit asks

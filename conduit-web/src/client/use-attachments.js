@@ -5,7 +5,6 @@ const PROGRESS_INTERVAL = 100;
 
 export function useAttachments(chatId, onError) {
   const [items, setItems] = useState([]);
-  const [open, setOpen] = useState(false);
   const inputRef = useRef(null);
   const queue = useRef([]);
   const active = useRef(0);
@@ -70,7 +69,6 @@ export function useAttachments(chatId, onError) {
     });
     if (!additions.length) return;
     setItems((current) => [...current, ...additions]);
-    setOpen(true);
     queue.current.push(...additions);
     while (active.current < MAX_CONCURRENT_UPLOADS && queue.current.length) upload(queue.current.shift());
   }, [upload]);
@@ -86,7 +84,9 @@ export function useAttachments(chatId, onError) {
     fetch(`/v0/chats/${encodeURIComponent(chatId)}/attachments`)
       .then((response) => response.ok ? response.json() : Promise.reject(new Error("Could not load attachments")))
       .then((payload) => current && setItems(Array.isArray(payload.attachments)
-        ? payload.attachments.map((item) => ({ ...item, status: "done", progress: 100 }))
+        ? payload.attachments
+          .filter((item) => !item.announced)
+          .map((item) => ({ ...item, status: "done", progress: 100 }))
         : []))
       .catch((error) => current && onError?.(error.message));
     return () => { current = false; };
@@ -102,7 +102,7 @@ export function useAttachments(chatId, onError) {
       const request = requests.current.get(item.id);
       if (request) request.abort();
       queue.current = queue.current.filter((queued) => queued.id !== item.id);
-      if (item.status === "done") {
+      if (item.status === "done" && !item.restored) {
         const response = await fetch(`/v0/chats/${encodeURIComponent(chatId)}/attachments/${item.id}`, { method: "DELETE" });
         if (!response.ok && response.status !== 404) {
           const body = await response.json().catch(() => ({}));
@@ -116,8 +116,9 @@ export function useAttachments(chatId, onError) {
       setItems((current) => current.filter((candidate) => candidate.id !== item.id));
     } catch (error) {
       onError?.(error.message);
-      throw error;
+      return false;
     }
+    return true;
   }, [chatId, onError]);
 
   const pendingIds = useMemo(() => items
@@ -126,11 +127,45 @@ export function useAttachments(chatId, onError) {
 
   const markAnnounced = useCallback((ids) => {
     const sent = new Set(ids);
-    setItems((current) => current.map((item) => sent.has(item.id) ? { ...item, announced: true } : item));
+    setItems((current) => current.filter((item) => !sent.has(item.id)));
+  }, []);
+
+  const clear = useCallback(() => {
+    queue.current = [];
+    for (const request of requests.current.values()) request.abort();
+    requests.current.clear();
+    active.current = 0;
+    for (const item of items) {
+      if (item.status !== "done" || item.restored) continue;
+      fetch(`/v0/chats/${encodeURIComponent(chatId)}/attachments/${item.id}`, { method: "DELETE" })
+        .catch(() => onError?.("Could not discard attachment"));
+    }
+    setItems([]);
+  }, [chatId, items, onError]);
+
+  const restore = useCallback((restored) => {
+    clear();
+    setItems((restored || []).map((item) => ({
+      ...item,
+      status: "done",
+      progress: 100,
+      announced: false,
+      restored: true,
+    })));
+  }, [clear]);
+
+  const restoreDraft = useCallback((draftItems) => {
+    setItems((draftItems || []).map((item) => ({
+      ...item,
+      status: "done",
+      progress: 100,
+      announced: false,
+      restored: false,
+    })));
   }, []);
 
   return {
-    items, open, setOpen, inputRef, addFiles, remove, pendingIds, markAnnounced,
+    items, inputRef, addFiles, remove, pendingIds, markAnnounced, clear, restore, restoreDraft,
     openPicker: () => inputRef.current?.click(),
   };
 }

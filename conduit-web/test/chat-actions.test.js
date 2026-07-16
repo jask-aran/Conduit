@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { availableCommands } from "../src/client/command-registry.js";
+import { availableComposerCommands, availablePaletteCommands } from "../src/client/command-registry.js";
 import { detectCommandToken, replaceCommandToken } from "../src/client/slash-token.js";
 import { mergeContinuation } from "../src/continuation.js";
 
@@ -12,12 +12,12 @@ test("slash tokens are limited to the first token and preserve unknown commands 
   assert.equal(replaceCommandToken("  /attach hello", token), "   hello");
 });
 
-test("command availability omits invalid chat actions and keeps slash scope narrow", () => {
-  const empty = availableCommands({ chatId: null, streaming: false });
+test("palette and composer commands have separate availability scopes", () => {
+  const empty = availablePaletteCommands({ chatId: null, streaming: false });
   assert.deepEqual(empty.map((command) => command.id), ["new-chat", "settings", "model"]);
-  const slash = availableCommands({ chatId: "chat-id", streaming: false, canCopy: true }, { slashOnly: true });
-  assert.equal(slash.some((command) => command.id === "delete"), false);
-  assert.equal(slash.some((command) => command.id === "copy"), true);
+  const composer = availableComposerCommands({ chatId: "chat-id" });
+  assert.deepEqual(composer.map((command) => command.slash), ["attach"]);
+  assert.deepEqual(availableComposerCommands({ chatId: null }), []);
 });
 
 test("continuation removes only exact normalized overlap", () => {
