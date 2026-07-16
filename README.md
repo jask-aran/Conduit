@@ -2,6 +2,8 @@
 
 [![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/jask-aran/Conduit?quickstart=1)
 
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/jask-aran/Conduit)
+
 ![architecture](interface_first_platform_architecture.svg)
 
 Conduit is an interface-first personal agent platform. The web application owns
