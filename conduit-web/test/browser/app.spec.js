@@ -216,7 +216,7 @@ test("renders persisted assistant Markdown with safe interactive controls", asyn
   await expect(page.locator('a[href^="irc:"]')).toHaveCount(0);
   expect(await page.evaluate(() => window.__markdownXss)).toBeUndefined();
 
-  await page.getByRole("button", { name: "External documentation" }).click();
+  await page.getByRole("link", { name: "External documentation" }).click();
   const dialog = page.getByRole("alertdialog", { name: "Open external link?" });
   await expect(dialog).toContainText("https://example.com/docs");
   await dialog.getByRole("button", { name: "Cancel" }).click();
