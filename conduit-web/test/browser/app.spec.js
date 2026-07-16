@@ -248,11 +248,15 @@ test("repairs unfinished Markdown while an assistant response streams", async ({
             message: { role: "assistant" },
           }) });
           this.onmessage?.({ data: JSON.stringify({
-            type: "message_update",
-            assistantMessageEvent: {
-              type: "text_delta",
-              delta: "## Live response\n\n**still streaming",
-            },
+            type: "assistant_stream_block",
+            block: 0,
+            content: "## Live response\n\n",
+            html: "<h2>Live response</h2>",
+            tail: "**still streaming",
+          }) });
+          this.onmessage?.({ data: JSON.stringify({
+            type: "assistant_stream_tail",
+            content: "**still streaming",
           }) });
         }, 0);
       }

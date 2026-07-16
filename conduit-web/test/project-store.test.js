@@ -36,7 +36,7 @@ test("stores project metadata centrally and keeps working directories clean", as
   await fs.rm(root, { recursive: true, force: true });
 });
 
-test("deletes named project files, native sessions, and catalog metadata", async () => {
+test("deletes named project files and catalog metadata without touching colliding session storage", async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-project-delete-test-"));
   const store = new ProjectStore({
     filesRoot: path.join(root, "data/chat/files"),
@@ -55,7 +55,7 @@ test("deletes named project files, native sessions, and catalog metadata", async
   await store.remove(project.id);
 
   await assert.rejects(fs.access(project.path), { code: "ENOENT" });
-  await assert.rejects(fs.access(projectSession), { code: "ENOENT" });
+  assert.match(await fs.readFile(projectSession, "utf8"), /\"type\":\"session\"/);
   assert.equal(await fs.readFile(foreignSession, "utf8"), `${JSON.stringify({ type: "session", cwd: path.join(root, "foreign") })}\n`);
   assert.equal(await store.get(project.id), null);
   await assert.rejects(store.remove("project_chat"), { code: "reserved_project" });
