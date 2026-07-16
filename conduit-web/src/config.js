@@ -22,6 +22,7 @@ export function loadConfig(env = process.env) {
     piCommand: env.PI_COMMAND || "pi",
     filesRoot: absolute(env.CONDUIT_FILES_ROOT || path.join(repositoryRoot, "data/chat/files")),
     catalogFile: absolute(env.CONDUIT_CATALOG_FILE || path.join(repositoryRoot, "data/conduit.json")),
+    sessionRegistryFile: absolute(env.CONDUIT_SESSION_REGISTRY_FILE || path.join(repositoryRoot, "data/sessions.json")),
     piAgentDir: absolute(env.CONDUIT_PI_AGENT_DIR || path.join(repositoryRoot, "data/pi")),
     piTemplate,
   };

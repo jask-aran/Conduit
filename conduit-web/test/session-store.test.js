@@ -3,7 +3,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { discoverSessions, duplicateSession, findSession, messagesFromEntries, moveSession, moveSessions, removeSession, renameSession, sessionDirectoryFor, sessionIdFor, settingsFromEntries, toolsFromEntries, transcriptFromEntries } from "../src/session-store.js";
+import { discoverSessions, duplicateSession, findSession, messagesFromEntries, moveSession, moveSessions, pageSessionEntries, removeSession, renameSession, sessionDirectoryFor, sessionIdFor, settingsFromEntries, toolsFromEntries, transcriptFromEntries } from "../src/session-store.js";
 
 test("session IDs prefer Pi's native ID and otherwise remain stable", () => {
   assert.equal(sessionIdFor("/tmp/a.jsonl", "native-123"), "native-123");
@@ -50,6 +50,23 @@ test("restores the latest model and thinking level from a session", () => {
     model: "openai-codex/gpt-5.6-luna",
     thinkingLevel: "high",
   });
+});
+
+test("pages complete recent turns with a character soft limit", () => {
+  const entries = Array.from({ length: 12 }, (_, index) => ([
+    { type: "message", message: { role: "user", content: `Question ${index}` } },
+    { type: "message", message: { role: "assistant", content: `Answer ${index}` } },
+  ])).flat();
+  const latest = pageSessionEntries(entries, { turnLimit: 10, characterLimit: 50_000 });
+  assert.equal(latest.entries.length, 20);
+  assert.equal(latest.start, 4);
+  assert.equal(latest.hasMore, true);
+  const older = pageSessionEntries(entries, { before: latest.start, turnLimit: 10, characterLimit: 50_000 });
+  assert.equal(older.entries.length, 4);
+  assert.equal(older.hasMore, false);
+
+  const oversized = pageSessionEntries(entries, { turnLimit: 10, characterLimit: 5 });
+  assert.equal(oversized.entries.length, 2, "the latest complete turn is retained even above the soft limit");
 });
 
 test("discovers cwd-matched sessions in Pi's native agent-home layout", async () => {

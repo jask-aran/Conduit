@@ -1,8 +1,5 @@
 import { memo, useEffect, useMemo, useState } from "react";
 import { CheckIcon, CopyIcon } from "lucide-react";
-import { createMathPlugin } from "@streamdown/math";
-import "katex/dist/katex.min.css";
-import { BlockPolicy, harden } from "rehype-harden";
 import { Streamdown, defaultRehypePlugins } from "streamdown";
 import {
   AlertDialog,
@@ -22,20 +19,10 @@ const controls = {
 };
 
 const icons = { CheckIcon, CopyIcon };
-const mathPlugin = createMathPlugin({ singleDollarTextMath: true });
 const allowedProtocols = new Set(["http:", "https:", "mailto:"]);
-let codePluginPromise;
+let mathPluginPromise;
 const rehypePlugins = [
-  defaultRehypePlugins.raw,
   defaultRehypePlugins.sanitize,
-  [harden, {
-    allowedProtocols: ["http", "https", "mailto"],
-    allowedLinkPrefixes: ["*"],
-    allowedImagePrefixes: [],
-    allowDataImages: false,
-    imageBlockPolicy: BlockPolicy.textOnly,
-    linkBlockPolicy: BlockPolicy.textOnly,
-  }],
 ];
 
 function safeUrlTransform(url, key) {
@@ -49,9 +36,12 @@ function safeUrlTransform(url, key) {
   }
 }
 
-function loadCodePlugin() {
-  codePluginPromise ||= import("@streamdown/code").then((module) => module.code);
-  return codePluginPromise;
+function loadMathPlugin() {
+  mathPluginPromise ||= Promise.all([
+    import("@streamdown/math"),
+    import("katex/dist/katex.min.css"),
+  ]).then(([module]) => module.createMathPlugin({ singleDollarTextMath: true }));
+  return mathPluginPromise;
 }
 
 function ExternalLinkDialog({ isOpen, onClose, onConfirm, url }) {
@@ -92,18 +82,17 @@ const linkSafety = {
 
 export const ChatMarkdown = memo(function ChatMarkdown({ children = "", streaming = false }) {
   const text = String(children || "");
-  const hasCodeFence = /(^|\n)[ \t]{0,3}(`{3,}|~{3,})/.test(text);
-  const [codePlugin, setCodePlugin] = useState(null);
+  const hasMath = /(^|[^\\])\$/.test(text);
+  const [mathPlugin, setMathPlugin] = useState(null);
   useEffect(() => {
-    if (!hasCodeFence || codePlugin) return undefined;
+    if (!hasMath || mathPlugin) return undefined;
     let active = true;
-    loadCodePlugin().then((plugin) => active && setCodePlugin(plugin));
+    loadMathPlugin().then((plugin) => active && setMathPlugin(plugin));
     return () => { active = false; };
-  }, [codePlugin, hasCodeFence]);
+  }, [hasMath, mathPlugin]);
   const plugins = useMemo(() => ({
-    ...(codePlugin ? { code: codePlugin } : {}),
-    math: mathPlugin,
-  }), [codePlugin]);
+    ...(mathPlugin ? { math: mathPlugin } : {}),
+  }), [mathPlugin]);
 
   return <Streamdown
     caret="block"

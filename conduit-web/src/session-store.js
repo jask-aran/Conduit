@@ -155,6 +155,31 @@ export function messagesFromEntries(entries) {
   });
 }
 
+export function pageSessionEntries(entries, { before, turnLimit = 10, characterLimit = 50_000 } = {}) {
+  const requestedEnd = Number.parseInt(before, 10);
+  const end = Number.isInteger(requestedEnd) ? Math.max(0, Math.min(requestedEnd, entries.length)) : entries.length;
+  const starts = [];
+  for (let index = 0; index < end; index += 1) {
+    if (entries[index].type === "message" && entries[index].message?.role === "user") starts.push(index);
+  }
+  if (!starts.length) return { entries: entries.slice(0, end), start: 0, end, hasMore: false };
+
+  let start = starts.at(-1);
+  let characters = 0;
+  let turns = 0;
+  for (let position = starts.length - 1; position >= 0; position -= 1) {
+    const turnStart = starts[position];
+    const turnEnd = position + 1 < starts.length ? starts[position + 1] : end;
+    const turnCharacters = entries.slice(turnStart, turnEnd).reduce((total, entry) =>
+      total + (entry.type === "message" ? textContent(entry.message?.content).length : 0), 0);
+    if (turns > 0 && (turns >= turnLimit || characters + turnCharacters > characterLimit)) break;
+    start = turnStart;
+    characters += turnCharacters;
+    turns += 1;
+  }
+  return { entries: entries.slice(start, end), start, end, hasMore: start > starts[0] };
+}
+
 export function transcriptFromEntries(entries) {
   return messagesFromEntries(entries)
     .filter((message) => message.content.trim())

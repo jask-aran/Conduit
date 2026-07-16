@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
-import { removeProjectSessions, sessionDirectoryFor } from "./session-store.js";
+import { sessionDirectoryFor } from "./session-store.js";
 
 const SLUG = /^[a-z0-9](?:[a-z0-9-]{0,46}[a-z0-9])?$/;
 
@@ -125,7 +125,6 @@ export class ProjectStore {
     }
     const view = this.projectView(project);
     await fs.rm(view.path, { recursive: true, force: true });
-    await removeProjectSessions(view);
     catalog.projects = catalog.projects.filter((item) => item.id !== project.id);
     await writeJson(this.catalogFile, catalog);
     return view;
