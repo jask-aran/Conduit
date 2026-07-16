@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
-import { CheckIcon, ChevronDownIcon, ChevronUpIcon } from "lucide-react";
+import { CheckIcon, ChevronDownIcon, ChevronUpIcon, PaperclipIcon } from "lucide-react";
 import { Bubble, BubbleContent } from "@/components/ui/bubble";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/message-scroller";
 import { Skeleton } from "@/components/ui/skeleton";
 import { RenderedMarkdown } from "./rendered-markdown";
+import { ResponseActions } from "./response-actions";
 
 const ChatMarkdown = lazy(() => import("./chat-markdown").then((module) => ({
   default: module.ChatMarkdown,
@@ -58,7 +59,10 @@ function ToolCard({ tool, sessionId }) {
   </Collapsible>;
 }
 
-export function ChatThread({ messages, tools, streaming, sessionId, hasOlder, loadingOlder, onLoadOlder }) {
+export function ChatThread({
+  messages, tools, streaming, sessionId, hasOlder, loadingOlder, partialContinue,
+  onLoadOlder, onCopyMessage, onEditMessage, onRegenerate, onContinue,
+}) {
   const older = useRef(null);
   useEffect(() => {
     if (!hasOlder || !older.current || !onLoadOlder) return undefined;
@@ -106,6 +110,7 @@ export function ChatThread({ messages, tools, streaming, sessionId, hasOlder, lo
             const message = item.value;
             const isUser = message.role === "user";
             const isStreamingMessage = streaming && message === lastMessage && !isUser;
+            const precedingUser = !isUser ? messages.slice(0, item.index).findLast((candidate) => candidate.role === "user") : null;
             return <MessageScrollerItem
               key={`message_${message.id}`}
               messageId={message.id}
@@ -116,7 +121,12 @@ export function ChatThread({ messages, tools, streaming, sessionId, hasOlder, lo
                   {message.timestamp && <MessageHeader>{time(message.timestamp)}</MessageHeader>}
                   <Bubble align={isUser ? "end" : "start"} variant={isUser ? "muted" : "ghost"}>
                     <BubbleContent>
-                      {isUser ? String(message.content || "") : message.html
+                      {isUser ? <>
+                        <span className="user-message-text">{String(message.content || "")}</span>
+                        {message.attachments?.length > 0 && <div className="message-attachments" aria-label="Message attachments">
+                          {message.attachments.map((attachment) => <span key={attachment.id}><PaperclipIcon />{attachment.name}</span>)}
+                        </div>}
+                      </> : message.html
                         ? <RenderedMarkdown html={message.html} />
                         : isStreamingMessage && (message.streamBlocks?.length || message.tail != null)
                           ? <>
@@ -128,8 +138,18 @@ export function ChatThread({ messages, tools, streaming, sessionId, hasOlder, lo
                           : <Suspense fallback={<Skeleton className="h-16 w-full" />}>
                             <ChatMarkdown streaming={isStreamingMessage}>{message.content}</ChatMarkdown>
                           </Suspense>}
+                      {message.stopped && <span className="stopped-label">{message.status === "stopping" ? "Stopping…" : "Stopped"}</span>}
                     </BubbleContent>
                   </Bubble>
+                  {!streaming && <ResponseActions
+                    message={message}
+                    precedingUserId={precedingUser?.id}
+                    partialContinue={partialContinue}
+                    onCopy={onCopyMessage}
+                    onEdit={onEditMessage}
+                    onRegenerate={onRegenerate}
+                    onContinue={onContinue}
+                  />}
                 </MessageContent>
               </Message>
             </MessageScrollerItem>;

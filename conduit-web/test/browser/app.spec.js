@@ -5,7 +5,7 @@ const projects = [{
   id: "project_chat",
   slug: "chat",
   name: "Chats",
-  sessions: [{ id: "session_existing", title: "Existing chat" }],
+  sessions: [{ id: "session_existing", projectId: "project_chat", status: "active", title: "Existing chat" }],
 }, {
   id: "project_research",
   slug: "research",
@@ -36,6 +36,53 @@ async function openSidebar(page, testInfo) {
 }
 
 test.beforeEach(async ({ page }) => {
+  await page.addInitScript(() => {
+    class IdleWebSocket extends EventTarget {
+      static OPEN = 1;
+      constructor() {
+        super();
+        this.readyState = 0;
+        queueMicrotask(() => { this.readyState = IdleWebSocket.OPEN; this.dispatchEvent(new Event("open")); });
+      }
+      send() {}
+      close() { this.readyState = 3; this.dispatchEvent(new Event("close")); }
+    }
+    Object.defineProperty(window, "WebSocket", { configurable: true, value: IdleWebSocket });
+  });
+  await page.route("**/v0/capabilities", async (route) => {
+    await route.fulfill({ json: { partialContinue: true } });
+  });
+  await page.route("**/v0/chats", async (route) => {
+    await route.fulfill({ status: 201, json: {
+      id: "550e8400-e29b-41d4-a716-446655440099",
+      projectId: "project_chat",
+      status: "draft",
+      title: "New chat",
+    } });
+  });
+  await page.route("**/v0/chats/550e8400-e29b-41d4-a716-446655440099", async (route) => {
+    await route.fulfill({ json: {
+      id: "550e8400-e29b-41d4-a716-446655440099",
+      projectId: "project_chat",
+      status: "draft",
+      title: "New chat",
+    } });
+  });
+  await page.route("**/v0/sessions/550e8400-e29b-41d4-a716-446655440099", async (route) => {
+    await route.fulfill({ json: {
+      id: "550e8400-e29b-41d4-a716-446655440099",
+      projectId: "project_chat",
+      status: "draft",
+      title: "New chat",
+      messages: [], tools: [], page: { before: null },
+    } });
+  });
+  await page.route("**/v0/chats/*/attachments", async (route) => {
+    await route.fulfill({ json: { attachments: [] } });
+  });
+  await page.route("**/v0/chats/*?ifEmpty=true", async (route) => {
+    await route.fulfill({ status: 204, body: "" });
+  });
   await page.route("**/v0/projects", async (route) => {
     await route.fulfill({ json: { projects } });
   });
@@ -50,13 +97,22 @@ test.beforeEach(async ({ page }) => {
     });
   });
   await page.route("**/v0/settings?**", async (route) => {
-    await route.fulfill({ json: { models: [model], enabledModels: [model.spec] } });
+    await route.fulfill({ json: { models: [model, plainModel], enabledModels: [model.spec, plainModel.spec], defaultModel: model.spec } });
   });
   await page.route("**/v0/settings", async (route) => {
-    await route.fulfill({ json: { models: [model], enabledModels: [model.spec] } });
+    const body = route.request().postDataJSON?.() || {};
+    await route.fulfill({ json: {
+      models: [model, plainModel],
+      enabledModels: body.enabledModels || [model.spec, plainModel.spec],
+      defaultModel: body.defaultModel || model.spec,
+    } });
   });
   await page.route("**/v0/sessions/session_existing", async (route) => {
     await route.fulfill({ json: {
+      id: "session_existing",
+      projectId: "project_chat",
+      status: "active",
+      title: "Existing chat",
       messages: [
         { id: "message_existing", role: "user", content: "Previous question" },
         { id: "message_tool_only", role: "assistant", content: "", timestamp: "2026-07-15T06:49:27.768Z" },
@@ -73,9 +129,6 @@ test.beforeEach(async ({ page }) => {
   });
   await page.route("**/v0/sessions/session_existing/transcript", async (route) => {
     await route.fulfill({ contentType: "text/markdown", body: "## User\n\nPrevious question" });
-  });
-  await page.route("**/v0/sessions/session_existing/duplicate", async (route) => {
-    await route.fulfill({ status: 201, json: { id: "session_duplicate", title: "Existing chat copy" } });
   });
   await page.route("**/v0/sessions/session_existing/move", async (route) => {
     await route.fulfill({ json: { id: "session_moved", title: "Existing chat", projectId: "project_research" } });
@@ -94,13 +147,16 @@ test.beforeEach(async ({ page }) => {
   });
 });
 
-test("renders the primary chat surface", async ({ page }) => {
+test("creates a durable chat route and renders the primary surface", async ({ page }) => {
+  const createRequest = page.waitForRequest((request) => request.url().endsWith("/v0/chats") && request.method() === "POST");
   await page.goto("/");
+  await createRequest;
+  await expect(page).toHaveURL(/\/chat\/550e8400-e29b-41d4-a716-446655440099$/);
 
   await expect(page.getByRole("heading", { name: "How can I help you today?" })).toBeVisible();
   const composer = page.getByRole("textbox", { name: "Message Pi" });
   await expect(composer).toHaveAttribute("placeholder", "Send a message...");
-  await expect(composer).toHaveJSProperty("tagName", "INPUT");
+  await expect(composer).toHaveJSProperty("tagName", "TEXTAREA");
 
   const composerGroup = page.locator(".composer");
   const sendButton = page.getByRole("button", { name: "Send message" });
@@ -109,8 +165,8 @@ test("renders the primary chat surface", async ({ page }) => {
     composer.boundingBox(),
     sendButton.boundingBox(),
   ]);
-  expect(groupBox.height).toBe(44);
-  expect(Math.abs(inputBox.y + inputBox.height / 2 - sendBox.y - sendBox.height / 2)).toBeLessThanOrEqual(1);
+  expect(groupBox.height).toBeGreaterThanOrEqual(72);
+  expect(sendBox.y).toBeGreaterThan(inputBox.y);
   await expect(composerGroup).toHaveCSS("opacity", "1");
   await expect(page.getByRole("button", { name: "Voice input" })).toHaveCount(0);
   await expect(sendButton).toHaveAttribute("aria-disabled", "true");
@@ -118,6 +174,21 @@ test("renders the primary chat surface", async ({ page }) => {
   await composer.fill("Hello");
   await expect(sendButton).toHaveAttribute("aria-disabled", "false");
   await expect(sendButton).toHaveAttribute("data-variant", "default");
+});
+
+test("reloading a durable new-chat URL does not create another chat", async ({ page }) => {
+  let creates = 0;
+  await page.route("**/v0/chats", async (route) => {
+    creates += 1;
+    await route.fulfill({ status: 201, json: {
+      id: "550e8400-e29b-41d4-a716-446655440099", projectId: "project_chat", status: "draft", title: "New chat",
+    } });
+  });
+  await page.goto("/");
+  await expect(page).toHaveURL(/\/chat\/550e8400-e29b-41d4-a716-446655440099$/);
+  await page.reload();
+  await expect(page.getByRole("textbox", { name: "Message Pi" })).toBeVisible();
+  expect(creates).toBe(1);
 });
 
 test("opens and dismisses the new folder dialog", async ({ page }, testInfo) => {
@@ -129,10 +200,10 @@ test("opens and dismisses the new folder dialog", async ({ page }, testInfo) => 
   await expect(dialog).toBeVisible();
   await expect(dialog.getByRole("button", { name: "Create folder" })).toBeDisabled();
   await page.keyboard.press("Escape");
-  await expect(dialog).toBeHidden();
+  await expect(dialog).toHaveAttribute("data-state", "closed");
 });
 
-test("keeps the thread composer on one line", async ({ page }, testInfo) => {
+test("keeps the native textarea composer bounded in a thread", async ({ page }, testInfo) => {
   await page.goto("/");
   await openSidebar(page, testInfo);
   await page.getByRole("button", { name: "Existing chat" }).click();
@@ -149,8 +220,9 @@ test("keeps the thread composer on one line", async ({ page }, testInfo) => {
     input.boundingBox(),
     sendButton.boundingBox(),
   ]);
-  expect(groupBox.height).toBe(44);
-  expect(Math.abs(inputBox.y + inputBox.height / 2 - sendBox.y - sendBox.height / 2)).toBeLessThanOrEqual(1);
+  expect(groupBox.height).toBeGreaterThanOrEqual(72);
+  expect(inputBox.height).toBeLessThanOrEqual(192);
+  expect(sendBox.y).toBeGreaterThan(inputBox.y);
   await expect(composerWrap).toHaveCSS("position", "static");
   await expect(page.locator(".chat-meteors")).toBeVisible();
 });
@@ -220,7 +292,7 @@ test("renders persisted assistant Markdown with safe interactive controls", asyn
   const dialog = page.getByRole("alertdialog", { name: "Open external link?" });
   await expect(dialog).toContainText("https://example.com/docs");
   await dialog.getByRole("button", { name: "Cancel" }).click();
-  await expect(dialog).toBeHidden();
+  await expect(dialog).toHaveAttribute("data-state", "closed");
 });
 
 test("repairs unfinished Markdown while an assistant response streams", async ({ page }) => {
@@ -296,7 +368,6 @@ test("hides transient new chats and provides complete right-click menus", async 
   await expect(page.getByRole("menuitem")).toHaveText([
     "Rename",
     "Move to folder…",
-    "Duplicate",
     "Copy transcript",
     "Delete chat",
   ]);
@@ -315,11 +386,6 @@ test("hides transient new chats and provides complete right-click menus", async 
   const moveRequest = page.waitForRequest((request) => request.url().endsWith("/v0/sessions/session_existing/move"));
   await page.getByRole("menuitemradio", { name: "Research" }).click();
   expect((await moveRequest).postDataJSON()).toEqual({ projectId: "project_research" });
-
-  await page.getByRole("button", { name: "Existing chat" }).click({ button: "right" });
-  const duplicateRequest = page.waitForRequest((request) => request.url().endsWith("/v0/sessions/session_existing/duplicate"));
-  await page.getByRole("menuitem", { name: "Duplicate" }).click();
-  await duplicateRequest;
 
   await page.getByRole("button", { name: "Existing chat" }).click({ button: "right" });
   await page.getByRole("menuitem", { name: "Copy transcript" }).click();
@@ -448,7 +514,161 @@ test("opens model scope settings from the sidebar", async ({ page }, testInfo) =
 
   await page.locator('[data-sidebar="footer"]').getByRole("button", { name: /Conduit Local workspace/ }).click();
   await page.getByRole("menuitem", { name: "Manage settings" }).click();
-  await expect(page.getByRole("heading", { name: "Settings" })).toBeVisible();
-  await expect(page.getByText("Scoped models")).toBeVisible();
+  const dialog = page.getByRole("dialog", { name: "Settings" });
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByRole("tab", { name: /Models/ })).toBeVisible();
   await expect(page.getByRole("checkbox", { name: /Reasoner/ })).toBeChecked();
+});
+
+test("uploads picker and dropped files through the same attachment surface", async ({ page }, testInfo) => {
+  const uploads = [];
+  await page.route("**/v0/chats/*/attachments/*?name=*", async (route) => {
+    const url = new URL(route.request().url());
+    const id = url.pathname.split("/").at(-1);
+    const name = url.searchParams.get("name");
+    uploads.push({ id, name, body: route.request().postDataBuffer()?.toString() });
+    await route.fulfill({ status: 201, json: { id, name, storedName: `${id}--${name}`, size: route.request().postDataBuffer()?.length || 0, type: "text/plain" } });
+  });
+  await page.goto("/");
+  const attachmentButton = page.getByRole("button", { name: /^Attachments/ });
+  await attachmentButton.click();
+  await page.locator('input[type="file"]').setInputFiles({ name: "picker.txt", mimeType: "text/plain", buffer: Buffer.from("picker") });
+  await expect(page.getByText("picker.txt", { exact: true })).toBeVisible();
+  await expect.poll(() => uploads.some((item) => item.name === "picker.txt" && item.body === "picker")).toBe(true);
+
+  await page.keyboard.press("Escape");
+  await page.locator(".chat-main").evaluate((target) => {
+    const transfer = new DataTransfer();
+    transfer.items.add(new File(["dropped"], "dropped.txt", { type: "text/plain" }));
+    target.dispatchEvent(new DragEvent("dragenter", { bubbles: true, dataTransfer: transfer }));
+  });
+  const overlay = page.getByText("Drop files to attach");
+  await expect(overlay).toBeVisible();
+  if (testInfo.project.name === "desktop-chromium") {
+    const [overlayBox, mainBox, sidebarBox] = await Promise.all([
+      page.locator(".chat-drop-overlay").boundingBox(),
+      page.locator(".chat-main").boundingBox(),
+      page.locator('[data-slot="sidebar-container"]').boundingBox(),
+    ]);
+    expect(overlayBox).toEqual(mainBox);
+    expect(overlayBox.x).toBeGreaterThanOrEqual(sidebarBox.x + sidebarBox.width);
+  }
+  await page.locator(".chat-main").evaluate((target) => {
+    const transfer = new DataTransfer();
+    transfer.items.add(new File(["dropped"], "dropped.txt", { type: "text/plain" }));
+    target.dispatchEvent(new DragEvent("drop", { bubbles: true, dataTransfer: transfer }));
+  });
+  await expect(page.getByText("dropped.txt", { exact: true })).toBeVisible();
+  await expect.poll(() => uploads.some((item) => item.name === "dropped.txt" && item.body === "dropped")).toBe(true);
+  await expect(page.getByText("Drop files to attach")).toHaveCount(0);
+});
+
+test("stop freezes the visible response and rejects late generation deltas", async ({ page }) => {
+  await page.addInitScript(() => {
+    class StopWebSocket extends EventTarget {
+      static OPEN = 1;
+      constructor() {
+        super(); this.readyState = 0;
+        queueMicrotask(() => { this.readyState = StopWebSocket.OPEN; this.dispatchEvent(new Event("open")); });
+      }
+      close() { this.readyState = 3; this.dispatchEvent(new Event("close")); }
+      send(data) {
+        const command = JSON.parse(data);
+        if (command.type === "prompt") queueMicrotask(() => {
+          this.onmessage?.({ data: JSON.stringify({ type: "generation_started", generationId: "g1" }) });
+          this.onmessage?.({ data: JSON.stringify({ type: "message_start", generationId: "g1", message: { role: "assistant" } }) });
+          this.onmessage?.({ data: JSON.stringify({ type: "assistant_stream_block", generationId: "g1", block: 0, content: "Visible ", html: "<p>Visible</p>", tail: "partial" }) });
+        });
+        if (command.type === "stop_generation") {
+          window.__stopCommand = command;
+          this.onmessage?.({ data: JSON.stringify({ type: "assistant_stream_tail", generationId: "g1", content: "LATE OUTPUT" }) });
+          setTimeout(() => this.onmessage?.({ data: JSON.stringify({ type: "generation_stopped", generationId: "g1", status: "stopped", processTerminated: false }) }), 2_000);
+        }
+      }
+    }
+    Object.defineProperty(window, "WebSocket", { configurable: true, value: StopWebSocket });
+  });
+  await page.goto("/");
+  await page.getByRole("textbox", { name: "Message Pi" }).fill("Start");
+  await page.getByRole("button", { name: "Send message" }).click();
+  await expect(page.getByText("partial")).toBeVisible();
+  await page.getByRole("button", { name: "Stop response" }).click();
+  await expect(page.getByRole("button", { name: "Stopping response" })).toHaveAttribute("aria-disabled", "true");
+  await expect(page.getByText("Stopping…")).toBeVisible();
+  await expect(page.getByText("LATE OUTPUT")).toHaveCount(0);
+  await expect(page.getByText("Stopped", { exact: true })).toBeVisible();
+  expect(await page.evaluate(() => window.__stopCommand)).toEqual({ type: "stop_generation", generationId: "g1" });
+});
+
+test("global commands and slash suggestions preserve their intended focus models", async ({ page }) => {
+  await page.goto("/");
+  const composer = page.getByRole("textbox", { name: "Message Pi" });
+  await composer.fill("/att");
+  await expect(page.getByRole("listbox")).toBeVisible();
+  await expect(composer).toBeFocused();
+  await expect(composer).toHaveAttribute("aria-expanded", "true");
+  await page.keyboard.press("Escape");
+  await expect(composer).toHaveValue("/att");
+  await expect(page.getByRole("listbox")).toHaveCount(0);
+
+  await page.keyboard.press("Control+k");
+  const palette = page.getByRole("dialog", { name: "Command Palette" });
+  await expect(palette).toBeVisible();
+  await palette.getByPlaceholder("Search commands…").fill("settings");
+  await palette.getByText("Open settings", { exact: true }).click();
+  await expect(page.getByRole("dialog", { name: "Settings" })).toBeVisible();
+  await page.keyboard.press("Escape");
+
+  await page.keyboard.press("Control+k");
+  await page.getByPlaceholder("Search commands…").fill("delete chat");
+  await page.getByText("Delete chat", { exact: true }).click();
+  await expect(page.getByRole("alertdialog", { name: "Delete this chat?" })).toBeVisible();
+});
+
+test("message actions copy source, edit from a Pi entry, and regenerate via fork", async ({ page }, testInfo) => {
+  await page.addInitScript(() => {
+    class RecordingWebSocket extends EventTarget {
+      static OPEN = 1;
+      constructor() { super(); this.readyState = 0; queueMicrotask(() => { this.readyState = 1; this.dispatchEvent(new Event("open")); }); }
+      close() { this.readyState = 3; this.dispatchEvent(new Event("close")); }
+      send(data) { (window.__commands ||= []).push(JSON.parse(data)); }
+    }
+    Object.defineProperty(window, "WebSocket", { configurable: true, value: RecordingWebSocket });
+    Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText: async (value) => { window.__copiedMessage = value; } } });
+  });
+  await page.route("**/v0/sessions/session_existing", async (route) => route.fulfill({ json: {
+    id: "session_existing", projectId: "project_chat", status: "active", title: "Existing chat",
+    messages: [
+      { id: "entry-user", role: "user", content: "Original question", attachments: [{ id: "file-one", name: "source-notes.md" }] },
+      { id: "entry-assistant", role: "assistant", content: "**Source Markdown**", html: "<p><strong>Source Markdown</strong></p>" },
+    ], tools: [], page: { before: null },
+  } }));
+  await page.goto("/");
+  await openSidebar(page, testInfo);
+  await page.getByRole("button", { name: "Existing chat" }).click();
+  await expect(page.getByLabel("Message attachments")).toContainText("source-notes.md");
+  await page.getByText("Source Markdown", { exact: true }).hover();
+  await page.getByRole("button", { name: "Copy Markdown" }).click();
+  await expect.poll(() => page.evaluate(() => window.__copiedMessage)).toBe("**Source Markdown**");
+  await page.locator(".user-message-text", { hasText: "Original question" }).hover();
+  await page.getByRole("button", { name: "Edit from here" }).click();
+  await expect(page.getByRole("textbox", { name: "Message Pi" })).toHaveValue("Original question");
+  await page.getByText("Source Markdown", { exact: true }).hover();
+  await page.getByRole("button", { name: "Regenerate response" }).click();
+  await expect.poll(() => page.evaluate(() => window.__commands?.find((command) => command.type === "regenerate"))).toEqual({ type: "regenerate", entryId: "entry-user" });
+});
+
+test("settings remains centered with a persistent vertical rail at narrow widths", async ({ page }, testInfo) => {
+  await page.goto("/");
+  await openSidebar(page, testInfo);
+  await page.locator('[data-sidebar="footer"]').getByRole("button", { name: /Conduit Local workspace/ }).click();
+  await page.getByRole("menuitem", { name: "Manage settings" }).click();
+  await page.setViewportSize({ width: 480, height: 720 });
+  const dialog = page.getByRole("dialog", { name: "Settings" });
+  const rail = dialog.getByRole("tablist", { name: "Settings sections" });
+  await expect(rail).toBeVisible();
+  await expect(dialog.getByRole("tab", { name: /About/ })).toBeVisible();
+  const [dialogBox, railBox] = await Promise.all([dialog.boundingBox(), rail.boundingBox()]);
+  expect(Math.abs(dialogBox.x + dialogBox.width / 2 - 240)).toBeLessThanOrEqual(2);
+  expect(railBox.width).toBeGreaterThan(60);
 });
