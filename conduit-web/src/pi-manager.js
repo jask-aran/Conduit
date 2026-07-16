@@ -3,6 +3,7 @@ import { spawn } from "node:child_process";
 import crypto from "node:crypto";
 import path from "node:path";
 import { buildPiEnvironment, buildPiResourceArgs } from "../../scripts/pi-runtime.mjs";
+import { mergeContinuation } from "./continuation.js";
 
 export function buildPiArgs({ sessionFile = null, model = "", thinkingLevel = "", models, template }) {
   const args = [
@@ -27,14 +28,23 @@ export class PiManager extends EventEmitter {
     this.stableBoundary = stableBoundary;
     this.processes = new Map();
     this.bySessionFile = new Map();
+    this.requestSequence = 0;
   }
 
-  create({ project, sessionFile = null, model = "", thinkingLevel = "", models }) {
+  create({ project, chatId = null, sessionFile = null, model = "", thinkingLevel = "", models }) {
+    if (chatId) {
+      const existing = [...this.processes.values()].find((record) =>
+        record.chatId === chatId && ["starting", "running"].includes(record.status));
+      if (existing) return existing;
+    }
     const resolvedFile = sessionFile ? path.resolve(sessionFile) : null;
     if (resolvedFile && this.bySessionFile.has(resolvedFile)) {
       const existingId = this.bySessionFile.get(resolvedFile);
       const existing = this.processes.get(existingId);
-      if (existing && ["starting", "running"].includes(existing.status)) return existing;
+      if (existing && ["starting", "running"].includes(existing.status)) {
+        if (chatId) existing.chatId = chatId;
+        return existing;
+      }
       this.bySessionFile.delete(resolvedFile);
       this.processes.delete(existingId);
     }
@@ -50,6 +60,7 @@ export class PiManager extends EventEmitter {
     });
     const record = {
       id,
+      chatId,
       projectId: project.id,
       projectSlug: project.slug,
       cwd: project.path,
@@ -68,6 +79,10 @@ export class PiManager extends EventEmitter {
       stdoutBuffer: "",
       stream: null,
       renderQueue: Promise.resolve(),
+      generationSequence: 0,
+      generation: null,
+      stopping: false,
+      pendingRequests: new Map(),
     };
     this.processes.set(id, record);
     if (resolvedFile) this.bySessionFile.set(resolvedFile, id);
@@ -83,11 +98,16 @@ export class PiManager extends EventEmitter {
     });
     child.once("error", (error) => {
       record.status = "failed";
+      for (const pending of record.pendingRequests.values()) pending.reject(error);
+      record.pendingRequests.clear();
       this.publish(record, { type: "runtime_error", message: error.message });
       this.publishState(record);
     });
     child.once("exit", (code, signal) => {
       record.status = "stopped";
+      if (record.sessionFile) this.bySessionFile.delete(record.sessionFile);
+      for (const pending of record.pendingRequests.values()) pending.reject(new Error("Pi process exited before replying"));
+      record.pendingRequests.clear();
       this.publish(record, { type: "runtime_exit", code, signal });
       this.publishState(record);
     });
@@ -103,16 +123,20 @@ export class PiManager extends EventEmitter {
       if (!line.trim()) continue;
       try {
         const event = JSON.parse(line);
+        this.captureSession(record, event);
+        if (event.type === "response" && event.id && record.pendingRequests.has(event.id)) {
+          const pending = record.pendingRequests.get(event.id);
+          record.pendingRequests.delete(event.id);
+          clearTimeout(pending.timer);
+          if (event.success === false) pending.reject(Object.assign(new Error(event.error || event.message || "Pi RPC request failed"), { response: event }));
+          else pending.resolve(event);
+        }
         if (event.type === "agent_start") record.active = true;
         if (event.type === "agent_end") record.active = false;
-        const sessionFile = event.sessionFile || event.data?.sessionFile || event.result?.sessionFile;
-        if (sessionFile && !record.sessionFile) {
-          record.sessionFile = path.resolve(sessionFile);
-          this.bySessionFile.set(record.sessionFile, record.id);
-        }
         if (event.type === "message_start" && event.message?.role === "assistant") {
-          record.stream = { raw: "", committedLength: 0, renderedLength: 0, block: 0, timer: null };
-          this.publish(record, event);
+          if (record.generation?.closed) continue;
+          record.stream = { raw: "", committedLength: 0, renderedLength: 0, block: 0, timer: null, generationId: record.generation?.id || null };
+          this.publishGeneration(record, event);
           continue;
         }
         const delta = event.assistantMessageEvent;
@@ -124,7 +148,7 @@ export class PiManager extends EventEmitter {
           this.finishAssistantMessage(record, event);
           continue;
         }
-        this.publish(record, event);
+        this.publishGeneration(record, event);
         if (event.type === "agent_end" && record.status === "running") {
           this.send(record.id, { type: "get_state" });
         }
@@ -134,8 +158,21 @@ export class PiManager extends EventEmitter {
     }
   }
 
+  captureSession(record, event) {
+    const sessionFile = event.sessionFile || event.data?.sessionFile || event.result?.sessionFile;
+    const sessionId = event.sessionId || event.data?.sessionId || event.result?.sessionId;
+    if (sessionFile) {
+      const resolved = path.resolve(sessionFile);
+      if (record.sessionFile && record.sessionFile !== resolved) this.bySessionFile.delete(record.sessionFile);
+      record.sessionFile = resolved;
+      this.bySessionFile.set(resolved, record.id);
+    }
+    if (sessionId) record.sessionId = sessionId;
+  }
+
   handleTextDelta(record, delta) {
     const stream = record.stream;
+    const generation = record.generation;
     stream.raw += delta;
     const boundary = this.stableBoundary?.(stream.raw) || 0;
     if (boundary > stream.committedLength) {
@@ -146,33 +183,37 @@ export class PiManager extends EventEmitter {
       record.renderQueue = record.renderQueue.then(async () => {
         const html = await this.renderMarkdown(content);
         stream.renderedLength = boundary;
-        this.publish(record, {
+        this.publishGeneration(record, {
           type: "assistant_stream_block",
           block,
           content,
           html,
           tail: stream.raw.slice(boundary),
-        });
+        }, generation);
       }).catch((error) => this.publish(record, { type: "runtime_error", message: error.message }));
     }
     clearTimeout(stream.timer);
     stream.timer = setTimeout(() => {
-      this.publish(record, {
+      this.publishGeneration(record, {
         type: "assistant_stream_tail",
         content: stream.raw.slice(stream.renderedLength),
-      });
+      }, generation);
     }, 40);
   }
 
   finishAssistantMessage(record, event) {
     const stream = record.stream;
+    const generation = record.generation;
     if (stream?.timer) clearTimeout(stream.timer);
     const content = Array.isArray(event.message.content)
       ? event.message.content.filter((block) => block.type === "text").map((block) => block.text).join("\n")
       : String(event.message.content || stream?.raw || "");
+    const finalContent = generation?.continuationBase
+      ? mergeContinuation(generation.continuationBase, content)
+      : content;
     record.renderQueue = record.renderQueue.then(async () => {
-      const html = await this.renderMarkdown(content);
-      this.publish(record, { type: "assistant_stream_final", message: event.message, content, html });
+      const html = await this.renderMarkdown(finalContent);
+      this.publishGeneration(record, { type: "assistant_stream_final", message: event.message, content: finalContent, html }, generation);
     }).catch((error) => this.publish(record, { type: "runtime_error", message: error.message }));
     record.stream = null;
   }
@@ -187,6 +228,85 @@ export class PiManager extends EventEmitter {
         if (record.status === "running") this.send(record.id, { type: "get_state" });
       }, 250);
     }
+  }
+
+  request(id, value, { timeout = 5000 } = {}) {
+    const record = this.processes.get(id);
+    if (!record || !["starting", "running"].includes(record.status)) return Promise.reject(new Error("Pi session process is not running"));
+    const requestId = value.id || `conduit_${++this.requestSequence}`;
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        record.pendingRequests.delete(requestId);
+        const error = new Error(`Pi RPC ${value.type} timed out`);
+        error.code = "rpc_timeout";
+        reject(error);
+      }, timeout);
+      record.pendingRequests.set(requestId, { resolve, reject, timer });
+      try { this.send(id, { ...value, id: requestId }); }
+      catch (error) {
+        clearTimeout(timer);
+        record.pendingRequests.delete(requestId);
+        reject(error);
+      }
+    });
+  }
+
+  async waitForSession(id, timeout = 5000) {
+    const record = this.processes.get(id);
+    if (!record) throw new Error("Unknown live session");
+    if (!record.sessionFile) await this.request(id, { type: "get_state" }, { timeout });
+    if (!record.sessionFile) throw new Error("Pi did not report a session file");
+    return record;
+  }
+
+  prompt(id, message, { continuationBase = "" } = {}) {
+    const record = this.processes.get(id);
+    if (!record) throw new Error("Unknown live session");
+    if (record.stopping) throw Object.assign(new Error("Pi is still stopping the previous response"), { code: "generation_stopping" });
+    const generationId = `g${++record.generationSequence}`;
+    const previousGeneration = record.generation;
+    record.generation = { id: generationId, closed: false, continuationBase };
+    try {
+      this.send(id, { type: "prompt", message });
+    } catch (error) {
+      record.generation = previousGeneration;
+      throw error;
+    }
+    this.publish(record, { type: "generation_started", generationId, continuation: Boolean(continuationBase) });
+    return generationId;
+  }
+
+  async abortGeneration(id, generationId = null) {
+    const record = this.processes.get(id);
+    const generation = record?.generation;
+    if (!record || !generation || (generationId && generation.id !== generationId)) return null;
+    generation.closed = true;
+    record.stopping = true;
+    generation.partial = record.stream?.raw || generation.partial || "";
+    if (record.stream?.timer) clearTimeout(record.stream.timer);
+    record.stream = null;
+    let processTerminated = false;
+    try {
+      await this.request(id, { type: "abort" }, { timeout: 250 });
+    } catch {
+      processTerminated = true;
+      record.status = "stopped";
+      record.active = false;
+      record.child.kill("SIGKILL");
+      if (record.sessionFile) this.bySessionFile.delete(record.sessionFile);
+    }
+    record.stopping = false;
+    this.publish(record, { type: "generation_stopped", generationId: generation.id, status: "stopped", processTerminated });
+    return { generationId: generation.id, processTerminated };
+  }
+
+  async fork(id, entryId) {
+    const response = await this.request(id, { type: "fork", entryId });
+    if (response.data?.cancelled) throw Object.assign(new Error("Pi cancelled the fork"), { code: "fork_cancelled" });
+    await this.request(id, { type: "get_state" });
+    const record = this.processes.get(id);
+    if (!record?.sessionFile) throw new Error("Pi did not report the forked session file");
+    return { text: response.data?.text || "", sessionFile: record.sessionFile, sessionId: record.sessionId || null };
   }
 
   attach(id, socket) {
@@ -205,6 +325,12 @@ export class PiManager extends EventEmitter {
       if (socket.readyState === socket.OPEN) socket.send(payload);
     }
     this.emit("event", { record, event });
+  }
+
+  publishGeneration(record, event, generation = record.generation) {
+    if (generation?.closed) return false;
+    this.publish(record, generation ? { ...event, generationId: generation.id } : event);
+    return true;
   }
 
   publishState(record) {
@@ -233,8 +359,8 @@ export class PiManager extends EventEmitter {
   }
 
   view(record) {
-    const { child, clients, stdoutBuffer, events, stream, renderQueue, ...safe } = record;
-    return { ...safe, clientCount: clients.size };
+    const { child, clients, stdoutBuffer, events, stream, renderQueue, pendingRequests, generation, ...safe } = record;
+    return { ...safe, generation: generation ? { id: generation.id, closed: generation.closed } : null, clientCount: clients.size };
   }
 
   list() {

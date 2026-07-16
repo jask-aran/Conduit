@@ -32,7 +32,7 @@ data/
   chat/files/          chat working directories and agent-visible files
   pi/                  isolated Pi agent home
   conduit.json         Conduit project catalog
-  sessions.json        rebuildable lightweight session registry
+  sessions.json        atomic lightweight chat registry
 ```
 
 `conduit-web/`, `templates/`, and `scripts/` are tracked product source.
@@ -58,9 +58,11 @@ session history.
 
 The reserved `chat` project has ID `project_chat`, kind `unstructured`, and
 working directory `data/chat/files`. Every named project uses
-`data/chat/files/<slug>`. Working directories contain only files available to
-the corresponding chats; they do not contain Conduit metadata, Pi configuration,
-or session JSONL.
+`data/chat/files/<slug>`. Working directories contain project-level files plus a
+Conduit-owned `.conduit/chats/<chat-id>/` tree. Each chat tree contains its
+`attachments/` files and a transient `.partial/` upload directory. Pi still runs
+at the project working root, so it can read chat attachments by their relative
+paths. Pi configuration and native session JSONL remain outside working trees.
 
 All unstructured chats share `data/chat/files` and therefore share access to its
 files. Named projects provide separate filesystem scopes beneath that root.
@@ -70,7 +72,22 @@ desktop to open a named project's working directory.
 Deleting a named project deletes its catalog entry, working directory, and
 native Pi sessions. The reserved unstructured project cannot be deleted.
 
-### Pi runtime and sessions
+### Chats, attachments, and Pi sessions
+
+Conduit creates a stable UUID chat and its filesystem directory before starting
+Pi. New chats are durable `draft` rows; empty drafts stay out of the sidebar,
+while the first completed attachment makes a draft visible. Pi starts only when
+the first user message is sent. Conduit then records the private native Pi
+session mapping and promotes the same public chat ID to `active`. Browser routes
+therefore remain `/chat/<conduit-chat-id>` across Pi restarts and history forks.
+
+Uploads use a raw HTTP request body streamed through
+`.partial/<attachment-id>.part` and atomically renamed into
+`attachments/<attachment-id>--<safe-name>`. The filesystem is the attachment
+registry; Conduit adds no file-count, MIME, extension, or byte policy. Host disk,
+browser, network, and proxy limits can still reject an upload. Attachment bytes
+are never injected into model context. The user prompt instead carries validated
+relative paths in a small envelope that transcript presentation hides again.
 
 `data/pi` is Conduit's app-wide Pi agent home:
 
@@ -91,13 +108,14 @@ session directory from the process working directory and records the canonical
 matching that header exactly, rather than trusting the lossy encoded directory
 name.
 
-Pi JSONL is the authoritative transcript. `data/conduit.json` stores only
-application metadata Pi does not model: stable project IDs, display names,
-kinds, and creation times. `data/sessions.json` is an atomic, rebuildable index
-of session IDs, titles, project associations, file paths, and checkpoint times.
-Normal sidebar requests read the complete lightweight registry without parsing
-transcripts. The server reconciles missing and new native files at startup and
-updates the registry after completed responses and explicit session mutations.
+Pi JSONL is the authoritative transcript. `data/conduit.json` stores stable
+project IDs, display names, kinds, and creation times. `data/sessions.json` is an
+atomic lightweight registry of stable Conduit chat IDs, `draft`/`active` status,
+titles, project associations, private Pi mappings, and timestamps. Existing
+pre-migration rows retain their stable ID as the Conduit chat ID. Normal sidebar
+requests read this registry without parsing transcripts; active rows are
+reconciled with native files at startup and checkpointed after completed
+responses and explicit mutations.
 Live process state, connected WebSockets, incomplete response state, and recent
 RPC events remain disposable server memory; persisted sessions remain resumable
 after a browser or server restart.
@@ -110,15 +128,19 @@ calls from JSONL. Selecting a model updates the active Pi process and
 `data/pi/settings.json`, making it the default for the next chat without
 replacing the model recorded by existing chats.
 
-Chat renames append Pi's native `session_info` entry. Duplication uses Pi's
-native cross-directory fork operation and assigns a new session ID. Moving a
-chat creates that fork with the destination project's canonical `cwd`, then
-deletes the source only after the destination JSONL has been created. Moving all
-chats from a project follows the same rule as one batch.
+Chat renames append Pi's native `session_info` entry. Editing an earlier user
+message and regenerating a response use Pi's public `fork` RPC while retaining
+the Conduit chat ID and attachment folder; the registry advances to the new
+private Pi mapping and preserves the old native session file. Chat duplication
+is deliberately unavailable because attachment ownership semantics are not yet
+defined. Moving a chat creates a native cross-directory fork with the
+destination project's canonical `cwd`, moves its Conduit folder, and deletes the
+source only after the destination JSONL has been created. Moving all chats from
+a project follows the same rule as one batch.
 
 Deleting a chat stops any live process writing that session and deletes its
-authoritative JSONL. Both chat and project deletion require interface
-confirmation.
+authoritative JSONL plus Conduit chat folder. Both chat and project deletion
+require interface confirmation.
 
 Do not let two Pi processes write the same JSONL simultaneously.
 
@@ -162,6 +184,23 @@ first-party Message Scroller, Message, and Bubble components: Message Scroller
 owns streaming follow, turn anchoring, and jump-to-latest behavior while Pi RPC
 continues to own transport and message state. The settings surface writes Pi's
 global scoped-model setting through the Conduit server.
+
+The composer is a bounded native textarea with a compact model selector and
+Shadcn Attachment cards above it. Upload progress appears in those cards; after
+send, the same cards move beneath their user message. Cmd/Ctrl+K lazy-loads the
+global Shadcn Command palette, while the textarea-focused slash Popover exposes
+only composition commands. Settings opens as a centered Dialog with fixed
+vertical Tabs and a searchable, grouped multi-model Combobox. The chat header
+uses a project-aware breadcrumb. Response controls copy source Markdown, fork
+for edit/regenerate, stop a generation immediately, and optionally continue an
+aborted partial response.
+
+Every response generation has a server-issued ID. Stop freezes the browser's
+visible partial synchronously and rejects later deltas for that ID. Conduit asks
+Pi to abort and kills a non-responsive process after 250 ms so the persisted
+session can be resumed by a single fresh writer. Browser disconnect alone never
+terminates the server-owned process. Experimental partial continuation is
+controlled by `ENABLE_PARTIAL_CONTINUE` and defaults to enabled.
 
 Assistant streaming commits complete Markdown blocks as immutable server-rendered
 HTML and rerenders only the unfinished tail at a 40 ms cadence. Final Markdown,

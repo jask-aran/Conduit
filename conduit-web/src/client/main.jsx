@@ -1,17 +1,25 @@
 import React, { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { ShareIcon } from "lucide-react";
+import { ShareIcon, TriangleAlertIcon } from "lucide-react";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Breadcrumb, BreadcrumbItem, BreadcrumbList, BreadcrumbPage, BreadcrumbSeparator } from "@/components/ui/breadcrumb";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Meteors } from "@/components/ui/meteors";
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
+import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { toast } from "sonner";
 import { AppSidebar } from "./app-sidebar";
 import { ChatComposer } from "./chat-composer";
+import { ChatDropOverlay, useChatDrop } from "./chat-drop-overlay";
 import { ChatThread } from "./chat-thread";
-import { sessionIdForLive } from "./session-selection";
+import { useAttachments } from "./use-attachments";
+import { useModelSettings } from "./use-model-settings";
 import "./styles.css";
 
-const SettingsPage = lazy(() => import("./settings-page").then((module) => ({ default: module.SettingsPage })));
+const CommandMenu = lazy(() => import("./command-menu").then((module) => ({ default: module.CommandMenu })));
+const SettingsDialog = lazy(() => import("./settings-dialog").then((module) => ({ default: module.SettingsDialog })));
 
 const api = async (url, options) => {
   const response = await fetch(url, { headers: { "content-type": "application/json" }, ...options });
@@ -25,6 +33,7 @@ const findLastMessage = (items, predicate) => {
   for (let index = items.length - 1; index >= 0; index -= 1) if (predicate(items[index])) return index;
   return -1;
 };
+const pathChatId = () => location.pathname.match(/^\/chat\/([a-zA-Z0-9_-]{8,128})$/)?.[1] || null;
 
 class AppErrorBoundary extends React.Component {
   constructor(props) { super(props); this.state = { error: null }; }
@@ -32,27 +41,37 @@ class AppErrorBoundary extends React.Component {
   componentDidCatch(error, details) { console.error("Conduit UI crashed", error, details); }
   render() {
     if (!this.state.error) return this.props.children;
-    return <div className="crash-screen"><div><i /><h1>Conduit hit a UI error</h1><p>{this.state.error.message || "The interface could not continue."}</p><button onClick={() => location.reload()}>Reload Conduit</button></div></div>;
+    return <div className="crash-screen">
+      <Card className="w-full max-w-md">
+        <CardHeader><CardTitle>Conduit hit a UI error</CardTitle><CardDescription>The interface could not continue.</CardDescription></CardHeader>
+        <CardContent><Alert variant="destructive"><TriangleAlertIcon /><AlertTitle>Unexpected error</AlertTitle><AlertDescription>{this.state.error.message || "Unknown interface error"}</AlertDescription></Alert></CardContent>
+        <CardFooter><Button onClick={() => location.reload()}>Reload Conduit</Button></CardFooter>
+      </Card>
+    </div>;
   }
 }
 
-function ChatHeader({ title, share = false }) {
+function ChatHeader({ project, title }) {
+  const projectLabel = project?.slug === "chat" ? "Chats" : project?.slug || project?.name || "Chats";
   return <header className="chat-header">
     <SidebarTrigger className="-ml-1" />
-    {title && <span className="chat-header-title">{title}</span>}
-    {share && <Button variant="ghost" size="icon-sm" className="ml-auto" aria-label="Share chat">
-      <ShareIcon />
-    </Button>}
+    {title && <Breadcrumb className="chat-header-title">
+      <BreadcrumbList className="flex-nowrap">
+        <BreadcrumbItem><span className="truncate">{projectLabel}</span></BreadcrumbItem>
+        <BreadcrumbSeparator />
+        <BreadcrumbItem className="min-w-0"><BreadcrumbPage className="truncate font-semibold">{title}</BreadcrumbPage></BreadcrumbItem>
+      </BreadcrumbList>
+    </Breadcrumb>}
+    <Button variant="ghost" size="icon-sm" className="ml-auto" aria-label="Share chat"><ShareIcon /></Button>
   </header>;
 }
 
 function App() {
   const [projects, setProjects] = useState([]);
-  const [models, setModels] = useState([]);
-  const [modelNotice, setModelNotice] = useState("");
-  const [view, setView] = useState("chat");
   const [projectId, setProjectId] = useState("project_chat");
   const [selectedId, setSelectedId] = useState(null);
+  const [chatStatus, setChatStatus] = useState("draft");
+  const [chatTitle, setChatTitle] = useState("New chat");
   const [live, setLive] = useState(null);
   const [messages, setMessages] = useState([]);
   const [tools, setTools] = useState([]);
@@ -60,104 +79,53 @@ function App() {
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [draft, setDraft] = useState("");
   const [streaming, setStreaming] = useState(false);
-  const [model, setModel] = useState("");
-  const [effort, setEffort] = useState("");
+  const [stopping, setStopping] = useState(false);
   const [error, setError] = useState("");
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsSection, setSettingsSection] = useState("models");
+  const [commandOpen, setCommandOpen] = useState(false);
+  const [sidebarCommand, setSidebarCommand] = useState(null);
+  const [editEntryId, setEditEntryId] = useState(null);
+  const [partialContinue, setPartialContinue] = useState(true);
   const ws = useRef(null);
+  const currentGeneration = useRef(null);
+  const closedGenerations = useRef(new Set());
+  const stopPending = useRef(false);
+  const continuation = useRef(null);
+  const selectedIdRef = useRef(null);
+  selectedIdRef.current = selectedId;
 
-  const refresh = async (selectLiveId = "") => {
+  const showError = useCallback((message) => setError(message), []);
+  useEffect(() => {
+    if (!error) return;
+    toast.error(error);
+    setError("");
+  }, [error]);
+  const modelSettings = useModelSettings(projectId, { onError: showError, socketRef: ws });
+  const attachmentState = useAttachments(selectedId, showError);
+  const drop = useChatDrop(attachmentState.addFiles);
+
+  const refresh = useCallback(async () => {
     const payload = await api("/v0/projects");
-    const nextProjects = list(payload.projects).map((item) => ({ ...item, sessions: list(item.sessions) }));
-    setProjects(nextProjects);
-    const createdSessionId = sessionIdForLive(nextProjects, selectLiveId);
-    if (createdSessionId) setSelectedId(createdSessionId);
-    return nextProjects;
-  };
-  useEffect(() => {
-    let active = true;
-    refresh().catch((e) => active && setError(e.message));
-    return () => { active = false; ws.current?.close(); };
+    const next = list(payload.projects).map((project) => ({ ...project, sessions: list(project.sessions) }));
+    setProjects(next);
+    const selected = next.flatMap((project) => project.sessions).find((chat) => chat.id === selectedIdRef.current);
+    if (selected) {
+      setChatTitle(selected.title);
+      setChatStatus(selected.status);
+    }
+    return next;
   }, []);
-  useEffect(() => {
-    let active = true;
-    api(`/v0/models?projectId=${encodeURIComponent(projectId)}`)
-      .then((payload) => {
-        if (!active) return;
-        const nextModels = list(payload.models);
-        const nextDefault = payload.defaultModel || nextModels[0]?.spec || "";
-        const requestedModel = nextModels.some((item) => item.spec === model) ? model : "";
-        const selectedModel = nextModels.find((item) => item.spec === (requestedModel || nextDefault));
-        const levels = list(selectedModel?.thinkingLevels);
-        setModels(nextModels);
-        setModelNotice(payload.requiresAuthentication ? "Authenticate with conduit-pi, then run /login." : "");
-        setModel(requestedModel || nextDefault);
-        setEffort((current) => levels.includes(current)
-          ? current
-          : levels.includes(payload.defaultThinkingLevel) ? payload.defaultThinkingLevel : levels[0] || "off");
-      })
-      .catch((e) => active && setError(e.message));
-    return () => { active = false; };
-  }, [projectId]);
-  const project = projects.find((item) => item.id === projectId) || projects[0];
-  const selectedSession = projects.flatMap((item) => item.sessions).find((item) => item.id === selectedId);
-  const chatTitle = selectedSession?.title || "New Chat";
-  function chooseModel(spec) {
-    const nextModel = models.find((item) => item.spec === spec);
-    if (!nextModel) return;
-    const levels = list(nextModel?.thinkingLevels);
-    setModel(spec);
-    setEffort((current) => levels.includes(current) ? current : levels.includes("medium") ? "medium" : levels[0] || "off");
-    if (ws.current?.readyState === WebSocket.OPEN) {
-      const [provider, ...modelParts] = spec.split("/");
-      ws.current.send(JSON.stringify({ type: "set_model", provider, modelId: modelParts.join("/") }));
-    }
-    api("/v0/settings", {
-      method: "PATCH",
-      body: JSON.stringify({
-        projectId: project?.id || "project_chat",
-        enabledModels: models.map((item) => item.spec),
-        defaultModel: spec,
-      }),
-    }).catch((e) => setError(e.message));
-  }
 
-  function consume(event, liveId = "") {
-    if (event.type === "agent_start") setStreaming(true);
-    if (event.type === "agent_end" || event.type === "runtime_exit") setStreaming(false);
-    if (event.type === "session_checkpoint") refresh(liveId).catch(() => {});
-    if (event.type === "message_start" && event.message?.role === "assistant") {
-      setMessages((old) => [...old, { id: `live_${Date.now()}`, role: "assistant", content: "", streamBlocks: [], tail: "", timestamp: new Date().toISOString() }]);
-    }
-    if (event.type === "assistant_stream_block") {
-      setMessages((old) => { const copy = [...old]; const i = findLastMessage(copy, (x) => x.role === "assistant"); if (i >= 0) copy[i] = {
-        ...copy[i],
-        streamBlocks: [...list(copy[i].streamBlocks), { block: event.block, content: event.content, html: event.html }],
-        tail: event.tail || "",
-      }; return copy; });
-    }
-    if (event.type === "assistant_stream_tail") {
-      setMessages((old) => { const copy = [...old]; const i = findLastMessage(copy, (x) => x.role === "assistant"); if (i >= 0) copy[i] = { ...copy[i], tail: event.content }; return copy; });
-    }
-    if (event.type === "assistant_stream_final") {
-      setMessages((old) => { const copy = [...old]; const i = findLastMessage(copy, (x) => x.role === "assistant"); const final = { content: event.content, html: event.html, streamBlocks: [], tail: "" }; if (i >= 0) copy[i] = { ...copy[i], ...final }; else copy.push({ id: `end_${Date.now()}`, role: "assistant", ...final }); return copy; });
-    }
-    if (event.type === "message_end" && event.message?.role === "user") refresh(liveId).catch(() => {});
-    if (event.type === "tool_execution_start") setTools((old) => {
-      const tool = {
-        id: event.toolCallId,
-        name: event.toolName,
-        args: event.args,
-        done: false,
-        timestamp: event.timestamp || new Date().toISOString(),
-      };
-      return old.some((item) => item.id === tool.id)
-        ? old.map((item) => item.id === tool.id ? { ...item, ...tool } : item)
-        : [...old, tool];
-    });
-    if (event.type === "tool_execution_end") setTools((old) => old.map((x) =>
-      x.id === event.toolCallId ? { ...x, done: true, result: event.result } : x));
-    if (["runtime_error", "client_error"].includes(event.type)) setError(event.message || "Runtime error");
-  }
+  const loadDetail = useCallback(async (chatId) => {
+    const detail = await api(`/v0/sessions/${encodeURIComponent(chatId)}`);
+    setMessages(list(detail.messages));
+    setTools(list(detail.tools));
+    setPageBefore(detail.page?.before || null);
+    setChatStatus(detail.status || "draft");
+    setChatTitle(detail.title || "New chat");
+    return detail;
+  }, []);
 
   function connect(record) {
     ws.current?.close();
@@ -167,37 +135,292 @@ function App() {
       try {
         const event = JSON.parse(data);
         if (event.type === "runtime_snapshot") {
-          if (event.session?.active) {
-            const events = list(event.events);
-            const hasAssistantStart = events.some((item) => item.type === "message_start" && item.message?.role === "assistant");
-            const hasAssistantStream = events.some((item) => item.type.startsWith("assistant_stream_"));
-            if (hasAssistantStream && !hasAssistantStart) {
-              setMessages((old) => [...old, { id: `live_${Date.now()}`, role: "assistant", content: "", streamBlocks: [], tail: "", timestamp: new Date().toISOString() }]);
-            }
-            events.forEach((item) => consume(item, record.id));
-          }
+          const generation = event.session?.generation;
+          if (generation?.id && !generation.closed) currentGeneration.current = generation.id;
+          if (event.session?.active) list(event.events).forEach((item) => consume(item, record.id));
         } else consume(event, record.id);
-      } catch (e) { setError(e.message); }
+      } catch (caught) { setError(caught.message); }
     };
     socket.onerror = () => setError("Lost connection to the Conduit runtime");
+    socket.addEventListener("close", () => {
+      if (ws.current === socket) ws.current = null;
+    });
+  }
+
+  async function openLive(chatId, owningProjectId, options = {}) {
+    const record = await api("/v0/live-sessions", {
+      method: "POST",
+      body: JSON.stringify({
+        chatId,
+        projectId: owningProjectId,
+        model: modelSettings.model,
+        thinkingLevel: modelSettings.effort,
+        ...options,
+      }),
+    });
+    setLive(record);
+    connect(record);
+    await new Promise((resolve, reject) => {
+      if (ws.current.readyState === WebSocket.OPEN) resolve();
+      else {
+        ws.current.addEventListener("open", resolve, { once: true });
+        ws.current.addEventListener("error", () => reject(new Error("Could not connect to Pi")), { once: true });
+      }
+    });
+    return record;
+  }
+
+  useEffect(() => {
+    let active = true;
+    Promise.all([api("/v0/projects"), api("/v0/capabilities").catch(() => ({ partialContinue: true }))])
+      .then(async ([payload, capabilities]) => {
+        if (!active) return;
+        const nextProjects = list(payload.projects).map((project) => ({ ...project, sessions: list(project.sessions) }));
+        setProjects(nextProjects);
+        setPartialContinue(capabilities.partialContinue !== false);
+        const routeId = pathChatId();
+        if (routeId) {
+          const chat = await api(`/v0/chats/${encodeURIComponent(routeId)}`);
+          if (!active) return;
+          setSelectedId(chat.id); setProjectId(chat.projectId); setChatStatus(chat.status); setChatTitle(chat.title);
+          await loadDetail(chat.id);
+          if (chat.status === "active") await openLive(chat.id, chat.projectId);
+          return;
+        }
+        const project = nextProjects.find((item) => item.slug === "chat") || nextProjects[0];
+        if (!project) throw new Error("Conduit has no chat project");
+        const chat = await api("/v0/chats", { method: "POST", body: JSON.stringify({ projectId: project.id }) });
+        if (!active) return;
+        history.replaceState({}, "", `/chat/${chat.id}`);
+        setSelectedId(chat.id); setProjectId(chat.projectId); setChatStatus(chat.status); setChatTitle(chat.title);
+      })
+      .catch((caught) => active && setError(caught.message));
+    return () => { active = false; ws.current?.close(); };
+  }, []);
+
+  useEffect(() => {
+    const onKeyDown = (event) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        setCommandOpen((open) => !open);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
+
+  function consume(event, liveId = "") {
+    if (event.generationId && closedGenerations.current.has(event.generationId)
+      && !["generation_stopped", "generation_started"].includes(event.type)) return;
+    if (stopPending.current && ["message_start", "assistant_stream_block", "assistant_stream_tail", "assistant_stream_final"].includes(event.type)) return;
+    if (event.type === "generation_started") {
+      currentGeneration.current = event.generationId;
+      stopPending.current = false;
+      setStopping(false);
+      setStreaming(true);
+      if (event.continuation) {
+        setMessages((current) => {
+          const copy = [...current];
+          const index = findLastMessage(copy, (message) => message.role === "assistant" && message.stopped);
+          if (index >= 0) {
+            continuation.current = { base: copy[index].content || "", committed: "" };
+            copy[index] = { ...copy[index], html: null, streamBlocks: [], tail: copy[index].content || "", stopped: false, status: null, continuing: true };
+          }
+          return copy;
+        });
+      }
+    }
+    if (event.type === "agent_start") setStreaming(true);
+    if (event.type === "agent_end" || event.type === "runtime_exit") setStreaming(false);
+    if (event.type === "generation_stopped") {
+      stopPending.current = false;
+      setStopping(false);
+      setStreaming(false);
+      setMessages((current) => {
+        const copy = [...current];
+        const index = findLastMessage(copy, (message) => message.role === "assistant");
+        if (index >= 0) copy[index] = { ...copy[index], stopped: true, status: "stopped" };
+        return copy;
+      });
+      if (event.processTerminated) { setLive(null); ws.current?.close(); }
+    }
+    if (event.type === "session_checkpoint") {
+      refresh().catch(() => {});
+      if (event.chat?.id === selectedIdRef.current) loadDetail(event.chat.id).catch(() => {});
+    }
+    if (event.type === "message_start" && event.message?.role === "assistant" && !continuation.current) {
+      setMessages((current) => [...current, { id: `live_${Date.now()}`, role: "assistant", content: "", streamBlocks: [], tail: "", timestamp: new Date().toISOString() }]);
+    }
+    if (event.type === "assistant_stream_block") {
+      setMessages((current) => {
+        const copy = [...current];
+        const index = findLastMessage(copy, (message) => message.role === "assistant");
+        if (index < 0) return copy;
+        if (continuation.current) {
+          continuation.current.committed += event.content || "";
+          copy[index] = { ...copy[index], streamBlocks: [], tail: continuation.current.base + continuation.current.committed + (event.tail || "") };
+        } else copy[index] = {
+          ...copy[index],
+          streamBlocks: [...list(copy[index].streamBlocks), { block: event.block, content: event.content, html: event.html }],
+          tail: event.tail || "",
+        };
+        return copy;
+      });
+    }
+    if (event.type === "assistant_stream_tail") {
+      setMessages((current) => {
+        const copy = [...current];
+        const index = findLastMessage(copy, (message) => message.role === "assistant");
+        if (index >= 0) copy[index] = continuation.current
+          ? { ...copy[index], tail: continuation.current.base + continuation.current.committed + (event.content || "") }
+          : { ...copy[index], tail: event.content };
+        return copy;
+      });
+    }
+    if (event.type === "assistant_stream_final") {
+      continuation.current = null;
+      setMessages((current) => {
+        const copy = [...current];
+        const index = findLastMessage(copy, (message) => message.role === "assistant");
+        const final = { content: event.content, html: event.html, streamBlocks: [], tail: "", stopped: false, continuing: false };
+        if (index >= 0) copy[index] = { ...copy[index], ...final };
+        else copy.push({ id: `end_${Date.now()}`, role: "assistant", ...final });
+        return copy;
+      });
+    }
+    if (event.type === "message_end" && event.message?.role === "user") refresh().catch(() => {});
+    if (event.type === "tool_execution_start") setTools((current) => {
+      const tool = { id: event.toolCallId, name: event.toolName, args: event.args, done: false, timestamp: event.timestamp || new Date().toISOString() };
+      return current.some((item) => item.id === tool.id) ? current.map((item) => item.id === tool.id ? { ...item, ...tool } : item) : [...current, tool];
+    });
+    if (event.type === "tool_execution_end") setTools((current) => current.map((tool) =>
+      tool.id === event.toolCallId ? { ...tool, done: true, result: event.result } : tool));
+    if (["runtime_error", "client_error"].includes(event.type)) {
+      setStreaming(false);
+      setStopping(false);
+      setError(event.message || "Runtime error");
+    }
+  }
+
+  async function discardEmptyDraft(chatId = selectedId, status = chatStatus) {
+    if (!chatId || status !== "draft") return;
+    await fetch(`/v0/chats/${encodeURIComponent(chatId)}?ifEmpty=true`, { method: "DELETE" }).catch(() => {});
+  }
+
+  function resetChatState() {
+    ws.current?.close(); setLive(null); setMessages([]); setTools([]); setPageBefore(null);
+    setStreaming(false); setStopping(false); setDraft(""); setEditEntryId(null); setError("");
+    currentGeneration.current = null; stopPending.current = false; continuation.current = null;
+  }
+
+  async function newChat(target) {
+    const nextProject = target || projects.find((item) => item.id === projectId) || projects[0];
+    if (!nextProject) return;
+    await discardEmptyDraft();
+    resetChatState();
+    const chat = await api("/v0/chats", { method: "POST", body: JSON.stringify({ projectId: nextProject.id }) });
+    history.replaceState({}, "", `/chat/${chat.id}`);
+    setSelectedId(chat.id); setProjectId(chat.projectId); setChatStatus(chat.status); setChatTitle(chat.title);
   }
 
   async function openSession(session, owningProject) {
-    setError(""); setView("chat"); setProjectId(owningProject.id); setSelectedId(session.id); setTools([]);
-    const detail = await api(`/v0/sessions/${session.id}`);
-    setMessages(list(detail.messages));
-    setTools(list(detail.tools));
-    setPageBefore(detail.page?.before || null);
-    if (detail.model) {
-      setModel(detail.model);
-      const sessionModel = models.find((item) => item.spec === detail.model);
-      const levels = list(sessionModel?.thinkingLevels);
-      setEffort(levels.includes(detail.thinkingLevel)
-        ? detail.thinkingLevel
-        : levels.includes("medium") ? "medium" : levels[0] || "off");
+    await discardEmptyDraft();
+    resetChatState();
+    setProjectId(owningProject.id); setSelectedId(session.id); setChatTitle(session.title); setChatStatus(session.status);
+    history.replaceState({}, "", `/chat/${session.id}`);
+    const detail = await loadDetail(session.id);
+    if (detail.status === "active") await openLive(session.id, owningProject.id);
+  }
+
+  async function ensureLive() {
+    if (live && ws.current?.readyState === WebSocket.OPEN) return live;
+    if (!selectedId) throw new Error("Chat is not ready yet");
+    return openLive(selectedId, projectId);
+  }
+
+  function stopResponse() {
+    if (!streaming) return;
+    const generationId = currentGeneration.current;
+    if (generationId) closedGenerations.current.add(generationId);
+    stopPending.current = true;
+    setStopping(true);
+    setStreaming(false);
+    setMessages((current) => {
+      const copy = [...current];
+      const index = findLastMessage(copy, (message) => message.role === "assistant");
+      if (index >= 0) {
+        const livePartial = `${list(copy[index].streamBlocks).map((block) => block.content).join("")}${copy[index].tail || ""}`;
+        const partial = livePartial || copy[index].content || "";
+        copy[index] = { ...copy[index], content: partial, html: null, streamBlocks: [], tail: "", stopped: true, status: "stopping" };
+      }
+      return copy;
+    });
+    ws.current?.send(JSON.stringify({ type: "stop_generation", generationId }));
+  }
+
+  async function send() {
+    if (stopping) return;
+    if (streaming) { stopResponse(); return; }
+    const text = draft.trim();
+    if (!text) return;
+    const attachmentIds = attachmentState.pendingIds;
+    const previousMessages = messages;
+    const previousEditEntryId = editEntryId;
+    const sentAttachments = attachmentState.items
+      .filter((item) => attachmentIds.includes(item.id))
+      .map(({ id, name, size, type, objectUrl }) => ({ id, name, size, type, objectUrl }));
+    setDraft("");
+    const localMessage = {
+      id: `user_${Date.now()}`,
+      role: "user",
+      content: text,
+      timestamp: new Date().toISOString(),
+      attachments: sentAttachments,
+    };
+    if (editEntryId) {
+      setMessages((current) => {
+        const index = current.findIndex((message) => message.id === editEntryId);
+        return index >= 0 ? [...current.slice(0, index), localMessage] : [...current, localMessage];
+      });
+    } else setMessages((current) => [...current, localMessage]);
+    attachmentState.markAnnounced(attachmentIds);
+    try {
+      await ensureLive();
+      ws.current.send(JSON.stringify(editEntryId
+        ? { type: "fork_and_prompt", entryId: editEntryId, message: text, attachmentIds }
+        : { type: "prompt", message: text, attachmentIds }));
+      setChatStatus("active");
+      setStreaming(true);
+      setEditEntryId(null);
+    } catch (caught) {
+      setMessages(previousMessages);
+      setEditEntryId(previousEditEntryId);
+      attachmentState.restoreDraft(sentAttachments);
+      setError(caught.message);
+      setDraft(text);
     }
-    const record = await api("/v0/live-sessions", { method: "POST", body: JSON.stringify({ projectId: owningProject.id, resumeSessionId: session.id }) });
-    setLive(record); connect(record);
+  }
+
+  async function regenerate(entryId) {
+    if (!entryId || streaming || stopping) return;
+    try {
+      await ensureLive();
+      setMessages((current) => {
+        const index = current.findIndex((message) => message.id === entryId);
+        return index >= 0 ? current.slice(0, index + 1) : current;
+      });
+      ws.current.send(JSON.stringify({ type: "regenerate", entryId }));
+      setStreaming(true);
+    } catch (caught) { setError(caught.message); }
+  }
+
+  async function continueResponse() {
+    if (streaming || stopping || !partialContinue) return;
+    try {
+      await ensureLive();
+      ws.current.send(JSON.stringify({ type: "continue" }));
+      setStreaming(true);
+    } catch (caught) { setError(caught.message); }
   }
 
   async function loadOlder() {
@@ -208,123 +431,60 @@ function App() {
       setMessages((current) => [...list(detail.messages), ...current]);
       setTools((current) => [...list(detail.tools), ...current]);
       setPageBefore(detail.page?.before || null);
-    } catch (e) { setError(e.message); }
+    } catch (caught) { setError(caught.message); }
     finally { setLoadingOlder(false); }
-  }
-
-  function newChat(target) {
-    const nextProject = target || project || projects[0];
-    ws.current?.close(); setView("chat"); setLive(null); setSelectedId(null); setMessages([]); setTools([]); setPageBefore(null); setStreaming(false); setError("");
-    if (nextProject) setProjectId(nextProject.id);
-  }
-
-  async function ensureLive() {
-    if (live && ws.current?.readyState === WebSocket.OPEN) return live;
-    const record = await api("/v0/live-sessions", {
-      method: "POST",
-      body: JSON.stringify({
-        projectId: project?.id || "project_chat",
-        resumeSessionId: selectedId || undefined,
-        model,
-        thinkingLevel: effort,
-      }),
-    });
-    setLive(record); connect(record); await new Promise((resolve) => { if (ws.current.readyState === WebSocket.OPEN) resolve(); else ws.current.addEventListener("open", resolve, { once: true }); });
-    return record;
-  }
-
-  async function send() {
-    if (streaming) { ws.current?.send(JSON.stringify({ type: "abort" })); return; }
-    const text = draft.trim(); if (!text) return;
-    setDraft(""); setMessages((old) => [...old, { id: `user_${Date.now()}`, role: "user", content: text, timestamp: new Date().toISOString() }]);
-    try { await ensureLive(); ws.current.send(JSON.stringify({ type: "prompt", message: text })); setStreaming(true); }
-    catch (e) { setError(e.message); setDraft(text); }
   }
 
   async function addProject(name) {
     try {
       const created = await api("/v0/projects", { method: "POST", body: JSON.stringify({ name }) });
-      await refresh(); setProjectId(created.id); newChat(created); return true;
-    } catch (e) { setError(e.message); return false; }
+      await refresh(); await newChat(created); return true;
+    } catch (caught) { setError(caught.message); return false; }
   }
 
   async function deleteSession(session, owningProject) {
     try {
       await api(`/v0/sessions/${session.id}`, { method: "DELETE" });
-      if (selectedId === session.id) newChat(owningProject);
+      if (selectedId === session.id) await newChat(owningProject);
       await refresh();
-    } catch (e) { setError(e.message); }
+    } catch (caught) { setError(caught.message); }
   }
 
   async function deleteProject(target) {
     try {
       await api(`/v0/projects/${target.id}`, { method: "DELETE" });
-      if (projectId === target.id) newChat(projects.find((item) => item.slug === "chat"));
+      if (projectId === target.id) await newChat(projects.find((item) => item.slug === "chat"));
       await refresh();
-    } catch (e) { setError(e.message); }
+    } catch (caught) { setError(caught.message); }
   }
 
-  async function renameSession(session, _owningProject, name) {
+  async function renameSession(session, _project, name) {
     try {
-      await api(`/v0/sessions/${session.id}`, { method: "PATCH", body: JSON.stringify({ name }) });
-      if (selectedId === session.id) {
-        ws.current?.close();
-        setLive(null);
-        setStreaming(false);
-      }
-      await refresh();
-      return true;
-    } catch (e) { setError(e.message); return false; }
+      const renamed = await api(`/v0/sessions/${session.id}`, { method: "PATCH", body: JSON.stringify({ name }) });
+      if (selectedId === session.id) setChatTitle(renamed.title);
+      await refresh(); return true;
+    } catch (caught) { setError(caught.message); return false; }
   }
 
   async function renameProject(target, name) {
-    try {
-      await api(`/v0/projects/${target.id}`, { method: "PATCH", body: JSON.stringify({ name }) });
-      await refresh();
-      return true;
-    } catch (e) { setError(e.message); return false; }
-  }
-
-  async function duplicateSession(session) {
-    try {
-      await api(`/v0/sessions/${session.id}/duplicate`, { method: "POST" });
-      await refresh();
-    } catch (e) { setError(e.message); }
+    try { await api(`/v0/projects/${target.id}`, { method: "PATCH", body: JSON.stringify({ name }) }); await refresh(); return true; }
+    catch (caught) { setError(caught.message); return false; }
   }
 
   async function moveSession(session, _source, target) {
     try {
-      const moved = await api(`/v0/sessions/${session.id}/move`, {
-        method: "POST",
-        body: JSON.stringify({ projectId: target.id }),
-      });
-      if (selectedId === session.id) {
-        ws.current?.close();
-        setLive(null);
-        setStreaming(false);
-        setProjectId(target.id);
-        setSelectedId(moved.id);
-      }
+      const moved = await api(`/v0/sessions/${session.id}/move`, { method: "POST", body: JSON.stringify({ projectId: target.id }) });
+      if (selectedId === session.id) { resetChatState(); setProjectId(target.id); setSelectedId(moved.id); setChatStatus(moved.status); }
       await refresh();
-    } catch (e) { setError(e.message); }
+    } catch (caught) { setError(caught.message); }
   }
 
   async function moveProjectSessions(source, target) {
     try {
-      const payload = await api(`/v0/projects/${source.id}/move-sessions`, {
-        method: "POST",
-        body: JSON.stringify({ projectId: target.id }),
-      });
-      const selectedMove = list(payload.moved).find((item) => item.sourceId === selectedId);
-      if (selectedMove) {
-        ws.current?.close();
-        setLive(null);
-        setStreaming(false);
-        setProjectId(target.id);
-        setSelectedId(selectedMove.session.id);
-      }
+      const payload = await api(`/v0/projects/${source.id}/move-sessions`, { method: "POST", body: JSON.stringify({ projectId: target.id }) });
+      if (list(payload.moved).some((item) => item.sourceId === selectedId)) { resetChatState(); setProjectId(target.id); }
       await refresh();
-    } catch (e) { setError(e.message); }
+    } catch (caught) { setError(caught.message); }
   }
 
   async function copyTranscript(session) {
@@ -332,92 +492,127 @@ function App() {
       const response = await fetch(`/v0/sessions/${session.id}/transcript`);
       if (!response.ok) throw new Error("Could not load the transcript");
       await navigator.clipboard.writeText(await response.text());
-    } catch (e) { setError(e.message); }
+    } catch (caught) { setError(caught.message); }
   }
 
   async function openDirectory(target) {
-    try {
-      await api(`/v0/projects/${target.id}/open`, { method: "POST" });
-    } catch (e) { setError(e.message); }
+    try { await api(`/v0/projects/${target.id}/open`, { method: "POST" }); }
+    catch (caught) { setError(caught.message); }
   }
 
-  const loadSettings = useCallback((targetProjectId) => api(`/v0/settings?projectId=${encodeURIComponent(targetProjectId)}`), []);
-  const saveSettings = useCallback((targetProjectId, enabledModels) => api("/v0/settings", {
-    method: "PATCH",
-    body: JSON.stringify({ projectId: targetProjectId, enabledModels }),
-  }), []);
-  const showError = useCallback((message) => setError(message), []);
-  const applyModelSettings = useCallback((payload) => {
-    const enabled = new Set(list(payload.enabledModels));
-    const nextModels = list(payload.models).filter((item) => enabled.has(item.spec));
-    const nextDefault = payload.defaultModel || nextModels[0]?.spec || "";
-    setModels(nextModels);
-    setModel((current) => enabled.has(current) ? current : nextDefault);
-    const nextModel = nextModels.find((item) => item.spec === nextDefault) || nextModels[0];
-    const levels = list(nextModel?.thinkingLevels);
-    setEffort((current) => levels.includes(current)
-      ? current
-      : levels.includes("medium") ? "medium" : levels[0] || "off");
-  }, []);
-  const emptyChat = view === "chat" && messages.length === 0 && tools.length === 0;
+  const lastAssistant = messages.findLast((message) => message.role === "assistant");
+  const lastAssistantIndex = lastAssistant ? messages.indexOf(lastAssistant) : -1;
+  const precedingUser = lastAssistantIndex >= 0
+    ? messages.slice(0, lastAssistantIndex).findLast((message) => message.role === "user" && !String(message.id || "").startsWith("user_"))
+    : null;
+  const commandContext = {
+    chatId: selectedId,
+    streaming,
+    canRegenerate: Boolean(precedingUser),
+    canContinue: Boolean(partialContinue && lastAssistant?.stopped),
+    canCopy: Boolean(lastAssistant?.content),
+  };
+  const openSettings = (section = "models") => { setSettingsSection(section); setSettingsOpen(true); };
+  const commandActions = {
+    newChat: () => newChat(),
+    attach: attachmentState.openPicker,
+    settings: () => openSettings("general"),
+    model: () => openSettings("models"),
+    rename: () => setSidebarCommand({ type: "rename", nonce: Date.now() }),
+    move: () => setSidebarCommand({ type: "move", nonce: Date.now() }),
+    delete: () => setSidebarCommand({ type: "delete", nonce: Date.now() }),
+    stop: stopResponse,
+    regenerate: () => regenerate(precedingUser?.id),
+    continue: continueResponse,
+    copy: () => lastAssistant && navigator.clipboard.writeText(lastAssistant.content),
+  };
 
+  const emptyChat = messages.length === 0 && tools.length === 0;
+  const selectedProject = projects.find((project) => project.id === projectId);
   return <TooltipProvider>
+    <Toaster richColors />
     <SidebarProvider defaultOpen>
       <AppSidebar
         projects={projects}
+        commandRequest={sidebarCommand}
         projectId={projectId}
         selectedId={selectedId}
-        view={view}
+        selectedStatus={chatStatus}
+        selectedTitle={chatTitle}
+        view="chat"
         onAddProject={addProject}
+        onCommandHandled={() => setSidebarCommand(null)}
         onCopyTranscript={copyTranscript}
         onDeleteProject={deleteProject}
         onDeleteSession={deleteSession}
-        onDuplicateSession={duplicateSession}
         onMoveProjectSessions={moveProjectSessions}
         onMoveSession={moveSession}
-        onNewChat={newChat}
+        onNewChat={(project) => newChat(project).catch((caught) => setError(caught.message))}
         onOpenDirectory={openDirectory}
-        onOpenSettings={() => setView("settings")}
-        onOpenSession={(session, owningProject) => openSession(session, owningProject).catch((e) => setError(e.message))}
+        onOpenSettings={() => openSettings("models")}
+        onOpenSession={(session, project) => openSession(session, project).catch((caught) => setError(caught.message))}
         onRenameProject={renameProject}
         onRenameSession={renameSession}
       />
-      <SidebarInset className={`chat-main${emptyChat ? " chat-main-empty" : ""}`}>
-        {view === "chat" && <div className="chat-meteors" aria-hidden="true">
-          <Meteors number={30} minDelay={0} maxDelay={1} minDuration={12} maxDuration={20} />
-        </div>}
-        <ChatHeader title={view === "chat" ? chatTitle : ""} share={view === "chat"} />
-        {view === "settings" ? <Suspense fallback={<div className="settings-page">Loading settings…</div>}><SettingsPage
-          projectId={projectId}
-          loadSettings={loadSettings}
-          saveSettings={saveSettings}
-          onError={showError}
-          onSaved={applyModelSettings}
-        /></Suspense> : <>
-          <ChatThread
-            messages={messages}
-            tools={tools}
-            streaming={streaming}
-            sessionId={selectedId}
-            hasOlder={Boolean(pageBefore)}
-            loadingOlder={loadingOlder}
-            onLoadOlder={loadOlder}
-          />
-          <ChatComposer
-            draft={draft}
-            streaming={streaming}
-            models={models}
-            model={model}
-            effort={effort}
-            modelNotice={modelNotice}
-            onDraftChange={setDraft}
-            onChooseModel={chooseModel}
-            onChooseEffort={setEffort}
-            onSend={send}
-          />
-        </>}
-        {error && <Button className="error" variant="destructive" onClick={() => setError("")}>{error} ×</Button>}
+      <SidebarInset className={`chat-main${emptyChat ? " chat-main-empty" : ""}`} {...drop.handlers}>
+        <ChatDropOverlay active={drop.active} />
+        <div className="chat-meteors" aria-hidden="true"><Meteors number={30} minDelay={0} maxDelay={1} minDuration={12} maxDuration={20} /></div>
+        <ChatHeader project={selectedProject} title={chatTitle} />
+        <ChatThread
+          messages={messages}
+          tools={tools}
+          streaming={streaming}
+          sessionId={selectedId}
+          hasOlder={Boolean(pageBefore)}
+          loadingOlder={loadingOlder}
+          partialContinue={partialContinue}
+          editingEntryId={editEntryId}
+          onLoadOlder={loadOlder}
+          onCopyMessage={(message) => navigator.clipboard.writeText(message.content || "")}
+          onEditMessage={(message) => {
+            if (editEntryId === message.id) {
+              setDraft("");
+              setEditEntryId(null);
+              attachmentState.clear();
+              return;
+            }
+            setDraft(message.content || "");
+            setEditEntryId(message.id);
+            attachmentState.restore(message.attachments);
+          }}
+          onRegenerate={regenerate}
+          onContinue={continueResponse}
+        />
+        <ChatComposer
+          draft={draft}
+          streaming={streaming}
+          stopping={stopping}
+          models={modelSettings.models}
+          model={modelSettings.model}
+          effort={modelSettings.effort}
+          modelNotice={modelSettings.notice}
+          attachments={attachmentState}
+          chatId={selectedId}
+          commandContext={commandContext}
+          commandActions={commandActions}
+          onDraftChange={setDraft}
+          onChooseModel={modelSettings.chooseModel}
+          onChooseEffort={modelSettings.chooseEffort}
+          onSend={send}
+        />
       </SidebarInset>
+      <Suspense fallback={null}>
+        {commandOpen && <CommandMenu
+          open={commandOpen}
+          onOpenChange={setCommandOpen}
+          context={commandContext}
+          actions={commandActions}
+          models={modelSettings.models}
+          model={modelSettings.model}
+          onChooseModel={modelSettings.chooseModel}
+        />}
+        {settingsOpen && <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} initialSection={settingsSection} modelSettings={modelSettings} />}
+      </Suspense>
     </SidebarProvider>
   </TooltipProvider>;
 }

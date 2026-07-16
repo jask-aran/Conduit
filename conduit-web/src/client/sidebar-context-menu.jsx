@@ -1,6 +1,5 @@
 import {
   ClipboardCopyIcon,
-  CopyPlusIcon,
   FolderInputIcon,
   FolderOpenIcon,
   MessageSquarePlusIcon,
@@ -40,7 +39,6 @@ export function ChatContextMenu({
   projects,
   onCopyTranscript,
   onDelete,
-  onDuplicate,
   onMove,
   onRename,
 }) {
@@ -61,10 +59,6 @@ export function ChatContextMenu({
             <MoveTargets currentProject={currentProject} projects={projects} onMove={onMove} />
           </ContextMenuSubContent>
         </ContextMenuSub>
-        <ContextMenuItem onSelect={onDuplicate}>
-          <CopyPlusIcon absoluteStrokeWidth />
-          Duplicate
-        </ContextMenuItem>
         <ContextMenuItem onSelect={onCopyTranscript}>
           <ClipboardCopyIcon absoluteStrokeWidth />
           Copy transcript

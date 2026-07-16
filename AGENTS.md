@@ -33,12 +33,14 @@ translates a selected manifest into explicit Pi arguments;
 data/chat/files/      working files visible to chats
 data/pi/              isolated Pi credentials, settings, and native sessions
 data/conduit.json     stable project identity and display metadata
-data/sessions.json    rebuildable lightweight session registry
+data/sessions.json    atomic lightweight Conduit chat registry
 ```
 
 The reserved unstructured project uses `data/chat/files` itself as its working
-directory. Named projects use `data/chat/files/<slug>`. Keep these working
-directories free of generated `.pi`, `.conduit`, and session files.
+directory. Named projects use `data/chat/files/<slug>`. Keep Pi configuration
+and native session files out of these roots. Conduit owns only
+`.conduit/chats/<chat-id>/attachments` and `.partial` beneath each working root;
+Pi continues to run with the project root as `cwd`.
 
 The root SVG is architecture documentation. `.devcontainer/` contains the
 development environment setup and Conduit launch scripts.
@@ -46,8 +48,10 @@ development environment setup and Conduit launch scripts.
 ## Runtime and Data Ownership
 
 Pi owns authentication, settings, model behavior, and JSONL transcript contents.
-Conduit owns project IDs, names, kinds, creation times, live process records,
-browser connections, and template selection.
+Conduit owns public chat IDs, `draft`/`active` status, project IDs, names, kinds,
+creation times, per-chat attachment folders, live process records, browser
+connections, and template selection. Native Pi IDs and paths are private
+mappings; browser routes always use the stable Conduit chat ID.
 
 `data/pi/settings.json` is authoritative for scoped models. Terminal and web
 saves share it, the latest successful save wins, and Conduit reloads it for
@@ -71,22 +75,43 @@ encoded directory name is lossy and can collide.
 catalog metadata in working directories or make Pi JSONL the owner of Conduit
 application identity.
 
-`data/sessions.json` is an atomic cache of lightweight sidebar metadata. Pi
-JSONL remains authoritative. Update the registry only at completed-response and
-explicit session-mutation checkpoints, reconcile file presence at startup, and
-never parse every transcript to serve an ordinary project or sidebar request.
-Browser and incomplete-stream state is disposable.
+`data/sessions.json` is an atomic lightweight registry. Rows contain the Conduit
+chat ID, project, title, durable `draft` or `active` status, private Pi mapping,
+and timestamps. Create the row and `.conduit/chats/<id>/{attachments,.partial}`
+before Pi starts. Empty drafts stay hidden; a completed attachment makes one
+visible; the first prompt attaches Pi and marks the existing chat active. Only
+startup cleanup may remove an empty draft older than 24 hours. Never remove a
+draft containing a completed attachment.
+
+Pi JSONL remains the transcript authority. Checkpoint active mappings only at
+completed-response and explicit mutation boundaries, reconcile native files at
+startup, and never parse every transcript for an ordinary sidebar request. The
+filesystem is the attachment registry. Stream raw request bodies through an
+exclusive `.part` file and publish with a same-filesystem atomic rename. Derive
+all paths from server-owned project/chat data, validate attachment UUIDs, and
+fail closed for malformed files and symlinks. Browser, upload-progress, and
+incomplete-stream state is disposable.
 
 Deleting a named project removes its catalog entry, working directory, and
 native session directory. The reserved `chat` project cannot be deleted.
-Deleting an individual chat removes its authoritative JSONL. Stop matching live
-processes before either destructive operation and require confirmation in the
-interface.
+Deleting an individual chat removes its authoritative JSONL and Conduit chat
+folder. Stop matching live processes before either destructive operation and
+require confirmation in the interface. Chat duplication remains unavailable
+until attachment ownership has an explicit product contract.
 
 The server owns live Pi processes. A browser disconnect must not terminate its
 process. Persisted JSONL is resumable after server restart, while live process
 records and buffered RPC events are in-memory state. Never allow two Pi
 processes to write the same JSONL simultaneously.
+
+Assign each response a monotonically increasing opaque generation ID. Stop must
+close the client and server generation gates before waiting for Pi's public
+`abort` RPC. Terminate a process that does not acknowledge within 250 ms and let
+the next action start one fresh writer. Edit and regenerate use Pi's public
+`fork` RPC, retain the Conduit chat/folder, advance only the private Pi mapping,
+and never rewrite JSONL. Experimental stopped-response continuation is an
+ordinary hidden user prompt behind `ENABLE_PARTIAL_CONTINUE`; keep it isolated
+and removable.
 
 Transcript APIs return ten complete turns at a time with a 50,000-character soft
 limit. Preserve turn boundaries when paging. Stream assistant output by freezing
@@ -127,6 +152,16 @@ Streamdown; user prompts remain literal text. Preserve static and streaming
 modes, the always-present KaTeX plugin, fence-triggered lazy Shiki loading, URL
 sanitization, image blocking, and the Shadcn external-link confirmation dialog.
 Do not introduce a parallel Markdown parser or raw HTML rendering path.
+
+Keep the composer a bounded native textarea. Keep palette commands and composer
+commands as explicit registries: the lazy Shadcn Command dialog owns persistent
+application actions, while the textarea-focused slash Popover exposes only
+`/attach` and does not route textarea keystrokes through cmdk. Keep the compact
+composer model menu; Settings owns the searchable, grouped multi-model
+Combobox and remains a centered Dialog with a visible vertical Tabs rail at
+narrow widths. Render the same Attachment composition above the composer while
+pending and beneath the user message after send. Keep raw upload queueing and
+the drag-enter counter as shallow application logic.
 
 ## Build, Test, and Development Commands
 

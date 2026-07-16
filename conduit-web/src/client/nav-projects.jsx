@@ -23,7 +23,6 @@ export function NavProjects({
   onCopyTranscript,
   onDeleteProject,
   onDeleteSession,
-  onDuplicateSession,
   onMoveProjectSessions,
   onMoveSession,
   onNewChat,
@@ -66,7 +65,6 @@ export function NavProjects({
                     projects={allProjects}
                     onCopyTranscript={() => onCopyTranscript(session)}
                     onDelete={() => onDeleteSession(session, project)}
-                    onDuplicate={() => onDuplicateSession(session, project)}
                     onMove={(target) => onMoveSession(session, project, target)}
                     onRename={() => onRenameSession(session, project)}
                   >
