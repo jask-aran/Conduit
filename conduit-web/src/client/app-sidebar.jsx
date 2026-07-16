@@ -11,6 +11,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import {
   Dialog,
   DialogContent,
@@ -273,17 +274,22 @@ export function AppSidebar({
           <DialogTitle>Move chat</DialogTitle>
           <DialogDescription>Choose the working folder for this chat and its attachments.</DialogDescription>
         </DialogHeader>
-        <div className="grid gap-2 py-2">
-          {projects.filter((item) => item.id !== pendingMove?.project.id).map((target) => <Button
+        <Command className="border">
+          <CommandInput placeholder="Search folders…" />
+          <CommandList>
+            <CommandEmpty>No matching folders.</CommandEmpty>
+            <CommandGroup heading="Folders">
+          {projects.filter((item) => item.id !== pendingMove?.project.id).map((target) => <CommandItem
             key={target.id}
-            variant="outline"
-            className="justify-start"
-            onClick={() => {
+            value={`${target.name} ${target.slug}`}
+            onSelect={() => {
               onMoveSession(pendingMove.session, pendingMove.project, target);
               setPendingMove(null);
             }}
-          >{target.name}</Button>)}
-        </div>
+          >{target.name}</CommandItem>)}
+            </CommandGroup>
+          </CommandList>
+        </Command>
       </DialogContent>
     </Dialog>
   </>;

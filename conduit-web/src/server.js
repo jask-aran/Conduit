@@ -69,13 +69,14 @@ app.put("/v0/chats/:chatId/attachments/:attachmentId", async (request, response,
 app.use(express.json({ limit: "128kb" }));
 
 const pendingCheckpoints = new Set();
-manager.on("event", ({ record }) => {
+manager.on("event", ({ record, event }) => {
   const chat = record.chatId ? registry.metadata(record.chatId) : null;
-  if (!chat || chat.status !== "active" || !record.sessionFile || pendingCheckpoints.has(record.id) || record.active) return;
+  if (!["agent_end", "generation_stopped"].includes(event.type)
+    || !chat || chat.status !== "active" || !record.sessionFile || pendingCheckpoints.has(record.id) || record.active) return;
   pendingCheckpoints.add(record.id);
   setTimeout(() => {
     projects.get(record.projectId)
-      .then((project) => project && registry.syncFile(record.chatId, record.sessionFile, project))
+      .then((project) => project && registry.syncFile(record.chatId, record.sessionFile, project, { waitForFileMs: 2000 }))
       .then((session) => session && manager.publish(record, { type: "session_checkpoint", chat: chatView(registry.metadata(record.chatId)) }))
       .catch((error) => console.error("Could not checkpoint the session registry", error))
       .finally(() => pendingCheckpoints.delete(record.id));
@@ -248,9 +249,10 @@ app.get("/v0/chats/:chatId/attachments/:attachmentId", async (request, response,
     if (!context) return response.status(404).json({ error: "chat_not_found" });
     const attachment = await attachments.open(context.project, context.chat.id, request.params.attachmentId);
     if (!attachment) return response.status(404).json({ error: "attachment_not_found" });
-    response.setHeader("Content-Type", "application/octet-stream");
+    const preview = request.query.preview === "1" && /^image\/(png|jpeg|gif|webp)$/.test(attachment.type);
+    response.setHeader("Content-Type", preview ? attachment.type : "application/octet-stream");
     const downloadName = encodeURIComponent(attachment.name).replace(/[!'()*]/g, (character) => `%${character.charCodeAt(0).toString(16).toUpperCase()}`);
-    response.setHeader("Content-Disposition", `attachment; filename*=UTF-8''${downloadName}`);
+    response.setHeader("Content-Disposition", `${preview ? "inline" : "attachment"}; filename*=UTF-8''${downloadName}`);
     response.setHeader("X-Content-Type-Options", "nosniff");
     response.setHeader("Content-Length", attachment.size);
     const stream = attachment.stream();
@@ -452,9 +454,12 @@ async function sendPrompt(record, prepared, options) {
 async function syncForkedChat(record) {
   const context = await findChatContext(record.chatId);
   if (!context) throw new Error("Chat no longer exists");
-  const session = await registry.syncFile(context.chat.id, record.sessionFile, context.project);
+  await registry.update(context.chat.id, {
+    piSessionId: record.sessionId || context.chat.piSessionId,
+    piSessionFile: record.sessionFile,
+  });
   manager.publish(record, { type: "history_forked", chat: chatView(registry.metadata(context.chat.id)) });
-  return session;
+  return registry.metadata(context.chat.id);
 }
 
 async function handleClientCommand(record, command) {

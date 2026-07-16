@@ -98,6 +98,28 @@ test("keeps a pre-prompt Pi mapping as a draft across startup", async () => {
   await fs.rm(root, { recursive: true, force: true });
 });
 
+test("waits for a newly reported fork file before checkpointing it", async () => {
+  const { root, project, registryFile } = await fixture();
+  const store = new ChatStore(registryFile);
+  await store.initialize([project]);
+  const chat = await store.create(project);
+  const forkFile = path.join(project.sessionsDir, "delayed-fork.jsonl");
+  const write = new Promise((resolve, reject) => setTimeout(() => {
+    fs.writeFile(forkFile, `${JSON.stringify({
+      type: "session",
+      id: "delayed-native",
+      cwd: project.path,
+      timestamp: "2026-07-16T00:00:00Z",
+    })}\n`).then(resolve, reject);
+  }, 50));
+
+  const session = await store.syncFile(chat.id, forkFile, project, { waitForFileMs: 500 });
+  await write;
+  assert.equal(session.nativeId, "delayed-native");
+  assert.equal(store.metadata(chat.id).piSessionFile, forkFile);
+  await fs.rm(root, { recursive: true, force: true });
+});
+
 test("startup removes stale empty drafts and orphan partial files only", async () => {
   const { root, project, registryFile } = await fixture();
   const old = "550e8400-e29b-41d4-a716-446655440000";

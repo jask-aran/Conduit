@@ -152,6 +152,7 @@ test("creates a durable chat route and renders the primary surface", async ({ pa
   await page.goto("/");
   await createRequest;
   await expect(page).toHaveURL(/\/chat\/550e8400-e29b-41d4-a716-446655440099$/);
+  await expect(page.getByRole("navigation", { name: "breadcrumb" })).toContainText("ChatsNew chat");
 
   await expect(page.getByRole("heading", { name: "How can I help you today?" })).toBeVisible();
   const composer = page.getByRole("textbox", { name: "Message Pi" });
@@ -169,10 +170,10 @@ test("creates a durable chat route and renders the primary surface", async ({ pa
   expect(sendBox.y).toBeGreaterThan(inputBox.y);
   await expect(composerGroup).toHaveCSS("opacity", "1");
   await expect(page.getByRole("button", { name: "Voice input" })).toHaveCount(0);
-  await expect(sendButton).toHaveAttribute("aria-disabled", "true");
+  await expect(sendButton).toBeDisabled();
   await expect(sendButton).toHaveAttribute("data-variant", "default");
   await composer.fill("Hello");
-  await expect(sendButton).toHaveAttribute("aria-disabled", "false");
+  await expect(sendButton).toBeEnabled();
   await expect(sendButton).toHaveAttribute("data-variant", "default");
 });
 
@@ -189,6 +190,24 @@ test("reloading a durable new-chat URL does not create another chat", async ({ p
   await page.reload();
   await expect(page.getByRole("textbox", { name: "Message Pi" })).toBeVisible();
   expect(creates).toBe(1);
+});
+
+test("new project chats identify their owning project in the header", async ({ page }, testInfo) => {
+  await page.route("**/v0/chats", async (route) => {
+    await route.fulfill({ status: 201, json: {
+      id: "550e8400-e29b-41d4-a716-446655440088",
+      projectId: "project_research",
+      status: "draft",
+      title: "New chat",
+    } });
+  });
+  await page.goto("/");
+  await openSidebar(page, testInfo);
+  await page.getByRole("button", { name: /Research/ }).click({ button: "right" });
+  await page.getByRole("menuitem", { name: "New chat" }).click();
+  const breadcrumb = page.getByRole("navigation", { name: "breadcrumb" });
+  await expect(breadcrumb).toContainText("research");
+  await expect(breadcrumb).toContainText("New chat");
 });
 
 test("opens and dismisses the new folder dialog", async ({ page }, testInfo) => {
@@ -282,6 +301,7 @@ test("renders persisted assistant Markdown with safe interactive controls", asyn
   await expect(page.locator(".katex")).toHaveCount(2);
   await expect(page.locator(".katex-display")).toHaveCount(1);
   await expect(page.getByRole("button", { name: "Copy code" })).toBeVisible();
+  await expect(page.locator(".server-markdown pre")).toHaveCSS("background-color", "rgb(36, 41, 46)");
   await expect(page.locator("img")).toHaveCount(0);
   await expect(page.getByText("Tracking image", { exact: true })).toBeVisible();
   await expect(page.locator('a[href^="javascript:"]')).toHaveCount(0);
@@ -479,14 +499,13 @@ test("sizes the meteor field with the chat viewport", async ({ page }, testInfo)
   expect(resizedField.height).toBeGreaterThan(initialField.height);
 });
 
-test("model picker exposes model and thinking selectors", async ({ page }) => {
+test("composer model picker exposes model and thinking selectors", async ({ page }) => {
   await page.goto("/");
 
   await page.getByRole("button", { name: /Reasoner medium/ }).click();
   await expect(page.getByText("Model", { exact: true })).toBeVisible();
   await expect(page.getByText("Thinking", { exact: true })).toBeVisible();
   await expect(page.getByRole("menuitemradio", { name: "Reasoner example" })).toBeChecked();
-  await expect(page.getByRole("menuitemradio", { name: "Pi default" })).toHaveCount(0);
   await expect(page.getByRole("menuitemradio", { name: "High" })).toBeVisible();
 });
 
@@ -508,7 +527,7 @@ test("persists a selected model as Pi's next-chat default", async ({ page }) => 
   await expect(page.getByRole("button", { name: /Plain off/ })).toBeVisible();
 });
 
-test("opens model scope settings from the sidebar", async ({ page }, testInfo) => {
+test("model scope settings searches and toggles multiple checked models", async ({ page }, testInfo) => {
   await page.goto("/");
   await openSidebar(page, testInfo);
 
@@ -516,8 +535,65 @@ test("opens model scope settings from the sidebar", async ({ page }, testInfo) =
   await page.getByRole("menuitem", { name: "Manage settings" }).click();
   const dialog = page.getByRole("dialog", { name: "Settings" });
   await expect(dialog).toBeVisible();
-  await expect(dialog.getByRole("tab", { name: /Models/ })).toBeVisible();
-  await expect(page.getByRole("checkbox", { name: /Reasoner/ })).toBeChecked();
+  const search = page.getByRole("combobox", { name: "Search available models" });
+  await expect(search).toBeFocused();
+  await search.fill("example plain");
+  await expect(search).toHaveValue("example plain");
+  await search.press("Space");
+  await expect(search).toHaveValue("example plain ");
+  await search.fill("");
+  const reasoner = page.getByRole("option", { name: /Reasoner example\/reasoner/ });
+  const plain = page.getByRole("option", { name: /Plain example\/plain/ });
+  await expect(reasoner).toHaveAttribute("aria-selected", "true");
+  await expect(reasoner.locator("svg")).toBeVisible();
+  await reasoner.click();
+  await expect(reasoner).toBeVisible();
+  await expect(reasoner).toHaveAttribute("aria-selected", "false");
+  await search.fill("reasoner");
+  await search.press("ArrowDown");
+  await expect(page.locator('[data-slot="combobox-item"][data-highlighted]')).toBeVisible();
+  await search.press("Enter");
+  await expect(reasoner).toHaveAttribute("aria-selected", "true");
+  await expect(search).toBeVisible();
+  await search.fill("");
+  await search.press("ArrowDown");
+  await expect(page.locator('[data-slot="combobox-item"][data-highlighted]')).toBeVisible();
+  await reasoner.click();
+  await plain.click();
+  await expect(page.getByRole("button", { name: "Save changes" })).toBeDisabled();
+});
+
+test("model scope search auto-focuses and its long result list scrolls", async ({ page }, testInfo) => {
+  const manyModels = Array.from({ length: 36 }, (_, index) => ({
+    provider: index < 18 ? "alpha" : "beta",
+    id: `model-${index + 1}`,
+    spec: `${index < 18 ? "alpha" : "beta"}/model-${index + 1}`,
+    label: `Model ${String(index + 1).padStart(2, "0")}`,
+    thinkingLevels: ["off"],
+  }));
+  await page.route("**/v0/settings?**", async (route) => {
+    await route.fulfill({ json: {
+      models: manyModels,
+      enabledModels: manyModels.map((item) => item.spec),
+      defaultModel: manyModels[0].spec,
+    } });
+  });
+  await page.goto("/");
+  await openSidebar(page, testInfo);
+  await page.locator('[data-sidebar="footer"]').getByRole("button", { name: /Conduit Local workspace/ }).click();
+  await page.getByRole("menuitem", { name: "Manage settings" }).click();
+
+  const search = page.getByRole("combobox", { name: "Search available models" });
+  const list = page.locator('[data-slot="combobox-list"]');
+  await expect(search).toBeFocused();
+  await expect(list).toBeVisible();
+  expect(await list.evaluate((element) => element.scrollHeight > element.clientHeight)).toBe(true);
+  await list.hover();
+  await page.mouse.wheel(0, 600);
+  await expect.poll(() => list.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
+  await search.click();
+  await search.fill("model 31");
+  await expect(page.getByRole("option", { name: /Model 31 beta\/model-31/ })).toBeVisible();
 });
 
 test("uploads picker and dropped files through the same attachment surface", async ({ page }, testInfo) => {
@@ -530,10 +606,24 @@ test("uploads picker and dropped files through the same attachment surface", asy
     await route.fulfill({ status: 201, json: { id, name, storedName: `${id}--${name}`, size: route.request().postDataBuffer()?.length || 0, type: "text/plain" } });
   });
   await page.goto("/");
-  const attachmentButton = page.getByRole("button", { name: /^Attachments/ });
+  const attachmentButton = page.getByRole("button", { name: /^Attach files/ });
   await attachmentButton.click();
   await page.locator('input[type="file"]').setInputFiles({ name: "picker.txt", mimeType: "text/plain", buffer: Buffer.from("picker") });
   await expect(page.getByText("picker.txt", { exact: true })).toBeVisible();
+  const attachment = page.locator('[data-slot="attachment-group"] [data-slot="attachment"]');
+  await expect(attachment).toHaveCount(1);
+  await expect(attachment).toHaveAttribute("data-size", "default");
+  const [attachmentBox, mediaBox] = await Promise.all([
+    attachment.boundingBox(),
+    attachment.locator('[data-slot="attachment-media"]').boundingBox(),
+  ]);
+  expect(attachmentBox.width).toBeLessThanOrEqual(400);
+  expect(mediaBox.width).toBe(40);
+  const [trayBox, composerBox] = await Promise.all([
+    page.locator(".attachment-tray").boundingBox(),
+    page.locator(".composer").boundingBox(),
+  ]);
+  expect(trayBox.y + trayBox.height).toBeLessThanOrEqual(composerBox.y);
   await expect.poll(() => uploads.some((item) => item.name === "picker.txt" && item.body === "picker")).toBe(true);
 
   await page.keyboard.press("Escape");
@@ -561,6 +651,12 @@ test("uploads picker and dropped files through the same attachment surface", asy
   await expect(page.getByText("dropped.txt", { exact: true })).toBeVisible();
   await expect.poll(() => uploads.some((item) => item.name === "dropped.txt" && item.body === "dropped")).toBe(true);
   await expect(page.getByText("Drop files to attach")).toHaveCount(0);
+  await page.getByRole("textbox", { name: "Message Pi" }).fill("Use these files");
+  await page.getByRole("button", { name: "Send message" }).click();
+  const messageAttachments = page.getByLabel("Message attachments");
+  await expect(messageAttachments).toContainText("picker.txt");
+  await expect(messageAttachments).toContainText("dropped.txt");
+  await expect(page.locator(".composer-wrap > .attachment-tray")).toHaveCount(0);
 });
 
 test("stop freezes the visible response and rejects late generation deltas", async ({ page }) => {
@@ -593,7 +689,7 @@ test("stop freezes the visible response and rejects late generation deltas", asy
   await page.getByRole("button", { name: "Send message" }).click();
   await expect(page.getByText("partial")).toBeVisible();
   await page.getByRole("button", { name: "Stop response" }).click();
-  await expect(page.getByRole("button", { name: "Stopping response" })).toHaveAttribute("aria-disabled", "true");
+  await expect(page.getByRole("button", { name: "Stopping response" })).toBeDisabled();
   await expect(page.getByText("Stopping…")).toBeVisible();
   await expect(page.getByText("LATE OUTPUT")).toHaveCount(0);
   await expect(page.getByText("Stopped", { exact: true })).toBeVisible();
@@ -603,13 +699,28 @@ test("stop freezes the visible response and rejects late generation deltas", asy
 test("global commands and slash suggestions preserve their intended focus models", async ({ page }) => {
   await page.goto("/");
   const composer = page.getByRole("textbox", { name: "Message Pi" });
-  await composer.fill("/att");
-  await expect(page.getByRole("listbox")).toBeVisible();
+  await composer.fill("/");
+  const slashList = page.getByRole("listbox", { name: "Suggestions" });
+  await expect(slashList).toBeVisible();
+  await expect(slashList.getByRole("option")).toHaveCount(1);
+  await expect(slashList.getByRole("option", { name: /\/attach/ })).toBeVisible();
   await expect(composer).toBeFocused();
   await expect(composer).toHaveAttribute("aria-expanded", "true");
+  const chooserPromise = page.waitForEvent("filechooser");
+  await page.keyboard.press("Enter");
+  const chooser = await chooserPromise;
+  await chooser.setFiles([]);
+  await expect(composer).toBeFocused();
+
+  for (const command of ["/settings", "/model", "/stop", "/regenerate", "/continue", "/copy"]) {
+    await composer.fill(command);
+    await expect(slashList).toHaveCount(0);
+    await expect(composer).toHaveValue(command);
+  }
+  await composer.fill("/att");
   await page.keyboard.press("Escape");
   await expect(composer).toHaveValue("/att");
-  await expect(page.getByRole("listbox")).toHaveCount(0);
+  await expect(slashList).toHaveCount(0);
 
   await page.keyboard.press("Control+k");
   const palette = page.getByRole("dialog", { name: "Command Palette" });
@@ -618,6 +729,14 @@ test("global commands and slash suggestions preserve their intended focus models
   await palette.getByText("Open settings", { exact: true }).click();
   await expect(page.getByRole("dialog", { name: "Settings" })).toBeVisible();
   await page.keyboard.press("Escape");
+
+  await page.keyboard.press("Control+k");
+  await palette.getByPlaceholder("Search commands…").fill("example plain");
+  await expect(palette.getByRole("group", { name: "Models · example" })).toBeVisible();
+  const settingsRequest = page.waitForRequest((request) => request.url().endsWith("/v0/settings") && request.method() === "PATCH");
+  await page.keyboard.press("ArrowDown");
+  await page.keyboard.press("Enter");
+  await settingsRequest;
 
   await page.keyboard.press("Control+k");
   await page.getByPlaceholder("Search commands…").fill("delete chat");
@@ -639,7 +758,10 @@ test("message actions copy source, edit from a Pi entry, and regenerate via fork
   await page.route("**/v0/sessions/session_existing", async (route) => route.fulfill({ json: {
     id: "session_existing", projectId: "project_chat", status: "active", title: "Existing chat",
     messages: [
-      { id: "entry-user", role: "user", content: "Original question", attachments: [{ id: "file-one", name: "source-notes.md" }] },
+      { id: "entry-user", role: "user", content: "Original question", attachments: [
+        { id: "file-one", name: "source-notes.md", type: "text/markdown", size: 128 },
+        { id: "image-one", name: "reference.png", type: "image/png", size: 256 },
+      ] },
       { id: "entry-assistant", role: "assistant", content: "**Source Markdown**", html: "<p><strong>Source Markdown</strong></p>" },
     ], tools: [], page: { before: null },
   } }));
@@ -647,12 +769,24 @@ test("message actions copy source, edit from a Pi entry, and regenerate via fork
   await openSidebar(page, testInfo);
   await page.getByRole("button", { name: "Existing chat" }).click();
   await expect(page.getByLabel("Message attachments")).toContainText("source-notes.md");
+  await expect(page.getByLabel("Message attachments").locator('[data-slot="attachment"]')).toHaveCount(2);
+  expect(await page.getByLabel("Message attachments").evaluate((element) => Boolean(element.closest('[data-slot="bubble"]')))).toBe(false);
   await page.getByText("Source Markdown", { exact: true }).hover();
   await page.getByRole("button", { name: "Copy Markdown" }).click();
   await expect.poll(() => page.evaluate(() => window.__copiedMessage)).toBe("**Source Markdown**");
   await page.locator(".user-message-text", { hasText: "Original question" }).hover();
   await page.getByRole("button", { name: "Edit from here" }).click();
   await expect(page.getByRole("textbox", { name: "Message Pi" })).toHaveValue("Original question");
+  await expect(page.locator('[data-slot="bubble"][data-editing="true"]')).toContainText("Original question");
+  await expect(page.locator(".composer-wrap > .attachment-tray")).toContainText("source-notes.md");
+  await expect(page.locator(".composer-wrap > .attachment-tray img")).toHaveAttribute(
+    "src",
+    "/v0/chats/session_existing/attachments/image-one?preview=1",
+  );
+  await page.getByRole("button", { name: "Cancel editing" }).click();
+  await expect(page.getByRole("textbox", { name: "Message Pi" })).toHaveValue("");
+  await expect(page.locator('[data-slot="bubble"][data-editing="true"]')).toHaveCount(0);
+  await expect(page.locator(".composer-wrap > .attachment-tray")).toHaveCount(0);
   await page.getByText("Source Markdown", { exact: true }).hover();
   await page.getByRole("button", { name: "Regenerate response" }).click();
   await expect.poll(() => page.evaluate(() => window.__commands?.find((command) => command.type === "regenerate"))).toEqual({ type: "regenerate", entryId: "entry-user" });
@@ -665,9 +799,8 @@ test("settings remains centered with a persistent vertical rail at narrow widths
   await page.getByRole("menuitem", { name: "Manage settings" }).click();
   await page.setViewportSize({ width: 480, height: 720 });
   const dialog = page.getByRole("dialog", { name: "Settings" });
-  const rail = dialog.getByRole("tablist", { name: "Settings sections" });
+  const rail = dialog.locator('[data-slot="tabs-list"]');
   await expect(rail).toBeVisible();
-  await expect(dialog.getByRole("tab", { name: /About/ })).toBeVisible();
   const [dialogBox, railBox] = await Promise.all([dialog.boundingBox(), rail.boundingBox()]);
   expect(Math.abs(dialogBox.x + dialogBox.width / 2 - 240)).toBeLessThanOrEqual(2);
   expect(railBox.width).toBeGreaterThan(60);

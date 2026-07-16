@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { ArrowUpIcon, ChevronDownIcon, SquareIcon } from "lucide-react";
+import { ArrowUpIcon, ChevronDownIcon, PaperclipIcon, SquareIcon } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -18,14 +18,13 @@ import {
   InputGroupTextarea,
 } from "@/components/ui/input-group";
 import { Popover, PopoverAnchor } from "@/components/ui/popover";
-import { AttachmentPopover } from "./attachment-popover";
-import { availableCommands } from "./command-registry";
+import { AttachmentTray } from "./attachment-tray";
+import { availableComposerCommands } from "./command-registry";
+import { thinkingLabel } from "./model-options";
 import { SlashSuggestions } from "./slash-suggestions";
 import { detectCommandToken, replaceCommandToken } from "./slash-token";
 
 const list = (value) => Array.isArray(value) ? value : [];
-const thinkingLabel = (level) => level === "xhigh" ? "XHigh" : `${level[0]?.toUpperCase() || ""}${level.slice(1)}`;
-
 export function ChatComposer({
   draft,
   streaming,
@@ -35,6 +34,7 @@ export function ChatComposer({
   effort,
   modelNotice,
   attachments,
+  chatId,
   commandContext,
   commandActions,
   onDraftChange,
@@ -54,7 +54,7 @@ export function ChatComposer({
   const slashCommands = useMemo(() => {
     if (token?.trigger !== "/") return [];
     const query = token.query.toLowerCase();
-    return availableCommands(commandContext, { slashOnly: true }).filter((command) =>
+    return availableComposerCommands(commandContext).filter((command) =>
       !query || command.slash.startsWith(query) || command.label.toLowerCase().includes(query)
         || command.keywords.some((keyword) => keyword.includes(query)));
   }, [commandContext, token?.query, token?.trigger]);
@@ -81,7 +81,8 @@ export function ChatComposer({
   };
 
   return <div className="composer-wrap">
-    <InputGroup className="composer">
+    <AttachmentTray attachments={attachments} chatId={chatId} />
+    <InputGroup className="composer has-disabled:bg-secondary has-disabled:opacity-100">
       <Popover open={suggestionsOpen} modal={false}>
         <PopoverAnchor asChild>
           <InputGroupTextarea
@@ -126,7 +127,11 @@ export function ChatComposer({
       </Popover>
       <InputGroupAddon align="block-end" className="composer-actions">
         <div className="composer-actions-left">
-          <AttachmentPopover attachments={attachments} />
+          <InputGroupButton
+            size="icon-sm"
+            aria-label={`Attach files${attachments.items.length ? ` (${attachments.items.length})` : ""}`}
+            onClick={() => attachments.inputRef.current?.click()}
+          ><PaperclipIcon /></InputGroupButton>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <InputGroupButton variant="ghost" size="sm" aria-label={`${modelLabel} ${effort || "off"}`}>
@@ -161,8 +166,8 @@ export function ChatComposer({
         <InputGroupButton
           variant="default"
           size="icon-sm"
-          aria-disabled={!canSend}
-          onClick={() => canSend && onSend()}
+          disabled={!canSend}
+          onClick={onSend}
           aria-label={stopping ? "Stopping response" : streaming ? "Stop response" : "Send message"}
         >
           {streaming ? <SquareIcon /> : <ArrowUpIcon />}

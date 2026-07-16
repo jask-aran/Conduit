@@ -79,6 +79,19 @@ test("raw JSON uploads publish atomically through the durable chat route", async
     assert.match(download.headers.get("content-disposition"), /^attachment;/);
     assert.equal(Buffer.from(await download.arrayBuffer()).toString(), body.toString());
 
+    const imageId = crypto.randomUUID();
+    const imageBody = Buffer.from([0x89, 0x50, 0x4e, 0x47]);
+    const imageUpload = await fetch(`${origin}/v0/chats/${chat.id}/attachments/${imageId}?name=preview.png`, {
+      method: "PUT",
+      headers: { "content-type": "image/png" },
+      body: imageBody,
+    });
+    assert.equal(imageUpload.status, 201);
+    const preview = await fetch(`${origin}/v0/chats/${chat.id}/attachments/${imageId}?preview=1`);
+    assert.equal(preview.headers.get("content-type"), "image/png");
+    assert.match(preview.headers.get("content-disposition"), /^inline;/);
+    assert.deepEqual(Buffer.from(await preview.arrayBuffer()), imageBody);
+
     const malformed = await fetch(`${origin}/v0/chats/${chat.id}/attachments/not-a-uuid?name=nope`, {
       method: "PUT", body: "nope",
     });
@@ -106,6 +119,8 @@ test("raw JSON uploads publish atomically through the durable chat route", async
 
     const deleted = await fetch(`${origin}/v0/chats/${chat.id}/attachments/${attachmentId}`, { method: "DELETE" });
     assert.equal(deleted.status, 204);
+    const imageDeleted = await fetch(`${origin}/v0/chats/${chat.id}/attachments/${imageId}`, { method: "DELETE" });
+    assert.equal(imageDeleted.status, 204);
     const listed = await fetch(`${origin}/v0/chats/${chat.id}/attachments`).then((response) => response.json());
     assert.deepEqual(listed.attachments, []);
   } finally {

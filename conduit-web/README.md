@@ -40,6 +40,14 @@ contain validated relative paths rather than file bytes. Generation IDs gate
 late output after stop; Pi receives public `abort` and `fork` RPC commands, and
 a hung abort terminates the process after 250 ms for clean resumption.
 
+The interface keeps uploaded Attachment cards above the bounded native
+textarea until send, then renders the same cards beneath their user message.
+Persisted image cards use the attachment preview route, including when restored
+for edit. The compact composer model menu remains separate from Settings'
+searchable, grouped multi-model Combobox. Cmd/Ctrl+K opens the application
+Command palette; the composer slash Popover contains only `/attach`. A
+project-aware breadcrumb identifies where each chat belongs.
+
 Every Pi process receives:
 
 - `PI_CODING_AGENT_DIR=data/pi`;
@@ -56,7 +64,8 @@ when associating sessions with projects.
 - `GET /v0/capabilities`
 - `POST /v0/chats`
 - `GET|DELETE /v0/chats/:id` (draft cleanup requires `?ifEmpty=true`)
-- `PUT|GET /v0/chats/:id/attachments/:attachment-id` uploads raw bytes or downloads
+- `PUT|GET /v0/chats/:id/attachments/:attachment-id` uploads raw bytes or downloads;
+  `?preview=1` serves supported raster images inline
 - `GET /v0/chats/:id/attachments`
 - `DELETE /v0/chats/:id/attachments/:attachment-id`
 - `GET|POST /v0/projects`

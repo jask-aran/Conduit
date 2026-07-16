@@ -134,12 +134,15 @@ Shadcn lowers primitive interaction risk but does not replace application tests.
 Test Conduit-specific state transitions, RPC behavior, data mapping, responsive
 composition, and regressions introduced by customization.
 
-Keep the composer a bounded native textarea. Use the plain shared command
-registry for both the lazy Shadcn Command dialog and the textarea-focused slash
-Popover; do not route slash keystrokes through cmdk. Settings remains a centered
-Dialog with a visible vertical Tabs rail at narrow widths. Use the existing
-Attachment composition with Popover, ScrollArea, and Progress, while keeping raw
-upload queueing and the drag-enter counter as shallow application logic.
+Keep the composer a bounded native textarea. Keep palette commands and composer
+commands as explicit registries: the lazy Shadcn Command dialog owns persistent
+application actions, while the textarea-focused slash Popover exposes only
+`/attach` and does not route textarea keystrokes through cmdk. Keep the compact
+composer model menu; Settings owns the searchable, grouped multi-model
+Combobox and remains a centered Dialog with a visible vertical Tabs rail at
+narrow widths. Render the same Attachment composition above the composer while
+pending and beneath the user message after send. Keep raw upload queueing and
+the drag-enter counter as shallow application logic.
 
 ## Build, Test, and Development Commands
 
