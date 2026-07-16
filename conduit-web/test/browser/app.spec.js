@@ -1,5 +1,4 @@
 import { expect, test } from "@playwright/test";
-import { createMarkdownRenderer } from "../../src/markdown-renderer.js";
 
 const projects = [{
   id: "project_chat",
@@ -275,12 +274,11 @@ test("renders persisted assistant Markdown with safe interactive controls", asyn
     "[Unsafe link](javascript:window.__markdownXss=true)",
     "[Unsupported protocol](irc://example.com/channel)",
   ].join("\n");
-  const html = await (await createMarkdownRenderer())(markdown);
   await page.route("**/v0/sessions/session_existing", async (route) => {
     await route.fulfill({ json: {
       messages: [
         { id: "message_existing", role: "user", content: "Show Markdown" },
-        { id: "message_markdown", role: "assistant", content: markdown, html },
+        { id: "message_markdown", role: "assistant", content: markdown },
       ],
       tools: [],
     } });
@@ -290,22 +288,21 @@ test("renders persisted assistant Markdown with safe interactive controls", asyn
   await page.getByRole("button", { name: "Existing chat" }).click();
 
   await expect(page.getByRole("heading", { name: "Markdown sample" })).toBeVisible();
-  await expect(page.locator(".server-markdown strong")).toHaveText("strong");
-  await expect(page.locator(".server-markdown ul li")).toHaveCount(2);
-  await expect(page.locator(".server-markdown blockquote")).toContainText("useful quotation");
-  await expect(page.locator(".server-markdown table")).toContainText("Tables");
-  await expect(page.locator(".server-markdown p > code")).toHaveText("inline code");
+  await expect(page.locator('[data-streamdown="strong"]')).toHaveText("strong");
+  await expect(page.locator(".chat-markdown ul li")).toHaveCount(2);
+  await expect(page.locator(".chat-markdown blockquote")).toContainText("useful quotation");
+  await expect(page.locator(".chat-markdown table")).toContainText("Tables");
+  await expect(page.locator(".chat-markdown p > code")).toHaveText("inline code");
   await expect(page.locator(".katex")).toHaveCount(2);
   await expect(page.locator(".katex-display")).toHaveCount(1);
   await expect(page.getByRole("button", { name: "Copy code" })).toBeVisible();
-  await expect(page.locator(".server-markdown pre")).toHaveCSS("background-color", "rgb(36, 41, 46)");
+  await expect(page.locator('[data-language="javascript"] pre')).toBeVisible();
   await expect(page.locator("img")).toHaveCount(0);
-  await expect(page.getByText("Tracking image", { exact: true })).toBeVisible();
   await expect(page.locator('a[href^="javascript:"]')).toHaveCount(0);
   await expect(page.locator('a[href^="irc:"]')).toHaveCount(0);
   expect(await page.evaluate(() => window.__markdownXss)).toBeUndefined();
 
-  await page.getByRole("link", { name: "External documentation" }).click();
+  await page.getByRole("button", { name: "External documentation" }).click();
   const dialog = page.getByRole("alertdialog", { name: "Open external link?" });
   await expect(dialog).toContainText("https://example.com/docs");
   await dialog.getByRole("button", { name: "Cancel" }).click();
@@ -335,20 +332,24 @@ test("repairs unfinished Markdown while an assistant response streams", async ({
         if (request.type !== "prompt") return;
         setTimeout(() => {
           this.onmessage?.({ data: JSON.stringify({
+            type: "generation_started",
+            generationId: "g1",
+          }) });
+          this.onmessage?.({ data: JSON.stringify({
             type: "message_start",
+            generationId: "g1",
             message: { role: "assistant" },
           }) });
           this.onmessage?.({ data: JSON.stringify({
-            type: "assistant_stream_block",
-            block: 0,
-            content: "## Live response\n\n",
-            html: "<h2>Live response</h2>",
-            tail: "**still streaming",
+            type: "assistant_stream_delta",
+            generationId: "g1",
+            delta: "## Live response\n\n**still streaming**\n\n```javascript\nconst answer = 42;\n```\n\n$$\nE = mc^2\n$$",
           }) });
-          this.onmessage?.({ data: JSON.stringify({
-            type: "assistant_stream_tail",
-            content: "**still streaming",
-          }) });
+          setTimeout(() => this.onmessage?.({ data: JSON.stringify({
+            type: "assistant_stream_final",
+            generationId: "g1",
+            content: "## Live response\n\n**still streaming**\n\n```javascript\nconst answer = 42;\n```\n\n$$\nE = mc^2\n$$",
+          }) }), 100);
         }, 0);
       }
     }
@@ -363,8 +364,11 @@ test("repairs unfinished Markdown while an assistant response streams", async ({
   await page.getByRole("button", { name: "Send message" }).click();
 
   await expect(page.getByRole("heading", { name: "Live response" })).toBeVisible();
-  await expect(page.locator('[data-streamdown="strong"]')).toHaveText("still streaming");
-  await expect(page.locator(".chat-markdown:not(.server-markdown)")).toContainText("still streaming");
+  await expect(page.locator(".chat-markdown")).toContainText("still streaming");
+  await expect(page.locator('[data-language="javascript"]')).toBeVisible();
+  await expect(page.locator('[data-language="javascript"] button[aria-label="Copy code"]')).toBeVisible();
+  await expect(page.locator(".katex-display")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Copy Markdown" })).toBeVisible();
 });
 
 test("hides transient new chats and provides complete right-click menus", async ({ page }, testInfo) => {
@@ -669,11 +673,11 @@ test("stop freezes the visible response and rejects late generation deltas", asy
         if (command.type === "prompt") queueMicrotask(() => {
           this.onmessage?.({ data: JSON.stringify({ type: "generation_started", generationId: "g1" }) });
           this.onmessage?.({ data: JSON.stringify({ type: "message_start", generationId: "g1", message: { role: "assistant" } }) });
-          this.onmessage?.({ data: JSON.stringify({ type: "assistant_stream_block", generationId: "g1", block: 0, content: "Visible ", html: "<p>Visible</p>", tail: "partial" }) });
+          this.onmessage?.({ data: JSON.stringify({ type: "assistant_stream_delta", generationId: "g1", delta: "Visible partial" }) });
         });
         if (command.type === "stop_generation") {
           window.__stopCommand = command;
-          this.onmessage?.({ data: JSON.stringify({ type: "assistant_stream_tail", generationId: "g1", content: "LATE OUTPUT" }) });
+          this.onmessage?.({ data: JSON.stringify({ type: "assistant_stream_delta", generationId: "g1", delta: "LATE OUTPUT" }) });
           setTimeout(() => this.onmessage?.({ data: JSON.stringify({ type: "generation_stopped", generationId: "g1", status: "stopped", processTerminated: false }) }), 2_000);
         }
       }
@@ -758,7 +762,7 @@ test("message actions copy source, edit from a Pi entry, and regenerate via fork
         { id: "file-one", name: "source-notes.md", type: "text/markdown", size: 128 },
         { id: "image-one", name: "reference.png", type: "image/png", size: 256 },
       ] },
-      { id: "entry-assistant", role: "assistant", content: "**Source Markdown**", html: "<p><strong>Source Markdown</strong></p>" },
+      { id: "entry-assistant", role: "assistant", content: "**Source Markdown**" },
     ], tools: [], page: { before: null },
   } }));
   await page.goto("/");

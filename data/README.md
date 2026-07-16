@@ -10,10 +10,11 @@ sessions.json     atomic, rebuildable session metadata registry
 ```
 
 `chat/files/` is the working directory for unstructured chats. Each direct
-child is a named project and contains only files scoped to that project. Pi
-associates sessions with these working directories and stores their JSONL under
-`pi/sessions/`; no `.pi` or `.conduit` compatibility directories are generated
-inside working directories.
+child is a named project containing that project's files plus a Conduit-owned
+`.conduit/chats/<chat-id>/` tree holding per-chat `attachments/` and a
+transient `.partial/` upload directory. Pi associates sessions with these
+working directories and stores their JSONL under `pi/sessions/`; no `.pi`
+directories or Pi configuration are generated inside working directories.
 
 `sessions.json` contains no transcript entries. It exists so listing chats does
 not require reading every JSONL and is reconciled against native session files

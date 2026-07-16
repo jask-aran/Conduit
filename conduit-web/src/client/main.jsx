@@ -14,6 +14,7 @@ import { AppSidebar } from "./app-sidebar";
 import { ChatComposer } from "./chat-composer";
 import { ChatDropOverlay, useChatDrop } from "./chat-drop-overlay";
 import { ChatThread } from "./chat-thread";
+import { createLiveStreamStore } from "./live-stream-store";
 import { useAttachments } from "./use-attachments";
 import { useModelSettings } from "./use-model-settings";
 import "./styles.css";
@@ -92,8 +93,10 @@ function App() {
   const closedGenerations = useRef(new Set());
   const stopPending = useRef(false);
   const continuation = useRef(null);
+  const liveStream = useRef(null);
   const selectedIdRef = useRef(null);
   selectedIdRef.current = selectedId;
+  if (!liveStream.current) liveStream.current = createLiveStreamStore();
 
   const showError = useCallback((message) => setError(message), []);
   useEffect(() => {
@@ -138,6 +141,9 @@ function App() {
           const generation = event.session?.generation;
           if (generation?.id && !generation.closed) currentGeneration.current = generation.id;
           if (event.session?.active) list(event.events).forEach((item) => consume(item, record.id));
+          if (event.stream?.generationId && !event.session?.generation?.closed) {
+            liveStream.current.setSnapshot(event.stream.generationId, event.stream.content);
+          }
         } else consume(event, record.id);
       } catch (caught) { setError(caught.message); }
     };
@@ -212,19 +218,20 @@ function App() {
   function consume(event, liveId = "") {
     if (event.generationId && closedGenerations.current.has(event.generationId)
       && !["generation_stopped", "generation_started"].includes(event.type)) return;
-    if (stopPending.current && ["message_start", "assistant_stream_block", "assistant_stream_tail", "assistant_stream_final"].includes(event.type)) return;
+    if (stopPending.current && ["message_start", "assistant_stream_delta", "assistant_stream_final"].includes(event.type)) return;
     if (event.type === "generation_started") {
       currentGeneration.current = event.generationId;
       stopPending.current = false;
       setStopping(false);
       setStreaming(true);
+      liveStream.current.start(event.generationId);
       if (event.continuation) {
+        continuation.current = true;
         setMessages((current) => {
           const copy = [...current];
           const index = findLastMessage(copy, (message) => message.role === "assistant" && message.stopped);
           if (index >= 0) {
-            continuation.current = { base: copy[index].content || "", committed: "" };
-            copy[index] = { ...copy[index], html: null, streamBlocks: [], tail: copy[index].content || "", stopped: false, status: null, continuing: true };
+            copy[index] = { ...copy[index], html: null, stopped: false, status: null, continuing: true };
           }
           return copy;
         });
@@ -249,44 +256,23 @@ function App() {
       if (event.chat?.id === selectedIdRef.current) loadDetail(event.chat.id).catch(() => {});
     }
     if (event.type === "message_start" && event.message?.role === "assistant" && !continuation.current) {
-      setMessages((current) => [...current, { id: `live_${Date.now()}`, role: "assistant", content: "", streamBlocks: [], tail: "", timestamp: new Date().toISOString() }]);
+      setMessages((current) => [...current, { id: `live_${Date.now()}`, role: "assistant", content: "", timestamp: new Date().toISOString() }]);
     }
-    if (event.type === "assistant_stream_block") {
-      setMessages((current) => {
-        const copy = [...current];
-        const index = findLastMessage(copy, (message) => message.role === "assistant");
-        if (index < 0) return copy;
-        if (continuation.current) {
-          continuation.current.committed += event.content || "";
-          copy[index] = { ...copy[index], streamBlocks: [], tail: continuation.current.base + continuation.current.committed + (event.tail || "") };
-        } else copy[index] = {
-          ...copy[index],
-          streamBlocks: [...list(copy[index].streamBlocks), { block: event.block, content: event.content, html: event.html }],
-          tail: event.tail || "",
-        };
-        return copy;
-      });
-    }
-    if (event.type === "assistant_stream_tail") {
-      setMessages((current) => {
-        const copy = [...current];
-        const index = findLastMessage(copy, (message) => message.role === "assistant");
-        if (index >= 0) copy[index] = continuation.current
-          ? { ...copy[index], tail: continuation.current.base + continuation.current.committed + (event.content || "") }
-          : { ...copy[index], tail: event.content };
-        return copy;
-      });
-    }
+    if (event.type === "assistant_stream_delta") liveStream.current.append(event.generationId, event.delta || "");
     if (event.type === "assistant_stream_final") {
+      liveStream.current.flush();
       continuation.current = null;
+      setStreaming(false);
+      setStopping(false);
       setMessages((current) => {
         const copy = [...current];
         const index = findLastMessage(copy, (message) => message.role === "assistant");
-        const final = { content: event.content, html: event.html, streamBlocks: [], tail: "", stopped: false, continuing: false };
+        const final = { content: event.content, stopped: false, continuing: false };
         if (index >= 0) copy[index] = { ...copy[index], ...final };
         else copy.push({ id: `end_${Date.now()}`, role: "assistant", ...final });
         return copy;
       });
+      liveStream.current.clear();
     }
     if (event.type === "message_end" && event.message?.role === "user") refresh().catch(() => {});
     if (event.type === "tool_execution_start") setTools((current) => {
@@ -310,6 +296,7 @@ function App() {
   function resetChatState() {
     ws.current?.close(); setLive(null); setMessages([]); setTools([]); setPageBefore(null);
     setStreaming(false); setStopping(false); setDraft(""); setEditEntryId(null); setError("");
+    liveStream.current.clear();
     currentGeneration.current = null; stopPending.current = false; continuation.current = null;
   }
 
@@ -342,6 +329,7 @@ function App() {
     if (!streaming) return;
     const generationId = currentGeneration.current;
     if (generationId) closedGenerations.current.add(generationId);
+    liveStream.current.flush();
     stopPending.current = true;
     setStopping(true);
     setStreaming(false);
@@ -349,9 +337,8 @@ function App() {
       const copy = [...current];
       const index = findLastMessage(copy, (message) => message.role === "assistant");
       if (index >= 0) {
-        const livePartial = `${list(copy[index].streamBlocks).map((block) => block.content).join("")}${copy[index].tail || ""}`;
-        const partial = livePartial || copy[index].content || "";
-        copy[index] = { ...copy[index], content: partial, html: null, streamBlocks: [], tail: "", stopped: true, status: "stopping" };
+        const partial = `${copy[index].content || ""}${liveStream.current.getSnapshot().content}`;
+        copy[index] = { ...copy[index], content: partial, stopped: true, status: "stopping" };
       }
       return copy;
     });
@@ -556,6 +543,7 @@ function App() {
           messages={messages}
           tools={tools}
           streaming={streaming}
+          liveStore={liveStream.current}
           sessionId={selectedId}
           hasOlder={Boolean(pageBefore)}
           loadingOlder={loadingOlder}
