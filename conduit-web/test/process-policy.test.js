@@ -84,6 +84,54 @@ test("create reuses the same chat and enforces max live processes", async () => 
   assert.equal(manager.list().length, 2);
 });
 
+test("starting processes are not reclaimable", async () => {
+  const { manager, children } = makeManager({ maxLiveProcesses: 1 });
+  const starting = manager.create({ project: project("boot"), chatId: "chat-boot" });
+  assert.equal(starting.status, "starting");
+  assert.equal(manager.isBusy(starting), true);
+  assert.equal(manager.isReclaimable(starting), false);
+  await assert.rejects(
+    () => manager.ensureCapacity({ excludeChatId: "chat-other" }),
+    (error) => error.code === "live_process_limit",
+  );
+  children[0].emit("spawn");
+  starting.clients.clear();
+  starting.active = false;
+  starting.activity = "idle";
+  assert.equal(manager.isReclaimable(starting), true);
+});
+
+test("createWithCapacity serializes concurrent creates under the cap", async () => {
+  const { manager, children } = makeManager({ maxLiveProcesses: 1 });
+  const results = await Promise.allSettled([
+    manager.createWithCapacity({ project: project("a"), chatId: "chat-a" }),
+    manager.createWithCapacity({ project: project("b"), chatId: "chat-b" }),
+  ]);
+  const fulfilled = results.filter((result) => result.status === "fulfilled");
+  const rejected = results.filter((result) => result.status === "rejected");
+  // First create wins; second hits the cap while the first is still starting (non-reclaimable).
+  assert.equal(fulfilled.length, 1);
+  assert.equal(rejected.length, 1);
+  assert.equal(rejected[0].reason.code, "live_process_limit");
+  assert.equal(manager.list().length, 1);
+  children[0]?.emit("spawn");
+});
+
+test("get_state does not settle an open generation", () => {
+  const { manager, children } = makeManager({ maxLiveProcesses: 2 });
+  const record = manager.create({ project: project("g"), chatId: "chat-g" });
+  children[0].emit("spawn");
+  record.generation = { id: "g1", closed: false, settled: false };
+  record.active = true;
+  manager.ingestResponseData(record, {
+    command: "get_state",
+    data: { isStreaming: false, isCompacting: false },
+  });
+  assert.equal(record.active, false);
+  assert.equal(record.generation.settled, false);
+  assert.equal(record.activity, "working");
+});
+
 test("reaper stops unattached idle processes after the TTL", async () => {
   const { manager, children, nowValue } = makeManager({ maxLiveProcesses: 4, idleProcessTtlMs: 120_000 });
   const record = manager.create({ project: project("idle"), chatId: "chat-idle" });

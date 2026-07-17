@@ -414,8 +414,7 @@ app.post("/v0/live-sessions", async (request, response, next) => {
     if (requestedProject && ![context.project.id, context.project.slug].includes(requestedProject)) {
       return response.status(409).json({ error: "session_project_mismatch" });
     }
-    await manager.ensureCapacity({ excludeChatId: context.chat.id });
-    const live = manager.create({
+    const live = await manager.createWithCapacity({
       project: context.project,
       chatId: context.chat.id,
       sessionFile: context.chat.piSessionFile,
@@ -562,7 +561,10 @@ server.on("upgrade", (request, socket, head) => {
     const record = manager.get(match[1]);
     manager.attach(match[1], ws);
     const turnStart = record.events.findLastIndex((event) => event.type === "agent_start");
-    const pendingEvents = record.active && turnStart >= 0
+    const generationOpen = record.generation
+      && !record.generation.closed
+      && !record.generation.settled;
+    const pendingEvents = generationOpen && turnStart >= 0
       ? record.events.slice(turnStart).filter((event) => event.type !== "assistant_stream_delta")
       : [];
     const stream = record.stream

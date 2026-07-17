@@ -26,8 +26,6 @@ export function loadConfig(env = process.env) {
     sessionRegistryFile: absolute(env.CONDUIT_SESSION_REGISTRY_FILE || path.join(repositoryRoot, "data/sessions.json")),
     piAgentDir: absolute(env.CONDUIT_PI_AGENT_DIR || path.join(repositoryRoot, "data/pi")),
     runtimeSettingsFile: absolute(env.CONDUIT_RUNTIME_SETTINGS_FILE || path.join(dataRoot, "runtime.json")),
-    maxLiveProcesses: Number(env.CONDUIT_MAX_LIVE_PROCESSES || 4),
-    idleProcessTtlMs: Number(env.CONDUIT_IDLE_PROCESS_TTL_MS || 120_000),
     piTemplate,
     // Experimental and intentionally removable until continuation quality is proven.
     enablePartialContinue: env.ENABLE_PARTIAL_CONTINUE !== "false",

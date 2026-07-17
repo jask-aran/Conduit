@@ -195,11 +195,13 @@ function App() {
     if (requests) setHostUiRequests(list(requests));
     if (event.session?.compacting != null) setCompacting(Boolean(event.session.compacting));
     if (event.session?.retry) setRetry(event.session.retry);
-    if (event.session?.active && event.session?.generation && !event.session.generation.closed) {
-      setGeneration("active");
-    } else if (event.session?.stopping) {
+    const gen = event.session?.generation;
+    const turnOpen = Boolean(gen && !gen.closed && !gen.settled);
+    if (event.session?.stopping) {
       setGeneration("stopping");
-    } else if (!event.session?.active) {
+    } else if (turnOpen || event.session?.active) {
+      setGeneration("active");
+    } else {
       setGeneration((current) => (current === "stopping" ? current : "idle"));
     }
   }
@@ -215,7 +217,9 @@ function App() {
           const generationInfo = event.session?.generation;
           if (generationInfo?.id && !generationInfo.closed) currentGeneration.current = generationInfo.id;
           applySnapshotExtras(event);
-          if (event.session?.active) list(event.events).forEach((item) => consume(item, record.id));
+          const snapGen = event.session?.generation;
+          const turnOpen = Boolean(snapGen && !snapGen.closed && !snapGen.settled);
+          if (turnOpen || event.session?.active) list(event.events).forEach((item) => consume(item, record.id));
           if (event.stream?.generationId && !event.session?.generation?.closed) {
             liveStream.current.setSnapshot(event.stream.generationId, event.stream.content);
           }
@@ -369,13 +373,17 @@ function App() {
       if (event.session.hostUiRequests) setHostUiRequests(list(event.session.hostUiRequests));
       if (event.session.compacting != null) setCompacting(Boolean(event.session.compacting));
       if (event.session.retry !== undefined) setRetry(event.session.retry);
-      // Prefer Conduit generation lifecycle. Clear to idle when the process reports
-      // settled/idle; never re-open active from a stale runtime_state alone.
+      // Prefer Conduit generation lifecycle. Clear only when the generation is
+      // missing/closed/settled — not when active is briefly false mid-turn.
       if (event.session.stopping) setGeneration("stopping");
-      else if (event.session.activity === "idle" || event.session.active === false) {
-        if (!stopPending.current) {
+      else {
+        const gen = event.session.generation;
+        const turnOpen = Boolean(gen && !gen.closed && !gen.settled);
+        if (!turnOpen && !stopPending.current) {
           setGeneration((current) => (current === "stopping" ? current : "idle"));
           resetLiveUiFlags();
+        } else if (turnOpen) {
+          setGeneration((current) => (current === "stopping" ? current : "active"));
         }
       }
     }
@@ -718,6 +726,7 @@ function App() {
     setHostUiRequests((current) => current.filter((item) => item.id !== response.id));
   }
 
+  /** Local UI only: pull queue text into the draft. Pi has no clear_queue RPC and may still deliver. */
   function clearQueue() {
     const restored = [...(queue.steering || []), ...(queue.followUp || [])].join("\n");
     setQueue({ steering: [], followUp: [] });

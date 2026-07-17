@@ -60,6 +60,7 @@ export class PiManager extends EventEmitter {
     this.now = now;
     this.maxLiveProcesses = Math.max(1, Math.trunc(Number(maxLiveProcesses) || 4));
     this.idleProcessTtlMs = Math.max(30_000, Math.trunc(Number(idleProcessTtlMs) || 120_000));
+    this.capacityQueue = Promise.resolve();
     this.reaperTimer = null;
     if (reaperIntervalMs > 0) {
       this.reaperTimer = setInterval(() => {
@@ -67,6 +68,13 @@ export class PiManager extends EventEmitter {
       }, reaperIntervalMs);
       this.reaperTimer.unref?.();
     }
+  }
+
+  /** Serialize capacity checks and creates so concurrent requests cannot overshoot the cap. */
+  runExclusive(work) {
+    const run = this.capacityQueue.then(work, work);
+    this.capacityQueue = run.then(() => {}, () => {});
+    return run;
   }
 
   configure({ maxLiveProcesses, idleProcessTtlMs } = {}) {
@@ -89,15 +97,18 @@ export class PiManager extends EventEmitter {
 
   isBusy(record) {
     if (!record) return false;
+    // Bootstrapping is not idle: never reclaim a process before it is running.
+    if (record.status === "starting") return true;
     if (record.active || record.stopping || record.compacting || record.retrying) return true;
     if ((record.hostUiRequests || []).length) return true;
     if (record.generation && !record.generation.closed && !record.generation.settled) return true;
     const activity = record.activity || deriveCoarseActivity(record);
-    return !["idle", "starting", "failed"].includes(activity);
+    return !["idle", "failed"].includes(activity);
   }
 
   isReclaimable(record, { ignoreClients = false } = {}) {
-    if (!record || !["starting", "running"].includes(record.status)) return false;
+    // Only fully started idle processes are reclaimable; starting is busy.
+    if (!record || record.status !== "running") return false;
     if (this.isBusy(record)) return false;
     if (!ignoreClients && record.clients.size > 0) return false;
     return true;
@@ -116,6 +127,10 @@ export class PiManager extends EventEmitter {
   }
 
   async ensureCapacity({ excludeChatId = null } = {}) {
+    return this.runExclusive(() => this.ensureCapacityUnlocked({ excludeChatId }));
+  }
+
+  async ensureCapacityUnlocked({ excludeChatId = null } = {}) {
     while (this.liveRecords().filter((record) => record.chatId !== excludeChatId).length >= this.maxLiveProcesses) {
       const victim = this.reclaimCandidates({ excludeChatId })[0];
       if (!victim) {
@@ -126,6 +141,14 @@ export class PiManager extends EventEmitter {
       }
       await this.stopAndWait(victim.id);
     }
+  }
+
+  /** Capacity check + create under one lock so concurrent POSTs cannot exceed the cap. */
+  async createWithCapacity(options = {}) {
+    return this.runExclusive(async () => {
+      await this.ensureCapacityUnlocked({ excludeChatId: options.chatId || null });
+      return this.create(options);
+    });
   }
 
   /** Trim down to maxLiveProcesses after a settings change (idle unattached first). */
@@ -373,11 +396,10 @@ export class PiManager extends EventEmitter {
       if (data.sessionFile) this.captureSession(record, { sessionFile: data.sessionFile, sessionId: data.sessionId });
       if (data.isCompacting != null) record.compacting = Boolean(data.isCompacting);
       // Assign isStreaming directly — never OR with prior active, or idle never sticks.
+      // Do not settle the generation from a polled snapshot: isStreaming can be false
+      // during willRetry gaps and before the first token after prompt().
       if (data.isStreaming != null && !record.stopping) {
         record.active = Boolean(data.isStreaming);
-        if (!record.active && record.generation && !record.generation.closed) {
-          record.generation.settled = true;
-        }
       }
       record.activity = deriveCoarseActivity(record);
       this.emit("process_changed", { record, reason: "state" });
