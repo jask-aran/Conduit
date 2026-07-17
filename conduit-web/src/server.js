@@ -14,6 +14,7 @@ import { AttachmentStore } from "./attachment-store.js";
 import { announcedAttachmentIds, serializeAttachmentEnvelope } from "./attachment-envelope.js";
 import { CONTINUE_PROMPT } from "./continuation.js";
 import { RuntimeHub } from "./runtime-hub.js";
+import { defaultsFromEnv, RuntimeSettingsStore } from "./runtime-settings.js";
 
 const config = loadConfig();
 const projects = new ProjectStore(config);
@@ -21,10 +22,14 @@ await projects.initialize();
 const registry = new ChatStore(config.sessionRegistryFile);
 await registry.initialize(await projects.list());
 const attachments = new AttachmentStore(registry);
+const runtimeSettings = new RuntimeSettingsStore(config.runtimeSettingsFile, defaultsFromEnv(process.env));
+await runtimeSettings.load();
 const manager = new PiManager({
   command: config.piCommand,
   agentDir: config.piAgentDir,
   template: config.piTemplate,
+  maxLiveProcesses: runtimeSettings.get().maxLiveProcesses,
+  idleProcessTtlMs: runtimeSettings.get().idleProcessTtlMs,
 });
 const runtimeHub = new RuntimeHub({ listViews: () => manager.list() });
 manager.on("process_changed", ({ record, reason }) => {
@@ -274,9 +279,10 @@ app.get("/v0/chats/:chatId/attachments/:attachmentId", async (request, response,
     if (!attachment) return response.status(404).json({ error: "attachment_not_found" });
     const preview = request.query.preview === "1" && /^image\/(png|jpeg|gif|webp)$/.test(attachment.type);
     response.setHeader("Content-Type", preview ? attachment.type : "application/octet-stream");
+    response.setHeader("X-Content-Type-Options", "nosniff");
+    response.setHeader("Cache-Control", "private, no-cache");
     const downloadName = encodeURIComponent(attachment.name).replace(/[!'()*]/g, (character) => `%${character.charCodeAt(0).toString(16).toUpperCase()}`);
     response.setHeader("Content-Disposition", `${preview ? "inline" : "attachment"}; filename*=UTF-8''${downloadName}`);
-    response.setHeader("X-Content-Type-Options", "nosniff");
     response.setHeader("Content-Length", attachment.size);
     const stream = attachment.stream();
     stream.once("error", next);
@@ -385,6 +391,20 @@ app.delete("/v0/sessions/:id", async (request, response, next) => {
 });
 
 app.get("/v0/live-sessions", (_request, response) => response.json({ sessions: manager.list() }));
+app.get("/v0/runtime/settings", (_request, response) => {
+  response.json({ ...runtimeSettings.get(), ...manager.policy() });
+});
+app.patch("/v0/runtime/settings", async (request, response, next) => {
+  try {
+    const saved = await runtimeSettings.save({
+      maxLiveProcesses: request.body?.maxLiveProcesses,
+      idleProcessTtlMs: request.body?.idleProcessTtlMs,
+    });
+    manager.configure(saved);
+    await manager.enforceLimit();
+    response.json({ ...saved, ...manager.policy() });
+  } catch (error) { next(error); }
+});
 app.post("/v0/live-sessions", async (request, response, next) => {
   try {
     const chatId = request.body?.chatId || request.body?.resumeSessionId;
@@ -394,6 +414,7 @@ app.post("/v0/live-sessions", async (request, response, next) => {
     if (requestedProject && ![context.project.id, context.project.slug].includes(requestedProject)) {
       return response.status(409).json({ error: "session_project_mismatch" });
     }
+    await manager.ensureCapacity({ excludeChatId: context.chat.id });
     const live = manager.create({
       project: context.project,
       chatId: context.chat.id,
@@ -440,8 +461,9 @@ app.get("*", (request, response, next) => {
 });
 app.use((error, _request, response, _next) => {
   console.error(error);
-  let status = 500;
+  let status = error.status || 500;
   if (error.code === "reserved_project") status = 409;
+  if (error.code === "live_process_limit") status = 429;
   if (error.code === "attachment_not_found") status = 404;
   if (error.code === "invalid_attachment_id"
     || ["enabled_models_required", "invalid_enabled_model", "invalid_default_model"].includes(error.code)

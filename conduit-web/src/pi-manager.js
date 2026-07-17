@@ -38,7 +38,16 @@ function emptyContextUsage() {
 }
 
 export class PiManager extends EventEmitter {
-  constructor({ command = "pi", agentDir, template, spawnImpl = spawn } = {}) {
+  constructor({
+    command = "pi",
+    agentDir,
+    template,
+    spawnImpl = spawn,
+    maxLiveProcesses = 4,
+    idleProcessTtlMs = 120_000,
+    reaperIntervalMs = 15_000,
+    now = () => Date.now(),
+  } = {}) {
     super();
     if (!agentDir) throw new Error("PiManager requires an isolated agent directory");
     this.command = command;
@@ -48,13 +57,110 @@ export class PiManager extends EventEmitter {
     this.processes = new Map();
     this.bySessionFile = new Map();
     this.requestSequence = 0;
+    this.now = now;
+    this.maxLiveProcesses = Math.max(1, Math.trunc(Number(maxLiveProcesses) || 4));
+    this.idleProcessTtlMs = Math.max(30_000, Math.trunc(Number(idleProcessTtlMs) || 120_000));
+    this.reaperTimer = null;
+    if (reaperIntervalMs > 0) {
+      this.reaperTimer = setInterval(() => {
+        this.reapIdleProcesses().catch(() => {});
+      }, reaperIntervalMs);
+      this.reaperTimer.unref?.();
+    }
+  }
+
+  configure({ maxLiveProcesses, idleProcessTtlMs } = {}) {
+    if (maxLiveProcesses != null) this.maxLiveProcesses = Math.max(1, Math.trunc(Number(maxLiveProcesses) || 1));
+    if (idleProcessTtlMs != null) this.idleProcessTtlMs = Math.max(30_000, Math.trunc(Number(idleProcessTtlMs) || 30_000));
+    return this.policy();
+  }
+
+  policy() {
+    return {
+      maxLiveProcesses: this.maxLiveProcesses,
+      idleProcessTtlMs: this.idleProcessTtlMs,
+      liveCount: this.liveRecords().length,
+    };
+  }
+
+  liveRecords() {
+    return [...this.processes.values()].filter((record) => ["starting", "running"].includes(record.status));
+  }
+
+  isBusy(record) {
+    if (!record) return false;
+    if (record.active || record.stopping || record.compacting || record.retrying) return true;
+    if ((record.hostUiRequests || []).length) return true;
+    if (record.generation && !record.generation.closed && !record.generation.settled) return true;
+    const activity = record.activity || deriveCoarseActivity(record);
+    return !["idle", "starting", "failed"].includes(activity);
+  }
+
+  isReclaimable(record, { ignoreClients = false } = {}) {
+    if (!record || !["starting", "running"].includes(record.status)) return false;
+    if (this.isBusy(record)) return false;
+    if (!ignoreClients && record.clients.size > 0) return false;
+    return true;
+  }
+
+  touchActivity(record) {
+    if (!record) return;
+    record.lastActivityAt = this.now();
+    record.updatedAt = new Date(record.lastActivityAt).toISOString();
+  }
+
+  reclaimCandidates({ excludeChatId = null } = {}) {
+    return this.liveRecords()
+      .filter((record) => record.chatId !== excludeChatId && this.isReclaimable(record))
+      .sort((left, right) => (left.lastClientAt || left.lastActivityAt || 0) - (right.lastClientAt || right.lastActivityAt || 0));
+  }
+
+  async ensureCapacity({ excludeChatId = null } = {}) {
+    while (this.liveRecords().filter((record) => record.chatId !== excludeChatId).length >= this.maxLiveProcesses) {
+      const victim = this.reclaimCandidates({ excludeChatId })[0];
+      if (!victim) {
+        const error = new Error(`Too many live Pi processes (max ${this.maxLiveProcesses}). Wait for a chat to finish or free an idle agent.`);
+        error.code = "live_process_limit";
+        error.status = 429;
+        throw error;
+      }
+      await this.stopAndWait(victim.id);
+    }
+  }
+
+  /** Trim down to maxLiveProcesses after a settings change (idle unattached first). */
+  async enforceLimit() {
+    let stopped = 0;
+    while (this.liveRecords().length > this.maxLiveProcesses) {
+      const victim = this.reclaimCandidates()[0];
+      if (!victim) break;
+      await this.stopAndWait(victim.id);
+      stopped += 1;
+    }
+    return stopped;
+  }
+
+  async reapIdleProcesses() {
+    const cutoff = this.now() - this.idleProcessTtlMs;
+    const victims = this.liveRecords().filter((record) => {
+      if (!this.isReclaimable(record)) return false;
+      const lastClient = record.lastClientAt ?? record.createdAtMs ?? 0;
+      return lastClient <= cutoff;
+    });
+    for (const victim of victims) {
+      await this.stopAndWait(victim.id);
+    }
+    return victims.length;
   }
 
   create({ project, chatId = null, sessionFile = null, model = "", thinkingLevel = "", models }) {
     if (chatId) {
       const existing = [...this.processes.values()].find((record) =>
         record.chatId === chatId && ["starting", "running"].includes(record.status));
-      if (existing) return existing;
+      if (existing) {
+        this.touchActivity(existing);
+        return existing;
+      }
     }
     const resolvedFile = sessionFile ? path.resolve(sessionFile) : null;
     if (resolvedFile && this.bySessionFile.has(resolvedFile)) {
@@ -62,11 +168,21 @@ export class PiManager extends EventEmitter {
       const existing = this.processes.get(existingId);
       if (existing && ["starting", "running"].includes(existing.status)) {
         if (chatId) existing.chatId = chatId;
+        this.touchActivity(existing);
         return existing;
       }
       this.bySessionFile.delete(resolvedFile);
       this.processes.delete(existingId);
     }
+
+    const liveOthers = this.liveRecords().filter((record) => record.chatId !== chatId);
+    if (liveOthers.length >= this.maxLiveProcesses) {
+      const error = new Error(`Too many live Pi processes (max ${this.maxLiveProcesses}). Wait for a chat to finish or free an idle agent.`);
+      error.code = "live_process_limit";
+      error.status = 429;
+      throw error;
+    }
+
     const id = resolvedFile
       ? crypto.createHash("sha256").update(resolvedFile).digest("hex").slice(0, 24)
       : crypto.randomUUID().replaceAll("-", "").slice(0, 24);
@@ -77,6 +193,7 @@ export class PiManager extends EventEmitter {
       stdio: ["pipe", "pipe", "pipe"],
       env: buildPiEnvironment(this.agentDir),
     });
+    const createdAtMs = this.now();
     const record = {
       id,
       chatId,
@@ -101,8 +218,11 @@ export class PiManager extends EventEmitter {
       contextUsage: emptyContextUsage(),
       clients: new Set(),
       events: [],
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
+      createdAt: new Date(createdAtMs).toISOString(),
+      createdAtMs,
+      updatedAt: new Date(createdAtMs).toISOString(),
+      lastActivityAt: createdAtMs,
+      lastClientAt: createdAtMs,
       stdoutBuffer: "",
       stream: null,
       generationSequence: 0,
@@ -121,6 +241,7 @@ export class PiManager extends EventEmitter {
     child.once("spawn", () => {
       record.status = "running";
       record.activity = deriveCoarseActivity(record);
+      this.touchActivity(record);
       this.publishState(record);
       this.send(record.id, { type: "get_state" });
     });
@@ -143,9 +264,10 @@ export class PiManager extends EventEmitter {
       if (record.sessionFile) this.bySessionFile.delete(record.sessionFile);
       for (const pending of record.pendingRequests.values()) pending.reject(new Error("Pi process exited before replying"));
       record.pendingRequests.clear();
+      if (record.statsTimer) clearTimeout(record.statsTimer);
       this.publish(record, { type: "runtime_exit", code, signal });
-      this.publishState(record);
       this.emit("process_removed", { id: record.id, chatId: record.chatId });
+      this.processes.delete(record.id);
     });
     this.emit("process_changed", { record, reason: "created" });
     return record;
@@ -478,11 +600,18 @@ export class PiManager extends EventEmitter {
     const record = this.processes.get(id);
     if (!record) throw new Error("Unknown live session");
     record.clients.add(socket);
-    socket.once("close", () => record.clients.delete(socket));
+    record.lastClientAt = this.now();
+    this.touchActivity(record);
+    socket.once("close", () => {
+      record.clients.delete(socket);
+      record.lastClientAt = this.now();
+      this.emit("process_changed", { record, reason: "client_detach" });
+    });
+    this.emit("process_changed", { record, reason: "client_attach" });
   }
 
   publish(record, event) {
-    record.updatedAt = new Date().toISOString();
+    this.touchActivity(record);
     record.events.push(event);
     if (record.events.length > 500) record.events.splice(0, record.events.length - 500);
     const payload = JSON.stringify(event);
@@ -528,7 +657,7 @@ export class PiManager extends EventEmitter {
   view(record) {
     const {
       child, clients, stdoutBuffer, events, stream, pendingRequests, generation, statsTimer,
-      cwd, sessionDir, template, ...safe
+      cwd, sessionDir, template, createdAtMs, lastActivityAt, lastClientAt, ...safe
     } = record;
     return {
       id: safe.id,
@@ -552,6 +681,8 @@ export class PiManager extends EventEmitter {
       contextUsage: safe.contextUsage || emptyContextUsage(),
       createdAt: safe.createdAt,
       updatedAt: safe.updatedAt,
+      lastClientAt: lastClientAt || null,
+      lastActivityAt: lastActivityAt || null,
       generation: generation
         ? { id: generation.id, closed: generation.closed, settled: Boolean(generation.settled) }
         : null,

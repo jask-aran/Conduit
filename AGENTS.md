@@ -102,7 +102,12 @@ until attachment ownership has an explicit product contract.
 The server owns live Pi processes. A browser disconnect must not terminate its
 process. Persisted JSONL is resumable after server restart, while live process
 records and buffered RPC events are in-memory state. Never allow two Pi
-processes to write the same JSONL simultaneously.
+processes to write the same JSONL simultaneously. Cap concurrent live processes
+(`CONDUIT_MAX_LIVE_PROCESSES` / Settings → Runtime, default 4): when creating a
+new process, stop the oldest idle process with no attached browsers first, or
+reject with `live_process_limit`. Reap unattached idle processes after
+`CONDUIT_IDLE_PROCESS_TTL_MS` (default 120s). Never auto-stop a process that is
+generating, compacting, retrying, waiting on host UI, or has clients attached.
 
 Assign each response a monotonically increasing opaque generation ID. Stop must
 close the client and server generation gates before waiting for Pi's public

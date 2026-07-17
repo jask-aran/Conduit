@@ -114,6 +114,7 @@ default; opening a persisted session restores its own model and thinking level.
 - `WS /v0/live-sessions/:id/stream`
 - `GET /v0/runtime` returns the current global live-process snapshot
 - `GET /v0/runtime/stream` (SSE) pushes snapshot-first global process updates
+- `GET /v0/runtime/settings` and `PATCH /v0/runtime/settings` read/update max live processes and idle reclaim TTL (`data/runtime.json`, env defaults)
 
 ## Global runtime channel
 
@@ -133,6 +134,13 @@ Coarse `activity` values: `idle`, `starting`, `working`, `waiting_for_user`,
 `retrying`, `compacting`, `stopping`, `failed`. Fine activity (thinking,
 tool name, responding) is derived on the selected-chat client from the
 per-chat WebSocket stream.
+
+Process residency: the server owns Pi processes. Browser disconnect does not
+stop them. Opening an active chat starts or reuses one process per chat. A
+configurable max live cap (default 4) reclaims the oldest idle unattached
+process when full; otherwise create returns 429. Unattached idle processes are
+stopped after the idle TTL (default 2 minutes). Transcripts remain on disk and
+resume on the next open.
 
 Context usage is synthesized by Conduit: after `agent_end` / `compaction_end`
 (and on selected-chat reconnect) the server calls Pi `get_session_stats` and
