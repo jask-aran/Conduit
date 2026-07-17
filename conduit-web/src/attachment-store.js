@@ -124,12 +124,34 @@ export class AttachmentStore {
   }
 
   async open(project, chatId, attachmentId) {
-    const item = await this.resolve(project, chatId, attachmentId);
+    let item = await this.resolve(project, chatId, attachmentId);
+    let ownerChatId = chatId;
+    // Envelope paths can outlive chat remaps; fall back to any chat under this project.
+    if (!item && project?.path && isAttachmentId(attachmentId)) {
+      const found = await this.findInProject(project, attachmentId);
+      if (found) {
+        item = found.item;
+        ownerChatId = found.chatId;
+      }
+    }
     if (!item) return null;
-    const file = path.join(this.directories(project, chatId).attachments, item.storedName);
+    const file = path.join(this.directories(project, ownerChatId).attachments, item.storedName);
     const stat = await fsp.lstat(file);
     if (!stat.isFile() || stat.isSymbolicLink()) return null;
-    return { ...item, file, stream: () => fs.createReadStream(file) };
+    return { ...item, chatId: ownerChatId, file, stream: () => fs.createReadStream(file) };
+  }
+
+  async findInProject(project, attachmentId) {
+    const root = path.join(project.path, ".conduit", "chats");
+    let chatDirs = [];
+    try { chatDirs = await fsp.readdir(root, { withFileTypes: true }); }
+    catch (error) { if (error.code === "ENOENT") return null; throw error; }
+    for (const entry of chatDirs) {
+      if (!entry.isDirectory()) continue;
+      const item = await this.resolve(project, entry.name, attachmentId);
+      if (item) return { chatId: entry.name, item };
+    }
+    return null;
   }
 }
 

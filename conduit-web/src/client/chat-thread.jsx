@@ -20,12 +20,21 @@ import {
 import { Marker, MarkerContent } from "@/components/ui/marker";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
+import { AgentActivityRow } from "./agent-activity";
+import { ReasoningBlock } from "./reasoning-block";
 import { ResponseActions } from "./response-actions";
 import { AttachmentCards } from "./attachment-tray";
+import { buildTimeline } from "./timeline-order";
 
 const ChatMarkdown = lazy(() => import("./chat-markdown").then((module) => ({
   default: module.ChatMarkdown,
 })));
+
+// Timeline rows participate in the message-scroller's pre-paint scroll math, so
+// they must lay out at their real height. Override the generated wrapper's lazy
+// [content-visibility:auto]/[contain-intrinsic-size] placeholders (tailwind-merge
+// keeps these later arbitrary-property values); pristine wrapper preserved.
+const eagerItem = "[content-visibility:visible] [contain-intrinsic-size:none]";
 
 const time = (value) => value
   ? new Date(value).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
@@ -47,29 +56,33 @@ function ToolCard({ tool, sessionId }) {
       .catch(() => setResult("Could not load tool output"))
       .finally(() => setLoading(false));
   }, [loading, open, result, sessionId, tool.id, tool.resultDeferred]);
+  const status = tool.error ? "Error" : tool.cancelled ? "Cancelled" : tool.done ? "Complete" : "Running";
   return <Collapsible open={open} onOpenChange={setOpen} className="tool-card">
     <CollapsibleTrigger asChild>
       <Button variant="outline" className="w-full justify-start">
-        {tool.done && <CheckIcon data-icon="inline-start" />}
+        {tool.done && !tool.error && <CheckIcon data-icon="inline-start" />}
+        {!tool.done && <Spinner data-icon="inline-start" className="size-3.5" />}
         <span className="truncate">{tool.name || "Tool"}</span>
-        <span className="ml-auto text-xs text-muted-foreground">{tool.done ? "Complete" : "Running"}</span>
+        <span className="ml-auto text-xs text-muted-foreground">{status}</span>
         {open ? <ChevronUpIcon data-icon="inline-end" /> : <ChevronDownIcon data-icon="inline-end" />}
       </Button>
     </CollapsibleTrigger>
     <CollapsibleContent>
-      <pre>{loading ? <span className="flex items-center gap-2"><Spinner />Loading…</span> : typeof result === "string" ? result : JSON.stringify(result || tool.args || {}, null, 2)}</pre>
+      <pre>{loading ? <span className="flex items-center gap-2"><Spinner />Loading…</span> : typeof result === "string" ? result : JSON.stringify(result || tool.partialResult || tool.args || {}, null, 2)}</pre>
     </CollapsibleContent>
   </Collapsible>;
 }
 
-export function StreamingAssistantMessage({ message, liveStore }) {
+function AssistantMessage({ message, liveStore, live }) {
   const stream = useSyncExternalStore(liveStore.subscribe, liveStore.getSnapshot, liveStore.getServerSnapshot);
-  return <ChatMarkdown streaming>{`${message.content || ""}${stream.content}`}</ChatMarkdown>;
+  const text = live ? `${message.content || ""}${stream.content}` : String(message.content || "");
+  return <ChatMarkdown streaming={live}>{text}</ChatMarkdown>;
 }
 
 export const ChatThread = memo(function ChatThread({
   messages, tools, streaming, sessionId, hasOlder, loadingOlder, partialContinue,
   editingEntryId, onLoadOlder, onCopyMessage, onEditMessage, onRegenerate, onContinue, liveStore,
+  activity = null, reasoning = null,
 }) {
   const older = useRef(null);
   useEffect(() => {
@@ -80,46 +93,34 @@ export const ChatThread = memo(function ChatThread({
     observer.observe(older.current);
     return () => observer.disconnect();
   }, [hasOlder, onLoadOlder]);
+  const timeline = buildTimeline(messages, tools, { streaming });
   const lastMessage = messages[messages.length - 1];
-  const timeline = [
-    ...messages.flatMap((message, index) => {
-      if (message.role !== "user" && message.role !== "assistant") return [];
-      const showStreaming = streaming && message === lastMessage && message.role === "assistant";
-      if (message.role === "assistant" && !String(message.content || "").trim() && !showStreaming) return [];
-      return [{ type: "message", value: message, index }];
-    }),
-    ...tools.map((tool, index) => ({ type: "tool", value: tool, index: messages.length + index })),
-  ].sort((left, right) => {
-    const leftTime = Date.parse(left.value.timestamp || "");
-    const rightTime = Date.parse(right.value.timestamp || "");
-    if (Number.isNaN(leftTime) || Number.isNaN(rightTime) || leftTime === rightTime) return left.index - right.index;
-    return leftTime - rightTime;
-  });
   const empty = timeline.length === 0;
 
   return <MessageScrollerProvider autoScroll>
     <MessageScroller className="transcript">
       <MessageScrollerViewport>
         <MessageScrollerContent className="thread">
-          {hasOlder && <MessageScrollerItem>
+          {hasOlder && <MessageScrollerItem className={eagerItem}>
             <Button ref={older} variant="ghost" className="mx-auto" onClick={onLoadOlder} disabled={loadingOlder}>
               {loadingOlder && <Spinner data-icon="inline-start" />}{loadingOlder ? "Loading earlier messages…" : "Load earlier messages"}
             </Button>
           </MessageScrollerItem>}
-          {empty && <MessageScrollerItem className="empty-thread">
+          {empty && !activity?.label && <MessageScrollerItem className={`empty-thread ${eagerItem}`}>
             <Empty className="welcome"><EmptyHeader><EmptyTitle><h1>How can I help you today?</h1></EmptyTitle></EmptyHeader></Empty>
           </MessageScrollerItem>}
           {timeline.map((item) => {
-            if (item.type === "tool") return <MessageScrollerItem key={`tool_${item.value.id}`}>
+            if (item.type === "tool") return <MessageScrollerItem key={`tool_${item.value.id}`} className={eagerItem}>
               <ToolCard tool={item.value} sessionId={sessionId} />
             </MessageScrollerItem>;
             const message = item.value;
             const isUser = message.role === "user";
             const isEditing = message.id === editingEntryId;
-            const isStreamingMessage = streaming && message === lastMessage && !isUser;
+            const live = streaming && message === lastMessage && !isUser;
             const precedingUser = !isUser ? messages.slice(0, item.index).findLast((candidate) => candidate.role === "user") : null;
             return <MessageScrollerItem
-              key={`message_${message.id}`}
+              key={`message_${message.key ?? message.id}`}
+              className={eagerItem}
               messageId={message.id}
               scrollAnchor={isUser}
             >
@@ -134,15 +135,25 @@ export const ChatThread = memo(function ChatThread({
                   >
                     <BubbleContent>
                       {isUser ? <span className="user-message-text">{String(message.content || "")}</span>
-                        : isStreamingMessage
-                          ? <Suspense fallback={<Skeleton className="h-16 w-full" />}>
-                            <StreamingAssistantMessage message={message} liveStore={liveStore} />
-                          </Suspense>
-                          : <Suspense fallback={<Skeleton className="h-16 w-full" />}>
-                            <ChatMarkdown>{message.content}</ChatMarkdown>
-                          </Suspense>}
+                        : <>
+                            {live && reasoning && (reasoning.content || reasoning.active) && (
+                              <ReasoningBlock
+                                content={reasoning.content}
+                                redacted={reasoning.redacted}
+                                active={reasoning.active}
+                              />
+                            )}
+                            <Suspense fallback={<Skeleton className="h-16 w-full" />}>
+                              <AssistantMessage message={message} liveStore={liveStore} live={live} />
+                            </Suspense>
+                          </>}
                     </BubbleContent>
                   </Bubble>
+                  {isUser && message.pending && <Marker>
+                    <MarkerContent>
+                      {message.queueMode === "steer" ? "Queued · steer (after tools)" : "Queued · follow-up (after turn)"}
+                    </MarkerContent>
+                  </Marker>}
                   {isUser && <AttachmentCards
                     items={message.attachments || []}
                     chatId={sessionId}
@@ -164,6 +175,9 @@ export const ChatThread = memo(function ChatThread({
               </Message>
             </MessageScrollerItem>;
           })}
+          {activity?.label && activity.kind !== "idle" && <MessageScrollerItem className={eagerItem} key="agent-activity">
+            <AgentActivityRow activity={activity} />
+          </MessageScrollerItem>}
         </MessageScrollerContent>
       </MessageScrollerViewport>
       <MessageScrollerButton />

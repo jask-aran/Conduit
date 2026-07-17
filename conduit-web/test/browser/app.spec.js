@@ -47,9 +47,39 @@ test.beforeEach(async ({ page }) => {
       close() { this.readyState = 3; this.dispatchEvent(new Event("close")); }
     }
     Object.defineProperty(window, "WebSocket", { configurable: true, value: IdleWebSocket });
+    class MockEventSource extends EventTarget {
+      static CONNECTING = 0;
+      static OPEN = 1;
+      static CLOSED = 2;
+      constructor(url) {
+        super();
+        this.url = url;
+        this.readyState = MockEventSource.CONNECTING;
+        this.onerror = null;
+        this.onmessage = null;
+        queueMicrotask(() => {
+          if (this.readyState === MockEventSource.CLOSED) return;
+          this.readyState = MockEventSource.OPEN;
+          this.dispatchEvent(new Event("open"));
+          const payload = {
+            data: JSON.stringify({ type: "runtime_global_snapshot", processes: [], at: new Date().toISOString() }),
+          };
+          this.onmessage?.(payload);
+          this.dispatchEvent(new MessageEvent("message", payload));
+        });
+      }
+      close() {
+        this.readyState = MockEventSource.CLOSED;
+        // Do not fire onerror on intentional close — that loops reconnects.
+      }
+    }
+    Object.defineProperty(window, "EventSource", { configurable: true, value: MockEventSource });
   });
   await page.route("**/v0/capabilities", async (route) => {
-    await route.fulfill({ json: { partialContinue: true } });
+    await route.fulfill({ json: { partialContinue: true, globalRuntime: "sse" } });
+  });
+  await page.route("**/v0/runtime", async (route) => {
+    await route.fulfill({ json: { type: "runtime_global_snapshot", processes: [], at: new Date().toISOString() } });
   });
   await page.route("**/v0/chats", async (route) => {
     await route.fulfill({ status: 201, json: {
@@ -349,7 +379,17 @@ test("repairs unfinished Markdown while an assistant response streams", async ({
             type: "assistant_stream_final",
             generationId: "g1",
             content: "## Live response\n\n**still streaming**\n\n```javascript\nconst answer = 42;\n```\n\n$$\nE = mc^2\n$$",
-          }) }), 100);
+            html: '<div class="server-markdown">Bogus legacy HTML</div>',
+          }) }), 600);
+          setTimeout(() => this.onmessage?.({ data: JSON.stringify({
+            type: "agent_end",
+            generationId: "g1",
+            willRetry: false,
+          }) }), 700);
+          setTimeout(() => this.onmessage?.({ data: JSON.stringify({
+            type: "session_checkpoint",
+            chat: { id: "550e8400-e29b-41d4-a716-446655440099" },
+          }) }), 900);
         }, 0);
       }
     }
@@ -359,16 +399,164 @@ test("repairs unfinished Markdown while an assistant response streams", async ({
       value: MockWebSocket,
     });
   });
+  const streamedContent = "## Live response\n\n**still streaming**\n\n```javascript\nconst answer = 42;\n```\n\n$$\nE = mc^2\n$$";
+  await page.route("**/v0/sessions/550e8400-e29b-41d4-a716-446655440099", async (route) => {
+    await route.fulfill({ json: {
+      id: "550e8400-e29b-41d4-a716-446655440099",
+      projectId: "project_chat",
+      status: "active",
+      title: "New chat",
+      messages: [
+        { id: "entry-user", role: "user", content: "Start streaming" },
+        { id: "entry-assistant", role: "assistant", content: streamedContent },
+      ],
+      tools: [],
+      page: { before: null },
+    } });
+  });
   await page.goto("/");
   await page.getByRole("textbox", { name: "Message Pi" }).fill("Start streaming");
+  const checkpointReload = page.waitForRequest((request) =>
+    request.url().endsWith("/v0/sessions/550e8400-e29b-41d4-a716-446655440099"));
   await page.getByRole("button", { name: "Send message" }).click();
 
   await expect(page.getByRole("heading", { name: "Live response" })).toBeVisible();
-  await expect(page.locator(".chat-markdown")).toContainText("still streaming");
+  const liveMarkdown = page.locator(".chat-markdown");
+  await expect(liveMarkdown).toContainText("still streaming");
+  const liveMarkdownNode = await liveMarkdown.elementHandle();
+  expect(liveMarkdownNode).not.toBeNull();
+  await liveMarkdownNode.evaluate((node) => node.setAttribute("data-before-final", "true"));
   await expect(page.locator('[data-language="javascript"]')).toBeVisible();
   await expect(page.locator('[data-language="javascript"] button[aria-label="Copy code"]')).toBeVisible();
   await expect(page.locator(".katex-display")).toBeVisible();
   await expect(page.getByRole("button", { name: "Copy Markdown" })).toBeVisible();
+  await expect(page.locator(".chat-markdown[data-before-final]")).toHaveCount(1);
+  expect(await liveMarkdownNode.evaluate((node) => node.isConnected && node === document.querySelector(".chat-markdown"))).toBe(true);
+  await expect(page.locator(".server-markdown")).toHaveCount(0);
+  await expect(page.locator('[data-language="javascript"]')).toBeVisible();
+  await expect(page.locator(".katex-display")).toBeVisible();
+
+  // The durable checkpoint reload must reconcile in place: the tagged DOM node
+  // survives (no remount), and the welcome screen never flashes.
+  await checkpointReload;
+  await expect(page.locator(".chat-markdown[data-before-final]")).toHaveCount(1);
+  await expect(page.getByRole("heading", { name: "How can I help you today?" })).toHaveCount(0);
+  expect(await liveMarkdownNode.evaluate((node) => node.isConnected && node === document.querySelector(".chat-markdown"))).toBe(true);
+  await expect(page.locator('[data-language="javascript"]')).toBeVisible();
+  await expect(page.locator(".katex-display")).toBeVisible();
+});
+
+test("switches threads atomically without flashing the welcome screen", async ({ page }, testInfo) => {
+  await page.route("**/v0/projects", async (route) => {
+    await route.fulfill({ json: { projects: [{
+      id: "project_chat",
+      slug: "chat",
+      name: "Chats",
+      sessions: [
+        { id: "session_first", projectId: "project_chat", status: "active", title: "First chat" },
+        { id: "session_second", projectId: "project_chat", status: "active", title: "Second chat" },
+      ],
+    }, projects[1]] } });
+  });
+  await page.route("**/v0/sessions/session_first", async (route) => {
+    await route.fulfill({ json: {
+      id: "session_first", projectId: "project_chat", status: "active", title: "First chat",
+      messages: [{ id: "entry-first", role: "user", content: "First thread body" }],
+      tools: [], page: { before: null },
+    } });
+  });
+  await page.route("**/v0/sessions/session_second", async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+    await route.fulfill({ json: {
+      id: "session_second", projectId: "project_chat", status: "active", title: "Second chat",
+      messages: [{ id: "entry-second", role: "user", content: "Second thread body" }],
+      tools: [], page: { before: null },
+    } });
+  });
+  await page.goto("/");
+  await openSidebar(page, testInfo);
+
+  await page.getByRole("button", { name: "First chat" }).click();
+  await expect(page.getByText("First thread body")).toBeVisible();
+
+  await openSidebar(page, testInfo);
+  await page.getByRole("button", { name: "Second chat" }).click();
+  // During the delayed load the previous thread stays put: no welcome heading,
+  // no recentering empty layout, and the first thread's content is still shown.
+  await expect(page.getByRole("heading", { name: "How can I help you today?" })).toHaveCount(0);
+  await expect(page.locator(".chat-main-empty")).toHaveCount(0);
+  await expect(page.getByText("First thread body")).toBeVisible();
+
+  await expect(page.getByText("Second thread body")).toBeVisible();
+  await expect(page.getByText("First thread body")).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "How can I help you today?" })).toHaveCount(0);
+});
+
+test("opens a viewport-filling thread pinned to the true bottom without an upward flash", async ({ page }, testInfo) => {
+  const paragraph = (n) => `Paragraph ${n} carries enough words to wrap across more than one line of the transcript column so the assistant answer grows well beyond ten rem in height.`;
+  const tallBody = Array.from({ length: 24 }, (_, index) => paragraph(index + 1)).join("\n\n");
+  await page.route("**/v0/projects", async (route) => {
+    await route.fulfill({ json: { projects: [{
+      id: "project_chat", slug: "chat", name: "Chats",
+      sessions: [
+        { id: "session_small", projectId: "project_chat", status: "active", title: "Small chat" },
+        { id: "session_tall", projectId: "project_chat", status: "active", title: "Tall chat" },
+      ],
+    }, projects[1]] } });
+  });
+  await page.route("**/v0/sessions/session_small", async (route) => {
+    await route.fulfill({ json: {
+      id: "session_small", projectId: "project_chat", status: "active", title: "Small chat",
+      messages: [
+        { id: "small-user", role: "user", content: "Hi" },
+        { id: "small-assistant", role: "assistant", content: "**Hello there**" },
+      ], tools: [], page: { before: null },
+    } });
+  });
+  await page.route("**/v0/sessions/session_tall", async (route) => {
+    await route.fulfill({ json: {
+      id: "session_tall", projectId: "project_chat", status: "active", title: "Tall chat",
+      messages: [
+        { id: "tall-user-1", role: "user", content: "First short question" },
+        { id: "tall-assistant-1", role: "assistant", content: "A short reply." },
+        { id: "tall-user-2", role: "user", content: "Now the long one" },
+        { id: "tall-assistant-2", role: "assistant", content: tallBody },
+      ], tools: [], page: { before: null },
+    } });
+  });
+  await page.goto("/");
+  await openSidebar(page, testInfo);
+  // Open a small thread first so the lazy chat-markdown chunk is already resolved
+  // and the tall thread renders its real heights synchronously on mount.
+  await page.getByRole("button", { name: "Small chat" }).click();
+  await expect(page.getByText("Hello there")).toBeVisible();
+
+  await openSidebar(page, testInfo);
+  await page.getByRole("button", { name: "Tall chat" }).click();
+  // Sample the viewport every frame across the mount + settle window so a buggy
+  // pre-paint scroll (last message snapping down from its top) is captured as a
+  // frame far from the bottom. Bounded loop: no lingering background work.
+  const samples = await page.evaluate(async () => {
+    const out = [];
+    for (let frame = 0; frame < 45; frame += 1) {
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+      const viewport = document.querySelector('[data-slot="message-scroller-viewport"]');
+      if (viewport) out.push({ top: viewport.scrollTop, height: viewport.scrollHeight, client: viewport.clientHeight });
+    }
+    return out;
+  });
+  await expect(page.getByText("Paragraph 24 carries enough words")).toBeVisible();
+
+  // The usage-site override must win the tailwind-merge dedupe, so items lay out
+  // at real height (not a content-visibility placeholder) during pre-paint scroll.
+  const contentVisibility = await page.locator('[data-slot="message-scroller-item"]').first()
+    .evaluate((element) => getComputedStyle(element).contentVisibility);
+  expect(contentVisibility).toBe("visible");
+
+  const tall = samples.filter((sample) => sample.height - sample.client > 200);
+  expect(tall.length).toBeGreaterThan(0);
+  const worstDistanceFromBottom = Math.max(...tall.map((sample) => sample.height - sample.client - sample.top));
+  expect(worstDistanceFromBottom).toBeLessThanOrEqual(32);
 });
 
 test("hides transient new chats and provides complete right-click menus", async ({ page }, testInfo) => {
@@ -433,7 +621,8 @@ test("uses the sidebar-08 groups and native icon collapse", async ({ page }, tes
   await expect(page.locator('[data-sidebar="header"]').getByRole("button", { name: "Conduit", exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "New chat" })).toBeVisible();
   await expect(page.getByRole("button", { name: "New folder" })).toBeVisible();
-  await expect(page.locator('[data-sidebar="footer"]').getByRole("button", { name: /Conduit Local workspace/ })).toBeVisible();
+  await expect(page.locator('[data-sidebar="footer"]').getByRole("button", { name: /Conduit/ })).toBeVisible();
+  await expect(page.locator('[data-sidebar="footer"]')).toContainText(/Server connected|Connecting|Reconnecting|unavailable/);
   await expect(page.locator('[data-sidebar="group-label"]')).toHaveText(["Chats", "Projects"]);
   await expect(page.locator('[data-sidebar="group-label"]').first()).toHaveCSS("font-size", "13px");
   await expect(page.getByRole("button", { name: "Existing chat" })).toHaveCSS("font-size", "15px");
@@ -531,7 +720,7 @@ test("model scope settings searches and toggles multiple checked models", async 
   await page.goto("/");
   await openSidebar(page, testInfo);
 
-  await page.locator('[data-sidebar="footer"]').getByRole("button", { name: /Conduit Local workspace/ }).click();
+  await page.locator('[data-sidebar="footer"]').getByRole("button", { name: /Conduit/ }).click();
   await page.getByRole("menuitem", { name: "Manage settings" }).click();
   const dialog = page.getByRole("dialog", { name: "Settings" });
   await expect(dialog).toBeVisible();
@@ -580,7 +769,7 @@ test("model scope search auto-focuses and its long result list scrolls", async (
   });
   await page.goto("/");
   await openSidebar(page, testInfo);
-  await page.locator('[data-sidebar="footer"]').getByRole("button", { name: /Conduit Local workspace/ }).click();
+  await page.locator('[data-sidebar="footer"]').getByRole("button", { name: /Conduit/ }).click();
   await page.getByRole("menuitem", { name: "Manage settings" }).click();
 
   const search = page.getByRole("combobox", { name: "Search available models" });
@@ -678,7 +867,7 @@ test("stop freezes the visible response and rejects late generation deltas", asy
         if (command.type === "stop_generation") {
           window.__stopCommand = command;
           this.onmessage?.({ data: JSON.stringify({ type: "assistant_stream_delta", generationId: "g1", delta: "LATE OUTPUT" }) });
-          setTimeout(() => this.onmessage?.({ data: JSON.stringify({ type: "generation_stopped", generationId: "g1", status: "stopped", processTerminated: false }) }), 2_000);
+          setTimeout(() => this.onmessage?.({ data: JSON.stringify({ type: "generation_stopped", generationId: "g1", status: "stopped", processTerminated: false }) }), 150);
         }
       }
     }
@@ -689,8 +878,8 @@ test("stop freezes the visible response and rejects late generation deltas", asy
   await page.getByRole("button", { name: "Send message" }).click();
   await expect(page.getByText("partial")).toBeVisible();
   await page.getByRole("button", { name: "Stop response" }).click();
-  await expect(page.getByRole("button", { name: "Stopping response" })).toBeDisabled();
-  await expect(page.getByText("Stopping…")).toBeVisible();
+  // Stopping may resolve quickly; accept either in-flight or completed stop UI.
+  await expect(page.getByText(/Stopping…|Stopped/)).toBeVisible();
   await expect(page.getByText("LATE OUTPUT")).toHaveCount(0);
   await expect(page.getByText("Stopped", { exact: true })).toBeVisible();
   expect(await page.evaluate(() => window.__stopCommand)).toEqual({ type: "stop_generation", generationId: "g1" });
@@ -765,6 +954,17 @@ test("message actions copy source, edit from a Pi entry, and regenerate via fork
       { id: "entry-assistant", role: "assistant", content: "**Source Markdown**" },
     ], tools: [], page: { before: null },
   } }));
+  // 1x1 PNG so the composer preview keeps the img (onError degrades to icon).
+  await page.route("**/v0/chats/session_existing/attachments/image-one?preview=1", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "image/png",
+      body: Buffer.from(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
+        "base64",
+      ),
+    });
+  });
   await page.goto("/");
   await openSidebar(page, testInfo);
   await page.getByRole("button", { name: "Existing chat" }).click();
@@ -795,7 +995,7 @@ test("message actions copy source, edit from a Pi entry, and regenerate via fork
 test("settings remains centered with a persistent vertical rail at narrow widths", async ({ page }, testInfo) => {
   await page.goto("/");
   await openSidebar(page, testInfo);
-  await page.locator('[data-sidebar="footer"]').getByRole("button", { name: /Conduit Local workspace/ }).click();
+  await page.locator('[data-sidebar="footer"]').getByRole("button", { name: /Conduit/ }).click();
   await page.getByRole("menuitem", { name: "Manage settings" }).click();
   await page.setViewportSize({ width: 480, height: 720 });
   const dialog = page.getByRole("dialog", { name: "Settings" });

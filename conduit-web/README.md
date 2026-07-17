@@ -112,6 +112,40 @@ default; opening a persisted session restores its own model and thinking level.
 - `GET /v0/live-sessions/:id/snapshot`
 - `DELETE /v0/live-sessions/:id/process`
 - `WS /v0/live-sessions/:id/stream`
+- `GET /v0/runtime` returns the current global live-process snapshot
+- `GET /v0/runtime/stream` (SSE) pushes snapshot-first global process updates
+- `GET /v0/runtime/settings` and `PATCH /v0/runtime/settings` read/update max live processes and idle reclaim TTL (`data/runtime.json`, env defaults)
+
+## Global runtime channel
+
+`GET /v0/runtime/stream` is a server-to-browser SSE channel for application-wide
+process residency and coarse activity. It does not carry transcript token
+deltas. On connect the server writes one `runtime_global_snapshot` with every
+live process view, then low-frequency `runtime_process` and
+`runtime_process_removed` events. Reconnect always starts with a fresh snapshot.
+
+Each public process view includes safe client-facing fields only: `id`,
+`chatId`, `projectId`, `status`, `active`, `activity`, `activityDetail`,
+`stopping`, queue lengths via `queue`, `hostUiRequests`, `contextUsage`,
+`updatedAt`, and `clientCount`. The durable Conduit chat id is the public row
+key; the live process id is disposable.
+
+Coarse `activity` values: `idle`, `starting`, `working`, `waiting_for_user`,
+`retrying`, `compacting`, `stopping`, `failed`. Fine activity (thinking,
+tool name, responding) is derived on the selected-chat client from the
+per-chat WebSocket stream.
+
+Process residency: the server owns Pi processes. Browser disconnect does not
+stop them. Opening an active chat starts or reuses one process per chat. A
+configurable max live cap (default 4) reclaims the oldest idle unattached
+process when full; otherwise create returns 429. Unattached idle processes are
+stopped after the idle TTL (default 2 minutes). Transcripts remain on disk and
+resume on the next open.
+
+Context usage is synthesized by Conduit: after `agent_end` / `compaction_end`
+(and on selected-chat reconnect) the server calls Pi `get_session_stats` and
+emits a Conduit `context_usage` event. Null tokens/percent mean unknown, not
+zero.
 
 ## Live session protocol
 
@@ -124,19 +158,23 @@ Client commands:
 
 | Command | Fields | Effect |
 |---|---|---|
-| `prompt` | `message`, `attachmentIds[]` | Send a user prompt wrapped in the attachment envelope |
+| `prompt` | `message`, `attachmentIds[]`, optional `streamingBehavior` (`steer` \| `followUp`) | Send a user prompt wrapped in the attachment envelope |
+| `follow_up` / `steer` | `message`, `attachmentIds[]` | Queue mid-run follow-up or steering input |
 | `stop_generation` / `abort` | `generationId` | Close the generation gate, then ask Pi to abort |
 | `fork_and_prompt` | `entryId`, `message`, `attachmentIds[]` | Fork history at an entry, then prompt |
 | `regenerate` | `entryId` | Fork at an entry and resend its recorded prompt |
 | `continue` | — | Experimental hidden-prompt continuation of a stopped response |
+| `extension_ui_response` / `host_ui_response` | `id`, `confirmed` \| `value` \| `cancelled` | Answer a blocking extension UI request |
+| `refresh_context` | — | Request a context-usage refresh via Pi session stats |
 
 Any other object is forwarded verbatim to Pi's RPC stdin. A failed command
 produces `client_error` with `code` and `message`.
 
 Server events. On connect the server sends one `runtime_snapshot` containing
 the session view, the accumulated `stream` content for any open generation
-(`{ generationId, content }` or `null`), and the current turn's replayable
-events; individual `assistant_stream_delta` events are never replayed.
+(`{ generationId, content }` or `null`), the current turn's replayable events,
+plus `hostUiRequests`, `queue`, and `contextUsage` when known; individual
+`assistant_stream_delta` events are never replayed.
 Conduit-origin events thereafter:
 
 | Event | Fields | Meaning |
@@ -144,8 +182,10 @@ Conduit-origin events thereafter:
 | `runtime_state` | `session` | Process/session status changed |
 | `generation_started` | `generationId`, `continuation` | A response began; deltas follow |
 | `assistant_stream_delta` | `generationId`, `delta` | Raw assistant text delta, relayed unthrottled |
-| `assistant_stream_final` | `generationId`, `message`, `content` | Canonical completed message text |
+| `assistant_stream_final` | `generationId`, `message`, `content`, optional `usage` | Canonical completed message text |
 | `generation_stopped` | `generationId`, `status`, `processTerminated` | Stop completed; late output was gated |
+| `context_usage` | `contextUsage` | Synthesized context window usage (nullable tokens/percent) |
+| `extension_ui_resolved` | `requestId` | A host-UI request was answered |
 | `session_checkpoint` | `chat` | Registry row checkpointed after a completed response |
 | `history_forked` | `chat` | The chat advanced to a forked native session |
 | `runtime_stderr` / `runtime_stdout` | `message` | Non-JSON process output |
@@ -154,7 +194,9 @@ Conduit-origin events thereafter:
 | `client_error` | `code`, `message` | A client command failed |
 
 Pi RPC events that Conduit does not transform (`agent_start`, `agent_end`,
-`message_end`, `tool_execution_start`, `tool_execution_end`, `response`, …)
+`message_end`, `tool_execution_start`, `tool_execution_update`,
+`tool_execution_end`, `queue_update`, `compaction_start`, `compaction_end`,
+`auto_retry_start`, `auto_retry_end`, `extension_ui_request`, `response`, …)
 are relayed as-is; during a generation every relayed event is stamped with the
 active `generationId`, and events for a closed generation are suppressed at
 the source.

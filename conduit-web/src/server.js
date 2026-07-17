@@ -13,6 +13,8 @@ import { ChatStore, chatView, isChatId } from "./chat-store.js";
 import { AttachmentStore } from "./attachment-store.js";
 import { announcedAttachmentIds, serializeAttachmentEnvelope } from "./attachment-envelope.js";
 import { CONTINUE_PROMPT } from "./continuation.js";
+import { RuntimeHub } from "./runtime-hub.js";
+import { defaultsFromEnv, RuntimeSettingsStore } from "./runtime-settings.js";
 
 const config = loadConfig();
 const projects = new ProjectStore(config);
@@ -20,10 +22,21 @@ await projects.initialize();
 const registry = new ChatStore(config.sessionRegistryFile);
 await registry.initialize(await projects.list());
 const attachments = new AttachmentStore(registry);
+const runtimeSettings = new RuntimeSettingsStore(config.runtimeSettingsFile, defaultsFromEnv(process.env));
+await runtimeSettings.load();
 const manager = new PiManager({
   command: config.piCommand,
   agentDir: config.piAgentDir,
   template: config.piTemplate,
+  maxLiveProcesses: runtimeSettings.get().maxLiveProcesses,
+  idleProcessTtlMs: runtimeSettings.get().idleProcessTtlMs,
+});
+const runtimeHub = new RuntimeHub({ listViews: () => manager.list() });
+manager.on("process_changed", ({ record, reason }) => {
+  runtimeHub.publishProcess(manager.view(record), reason || "update");
+});
+manager.on("process_removed", ({ id, chatId }) => {
+  runtimeHub.publishProcessRemoved(id, chatId);
 });
 const modelCatalog = new PiModelCatalog({ agentDir: config.piAgentDir, modelPatterns: config.piTemplate.models });
 const app = express();
@@ -83,7 +96,30 @@ app.get("/v0/capabilities", (_request, response) => response.json({
   sessionManagement: true, chatIdentity: "conduit", attachments: "raw-http",
   partialContinue: config.enablePartialContinue,
   stream: "websocket", processOwner: "conduit-server", sessionAuthority: "pi-jsonl",
+  globalRuntime: "sse",
 }));
+
+app.get("/v0/runtime", (_request, response) => {
+  response.json(runtimeHub.snapshot());
+});
+
+app.get("/v0/runtime/stream", (request, response) => {
+  response.setHeader("Content-Type", "text/event-stream");
+  response.setHeader("Cache-Control", "no-cache, no-transform");
+  response.setHeader("Connection", "keep-alive");
+  response.flushHeaders?.();
+  const client = { kind: "sse", response };
+  const detach = runtimeHub.attach(client);
+  const heartbeat = setInterval(() => {
+    try { response.write(": ping\n\n"); }
+    catch { clearInterval(heartbeat); detach(); }
+  }, 25000);
+  heartbeat.unref?.();
+  request.on("close", () => {
+    clearInterval(heartbeat);
+    detach();
+  });
+});
 
 async function stopSessionProcesses(session) {
   const chatId = session.chatId || session.id;
@@ -100,7 +136,13 @@ app.get("/v0/projects", async (_request, response, next) => {
       ...project,
       sessions: registry.listProject(project.id).map((chat) => {
         const process = live.find((item) => item.chatId === chat.id);
-        return { ...chatView(chat), liveStatus: process?.status || null, liveId: process?.id || null };
+        return {
+          ...chatView(chat),
+          liveStatus: process?.status || null,
+          liveId: process?.id || null,
+          liveActivity: process?.activity || null,
+          liveActive: process?.active || false,
+        };
       }),
     }))), live });
   } catch (error) { next(error); }
@@ -237,9 +279,10 @@ app.get("/v0/chats/:chatId/attachments/:attachmentId", async (request, response,
     if (!attachment) return response.status(404).json({ error: "attachment_not_found" });
     const preview = request.query.preview === "1" && /^image\/(png|jpeg|gif|webp)$/.test(attachment.type);
     response.setHeader("Content-Type", preview ? attachment.type : "application/octet-stream");
+    response.setHeader("X-Content-Type-Options", "nosniff");
+    response.setHeader("Cache-Control", "private, no-cache");
     const downloadName = encodeURIComponent(attachment.name).replace(/[!'()*]/g, (character) => `%${character.charCodeAt(0).toString(16).toUpperCase()}`);
     response.setHeader("Content-Disposition", `${preview ? "inline" : "attachment"}; filename*=UTF-8''${downloadName}`);
-    response.setHeader("X-Content-Type-Options", "nosniff");
     response.setHeader("Content-Length", attachment.size);
     const stream = attachment.stream();
     stream.once("error", next);
@@ -348,6 +391,20 @@ app.delete("/v0/sessions/:id", async (request, response, next) => {
 });
 
 app.get("/v0/live-sessions", (_request, response) => response.json({ sessions: manager.list() }));
+app.get("/v0/runtime/settings", (_request, response) => {
+  response.json({ ...runtimeSettings.get(), ...manager.policy() });
+});
+app.patch("/v0/runtime/settings", async (request, response, next) => {
+  try {
+    const saved = await runtimeSettings.save({
+      maxLiveProcesses: request.body?.maxLiveProcesses,
+      idleProcessTtlMs: request.body?.idleProcessTtlMs,
+    });
+    manager.configure(saved);
+    await manager.enforceLimit();
+    response.json({ ...saved, ...manager.policy() });
+  } catch (error) { next(error); }
+});
 app.post("/v0/live-sessions", async (request, response, next) => {
   try {
     const chatId = request.body?.chatId || request.body?.resumeSessionId;
@@ -357,7 +414,7 @@ app.post("/v0/live-sessions", async (request, response, next) => {
     if (requestedProject && ![context.project.id, context.project.slug].includes(requestedProject)) {
       return response.status(409).json({ error: "session_project_mismatch" });
     }
-    const live = manager.create({
+    const live = await manager.createWithCapacity({
       project: context.project,
       chatId: context.chat.id,
       sessionFile: context.chat.piSessionFile,
@@ -403,8 +460,9 @@ app.get("*", (request, response, next) => {
 });
 app.use((error, _request, response, _next) => {
   console.error(error);
-  let status = 500;
+  let status = error.status || 500;
   if (error.code === "reserved_project") status = 409;
+  if (error.code === "live_process_limit") status = 429;
   if (error.code === "attachment_not_found") status = 404;
   if (error.code === "invalid_attachment_id"
     || ["enabled_models_required", "invalid_enabled_model", "invalid_default_model"].includes(error.code)
@@ -449,7 +507,18 @@ async function syncForkedChat(record) {
 async function handleClientCommand(record, command) {
   if (command.type === "prompt") {
     const prepared = await promptForChat(record, command, String(command.message || ""));
-    return sendPrompt(record, prepared);
+    const streamingBehavior = command.streamingBehavior === "steer" || command.streamingBehavior === "followUp"
+      ? command.streamingBehavior
+      : null;
+    return sendPrompt(record, prepared, { streamingBehavior });
+  }
+  if (command.type === "follow_up" || command.type === "steer") {
+    const prepared = await promptForChat(record, command, String(command.message || ""));
+    manager.send(record.id, {
+      type: command.type,
+      message: prepared.prompt,
+    });
+    return null;
   }
   if (command.type === "stop_generation" || command.type === "abort") {
     return manager.abortGeneration(record.id, command.generationId || null);
@@ -474,6 +543,13 @@ async function handleClientCommand(record, command) {
     // Experimental and intentionally removable: this is an ordinary hidden user prompt, not assistant prefill.
     return manager.prompt(record.id, CONTINUE_PROMPT, { continuationBase: partial });
   }
+  if (command.type === "extension_ui_response" || command.type === "host_ui_response") {
+    manager.respondHostUi(record.id, command);
+    return null;
+  }
+  if (command.type === "refresh_context") {
+    return manager.refreshContextUsage(record.id);
+  }
   manager.send(record.id, command);
   return null;
 }
@@ -485,13 +561,27 @@ server.on("upgrade", (request, socket, head) => {
     const record = manager.get(match[1]);
     manager.attach(match[1], ws);
     const turnStart = record.events.findLastIndex((event) => event.type === "agent_start");
-    const pendingEvents = record.active && turnStart >= 0
+    const generationOpen = record.generation
+      && !record.generation.closed
+      && !record.generation.settled;
+    const pendingEvents = generationOpen && turnStart >= 0
       ? record.events.slice(turnStart).filter((event) => event.type !== "assistant_stream_delta")
       : [];
     const stream = record.stream
       ? { generationId: record.stream.generationId, content: record.stream.chunks.join("") }
       : null;
-    ws.send(JSON.stringify({ type: "runtime_snapshot", session: manager.view(record), stream, events: pendingEvents }));
+    if (record.status === "running" && !record.contextUsage?.contextWindow) {
+      manager.refreshContextUsage(record.id).catch(() => {});
+    }
+    ws.send(JSON.stringify({
+      type: "runtime_snapshot",
+      session: manager.view(record),
+      stream,
+      events: pendingEvents,
+      hostUiRequests: record.hostUiRequests || [],
+      queue: record.queue || { steering: [], followUp: [] },
+      contextUsage: record.contextUsage || null,
+    }));
     ws.on("message", (data) => {
       Promise.resolve()
         .then(() => handleClientCommand(record, JSON.parse(String(data))))
