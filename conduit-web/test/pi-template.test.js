@@ -228,7 +228,7 @@ test("process view exposes chatId, activity, and host UI for global runtime", as
         type: "response",
         command: "get_session_stats",
         success: true,
-        data: { contextUsage: { tokens: 1000, contextWindow: 128000, percent: 0.78 } },
+        data: { contextUsage: { tokens: 1000, contextWindow: 128000, percent: 78 } },
       })}\n`));
     }
   });
@@ -248,6 +248,7 @@ test("process view exposes chatId, activity, and host UI for global runtime", as
   await manager.refreshContextUsage(record.id);
   assert.equal(record.contextUsage.contextWindow, 128000);
   assert.equal(record.contextUsage.tokens, 1000);
+  assert.equal(record.contextUsage.percent, 78);
   assert.ok(record.events.some((event) => event.type === "context_usage"));
 });
 
@@ -264,6 +265,8 @@ test("tool and compaction events update coarse activity and publish state", () =
     args: { path: "a.js" },
   })}\n`);
   assert.match(record.activityDetail || "", /read/);
+  assert.ok(record.events.some((event) => event.type === "runtime_state"
+    && event.session?.activityDetail?.includes("read")));
 
   child.stdout.write(`${JSON.stringify({ type: "compaction_start", reason: "threshold" })}\n`);
   assert.equal(manager.view(record).activity, "compacting");

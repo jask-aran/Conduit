@@ -21,6 +21,12 @@ import { reconcileMessages } from "./reconcile-messages";
 import { useGlobalRuntime } from "./runtime/use-global-runtime";
 import { useAttachments } from "./use-attachments";
 import { useModelSettings } from "./use-model-settings";
+import {
+  assignToolSeq,
+  maxToolSeq,
+  mergeToolEvent,
+  promotePendingUser,
+} from "./timeline-order";
 import "./styles.css";
 
 const CommandMenu = lazy(() => import("./command-menu").then((module) => ({ default: module.CommandMenu })));
@@ -108,6 +114,9 @@ function App() {
   const stopPending = useRef(false);
   const continuation = useRef(null);
   const liveStream = useRef(null);
+  const toolSeq = useRef(0);
+  const openLiveToken = useRef(0);
+  const [connectingChatId, setConnectingChatId] = useState(null);
   const selectedIdRef = useRef(null);
   selectedIdRef.current = selectedId;
   if (!liveStream.current) liveStream.current = createLiveStreamStore();
@@ -115,7 +124,20 @@ function App() {
   const streaming = generation === "active" || generation === "submitting";
   const stopping = generation === "stopping";
   const serverOnline = globalRuntime.connectivity === "online";
-  const selectedProcess = globalRuntime.getProcess(selectedId);
+  const getProcess = useCallback((chatId) => {
+    const process = globalRuntime.getProcess(chatId);
+    // Only show starting while connect is in flight if no resident process is already live.
+    if (chatId && chatId === connectingChatId && process?.status !== "running") {
+      return {
+        ...(process || { chatId }),
+        status: "starting",
+        activity: "starting",
+        active: false,
+      };
+    }
+    return process;
+  }, [connectingChatId, globalRuntime.getProcess]);
+  const selectedProcess = getProcess(selectedId);
 
   const showError = useCallback((message) => setError(message), []);
   useEffect(() => {
@@ -145,7 +167,9 @@ function App() {
     const incoming = list(detail.messages);
     if (reconcile) setMessages((current) => reconcileMessages(current, incoming));
     else setMessages(incoming);
-    setTools(list(detail.tools));
+    const nextTools = assignToolSeq(list(detail.tools));
+    setTools(nextTools);
+    toolSeq.current = maxToolSeq(nextTools) + 1;
     setPageBefore(detail.page?.before || null);
     setChatStatus(detail.status || "draft");
     setChatTitle(detail.title || "New chat");
@@ -207,27 +231,49 @@ function App() {
   }
 
   async function openLive(chatId, owningProjectId, options = {}) {
-    const record = await api("/v0/live-sessions", {
-      method: "POST",
-      body: JSON.stringify({
-        chatId,
-        projectId: owningProjectId,
-        model: modelSettings.model,
-        thinkingLevel: modelSettings.effort,
-        ...options,
-      }),
-    });
-    setLive(record);
-    if (record.contextUsage) setContextUsage(record.contextUsage);
-    connect(record);
-    await new Promise((resolve, reject) => {
-      if (ws.current.readyState === WebSocket.OPEN) resolve();
-      else {
-        ws.current.addEventListener("open", resolve, { once: true });
-        ws.current.addEventListener("error", () => reject(new Error("Could not connect to Pi")), { once: true });
+    const token = ++openLiveToken.current;
+    setConnectingChatId(chatId);
+    try {
+      const record = await api("/v0/live-sessions", {
+        method: "POST",
+        body: JSON.stringify({
+          chatId,
+          projectId: owningProjectId,
+          model: modelSettings.model,
+          thinkingLevel: modelSettings.effort,
+          ...options,
+        }),
+      });
+      if (token !== openLiveToken.current || selectedIdRef.current !== chatId) return null;
+      setLive(record);
+      if (record.contextUsage) setContextUsage(record.contextUsage);
+      connect(record);
+      await new Promise((resolve, reject) => {
+        const socket = ws.current;
+        if (!socket) {
+          reject(new Error("Could not connect to Pi"));
+          return;
+        }
+        if (socket.readyState === WebSocket.OPEN) {
+          resolve();
+          return;
+        }
+        const onOpen = () => resolve();
+        const onError = () => reject(new Error("Pi is starting or the live stream failed. Try again."));
+        socket.addEventListener("open", onOpen, { once: true });
+        socket.addEventListener("error", onError, { once: true });
+      });
+      if (token !== openLiveToken.current || selectedIdRef.current !== chatId) return null;
+      return record;
+    } catch (caught) {
+      if (token !== openLiveToken.current || selectedIdRef.current !== chatId) return null;
+      if (caught.message?.includes("Too many live Pi") || caught.message?.includes("live_process_limit")) {
+        throw new Error(caught.message || "Too many live Pi processes. Wait for idle chats to free up.");
       }
-    });
-    return record;
+      throw caught;
+    } finally {
+      if (token === openLiveToken.current) setConnectingChatId(null);
+    }
   }
 
   useEffect(() => {
@@ -422,7 +468,6 @@ function App() {
       continuation.current = null;
       setResponding(false);
       setThinking(false);
-      if (!stopPending.current) setGeneration((current) => (current === "stopping" ? current : "idle"));
       setMessages((current) => {
         const copy = [...current];
         const index = findLastMessage(copy, (message) => message.role === "assistant");
@@ -432,7 +477,7 @@ function App() {
         return copy;
       });
       liveStream.current.clear();
-      if (event.usage && contextUsage) {
+      if (event.usage) {
         setContextUsage((current) => current ? {
           ...current,
           lastRequestUsage: {
@@ -446,35 +491,37 @@ function App() {
         } : current);
       }
     }
-    if (event.type === "message_end" && event.message?.role === "user") refresh().catch(() => {});
+    if (event.type === "message_end" && event.message?.role === "user") {
+      refresh().catch(() => {});
+      setMessages((current) => promotePendingUser(current, event.message));
+    }
     if (event.type === "tool_execution_start") {
       setActiveToolName(event.toolName || "tool");
-      setTools((current) => {
-        const tool = {
-          id: event.toolCallId,
-          name: event.toolName,
-          args: event.args,
-          done: false,
-          error: false,
-          timestamp: event.timestamp || new Date().toISOString(),
-        };
-        return current.some((item) => item.id === tool.id)
-          ? current.map((item) => item.id === tool.id ? { ...item, ...tool } : item)
-          : [...current, tool];
-      });
+      setTools((current) => mergeToolEvent(current, event, {
+        nextSeq: () => {
+          const seq = toolSeq.current;
+          toolSeq.current += 1;
+          return seq;
+        },
+      }).tools);
     }
     if (event.type === "tool_execution_update") {
-      setTools((current) => current.map((tool) =>
-        tool.id === event.toolCallId
-          ? { ...tool, partialResult: event.partialResult, name: event.toolName || tool.name }
-          : tool));
+      setTools((current) => mergeToolEvent(current, {
+        ...event,
+        toolCallId: event.toolCallId,
+        toolName: event.toolName,
+        partialResult: event.partialResult,
+      }).tools);
     }
     if (event.type === "tool_execution_end") {
       setActiveToolName(null);
-      setTools((current) => current.map((tool) =>
-        tool.id === event.toolCallId
-          ? { ...tool, done: true, result: event.result, error: Boolean(event.isError) }
-          : tool));
+      setTools((current) => mergeToolEvent(current, {
+        ...event,
+        toolCallId: event.toolCallId,
+        done: true,
+        result: event.result,
+        isError: event.isError,
+      }).tools);
     }
     if (["runtime_error", "client_error"].includes(event.type)) {
       if (!stopPending.current) setGeneration(event.type === "runtime_error" ? "failed" : "idle");
@@ -489,12 +536,15 @@ function App() {
   }
 
   function resetChatState() {
+    openLiveToken.current += 1;
+    setConnectingChatId(null);
     ws.current?.close(); setLive(null);
     setGeneration("idle"); setDraft(""); setEditEntryId(null); setError("");
     setContextUsage(null); setHostUiRequests([]); setQueue({ steering: [], followUp: [] });
     resetLiveUiFlags();
     liveStream.current.clear();
     currentGeneration.current = null; stopPending.current = false; continuation.current = null;
+    toolSeq.current = 0;
   }
 
   async function newChat(target) {
@@ -516,13 +566,21 @@ function App() {
     setProjectId(owningProject.id); setSelectedId(session.id); setChatTitle(session.title); setChatStatus(session.status);
     history.replaceState({}, "", `/chat/${session.id}`);
     const detail = await loadDetail(session.id);
-    if (selectedIdRef.current === session.id && detail.status === "active") await openLive(session.id, owningProject.id);
+    if (selectedIdRef.current === session.id && detail.status === "active") {
+      try {
+        await openLive(session.id, owningProject.id);
+      } catch (caught) {
+        if (selectedIdRef.current === session.id) setError(caught.message);
+      }
+    }
   }
 
   async function ensureLive() {
     if (live && ws.current?.readyState === WebSocket.OPEN) return live;
     if (!selectedId) throw new Error("Chat is not ready yet");
-    return openLive(selectedId, projectId);
+    const record = await openLive(selectedId, projectId);
+    if (!record) throw new Error("Chat switched before Pi was ready");
+    return record;
   }
 
   function stopResponse() {
@@ -555,10 +613,24 @@ function App() {
 
     const busy = generation === "active" || generation === "submitting";
     if (busy) {
-      // Mid-run: queue follow-up or steer instead of stopping
       const mode = steer || streamingBehavior === "steer" ? "steer" : "followUp";
       const attachmentIds = attachmentState.pendingIds;
+      const sentAttachments = attachmentState.items
+        .filter((item) => attachmentIds.includes(item.id))
+        .map(({ id, name, size, type, objectUrl }) => ({ id, name, size, type, objectUrl }));
+      const pendingId = `user_${Date.now()}`;
+      const pendingMessage = {
+        id: pendingId,
+        key: pendingId,
+        role: "user",
+        content: text,
+        timestamp: new Date().toISOString(),
+        attachments: sentAttachments,
+        pending: true,
+        queueMode: mode,
+      };
       setDraft("");
+      setMessages((current) => [...current, pendingMessage]);
       try {
         await ensureLive();
         ws.current.send(JSON.stringify({
@@ -566,11 +638,9 @@ function App() {
           message: text,
           attachmentIds,
         }));
-        setQueue((current) => ({
-          steering: mode === "steer" ? [...(current.steering || []), text] : (current.steering || []),
-          followUp: mode === "followUp" ? [...(current.followUp || []), text] : (current.followUp || []),
-        }));
+        attachmentState.markAnnounced(attachmentIds);
       } catch (caught) {
+        setMessages((current) => current.filter((message) => message.id !== pendingId));
         setError(caught.message);
         setDraft(text);
       }
@@ -651,8 +721,8 @@ function App() {
   function clearQueue() {
     const restored = [...(queue.steering || []), ...(queue.followUp || [])].join("\n");
     setQueue({ steering: [], followUp: [] });
+    setMessages((current) => current.filter((message) => !message.pending));
     if (restored) setDraft((current) => (current ? `${current}\n${restored}` : restored));
-    // Pi only supports clear-all via consuming or process-side; restore to composer for editing.
   }
 
   async function loadOlder() {
@@ -661,7 +731,14 @@ function App() {
     try {
       const detail = await api(`/v0/sessions/${selectedId}?before=${encodeURIComponent(pageBefore)}`);
       setMessages((current) => [...list(detail.messages), ...current]);
-      setTools((current) => [...list(detail.tools), ...current]);
+      setTools((current) => {
+        const older = assignToolSeq(list(detail.tools));
+        const known = new Set(older.map((tool) => tool.id));
+        const live = current.filter((tool) => !known.has(tool.id));
+        const merged = [...older, ...live];
+        toolSeq.current = Math.max(toolSeq.current, maxToolSeq(merged) + 1);
+        return merged;
+      });
       setPageBefore(detail.page?.before || null);
     } catch (caught) { setError(caught.message); }
     finally { setLoadingOlder(false); }
@@ -749,10 +826,11 @@ function App() {
     retry,
   }), [generation, selectedProcess, live, thinking, responding, activeToolName, retry, hostUiRequests]);
 
-  // Prefer waiting_for_user when host UI is pending on selected chat
+  // Transcript activity is for in-turn work only. Starting/connecting shows in the
+  // sidebar RuntimeIndicator so the thread does not jump or flash the composer busy state.
   const displayActivity = hostUiRequests.length
     ? { kind: "waiting_for_user", label: "Waiting for your confirmation" }
-    : activity;
+    : (activity.kind === "starting" ? { kind: "idle", label: null } : activity);
 
   const lastAssistant = messages.findLast((message) => message.role === "assistant");
   const lastAssistantIndex = lastAssistant ? messages.indexOf(lastAssistant) : -1;
@@ -796,7 +874,7 @@ function App() {
         selectedTitle={chatTitle}
         view="chat"
         connectivity={globalRuntime.connectivity}
-        getProcess={globalRuntime.getProcess}
+        getProcess={getProcess}
         runtimeStale={globalRuntime.stale}
         onRetryConnection={globalRuntime.retry}
         onAddProject={addProject}

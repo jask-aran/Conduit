@@ -24,6 +24,7 @@ import { AgentActivityRow } from "./agent-activity";
 import { ReasoningBlock } from "./reasoning-block";
 import { ResponseActions } from "./response-actions";
 import { AttachmentCards } from "./attachment-tray";
+import { buildTimeline } from "./timeline-order";
 
 const ChatMarkdown = lazy(() => import("./chat-markdown").then((module) => ({
   default: module.ChatMarkdown,
@@ -92,21 +93,8 @@ export const ChatThread = memo(function ChatThread({
     observer.observe(older.current);
     return () => observer.disconnect();
   }, [hasOlder, onLoadOlder]);
+  const timeline = buildTimeline(messages, tools, { streaming });
   const lastMessage = messages[messages.length - 1];
-  const timeline = [
-    ...messages.flatMap((message, index) => {
-      if (message.role !== "user" && message.role !== "assistant") return [];
-      const showStreaming = streaming && message === lastMessage && message.role === "assistant";
-      if (message.role === "assistant" && !String(message.content || "").trim() && !showStreaming) return [];
-      return [{ type: "message", value: message, index }];
-    }),
-    ...tools.map((tool, index) => ({ type: "tool", value: tool, index: messages.length + index })),
-  ].sort((left, right) => {
-    const leftTime = Date.parse(left.value.timestamp || "");
-    const rightTime = Date.parse(right.value.timestamp || "");
-    if (Number.isNaN(leftTime) || Number.isNaN(rightTime) || leftTime === rightTime) return left.index - right.index;
-    return leftTime - rightTime;
-  });
   const empty = timeline.length === 0;
 
   return <MessageScrollerProvider autoScroll>
@@ -161,6 +149,11 @@ export const ChatThread = memo(function ChatThread({
                           </>}
                     </BubbleContent>
                   </Bubble>
+                  {isUser && message.pending && <Marker>
+                    <MarkerContent>
+                      {message.queueMode === "steer" ? "Queued · steer (after tools)" : "Queued · follow-up (after turn)"}
+                    </MarkerContent>
+                  </Marker>}
                   {isUser && <AttachmentCards
                     items={message.attachments || []}
                     chatId={sessionId}

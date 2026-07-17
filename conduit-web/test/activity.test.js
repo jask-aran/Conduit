@@ -50,9 +50,14 @@ test("settled generation is idle even when the generation handle remains open", 
 
 test("applyActivityEvent tracks tools, compaction, retry, and host UI", () => {
   const state = record();
-  applyActivityEvent(state, { type: "tool_execution_start", toolName: "read" });
+  assert.equal(applyActivityEvent(state, { type: "tool_execution_start", toolName: "read" }), true);
   assert.equal(state.activity, "working");
   assert.match(state.activityDetail, /read/);
+
+  // Detail-only change while already working must still report a change for SSE/sidebar.
+  assert.equal(applyActivityEvent(state, { type: "tool_execution_start", toolName: "bash" }), true);
+  assert.equal(state.activity, "working");
+  assert.match(state.activityDetail, /bash/);
 
   applyActivityEvent(state, { type: "compaction_start" });
   assert.equal(state.activity, "compacting");
@@ -109,6 +114,7 @@ test("fine activity prefers tools and stop over generic working", () => {
 
 test("activity labels and ranking", () => {
   assert.equal(activityLabel("working", "using read"), "Pi working — using read");
+  assert.equal(activityLabel("idle"), "Pi ready (idle)");
   assert.ok(pickHigherActivity("failed", "working") === "failed");
   assert.ok(pickHigherActivity("working", "idle") === "working");
 });

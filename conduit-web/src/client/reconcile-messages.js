@@ -50,8 +50,14 @@ export function reconcileMessages(current, incoming) {
   };
 
   return incomingList.map((message, index) => {
-    if (resolved[index]) return resolved[index];
+    if (resolved[index]) {
+      const kept = resolved[index];
+      if (kept.pending || kept.queueMode) {
+        return { ...kept, pending: false, queueMode: undefined };
+      }
+      return kept;
+    }
     const key = takeKeyForRole(message.role) ?? message.id;
-    return { ...message, key };
+    return { ...message, key, pending: false, queueMode: undefined };
   });
 }

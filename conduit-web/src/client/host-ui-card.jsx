@@ -5,7 +5,9 @@ import { Textarea } from "@/components/ui/textarea";
 
 export function HostUiCard({ request, onRespond }) {
   if (!request) return null;
-  const [value, setValue] = useState(request.kind === "editor" ? (request.prefill || "") : "");
+  const [value, setValue] = useState(
+    request.kind === "editor" || request.kind === "input" ? (request.prefill || "") : "",
+  );
 
   const dismiss = () => onRespond({ id: request.id, cancelled: true });
   const approve = () => onRespond({ id: request.id, confirmed: true });

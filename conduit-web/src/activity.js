@@ -139,10 +139,11 @@ export function applyActivityEvent(record, event) {
       break;
   }
 
+  const beforeDetail = record.activityDetail || null;
   record.activityDetail = detail;
   const after = deriveCoarseActivity(record);
   record.activity = after;
-  return before !== after || detail !== record.activityDetail;
+  return before !== after || beforeDetail !== detail;
 }
 
 export function isBlockingHostUi(event) {
@@ -169,7 +170,7 @@ export function normalizeHostUiRequest(event) {
 
 export function activityLabel(activity, detail = null) {
   const base = {
-    idle: "Pi idle",
+    idle: "Pi ready (idle)",
     starting: "Pi starting",
     working: "Pi working",
     waiting_for_user: "Waiting for you",
