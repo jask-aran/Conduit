@@ -43,7 +43,8 @@ export class PiManager extends EventEmitter {
     agentDir,
     template,
     spawnImpl = spawn,
-    maxLiveProcesses = 4,
+    maxLiveProcesses = 12,
+    maxGeneratingProcesses = 2,
     idleProcessTtlMs = 120_000,
     reaperIntervalMs = 15_000,
     now = () => Date.now(),
@@ -58,7 +59,8 @@ export class PiManager extends EventEmitter {
     this.bySessionFile = new Map();
     this.requestSequence = 0;
     this.now = now;
-    this.maxLiveProcesses = Math.max(1, Math.trunc(Number(maxLiveProcesses) || 4));
+    this.maxLiveProcesses = Math.max(1, Math.trunc(Number(maxLiveProcesses) || 12));
+    this.maxGeneratingProcesses = Math.max(1, Math.trunc(Number(maxGeneratingProcesses) || 2));
     this.idleProcessTtlMs = Math.max(30_000, Math.trunc(Number(idleProcessTtlMs) || 120_000));
     this.capacityQueue = Promise.resolve();
     this.reaperTimer = null;
@@ -77,8 +79,11 @@ export class PiManager extends EventEmitter {
     return run;
   }
 
-  configure({ maxLiveProcesses, idleProcessTtlMs } = {}) {
+  configure({ maxLiveProcesses, maxGeneratingProcesses, idleProcessTtlMs } = {}) {
     if (maxLiveProcesses != null) this.maxLiveProcesses = Math.max(1, Math.trunc(Number(maxLiveProcesses) || 1));
+    if (maxGeneratingProcesses != null) {
+      this.maxGeneratingProcesses = Math.max(1, Math.trunc(Number(maxGeneratingProcesses) || 1));
+    }
     if (idleProcessTtlMs != null) this.idleProcessTtlMs = Math.max(30_000, Math.trunc(Number(idleProcessTtlMs) || 30_000));
     return this.policy();
   }
@@ -86,8 +91,10 @@ export class PiManager extends EventEmitter {
   policy() {
     return {
       maxLiveProcesses: this.maxLiveProcesses,
+      maxGeneratingProcesses: this.maxGeneratingProcesses,
       idleProcessTtlMs: this.idleProcessTtlMs,
       liveCount: this.liveRecords().length,
+      generatingCount: this.generatingRecords().length,
     };
   }
 
@@ -95,13 +102,44 @@ export class PiManager extends EventEmitter {
     return [...this.processes.values()].filter((record) => ["starting", "running"].includes(record.status));
   }
 
+  /** True while a process holds an agent-loop slot (turn, compact, retry, host UI). */
+  isGenerating(record) {
+    if (!record || !["starting", "running"].includes(record.status)) return false;
+    if (record.active || record.stopping || record.compacting || record.retrying) return true;
+    if ((record.hostUiRequests || []).length) return true;
+    if (record.generation && !record.generation.closed && !record.generation.settled) return true;
+    return false;
+  }
+
+  generatingRecords() {
+    return this.liveRecords().filter((record) => this.isGenerating(record));
+  }
+
+  /**
+   * Hard limit on concurrent agent loops. Warm idle processes do not count.
+   * A process that already holds a generating slot may continue (steer/retry path).
+   */
+  assertCanStartGeneration(record) {
+    if (!record) throw new Error("Unknown live session");
+    if (this.isGenerating(record)) return;
+    const generatingCount = this.generatingRecords().length;
+    if (generatingCount >= this.maxGeneratingProcesses) {
+      const error = new Error(
+        `Too many concurrent generations (max ${this.maxGeneratingProcesses}). Wait for another chat to finish.`,
+      );
+      error.code = "generation_limit";
+      error.status = 429;
+      error.maxGeneratingProcesses = this.maxGeneratingProcesses;
+      error.generatingCount = generatingCount;
+      throw error;
+    }
+  }
+
   isBusy(record) {
     if (!record) return false;
     // Bootstrapping is not idle: never reclaim a process before it is running.
     if (record.status === "starting") return true;
-    if (record.active || record.stopping || record.compacting || record.retrying) return true;
-    if ((record.hostUiRequests || []).length) return true;
-    if (record.generation && !record.generation.closed && !record.generation.settled) return true;
+    if (this.isGenerating(record)) return true;
     const activity = record.activity || deriveCoarseActivity(record);
     return !["idle", "failed"].includes(activity);
   }
@@ -545,6 +583,10 @@ export class PiManager extends EventEmitter {
     const record = this.processes.get(id);
     if (!record) throw new Error("Unknown live session");
     if (record.stopping) throw Object.assign(new Error("Pi is still stopping the previous response"), { code: "generation_stopping" });
+    // Steer/follow-up into an open turn keeps the existing generating slot.
+    if (streamingBehavior !== "steer" && streamingBehavior !== "followUp") {
+      this.assertCanStartGeneration(record);
+    }
     const generationId = `g${++record.generationSequence}`;
     const previousGeneration = record.generation;
     record.generation = { id: generationId, closed: false, settled: false, continuationBase };

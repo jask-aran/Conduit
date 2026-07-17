@@ -534,7 +534,20 @@ function App() {
     if (["runtime_error", "client_error"].includes(event.type)) {
       if (!stopPending.current) setGeneration(event.type === "runtime_error" ? "failed" : "idle");
       resetLiveUiFlags();
-      setError(event.message || "Runtime error");
+      if (event.code === "generation_limit") {
+        // Prompt was rejected before a turn started: undo optimistic user bubble and restore draft.
+        setMessages((current) => {
+          const last = current[current.length - 1];
+          if (last?.role === "user" && String(last.id || "").startsWith("user_")) {
+            setDraft((draft) => draft || last.content || "");
+            return current.slice(0, -1);
+          }
+          return current;
+        });
+        setError(event.message || "Too many concurrent generations. Wait for another chat to finish.");
+      } else {
+        setError(event.message || "Runtime error");
+      }
     }
   }
 

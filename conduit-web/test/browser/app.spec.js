@@ -1005,3 +1005,77 @@ test("settings remains centered with a persistent vertical rail at narrow widths
   expect(Math.abs(dialogBox.x + dialogBox.width / 2 - 240)).toBeLessThanOrEqual(2);
   expect(railBox.width).toBeGreaterThan(60);
 });
+
+test("generation_limit bounce surfaces an error and keeps the composer usable", async ({ page }) => {
+  await page.addInitScript(() => {
+    class LimitWebSocket extends EventTarget {
+      static OPEN = 1;
+      constructor() {
+        super();
+        this.readyState = 0;
+        queueMicrotask(() => {
+          this.readyState = LimitWebSocket.OPEN;
+          this.dispatchEvent(new Event("open"));
+        });
+      }
+      close() { this.readyState = 3; this.dispatchEvent(new Event("close")); }
+      send(data) {
+        const command = JSON.parse(data);
+        if (command.type === "prompt") {
+          queueMicrotask(() => {
+            this.onmessage?.({ data: JSON.stringify({
+              type: "client_error",
+              code: "generation_limit",
+              message: "Too many concurrent generations (max 2). Wait for another chat to finish.",
+            }) });
+          });
+        }
+      }
+    }
+    Object.defineProperty(window, "WebSocket", { configurable: true, value: LimitWebSocket });
+  });
+  await page.goto("/");
+  const composer = page.getByRole("textbox", { name: "Message Pi" });
+  await composer.fill("Should bounce");
+  await page.getByRole("button", { name: "Send message" }).click();
+  await expect(page.getByText(/Too many concurrent generations/i)).toBeVisible();
+  await expect(composer).toHaveValue("Should bounce");
+  await expect(page.getByRole("button", { name: "Send message" })).toBeEnabled();
+});
+
+test("runtime settings exposes warm pool and concurrent generation caps", async ({ page }, testInfo) => {
+  await page.route("**/v0/runtime/settings", async (route) => {
+    if (route.request().method() === "GET") {
+      await route.fulfill({ json: {
+        maxLiveProcesses: 12,
+        maxGeneratingProcesses: 2,
+        idleProcessTtlMs: 120_000,
+        liveCount: 3,
+        generatingCount: 1,
+      } });
+      return;
+    }
+    if (route.request().method() === "PATCH") {
+      const body = route.request().postDataJSON() || {};
+      await route.fulfill({ json: {
+        maxLiveProcesses: Number(body.maxLiveProcesses) || 12,
+        maxGeneratingProcesses: Number(body.maxGeneratingProcesses) || 2,
+        idleProcessTtlMs: Number(body.idleProcessTtlMs) || 120_000,
+        liveCount: 3,
+        generatingCount: 1,
+      } });
+      return;
+    }
+    await route.fallback();
+  });
+  await page.goto("/");
+  await openSidebar(page, testInfo);
+  await page.locator('[data-sidebar="footer"]').getByRole("button", { name: /Conduit/ }).click();
+  await page.getByRole("menuitem", { name: "Manage settings" }).click();
+  const dialog = page.getByRole("dialog", { name: "Settings" });
+  await dialog.getByRole("tab", { name: /Runtime/ }).click();
+  await expect(dialog.getByText("Max warm Pi processes")).toBeVisible();
+  await expect(dialog.getByText("Max concurrent generations")).toBeVisible();
+  await expect(dialog.getByText("3 live now")).toBeVisible();
+  await expect(dialog.getByText("1 generating")).toBeVisible();
+});
