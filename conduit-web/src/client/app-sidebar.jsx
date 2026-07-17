@@ -165,6 +165,7 @@ export function AppSidebar({
           view={view}
           getProcess={getProcess}
           runtimeStale={runtimeStale}
+          runtimeOnline={connectivity === "online"}
           onCopyTranscript={onCopyTranscript}
           onMoveSession={onMoveSession}
           onNewChat={chooseNewChat}
@@ -179,6 +180,7 @@ export function AppSidebar({
           view={view}
           getProcess={getProcess}
           runtimeStale={runtimeStale}
+          runtimeOnline={connectivity === "online"}
           onAddProject={() => setNewFolderOpen(true)}
           onCopyTranscript={onCopyTranscript}
           onMoveProjectSessions={onMoveProjectSessions}

@@ -22,6 +22,7 @@ export function NavProjects({
   view,
   getProcess,
   runtimeStale = false,
+  runtimeOnline = false,
   onAddProject,
   onCopyTranscript,
   onDeleteProject,
@@ -53,7 +54,7 @@ export function NavProjects({
               <CollapsibleTrigger asChild>
                 <SidebarMenuButton className="text-sidebar-foreground" tooltip={project.name}>
                   <FolderIcon absoluteStrokeWidth />
-                  <ProjectActivityIndicator sessions={project.sessions} getProcess={getProcess} stale={runtimeStale} />
+                  <ProjectActivityIndicator sessions={project.sessions} getProcess={getProcess} stale={runtimeStale} runtimeOnline={runtimeOnline} />
                   <span className="truncate">{project.name}</span>
                   <ChevronRightIcon absoluteStrokeWidth className="ml-auto transition-transform group-data-[state=open]/project:rotate-90" />
                 </SidebarMenuButton>
@@ -62,12 +63,13 @@ export function NavProjects({
             <CollapsibleContent>
               <SidebarMenuSub>
                 {project.sessions.map((session) => {
-                  const process = getProcess?.(session.id) || (session.liveStatus ? {
-                    chatId: session.id,
-                    status: session.liveStatus,
-                    activity: session.liveActivity || (session.liveActive ? "working" : "idle"),
-                    active: session.liveActive,
-                  } : null);
+                  const process = getProcess?.(session.id)
+                    || (!runtimeOnline && session.liveStatus ? {
+                      chatId: session.id,
+                      status: session.liveStatus,
+                      activity: session.liveActivity || (session.liveActive ? "working" : "idle"),
+                      active: session.liveActive,
+                    } : null);
                   return <SidebarMenuSubItem key={session.id}>
                     <ChatContextMenu
                       currentProject={project}

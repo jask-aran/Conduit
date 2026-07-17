@@ -58,9 +58,9 @@ export function RuntimeIndicator({
   </Tooltip>;
 }
 
-export function ProjectActivityIndicator({ sessions = [], getProcess, stale = false }) {
+export function ProjectActivityIndicator({ sessions = [], getProcess, stale = false, runtimeOnline = false }) {
   const children = sessions
-    .map((session) => getProcess?.(session.id) || (session.liveActivity ? {
+    .map((session) => getProcess?.(session.id) || (!runtimeOnline && session.liveActivity ? {
       chatId: session.id,
       status: session.liveStatus,
       activity: session.liveActivity,

@@ -18,6 +18,7 @@ export function NavChats({
   view,
   getProcess,
   runtimeStale = false,
+  runtimeOnline = false,
   onCopyTranscript,
   onDeleteSession,
   onMoveSession,
@@ -35,12 +36,14 @@ export function NavChats({
     <SidebarGroupContent>
       <SidebarMenu>
         {project.sessions.map((session) => {
-          const process = getProcess?.(session.id) || (session.liveStatus ? {
-            chatId: session.id,
-            status: session.liveStatus,
-            activity: session.liveActivity || (session.liveActive ? "working" : "idle"),
-            active: session.liveActive,
-          } : null);
+          // When SSE is online, only trust the live process map — never stale projects bootstrap.
+          const process = getProcess?.(session.id)
+            || (!runtimeOnline && session.liveStatus ? {
+              chatId: session.id,
+              status: session.liveStatus,
+              activity: session.liveActivity || (session.liveActive ? "working" : "idle"),
+              active: session.liveActive,
+            } : null);
           return <SidebarMenuItem key={session.id}>
             <ChatContextMenu
               currentProject={project}
