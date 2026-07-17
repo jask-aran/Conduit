@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { FileArchiveIcon, FileCode2Icon, FileIcon, FileTextIcon, ImageIcon, PackageIcon, XIcon } from "lucide-react";
 import {
   Attachment,
@@ -11,6 +12,7 @@ import {
 } from "@/components/ui/attachment";
 import { Progress } from "@/components/ui/progress";
 import { cn } from "@/lib/utils";
+import { attachmentChatIdFromPath } from "../attachment-envelope.js";
 
 function sizeLabel(bytes) {
   if (!Number.isFinite(bytes)) return "";
@@ -53,23 +55,43 @@ function description(item) {
   return size ? `${kind} · ${size}` : kind;
 }
 
+function previewOwnerChatId(item, chatId) {
+  return item.chatId || attachmentChatIdFromPath(item.path) || chatId || null;
+}
+
 function AttachmentRow({ item, orientation, onRemove, chatId }) {
-  const previewUrl = isImage(item) && chatId
-    ? `/v0/chats/${encodeURIComponent(chatId)}/attachments/${encodeURIComponent(item.id)}?preview=1`
+  const [previewFailed, setPreviewFailed] = useState(false);
+  const ownerChatId = previewOwnerChatId(item, chatId);
+  const previewUrl = isImage(item) && ownerChatId && item.id && !previewFailed
+    ? `/v0/chats/${encodeURIComponent(ownerChatId)}/attachments/${encodeURIComponent(item.id)}?preview=1`
     : null;
   const imageUrl = item.objectUrl || previewUrl;
+  const showImage = Boolean(imageUrl) && !previewFailed;
   return <Attachment
     size="default"
     orientation={orientation}
-    state={status(item)}
+    state={status(item) || (previewFailed && isImage(item) ? "error" : undefined)}
     className={orientation === "horizontal" ? "w-[25rem] flex-nowrap" : undefined}
   >
-    <AttachmentMedia variant={imageUrl ? "image" : "icon"}>
-      {imageUrl ? <img src={imageUrl} alt="" /> : <TypeIcon item={item} />}
+    <AttachmentMedia variant={showImage ? "image" : "icon"}>
+      {showImage
+        ? <img
+            src={imageUrl}
+            alt=""
+            onError={() => {
+              if (item.objectUrl) URL.revokeObjectURL?.(item.objectUrl);
+              setPreviewFailed(true);
+            }}
+          />
+        : <TypeIcon item={item} />}
     </AttachmentMedia>
     <AttachmentContent>
       <AttachmentTitle>{item.name}</AttachmentTitle>
-      <AttachmentDescription>{description(item)}</AttachmentDescription>
+      <AttachmentDescription>
+        {previewFailed && isImage(item) && item.status !== "uploading" && item.status !== "error"
+          ? "Preview unavailable"
+          : description(item)}
+      </AttachmentDescription>
       {item.status === "uploading" && <Progress value={item.progress} className="mt-2" />}
     </AttachmentContent>
     {onRemove && <AttachmentActions>

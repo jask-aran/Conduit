@@ -16,6 +16,7 @@ function absolute(value) {
 
 export function loadConfig(env = process.env) {
   const piTemplate = loadPiTemplate(env.CONDUIT_PI_TEMPLATE || path.join(repositoryRoot, "templates/chat/template.json"));
+  const dataRoot = path.join(repositoryRoot, "data");
   return {
     host: env.CONDUIT_HOST || env.HOST || "127.0.0.1",
     port: Number(env.CONDUIT_PORT || env.PORT || 4310),
@@ -24,6 +25,7 @@ export function loadConfig(env = process.env) {
     catalogFile: absolute(env.CONDUIT_CATALOG_FILE || path.join(repositoryRoot, "data/conduit.json")),
     sessionRegistryFile: absolute(env.CONDUIT_SESSION_REGISTRY_FILE || path.join(repositoryRoot, "data/sessions.json")),
     piAgentDir: absolute(env.CONDUIT_PI_AGENT_DIR || path.join(repositoryRoot, "data/pi")),
+    runtimeSettingsFile: absolute(env.CONDUIT_RUNTIME_SETTINGS_FILE || path.join(dataRoot, "runtime.json")),
     piTemplate,
     // Experimental and intentionally removable until continuation quality is proven.
     enablePartialContinue: env.ENABLE_PARTIAL_CONTINUE !== "false",

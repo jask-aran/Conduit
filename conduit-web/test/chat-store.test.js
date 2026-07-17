@@ -84,10 +84,11 @@ test("keeps a pre-prompt Pi mapping as a draft across startup", async () => {
   const piSessionFile = path.join(project.sessionsDir, "draft.jsonl");
   await fs.writeFile(piSessionFile, `${JSON.stringify({ type: "session", id: "native-draft", cwd: project.path })}\n`);
   const id = "550e8400-e29b-41d4-a716-446655440090";
+  const now = new Date().toISOString();
   await fs.writeFile(registryFile, `${JSON.stringify({ version: 2, chats: [{
     id, projectId: project.id, status: "draft", title: "New chat",
     piSessionId: "native-draft", piSessionFile,
-    createdAt: "2026-07-16T00:00:00Z", updatedAt: "2026-07-16T00:00:00Z",
+    createdAt: now, updatedAt: now,
   }] })}\n`);
 
   const store = new ChatStore(registryFile);

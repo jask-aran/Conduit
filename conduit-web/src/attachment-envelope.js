@@ -43,8 +43,38 @@ export function parseAttachmentEnvelope(value) {
   const messageMatch = rest.match(/^<user_message>\n([\s\S]*)\n<\/user_message>$/);
   if (!messageMatch) return { message: text, attachments: [] };
   const attachments = [...attachmentBlock.matchAll(/<attachment\s+id="([^"]+)"\s+path="([^"]+)"\s+name="([^"]*)"\s*\/>/g)]
-    .map((match) => ({ id: decodeXml(match[1]), path: decodeXml(match[2]), name: decodeXml(match[3]) }));
+    .map((match) => enrichAttachment({
+      id: decodeXml(match[1]),
+      path: decodeXml(match[2]),
+      name: decodeXml(match[3]),
+    }));
   return { message: decodeXml(messageMatch[1]), attachments };
+}
+
+export function attachmentChatIdFromPath(pathValue) {
+  const match = String(pathValue || "").match(/^\.conduit\/chats\/([^/]+)\/attachments\//);
+  return match?.[1] || null;
+}
+
+function mimeFromName(name) {
+  const extension = String(name || "").split(".").pop()?.toLowerCase() || "";
+  return ({
+    png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif",
+    webp: "image/webp", svg: "image/svg+xml", pdf: "application/pdf", json: "application/json",
+    txt: "text/plain", md: "text/markdown", csv: "text/csv",
+  })[extension] || "application/octet-stream";
+}
+
+export function enrichAttachment(attachment) {
+  if (!attachment || typeof attachment !== "object") return attachment;
+  const path = attachment.path || "";
+  const name = attachment.name || "";
+  const chatId = attachment.chatId || attachmentChatIdFromPath(path);
+  return {
+    ...attachment,
+    chatId: chatId || undefined,
+    type: attachment.type || mimeFromName(name),
+  };
 }
 
 export function announcedAttachmentIds(entries) {

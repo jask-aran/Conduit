@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from "react";
-import { BotIcon, CircleHelpIcon, LinkIcon, MonitorIcon, Settings2Icon } from "lucide-react";
+import { BotIcon, CircleHelpIcon, CpuIcon, LinkIcon, MonitorIcon, Settings2Icon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Spinner } from "@/components/ui/spinner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -13,6 +14,7 @@ import { ModelScopeCombobox } from "./model-picker";
 
 const sections = [
   { id: "models", label: "Models", short: "Models", icon: BotIcon },
+  { id: "runtime", label: "Runtime", short: "Runtime", icon: CpuIcon },
   { id: "general", label: "General", short: "General", icon: Settings2Icon },
   { id: "appearance", label: "Appearance", short: "Display", icon: MonitorIcon },
   { id: "connections", label: "Connections", short: "Links", icon: LinkIcon },
@@ -23,6 +25,111 @@ function Placeholder({ title }) {
   return <Empty>
     <EmptyHeader><EmptyTitle>{title}</EmptyTitle><EmptyDescription>Not available yet.</EmptyDescription></EmptyHeader>
   </Empty>;
+}
+
+function RuntimeSettings() {
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const [maxLiveProcesses, setMaxLiveProcesses] = useState(4);
+  const [idleMinutes, setIdleMinutes] = useState(2);
+  const [liveCount, setLiveCount] = useState(0);
+
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+    fetch("/v0/runtime/settings")
+      .then(async (response) => {
+        const body = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(body.message || body.error || "Could not load runtime settings");
+        return body;
+      })
+      .then((body) => {
+        if (!active) return;
+        setMaxLiveProcesses(body.maxLiveProcesses ?? 4);
+        setIdleMinutes(Math.max(1, Math.round((body.idleProcessTtlMs || 120_000) / 60_000)));
+        setLiveCount(body.liveCount ?? 0);
+        setError("");
+      })
+      .catch((caught) => {
+        if (active) setError(caught.message);
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => { active = false; };
+  }, []);
+
+  async function save() {
+    setSaving(true);
+    setError("");
+    try {
+      const response = await fetch("/v0/runtime/settings", {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          maxLiveProcesses: Number(maxLiveProcesses),
+          idleProcessTtlMs: Math.max(1, Number(idleMinutes)) * 60_000,
+        }),
+      });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(body.message || body.error || "Could not save runtime settings");
+      setMaxLiveProcesses(body.maxLiveProcesses ?? maxLiveProcesses);
+      setIdleMinutes(Math.max(1, Math.round((body.idleProcessTtlMs || 120_000) / 60_000)));
+      setLiveCount(body.liveCount ?? liveCount);
+    } catch (caught) {
+      setError(caught.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (loading) return <div className="flex items-center gap-2 text-sm text-muted-foreground"><Spinner />Loading runtime settings…</div>;
+
+  return <>
+    <div className="settings-section-heading">
+      <h2>Runtime</h2>
+      <p>Limit how many Pi agents stay warm, and reclaim idle processes after you leave a chat.</p>
+    </div>
+    <FieldGroup>
+      <Field>
+        <FieldLabel className="justify-between">
+          Max live Pi processes
+          <Badge variant="secondary">{liveCount} live now</Badge>
+        </FieldLabel>
+        <Input
+          type="number"
+          min={1}
+          max={16}
+          value={maxLiveProcesses}
+          onChange={(event) => setMaxLiveProcesses(event.target.value)}
+        />
+        <FieldDescription>
+          Opening an active chat starts or reuses a Pi process. When the cap is hit, the oldest idle unattached process is stopped first.
+        </FieldDescription>
+      </Field>
+      <Field>
+        <FieldLabel>Idle reclaim (minutes)</FieldLabel>
+        <Input
+          type="number"
+          min={1}
+          max={60}
+          value={idleMinutes}
+          onChange={(event) => setIdleMinutes(event.target.value)}
+        />
+        <FieldDescription>
+          After this long with no browser attached and no generation, Conduit stops that Pi process. The chat transcript stays on disk.
+        </FieldDescription>
+      </Field>
+    </FieldGroup>
+    {error && <p className="text-destructive mt-3 text-sm">{error}</p>}
+    <div className="settings-save">
+      <Button disabled={saving} onClick={save}>
+        {saving && <Spinner data-icon="inline-start" />}
+        {saving ? "Saving…" : "Save changes"}
+      </Button>
+    </div>
+  </>;
 }
 
 export function SettingsDialog({ open, onOpenChange, initialSection = "models", modelSettings }) {
@@ -90,7 +197,10 @@ export function SettingsDialog({ open, onOpenChange, initialSection = "models", 
               onClick={() => modelSettings.saveScope(enabled)}
             >{modelSettings.saving && <Spinner data-icon="inline-start" />}{modelSettings.saving ? "Saving…" : "Save changes"}</Button></div>
           </TabsContent>
-          {sections.slice(1).map((item) => <TabsContent key={item.id} value={item.id}><Placeholder title={item.label} /></TabsContent>)}
+          <TabsContent value="runtime"><RuntimeSettings /></TabsContent>
+          {sections.filter((item) => !["models", "runtime"].includes(item.id)).map((item) => (
+            <TabsContent key={item.id} value={item.id}><Placeholder title={item.label} /></TabsContent>
+          ))}
         </ScrollArea>
       </Tabs>
     </DialogContent>

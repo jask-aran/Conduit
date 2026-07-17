@@ -1,4 +1,4 @@
-import { ChevronsUpDownIcon, SettingsIcon, UserRoundIcon } from "lucide-react";
+import { ChevronsUpDownIcon, RefreshCwIcon, SettingsIcon, UserRoundIcon } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   DropdownMenu,
@@ -15,9 +15,25 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from "@/components/ui/sidebar";
+import { Spinner } from "@/components/ui/spinner";
+import { cn } from "@/lib/utils";
 
-export function NavUser({ onOpenSettings }) {
+const connectivityCopy = {
+  connecting: "Connecting to server…",
+  online: "Server connected",
+  reconnecting: "Reconnecting…",
+  offline: "Server unavailable",
+};
+
+export function NavUser({ onOpenSettings, connectivity = "online", onRetryConnection }) {
   const { isMobile } = useSidebar();
+  const status = connectivityCopy[connectivity] || connectivityCopy.online;
+  const tone = {
+    connecting: "muted",
+    online: "success",
+    reconnecting: "warn",
+    offline: "danger",
+  }[connectivity] || "muted";
 
   return <SidebarMenu>
     <SidebarMenuItem>
@@ -31,8 +47,13 @@ export function NavUser({ onOpenSettings }) {
             </Avatar>
             <div className="grid flex-1 text-left text-[15px] leading-tight">
               <span className="truncate font-medium">Conduit</span>
-              <span className="truncate text-[13px]">Local workspace</span>
+              <span className="truncate text-[13px] text-muted-foreground">{status}</span>
             </div>
+            <span className={cn("server-status-dot", `server-status-${tone}`)} aria-hidden="true">
+              {["connecting", "reconnecting"].includes(connectivity)
+                ? <Spinner className="size-3" />
+                : <span className="server-status-mark" />}
+            </span>
             <ChevronsUpDownIcon absoluteStrokeWidth className="ml-auto text-sidebar-foreground" />
           </SidebarMenuButton>
         </DropdownMenuTrigger>
@@ -45,7 +66,7 @@ export function NavUser({ onOpenSettings }) {
           <DropdownMenuLabel className="font-normal">
             <div className="grid text-left text-sm leading-tight">
               <span className="font-medium">Conduit</span>
-              <span className="text-xs text-muted-foreground">Local Pi workspace</span>
+              <span className="text-xs text-muted-foreground">{status}</span>
             </div>
           </DropdownMenuLabel>
           <DropdownMenuSeparator />
@@ -54,6 +75,14 @@ export function NavUser({ onOpenSettings }) {
               <SettingsIcon absoluteStrokeWidth />
               Manage settings
             </DropdownMenuItem>
+            {connectivity !== "online" && onRetryConnection && <DropdownMenuItem onSelect={onRetryConnection}>
+              <RefreshCwIcon absoluteStrokeWidth />
+              Retry connection
+            </DropdownMenuItem>}
+            {connectivity === "offline" && <DropdownMenuItem onSelect={() => location.reload()}>
+              <RefreshCwIcon absoluteStrokeWidth />
+              Reload Conduit
+            </DropdownMenuItem>}
           </DropdownMenuGroup>
         </DropdownMenuContent>
       </DropdownMenu>

@@ -102,7 +102,12 @@ until attachment ownership has an explicit product contract.
 The server owns live Pi processes. A browser disconnect must not terminate its
 process. Persisted JSONL is resumable after server restart, while live process
 records and buffered RPC events are in-memory state. Never allow two Pi
-processes to write the same JSONL simultaneously.
+processes to write the same JSONL simultaneously. Cap concurrent live processes
+(`CONDUIT_MAX_LIVE_PROCESSES` / Settings → Runtime, default 4): when creating a
+new process, stop the oldest idle process with no attached browsers first, or
+reject with `live_process_limit`. Reap unattached idle processes after
+`CONDUIT_IDLE_PROCESS_TTL_MS` (default 120s). Never auto-stop a process that is
+generating, compacting, retrying, waiting on host UI, or has clients attached.
 
 Assign each response a monotonically increasing opaque generation ID. Stop must
 close the client and server generation gates before waiting for Pi's public
@@ -163,6 +168,19 @@ ai-elements Artifact and CodeBlock components using the fine-grained Shiki core
 with the JavaScript regex engine and a pinned language set; do not import the
 full `shiki` bundle. Do not introduce a parallel Markdown parser; raw HTML in
 assistant output renders only through Streamdown's sanitize-and-harden plugins.
+
+Rendering stability: timeline React keys are durable identities. When the server
+confirms an optimistic client entry, reconcile it in place and preserve the
+original key; never wholesale-replace a rendered list with re-keyed equivalents
+of the same content. A timeline slot keeps a single element type across its
+lifecycle from streaming to final; vary props, never the component identity
+mid-life. Read mutable external stores during render only through
+`useSyncExternalStore`. Navigation and reloads are load-then-commit: never commit
+a cleared intermediate state while replacement data is in flight, and key
+per-thread interface state by the loaded session id so scroll position and
+per-thread component state reset atomically with content. Pre-paint scroll
+positioning requires exact layout, so do not apply `content-visibility` or
+intrinsic-size placeholders to elements that participate in initial scroll math.
 
 Keep the composer a bounded native textarea. Keep palette commands and composer
 commands as explicit registries: the lazy Shadcn Command dialog owns persistent

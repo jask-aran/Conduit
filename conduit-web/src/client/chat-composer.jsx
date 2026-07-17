@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { ArrowUpIcon, ChevronDownIcon, PaperclipIcon, SquareIcon } from "lucide-react";
+import { ArrowUpIcon, ChevronDownIcon, PaperclipIcon, SquareIcon, WaypointsIcon } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -17,16 +17,22 @@ import {
   InputGroupButton,
   InputGroupTextarea,
 } from "@/components/ui/input-group";
+import { ButtonGroup } from "@/components/ui/button-group";
 import { Popover, PopoverAnchor } from "@/components/ui/popover";
+import { Spinner } from "@/components/ui/spinner";
+import { ContextDisplay } from "@/components/assistant-ui/context-display";
 import { AttachmentTray } from "./attachment-tray";
 import { availableComposerCommands } from "./command-registry";
+import { ComposerQueue } from "./composer-queue";
 import { thinkingLabel } from "./model-options";
 import { SlashSuggestions } from "./slash-suggestions";
 import { detectCommandToken, replaceCommandToken } from "./slash-token";
 
 const list = (value) => Array.isArray(value) ? value : [];
+
 export function ChatComposer({
   draft,
+  generation = "idle",
   streaming,
   stopping,
   models,
@@ -37,10 +43,17 @@ export function ChatComposer({
   chatId,
   commandContext,
   commandActions,
+  contextUsage = null,
+  compacting = false,
+  queue = null,
+  serverOnline = true,
   onDraftChange,
   onChooseModel,
   onChooseEffort,
   onSend,
+  onStop,
+  onClearQueue,
+  onSteer,
 }) {
   const textarea = useRef(null);
   const [caret, setCaret] = useState(0);
@@ -49,7 +62,12 @@ export function ChatComposer({
   const selectedModel = models.find((item) => item.spec === model);
   const thinkingLevels = list(selectedModel?.thinkingLevels);
   const modelLabel = selectedModel?.label || model.split("/").pop() || "Select model";
-  const canSend = !stopping && Boolean(draft.trim() || streaming);
+  const busy = streaming || generation === "active" || generation === "submitting";
+  const isStopping = stopping || generation === "stopping";
+  const hasText = Boolean(draft.trim());
+  const canQueue = serverOnline && !isStopping && busy && hasText;
+  const canSendIdle = serverOnline && !isStopping && !busy && hasText;
+  const canStop = serverOnline && (busy || isStopping);
   const token = detectCommandToken(draft, caret);
   const slashCommands = useMemo(() => {
     if (token?.trigger !== "/") return [];
@@ -80,8 +98,16 @@ export function ChatComposer({
     });
   };
 
+  // Keep the send control labeled for send/queue only. Stop has its own button.
+  const primaryLabel = isStopping
+    ? "Stopping response"
+    : canQueue
+      ? "Queue follow-up"
+      : "Send message";
+
   return <div className="composer-wrap">
     <AttachmentTray attachments={attachments} chatId={chatId} />
+    <ComposerQueue queue={queue} onClear={onClearQueue} />
     <InputGroup className="composer has-disabled:bg-secondary has-disabled:opacity-100">
       <Popover open={suggestionsOpen} modal={false}>
         <PopoverAnchor asChild>
@@ -89,6 +115,7 @@ export function ChatComposer({
             ref={textarea}
             rows={1}
             value={draft}
+            disabled={!serverOnline}
             onChange={(event) => {
               onDraftChange(event.target.value);
               setCaret(event.target.selectionStart ?? event.target.value.length);
@@ -111,12 +138,23 @@ export function ChatComposer({
                 setDismissed(true);
                 return;
               }
+              if (event.key === "Enter" && event.shiftKey && (event.metaKey || event.ctrlKey)) {
+                if (canQueue && onSteer) {
+                  event.preventDefault();
+                  onSteer();
+                }
+                return;
+              }
               if (event.key === "Enter" && !event.shiftKey) {
                 event.preventDefault();
-                onSend();
+                if (isStopping) return;
+                if (hasText && (canQueue || canSendIdle)) onSend();
+                else if (canStop && onStop) onStop();
               }
             }}
-            placeholder="Send a message..."
+            placeholder={serverOnline
+              ? (busy ? "Queue a follow-up, or Steer after tools…" : "Send a message...")
+              : "Server unavailable"}
             aria-label="Message Pi"
             aria-controls={suggestionsOpen ? "slash-command-list" : undefined}
             aria-expanded={suggestionsOpen}
@@ -131,10 +169,11 @@ export function ChatComposer({
             size="icon-sm"
             aria-label={`Attach files${attachments.items.length ? ` (${attachments.items.length})` : ""}`}
             onClick={() => attachments.inputRef.current?.click()}
+            disabled={!serverOnline}
           ><PaperclipIcon /></InputGroupButton>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <InputGroupButton variant="ghost" size="sm" aria-label={`${modelLabel} ${effort || "off"}`}>
+              <InputGroupButton variant="ghost" size="sm" aria-label={`${modelLabel} ${effort || "off"}`} disabled={!serverOnline}>
                 <span className="max-w-24 truncate sm:max-w-36">{modelLabel}</span>
                 <span className="hidden text-muted-foreground sm:inline">{effort || "off"}</span>
                 <ChevronDownIcon data-icon="inline-end" />
@@ -163,15 +202,54 @@ export function ChatComposer({
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
-        <InputGroupButton
-          variant="default"
-          size="icon-sm"
-          disabled={!canSend}
-          onClick={onSend}
-          aria-label={stopping ? "Stopping response" : streaming ? "Stop response" : "Send message"}
-        >
-          {streaming ? <SquareIcon /> : <ArrowUpIcon />}
-        </InputGroupButton>
+        <div className="composer-actions-right flex items-center gap-1">
+          <ContextDisplay.Ring
+            modelContextWindow={contextUsage?.contextWindow}
+            usage={contextUsage}
+            compacting={compacting}
+          />
+          <ButtonGroup className="items-center">
+            {canStop && <InputGroupButton
+              variant={hasText && busy ? "outline" : "default"}
+              size="icon-sm"
+              disabled={!canStop}
+              onClick={() => onStop?.()}
+              aria-label="Stop response"
+              title="Stop response (abort only)"
+            >
+              {isStopping
+                ? <Spinner className="size-4" />
+                : <span className="relative inline-flex">
+                    {(generation === "active" || streaming) && <Spinner className="absolute inset-0 size-4 opacity-40" />}
+                    <SquareIcon className="relative" />
+                  </span>}
+            </InputGroupButton>}
+            {canQueue && <InputGroupButton
+              variant="outline"
+              size="icon-sm"
+              onClick={() => onSteer?.()}
+              aria-label="Steer after tools"
+              title="Steer: inject after current tools (Ctrl/Cmd+Shift+Enter)"
+            >
+              <WaypointsIcon />
+            </InputGroupButton>}
+            <InputGroupButton
+              variant="default"
+              size="icon-sm"
+              disabled={!(canQueue || canSendIdle) || isStopping}
+              onClick={() => {
+                if (isStopping) return;
+                if (canQueue || canSendIdle) onSend();
+              }}
+              aria-label={primaryLabel}
+              title={primaryLabel}
+            >
+              {generation === "submitting"
+                ? <Spinner className="size-4" />
+                : <ArrowUpIcon />}
+            </InputGroupButton>
+          </ButtonGroup>
+        </div>
       </InputGroupAddon>
     </InputGroup>
   </div>;
