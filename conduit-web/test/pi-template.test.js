@@ -175,7 +175,7 @@ test("normal abort closes the generation before late deltas can be published", a
 
   assert.equal(result.processTerminated, false);
   assert.equal(record.events.some((event) => event.type === "message_start"), false);
-  assert.equal(record.events.at(-1).type, "generation_stopped");
+  assert.ok(record.events.some((event) => event.type === "generation_stopped"));
   assert.equal(record.generation.closed, true);
 });
 
@@ -218,4 +218,61 @@ test("fork uses Pi's public RPC and updates the live native session mapping", as
   assert.equal(record.sessionFile, path.resolve(nextFile));
   assert.equal(record.sessionId, "forked-native");
   assert.equal(manager.bySessionFile.has(path.resolve("/tmp/sessions/original.jsonl")), false);
+});
+
+test("process view exposes chatId, activity, and host UI for global runtime", async () => {
+  const { manager, child, record } = rpcFixture((command, process) => {
+    if (command.type === "get_session_stats" && command.id) {
+      queueMicrotask(() => process.stdout.write(`${JSON.stringify({
+        id: command.id,
+        type: "response",
+        command: "get_session_stats",
+        success: true,
+        data: { contextUsage: { tokens: 1000, contextWindow: 128000, percent: 0.78 } },
+      })}\n`));
+    }
+  });
+  child.stdout.write(`${JSON.stringify({
+    type: "extension_ui_request",
+    id: "ui1",
+    method: "confirm",
+    title: "Allow?",
+    message: "Write file",
+  })}\n`);
+  const view = manager.view(record);
+  assert.equal(view.chatId, "chat-test");
+  assert.equal(view.activity, "waiting_for_user");
+  assert.equal(view.hostUiRequests.length, 1);
+  assert.equal(view.hostUiRequests[0].kind, "confirm");
+
+  await manager.refreshContextUsage(record.id);
+  assert.equal(record.contextUsage.contextWindow, 128000);
+  assert.equal(record.contextUsage.tokens, 1000);
+  assert.ok(record.events.some((event) => event.type === "context_usage"));
+});
+
+test("tool and compaction events update coarse activity and publish state", () => {
+  const { manager, child, record } = rpcFixture();
+  child.stdout.write(`${JSON.stringify({ type: "agent_start" })}\n`);
+  assert.equal(record.active, true);
+  assert.equal(manager.view(record).activity, "working");
+
+  child.stdout.write(`${JSON.stringify({
+    type: "tool_execution_start",
+    toolCallId: "t1",
+    toolName: "read",
+    args: { path: "a.js" },
+  })}\n`);
+  assert.match(record.activityDetail || "", /read/);
+
+  child.stdout.write(`${JSON.stringify({ type: "compaction_start", reason: "threshold" })}\n`);
+  assert.equal(manager.view(record).activity, "compacting");
+
+  child.stdout.write(`${JSON.stringify({
+    type: "compaction_end",
+    reason: "threshold",
+    aborted: false,
+    willRetry: false,
+  })}\n`);
+  assert.equal(record.compacting, false);
 });

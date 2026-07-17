@@ -13,6 +13,7 @@ import { ChatStore, chatView, isChatId } from "./chat-store.js";
 import { AttachmentStore } from "./attachment-store.js";
 import { announcedAttachmentIds, serializeAttachmentEnvelope } from "./attachment-envelope.js";
 import { CONTINUE_PROMPT } from "./continuation.js";
+import { RuntimeHub } from "./runtime-hub.js";
 
 const config = loadConfig();
 const projects = new ProjectStore(config);
@@ -24,6 +25,13 @@ const manager = new PiManager({
   command: config.piCommand,
   agentDir: config.piAgentDir,
   template: config.piTemplate,
+});
+const runtimeHub = new RuntimeHub({ listViews: () => manager.list() });
+manager.on("process_changed", ({ record, reason }) => {
+  runtimeHub.publishProcess(manager.view(record), reason || "update");
+});
+manager.on("process_removed", ({ id, chatId }) => {
+  runtimeHub.publishProcessRemoved(id, chatId);
 });
 const modelCatalog = new PiModelCatalog({ agentDir: config.piAgentDir, modelPatterns: config.piTemplate.models });
 const app = express();
@@ -83,7 +91,30 @@ app.get("/v0/capabilities", (_request, response) => response.json({
   sessionManagement: true, chatIdentity: "conduit", attachments: "raw-http",
   partialContinue: config.enablePartialContinue,
   stream: "websocket", processOwner: "conduit-server", sessionAuthority: "pi-jsonl",
+  globalRuntime: "sse",
 }));
+
+app.get("/v0/runtime", (_request, response) => {
+  response.json(runtimeHub.snapshot());
+});
+
+app.get("/v0/runtime/stream", (request, response) => {
+  response.setHeader("Content-Type", "text/event-stream");
+  response.setHeader("Cache-Control", "no-cache, no-transform");
+  response.setHeader("Connection", "keep-alive");
+  response.flushHeaders?.();
+  const client = { kind: "sse", response };
+  const detach = runtimeHub.attach(client);
+  const heartbeat = setInterval(() => {
+    try { response.write(": ping\n\n"); }
+    catch { clearInterval(heartbeat); detach(); }
+  }, 25000);
+  heartbeat.unref?.();
+  request.on("close", () => {
+    clearInterval(heartbeat);
+    detach();
+  });
+});
 
 async function stopSessionProcesses(session) {
   const chatId = session.chatId || session.id;
@@ -100,7 +131,13 @@ app.get("/v0/projects", async (_request, response, next) => {
       ...project,
       sessions: registry.listProject(project.id).map((chat) => {
         const process = live.find((item) => item.chatId === chat.id);
-        return { ...chatView(chat), liveStatus: process?.status || null, liveId: process?.id || null };
+        return {
+          ...chatView(chat),
+          liveStatus: process?.status || null,
+          liveId: process?.id || null,
+          liveActivity: process?.activity || null,
+          liveActive: process?.active || false,
+        };
       }),
     }))), live });
   } catch (error) { next(error); }
@@ -449,7 +486,18 @@ async function syncForkedChat(record) {
 async function handleClientCommand(record, command) {
   if (command.type === "prompt") {
     const prepared = await promptForChat(record, command, String(command.message || ""));
-    return sendPrompt(record, prepared);
+    const streamingBehavior = command.streamingBehavior === "steer" || command.streamingBehavior === "followUp"
+      ? command.streamingBehavior
+      : null;
+    return sendPrompt(record, prepared, { streamingBehavior });
+  }
+  if (command.type === "follow_up" || command.type === "steer") {
+    const prepared = await promptForChat(record, command, String(command.message || ""));
+    manager.send(record.id, {
+      type: command.type,
+      message: prepared.prompt,
+    });
+    return null;
   }
   if (command.type === "stop_generation" || command.type === "abort") {
     return manager.abortGeneration(record.id, command.generationId || null);
@@ -474,6 +522,13 @@ async function handleClientCommand(record, command) {
     // Experimental and intentionally removable: this is an ordinary hidden user prompt, not assistant prefill.
     return manager.prompt(record.id, CONTINUE_PROMPT, { continuationBase: partial });
   }
+  if (command.type === "extension_ui_response" || command.type === "host_ui_response") {
+    manager.respondHostUi(record.id, command);
+    return null;
+  }
+  if (command.type === "refresh_context") {
+    return manager.refreshContextUsage(record.id);
+  }
   manager.send(record.id, command);
   return null;
 }
@@ -491,7 +546,18 @@ server.on("upgrade", (request, socket, head) => {
     const stream = record.stream
       ? { generationId: record.stream.generationId, content: record.stream.chunks.join("") }
       : null;
-    ws.send(JSON.stringify({ type: "runtime_snapshot", session: manager.view(record), stream, events: pendingEvents }));
+    if (record.status === "running" && !record.contextUsage?.contextWindow) {
+      manager.refreshContextUsage(record.id).catch(() => {});
+    }
+    ws.send(JSON.stringify({
+      type: "runtime_snapshot",
+      session: manager.view(record),
+      stream,
+      events: pendingEvents,
+      hostUiRequests: record.hostUiRequests || [],
+      queue: record.queue || { steering: [], followUp: [] },
+      contextUsage: record.contextUsage || null,
+    }));
     ws.on("message", (data) => {
       Promise.resolve()
         .then(() => handleClientCommand(record, JSON.parse(String(data))))
