@@ -382,6 +382,11 @@ test("repairs unfinished Markdown while an assistant response streams", async ({
             html: '<div class="server-markdown">Bogus legacy HTML</div>',
           }) }), 600);
           setTimeout(() => this.onmessage?.({ data: JSON.stringify({
+            type: "agent_end",
+            generationId: "g1",
+            willRetry: false,
+          }) }), 700);
+          setTimeout(() => this.onmessage?.({ data: JSON.stringify({
             type: "session_checkpoint",
             chat: { id: "550e8400-e29b-41d4-a716-446655440099" },
           }) }), 900);
@@ -949,6 +954,17 @@ test("message actions copy source, edit from a Pi entry, and regenerate via fork
       { id: "entry-assistant", role: "assistant", content: "**Source Markdown**" },
     ], tools: [], page: { before: null },
   } }));
+  // 1x1 PNG so the composer preview keeps the img (onError degrades to icon).
+  await page.route("**/v0/chats/session_existing/attachments/image-one?preview=1", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "image/png",
+      body: Buffer.from(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
+        "base64",
+      ),
+    });
+  });
   await page.goto("/");
   await openSidebar(page, testInfo);
   await page.getByRole("button", { name: "Existing chat" }).click();

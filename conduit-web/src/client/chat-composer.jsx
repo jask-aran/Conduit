@@ -98,15 +98,12 @@ export function ChatComposer({
     });
   };
 
+  // Keep the send control labeled for send/queue only. Stop has its own button.
   const primaryLabel = isStopping
     ? "Stopping response"
     : canQueue
       ? "Queue follow-up"
-      : canSendIdle
-        ? "Send message"
-        : canStop
-          ? "Stop response"
-          : "Send message";
+      : "Send message";
 
   return <div className="composer-wrap">
     <AttachmentTray attachments={attachments} chatId={chatId} />
