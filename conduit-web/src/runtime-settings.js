@@ -2,7 +2,8 @@ import fs from "node:fs/promises";
 import path from "node:path";
 
 const DEFAULTS = {
-  maxLiveProcesses: 4,
+  maxLiveProcesses: 12,
+  maxGeneratingProcesses: 2,
   idleProcessTtlMs: 120_000,
 };
 
@@ -14,7 +15,8 @@ function clampInt(value, min, max, fallback) {
 
 export function normalizeRuntimeSettings(input = {}, fallback = DEFAULTS) {
   return {
-    maxLiveProcesses: clampInt(input.maxLiveProcesses, 1, 16, fallback.maxLiveProcesses),
+    maxLiveProcesses: clampInt(input.maxLiveProcesses, 1, 32, fallback.maxLiveProcesses),
+    maxGeneratingProcesses: clampInt(input.maxGeneratingProcesses, 1, 8, fallback.maxGeneratingProcesses),
     idleProcessTtlMs: clampInt(input.idleProcessTtlMs, 30_000, 3_600_000, fallback.idleProcessTtlMs),
   };
 }
@@ -22,6 +24,7 @@ export function normalizeRuntimeSettings(input = {}, fallback = DEFAULTS) {
 export function defaultsFromEnv(env = process.env) {
   return normalizeRuntimeSettings({
     maxLiveProcesses: env.CONDUIT_MAX_LIVE_PROCESSES,
+    maxGeneratingProcesses: env.CONDUIT_MAX_GENERATING_PROCESSES,
     idleProcessTtlMs: env.CONDUIT_IDLE_PROCESS_TTL_MS,
   }, DEFAULTS);
 }

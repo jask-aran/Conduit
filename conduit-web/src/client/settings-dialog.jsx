@@ -31,9 +31,11 @@ function RuntimeSettings() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
-  const [maxLiveProcesses, setMaxLiveProcesses] = useState(4);
+  const [maxLiveProcesses, setMaxLiveProcesses] = useState(12);
+  const [maxGeneratingProcesses, setMaxGeneratingProcesses] = useState(2);
   const [idleMinutes, setIdleMinutes] = useState(2);
   const [liveCount, setLiveCount] = useState(0);
+  const [generatingCount, setGeneratingCount] = useState(0);
 
   useEffect(() => {
     let active = true;
@@ -46,9 +48,11 @@ function RuntimeSettings() {
       })
       .then((body) => {
         if (!active) return;
-        setMaxLiveProcesses(body.maxLiveProcesses ?? 4);
+        setMaxLiveProcesses(body.maxLiveProcesses ?? 12);
+        setMaxGeneratingProcesses(body.maxGeneratingProcesses ?? 2);
         setIdleMinutes(Math.max(1, Math.round((body.idleProcessTtlMs || 120_000) / 60_000)));
         setLiveCount(body.liveCount ?? 0);
+        setGeneratingCount(body.generatingCount ?? 0);
         setError("");
       })
       .catch((caught) => {
@@ -69,14 +73,17 @@ function RuntimeSettings() {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           maxLiveProcesses: Number(maxLiveProcesses),
+          maxGeneratingProcesses: Number(maxGeneratingProcesses),
           idleProcessTtlMs: Math.max(1, Number(idleMinutes)) * 60_000,
         }),
       });
       const body = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(body.message || body.error || "Could not save runtime settings");
       setMaxLiveProcesses(body.maxLiveProcesses ?? maxLiveProcesses);
+      setMaxGeneratingProcesses(body.maxGeneratingProcesses ?? maxGeneratingProcesses);
       setIdleMinutes(Math.max(1, Math.round((body.idleProcessTtlMs || 120_000) / 60_000)));
       setLiveCount(body.liveCount ?? liveCount);
+      setGeneratingCount(body.generatingCount ?? generatingCount);
     } catch (caught) {
       setError(caught.message);
     } finally {
@@ -89,23 +96,39 @@ function RuntimeSettings() {
   return <>
     <div className="settings-section-heading">
       <h2>Runtime</h2>
-      <p>Limit how many Pi agents stay warm, and reclaim idle processes after you leave a chat.</p>
+      <p>Keep many chats warm; limit how many agent loops run at once. Idle warms reclaim after you leave.</p>
     </div>
     <FieldGroup>
       <Field>
         <FieldLabel className="justify-between">
-          Max live Pi processes
+          Max warm Pi processes
           <Badge variant="secondary">{liveCount} live now</Badge>
         </FieldLabel>
         <Input
           type="number"
           min={1}
-          max={16}
+          max={32}
           value={maxLiveProcesses}
           onChange={(event) => setMaxLiveProcesses(event.target.value)}
         />
         <FieldDescription>
-          Opening an active chat starts or reuses a Pi process. When the cap is hit, the oldest idle unattached process is stopped first.
+          Resident agents for open chats. When full, the oldest idle unattached process is stopped. Raising this reduces thrash when switching sessions.
+        </FieldDescription>
+      </Field>
+      <Field>
+        <FieldLabel className="justify-between">
+          Max concurrent generations
+          <Badge variant="secondary">{generatingCount} generating</Badge>
+        </FieldLabel>
+        <Input
+          type="number"
+          min={1}
+          max={8}
+          value={maxGeneratingProcesses}
+          onChange={(event) => setMaxGeneratingProcesses(event.target.value)}
+        />
+        <FieldDescription>
+          Hard limit on agent loops at once. Extra prompts bounce until a generation finishes; warm processes stay attached.
         </FieldDescription>
       </Field>
       <Field>
