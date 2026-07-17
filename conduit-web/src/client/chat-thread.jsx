@@ -27,6 +27,12 @@ const ChatMarkdown = lazy(() => import("./chat-markdown").then((module) => ({
   default: module.ChatMarkdown,
 })));
 
+// Timeline rows participate in the message-scroller's pre-paint scroll math, so
+// they must lay out at their real height. Override the generated wrapper's lazy
+// [content-visibility:auto]/[contain-intrinsic-size] placeholders (tailwind-merge
+// keeps these later arbitrary-property values); pristine wrapper preserved.
+const eagerItem = "[content-visibility:visible] [contain-intrinsic-size:none]";
+
 const time = (value) => value
   ? new Date(value).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
   : "";
@@ -62,9 +68,10 @@ function ToolCard({ tool, sessionId }) {
   </Collapsible>;
 }
 
-export function StreamingAssistantMessage({ message, liveStore }) {
+function AssistantMessage({ message, liveStore, live }) {
   const stream = useSyncExternalStore(liveStore.subscribe, liveStore.getSnapshot, liveStore.getServerSnapshot);
-  return <ChatMarkdown streaming>{`${message.content || ""}${stream.content}`}</ChatMarkdown>;
+  const text = live ? `${message.content || ""}${stream.content}` : String(message.content || "");
+  return <ChatMarkdown streaming={live}>{text}</ChatMarkdown>;
 }
 
 export const ChatThread = memo(function ChatThread({
@@ -101,25 +108,26 @@ export const ChatThread = memo(function ChatThread({
     <MessageScroller className="transcript">
       <MessageScrollerViewport>
         <MessageScrollerContent className="thread">
-          {hasOlder && <MessageScrollerItem>
+          {hasOlder && <MessageScrollerItem className={eagerItem}>
             <Button ref={older} variant="ghost" className="mx-auto" onClick={onLoadOlder} disabled={loadingOlder}>
               {loadingOlder && <Spinner data-icon="inline-start" />}{loadingOlder ? "Loading earlier messages…" : "Load earlier messages"}
             </Button>
           </MessageScrollerItem>}
-          {empty && <MessageScrollerItem className="empty-thread">
+          {empty && <MessageScrollerItem className={`empty-thread ${eagerItem}`}>
             <Empty className="welcome"><EmptyHeader><EmptyTitle><h1>How can I help you today?</h1></EmptyTitle></EmptyHeader></Empty>
           </MessageScrollerItem>}
           {timeline.map((item) => {
-            if (item.type === "tool") return <MessageScrollerItem key={`tool_${item.value.id}`}>
+            if (item.type === "tool") return <MessageScrollerItem key={`tool_${item.value.id}`} className={eagerItem}>
               <ToolCard tool={item.value} sessionId={sessionId} />
             </MessageScrollerItem>;
             const message = item.value;
             const isUser = message.role === "user";
             const isEditing = message.id === editingEntryId;
-            const isStreamingMessage = streaming && message === lastMessage && !isUser;
+            const live = streaming && message === lastMessage && !isUser;
             const precedingUser = !isUser ? messages.slice(0, item.index).findLast((candidate) => candidate.role === "user") : null;
             return <MessageScrollerItem
-              key={`message_${message.id}`}
+              key={`message_${message.key ?? message.id}`}
+              className={eagerItem}
               messageId={message.id}
               scrollAnchor={isUser}
             >
@@ -134,12 +142,8 @@ export const ChatThread = memo(function ChatThread({
                   >
                     <BubbleContent>
                       {isUser ? <span className="user-message-text">{String(message.content || "")}</span>
-                        : isStreamingMessage
-                          ? <Suspense fallback={<Skeleton className="h-16 w-full" />}>
-                            <StreamingAssistantMessage message={message} liveStore={liveStore} />
-                          </Suspense>
-                          : <Suspense fallback={<Skeleton className="h-16 w-full" />}>
-                            <ChatMarkdown>{message.content}</ChatMarkdown>
+                        : <Suspense fallback={<Skeleton className="h-16 w-full" />}>
+                            <AssistantMessage message={message} liveStore={liveStore} live={live} />
                           </Suspense>}
                     </BubbleContent>
                   </Bubble>

@@ -164,6 +164,19 @@ with the JavaScript regex engine and a pinned language set; do not import the
 full `shiki` bundle. Do not introduce a parallel Markdown parser; raw HTML in
 assistant output renders only through Streamdown's sanitize-and-harden plugins.
 
+Rendering stability: timeline React keys are durable identities. When the server
+confirms an optimistic client entry, reconcile it in place and preserve the
+original key; never wholesale-replace a rendered list with re-keyed equivalents
+of the same content. A timeline slot keeps a single element type across its
+lifecycle from streaming to final; vary props, never the component identity
+mid-life. Read mutable external stores during render only through
+`useSyncExternalStore`. Navigation and reloads are load-then-commit: never commit
+a cleared intermediate state while replacement data is in flight, and key
+per-thread interface state by the loaded session id so scroll position and
+per-thread component state reset atomically with content. Pre-paint scroll
+positioning requires exact layout, so do not apply `content-visibility` or
+intrinsic-size placeholders to elements that participate in initial scroll math.
+
 Keep the composer a bounded native textarea. Keep palette commands and composer
 commands as explicit registries: the lazy Shadcn Command dialog owns persistent
 application actions, while the textarea-focused slash Popover exposes only

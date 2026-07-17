@@ -349,7 +349,12 @@ test("repairs unfinished Markdown while an assistant response streams", async ({
             type: "assistant_stream_final",
             generationId: "g1",
             content: "## Live response\n\n**still streaming**\n\n```javascript\nconst answer = 42;\n```\n\n$$\nE = mc^2\n$$",
-          }) }), 100);
+            html: '<div class="server-markdown">Bogus legacy HTML</div>',
+          }) }), 600);
+          setTimeout(() => this.onmessage?.({ data: JSON.stringify({
+            type: "session_checkpoint",
+            chat: { id: "550e8400-e29b-41d4-a716-446655440099" },
+          }) }), 900);
         }, 0);
       }
     }
@@ -359,16 +364,164 @@ test("repairs unfinished Markdown while an assistant response streams", async ({
       value: MockWebSocket,
     });
   });
+  const streamedContent = "## Live response\n\n**still streaming**\n\n```javascript\nconst answer = 42;\n```\n\n$$\nE = mc^2\n$$";
+  await page.route("**/v0/sessions/550e8400-e29b-41d4-a716-446655440099", async (route) => {
+    await route.fulfill({ json: {
+      id: "550e8400-e29b-41d4-a716-446655440099",
+      projectId: "project_chat",
+      status: "active",
+      title: "New chat",
+      messages: [
+        { id: "entry-user", role: "user", content: "Start streaming" },
+        { id: "entry-assistant", role: "assistant", content: streamedContent },
+      ],
+      tools: [],
+      page: { before: null },
+    } });
+  });
   await page.goto("/");
   await page.getByRole("textbox", { name: "Message Pi" }).fill("Start streaming");
+  const checkpointReload = page.waitForRequest((request) =>
+    request.url().endsWith("/v0/sessions/550e8400-e29b-41d4-a716-446655440099"));
   await page.getByRole("button", { name: "Send message" }).click();
 
   await expect(page.getByRole("heading", { name: "Live response" })).toBeVisible();
-  await expect(page.locator(".chat-markdown")).toContainText("still streaming");
+  const liveMarkdown = page.locator(".chat-markdown");
+  await expect(liveMarkdown).toContainText("still streaming");
+  const liveMarkdownNode = await liveMarkdown.elementHandle();
+  expect(liveMarkdownNode).not.toBeNull();
+  await liveMarkdownNode.evaluate((node) => node.setAttribute("data-before-final", "true"));
   await expect(page.locator('[data-language="javascript"]')).toBeVisible();
   await expect(page.locator('[data-language="javascript"] button[aria-label="Copy code"]')).toBeVisible();
   await expect(page.locator(".katex-display")).toBeVisible();
   await expect(page.getByRole("button", { name: "Copy Markdown" })).toBeVisible();
+  await expect(page.locator(".chat-markdown[data-before-final]")).toHaveCount(1);
+  expect(await liveMarkdownNode.evaluate((node) => node.isConnected && node === document.querySelector(".chat-markdown"))).toBe(true);
+  await expect(page.locator(".server-markdown")).toHaveCount(0);
+  await expect(page.locator('[data-language="javascript"]')).toBeVisible();
+  await expect(page.locator(".katex-display")).toBeVisible();
+
+  // The durable checkpoint reload must reconcile in place: the tagged DOM node
+  // survives (no remount), and the welcome screen never flashes.
+  await checkpointReload;
+  await expect(page.locator(".chat-markdown[data-before-final]")).toHaveCount(1);
+  await expect(page.getByRole("heading", { name: "How can I help you today?" })).toHaveCount(0);
+  expect(await liveMarkdownNode.evaluate((node) => node.isConnected && node === document.querySelector(".chat-markdown"))).toBe(true);
+  await expect(page.locator('[data-language="javascript"]')).toBeVisible();
+  await expect(page.locator(".katex-display")).toBeVisible();
+});
+
+test("switches threads atomically without flashing the welcome screen", async ({ page }, testInfo) => {
+  await page.route("**/v0/projects", async (route) => {
+    await route.fulfill({ json: { projects: [{
+      id: "project_chat",
+      slug: "chat",
+      name: "Chats",
+      sessions: [
+        { id: "session_first", projectId: "project_chat", status: "active", title: "First chat" },
+        { id: "session_second", projectId: "project_chat", status: "active", title: "Second chat" },
+      ],
+    }, projects[1]] } });
+  });
+  await page.route("**/v0/sessions/session_first", async (route) => {
+    await route.fulfill({ json: {
+      id: "session_first", projectId: "project_chat", status: "active", title: "First chat",
+      messages: [{ id: "entry-first", role: "user", content: "First thread body" }],
+      tools: [], page: { before: null },
+    } });
+  });
+  await page.route("**/v0/sessions/session_second", async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+    await route.fulfill({ json: {
+      id: "session_second", projectId: "project_chat", status: "active", title: "Second chat",
+      messages: [{ id: "entry-second", role: "user", content: "Second thread body" }],
+      tools: [], page: { before: null },
+    } });
+  });
+  await page.goto("/");
+  await openSidebar(page, testInfo);
+
+  await page.getByRole("button", { name: "First chat" }).click();
+  await expect(page.getByText("First thread body")).toBeVisible();
+
+  await openSidebar(page, testInfo);
+  await page.getByRole("button", { name: "Second chat" }).click();
+  // During the delayed load the previous thread stays put: no welcome heading,
+  // no recentering empty layout, and the first thread's content is still shown.
+  await expect(page.getByRole("heading", { name: "How can I help you today?" })).toHaveCount(0);
+  await expect(page.locator(".chat-main-empty")).toHaveCount(0);
+  await expect(page.getByText("First thread body")).toBeVisible();
+
+  await expect(page.getByText("Second thread body")).toBeVisible();
+  await expect(page.getByText("First thread body")).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "How can I help you today?" })).toHaveCount(0);
+});
+
+test("opens a viewport-filling thread pinned to the true bottom without an upward flash", async ({ page }, testInfo) => {
+  const paragraph = (n) => `Paragraph ${n} carries enough words to wrap across more than one line of the transcript column so the assistant answer grows well beyond ten rem in height.`;
+  const tallBody = Array.from({ length: 24 }, (_, index) => paragraph(index + 1)).join("\n\n");
+  await page.route("**/v0/projects", async (route) => {
+    await route.fulfill({ json: { projects: [{
+      id: "project_chat", slug: "chat", name: "Chats",
+      sessions: [
+        { id: "session_small", projectId: "project_chat", status: "active", title: "Small chat" },
+        { id: "session_tall", projectId: "project_chat", status: "active", title: "Tall chat" },
+      ],
+    }, projects[1]] } });
+  });
+  await page.route("**/v0/sessions/session_small", async (route) => {
+    await route.fulfill({ json: {
+      id: "session_small", projectId: "project_chat", status: "active", title: "Small chat",
+      messages: [
+        { id: "small-user", role: "user", content: "Hi" },
+        { id: "small-assistant", role: "assistant", content: "**Hello there**" },
+      ], tools: [], page: { before: null },
+    } });
+  });
+  await page.route("**/v0/sessions/session_tall", async (route) => {
+    await route.fulfill({ json: {
+      id: "session_tall", projectId: "project_chat", status: "active", title: "Tall chat",
+      messages: [
+        { id: "tall-user-1", role: "user", content: "First short question" },
+        { id: "tall-assistant-1", role: "assistant", content: "A short reply." },
+        { id: "tall-user-2", role: "user", content: "Now the long one" },
+        { id: "tall-assistant-2", role: "assistant", content: tallBody },
+      ], tools: [], page: { before: null },
+    } });
+  });
+  await page.goto("/");
+  await openSidebar(page, testInfo);
+  // Open a small thread first so the lazy chat-markdown chunk is already resolved
+  // and the tall thread renders its real heights synchronously on mount.
+  await page.getByRole("button", { name: "Small chat" }).click();
+  await expect(page.getByText("Hello there")).toBeVisible();
+
+  await openSidebar(page, testInfo);
+  await page.getByRole("button", { name: "Tall chat" }).click();
+  // Sample the viewport every frame across the mount + settle window so a buggy
+  // pre-paint scroll (last message snapping down from its top) is captured as a
+  // frame far from the bottom. Bounded loop: no lingering background work.
+  const samples = await page.evaluate(async () => {
+    const out = [];
+    for (let frame = 0; frame < 45; frame += 1) {
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+      const viewport = document.querySelector('[data-slot="message-scroller-viewport"]');
+      if (viewport) out.push({ top: viewport.scrollTop, height: viewport.scrollHeight, client: viewport.clientHeight });
+    }
+    return out;
+  });
+  await expect(page.getByText("Paragraph 24 carries enough words")).toBeVisible();
+
+  // The usage-site override must win the tailwind-merge dedupe, so items lay out
+  // at real height (not a content-visibility placeholder) during pre-paint scroll.
+  const contentVisibility = await page.locator('[data-slot="message-scroller-item"]').first()
+    .evaluate((element) => getComputedStyle(element).contentVisibility);
+  expect(contentVisibility).toBe("visible");
+
+  const tall = samples.filter((sample) => sample.height - sample.client > 200);
+  expect(tall.length).toBeGreaterThan(0);
+  const worstDistanceFromBottom = Math.max(...tall.map((sample) => sample.height - sample.client - sample.top));
+  expect(worstDistanceFromBottom).toBeLessThanOrEqual(32);
 });
 
 test("hides transient new chats and provides complete right-click menus", async ({ page }, testInfo) => {

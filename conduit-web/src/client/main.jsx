@@ -15,6 +15,7 @@ import { ChatComposer } from "./chat-composer";
 import { ChatDropOverlay, useChatDrop } from "./chat-drop-overlay";
 import { ChatThread } from "./chat-thread";
 import { createLiveStreamStore } from "./live-stream-store";
+import { reconcileMessages } from "./reconcile-messages";
 import { useAttachments } from "./use-attachments";
 import { useModelSettings } from "./use-model-settings";
 import "./styles.css";
@@ -76,6 +77,7 @@ function App() {
   const [live, setLive] = useState(null);
   const [messages, setMessages] = useState([]);
   const [tools, setTools] = useState([]);
+  const [loadedSessionId, setLoadedSessionId] = useState(null);
   const [pageBefore, setPageBefore] = useState(null);
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [draft, setDraft] = useState("");
@@ -120,13 +122,17 @@ function App() {
     return next;
   }, []);
 
-  const loadDetail = useCallback(async (chatId) => {
+  const loadDetail = useCallback(async (chatId, { reconcile = false } = {}) => {
     const detail = await api(`/v0/sessions/${encodeURIComponent(chatId)}`);
-    setMessages(list(detail.messages));
+    if (selectedIdRef.current !== chatId) return detail;
+    const incoming = list(detail.messages);
+    if (reconcile) setMessages((current) => reconcileMessages(current, incoming));
+    else setMessages(incoming);
     setTools(list(detail.tools));
     setPageBefore(detail.page?.before || null);
     setChatStatus(detail.status || "draft");
     setChatTitle(detail.title || "New chat");
+    setLoadedSessionId(chatId);
     return detail;
   }, []);
 
@@ -188,6 +194,7 @@ function App() {
         if (routeId) {
           const chat = await api(`/v0/chats/${encodeURIComponent(routeId)}`);
           if (!active) return;
+          selectedIdRef.current = chat.id;
           setSelectedId(chat.id); setProjectId(chat.projectId); setChatStatus(chat.status); setChatTitle(chat.title);
           await loadDetail(chat.id);
           if (chat.status === "active") await openLive(chat.id, chat.projectId);
@@ -198,7 +205,9 @@ function App() {
         const chat = await api("/v0/chats", { method: "POST", body: JSON.stringify({ projectId: project.id }) });
         if (!active) return;
         history.replaceState({}, "", `/chat/${chat.id}`);
+        selectedIdRef.current = chat.id;
         setSelectedId(chat.id); setProjectId(chat.projectId); setChatStatus(chat.status); setChatTitle(chat.title);
+        setMessages([]); setTools([]); setPageBefore(null); setLoadedSessionId(chat.id);
       })
       .catch((caught) => active && setError(caught.message));
     return () => { active = false; ws.current?.close(); };
@@ -253,14 +262,13 @@ function App() {
     }
     if (event.type === "session_checkpoint") {
       refresh().catch(() => {});
-      if (event.chat?.id === selectedIdRef.current) loadDetail(event.chat.id).catch(() => {});
+      if (event.chat?.id === selectedIdRef.current) loadDetail(event.chat.id, { reconcile: true }).catch(() => {});
     }
     if (event.type === "message_start" && event.message?.role === "assistant" && !continuation.current) {
       setMessages((current) => [...current, { id: `live_${Date.now()}`, role: "assistant", content: "", timestamp: new Date().toISOString() }]);
     }
     if (event.type === "assistant_stream_delta") liveStream.current.append(event.generationId, event.delta || "");
     if (event.type === "assistant_stream_final") {
-      liveStream.current.flush();
       continuation.current = null;
       setStreaming(false);
       setStopping(false);
@@ -294,7 +302,7 @@ function App() {
   }
 
   function resetChatState() {
-    ws.current?.close(); setLive(null); setMessages([]); setTools([]); setPageBefore(null);
+    ws.current?.close(); setLive(null);
     setStreaming(false); setStopping(false); setDraft(""); setEditEntryId(null); setError("");
     liveStream.current.clear();
     currentGeneration.current = null; stopPending.current = false; continuation.current = null;
@@ -307,16 +315,19 @@ function App() {
     resetChatState();
     const chat = await api("/v0/chats", { method: "POST", body: JSON.stringify({ projectId: nextProject.id }) });
     history.replaceState({}, "", `/chat/${chat.id}`);
+    selectedIdRef.current = chat.id;
     setSelectedId(chat.id); setProjectId(chat.projectId); setChatStatus(chat.status); setChatTitle(chat.title);
+    setMessages([]); setTools([]); setPageBefore(null); setLoadedSessionId(chat.id);
   }
 
   async function openSession(session, owningProject) {
     await discardEmptyDraft();
     resetChatState();
+    selectedIdRef.current = session.id;
     setProjectId(owningProject.id); setSelectedId(session.id); setChatTitle(session.title); setChatStatus(session.status);
     history.replaceState({}, "", `/chat/${session.id}`);
     const detail = await loadDetail(session.id);
-    if (detail.status === "active") await openLive(session.id, owningProject.id);
+    if (selectedIdRef.current === session.id && detail.status === "active") await openLive(session.id, owningProject.id);
   }
 
   async function ensureLive() {
@@ -461,7 +472,12 @@ function App() {
   async function moveSession(session, _source, target) {
     try {
       const moved = await api(`/v0/sessions/${session.id}/move`, { method: "POST", body: JSON.stringify({ projectId: target.id }) });
-      if (selectedId === session.id) { resetChatState(); setProjectId(target.id); setSelectedId(moved.id); setChatStatus(moved.status); }
+      if (selectedId === session.id) {
+        resetChatState();
+        selectedIdRef.current = moved.id;
+        setProjectId(target.id); setSelectedId(moved.id); setChatStatus(moved.status);
+        await loadDetail(moved.id);
+      }
       await refresh();
     } catch (caught) { setError(caught.message); }
   }
@@ -469,7 +485,14 @@ function App() {
   async function moveProjectSessions(source, target) {
     try {
       const payload = await api(`/v0/projects/${source.id}/move-sessions`, { method: "POST", body: JSON.stringify({ projectId: target.id }) });
-      if (list(payload.moved).some((item) => item.sourceId === selectedId)) { resetChatState(); setProjectId(target.id); }
+      const movedSelected = list(payload.moved).find((item) => item.sourceId === selectedId);
+      if (movedSelected) {
+        resetChatState();
+        const nextId = movedSelected.session?.id || selectedId;
+        selectedIdRef.current = nextId;
+        setProjectId(target.id); setSelectedId(nextId);
+        await loadDetail(nextId);
+      }
       await refresh();
     } catch (caught) { setError(caught.message); }
   }
@@ -509,7 +532,8 @@ function App() {
     copy: () => lastAssistant && navigator.clipboard.writeText(lastAssistant.content),
   };
 
-  const emptyChat = messages.length === 0 && tools.length === 0;
+  const threadReady = loadedSessionId === selectedId;
+  const emptyChat = threadReady && messages.length === 0 && tools.length === 0;
   const selectedProject = projects.find((project) => project.id === projectId);
   return <TooltipProvider>
     <Toaster richColors />
@@ -540,6 +564,7 @@ function App() {
         <div className="chat-meteors" aria-hidden="true"><Meteors number={30} minDelay={0} maxDelay={1} minDuration={12} maxDuration={20} /></div>
         <ChatHeader project={selectedProject} title={chatTitle} />
         <ChatThread
+          key={loadedSessionId ?? "boot"}
           messages={messages}
           tools={tools}
           streaming={streaming}

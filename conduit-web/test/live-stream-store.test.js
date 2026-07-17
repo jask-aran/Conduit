@@ -32,3 +32,14 @@ test("flush publishes pending content and rejects stale generations", () => {
   assert.equal(store.getSnapshot().content, "visible");
   assert.equal(frames.length, 1);
 });
+
+test("ordinary clear resets the generation and notifies subscribers", () => {
+  const { store } = fixture();
+  let notifications = 0;
+  store.subscribe(() => { notifications += 1; });
+  store.start("g1");
+  notifications = 0;
+  store.clear();
+  assert.deepEqual(store.getSnapshot(), { generationId: null, content: "" });
+  assert.equal(notifications, 1);
+});
