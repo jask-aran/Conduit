@@ -20,6 +20,8 @@ import {
 import { Marker, MarkerContent } from "@/components/ui/marker";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
+import { AgentActivityRow } from "./agent-activity";
+import { ReasoningBlock } from "./reasoning-block";
 import { ResponseActions } from "./response-actions";
 import { AttachmentCards } from "./attachment-tray";
 
@@ -53,17 +55,19 @@ function ToolCard({ tool, sessionId }) {
       .catch(() => setResult("Could not load tool output"))
       .finally(() => setLoading(false));
   }, [loading, open, result, sessionId, tool.id, tool.resultDeferred]);
+  const status = tool.error ? "Error" : tool.cancelled ? "Cancelled" : tool.done ? "Complete" : "Running";
   return <Collapsible open={open} onOpenChange={setOpen} className="tool-card">
     <CollapsibleTrigger asChild>
       <Button variant="outline" className="w-full justify-start">
-        {tool.done && <CheckIcon data-icon="inline-start" />}
+        {tool.done && !tool.error && <CheckIcon data-icon="inline-start" />}
+        {!tool.done && <Spinner data-icon="inline-start" className="size-3.5" />}
         <span className="truncate">{tool.name || "Tool"}</span>
-        <span className="ml-auto text-xs text-muted-foreground">{tool.done ? "Complete" : "Running"}</span>
+        <span className="ml-auto text-xs text-muted-foreground">{status}</span>
         {open ? <ChevronUpIcon data-icon="inline-end" /> : <ChevronDownIcon data-icon="inline-end" />}
       </Button>
     </CollapsibleTrigger>
     <CollapsibleContent>
-      <pre>{loading ? <span className="flex items-center gap-2"><Spinner />Loading…</span> : typeof result === "string" ? result : JSON.stringify(result || tool.args || {}, null, 2)}</pre>
+      <pre>{loading ? <span className="flex items-center gap-2"><Spinner />Loading…</span> : typeof result === "string" ? result : JSON.stringify(result || tool.partialResult || tool.args || {}, null, 2)}</pre>
     </CollapsibleContent>
   </Collapsible>;
 }
@@ -77,6 +81,7 @@ function AssistantMessage({ message, liveStore, live }) {
 export const ChatThread = memo(function ChatThread({
   messages, tools, streaming, sessionId, hasOlder, loadingOlder, partialContinue,
   editingEntryId, onLoadOlder, onCopyMessage, onEditMessage, onRegenerate, onContinue, liveStore,
+  activity = null, reasoning = null,
 }) {
   const older = useRef(null);
   useEffect(() => {
@@ -113,7 +118,7 @@ export const ChatThread = memo(function ChatThread({
               {loadingOlder && <Spinner data-icon="inline-start" />}{loadingOlder ? "Loading earlier messages…" : "Load earlier messages"}
             </Button>
           </MessageScrollerItem>}
-          {empty && <MessageScrollerItem className={`empty-thread ${eagerItem}`}>
+          {empty && !activity?.label && <MessageScrollerItem className={`empty-thread ${eagerItem}`}>
             <Empty className="welcome"><EmptyHeader><EmptyTitle><h1>How can I help you today?</h1></EmptyTitle></EmptyHeader></Empty>
           </MessageScrollerItem>}
           {timeline.map((item) => {
@@ -142,9 +147,18 @@ export const ChatThread = memo(function ChatThread({
                   >
                     <BubbleContent>
                       {isUser ? <span className="user-message-text">{String(message.content || "")}</span>
-                        : <Suspense fallback={<Skeleton className="h-16 w-full" />}>
-                            <AssistantMessage message={message} liveStore={liveStore} live={live} />
-                          </Suspense>}
+                        : <>
+                            {live && reasoning && (reasoning.content || reasoning.active) && (
+                              <ReasoningBlock
+                                content={reasoning.content}
+                                redacted={reasoning.redacted}
+                                active={reasoning.active}
+                              />
+                            )}
+                            <Suspense fallback={<Skeleton className="h-16 w-full" />}>
+                              <AssistantMessage message={message} liveStore={liveStore} live={live} />
+                            </Suspense>
+                          </>}
                     </BubbleContent>
                   </Bubble>
                   {isUser && <AttachmentCards
@@ -168,6 +182,9 @@ export const ChatThread = memo(function ChatThread({
               </Message>
             </MessageScrollerItem>;
           })}
+          {activity?.label && activity.kind !== "idle" && <MessageScrollerItem className={eagerItem} key="agent-activity">
+            <AgentActivityRow activity={activity} />
+          </MessageScrollerItem>}
         </MessageScrollerContent>
       </MessageScrollerViewport>
       <MessageScrollerButton />

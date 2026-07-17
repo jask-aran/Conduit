@@ -13,12 +13,15 @@ import {
   SidebarMenuSubItem,
 } from "@/components/ui/sidebar";
 import { ChatContextMenu, ProjectContextMenu } from "./sidebar-context-menu";
+import { ProjectActivityIndicator, RuntimeIndicator } from "./runtime-indicator";
 
 export function NavProjects({
   allProjects,
   projects,
   selectedId,
   view,
+  getProcess,
+  runtimeStale = false,
   onAddProject,
   onCopyTranscript,
   onDeleteProject,
@@ -50,33 +53,43 @@ export function NavProjects({
               <CollapsibleTrigger asChild>
                 <SidebarMenuButton className="text-sidebar-foreground" tooltip={project.name}>
                   <FolderIcon absoluteStrokeWidth />
-                  <span>{project.name}</span>
+                  <ProjectActivityIndicator sessions={project.sessions} getProcess={getProcess} stale={runtimeStale} />
+                  <span className="truncate">{project.name}</span>
                   <ChevronRightIcon absoluteStrokeWidth className="ml-auto transition-transform group-data-[state=open]/project:rotate-90" />
                 </SidebarMenuButton>
               </CollapsibleTrigger>
             </ProjectContextMenu>
             <CollapsibleContent>
               <SidebarMenuSub>
-                {project.sessions.map((session) => <SidebarMenuSubItem key={session.id}>
-                  <ChatContextMenu
-                    currentProject={project}
-                    projects={allProjects}
-                    onCopyTranscript={() => onCopyTranscript(session)}
-                    onDelete={() => onDeleteSession(session, project)}
-                    onMove={(target) => onMoveSession(session, project, target)}
-                    onRename={() => onRenameSession(session, project)}
-                  >
-                    <SidebarMenuSubButton
-                      asChild
-                      isActive={view === "chat" && selectedId === session.id}
-                      aria-current={view === "chat" && selectedId === session.id ? "page" : undefined}
+                {project.sessions.map((session) => {
+                  const process = getProcess?.(session.id) || (session.liveStatus ? {
+                    chatId: session.id,
+                    status: session.liveStatus,
+                    activity: session.liveActivity || (session.liveActive ? "working" : "idle"),
+                    active: session.liveActive,
+                  } : null);
+                  return <SidebarMenuSubItem key={session.id}>
+                    <ChatContextMenu
+                      currentProject={project}
+                      projects={allProjects}
+                      onCopyTranscript={() => onCopyTranscript(session)}
+                      onDelete={() => onDeleteSession(session, project)}
+                      onMove={(target) => onMoveSession(session, project, target)}
+                      onRename={() => onRenameSession(session, project)}
                     >
-                      <button type="button" onClick={() => onOpenSession(session, project)}>
-                        <span>{session.title}</span>
-                      </button>
-                    </SidebarMenuSubButton>
-                  </ChatContextMenu>
-                </SidebarMenuSubItem>)}
+                      <SidebarMenuSubButton
+                        asChild
+                        isActive={view === "chat" && selectedId === session.id}
+                        aria-current={view === "chat" && selectedId === session.id ? "page" : undefined}
+                      >
+                        <button type="button" className="flex w-full items-center gap-2" onClick={() => onOpenSession(session, project)}>
+                          <RuntimeIndicator process={process} stale={runtimeStale} />
+                          <span className="truncate">{session.title}</span>
+                        </button>
+                      </SidebarMenuSubButton>
+                    </ChatContextMenu>
+                  </SidebarMenuSubItem>;
+                })}
                 {!project.sessions.length && <SidebarMenuSubItem>
                   <span className="block px-2 py-1 text-[13px] text-sidebar-foreground/50">No chats</span>
                 </SidebarMenuSubItem>}

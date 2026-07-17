@@ -60,6 +60,10 @@ export function AppSidebar({
   selectedStatus,
   selectedTitle,
   view,
+  connectivity = "online",
+  getProcess,
+  runtimeStale = false,
+  onRetryConnection,
   onAddProject,
   onCopyTranscript,
   onDeleteProject,
@@ -159,6 +163,8 @@ export function AppSidebar({
           projects={projects}
           selectedId={selectedId}
           view={view}
+          getProcess={getProcess}
+          runtimeStale={runtimeStale}
           onCopyTranscript={onCopyTranscript}
           onMoveSession={onMoveSession}
           onNewChat={chooseNewChat}
@@ -171,6 +177,8 @@ export function AppSidebar({
           projects={folderProjects}
           selectedId={selectedId}
           view={view}
+          getProcess={getProcess}
+          runtimeStale={runtimeStale}
           onAddProject={() => setNewFolderOpen(true)}
           onCopyTranscript={onCopyTranscript}
           onMoveProjectSessions={onMoveProjectSessions}
@@ -185,7 +193,11 @@ export function AppSidebar({
       </SidebarContent>
 
       <SidebarFooter>
-        <NavUser onOpenSettings={chooseSettings} />
+        <NavUser
+          onOpenSettings={chooseSettings}
+          connectivity={connectivity}
+          onRetryConnection={onRetryConnection}
+        />
       </SidebarFooter>
       <SidebarRail />
     </Sidebar>

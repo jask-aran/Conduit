@@ -1,4 +1,4 @@
-import React, { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
+import React, { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { ShareIcon, TriangleAlertIcon } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -10,12 +10,15 @@ import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/s
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { toast } from "sonner";
+import { deriveFineActivity, normalizeHostUiRequest } from "../activity.js";
 import { AppSidebar } from "./app-sidebar";
 import { ChatComposer } from "./chat-composer";
 import { ChatDropOverlay, useChatDrop } from "./chat-drop-overlay";
 import { ChatThread } from "./chat-thread";
+import { HostUiRequests } from "./host-ui-card";
 import { createLiveStreamStore } from "./live-stream-store";
 import { reconcileMessages } from "./reconcile-messages";
+import { useGlobalRuntime } from "./runtime/use-global-runtime";
 import { useAttachments } from "./use-attachments";
 import { useModelSettings } from "./use-model-settings";
 import "./styles.css";
@@ -69,6 +72,7 @@ function ChatHeader({ project, title }) {
 }
 
 function App() {
+  const globalRuntime = useGlobalRuntime();
   const [projects, setProjects] = useState([]);
   const [projectId, setProjectId] = useState("project_chat");
   const [selectedId, setSelectedId] = useState(null);
@@ -81,8 +85,7 @@ function App() {
   const [pageBefore, setPageBefore] = useState(null);
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [draft, setDraft] = useState("");
-  const [streaming, setStreaming] = useState(false);
-  const [stopping, setStopping] = useState(false);
+  const [generation, setGeneration] = useState("idle");
   const [error, setError] = useState("");
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsSection, setSettingsSection] = useState("models");
@@ -90,6 +93,15 @@ function App() {
   const [sidebarCommand, setSidebarCommand] = useState(null);
   const [editEntryId, setEditEntryId] = useState(null);
   const [partialContinue, setPartialContinue] = useState(true);
+  const [contextUsage, setContextUsage] = useState(null);
+  const [compacting, setCompacting] = useState(false);
+  const [hostUiRequests, setHostUiRequests] = useState([]);
+  const [queue, setQueue] = useState({ steering: [], followUp: [] });
+  const [thinking, setThinking] = useState(false);
+  const [responding, setResponding] = useState(false);
+  const [activeToolName, setActiveToolName] = useState(null);
+  const [retry, setRetry] = useState(null);
+  const [reasoning, setReasoning] = useState({ content: "", active: false, redacted: false });
   const ws = useRef(null);
   const currentGeneration = useRef(null);
   const closedGenerations = useRef(new Set());
@@ -99,6 +111,11 @@ function App() {
   const selectedIdRef = useRef(null);
   selectedIdRef.current = selectedId;
   if (!liveStream.current) liveStream.current = createLiveStreamStore();
+
+  const streaming = generation === "active" || generation === "submitting";
+  const stopping = generation === "stopping";
+  const serverOnline = globalRuntime.connectivity === "online";
+  const selectedProcess = globalRuntime.getProcess(selectedId);
 
   const showError = useCallback((message) => setError(message), []);
   useEffect(() => {
@@ -136,6 +153,33 @@ function App() {
     return detail;
   }, []);
 
+  function resetLiveUiFlags() {
+    setThinking(false);
+    setResponding(false);
+    setActiveToolName(null);
+    setRetry(null);
+    setCompacting(false);
+    setReasoning({ content: "", active: false, redacted: false });
+  }
+
+  function applySnapshotExtras(event) {
+    if (event.contextUsage) setContextUsage(event.contextUsage);
+    else if (event.session?.contextUsage) setContextUsage(event.session.contextUsage);
+    if (event.queue) setQueue(event.queue);
+    else if (event.session?.queue) setQueue(event.session.queue);
+    const requests = event.hostUiRequests || event.session?.hostUiRequests;
+    if (requests) setHostUiRequests(list(requests));
+    if (event.session?.compacting != null) setCompacting(Boolean(event.session.compacting));
+    if (event.session?.retry) setRetry(event.session.retry);
+    if (event.session?.active && event.session?.generation && !event.session.generation.closed) {
+      setGeneration("active");
+    } else if (event.session?.stopping) {
+      setGeneration("stopping");
+    } else if (!event.session?.active) {
+      setGeneration((current) => (current === "stopping" ? current : "idle"));
+    }
+  }
+
   function connect(record) {
     ws.current?.close();
     const socket = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}${record.streamUrl || `/v0/live-sessions/${record.id}/stream`}`);
@@ -144,8 +188,9 @@ function App() {
       try {
         const event = JSON.parse(data);
         if (event.type === "runtime_snapshot") {
-          const generation = event.session?.generation;
-          if (generation?.id && !generation.closed) currentGeneration.current = generation.id;
+          const generationInfo = event.session?.generation;
+          if (generationInfo?.id && !generationInfo.closed) currentGeneration.current = generationInfo.id;
+          applySnapshotExtras(event);
           if (event.session?.active) list(event.events).forEach((item) => consume(item, record.id));
           if (event.stream?.generationId && !event.session?.generation?.closed) {
             liveStream.current.setSnapshot(event.stream.generationId, event.stream.content);
@@ -153,7 +198,9 @@ function App() {
         } else consume(event, record.id);
       } catch (caught) { setError(caught.message); }
     };
-    socket.onerror = () => setError("Lost connection to the Conduit runtime");
+    socket.onerror = () => {
+      // Global connectivity handles server-wide offline; keep chat-local noise low.
+    };
     socket.addEventListener("close", () => {
       if (ws.current === socket) ws.current = null;
     });
@@ -171,6 +218,7 @@ function App() {
       }),
     });
     setLive(record);
+    if (record.contextUsage) setContextUsage(record.contextUsage);
     connect(record);
     await new Promise((resolve, reject) => {
       if (ws.current.readyState === WebSocket.OPEN) resolve();
@@ -228,11 +276,12 @@ function App() {
     if (event.generationId && closedGenerations.current.has(event.generationId)
       && !["generation_stopped", "generation_started"].includes(event.type)) return;
     if (stopPending.current && ["message_start", "assistant_stream_delta", "assistant_stream_final"].includes(event.type)) return;
+
     if (event.type === "generation_started") {
       currentGeneration.current = event.generationId;
       stopPending.current = false;
-      setStopping(false);
-      setStreaming(true);
+      setGeneration("active");
+      resetLiveUiFlags();
       liveStream.current.start(event.generationId);
       if (event.continuation) {
         continuation.current = true;
@@ -246,12 +295,81 @@ function App() {
         });
       }
     }
-    if (event.type === "agent_start") setStreaming(true);
-    if (event.type === "agent_end" || event.type === "runtime_exit") setStreaming(false);
+    if (event.type === "agent_start") {
+      setGeneration((current) => (current === "stopping" ? current : "active"));
+    }
+    if (event.type === "agent_end") {
+      if (event.willRetry) {
+        // Keep active until auto_retry resolves; do not clear the turn yet.
+      } else if (!stopPending.current) {
+        setGeneration((current) => (current === "stopping" ? current : "idle"));
+        resetLiveUiFlags();
+      }
+    }
+    if (event.type === "agent_settled") {
+      if (!stopPending.current) {
+        setGeneration((current) => (current === "stopping" ? current : "idle"));
+        resetLiveUiFlags();
+      }
+    }
+    if (event.type === "runtime_exit") {
+      setGeneration("idle");
+      resetLiveUiFlags();
+      setLive(null);
+    }
+    if (event.type === "runtime_state" && event.session) {
+      if (event.session.contextUsage) setContextUsage(event.session.contextUsage);
+      if (event.session.queue) setQueue(event.session.queue);
+      if (event.session.hostUiRequests) setHostUiRequests(list(event.session.hostUiRequests));
+      if (event.session.compacting != null) setCompacting(Boolean(event.session.compacting));
+      if (event.session.retry !== undefined) setRetry(event.session.retry);
+      // Prefer Conduit generation lifecycle. Clear to idle when the process reports
+      // settled/idle; never re-open active from a stale runtime_state alone.
+      if (event.session.stopping) setGeneration("stopping");
+      else if (event.session.activity === "idle" || event.session.active === false) {
+        if (!stopPending.current) {
+          setGeneration((current) => (current === "stopping" ? current : "idle"));
+          resetLiveUiFlags();
+        }
+      }
+    }
+    if (event.type === "context_usage" && event.contextUsage) {
+      setContextUsage(event.contextUsage);
+    }
+    if (event.type === "compaction_start") setCompacting(true);
+    if (event.type === "compaction_end") setCompacting(false);
+    if (event.type === "auto_retry_start") {
+      setRetry({
+        attempt: event.attempt,
+        maxAttempts: event.maxAttempts,
+        delayMs: event.delayMs,
+        errorMessage: event.errorMessage || null,
+      });
+      setGeneration((current) => (current === "stopping" ? current : "active"));
+    }
+    if (event.type === "auto_retry_end") setRetry(null);
+    if (event.type === "queue_update") {
+      setQueue({
+        steering: list(event.steering),
+        followUp: list(event.followUp),
+      });
+    }
+    if (event.type === "extension_ui_request") {
+      const request = normalizeHostUiRequest(event);
+      if (request) {
+        setHostUiRequests((current) => current.some((item) => item.id === request.id)
+          ? current
+          : [...current, request]);
+      }
+    }
+    if (event.type === "extension_ui_resolved") {
+      const requestId = event.requestId || event.id;
+      setHostUiRequests((current) => current.filter((item) => item.id !== requestId));
+    }
     if (event.type === "generation_stopped") {
       stopPending.current = false;
-      setStopping(false);
-      setStreaming(false);
+      setGeneration("idle");
+      resetLiveUiFlags();
       setMessages((current) => {
         const copy = [...current];
         const index = findLastMessage(copy, (message) => message.role === "assistant");
@@ -267,11 +385,44 @@ function App() {
     if (event.type === "message_start" && event.message?.role === "assistant" && !continuation.current) {
       setMessages((current) => [...current, { id: `live_${Date.now()}`, role: "assistant", content: "", timestamp: new Date().toISOString() }]);
     }
-    if (event.type === "assistant_stream_delta") liveStream.current.append(event.generationId, event.delta || "");
+    const delta = event.assistantMessageEvent;
+    if (event.type === "message_update" && delta) {
+      if (delta.type === "thinking_start") {
+        setThinking(true);
+        setResponding(false);
+        setReasoning((current) => ({ ...current, active: true, redacted: Boolean(delta.partial?.content?.[delta.contentIndex]?.redacted) }));
+      }
+      if (delta.type === "thinking_delta") {
+        setThinking(true);
+        setReasoning((current) => ({
+          ...current,
+          active: true,
+          content: `${current.content || ""}${delta.delta || ""}`,
+        }));
+      }
+      if (delta.type === "thinking_end") {
+        setThinking(false);
+        setReasoning((current) => ({
+          ...current,
+          active: false,
+          content: delta.content || current.content,
+        }));
+      }
+      if (delta.type === "text_start" || delta.type === "text_delta") {
+        setResponding(true);
+        setThinking(false);
+      }
+      if (delta.type === "text_end") setResponding(false);
+    }
+    if (event.type === "assistant_stream_delta") {
+      setResponding(true);
+      liveStream.current.append(event.generationId, event.delta || "");
+    }
     if (event.type === "assistant_stream_final") {
       continuation.current = null;
-      setStreaming(false);
-      setStopping(false);
+      setResponding(false);
+      setThinking(false);
+      if (!stopPending.current) setGeneration((current) => (current === "stopping" ? current : "idle"));
       setMessages((current) => {
         const copy = [...current];
         const index = findLastMessage(copy, (message) => message.role === "assistant");
@@ -281,17 +432,53 @@ function App() {
         return copy;
       });
       liveStream.current.clear();
+      if (event.usage && contextUsage) {
+        setContextUsage((current) => current ? {
+          ...current,
+          lastRequestUsage: {
+            input: event.usage.input ?? null,
+            output: event.usage.output ?? null,
+            cacheRead: event.usage.cacheRead ?? null,
+            cacheWrite: event.usage.cacheWrite ?? null,
+            totalTokens: event.usage.totalTokens ?? null,
+            cost: event.usage.cost || null,
+          },
+        } : current);
+      }
     }
     if (event.type === "message_end" && event.message?.role === "user") refresh().catch(() => {});
-    if (event.type === "tool_execution_start") setTools((current) => {
-      const tool = { id: event.toolCallId, name: event.toolName, args: event.args, done: false, timestamp: event.timestamp || new Date().toISOString() };
-      return current.some((item) => item.id === tool.id) ? current.map((item) => item.id === tool.id ? { ...item, ...tool } : item) : [...current, tool];
-    });
-    if (event.type === "tool_execution_end") setTools((current) => current.map((tool) =>
-      tool.id === event.toolCallId ? { ...tool, done: true, result: event.result } : tool));
+    if (event.type === "tool_execution_start") {
+      setActiveToolName(event.toolName || "tool");
+      setTools((current) => {
+        const tool = {
+          id: event.toolCallId,
+          name: event.toolName,
+          args: event.args,
+          done: false,
+          error: false,
+          timestamp: event.timestamp || new Date().toISOString(),
+        };
+        return current.some((item) => item.id === tool.id)
+          ? current.map((item) => item.id === tool.id ? { ...item, ...tool } : item)
+          : [...current, tool];
+      });
+    }
+    if (event.type === "tool_execution_update") {
+      setTools((current) => current.map((tool) =>
+        tool.id === event.toolCallId
+          ? { ...tool, partialResult: event.partialResult, name: event.toolName || tool.name }
+          : tool));
+    }
+    if (event.type === "tool_execution_end") {
+      setActiveToolName(null);
+      setTools((current) => current.map((tool) =>
+        tool.id === event.toolCallId
+          ? { ...tool, done: true, result: event.result, error: Boolean(event.isError) }
+          : tool));
+    }
     if (["runtime_error", "client_error"].includes(event.type)) {
-      setStreaming(false);
-      setStopping(false);
+      if (!stopPending.current) setGeneration(event.type === "runtime_error" ? "failed" : "idle");
+      resetLiveUiFlags();
       setError(event.message || "Runtime error");
     }
   }
@@ -303,7 +490,9 @@ function App() {
 
   function resetChatState() {
     ws.current?.close(); setLive(null);
-    setStreaming(false); setStopping(false); setDraft(""); setEditEntryId(null); setError("");
+    setGeneration("idle"); setDraft(""); setEditEntryId(null); setError("");
+    setContextUsage(null); setHostUiRequests([]); setQueue({ steering: [], followUp: [] });
+    resetLiveUiFlags();
     liveStream.current.clear();
     currentGeneration.current = null; stopPending.current = false; continuation.current = null;
   }
@@ -337,13 +526,12 @@ function App() {
   }
 
   function stopResponse() {
-    if (!streaming) return;
+    if (generation !== "active" && generation !== "submitting" && !streaming) return;
     const generationId = currentGeneration.current;
     if (generationId) closedGenerations.current.add(generationId);
     liveStream.current.flush();
     stopPending.current = true;
-    setStopping(true);
-    setStreaming(false);
+    setGeneration("stopping");
     setMessages((current) => {
       const copy = [...current];
       const index = findLastMessage(copy, (message) => message.role === "assistant");
@@ -356,11 +544,39 @@ function App() {
     ws.current?.send(JSON.stringify({ type: "stop_generation", generationId }));
   }
 
-  async function send() {
-    if (stopping) return;
-    if (streaming) { stopResponse(); return; }
+  async function send({ streamingBehavior = null, steer = false } = {}) {
+    if (generation === "stopping") return;
+    if (!serverOnline) {
+      setError("Server unavailable");
+      return;
+    }
     const text = draft.trim();
     if (!text) return;
+
+    const busy = generation === "active" || generation === "submitting";
+    if (busy) {
+      // Mid-run: queue follow-up or steer instead of stopping
+      const mode = steer || streamingBehavior === "steer" ? "steer" : "followUp";
+      const attachmentIds = attachmentState.pendingIds;
+      setDraft("");
+      try {
+        await ensureLive();
+        ws.current.send(JSON.stringify({
+          type: mode === "steer" ? "steer" : "follow_up",
+          message: text,
+          attachmentIds,
+        }));
+        setQueue((current) => ({
+          steering: mode === "steer" ? [...(current.steering || []), text] : (current.steering || []),
+          followUp: mode === "followUp" ? [...(current.followUp || []), text] : (current.followUp || []),
+        }));
+      } catch (caught) {
+        setError(caught.message);
+        setDraft(text);
+      }
+      return;
+    }
+
     const attachmentIds = attachmentState.pendingIds;
     const previousMessages = messages;
     const previousEditEntryId = editEntryId;
@@ -382,13 +598,14 @@ function App() {
       });
     } else setMessages((current) => [...current, localMessage]);
     attachmentState.markAnnounced(attachmentIds);
+    setGeneration("submitting");
     try {
       await ensureLive();
       ws.current.send(JSON.stringify(editEntryId
         ? { type: "fork_and_prompt", entryId: editEntryId, message: text, attachmentIds }
         : { type: "prompt", message: text, attachmentIds }));
       setChatStatus("active");
-      setStreaming(true);
+      setGeneration("active");
       setEditEntryId(null);
     } catch (caught) {
       setMessages(previousMessages);
@@ -396,6 +613,7 @@ function App() {
       attachmentState.restoreDraft(sentAttachments);
       setError(caught.message);
       setDraft(text);
+      setGeneration("idle");
     }
   }
 
@@ -407,18 +625,34 @@ function App() {
         const index = current.findIndex((message) => message.id === entryId);
         return index >= 0 ? current.slice(0, index + 1) : current;
       });
+      setGeneration("active");
       ws.current.send(JSON.stringify({ type: "regenerate", entryId }));
-      setStreaming(true);
-    } catch (caught) { setError(caught.message); }
+    } catch (caught) { setError(caught.message); setGeneration("idle"); }
   }
 
   async function continueResponse() {
     if (streaming || stopping || !partialContinue) return;
     try {
       await ensureLive();
+      setGeneration("active");
       ws.current.send(JSON.stringify({ type: "continue" }));
-      setStreaming(true);
-    } catch (caught) { setError(caught.message); }
+    } catch (caught) { setError(caught.message); setGeneration("idle"); }
+  }
+
+  function respondHostUi(response) {
+    if (!ws.current || ws.current.readyState !== WebSocket.OPEN) {
+      setError("Not connected to the live session");
+      return;
+    }
+    ws.current.send(JSON.stringify({ type: "extension_ui_response", ...response }));
+    setHostUiRequests((current) => current.filter((item) => item.id !== response.id));
+  }
+
+  function clearQueue() {
+    const restored = [...(queue.steering || []), ...(queue.followUp || [])].join("\n");
+    setQueue({ steering: [], followUp: [] });
+    if (restored) setDraft((current) => (current ? `${current}\n${restored}` : restored));
+    // Pi only supports clear-all via consuming or process-side; restore to composer for editing.
   }
 
   async function loadOlder() {
@@ -505,6 +739,21 @@ function App() {
     } catch (caught) { setError(caught.message); }
   }
 
+  const activity = useMemo(() => deriveFineActivity({
+    generation,
+    processStatus: selectedProcess?.status || (live ? "running" : "none"),
+    coarse: selectedProcess?.activity || "idle",
+    thinking,
+    responding,
+    toolName: activeToolName,
+    retry,
+  }), [generation, selectedProcess, live, thinking, responding, activeToolName, retry, hostUiRequests]);
+
+  // Prefer waiting_for_user when host UI is pending on selected chat
+  const displayActivity = hostUiRequests.length
+    ? { kind: "waiting_for_user", label: "Waiting for your confirmation" }
+    : activity;
+
   const lastAssistant = messages.findLast((message) => message.role === "assistant");
   const lastAssistantIndex = lastAssistant ? messages.indexOf(lastAssistant) : -1;
   const precedingUser = lastAssistantIndex >= 0
@@ -533,7 +782,7 @@ function App() {
   };
 
   const threadReady = loadedSessionId === selectedId;
-  const emptyChat = threadReady && messages.length === 0 && tools.length === 0;
+  const emptyChat = threadReady && messages.length === 0 && tools.length === 0 && !displayActivity?.label;
   const selectedProject = projects.find((project) => project.id === projectId);
   return <TooltipProvider>
     <Toaster richColors />
@@ -546,6 +795,10 @@ function App() {
         selectedStatus={chatStatus}
         selectedTitle={chatTitle}
         view="chat"
+        connectivity={globalRuntime.connectivity}
+        getProcess={globalRuntime.getProcess}
+        runtimeStale={globalRuntime.stale}
+        onRetryConnection={globalRuntime.retry}
         onAddProject={addProject}
         onCommandHandled={() => setSidebarCommand(null)}
         onCopyTranscript={copyTranscript}
@@ -574,6 +827,8 @@ function App() {
           loadingOlder={loadingOlder}
           partialContinue={partialContinue}
           editingEntryId={editEntryId}
+          activity={displayActivity}
+          reasoning={reasoning}
           onLoadOlder={loadOlder}
           onCopyMessage={(message) => navigator.clipboard.writeText(message.content || "")}
           onEditMessage={(message) => {
@@ -590,23 +845,34 @@ function App() {
           onRegenerate={regenerate}
           onContinue={continueResponse}
         />
-        <ChatComposer
-          draft={draft}
-          streaming={streaming}
-          stopping={stopping}
-          models={modelSettings.models}
-          model={modelSettings.model}
-          effort={modelSettings.effort}
-          modelNotice={modelSettings.notice}
-          attachments={attachmentState}
-          chatId={selectedId}
-          commandContext={commandContext}
-          commandActions={commandActions}
-          onDraftChange={setDraft}
-          onChooseModel={modelSettings.chooseModel}
-          onChooseEffort={modelSettings.chooseEffort}
-          onSend={send}
-        />
+        <div className="composer-stack">
+          <HostUiRequests requests={hostUiRequests} onRespond={respondHostUi} />
+          <ChatComposer
+            draft={draft}
+            generation={generation}
+            streaming={streaming}
+            stopping={stopping}
+            models={modelSettings.models}
+            model={modelSettings.model}
+            effort={modelSettings.effort}
+            modelNotice={modelSettings.notice}
+            attachments={attachmentState}
+            chatId={selectedId}
+            commandContext={commandContext}
+            commandActions={commandActions}
+            contextUsage={contextUsage}
+            compacting={compacting}
+            queue={queue}
+            serverOnline={serverOnline}
+            onDraftChange={setDraft}
+            onChooseModel={modelSettings.chooseModel}
+            onChooseEffort={modelSettings.chooseEffort}
+            onSend={() => send()}
+            onStop={stopResponse}
+            onSteer={() => send({ steer: true })}
+            onClearQueue={clearQueue}
+          />
+        </div>
       </SidebarInset>
       <Suspense fallback={null}>
         {commandOpen && <CommandMenu
