@@ -86,6 +86,37 @@ test("links allow-listed directories without deleting them on unregister", async
   await fs.rm(root, { recursive: true, force: true });
 });
 
+test("managed create never reuses a linked workspace with the same slug", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-project-slug-"));
+  const external = path.join(root, "api");
+  await fs.mkdir(external);
+  await fs.writeFile(path.join(external, "secret.txt"), "external");
+  const filesRoot = path.join(root, "data/chat/files");
+  const store = new ProjectStore({
+    filesRoot,
+    catalogFile: path.join(root, "data/conduit.json"),
+    piAgentDir: path.join(root, "data/pi"),
+    workspaceAllowlist: [root],
+  });
+  await store.initialize();
+  const linked = await store.create({ mode: "linked", name: "api", path: external });
+  assert.equal(linked.slug, "api");
+  assert.equal(linked.path, external);
+
+  const managed = await store.create({ mode: "managed", name: "api" });
+  assert.equal(managed.origin, "managed");
+  assert.notEqual(managed.id, linked.id);
+  assert.equal(managed.slug, "api-2");
+  assert.equal(managed.path, path.join(filesRoot, "api-2"));
+  assert.equal(await fs.readFile(path.join(external, "secret.txt"), "utf8"), "external");
+  assert.deepEqual(await fs.readdir(managed.path), []);
+
+  const again = await store.create({ mode: "managed", name: "api" });
+  assert.equal(again.slug, "api-3");
+  assert.equal(again.origin, "managed");
+  await fs.rm(root, { recursive: true, force: true });
+});
+
 test("clones a repository into the managed files root", async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-project-clone-"));
   const source = path.join(root, "source");

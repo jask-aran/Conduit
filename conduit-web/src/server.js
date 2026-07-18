@@ -610,6 +610,7 @@ app.use((error, _request, response, _next) => {
   if (error.code === "reserved_project" || error.code === "workspace_already_linked") status = 409;
   if (error.code === "live_process_limit" || error.code === "generation_limit") status = 429;
   if (error.code === "attachment_not_found" || error.code === "path_not_found") status = 404;
+  if (error.code === "command_failed") status = 502;
   if (error.code === "invalid_attachment_id"
     || [
       "enabled_models_required",
@@ -620,7 +621,6 @@ app.use((error, _request, response, _next) => {
       "path_not_directory",
       "clone_url_required",
       "clone_target_exists",
-      "command_failed",
     ].includes(error.code)
     || error.message?.includes("Project names")) status = 400;
   response.status(status).json({
