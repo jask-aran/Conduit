@@ -61,8 +61,10 @@ creation times, per-chat attachment folders, live process records, browser
 connections, and template/profile selection. Each chat durably stores
 `templateId` (and `templateVersion` at first launch). Resume reloads that
 template by id from the repository registry; drafts may change profile until the
-first Pi process attaches. Native Pi IDs and paths are private mappings; browser
-routes always use the stable Conduit chat ID.
+first Pi process attaches. Special templates such as `runtime` are not valid
+defaults or ordinary profile choices and are launched through dedicated routes.
+Native Pi IDs and paths are private mappings; browser routes always use the stable
+Conduit chat ID.
 
 `data/pi/settings.json` is authoritative for scoped models. Terminal and web
 saves share it, the latest successful save wins, and Conduit reloads it for

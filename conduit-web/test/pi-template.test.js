@@ -24,10 +24,12 @@ test("repository templates are discoverable launch presets", () => {
   const general = templates.find((template) => template.id === "chat");
   const view = templatePublicView(workspace);
   assert.equal(view.label, "Workspace");
+  assert.equal(view.defaultable, true);
   assert.ok(view.tools.includes("edit"));
   assert.ok(view.skillCount >= 1);
   assert.deepEqual(general.tools, ["read", "bash"]);
   assert.equal(view.extensionCount, 0);
+  assert.equal(templatePublicView(templates.find((template) => template.id === "runtime")).defaultable, false);
 });
 
 test("listPiTemplates rejects duplicate template ids", () => {

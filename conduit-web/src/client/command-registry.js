@@ -304,8 +304,9 @@ export const paletteSources = [{
   id: "profiles",
   page: null,
   commands(context) {
-    const templates = Array.isArray(context.templates) ? context.templates : [];
-    const draft = context.chatStatus === "draft";
+    const templates = (Array.isArray(context.templates) ? context.templates : [])
+      .filter((template) => template.defaultable !== false);
+    const draft = context.chatStatus === "draft" && context.templateId !== "runtime";
     return templates.flatMap((template) => {
       const rows = [{
         id: `new-chat-profile:${template.id}`,

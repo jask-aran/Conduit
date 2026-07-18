@@ -10,7 +10,7 @@ Shipped profiles:
 |----|--------|------|
 | `chat` | General | Restrained tools (`read`, `bash`) for ordinary conversation |
 | `workspace` | Workspace | Full tools + git/web/develop skills for real folders |
-| `runtime` | Runtime | Admin chat for templates and Pi package management |
+| `runtime` | Runtime | Special one-off admin chat for templates and Pi package management |
 
 ## Discovery and durable identity
 
@@ -19,6 +19,11 @@ Profiles chooses the default for new chats (`data/preferences.json`). Each chat
 stores `templateId` and `templateVersion` in `data/sessions.json`. Missing
 identity is stamped with the app (or project) default the next time the runtime
 touches the chat. Resume reloads the template by id from disk.
+
+General and Workspace are ordinary selectable profiles. Runtime is special: it
+cannot be an app or project default and does not appear in ordinary profile
+switching. Settings → Profiles shows its details separately and provides
+**Open runtime chat**; each activation creates a fresh management chat.
 
 ## Workspaces
 
