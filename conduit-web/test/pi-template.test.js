@@ -30,6 +30,26 @@ test("repository templates are discoverable launch presets", () => {
   assert.equal(view.extensionCount, 0);
 });
 
+test("listPiTemplates rejects duplicate template ids", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "conduit-dup-templates-"));
+  for (const dir of ["one", "two"]) {
+    const folder = path.join(root, dir);
+    fs.mkdirSync(folder);
+    fs.writeFileSync(path.join(folder, "SYSTEM.md"), "# x\n");
+    fs.writeFileSync(path.join(folder, "template.json"), JSON.stringify({
+      id: "shared",
+      version: "1",
+      tools: ["read"],
+      models: [],
+      extensions: [],
+      skills: [],
+      promptTemplates: [],
+    }));
+  }
+  assert.throws(() => listPiTemplates(root), /Duplicate Pi template id "shared"/);
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
 test("Pi launch arguments use native session storage and load only the selected template", () => {
   const template = {
     id: "chat",

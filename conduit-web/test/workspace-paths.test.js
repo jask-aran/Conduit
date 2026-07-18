@@ -30,9 +30,29 @@ test("resolveExistingDirectory requires a real directory inside the allowlist", 
   const dir = path.join(root, "repo");
   await fs.mkdir(dir);
   await fs.writeFile(path.join(root, "file.txt"), "x");
-  assert.equal(await resolveExistingDirectory(dir, [root]), dir);
+  assert.equal(await resolveExistingDirectory(dir, [root]), await fs.realpath(dir));
   await assert.rejects(resolveExistingDirectory(path.join(root, "missing"), [root]), { code: "path_not_found" });
   await assert.rejects(resolveExistingDirectory(path.join(root, "file.txt"), [root]), { code: "path_not_directory" });
   await assert.rejects(resolveExistingDirectory("/etc", [root]), { code: "path_not_allowed" });
   await fs.rm(root, { recursive: true, force: true });
+});
+
+test("resolveExistingDirectory rejects intermediate symlink escapes", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-ws-escape-"));
+  const outside = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-ws-outside-"));
+  const secret = path.join(outside, "secret");
+  await fs.mkdir(secret);
+  await fs.writeFile(path.join(secret, "x"), "nope");
+  const shortcut = path.join(root, "shortcut");
+  await fs.symlink(outside, shortcut);
+  // Textual path looks allow-listed; realpath lands outside.
+  await assert.rejects(resolveExistingDirectory(path.join(shortcut, "secret"), [root]), {
+    code: "path_not_allowed",
+  });
+  // Leaf symlink to outside is also rejected after realpath.
+  const leaf = path.join(root, "leaf-link");
+  await fs.symlink(secret, leaf);
+  await assert.rejects(resolveExistingDirectory(leaf, [root]), { code: "path_not_allowed" });
+  await fs.rm(root, { recursive: true, force: true });
+  await fs.rm(outside, { recursive: true, force: true });
 });

@@ -85,6 +85,7 @@ export function AppSidebar({
   const [newFolderName, setNewFolderName] = useState("");
   const [newFolderPath, setNewFolderPath] = useState("");
   const [newFolderCloneUrl, setNewFolderCloneUrl] = useState("");
+  const [newFolderSubmitting, setNewFolderSubmitting] = useState(false);
   const [pendingMove, setPendingMove] = useState(null);
   const { setOpenMobile } = useSidebar();
 
@@ -161,6 +162,7 @@ export function AppSidebar({
 
   const createFolder = async (event) => {
     event.preventDefault();
+    if (newFolderSubmitting) return;
     const name = newFolderName.trim();
     const pathValue = newFolderPath.trim();
     const cloneUrl = newFolderCloneUrl.trim();
@@ -172,20 +174,27 @@ export function AppSidebar({
       : newFolderMode === "linked"
         ? { mode: "linked", name: name || undefined, path: pathValue, defaultTemplateId: "workspace" }
         : { mode: "cloned", name: name || undefined, cloneUrl, defaultTemplateId: "workspace" };
-    if (!await onAddProject(payload)) return;
-    setNewFolderName("");
-    setNewFolderPath("");
-    setNewFolderCloneUrl("");
-    setNewFolderMode("managed");
-    setNewFolderOpen(false);
-    setOpenMobile(false);
+    setNewFolderSubmitting(true);
+    try {
+      if (!await onAddProject(payload)) return;
+      setNewFolderName("");
+      setNewFolderPath("");
+      setNewFolderCloneUrl("");
+      setNewFolderMode("managed");
+      setNewFolderOpen(false);
+      setOpenMobile(false);
+    } finally {
+      setNewFolderSubmitting(false);
+    }
   };
 
-  const canCreateFolder = newFolderMode === "managed"
-    ? Boolean(newFolderName.trim())
-    : newFolderMode === "linked"
-      ? Boolean(newFolderPath.trim())
-      : Boolean(newFolderCloneUrl.trim());
+  const canCreateFolder = !newFolderSubmitting && (
+    newFolderMode === "managed"
+      ? Boolean(newFolderName.trim())
+      : newFolderMode === "linked"
+        ? Boolean(newFolderPath.trim())
+        : Boolean(newFolderCloneUrl.trim())
+  );
 
   return <>
     <Sidebar collapsible="icon" className="conduit-sidebar">
@@ -262,6 +271,7 @@ export function AppSidebar({
     </AlertDialog>
 
     <Dialog open={newFolderOpen} onOpenChange={(open) => {
+      if (newFolderSubmitting) return;
       setNewFolderOpen(open);
       if (!open) {
         setNewFolderMode("managed");
@@ -285,6 +295,7 @@ export function AppSidebar({
                 id="folder-mode"
                 className="border-input bg-background h-8 w-full rounded-lg border px-2.5 text-sm"
                 value={newFolderMode}
+                disabled={newFolderSubmitting}
                 onChange={(event) => setNewFolderMode(event.target.value)}
               >
                 <option value="managed">Managed folder</option>
@@ -298,6 +309,7 @@ export function AppSidebar({
                 id="folder-name"
                 autoFocus={newFolderMode === "managed"}
                 value={newFolderName}
+                disabled={newFolderSubmitting}
                 onChange={(event) => setNewFolderName(event.target.value)}
                 placeholder={newFolderMode === "managed" ? "Research" : "My project"}
               />
@@ -308,6 +320,7 @@ export function AppSidebar({
                 id="folder-path"
                 autoFocus
                 value={newFolderPath}
+                disabled={newFolderSubmitting}
                 onChange={(event) => setNewFolderPath(event.target.value)}
                 placeholder="~/code/my-repo"
               />
@@ -318,15 +331,18 @@ export function AppSidebar({
                 id="folder-clone"
                 autoFocus
                 value={newFolderCloneUrl}
+                disabled={newFolderSubmitting}
                 onChange={(event) => setNewFolderCloneUrl(event.target.value)}
                 placeholder="https://github.com/org/repo.git"
               />
             </Field>}
           </FieldGroup>
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setNewFolderOpen(false)}>Cancel</Button>
+            <Button type="button" variant="outline" disabled={newFolderSubmitting} onClick={() => setNewFolderOpen(false)}>Cancel</Button>
             <Button type="submit" disabled={!canCreateFolder}>
-              {newFolderMode === "cloned" ? "Clone workspace" : newFolderMode === "linked" ? "Link workspace" : "Create folder"}
+              {newFolderSubmitting
+                ? (newFolderMode === "cloned" ? "Cloning…" : "Creating…")
+                : newFolderMode === "cloned" ? "Clone workspace" : newFolderMode === "linked" ? "Link workspace" : "Create folder"}
             </Button>
           </DialogFooter>
         </form>

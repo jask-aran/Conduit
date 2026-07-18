@@ -58,6 +58,15 @@ export class ProjectStore {
     this.catalogFile = catalogFile;
     this.piAgentDir = piAgentDir;
     this.workspaceAllowlist = workspaceAllowlist.map((item) => path.resolve(item));
+    // Serialize catalog mutations (especially slow clones) so concurrent creates
+    // cannot share a slug or rm each other's checkout.
+    this.mutationQueue = Promise.resolve();
+  }
+
+  runExclusive(work) {
+    const run = this.mutationQueue.then(work, work);
+    this.mutationQueue = run.then(() => {}, () => {});
+    return run;
   }
 
   async initialize() {
@@ -143,53 +152,57 @@ export class ProjectStore {
   }
 
   async createManaged({ name, defaultTemplateId = null }) {
-    // Always mint a new catalog row with a free slug. Never reuse a linked/cloned
-    // (or existing managed) entry via ensure()'s slug-idempotent path — that can
-    // silently point a "new workspace" at an external tree.
-    const slug = await this.uniqueSlug(name);
-    const catalog = await this.readCatalog();
-    const project = {
-      id: `project_${crypto.randomUUID()}`,
-      slug,
-      name: String(name || slug).trim(),
-      kind: "project",
-      origin: "managed",
-      externalPath: null,
-      cloneUrl: null,
-      defaultTemplateId: defaultTemplateId || null,
-      createdAt: new Date().toISOString(),
-    };
-    catalog.projects.push(project);
-    await writeJson(this.catalogFile, catalog);
-    await fs.mkdir(this.managedPath(slug), { recursive: true });
-    return this.projectView(project);
+    return this.runExclusive(async () => {
+      // Always mint a new catalog row with a free slug. Never reuse a linked/cloned
+      // (or existing managed) entry via ensure()'s slug-idempotent path — that can
+      // silently point a "new workspace" at an external tree.
+      const slug = await this.uniqueSlug(name);
+      const catalog = await this.readCatalog();
+      const project = {
+        id: `project_${crypto.randomUUID()}`,
+        slug,
+        name: String(name || slug).trim(),
+        kind: "project",
+        origin: "managed",
+        externalPath: null,
+        cloneUrl: null,
+        defaultTemplateId: defaultTemplateId || null,
+        createdAt: new Date().toISOString(),
+      };
+      catalog.projects.push(project);
+      await writeJson(this.catalogFile, catalog);
+      await fs.mkdir(this.managedPath(slug), { recursive: true });
+      return this.projectView(project);
+    });
   }
 
   async createLinked({ name, path: inputPath, defaultTemplateId = "workspace" }) {
     const externalPath = await resolveExistingDirectory(inputPath, this.workspaceAllowlist);
-    const slugBase = name || path.basename(externalPath);
-    const slug = await this.uniqueSlug(slugBase);
-    const catalog = await this.readCatalog();
-    if (catalog.projects.some((item) => item.externalPath && path.resolve(item.externalPath) === externalPath)) {
-      const error = new Error("That directory is already registered");
-      error.code = "workspace_already_linked";
-      throw error;
-    }
-    const project = {
-      id: `project_${crypto.randomUUID()}`,
-      slug,
-      name: String(name || path.basename(externalPath)).trim(),
-      kind: "workspace",
-      origin: "linked",
-      externalPath,
-      cloneUrl: null,
-      defaultTemplateId: defaultTemplateId || "workspace",
-      createdAt: new Date().toISOString(),
-    };
-    catalog.projects.push(project);
-    await writeJson(this.catalogFile, catalog);
-    await fs.mkdir(path.join(externalPath, ".conduit", "chats"), { recursive: true });
-    return this.projectView(project);
+    return this.runExclusive(async () => {
+      const slugBase = name || path.basename(externalPath);
+      const slug = await this.uniqueSlug(slugBase);
+      const catalog = await this.readCatalog();
+      if (catalog.projects.some((item) => item.externalPath && path.resolve(item.externalPath) === externalPath)) {
+        const error = new Error("That directory is already registered");
+        error.code = "workspace_already_linked";
+        throw error;
+      }
+      const project = {
+        id: `project_${crypto.randomUUID()}`,
+        slug,
+        name: String(name || path.basename(externalPath)).trim(),
+        kind: "workspace",
+        origin: "linked",
+        externalPath,
+        cloneUrl: null,
+        defaultTemplateId: defaultTemplateId || "workspace",
+        createdAt: new Date().toISOString(),
+      };
+      catalog.projects.push(project);
+      await writeJson(this.catalogFile, catalog);
+      await fs.mkdir(path.join(externalPath, ".conduit", "chats"), { recursive: true });
+      return this.projectView(project);
+    });
   }
 
   async createCloned({ name, cloneUrl, defaultTemplateId = "workspace" }) {
@@ -199,41 +212,50 @@ export class ProjectStore {
       error.code = "clone_url_required";
       throw error;
     }
-    const slugBase = name || url.replace(/\.git$/i, "").split("/").filter(Boolean).pop() || "repo";
-    const slug = await this.uniqueSlug(slugBase);
-    const target = this.managedPath(slug);
-    assertAllowedPath(target, [this.filesRoot, ...this.workspaceAllowlist], "clone target");
-    await fs.mkdir(path.dirname(target), { recursive: true });
-    try {
-      await fs.access(target);
-      const exists = new Error("clone target already exists");
-      exists.code = "clone_target_exists";
-      throw exists;
-    } catch (error) {
-      if (error.code === "clone_target_exists") throw error;
-      if (error.code !== "ENOENT") throw error;
-    }
-    try {
-      await runCommand("git", ["clone", "--", url, target]);
-    } catch (error) {
-      await fs.rm(target, { recursive: true, force: true }).catch(() => {});
-      throw error;
-    }
-    const catalog = await this.readCatalog();
-    const project = {
-      id: `project_${crypto.randomUUID()}`,
-      slug,
-      name: String(name || slug).trim(),
-      kind: "workspace",
-      origin: "cloned",
-      externalPath: null,
-      cloneUrl: url,
-      defaultTemplateId: defaultTemplateId || "workspace",
-      createdAt: new Date().toISOString(),
-    };
-    catalog.projects.push(project);
-    await writeJson(this.catalogFile, catalog);
-    return this.projectView(project);
+    return this.runExclusive(async () => {
+      const slugBase = name || url.replace(/\.git$/i, "").split("/").filter(Boolean).pop() || "repo";
+      const slug = await this.uniqueSlug(slugBase);
+      const target = this.managedPath(slug);
+      assertAllowedPath(target, [this.filesRoot, ...this.workspaceAllowlist], "clone target");
+      await fs.mkdir(path.dirname(target), { recursive: true });
+      try {
+        await fs.access(target);
+        const exists = new Error("clone target already exists");
+        exists.code = "clone_target_exists";
+        throw exists;
+      } catch (error) {
+        if (error.code === "clone_target_exists") throw error;
+        if (error.code !== "ENOENT") throw error;
+      }
+
+      // Reserve the catalog slug before the slow clone so concurrent requests
+      // cannot pick the same free slug and later rm each other's checkout.
+      const catalog = await this.readCatalog();
+      const project = {
+        id: `project_${crypto.randomUUID()}`,
+        slug,
+        name: String(name || slug).trim(),
+        kind: "workspace",
+        origin: "cloned",
+        externalPath: null,
+        cloneUrl: url,
+        defaultTemplateId: defaultTemplateId || "workspace",
+        createdAt: new Date().toISOString(),
+      };
+      catalog.projects.push(project);
+      await writeJson(this.catalogFile, catalog);
+
+      try {
+        await runCommand("git", ["clone", "--", url, target]);
+      } catch (error) {
+        await fs.rm(target, { recursive: true, force: true }).catch(() => {});
+        const rollback = await this.readCatalog();
+        rollback.projects = rollback.projects.filter((item) => item.id !== project.id);
+        await writeJson(this.catalogFile, rollback);
+        throw error;
+      }
+      return this.projectView(project);
+    });
   }
 
   async create(input = {}) {

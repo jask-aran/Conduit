@@ -56,11 +56,19 @@ export function listPiTemplates(templatesRoot) {
     throw error;
   }
   const templates = [];
+  const seen = new Map();
   for (const entry of entries) {
     if (!entry.isDirectory()) continue;
     const file = path.join(root, entry.name, "template.json");
     if (!fs.existsSync(file)) continue;
-    templates.push(loadPiTemplate(file));
+    const template = loadPiTemplate(file);
+    if (seen.has(template.id)) {
+      throw new Error(
+        `Duplicate Pi template id "${template.id}" in ${seen.get(template.id)} and ${template.templateFile}`,
+      );
+    }
+    seen.set(template.id, template.templateFile);
+    templates.push(template);
   }
   return templates.sort((a, b) => a.id.localeCompare(b.id));
 }

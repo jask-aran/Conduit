@@ -221,6 +221,17 @@ app.get("/v0/projects", async (_request, response, next) => {
   } catch (error) { next(error); }
 });
 
+function resolveProjectDefaultTemplateId(requested, fallback = null) {
+  if (requested == null || requested === "") return fallback;
+  if (!resolveTemplate(config, requested)) {
+    const error = new Error(`Unknown template: ${requested}`);
+    error.code = "unknown_template";
+    error.templateId = requested;
+    throw error;
+  }
+  return requested;
+}
+
 app.post("/v0/projects", async (request, response, next) => {
   try {
     const mode = String(request.body?.mode || request.body?.origin || "managed").trim().toLowerCase();
@@ -231,7 +242,7 @@ app.post("/v0/projects", async (request, response, next) => {
         mode: "linked",
         name: name || undefined,
         path: request.body.path,
-        defaultTemplateId: request.body?.defaultTemplateId || "workspace",
+        defaultTemplateId: resolveProjectDefaultTemplateId(request.body?.defaultTemplateId, "workspace"),
       });
       return response.status(201).json(created);
     }
@@ -241,7 +252,7 @@ app.post("/v0/projects", async (request, response, next) => {
         mode: "cloned",
         name: name || undefined,
         cloneUrl: request.body.cloneUrl,
-        defaultTemplateId: request.body?.defaultTemplateId || "workspace",
+        defaultTemplateId: resolveProjectDefaultTemplateId(request.body?.defaultTemplateId, "workspace"),
       });
       return response.status(201).json(created);
     }
@@ -249,7 +260,7 @@ app.post("/v0/projects", async (request, response, next) => {
     response.status(201).json(await projects.create({
       mode: "managed",
       name,
-      defaultTemplateId: request.body?.defaultTemplateId || null,
+      defaultTemplateId: resolveProjectDefaultTemplateId(request.body?.defaultTemplateId, null),
     }));
   } catch (error) { next(error); }
 });
@@ -621,6 +632,7 @@ app.use((error, _request, response, _next) => {
       "path_not_directory",
       "clone_url_required",
       "clone_target_exists",
+      "unknown_template",
     ].includes(error.code)
     || error.message?.includes("Project names")) status = 400;
   response.status(status).json({
