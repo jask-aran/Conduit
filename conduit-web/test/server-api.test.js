@@ -34,6 +34,11 @@ test("raw JSON uploads publish atomically through the durable chat route", async
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-server-api-"));
   const port = await availablePort();
   const origin = `http://127.0.0.1:${port}`;
+  const nativePi = path.join(root, "native-pi");
+  await fs.writeFile(nativePi, "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then echo 0.80.10; exit 0; fi\nexit 1\n");
+  await fs.chmod(nativePi, 0o755);
+  const workspace = path.join(root, "workspace");
+  await fs.mkdir(workspace);
   const child = spawn(process.execPath, ["src/server.js"], {
     cwd: path.resolve(import.meta.dirname, ".."),
     stdio: ["ignore", "pipe", "pipe"],
@@ -46,6 +51,8 @@ test("raw JSON uploads publish atomically through the durable chat route", async
       CONDUIT_SESSION_REGISTRY_FILE: path.join(root, "sessions.json"),
       CONDUIT_PREFERENCES_FILE: path.join(root, "preferences.json"),
       CONDUIT_PI_AGENT_DIR: path.join(root, "pi"),
+      CONDUIT_NATIVE_PI_COMMAND: nativePi,
+      CONDUIT_WORKSPACE_ALLOWLIST: root,
     },
   });
 
@@ -59,6 +66,48 @@ test("raw JSON uploads publish atomically through the durable chat route", async
     assert.ok(templateCatalog.templates.some((item) => item.id === "runtime"));
     assert.equal(templateCatalog.defaultTemplateId, "chat");
     assert.equal(templateCatalog.templates.find((item) => item.id === "runtime").defaultable, false);
+
+    const installations = await (await fetch(`${origin}/v0/pi-installations`)).json();
+    assert.equal(installations.installations.find((item) => item.id === "conduit-pinned").version, "0.80.6");
+    assert.equal(installations.installations.find((item) => item.id === "host-pi").version, "0.80.10");
+    assert.equal("command" in installations.installations[0], false);
+
+    const linkedResponse = await fetch(`${origin}/v0/projects`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ mode: "linked", path: workspace }),
+    });
+    assert.equal(linkedResponse.status, 201);
+    const linked = await linkedResponse.json();
+    const preflight = await (await fetch(`${origin}/v0/workspaces/${linked.id}/native-preflight`)).json();
+    assert.equal(preflight.available, true);
+    assert.equal(preflight.version, "0.80.10");
+
+    const nativeChatResponse = await fetch(`${origin}/v0/chats`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ projectId: linked.id, runtimeKind: "native_pi" }),
+    });
+    assert.equal(nativeChatResponse.status, 201);
+    const nativeChat = await nativeChatResponse.json();
+    assert.equal(nativeChat.runtime.kind, "native_pi");
+    assert.equal(nativeChat.runtime.installationId, "host-pi");
+
+    const nativeMove = await fetch(`${origin}/v0/sessions/${nativeChat.id}/move`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ projectId: "project_chat" }),
+    });
+    assert.equal(nativeMove.status, 409);
+    assert.equal((await nativeMove.json()).error, "chat_move_not_supported");
+
+    const invalidNative = await fetch(`${origin}/v0/chats`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ projectId: "project_chat", runtimeKind: "native_pi" }),
+    });
+    assert.equal(invalidNative.status, 400);
+    assert.equal((await invalidNative.json()).error, "native_pi_requires_workspace");
 
     const runtimeDefault = await fetch(`${origin}/v0/preferences`, {
       method: "PATCH",
@@ -140,7 +189,7 @@ test("raw JSON uploads publish atomically through the durable chat route", async
     assert.equal(Buffer.from(await download.arrayBuffer()).toString(), body.toString());
 
     const imageId = crypto.randomUUID();
-    const imageBody = Buffer.from([0x89, 0x50, 0x4e, 0x47]);
+    const imageBody = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
     const imageUpload = await fetch(`${origin}/v0/chats/${chat.id}/attachments/${imageId}?name=preview.png`, {
       method: "PUT",
       headers: { "content-type": "image/png" },

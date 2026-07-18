@@ -54,7 +54,7 @@ Cmd/Ctrl+Shift+O opens Go to mode directly; Cmd/Ctrl+Shift+C starts a new chat.
 The composer slash Popover contains only `/attach`. A project-aware breadcrumb
 identifies where each chat belongs.
 
-Every Pi process receives:
+Every Conduit-profile Pi process receives:
 
 - `PI_CODING_AGENT_DIR=data/pi`;
 - the selected project directory as `cwd`;
@@ -64,6 +64,14 @@ Every Pi process receives:
 No session-directory override is supplied. Pi writes native JSONL sessions to
 `data/pi/sessions/<encoded-cwd>/`, and Conduit verifies each JSONL header's `cwd`
 when associating sessions with projects.
+
+Native Pi Workspace processes instead use the detected absolute host executable,
+the host Pi home and configuration, the Workspace as `cwd`, and only the
+additive Conduit attachment bridge. They never receive `PI_CODING_AGENT_DIR`, a
+Conduit profile, model scope, or tool allow-list. Saved native project trust is
+honored; otherwise the browser must choose trust-once or no project resources.
+One `PiManager` owns both launch forms and enforces shared writer and process
+limits.
 
 JSONL remains authoritative for persisted messages, tool calls, model changes,
 and thinking-level changes. Opening a chat reconstructs that state from its
@@ -109,6 +117,9 @@ default; opening a persisted session restores its own model and thinking level.
 - `POST /v0/projects/:id/move-sessions`
 - `GET /v0/workspaces/policy` returns the server-owned linked-workspace roots
 - `GET /v0/workspaces/suggestions` returns visible direct folders under `~/`
+- `GET /v0/workspaces/:id/native-preflight` reports derived host trust/resource status
+- `GET /v0/pi-installations` lists safe installation/version status
+- `POST /v0/pi-installations/host/detect` re-detects the host Pi executable
 - `POST /v0/runtime/chats` creates a fresh special Runtime management chat
 - `GET /v0/models`
 - `GET|PATCH /v0/settings` reads and updates Pi's shared global model scope;
@@ -138,7 +149,7 @@ live process view, then low-frequency `runtime_process` and
 Each public process view includes safe client-facing fields only: `id`,
 `chatId`, `projectId`, `status`, `active`, `activity`, `activityDetail`,
 `stopping`, queue lengths via `queue`, `hostUiRequests`, `contextUsage`,
-`updatedAt`, and `clientCount`. The durable Conduit chat id is the public row
+`runtime`, `binaryVersion`, `trustPosture`, `updatedAt`, and `clientCount`. The durable Conduit chat id is the public row
 key; the live process id is disposable.
 
 Coarse `activity` values: `idle`, `starting`, `working`, `waiting_for_user`,
@@ -171,7 +182,7 @@ Client commands:
 
 | Command | Fields | Effect |
 |---|---|---|
-| `prompt` | `message`, `attachmentIds[]`, optional `streamingBehavior` (`steer` \| `followUp`) | Send a user prompt wrapped in the attachment envelope |
+| `prompt` | `message`, `attachmentIds[]`, optional `streamingBehavior` (`steer` \| `followUp`) | Send a user prompt in the strict attachment envelope after Pi accepts it |
 | `follow_up` / `steer` | `message`, `attachmentIds[]` | Queue mid-run follow-up or steering input |
 | `stop_generation` / `abort` | `generationId` | Close the generation gate, then ask Pi to abort |
 | `fork_and_prompt` | `entryId`, `message`, `attachmentIds[]` | Fork history at an entry, then prompt |

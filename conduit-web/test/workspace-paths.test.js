@@ -5,6 +5,7 @@ import path from "node:path";
 import test from "node:test";
 import {
   assertAllowedPath,
+  assertSafeWorkspaceRoot,
   isPathInside,
   listDirectorySuggestions,
   parseAllowlist,
@@ -24,6 +25,20 @@ test("assertAllowedPath rejects paths outside the allowlist", () => {
   assert.throws(() => assertAllowedPath("/etc/passwd", ["/home/user"]), { code: "path_not_allowed" });
   assert.equal(isPathInside("/home/user/a", "/home/user"), true);
   assert.equal(isPathInside("/home/user", "/home/user/a"), false);
+  assert.throws(() => assertAllowedPath("relative/repo", [process.cwd()]), { code: "path_not_absolute" });
+});
+
+test("dangerous workspace roots fail closed", () => {
+  assert.throws(() => assertSafeWorkspaceRoot("/"), { code: "dangerous_workspace_root", reason: "system_root" });
+  assert.throws(() => assertSafeWorkspaceRoot("/home/user", { home: "/home/user" }), {
+    code: "dangerous_workspace_root",
+    reason: "home_root",
+  });
+  assert.throws(() => assertSafeWorkspaceRoot("/srv/conduit/data/chat", { dataRoot: "/srv/conduit/data" }), {
+    code: "dangerous_workspace_root",
+    reason: "conduit_data",
+  });
+  assert.equal(assertSafeWorkspaceRoot("/home/user/code", { home: "/home/user" }), "/home/user/code");
 });
 
 test("resolveExistingDirectory requires a real directory inside the allowlist", async () => {

@@ -79,10 +79,62 @@ test("links allow-listed directories without deleting them on unregister", async
   assert.equal(linked.path, external);
   assert.equal(linked.defaultTemplateId, "workspace");
   assert.equal(linked.deletesFilesOnRemove, false);
+  await fs.writeFile(path.join(external, ".conduit", "user-owned.txt"), "keep");
   await store.remove(linked.id);
   assert.equal(await fs.readFile(path.join(external, "README.md"), "utf8"), "hello");
+  assert.equal(await fs.readFile(path.join(external, ".conduit", "user-owned.txt"), "utf8"), "keep");
   assert.equal(await store.get(linked.id), null);
   await assert.rejects(store.create({ mode: "linked", path: path.join(root, "nope") }), { code: "path_not_found" });
+  await fs.rm(root, { recursive: true, force: true });
+});
+
+test("linked workspace cannot alias an existing managed working root", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-project-alias-"));
+  const store = new ProjectStore({
+    filesRoot: path.join(root, "data/chat/files"),
+    catalogFile: path.join(root, "data/conduit.json"),
+    piAgentDir: path.join(root, "data/pi"),
+    workspaceAllowlist: [root],
+  });
+  await store.initialize();
+  const managed = await store.create({ name: "Existing" });
+  await assert.rejects(store.create({ mode: "linked", path: managed.path }), { code: "workspace_already_linked" });
+  await fs.rm(root, { recursive: true, force: true });
+});
+
+test("linking rejects a pre-existing symlinked Conduit metadata root", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-project-symlink-"));
+  const external = path.join(root, "external");
+  const outside = path.join(root, "outside");
+  await fs.mkdir(external);
+  await fs.mkdir(outside);
+  await fs.symlink(outside, path.join(external, ".conduit"));
+  const store = new ProjectStore({
+    filesRoot: path.join(root, "data/chat/files"),
+    catalogFile: path.join(root, "data/conduit.json"),
+    piAgentDir: path.join(root, "data/pi"),
+    workspaceAllowlist: [root],
+  });
+  await store.initialize();
+  await assert.rejects(store.create({ mode: "linked", path: external }), { code: "unsafe_conduit_path" });
+  await fs.rm(root, { recursive: true, force: true });
+});
+
+test("missing linked workspaces can be forgotten without touching a replacement path", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-project-forget-"));
+  const external = path.join(root, "external");
+  await fs.mkdir(external);
+  const store = new ProjectStore({
+    filesRoot: path.join(root, "data/chat/files"),
+    catalogFile: path.join(root, "data/conduit.json"),
+    piAgentDir: path.join(root, "data/pi"),
+    workspaceAllowlist: [root],
+  });
+  await store.initialize();
+  const linked = await store.create({ mode: "linked", path: external });
+  await fs.rm(external, { recursive: true });
+  await store.remove(linked.id, { skipWorkingTree: true });
+  assert.equal(await store.get(linked.id), null);
   await fs.rm(root, { recursive: true, force: true });
 });
 

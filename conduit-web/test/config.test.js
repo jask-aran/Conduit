@@ -6,7 +6,7 @@ import { loadConfig } from "../src/config.js";
 test("default runtime paths are owned by the repository root", () => {
   const config = loadConfig({});
   assert.equal(config.piTemplate.id, "chat");
-  assert.equal(config.piTemplate.version, "2");
+  assert.equal(config.piTemplate.version, "3");
   assert.equal(config.piTemplate.label, "General");
   assert.deepEqual(config.piTemplate.tools, ["read", "bash"]);
   assert.deepEqual(config.piTemplate.models, [
@@ -27,6 +27,8 @@ test("default runtime paths are owned by the repository root", () => {
   assert.equal(config.sessionRegistryFile.endsWith(path.join("data", "sessions.json")), true);
   assert.equal(config.preferencesFile.endsWith(path.join("data", "preferences.json")), true);
   assert.equal(config.piAgentDir.endsWith(path.join("data", "pi")), true);
+  assert.equal(config.installations.get("conduit-pinned").version, "0.80.6");
+  assert.equal(path.isAbsolute(config.installations.get("conduit-pinned").command), true);
   assert.equal(config.enablePartialContinue, true);
   assert.equal(loadConfig({ ENABLE_PARTIAL_CONTINUE: "false" }).enablePartialContinue, false);
 });

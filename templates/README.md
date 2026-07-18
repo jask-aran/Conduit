@@ -33,6 +33,15 @@ Projects may be:
 - **linked** — allow-listed absolute path already on the machine (unregister does not delete files)
 - **cloned** — `git clone` into the managed root
 
+These are catalog origins, not separate agent products. The interface presents
+linked and cloned roots uniformly as Workspaces; a clone is functionally a
+checkout followed by Workspace registration.
+
+Each Workspace chat independently chooses **Conduit profile** or **Native Pi**.
+Conduit profile uses the bundled Pi and isolated `data/pi` home. Native Pi uses
+the host executable/home/resources plus the additive resources under
+`templates/conduit-workspace/`; it does not load the selected Conduit profile.
+
 Allow-list roots come from `CONDUIT_WORKSPACE_ALLOWLIST` (default: home,
 repository root, and the managed files root). Browser-supplied paths never become
 Pi `cwd` until the server resolves and allow-lists them.
