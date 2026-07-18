@@ -186,18 +186,32 @@ per-thread component state reset atomically with content. Pre-paint scroll
 positioning requires exact layout, so do not apply `content-visibility` or
 intrinsic-size placeholders to elements that participate in initial scroll math.
 
-Keep the composer a bounded native textarea. Keep palette commands and composer
-commands as explicit registries in `command-registry.js`: add static actions to
-`paletteCommands` and dynamic lists (chats, folders, settings sections, thinking
-levels) to `paletteSources`. The lazy Shadcn Command dialog owns all persistent
-application actions so new surface features should be reachable from Cmd/Ctrl+K;
-the textarea-focused slash Popover exposes only `/attach` and does not route
-textarea keystrokes through cmdk. Keep the compact composer model menu; Settings
-owns the searchable, grouped multi-model Combobox and remains a centered Dialog
-with a visible vertical Tabs rail at narrow widths. Render the same Attachment
-composition above the composer while pending and beneath the user message after
-send. Keep raw upload queueing and the drag-enter counter as shallow application
-logic.
+Keep the composer a bounded native textarea. Keep palette and composer commands
+as explicit registries in `command-registry.js`:
+
+- `paletteCommands` — static one-shot actions (new chat, attach, stop, …)
+- `paletteSources` — dynamic lists; set `page: "settings" | "goto" | null`. Page
+  sources only appear on their drill-down page; root sources (e.g. thinking
+  levels) appear at root. Page children must never leak into root browse/search
+- `PALETTE_PAGES` — Settings… and Go to… portals with VS Code-style input
+  prefixes (`Settings ›`, `Go to ›`). Entering a portal (or a shortcut that opens
+  that page) shows children; Escape/Back/empty Backspace returns to root
+- `palette-search.js` ranks root and page results with label/prefix priority and
+  drops weak fuzzy noise; searching uses `shouldFilter={false}` and a flat
+  score-sorted list so models are not trapped under static groups
+
+The lazy Shadcn Command dialog owns persistent application actions: new surface
+features should be reachable from Cmd/Ctrl+K. Wire `run` handlers through the
+`commandActions` bag in `main.jsx` (and sidebar `commandRequest` for dialogs).
+Keyboard: `⌘/Ctrl+K` palette, `⌘/Ctrl+⇧O` open palette in Go to mode, `⌘/Ctrl+⇧C`
+new chat (not `⌘N` — browsers steal it), `⌘/Ctrl+,` settings dialog, `⌘/Ctrl+B`
+sidebar (Shadcn). The textarea slash Popover exposes only `/attach` and does not
+route textarea keystrokes through cmdk. Keep the compact composer model menu;
+Settings owns the searchable, grouped multi-model Combobox and remains a centered
+Dialog with a visible vertical Tabs rail at narrow widths. Render the same
+Attachment composition above the composer while pending and beneath the user
+message after send. Keep raw upload queueing and the drag-enter counter as
+shallow application logic.
 
 ## Build, Test, and Development Commands
 

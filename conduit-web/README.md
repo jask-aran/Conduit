@@ -46,10 +46,13 @@ textarea until send, then renders the same cards beneath their user message.
 Persisted image cards use the attachment preview route, including when restored
 for edit. The compact composer model menu remains separate from Settings'
 searchable, grouped multi-model Combobox. Cmd/Ctrl+K opens the application
-Command palette (navigation, settings sections, chat actions, models, and
-thinking levels from the extensible `command-registry`); the composer slash
-Popover contains only `/attach`. A project-aware breadcrumb identifies where
-each chat belongs.
+Command palette (`src/client/command-registry.js` + ranked search in
+`palette-search.js`). Root lists chat actions, portals, thinking levels, and
+models; Settings… and Go to… are drill-down pages with search prefixes
+(`Settings ›`, `Go to ›`) so sections and chats do not flood the root list.
+Cmd/Ctrl+Shift+O opens Go to mode directly; Cmd/Ctrl+Shift+C starts a new chat.
+The composer slash Popover contains only `/attach`. A project-aware breadcrumb
+identifies where each chat belongs.
 
 Every Pi process receives:
 
@@ -73,7 +76,9 @@ The Shadcn icon-collapsible sidebar separates first-class Chats from expandable
 Projects. Draft chats stay out of navigation until their first message creates a
 session, after which the new session is selected. Context menus expose chat
 rename, move, duplicate, transcript copy, and delete operations, plus project
-chat creation, rename, bulk move, and delete operations.
+chat creation, rename, bulk move, and delete operations. The same chat and
+folder mutations are available from the command palette (root actions or the
+Go to / Settings pages) so keyboard users do not depend on the sidebar alone.
 
 Assistant messages pass through `src/client/chat-markdown.jsx`, which configures
 Streamdown for live and restored content. GFM, partial streaming Markdown,
