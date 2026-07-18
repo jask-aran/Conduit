@@ -29,6 +29,7 @@ const manager = new PiManager({
   agentDir: config.piAgentDir,
   template: config.piTemplate,
   maxLiveProcesses: runtimeSettings.get().maxLiveProcesses,
+  maxGeneratingProcesses: runtimeSettings.get().maxGeneratingProcesses,
   idleProcessTtlMs: runtimeSettings.get().idleProcessTtlMs,
 });
 const runtimeHub = new RuntimeHub({ listViews: () => manager.list() });
@@ -398,6 +399,7 @@ app.patch("/v0/runtime/settings", async (request, response, next) => {
   try {
     const saved = await runtimeSettings.save({
       maxLiveProcesses: request.body?.maxLiveProcesses,
+      maxGeneratingProcesses: request.body?.maxGeneratingProcesses,
       idleProcessTtlMs: request.body?.idleProcessTtlMs,
     });
     manager.configure(saved);
@@ -462,7 +464,7 @@ app.use((error, _request, response, _next) => {
   console.error(error);
   let status = error.status || 500;
   if (error.code === "reserved_project") status = 409;
-  if (error.code === "live_process_limit") status = 429;
+  if (error.code === "live_process_limit" || error.code === "generation_limit") status = 429;
   if (error.code === "attachment_not_found") status = 404;
   if (error.code === "invalid_attachment_id"
     || ["enabled_models_required", "invalid_enabled_model", "invalid_default_model"].includes(error.code)

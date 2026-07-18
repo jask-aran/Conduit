@@ -46,8 +46,13 @@ textarea until send, then renders the same cards beneath their user message.
 Persisted image cards use the attachment preview route, including when restored
 for edit. The compact composer model menu remains separate from Settings'
 searchable, grouped multi-model Combobox. Cmd/Ctrl+K opens the application
-Command palette; the composer slash Popover contains only `/attach`. A
-project-aware breadcrumb identifies where each chat belongs.
+Command palette (`src/client/command-registry.js` + ranked search in
+`palette-search.js`). Root lists chat actions, portals, thinking levels, and
+models; Settings… and Go to… are drill-down pages with search prefixes
+(`Settings ›`, `Go to ›`) so sections and chats do not flood the root list.
+Cmd/Ctrl+Shift+O opens Go to mode directly; Cmd/Ctrl+Shift+C starts a new chat.
+The composer slash Popover contains only `/attach`. A project-aware breadcrumb
+identifies where each chat belongs.
 
 Every Pi process receives:
 
@@ -71,7 +76,9 @@ The Shadcn icon-collapsible sidebar separates first-class Chats from expandable
 Projects. Draft chats stay out of navigation until their first message creates a
 session, after which the new session is selected. Context menus expose chat
 rename, move, duplicate, transcript copy, and delete operations, plus project
-chat creation, rename, bulk move, and delete operations.
+chat creation, rename, bulk move, and delete operations. The same chat and
+folder mutations are available from the command palette (root actions or the
+Go to / Settings pages) so keyboard users do not depend on the sidebar alone.
 
 Assistant messages pass through `src/client/chat-markdown.jsx`, which configures
 Streamdown for live and restored content. GFM, partial streaming Markdown,
@@ -114,7 +121,7 @@ default; opening a persisted session restores its own model and thinking level.
 - `WS /v0/live-sessions/:id/stream`
 - `GET /v0/runtime` returns the current global live-process snapshot
 - `GET /v0/runtime/stream` (SSE) pushes snapshot-first global process updates
-- `GET /v0/runtime/settings` and `PATCH /v0/runtime/settings` read/update max live processes and idle reclaim TTL (`data/runtime.json`, env defaults)
+- `GET /v0/runtime/settings` and `PATCH /v0/runtime/settings` read/update max warm processes, max concurrent generations, and idle reclaim TTL (`data/runtime.json`, env defaults)
 
 ## Global runtime channel
 
@@ -137,10 +144,12 @@ per-chat WebSocket stream.
 
 Process residency: the server owns Pi processes. Browser disconnect does not
 stop them. Opening an active chat starts or reuses one process per chat. A
-configurable max live cap (default 4) reclaims the oldest idle unattached
-process when full; otherwise create returns 429. Unattached idle processes are
-stopped after the idle TTL (default 2 minutes). Transcripts remain on disk and
-resume on the next open.
+configurable warm-pool cap (default 12) reclaims the oldest idle unattached
+process when full; otherwise create returns 429 `live_process_limit`. Concurrent
+agent loops are limited separately (default 2): starting a new generation at the
+cap returns 429 `generation_limit` without killing warm processes. Unattached
+idle processes are stopped after the idle TTL (default 2 minutes). Transcripts
+remain on disk and resume on the next open.
 
 Context usage is synthesized by Conduit: after `agent_end` / `compaction_end`
 (and on selected-chat reconnect) the server calls Pi `get_session_stats` and

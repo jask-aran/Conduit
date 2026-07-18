@@ -914,22 +914,48 @@ test("global commands and slash suggestions preserve their intended focus models
   await page.keyboard.press("Control+k");
   const palette = page.getByRole("dialog", { name: "Command Palette" });
   await expect(palette).toBeVisible();
+  await expect(palette.getByRole("group", { name: "Commands" })).toBeVisible();
+  await expect(palette.getByRole("option", { name: /Settings…/ })).toBeVisible();
+  await expect(palette.getByRole("option", { name: /Go to…/ })).toBeVisible();
+  await expect(palette.getByRole("option", { name: /^Runtime$/ })).toHaveCount(0);
+  await palette.getByRole("option", { name: /Settings…/ }).click();
+  await expect(palette.locator("[data-slot='command-input-prefix']")).toHaveText("Settings ›");
+  await expect(palette.getByRole("option", { name: /^Back$/ })).toBeVisible();
+  await expect(palette.getByRole("option", { name: /^Runtime$/ })).toBeVisible();
+  await palette.getByRole("option", { name: /^Runtime$/ }).click();
+  const settingsDialog = page.getByRole("dialog", { name: "Settings" });
+  await expect(settingsDialog).toBeVisible();
+  await expect(settingsDialog.getByRole("tab", { name: /Runtime/ })).toHaveAttribute("aria-selected", "true");
+  await expect(settingsDialog.getByRole("heading", { name: "Runtime" })).toBeVisible();
+  await page.keyboard.press("Escape");
+
+  await page.keyboard.press("Control+k");
+  await palette.getByPlaceholder("Search commands…").fill("runtime");
+  await expect(palette.getByRole("option", { name: /^Runtime$/ })).toHaveCount(0);
   await palette.getByPlaceholder("Search commands…").fill("settings");
-  await palette.getByText("Open settings", { exact: true }).click();
+  await palette.getByRole("option", { name: /Settings…/ }).click();
+  await expect(palette.locator("[data-slot='command-input-prefix']")).toHaveText("Settings ›");
+  await palette.getByRole("option", { name: /^Runtime$/ }).click();
   await expect(page.getByRole("dialog", { name: "Settings" })).toBeVisible();
   await page.keyboard.press("Escape");
 
   await page.keyboard.press("Control+k");
+  await palette.getByPlaceholder("Search commands…").fill("new folder");
+  await palette.getByRole("option", { name: /^New folder/ }).click();
+  await expect(page.getByRole("dialog", { name: "New folder" })).toBeVisible();
+  await page.keyboard.press("Escape");
+
+  await page.keyboard.press("Control+k");
   await palette.getByPlaceholder("Search commands…").fill("example plain");
-  await expect(palette.getByRole("group", { name: "Models · example" })).toBeVisible();
+  await expect(palette.getByRole("group", { name: "Models" })).toBeVisible();
+  await expect(palette.getByRole("option", { name: /Plain/ })).toBeVisible();
   const settingsRequest = page.waitForRequest((request) => request.url().endsWith("/v0/settings") && request.method() === "PATCH");
-  await page.keyboard.press("ArrowDown");
-  await page.keyboard.press("Enter");
+  await palette.getByRole("option", { name: /Plain/ }).click();
   await settingsRequest;
 
   await page.keyboard.press("Control+k");
   await page.getByPlaceholder("Search commands…").fill("delete chat");
-  await page.getByText("Delete chat", { exact: true }).click();
+  await page.getByRole("option", { name: /Delete chat/ }).click();
   await expect(page.getByRole("alertdialog", { name: "Delete this chat?" })).toBeVisible();
 });
 
@@ -1004,4 +1030,78 @@ test("settings remains centered with a persistent vertical rail at narrow widths
   const [dialogBox, railBox] = await Promise.all([dialog.boundingBox(), rail.boundingBox()]);
   expect(Math.abs(dialogBox.x + dialogBox.width / 2 - 240)).toBeLessThanOrEqual(2);
   expect(railBox.width).toBeGreaterThan(60);
+});
+
+test("generation_limit bounce surfaces an error and keeps the composer usable", async ({ page }) => {
+  await page.addInitScript(() => {
+    class LimitWebSocket extends EventTarget {
+      static OPEN = 1;
+      constructor() {
+        super();
+        this.readyState = 0;
+        queueMicrotask(() => {
+          this.readyState = LimitWebSocket.OPEN;
+          this.dispatchEvent(new Event("open"));
+        });
+      }
+      close() { this.readyState = 3; this.dispatchEvent(new Event("close")); }
+      send(data) {
+        const command = JSON.parse(data);
+        if (command.type === "prompt") {
+          queueMicrotask(() => {
+            this.onmessage?.({ data: JSON.stringify({
+              type: "client_error",
+              code: "generation_limit",
+              message: "Too many concurrent generations (max 2). Wait for another chat to finish.",
+            }) });
+          });
+        }
+      }
+    }
+    Object.defineProperty(window, "WebSocket", { configurable: true, value: LimitWebSocket });
+  });
+  await page.goto("/");
+  const composer = page.getByRole("textbox", { name: "Message Pi" });
+  await composer.fill("Should bounce");
+  await page.getByRole("button", { name: "Send message" }).click();
+  await expect(page.getByText(/Too many concurrent generations/i)).toBeVisible();
+  await expect(composer).toHaveValue("Should bounce");
+  await expect(page.getByRole("button", { name: "Send message" })).toBeEnabled();
+});
+
+test("runtime settings exposes warm pool and concurrent generation caps", async ({ page }, testInfo) => {
+  await page.route("**/v0/runtime/settings", async (route) => {
+    if (route.request().method() === "GET") {
+      await route.fulfill({ json: {
+        maxLiveProcesses: 12,
+        maxGeneratingProcesses: 2,
+        idleProcessTtlMs: 120_000,
+        liveCount: 3,
+        generatingCount: 1,
+      } });
+      return;
+    }
+    if (route.request().method() === "PATCH") {
+      const body = route.request().postDataJSON() || {};
+      await route.fulfill({ json: {
+        maxLiveProcesses: Number(body.maxLiveProcesses) || 12,
+        maxGeneratingProcesses: Number(body.maxGeneratingProcesses) || 2,
+        idleProcessTtlMs: Number(body.idleProcessTtlMs) || 120_000,
+        liveCount: 3,
+        generatingCount: 1,
+      } });
+      return;
+    }
+    await route.fallback();
+  });
+  await page.goto("/");
+  await openSidebar(page, testInfo);
+  await page.locator('[data-sidebar="footer"]').getByRole("button", { name: /Conduit/ }).click();
+  await page.getByRole("menuitem", { name: "Manage settings" }).click();
+  const dialog = page.getByRole("dialog", { name: "Settings" });
+  await dialog.getByRole("tab", { name: /Runtime/ }).click();
+  await expect(dialog.getByText("Max warm Pi processes")).toBeVisible();
+  await expect(dialog.getByText("Max concurrent generations")).toBeVisible();
+  await expect(dialog.getByText("3 live now")).toBeVisible();
+  await expect(dialog.getByText("1 generating")).toBeVisible();
 });
