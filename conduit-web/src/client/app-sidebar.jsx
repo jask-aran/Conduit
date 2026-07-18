@@ -97,12 +97,26 @@ export function AppSidebar({
       : null);
 
   useEffect(() => {
-    if (!commandRequest || !selectedTarget) return;
+    if (!commandRequest) return;
+    if (commandRequest.type === "new-folder") {
+      setNewFolderOpen(true);
+      onCommandHandled?.();
+      return;
+    }
+    if (!selectedTarget) return;
     if (commandRequest.type === "rename") requestRename({ type: "session", ...selectedTarget });
+    if (commandRequest.type === "rename-folder") {
+      const project = projects.find((item) => item.id === projectId);
+      if (project && project.slug !== "chat") requestRename({ type: "project", project });
+    }
     if (commandRequest.type === "move") setPendingMove(selectedTarget);
     if (commandRequest.type === "delete") setPendingDelete({ type: "session", ...selectedTarget });
+    if (commandRequest.type === "delete-folder") {
+      const project = projects.find((item) => item.id === projectId);
+      if (project && project.slug !== "chat") setPendingDelete({ type: "project", project });
+    }
     onCommandHandled?.();
-  }, [commandRequest, selectedTarget]);
+  }, [commandRequest, selectedTarget, projectId, projects]);
 
   const chooseSession = (session, project) => {
     setOpenMobile(false);

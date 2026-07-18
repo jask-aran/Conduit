@@ -914,22 +914,48 @@ test("global commands and slash suggestions preserve their intended focus models
   await page.keyboard.press("Control+k");
   const palette = page.getByRole("dialog", { name: "Command Palette" });
   await expect(palette).toBeVisible();
+  await expect(palette.getByRole("group", { name: "Commands" })).toBeVisible();
+  await expect(palette.getByRole("option", { name: /Settings…/ })).toBeVisible();
+  await expect(palette.getByRole("option", { name: /Go to…/ })).toBeVisible();
+  await expect(palette.getByRole("option", { name: /^Runtime$/ })).toHaveCount(0);
+  await palette.getByRole("option", { name: /Settings…/ }).click();
+  await expect(palette.locator("[data-slot='command-input-prefix']")).toHaveText("Settings ›");
+  await expect(palette.getByRole("option", { name: /^Back$/ })).toBeVisible();
+  await expect(palette.getByRole("option", { name: /^Runtime$/ })).toBeVisible();
+  await palette.getByRole("option", { name: /^Runtime$/ }).click();
+  const settingsDialog = page.getByRole("dialog", { name: "Settings" });
+  await expect(settingsDialog).toBeVisible();
+  await expect(settingsDialog.getByRole("tab", { name: /Runtime/ })).toHaveAttribute("aria-selected", "true");
+  await expect(settingsDialog.getByRole("heading", { name: "Runtime" })).toBeVisible();
+  await page.keyboard.press("Escape");
+
+  await page.keyboard.press("Control+k");
+  await palette.getByPlaceholder("Search commands…").fill("runtime");
+  await expect(palette.getByRole("option", { name: /^Runtime$/ })).toHaveCount(0);
   await palette.getByPlaceholder("Search commands…").fill("settings");
-  await palette.getByText("Open settings", { exact: true }).click();
+  await palette.getByRole("option", { name: /Settings…/ }).click();
+  await expect(palette.locator("[data-slot='command-input-prefix']")).toHaveText("Settings ›");
+  await palette.getByRole("option", { name: /^Runtime$/ }).click();
   await expect(page.getByRole("dialog", { name: "Settings" })).toBeVisible();
   await page.keyboard.press("Escape");
 
   await page.keyboard.press("Control+k");
+  await palette.getByPlaceholder("Search commands…").fill("new folder");
+  await palette.getByRole("option", { name: /^New folder/ }).click();
+  await expect(page.getByRole("dialog", { name: "New folder" })).toBeVisible();
+  await page.keyboard.press("Escape");
+
+  await page.keyboard.press("Control+k");
   await palette.getByPlaceholder("Search commands…").fill("example plain");
-  await expect(palette.getByRole("group", { name: "Models · example" })).toBeVisible();
+  await expect(palette.getByRole("group", { name: "Models" })).toBeVisible();
+  await expect(palette.getByRole("option", { name: /Plain/ })).toBeVisible();
   const settingsRequest = page.waitForRequest((request) => request.url().endsWith("/v0/settings") && request.method() === "PATCH");
-  await page.keyboard.press("ArrowDown");
-  await page.keyboard.press("Enter");
+  await palette.getByRole("option", { name: /Plain/ }).click();
   await settingsRequest;
 
   await page.keyboard.press("Control+k");
   await page.getByPlaceholder("Search commands…").fill("delete chat");
-  await page.getByText("Delete chat", { exact: true }).click();
+  await page.getByRole("option", { name: /Delete chat/ }).click();
   await expect(page.getByRole("alertdialog", { name: "Delete this chat?" })).toBeVisible();
 });
 
