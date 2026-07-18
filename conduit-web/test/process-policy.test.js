@@ -17,11 +17,17 @@ function fakeChild() {
   return child;
 }
 
-function makeManager({ maxLiveProcesses = 2, idleProcessTtlMs = 120_000, nowValue = { t: 1_000 } } = {}) {
+function makeManager({
+  maxLiveProcesses = 2,
+  maxGeneratingProcesses = 2,
+  idleProcessTtlMs = 120_000,
+  nowValue = { t: 1_000 },
+} = {}) {
   const children = [];
   const manager = new PiManager({
     agentDir: "/tmp/conduit-process-policy",
     maxLiveProcesses,
+    maxGeneratingProcesses,
     idleProcessTtlMs,
     reaperIntervalMs: 0,
     now: () => nowValue.t,
@@ -42,12 +48,18 @@ const project = (slug) => ({
   sessionsDir: `/tmp/${slug}/sessions`,
 });
 
-test("normalizeRuntimeSettings clamps max live and idle TTL", () => {
-  assert.deepEqual(normalizeRuntimeSettings({ maxLiveProcesses: 99, idleProcessTtlMs: 1000 }), {
-    maxLiveProcesses: 16,
+test("normalizeRuntimeSettings clamps warm pool, generating cap, and idle TTL", () => {
+  assert.deepEqual(normalizeRuntimeSettings({
+    maxLiveProcesses: 99,
+    maxGeneratingProcesses: 99,
+    idleProcessTtlMs: 1000,
+  }), {
+    maxLiveProcesses: 32,
+    maxGeneratingProcesses: 8,
     idleProcessTtlMs: 30_000,
   });
-  assert.equal(normalizeRuntimeSettings({}).maxLiveProcesses, 4);
+  assert.equal(normalizeRuntimeSettings({}).maxLiveProcesses, 12);
+  assert.equal(normalizeRuntimeSettings({}).maxGeneratingProcesses, 2);
 });
 
 test("create reuses the same chat and enforces max live processes", async () => {
@@ -130,6 +142,45 @@ test("get_state does not settle an open generation", () => {
   assert.equal(record.active, false);
   assert.equal(record.generation.settled, false);
   assert.equal(record.activity, "working");
+});
+
+test("assertCanStartGeneration limits concurrent agent loops without reclaiming warms", () => {
+  const { manager, children } = makeManager({ maxLiveProcesses: 8, maxGeneratingProcesses: 2 });
+  const a = manager.create({ project: project("a"), chatId: "chat-a" });
+  const b = manager.create({ project: project("b"), chatId: "chat-b" });
+  const c = manager.create({ project: project("c"), chatId: "chat-c" });
+  for (const child of children) child.emit("spawn");
+  a.generation = { id: "ga", closed: false, settled: false };
+  a.active = true;
+  b.generation = { id: "gb", closed: false, settled: false };
+  b.active = true;
+  c.active = false;
+  c.activity = "idle";
+  assert.equal(manager.generatingRecords().length, 2);
+  assert.equal(manager.list().length, 3);
+  assert.throws(
+    () => manager.assertCanStartGeneration(c),
+    (error) => error.code === "generation_limit",
+  );
+  // Already-generating chats keep their slot (steer/retry).
+  assert.doesNotThrow(() => manager.assertCanStartGeneration(a));
+  // Warm pool is independent: no processes reclaimed by the generation bounce.
+  assert.equal(manager.list().length, 3);
+});
+
+test("prompt rejects when the generating cap is full", () => {
+  const { manager, children } = makeManager({ maxLiveProcesses: 4, maxGeneratingProcesses: 1 });
+  const busy = manager.create({ project: project("busy"), chatId: "chat-busy" });
+  const idle = manager.create({ project: project("idle"), chatId: "chat-idle" });
+  children[0].emit("spawn");
+  children[1].emit("spawn");
+  busy.generation = { id: "g1", closed: false, settled: false };
+  busy.active = true;
+  assert.throws(
+    () => manager.prompt(idle.id, "hello"),
+    (error) => error.code === "generation_limit",
+  );
+  assert.equal(idle.generation, null);
 });
 
 test("reaper stops unattached idle processes after the TTL", async () => {

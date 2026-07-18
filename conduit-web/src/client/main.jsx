@@ -96,6 +96,8 @@ function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsSection, setSettingsSection] = useState("models");
   const [commandOpen, setCommandOpen] = useState(false);
+  const [commandPage, setCommandPage] = useState(null);
+  const [commandLaunchNonce, setCommandLaunchNonce] = useState(0);
   const [sidebarCommand, setSidebarCommand] = useState(null);
   const [editEntryId, setEditEntryId] = useState(null);
   const [partialContinue, setPartialContinue] = useState(true);
@@ -312,15 +314,43 @@ function App() {
   }, []);
 
   useEffect(() => {
+    const openPalette = (page = null) => {
+      setCommandPage(page);
+      setCommandLaunchNonce(Date.now());
+      setCommandOpen(true);
+    };
     const onKeyDown = (event) => {
-      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+      if (!(event.metaKey || event.ctrlKey) || event.altKey) return;
+      const key = event.key.toLowerCase();
+      if (key === "k" && !event.shiftKey) {
         event.preventDefault();
-        setCommandOpen((open) => !open);
+        setCommandOpen((open) => {
+          if (open) setCommandPage(null);
+          return !open;
+        });
+        return;
+      }
+      // ⌘⇧O — open palette in Go to mode (avoid ⌘O / ⌘P browser chrome).
+      if (key === "o" && event.shiftKey) {
+        event.preventDefault();
+        openPalette("goto");
+        return;
+      }
+      // ⌘⇧C — new chat (⌘N is new-window in browsers).
+      if (key === "c" && event.shiftKey) {
+        event.preventDefault();
+        newChat().catch((caught) => setError(caught.message));
+        return;
+      }
+      if (key === ",") {
+        event.preventDefault();
+        setSettingsSection("general");
+        setSettingsOpen(true);
       }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, []);
+  }, [projects, projectId]);
 
   function consume(event, liveId = "") {
     if (event.generationId && closedGenerations.current.has(event.generationId)
@@ -534,7 +564,20 @@ function App() {
     if (["runtime_error", "client_error"].includes(event.type)) {
       if (!stopPending.current) setGeneration(event.type === "runtime_error" ? "failed" : "idle");
       resetLiveUiFlags();
-      setError(event.message || "Runtime error");
+      if (event.code === "generation_limit") {
+        // Prompt was rejected before a turn started: undo optimistic user bubble and restore draft.
+        setMessages((current) => {
+          const last = current[current.length - 1];
+          if (last?.role === "user" && String(last.id || "").startsWith("user_")) {
+            setDraft((draft) => draft || last.content || "");
+            return current.slice(0, -1);
+          }
+          return current;
+        });
+        setError(event.message || "Too many concurrent generations. Wait for another chat to finish.");
+      } else {
+        setError(event.message || "Runtime error");
+      }
     }
   }
 
@@ -846,26 +889,39 @@ function App() {
   const precedingUser = lastAssistantIndex >= 0
     ? messages.slice(0, lastAssistantIndex).findLast((message) => message.role === "user" && !String(message.id || "").startsWith("user_"))
     : null;
+  const selectedModel = modelSettings.models.find((item) => item.spec === modelSettings.model);
   const commandContext = {
     chatId: selectedId,
     streaming,
     canRegenerate: Boolean(precedingUser),
     canContinue: Boolean(partialContinue && lastAssistant?.stopped),
     canCopy: Boolean(lastAssistant?.content),
+    connectivity: globalRuntime.connectivity,
+    projects,
+    project: projects.find((item) => item.id === projectId) || null,
+    thinkingLevels: Array.isArray(selectedModel?.thinkingLevels) ? selectedModel.thinkingLevels : [],
+    effort: modelSettings.effort,
   };
   const openSettings = (section = "models") => { setSettingsSection(section); setSettingsOpen(true); };
   const commandActions = {
-    newChat: () => newChat(),
+    newChat: (project) => newChat(project).catch((caught) => setError(caught.message)),
+    newFolder: () => setSidebarCommand({ type: "new-folder", nonce: Date.now() }),
     attach: attachmentState.openPicker,
-    settings: () => openSettings("general"),
-    model: () => openSettings("models"),
+    settings: (section = "general") => openSettings(section),
     rename: () => setSidebarCommand({ type: "rename", nonce: Date.now() }),
+    renameFolder: () => setSidebarCommand({ type: "rename-folder", nonce: Date.now() }),
     move: () => setSidebarCommand({ type: "move", nonce: Date.now() }),
     delete: () => setSidebarCommand({ type: "delete", nonce: Date.now() }),
+    deleteFolder: () => setSidebarCommand({ type: "delete-folder", nonce: Date.now() }),
     stop: stopResponse,
     regenerate: () => regenerate(precedingUser?.id),
     continue: continueResponse,
     copy: () => lastAssistant && navigator.clipboard.writeText(lastAssistant.content),
+    copyTranscript: () => selectedId && copyTranscript({ id: selectedId }),
+    openChat: (session, project) => openSession(session, project).catch((caught) => setError(caught.message)),
+    chooseEffort: modelSettings.chooseEffort,
+    retryConnection: globalRuntime.retry,
+    reload: () => location.reload(),
   };
 
   const threadReady = loadedSessionId === selectedId;
@@ -964,7 +1020,12 @@ function App() {
       <Suspense fallback={null}>
         {commandOpen && <CommandMenu
           open={commandOpen}
-          onOpenChange={setCommandOpen}
+          initialPage={commandPage}
+          launchNonce={commandLaunchNonce}
+          onOpenChange={(open) => {
+            setCommandOpen(open);
+            if (!open) setCommandPage(null);
+          }}
           context={commandContext}
           actions={commandActions}
           models={modelSettings.models}
