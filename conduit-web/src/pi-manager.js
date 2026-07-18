@@ -579,6 +579,11 @@ export class PiManager extends EventEmitter {
     return record;
   }
 
+  /** Persist a display name via the live writer's public RPC (do not dual-write JSONL). */
+  async setSessionName(id, name) {
+    await this.request(id, { type: "set_session_name", name: String(name || "").trim() });
+  }
+
   prompt(id, message, { continuationBase = "", streamingBehavior = null } = {}) {
     const record = this.processes.get(id);
     if (!record) throw new Error("Unknown live session");
