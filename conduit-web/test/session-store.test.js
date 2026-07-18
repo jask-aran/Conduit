@@ -147,6 +147,37 @@ test("deletes a discovered native session file", async () => {
   await fs.rm(root, { recursive: true, force: true });
 });
 
+test("discoverSessions keeps creation order after rename updates mtime", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-session-order-test-"));
+  const projectPath = path.join(root, "project");
+  const sessionsDir = sessionDirectoryFor(projectPath, path.join(root, "pi"));
+  const project = { id: "project_order", slug: "order", path: projectPath, sessionsDir };
+  await fs.mkdir(sessionsDir, { recursive: true });
+  const older = path.join(sessionsDir, "older.jsonl");
+  const newer = path.join(sessionsDir, "newer.jsonl");
+  await fs.writeFile(older, [
+    JSON.stringify({ type: "session", version: 3, id: "session-older", timestamp: "2026-01-01T00:00:00Z", cwd: projectPath }),
+    JSON.stringify({ type: "message", id: "u1", parentId: null, timestamp: "2026-01-01T00:00:01Z", message: { role: "user", content: [{ type: "text", text: "Older chat" }] } }),
+  ].join("\n") + "\n");
+  await fs.writeFile(newer, [
+    JSON.stringify({ type: "session", version: 3, id: "session-newer", timestamp: "2026-02-01T00:00:00Z", cwd: projectPath }),
+    JSON.stringify({ type: "message", id: "u2", parentId: null, timestamp: "2026-02-01T00:00:01Z", message: { role: "user", content: [{ type: "text", text: "Newer chat" }] } }),
+  ].join("\n") + "\n");
+
+  const before = await discoverSessions([project]);
+  assert.deepEqual(before.map((session) => session.id), ["session-newer", "session-older"]);
+
+  const renamed = await renameSession(before.find((session) => session.id === "session-older"), project, "Renamed older");
+  assert.equal(renamed.title, "Renamed older");
+  // Rename appends session_info and advances mtime-backed updatedAt.
+  assert.ok(renamed.updatedAt >= before.find((session) => session.id === "session-older").updatedAt);
+
+  const after = await discoverSessions([project]);
+  assert.deepEqual(after.map((session) => session.id), ["session-newer", "session-older"]);
+  assert.equal(after.find((session) => session.id === "session-older").title, "Renamed older");
+  await fs.rm(root, { recursive: true, force: true });
+});
+
 test("renames, duplicates, and moves sessions through Pi's native session manager", async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-session-mutation-test-"));
   const piAgentDir = path.join(root, "pi");
