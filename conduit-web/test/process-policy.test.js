@@ -144,6 +144,30 @@ test("get_state does not settle an open generation", () => {
   assert.equal(record.activity, "working");
 });
 
+test("setSessionName uses the live process RPC and leaves the process running", async () => {
+  const { manager, children } = makeManager({ maxLiveProcesses: 4 });
+  const writes = [];
+  const record = manager.create({ project: project("rename"), chatId: "chat-rename" });
+  children[0].emit("spawn");
+  children[0].stdin.write = (chunk) => { writes.push(String(chunk)); };
+  record.status = "running";
+  const pending = manager.setSessionName(record.id, "Renamed chat");
+  await Promise.resolve();
+  const sent = writes.map((line) => JSON.parse(line.trim()));
+  const request = sent.find((item) => item.type === "set_session_name");
+  assert.ok(request);
+  assert.equal(request.name, "Renamed chat");
+  // Resolve the pending RPC like Pi would.
+  const pendingRequest = record.pendingRequests.get(request.id);
+  assert.ok(pendingRequest);
+  pendingRequest.resolve({ type: "response", id: request.id, command: "set_session_name", success: true });
+  clearTimeout(pendingRequest.timer);
+  record.pendingRequests.delete(request.id);
+  await pending;
+  assert.equal(record.status, "running");
+  assert.equal(manager.list().length, 1);
+});
+
 test("assertCanStartGeneration limits concurrent agent loops without reclaiming warms", () => {
   const { manager, children } = makeManager({ maxLiveProcesses: 8, maxGeneratingProcesses: 2 });
   const a = manager.create({ project: project("a"), chatId: "chat-a" });
