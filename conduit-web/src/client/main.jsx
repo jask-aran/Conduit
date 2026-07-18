@@ -114,6 +114,7 @@ function App() {
   const [commandOpen, setCommandOpen] = useState(false);
   const [commandPage, setCommandPage] = useState(null);
   const [templates, setTemplates] = useState([]);
+  const [workspaceSuggestions, setWorkspaceSuggestions] = useState([]);
   const [defaultTemplateId, setDefaultTemplateId] = useState("chat");
   const [chatTemplateId, setChatTemplateId] = useState(null);
   const [commandLaunchNonce, setCommandLaunchNonce] = useState(0);
@@ -308,13 +309,15 @@ function App() {
       api("/v0/projects"),
       api("/v0/capabilities").catch(() => ({ partialContinue: true })),
       api("/v0/templates").catch(() => ({ templates: [], defaultTemplateId: "chat" })),
+      api("/v0/workspaces/suggestions").catch(() => ({ folders: [] })),
     ])
-      .then(async ([payload, capabilities, templateCatalog]) => {
+      .then(async ([payload, capabilities, templateCatalog, workspaceCatalog]) => {
         if (!active) return;
         const nextProjects = list(payload.projects).map((project) => ({ ...project, sessions: list(project.sessions) }));
         setProjects(nextProjects);
         setPartialContinue(capabilities.partialContinue !== false);
         setTemplates(list(templateCatalog.templates));
+        setWorkspaceSuggestions(list(workspaceCatalog.folders));
         setDefaultTemplateId(templateCatalog.defaultTemplateId || "chat");
         const routeId = pathChatId();
         if (routeId) {
@@ -1037,6 +1040,7 @@ function App() {
         runtimeStale={globalRuntime.stale}
         onRetryConnection={globalRuntime.retry}
         onAddProject={addProject}
+        workspaceSuggestions={workspaceSuggestions}
         onCommandHandled={() => setSidebarCommand(null)}
         onCopyTranscript={copyTranscript}
         onDeleteProject={deleteProject}

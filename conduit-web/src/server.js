@@ -1,4 +1,5 @@
 import http from "node:http";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import express from "express";
@@ -17,6 +18,7 @@ import { RuntimeHub } from "./runtime-hub.js";
 import { defaultsFromEnv, RuntimeSettingsStore } from "./runtime-settings.js";
 import { PreferencesStore } from "./preferences-store.js";
 import { templatePublicView } from "../../scripts/pi-runtime.mjs";
+import { isPathInside, listDirectorySuggestions } from "./workspace-paths.js";
 
 const config = loadConfig();
 const projects = new ProjectStore(config);
@@ -148,6 +150,24 @@ app.get("/v0/workspaces/policy", (_request, response) => {
     templatesRoot: config.templatesRoot,
     modes: ["managed", "linked", "cloned"],
   });
+});
+
+app.get("/v0/workspaces/suggestions", async (_request, response, next) => {
+  try {
+    const home = path.resolve(os.homedir());
+    if (!config.workspaceAllowlist.some((root) => isPathInside(home, root))) {
+      return response.json({ root: "~", folders: [] });
+    }
+    const folders = await listDirectorySuggestions(home);
+    response.json({
+      root: "~",
+      folders: folders.map((folder) => ({
+        name: folder.name,
+        path: folder.path,
+        displayPath: `~/${folder.name}`,
+      })),
+    });
+  } catch (error) { next(error); }
 });
 
 app.get("/v0/templates", (_request, response) => {

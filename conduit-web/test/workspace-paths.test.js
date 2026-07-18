@@ -6,6 +6,7 @@ import test from "node:test";
 import {
   assertAllowedPath,
   isPathInside,
+  listDirectorySuggestions,
   parseAllowlist,
   resolveExistingDirectory,
 } from "../src/workspace-paths.js";
@@ -55,4 +56,15 @@ test("resolveExistingDirectory rejects intermediate symlink escapes", async () =
   await assert.rejects(resolveExistingDirectory(leaf, [root]), { code: "path_not_allowed" });
   await fs.rm(root, { recursive: true, force: true });
   await fs.rm(outside, { recursive: true, force: true });
+});
+
+test("listDirectorySuggestions returns only visible direct directories", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-ws-suggestions-"));
+  await fs.mkdir(path.join(root, "Visible"));
+  await fs.mkdir(path.join(root, ".hidden"));
+  await fs.writeFile(path.join(root, "file.txt"), "not a directory");
+  const suggestions = await listDirectorySuggestions(root);
+  assert.deepEqual(suggestions.map((item) => item.name), ["Visible"]);
+  assert.equal(suggestions[0].path, path.join(root, "Visible"));
+  await fs.rm(root, { recursive: true, force: true });
 });
