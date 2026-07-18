@@ -1,28 +1,65 @@
 # Conduit Pi templates
 
-Each child directory is a versioned Conduit launch preset. `template.json`
-selects the system prompt, tools, model scope, extensions, skills, and prompt
-templates passed explicitly to Pi.
+Each child directory is a versioned Conduit launch preset (a **profile** in the
+web UI). `template.json` selects the system prompt, tools, model scope,
+extensions, skills, and prompt templates passed explicitly to Pi.
 
-These are not project-local `.pi` directories. Working directories remain
-clean, and `conduit-pi` or the web server can apply a template independently of
-the selected working directory and session.
+Shipped profiles:
 
-Pi's saved `enabledModels` setting overrides a template's model list; the list
-in `template.json` is used only when Pi has no saved scope. Templates do not own
-the next-chat default model or an existing session's recorded model and thinking
-level.
+| id | Label | Role |
+|----|--------|------|
+| `chat` | General | Restrained tools (`read`, `bash`) for ordinary conversation |
+| `workspace` | Workspace | Full tools + git/web/develop skills for real folders |
+| `runtime` | Runtime | Special one-off admin chat for templates and Pi package management |
 
-`template.json` fields (paths resolve relative to the template directory):
+## Discovery and durable identity
 
-- `id`, `version` — required template identity, recorded on live process state
-- `systemPrompt` — system prompt file; defaults to `SYSTEM.md`
-- `tools` — Pi tool allowlist passed as `--tools`
-- `models` — fallback model scope used only when Pi has no saved `enabledModels`
-- `extensions`, `skills`, `promptTemplates` — resource files passed explicitly
+Conduit discovers every `templates/*/template.json` at server start. Settings →
+Profiles chooses the default for new chats (`data/preferences.json`). Each chat
+stores `templateId` and `templateVersion` in `data/sessions.json`. Missing
+identity is stamped with the app (or project) default the next time the runtime
+touches the chat. Resume reloads the template by id from disk.
 
-Templates launch Pi with `--no-approve` and with ambient extensions, skills,
-prompt templates, themes, and context files disabled: the template's explicit
-lists are the entire resource surface, and every allowed tool runs without
-interactive approval. Treat a template's tool list and resources as trusted
-executable configuration and review additions accordingly.
+General and Workspace are ordinary selectable profiles. Runtime is special: it
+cannot be an app or project default and does not appear in ordinary profile
+switching. Settings → Profiles shows its details separately and provides
+**Open runtime chat**; each activation creates a fresh management chat.
+
+## Workspaces
+
+Projects may be:
+
+- **managed** — directory under `data/chat/files/<slug>`
+- **linked** — allow-listed absolute path already on the machine (unregister does not delete files)
+- **cloned** — `git clone` into the managed root
+
+Allow-list roots come from `CONDUIT_WORKSPACE_ALLOWLIST` (default: home,
+repository root, and the managed files root). Browser-supplied paths never become
+Pi `cwd` until the server resolves and allow-lists them.
+
+## Manifest fields
+
+Paths resolve relative to the template directory:
+
+- `id`, `version` — required identity
+- `label`, `description`, `posture` — UI metadata
+- `systemPrompt` — defaults to `SYSTEM.md`
+- `tools` — Pi `--tools` allowlist
+- `models` — fallback when Pi has no saved `enabledModels`
+- `extensions`, `skills`, `promptTemplates` — explicit resource paths
+
+Templates launch with `--no-approve` and ambient resources disabled. Treat tool
+lists and resources as trusted executable configuration.
+
+## Managing plugins and skills
+
+Use a **Runtime** profile chat (Settings → Profiles → Open runtime chat) or the
+terminal with `PI_CODING_AGENT_DIR=data/pi`:
+
+```bash
+pi install npm:some-package
+```
+
+Then add the installed entry file or skill directory to the relevant
+`template.json`. There is no database-backed marketplace; the repository remains
+the source of truth.

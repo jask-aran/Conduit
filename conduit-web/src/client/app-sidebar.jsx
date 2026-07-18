@@ -65,6 +65,7 @@ export function AppSidebar({
   runtimeStale = false,
   onRetryConnection,
   onAddProject,
+  workspaceSuggestions = [],
   onCopyTranscript,
   onDeleteProject,
   onDeleteSession,
@@ -80,13 +81,18 @@ export function AppSidebar({
   const [pendingDelete, setPendingDelete] = useState(null);
   const [pendingRename, setPendingRename] = useState(null);
   const [renameName, setRenameName] = useState("");
-  const [newFolderOpen, setNewFolderOpen] = useState(false);
+  const [newProjectDialog, setNewProjectDialog] = useState(null);
+  const [newFolderMode, setNewFolderMode] = useState("managed");
   const [newFolderName, setNewFolderName] = useState("");
+  const [newFolderPath, setNewFolderPath] = useState("");
+  const [newFolderCloneUrl, setNewFolderCloneUrl] = useState("");
+  const [newFolderSubmitting, setNewFolderSubmitting] = useState(false);
   const [pendingMove, setPendingMove] = useState(null);
   const { setOpenMobile } = useSidebar();
 
   const chatsProject = projects.find((project) => project.slug === "chat") || projects[0];
-  const folderProjects = projects.filter((project) => project.slug !== "chat");
+  const folderProjects = projects.filter((project) => project.slug !== "chat" && project.origin !== "linked" && project.origin !== "cloned");
+  const workspaceProjects = projects.filter((project) => project.origin === "linked" || project.origin === "cloned");
   const selectedTarget = projects.flatMap((project) => project.sessions.map((session) => ({ session, project })))
     .find((item) => item.session.id === selectedId)
     || (selectedId && projects.find((project) => project.id === projectId)
@@ -99,7 +105,12 @@ export function AppSidebar({
   useEffect(() => {
     if (!commandRequest) return;
     if (commandRequest.type === "new-folder") {
-      setNewFolderOpen(true);
+      openNewFolderDialog(false);
+      onCommandHandled?.();
+      return;
+    }
+    if (commandRequest.type === "new-workspace") {
+      openNewFolderDialog(true);
       onCommandHandled?.();
       return;
     }
@@ -133,6 +144,11 @@ export function AppSidebar({
     onOpenSettings();
   };
 
+  const openNewFolderDialog = (workspace = false) => {
+    setNewFolderMode(workspace ? "linked" : "managed");
+    setNewProjectDialog(workspace ? "workspace" : "folder");
+  };
+
   const confirmDelete = () => {
     if (pendingDelete?.type === "project") onDeleteProject(pendingDelete.project);
     if (pendingDelete?.type === "session") onDeleteSession(pendingDelete.session, pendingDelete.project);
@@ -158,12 +174,39 @@ export function AppSidebar({
 
   const createFolder = async (event) => {
     event.preventDefault();
+    if (newFolderSubmitting) return;
     const name = newFolderName.trim();
-    if (!name || !await onAddProject(name)) return;
-    setNewFolderName("");
-    setNewFolderOpen(false);
-    setOpenMobile(false);
+    const pathValue = newFolderPath.trim();
+    const cloneUrl = newFolderCloneUrl.trim();
+    if (newFolderMode === "managed" && !name) return;
+    if (newFolderMode === "linked" && !pathValue) return;
+    if (newFolderMode === "cloned" && !cloneUrl) return;
+    const payload = newFolderMode === "managed"
+      ? { mode: "managed", name }
+      : newFolderMode === "linked"
+        ? { mode: "linked", name: name || undefined, path: pathValue, defaultTemplateId: "workspace" }
+        : { mode: "cloned", name: name || undefined, cloneUrl, defaultTemplateId: "workspace" };
+    setNewFolderSubmitting(true);
+    try {
+      if (!await onAddProject(payload)) return;
+      setNewFolderName("");
+      setNewFolderPath("");
+      setNewFolderCloneUrl("");
+      setNewFolderMode("managed");
+      setNewProjectDialog(null);
+      setOpenMobile(false);
+    } finally {
+      setNewFolderSubmitting(false);
+    }
   };
+
+  const canCreateFolder = !newFolderSubmitting && (
+    newFolderMode === "managed"
+      ? Boolean(newFolderName.trim())
+      : newFolderMode === "linked"
+        ? Boolean(newFolderPath.trim())
+        : Boolean(newFolderCloneUrl.trim())
+  );
 
   return <>
     <Sidebar collapsible="icon" className="conduit-sidebar">
@@ -190,12 +233,39 @@ export function AppSidebar({
         <NavProjects
           allProjects={projects}
           projects={folderProjects}
+          groupLabel="Projects"
+          addLabel="New folder"
+          emptyLabel="No projects"
+          projectNoun="folder"
           selectedId={selectedId}
           view={view}
           getProcess={getProcess}
           runtimeStale={runtimeStale}
           runtimeOnline={connectivity === "online"}
-          onAddProject={() => setNewFolderOpen(true)}
+          onAddProject={() => openNewFolderDialog(false)}
+          onCopyTranscript={onCopyTranscript}
+          onMoveProjectSessions={onMoveProjectSessions}
+          onMoveSession={onMoveSession}
+          onNewChat={chooseNewChat}
+          onOpenSession={chooseSession}
+          onRenameProject={(project) => requestRename({ type: "project", project })}
+          onRenameSession={(session, project) => requestRename({ type: "session", session, project })}
+          onDeleteProject={(project) => setPendingDelete({ type: "project", project })}
+          onDeleteSession={(session, project) => setPendingDelete({ type: "session", session, project })}
+        />
+        <NavProjects
+          allProjects={projects}
+          projects={workspaceProjects}
+          groupLabel="Workspaces"
+          addLabel="New workspace"
+          emptyLabel="No workspaces"
+          projectNoun="workspace"
+          selectedId={selectedId}
+          view={view}
+          getProcess={getProcess}
+          runtimeStale={runtimeStale}
+          runtimeOnline={connectivity === "online"}
+          onAddProject={() => openNewFolderDialog(true)}
           onCopyTranscript={onCopyTranscript}
           onMoveProjectSessions={onMoveProjectSessions}
           onMoveSession={onMoveSession}
@@ -222,12 +292,22 @@ export function AppSidebar({
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>
-            {pendingDelete?.type === "project" ? "Delete this folder?" : "Delete this chat?"}
+            {pendingDelete?.type !== "project"
+              ? "Delete this chat?"
+              : pendingDelete.project.origin === "linked"
+                ? "Unlink this workspace?"
+                : pendingDelete.project.origin === "cloned"
+                  ? "Delete this workspace?"
+                  : "Delete this folder?"}
           </AlertDialogTitle>
           <AlertDialogDescription>
-            {pendingDelete?.type === "project"
-              ? `This permanently deletes ${pendingDelete.project.name}, its working files, and all of its chats.`
-              : "This permanently deletes the Pi session transcript and this chat's attached files."}
+            {pendingDelete?.type !== "project"
+              ? "This permanently deletes the Pi session transcript and this chat's attached files."
+              : pendingDelete.project.origin === "linked"
+                ? `This unregisters ${pendingDelete.project.name} and deletes its Conduit chats. The linked directory on disk is kept.`
+                : pendingDelete.project.origin === "cloned"
+                  ? `This permanently deletes the cloned checkout for ${pendingDelete.project.name} and all of its chats.`
+                  : `This permanently deletes ${pendingDelete.project.name}, its working files, and all of its chats.`}
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
@@ -237,28 +317,86 @@ export function AppSidebar({
       </AlertDialogContent>
     </AlertDialog>
 
-    <Dialog open={newFolderOpen} onOpenChange={setNewFolderOpen}>
+    <Dialog open={Boolean(newProjectDialog)} onOpenChange={(open) => {
+      if (newFolderSubmitting) return;
+      if (open) return;
+      setNewProjectDialog(null);
+      setNewFolderMode("managed");
+      setNewFolderName("");
+      setNewFolderPath("");
+      setNewFolderCloneUrl("");
+    }}>
       <DialogContent>
         <form onSubmit={createFolder}>
           <DialogHeader>
-            <DialogTitle>New folder</DialogTitle>
-            <DialogDescription>Create a separate working directory and chat scope.</DialogDescription>
+            <DialogTitle>{newProjectDialog === "workspace" ? "New workspace" : "New folder"}</DialogTitle>
+            <DialogDescription>
+              {newProjectDialog === "workspace"
+                ? "Link an existing allow-listed directory or clone a repository into Conduit."
+                : "Create a separate managed working directory and chat scope."}
+            </DialogDescription>
           </DialogHeader>
           <FieldGroup className="my-4">
+            {newProjectDialog === "workspace" && <Field>
+              <FieldLabel htmlFor="folder-mode">Type</FieldLabel>
+              <select
+                id="folder-mode"
+                className="border-input bg-background h-8 w-full rounded-lg border px-2.5 text-sm"
+                value={newFolderMode}
+                disabled={newFolderSubmitting}
+                onChange={(event) => setNewFolderMode(event.target.value)}
+              >
+                <option value="linked">Link existing directory</option>
+                <option value="cloned">Clone git repository</option>
+              </select>
+            </Field>}
             <Field>
-              <FieldLabel htmlFor="folder-name">Folder name</FieldLabel>
+              <FieldLabel htmlFor="folder-name">Display name{newFolderMode === "managed" ? "" : " (optional)"}</FieldLabel>
               <Input
                 id="folder-name"
-                autoFocus
+                autoFocus={newFolderMode === "managed"}
                 value={newFolderName}
+                disabled={newFolderSubmitting}
                 onChange={(event) => setNewFolderName(event.target.value)}
-                placeholder="Research"
+                placeholder={newFolderMode === "managed" ? "Research" : "My project"}
               />
             </Field>
+            {newFolderMode === "linked" && <Field>
+              <FieldLabel htmlFor="folder-path">Absolute path</FieldLabel>
+              <Input
+                id="folder-path"
+                autoFocus
+                list="workspace-path-suggestions"
+                value={newFolderPath}
+                disabled={newFolderSubmitting}
+                onChange={(event) => setNewFolderPath(event.target.value)}
+                placeholder="~/code/my-repo"
+              />
+              <datalist id="workspace-path-suggestions">
+                {workspaceSuggestions.map((folder) => (
+                  <option key={folder.path} value={folder.displayPath || folder.path} label={folder.name} />
+                ))}
+              </datalist>
+            </Field>}
+            {newFolderMode === "cloned" && <Field>
+              <FieldLabel htmlFor="folder-clone">Git URL</FieldLabel>
+              <Input
+                id="folder-clone"
+                autoFocus
+                value={newFolderCloneUrl}
+                disabled={newFolderSubmitting}
+                onChange={(event) => setNewFolderCloneUrl(event.target.value)}
+                placeholder="https://github.com/org/repo.git"
+              />
+            </Field>}
           </FieldGroup>
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setNewFolderOpen(false)}>Cancel</Button>
-            <Button type="submit" disabled={!newFolderName.trim()}>Create folder</Button>
+            <Button type="button" variant="outline" disabled={newFolderSubmitting} onClick={() => setNewProjectDialog(null)}>Cancel</Button>
+            <Button type="submit" disabled={!canCreateFolder}>
+              {newFolderSubmitting
+                ? (newFolderMode === "cloned" ? "Cloning…" : "Creating…")
+                : newFolderMode === "cloned" ? "Clone workspace" : newFolderMode === "linked" ? "Link workspace" : "Create folder"}
+            </Button>
           </DialogFooter>
         </form>
       </DialogContent>

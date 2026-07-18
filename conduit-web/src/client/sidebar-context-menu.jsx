@@ -78,11 +78,18 @@ export function ProjectContextMenu({
   children,
   currentProject,
   projects,
+  projectNoun = "folder",
   onDelete,
   onMoveChats,
   onNewChat,
   onRename,
 }) {
+  const isWorkspace = currentProject.origin === "linked" || currentProject.origin === "cloned";
+  const deleteLabel = currentProject.origin === "linked"
+    ? "Unlink workspace"
+    : isWorkspace
+      ? "Delete workspace"
+      : `Delete ${projectNoun}`;
   return <ContextMenu>
     <ContextMenuTrigger asChild>{children}</ContextMenuTrigger>
     <ContextMenuContent className="w-60 sidebar-context-menu">
@@ -93,7 +100,7 @@ export function ProjectContextMenu({
         </ContextMenuItem>
         <ContextMenuItem onSelect={onRename}>
           <PencilIcon absoluteStrokeWidth />
-          Rename folder
+          Rename {projectNoun}
         </ContextMenuItem>
         <ContextMenuSub>
           <ContextMenuSubTrigger disabled={!currentProject.sessions.length}>
@@ -109,7 +116,7 @@ export function ProjectContextMenu({
       <ContextMenuGroup>
         <ContextMenuItem variant="destructive" onSelect={onDelete}>
           <Trash2Icon absoluteStrokeWidth />
-          Delete folder
+          {deleteLabel}
         </ContextMenuItem>
       </ContextMenuGroup>
     </ContextMenuContent>

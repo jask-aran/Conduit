@@ -6,7 +6,51 @@ import path from "node:path";
 import { PassThrough } from "node:stream";
 import test from "node:test";
 import { buildPiArgs, PiManager } from "../src/pi-manager.js";
-import { buildPiEnvironment, loadPiModelPatterns } from "../../scripts/pi-runtime.mjs";
+import { fileURLToPath } from "node:url";
+import {
+  buildPiEnvironment,
+  listPiTemplates,
+  loadPiModelPatterns,
+  templatePublicView,
+} from "../../scripts/pi-runtime.mjs";
+
+test("repository templates are discoverable launch presets", () => {
+  const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../templates");
+  const templates = listPiTemplates(root);
+  assert.ok(templates.some((template) => template.id === "chat"));
+  assert.ok(templates.some((template) => template.id === "workspace"));
+  assert.ok(templates.some((template) => template.id === "runtime"));
+  const workspace = templates.find((template) => template.id === "workspace");
+  const general = templates.find((template) => template.id === "chat");
+  const view = templatePublicView(workspace);
+  assert.equal(view.label, "Workspace");
+  assert.equal(view.defaultable, true);
+  assert.ok(view.tools.includes("edit"));
+  assert.ok(view.skillCount >= 1);
+  assert.deepEqual(general.tools, ["read", "bash"]);
+  assert.equal(view.extensionCount, 0);
+  assert.equal(templatePublicView(templates.find((template) => template.id === "runtime")).defaultable, false);
+});
+
+test("listPiTemplates rejects duplicate template ids", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "conduit-dup-templates-"));
+  for (const dir of ["one", "two"]) {
+    const folder = path.join(root, dir);
+    fs.mkdirSync(folder);
+    fs.writeFileSync(path.join(folder, "SYSTEM.md"), "# x\n");
+    fs.writeFileSync(path.join(folder, "template.json"), JSON.stringify({
+      id: "shared",
+      version: "1",
+      tools: ["read"],
+      models: [],
+      extensions: [],
+      skills: [],
+      promptTemplates: [],
+    }));
+  }
+  assert.throws(() => listPiTemplates(root), /Duplicate Pi template id "shared"/);
+  fs.rmSync(root, { recursive: true, force: true });
+});
 
 test("Pi launch arguments use native session storage and load only the selected template", () => {
   const template = {
@@ -121,6 +165,49 @@ test("one Conduit chat cannot start two live Pi writers", () => {
   const second = manager.create({ project, chatId: "chat-stable" });
   assert.equal(second, first);
   assert.equal(spawns, 1);
+});
+
+test("create can launch a non-default template and exposes it on the process view", () => {
+  const manager = new PiManager({
+    agentDir: "/tmp/conduit-pi-template-select-test",
+    spawnImpl: () => {
+      const child = new EventEmitter();
+      child.stdout = new PassThrough();
+      child.stderr = new PassThrough();
+      child.stdin = { write() {} };
+      child.kill = () => true;
+      return child;
+    },
+    template: {
+      id: "chat",
+      version: "1",
+      label: "General",
+      tools: ["read"],
+      models: [],
+      extensions: [],
+      skills: [],
+      promptTemplates: [],
+      systemPrompt: "/tmp/SYSTEM.md",
+    },
+  });
+  const project = { id: "project_test", slug: "test", path: "/tmp/project", sessionsDir: "/tmp/sessions" };
+  const workspace = {
+    id: "workspace",
+    version: "1",
+    label: "Workspace",
+    posture: "read / edit / shell",
+    tools: ["read", "bash", "edit", "write"],
+    models: [],
+    extensions: [],
+    skills: [],
+    promptTemplates: [],
+    systemPrompt: "/tmp/WORKSPACE.md",
+  };
+  const record = manager.create({ project, chatId: "chat-workspace", template: workspace });
+  const view = manager.view(record);
+  assert.equal(view.template.id, "workspace");
+  assert.equal(view.template.label, "Workspace");
+  assert.deepEqual(view.template.tools, ["read", "bash", "edit", "write"]);
 });
 
 test("forwards each text delta immediately and preserves chunk ordering", () => {

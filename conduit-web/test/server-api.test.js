@@ -44,12 +44,38 @@ test("raw JSON uploads publish atomically through the durable chat route", async
       CONDUIT_FILES_ROOT: path.join(root, "files"),
       CONDUIT_CATALOG_FILE: path.join(root, "conduit.json"),
       CONDUIT_SESSION_REGISTRY_FILE: path.join(root, "sessions.json"),
+      CONDUIT_PREFERENCES_FILE: path.join(root, "preferences.json"),
       CONDUIT_PI_AGENT_DIR: path.join(root, "pi"),
     },
   });
 
   try {
     await waitForServer(origin, child);
+    const templatesResponse = await fetch(`${origin}/v0/templates`);
+    assert.equal(templatesResponse.status, 200);
+    const templateCatalog = await templatesResponse.json();
+    assert.ok(templateCatalog.templates.some((item) => item.id === "chat"));
+    assert.ok(templateCatalog.templates.some((item) => item.id === "workspace"));
+    assert.ok(templateCatalog.templates.some((item) => item.id === "runtime"));
+    assert.equal(templateCatalog.defaultTemplateId, "chat");
+    assert.equal(templateCatalog.templates.find((item) => item.id === "runtime").defaultable, false);
+
+    const runtimeDefault = await fetch(`${origin}/v0/preferences`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ defaultTemplateId: "runtime" }),
+    });
+    assert.equal(runtimeDefault.status, 400);
+    assert.equal((await runtimeDefault.json()).error, "special_template");
+
+    const prefsPatch = await fetch(`${origin}/v0/preferences`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ defaultTemplateId: "workspace" }),
+    });
+    assert.equal(prefsPatch.status, 200);
+    assert.equal((await prefsPatch.json()).defaultTemplateId, "workspace");
+
     const createdResponse = await fetch(`${origin}/v0/chats`, {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -58,7 +84,41 @@ test("raw JSON uploads publish atomically through the durable chat route", async
     assert.equal(createdResponse.status, 201);
     const chat = await createdResponse.json();
     assert.equal(chat.status, "draft");
+    assert.equal(chat.templateId, "workspace");
     assert.equal("piSessionId" in chat, false);
+
+    const switched = await fetch(`${origin}/v0/chats/${chat.id}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ templateId: "chat" }),
+    });
+    assert.equal(switched.status, 200);
+    assert.equal((await switched.json()).templateId, "chat");
+
+    const ordinaryRuntime = await fetch(`${origin}/v0/chats`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ projectId: "project_chat", templateId: "runtime" }),
+    });
+    assert.equal(ordinaryRuntime.status, 400);
+    assert.equal((await ordinaryRuntime.json()).error, "special_template");
+
+    const runtimeChat = await fetch(`${origin}/v0/runtime/chats`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: "{}",
+    });
+    assert.equal(runtimeChat.status, 201);
+    const runtimeChatBody = await runtimeChat.json();
+    assert.equal(runtimeChatBody.templateId, "runtime");
+
+    const runtimeSwitch = await fetch(`${origin}/v0/chats/${runtimeChatBody.id}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ templateId: "workspace" }),
+    });
+    assert.equal(runtimeSwitch.status, 409);
+    assert.equal((await runtimeSwitch.json()).error, "special_chat_locked");
     const directory = path.join(root, "files", ".conduit", "chats", chat.id);
     await fs.access(path.join(directory, "attachments"));
     await fs.access(path.join(directory, ".partial"));

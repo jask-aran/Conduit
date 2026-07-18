@@ -1,0 +1,22 @@
+{
+  "id": "workspace",
+  "version": "2",
+  "label": "Workspace",
+  "description": "Development Pi with filesystem, shell, Git/GitHub, and web research skills.",
+  "posture": "read / edit / shell",
+  "systemPrompt": "SYSTEM.md",
+  "tools": ["read", "bash", "edit", "write"],
+  "models": [
+    "openai-codex/gpt-5.6-luna",
+    "openai-codex/gpt-5.6-sol",
+    "anthropic/claude-opus-4-8",
+    "anthropic/claude-fable-5"
+  ],
+  "extensions": [],
+  "skills": [
+    "skills/git-github",
+    "skills/web-research",
+    "skills/develop-loop"
+  ],
+  "promptTemplates": []
+}
