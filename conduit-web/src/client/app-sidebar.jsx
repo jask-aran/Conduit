@@ -252,7 +252,7 @@ export function AppSidebar({
           onDeleteProject={(project) => setPendingDelete({ type: "project", project })}
           onDeleteSession={(session, project) => setPendingDelete({ type: "session", session, project })}
         />
-        {workspaceProjects.length > 0 && <NavProjects
+        <NavProjects
           allProjects={projects}
           projects={workspaceProjects}
           groupLabel="Workspaces"
@@ -274,7 +274,7 @@ export function AppSidebar({
           onRenameSession={(session, project) => requestRename({ type: "session", session, project })}
           onDeleteProject={(project) => setPendingDelete({ type: "project", project })}
           onDeleteSession={(session, project) => setPendingDelete({ type: "session", session, project })}
-        />}
+        />
       </SidebarContent>
 
       <SidebarFooter>
