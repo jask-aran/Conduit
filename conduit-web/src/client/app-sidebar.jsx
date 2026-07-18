@@ -81,6 +81,7 @@ export function AppSidebar({
   const [pendingRename, setPendingRename] = useState(null);
   const [renameName, setRenameName] = useState("");
   const [newFolderOpen, setNewFolderOpen] = useState(false);
+  const [newFolderIsWorkspace, setNewFolderIsWorkspace] = useState(false);
   const [newFolderMode, setNewFolderMode] = useState("managed");
   const [newFolderName, setNewFolderName] = useState("");
   const [newFolderPath, setNewFolderPath] = useState("");
@@ -90,7 +91,8 @@ export function AppSidebar({
   const { setOpenMobile } = useSidebar();
 
   const chatsProject = projects.find((project) => project.slug === "chat") || projects[0];
-  const folderProjects = projects.filter((project) => project.slug !== "chat");
+  const folderProjects = projects.filter((project) => project.slug !== "chat" && project.origin !== "linked" && project.origin !== "cloned");
+  const workspaceProjects = projects.filter((project) => project.origin === "linked" || project.origin === "cloned");
   const selectedTarget = projects.flatMap((project) => project.sessions.map((session) => ({ session, project })))
     .find((item) => item.session.id === selectedId)
     || (selectedId && projects.find((project) => project.id === projectId)
@@ -103,7 +105,12 @@ export function AppSidebar({
   useEffect(() => {
     if (!commandRequest) return;
     if (commandRequest.type === "new-folder") {
-      setNewFolderOpen(true);
+      openNewFolderDialog(false);
+      onCommandHandled?.();
+      return;
+    }
+    if (commandRequest.type === "new-workspace") {
+      openNewFolderDialog(true);
       onCommandHandled?.();
       return;
     }
@@ -135,6 +142,12 @@ export function AppSidebar({
   const chooseSettings = () => {
     setOpenMobile(false);
     onOpenSettings();
+  };
+
+  const openNewFolderDialog = (workspace = false) => {
+    setNewFolderIsWorkspace(workspace);
+    setNewFolderMode(workspace ? "linked" : "managed");
+    setNewFolderOpen(true);
   };
 
   const confirmDelete = () => {
@@ -180,6 +193,7 @@ export function AppSidebar({
       setNewFolderName("");
       setNewFolderPath("");
       setNewFolderCloneUrl("");
+      setNewFolderIsWorkspace(false);
       setNewFolderMode("managed");
       setNewFolderOpen(false);
       setOpenMobile(false);
@@ -221,12 +235,16 @@ export function AppSidebar({
         <NavProjects
           allProjects={projects}
           projects={folderProjects}
+          groupLabel="Projects"
+          addLabel="New folder"
+          emptyLabel="No projects"
+          projectNoun="folder"
           selectedId={selectedId}
           view={view}
           getProcess={getProcess}
           runtimeStale={runtimeStale}
           runtimeOnline={connectivity === "online"}
-          onAddProject={() => setNewFolderOpen(true)}
+          onAddProject={() => openNewFolderDialog(false)}
           onCopyTranscript={onCopyTranscript}
           onMoveProjectSessions={onMoveProjectSessions}
           onMoveSession={onMoveSession}
@@ -237,6 +255,29 @@ export function AppSidebar({
           onDeleteProject={(project) => setPendingDelete({ type: "project", project })}
           onDeleteSession={(session, project) => setPendingDelete({ type: "session", session, project })}
         />
+        {workspaceProjects.length > 0 && <NavProjects
+          allProjects={projects}
+          projects={workspaceProjects}
+          groupLabel="Workspaces"
+          addLabel="New workspace"
+          emptyLabel="No workspaces"
+          projectNoun="workspace"
+          selectedId={selectedId}
+          view={view}
+          getProcess={getProcess}
+          runtimeStale={runtimeStale}
+          runtimeOnline={connectivity === "online"}
+          onAddProject={() => openNewFolderDialog(true)}
+          onCopyTranscript={onCopyTranscript}
+          onMoveProjectSessions={onMoveProjectSessions}
+          onMoveSession={onMoveSession}
+          onNewChat={chooseNewChat}
+          onOpenSession={chooseSession}
+          onRenameProject={(project) => requestRename({ type: "project", project })}
+          onRenameSession={(session, project) => requestRename({ type: "session", session, project })}
+          onDeleteProject={(project) => setPendingDelete({ type: "project", project })}
+          onDeleteSession={(session, project) => setPendingDelete({ type: "session", session, project })}
+        />}
       </SidebarContent>
 
       <SidebarFooter>
@@ -274,6 +315,7 @@ export function AppSidebar({
       if (newFolderSubmitting) return;
       setNewFolderOpen(open);
       if (!open) {
+        setNewFolderIsWorkspace(false);
         setNewFolderMode("managed");
         setNewFolderName("");
         setNewFolderPath("");
@@ -283,9 +325,11 @@ export function AppSidebar({
       <DialogContent>
         <form onSubmit={createFolder}>
           <DialogHeader>
-            <DialogTitle>New workspace</DialogTitle>
+            <DialogTitle>{newFolderIsWorkspace ? "New workspace" : "New folder"}</DialogTitle>
             <DialogDescription>
-              Managed folders live under Conduit. Linked directories must sit inside the server allow-list. Clones check out into the managed root.
+              {newFolderIsWorkspace
+                ? "Link an existing allow-listed directory or clone a repository into Conduit."
+                : "Create a separate managed working directory and chat scope."}
             </DialogDescription>
           </DialogHeader>
           <FieldGroup className="my-4">
@@ -298,7 +342,7 @@ export function AppSidebar({
                 disabled={newFolderSubmitting}
                 onChange={(event) => setNewFolderMode(event.target.value)}
               >
-                <option value="managed">Managed folder</option>
+              {!newFolderIsWorkspace && <option value="managed">Managed folder</option>}
                 <option value="linked">Link existing directory</option>
                 <option value="cloned">Clone git repository</option>
               </select>

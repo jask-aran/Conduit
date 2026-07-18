@@ -78,6 +78,7 @@ export function ProjectContextMenu({
   children,
   currentProject,
   projects,
+  projectNoun = "folder",
   onDelete,
   onMoveChats,
   onNewChat,
@@ -93,7 +94,7 @@ export function ProjectContextMenu({
         </ContextMenuItem>
         <ContextMenuItem onSelect={onRename}>
           <PencilIcon absoluteStrokeWidth />
-          Rename folder
+          Rename {projectNoun}
         </ContextMenuItem>
         <ContextMenuSub>
           <ContextMenuSubTrigger disabled={!currentProject.sessions.length}>
@@ -109,7 +110,7 @@ export function ProjectContextMenu({
       <ContextMenuGroup>
         <ContextMenuItem variant="destructive" onSelect={onDelete}>
           <Trash2Icon absoluteStrokeWidth />
-          Delete folder
+          Delete {projectNoun}
         </ContextMenuItem>
       </ContextMenuGroup>
     </ContextMenuContent>

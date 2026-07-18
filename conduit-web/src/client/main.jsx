@@ -63,7 +63,7 @@ class AppErrorBoundary extends React.Component {
 }
 
 function ChatHeader({ project, title, profile }) {
-  const projectLabel = project?.slug === "chat" ? "Chats" : project?.name || project?.slug || "Chats";
+  const projectLabel = project?.slug === "chat" ? "Chats" : project?.slug || project?.name || "Chats";
   const profileLabel = profile?.label || profile?.id || null;
   const posture = profile?.posture || (Array.isArray(profile?.tools) ? profile.tools.join(" / ") : "");
   const workspaceHint = project?.origin === "linked"
@@ -997,6 +997,7 @@ function App() {
   const commandActions = {
     newChat: (project, options) => newChat(project, options).catch((caught) => setError(caught.message)),
     newFolder: () => setSidebarCommand({ type: "new-folder", nonce: Date.now() }),
+    newWorkspace: () => setSidebarCommand({ type: "new-workspace", nonce: Date.now() }),
     attach: attachmentState.openPicker,
     settings: (section = "general") => openSettings(section),
     rename: () => setSidebarCommand({ type: "rename", nonce: Date.now() }),
