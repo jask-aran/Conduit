@@ -77,12 +77,21 @@ export const paletteCommands = [{
 }, {
   id: "new-folder",
   group: "commands",
+  label: "New folder",
+  description: "Create a managed working directory and chat scope",
+  icon: "new-folder",
+  keywords: ["project", "create", "directory", "folder"],
+  isAvailable: () => true,
+  run: (actions) => actions.newFolder(),
+}, {
+  id: "new-workspace",
+  group: "commands",
   label: "New workspace",
-  description: "Create, link, or clone a working directory",
+  description: "Link an existing directory or clone a repository",
   icon: "new-folder",
   keywords: ["project", "create", "directory", "workspace", "clone", "link"],
   isAvailable: () => true,
-  run: (actions) => actions.newFolder(),
+  run: (actions) => actions.newWorkspace?.(),
 }, {
   id: "runtime-chat",
   group: "commands",

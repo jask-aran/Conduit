@@ -18,6 +18,10 @@ import { ProjectActivityIndicator, RuntimeIndicator } from "./runtime-indicator"
 export function NavProjects({
   allProjects,
   projects,
+  groupLabel = "Projects",
+  addLabel = "New folder",
+  emptyLabel = "No projects",
+  projectNoun = "folder",
   selectedId,
   view,
   getProcess,
@@ -35,8 +39,8 @@ export function NavProjects({
   onRenameSession,
 }) {
   return <SidebarGroup>
-    <SidebarGroupLabel>Projects</SidebarGroupLabel>
-    <SidebarGroupAction className="text-sidebar-foreground" aria-label="New folder" title="New folder" onClick={onAddProject}>
+    <SidebarGroupLabel>{groupLabel}</SidebarGroupLabel>
+    <SidebarGroupAction className="text-sidebar-foreground" aria-label={addLabel} title={addLabel} onClick={onAddProject}>
       <FolderPlusIcon absoluteStrokeWidth />
     </SidebarGroupAction>
     <SidebarGroupContent>
@@ -46,6 +50,7 @@ export function NavProjects({
             <ProjectContextMenu
               currentProject={project}
               projects={allProjects}
+              projectNoun={projectNoun}
               onDelete={() => onDeleteProject(project)}
               onMoveChats={(target) => onMoveProjectSessions(project, target)}
               onNewChat={() => onNewChat(project)}
@@ -100,7 +105,7 @@ export function NavProjects({
           </SidebarMenuItem>
         </Collapsible>)}
         {!projects.length && <SidebarMenuItem>
-          <span className="block px-2 py-1 text-[13px] text-sidebar-foreground/50">No projects</span>
+          <span className="block px-2 py-1 text-[13px] text-sidebar-foreground/50">{emptyLabel}</span>
         </SidebarMenuItem>}
       </SidebarMenu>
     </SidebarGroupContent>
