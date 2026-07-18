@@ -117,10 +117,8 @@ test("managed create never reuses a linked workspace with the same slug", async 
   await fs.rm(root, { recursive: true, force: true });
 });
 
-test("clones a repository into the managed files root", async () => {
-  const root = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-project-clone-"));
-  const source = path.join(root, "source");
-  await fs.mkdir(source);
+async function initGitRepo(source) {
+  await fs.mkdir(source, { recursive: true });
   const { spawnSync } = await import("node:child_process");
   const git = (args, cwd = source) => {
     const result = spawnSync("git", args, { cwd, encoding: "utf8" });
@@ -132,6 +130,12 @@ test("clones a repository into the managed files root", async () => {
   await fs.writeFile(path.join(source, "app.js"), "console.log(1)\n");
   git(["add", "."]);
   git(["commit", "-m", "init"]);
+}
+
+test("clones a repository into the managed files root", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-project-clone-"));
+  const source = path.join(root, "source");
+  await initGitRepo(source);
 
   const store = new ProjectStore({
     filesRoot: path.join(root, "data/chat/files"),
@@ -144,5 +148,30 @@ test("clones a repository into the managed files root", async () => {
   assert.equal(cloned.origin, "cloned");
   assert.equal(cloned.path, path.join(root, "data/chat/files", "cloned-app"));
   assert.equal(await fs.readFile(path.join(cloned.path, "app.js"), "utf8"), "console.log(1)\n");
+  await fs.rm(root, { recursive: true, force: true });
+});
+
+test("concurrent clones with the same name get distinct slugs and keep both trees", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-project-clone-race-"));
+  const source = path.join(root, "source");
+  await initGitRepo(source);
+  const filesRoot = path.join(root, "data/chat/files");
+  const store = new ProjectStore({
+    filesRoot,
+    catalogFile: path.join(root, "data/conduit.json"),
+    piAgentDir: path.join(root, "data/pi"),
+    workspaceAllowlist: [root],
+  });
+  await store.initialize();
+
+  const [first, second] = await Promise.all([
+    store.create({ mode: "cloned", name: "Race", cloneUrl: source }),
+    store.create({ mode: "cloned", name: "Race", cloneUrl: source }),
+  ]);
+  assert.notEqual(first.slug, second.slug);
+  assert.equal(await fs.readFile(path.join(first.path, "app.js"), "utf8"), "console.log(1)\n");
+  assert.equal(await fs.readFile(path.join(second.path, "app.js"), "utf8"), "console.log(1)\n");
+  const listed = await store.list();
+  assert.equal(listed.filter((item) => item.origin === "cloned").length, 2);
   await fs.rm(root, { recursive: true, force: true });
 });

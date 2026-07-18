@@ -46,31 +46,27 @@ export function assertAllowedPath(candidate, allowlist, label = "path") {
   return resolved;
 }
 
+/**
+ * Resolve a user-supplied directory for linking. Always realpath the candidate so
+ * intermediate symlink ancestors cannot textually sit inside the allowlist while
+ * resolving outside it at the OS level.
+ */
 export async function resolveExistingDirectory(candidate, allowlist) {
-  const resolved = assertAllowedPath(candidate, allowlist, "workspace path");
-  let stats;
+  const textual = assertAllowedPath(candidate, allowlist, "workspace path");
+  let real;
   try {
-    stats = await fs.lstat(resolved);
+    real = await fs.realpath(textual);
   } catch (error) {
     if (error.code === "ENOENT") {
       const missing = new Error("workspace path does not exist");
       missing.code = "path_not_found";
-      missing.path = resolved;
+      missing.path = textual;
       throw missing;
     }
     throw error;
   }
-  if (stats.isSymbolicLink()) {
-    const real = await fs.realpath(resolved);
-    assertAllowedPath(real, allowlist, "workspace path");
-    const realStats = await fs.stat(real);
-    if (!realStats.isDirectory()) {
-      const error = new Error("workspace path must be a directory");
-      error.code = "path_not_directory";
-      throw error;
-    }
-    return path.resolve(real);
-  }
+  const resolved = assertAllowedPath(real, allowlist, "workspace path");
+  const stats = await fs.stat(resolved);
   if (!stats.isDirectory()) {
     const error = new Error("workspace path must be a directory");
     error.code = "path_not_directory";
