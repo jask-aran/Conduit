@@ -2,6 +2,16 @@ import React, { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useStat
 import { createRoot } from "react-dom/client";
 import { ShareIcon, TriangleAlertIcon } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Breadcrumb, BreadcrumbItem, BreadcrumbList, BreadcrumbPage, BreadcrumbSeparator } from "@/components/ui/breadcrumb";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
@@ -36,7 +46,7 @@ const api = async (url, options) => {
   const response = await fetch(url, { headers: { "content-type": "application/json" }, ...options });
   const text = await response.text();
   const body = text ? JSON.parse(text) : {};
-  if (!response.ok) throw new Error(body.message || body.error || "Request failed");
+  if (!response.ok) throw Object.assign(new Error(body.message || body.error || "Request failed"), body);
   return body;
 };
 const list = (value) => Array.isArray(value) ? value : [];
@@ -62,10 +72,12 @@ class AppErrorBoundary extends React.Component {
   }
 }
 
-function ChatHeader({ project, title, profile }) {
+function ChatHeader({ project, title, profile, runtime, live }) {
   const projectLabel = project?.slug === "chat" ? "Chats" : project?.slug || project?.name || "Chats";
-  const profileLabel = profile?.label || profile?.id || null;
-  const posture = profile?.posture || (Array.isArray(profile?.tools) ? profile.tools.join(" / ") : "");
+  const profileLabel = runtime?.kind === "native_pi" ? "host setup" : profile?.label || profile?.id || null;
+  const posture = runtime?.kind === "native_pi"
+    ? "host resources"
+    : profile?.posture || (Array.isArray(profile?.tools) ? profile.tools.join(" / ") : "");
   const workspaceHint = project?.origin === "linked"
     ? "linked"
     : project?.origin === "cloned"
@@ -73,7 +85,10 @@ function ChatHeader({ project, title, profile }) {
       : project?.slug === "chat"
         ? null
         : "folder";
-  const postureLine = [profileLabel, projectLabel !== "Chats" ? projectLabel : null, posture].filter(Boolean).join(" · ");
+  const runtimeLabel = runtime?.kind === "native_pi" ? "Native Pi" : "Conduit";
+  const runtimeVersion = live?.binaryVersion || runtime?.binaryVersion;
+  const postureLine = [runtimeLabel, runtimeVersion ? `Pi ${runtimeVersion}` : null, profileLabel, projectLabel !== "Chats" ? projectLabel : null, posture]
+    .filter(Boolean).join(" · ");
   return <header className="chat-header">
     <SidebarTrigger className="-ml-1" />
     {title && <Breadcrumb className="chat-header-title">
@@ -85,7 +100,16 @@ function ChatHeader({ project, title, profile }) {
     </Breadcrumb>}
     {postureLine && <span
       className="chat-profile-posture text-muted-foreground ml-auto hidden truncate text-xs sm:inline"
-      title={[postureLine, project?.path, workspaceHint].filter(Boolean).join("\n")}
+      title={[
+        postureLine,
+        project?.path ? `cwd: ${project.path}` : null,
+        live?.sessionFile ? `session: ${live.sessionFile}` : null,
+        runtime?.binaryVersion && live?.binaryVersion && runtime.binaryVersion !== live.binaryVersion
+          ? `created with Pi ${runtime.binaryVersion}; launched with Pi ${live.binaryVersion}`
+          : null,
+        live?.trustPosture ? `trust: ${live.trustPosture}` : null,
+        workspaceHint,
+      ].filter(Boolean).join("\n")}
     >
       {postureLine}
     </span>}
@@ -117,6 +141,9 @@ function App() {
   const [workspaceSuggestions, setWorkspaceSuggestions] = useState([]);
   const [defaultTemplateId, setDefaultTemplateId] = useState("chat");
   const [chatTemplateId, setChatTemplateId] = useState(null);
+  const [chatRuntime, setChatRuntime] = useState(null);
+  const [installations, setInstallations] = useState([]);
+  const [nativeTrustRequest, setNativeTrustRequest] = useState(null);
   const [commandLaunchNonce, setCommandLaunchNonce] = useState(0);
   const [sidebarCommand, setSidebarCommand] = useState(null);
   const [editEntryId, setEditEntryId] = useState(null);
@@ -138,6 +165,7 @@ function App() {
   const liveStream = useRef(null);
   const toolSeq = useRef(0);
   const openLiveToken = useRef(0);
+  const pendingNativeLaunch = useRef(new Map());
   const [connectingChatId, setConnectingChatId] = useState(null);
   const selectedIdRef = useRef(null);
   selectedIdRef.current = selectedId;
@@ -179,6 +207,7 @@ function App() {
     if (selected) {
       setChatTitle(selected.title);
       setChatStatus(selected.status);
+      if (selected.runtime) setChatRuntime(selected.runtime);
     }
     return next;
   }, []);
@@ -196,6 +225,7 @@ function App() {
     setChatStatus(detail.status || "draft");
     setChatTitle(detail.title || "New chat");
     if (detail.templateId) setChatTemplateId(detail.templateId);
+    if (detail.runtime) setChatRuntime(detail.runtime);
     setLoadedSessionId(chatId);
     return detail;
   }, []);
@@ -268,11 +298,14 @@ function App() {
           projectId: owningProjectId,
           model: modelSettings.model,
           thinkingLevel: modelSettings.effort,
+          ...(pendingNativeLaunch.current.get(chatId) || {}),
           ...options,
         }),
       });
       if (token !== openLiveToken.current || selectedIdRef.current !== chatId) return null;
       setLive(record);
+      pendingNativeLaunch.current.delete(chatId);
+      if (record.runtime) setChatRuntime(record.runtime);
       if (record.contextUsage) setContextUsage(record.contextUsage);
       connect(record);
       await new Promise((resolve, reject) => {
@@ -294,6 +327,14 @@ function App() {
       return record;
     } catch (caught) {
       if (token !== openLiveToken.current || selectedIdRef.current !== chatId) return null;
+      if (caught.error === "native_trust_required") {
+        setNativeTrustRequest({
+          chatId,
+          projectId: owningProjectId,
+          token: caught.trustToken,
+          resources: list(caught.resources),
+        });
+      }
       if (caught.message?.includes("Too many live Pi") || caught.message?.includes("live_process_limit")) {
         throw new Error(caught.message || "Too many live Pi processes. Wait for idle chats to free up.");
       }
@@ -310,14 +351,16 @@ function App() {
       api("/v0/capabilities").catch(() => ({ partialContinue: true })),
       api("/v0/templates").catch(() => ({ templates: [], defaultTemplateId: "chat" })),
       api("/v0/workspaces/suggestions").catch(() => ({ folders: [] })),
+      api("/v0/pi-installations").catch(() => ({ installations: [] })),
     ])
-      .then(async ([payload, capabilities, templateCatalog, workspaceCatalog]) => {
+      .then(async ([payload, capabilities, templateCatalog, workspaceCatalog, installationCatalog]) => {
         if (!active) return;
         const nextProjects = list(payload.projects).map((project) => ({ ...project, sessions: list(project.sessions) }));
         setProjects(nextProjects);
         setPartialContinue(capabilities.partialContinue !== false);
         setTemplates(list(templateCatalog.templates));
         setWorkspaceSuggestions(list(workspaceCatalog.folders));
+        setInstallations(list(installationCatalog.installations));
         setDefaultTemplateId(templateCatalog.defaultTemplateId || "chat");
         const routeId = pathChatId();
         if (routeId) {
@@ -326,6 +369,7 @@ function App() {
           selectedIdRef.current = chat.id;
           setSelectedId(chat.id); setProjectId(chat.projectId); setChatStatus(chat.status); setChatTitle(chat.title);
           setChatTemplateId(chat.templateId || templateCatalog.defaultTemplateId || "chat");
+          setChatRuntime(chat.runtime || null);
           await loadDetail(chat.id);
           if (chat.status === "active") await openLive(chat.id, chat.projectId);
           return;
@@ -344,6 +388,7 @@ function App() {
         selectedIdRef.current = chat.id;
         setSelectedId(chat.id); setProjectId(chat.projectId); setChatStatus(chat.status); setChatTitle(chat.title);
         setChatTemplateId(chat.templateId || templateCatalog.defaultTemplateId || "chat");
+        setChatRuntime(chat.runtime || null);
         setMessages([]); setTools([]); setPageBefore(null); setLoadedSessionId(chat.id);
       })
       .catch((caught) => active && setError(caught.message));
@@ -376,7 +421,7 @@ function App() {
       // ⌘⇧C — new chat (⌘N is new-window in browsers).
       if (key === "c" && event.shiftKey) {
         event.preventDefault();
-        newChat().catch((caught) => setError(caught.message));
+        requestNewChat();
         return;
       }
       if (key === ",") {
@@ -638,19 +683,42 @@ function App() {
   async function newChat(target, options = {}) {
     const nextProject = target || projects.find((item) => item.id === projectId) || projects[0];
     if (!nextProject) return;
-    const templateId = options.templateId || defaultTemplateId || "chat";
+    const templateId = options.templateId || nextProject.defaultTemplateId || defaultTemplateId || "chat";
     await discardEmptyDraft();
     resetChatState();
     const specialRuntimeChat = templateId === "runtime";
     const chat = await api(specialRuntimeChat ? "/v0/runtime/chats" : "/v0/chats", {
       method: "POST",
-      body: JSON.stringify(specialRuntimeChat ? {} : { projectId: nextProject.id, templateId }),
+      body: JSON.stringify(specialRuntimeChat ? {} : {
+        projectId: nextProject.id,
+        templateId,
+        runtimeKind: options.runtimeKind || "conduit_profile",
+      }),
     });
+    if (options.trustChoice && options.trustToken) {
+      pendingNativeLaunch.current.set(chat.id, {
+        trustChoice: options.trustChoice,
+        trustToken: options.trustToken,
+      });
+    }
     history.replaceState({}, "", `/chat/${chat.id}`);
     selectedIdRef.current = chat.id;
     setSelectedId(chat.id); setProjectId(chat.projectId); setChatStatus(chat.status); setChatTitle(chat.title);
     setChatTemplateId(chat.templateId || templateId);
+    setChatRuntime(chat.runtime || null);
     setMessages([]); setTools([]); setPageBefore(null); setLoadedSessionId(chat.id);
+  }
+
+  function requestNewChat(target = null, options = {}) {
+    if (!target && !options.templateId && !options.runtimeKind) {
+      setSidebarCommand({ type: "new-chat", nonce: Date.now() });
+      return;
+    }
+    if (target?.kind === "workspace" && !options.templateId && !options.runtimeKind) {
+      setSidebarCommand({ type: "new-chat", projectId: target.id, nonce: Date.now() });
+      return;
+    }
+    newChat(target, options).catch((caught) => setError(caught.message));
   }
 
   async function setChatProfile(templateId) {
@@ -681,9 +749,11 @@ function App() {
     selectedIdRef.current = session.id;
     setProjectId(owningProject.id); setSelectedId(session.id); setChatTitle(session.title); setChatStatus(session.status);
     setChatTemplateId(session.templateId || defaultTemplateId || "chat");
+    setChatRuntime(session.runtime || null);
     history.replaceState({}, "", `/chat/${session.id}`);
     const detail = await loadDetail(session.id);
     if (detail?.templateId) setChatTemplateId(detail.templateId);
+    if (detail?.runtime) setChatRuntime(detail.runtime);
     if (selectedIdRef.current === session.id && detail.status === "active") {
       try {
         await openLive(session.id, owningProject.id);
@@ -998,7 +1068,7 @@ function App() {
     || templates[0]
     || null;
   const commandActions = {
-    newChat: (project, options) => newChat(project, options).catch((caught) => setError(caught.message)),
+    newChat: requestNewChat,
     newFolder: () => setSidebarCommand({ type: "new-folder", nonce: Date.now() }),
     newWorkspace: () => setSidebarCommand({ type: "new-workspace", nonce: Date.now() }),
     attach: attachmentState.openPicker,
@@ -1024,8 +1094,34 @@ function App() {
   const threadReady = loadedSessionId === selectedId;
   const emptyChat = threadReady && messages.length === 0 && tools.length === 0 && !displayActivity?.label;
   const selectedProject = projects.find((project) => project.id === projectId);
+  const sharedWorkspaceGeneration = selectedProject?.kind === "workspace"
+    && [...globalRuntime.processes.values()].some((process) => process.projectId === selectedProject.id
+      && process.chatId !== selectedId
+      && (process.active || ["working", "compacting", "retrying"].includes(process.activity)));
+  const resumeNative = (trustChoice) => {
+    if (!nativeTrustRequest) return;
+    const request = nativeTrustRequest;
+    pendingNativeLaunch.current.set(request.chatId, { trustChoice, trustToken: request.token });
+    setNativeTrustRequest(null);
+    openLive(request.chatId, request.projectId).catch((caught) => setError(caught.message));
+  };
   return <TooltipProvider>
     <Toaster richColors />
+    <AlertDialog open={Boolean(nativeTrustRequest)} onOpenChange={(open) => !open && setNativeTrustRequest(null)}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Native Pi project resources</AlertDialogTitle>
+          <AlertDialogDescription>
+            This Workspace contains {nativeTrustRequest?.resources.join(", ") || "project-local resources"}. Trusted resources can execute code with the Conduit server user's permissions.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <Button variant="outline" onClick={() => resumeNative("ignore_project_resources")}>Start without resources</Button>
+          <AlertDialogAction onClick={() => resumeNative("trusted_once")}>Trust once and start</AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
     <SidebarProvider defaultOpen>
       <AppSidebar
         projects={projects}
@@ -1041,13 +1137,14 @@ function App() {
         onRetryConnection={globalRuntime.retry}
         onAddProject={addProject}
         workspaceSuggestions={workspaceSuggestions}
+        installations={installations}
         onCommandHandled={() => setSidebarCommand(null)}
         onCopyTranscript={copyTranscript}
         onDeleteProject={deleteProject}
         onDeleteSession={deleteSession}
         onMoveProjectSessions={moveProjectSessions}
         onMoveSession={moveSession}
-        onNewChat={(project) => newChat(project).catch((caught) => setError(caught.message))}
+        onNewChat={(project, options) => newChat(project, options).catch((caught) => setError(caught.message))}
         onOpenSettings={() => openSettings("models")}
         onOpenSession={(session, project) => openSession(session, project).catch((caught) => setError(caught.message))}
         onRenameProject={renameProject}
@@ -1056,7 +1153,12 @@ function App() {
       <SidebarInset className={`chat-main${emptyChat ? " chat-main-empty" : ""}`} {...drop.handlers}>
         <ChatDropOverlay active={drop.active} />
         <div className="chat-meteors" aria-hidden="true"><Meteors number={30} minDelay={0} maxDelay={1} minDuration={12} maxDuration={20} /></div>
-        <ChatHeader project={selectedProject} title={chatTitle} profile={activeProfile} />
+        <ChatHeader project={selectedProject} title={chatTitle} profile={activeProfile} runtime={chatRuntime} live={live} />
+        {sharedWorkspaceGeneration && <Alert className="mx-auto mt-3 max-w-3xl" variant="default">
+          <TriangleAlertIcon />
+          <AlertTitle>Another chat is working in this Workspace</AlertTitle>
+          <AlertDescription>Both agents can edit the same files. Conduit does not lock the Workspace or create worktrees automatically.</AlertDescription>
+        </Alert>}
         <ChatThread
           key={loadedSessionId ?? "boot"}
           messages={messages}
@@ -1106,8 +1208,9 @@ function App() {
             queue={queue}
             serverOnline={serverOnline}
             profile={activeProfile}
+            runtime={chatRuntime}
             profiles={chatTemplateId === "runtime" ? [] : templates.filter((item) => item.defaultable !== false)}
-            profileLocked={chatStatus !== "draft"}
+            profileLocked={chatStatus !== "draft" || chatRuntime?.kind === "native_pi"}
             onDraftChange={setDraft}
             onChooseModel={modelSettings.chooseModel}
             onChooseEffort={modelSettings.chooseEffort}

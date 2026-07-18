@@ -4,6 +4,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { sessionDirectoryFor } from "./session-store.js";
 import { assertAllowedPath, resolveExistingDirectory } from "./workspace-paths.js";
+import { ensureConduitRoot } from "./owned-paths.js";
 
 const SLUG = /^[a-z0-9](?:[a-z0-9-]{0,46}[a-z0-9])?$/;
 const ORIGINS = new Set(["managed", "linked", "cloned"]);
@@ -53,11 +54,12 @@ function runCommand(command, args, { cwd } = {}) {
 }
 
 export class ProjectStore {
-  constructor({ filesRoot, catalogFile, piAgentDir, workspaceAllowlist = [] }) {
+  constructor({ filesRoot, catalogFile, piAgentDir, workspaceAllowlist = [], dataRoot = null }) {
     this.filesRoot = path.resolve(filesRoot);
     this.catalogFile = catalogFile;
     this.piAgentDir = piAgentDir;
     this.workspaceAllowlist = workspaceAllowlist.map((item) => path.resolve(item));
+    this.dataRoot = dataRoot ? path.resolve(dataRoot) : null;
     // Serialize catalog mutations (especially slow clones) so concurrent creates
     // cannot share a slug or rm each other's checkout.
     this.mutationQueue = Promise.resolve();
@@ -170,19 +172,24 @@ export class ProjectStore {
         createdAt: new Date().toISOString(),
       };
       catalog.projects.push(project);
-      await writeJson(this.catalogFile, catalog);
-      await fs.mkdir(this.managedPath(slug), { recursive: true });
+      const target = this.managedPath(slug);
+      await fs.mkdir(target, { recursive: false });
+      try { await writeJson(this.catalogFile, catalog); }
+      catch (error) {
+        await fs.rmdir(target).catch(() => {});
+        throw error;
+      }
       return this.projectView(project);
     });
   }
 
   async createLinked({ name, path: inputPath, defaultTemplateId = "workspace" }) {
-    const externalPath = await resolveExistingDirectory(inputPath, this.workspaceAllowlist);
+    const externalPath = await resolveExistingDirectory(inputPath, this.workspaceAllowlist, { dataRoot: this.dataRoot });
     return this.runExclusive(async () => {
       const slugBase = name || path.basename(externalPath);
       const slug = await this.uniqueSlug(slugBase);
       const catalog = await this.readCatalog();
-      if (catalog.projects.some((item) => item.externalPath && path.resolve(item.externalPath) === externalPath)) {
+      if (catalog.projects.some((item) => path.resolve(this.resolvePath(item)) === externalPath)) {
         const error = new Error("That directory is already registered");
         error.code = "workspace_already_linked";
         throw error;
@@ -199,8 +206,8 @@ export class ProjectStore {
         createdAt: new Date().toISOString(),
       };
       catalog.projects.push(project);
+      await ensureConduitRoot({ path: externalPath, origin: "linked" });
       await writeJson(this.catalogFile, catalog);
-      await fs.mkdir(path.join(externalPath, ".conduit", "chats"), { recursive: true });
       return this.projectView(project);
     });
   }
@@ -210,6 +217,27 @@ export class ProjectStore {
     if (!url) {
       const error = new Error("cloneUrl is required");
       error.code = "clone_url_required";
+      throw error;
+    }
+    if (path.isAbsolute(url)) await resolveExistingDirectory(url, this.workspaceAllowlist, { dataRoot: this.dataRoot });
+    else if (/^file:/i.test(url)) {
+      const localPath = decodeURIComponent(new URL(url).pathname);
+      await resolveExistingDirectory(localPath, this.workspaceAllowlist, { dataRoot: this.dataRoot });
+    } else if (/^[a-z][a-z0-9+.-]*:\/\//i.test(url)) {
+      const parsed = new URL(url);
+      if (!new Set(["https:", "ssh:", "git:"]).has(parsed.protocol)) {
+        const error = new Error("Clone URL scheme is not allowed");
+        error.code = "clone_url_not_allowed";
+        throw error;
+      }
+      if (parsed.password || (parsed.protocol === "https:" && parsed.username)) {
+        const error = new Error("Clone URLs must not contain credentials");
+        error.code = "clone_url_credentials";
+        throw error;
+      }
+    } else if (!/^[\w.-]+@[\w.-]+:.+/.test(url)) {
+      const error = new Error("Clone source must be an allow-listed local path or a supported Git URL");
+      error.code = "clone_url_not_allowed";
       throw error;
     }
     return this.runExclusive(async () => {
@@ -283,6 +311,10 @@ export class ProjectStore {
   }
 
   async rename(idOrSlug, name) {
+    return this.runExclusive(() => this.renameUnlocked(idOrSlug, name));
+  }
+
+  async renameUnlocked(idOrSlug, name) {
     const nextName = String(name || "").trim();
     if (!nextName) throw new Error("Project names must contain letters or numbers");
     const catalog = await this.readCatalog();
@@ -298,7 +330,11 @@ export class ProjectStore {
     return this.projectView(project);
   }
 
-  async remove(idOrSlug) {
+  async remove(idOrSlug, options = {}) {
+    return this.runExclusive(() => this.removeUnlocked(idOrSlug, options));
+  }
+
+  async removeUnlocked(idOrSlug, { skipWorkingTree = false } = {}) {
     const catalog = await this.readCatalog();
     const project = catalog.projects.find((item) => item.id === idOrSlug || item.slug === idOrSlug);
     if (!project) return null;
@@ -309,14 +345,32 @@ export class ProjectStore {
     }
     const view = this.projectView(project);
     // Linked workspaces are unregistered only — never delete the external tree.
-    if ((project.origin || "managed") !== "linked") {
+    if (!skipWorkingTree && (project.origin || "managed") !== "linked") {
       await fs.rm(view.path, { recursive: true, force: true });
-    } else {
-      await fs.rm(path.join(view.path, ".conduit"), { recursive: true, force: true }).catch(() => {});
+    } else if (!skipWorkingTree) {
+      // Chat deletion removes Conduit's owned trees. Unregister only prunes empty
+      // parents so unrelated .conduit metadata is never removed.
+      await fs.rmdir(path.join(view.path, ".conduit", "chats")).catch((error) => {
+        if (!["ENOENT", "ENOTEMPTY"].includes(error.code)) throw error;
+      });
+      await fs.rmdir(path.join(view.path, ".conduit")).catch((error) => {
+        if (!["ENOENT", "ENOTEMPTY"].includes(error.code)) throw error;
+      });
     }
     catalog.projects = catalog.projects.filter((item) => item.id !== project.id);
     await writeJson(this.catalogFile, catalog);
     return view;
+  }
+
+  async validate(project) {
+    if (!project || project.origin !== "linked") return project;
+    const current = await resolveExistingDirectory(project.path, this.workspaceAllowlist, { dataRoot: this.dataRoot });
+    if (current !== path.resolve(project.externalPath)) {
+      const error = new Error("Workspace path identity changed");
+      error.code = "workspace_identity_changed";
+      throw error;
+    }
+    return project;
   }
 }
 

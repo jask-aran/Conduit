@@ -214,16 +214,23 @@ export class PiManager extends EventEmitter {
     return victims.length;
   }
 
-  create({ project, chatId = null, sessionFile = null, model = "", thinkingLevel = "", models, template = null }) {
+  create({ project, chatId = null, sessionFile = null, model = "", thinkingLevel = "", models, template = null, launchSpec = null }) {
     if (chatId) {
       const existing = [...this.processes.values()].find((record) =>
         record.chatId === chatId && ["starting", "running"].includes(record.status));
       if (existing) {
+        if (launchSpec?.runtime?.kind && existing.runtime?.kind && launchSpec.runtime.kind !== existing.runtime.kind) {
+          const error = new Error("A different runtime already owns this chat process");
+          error.code = "session_writer_conflict";
+          throw error;
+        }
         this.touchActivity(existing);
         return existing;
       }
     }
-    const resolvedFile = sessionFile ? path.resolve(sessionFile) : null;
+    const resolvedFile = launchSpec?.sessionFile
+      ? path.resolve(launchSpec.sessionFile)
+      : sessionFile ? path.resolve(sessionFile) : null;
     if (resolvedFile && this.bySessionFile.has(resolvedFile)) {
       const existingId = this.bySessionFile.get(resolvedFile);
       const existing = this.processes.get(existingId);
@@ -248,13 +255,13 @@ export class PiManager extends EventEmitter {
       ? crypto.createHash("sha256").update(resolvedFile).digest("hex").slice(0, 24)
       : crypto.randomUUID().replaceAll("-", "").slice(0, 24);
 
-    const launchTemplate = template || this.template;
-    if (!launchTemplate) throw new Error("PiManager.create requires a template");
-    const args = buildPiArgs({ sessionFile: resolvedFile, model, thinkingLevel, models, template: launchTemplate });
-    const child = this.spawnImpl(this.command, args, {
-      cwd: project.path,
+    const launchTemplate = launchSpec ? template : (template || this.template);
+    if (!launchSpec && !launchTemplate) throw new Error("PiManager.create requires a template or launch specification");
+    const args = launchSpec?.args || buildPiArgs({ sessionFile: resolvedFile, model, thinkingLevel, models, template: launchTemplate });
+    const child = this.spawnImpl(launchSpec?.command || this.command, args, {
+      cwd: launchSpec?.cwd || project.path,
       stdio: ["pipe", "pipe", "pipe"],
-      env: buildPiEnvironment(this.agentDir),
+      env: launchSpec?.env || buildPiEnvironment(this.agentDir),
     });
     const createdAtMs = this.now();
     const record = {
@@ -262,18 +269,21 @@ export class PiManager extends EventEmitter {
       chatId,
       projectId: project.id,
       projectSlug: project.slug,
-      cwd: project.path,
+      cwd: launchSpec?.cwd || project.path,
       sessionDir: project.sessionsDir,
       sessionFile: resolvedFile,
       model: model.trim() || null,
       thinkingLevel: thinkingLevel.trim() || null,
-      template: {
+      template: launchTemplate ? {
         id: launchTemplate.id,
         version: launchTemplate.version,
         label: launchTemplate.label || launchTemplate.id,
         posture: launchTemplate.posture || "",
         tools: [...(launchTemplate.tools || [])],
-      },
+      } : null,
+      runtime: launchSpec?.runtime || null,
+      binaryVersion: launchSpec?.binaryVersion || launchSpec?.runtime?.binaryVersion || null,
+      trustPosture: launchSpec?.trustPosture || "ignore_project_resources",
       child,
       status: "starting",
       active: false,
@@ -619,6 +629,35 @@ export class PiManager extends EventEmitter {
     return generationId;
   }
 
+  async promptAccepted(id, message, { continuationBase = "", streamingBehavior = null } = {}) {
+    const record = this.processes.get(id);
+    if (!record) throw new Error("Unknown live session");
+    if (record.stopping) throw Object.assign(new Error("Pi is still stopping the previous response"), { code: "generation_stopping" });
+    if (streamingBehavior !== "steer" && streamingBehavior !== "followUp") this.assertCanStartGeneration(record);
+    const generationId = `g${++record.generationSequence}`;
+    const previousGeneration = record.generation;
+    record.generation = { id: generationId, closed: false, settled: false, continuationBase };
+    record.activity = "working";
+    const payload = { type: "prompt", message };
+    if (streamingBehavior === "steer" || streamingBehavior === "followUp") payload.streamingBehavior = streamingBehavior;
+    try {
+      await this.request(id, payload);
+    } catch (error) {
+      record.generation = previousGeneration;
+      record.activity = deriveCoarseActivity(record);
+      this.publishState(record);
+      throw error;
+    }
+    this.publish(record, { type: "generation_started", generationId, continuation: Boolean(continuationBase) });
+    this.publishState(record);
+    return generationId;
+  }
+
+  async queueAccepted(id, type, message) {
+    if (!new Set(["steer", "follow_up"]).has(type)) throw new Error("Invalid queued prompt type");
+    await this.request(id, { type, message });
+  }
+
   async abortGeneration(id, generationId = null) {
     const record = this.processes.get(id);
     const generation = record?.generation;
@@ -741,11 +780,14 @@ export class PiManager extends EventEmitter {
       chatId: safe.chatId,
       projectId: safe.projectId,
       projectSlug: safe.projectSlug,
-      sessionFile: safe.sessionFile,
-      sessionId: safe.sessionId || null,
+      sessionFile: safe.runtime?.kind === "native_pi" ? null : safe.sessionFile,
+      sessionId: safe.runtime?.kind === "native_pi" ? null : safe.sessionId || null,
       model: safe.model,
       thinkingLevel: safe.thinkingLevel,
       template: safe.template || null,
+      runtime: safe.runtime || null,
+      binaryVersion: safe.binaryVersion || null,
+      trustPosture: safe.trustPosture || null,
       status: safe.status,
       active: safe.active,
       activity: safe.activity || deriveCoarseActivity(record),
@@ -777,6 +819,9 @@ export class PiManager extends EventEmitter {
   get(id) {
     return this.processes.get(id) || null;
   }
+
+  getByChatId(chatId) {
+    return [...this.processes.values()].find((record) => record.chatId === chatId
+      && ["starting", "running"].includes(record.status)) || null;
+  }
 }
-
-

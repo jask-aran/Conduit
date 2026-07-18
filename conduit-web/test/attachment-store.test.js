@@ -56,6 +56,33 @@ test("large generated uploads remain ordinary streamed files and symlinks fail c
   await fs.rm(root, { recursive: true, force: true });
 });
 
+test("attachment access is scoped to one chat and rejects symlinked owned parents", async () => {
+  const { root, project, chat, chats, store } = await fixture();
+  const other = await chats.create(project);
+  const id = crypto.randomUUID();
+  await store.write(project, other.id, id, "private.txt", Readable.from(["other chat"]));
+  assert.equal(await store.open(project, chat.id, id), null);
+
+  const outside = path.join(root, "outside");
+  await fs.mkdir(outside);
+  const attachmentDirectory = path.join(chatDirectory(project, chat.id), "attachments");
+  await fs.rmdir(attachmentDirectory);
+  await fs.symlink(outside, attachmentDirectory);
+  await assert.rejects(store.list(project, chat.id), { code: "unsafe_conduit_path" });
+  await fs.rm(root, { recursive: true, force: true });
+});
+
+test("first attachment keeps Conduit metadata out of Git status locally", async () => {
+  const { root, project, chat, store } = await fixture();
+  const { spawnSync } = await import("node:child_process");
+  const initialized = spawnSync("git", ["init"], { cwd: project.path, encoding: "utf8" });
+  assert.equal(initialized.status, 0, initialized.stderr);
+  await store.write(project, chat.id, crypto.randomUUID(), "note.txt", Readable.from(["hello"]));
+  const excluded = await fs.readFile(path.join(project.path, ".git", "info", "exclude"), "utf8");
+  assert.match(excluded, /# Conduit chat attachments\n\.conduit\//);
+  await fs.rm(root, { recursive: true, force: true });
+});
+
 test("sanitizes separators, controls, dot-only names, and UTF-8 byte length", () => {
   assert.equal(safeAttachmentName("../../\u0000\u0085secret.txt"), "secret.txt");
   assert.equal(safeAttachmentName("..."), "attachment");

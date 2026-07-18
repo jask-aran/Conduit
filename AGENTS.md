@@ -66,6 +66,16 @@ defaults or ordinary profile choices and are launched through dedicated routes.
 Native Pi IDs and paths are private mappings; browser routes always use the stable
 Conduit chat ID.
 
+Workspace chats persist an immutable runtime kind. `conduit_profile` launches the
+bundled 0.80.6 executable with `data/pi`, explicit profile resources, and no
+ambient project resources. `native_pi` launches the detected absolute host Pi
+executable with the server user's native Pi home/resources and the versioned
+Conduit Workspace bridge only. Native Pi is available only for Workspaces and
+requires saved host trust or a one-run trust/ignore choice. One `PiManager` owns
+both runtimes so process limits and writer exclusion remain global. Native Pi
+chat movement is unavailable because moving would re-home its host-native JSONL
+through Conduit's isolated session store.
+
 `data/pi/settings.json` is authoritative for scoped models. Terminal and web
 saves share it, the latest successful save wins, and Conduit reloads it for
 model requests and new processes. The template model list is only the fallback

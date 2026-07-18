@@ -48,6 +48,7 @@ export function ChatComposer({
   queue = null,
   serverOnline = true,
   profile = null,
+  runtime = null,
   profiles = [],
   profileLocked = false,
   onChooseProfile,
@@ -66,6 +67,7 @@ export function ChatComposer({
   const selectedModel = models.find((item) => item.spec === model);
   const thinkingLevels = list(selectedModel?.thinkingLevels);
   const modelLabel = selectedModel?.label || model.split("/").pop() || "Select model";
+  const nativeRuntime = runtime?.kind === "native_pi";
   const busy = streaming || generation === "active" || generation === "submitting";
   const isStopping = stopping || generation === "stopping";
   const hasText = Boolean(draft.trim());
@@ -175,7 +177,9 @@ export function ChatComposer({
             onClick={() => attachments.inputRef.current?.click()}
             disabled={!serverOnline}
           ><PaperclipIcon /></InputGroupButton>
-          <DropdownMenu>
+          {nativeRuntime ? <InputGroupButton variant="ghost" size="sm" disabled aria-label="Native Pi uses the host model">
+            <span>Host model</span>
+          </InputGroupButton> : <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <InputGroupButton variant="ghost" size="sm" aria-label={`${modelLabel} ${effort || "off"}`} disabled={!serverOnline}>
                 <span className="max-w-24 truncate sm:max-w-36">{modelLabel}</span>
@@ -204,7 +208,7 @@ export function ChatComposer({
               <DropdownMenuSeparator />
               <DropdownMenuItem onSelect={() => requestAnimationFrame(() => commandActions.settings?.("models"))}>Manage models…</DropdownMenuItem>
             </DropdownMenuContent>
-          </DropdownMenu>
+          </DropdownMenu>}
           {list(profiles).length > 0 && <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <InputGroupButton

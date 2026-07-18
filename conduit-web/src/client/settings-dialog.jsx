@@ -44,23 +44,30 @@ function RuntimeSettings() {
   const [idleMinutes, setIdleMinutes] = useState(2);
   const [liveCount, setLiveCount] = useState(0);
   const [generatingCount, setGeneratingCount] = useState(0);
+  const [installations, setInstallations] = useState([]);
+  const [detecting, setDetecting] = useState(false);
 
   useEffect(() => {
     let active = true;
     setLoading(true);
-    fetch("/v0/runtime/settings")
-      .then(async (response) => {
-        const body = await response.json().catch(() => ({}));
-        if (!response.ok) throw new Error(body.message || body.error || "Could not load runtime settings");
-        return body;
-      })
-      .then((body) => {
+    Promise.all([
+      fetch("/v0/runtime/settings").then(async (response) => {
+          const body = await response.json().catch(() => ({}));
+          if (!response.ok) throw new Error(body.message || body.error || "Could not load runtime settings");
+          return body;
+        }),
+      fetch("/v0/pi-installations")
+        .then(async (response) => response.ok ? response.json() : { installations: [] })
+        .catch(() => ({ installations: [] })),
+    ])
+      .then(([body, catalog]) => {
         if (!active) return;
         setMaxLiveProcesses(body.maxLiveProcesses ?? 12);
         setMaxGeneratingProcesses(body.maxGeneratingProcesses ?? 2);
         setIdleMinutes(Math.max(1, Math.round((body.idleProcessTtlMs || 120_000) / 60_000)));
         setLiveCount(body.liveCount ?? 0);
         setGeneratingCount(body.generatingCount ?? 0);
+        setInstallations(catalog.installations || []);
         setError("");
       })
       .catch((caught) => {
@@ -99,6 +106,21 @@ function RuntimeSettings() {
     }
   }
 
+  async function detectHostPi() {
+    setDetecting(true);
+    setError("");
+    try {
+      const response = await fetch("/v0/pi-installations/host/detect", { method: "POST" });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(body.message || body.error || "Could not detect host Pi");
+      setInstallations((current) => [...current.filter((item) => item.id !== body.id), body]);
+    } catch (caught) {
+      setError(caught.message);
+    } finally {
+      setDetecting(false);
+    }
+  }
+
   if (loading) return <div className="flex items-center gap-2 text-sm text-muted-foreground"><Spinner />Loading runtime settings…</div>;
 
   return <>
@@ -107,6 +129,23 @@ function RuntimeSettings() {
       <p>Keep many chats warm; limit how many agent loops run at once. Idle warms reclaim after you leave.</p>
     </div>
     <FieldGroup>
+      <Field>
+        <FieldLabel>Pi installations</FieldLabel>
+        <div className="flex flex-col gap-2">
+          {installations.map((installation) => <div key={installation.id} className="bg-muted/40 flex items-center justify-between gap-3 rounded-lg border p-3 text-sm">
+            <span>
+              <span className="font-medium">{installation.label}</span>
+              <span className="text-muted-foreground"> · {installation.version ? `Pi ${installation.version}` : installation.error || "Unavailable"}</span>
+            </span>
+            <Badge variant={installation.available ? "secondary" : "outline"}>{installation.available ? "Available" : "Unavailable"}</Badge>
+          </div>)}
+        </div>
+        <FieldDescription>Conduit uses its bundled Pi and isolated home. Workspace chats may explicitly use the host Pi installation and native home.</FieldDescription>
+        <Button type="button" variant="outline" disabled={detecting} onClick={detectHostPi}>
+          {detecting && <Spinner data-icon="inline-start" />}
+          {detecting ? "Detecting…" : "Re-detect host Pi"}
+        </Button>
+      </Field>
       <Field>
         <FieldLabel className="justify-between">
           Max warm Pi processes
@@ -306,7 +345,7 @@ export function SettingsDialog({
     >
       <DialogHeader className="settings-dialog-header">
         <DialogTitle>Settings</DialogTitle>
-        <DialogDescription>Configure the isolated Pi runtime used by Conduit.</DialogDescription>
+        <DialogDescription>Configure Conduit profiles, Pi installations, models, and process limits.</DialogDescription>
       </DialogHeader>
       <Tabs value={section} onValueChange={setSection} orientation="vertical" activationMode="manual" className="settings-tabs">
         <TabsList variant="line" aria-label="Settings sections" className="settings-rail">

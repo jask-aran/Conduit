@@ -81,6 +81,12 @@ test.beforeEach(async ({ page }) => {
   await page.route("**/v0/runtime", async (route) => {
     await route.fulfill({ json: { type: "runtime_global_snapshot", processes: [], at: new Date().toISOString() } });
   });
+  await page.route("**/v0/pi-installations", async (route) => {
+    await route.fulfill({ json: { installations: [
+      { id: "conduit-pinned", label: "Conduit", version: "0.80.6", available: true },
+      { id: "host-pi", label: "Native Pi", version: "0.80.10", available: true },
+    ] } });
+  });
   await page.route("**/v0/chats", async (route) => {
     await route.fulfill({ status: 201, json: {
       id: "550e8400-e29b-41d4-a716-446655440099",
@@ -662,6 +668,7 @@ test("keeps linked workspaces in their own sidebar group", async ({ page }, test
         id: "project_workspace",
         slug: "jaskfish",
         name: "JaskFish",
+        kind: "workspace",
         origin: "linked",
         sessions: [],
       }],
@@ -672,6 +679,57 @@ test("keeps linked workspaces in their own sidebar group", async ({ page }, test
   await expect(page.locator('[data-sidebar="group-label"]')).toHaveText(["Chats", "Projects", "Workspaces"]);
   await expect(page.getByRole("button", { name: "JaskFish" })).toBeVisible();
   await expect(page.getByRole("button", { name: "New workspace" })).toBeVisible();
+});
+
+test("workspace new chat chooses Native Pi after trust preflight", async ({ page }, testInfo) => {
+  const workspace = {
+    id: "project_workspace",
+    slug: "jaskfish",
+    name: "JaskFish",
+    kind: "workspace",
+    origin: "linked",
+    defaultTemplateId: "workspace",
+    sessions: [],
+  };
+  await page.unroute("**/v0/projects");
+  await page.route("**/v0/projects", (route) => route.fulfill({ json: { projects: [...projects, workspace] } }));
+  await page.route("**/v0/workspaces/project_workspace/native-preflight", (route) => route.fulfill({ json: {
+    available: true,
+    version: "0.80.10",
+    trustRequired: true,
+    resources: ["settings", "skills"],
+    token: "trust-token",
+  } }));
+  await page.unroute("**/v0/chats");
+  await page.route("**/v0/chats", async (route) => {
+    const body = route.request().postDataJSON();
+    await route.fulfill({ status: 201, json: {
+      id: "550e8400-e29b-41d4-a716-446655440088",
+      projectId: body.projectId,
+      status: "draft",
+      title: "New chat",
+      templateId: body.templateId,
+      runtime: { kind: body.runtimeKind, installationId: "host-pi", binaryVersion: "0.80.10" },
+    } });
+  });
+  await page.goto("/");
+  await openSidebar(page, testInfo);
+  await page.getByRole("button", { name: "JaskFish" }).click({ button: "right" });
+  await page.getByRole("menuitem", { name: "New chat" }).click();
+  const dialog = page.getByRole("dialog", { name: "New chat in JaskFish" });
+  await expect(dialog).toBeVisible();
+  await dialog.getByRole("combobox", { name: "Runtime" }).click();
+  await page.getByRole("option", { name: "Native Pi (host setup)" }).click();
+  await expect(dialog.getByText(/Found settings, skills/)).toBeVisible();
+  const requestPromise = page.waitForRequest((request) => request.url().endsWith("/v0/chats")
+    && request.method() === "POST" && request.postDataJSON().runtimeKind === "native_pi");
+  await dialog.getByRole("button", { name: "Create chat" }).click();
+  const request = await requestPromise;
+  expect(request.postDataJSON()).toMatchObject({
+    projectId: "project_workspace",
+    templateId: "workspace",
+    runtimeKind: "native_pi",
+  });
 });
 
 test("sizes the meteor field with the chat viewport", async ({ page }, testInfo) => {
