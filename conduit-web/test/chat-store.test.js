@@ -79,6 +79,40 @@ test("creates invisible drafts before Pi and reveals them after a completed atta
   await fs.rm(root, { recursive: true, force: true });
 });
 
+test("sidebar list keeps creation order when a rename bumps updatedAt", async () => {
+  const { root, project, registryFile } = await fixture();
+  const olderFile = path.join(project.sessionsDir, "older.jsonl");
+  const newerFile = path.join(project.sessionsDir, "newer.jsonl");
+  await fs.writeFile(olderFile, `${JSON.stringify({ type: "session", id: "session-older", cwd: project.path, timestamp: "2026-01-01T00:00:00Z" })}\n`);
+  await fs.writeFile(newerFile, `${JSON.stringify({ type: "session", id: "session-newer", cwd: project.path, timestamp: "2026-02-01T00:00:00Z" })}\n`);
+  await fs.writeFile(registryFile, `${JSON.stringify({ version: 2, chats: [{
+    id: "chat-older", projectId: project.id, status: "active", title: "Older",
+    piSessionId: "session-older", piSessionFile: olderFile,
+    createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z",
+  }, {
+    id: "chat-newer", projectId: project.id, status: "active", title: "Newer",
+    piSessionId: "session-newer", piSessionFile: newerFile,
+    createdAt: "2026-02-01T00:00:00Z", updatedAt: "2026-02-01T00:00:00Z",
+  }] })}\n`);
+
+  const store = new ChatStore(registryFile);
+  await store.initialize([project]);
+  assert.deepEqual(store.listProject(project.id).map((chat) => chat.id), ["chat-newer", "chat-older"]);
+
+  // Simulate rename: title + fresh updatedAt (as commitSession does after appendSessionInfo).
+  await store.commitSession("chat-older", {
+    title: "Renamed older",
+    nativeId: "session-older",
+    id: "session-older",
+    file: olderFile,
+    updatedAt: "2026-07-18T12:00:00Z",
+  });
+  assert.equal(store.metadata("chat-older").title, "Renamed older");
+  assert.equal(store.metadata("chat-older").updatedAt, "2026-07-18T12:00:00Z");
+  assert.deepEqual(store.listProject(project.id).map((chat) => chat.id), ["chat-newer", "chat-older"]);
+  await fs.rm(root, { recursive: true, force: true });
+});
+
 test("keeps a pre-prompt Pi mapping as a draft across startup", async () => {
   const { root, project, registryFile } = await fixture();
   const piSessionFile = path.join(project.sessionsDir, "draft.jsonl");
