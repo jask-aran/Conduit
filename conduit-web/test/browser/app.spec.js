@@ -623,7 +623,7 @@ test("uses the sidebar-08 groups and native icon collapse", async ({ page }, tes
   await expect(page.getByRole("button", { name: "New folder" })).toBeVisible();
   await expect(page.locator('[data-sidebar="footer"]').getByRole("button", { name: /Conduit/ })).toBeVisible();
   await expect(page.locator('[data-sidebar="footer"]')).toContainText(/Server connected|Connecting|Reconnecting|unavailable/);
-  await expect(page.locator('[data-sidebar="group-label"]')).toHaveText(["Chats", "Projects"]);
+  await expect(page.locator('[data-sidebar="group-label"]')).toHaveText(["Chats", "Projects", "Workspaces"]);
   await expect(page.locator('[data-sidebar="group-label"]').first()).toHaveCSS("font-size", "13px");
   await expect(page.getByRole("button", { name: "Existing chat" })).toHaveCSS("font-size", "15px");
   await expect(page.locator('[data-sidebar="header"] span', { hasText: "Conduit" })).toHaveCSS("font-size", "24px");
