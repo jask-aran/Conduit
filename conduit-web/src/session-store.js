@@ -72,12 +72,18 @@ export async function discoverProjectSessions(project) {
       if (path.resolve(session.cwd) === path.resolve(project.path)) sessions.push(session);
     } catch {}
   }
-  return sessions.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  return sessions.sort(compareSessionsByCreatedAt);
 }
 
 export async function discoverSessions(projects) {
   return (await Promise.all(projects.map(discoverProjectSessions))).flat()
-    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+    .sort(compareSessionsByCreatedAt);
+}
+
+/** Newest creation first; rename must not reorder (mtime-backed updatedAt changes on title edit). */
+function compareSessionsByCreatedAt(a, b) {
+  const byCreated = String(b.createdAt || "").localeCompare(String(a.createdAt || ""));
+  return byCreated || String(b.id || "").localeCompare(String(a.id || ""));
 }
 
 export async function findSession(projects, id) {

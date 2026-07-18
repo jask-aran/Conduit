@@ -163,7 +163,11 @@ export class ChatStore {
   list({ includeHidden = false } = {}) {
     return [...this.chats]
       .filter((chat) => includeHidden || chat.status === "active" || this.visibleDrafts.has(chat.id))
-      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+      // Creation order is stable: rename/title edits bump mtime/updatedAt and must not reshuffle the sidebar.
+      .sort((a, b) => {
+        const byCreated = String(b.createdAt || "").localeCompare(String(a.createdAt || ""));
+        return byCreated || String(b.id || "").localeCompare(String(a.id || ""));
+      });
   }
 
   listProject(projectId, options) {
