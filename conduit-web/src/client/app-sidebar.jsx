@@ -65,6 +65,7 @@ export function AppSidebar({
   runtimeStale = false,
   onRetryConnection,
   onAddProject,
+  workspaceSuggestions = [],
   onCopyTranscript,
   onDeleteProject,
   onDeleteSession,
@@ -291,14 +292,22 @@ export function AppSidebar({
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>
-            {pendingDelete?.type === "project" ? "Delete this folder?" : "Delete this chat?"}
+            {pendingDelete?.type !== "project"
+              ? "Delete this chat?"
+              : pendingDelete.project.origin === "linked"
+                ? "Unlink this workspace?"
+                : pendingDelete.project.origin === "cloned"
+                  ? "Delete this workspace?"
+                  : "Delete this folder?"}
           </AlertDialogTitle>
           <AlertDialogDescription>
-            {pendingDelete?.type === "project"
-              ? (pendingDelete.project.origin === "linked"
+            {pendingDelete?.type !== "project"
+              ? "This permanently deletes the Pi session transcript and this chat's attached files."
+              : pendingDelete.project.origin === "linked"
                 ? `This unregisters ${pendingDelete.project.name} and deletes its Conduit chats. The linked directory on disk is kept.`
-                : `This permanently deletes ${pendingDelete.project.name}, its working files, and all of its chats.`)
-              : "This permanently deletes the Pi session transcript and this chat's attached files."}
+                : pendingDelete.project.origin === "cloned"
+                  ? `This permanently deletes the cloned checkout for ${pendingDelete.project.name} and all of its chats.`
+                  : `This permanently deletes ${pendingDelete.project.name}, its working files, and all of its chats.`}
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
@@ -357,11 +366,17 @@ export function AppSidebar({
               <Input
                 id="folder-path"
                 autoFocus
+                list="workspace-path-suggestions"
                 value={newFolderPath}
                 disabled={newFolderSubmitting}
                 onChange={(event) => setNewFolderPath(event.target.value)}
                 placeholder="~/code/my-repo"
               />
+              <datalist id="workspace-path-suggestions">
+                {workspaceSuggestions.map((folder) => (
+                  <option key={folder.path} value={folder.displayPath || folder.path} label={folder.name} />
+                ))}
+              </datalist>
             </Field>}
             {newFolderMode === "cloned" && <Field>
               <FieldLabel htmlFor="folder-clone">Git URL</FieldLabel>

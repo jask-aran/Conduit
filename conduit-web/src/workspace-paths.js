@@ -74,3 +74,15 @@ export async function resolveExistingDirectory(candidate, allowlist) {
   }
   return resolved;
 }
+
+export async function listDirectorySuggestions(root) {
+  const resolvedRoot = await fs.realpath(path.resolve(root));
+  const entries = await fs.readdir(resolvedRoot, { withFileTypes: true });
+  return entries
+    .filter((entry) => entry.isDirectory() && !entry.name.startsWith("."))
+    .map((entry) => ({
+      name: entry.name,
+      path: path.join(resolvedRoot, entry.name),
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
