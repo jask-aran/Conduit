@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { BotIcon, CircleHelpIcon, CpuIcon, LinkIcon, MonitorIcon, Settings2Icon } from "lucide-react";
+import { BotIcon, CircleHelpIcon, CpuIcon, LayersIcon, LinkIcon, MonitorIcon, Settings2Icon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -7,6 +7,13 @@ import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/u
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -14,6 +21,7 @@ import { ModelScopeCombobox } from "./model-picker";
 
 const sections = [
   { id: "models", label: "Models", short: "Models", icon: BotIcon },
+  { id: "profiles", label: "Profiles", short: "Profiles", icon: LayersIcon },
   { id: "runtime", label: "Runtime", short: "Runtime", icon: CpuIcon },
   { id: "general", label: "General", short: "General", icon: Settings2Icon },
   { id: "appearance", label: "Appearance", short: "Display", icon: MonitorIcon },
@@ -155,7 +163,115 @@ function RuntimeSettings() {
   </>;
 }
 
-export function SettingsDialog({ open, onOpenChange, initialSection = "models", modelSettings }) {
+function ProfileSettings({
+  templates = [],
+  defaultTemplateId = "chat",
+  onDefaultTemplateChange,
+  onOpenRuntimeChat,
+}) {
+  const [selected, setSelected] = useState(defaultTemplateId);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+
+  useEffect(() => {
+    setSelected(defaultTemplateId);
+  }, [defaultTemplateId]);
+
+  const active = templates.find((item) => item.id === selected) || templates[0] || null;
+  const hasRuntime = templates.some((item) => item.id === "runtime");
+
+  async function save() {
+    if (!selected || !onDefaultTemplateChange) return;
+    setSaving(true);
+    setError("");
+    setNotice("");
+    try {
+      await onDefaultTemplateChange(selected);
+      setNotice("Default profile saved. New chats use it.");
+    } catch (caught) {
+      setError(caught.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (!templates.length) {
+    return <Empty>
+      <EmptyHeader>
+        <EmptyTitle>No profiles found</EmptyTitle>
+        <EmptyDescription>Add a directory under templates/ with a template.json manifest.</EmptyDescription>
+      </EmptyHeader>
+    </Empty>;
+  }
+
+  return <>
+    <div className="settings-section-heading">
+      <h2>Profiles</h2>
+      <p>Profiles are repository launch presets for Pi. Each chat stores the profile it started with and reuses it on resume.</p>
+    </div>
+    <FieldGroup>
+      <Field>
+        <FieldLabel>Default profile for new chats</FieldLabel>
+        <Select value={selected} onValueChange={setSelected}>
+          <SelectTrigger className="w-full max-w-md">
+            <SelectValue placeholder="Choose a profile" />
+          </SelectTrigger>
+          <SelectContent>
+            {templates.map((template) => (
+              <SelectItem key={template.id} value={template.id}>
+                {template.label || template.id}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <FieldDescription>
+          Command palette and New chat use this default. Linked and cloned workspaces default to Workspace.
+        </FieldDescription>
+      </Field>
+      {active && <Field>
+        <FieldLabel className="justify-between">
+          {active.label || active.id}
+          <Badge variant="secondary">v{active.version}</Badge>
+        </FieldLabel>
+        <div className="bg-muted/40 space-y-2 rounded-lg border p-3 text-sm">
+          {active.description && <p className="text-muted-foreground">{active.description}</p>}
+          <p><span className="text-muted-foreground">Posture · </span>{active.posture || active.tools?.join(" / ") || "—"}</p>
+          <p><span className="text-muted-foreground">Tools · </span>{(active.tools || []).join(", ") || "none"}</p>
+          <p>
+            <span className="text-muted-foreground">Resources · </span>
+            {active.extensionCount || 0} extensions, {active.skillCount || 0} skills, {active.promptTemplateCount || 0} prompt templates
+          </p>
+        </div>
+        <FieldDescription>
+          Manifests live under templates/&lt;id&gt;/. Open a Runtime chat to install Pi packages and wire them into a profile with ordinary agent tools.
+        </FieldDescription>
+      </Field>}
+    </FieldGroup>
+    {error && <p className="text-destructive mt-3 text-sm">{error}</p>}
+    {notice && <p className="text-muted-foreground mt-3 text-sm">{notice}</p>}
+    <div className="settings-save flex flex-wrap gap-2">
+      <Button disabled={saving || selected === defaultTemplateId} onClick={save}>
+        {saving && <Spinner data-icon="inline-start" />}
+        {saving ? "Saving…" : "Save default"}
+      </Button>
+      {hasRuntime && onOpenRuntimeChat && <Button type="button" variant="outline" onClick={onOpenRuntimeChat}>
+        Open runtime chat
+      </Button>}
+    </div>
+  </>;
+}
+
+export function SettingsDialog({
+  open,
+  onOpenChange,
+  initialSection = "models",
+  modelSettings,
+  templates = [],
+  defaultTemplateId = "chat",
+  onDefaultTemplateChange,
+  onOpenRuntimeChat,
+}) {
   const [section, setSection] = useState(initialSection);
   const [enabled, setEnabled] = useState(modelSettings.enabledModels);
   const [scopeOpen, setScopeOpen] = useState(false);
@@ -220,8 +336,16 @@ export function SettingsDialog({ open, onOpenChange, initialSection = "models", 
               onClick={() => modelSettings.saveScope(enabled)}
             >{modelSettings.saving && <Spinner data-icon="inline-start" />}{modelSettings.saving ? "Saving…" : "Save changes"}</Button></div>
           </TabsContent>
+          <TabsContent value="profiles">
+            <ProfileSettings
+              templates={templates}
+              defaultTemplateId={defaultTemplateId}
+              onDefaultTemplateChange={onDefaultTemplateChange}
+              onOpenRuntimeChat={onOpenRuntimeChat}
+            />
+          </TabsContent>
           <TabsContent value="runtime"><RuntimeSettings /></TabsContent>
-          {sections.filter((item) => !["models", "runtime"].includes(item.id)).map((item) => (
+          {sections.filter((item) => !["models", "profiles", "runtime"].includes(item.id)).map((item) => (
             <TabsContent key={item.id} value={item.id}><Placeholder title={item.label} /></TabsContent>
           ))}
         </ScrollArea>

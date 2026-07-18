@@ -63,10 +63,19 @@ test("creates invisible drafts before Pi and reveals them after a completed atta
   const { root, project, registryFile } = await fixture();
   const store = new ChatStore(registryFile);
   await store.initialize([project]);
-  const chat = await store.create(project);
+  const chat = await store.create(project, { templateId: "workspace", templateVersion: "1" });
   assert.equal(chat.status, "draft");
+  assert.equal(chat.templateId, "workspace");
+  assert.equal(chat.templateVersion, "1");
   assert.equal(chat.piSessionId, null);
   assert.deepEqual(store.listProject(project.id), []);
+
+  const bare = await store.create(project);
+  assert.equal(bare.templateId, null);
+  await store.ensureTemplate(bare.id, { templateId: "chat", templateVersion: "2" });
+  assert.equal(store.metadata(bare.id).templateId, "chat");
+  await store.ensureTemplate(bare.id, { templateId: "workspace", templateVersion: "9" });
+  assert.equal(store.metadata(bare.id).templateId, "chat");
 
   const attachment = path.join(chatDirectory(project, chat.id), "attachments", `${crypto.randomUUID()}--note.txt`);
   await fs.writeFile(attachment, "hello");

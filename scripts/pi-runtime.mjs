@@ -14,21 +14,70 @@ function requireStrings(value, name) {
   return value;
 }
 
+function formatPosture(tools = []) {
+  const labels = tools.map((tool) => {
+    if (tool === "bash") return "shell";
+    return tool;
+  });
+  return labels.join(" / ");
+}
+
 export function loadPiTemplate(file) {
   const templateFile = path.resolve(file);
   const directory = path.dirname(templateFile);
   const template = JSON.parse(fs.readFileSync(templateFile, "utf8"));
   const paths = (name) => requireStrings(template[name], name).map((value) => path.resolve(directory, value));
+  const tools = requireStrings(template.tools, "tools");
   return {
     id: requireString(template.id, "id"),
     version: requireString(template.version, "version"),
+    label: typeof template.label === "string" && template.label.trim() ? template.label.trim() : requireString(template.id, "id"),
+    description: typeof template.description === "string" ? template.description.trim() : "",
+    posture: typeof template.posture === "string" && template.posture.trim()
+      ? template.posture.trim()
+      : formatPosture(tools),
     templateFile,
     systemPrompt: path.resolve(directory, template.systemPrompt || "SYSTEM.md"),
-    tools: requireStrings(template.tools, "tools"),
+    tools,
     models: requireStrings(template.models, "models"),
     extensions: paths("extensions"),
     skills: paths("skills"),
     promptTemplates: paths("promptTemplates"),
+  };
+}
+
+export function listPiTemplates(templatesRoot) {
+  const root = path.resolve(templatesRoot);
+  let entries = [];
+  try {
+    entries = fs.readdirSync(root, { withFileTypes: true });
+  } catch (error) {
+    if (error.code === "ENOENT") return [];
+    throw error;
+  }
+  const templates = [];
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue;
+    const file = path.join(root, entry.name, "template.json");
+    if (!fs.existsSync(file)) continue;
+    templates.push(loadPiTemplate(file));
+  }
+  return templates.sort((a, b) => a.id.localeCompare(b.id));
+}
+
+export function templatePublicView(template) {
+  if (!template) return null;
+  return {
+    id: template.id,
+    version: template.version,
+    label: template.label || template.id,
+    description: template.description || "",
+    posture: template.posture || formatPosture(template.tools),
+    tools: [...(template.tools || [])],
+    models: [...(template.models || [])],
+    extensionCount: (template.extensions || []).length,
+    skillCount: (template.skills || []).length,
+    promptTemplateCount: (template.promptTemplates || []).length,
   };
 }
 

@@ -47,6 +47,10 @@ export function ChatComposer({
   compacting = false,
   queue = null,
   serverOnline = true,
+  profile = null,
+  profiles = [],
+  profileLocked = false,
+  onChooseProfile,
   onDraftChange,
   onChooseModel,
   onChooseEffort,
@@ -198,9 +202,53 @@ export function ChatComposer({
                 </DropdownMenuRadioGroup>
               </DropdownMenuGroup>
               <DropdownMenuSeparator />
-              <DropdownMenuItem onSelect={() => requestAnimationFrame(commandActions.model)}>Manage models…</DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => requestAnimationFrame(() => commandActions.settings?.("models"))}>Manage models…</DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
+          {list(profiles).length > 0 && <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <InputGroupButton
+                variant="ghost"
+                size="sm"
+                aria-label={`Profile ${profile?.label || profile?.id || "General"}`}
+                disabled={!serverOnline}
+              >
+                <span className="max-w-20 truncate sm:max-w-28">{profile?.label || profile?.id || "Profile"}</span>
+                <ChevronDownIcon data-icon="inline-end" />
+              </InputGroupButton>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent side="top" align="start" className="w-72">
+              <DropdownMenuGroup>
+                <DropdownMenuLabel>Profile</DropdownMenuLabel>
+                {profileLocked && <div className="px-1.5 pb-2 text-xs text-muted-foreground">
+                  Locked for this chat after the first message.
+                </div>}
+                <DropdownMenuRadioGroup
+                  value={profile?.id || ""}
+                  onValueChange={(value) => {
+                    if (profileLocked) return;
+                    onChooseProfile?.(value);
+                  }}
+                >
+                  {list(profiles).map((item) => <DropdownMenuRadioItem
+                    key={item.id}
+                    value={item.id}
+                    disabled={profileLocked}
+                    onSelect={(event) => event.preventDefault()}
+                  >
+                    <span className="flex min-w-0 flex-col">
+                      <span className="truncate">{item.label || item.id}</span>
+                      {item.description && <span className="text-muted-foreground truncate text-xs">{item.description}</span>}
+                    </span>
+                  </DropdownMenuRadioItem>)}
+                </DropdownMenuRadioGroup>
+              </DropdownMenuGroup>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onSelect={() => requestAnimationFrame(() => commandActions.settings?.("profiles"))}>
+                Manage profiles…
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>}
         </div>
         <div className="composer-actions-right flex items-center gap-1">
           <ContextDisplay.Ring

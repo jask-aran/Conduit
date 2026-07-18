@@ -193,6 +193,10 @@ button, textarea { font: inherit; }
   min-width: 0;
 }
 
+.chat-profile-posture {
+  max-width: min(280px, 36vw);
+}
+
 .transcript {
   position: relative;
   z-index: 1;
