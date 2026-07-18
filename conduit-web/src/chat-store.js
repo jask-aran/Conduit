@@ -80,6 +80,10 @@ export class ChatStore {
         projectId: project.id,
         status: active ? "active" : "draft",
         title: String(item.title || "New chat"),
+        templateId: typeof item.templateId === "string" && item.templateId.trim() ? item.templateId.trim() : null,
+        templateVersion: typeof item.templateVersion === "string" && item.templateVersion.trim()
+          ? item.templateVersion.trim()
+          : null,
         piSessionId: item.piSessionId || item.nativeId || (active ? item.id : null),
         piSessionFile,
         createdAt,
@@ -113,6 +117,8 @@ export class ChatStore {
             projectId: project.id,
             status: "active",
             title: session.title,
+            templateId: null,
+            templateVersion: null,
             piSessionId: session.nativeId || session.id,
             piSessionFile: session.file,
             createdAt: session.createdAt,
@@ -178,6 +184,19 @@ export class ChatStore {
     return this.chats.find((chat) => chat.id === id) || null;
   }
 
+  /** Stamp default profile identity when a chat is missing one. */
+  async ensureTemplate(chatId, { templateId, templateVersion } = {}) {
+    const chat = this.metadata(chatId);
+    if (!chat) return null;
+    if (chat.templateId) return chat;
+    if (!templateId) return chat;
+    chat.templateId = String(templateId).trim();
+    chat.templateVersion = templateVersion ? String(templateVersion).trim() : chat.templateVersion;
+    chat.updatedAt = new Date(this.now()).toISOString();
+    await this.flush();
+    return chat;
+  }
+
   async find(projects, id) {
     const chat = this.metadata(id);
     if (!chat?.piSessionFile) return null;
@@ -187,13 +206,17 @@ export class ChatStore {
     catch (error) { if (error.code === "ENOENT") return null; throw error; }
   }
 
-  async create(project) {
+  async create(project, { templateId = null, templateVersion = null } = {}) {
     const timestamp = new Date(this.now()).toISOString();
     const chat = {
       id: crypto.randomUUID(),
       projectId: project.id,
       status: "draft",
       title: "New chat",
+      templateId: typeof templateId === "string" && templateId.trim() ? templateId.trim() : null,
+      templateVersion: typeof templateVersion === "string" && templateVersion.trim()
+        ? templateVersion.trim()
+        : null,
       piSessionId: null,
       piSessionFile: null,
       createdAt: timestamp,
@@ -238,7 +261,15 @@ export class ChatStore {
   async update(chatId, patch) {
     const chat = this.metadata(chatId);
     if (!chat) return null;
-    const allowed = ["projectId", "title", "piSessionId", "piSessionFile", "updatedAt"];
+    const allowed = [
+      "projectId",
+      "title",
+      "templateId",
+      "templateVersion",
+      "piSessionId",
+      "piSessionFile",
+      "updatedAt",
+    ];
     for (const key of allowed) if (Object.hasOwn(patch, key)) chat[key] = patch[key];
     if (patch.status === "draft" || patch.status === "active") chat.status = patch.status;
     if (chat.piSessionFile) chat.piSessionFile = path.resolve(chat.piSessionFile);

@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import express from "express";
 import compression from "compression";
 import { WebSocketServer } from "ws";
-import { loadConfig } from "./config.js";
+import { loadConfig, resolveTemplate } from "./config.js";
 import { PiModelCatalog } from "./pi-model-catalog.js";
 import { ProjectStore } from "./project-store.js";
 import { messagesFromEntries, moveSession, pageSessionEntries, removeSession, renameSession, settingsFromEntries, toolsFromEntries, transcriptFromEntries } from "./session-store.js";
@@ -15,6 +15,8 @@ import { announcedAttachmentIds, serializeAttachmentEnvelope } from "./attachmen
 import { CONTINUE_PROMPT } from "./continuation.js";
 import { RuntimeHub } from "./runtime-hub.js";
 import { defaultsFromEnv, RuntimeSettingsStore } from "./runtime-settings.js";
+import { PreferencesStore } from "./preferences-store.js";
+import { templatePublicView } from "../../scripts/pi-runtime.mjs";
 
 const config = loadConfig();
 const projects = new ProjectStore(config);
@@ -24,6 +26,13 @@ await registry.initialize(await projects.list());
 const attachments = new AttachmentStore(registry);
 const runtimeSettings = new RuntimeSettingsStore(config.runtimeSettingsFile, defaultsFromEnv(process.env));
 await runtimeSettings.load();
+const knownTemplateIds = config.piTemplates.map((template) => template.id);
+const preferences = new PreferencesStore(
+  config.preferencesFile,
+  { defaultTemplateId: config.piTemplate.id },
+  { knownTemplateIds },
+);
+await preferences.load();
 const manager = new PiManager({
   command: config.piCommand,
   agentDir: config.piAgentDir,
@@ -43,6 +52,30 @@ const modelCatalog = new PiModelCatalog({ agentDir: config.piAgentDir, modelPatt
 const app = express();
 const dist = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../dist");
 
+function defaultTemplate() {
+  return resolveTemplate(config, preferences.get().defaultTemplateId) || config.piTemplate;
+}
+
+function templateForId(templateId) {
+  return resolveTemplate(config, templateId) || defaultTemplate();
+}
+
+function templateForChat(chat, project = null) {
+  if (chat?.templateId) return templateForId(chat.templateId);
+  if (project?.defaultTemplateId) return templateForId(project.defaultTemplateId);
+  return defaultTemplate();
+}
+
+async function ensureChatTemplate(chat, project = null) {
+  if (!chat) return null;
+  if (chat.templateId) return chat;
+  const template = templateForChat(chat, project);
+  return registry.ensureTemplate(chat.id, {
+    templateId: template.id,
+    templateVersion: template.version,
+  });
+}
+
 app.use(compression());
 
 async function findRegisteredSession(id) {
@@ -51,10 +84,12 @@ async function findRegisteredSession(id) {
 
 async function findChatContext(chatId) {
   if (!isChatId(chatId)) return null;
-  const chat = registry.metadata(chatId);
+  let chat = registry.metadata(chatId);
   if (!chat) return null;
   const project = await projects.get(chat.projectId);
-  return project ? { chat, project } : null;
+  if (!project) return null;
+  chat = await ensureChatTemplate(chat, project) || chat;
+  return { chat, project };
 }
 
 app.put("/v0/chats/:chatId/attachments/:attachmentId", async (request, response, next) => {
@@ -98,7 +133,44 @@ app.get("/v0/capabilities", (_request, response) => response.json({
   partialContinue: config.enablePartialContinue,
   stream: "websocket", processOwner: "conduit-server", sessionAuthority: "pi-jsonl",
   globalRuntime: "sse",
+  templates: true,
+  workspaces: true,
+  workspaceModes: ["managed", "linked", "cloned"],
 }));
+
+app.get("/v0/workspaces/policy", (_request, response) => {
+  response.json({
+    allowlist: config.workspaceAllowlist,
+    filesRoot: config.filesRoot,
+    templatesRoot: config.templatesRoot,
+    modes: ["managed", "linked", "cloned"],
+  });
+});
+
+app.get("/v0/templates", (_request, response) => {
+  const prefs = preferences.get();
+  response.json({
+    defaultTemplateId: prefs.defaultTemplateId,
+    templates: config.piTemplates.map((template) => templatePublicView(template)),
+  });
+});
+
+app.get("/v0/preferences", (_request, response) => {
+  response.json(preferences.get());
+});
+
+app.patch("/v0/preferences", async (request, response, next) => {
+  try {
+    const requested = request.body?.defaultTemplateId;
+    if (requested != null && !resolveTemplate(config, requested)) {
+      return response.status(400).json({ error: "unknown_template", templateId: requested });
+    }
+    const saved = await preferences.save({
+      defaultTemplateId: requested ?? preferences.get().defaultTemplateId,
+    });
+    response.json(saved);
+  } catch (error) { next(error); }
+});
 
 app.get("/v0/runtime", (_request, response) => {
   response.json(runtimeHub.snapshot());
@@ -151,9 +223,34 @@ app.get("/v0/projects", async (_request, response, next) => {
 
 app.post("/v0/projects", async (request, response, next) => {
   try {
+    const mode = String(request.body?.mode || request.body?.origin || "managed").trim().toLowerCase();
     const name = String(request.body?.name || "").trim();
+    if (mode === "link" || mode === "linked") {
+      if (!request.body?.path) return response.status(400).json({ error: "workspace_path_required" });
+      const created = await projects.create({
+        mode: "linked",
+        name: name || undefined,
+        path: request.body.path,
+        defaultTemplateId: request.body?.defaultTemplateId || "workspace",
+      });
+      return response.status(201).json(created);
+    }
+    if (mode === "clone" || mode === "cloned") {
+      if (!request.body?.cloneUrl) return response.status(400).json({ error: "clone_url_required" });
+      const created = await projects.create({
+        mode: "cloned",
+        name: name || undefined,
+        cloneUrl: request.body.cloneUrl,
+        defaultTemplateId: request.body?.defaultTemplateId || "workspace",
+      });
+      return response.status(201).json(created);
+    }
     if (!name) return response.status(400).json({ error: "project_name_required" });
-    response.status(201).json(await projects.create({ name }));
+    response.status(201).json(await projects.create({
+      mode: "managed",
+      name,
+      defaultTemplateId: request.body?.defaultTemplateId || null,
+    }));
   } catch (error) { next(error); }
 });
 
@@ -238,7 +335,16 @@ app.post("/v0/chats", async (request, response, next) => {
   try {
     const project = await projects.get(request.body?.projectId || "chat");
     if (!project) return response.status(404).json({ error: "project_not_found" });
-    response.status(201).json(chatView(await registry.create(project)));
+    const requestedTemplateId = request.body?.templateId || project.defaultTemplateId || null;
+    const template = requestedTemplateId
+      ? resolveTemplate(config, requestedTemplateId)
+      : defaultTemplate();
+    if (!template) return response.status(400).json({ error: "unknown_template", templateId: requestedTemplateId });
+    const chat = await registry.create(project, {
+      templateId: template.id,
+      templateVersion: template.version,
+    });
+    response.status(201).json(chatView(chat));
   } catch (error) { next(error); }
 });
 
@@ -247,6 +353,27 @@ app.get("/v0/chats/:chatId", async (request, response, next) => {
     const context = await findChatContext(request.params.chatId);
     if (!context) return response.status(404).json({ error: "chat_not_found" });
     response.json(chatView(context.chat));
+  } catch (error) { next(error); }
+});
+
+app.patch("/v0/chats/:chatId", async (request, response, next) => {
+  try {
+    const context = await findChatContext(request.params.chatId);
+    if (!context) return response.status(404).json({ error: "chat_not_found" });
+    if (request.body?.templateId != null) {
+      if (context.chat.status !== "draft" || context.chat.piSessionFile) {
+        return response.status(409).json({ error: "template_locked" });
+      }
+      const template = resolveTemplate(config, request.body.templateId);
+      if (!template) {
+        return response.status(400).json({ error: "unknown_template", templateId: request.body.templateId });
+      }
+      await registry.update(context.chat.id, {
+        templateId: template.id,
+        templateVersion: template.version,
+      });
+    }
+    response.json(chatView(registry.metadata(context.chat.id)));
   } catch (error) { next(error); }
 });
 
@@ -428,6 +555,7 @@ app.post("/v0/live-sessions", async (request, response, next) => {
     if (requestedProject && ![context.project.id, context.project.slug].includes(requestedProject)) {
       return response.status(409).json({ error: "session_project_mismatch" });
     }
+    const template = templateForChat(context.chat, context.project);
     const live = await manager.createWithCapacity({
       project: context.project,
       chatId: context.chat.id,
@@ -435,14 +563,18 @@ app.post("/v0/live-sessions", async (request, response, next) => {
       model: request.body?.model || "",
       thinkingLevel: request.body?.thinkingLevel || "",
       models: modelCatalog.getLaunchModels(context.project.path),
+      template,
     });
     await manager.waitForSession(live.id);
+    const mapping = {
+      templateId: template.id,
+      templateVersion: template.version,
+    };
     if (context.chat.status === "draft") {
-      await registry.update(context.chat.id, {
-        piSessionId: live.sessionId || null,
-        piSessionFile: live.sessionFile,
-      });
+      mapping.piSessionId = live.sessionId || null;
+      mapping.piSessionFile = live.sessionFile;
     }
+    await registry.update(context.chat.id, mapping);
     response.status(201).json({ ...manager.view(live), streamUrl: `/v0/live-sessions/${live.id}/stream` });
   } catch (error) { next(error); }
 });
@@ -475,13 +607,28 @@ app.get("*", (request, response, next) => {
 app.use((error, _request, response, _next) => {
   console.error(error);
   let status = error.status || 500;
-  if (error.code === "reserved_project") status = 409;
+  if (error.code === "reserved_project" || error.code === "workspace_already_linked") status = 409;
   if (error.code === "live_process_limit" || error.code === "generation_limit") status = 429;
-  if (error.code === "attachment_not_found") status = 404;
+  if (error.code === "attachment_not_found" || error.code === "path_not_found") status = 404;
   if (error.code === "invalid_attachment_id"
-    || ["enabled_models_required", "invalid_enabled_model", "invalid_default_model"].includes(error.code)
+    || [
+      "enabled_models_required",
+      "invalid_enabled_model",
+      "invalid_default_model",
+      "path_not_allowed",
+      "path_not_absolute",
+      "path_not_directory",
+      "clone_url_required",
+      "clone_target_exists",
+      "command_failed",
+    ].includes(error.code)
     || error.message?.includes("Project names")) status = 400;
-  response.status(status).json({ error: error.code || "runtime_error", message: error.message });
+  response.status(status).json({
+    error: error.code || "runtime_error",
+    message: error.message,
+    path: error.path,
+    allowlist: error.allowlist,
+  });
 });
 
 const server = http.createServer(app);

@@ -62,8 +62,18 @@ class AppErrorBoundary extends React.Component {
   }
 }
 
-function ChatHeader({ project, title }) {
-  const projectLabel = project?.slug === "chat" ? "Chats" : project?.slug || project?.name || "Chats";
+function ChatHeader({ project, title, profile }) {
+  const projectLabel = project?.slug === "chat" ? "Chats" : project?.name || project?.slug || "Chats";
+  const profileLabel = profile?.label || profile?.id || null;
+  const posture = profile?.posture || (Array.isArray(profile?.tools) ? profile.tools.join(" / ") : "");
+  const workspaceHint = project?.origin === "linked"
+    ? "linked"
+    : project?.origin === "cloned"
+      ? "cloned"
+      : project?.slug === "chat"
+        ? null
+        : "folder";
+  const postureLine = [profileLabel, projectLabel !== "Chats" ? projectLabel : null, posture].filter(Boolean).join(" · ");
   return <header className="chat-header">
     <SidebarTrigger className="-ml-1" />
     {title && <Breadcrumb className="chat-header-title">
@@ -73,7 +83,13 @@ function ChatHeader({ project, title }) {
         <BreadcrumbItem className="min-w-0"><BreadcrumbPage className="truncate font-semibold">{title}</BreadcrumbPage></BreadcrumbItem>
       </BreadcrumbList>
     </Breadcrumb>}
-    <Button variant="ghost" size="icon-sm" className="ml-auto" aria-label="Share chat"><ShareIcon /></Button>
+    {postureLine && <span
+      className="chat-profile-posture text-muted-foreground ml-auto hidden truncate text-xs sm:inline"
+      title={[postureLine, project?.path, workspaceHint].filter(Boolean).join("\n")}
+    >
+      {postureLine}
+    </span>}
+    <Button variant="ghost" size="icon-sm" className={postureLine ? "" : "ml-auto"} aria-label="Share chat"><ShareIcon /></Button>
   </header>;
 }
 
@@ -97,6 +113,9 @@ function App() {
   const [settingsSection, setSettingsSection] = useState("models");
   const [commandOpen, setCommandOpen] = useState(false);
   const [commandPage, setCommandPage] = useState(null);
+  const [templates, setTemplates] = useState([]);
+  const [defaultTemplateId, setDefaultTemplateId] = useState("chat");
+  const [chatTemplateId, setChatTemplateId] = useState(null);
   const [commandLaunchNonce, setCommandLaunchNonce] = useState(0);
   const [sidebarCommand, setSidebarCommand] = useState(null);
   const [editEntryId, setEditEntryId] = useState(null);
@@ -175,6 +194,7 @@ function App() {
     setPageBefore(detail.page?.before || null);
     setChatStatus(detail.status || "draft");
     setChatTitle(detail.title || "New chat");
+    if (detail.templateId) setChatTemplateId(detail.templateId);
     setLoadedSessionId(chatId);
     return detail;
   }, []);
@@ -284,29 +304,43 @@ function App() {
 
   useEffect(() => {
     let active = true;
-    Promise.all([api("/v0/projects"), api("/v0/capabilities").catch(() => ({ partialContinue: true }))])
-      .then(async ([payload, capabilities]) => {
+    Promise.all([
+      api("/v0/projects"),
+      api("/v0/capabilities").catch(() => ({ partialContinue: true })),
+      api("/v0/templates").catch(() => ({ templates: [], defaultTemplateId: "chat" })),
+    ])
+      .then(async ([payload, capabilities, templateCatalog]) => {
         if (!active) return;
         const nextProjects = list(payload.projects).map((project) => ({ ...project, sessions: list(project.sessions) }));
         setProjects(nextProjects);
         setPartialContinue(capabilities.partialContinue !== false);
+        setTemplates(list(templateCatalog.templates));
+        setDefaultTemplateId(templateCatalog.defaultTemplateId || "chat");
         const routeId = pathChatId();
         if (routeId) {
           const chat = await api(`/v0/chats/${encodeURIComponent(routeId)}`);
           if (!active) return;
           selectedIdRef.current = chat.id;
           setSelectedId(chat.id); setProjectId(chat.projectId); setChatStatus(chat.status); setChatTitle(chat.title);
+          setChatTemplateId(chat.templateId || templateCatalog.defaultTemplateId || "chat");
           await loadDetail(chat.id);
           if (chat.status === "active") await openLive(chat.id, chat.projectId);
           return;
         }
         const project = nextProjects.find((item) => item.slug === "chat") || nextProjects[0];
         if (!project) throw new Error("Conduit has no chat project");
-        const chat = await api("/v0/chats", { method: "POST", body: JSON.stringify({ projectId: project.id }) });
+        const chat = await api("/v0/chats", {
+          method: "POST",
+          body: JSON.stringify({
+            projectId: project.id,
+            templateId: templateCatalog.defaultTemplateId || "chat",
+          }),
+        });
         if (!active) return;
         history.replaceState({}, "", `/chat/${chat.id}`);
         selectedIdRef.current = chat.id;
         setSelectedId(chat.id); setProjectId(chat.projectId); setChatStatus(chat.status); setChatTitle(chat.title);
+        setChatTemplateId(chat.templateId || templateCatalog.defaultTemplateId || "chat");
         setMessages([]); setTools([]); setPageBefore(null); setLoadedSessionId(chat.id);
       })
       .catch((caught) => active && setError(caught.message));
@@ -598,16 +632,43 @@ function App() {
     toolSeq.current = 0;
   }
 
-  async function newChat(target) {
+  async function newChat(target, options = {}) {
     const nextProject = target || projects.find((item) => item.id === projectId) || projects[0];
     if (!nextProject) return;
+    const templateId = options.templateId || defaultTemplateId || "chat";
     await discardEmptyDraft();
     resetChatState();
-    const chat = await api("/v0/chats", { method: "POST", body: JSON.stringify({ projectId: nextProject.id }) });
+    const chat = await api("/v0/chats", {
+      method: "POST",
+      body: JSON.stringify({ projectId: nextProject.id, templateId }),
+    });
     history.replaceState({}, "", `/chat/${chat.id}`);
     selectedIdRef.current = chat.id;
     setSelectedId(chat.id); setProjectId(chat.projectId); setChatStatus(chat.status); setChatTitle(chat.title);
+    setChatTemplateId(chat.templateId || templateId);
     setMessages([]); setTools([]); setPageBefore(null); setLoadedSessionId(chat.id);
+  }
+
+  async function setChatProfile(templateId) {
+    if (!selectedId || !templateId || templateId === chatTemplateId) return;
+    if (chatStatus !== "draft") {
+      setError("Profile is locked after the first message. Start a new chat to switch.");
+      return;
+    }
+    const chat = await api(`/v0/chats/${encodeURIComponent(selectedId)}`, {
+      method: "PATCH",
+      body: JSON.stringify({ templateId }),
+    });
+    setChatTemplateId(chat.templateId || templateId);
+  }
+
+  async function saveDefaultTemplate(templateId) {
+    const saved = await api("/v0/preferences", {
+      method: "PATCH",
+      body: JSON.stringify({ defaultTemplateId: templateId }),
+    });
+    setDefaultTemplateId(saved.defaultTemplateId || templateId);
+    return saved;
   }
 
   async function openSession(session, owningProject) {
@@ -615,8 +676,10 @@ function App() {
     resetChatState();
     selectedIdRef.current = session.id;
     setProjectId(owningProject.id); setSelectedId(session.id); setChatTitle(session.title); setChatStatus(session.status);
+    setChatTemplateId(session.templateId || defaultTemplateId || "chat");
     history.replaceState({}, "", `/chat/${session.id}`);
     const detail = await loadDetail(session.id);
+    if (detail?.templateId) setChatTemplateId(detail.templateId);
     if (selectedIdRef.current === session.id && detail.status === "active") {
       try {
         await openLive(session.id, owningProject.id);
@@ -796,11 +859,30 @@ function App() {
     finally { setLoadingOlder(false); }
   }
 
-  async function addProject(name) {
+  async function addProject(input) {
     try {
-      const created = await api("/v0/projects", { method: "POST", body: JSON.stringify({ name }) });
-      await refresh(); await newChat(created); return true;
+      const body = typeof input === "string"
+        ? { name: input, mode: "managed" }
+        : {
+          mode: input.mode || "managed",
+          name: input.name || undefined,
+          path: input.path || undefined,
+          cloneUrl: input.cloneUrl || undefined,
+          defaultTemplateId: input.defaultTemplateId || undefined,
+        };
+      const created = await api("/v0/projects", { method: "POST", body: JSON.stringify(body) });
+      await refresh();
+      const templateId = created.defaultTemplateId || (created.origin === "managed" ? defaultTemplateId : "workspace");
+      await newChat(created, { templateId });
+      return true;
     } catch (caught) { setError(caught.message); return false; }
+  }
+
+  async function openRuntimeChat() {
+    const project = projects.find((item) => item.slug === "chat") || projects[0];
+    if (!project) throw new Error("No chat project");
+    setSettingsOpen(false);
+    await newChat(project, { templateId: "runtime" });
   }
 
   async function deleteSession(session, owningProject) {
@@ -892,6 +974,7 @@ function App() {
   const selectedModel = modelSettings.models.find((item) => item.spec === modelSettings.model);
   const commandContext = {
     chatId: selectedId,
+    chatStatus,
     streaming,
     canRegenerate: Boolean(precedingUser),
     canContinue: Boolean(partialContinue && lastAssistant?.stopped),
@@ -901,10 +984,17 @@ function App() {
     project: projects.find((item) => item.id === projectId) || null,
     thinkingLevels: Array.isArray(selectedModel?.thinkingLevels) ? selectedModel.thinkingLevels : [],
     effort: modelSettings.effort,
+    templates,
+    templateId: chatTemplateId || defaultTemplateId,
+    defaultTemplateId,
   };
   const openSettings = (section = "models") => { setSettingsSection(section); setSettingsOpen(true); };
+  const activeProfile = templates.find((item) => item.id === chatTemplateId)
+    || templates.find((item) => item.id === defaultTemplateId)
+    || templates[0]
+    || null;
   const commandActions = {
-    newChat: (project) => newChat(project).catch((caught) => setError(caught.message)),
+    newChat: (project, options) => newChat(project, options).catch((caught) => setError(caught.message)),
     newFolder: () => setSidebarCommand({ type: "new-folder", nonce: Date.now() }),
     attach: attachmentState.openPicker,
     settings: (section = "general") => openSettings(section),
@@ -920,6 +1010,8 @@ function App() {
     copyTranscript: () => selectedId && copyTranscript({ id: selectedId }),
     openChat: (session, project) => openSession(session, project).catch((caught) => setError(caught.message)),
     chooseEffort: modelSettings.chooseEffort,
+    setChatProfile: (templateId) => setChatProfile(templateId).catch((caught) => setError(caught.message)),
+    openRuntimeChat: () => openRuntimeChat().catch((caught) => setError(caught.message)),
     retryConnection: globalRuntime.retry,
     reload: () => location.reload(),
   };
@@ -958,7 +1050,7 @@ function App() {
       <SidebarInset className={`chat-main${emptyChat ? " chat-main-empty" : ""}`} {...drop.handlers}>
         <ChatDropOverlay active={drop.active} />
         <div className="chat-meteors" aria-hidden="true"><Meteors number={30} minDelay={0} maxDelay={1} minDuration={12} maxDuration={20} /></div>
-        <ChatHeader project={selectedProject} title={chatTitle} />
+        <ChatHeader project={selectedProject} title={chatTitle} profile={activeProfile} />
         <ChatThread
           key={loadedSessionId ?? "boot"}
           messages={messages}
@@ -1007,9 +1099,13 @@ function App() {
             compacting={compacting}
             queue={queue}
             serverOnline={serverOnline}
+            profile={activeProfile}
+            profiles={templates}
+            profileLocked={chatStatus !== "draft"}
             onDraftChange={setDraft}
             onChooseModel={modelSettings.chooseModel}
             onChooseEffort={modelSettings.chooseEffort}
+            onChooseProfile={(templateId) => setChatProfile(templateId).catch((caught) => setError(caught.message))}
             onSend={() => send()}
             onStop={stopResponse}
             onSteer={() => send({ steer: true })}
@@ -1032,7 +1128,16 @@ function App() {
           model={modelSettings.model}
           onChooseModel={modelSettings.chooseModel}
         />}
-        {settingsOpen && <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} initialSection={settingsSection} modelSettings={modelSettings} />}
+        {settingsOpen && <SettingsDialog
+          open={settingsOpen}
+          onOpenChange={setSettingsOpen}
+          initialSection={settingsSection}
+          modelSettings={modelSettings}
+          templates={templates}
+          defaultTemplateId={defaultTemplateId}
+          onDefaultTemplateChange={saveDefaultTemplate}
+          onOpenRuntimeChat={() => openRuntimeChat().catch((caught) => setError(caught.message))}
+        />}
       </Suspense>
     </SidebarProvider>
   </TooltipProvider>;

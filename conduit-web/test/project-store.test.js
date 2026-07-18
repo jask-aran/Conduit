@@ -61,3 +61,57 @@ test("deletes named project files and catalog metadata without touching collidin
   await assert.rejects(store.remove("project_chat"), { code: "reserved_project" });
   await fs.rm(root, { recursive: true, force: true });
 });
+
+test("links allow-listed directories without deleting them on unregister", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-project-link-"));
+  const external = path.join(root, "external-repo");
+  await fs.mkdir(external);
+  await fs.writeFile(path.join(external, "README.md"), "hello");
+  const store = new ProjectStore({
+    filesRoot: path.join(root, "data/chat/files"),
+    catalogFile: path.join(root, "data/conduit.json"),
+    piAgentDir: path.join(root, "data/pi"),
+    workspaceAllowlist: [root],
+  });
+  await store.initialize();
+  const linked = await store.create({ mode: "linked", name: "External", path: external });
+  assert.equal(linked.origin, "linked");
+  assert.equal(linked.path, external);
+  assert.equal(linked.defaultTemplateId, "workspace");
+  assert.equal(linked.deletesFilesOnRemove, false);
+  await store.remove(linked.id);
+  assert.equal(await fs.readFile(path.join(external, "README.md"), "utf8"), "hello");
+  assert.equal(await store.get(linked.id), null);
+  await assert.rejects(store.create({ mode: "linked", path: path.join(root, "nope") }), { code: "path_not_found" });
+  await fs.rm(root, { recursive: true, force: true });
+});
+
+test("clones a repository into the managed files root", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-project-clone-"));
+  const source = path.join(root, "source");
+  await fs.mkdir(source);
+  const { spawnSync } = await import("node:child_process");
+  const git = (args, cwd = source) => {
+    const result = spawnSync("git", args, { cwd, encoding: "utf8" });
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+  };
+  git(["init"]);
+  git(["config", "user.email", "test@example.com"]);
+  git(["config", "user.name", "Test"]);
+  await fs.writeFile(path.join(source, "app.js"), "console.log(1)\n");
+  git(["add", "."]);
+  git(["commit", "-m", "init"]);
+
+  const store = new ProjectStore({
+    filesRoot: path.join(root, "data/chat/files"),
+    catalogFile: path.join(root, "data/conduit.json"),
+    piAgentDir: path.join(root, "data/pi"),
+    workspaceAllowlist: [root],
+  });
+  await store.initialize();
+  const cloned = await store.create({ mode: "cloned", name: "Cloned App", cloneUrl: source });
+  assert.equal(cloned.origin, "cloned");
+  assert.equal(cloned.path, path.join(root, "data/chat/files", "cloned-app"));
+  assert.equal(await fs.readFile(path.join(cloned.path, "app.js"), "utf8"), "console.log(1)\n");
+  await fs.rm(root, { recursive: true, force: true });
+});

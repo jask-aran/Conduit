@@ -22,10 +22,13 @@ generated Shadcn primitives live in `src/components/ui/`, Node tests live in
 aliases, CSS variables, and Lucide icon library. Tailwind CSS v4 supplies
 component and application styling.
 
-`templates/` contains tracked Pi launch presets. Each template owns its manifest,
-system prompt, extensions, skills, and prompt templates. `scripts/pi-runtime.mjs`
-translates a selected manifest into explicit Pi arguments;
-`scripts/conduit-pi.mjs` provides the equivalent interactive terminal launch.
+`templates/` contains tracked Pi launch presets (profiles in the UI). Each
+template owns its manifest, system prompt, extensions, skills, and prompt
+templates. The server discovers every `templates/*/template.json` at boot.
+`scripts/pi-runtime.mjs` translates a selected manifest into explicit Pi
+arguments; `scripts/conduit-pi.mjs` provides the equivalent interactive terminal
+launch. App default profile lives in `data/preferences.json`; each chat stores
+sticky `templateId` / `templateVersion` in the session registry.
 
 `data/` is ignored mutable application data:
 
@@ -34,13 +37,18 @@ data/chat/files/      working files visible to chats
 data/pi/              isolated Pi credentials, settings, and native sessions
 data/conduit.json     stable project identity and display metadata
 data/sessions.json    atomic lightweight Conduit chat registry
+data/preferences.json app preferences (default profile for new chats)
+data/runtime.json     warm-pool and generation policy
 ```
 
 The reserved unstructured project uses `data/chat/files` itself as its working
-directory. Named projects use `data/chat/files/<slug>`. Keep Pi configuration
-and native session files out of these roots. Conduit owns only
+directory. Managed named projects use `data/chat/files/<slug>`. Linked workspaces
+point at allow-listed absolute directories already on the host (unregister does
+not delete them). Cloned workspaces `git clone` into the managed root. Keep Pi
+configuration and native session files out of these roots. Conduit owns only
 `.conduit/chats/<chat-id>/attachments` and `.partial` beneath each working root;
-Pi continues to run with the project root as `cwd`.
+Pi continues to run with the project root as `cwd`. Browser-supplied paths never
+become Pi cwd until the server resolves them against `CONDUIT_WORKSPACE_ALLOWLIST`.
 
 The root SVG is architecture documentation. `.devcontainer/` contains the
 development environment setup and Conduit launch scripts.
@@ -50,8 +58,11 @@ development environment setup and Conduit launch scripts.
 Pi owns authentication, settings, model behavior, and JSONL transcript contents.
 Conduit owns public chat IDs, `draft`/`active` status, project IDs, names, kinds,
 creation times, per-chat attachment folders, live process records, browser
-connections, and template selection. Native Pi IDs and paths are private
-mappings; browser routes always use the stable Conduit chat ID.
+connections, and template/profile selection. Each chat durably stores
+`templateId` (and `templateVersion` at first launch). Resume reloads that
+template by id from the repository registry; drafts may change profile until the
+first Pi process attaches. Native Pi IDs and paths are private mappings; browser
+routes always use the stable Conduit chat ID.
 
 `data/pi/settings.json` is authoritative for scoped models. Terminal and web
 saves share it, the latest successful save wins, and Conduit reloads it for
@@ -291,6 +302,10 @@ network activity, console output, and actions. Use a real server-backed browser
 test only when the API or WebSocket boundary is itself under test.
 
 ## Commits and Pull Requests
+
+Do not create commits, push branches, open pull requests, or merge unless the
+user explicitly asks for that step. Implement and verify work first; wait for
+instruction before any git publish or history-changing action.
 
 Use short, imperative, sentence-case commit subjects. Keep each commit scoped to
 one coherent change. Pull requests must explain user-visible behavior, identify

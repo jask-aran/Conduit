@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
 import {
   ArrowLeftIcon, BrainIcon, CopyIcon, FilePlus2Icon, FolderInputIcon, FolderPlusIcon,
-  MessageSquareIcon, MessageSquarePlusIcon, PanelLeftIcon, PencilIcon,
+  LayersIcon, MessageSquareIcon, MessageSquarePlusIcon, PanelLeftIcon, PencilIcon,
   PlayIcon, RefreshCwIcon, SettingsIcon, SlidersHorizontalIcon, SquareIcon,
   Trash2Icon,
 } from "lucide-react";
@@ -22,6 +22,7 @@ const icons = {
   attach: FilePlus2Icon,
   settings: SettingsIcon,
   model: SlidersHorizontalIcon,
+  profile: LayersIcon,
   rename: PencilIcon,
   move: FolderInputIcon,
   stop: SquareIcon,
@@ -42,6 +43,7 @@ const GROUP_HEADINGS = {
   commands: "Commands",
   settings: "Settings",
   navigation: "Go to",
+  profiles: "Profiles",
   thinking: "Thinking level",
   danger: "Danger zone",
   models: "Models",

@@ -1,8 +1,11 @@
 {
   "id": "chat",
-  "version": "1",
+  "version": "2",
+  "label": "General",
+  "description": "Conversational Pi with attachments and a restrained toolset (read + shell).",
+  "posture": "read / shell",
   "systemPrompt": "SYSTEM.md",
-  "tools": ["read", "bash", "edit", "write"],
+  "tools": ["read", "bash"],
   "models": [
     "openai-codex/gpt-5.6-luna",
     "openai-codex/gpt-5.6-sol",

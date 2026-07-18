@@ -214,7 +214,7 @@ export class PiManager extends EventEmitter {
     return victims.length;
   }
 
-  create({ project, chatId = null, sessionFile = null, model = "", thinkingLevel = "", models }) {
+  create({ project, chatId = null, sessionFile = null, model = "", thinkingLevel = "", models, template = null }) {
     if (chatId) {
       const existing = [...this.processes.values()].find((record) =>
         record.chatId === chatId && ["starting", "running"].includes(record.status));
@@ -248,7 +248,9 @@ export class PiManager extends EventEmitter {
       ? crypto.createHash("sha256").update(resolvedFile).digest("hex").slice(0, 24)
       : crypto.randomUUID().replaceAll("-", "").slice(0, 24);
 
-    const args = buildPiArgs({ sessionFile: resolvedFile, model, thinkingLevel, models, template: this.template });
+    const launchTemplate = template || this.template;
+    if (!launchTemplate) throw new Error("PiManager.create requires a template");
+    const args = buildPiArgs({ sessionFile: resolvedFile, model, thinkingLevel, models, template: launchTemplate });
     const child = this.spawnImpl(this.command, args, {
       cwd: project.path,
       stdio: ["pipe", "pipe", "pipe"],
@@ -265,7 +267,13 @@ export class PiManager extends EventEmitter {
       sessionFile: resolvedFile,
       model: model.trim() || null,
       thinkingLevel: thinkingLevel.trim() || null,
-      template: { id: this.template.id, version: this.template.version },
+      template: {
+        id: launchTemplate.id,
+        version: launchTemplate.version,
+        label: launchTemplate.label || launchTemplate.id,
+        posture: launchTemplate.posture || "",
+        tools: [...(launchTemplate.tools || [])],
+      },
       child,
       status: "starting",
       active: false,
@@ -726,7 +734,7 @@ export class PiManager extends EventEmitter {
   view(record) {
     const {
       child, clients, stdoutBuffer, events, stream, pendingRequests, generation, statsTimer,
-      cwd, sessionDir, template, createdAtMs, lastActivityAt, lastClientAt, ...safe
+      cwd, sessionDir, createdAtMs, lastActivityAt, lastClientAt, ...safe
     } = record;
     return {
       id: safe.id,
@@ -737,6 +745,7 @@ export class PiManager extends EventEmitter {
       sessionId: safe.sessionId || null,
       model: safe.model,
       thinkingLevel: safe.thinkingLevel,
+      template: safe.template || null,
       status: safe.status,
       active: safe.active,
       activity: safe.activity || deriveCoarseActivity(record),
