@@ -58,7 +58,8 @@ Every Pi process receives:
 
 - `PI_CODING_AGENT_DIR=data/pi`;
 - the selected project directory as `cwd`;
-- resources from `templates/chat/template.json` as explicit CLI arguments.
+- resources from the chat's sticky profile (`templates/<id>/template.json`) as
+  explicit CLI arguments.
 
 No session-directory override is supplied. Pi writes native JSONL sessions to
 `data/pi/sessions/<encoded-cwd>/`, and Conduit verifies each JSONL header's `cwd`
@@ -106,6 +107,9 @@ default; opening a persisted session restores its own model and thinking level.
 - `GET|POST /v0/projects`
 - `PATCH|DELETE /v0/projects/:id`
 - `POST /v0/projects/:id/move-sessions`
+- `GET /v0/workspaces/policy` returns the server-owned linked-workspace roots
+- `GET /v0/workspaces/suggestions` returns visible direct folders under `~/`
+- `POST /v0/runtime/chats` creates a fresh special Runtime management chat
 - `GET /v0/models`
 - `GET|PATCH /v0/settings` reads and updates Pi's shared global model scope;
   terminal and web saves use the same isolated settings file.

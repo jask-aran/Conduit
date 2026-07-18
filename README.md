@@ -152,21 +152,34 @@ require interface confirmation.
 
 Do not let two Pi processes write the same JSONL simultaneously.
 
-### Templates
+### Templates (profiles)
 
-Templates are tracked Conduit launch presets, not project-local `.pi`
-directories. `templates/chat/template.json` selects a system prompt, allowed
-tools, fallback models, extensions, skills, and prompt templates. The web server and
-`conduit-pi` translate the selected template into explicit Pi arguments while
-independently selecting the Pi home, working directory, and session.
+Templates are tracked Conduit launch presets (profiles in Settings), not
+project-local `.pi` directories. Conduit discovers every
+`templates/*/template.json` at boot. Each manifest selects a system prompt,
+allowed tools, fallback models, extensions, skills, and prompt templates. The
+web server and `conduit-pi` translate the selected template into explicit Pi
+arguments while independently selecting the Pi home, working directory, and
+session.
 
-The configured template is applied when a session process starts or resumes.
+New chats use the app default profile from `data/preferences.json` (Settings →
+Profiles). Each chat stores sticky `templateId` / `templateVersion` in
+`data/sessions.json` and reloads that template by id on resume. Chats missing a
+profile receive the default the next time the runtime touches them. Drafts may
+change profile until the first Pi process attaches.
+
+Workspaces may be managed folders under `data/chat/files`, linked allow-listed
+directories on the host, or git clones into the managed root. Linked unregister
+keeps the external tree. Shipped profiles: General (restrained tools), Workspace
+(full tools + skills), and Runtime (a special one-off admin chat for templates
+and `pi install`). Runtime is not a valid app/project default or ordinary chat
+profile; Settings → Profiles shows it separately and creates a fresh instance
+when requested.
+
 Pi's global `enabledModels` setting is the authoritative model scope shared by
 the terminal and web interface. Conduit reloads `data/pi/settings.json` for
 model and settings requests and uses the saved scope for new Pi processes. The
 template model list applies only when Pi has no saved `enabledModels` value.
-Template identity is present in live process state but is not persisted as part
-of the current project catalog.
 
 ## Interface development
 

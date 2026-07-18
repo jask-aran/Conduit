@@ -61,3 +61,117 @@ test("deletes named project files and catalog metadata without touching collidin
   await assert.rejects(store.remove("project_chat"), { code: "reserved_project" });
   await fs.rm(root, { recursive: true, force: true });
 });
+
+test("links allow-listed directories without deleting them on unregister", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-project-link-"));
+  const external = path.join(root, "external-repo");
+  await fs.mkdir(external);
+  await fs.writeFile(path.join(external, "README.md"), "hello");
+  const store = new ProjectStore({
+    filesRoot: path.join(root, "data/chat/files"),
+    catalogFile: path.join(root, "data/conduit.json"),
+    piAgentDir: path.join(root, "data/pi"),
+    workspaceAllowlist: [root],
+  });
+  await store.initialize();
+  const linked = await store.create({ mode: "linked", name: "External", path: external });
+  assert.equal(linked.origin, "linked");
+  assert.equal(linked.path, external);
+  assert.equal(linked.defaultTemplateId, "workspace");
+  assert.equal(linked.deletesFilesOnRemove, false);
+  await store.remove(linked.id);
+  assert.equal(await fs.readFile(path.join(external, "README.md"), "utf8"), "hello");
+  assert.equal(await store.get(linked.id), null);
+  await assert.rejects(store.create({ mode: "linked", path: path.join(root, "nope") }), { code: "path_not_found" });
+  await fs.rm(root, { recursive: true, force: true });
+});
+
+test("managed create never reuses a linked workspace with the same slug", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-project-slug-"));
+  const external = path.join(root, "api");
+  await fs.mkdir(external);
+  await fs.writeFile(path.join(external, "secret.txt"), "external");
+  const filesRoot = path.join(root, "data/chat/files");
+  const store = new ProjectStore({
+    filesRoot,
+    catalogFile: path.join(root, "data/conduit.json"),
+    piAgentDir: path.join(root, "data/pi"),
+    workspaceAllowlist: [root],
+  });
+  await store.initialize();
+  const linked = await store.create({ mode: "linked", name: "api", path: external });
+  assert.equal(linked.slug, "api");
+  assert.equal(linked.path, external);
+
+  const managed = await store.create({ mode: "managed", name: "api" });
+  assert.equal(managed.origin, "managed");
+  assert.notEqual(managed.id, linked.id);
+  assert.equal(managed.slug, "api-2");
+  assert.equal(managed.path, path.join(filesRoot, "api-2"));
+  assert.equal(await fs.readFile(path.join(external, "secret.txt"), "utf8"), "external");
+  assert.deepEqual(await fs.readdir(managed.path), []);
+
+  const again = await store.create({ mode: "managed", name: "api" });
+  assert.equal(again.slug, "api-3");
+  assert.equal(again.origin, "managed");
+  await fs.rm(root, { recursive: true, force: true });
+});
+
+async function initGitRepo(source) {
+  await fs.mkdir(source, { recursive: true });
+  const { spawnSync } = await import("node:child_process");
+  const git = (args, cwd = source) => {
+    const result = spawnSync("git", args, { cwd, encoding: "utf8" });
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+  };
+  git(["init"]);
+  git(["config", "user.email", "test@example.com"]);
+  git(["config", "user.name", "Test"]);
+  await fs.writeFile(path.join(source, "app.js"), "console.log(1)\n");
+  git(["add", "."]);
+  git(["commit", "-m", "init"]);
+}
+
+test("clones a repository into the managed files root", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-project-clone-"));
+  const source = path.join(root, "source");
+  await initGitRepo(source);
+
+  const store = new ProjectStore({
+    filesRoot: path.join(root, "data/chat/files"),
+    catalogFile: path.join(root, "data/conduit.json"),
+    piAgentDir: path.join(root, "data/pi"),
+    workspaceAllowlist: [root],
+  });
+  await store.initialize();
+  const cloned = await store.create({ mode: "cloned", name: "Cloned App", cloneUrl: source });
+  assert.equal(cloned.origin, "cloned");
+  assert.equal(cloned.path, path.join(root, "data/chat/files", "cloned-app"));
+  assert.equal(await fs.readFile(path.join(cloned.path, "app.js"), "utf8"), "console.log(1)\n");
+  await fs.rm(root, { recursive: true, force: true });
+});
+
+test("concurrent clones with the same name get distinct slugs and keep both trees", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-project-clone-race-"));
+  const source = path.join(root, "source");
+  await initGitRepo(source);
+  const filesRoot = path.join(root, "data/chat/files");
+  const store = new ProjectStore({
+    filesRoot,
+    catalogFile: path.join(root, "data/conduit.json"),
+    piAgentDir: path.join(root, "data/pi"),
+    workspaceAllowlist: [root],
+  });
+  await store.initialize();
+
+  const [first, second] = await Promise.all([
+    store.create({ mode: "cloned", name: "Race", cloneUrl: source }),
+    store.create({ mode: "cloned", name: "Race", cloneUrl: source }),
+  ]);
+  assert.notEqual(first.slug, second.slug);
+  assert.equal(await fs.readFile(path.join(first.path, "app.js"), "utf8"), "console.log(1)\n");
+  assert.equal(await fs.readFile(path.join(second.path, "app.js"), "utf8"), "console.log(1)\n");
+  const listed = await store.list();
+  assert.equal(listed.filter((item) => item.origin === "cloned").length, 2);
+  await fs.rm(root, { recursive: true, force: true });
+});

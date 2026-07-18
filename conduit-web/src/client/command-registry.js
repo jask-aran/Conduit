@@ -17,12 +17,14 @@ export const PALETTE_GROUPS = [
   { id: "commands", heading: "Commands" },
   { id: "settings", heading: "Settings" },
   { id: "navigation", heading: "Go to" },
+  { id: "profiles", heading: "Profiles" },
   { id: "thinking", heading: "Thinking level" },
   { id: "danger", heading: "Danger zone" },
 ];
 
 export const SETTINGS_SECTIONS = [
   { id: "models", label: "Models", keywords: ["model", "llm", "provider"] },
+  { id: "profiles", label: "Profiles", keywords: ["template", "tools", "workspace", "general", "agent"] },
   { id: "runtime", label: "Runtime", keywords: ["processes", "pool", "idle", "generation"] },
   { id: "general", label: "General", keywords: ["preferences"] },
   { id: "appearance", label: "Appearance", keywords: ["theme", "display", "ui"] },
@@ -76,11 +78,29 @@ export const paletteCommands = [{
   id: "new-folder",
   group: "commands",
   label: "New folder",
-  description: "Create a working directory and chat scope",
+  description: "Create a managed working directory and chat scope",
   icon: "new-folder",
-  keywords: ["project", "create", "directory"],
+  keywords: ["project", "create", "directory", "folder"],
   isAvailable: () => true,
   run: (actions) => actions.newFolder(),
+}, {
+  id: "new-workspace",
+  group: "commands",
+  label: "New workspace",
+  description: "Link an existing directory or clone a repository",
+  icon: "new-folder",
+  keywords: ["project", "create", "directory", "workspace", "clone", "link"],
+  isAvailable: () => true,
+  run: (actions) => actions.newWorkspace?.(),
+}, {
+  id: "runtime-chat",
+  group: "commands",
+  label: "Open runtime chat",
+  description: "Admin chat for templates and Pi packages",
+  icon: "profile",
+  keywords: ["admin", "template", "plugin", "install", "runtime"],
+  isAvailable: () => true,
+  run: (actions) => actions.openRuntimeChat?.(),
 }, {
   id: "attach",
   group: "commands",
@@ -289,6 +309,42 @@ export const paletteSources = [{
   id: "settings-sections",
   page: "settings",
   commands: () => settingsSectionCommands(),
+}, {
+  id: "profiles",
+  page: null,
+  commands(context) {
+    const templates = (Array.isArray(context.templates) ? context.templates : [])
+      .filter((template) => template.defaultable !== false);
+    const draft = context.chatStatus === "draft" && context.templateId !== "runtime";
+    return templates.flatMap((template) => {
+      const rows = [{
+        id: `new-chat-profile:${template.id}`,
+        group: "profiles",
+        label: `New ${template.label || template.id} chat`,
+        description: template.description || `Start a chat with the ${template.label || template.id} profile`,
+        icon: "new-chat",
+        keywords: ["new", "profile", "template", template.id, template.label],
+        searchValue: `new chat profile ${template.label || ""} ${template.id}`,
+        isAvailable: () => true,
+        run: (actions) => actions.newChat(null, { templateId: template.id }),
+      }];
+      if (draft) {
+        rows.push({
+          id: `set-profile:${template.id}`,
+          group: "profiles",
+          label: `Use ${template.label || template.id} profile`,
+          description: template.description || "Apply this profile to the current draft",
+          icon: "profile",
+          checked: context.templateId === template.id,
+          keywords: ["profile", "template", "switch", template.id, template.label],
+          searchValue: `use profile ${template.label || ""} ${template.id}`,
+          isAvailable: () => true,
+          run: (actions) => actions.setChatProfile(template.id),
+        });
+      }
+      return rows;
+    });
+  },
 }, {
   id: "thinking-levels",
   page: null,

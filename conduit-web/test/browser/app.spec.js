@@ -623,7 +623,7 @@ test("uses the sidebar-08 groups and native icon collapse", async ({ page }, tes
   await expect(page.getByRole("button", { name: "New folder" })).toBeVisible();
   await expect(page.locator('[data-sidebar="footer"]').getByRole("button", { name: /Conduit/ })).toBeVisible();
   await expect(page.locator('[data-sidebar="footer"]')).toContainText(/Server connected|Connecting|Reconnecting|unavailable/);
-  await expect(page.locator('[data-sidebar="group-label"]')).toHaveText(["Chats", "Projects"]);
+  await expect(page.locator('[data-sidebar="group-label"]')).toHaveText(["Chats", "Projects", "Workspaces"]);
   await expect(page.locator('[data-sidebar="group-label"]').first()).toHaveCSS("font-size", "13px");
   await expect(page.getByRole("button", { name: "Existing chat" })).toHaveCSS("font-size", "15px");
   await expect(page.locator('[data-sidebar="header"] span', { hasText: "Conduit" })).toHaveCSS("font-size", "24px");
@@ -652,6 +652,26 @@ test("uses the sidebar-08 groups and native icon collapse", async ({ page }, tes
   await page.locator('[data-sidebar="trigger"]:visible').click();
   await expect(sidebar).toHaveAttribute("data-state", "expanded");
   await expect.poll(async () => (await main.boundingBox()).x).toBe(mainBox.x);
+});
+
+test("keeps linked workspaces in their own sidebar group", async ({ page }, testInfo) => {
+  await page.unroute("**/v0/projects");
+  await page.route("**/v0/projects", async (route) => {
+    await route.fulfill({ json: {
+      projects: [...projects, {
+        id: "project_workspace",
+        slug: "jaskfish",
+        name: "JaskFish",
+        origin: "linked",
+        sessions: [],
+      }],
+    } });
+  });
+  await page.goto("/");
+  await openSidebar(page, testInfo);
+  await expect(page.locator('[data-sidebar="group-label"]')).toHaveText(["Chats", "Projects", "Workspaces"]);
+  await expect(page.getByRole("button", { name: "JaskFish" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "New workspace" })).toBeVisible();
 });
 
 test("sizes the meteor field with the chat viewport", async ({ page }, testInfo) => {
