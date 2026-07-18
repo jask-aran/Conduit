@@ -80,8 +80,7 @@ export function AppSidebar({
   const [pendingDelete, setPendingDelete] = useState(null);
   const [pendingRename, setPendingRename] = useState(null);
   const [renameName, setRenameName] = useState("");
-  const [newFolderOpen, setNewFolderOpen] = useState(false);
-  const [newFolderIsWorkspace, setNewFolderIsWorkspace] = useState(false);
+  const [newProjectDialog, setNewProjectDialog] = useState(null);
   const [newFolderMode, setNewFolderMode] = useState("managed");
   const [newFolderName, setNewFolderName] = useState("");
   const [newFolderPath, setNewFolderPath] = useState("");
@@ -145,9 +144,8 @@ export function AppSidebar({
   };
 
   const openNewFolderDialog = (workspace = false) => {
-    setNewFolderIsWorkspace(workspace);
     setNewFolderMode(workspace ? "linked" : "managed");
-    setNewFolderOpen(true);
+    setNewProjectDialog(workspace ? "workspace" : "folder");
   };
 
   const confirmDelete = () => {
@@ -193,9 +191,8 @@ export function AppSidebar({
       setNewFolderName("");
       setNewFolderPath("");
       setNewFolderCloneUrl("");
-      setNewFolderIsWorkspace(false);
       setNewFolderMode("managed");
-      setNewFolderOpen(false);
+      setNewProjectDialog(null);
       setOpenMobile(false);
     } finally {
       setNewFolderSubmitting(false);
@@ -311,29 +308,27 @@ export function AppSidebar({
       </AlertDialogContent>
     </AlertDialog>
 
-    <Dialog open={newFolderOpen} onOpenChange={(open) => {
+    <Dialog open={Boolean(newProjectDialog)} onOpenChange={(open) => {
       if (newFolderSubmitting) return;
-      setNewFolderOpen(open);
-      if (!open) {
-        setNewFolderIsWorkspace(false);
-        setNewFolderMode("managed");
-        setNewFolderName("");
-        setNewFolderPath("");
-        setNewFolderCloneUrl("");
-      }
+      if (open) return;
+      setNewProjectDialog(null);
+      setNewFolderMode("managed");
+      setNewFolderName("");
+      setNewFolderPath("");
+      setNewFolderCloneUrl("");
     }}>
       <DialogContent>
         <form onSubmit={createFolder}>
           <DialogHeader>
-            <DialogTitle>{newFolderIsWorkspace ? "New workspace" : "New folder"}</DialogTitle>
+            <DialogTitle>{newProjectDialog === "workspace" ? "New workspace" : "New folder"}</DialogTitle>
             <DialogDescription>
-              {newFolderIsWorkspace
+              {newProjectDialog === "workspace"
                 ? "Link an existing allow-listed directory or clone a repository into Conduit."
                 : "Create a separate managed working directory and chat scope."}
             </DialogDescription>
           </DialogHeader>
           <FieldGroup className="my-4">
-            <Field>
+            {newProjectDialog === "workspace" && <Field>
               <FieldLabel htmlFor="folder-mode">Type</FieldLabel>
               <select
                 id="folder-mode"
@@ -342,11 +337,10 @@ export function AppSidebar({
                 disabled={newFolderSubmitting}
                 onChange={(event) => setNewFolderMode(event.target.value)}
               >
-              {!newFolderIsWorkspace && <option value="managed">Managed folder</option>}
                 <option value="linked">Link existing directory</option>
                 <option value="cloned">Clone git repository</option>
               </select>
-            </Field>
+            </Field>}
             <Field>
               <FieldLabel htmlFor="folder-name">Display name{newFolderMode === "managed" ? "" : " (optional)"}</FieldLabel>
               <Input
@@ -382,7 +376,7 @@ export function AppSidebar({
             </Field>}
           </FieldGroup>
           <DialogFooter>
-            <Button type="button" variant="outline" disabled={newFolderSubmitting} onClick={() => setNewFolderOpen(false)}>Cancel</Button>
+            <Button type="button" variant="outline" disabled={newFolderSubmitting} onClick={() => setNewProjectDialog(null)}>Cancel</Button>
             <Button type="submit" disabled={!canCreateFolder}>
               {newFolderSubmitting
                 ? (newFolderMode === "cloned" ? "Cloning…" : "Creating…")
