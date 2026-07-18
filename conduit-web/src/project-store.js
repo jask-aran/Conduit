@@ -143,13 +143,26 @@ export class ProjectStore {
   }
 
   async createManaged({ name, defaultTemplateId = null }) {
-    return this.ensure({
-      slug: name,
-      name,
+    // Always mint a new catalog row with a free slug. Never reuse a linked/cloned
+    // (or existing managed) entry via ensure()'s slug-idempotent path — that can
+    // silently point a "new workspace" at an external tree.
+    const slug = await this.uniqueSlug(name);
+    const catalog = await this.readCatalog();
+    const project = {
+      id: `project_${crypto.randomUUID()}`,
+      slug,
+      name: String(name || slug).trim(),
       kind: "project",
       origin: "managed",
-      defaultTemplateId,
-    });
+      externalPath: null,
+      cloneUrl: null,
+      defaultTemplateId: defaultTemplateId || null,
+      createdAt: new Date().toISOString(),
+    };
+    catalog.projects.push(project);
+    await writeJson(this.catalogFile, catalog);
+    await fs.mkdir(this.managedPath(slug), { recursive: true });
+    return this.projectView(project);
   }
 
   async createLinked({ name, path: inputPath, defaultTemplateId = "workspace" }) {
@@ -200,7 +213,12 @@ export class ProjectStore {
       if (error.code === "clone_target_exists") throw error;
       if (error.code !== "ENOENT") throw error;
     }
-    await runCommand("git", ["clone", "--", url, target]);
+    try {
+      await runCommand("git", ["clone", "--", url, target]);
+    } catch (error) {
+      await fs.rm(target, { recursive: true, force: true }).catch(() => {});
+      throw error;
+    }
     const catalog = await this.readCatalog();
     const project = {
       id: `project_${crypto.randomUUID()}`,
