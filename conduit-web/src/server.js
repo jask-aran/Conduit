@@ -346,13 +346,25 @@ app.patch("/v0/sessions/:id", async (request, response, next) => {
     const projectList = await projects.list();
     const context = await findChatContext(request.params.id);
     if (!context) return response.status(404).json({ error: "chat_not_found" });
-    const session = await registry.find(projectList, request.params.id);
-    if (session) {
-      await stopSessionProcesses(context.chat);
-      const renamed = await renameSession(session, context.project, name);
-      await registry.commitSession(context.chat.id, renamed);
-    } else {
+    // Never stop a warm process on rename — that drops the ready indicator and
+    // thrash-kills idle agents. Live writers use Pi's set_session_name RPC;
+    // cold sessions append session_info offline.
+    const live = manager.list().find((item) => (
+      item.chatId === context.chat.id && ["starting", "running"].includes(item.status)
+    ));
+    if (live?.status === "running") {
+      await manager.setSessionName(live.id, name);
       await registry.update(context.chat.id, { title: name });
+    } else if (live) {
+      await registry.update(context.chat.id, { title: name });
+    } else {
+      const session = await registry.find(projectList, request.params.id);
+      if (session) {
+        const renamed = await renameSession(session, context.project, name);
+        await registry.commitSession(context.chat.id, renamed);
+      } else {
+        await registry.update(context.chat.id, { title: name });
+      }
     }
     response.json(chatView(registry.metadata(context.chat.id)));
   } catch (error) { next(error); }
