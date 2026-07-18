@@ -56,7 +56,17 @@ test("raw JSON uploads publish atomically through the durable chat route", async
     const templateCatalog = await templatesResponse.json();
     assert.ok(templateCatalog.templates.some((item) => item.id === "chat"));
     assert.ok(templateCatalog.templates.some((item) => item.id === "workspace"));
+    assert.ok(templateCatalog.templates.some((item) => item.id === "runtime"));
     assert.equal(templateCatalog.defaultTemplateId, "chat");
+    assert.equal(templateCatalog.templates.find((item) => item.id === "runtime").defaultable, false);
+
+    const runtimeDefault = await fetch(`${origin}/v0/preferences`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ defaultTemplateId: "runtime" }),
+    });
+    assert.equal(runtimeDefault.status, 400);
+    assert.equal((await runtimeDefault.json()).error, "special_template");
 
     const prefsPatch = await fetch(`${origin}/v0/preferences`, {
       method: "PATCH",
@@ -84,6 +94,31 @@ test("raw JSON uploads publish atomically through the durable chat route", async
     });
     assert.equal(switched.status, 200);
     assert.equal((await switched.json()).templateId, "chat");
+
+    const ordinaryRuntime = await fetch(`${origin}/v0/chats`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ projectId: "project_chat", templateId: "runtime" }),
+    });
+    assert.equal(ordinaryRuntime.status, 400);
+    assert.equal((await ordinaryRuntime.json()).error, "special_template");
+
+    const runtimeChat = await fetch(`${origin}/v0/runtime/chats`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: "{}",
+    });
+    assert.equal(runtimeChat.status, 201);
+    const runtimeChatBody = await runtimeChat.json();
+    assert.equal(runtimeChatBody.templateId, "runtime");
+
+    const runtimeSwitch = await fetch(`${origin}/v0/chats/${runtimeChatBody.id}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ templateId: "workspace" }),
+    });
+    assert.equal(runtimeSwitch.status, 409);
+    assert.equal((await runtimeSwitch.json()).error, "special_chat_locked");
     const directory = path.join(root, "files", ".conduit", "chats", chat.id);
     await fs.access(path.join(directory, "attachments"));
     await fs.access(path.join(directory, ".partial"));

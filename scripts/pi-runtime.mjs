@@ -36,6 +36,8 @@ export function loadPiTemplate(file) {
     posture: typeof template.posture === "string" && template.posture.trim()
       ? template.posture.trim()
       : formatPosture(tools),
+    defaultable: template.defaultable !== false,
+    special: template.special === true,
     templateFile,
     systemPrompt: path.resolve(directory, template.systemPrompt || "SYSTEM.md"),
     tools,
@@ -81,6 +83,8 @@ export function templatePublicView(template) {
     label: template.label || template.id,
     description: template.description || "",
     posture: template.posture || formatPosture(template.tools),
+    defaultable: template.defaultable !== false,
+    special: template.special === true,
     tools: [...(template.tools || [])],
     models: [...(template.models || [])],
     extensionCount: (template.extensions || []).length,

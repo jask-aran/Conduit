@@ -171,7 +171,10 @@ change profile until the first Pi process attaches.
 Workspaces may be managed folders under `data/chat/files`, linked allow-listed
 directories on the host, or git clones into the managed root. Linked unregister
 keeps the external tree. Shipped profiles: General (restrained tools), Workspace
-(full tools + skills), Runtime (admin chat for templates and `pi install`).
+(full tools + skills), and Runtime (a special one-off admin chat for templates
+and `pi install`). Runtime is not a valid app/project default or ordinary chat
+profile; Settings → Profiles shows it separately and creates a fresh instance
+when requested.
 
 Pi's global `enabledModels` setting is the authoritative model scope shared by
 the terminal and web interface. Conduit reloads `data/pi/settings.json` for

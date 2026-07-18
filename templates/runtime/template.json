@@ -4,6 +4,8 @@
   "label": "Runtime",
   "description": "Admin chat for Conduit templates, Pi packages, and runtime configuration.",
   "posture": "read / edit / shell",
+  "defaultable": false,
+  "special": true,
   "systemPrompt": "SYSTEM.md",
   "tools": ["read", "bash", "edit", "write"],
   "models": [

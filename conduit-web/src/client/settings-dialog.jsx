@@ -178,8 +178,9 @@ function ProfileSettings({
     setSelected(defaultTemplateId);
   }, [defaultTemplateId]);
 
-  const active = templates.find((item) => item.id === selected) || templates[0] || null;
-  const hasRuntime = templates.some((item) => item.id === "runtime");
+  const selectableTemplates = templates.filter((item) => item.defaultable !== false);
+  const runtimeProfile = templates.find((item) => item.special === true && item.id === "runtime") || null;
+  const active = selectableTemplates.find((item) => item.id === selected) || selectableTemplates[0] || null;
 
   async function save() {
     if (!selected || !onDefaultTemplateChange) return;
@@ -196,7 +197,7 @@ function ProfileSettings({
     }
   }
 
-  if (!templates.length) {
+  if (!selectableTemplates.length && !runtimeProfile) {
     return <Empty>
       <EmptyHeader>
         <EmptyTitle>No profiles found</EmptyTitle>
@@ -218,7 +219,7 @@ function ProfileSettings({
             <SelectValue placeholder="Choose a profile" />
           </SelectTrigger>
           <SelectContent>
-            {templates.map((template) => (
+            {selectableTemplates.map((template) => (
               <SelectItem key={template.id} value={template.id}>
                 {template.label || template.id}
               </SelectItem>
@@ -247,6 +248,21 @@ function ProfileSettings({
           Manifests live under templates/&lt;id&gt;/. Open a Runtime chat to install Pi packages and wire them into a profile with ordinary agent tools.
         </FieldDescription>
       </Field>}
+      {runtimeProfile && <Field>
+        <FieldLabel className="justify-between">
+          Runtime management
+          <Badge variant="outline">Special profile</Badge>
+        </FieldLabel>
+        <div className="bg-muted/40 space-y-2 rounded-lg border p-3 text-sm">
+          <p className="font-medium">{runtimeProfile.label || "Runtime"}</p>
+          {runtimeProfile.description && <p className="text-muted-foreground">{runtimeProfile.description}</p>}
+          <p><span className="text-muted-foreground">Posture · </span>{runtimeProfile.posture || runtimeProfile.tools?.join(" / ") || "—"}</p>
+          <p className="text-muted-foreground">This profile is not available as a default or ordinary chat profile. It creates a fresh one-off management chat for Conduit runtime work.</p>
+        </div>
+        {onOpenRuntimeChat && <Button type="button" variant="outline" onClick={onOpenRuntimeChat}>
+          Open runtime chat
+        </Button>}
+      </Field>}
     </FieldGroup>
     {error && <p className="text-destructive mt-3 text-sm">{error}</p>}
     {notice && <p className="text-muted-foreground mt-3 text-sm">{notice}</p>}
@@ -255,9 +271,6 @@ function ProfileSettings({
         {saving && <Spinner data-icon="inline-start" />}
         {saving ? "Saving…" : "Save default"}
       </Button>
-      {hasRuntime && onOpenRuntimeChat && <Button type="button" variant="outline" onClick={onOpenRuntimeChat}>
-        Open runtime chat
-      </Button>}
     </div>
   </>;
 }

@@ -26,7 +26,9 @@ await registry.initialize(await projects.list());
 const attachments = new AttachmentStore(registry);
 const runtimeSettings = new RuntimeSettingsStore(config.runtimeSettingsFile, defaultsFromEnv(process.env));
 await runtimeSettings.load();
-const knownTemplateIds = config.piTemplates.map((template) => template.id);
+const knownTemplateIds = config.piTemplates
+  .filter((template) => template.defaultable !== false)
+  .map((template) => template.id);
 const preferences = new PreferencesStore(
   config.preferencesFile,
   { defaultTemplateId: config.piTemplate.id },
@@ -53,7 +55,8 @@ const app = express();
 const dist = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../dist");
 
 function defaultTemplate() {
-  return resolveTemplate(config, preferences.get().defaultTemplateId) || config.piTemplate;
+  const selected = resolveTemplate(config, preferences.get().defaultTemplateId);
+  return selected?.defaultable !== false ? selected : config.piTemplate;
 }
 
 function templateForId(templateId) {
@@ -162,8 +165,12 @@ app.get("/v0/preferences", (_request, response) => {
 app.patch("/v0/preferences", async (request, response, next) => {
   try {
     const requested = request.body?.defaultTemplateId;
-    if (requested != null && !resolveTemplate(config, requested)) {
+    const template = requested == null ? null : resolveTemplate(config, requested);
+    if (requested != null && !template) {
       return response.status(400).json({ error: "unknown_template", templateId: requested });
+    }
+    if (template?.defaultable === false) {
+      return response.status(400).json({ error: "special_template", templateId: requested });
     }
     const saved = await preferences.save({
       defaultTemplateId: requested ?? preferences.get().defaultTemplateId,
@@ -223,9 +230,16 @@ app.get("/v0/projects", async (_request, response, next) => {
 
 function resolveProjectDefaultTemplateId(requested, fallback = null) {
   if (requested == null || requested === "") return fallback;
-  if (!resolveTemplate(config, requested)) {
+  const template = resolveTemplate(config, requested);
+  if (!template) {
     const error = new Error(`Unknown template: ${requested}`);
     error.code = "unknown_template";
+    error.templateId = requested;
+    throw error;
+  }
+  if (template.defaultable === false) {
+    const error = new Error(`Template cannot be used as a project default: ${requested}`);
+    error.code = "special_template";
     error.templateId = requested;
     throw error;
   }
@@ -351,6 +365,7 @@ app.post("/v0/chats", async (request, response, next) => {
       ? resolveTemplate(config, requestedTemplateId)
       : defaultTemplate();
     if (!template) return response.status(400).json({ error: "unknown_template", templateId: requestedTemplateId });
+    if (template.defaultable === false) return response.status(400).json({ error: "special_template", templateId: template.id });
     const chat = await registry.create(project, {
       templateId: template.id,
       templateVersion: template.version,
@@ -372,6 +387,10 @@ app.patch("/v0/chats/:chatId", async (request, response, next) => {
     const context = await findChatContext(request.params.chatId);
     if (!context) return response.status(404).json({ error: "chat_not_found" });
     if (request.body?.templateId != null) {
+      const currentTemplate = resolveTemplate(config, context.chat.templateId);
+      if (currentTemplate?.special === true) {
+        return response.status(409).json({ error: "special_chat_locked" });
+      }
       if (context.chat.status !== "draft" || context.chat.piSessionFile) {
         return response.status(409).json({ error: "template_locked" });
       }
@@ -379,12 +398,29 @@ app.patch("/v0/chats/:chatId", async (request, response, next) => {
       if (!template) {
         return response.status(400).json({ error: "unknown_template", templateId: request.body.templateId });
       }
+      if (template.defaultable === false) {
+        return response.status(400).json({ error: "special_template", templateId: template.id });
+      }
       await registry.update(context.chat.id, {
         templateId: template.id,
         templateVersion: template.version,
       });
     }
     response.json(chatView(registry.metadata(context.chat.id)));
+  } catch (error) { next(error); }
+});
+
+app.post("/v0/runtime/chats", async (_request, response, next) => {
+  try {
+    const template = config.piTemplates.find((item) => item.special === true && item.id === "runtime");
+    if (!template) return response.status(404).json({ error: "runtime_template_not_found" });
+    const project = await projects.get("chat");
+    if (!project) return response.status(404).json({ error: "project_not_found" });
+    const chat = await registry.create(project, {
+      templateId: template.id,
+      templateVersion: template.version,
+    });
+    response.status(201).json(chatView(chat));
   } catch (error) { next(error); }
 });
 
@@ -632,6 +668,8 @@ app.use((error, _request, response, _next) => {
       "path_not_directory",
       "clone_url_required",
       "clone_target_exists",
+      "special_template",
+      "special_chat_locked",
       "unknown_template",
     ].includes(error.code)
     || error.message?.includes("Project names")) status = 400;

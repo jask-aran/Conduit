@@ -638,9 +638,10 @@ function App() {
     const templateId = options.templateId || defaultTemplateId || "chat";
     await discardEmptyDraft();
     resetChatState();
-    const chat = await api("/v0/chats", {
+    const specialRuntimeChat = templateId === "runtime";
+    const chat = await api(specialRuntimeChat ? "/v0/runtime/chats" : "/v0/chats", {
       method: "POST",
-      body: JSON.stringify({ projectId: nextProject.id, templateId }),
+      body: JSON.stringify(specialRuntimeChat ? {} : { projectId: nextProject.id, templateId }),
     });
     history.replaceState({}, "", `/chat/${chat.id}`);
     selectedIdRef.current = chat.id;
@@ -984,7 +985,7 @@ function App() {
     project: projects.find((item) => item.id === projectId) || null,
     thinkingLevels: Array.isArray(selectedModel?.thinkingLevels) ? selectedModel.thinkingLevels : [],
     effort: modelSettings.effort,
-    templates,
+    templates: templates.filter((item) => item.defaultable !== false),
     templateId: chatTemplateId || defaultTemplateId,
     defaultTemplateId,
   };
@@ -1100,7 +1101,7 @@ function App() {
             queue={queue}
             serverOnline={serverOnline}
             profile={activeProfile}
-            profiles={templates}
+            profiles={chatTemplateId === "runtime" ? [] : templates.filter((item) => item.defaultable !== false)}
             profileLocked={chatStatus !== "draft"}
             onDraftChange={setDraft}
             onChooseModel={modelSettings.chooseModel}
