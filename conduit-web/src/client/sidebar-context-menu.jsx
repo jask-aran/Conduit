@@ -84,6 +84,12 @@ export function ProjectContextMenu({
   onNewChat,
   onRename,
 }) {
+  const isWorkspace = currentProject.origin === "linked" || currentProject.origin === "cloned";
+  const deleteLabel = currentProject.origin === "linked"
+    ? "Unlink workspace"
+    : isWorkspace
+      ? "Delete workspace"
+      : `Delete ${projectNoun}`;
   return <ContextMenu>
     <ContextMenuTrigger asChild>{children}</ContextMenuTrigger>
     <ContextMenuContent className="w-60 sidebar-context-menu">
@@ -110,7 +116,7 @@ export function ProjectContextMenu({
       <ContextMenuGroup>
         <ContextMenuItem variant="destructive" onSelect={onDelete}>
           <Trash2Icon absoluteStrokeWidth />
-          Delete {projectNoun}
+          {deleteLabel}
         </ContextMenuItem>
       </ContextMenuGroup>
     </ContextMenuContent>
