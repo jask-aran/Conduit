@@ -196,7 +196,8 @@ global scoped-model setting through the Conduit server.
 The composer is a bounded native textarea with a compact model selector and
 Shadcn Attachment cards above it. Upload progress appears in those cards; after
 send, the same cards move beneath their user message. Cmd/Ctrl+K lazy-loads the
-global Shadcn Command palette, while the textarea-focused slash Popover exposes
+global Shadcn Command palette (extensible action registry for navigation,
+settings, chat ops, models, and thinking levels), while the textarea-focused slash Popover exposes
 only composition commands. Settings opens as a centered Dialog with fixed
 vertical Tabs and a searchable, grouped multi-model Combobox. The chat header
 uses a project-aware breadcrumb. Response controls copy source Markdown, fork

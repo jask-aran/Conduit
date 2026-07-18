@@ -46,8 +46,10 @@ textarea until send, then renders the same cards beneath their user message.
 Persisted image cards use the attachment preview route, including when restored
 for edit. The compact composer model menu remains separate from Settings'
 searchable, grouped multi-model Combobox. Cmd/Ctrl+K opens the application
-Command palette; the composer slash Popover contains only `/attach`. A
-project-aware breadcrumb identifies where each chat belongs.
+Command palette (navigation, settings sections, chat actions, models, and
+thinking levels from the extensible `command-registry`); the composer slash
+Popover contains only `/attach`. A project-aware breadcrumb identifies where
+each chat belongs.
 
 Every Pi process receives:
 
