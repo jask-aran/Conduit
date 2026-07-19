@@ -195,7 +195,7 @@ function App() {
     toast.error(error);
     setError("");
   }, [error]);
-  const modelSettings = useModelSettings(projectId, { onError: showError, socketRef: ws });
+  const modelSettings = useModelSettings(projectId, selectedId, { onError: showError });
   const attachmentState = useAttachments(selectedId, showError);
   const drop = useChatDrop(attachmentState.addFiles);
 
@@ -288,6 +288,7 @@ function App() {
   }
 
   async function openLive(chatId, owningProjectId, options = {}) {
+    const { intent = "open", ...launchOptions } = options;
     const token = ++openLiveToken.current;
     setConnectingChatId(chatId);
     try {
@@ -299,7 +300,7 @@ function App() {
           model: modelSettings.model,
           thinkingLevel: modelSettings.effort,
           ...(pendingNativeLaunch.current.get(chatId) || {}),
-          ...options,
+          ...launchOptions,
         }),
       });
       if (token !== openLiveToken.current || selectedIdRef.current !== chatId) return null;
@@ -324,6 +325,7 @@ function App() {
         socket.addEventListener("error", onError, { once: true });
       });
       if (token !== openLiveToken.current || selectedIdRef.current !== chatId) return null;
+      await modelSettings.reloadChat();
       return record;
     } catch (caught) {
       if (token !== openLiveToken.current || selectedIdRef.current !== chatId) return null;
@@ -333,6 +335,7 @@ function App() {
           projectId: owningProjectId,
           token: caught.trustToken,
           resources: list(caught.resources),
+          intent,
         });
       }
       if (caught.message?.includes("Too many live Pi") || caught.message?.includes("live_process_limit")) {
@@ -714,10 +717,6 @@ function App() {
       setSidebarCommand({ type: "new-chat", nonce: Date.now() });
       return;
     }
-    if (target?.kind === "workspace" && !options.templateId && !options.runtimeKind) {
-      setSidebarCommand({ type: "new-chat", projectId: target.id, nonce: Date.now() });
-      return;
-    }
     newChat(target, options).catch((caught) => setError(caught.message));
   }
 
@@ -741,6 +740,7 @@ function App() {
     });
     setChatTemplateId(chat.templateId || templateId);
     setChatRuntime(chat.runtime || null);
+    await modelSettings.reloadChat();
   }
 
   const setChatProfile = (templateId) => setChatLaunchOption(templateId);
@@ -774,10 +774,10 @@ function App() {
     }
   }
 
-  async function ensureLive() {
+  async function ensureLive(intent = "open") {
     if (live && ws.current?.readyState === WebSocket.OPEN) return live;
     if (!selectedId) throw new Error("Chat is not ready yet");
-    const record = await openLive(selectedId, projectId);
+    const record = await openLive(selectedId, projectId, { intent });
     if (!record) throw new Error("Chat switched before Pi was ready");
     return record;
   }
@@ -846,6 +846,17 @@ function App() {
       return;
     }
 
+    if (!live || ws.current?.readyState !== WebSocket.OPEN) {
+      setGeneration("submitting");
+      try {
+        await ensureLive("prompt");
+      } catch (caught) {
+        setGeneration("idle");
+        if (caught.error !== "native_trust_required") setError(caught.message);
+        return;
+      }
+    }
+
     const attachmentIds = attachmentState.pendingIds;
     const previousMessages = messages;
     const previousEditEntryId = editEntryId;
@@ -869,7 +880,6 @@ function App() {
     attachmentState.markAnnounced(attachmentIds);
     setGeneration("submitting");
     try {
-      await ensureLive();
       ws.current.send(JSON.stringify(editEntryId
         ? { type: "fork_and_prompt", entryId: editEntryId, message: text, attachmentIds }
         : { type: "prompt", message: text, attachmentIds }));
@@ -1114,7 +1124,8 @@ function App() {
     const request = nativeTrustRequest;
     pendingNativeLaunch.current.set(request.chatId, { trustChoice, trustToken: request.token });
     setNativeTrustRequest(null);
-    openLive(request.chatId, request.projectId).catch((caught) => setError(caught.message));
+    if (request.intent === "prompt") send().catch((caught) => setError(caught.message));
+    else openLive(request.chatId, request.projectId).catch((caught) => setError(caught.message));
   };
   return <TooltipProvider>
     <Toaster richColors />
@@ -1148,8 +1159,6 @@ function App() {
         onRetryConnection={globalRuntime.retry}
         onAddProject={addProject}
         workspaceSuggestions={workspaceSuggestions}
-        installations={installations}
-        templates={templates}
         onCommandHandled={() => setSidebarCommand(null)}
         onCopyTranscript={copyTranscript}
         onDeleteProject={deleteProject}

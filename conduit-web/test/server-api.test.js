@@ -90,9 +90,17 @@ input.on("line", (line) => {
     assert.equal(templateCatalog.templates.find((item) => item.id === "runtime").defaultable, false);
 
     const installations = await (await fetch(`${origin}/v0/pi-installations`)).json();
-    assert.equal(installations.installations.find((item) => item.id === "conduit-pinned").version, "0.80.6");
-    assert.equal(installations.installations.find((item) => item.id === "host-pi").version, "0.80.10");
+    const isolatedInstallation = installations.installations.find((item) => item.id === "conduit-pinned");
+    const hostInstallation = installations.installations.find((item) => item.id === "host-pi");
+    assert.equal(isolatedInstallation.version, "0.80.6");
+    assert.equal(isolatedInstallation.executablePath, conduitPi);
+    assert.equal(isolatedInstallation.agentHome.path, path.join(root, "pi"));
+    assert.equal(isolatedInstallation.models.access, "managed");
+    assert.equal(hostInstallation.version, "0.80.10");
+    assert.equal(hostInstallation.executablePath, nativePi);
+    assert.equal(hostInstallation.models.access, "read-only");
     assert.equal("command" in installations.installations[0], false);
+    assert.equal("environment" in installations.installations[1], false);
 
     const linkedResponse = await fetch(`${origin}/v0/projects`, {
       method: "POST",
@@ -178,6 +186,18 @@ input.on("line", (line) => {
     assert.equal(chat.status, "draft");
     assert.equal(chat.templateId, "workspace");
     assert.equal("piSessionId" in chat, false);
+
+    const chatModels = await (await fetch(`${origin}/v0/chats/${chat.id}/models`)).json();
+    assert.equal(chatModels.installationId, "conduit-pinned");
+    assert.equal(chatModels.runtimeKind, "conduit_profile");
+    assert.equal(chatModels.source, "runtime_default");
+    const invalidModel = await fetch(`${origin}/v0/chats/${chat.id}/models`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ model: "missing/model" }),
+    });
+    assert.equal(invalidModel.status, 400);
+    assert.equal((await invalidModel.json()).error, "invalid_model");
 
     const switched = await fetch(`${origin}/v0/chats/${chat.id}`, {
       method: "PATCH",

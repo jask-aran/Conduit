@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { CableIcon } from "lucide-react";
 import {
   AlertDialog,
@@ -37,8 +37,6 @@ import { NavChats } from "./nav-chats";
 import { NavProjects } from "./nav-projects";
 import { NavUser } from "./nav-user";
 
-const WorkspaceRuntimeDialog = lazy(() => import("./workspace-runtime-dialog").then((module) => ({ default: module.WorkspaceRuntimeDialog })));
-
 function ConduitBrand({ onClick }) {
   return <SidebarMenu>
     <SidebarMenuItem>
@@ -68,8 +66,6 @@ export function AppSidebar({
   onRetryConnection,
   onAddProject,
   workspaceSuggestions = [],
-  installations = [],
-  templates = [],
   onCopyTranscript,
   onDeleteProject,
   onDeleteSession,
@@ -92,11 +88,6 @@ export function AppSidebar({
   const [newFolderCloneUrl, setNewFolderCloneUrl] = useState("");
   const [newFolderSubmitting, setNewFolderSubmitting] = useState(false);
   const [pendingMove, setPendingMove] = useState(null);
-  const [pendingWorkspaceChat, setPendingWorkspaceChat] = useState(null);
-  const [workspaceLaunchOption, setWorkspaceLaunchOption] = useState("profile:workspace");
-  const [nativePreflight, setNativePreflight] = useState(null);
-  const [nativeTrustChoice, setNativeTrustChoice] = useState("ignore_project_resources");
-  const [nativeLoading, setNativeLoading] = useState(false);
   const { setOpenMobile } = useSidebar();
 
   const chatsProject = projects.find((project) => project.slug === "chat") || projects[0];
@@ -151,48 +142,7 @@ export function AppSidebar({
 
   const chooseNewChat = (project = chatsProject, options = null) => {
     setOpenMobile(false);
-    if (project?.kind === "workspace" && !options) {
-      const defaultOption = `profile:${project.defaultTemplateId || "workspace"}`;
-      const remembered = localStorage.getItem(`conduit.workspace-profile.${project.id}`)
-        || localStorage.getItem(`conduit.workspace-runtime.${project.id}`);
-      setWorkspaceLaunchOption(remembered === "native_pi" ? "host-pi" : remembered?.startsWith("profile:") ? remembered : defaultOption);
-      setNativePreflight(null);
-      setNativeTrustChoice("ignore_project_resources");
-      setPendingWorkspaceChat(project);
-      return;
-    }
     onNewChat(project, options || {});
-  };
-
-  useEffect(() => {
-    if (!pendingWorkspaceChat || workspaceLaunchOption !== "host-pi") return;
-    let active = true;
-    setNativeLoading(true);
-    fetch(`/v0/workspaces/${encodeURIComponent(pendingWorkspaceChat.id)}/native-preflight`)
-      .then(async (response) => {
-        const body = await response.json().catch(() => ({}));
-        if (!response.ok) throw new Error(body.message || body.error || "Could not inspect Host Pi");
-        return body;
-      })
-      .then((body) => active && setNativePreflight(body))
-      .catch((error) => active && setNativePreflight({ available: false, error: error.message }))
-      .finally(() => active && setNativeLoading(false));
-    return () => { active = false; };
-  }, [pendingWorkspaceChat, workspaceLaunchOption]);
-
-  const createWorkspaceChat = () => {
-    if (!pendingWorkspaceChat) return;
-    const nativeRuntime = workspaceLaunchOption === "host-pi";
-    const options = nativeRuntime
-      ? { runtimeKind: "native_pi", templateId: pendingWorkspaceChat.defaultTemplateId || "workspace" }
-      : { runtimeKind: "conduit_profile", templateId: workspaceLaunchOption.slice("profile:".length) };
-    if (nativeRuntime && nativePreflight?.trustRequired) {
-      options.trustChoice = nativeTrustChoice;
-      options.trustToken = nativePreflight.token;
-    }
-    localStorage.setItem(`conduit.workspace-profile.${pendingWorkspaceChat.id}`, workspaceLaunchOption);
-    onNewChat(pendingWorkspaceChat, options);
-    setPendingWorkspaceChat(null);
   };
 
   const chooseSettings = () => {
@@ -372,26 +322,6 @@ export function AppSidebar({
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
-
-    <Suspense fallback={null}>
-      {pendingWorkspaceChat && <WorkspaceRuntimeDialog
-        project={pendingWorkspaceChat}
-        open
-        onOpenChange={(open) => !open && setPendingWorkspaceChat(null)}
-        launchOption={workspaceLaunchOption}
-        onLaunchOptionChange={(launchOption) => {
-          setWorkspaceLaunchOption(launchOption);
-          setNativeTrustChoice("ignore_project_resources");
-        }}
-        profiles={templates.filter((template) => template.defaultable !== false && template.special !== true)}
-        installations={installations}
-        preflight={nativePreflight}
-        loading={nativeLoading}
-        trustChoice={nativeTrustChoice}
-        onTrustChoiceChange={setNativeTrustChoice}
-        onCreate={createWorkspaceChat}
-      />}
-    </Suspense>
 
     <Dialog open={Boolean(newProjectDialog)} onOpenChange={(open) => {
       if (newFolderSubmitting) return;

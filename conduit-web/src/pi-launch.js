@@ -56,7 +56,7 @@ export function resolvePiLaunch({
         ...trustArgs,
         "--append-system-prompt", path.resolve(bridgeSystemPrompt),
         "--skill", path.resolve(bridgeSkill),
-        ...sessionArgs(chat.piSessionFile, "", ""),
+        ...sessionArgs(chat.piSessionFile, model, thinkingLevel),
       ],
       cwd,
       env: nativeEnvironment(installation),

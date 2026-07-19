@@ -20,6 +20,11 @@ test("explicit Conduit overrides report their actual version", () => {
   assert.equal(installation.source, "override");
   assert.equal(installation.label, "Isolated Pi override");
   assert.equal(installation.version, "9.9.9");
+  const publicInstallation = registry.publicList().find((item) => item.id === "conduit-pinned");
+  assert.equal(publicInstallation.executablePath, override);
+  assert.equal(publicInstallation.agentHome.path, path.join(root, "agent"));
+  assert.equal("environment" in publicInstallation, false);
+  assert.equal("command" in publicInstallation, false);
   fs.rmSync(root, { recursive: true, force: true });
 });
 
@@ -35,6 +40,9 @@ test("host Pi requires the RPC flags used by Native Workspace launches", () => {
   assert.equal(installation.version, "0.1.0");
   assert.equal(installation.compatible, false);
   assert.equal(installation.available, false);
+  assert.equal(installation.capabilities.mode, true);
+  assert.equal(installation.capabilities.session, true);
+  assert.equal(installation.capabilities.skill, false);
   assert.match(installation.error, /required RPC capabilities/);
   fs.rmSync(root, { recursive: true, force: true });
 });

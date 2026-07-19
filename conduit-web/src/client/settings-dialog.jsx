@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { BotIcon, CircleHelpIcon, CpuIcon, LayersIcon, LinkIcon, MonitorIcon, Settings2Icon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
@@ -35,7 +36,7 @@ function Placeholder({ title }) {
   </Empty>;
 }
 
-function RuntimeSettings({ installations = [], onInstallationsChange }) {
+function RuntimeSettings({ installations = [], onInstallationsChange, onManageModels }) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -120,26 +121,44 @@ function RuntimeSettings({ installations = [], onInstallationsChange }) {
   return <>
     <div className="settings-section-heading">
       <h2>Runtime</h2>
-      <p>Keep many chats warm; limit how many agent loops run at once. Idle warms reclaim after you leave.</p>
+      <p>Inspect the Pi installations Conduit can launch, then configure shared process limits.</p>
     </div>
     <FieldGroup>
       <Field>
         <FieldLabel>Pi installations</FieldLabel>
         <div className="flex flex-col gap-2">
-          {installations.map((installation) => <div key={installation.id} className="bg-muted/40 flex items-center justify-between gap-3 rounded-lg border p-3 text-sm">
-            <span>
-              <span className="font-medium">{installation.label}</span>
-              <span className="text-muted-foreground"> · {installation.version ? `Pi ${installation.version}` : installation.error || "Unavailable"}</span>
-            </span>
-            <Badge variant={installation.available ? "secondary" : "outline"}>{installation.available ? "Available" : "Unavailable"}</Badge>
-          </div>)}
+          {installations.map((installation) => <Card key={installation.id} size="sm">
+            <CardHeader>
+              <div className="flex items-center justify-between gap-3">
+                <CardTitle>{installation.label}</CardTitle>
+                <Badge variant={installation.available ? "secondary" : "outline"}>{installation.available ? "Available" : "Unavailable"}</Badge>
+              </div>
+              <CardDescription>
+                {installation.id === "host-pi"
+                  ? "Detected and owned by the server user's host environment. Conduit does not manage its authentication, packages, or model scope."
+                  : "Bundled and isolated by Conduit. Profiles and model scope use Conduit's private Pi home."}
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-1 text-xs">
+              <span><strong>Version:</strong> {installation.version ? `Pi ${installation.version}` : installation.error || "Unavailable"}</span>
+              <span className="break-all"><strong>Executable:</strong> {installation.executablePath || "Not detected"}</span>
+              <span className="break-all"><strong>Agent home:</strong> {installation.agentHome?.path || "Unknown"} ({installation.agentHome?.source || "unknown"})</span>
+              <span><strong>Capabilities:</strong> {Object.values(installation.capabilities || {}).filter(Boolean).length}/{Object.keys(installation.capabilities || {}).length || 0} required</span>
+              <span className="break-all"><strong>Scoped models:</strong> {installation.models?.enabledModels?.join(", ") || "None available"}</span>
+              <span className="break-all"><strong>Default:</strong> {installation.models?.defaultModel || "None"}</span>
+            </CardContent>
+            <CardFooter>
+              {installation.id === "host-pi"
+                ? <Button type="button" variant="outline" disabled={detecting} onClick={detectHostPi}>
+                    {detecting && <Spinner data-icon="inline-start" />}
+                    {detecting ? "Detecting…" : "Re-detect Host Pi"}
+                  </Button>
+                : <Button type="button" variant="outline" onClick={onManageModels}>Manage Isolated Pi models</Button>}
+            </CardFooter>
+          </Card>)}
         </div>
-        <FieldDescription>Ordinary profiles use the bundled Isolated Pi and its private home. Workspace chats may instead select Host Pi.</FieldDescription>
-        <Button type="button" variant="outline" disabled={detecting} onClick={detectHostPi}>
-          {detecting && <Spinner data-icon="inline-start" />}
-          {detecting ? "Detecting…" : "Re-detect host Pi"}
-        </Button>
       </Field>
+      <Field><FieldLabel>Process limits</FieldLabel><FieldDescription>These limits are shared by Isolated Pi and Host Pi.</FieldDescription></Field>
       <Field>
         <FieldLabel className="justify-between">
           Max warm Pi processes
@@ -328,6 +347,18 @@ export function SettingsDialog({
   useEffect(() => { if (open) setSection(initialSection); }, [initialSection, open]);
   useEffect(() => { setEnabled(modelSettings.enabledModels); }, [modelSettings.enabledModels]);
   useEffect(() => { setScopeOpen(open && section === "models" && !modelSettings.loading); }, [modelSettings.loading, open, section]);
+  useEffect(() => {
+    if (!open || section !== "runtime" || !onInstallationsChange) return;
+    let active = true;
+    fetch("/v0/pi-installations")
+      .then((response) => response.json().then((body) => ({ response, body })))
+      .then(({ response, body }) => {
+        if (!response.ok) throw new Error(body.message || body.error || "Could not load Pi installations");
+        if (active) onInstallationsChange(body.installations || []);
+      })
+      .catch(() => {});
+    return () => { active = false; };
+  }, [onInstallationsChange, open, section]);
 
   return <Dialog open={open} onOpenChange={onOpenChange}>
     <DialogContent
@@ -354,7 +385,7 @@ export function SettingsDialog({
         </TabsList>
         <ScrollArea className="settings-panel">
           <TabsContent value="models">
-            <div className="settings-section-heading"><h2>Models</h2><p>Choose the models available in Conduit. Pi and the terminal share this saved scope.</p></div>
+            <div className="settings-section-heading"><h2>Isolated Pi models</h2><p>Choose the models available to ordinary profiles. Isolated Pi and the Conduit terminal launcher share this saved scope; Host Pi remains host-owned.</p></div>
             {modelSettings.loading ? <div className="flex items-center gap-2 text-sm text-muted-foreground"><Spinner />Loading models…</div>
               : modelSettings.allModels.length > 0 ? <FieldGroup>
                 <Field>
@@ -392,7 +423,7 @@ export function SettingsDialog({
               onOpenRuntimeChat={onOpenRuntimeChat}
             />
           </TabsContent>
-          <TabsContent value="runtime"><RuntimeSettings installations={installations} onInstallationsChange={onInstallationsChange} /></TabsContent>
+          <TabsContent value="runtime"><RuntimeSettings installations={installations} onInstallationsChange={onInstallationsChange} onManageModels={() => setSection("models")} /></TabsContent>
           {sections.filter((item) => !["models", "profiles", "runtime"].includes(item.id)).map((item) => (
             <TabsContent key={item.id} value={item.id}><Placeholder title={item.label} /></TabsContent>
           ))}

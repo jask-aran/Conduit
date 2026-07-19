@@ -33,7 +33,8 @@ only Conduit-owned project identity and display metadata.
 
 Host Pi Workspace chats do not use `data/pi`; they use the server user's
 login-shell Pi home (`PI_CODING_AGENT_DIR` or normally `~/.pi/agent`) and store only the exact private session mapping
-in `sessions.json`.
+in `sessions.json`. Their scoped models and future-chat default also come from
+that host home; Conduit Settings reports them read-only.
 
 Repository-owned behavior belongs in `../templates/`, not in runtime data.
 Back up or mount this directory as one unit to preserve files, project identity,
