@@ -27,6 +27,15 @@ import { resolvePiLaunch } from "./pi-launch.js";
 const config = loadConfig();
 const projects = new ProjectStore(config);
 await projects.initialize();
+async function clearHostPiDefaults() {
+  const changed = [];
+  for (const project of await projects.list()) {
+    if (project.kind !== "workspace" || project.defaultTemplateId !== "host-pi") continue;
+    changed.push(await projects.update(project.id, { defaultTemplateId: null }));
+  }
+  return changed;
+}
+if (!config.installations.get("host-pi").available) await clearHostPiDefaults();
 const pinnedInstallation = config.installations.get("conduit-pinned");
 const registry = new ChatStore(config.sessionRegistryFile, {
   defaultRuntime: {
@@ -67,7 +76,6 @@ manager.on("process_removed", ({ id, chatId }) => {
 });
 const modelCatalog = new PiModelCatalog({ agentDir: config.piAgentDir, modelPatterns: config.piTemplate.models });
 const modelCatalogs = new Map();
-const nativeTrustTokens = new Map();
 const launchingChats = new Set();
 const app = express();
 const dist = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../dist");
@@ -289,9 +297,6 @@ async function nativeResourceFingerprint(cwd) {
 }
 
 async function nativePreflight(project) {
-  for (const [token, value] of nativeTrustTokens) {
-    if (value.expiresAt < Date.now()) nativeTrustTokens.delete(token);
-  }
   const installation = config.installations.get("host-pi");
   if (!installation.available) {
     return { available: false, error: installation.error, version: installation.version, trustRequired: false, resources: [] };
@@ -300,24 +305,15 @@ async function nativePreflight(project) {
   const decision = trustStore.get(project.path);
   const requiresResources = hasTrustRequiringProjectResources(project.path);
   const resources = requiresResources ? await nativeResourceClasses(project.path) : [];
-  const fingerprint = requiresResources ? await nativeResourceFingerprint(project.path) : null;
+  if (requiresResources) await nativeResourceFingerprint(project.path);
   if (requiresResources && resources.length === 0) resources.push("inherited project resources");
-  const trustRequired = requiresResources && decision === null;
-  let token = null;
-  if (trustRequired) {
-    token = crypto.randomUUID();
-    nativeTrustTokens.set(token, { projectId: project.id, fingerprint, expiresAt: Date.now() + 5 * 60_000 });
-  }
-  const result = {
+  return {
     available: true,
     version: installation.version,
     savedTrust: decision,
-    trustRequired,
+    trustRequired: false,
     resources,
-    token,
   };
-  Object.defineProperty(result, "fingerprint", { value: fingerprint });
-  return result;
 }
 
 async function ensureChatTemplate(chat, project = null) {
@@ -401,7 +397,8 @@ app.get("/v0/pi-installations", async (_request, response, next) => {
 
 app.post("/v0/pi-installations/host/detect", async (_request, response, next) => {
   try {
-    await config.installations.detectHost();
+    const detected = await config.installations.detectHost();
+    if (!detected.available) await clearHostPiDefaults();
     response.json((await installationViews()).find((item) => item.id === "host-pi"));
   } catch (error) { next(error); }
 });
@@ -548,8 +545,9 @@ app.get("/v0/projects", async (_request, response, next) => {
   } catch (error) { next(error); }
 });
 
-function resolveProjectDefaultTemplateId(requested, fallback = null) {
+function resolveProjectDefaultTemplateId(requested, fallback = null, { allowHostPi = false } = {}) {
   if (requested == null || requested === "") return fallback;
+  if (requested === "host-pi" && allowHostPi) return requested;
   const template = resolveTemplate(config, requested);
   if (!template) {
     const error = new Error(`Unknown template: ${requested}`);
@@ -576,7 +574,7 @@ app.post("/v0/projects", async (request, response, next) => {
         mode: "linked",
         name: name || undefined,
         path: request.body.path,
-        defaultTemplateId: resolveProjectDefaultTemplateId(request.body?.defaultTemplateId, "workspace"),
+        defaultTemplateId: resolveProjectDefaultTemplateId(request.body?.defaultTemplateId, null),
       });
       return response.status(201).json(created);
     }
@@ -588,7 +586,7 @@ app.post("/v0/projects", async (request, response, next) => {
         name: name || undefined,
         cloneUrl: request.body.cloneUrl,
         path: request.body.path,
-        defaultTemplateId: resolveProjectDefaultTemplateId(request.body?.defaultTemplateId, "workspace"),
+        defaultTemplateId: resolveProjectDefaultTemplateId(request.body?.defaultTemplateId, null),
       });
       return response.status(201).json(created);
     }
@@ -603,9 +601,18 @@ app.post("/v0/projects", async (request, response, next) => {
 
 app.patch("/v0/projects/:id", async (request, response, next) => {
   try {
-    const name = String(request.body?.name || "").trim();
-    if (!name) return response.status(400).json({ error: "project_name_required" });
-    const project = await projects.rename(request.params.id, name);
+    const current = await projects.get(request.params.id);
+    if (!current) return response.status(404).json({ error: "project_not_found" });
+    const hasName = Object.hasOwn(request.body || {}, "name");
+    const hasDefault = Object.hasOwn(request.body || {}, "defaultTemplateId");
+    if (!hasName && !hasDefault) return response.status(400).json({ error: "project_update_required" });
+    const changes = {};
+    if (hasName) {
+      changes.name = String(request.body.name || "").trim();
+      if (!changes.name) return response.status(400).json({ error: "project_name_required" });
+    }
+    if (hasDefault) changes.defaultTemplateId = resolveProjectDefaultTemplateId(request.body.defaultTemplateId, null, { allowHostPi: current.kind === "workspace" });
+    const project = await projects.update(request.params.id, changes);
     if (!project) return response.status(404).json({ error: "project_not_found" });
     response.json(project);
   } catch (error) { next(error); }
@@ -697,13 +704,19 @@ app.post("/v0/chats", async (request, response, next) => {
     const project = await projects.get(request.body?.projectId || "chat");
     if (!project) return response.status(404).json({ error: "project_not_found" });
     await projects.validate(project);
-    const requestedTemplateId = request.body?.templateId || project.defaultTemplateId || null;
+    const hostDefault = project.defaultTemplateId === "host-pi" && request.body?.templateId == null && request.body?.runtimeKind == null;
+    const hostAvailable = config.installations.get("host-pi").available;
+    if (hostDefault && !hostAvailable) {
+      await projects.update(project.id, { defaultTemplateId: null });
+      project.defaultTemplateId = null;
+    }
+    const requestedTemplateId = request.body?.templateId || (project.defaultTemplateId === "host-pi" ? null : project.defaultTemplateId) || null;
     const template = requestedTemplateId
       ? resolveTemplate(config, requestedTemplateId)
       : defaultTemplate();
     if (!template) return response.status(400).json({ error: "unknown_template", templateId: requestedTemplateId });
     if (template.defaultable === false) return response.status(400).json({ error: "special_template", templateId: template.id });
-    const runtimeKind = request.body?.runtimeKind || "conduit_profile";
+    const runtimeKind = request.body?.runtimeKind || (hostDefault && hostAvailable ? "native_pi" : "conduit_profile");
     if (!new Set(["conduit_profile", "native_pi"]).has(runtimeKind)) {
       return response.status(400).json({ error: "unknown_runtime_kind" });
     }
@@ -1034,25 +1047,10 @@ app.post("/v0/live-sessions", async (request, response, next) => {
         return response.status(409).json({ error: "session_file_unavailable", message: error.message });
       }
     }
-    let trustChoice = null;
     if (runtime.kind === "native_pi") {
       const preflight = await nativePreflight(context.project);
       if (!preflight.available) return response.status(409).json({ error: "native_pi_unavailable", message: preflight.error });
-      if (preflight.trustRequired) {
-        const token = nativeTrustTokens.get(request.body?.trustToken);
-        const selected = request.body?.trustChoice;
-        if (!token || token.projectId !== context.project.id || token.fingerprint !== preflight.fingerprint || token.expiresAt < Date.now()
-          || !["trusted_once", "ignore_project_resources"].includes(selected)) {
-          return response.status(409).json({
-            error: "native_trust_required",
-            resources: preflight.resources,
-            trustToken: preflight.token,
-          });
-        }
-        nativeTrustTokens.delete(request.body.trustToken);
-        trustChoice = selected;
-      } else if (preflight.savedTrust === true) trustChoice = "native_saved_trust";
-      else trustChoice = "ignore_project_resources";
+      new ProjectTrustStore(installation.agentDir).set(context.project.path, true);
     }
     const seedModel = context.chat.piSessionFile ? "" : request.body?.model || "";
     const seedThinkingLevel = context.chat.piSessionFile ? "" : request.body?.thinkingLevel || "";
@@ -1071,7 +1069,6 @@ app.post("/v0/live-sessions", async (request, response, next) => {
       models: runtime.kind === "conduit_profile" ? runtimeCatalog.getLaunchModels(context.project.path) : null,
       model: seedModel,
       thinkingLevel: seedThinkingLevel,
-      trustChoice,
       bridgeSystemPrompt: config.bridgeSystemPrompt,
       bridgeSkill: config.bridgeSkill,
     });

@@ -2,16 +2,6 @@ import React, { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useStat
 import { createRoot } from "react-dom/client";
 import { ShareIcon, TriangleAlertIcon } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
 import { Breadcrumb, BreadcrumbItem, BreadcrumbList, BreadcrumbPage, BreadcrumbSeparator } from "@/components/ui/breadcrumb";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
@@ -75,8 +65,11 @@ class AppErrorBoundary extends React.Component {
 function ChatHeader({ project, title, profile, runtime, live }) {
   const projectLabel = project?.slug === "chat" ? "Chats" : project?.slug || project?.name || "Chats";
   const profileLabel = runtime?.kind === "native_pi" ? null : profile?.label || profile?.id || null;
+  const hostTrustLabel = live?.trustPosture === "native_saved_trust"
+    ? "project resources trusted"
+    : "project trust pending";
   const posture = runtime?.kind === "native_pi"
-    ? "host resources"
+    ? hostTrustLabel
     : profile?.posture || (Array.isArray(profile?.tools) ? profile.tools.join(" / ") : "");
   const workspaceHint = project?.origin === "linked"
     ? "linked"
@@ -99,7 +92,7 @@ function ChatHeader({ project, title, profile, runtime, live }) {
       </BreadcrumbList>
     </Breadcrumb>}
     {postureLine && <span
-      className="chat-profile-posture text-muted-foreground ml-auto hidden truncate text-xs sm:inline"
+      className="chat-profile-posture text-muted-foreground ml-auto truncate text-xs"
       title={[
         postureLine,
         project?.path ? `cwd: ${project.path}` : null,
@@ -135,6 +128,7 @@ function App() {
   const [error, setError] = useState("");
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsSection, setSettingsSection] = useState("models");
+  const [settingsWorkspaceId, setSettingsWorkspaceId] = useState(null);
   const [commandOpen, setCommandOpen] = useState(false);
   const [commandPage, setCommandPage] = useState(null);
   const [templates, setTemplates] = useState([]);
@@ -143,7 +137,6 @@ function App() {
   const [chatTemplateId, setChatTemplateId] = useState(null);
   const [chatRuntime, setChatRuntime] = useState(null);
   const [installations, setInstallations] = useState([]);
-  const [nativeTrustRequest, setNativeTrustRequest] = useState(null);
   const [commandLaunchNonce, setCommandLaunchNonce] = useState(0);
   const [sidebarCommand, setSidebarCommand] = useState(null);
   const [editEntryId, setEditEntryId] = useState(null);
@@ -165,10 +158,11 @@ function App() {
   const liveStream = useRef(null);
   const toolSeq = useRef(0);
   const openLiveToken = useRef(0);
-  const pendingNativeLaunch = useRef(new Map());
   const [connectingChatId, setConnectingChatId] = useState(null);
   const selectedIdRef = useRef(null);
+  const chatRuntimeRef = useRef(chatRuntime);
   selectedIdRef.current = selectedId;
+  chatRuntimeRef.current = chatRuntime;
   if (!liveStream.current) liveStream.current = createLiveStreamStore();
 
   const streaming = generation === "active" || generation === "submitting";
@@ -288,7 +282,13 @@ function App() {
   }
 
   async function openLive(chatId, owningProjectId, options = {}) {
-    const { intent = "open", ...launchOptions } = options;
+    const {
+      intent = "open",
+      hostFallback = false,
+      modelOverride,
+      thinkingOverride,
+      ...launchOptions
+    } = options;
     const token = ++openLiveToken.current;
     setConnectingChatId(chatId);
     try {
@@ -297,15 +297,13 @@ function App() {
         body: JSON.stringify({
           chatId,
           projectId: owningProjectId,
-          model: modelSettings.model,
-          thinkingLevel: modelSettings.effort,
-          ...(pendingNativeLaunch.current.get(chatId) || {}),
+          model: modelOverride ?? modelSettings.model,
+          thinkingLevel: thinkingOverride ?? modelSettings.effort,
           ...launchOptions,
         }),
       });
       if (token !== openLiveToken.current || selectedIdRef.current !== chatId) return null;
       setLive(record);
-      pendingNativeLaunch.current.delete(chatId);
       if (record.runtime) setChatRuntime(record.runtime);
       if (record.contextUsage) setContextUsage(record.contextUsage);
       connect(record);
@@ -329,13 +327,26 @@ function App() {
       return record;
     } catch (caught) {
       if (token !== openLiveToken.current || selectedIdRef.current !== chatId) return null;
-      if (caught.error === "native_trust_required") {
-        setNativeTrustRequest({
-          chatId,
-          projectId: owningProjectId,
-          token: caught.trustToken,
-          resources: list(caught.resources),
+      const owningProject = projects.find((project) => project.id === owningProjectId);
+      const hostDefaultFailed = !hostFallback
+        && chatRuntimeRef.current?.kind === "native_pi"
+        && owningProject?.defaultTemplateId === "host-pi"
+        && !["live_process_limit", "generation_limit"].includes(caught.error);
+      if (hostDefaultFailed) {
+        await saveWorkspaceDefault(owningProject.id, null);
+        const fallbackTemplateId = defaultTemplateId || "chat";
+        const fallbackChat = await api(`/v0/chats/${encodeURIComponent(chatId)}`, {
+          method: "PATCH",
+          body: JSON.stringify({ templateId: fallbackTemplateId, runtimeKind: "conduit_profile" }),
+        });
+        setChatTemplateId(fallbackChat.templateId || fallbackTemplateId);
+        setChatRuntime(fallbackChat.runtime || null);
+        await modelSettings.reloadChat();
+        return openLive(chatId, owningProjectId, {
           intent,
+          hostFallback: true,
+          modelOverride: "",
+          thinkingOverride: "",
         });
       }
       if (caught.message?.includes("Too many live Pi") || caught.message?.includes("live_process_limit")) {
@@ -686,29 +697,34 @@ function App() {
   async function newChat(target, options = {}) {
     const nextProject = target || projects.find((item) => item.id === projectId) || projects[0];
     if (!nextProject) return;
-    const templateId = options.templateId || nextProject.defaultTemplateId || defaultTemplateId || "chat";
+    const hostDefault = nextProject.defaultTemplateId === "host-pi" && !options.templateId && !options.runtimeKind;
+    const templateId = options.templateId
+      || (nextProject.defaultTemplateId === "host-pi" ? null : nextProject.defaultTemplateId)
+      || defaultTemplateId
+      || "chat";
     await discardEmptyDraft();
     resetChatState();
     const specialRuntimeChat = templateId === "runtime";
     const chat = await api(specialRuntimeChat ? "/v0/runtime/chats" : "/v0/chats", {
       method: "POST",
-      body: JSON.stringify(specialRuntimeChat ? {} : {
-        projectId: nextProject.id,
-        templateId,
-        runtimeKind: options.runtimeKind || "conduit_profile",
-      }),
+      body: JSON.stringify(specialRuntimeChat ? {} : hostDefault
+        ? { projectId: nextProject.id }
+        : {
+          projectId: nextProject.id,
+          templateId,
+          runtimeKind: options.runtimeKind || "conduit_profile",
+        }),
     });
-    if (options.trustChoice && options.trustToken) {
-      pendingNativeLaunch.current.set(chat.id, {
-        trustChoice: options.trustChoice,
-        trustToken: options.trustToken,
-      });
-    }
     history.replaceState({}, "", `/chat/${chat.id}`);
     selectedIdRef.current = chat.id;
     setSelectedId(chat.id); setProjectId(chat.projectId); setChatStatus(chat.status); setChatTitle(chat.title);
     setChatTemplateId(chat.templateId || templateId);
     setChatRuntime(chat.runtime || null);
+    if (hostDefault && chat.runtime?.kind !== "native_pi") {
+      setProjects((current) => current.map((project) => project.id === nextProject.id
+        ? { ...project, defaultTemplateId: null }
+        : project));
+    }
     setMessages([]); setTools([]); setPageBefore(null); setLoadedSessionId(chat.id);
   }
 
@@ -852,7 +868,7 @@ function App() {
         await ensureLive("prompt");
       } catch (caught) {
         setGeneration("idle");
-        if (caught.error !== "native_trust_required") setError(caught.message);
+        setError(caught.message);
         return;
       }
     }
@@ -967,7 +983,7 @@ function App() {
         };
       const created = await api("/v0/projects", { method: "POST", body: JSON.stringify(body) });
       await refresh();
-      const templateId = created.defaultTemplateId || (created.origin === "managed" ? defaultTemplateId : "workspace");
+      const templateId = created.defaultTemplateId || defaultTemplateId || "chat";
       await newChat(created, { templateId });
       return true;
     } catch (caught) { setError(caught.message); return false; }
@@ -978,6 +994,17 @@ function App() {
     if (!project) throw new Error("No chat project");
     setSettingsOpen(false);
     await newChat(project, { templateId: "runtime" });
+  }
+
+  async function saveWorkspaceDefault(workspaceId, templateId) {
+    const saved = await api(`/v0/projects/${encodeURIComponent(workspaceId)}`, {
+      method: "PATCH",
+      body: JSON.stringify({ defaultTemplateId: templateId }),
+    });
+    setProjects((current) => current.map((project) => project.id === workspaceId
+      ? { ...project, ...saved, sessions: project.sessions }
+      : project));
+    return saved;
   }
 
   async function deleteSession(session, owningProject) {
@@ -1083,7 +1110,11 @@ function App() {
     templateId: chatTemplateId || defaultTemplateId,
     defaultTemplateId,
   };
-  const openSettings = (section = "models") => { setSettingsSection(section); setSettingsOpen(true); };
+  const openSettings = (section = "models", workspaceId = null) => {
+    setSettingsSection(section);
+    setSettingsWorkspaceId(workspaceId);
+    setSettingsOpen(true);
+  };
   const activeProfile = templates.find((item) => item.id === chatTemplateId)
     || templates.find((item) => item.id === defaultTemplateId)
     || templates[0]
@@ -1094,6 +1125,7 @@ function App() {
     newWorkspace: () => setSidebarCommand({ type: "new-workspace", nonce: Date.now() }),
     attach: attachmentState.openPicker,
     settings: (section = "general") => openSettings(section),
+    workspaceSettings: (workspaceId) => openSettings("workspaces", workspaceId),
     rename: () => setSidebarCommand({ type: "rename", nonce: Date.now() }),
     renameFolder: () => setSidebarCommand({ type: "rename-folder", nonce: Date.now() }),
     move: () => setSidebarCommand({ type: "move", nonce: Date.now() }),
@@ -1119,31 +1151,8 @@ function App() {
     && [...globalRuntime.processes.values()].some((process) => process.projectId === selectedProject.id
       && process.chatId !== selectedId
       && (process.active || ["working", "compacting", "retrying"].includes(process.activity)));
-  const resumeNative = (trustChoice) => {
-    if (!nativeTrustRequest) return;
-    const request = nativeTrustRequest;
-    pendingNativeLaunch.current.set(request.chatId, { trustChoice, trustToken: request.token });
-    setNativeTrustRequest(null);
-    if (request.intent === "prompt") send().catch((caught) => setError(caught.message));
-    else openLive(request.chatId, request.projectId).catch((caught) => setError(caught.message));
-  };
   return <TooltipProvider>
     <Toaster richColors />
-    <AlertDialog open={Boolean(nativeTrustRequest)} onOpenChange={(open) => !open && setNativeTrustRequest(null)}>
-      <AlertDialogContent>
-        <AlertDialogHeader>
-          <AlertDialogTitle>Host Pi project resources</AlertDialogTitle>
-          <AlertDialogDescription>
-            This Workspace contains {nativeTrustRequest?.resources.join(", ") || "project-local resources"}. Trusted resources can execute code with the Conduit server user's permissions.
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        <AlertDialogFooter>
-          <AlertDialogCancel>Cancel</AlertDialogCancel>
-          <Button variant="outline" onClick={() => resumeNative("ignore_project_resources")}>Start without resources</Button>
-          <AlertDialogAction onClick={() => resumeNative("trusted_once")}>Trust once and start</AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
     <SidebarProvider defaultOpen>
       <AppSidebar
         projects={projects}
@@ -1167,6 +1176,7 @@ function App() {
         onMoveSession={moveSession}
         onNewChat={(project, options) => newChat(project, options).catch((caught) => setError(caught.message))}
         onOpenSettings={() => openSettings("models")}
+        onOpenWorkspaceSettings={(workspace) => openSettings("workspaces", workspace.id)}
         onOpenSession={(session, project) => openSession(session, project).catch((caught) => setError(caught.message))}
         onRenameProject={renameProject}
         onRenameSession={renameSession}
@@ -1281,6 +1291,12 @@ function App() {
           onOpenRuntimeChat={() => openRuntimeChat().catch((caught) => setError(caught.message))}
           installations={installations}
           onInstallationsChange={setInstallations}
+          projects={projects}
+          initialWorkspaceId={settingsWorkspaceId}
+          onWorkspaceDefaultChange={saveWorkspaceDefault}
+          onHostUnavailable={() => setProjects((current) => current.map((project) => project.defaultTemplateId === "host-pi"
+            ? { ...project, defaultTemplateId: null }
+            : project))}
         />}
       </Suspense>
     </SidebarProvider>

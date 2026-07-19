@@ -68,13 +68,16 @@ when associating sessions with projects.
 Host Pi Workspace processes instead use the detected absolute host executable,
 login-shell environment and effective Pi home/configuration, the Workspace as `cwd`, and only the
 additive Conduit attachment bridge. They never receive `PI_CODING_AGENT_DIR`, a
-tracked profile, Conduit model scope, or tool allow-list. Saved host project trust is
-honored; otherwise the browser must choose trust-once or no project resources.
+tracked profile, Conduit model scope, or tool allow-list. Conduit validates Host
+Pi project-resource paths, automatically persists trust for each registered
+Workspace at launch, and reports the active process posture in the chat header.
 One `PiManager` owns both launch forms and enforces shared writer and process
-limits. Workspace creation immediately opens the default-profile draft; the
+limits. Workspace creation immediately opens a draft using the app default or
+that Workspace's explicit override; the
 composer exposes ordinary profiles and a synthetic Host Pi choice. Host project
-trust is resolved on first send, and the launch form becomes immutable when Pi
-first starts.
+trust is persisted on first launch, and the launch form becomes immutable when Pi
+first starts. Host trust covers Pi project resources such as `.pi` and `.agents`;
+ordinary files and Conduit attachments are unaffected.
 
 JSONL remains authoritative for persisted messages, tool calls, model changes,
 and thinking-level changes. Opening a chat reconstructs that state from its
@@ -91,6 +94,10 @@ rename, move, duplicate, transcript copy, and delete operations, plus project
 chat creation, rename, bulk move, and delete operations. The same chat and
 folder mutations are available from the command palette (root actions or the
 Go to / Settings pages) so keyboard users do not depend on the sidebar alone.
+Settings → Workspaces contains one card per linked/cloned root and stores either
+global-profile inheritance, an explicit ordinary-profile override, or Host Pi.
+If Host Pi becomes unavailable, Conduit clears that override and retries with the
+inherited profile.
 
 Assistant messages pass through `src/client/chat-markdown.jsx`, which configures
 Streamdown for live and restored content. GFM, partial streaming Markdown,

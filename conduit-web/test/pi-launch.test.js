@@ -68,7 +68,6 @@ test("Host Pi launch uses host state, a draft model, and only the additive Condu
       agentDir: "/home/user/.pi/agent",
       environment: { HOME: "/home/user", PATH: "/home/user/bin:/usr/bin", TOOL_TOKEN: "keep", CONDUIT_SECRET: "strip" },
     },
-    trustChoice: "trusted_once",
     model: "example/reasoner",
     thinkingLevel: "high",
     bridgeSystemPrompt: "/repo/templates/conduit-workspace/SYSTEM.md",
@@ -79,14 +78,15 @@ test("Host Pi launch uses host state, a draft model, and only the additive Condu
   assert.equal(launch.env.PATH, "/home/user/bin:/usr/bin");
   assert.equal(launch.env.TOOL_TOKEN, "keep");
   assert.equal("CONDUIT_SECRET" in launch.env, false);
-  assert.ok(launch.args.includes("--approve"));
+  assert.equal(launch.args.includes("--approve"), false);
+  assert.equal(launch.args.includes("--no-approve"), false);
   assert.ok(launch.args.includes("--append-system-prompt"));
   assert.ok(launch.args.includes("--skill"));
   assert.equal(launch.args.includes("--system-prompt"), false);
   assert.equal(launch.args.includes("--tools"), false);
   assert.equal(launch.args.includes("--models"), false);
   assert.deepEqual(launch.args.slice(launch.args.indexOf("--model"), launch.args.indexOf("--model") + 4), ["--model", "example/reasoner", "--thinking", "high"]);
-  assert.equal(launch.trustPosture, "trusted_once");
+  assert.equal(launch.trustPosture, "native_saved_trust");
 });
 
 test("Native Pi launch preserves an explicitly resolved host agent home", () => {
@@ -102,7 +102,6 @@ test("Native Pi launch preserves an explicitly resolved host agent home", () => 
       environment: { HOME: "/home/user", PI_CODING_AGENT_DIR: "/mnt/native-pi-home" },
       version: "0.80.10",
     },
-    trustChoice: "ignore_project_resources",
     bridgeSystemPrompt: "/repo/templates/conduit-workspace/SYSTEM.md",
     bridgeSkill: "/repo/templates/conduit-workspace/SKILL.md",
   });

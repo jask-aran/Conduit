@@ -13,7 +13,10 @@ runtime.json      warm-pool and generation policy
 
 `chat/files/` is the working directory for unstructured chats. Managed named
 projects are direct children. Linked and cloned Workspaces store catalog metadata
-in `conduit.json` and use an allow-listed absolute path as Pi `cwd`. Each working
+in `conduit.json` and use an allow-listed absolute path as Pi `cwd`. A Workspace's
+nullable `defaultTemplateId` is `null` when it inherits `preferences.json` and an
+ordinary profile id or `host-pi` when explicitly overridden. Unavailable Host Pi
+defaults are cleared back to `null`. Each working
 root may contain a Conduit-owned `.conduit/chats/<chat-id>/` tree holding
 per-chat `attachments/` and a transient `.partial/` upload directory. Pi
 associates sessions with these working directories and stores their JSONL under

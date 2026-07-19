@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { BotIcon, CircleHelpIcon, CpuIcon, LayersIcon, LinkIcon, MonitorIcon, Settings2Icon } from "lucide-react";
+import { BotIcon, CircleHelpIcon, CpuIcon, FolderCogIcon, LayersIcon, LinkIcon, MonitorIcon, Settings2Icon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
@@ -11,6 +11,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
   SelectTrigger,
   SelectValue,
@@ -23,6 +24,7 @@ import { ModelScopeCombobox } from "./model-picker";
 const sections = [
   { id: "models", label: "Models", short: "Models", icon: BotIcon },
   { id: "profiles", label: "Profiles", short: "Profiles", icon: LayersIcon },
+  { id: "workspaces", label: "Workspaces", short: "Workspaces", icon: FolderCogIcon },
   { id: "runtime", label: "Runtime", short: "Runtime", icon: CpuIcon },
   { id: "general", label: "General", short: "General", icon: Settings2Icon },
   { id: "appearance", label: "Appearance", short: "Display", icon: MonitorIcon },
@@ -36,7 +38,7 @@ function Placeholder({ title }) {
   </Empty>;
 }
 
-function RuntimeSettings({ installations = [], onInstallationsChange, onManageModels }) {
+function RuntimeSettings({ installations = [], onInstallationsChange, onHostUnavailable, onManageModels }) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -109,6 +111,7 @@ function RuntimeSettings({ installations = [], onInstallationsChange, onManageMo
       const body = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(body.message || body.error || "Could not detect host Pi");
       onInstallationsChange?.((current) => [...current.filter((item) => item.id !== body.id), body]);
+      if (!body.available) onHostUnavailable?.();
     } catch (caught) {
       setError(caught.message);
     } finally {
@@ -279,7 +282,7 @@ function ProfileSettings({
           </SelectContent>
         </Select>
         <FieldDescription>
-          Command palette and New chat use this default. Linked and cloned Workspaces default to Coding.
+          Command palette and New chat use this default. Workspaces inherit it unless their Workspaces setting overrides it.
         </FieldDescription>
       </Field>
       {active && <Field>
@@ -327,6 +330,82 @@ function ProfileSettings({
   </>;
 }
 
+function WorkspaceSettings({
+  projects = [],
+  templates = [],
+  defaultTemplateId = "chat",
+  initialWorkspaceId = null,
+  installations = [],
+  onWorkspaceDefaultChange,
+}) {
+  const [savingId, setSavingId] = useState(null);
+  const [error, setError] = useState("");
+  const workspaces = projects.filter((project) => ["linked", "cloned"].includes(project.origin));
+  const profiles = templates.filter((template) => template.defaultable !== false && template.special !== true);
+  const globalProfile = profiles.find((template) => template.id === defaultTemplateId) || profiles[0];
+  const hostAvailable = installations.find((installation) => installation.id === "host-pi")?.available === true;
+
+  useEffect(() => {
+    if (!initialWorkspaceId) return;
+    requestAnimationFrame(() => document.getElementById(`workspace-setting-${initialWorkspaceId}`)?.scrollIntoView({ block: "nearest" }));
+  }, [initialWorkspaceId]);
+
+  async function changeDefault(project, value) {
+    setSavingId(project.id);
+    setError("");
+    try {
+      await onWorkspaceDefaultChange?.(project.id, value === "inherit" ? null : value);
+    } catch (caught) {
+      setError(caught.message);
+    } finally {
+      setSavingId(null);
+    }
+  }
+
+  return <>
+    <div className="settings-section-heading">
+      <h2>Workspaces</h2>
+      <p>Workspace chats inherit the global profile unless that Workspace has an explicit override.</p>
+    </div>
+    {workspaces.length === 0 ? <Empty>
+      <EmptyHeader><EmptyTitle>No Workspaces</EmptyTitle><EmptyDescription>Link or clone a Workspace to configure its default profile.</EmptyDescription></EmptyHeader>
+    </Empty> : <div className="flex flex-col gap-3">
+      {workspaces.map((project) => {
+        const selected = project.defaultTemplateId || "inherit";
+        const selectedProfile = project.defaultTemplateId === "host-pi"
+          ? { label: "Host Pi" }
+          : profiles.find((template) => template.id === project.defaultTemplateId);
+        return <Card key={project.id} id={`workspace-setting-${project.id}`} size="sm">
+          <CardHeader>
+            <CardTitle>{project.name}</CardTitle>
+            <CardDescription className="break-all">{project.path || project.externalPath}</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Field>
+              <FieldLabel htmlFor={`workspace-profile-${project.id}`}>Default profile</FieldLabel>
+              <Select value={selected} disabled={savingId === project.id} onValueChange={(value) => changeDefault(project, value)}>
+                <SelectTrigger id={`workspace-profile-${project.id}`} className="w-full"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectGroup>
+                    <SelectItem value="inherit">Inherit global ({globalProfile?.label || "General"})</SelectItem>
+                    {profiles.map((profile) => <SelectItem key={profile.id} value={profile.id}>{profile.label || profile.id}</SelectItem>)}
+                    <SelectItem value="host-pi" disabled={!hostAvailable}>Host Pi{hostAvailable ? "" : " (unavailable)"}</SelectItem>
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+              <FieldDescription>Applies to new chats only. Existing chats keep their selected profile.</FieldDescription>
+            </Field>
+          </CardContent>
+          <CardFooter>
+            <Badge variant="secondary">{selectedProfile ? `Override: ${selectedProfile.label}` : `Inherits ${globalProfile?.label || "global"}`}</Badge>
+          </CardFooter>
+        </Card>;
+      })}
+    </div>}
+    {error && <p className="text-destructive mt-3 text-sm">{error}</p>}
+  </>;
+}
+
 export function SettingsDialog({
   open,
   onOpenChange,
@@ -338,6 +417,10 @@ export function SettingsDialog({
   onOpenRuntimeChat,
   installations = [],
   onInstallationsChange,
+  projects = [],
+  initialWorkspaceId = null,
+  onWorkspaceDefaultChange,
+  onHostUnavailable,
 }) {
   const [section, setSection] = useState(initialSection);
   const [enabled, setEnabled] = useState(modelSettings.enabledModels);
@@ -423,8 +506,18 @@ export function SettingsDialog({
               onOpenRuntimeChat={onOpenRuntimeChat}
             />
           </TabsContent>
-          <TabsContent value="runtime"><RuntimeSettings installations={installations} onInstallationsChange={onInstallationsChange} onManageModels={() => setSection("models")} /></TabsContent>
-          {sections.filter((item) => !["models", "profiles", "runtime"].includes(item.id)).map((item) => (
+          <TabsContent value="workspaces">
+            <WorkspaceSettings
+              projects={projects}
+              templates={templates}
+              defaultTemplateId={defaultTemplateId}
+              initialWorkspaceId={initialWorkspaceId}
+              installations={installations}
+              onWorkspaceDefaultChange={onWorkspaceDefaultChange}
+            />
+          </TabsContent>
+          <TabsContent value="runtime"><RuntimeSettings installations={installations} onInstallationsChange={onInstallationsChange} onHostUnavailable={onHostUnavailable} onManageModels={() => setSection("models")} /></TabsContent>
+          {sections.filter((item) => !["models", "profiles", "workspaces", "runtime"].includes(item.id)).map((item) => (
             <TabsContent key={item.id} value={item.id}><Placeholder title={item.label} /></TabsContent>
           ))}
         </ScrollArea>

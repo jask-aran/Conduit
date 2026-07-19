@@ -32,7 +32,6 @@ export function resolvePiLaunch({
   models,
   model = "",
   thinkingLevel = "",
-  trustChoice = null,
   bridgeSystemPrompt,
   bridgeSkill,
 }) {
@@ -45,15 +44,11 @@ export function resolvePiLaunch({
   const runtime = chat.runtime;
   if (runtime.kind === "native_pi") {
     if (!bridgeSystemPrompt || !bridgeSkill) throw new Error("Native Pi requires the Conduit bridge");
-    const trustArgs = trustChoice === "trusted_once"
-      ? ["--approve"]
-      : trustChoice === "native_saved_trust" ? [] : ["--no-approve"];
     return {
       command: installation.command,
       args: [
         ...(installation.commandArgs || []),
         "--mode", "rpc",
-        ...trustArgs,
         "--append-system-prompt", path.resolve(bridgeSystemPrompt),
         "--skill", path.resolve(bridgeSkill),
         ...sessionArgs(chat.piSessionFile, model, thinkingLevel),
@@ -63,9 +58,7 @@ export function resolvePiLaunch({
       sessionFile: chat.piSessionFile ? path.resolve(chat.piSessionFile) : null,
       runtime,
       binaryVersion: installation.version,
-      trustPosture: trustChoice === "trusted_once"
-        ? "trusted_once"
-        : trustChoice === "native_saved_trust" ? "native_saved_trust" : "ignore_project_resources",
+      trustPosture: "native_saved_trust",
     };
   }
 

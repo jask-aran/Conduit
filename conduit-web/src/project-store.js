@@ -74,6 +74,16 @@ export class ProjectStore {
   async initialize() {
     await fs.mkdir(this.filesRoot, { recursive: true });
     await fs.mkdir(this.piAgentDir, { recursive: true });
+    const catalog = await readJson(this.catalogFile, { version: 2, projects: [] });
+    if ((catalog.version || 1) < 2) {
+      for (const project of Array.isArray(catalog.projects) ? catalog.projects : []) {
+        if (["linked", "cloned"].includes(project.origin) && project.defaultTemplateId === "workspace") {
+          project.defaultTemplateId = null;
+        }
+      }
+      catalog.version = 2;
+      await writeJson(this.catalogFile, catalog);
+    }
     await this.ensure({ slug: "chat", name: "Chats", kind: "unstructured", origin: "managed" });
   }
 
@@ -83,9 +93,9 @@ export class ProjectStore {
   }
 
   async readCatalog() {
-    const catalog = await readJson(this.catalogFile, { version: 1, projects: [] });
+    const catalog = await readJson(this.catalogFile, { version: 2, projects: [] });
     return {
-      version: 1,
+      version: 2,
       projects: Array.isArray(catalog.projects) ? catalog.projects : [],
     };
   }
@@ -183,7 +193,7 @@ export class ProjectStore {
     });
   }
 
-  async createLinked({ name, path: inputPath, defaultTemplateId = "workspace" }) {
+  async createLinked({ name, path: inputPath, defaultTemplateId = null }) {
     const externalPath = await resolveExistingDirectory(inputPath, this.workspaceAllowlist, { dataRoot: this.dataRoot });
     return this.runExclusive(async () => {
       const slugBase = name || path.basename(externalPath);
@@ -202,7 +212,7 @@ export class ProjectStore {
         origin: "linked",
         externalPath,
         cloneUrl: null,
-        defaultTemplateId: defaultTemplateId || "workspace",
+        defaultTemplateId: defaultTemplateId || null,
         createdAt: new Date().toISOString(),
       };
       catalog.projects.push(project);
@@ -212,7 +222,7 @@ export class ProjectStore {
     });
   }
 
-  async createCloned({ name, cloneUrl, path: inputPath, defaultTemplateId = "workspace" }) {
+  async createCloned({ name, cloneUrl, path: inputPath, defaultTemplateId = null }) {
     const url = String(cloneUrl || "").trim();
     if (!url) {
       const error = new Error("cloneUrl is required");
@@ -280,7 +290,7 @@ export class ProjectStore {
         origin: "cloned",
         externalPath: target,
         cloneUrl: url,
-        defaultTemplateId: defaultTemplateId || "workspace",
+        defaultTemplateId: defaultTemplateId || null,
         createdAt: new Date().toISOString(),
       };
       try {
@@ -332,6 +342,23 @@ export class ProjectStore {
 
   async rename(idOrSlug, name) {
     return this.runExclusive(() => this.renameUnlocked(idOrSlug, name));
+  }
+
+  async update(idOrSlug, changes = {}) {
+    return this.runExclusive(async () => {
+      const catalog = await this.readCatalog();
+      const project = catalog.projects.find((item) => item.id === idOrSlug || item.slug === idOrSlug);
+      if (!project) return null;
+      if (Object.hasOwn(changes, "name")) {
+        const name = String(changes.name || "").trim();
+        if (!name) throw new Error("Project names must contain letters or numbers");
+        if (project.slug === "chat") throw Object.assign(new Error("The unstructured Chats project cannot be renamed"), { code: "reserved_project" });
+        project.name = name;
+      }
+      if (Object.hasOwn(changes, "defaultTemplateId")) project.defaultTemplateId = changes.defaultTemplateId || null;
+      await writeJson(this.catalogFile, catalog);
+      return this.projectView(project);
+    });
   }
 
   async renameUnlocked(idOrSlug, name) {

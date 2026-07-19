@@ -39,7 +39,10 @@ linked and cloned roots uniformly as non-owning Workspaces; a clone is
 functionally a checkout followed by Workspace registration, and unregistering
 does not delete either working tree.
 
-Creating a Workspace chat immediately opens a draft with its default profile.
+Creating a Workspace chat immediately opens a draft with the app default profile,
+unless Settings → Workspaces assigns that Workspace an explicit override.
+Host Pi is also available as a synthetic override while detected; failure clears
+that override back to global inheritance.
 The composer uses one profile selector. Ordinary profiles launch the
 bundled Isolated Pi with the private `data/pi` home; the synthetic **Host Pi**
 choice uses the host executable/home/resources plus the additive resources under

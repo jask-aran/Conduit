@@ -77,7 +77,10 @@ test("links allow-listed directories without deleting them on unregister", async
   const linked = await store.create({ mode: "linked", name: "External", path: external });
   assert.equal(linked.origin, "linked");
   assert.equal(linked.path, external);
-  assert.equal(linked.defaultTemplateId, "workspace");
+  assert.equal(linked.defaultTemplateId, null);
+  assert.equal((await store.update(linked.id, { defaultTemplateId: "workspace" })).defaultTemplateId, "workspace");
+  assert.equal((await store.update(linked.id, { defaultTemplateId: "host-pi" })).defaultTemplateId, "host-pi");
+  assert.equal((await store.update(linked.id, { defaultTemplateId: null })).defaultTemplateId, null);
   assert.equal(linked.deletesFilesOnRemove, false);
   await fs.writeFile(path.join(external, ".conduit", "user-owned.txt"), "keep");
   await store.remove(linked.id);
@@ -85,6 +88,39 @@ test("links allow-listed directories without deleting them on unregister", async
   assert.equal(await fs.readFile(path.join(external, ".conduit", "user-owned.txt"), "utf8"), "keep");
   assert.equal(await store.get(linked.id), null);
   await assert.rejects(store.create({ mode: "linked", path: path.join(root, "nope") }), { code: "path_not_found" });
+  await fs.rm(root, { recursive: true, force: true });
+});
+
+test("migrates implicit Workspace profile defaults to global inheritance", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-project-default-migration-"));
+  const external = path.join(root, "external");
+  const catalogFile = path.join(root, "data/conduit.json");
+  await fs.mkdir(external);
+  await fs.mkdir(path.dirname(catalogFile), { recursive: true });
+  await fs.writeFile(catalogFile, `${JSON.stringify({
+    version: 1,
+    projects: [{
+      id: "project_external",
+      slug: "external",
+      name: "External",
+      kind: "workspace",
+      origin: "linked",
+      externalPath: external,
+      defaultTemplateId: "workspace",
+      createdAt: "2026-01-01T00:00:00.000Z",
+    }],
+  })}\n`);
+  const store = new ProjectStore({
+    filesRoot: path.join(root, "data/chat/files"),
+    catalogFile,
+    piAgentDir: path.join(root, "data/pi"),
+    workspaceAllowlist: [root],
+  });
+
+  await store.initialize();
+
+  assert.equal((await store.get("project_external")).defaultTemplateId, null);
+  assert.equal(JSON.parse(await fs.readFile(catalogFile, "utf8")).version, 2);
   await fs.rm(root, { recursive: true, force: true });
 });
 

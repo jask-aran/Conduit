@@ -76,11 +76,24 @@ bundled 0.80.6 executable with `data/pi`, explicit profile resources, and no
 ambient project resources. `native_pi` launches the detected absolute host Pi
 executable with the server user's login-shell environment and effective native
 Pi home/resources and the versioned
-Conduit Workspace bridge only. Host Pi is available only for Workspaces and
-requires saved host trust or a one-run trust/ignore choice at first launch. One `PiManager` owns
+Conduit Workspace bridge only. Host Pi is available only for Workspaces. Before
+each Host launch, validate Pi project-resource paths and persist trust for that
+registered Workspace in Host Pi's trust store without a browser prompt. Surface
+the active process posture in the chat header. One `PiManager` owns
 both runtimes so process limits and writer exclusion remain global. Host Pi
 chat movement is unavailable because moving would re-home its host-native JSONL
 through Conduit's isolated session store.
+
+New Workspaces inherit the app default profile from `data/preferences.json`.
+`data/conduit.json` may store a nullable per-Workspace `defaultTemplateId`;
+`null` means inheritance, an ordinary template id is a profile override, and
+`host-pi` selects the synthetic Host Pi launch option. If Host Pi is unavailable
+at detection, chat creation, or launch, clear that override to `null` and retry
+with the inherited ordinary profile.
+Settings → Workspaces, the Settings command page, and the Workspace context menu
+edit that override. Host trust applies only to Pi project resources detected by
+Pi (for example `.pi` or `.agents`); ordinary files, context files, and Conduit
+attachments do not trigger a trust prompt.
 
 `data/pi/settings.json` is authoritative for Isolated Pi scoped models. Terminal and web
 saves share it, the latest successful save wins, and Conduit reloads it for
