@@ -118,16 +118,20 @@ session directory from the process working directory and records the canonical
 matching that header exactly, rather than trusting the lossy encoded directory
 name.
 
-Creating a Workspace chat immediately opens a draft using its default profile.
+Creating a Workspace chat immediately opens a draft using the app default
+profile, unless that Workspace has an explicit override in Settings → Workspaces.
 The composer presents ordinary profiles and **Host Pi** in one selector.
 Ordinary profiles use the bundled **Isolated Pi**, isolated home, and
 their explicit tracked resources. Host Pi uses
 the executable, environment, and optional `PI_CODING_AGENT_DIR` discovered
 through the server user's login shell (otherwise `$HOME/.pi/agent`), native
 authentication and resources, plus a minimal Conduit attachment bridge. Native
-project resources require an existing saved
-trust decision or a one-run choice on first send to trust them or start without them. The
-choice may change until the first prompt starts Pi, then becomes immutable. Both
+project resources are automatically trusted for registered Workspaces when Host
+Pi first launches, and the decision is persisted in Host Pi's trust store. The
+active Host Pi resource posture is shown in the chat header. Conduit still
+validates Pi project-resource paths such as `.pi` and `.agents`; ordinary files,
+context files, and Conduit attachments are unaffected. The runtime choice may
+change until the first prompt starts Pi, then becomes immutable. Both
 runtimes use the Workspace as canonical `cwd`, share one process manager and
 global capacity limits, and preserve the one-writer-per-JSONL invariant. The
 internal Native bridge is not exposed as a profile.
@@ -188,6 +192,13 @@ Profiles). Each chat stores sticky `templateId` / `templateVersion` in
 profile receive the default the next time the runtime touches them. Drafts may
 change profile until the first Pi process attaches.
 
+Linked and cloned Workspaces inherit that app default unless their nullable
+`defaultTemplateId` in `data/conduit.json` names an ordinary profile or the
+synthetic `host-pi` launch option. An unavailable Host Pi override is cleared
+back to inheritance and the chat continues with the global ordinary profile. Settings →
+Workspaces renders one card per Workspace; the Settings command page targets the
+current Workspace, and the Workspace sidebar context menu opens its card directly.
+
 The sidebar presents managed folders under **Projects**. **Workspaces** register
 an existing allow-listed host directory; cloning first creates a checkout under
 the user-selected absolute location and then registers that checkout as a
@@ -237,7 +248,8 @@ send, the same cards move beneath their user message. Cmd/Ctrl+K lazy-loads the
 global Shadcn Command palette: an extensible registry for chat ops, models, and
 thinking levels, with Settings… and Go to… drill-down pages (search prefixes,
 Cmd/Ctrl+Shift+O for Go to) so nested targets stay out of the root list. The
-textarea-focused slash Popover exposes only composition commands
+selected command follows the highest-ranked result as a drill-down query changes.
+The textarea-focused slash Popover exposes only composition commands
 (`/attach`). Settings opens as a centered Dialog with fixed vertical Tabs and a
 searchable, grouped multi-model Combobox. The chat header uses a project-aware
 breadcrumb. Response controls copy source Markdown, fork for edit/regenerate,

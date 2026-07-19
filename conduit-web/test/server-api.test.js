@@ -109,11 +109,13 @@ input.on("line", (line) => {
     });
     assert.equal(linkedResponse.status, 201);
     const linked = await linkedResponse.json();
+    assert.equal(linked.defaultTemplateId, null);
     await fs.mkdir(path.join(workspace, ".pi", "themes"), { recursive: true });
     const preflight = await (await fetch(`${origin}/v0/workspaces/${linked.id}/native-preflight`)).json();
     assert.equal(preflight.available, true);
     assert.equal(preflight.version, "0.80.10");
-    assert.equal(preflight.trustRequired, true);
+    assert.equal(preflight.savedTrust, null);
+    assert.equal(preflight.trustRequired, false);
     assert.ok(preflight.resources.includes("themes"));
 
     const nativeChatResponse = await fetch(`${origin}/v0/chats`, {
@@ -125,6 +127,21 @@ input.on("line", (line) => {
     const nativeChat = await nativeChatResponse.json();
     assert.equal(nativeChat.runtime.kind, "native_pi");
     assert.equal(nativeChat.runtime.installationId, "host-pi");
+
+    const automaticTrustLaunch = await fetch(`${origin}/v0/live-sessions`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        chatId: nativeChat.id,
+        projectId: linked.id,
+        model: "missing/provider-model",
+      }),
+    });
+    assert.equal(automaticTrustLaunch.status, 400);
+    assert.equal((await automaticTrustLaunch.json()).error, "invalid_model");
+    const savedPreflight = await (await fetch(`${origin}/v0/workspaces/${linked.id}/native-preflight`)).json();
+    assert.equal(savedPreflight.savedTrust, true);
+    assert.equal(savedPreflight.trustRequired, false);
 
     const nativeMove = await fetch(`${origin}/v0/sessions/${nativeChat.id}/move`, {
       method: "POST",
@@ -175,6 +192,50 @@ input.on("line", (line) => {
     });
     assert.equal(prefsPatch.status, 200);
     assert.equal((await prefsPatch.json()).defaultTemplateId, "workspace");
+
+    const inheritedWorkspaceChat = await fetch(`${origin}/v0/chats`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ projectId: linked.id }),
+    });
+    assert.equal((await inheritedWorkspaceChat.json()).templateId, "workspace");
+    const workspaceOverride = await fetch(`${origin}/v0/projects/${linked.id}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ defaultTemplateId: "chat" }),
+    });
+    assert.equal((await workspaceOverride.json()).defaultTemplateId, "chat");
+    const overriddenWorkspaceChat = await fetch(`${origin}/v0/chats`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ projectId: linked.id }),
+    });
+    assert.equal((await overriddenWorkspaceChat.json()).templateId, "chat");
+    const clearedOverride = await fetch(`${origin}/v0/projects/${linked.id}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ defaultTemplateId: null }),
+    });
+    assert.equal((await clearedOverride.json()).defaultTemplateId, null);
+    const hostOverride = await fetch(`${origin}/v0/projects/${linked.id}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ defaultTemplateId: "host-pi" }),
+    });
+    assert.equal((await hostOverride.json()).defaultTemplateId, "host-pi");
+    const hostDefaultChat = await fetch(`${origin}/v0/chats`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ projectId: linked.id }),
+    });
+    const hostDefaultChatBody = await hostDefaultChat.json();
+    assert.equal(hostDefaultChatBody.runtime.kind, "native_pi");
+    assert.equal(hostDefaultChatBody.templateId, "workspace");
+    await fetch(`${origin}/v0/projects/${linked.id}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ defaultTemplateId: null }),
+    });
 
     const createdResponse = await fetch(`${origin}/v0/chats`, {
       method: "POST",

@@ -222,11 +222,11 @@ export function CommandMenu({
       />
       <CommandList className="max-h-[36rem]">
         <CommandEmpty>No matching commands.</CommandEmpty>
-        {page && <CommandGroup>
+        {page && !searching && <CommandGroup>
           <CommandRow command={backCommand} onRun={run} />
         </CommandGroup>}
         {showRanked ? clusterRanked(ranked || []).map((cluster, index) => <Fragment key={`${cluster.group}-${index}`}>
-          {(index > 0 || page) && <CommandSeparator />}
+          {(index > 0 || (page && !searching)) && <CommandSeparator />}
           <CommandGroup heading={cluster.heading}>
             {cluster.items.map((row) => <RankedRow
               key={row.id}

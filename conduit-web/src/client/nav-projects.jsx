@@ -35,6 +35,7 @@ export function NavProjects({
   onMoveSession,
   onNewChat,
   onOpenSession,
+  onOpenProjectSettings,
   onRenameProject,
   onRenameSession,
 }) {
@@ -54,6 +55,7 @@ export function NavProjects({
               onDelete={() => onDeleteProject(project)}
               onMoveChats={(target) => onMoveProjectSessions(project, target)}
               onNewChat={() => onNewChat(project)}
+              onOpenSettings={onOpenProjectSettings ? () => onOpenProjectSettings(project) : undefined}
               onRename={() => onRenameProject(project)}
             >
               <CollapsibleTrigger asChild>

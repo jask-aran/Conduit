@@ -696,14 +696,53 @@ test("keeps linked workspaces in their own sidebar group", async ({ page }, test
   await expect(page.getByRole("button", { name: "New workspace" })).toBeVisible();
 });
 
-test("workspace draft chooses Host Pi and resolves trust on first send", async ({ page }, testInfo) => {
+test("opens a targeted Workspace settings card from its context menu", async ({ page }, testInfo) => {
   const workspace = {
     id: "project_workspace",
     slug: "jaskfish",
     name: "JaskFish",
     kind: "workspace",
     origin: "linked",
-    defaultTemplateId: "workspace",
+    path: "/home/user/JaskFish",
+    defaultTemplateId: null,
+    sessions: [],
+  };
+  await page.unroute("**/v0/projects");
+  await page.route("**/v0/projects", (route) => route.fulfill({ json: { projects: [...projects, workspace] } }));
+  await page.route("**/v0/projects/project_workspace", async (route) => {
+    const body = route.request().postDataJSON();
+    await route.fulfill({ json: { ...workspace, defaultTemplateId: body.defaultTemplateId } });
+  });
+  await page.goto("/");
+  await openSidebar(page, testInfo);
+  await page.getByRole("button", { name: "JaskFish" }).click({ button: "right" });
+  await page.getByRole("menuitem", { name: "Workspace settings" }).click();
+  const settings = page.getByRole("dialog", { name: "Settings" });
+  await expect(settings.getByRole("tab", { name: /Workspaces/ })).toHaveAttribute("aria-selected", "true");
+  await expect(settings.getByText("/home/user/JaskFish")).toBeVisible();
+  await settings.getByRole("combobox", { name: "Default profile" }).click();
+  await expect(page.getByRole("option", { name: "Inherit global (General)" })).toBeVisible();
+  const updateRequest = page.waitForRequest((request) => request.url().endsWith("/v0/projects/project_workspace")
+    && request.method() === "PATCH");
+  await page.getByRole("option", { name: "Coding" }).click();
+  expect((await updateRequest).postDataJSON()).toEqual({ defaultTemplateId: "workspace" });
+  await expect(settings.getByText("Override: Coding")).toBeVisible();
+  await settings.getByRole("combobox", { name: "Default profile" }).click();
+  const hostRequest = page.waitForRequest((request) => request.url().endsWith("/v0/projects/project_workspace")
+    && request.method() === "PATCH" && request.postDataJSON()?.defaultTemplateId === "host-pi");
+  await page.getByRole("option", { name: "Host Pi" }).click();
+  await hostRequest;
+  await expect(settings.getByText("Override: Host Pi")).toBeVisible();
+});
+
+test("workspace draft chooses Host Pi and automatically trusts project resources", async ({ page }, testInfo) => {
+  const workspace = {
+    id: "project_workspace",
+    slug: "jaskfish",
+    name: "JaskFish",
+    kind: "workspace",
+    origin: "linked",
+    defaultTemplateId: null,
     sessions: [],
   };
   await page.unroute("**/v0/projects");
@@ -746,21 +785,12 @@ test("workspace draft chooses Host Pi and resolves trust on first send", async (
     } });
   });
   await page.unroute("**/v0/live-sessions");
-  let liveAttempts = 0;
   await page.route("**/v0/live-sessions", async (route) => {
-    liveAttempts += 1;
-    if (liveAttempts === 1) {
-      await route.fulfill({ status: 409, json: {
-        error: "native_trust_required",
-        resources: ["settings", "skills"],
-        trustToken: "trust-token",
-      } });
-      return;
-    }
     await route.fulfill({ status: 201, json: {
       id: "live_host",
       streamUrl: "/v0/live-sessions/live_host/stream",
       runtime: { kind: "native_pi", installationId: "host-pi" },
+      trustPosture: "native_saved_trust",
     } });
   });
   await page.goto("/");
@@ -771,12 +801,12 @@ test("workspace draft chooses Host Pi and resolves trust on first send", async (
   await page.getByRole("menuitem", { name: "New chat" }).click();
   expect((await createRequest).postDataJSON()).toMatchObject({
     projectId: "project_workspace",
-    templateId: "workspace",
+    templateId: "chat",
     runtimeKind: "conduit_profile",
   });
   await expect(page.getByRole("dialog", { name: /New chat in/ })).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "Profile Coding" })).toBeVisible();
-  await page.getByRole("button", { name: "Profile Coding" }).click();
+  await expect(page.getByRole("button", { name: "Profile General" })).toBeVisible();
+  await page.getByRole("button", { name: "Profile General" }).click();
   const switchRequest = page.waitForRequest((candidate) => candidate.method() === "PATCH"
     && candidate.postDataJSON()?.runtimeKind === "native_pi");
   await page.getByRole("menuitemradio", { name: /Host Pi/ }).click();
@@ -786,19 +816,77 @@ test("workspace draft chooses Host Pi and resolves trust on first send", async (
   await expect(page.getByRole("button", { name: /Reasoner medium/ })).toBeVisible();
 
   await page.getByRole("textbox", { name: "Message Pi" }).fill("Inspect this workspace");
+  const launchRequest = page.waitForRequest((request) => request.url().endsWith("/v0/live-sessions")
+    && request.method() === "POST");
   await page.getByRole("button", { name: "Send message" }).click();
-  const trustDialog = page.getByRole("alertdialog", { name: "Host Pi project resources" });
-  await expect(trustDialog).toContainText("settings, skills");
-  const retryRequest = page.waitForRequest((request) => request.url().endsWith("/v0/live-sessions")
-    && request.method() === "POST" && request.postDataJSON()?.trustChoice === "trusted_once");
-  await trustDialog.getByRole("button", { name: "Trust once and start" }).click();
-  const retry = await retryRequest;
-  expect(retry.postDataJSON()).toMatchObject({
+  const launch = await launchRequest;
+  expect(launch.postDataJSON()).toMatchObject({
     chatId: "550e8400-e29b-41d4-a716-446655440088",
     model: model.spec,
-    trustChoice: "trusted_once",
-    trustToken: "trust-token",
   });
+  expect(launch.postDataJSON()).not.toHaveProperty("trustChoice");
+  expect(launch.postDataJSON()).not.toHaveProperty("trustToken");
+  await expect(page.getByRole("alertdialog", { name: "Host Pi project resources" })).toHaveCount(0);
+  await expect(page.getByRole("textbox", { name: "Message Pi" })).toHaveValue("");
+  await expect(page.locator(".chat-profile-posture")).toContainText("project resources trusted");
+});
+
+test("Host Pi default falls back to global when launch becomes unavailable", async ({ page }, testInfo) => {
+  const workspace = {
+    id: "project_workspace",
+    slug: "jaskfish",
+    name: "JaskFish",
+    kind: "workspace",
+    origin: "linked",
+    defaultTemplateId: "host-pi",
+    sessions: [],
+  };
+  await page.unroute("**/v0/projects");
+  await page.route("**/v0/projects", (route) => route.fulfill({ json: { projects: [...projects, workspace] } }));
+  await page.route("**/v0/projects/project_workspace", async (route) => route.fulfill({ json: {
+    ...workspace,
+    defaultTemplateId: route.request().postDataJSON()?.defaultTemplateId ?? null,
+  } }));
+  await page.unroute("**/v0/chats");
+  await page.route("**/v0/chats", (route) => route.fulfill({ status: 201, json: {
+    id: "550e8400-e29b-41d4-a716-446655440066",
+    projectId: "project_workspace",
+    status: "draft",
+    title: "New chat",
+    templateId: "chat",
+    runtime: { kind: "native_pi", installationId: "host-pi" },
+  } }));
+  await page.route("**/v0/chats/550e8400-e29b-41d4-a716-446655440066", async (route) => {
+    const body = route.request().postDataJSON();
+    await route.fulfill({ json: {
+      id: "550e8400-e29b-41d4-a716-446655440066",
+      projectId: "project_workspace",
+      status: "draft",
+      title: "New chat",
+      templateId: body.templateId,
+      runtime: { kind: body.runtimeKind, installationId: "conduit-pinned", profileId: body.templateId },
+    } });
+  });
+  await page.unroute("**/v0/live-sessions");
+  let attempts = 0;
+  await page.route("**/v0/live-sessions", async (route) => {
+    attempts += 1;
+    if (attempts === 1) await route.fulfill({ status: 409, json: { error: "native_pi_unavailable", message: "Host Pi disappeared" } });
+    else await route.fulfill({ status: 201, json: { id: "live_fallback", streamUrl: "/v0/live-sessions/live_fallback/stream", runtime: { kind: "conduit_profile", installationId: "conduit-pinned" } } });
+  });
+  await page.goto("/");
+  await openSidebar(page, testInfo);
+  await page.getByRole("button", { name: "JaskFish" }).click({ button: "right" });
+  await page.getByRole("menuitem", { name: "New chat" }).click();
+  await expect(page.getByRole("button", { name: "Profile Host Pi" })).toBeVisible();
+  await page.getByRole("textbox", { name: "Message Pi" }).fill("Fall back safely");
+  const clearDefault = page.waitForRequest((request) => request.url().endsWith("/v0/projects/project_workspace")
+    && request.method() === "PATCH" && request.postDataJSON()?.defaultTemplateId === null);
+  const switchRuntime = page.waitForRequest((request) => request.url().endsWith("/v0/chats/550e8400-e29b-41d4-a716-446655440066")
+    && request.method() === "PATCH" && request.postDataJSON()?.runtimeKind === "conduit_profile");
+  await page.getByRole("button", { name: "Send message" }).click();
+  await Promise.all([clearDefault, switchRuntime]);
+  await expect(page.getByRole("button", { name: "Profile General" })).toBeVisible();
   await expect(page.getByRole("textbox", { name: "Message Pi" })).toHaveValue("");
 });
 
@@ -815,7 +903,7 @@ test("clone workspace requires a repository and absolute target location", async
         origin: "cloned",
         externalPath: body.path,
         path: body.path,
-        defaultTemplateId: "workspace",
+        defaultTemplateId: null,
         deletesFilesOnRemove: false,
         sessions: [],
       } });
@@ -839,7 +927,6 @@ test("clone workspace requires a repository and absolute target location", async
     mode: "cloned",
     cloneUrl: "https://github.com/example/repo.git",
     path: "/home/user/code/repo",
-    defaultTemplateId: "workspace",
   });
 });
 
@@ -1107,6 +1194,10 @@ test("global commands and slash suggestions preserve their intended focus models
   await expect(palette.locator("[data-slot='command-input-prefix']")).toHaveText("Settings ›");
   await expect(palette.getByRole("option", { name: /^Back$/ })).toBeVisible();
   await expect(palette.getByRole("option", { name: /^Runtime$/ })).toBeVisible();
+  await expect(palette.getByRole("option", { name: /^Workspaces$/ })).toBeVisible();
+  await palette.getByRole("combobox").fill("work");
+  await expect(palette.getByRole("option", { name: /^Workspaces$/ })).toHaveAttribute("data-selected", "true");
+  await palette.getByRole("combobox").fill("");
   await palette.getByRole("option", { name: /^Runtime$/ }).click();
   const settingsDialog = page.getByRole("dialog", { name: "Settings" });
   await expect(settingsDialog).toBeVisible();

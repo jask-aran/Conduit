@@ -75,6 +75,7 @@ export function AppSidebar({
   onNewChat,
   onOpenSession,
   onOpenSettings,
+  onOpenWorkspaceSettings,
   onRenameProject,
   onRenameSession,
 }) {
@@ -190,8 +191,8 @@ export function AppSidebar({
     const payload = newFolderMode === "managed"
       ? { mode: "managed", name }
       : newFolderMode === "linked"
-        ? { mode: "linked", name: name || undefined, path: pathValue, defaultTemplateId: "workspace" }
-        : { mode: "cloned", name: name || undefined, cloneUrl, path: pathValue, defaultTemplateId: "workspace" };
+        ? { mode: "linked", name: name || undefined, path: pathValue }
+        : { mode: "cloned", name: name || undefined, cloneUrl, path: pathValue };
     setNewFolderSubmitting(true);
     try {
       if (!await onAddProject(payload)) return;
@@ -277,6 +278,7 @@ export function AppSidebar({
           onMoveSession={onMoveSession}
           onNewChat={chooseNewChat}
           onOpenSession={chooseSession}
+          onOpenProjectSettings={onOpenWorkspaceSettings}
           onRenameProject={(project) => requestRename({ type: "project", project })}
           onRenameSession={(session, project) => requestRename({ type: "session", session, project })}
           onDeleteProject={(project) => setPendingDelete({ type: "project", project })}
