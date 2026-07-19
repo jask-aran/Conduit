@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 const list = (value) => Array.isArray(value) ? value : [];
 
@@ -9,28 +9,27 @@ async function api(url, options) {
   return body;
 }
 
-export function useModelSettings(projectId, { onError, socketRef } = {}) {
+export function useModelSettings(projectId, chatId, { onError } = {}) {
   const [allModels, setAllModels] = useState([]);
   const [enabledModels, setEnabledModels] = useState([]);
+  const [chatModels, setChatModels] = useState([]);
+  const [settingsDefaultModel, setSettingsDefaultModel] = useState("");
   const [model, setModel] = useState("");
   const [effort, setEffort] = useState("");
   const [notice, setNotice] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const currentChatId = useRef(chatId);
+  const chatRequestSequence = useRef(0);
+  currentChatId.current = chatId;
 
-  const apply = useCallback((settings, catalog = null) => {
+  const applySettings = useCallback((settings, catalog = null) => {
     const nextAll = list(settings.models);
     const enabled = list(settings.enabledModels);
     const nextModel = enabled.includes(settings.defaultModel) ? settings.defaultModel : enabled[0] || "";
     setAllModels(nextAll);
     setEnabledModels(enabled);
-    setModel((current) => enabled.includes(current) ? current : nextModel);
-    const selected = nextAll.find((item) => item.spec === nextModel);
-    const levels = list(selected?.thinkingLevels);
-    setEffort((current) => levels.includes(current)
-      ? current
-      : levels.includes(catalog?.defaultThinkingLevel) ? catalog.defaultThinkingLevel
-        : levels.includes("medium") ? "medium" : levels[0] || "off");
+    setSettingsDefaultModel(nextModel);
     if (catalog) setNotice(catalog.requiresAuthentication ? "Authenticate with conduit-pi, then run /login." : "");
   }, []);
 
@@ -42,61 +41,109 @@ export function useModelSettings(projectId, { onError, socketRef } = {}) {
         api(`/v0/settings?projectId=${encodeURIComponent(projectId)}`),
         api(`/v0/models?projectId=${encodeURIComponent(projectId)}`),
       ]);
-      apply(settings, catalog);
+      applySettings(settings, catalog);
     } catch (error) { onError?.(error.message); }
     finally { setLoading(false); }
-  }, [apply, onError, projectId]);
+  }, [applySettings, onError, projectId]);
 
   useEffect(() => { reload(); }, [reload]);
 
-  const save = useCallback(async (nextEnabled, defaultModel = model) => {
-    const previous = { enabledModels, model };
+  const reloadChat = useCallback(async () => {
+    if (!chatId) return;
+    const requestedChatId = chatId;
+    const requestId = ++chatRequestSequence.current;
+    setLoading(true);
+    try {
+      const catalog = await api(`/v0/chats/${encodeURIComponent(chatId)}/models`);
+      if (currentChatId.current !== requestedChatId || chatRequestSequence.current !== requestId) return;
+      const models = list(catalog.models);
+      const selectedModel = models.find((item) => item.spec === catalog.model) || null;
+      const levels = list(selectedModel?.thinkingLevels);
+      setChatModels(models);
+      setModel(catalog.model || models[0]?.spec || "");
+      setEffort(levels.includes(catalog.thinkingLevel)
+        ? catalog.thinkingLevel
+        : levels.includes(catalog.defaultThinkingLevel) ? catalog.defaultThinkingLevel
+          : levels.includes("medium") ? "medium" : levels[0] || "off");
+      setNotice(catalog.requiresAuthentication
+        ? `Authenticate ${catalog.runtimeKind === "native_pi" ? "Host Pi" : "Isolated Pi"} to use models.`
+        : "");
+    } catch (error) {
+      if (currentChatId.current === requestedChatId && chatRequestSequence.current === requestId) onError?.(error.message);
+    } finally {
+      if (currentChatId.current === requestedChatId && chatRequestSequence.current === requestId) setLoading(false);
+    }
+  }, [chatId, onError]);
+
+  useEffect(() => { reloadChat(); }, [reloadChat]);
+
+  const save = useCallback(async (nextEnabled, defaultModel = settingsDefaultModel) => {
+    const previous = { enabledModels, settingsDefaultModel };
     const allowedDefault = nextEnabled.includes(defaultModel) ? defaultModel : nextEnabled[0] || "";
     setEnabledModels(nextEnabled);
-    setModel(allowedDefault);
+    setSettingsDefaultModel(allowedDefault);
     setSaving(true);
     try {
       const payload = await api("/v0/settings", {
         method: "PATCH",
         body: JSON.stringify({ projectId, enabledModels: nextEnabled, defaultModel: allowedDefault }),
       });
-      apply(payload);
+      applySettings(payload);
+      await reloadChat();
       return true;
     } catch (error) {
       setEnabledModels(previous.enabledModels);
-      setModel(previous.model);
+      setSettingsDefaultModel(previous.settingsDefaultModel);
       onError?.(error.message);
       return false;
     } finally { setSaving(false); }
-  }, [apply, enabledModels, model, onError, projectId]);
+  }, [applySettings, enabledModels, onError, projectId, reloadChat, settingsDefaultModel]);
 
   const chooseModel = useCallback(async (spec) => {
-    if (!enabledModels.includes(spec)) return false;
-    const previous = model;
+    if (!chatId || !chatModels.some((item) => item.spec === spec)) return false;
+    const previous = { model, effort };
     setModel(spec);
-    const saved = await save(enabledModels, spec);
-    if (!saved) setModel(previous);
-    if (saved && socketRef?.current?.readyState === WebSocket.OPEN) {
-      const [provider, ...modelParts] = spec.split("/");
-      socketRef.current.send(JSON.stringify({ type: "set_model", provider, modelId: modelParts.join("/") }));
+    try {
+      const selected = chatModels.find((item) => item.spec === spec);
+      const levels = list(selected?.thinkingLevels);
+      const nextEffort = levels.includes(effort) ? effort : levels.includes("medium") ? "medium" : levels[0] || "off";
+      const payload = await api(`/v0/chats/${encodeURIComponent(chatId)}/models`, {
+        method: "PATCH",
+        body: JSON.stringify({ model: spec, thinkingLevel: nextEffort }),
+      });
+      setModel(payload.model || spec);
+      setEffort(payload.thinkingLevel || nextEffort);
+      return true;
+    } catch (error) {
+      setModel(previous.model);
+      setEffort(previous.effort);
+      onError?.(error.message);
+      return false;
     }
-    return saved;
-  }, [enabledModels, model, save, socketRef]);
+  }, [chatId, chatModels, effort, model, onError]);
 
-  const chooseEffort = useCallback((level) => {
+  const chooseEffort = useCallback(async (level) => {
+    if (!chatId || !model) return false;
+    const previous = effort;
     setEffort(level);
-    if (socketRef?.current?.readyState === WebSocket.OPEN) {
-      socketRef.current.send(JSON.stringify({ type: "set_thinking_level", level }));
+    try {
+      const payload = await api(`/v0/chats/${encodeURIComponent(chatId)}/models`, {
+        method: "PATCH",
+        body: JSON.stringify({ model, thinkingLevel: level }),
+      });
+      setEffort(payload.thinkingLevel || level);
+      return true;
+    } catch (error) {
+      setEffort(previous);
+      onError?.(error.message);
+      return false;
     }
-  }, [socketRef]);
+  }, [chatId, effort, model, onError]);
 
-  const models = useMemo(() => {
-    const enabled = new Set(enabledModels);
-    return allModels.filter((item) => enabled.has(item.spec));
-  }, [allModels, enabledModels]);
+  const models = useMemo(() => chatModels, [chatModels]);
 
   return {
     allModels, enabledModels, models, model, effort, notice, loading, saving,
-    chooseModel, chooseEffort, saveScope: save, reload,
+    chooseModel, chooseEffort, saveScope: save, reload, reloadChat,
   };
 }

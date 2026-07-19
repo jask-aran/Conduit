@@ -54,7 +54,7 @@ Cmd/Ctrl+Shift+O opens Go to mode directly; Cmd/Ctrl+Shift+C starts a new chat.
 The composer slash Popover contains only `/attach`. A project-aware breadcrumb
 identifies where each chat belongs.
 
-Every Pi process receives:
+Every Isolated Pi profile process receives:
 
 - `PI_CODING_AGENT_DIR=data/pi`;
 - the selected project directory as `cwd`;
@@ -64,6 +64,20 @@ Every Pi process receives:
 No session-directory override is supplied. Pi writes native JSONL sessions to
 `data/pi/sessions/<encoded-cwd>/`, and Conduit verifies each JSONL header's `cwd`
 when associating sessions with projects.
+
+Host Pi Workspace processes instead use the detected absolute host executable,
+login-shell environment and effective Pi home/configuration, the Workspace as `cwd`, and only the
+additive Conduit attachment bridge. They never receive `PI_CODING_AGENT_DIR`, a
+tracked profile, Conduit model scope, or tool allow-list. Conduit validates Host
+Pi project-resource paths, automatically persists trust for each registered
+Workspace at launch, and reports the active process posture in the chat header.
+One `PiManager` owns both launch forms and enforces shared writer and process
+limits. Workspace creation immediately opens a draft using the app default or
+that Workspace's explicit override; the
+composer exposes ordinary profiles and a synthetic Host Pi choice. Host project
+trust is persisted on first launch, and the launch form becomes immutable when Pi
+first starts. Host trust covers Pi project resources such as `.pi` and `.agents`;
+ordinary files and Conduit attachments are unaffected.
 
 JSONL remains authoritative for persisted messages, tool calls, model changes,
 and thinking-level changes. Opening a chat reconstructs that state from its
@@ -80,6 +94,10 @@ rename, move, duplicate, transcript copy, and delete operations, plus project
 chat creation, rename, bulk move, and delete operations. The same chat and
 folder mutations are available from the command palette (root actions or the
 Go to / Settings pages) so keyboard users do not depend on the sidebar alone.
+Settings → Workspaces contains one card per linked/cloned root and stores either
+global-profile inheritance, an explicit ordinary-profile override, or Host Pi.
+If Host Pi becomes unavailable, Conduit clears that override and retries with the
+inherited profile.
 
 Assistant messages pass through `src/client/chat-markdown.jsx`, which configures
 Streamdown for live and restored content. GFM, partial streaming Markdown,
@@ -90,9 +108,12 @@ responses stream as raw deltas coalesced per animation frame by
 HTML is sanitized, unsafe URLs are removed, remote images become alt text, and
 external links require confirmation. User messages are displayed literally.
 
-The single-line composer owns the current model and thinking controls. A model
-selection is sent to an attached live process and saved as Pi's next-chat
-default; opening a persisted session restores its own model and thinking level.
+The single-line composer owns runtime-aware model and thinking controls. Isolated
+Pi reads `data/pi`; Host Pi reads its detected agent home and reconciles against
+the live process through `get_available_models` and `get_state`. A selection is
+sent through correlated RPC and saved as that installation's next-chat default.
+Opening a persisted session restores JSONL state and does not pass model flags
+that could replace it.
 
 ## Runtime API
 
@@ -109,10 +130,15 @@ default; opening a persisted session restores its own model and thinking level.
 - `POST /v0/projects/:id/move-sessions`
 - `GET /v0/workspaces/policy` returns the server-owned linked-workspace roots
 - `GET /v0/workspaces/suggestions` returns visible direct folders under `~/`
+- `GET /v0/workspaces/:id/native-preflight` reports derived host trust/resource status
+- `GET /v0/pi-installations` lists safe installation/version status
+- `POST /v0/pi-installations/host/detect` re-detects the host Pi executable
 - `POST /v0/runtime/chats` creates a fresh special Runtime management chat
 - `GET /v0/models`
 - `GET|PATCH /v0/settings` reads and updates Pi's shared global model scope;
   terminal and web saves use the same isolated settings file.
+- `GET|PATCH /v0/chats/:id/models` resolves the selected installation's scoped
+  models and changes the draft/live chat model through the server-owned runtime.
 - `GET|PATCH|DELETE /v0/sessions/:id`
 - `GET /v0/sessions/:id?before=<entry-index>` returns a ten-turn transcript page
 - `GET /v0/sessions/:id/transcript`
@@ -138,7 +164,7 @@ live process view, then low-frequency `runtime_process` and
 Each public process view includes safe client-facing fields only: `id`,
 `chatId`, `projectId`, `status`, `active`, `activity`, `activityDetail`,
 `stopping`, queue lengths via `queue`, `hostUiRequests`, `contextUsage`,
-`updatedAt`, and `clientCount`. The durable Conduit chat id is the public row
+`runtime`, `binaryVersion`, `trustPosture`, `updatedAt`, and `clientCount`. The durable Conduit chat id is the public row
 key; the live process id is disposable.
 
 Coarse `activity` values: `idle`, `starting`, `working`, `waiting_for_user`,
@@ -171,7 +197,7 @@ Client commands:
 
 | Command | Fields | Effect |
 |---|---|---|
-| `prompt` | `message`, `attachmentIds[]`, optional `streamingBehavior` (`steer` \| `followUp`) | Send a user prompt wrapped in the attachment envelope |
+| `prompt` | `message`, `attachmentIds[]`, optional `streamingBehavior` (`steer` \| `followUp`) | Send a user prompt in the strict attachment envelope after Pi accepts it |
 | `follow_up` / `steer` | `message`, `attachmentIds[]` | Queue mid-run follow-up or steering input |
 | `stop_generation` / `abort` | `generationId` | Close the generation gate, then ask Pi to abort |
 | `fork_and_prompt` | `entryId`, `message`, `attachmentIds[]` | Fork history at an entry, then prompt |

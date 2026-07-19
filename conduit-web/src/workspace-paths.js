@@ -30,12 +30,13 @@ export function isPathInside(candidate, root) {
 }
 
 export function assertAllowedPath(candidate, allowlist, label = "path") {
-  const resolved = path.resolve(expandHome(candidate));
-  if (!path.isAbsolute(resolved)) {
+  const expanded = expandHome(String(candidate || ""));
+  if (!path.isAbsolute(expanded)) {
     const error = new Error(`${label} must be absolute`);
     error.code = "path_not_absolute";
     throw error;
   }
+  const resolved = path.resolve(expanded);
   if (!allowlist.some((root) => isPathInside(resolved, root))) {
     const error = new Error(`${label} is outside the workspace allowlist`);
     error.code = "path_not_allowed";
@@ -46,12 +47,33 @@ export function assertAllowedPath(candidate, allowlist, label = "path") {
   return resolved;
 }
 
+const DANGEROUS_UNIX_ROOTS = new Set([
+  "/", "/bin", "/boot", "/dev", "/etc", "/proc", "/run", "/sbin", "/sys", "/usr", "/var",
+]);
+
+export function assertSafeWorkspaceRoot(candidate, { home = os.homedir(), dataRoot = null } = {}) {
+  const resolved = path.resolve(candidate);
+  let reason = null;
+  if (DANGEROUS_UNIX_ROOTS.has(resolved)) reason = "system_root";
+  else if (resolved === path.parse(resolved).root) reason = "filesystem_root";
+  else if (resolved === path.resolve(home)) reason = "home_root";
+  else if (dataRoot && isPathInside(resolved, path.resolve(dataRoot))) reason = "conduit_data";
+  if (reason) {
+    const error = new Error("That directory is too broad or owned by Conduit application data");
+    error.code = "dangerous_workspace_root";
+    error.reason = reason;
+    error.path = resolved;
+    throw error;
+  }
+  return resolved;
+}
+
 /**
  * Resolve a user-supplied directory for linking. Always realpath the candidate so
  * intermediate symlink ancestors cannot textually sit inside the allowlist while
  * resolving outside it at the OS level.
  */
-export async function resolveExistingDirectory(candidate, allowlist) {
+export async function resolveExistingDirectory(candidate, allowlist, policy = {}) {
   const textual = assertAllowedPath(candidate, allowlist, "workspace path");
   let real;
   try {
@@ -66,6 +88,7 @@ export async function resolveExistingDirectory(candidate, allowlist) {
     throw error;
   }
   const resolved = assertAllowedPath(real, allowlist, "workspace path");
+  assertSafeWorkspaceRoot(resolved, policy);
   const stats = await fs.stat(resolved);
   if (!stats.isDirectory()) {
     const error = new Error("workspace path must be a directory");

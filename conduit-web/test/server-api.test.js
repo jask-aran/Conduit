@@ -34,11 +34,36 @@ test("raw JSON uploads publish atomically through the durable chat route", async
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-server-api-"));
   const port = await availablePort();
   const origin = `http://127.0.0.1:${port}`;
+  const freshSessionFile = path.join(root, "pi", "sessions", "future.jsonl");
+  const conduitPi = path.join(root, "conduit-pi");
+  await fs.writeFile(conduitPi, `#!/usr/bin/env node
+if (process.argv.includes("--version")) { console.log("0.80.6"); process.exit(0); }
+if (process.argv.includes("--help")) { console.log("--mode --session --append-system-prompt --skill --approve --no-approve"); process.exit(0); }
+const readline = require("node:readline");
+const input = readline.createInterface({ input: process.stdin });
+input.on("line", (line) => {
+  const command = JSON.parse(line);
+  if (command.type === "get_state") process.stdout.write(JSON.stringify({
+    id: command.id,
+    type: "response",
+    command: "get_state",
+    success: true,
+    data: { sessionFile: ${JSON.stringify(freshSessionFile)}, sessionId: "future-session" },
+  }) + "\\n");
+});
+`);
+  await fs.chmod(conduitPi, 0o755);
+  const nativePi = path.join(root, "native-pi");
+  await fs.writeFile(nativePi, "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then echo 0.80.10; exit 0; fi\nif [ \"$1\" = \"--help\" ]; then echo '--mode --session --append-system-prompt --skill --approve --no-approve'; exit 0; fi\nexit 1\n");
+  await fs.chmod(nativePi, 0o755);
+  const workspace = path.join(root, "workspace");
+  await fs.mkdir(workspace);
   const child = spawn(process.execPath, ["src/server.js"], {
     cwd: path.resolve(import.meta.dirname, ".."),
     stdio: ["ignore", "pipe", "pipe"],
     env: {
       ...process.env,
+      HOME: root,
       CONDUIT_HOST: "127.0.0.1",
       CONDUIT_PORT: String(port),
       CONDUIT_FILES_ROOT: path.join(root, "files"),
@@ -46,6 +71,10 @@ test("raw JSON uploads publish atomically through the durable chat route", async
       CONDUIT_SESSION_REGISTRY_FILE: path.join(root, "sessions.json"),
       CONDUIT_PREFERENCES_FILE: path.join(root, "preferences.json"),
       CONDUIT_PI_AGENT_DIR: path.join(root, "pi"),
+      CONDUIT_PI_COMMAND: conduitPi,
+      CONDUIT_NATIVE_PI_COMMAND: nativePi,
+      CONDUIT_NATIVE_PI_AGENT_DIR: path.join(root, "native-agent"),
+      CONDUIT_WORKSPACE_ALLOWLIST: root,
     },
   });
 
@@ -59,6 +88,94 @@ test("raw JSON uploads publish atomically through the durable chat route", async
     assert.ok(templateCatalog.templates.some((item) => item.id === "runtime"));
     assert.equal(templateCatalog.defaultTemplateId, "chat");
     assert.equal(templateCatalog.templates.find((item) => item.id === "runtime").defaultable, false);
+
+    const installations = await (await fetch(`${origin}/v0/pi-installations`)).json();
+    const isolatedInstallation = installations.installations.find((item) => item.id === "conduit-pinned");
+    const hostInstallation = installations.installations.find((item) => item.id === "host-pi");
+    assert.equal(isolatedInstallation.version, "0.80.6");
+    assert.equal(isolatedInstallation.executablePath, conduitPi);
+    assert.equal(isolatedInstallation.agentHome.path, path.join(root, "pi"));
+    assert.equal(isolatedInstallation.models.access, "managed");
+    assert.equal(hostInstallation.version, "0.80.10");
+    assert.equal(hostInstallation.executablePath, nativePi);
+    assert.equal(hostInstallation.models.access, "read-only");
+    assert.equal("command" in installations.installations[0], false);
+    assert.equal("environment" in installations.installations[1], false);
+
+    const linkedResponse = await fetch(`${origin}/v0/projects`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ mode: "linked", path: workspace }),
+    });
+    assert.equal(linkedResponse.status, 201);
+    const linked = await linkedResponse.json();
+    assert.equal(linked.defaultTemplateId, null);
+    await fs.mkdir(path.join(workspace, ".pi", "themes"), { recursive: true });
+    const preflight = await (await fetch(`${origin}/v0/workspaces/${linked.id}/native-preflight`)).json();
+    assert.equal(preflight.available, true);
+    assert.equal(preflight.version, "0.80.10");
+    assert.equal(preflight.savedTrust, null);
+    assert.equal(preflight.trustRequired, false);
+    assert.ok(preflight.resources.includes("themes"));
+
+    const nativeChatResponse = await fetch(`${origin}/v0/chats`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ projectId: linked.id, runtimeKind: "native_pi" }),
+    });
+    assert.equal(nativeChatResponse.status, 201);
+    const nativeChat = await nativeChatResponse.json();
+    assert.equal(nativeChat.runtime.kind, "native_pi");
+    assert.equal(nativeChat.runtime.installationId, "host-pi");
+
+    const automaticTrustLaunch = await fetch(`${origin}/v0/live-sessions`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        chatId: nativeChat.id,
+        projectId: linked.id,
+        model: "missing/provider-model",
+      }),
+    });
+    assert.equal(automaticTrustLaunch.status, 400);
+    assert.equal((await automaticTrustLaunch.json()).error, "invalid_model");
+    const savedPreflight = await (await fetch(`${origin}/v0/workspaces/${linked.id}/native-preflight`)).json();
+    assert.equal(savedPreflight.savedTrust, true);
+    assert.equal(savedPreflight.trustRequired, false);
+
+    const nativeMove = await fetch(`${origin}/v0/sessions/${nativeChat.id}/move`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ projectId: "project_chat" }),
+    });
+    assert.equal(nativeMove.status, 409);
+    assert.equal((await nativeMove.json()).error, "chat_move_not_supported");
+
+    const isolatedSwitch = await fetch(`${origin}/v0/chats/${nativeChat.id}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ templateId: "chat", runtimeKind: "conduit_profile" }),
+    });
+    assert.equal(isolatedSwitch.status, 200);
+    const isolatedChat = await isolatedSwitch.json();
+    assert.equal(isolatedChat.templateId, "chat");
+    assert.equal(isolatedChat.runtime.kind, "conduit_profile");
+    assert.equal(isolatedChat.runtime.profileId, "chat");
+
+    const invalidNative = await fetch(`${origin}/v0/chats`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ projectId: "project_chat", runtimeKind: "native_pi" }),
+    });
+    assert.equal(invalidNative.status, 400);
+    assert.equal((await invalidNative.json()).error, "native_pi_requires_workspace");
+
+    const externalAgents = path.join(root, "external-agents");
+    await fs.mkdir(path.join(externalAgents, "skills"), { recursive: true });
+    await fs.symlink(externalAgents, path.join(workspace, ".agents"));
+    const symlinkedPreflight = await fetch(`${origin}/v0/workspaces/${linked.id}/native-preflight`);
+    assert.equal(symlinkedPreflight.status, 400);
+    assert.equal((await symlinkedPreflight.json()).error, "native_resource_symlink");
 
     const runtimeDefault = await fetch(`${origin}/v0/preferences`, {
       method: "PATCH",
@@ -76,6 +193,50 @@ test("raw JSON uploads publish atomically through the durable chat route", async
     assert.equal(prefsPatch.status, 200);
     assert.equal((await prefsPatch.json()).defaultTemplateId, "workspace");
 
+    const inheritedWorkspaceChat = await fetch(`${origin}/v0/chats`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ projectId: linked.id }),
+    });
+    assert.equal((await inheritedWorkspaceChat.json()).templateId, "workspace");
+    const workspaceOverride = await fetch(`${origin}/v0/projects/${linked.id}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ defaultTemplateId: "chat" }),
+    });
+    assert.equal((await workspaceOverride.json()).defaultTemplateId, "chat");
+    const overriddenWorkspaceChat = await fetch(`${origin}/v0/chats`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ projectId: linked.id }),
+    });
+    assert.equal((await overriddenWorkspaceChat.json()).templateId, "chat");
+    const clearedOverride = await fetch(`${origin}/v0/projects/${linked.id}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ defaultTemplateId: null }),
+    });
+    assert.equal((await clearedOverride.json()).defaultTemplateId, null);
+    const hostOverride = await fetch(`${origin}/v0/projects/${linked.id}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ defaultTemplateId: "host-pi" }),
+    });
+    assert.equal((await hostOverride.json()).defaultTemplateId, "host-pi");
+    const hostDefaultChat = await fetch(`${origin}/v0/chats`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ projectId: linked.id }),
+    });
+    const hostDefaultChatBody = await hostDefaultChat.json();
+    assert.equal(hostDefaultChatBody.runtime.kind, "native_pi");
+    assert.equal(hostDefaultChatBody.templateId, "workspace");
+    await fetch(`${origin}/v0/projects/${linked.id}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ defaultTemplateId: null }),
+    });
+
     const createdResponse = await fetch(`${origin}/v0/chats`, {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -86,6 +247,18 @@ test("raw JSON uploads publish atomically through the durable chat route", async
     assert.equal(chat.status, "draft");
     assert.equal(chat.templateId, "workspace");
     assert.equal("piSessionId" in chat, false);
+
+    const chatModels = await (await fetch(`${origin}/v0/chats/${chat.id}/models`)).json();
+    assert.equal(chatModels.installationId, "conduit-pinned");
+    assert.equal(chatModels.runtimeKind, "conduit_profile");
+    assert.equal(chatModels.source, "runtime_default");
+    const invalidModel = await fetch(`${origin}/v0/chats/${chat.id}/models`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ model: "missing/model" }),
+    });
+    assert.equal(invalidModel.status, 400);
+    assert.equal((await invalidModel.json()).error, "invalid_model");
 
     const switched = await fetch(`${origin}/v0/chats/${chat.id}`, {
       method: "PATCH",
@@ -119,6 +292,16 @@ test("raw JSON uploads publish atomically through the durable chat route", async
     });
     assert.equal(runtimeSwitch.status, 409);
     assert.equal((await runtimeSwitch.json()).error, "special_chat_locked");
+
+    const freshLive = await fetch(`${origin}/v0/live-sessions`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ chatId: chat.id, projectId: "project_chat" }),
+    });
+    assert.equal(freshLive.status, 201);
+    assert.equal((await freshLive.json()).status, "running");
+    await assert.rejects(fs.access(freshSessionFile), { code: "ENOENT" });
+
     const directory = path.join(root, "files", ".conduit", "chats", chat.id);
     await fs.access(path.join(directory, "attachments"));
     await fs.access(path.join(directory, ".partial"));
@@ -140,7 +323,7 @@ test("raw JSON uploads publish atomically through the durable chat route", async
     assert.equal(Buffer.from(await download.arrayBuffer()).toString(), body.toString());
 
     const imageId = crypto.randomUUID();
-    const imageBody = Buffer.from([0x89, 0x50, 0x4e, 0x47]);
+    const imageBody = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
     const imageUpload = await fetch(`${origin}/v0/chats/${chat.id}/attachments/${imageId}?name=preview.png`, {
       method: "PUT",
       headers: { "content-type": "image/png" },

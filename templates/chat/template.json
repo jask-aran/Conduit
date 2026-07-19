@@ -1,6 +1,6 @@
 {
   "id": "chat",
-  "version": "2",
+  "version": "3",
   "label": "General",
   "description": "Conversational Pi with attachments and a restrained toolset (read + shell).",
   "posture": "read / shell",

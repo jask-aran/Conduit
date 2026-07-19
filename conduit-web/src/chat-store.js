@@ -1,7 +1,8 @@
 import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
-import { parseSession } from "./session-store.js";
+import { validateSessionFile } from "./session-store.js";
+import { ensureChatTree } from "./owned-paths.js";
 
 const CHAT_ID = /^[a-zA-Z0-9_-]{8,128}$/;
 const COMPLETED_ATTACHMENT = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}--.+$/i;
@@ -36,12 +37,39 @@ export function chatView(chat) {
 }
 
 export class ChatStore {
-  constructor(file, { now = () => Date.now() } = {}) {
+  constructor(file, { now = () => Date.now(), defaultRuntime = null } = {}) {
     this.file = path.resolve(file);
     this.now = now;
     this.chats = [];
     this.visibleDrafts = new Set();
     this.writeQueue = Promise.resolve();
+    this.defaultRuntime = defaultRuntime || {
+      kind: "conduit_profile",
+      installationId: "conduit-pinned",
+      binaryVersion: null,
+      profileId: null,
+      profileVersion: null,
+    };
+  }
+
+  runtimeFor(item, templateId = null, templateVersion = null) {
+    const stored = item?.runtime;
+    if (stored?.kind === "native_pi") {
+      return {
+        kind: "native_pi",
+        installationId: "host-pi",
+        binaryVersion: stored.binaryVersion || null,
+        profileId: null,
+        profileVersion: null,
+      };
+    }
+    return {
+      kind: "conduit_profile",
+      installationId: stored?.installationId || this.defaultRuntime.installationId,
+      binaryVersion: stored?.binaryVersion || this.defaultRuntime.binaryVersion || null,
+      profileId: stored?.profileId || templateId || this.defaultRuntime.profileId || null,
+      profileVersion: stored?.profileVersion || templateVersion || this.defaultRuntime.profileVersion || null,
+    };
   }
 
   async initialize(projects) {
@@ -69,10 +97,15 @@ export class ChatStore {
       if (!project) continue;
       const id = isChatId(item.id) && !usedIds.has(item.id) ? item.id : crypto.randomUUID();
       let piSessionFile = item.piSessionFile || item.file ? path.resolve(item.piSessionFile || item.file) : null;
+      const nativeRuntime = item.runtime?.kind === "native_pi";
       const active = legacyRegistry
         ? item.status === "active" || item.status === "persisted" || Boolean(item.file)
         : item.status === "active";
-      if (active && (!piSessionFile || !await fileExists(piSessionFile))) continue;
+      if (active && (!piSessionFile || !await fileExists(piSessionFile)) && !nativeRuntime) continue;
+      if (piSessionFile && await fileExists(piSessionFile)) {
+        try { await validateSessionFile(piSessionFile, project); }
+        catch { if (!nativeRuntime) continue; }
+      }
       if (!active && piSessionFile && !await fileExists(piSessionFile)) piSessionFile = null;
       const createdAt = item.createdAt || new Date(this.now()).toISOString();
       const chat = {
@@ -84,14 +117,20 @@ export class ChatStore {
         templateVersion: typeof item.templateVersion === "string" && item.templateVersion.trim()
           ? item.templateVersion.trim()
           : null,
+        runtime: this.runtimeFor(item, item.templateId, item.templateVersion),
         piSessionId: item.piSessionId || item.nativeId || (active ? item.id : null),
         piSessionFile,
         createdAt,
         updatedAt: item.updatedAt || createdAt,
       };
-      await this.ensureDirectories(project, id);
-      const hasAttachments = await this.hasAttachments(project, id);
-      await this.removePartials(project, id);
+      let hasAttachments = false;
+      try {
+        await this.ensureDirectories(project, id);
+        hasAttachments = await this.hasAttachments(project, id);
+        await this.removePartials(project, id);
+      } catch (error) {
+        if (project.origin !== "linked" || !["ENOENT", "unsafe_conduit_path"].includes(error.code)) throw error;
+      }
       if (chat.status === "draft" && !hasAttachments && this.now() - Date.parse(chat.createdAt) > DAY) {
         if (piSessionFile) {
           discoveredFiles.delete(piSessionFile);
@@ -109,8 +148,7 @@ export class ChatStore {
     for (const [file, candidates] of discoveredFiles) {
       for (const project of candidates) {
         try {
-          const session = await parseSession(file, project);
-          if (path.resolve(session.cwd) !== path.resolve(project.path)) continue;
+          const session = await validateSessionFile(file, project);
           const id = isChatId(session.id) && !usedIds.has(session.id) ? session.id : crypto.randomUUID();
           const chat = {
             id,
@@ -119,6 +157,7 @@ export class ChatStore {
             title: session.title,
             templateId: null,
             templateVersion: null,
+            runtime: this.runtimeFor(null),
             piSessionId: session.nativeId || session.id,
             piSessionFile: session.file,
             createdAt: session.createdAt,
@@ -138,12 +177,7 @@ export class ChatStore {
   }
 
   async ensureDirectories(project, chatId) {
-    const root = chatDirectory(project, chatId);
-    await Promise.all([
-      fs.mkdir(path.join(root, "attachments"), { recursive: true }),
-      fs.mkdir(path.join(root, ".partial"), { recursive: true }),
-    ]);
-    return root;
+    return (await ensureChatTree(project, chatId)).root;
   }
 
   async hasAttachments(project, chatId) {
@@ -192,6 +226,10 @@ export class ChatStore {
     if (!templateId) return chat;
     chat.templateId = String(templateId).trim();
     chat.templateVersion = templateVersion ? String(templateVersion).trim() : chat.templateVersion;
+    if (chat.runtime?.kind === "conduit_profile") {
+      chat.runtime.profileId = chat.templateId;
+      chat.runtime.profileVersion = chat.templateVersion;
+    }
     chat.updatedAt = new Date(this.now()).toISOString();
     await this.flush();
     return chat;
@@ -202,11 +240,11 @@ export class ChatStore {
     if (!chat?.piSessionFile) return null;
     const project = projects.find((item) => item.id === chat.projectId);
     if (!project) return null;
-    try { return { ...(await parseSession(chat.piSessionFile, project)), chatId: chat.id }; }
+    try { return { ...(await validateSessionFile(chat.piSessionFile, project)), chatId: chat.id }; }
     catch (error) { if (error.code === "ENOENT") return null; throw error; }
   }
 
-  async create(project, { templateId = null, templateVersion = null } = {}) {
+  async create(project, { templateId = null, templateVersion = null, runtime = null } = {}) {
     const timestamp = new Date(this.now()).toISOString();
     const chat = {
       id: crypto.randomUUID(),
@@ -217,6 +255,7 @@ export class ChatStore {
       templateVersion: typeof templateVersion === "string" && templateVersion.trim()
         ? templateVersion.trim()
         : null,
+      runtime: this.runtimeFor({ runtime }, templateId, templateVersion),
       piSessionId: null,
       piSessionFile: null,
       createdAt: timestamp,
@@ -247,13 +286,13 @@ export class ChatStore {
     let session;
     while (!session) {
       try {
-        session = await parseSession(file, project);
+        session = await validateSessionFile(file, project);
       } catch (error) {
+        if (["session_cwd_mismatch", "invalid_session_mapping"].includes(error.code)) return null;
         if (error.code !== "ENOENT" || Date.now() >= deadline) throw error;
         await new Promise((resolve) => setTimeout(resolve, 20));
       }
     }
-    if (path.resolve(session.cwd) !== path.resolve(project.path)) return null;
     await this.commitSession(chatId, session);
     return session;
   }
@@ -266,11 +305,17 @@ export class ChatStore {
       "title",
       "templateId",
       "templateVersion",
+      "runtime",
       "piSessionId",
       "piSessionFile",
       "updatedAt",
     ];
     for (const key of allowed) if (Object.hasOwn(patch, key)) chat[key] = patch[key];
+    if (chat.runtime?.kind === "conduit_profile" && (Object.hasOwn(patch, "templateId") || Object.hasOwn(patch, "templateVersion"))) {
+      chat.runtime.profileId = chat.templateId;
+      chat.runtime.profileVersion = chat.templateVersion;
+    }
+    if (chat.runtime) chat.runtime = this.runtimeFor(chat, chat.templateId, chat.templateVersion);
     if (patch.status === "draft" || patch.status === "active") chat.status = patch.status;
     if (chat.piSessionFile) chat.piSessionFile = path.resolve(chat.piSessionFile);
     if (!patch.updatedAt) chat.updatedAt = new Date(this.now()).toISOString();
@@ -291,8 +336,18 @@ export class ChatStore {
     await fs.mkdir(path.dirname(target), { recursive: true });
     try { await fs.rename(source, target); }
     catch (error) {
-      if (error.code !== "ENOENT") throw error;
-      await this.ensureDirectories(targetProject, chatId);
+      if (error.code === "EXDEV") {
+        const temporary = `${target}.partial-${crypto.randomUUID()}`;
+        await fs.cp(source, temporary, { recursive: true, errorOnExist: true, dereference: false });
+        try {
+          await fs.rename(temporary, target);
+          await fs.rm(source, { recursive: true, force: true });
+        } catch (moveError) {
+          await fs.rm(temporary, { recursive: true, force: true }).catch(() => {});
+          throw moveError;
+        }
+      } else if (error.code === "ENOENT") await this.ensureDirectories(targetProject, chatId);
+      else throw error;
     }
     chat.projectId = targetProject.id;
     chat.updatedAt = new Date(this.now()).toISOString();
@@ -324,7 +379,7 @@ export class ChatStore {
   }
 
   flush() {
-    const value = `${JSON.stringify({ version: 2, chats: this.chats }, null, 2)}\n`;
+    const value = `${JSON.stringify({ version: 3, chats: this.chats }, null, 2)}\n`;
     this.writeQueue = this.writeQueue.then(async () => {
       await fs.mkdir(path.dirname(this.file), { recursive: true });
       const temporary = `${this.file}.tmp`;

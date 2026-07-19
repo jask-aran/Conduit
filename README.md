@@ -46,8 +46,9 @@ data/
 
 `conduit-web/`, `templates/`, and `scripts/` are tracked product source.
 `data/` is ignored mutable application data and forms one backup or mount
-boundary for working files, project metadata, credentials, preferences, and
-session history.
+boundary for working files, project metadata, Isolated Pi credentials,
+preferences, and Isolated Pi session history. Host Pi history remains in
+the host Pi home and needs a separate backup.
 
 ## Data model
 
@@ -97,7 +98,7 @@ browser, network, and proxy limits can still reject an upload. Attachment bytes
 are never injected into model context. The user prompt instead carries validated
 relative paths in a small envelope that transcript presentation hides again.
 
-`data/pi` is Conduit's app-wide Pi agent home:
+`data/pi` is the isolated agent home for ordinary profile chats:
 
 ```text
 data/pi/
@@ -109,17 +110,37 @@ data/pi/
       <timestamp>_<id>.jsonl
 ```
 
-Conduit sets `PI_CODING_AGENT_DIR=data/pi` but does not set
+Isolated-profile chats use the bundled, pinned Pi executable and set
+`PI_CODING_AGENT_DIR=data/pi` but do not set
 `PI_CODING_AGENT_SESSION_DIR` or pass `--session-dir`. Pi derives its native
 session directory from the process working directory and records the canonical
 `cwd` in every JSONL header. Conduit associates a session with a project by
 matching that header exactly, rather than trusting the lossy encoded directory
 name.
 
+Creating a Workspace chat immediately opens a draft using the app default
+profile, unless that Workspace has an explicit override in Settings → Workspaces.
+The composer presents ordinary profiles and **Host Pi** in one selector.
+Ordinary profiles use the bundled **Isolated Pi**, isolated home, and
+their explicit tracked resources. Host Pi uses
+the executable, environment, and optional `PI_CODING_AGENT_DIR` discovered
+through the server user's login shell (otherwise `$HOME/.pi/agent`), native
+authentication and resources, plus a minimal Conduit attachment bridge. Native
+project resources are automatically trusted for registered Workspaces when Host
+Pi first launches, and the decision is persisted in Host Pi's trust store. The
+active Host Pi resource posture is shown in the chat header. Conduit still
+validates Pi project-resource paths such as `.pi` and `.agents`; ordinary files,
+context files, and Conduit attachments are unaffected. The runtime choice may
+change until the first prompt starts Pi, then becomes immutable. Both
+runtimes use the Workspace as canonical `cwd`, share one process manager and
+global capacity limits, and preserve the one-writer-per-JSONL invariant. The
+internal Native bridge is not exposed as a profile.
+
 Pi JSONL is the authoritative transcript. `data/conduit.json` stores stable
 project IDs, display names, kinds, and creation times. `data/sessions.json` is an
 atomic lightweight registry of stable Conduit chat IDs, `draft`/`active` status,
-titles, project associations, private Pi mappings, and timestamps. Existing
+titles, project associations, immutable runtime/installation identity, private
+Pi mappings, and timestamps. Existing
 pre-migration rows retain their stable ID as the Conduit chat ID. Normal sidebar
 requests read this registry without parsing transcripts; active rows are
 reconciled with native files at startup and checkpointed after completed
@@ -132,19 +153,22 @@ Opening a chat returns at most ten recent complete turns with a 50,000-character
 soft limit. Older ten-turn pages load when the transcript is scrolled upward.
 Large tool results are fetched only when their card is expanded.
 Reopening a chat restores its recorded model, thinking level, messages, and tool
-calls from JSONL. Selecting a model updates the active Pi process and
-`data/pi/settings.json`, making it the default for the next chat without
-replacing the model recorded by existing chats.
+calls from JSONL. Each chat resolves models from its selected installation.
+Selecting a model updates the active Pi process and that installation's saved
+default without replacing the model recorded by existing chats. Settings can
+edit the Isolated Pi scope; Host Pi scope and installation ownership remain
+read-only diagnostics.
 
 Chat renames append Pi's native `session_info` entry. Editing an earlier user
 message and regenerating a response use Pi's public `fork` RPC while retaining
 the Conduit chat ID and attachment folder; the registry advances to the new
 private Pi mapping and preserves the old native session file. Chat duplication
 is deliberately unavailable because attachment ownership semantics are not yet
-defined. Moving a chat creates a native cross-directory fork with the
+defined. Moving an Isolated Pi chat creates a native cross-directory fork with the
 destination project's canonical `cwd`, moves its Conduit folder, and deletes the
 source only after the destination JSONL has been created. Moving all chats from
-a project follows the same rule as one batch.
+a project follows the same rule as one batch. Host Pi chats cannot move
+between working roots.
 
 Deleting a chat stops any live process writing that session and deletes its
 authoritative JSONL plus Conduit chat folder. Both chat and project deletion
@@ -168,18 +192,29 @@ Profiles). Each chat stores sticky `templateId` / `templateVersion` in
 profile receive the default the next time the runtime touches them. Drafts may
 change profile until the first Pi process attaches.
 
-Workspaces may be managed folders under `data/chat/files`, linked allow-listed
-directories on the host, or git clones into the managed root. Linked unregister
-keeps the external tree. Shipped profiles: General (restrained tools), Workspace
+Linked and cloned Workspaces inherit that app default unless their nullable
+`defaultTemplateId` in `data/conduit.json` names an ordinary profile or the
+synthetic `host-pi` launch option. An unavailable Host Pi override is cleared
+back to inheritance and the chat continues with the global ordinary profile. Settings →
+Workspaces renders one card per Workspace; the Settings command page targets the
+current Workspace, and the Workspace sidebar context menu opens its card directly.
+
+The sidebar presents managed folders under **Projects**. **Workspaces** register
+an existing allow-listed host directory; cloning first creates a checkout under
+the user-selected absolute location and then registers that checkout as a
+Workspace. Unlinking either kind keeps the working tree. Shipped profiles:
+General (restrained tools), Coding
 (full tools + skills), and Runtime (a special one-off admin chat for templates
 and `pi install`). Runtime is not a valid app/project default or ordinary chat
 profile; Settings → Profiles shows it separately and creates a fresh instance
 when requested.
 
-Pi's global `enabledModels` setting is the authoritative model scope shared by
-the terminal and web interface. Conduit reloads `data/pi/settings.json` for
-model and settings requests and uses the saved scope for new Pi processes. The
-template model list applies only when Pi has no saved `enabledModels` value.
+Isolated Pi's global `enabledModels` setting is the authoritative scope shared
+by the terminal and web interface. Conduit reloads `data/pi/settings.json` for
+model and settings requests. Host Pi uses its detected agent home's scope and
+default; Conduit displays those settings read-only and routes chat selections
+through Host Pi's public RPC. Template model lists apply only when the selected
+installation has no saved `enabledModels` value.
 
 ## Interface development
 
@@ -203,8 +238,9 @@ The application shell composes Shadcn Sidebar, Button Group, Dropdown Menu,
 Context Menu, Input Group, Field, and Card primitives. Chat transcripts use the
 first-party Message Scroller, Message, and Bubble components: Message Scroller
 owns streaming follow, turn anchoring, and jump-to-latest behavior while Pi RPC
-continues to own transport and message state. The settings surface writes Pi's
-global scoped-model setting through the Conduit server.
+continues to own transport and message state. The settings surface writes only
+Isolated Pi's global scoped-model setting and reports Host Pi diagnostics without
+claiming ownership of its configuration.
 
 The composer is a bounded native textarea with a compact model selector and
 Shadcn Attachment cards above it. Upload progress appears in those cards; after
@@ -212,7 +248,8 @@ send, the same cards move beneath their user message. Cmd/Ctrl+K lazy-loads the
 global Shadcn Command palette: an extensible registry for chat ops, models, and
 thinking levels, with Settings… and Go to… drill-down pages (search prefixes,
 Cmd/Ctrl+Shift+O for Go to) so nested targets stay out of the root list. The
-textarea-focused slash Popover exposes only composition commands
+selected command follows the highest-ranked result as a drill-down query changes.
+The textarea-focused slash Popover exposes only composition commands
 (`/attach`). Settings opens as a centered Dialog with fixed vertical Tabs and a
 searchable, grouped multi-model Combobox. The chat header uses a project-aware
 breadcrumb. Response controls copy source Markdown, fork for edit/regenerate,

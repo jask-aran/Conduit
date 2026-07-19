@@ -8,7 +8,7 @@ import { WebSocketServer } from "ws";
 import { loadConfig, resolveTemplate } from "./config.js";
 import { PiModelCatalog } from "./pi-model-catalog.js";
 import { ProjectStore } from "./project-store.js";
-import { messagesFromEntries, moveSession, pageSessionEntries, removeSession, renameSession, settingsFromEntries, toolsFromEntries, transcriptFromEntries } from "./session-store.js";
+import { duplicateSession, messagesFromEntries, pageSessionEntries, removeProjectSessions, removeSession, renameSession, settingsFromEntries, toolsFromEntries, transcriptFromEntries, validateSessionFile } from "./session-store.js";
 import { PiManager } from "./pi-manager.js";
 import { ChatStore, chatView, isChatId } from "./chat-store.js";
 import { AttachmentStore } from "./attachment-store.js";
@@ -19,11 +19,33 @@ import { defaultsFromEnv, RuntimeSettingsStore } from "./runtime-settings.js";
 import { PreferencesStore } from "./preferences-store.js";
 import { templatePublicView } from "../../scripts/pi-runtime.mjs";
 import { isPathInside, listDirectorySuggestions } from "./workspace-paths.js";
+import { hasTrustRequiringProjectResources, ProjectTrustStore } from "@earendil-works/pi-coding-agent";
+import crypto from "node:crypto";
+import fs from "node:fs/promises";
+import { resolvePiLaunch } from "./pi-launch.js";
 
 const config = loadConfig();
 const projects = new ProjectStore(config);
 await projects.initialize();
-const registry = new ChatStore(config.sessionRegistryFile);
+async function clearHostPiDefaults() {
+  const changed = [];
+  for (const project of await projects.list()) {
+    if (project.kind !== "workspace" || project.defaultTemplateId !== "host-pi") continue;
+    changed.push(await projects.update(project.id, { defaultTemplateId: null }));
+  }
+  return changed;
+}
+if (!config.installations.get("host-pi").available) await clearHostPiDefaults();
+const pinnedInstallation = config.installations.get("conduit-pinned");
+const registry = new ChatStore(config.sessionRegistryFile, {
+  defaultRuntime: {
+    kind: "conduit_profile",
+    installationId: pinnedInstallation.id,
+    binaryVersion: pinnedInstallation.version,
+    profileId: config.piTemplate.id,
+    profileVersion: config.piTemplate.version,
+  },
+});
 await registry.initialize(await projects.list());
 const attachments = new AttachmentStore(registry);
 const runtimeSettings = new RuntimeSettingsStore(config.runtimeSettingsFile, defaultsFromEnv(process.env));
@@ -53,12 +75,111 @@ manager.on("process_removed", ({ id, chatId }) => {
   runtimeHub.publishProcessRemoved(id, chatId);
 });
 const modelCatalog = new PiModelCatalog({ agentDir: config.piAgentDir, modelPatterns: config.piTemplate.models });
+const modelCatalogs = new Map();
+const launchingChats = new Set();
 const app = express();
 const dist = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../dist");
 
 function defaultTemplate() {
   const selected = resolveTemplate(config, preferences.get().defaultTemplateId);
   return selected?.defaultable !== false ? selected : config.piTemplate;
+}
+
+function catalogFor(runtime, template) {
+  const installation = config.installations.get(runtime.installationId);
+  const key = runtime.kind === "native_pi"
+    ? `host:${installation?.agentDir || "unavailable"}`
+    : `isolated:${template?.id || config.piTemplate.id}`;
+  if (!modelCatalogs.has(key)) {
+    modelCatalogs.set(key, runtime.kind === "native_pi"
+      ? new PiModelCatalog({ agentDir: installation.agentDir })
+      : new PiModelCatalog({ agentDir: config.piAgentDir, modelPatterns: template?.models || config.piTemplate.models }));
+  }
+  return modelCatalogs.get(key);
+}
+
+async function chatModelView(context) {
+  const template = templateForChat(context.chat, context.project);
+  const runtime = context.chat.runtime || runtimeFor({ runtimeKind: "conduit_profile", template });
+  const catalog = catalogFor(runtime, template);
+  const catalogView = await catalog.list(context.project.path);
+  let model = catalogView.defaultModel;
+  let thinkingLevel = catalogView.defaultThinkingLevel;
+  let source = "runtime_default";
+  if (context.chat.piSessionFile) {
+    const session = await findDeletableSession(await projects.list(), context.chat);
+    if (session) {
+      const persisted = settingsFromEntries(session.entries);
+      model = persisted.model || model;
+      thinkingLevel = persisted.thinkingLevel || thinkingLevel;
+      source = "jsonl";
+    }
+  }
+  const resident = manager.getByChatId(context.chat.id);
+  let models = catalogView.models;
+  if (resident) {
+    const [available, state] = await Promise.all([
+      manager.getAvailableModels(resident.id),
+      manager.getModelState(resident.id),
+    ]);
+    const enabled = new Set(catalogView.models.map((item) => item.spec));
+    const liveModels = available.map((item) => catalog.modelView({ model: item }));
+    models = enabled.size ? liveModels.filter((item) => enabled.has(item.spec)) : liveModels;
+    model = state.model || model;
+    thinkingLevel = state.thinkingLevel || thinkingLevel;
+    const currentModel = liveModels.find((item) => item.spec === model);
+    if (currentModel && !models.some((item) => item.spec === model)) models = [...models, currentModel];
+    source = "live";
+  }
+  if (model && !models.some((item) => item.spec === model)) {
+    const [provider, ...modelParts] = model.split("/");
+    models = [...models, {
+      provider,
+      id: modelParts.join("/"),
+      spec: model,
+      label: modelParts.at(-1) || model,
+      reasoning: thinkingLevel !== "off",
+      thinkingLevels: thinkingLevel ? [...new Set(["off", thinkingLevel])] : ["off"],
+      outsideScope: true,
+    }];
+  }
+  return {
+    installationId: runtime.installationId,
+    runtimeKind: runtime.kind,
+    models,
+    model,
+    thinkingLevel,
+    defaultModel: catalogView.defaultModel,
+    defaultThinkingLevel: catalogView.defaultThinkingLevel,
+    requiresAuthentication: catalogView.requiresAuthentication,
+    warnings: catalogView.warnings,
+    source,
+  };
+}
+
+async function installationViews() {
+  const project = await projects.get("chat");
+  return Promise.all(config.installations.publicList().map(async (installation) => {
+    if (!installation.available || !project) return { ...installation, models: null };
+    const runtime = installation.id === "host-pi"
+      ? { kind: "native_pi", installationId: installation.id }
+      : { kind: "conduit_profile", installationId: installation.id };
+    const catalog = catalogFor(runtime, config.piTemplate);
+    try {
+      const view = await catalog.list(project.path);
+      return {
+        ...installation,
+        models: {
+          access: installation.id === "host-pi" ? "read-only" : "managed",
+          enabledModels: view.models.map((model) => model.spec),
+          defaultModel: view.defaultModel,
+          warnings: view.warnings,
+        },
+      };
+    } catch (error) {
+      return { ...installation, models: { access: "unavailable", enabledModels: [], defaultModel: null, warnings: [{ type: "warning", message: error.message }] } };
+    }
+  }));
 }
 
 function templateForId(templateId) {
@@ -69,6 +190,130 @@ function templateForChat(chat, project = null) {
   if (chat?.templateId) return templateForId(chat.templateId);
   if (project?.defaultTemplateId) return templateForId(project.defaultTemplateId);
   return defaultTemplate();
+}
+
+function runtimeFor({ runtimeKind = "conduit_profile", template }) {
+  const installation = config.installations.get(runtimeKind === "native_pi" ? "host-pi" : "conduit-pinned");
+  return runtimeKind === "native_pi"
+    ? {
+        kind: "native_pi",
+        installationId: installation.id,
+        binaryVersion: installation.version,
+        profileId: null,
+        profileVersion: null,
+      }
+    : {
+        kind: "conduit_profile",
+        installationId: installation.id,
+        binaryVersion: installation.version,
+        profileId: template.id,
+        profileVersion: template.version,
+      };
+}
+
+async function nativeResourceClasses(cwd) {
+  const candidates = [
+    [".pi/settings.json", "settings"],
+    [".pi/extensions", "extensions"],
+    [".pi/packages", "packages"],
+    [".pi/skills", "skills"],
+    [".pi/prompts", "prompts"],
+    [".pi/themes", "themes"],
+    [".pi/SYSTEM.md", "system prompt"],
+    [".pi/APPEND_SYSTEM.md", "appended system prompt"],
+    [".agents/skills", "agent skills"],
+  ];
+  const found = [];
+  for (const [relative, label] of candidates) {
+    try { await fs.access(path.join(cwd, relative)); found.push(label); }
+    catch (error) { if (error.code !== "ENOENT") throw error; }
+  }
+  let current = path.dirname(path.resolve(cwd));
+  while (true) {
+    const inherited = path.join(current, ".agents", "skills");
+    if (inherited !== path.join(os.homedir(), ".agents", "skills")) {
+      try { await fs.access(inherited); if (!found.includes("agent skills")) found.push("agent skills"); }
+      catch (error) { if (error.code !== "ENOENT") throw error; }
+    }
+    const parent = path.dirname(current);
+    if (parent === current) break;
+    current = parent;
+  }
+  return found;
+}
+
+async function nativeResourceFingerprint(cwd) {
+  const roots = [path.join(cwd, ".pi")];
+  let current = path.resolve(cwd);
+  while (true) {
+    const agentsSkills = path.join(current, ".agents", "skills");
+    if (agentsSkills !== path.join(os.homedir(), ".agents", "skills")) roots.push(agentsSkills);
+    const parent = path.dirname(current);
+    if (parent === current) break;
+    current = parent;
+  }
+  const entries = [];
+  let totalBytes = 0;
+  const assertRealDirectory = async (target) => {
+    let stat;
+    try { stat = await fs.lstat(target); }
+    catch (error) { if (error.code === "ENOENT") return false; throw error; }
+    if (stat.isSymbolicLink()) {
+      throw Object.assign(new Error("Symlinked project resources cannot be trusted through Conduit"), {
+        code: "native_resource_symlink",
+        path: target,
+      });
+    }
+    return stat.isDirectory();
+  };
+  for (const root of roots.filter((item) => item.endsWith(`${path.sep}.agents${path.sep}skills`))) {
+    const agentsRoot = path.dirname(root);
+    if (await assertRealDirectory(agentsRoot)) await assertRealDirectory(root);
+  }
+  const visit = async (target) => {
+    if (entries.length >= 10_000) {
+      throw Object.assign(new Error("Too many project resources to preflight safely"), { code: "native_resource_limit" });
+    }
+    let stat;
+    try { stat = await fs.lstat(target); }
+    catch (error) { if (error.code === "ENOENT") return; throw error; }
+    if (stat.isSymbolicLink()) {
+      throw Object.assign(new Error("Symlinked project resources cannot be trusted through Conduit"), { code: "native_resource_symlink" });
+    }
+    let content = null;
+    if (stat.isFile()) {
+      totalBytes += stat.size;
+      if (totalBytes > 100 * 1024 * 1024) {
+        throw Object.assign(new Error("Project resources are too large to preflight safely"), { code: "native_resource_limit" });
+      }
+      content = crypto.createHash("sha256").update(await fs.readFile(target)).digest("hex");
+    }
+    entries.push([path.relative(cwd, target), stat.mode, stat.size, content]);
+    if (!stat.isDirectory() || stat.isSymbolicLink()) return;
+    for (const child of (await fs.readdir(target)).sort()) await visit(path.join(target, child));
+  };
+  for (const root of roots) await visit(root);
+  return crypto.createHash("sha256").update(JSON.stringify(entries)).digest("hex");
+}
+
+async function nativePreflight(project) {
+  const installation = config.installations.get("host-pi");
+  if (!installation.available) {
+    return { available: false, error: installation.error, version: installation.version, trustRequired: false, resources: [] };
+  }
+  const trustStore = new ProjectTrustStore(installation.agentDir);
+  const decision = trustStore.get(project.path);
+  const requiresResources = hasTrustRequiringProjectResources(project.path);
+  const resources = requiresResources ? await nativeResourceClasses(project.path) : [];
+  if (requiresResources) await nativeResourceFingerprint(project.path);
+  if (requiresResources && resources.length === 0) resources.push("inherited project resources");
+  return {
+    available: true,
+    version: installation.version,
+    savedTrust: decision,
+    trustRequired: false,
+    resources,
+  };
 }
 
 async function ensureChatTemplate(chat, project = null) {
@@ -93,6 +338,7 @@ async function findChatContext(chatId) {
   if (!chat) return null;
   const project = await projects.get(chat.projectId);
   if (!project) return null;
+  await projects.validate(project);
   chat = await ensureChatTemplate(chat, project) || chat;
   return { chat, project };
 }
@@ -141,7 +387,30 @@ app.get("/v0/capabilities", (_request, response) => response.json({
   templates: true,
   workspaces: true,
   workspaceModes: ["managed", "linked", "cloned"],
+  piRuntimes: ["conduit_profile", "native_pi"],
 }));
+
+app.get("/v0/pi-installations", async (_request, response, next) => {
+  try { response.json({ installations: await installationViews() }); }
+  catch (error) { next(error); }
+});
+
+app.post("/v0/pi-installations/host/detect", async (_request, response, next) => {
+  try {
+    const detected = await config.installations.detectHost();
+    if (!detected.available) await clearHostPiDefaults();
+    response.json((await installationViews()).find((item) => item.id === "host-pi"));
+  } catch (error) { next(error); }
+});
+
+app.get("/v0/workspaces/:id/native-preflight", async (request, response, next) => {
+  try {
+    const project = await projects.get(request.params.id);
+    if (!project || project.kind !== "workspace") return response.status(404).json({ error: "workspace_not_found" });
+    await projects.validate(project);
+    response.json(await nativePreflight(project));
+  } catch (error) { next(error); }
+});
 
 app.get("/v0/workspaces/policy", (_request, response) => {
   response.json({
@@ -228,6 +497,34 @@ async function stopSessionProcesses(session) {
   await Promise.all(matching.map((item) => manager.stopAndWait(item.id)));
 }
 
+async function findDeletableSession(projectList, chat) {
+  try { return await registry.find(projectList, chat.id); }
+  catch (error) {
+    if (["ENOENT", "invalid_session_mapping", "session_cwd_mismatch"].includes(error.code)) return null;
+    throw error;
+  }
+}
+
+async function moveRegisteredChat({ chat, source, target, session }) {
+  let duplicate = null;
+  let folderMoved = false;
+  try {
+    if (session) duplicate = await duplicateSession(session, target);
+    await registry.move(chat.id, source, target);
+    folderMoved = true;
+    if (duplicate) await registry.commitSession(chat.id, duplicate);
+    if (session) await removeSession(session);
+    return duplicate;
+  } catch (error) {
+    if (folderMoved) {
+      await registry.move(chat.id, target, source).catch(() => {});
+      if (session) await registry.commitSession(chat.id, session).catch(() => {});
+    }
+    if (duplicate) await removeSession(duplicate).catch(() => {});
+    throw error;
+  }
+}
+
 app.get("/v0/projects", async (_request, response, next) => {
   try {
     const items = await projects.list();
@@ -248,8 +545,9 @@ app.get("/v0/projects", async (_request, response, next) => {
   } catch (error) { next(error); }
 });
 
-function resolveProjectDefaultTemplateId(requested, fallback = null) {
+function resolveProjectDefaultTemplateId(requested, fallback = null, { allowHostPi = false } = {}) {
   if (requested == null || requested === "") return fallback;
+  if (requested === "host-pi" && allowHostPi) return requested;
   const template = resolveTemplate(config, requested);
   if (!template) {
     const error = new Error(`Unknown template: ${requested}`);
@@ -276,17 +574,19 @@ app.post("/v0/projects", async (request, response, next) => {
         mode: "linked",
         name: name || undefined,
         path: request.body.path,
-        defaultTemplateId: resolveProjectDefaultTemplateId(request.body?.defaultTemplateId, "workspace"),
+        defaultTemplateId: resolveProjectDefaultTemplateId(request.body?.defaultTemplateId, null),
       });
       return response.status(201).json(created);
     }
     if (mode === "clone" || mode === "cloned") {
       if (!request.body?.cloneUrl) return response.status(400).json({ error: "clone_url_required" });
+      if (!request.body?.path) return response.status(400).json({ error: "workspace_path_required" });
       const created = await projects.create({
         mode: "cloned",
         name: name || undefined,
         cloneUrl: request.body.cloneUrl,
-        defaultTemplateId: resolveProjectDefaultTemplateId(request.body?.defaultTemplateId, "workspace"),
+        path: request.body.path,
+        defaultTemplateId: resolveProjectDefaultTemplateId(request.body?.defaultTemplateId, null),
       });
       return response.status(201).json(created);
     }
@@ -301,9 +601,18 @@ app.post("/v0/projects", async (request, response, next) => {
 
 app.patch("/v0/projects/:id", async (request, response, next) => {
   try {
-    const name = String(request.body?.name || "").trim();
-    if (!name) return response.status(400).json({ error: "project_name_required" });
-    const project = await projects.rename(request.params.id, name);
+    const current = await projects.get(request.params.id);
+    if (!current) return response.status(404).json({ error: "project_not_found" });
+    const hasName = Object.hasOwn(request.body || {}, "name");
+    const hasDefault = Object.hasOwn(request.body || {}, "defaultTemplateId");
+    if (!hasName && !hasDefault) return response.status(400).json({ error: "project_update_required" });
+    const changes = {};
+    if (hasName) {
+      changes.name = String(request.body.name || "").trim();
+      if (!changes.name) return response.status(400).json({ error: "project_name_required" });
+    }
+    if (hasDefault) changes.defaultTemplateId = resolveProjectDefaultTemplateId(request.body.defaultTemplateId, null, { allowHostPi: current.kind === "workspace" });
+    const project = await projects.update(request.params.id, changes);
     if (!project) return response.status(404).json({ error: "project_not_found" });
     response.json(project);
   } catch (error) { next(error); }
@@ -314,16 +623,19 @@ app.post("/v0/projects/:id/move-sessions", async (request, response, next) => {
     const source = await projects.get(request.params.id);
     const target = await projects.get(request.body?.projectId || "");
     if (!source || !target) return response.status(404).json({ error: "project_not_found" });
+    await projects.validate(source);
+    await projects.validate(target);
     if (source.id === target.id) return response.status(409).json({ error: "project_target_unchanged" });
     const projectList = await projects.list();
     const chats = registry.listProject(source.id, { includeHidden: true });
+    if (chats.some((chat) => chat.runtime?.kind === "native_pi")) {
+      return response.status(409).json({ error: "chat_move_not_supported", message: "Host Pi chats cannot move between working roots." });
+    }
     const moved = [];
     for (const chat of chats) {
       await stopSessionProcesses(chat);
-      let session = chat.piSessionFile ? await registry.find(projectList, chat.id) : null;
-      if (session) session = await moveSession(session, target);
-      await registry.move(chat.id, source, target);
-      if (session) await registry.commitSession(chat.id, session);
+      const session = chat.piSessionFile ? await registry.find(projectList, chat.id) : null;
+      await moveRegisteredChat({ chat, source, target, session });
       moved.push({ sourceId: chat.id, session: chatView(registry.metadata(chat.id)) });
     }
     response.json({ moved });
@@ -334,14 +646,24 @@ app.delete("/v0/projects/:id", async (request, response, next) => {
   try {
     const project = await projects.get(request.params.id);
     if (!project) return response.status(404).json({ error: "project_not_found" });
+    let skipWorkingTree = false;
+    try { await projects.validate(project); }
+    catch (error) {
+      if (project.origin !== "linked") throw error;
+      skipWorkingTree = true;
+    }
     const matching = manager.list().filter((item) => item.projectId === project.id);
     await Promise.all(matching.map((item) => manager.stopAndWait(item.id)));
     const projectList = await projects.list();
     const sessions = (await Promise.all(registry.listProject(project.id, { includeHidden: true })
-      .map((chat) => registry.find(projectList, chat.id)))).filter(Boolean);
+      .map((chat) => findDeletableSession(projectList, chat)))).filter(Boolean);
     await Promise.all(sessions.map(removeSession));
+    await removeProjectSessions(project);
+    for (const chat of registry.listProject(project.id, { includeHidden: true })) {
+      await registry.remove(chat.id, skipWorkingTree ? null : project);
+    }
     await registry.removeProject(project.id);
-    await projects.remove(project.id);
+    await projects.remove(project.id, { skipWorkingTree });
     response.status(204).end();
   } catch (error) { next(error); }
 });
@@ -350,7 +672,7 @@ app.get("/v0/models", async (request, response, next) => {
   try {
     const project = await projects.get(request.query.projectId || "chat");
     if (!project) return response.status(404).json({ error: "project_not_found" });
-    response.json(await modelCatalog.list(project.path));
+    response.json({ installationId: "conduit-pinned", runtimeKind: "conduit_profile", ...await modelCatalog.list(project.path) });
   } catch (error) {
     next(error);
   }
@@ -360,7 +682,7 @@ app.get("/v0/settings", async (request, response, next) => {
   try {
     const project = await projects.get(request.query.projectId || "chat");
     if (!project) return response.status(404).json({ error: "project_not_found" });
-    response.json(await modelCatalog.getSettings(project.path));
+    response.json({ installationId: "conduit-pinned", runtimeKind: "conduit_profile", ...await modelCatalog.getSettings(project.path) });
   } catch (error) {
     next(error);
   }
@@ -370,7 +692,8 @@ app.patch("/v0/settings", async (request, response, next) => {
   try {
     const project = await projects.get(request.body?.projectId || "chat");
     if (!project) return response.status(404).json({ error: "project_not_found" });
-    response.json(await modelCatalog.updateSettings(project.path, request.body));
+    await projects.validate(project);
+    response.json({ installationId: "conduit-pinned", runtimeKind: "conduit_profile", ...await modelCatalog.updateSettings(project.path, request.body) });
   } catch (error) {
     next(error);
   }
@@ -380,15 +703,34 @@ app.post("/v0/chats", async (request, response, next) => {
   try {
     const project = await projects.get(request.body?.projectId || "chat");
     if (!project) return response.status(404).json({ error: "project_not_found" });
-    const requestedTemplateId = request.body?.templateId || project.defaultTemplateId || null;
+    await projects.validate(project);
+    const hostDefault = project.defaultTemplateId === "host-pi" && request.body?.templateId == null && request.body?.runtimeKind == null;
+    const hostAvailable = config.installations.get("host-pi").available;
+    if (hostDefault && !hostAvailable) {
+      await projects.update(project.id, { defaultTemplateId: null });
+      project.defaultTemplateId = null;
+    }
+    const requestedTemplateId = request.body?.templateId || (project.defaultTemplateId === "host-pi" ? null : project.defaultTemplateId) || null;
     const template = requestedTemplateId
       ? resolveTemplate(config, requestedTemplateId)
       : defaultTemplate();
     if (!template) return response.status(400).json({ error: "unknown_template", templateId: requestedTemplateId });
     if (template.defaultable === false) return response.status(400).json({ error: "special_template", templateId: template.id });
+    const runtimeKind = request.body?.runtimeKind || (hostDefault && hostAvailable ? "native_pi" : "conduit_profile");
+    if (!new Set(["conduit_profile", "native_pi"]).has(runtimeKind)) {
+      return response.status(400).json({ error: "unknown_runtime_kind" });
+    }
+    if (runtimeKind === "native_pi" && project.kind !== "workspace") {
+      return response.status(400).json({ error: "native_pi_requires_workspace" });
+    }
+    const runtime = runtimeFor({ runtimeKind, template });
+    if (runtimeKind === "native_pi" && !config.installations.get("host-pi").available) {
+      return response.status(409).json({ error: "native_pi_unavailable" });
+    }
     const chat = await registry.create(project, {
       templateId: template.id,
       templateVersion: template.version,
+      runtime,
     });
     response.status(201).json(chatView(chat));
   } catch (error) { next(error); }
@@ -406,6 +748,10 @@ app.patch("/v0/chats/:chatId", async (request, response, next) => {
   try {
     const context = await findChatContext(request.params.chatId);
     if (!context) return response.status(404).json({ error: "chat_not_found" });
+    if (launchingChats.has(context.chat.id) && (request.body?.templateId != null || request.body?.runtimeKind != null)) {
+      return response.status(409).json({ error: "runtime_locked", message: "Pi is already starting for this chat." });
+    }
+    let selectedTemplate = templateForChat(context.chat, context.project);
     if (request.body?.templateId != null) {
       const currentTemplate = resolveTemplate(config, context.chat.templateId);
       if (currentTemplate?.special === true) {
@@ -425,8 +771,63 @@ app.patch("/v0/chats/:chatId", async (request, response, next) => {
         templateId: template.id,
         templateVersion: template.version,
       });
+      selectedTemplate = template;
+    }
+    if (request.body?.runtimeKind != null) {
+      if (context.project.kind !== "workspace") {
+        return response.status(400).json({ error: "native_pi_requires_workspace" });
+      }
+      if (context.chat.status !== "draft" || context.chat.piSessionFile) {
+        return response.status(409).json({ error: "runtime_locked" });
+      }
+      const runtimeKind = request.body.runtimeKind;
+      if (!new Set(["conduit_profile", "native_pi"]).has(runtimeKind)) {
+        return response.status(400).json({ error: "unknown_runtime_kind" });
+      }
+      const runtime = runtimeFor({ runtimeKind, template: selectedTemplate });
+      if (runtimeKind === "native_pi" && !config.installations.get("host-pi").available) {
+        return response.status(409).json({ error: "native_pi_unavailable" });
+      }
+      await registry.update(context.chat.id, { runtime });
     }
     response.json(chatView(registry.metadata(context.chat.id)));
+  } catch (error) { next(error); }
+});
+
+app.get("/v0/chats/:chatId/models", async (request, response, next) => {
+  try {
+    const context = await findChatContext(request.params.chatId);
+    if (!context) return response.status(404).json({ error: "chat_not_found" });
+    response.json(await chatModelView(context));
+  } catch (error) { next(error); }
+});
+
+app.patch("/v0/chats/:chatId/models", async (request, response, next) => {
+  try {
+    const context = await findChatContext(request.params.chatId);
+    if (!context) return response.status(404).json({ error: "chat_not_found" });
+    const spec = String(request.body?.model || "").trim();
+    const thinkingLevel = String(request.body?.thinkingLevel || "").trim();
+    const current = await chatModelView(context);
+    if (spec && !current.models.some((item) => item.spec === spec)) {
+      return response.status(400).json({ error: "invalid_model" });
+    }
+    const resident = manager.getByChatId(context.chat.id);
+    if (resident) {
+      if (spec && spec !== current.model) await manager.setModel(resident.id, spec);
+      if (thinkingLevel) await manager.setThinkingLevel(resident.id, thinkingLevel);
+    } else {
+      if (context.chat.status !== "draft" || context.chat.piSessionFile) {
+        return response.status(409).json({ error: "live_session_required" });
+      }
+      const template = templateForChat(context.chat, context.project);
+      const runtime = context.chat.runtime || runtimeFor({ runtimeKind: "conduit_profile", template });
+      if (runtime.kind === "native_pi") {
+        return response.json({ ...current, model: spec || current.model, thinkingLevel: thinkingLevel || current.thinkingLevel });
+      }
+      if (spec) await catalogFor(runtime, template).updateDefault(context.project.path, spec, thinkingLevel);
+    }
+    response.json(await chatModelView(context));
   } catch (error) { next(error); }
 });
 
@@ -439,6 +840,7 @@ app.post("/v0/runtime/chats", async (_request, response, next) => {
     const chat = await registry.create(project, {
       templateId: template.id,
       templateVersion: template.version,
+      runtime: runtimeFor({ runtimeKind: "conduit_profile", template }),
     });
     response.status(201).json(chatView(chat));
   } catch (error) { next(error); }
@@ -498,7 +900,7 @@ app.get("/v0/sessions/:id", async (request, response, next) => {
   try {
     const context = await findChatContext(request.params.id);
     if (!context) return response.status(404).json({ error: "chat_not_found" });
-    const session = await findRegisteredSession(request.params.id);
+    const session = await findDeletableSession(await projects.list(), context.chat);
     if (!session) return response.json({
       ...chatView(context.chat), messages: [], tools: [], attachments: [], page: { before: null },
     });
@@ -572,15 +974,17 @@ app.post("/v0/sessions/:id/move", async (request, response, next) => {
   try {
     const projectList = await projects.list();
     const context = await findChatContext(request.params.id);
+    if (!context) return response.status(404).json({ error: "chat_not_found" });
+    if (context.chat.runtime?.kind === "native_pi") {
+      return response.status(409).json({ error: "chat_move_not_supported", message: "Host Pi chats cannot move between working roots." });
+    }
     const session = await registry.find(projectList, request.params.id);
     const target = projectList.find((item) => item.id === request.body?.projectId || item.slug === request.body?.projectId);
-    if (!context) return response.status(404).json({ error: "chat_not_found" });
     if (!target) return response.status(404).json({ error: "project_not_found" });
+    await projects.validate(target);
     if (context.chat.projectId === target.id) return response.status(409).json({ error: "session_project_unchanged" });
     await stopSessionProcesses(context.chat);
-    const moved = session ? await moveSession(session, target) : null;
-    await registry.move(context.chat.id, context.project, target);
-    if (moved) await registry.commitSession(context.chat.id, moved);
+    await moveRegisteredChat({ chat: context.chat, source: context.project, target, session });
     response.json(chatView(registry.metadata(context.chat.id)));
   } catch (error) { next(error); }
 });
@@ -589,7 +993,7 @@ app.delete("/v0/sessions/:id", async (request, response, next) => {
   try {
     const context = await findChatContext(request.params.id);
     if (!context) return response.status(404).json({ error: "chat_not_found" });
-    const session = await findRegisteredSession(request.params.id);
+    const session = await findDeletableSession(await projects.list(), context.chat);
     await stopSessionProcesses(context.chat);
     if (session) await removeSession(session);
     await registry.remove(context.chat.id, context.project);
@@ -614,28 +1018,94 @@ app.patch("/v0/runtime/settings", async (request, response, next) => {
   } catch (error) { next(error); }
 });
 app.post("/v0/live-sessions", async (request, response, next) => {
+  let lockedChatId = null;
+  let launchedRecord = null;
   try {
     const chatId = request.body?.chatId || request.body?.resumeSessionId;
     const context = await findChatContext(chatId);
     if (!context) return response.status(404).json({ error: "chat_not_found" });
+    if (launchingChats.has(context.chat.id)) return response.status(409).json({ error: "live_session_starting" });
+    launchingChats.add(context.chat.id);
+    lockedChatId = context.chat.id;
     const requestedProject = request.body?.projectId;
     if (requestedProject && ![context.project.id, context.project.slug].includes(requestedProject)) {
       return response.status(409).json({ error: "session_project_mismatch" });
     }
+    const resident = manager.getByChatId(context.chat.id);
+    if (resident) {
+      return response.status(201).json({ ...manager.view(resident), streamUrl: `/v0/live-sessions/${resident.id}/stream` });
+    }
     const template = templateForChat(context.chat, context.project);
+    const runtime = context.chat.runtime || runtimeFor({ runtimeKind: "conduit_profile", template });
+    const installation = config.installations.get(runtime.installationId);
+    if (!installation) {
+      return response.status(409).json({ error: "runtime_unavailable", installationId: runtime.installationId });
+    }
+    if (context.chat.piSessionFile) {
+      try { await validateSessionFile(context.chat.piSessionFile, context.project); }
+      catch (error) {
+        return response.status(409).json({ error: "session_file_unavailable", message: error.message });
+      }
+    }
+    if (runtime.kind === "native_pi") {
+      const preflight = await nativePreflight(context.project);
+      if (!preflight.available) return response.status(409).json({ error: "native_pi_unavailable", message: preflight.error });
+      new ProjectTrustStore(installation.agentDir).set(context.project.path, true);
+    }
+    const seedModel = context.chat.piSessionFile ? "" : request.body?.model || "";
+    const seedThinkingLevel = context.chat.piSessionFile ? "" : request.body?.thinkingLevel || "";
+    const runtimeCatalog = catalogFor(runtime, template);
+    if (seedModel) {
+      const allowed = await runtimeCatalog.list(context.project.path);
+      if (!allowed.models.some((model) => model.spec === seedModel)) {
+        return response.status(400).json({ error: "invalid_model" });
+      }
+    }
+    const launchSpec = resolvePiLaunch({
+      chat: context.chat,
+      project: context.project,
+      installation,
+      template: runtime.kind === "conduit_profile" ? template : null,
+      models: runtime.kind === "conduit_profile" ? runtimeCatalog.getLaunchModels(context.project.path) : null,
+      model: seedModel,
+      thinkingLevel: seedThinkingLevel,
+      bridgeSystemPrompt: config.bridgeSystemPrompt,
+      bridgeSkill: config.bridgeSkill,
+    });
+    console.info("Launching Pi", {
+      chatId: context.chat.id,
+      projectId: context.project.id,
+      runtimeKind: runtime.kind,
+      installationId: installation.id,
+      binaryVersion: installation.version,
+      profileId: runtime.profileId,
+      profileVersion: runtime.profileVersion,
+      cwd: launchSpec.cwd,
+      sessionFile: launchSpec.sessionFile,
+      trustPosture: launchSpec.trustPosture,
+    });
     const live = await manager.createWithCapacity({
       project: context.project,
       chatId: context.chat.id,
       sessionFile: context.chat.piSessionFile,
-      model: request.body?.model || "",
-      thinkingLevel: request.body?.thinkingLevel || "",
-      models: modelCatalog.getLaunchModels(context.project.path),
-      template,
+      model: seedModel,
+      thinkingLevel: seedThinkingLevel,
+      template: runtime.kind === "conduit_profile" ? template : null,
+      launchSpec,
     });
+    launchedRecord = live;
     await manager.waitForSession(live.id);
+    if (runtime.kind === "native_pi" && seedModel) {
+      await manager.setModel(live.id, seedModel);
+      if (seedThinkingLevel) await manager.setThinkingLevel(live.id, seedThinkingLevel);
+    }
+    if (!live.sessionFile) throw Object.assign(new Error("Pi did not report a session file"), { code: "invalid_session_mapping" });
     const mapping = {
       templateId: template.id,
       templateVersion: template.version,
+      runtime: {
+        ...runtime,
+      },
     };
     if (context.chat.status === "draft") {
       mapping.piSessionId = live.sessionId || null;
@@ -643,7 +1113,14 @@ app.post("/v0/live-sessions", async (request, response, next) => {
     }
     await registry.update(context.chat.id, mapping);
     response.status(201).json({ ...manager.view(live), streamUrl: `/v0/live-sessions/${live.id}/stream` });
-  } catch (error) { next(error); }
+  } catch (error) {
+    if (launchedRecord && ["starting", "running"].includes(launchedRecord.status)) {
+      await manager.stopAndWait(launchedRecord.id).catch(() => {});
+    }
+    next(error);
+  } finally {
+    if (lockedChatId) launchingChats.delete(lockedChatId);
+  }
 });
 
 app.get("/v0/live-sessions/:id/snapshot", async (request, response, next) => {
@@ -675,6 +1152,8 @@ app.use((error, _request, response, _next) => {
   console.error(error);
   let status = error.status || 500;
   if (error.code === "reserved_project" || error.code === "workspace_already_linked") status = 409;
+  if (error.code === "workspace_identity_changed") status = 409;
+  if (["chat_move_not_supported", "live_session_starting", "runtime_locked", "session_writer_conflict"].includes(error.code)) status = 409;
   if (error.code === "live_process_limit" || error.code === "generation_limit") status = 429;
   if (error.code === "attachment_not_found" || error.code === "path_not_found") status = 404;
   if (error.code === "command_failed") status = 502;
@@ -686,11 +1165,19 @@ app.use((error, _request, response, _next) => {
       "path_not_allowed",
       "path_not_absolute",
       "path_not_directory",
+      "dangerous_workspace_root",
+      "unsafe_conduit_path",
+      "native_resource_limit",
+      "native_resource_symlink",
       "clone_url_required",
       "clone_target_exists",
+      "clone_url_not_allowed",
+      "clone_url_credentials",
       "special_template",
       "special_chat_locked",
       "unknown_template",
+      "unknown_runtime_kind",
+      "native_pi_requires_workspace",
     ].includes(error.code)
     || error.message?.includes("Project names")) status = 400;
   response.status(status).json({
@@ -713,7 +1200,7 @@ async function promptForChat(record, command, message) {
 }
 
 async function sendPrompt(record, prepared, options) {
-  const generationId = manager.prompt(record.id, prepared.prompt, options);
+  const generationId = await manager.promptAccepted(record.id, prepared.prompt, options);
   if (prepared.context.chat.status === "draft") {
     await registry.update(prepared.context.chat.id, {
       status: "active",
@@ -745,10 +1232,7 @@ async function handleClientCommand(record, command) {
   }
   if (command.type === "follow_up" || command.type === "steer") {
     const prepared = await promptForChat(record, command, String(command.message || ""));
-    manager.send(record.id, {
-      type: command.type,
-      message: prepared.prompt,
-    });
+    await manager.queueAccepted(record.id, command.type, prepared.prompt);
     return null;
   }
   if (command.type === "stop_generation" || command.type === "abort") {
@@ -763,7 +1247,7 @@ async function handleClientCommand(record, command) {
   if (command.type === "regenerate") {
     const forked = await manager.fork(record.id, command.entryId);
     await syncForkedChat(record);
-    return manager.prompt(record.id, forked.text);
+    return manager.promptAccepted(record.id, forked.text);
   }
   if (command.type === "continue") {
     if (!config.enablePartialContinue) throw Object.assign(new Error("Partial continuation is disabled"), { code: "partial_continue_disabled" });
@@ -772,7 +1256,7 @@ async function handleClientCommand(record, command) {
     const partial = previous?.content || record.generation?.partial || "";
     if (!partial || (!previous?.stopped && !record.generation?.closed)) throw new Error("There is no stopped response to continue");
     // Experimental and intentionally removable: this is an ordinary hidden user prompt, not assistant prefill.
-    return manager.prompt(record.id, CONTINUE_PROMPT, { continuationBase: partial });
+    return manager.promptAccepted(record.id, CONTINUE_PROMPT, { continuationBase: partial });
   }
   if (command.type === "extension_ui_response" || command.type === "host_ui_response") {
     manager.respondHostUi(record.id, command);

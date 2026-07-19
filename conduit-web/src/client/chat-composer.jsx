@@ -48,6 +48,7 @@ export function ChatComposer({
   queue = null,
   serverOnline = true,
   profile = null,
+  runtime = null,
   profiles = [],
   profileLocked = false,
   onChooseProfile,
@@ -66,6 +67,7 @@ export function ChatComposer({
   const selectedModel = models.find((item) => item.spec === model);
   const thinkingLevels = list(selectedModel?.thinkingLevels);
   const modelLabel = selectedModel?.label || model.split("/").pop() || "Select model";
+  const nativeRuntime = runtime?.kind === "native_pi";
   const busy = streaming || generation === "active" || generation === "submitting";
   const isStopping = stopping || generation === "stopping";
   const hasText = Boolean(draft.trim());
@@ -202,7 +204,9 @@ export function ChatComposer({
                 </DropdownMenuRadioGroup>
               </DropdownMenuGroup>
               <DropdownMenuSeparator />
-              <DropdownMenuItem onSelect={() => requestAnimationFrame(() => commandActions.settings?.("models"))}>Manage models…</DropdownMenuItem>
+              {nativeRuntime
+                ? <DropdownMenuItem disabled>Host model scope is managed externally</DropdownMenuItem>
+                : <DropdownMenuItem onSelect={() => requestAnimationFrame(() => commandActions.settings?.("models"))}>Manage models…</DropdownMenuItem>}
             </DropdownMenuContent>
           </DropdownMenu>
           {list(profiles).length > 0 && <DropdownMenu>
@@ -233,7 +237,7 @@ export function ChatComposer({
                   {list(profiles).map((item) => <DropdownMenuRadioItem
                     key={item.id}
                     value={item.id}
-                    disabled={profileLocked}
+                    disabled={profileLocked || item.disabled}
                     onSelect={(event) => event.preventDefault()}
                   >
                     <span className="flex min-w-0 flex-col">

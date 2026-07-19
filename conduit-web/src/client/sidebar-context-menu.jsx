@@ -3,6 +3,7 @@ import {
   FolderInputIcon,
   MessageSquarePlusIcon,
   PencilIcon,
+  Settings2Icon,
   Trash2Icon,
 } from "lucide-react";
 import {
@@ -82,10 +83,11 @@ export function ProjectContextMenu({
   onDelete,
   onMoveChats,
   onNewChat,
+  onOpenSettings,
   onRename,
 }) {
   const isWorkspace = currentProject.origin === "linked" || currentProject.origin === "cloned";
-  const deleteLabel = currentProject.origin === "linked"
+  const deleteLabel = currentProject.deletesFilesOnRemove === false
     ? "Unlink workspace"
     : isWorkspace
       ? "Delete workspace"
@@ -102,6 +104,10 @@ export function ProjectContextMenu({
           <PencilIcon absoluteStrokeWidth />
           Rename {projectNoun}
         </ContextMenuItem>
+        {isWorkspace && <ContextMenuItem onSelect={onOpenSettings}>
+          <Settings2Icon absoluteStrokeWidth />
+          Workspace settings
+        </ContextMenuItem>}
         <ContextMenuSub>
           <ContextMenuSubTrigger disabled={!currentProject.sessions.length}>
             <FolderInputIcon absoluteStrokeWidth />
