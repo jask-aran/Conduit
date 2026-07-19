@@ -23,7 +23,10 @@ associates sessions with these working directories and stores their JSONL under
 `pi/sessions/`; no `.pi` directories or Pi configuration are generated inside
 working directories.
 
-`sessions.json` contains no transcript entries. Each row stores its immutable
+`sessions.json` contains no transcript entries. Empty drafts stay out of the
+sidebar until a completed attachment or first message; only startup cleanup
+removes empty drafts older than 24 hours, and a draft with a completed
+attachment is never removed automatically. Each row stores its immutable
 runtime kind, installation identity, creation-time binary version, and profile
 identity alongside the stable Conduit chat metadata. It exists so listing chats does
 not require reading every JSONL and is reconciled against native session files
@@ -37,7 +40,9 @@ only Conduit-owned project identity and display metadata.
 Host Pi Workspace chats do not use `data/pi`; they use the server user's
 login-shell Pi home (`PI_CODING_AGENT_DIR` or normally `~/.pi/agent`) and store only the exact private session mapping
 in `sessions.json`. Their scoped models and future-chat default also come from
-that host home; Conduit Settings reports them read-only.
+that host home; Conduit Settings reports them read-only. Host Pi chats cannot
+move between working roots (moving would re-home host-native JSONL through
+Conduit's isolated session store).
 
 Repository-owned behavior belongs in `../templates/`, not in runtime data.
 Back up or mount this directory as one unit to preserve files, project identity,
