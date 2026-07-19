@@ -34,6 +34,23 @@ test("raw JSON uploads publish atomically through the durable chat route", async
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-server-api-"));
   const port = await availablePort();
   const origin = `http://127.0.0.1:${port}`;
+  const freshSessionFile = path.join(root, "pi", "sessions", "future.jsonl");
+  const conduitPi = path.join(root, "conduit-pi");
+  await fs.writeFile(conduitPi, `#!/usr/bin/env node
+const readline = require("node:readline");
+const input = readline.createInterface({ input: process.stdin });
+input.on("line", (line) => {
+  const command = JSON.parse(line);
+  if (command.type === "get_state") process.stdout.write(JSON.stringify({
+    id: command.id,
+    type: "response",
+    command: "get_state",
+    success: true,
+    data: { sessionFile: ${JSON.stringify(freshSessionFile)}, sessionId: "future-session" },
+  }) + "\\n");
+});
+`);
+  await fs.chmod(conduitPi, 0o755);
   const nativePi = path.join(root, "native-pi");
   await fs.writeFile(nativePi, "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then echo 0.80.10; exit 0; fi\nexit 1\n");
   await fs.chmod(nativePi, 0o755);
@@ -51,6 +68,7 @@ test("raw JSON uploads publish atomically through the durable chat route", async
       CONDUIT_SESSION_REGISTRY_FILE: path.join(root, "sessions.json"),
       CONDUIT_PREFERENCES_FILE: path.join(root, "preferences.json"),
       CONDUIT_PI_AGENT_DIR: path.join(root, "pi"),
+      CONDUIT_PI_COMMAND: conduitPi,
       CONDUIT_NATIVE_PI_COMMAND: nativePi,
       CONDUIT_WORKSPACE_ALLOWLIST: root,
     },
@@ -168,6 +186,16 @@ test("raw JSON uploads publish atomically through the durable chat route", async
     });
     assert.equal(runtimeSwitch.status, 409);
     assert.equal((await runtimeSwitch.json()).error, "special_chat_locked");
+
+    const freshLive = await fetch(`${origin}/v0/live-sessions`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ chatId: chat.id, projectId: "project_chat" }),
+    });
+    assert.equal(freshLive.status, 201);
+    assert.equal((await freshLive.json()).status, "running");
+    await assert.rejects(fs.access(freshSessionFile), { code: "ENOENT" });
+
     const directory = path.join(root, "files", ".conduit", "chats", chat.id);
     await fs.access(path.join(directory, "attachments"));
     await fs.access(path.join(directory, ".partial"));
