@@ -1,7 +1,7 @@
 {
   "id": "workspace",
   "version": "3",
-  "label": "Workspace",
+  "label": "Coding",
   "description": "Development Pi with filesystem, shell, Git/GitHub, and web research skills.",
   "posture": "read / edit / shell",
   "systemPrompt": "SYSTEM.md",

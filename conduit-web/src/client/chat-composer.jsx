@@ -177,7 +177,7 @@ export function ChatComposer({
             onClick={() => attachments.inputRef.current?.click()}
             disabled={!serverOnline}
           ><PaperclipIcon /></InputGroupButton>
-          {nativeRuntime ? <InputGroupButton variant="ghost" size="sm" disabled aria-label="Native Pi uses the host model">
+          {nativeRuntime ? <InputGroupButton variant="ghost" size="sm" disabled aria-label="Host Pi uses the host model">
             <span>Host model</span>
           </InputGroupButton> : <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -237,7 +237,7 @@ export function ChatComposer({
                   {list(profiles).map((item) => <DropdownMenuRadioItem
                     key={item.id}
                     value={item.id}
-                    disabled={profileLocked}
+                    disabled={profileLocked || item.disabled}
                     onSelect={(event) => event.preventDefault()}
                   >
                     <span className="flex min-w-0 flex-col">

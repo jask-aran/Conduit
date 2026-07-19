@@ -7,10 +7,12 @@ function filteredEnvironment(env = process.env) {
   return Object.fromEntries(Object.entries(env).filter(([key]) => !SENSITIVE_ENV.test(key)));
 }
 
-function nativeEnvironment(env = process.env) {
+function nativeEnvironment(installation) {
+  const env = installation.environment || process.env;
   const filtered = filteredEnvironment(env);
-  delete filtered.PI_CODING_AGENT_DIR;
   delete filtered.PI_CODING_AGENT_SESSION_DIR;
+  if (installation.agentDirExplicit) filtered.PI_CODING_AGENT_DIR = installation.agentDir;
+  else delete filtered.PI_CODING_AGENT_DIR;
   return filtered;
 }
 
@@ -57,7 +59,7 @@ export function resolvePiLaunch({
         ...sessionArgs(chat.piSessionFile, "", ""),
       ],
       cwd,
-      env: nativeEnvironment(process.env),
+      env: nativeEnvironment(installation),
       sessionFile: chat.piSessionFile ? path.resolve(chat.piSessionFile) : null,
       runtime,
       binaryVersion: installation.version,
@@ -81,7 +83,7 @@ export function resolvePiLaunch({
       ...sessionArgs(chat.piSessionFile, model, thinkingLevel),
     ],
     cwd,
-    env: buildPiEnvironment(installation.agentDir, filteredEnvironment(process.env)),
+    env: buildPiEnvironment(installation.agentDir, filteredEnvironment(installation.environment || process.env)),
     sessionFile: chat.piSessionFile ? path.resolve(chat.piSessionFile) : null,
     runtime,
     binaryVersion: installation.version,

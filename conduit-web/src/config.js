@@ -31,8 +31,9 @@ export function loadConfig(env = process.env) {
   const piAgentDir = absolute(env.CONDUIT_PI_AGENT_DIR || path.join(repositoryRoot, "data/pi"));
   const installations = new PiInstallationRegistry({
     conduitAgentDir: piAgentDir,
-    conduitCommand: env.CONDUIT_PI_COMMAND || env.PI_COMMAND || "",
+    conduitCommand: env.CONDUIT_PI_COMMAND || "",
     nativeCommand: env.CONDUIT_NATIVE_PI_COMMAND || "",
+    nativeAgentDir: env.CONDUIT_NATIVE_PI_AGENT_DIR || "",
   });
   return {
     host: env.CONDUIT_HOST || env.HOST || "127.0.0.1",

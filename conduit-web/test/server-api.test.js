@@ -37,6 +37,8 @@ test("raw JSON uploads publish atomically through the durable chat route", async
   const freshSessionFile = path.join(root, "pi", "sessions", "future.jsonl");
   const conduitPi = path.join(root, "conduit-pi");
   await fs.writeFile(conduitPi, `#!/usr/bin/env node
+if (process.argv.includes("--version")) { console.log("0.80.6"); process.exit(0); }
+if (process.argv.includes("--help")) { console.log("--mode --session --append-system-prompt --skill --approve --no-approve"); process.exit(0); }
 const readline = require("node:readline");
 const input = readline.createInterface({ input: process.stdin });
 input.on("line", (line) => {
@@ -52,7 +54,7 @@ input.on("line", (line) => {
 `);
   await fs.chmod(conduitPi, 0o755);
   const nativePi = path.join(root, "native-pi");
-  await fs.writeFile(nativePi, "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then echo 0.80.10; exit 0; fi\nexit 1\n");
+  await fs.writeFile(nativePi, "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then echo 0.80.10; exit 0; fi\nif [ \"$1\" = \"--help\" ]; then echo '--mode --session --append-system-prompt --skill --approve --no-approve'; exit 0; fi\nexit 1\n");
   await fs.chmod(nativePi, 0o755);
   const workspace = path.join(root, "workspace");
   await fs.mkdir(workspace);
@@ -61,6 +63,7 @@ input.on("line", (line) => {
     stdio: ["ignore", "pipe", "pipe"],
     env: {
       ...process.env,
+      HOME: root,
       CONDUIT_HOST: "127.0.0.1",
       CONDUIT_PORT: String(port),
       CONDUIT_FILES_ROOT: path.join(root, "files"),
@@ -70,6 +73,7 @@ input.on("line", (line) => {
       CONDUIT_PI_AGENT_DIR: path.join(root, "pi"),
       CONDUIT_PI_COMMAND: conduitPi,
       CONDUIT_NATIVE_PI_COMMAND: nativePi,
+      CONDUIT_NATIVE_PI_AGENT_DIR: path.join(root, "native-agent"),
       CONDUIT_WORKSPACE_ALLOWLIST: root,
     },
   });
@@ -97,9 +101,12 @@ input.on("line", (line) => {
     });
     assert.equal(linkedResponse.status, 201);
     const linked = await linkedResponse.json();
+    await fs.mkdir(path.join(workspace, ".pi", "themes"), { recursive: true });
     const preflight = await (await fetch(`${origin}/v0/workspaces/${linked.id}/native-preflight`)).json();
     assert.equal(preflight.available, true);
     assert.equal(preflight.version, "0.80.10");
+    assert.equal(preflight.trustRequired, true);
+    assert.ok(preflight.resources.includes("themes"));
 
     const nativeChatResponse = await fetch(`${origin}/v0/chats`, {
       method: "POST",
@@ -119,6 +126,17 @@ input.on("line", (line) => {
     assert.equal(nativeMove.status, 409);
     assert.equal((await nativeMove.json()).error, "chat_move_not_supported");
 
+    const isolatedSwitch = await fetch(`${origin}/v0/chats/${nativeChat.id}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ templateId: "chat", runtimeKind: "conduit_profile" }),
+    });
+    assert.equal(isolatedSwitch.status, 200);
+    const isolatedChat = await isolatedSwitch.json();
+    assert.equal(isolatedChat.templateId, "chat");
+    assert.equal(isolatedChat.runtime.kind, "conduit_profile");
+    assert.equal(isolatedChat.runtime.profileId, "chat");
+
     const invalidNative = await fetch(`${origin}/v0/chats`, {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -126,6 +144,13 @@ input.on("line", (line) => {
     });
     assert.equal(invalidNative.status, 400);
     assert.equal((await invalidNative.json()).error, "native_pi_requires_workspace");
+
+    const externalAgents = path.join(root, "external-agents");
+    await fs.mkdir(path.join(externalAgents, "skills"), { recursive: true });
+    await fs.symlink(externalAgents, path.join(workspace, ".agents"));
+    const symlinkedPreflight = await fetch(`${origin}/v0/workspaces/${linked.id}/native-preflight`);
+    assert.equal(symlinkedPreflight.status, 400);
+    assert.equal((await symlinkedPreflight.json()).error, "native_resource_symlink");
 
     const runtimeDefault = await fetch(`${origin}/v0/preferences`, {
       method: "PATCH",

@@ -69,6 +69,7 @@ export function AppSidebar({
   onAddProject,
   workspaceSuggestions = [],
   installations = [],
+  templates = [],
   onCopyTranscript,
   onDeleteProject,
   onDeleteSession,
@@ -92,7 +93,7 @@ export function AppSidebar({
   const [newFolderSubmitting, setNewFolderSubmitting] = useState(false);
   const [pendingMove, setPendingMove] = useState(null);
   const [pendingWorkspaceChat, setPendingWorkspaceChat] = useState(null);
-  const [workspaceRuntime, setWorkspaceRuntime] = useState("conduit_profile");
+  const [workspaceLaunchOption, setWorkspaceLaunchOption] = useState("profile:workspace");
   const [nativePreflight, setNativePreflight] = useState(null);
   const [nativeTrustChoice, setNativeTrustChoice] = useState("ignore_project_resources");
   const [nativeLoading, setNativeLoading] = useState(false);
@@ -151,9 +152,12 @@ export function AppSidebar({
   const chooseNewChat = (project = chatsProject, options = null) => {
     setOpenMobile(false);
     if (project?.kind === "workspace" && !options) {
-      const remembered = localStorage.getItem(`conduit.workspace-runtime.${project.id}`) || "conduit_profile";
-      setWorkspaceRuntime(remembered);
+      const defaultOption = `profile:${project.defaultTemplateId || "workspace"}`;
+      const remembered = localStorage.getItem(`conduit.workspace-profile.${project.id}`)
+        || localStorage.getItem(`conduit.workspace-runtime.${project.id}`);
+      setWorkspaceLaunchOption(remembered === "native_pi" ? "host-pi" : remembered?.startsWith("profile:") ? remembered : defaultOption);
       setNativePreflight(null);
+      setNativeTrustChoice("ignore_project_resources");
       setPendingWorkspaceChat(project);
       return;
     }
@@ -161,29 +165,32 @@ export function AppSidebar({
   };
 
   useEffect(() => {
-    if (!pendingWorkspaceChat || workspaceRuntime !== "native_pi") return;
+    if (!pendingWorkspaceChat || workspaceLaunchOption !== "host-pi") return;
     let active = true;
     setNativeLoading(true);
     fetch(`/v0/workspaces/${encodeURIComponent(pendingWorkspaceChat.id)}/native-preflight`)
       .then(async (response) => {
         const body = await response.json().catch(() => ({}));
-        if (!response.ok) throw new Error(body.message || body.error || "Could not inspect Native Pi");
+        if (!response.ok) throw new Error(body.message || body.error || "Could not inspect Host Pi");
         return body;
       })
       .then((body) => active && setNativePreflight(body))
       .catch((error) => active && setNativePreflight({ available: false, error: error.message }))
       .finally(() => active && setNativeLoading(false));
     return () => { active = false; };
-  }, [pendingWorkspaceChat, workspaceRuntime]);
+  }, [pendingWorkspaceChat, workspaceLaunchOption]);
 
   const createWorkspaceChat = () => {
     if (!pendingWorkspaceChat) return;
-    const options = { runtimeKind: workspaceRuntime };
-    if (workspaceRuntime === "native_pi" && nativePreflight?.trustRequired) {
+    const nativeRuntime = workspaceLaunchOption === "host-pi";
+    const options = nativeRuntime
+      ? { runtimeKind: "native_pi", templateId: pendingWorkspaceChat.defaultTemplateId || "workspace" }
+      : { runtimeKind: "conduit_profile", templateId: workspaceLaunchOption.slice("profile:".length) };
+    if (nativeRuntime && nativePreflight?.trustRequired) {
       options.trustChoice = nativeTrustChoice;
       options.trustToken = nativePreflight.token;
     }
-    localStorage.setItem(`conduit.workspace-runtime.${pendingWorkspaceChat.id}`, workspaceRuntime);
+    localStorage.setItem(`conduit.workspace-profile.${pendingWorkspaceChat.id}`, workspaceLaunchOption);
     onNewChat(pendingWorkspaceChat, options);
     setPendingWorkspaceChat(null);
   };
@@ -229,12 +236,12 @@ export function AppSidebar({
     const cloneUrl = newFolderCloneUrl.trim();
     if (newFolderMode === "managed" && !name) return;
     if (newFolderMode === "linked" && !pathValue) return;
-    if (newFolderMode === "cloned" && !cloneUrl) return;
+    if (newFolderMode === "cloned" && (!cloneUrl || !pathValue)) return;
     const payload = newFolderMode === "managed"
       ? { mode: "managed", name }
       : newFolderMode === "linked"
         ? { mode: "linked", name: name || undefined, path: pathValue, defaultTemplateId: "workspace" }
-        : { mode: "cloned", name: name || undefined, cloneUrl, defaultTemplateId: "workspace" };
+        : { mode: "cloned", name: name || undefined, cloneUrl, path: pathValue, defaultTemplateId: "workspace" };
     setNewFolderSubmitting(true);
     try {
       if (!await onAddProject(payload)) return;
@@ -254,7 +261,7 @@ export function AppSidebar({
       ? Boolean(newFolderName.trim())
       : newFolderMode === "linked"
         ? Boolean(newFolderPath.trim())
-        : Boolean(newFolderCloneUrl.trim())
+        : Boolean(newFolderCloneUrl.trim() && newFolderPath.trim())
   );
 
   return <>
@@ -346,7 +353,7 @@ export function AppSidebar({
               : pendingDelete.project.origin === "linked"
                 ? "Unlink this workspace?"
                 : pendingDelete.project.origin === "cloned"
-                  ? "Delete this workspace?"
+                  ? "Unlink this workspace?"
                   : "Delete this folder?"}
           </AlertDialogTitle>
           <AlertDialogDescription>
@@ -355,7 +362,7 @@ export function AppSidebar({
               : pendingDelete.project.origin === "linked"
                 ? `This unregisters ${pendingDelete.project.name} and deletes its Conduit chats. The linked directory on disk is kept.`
                 : pendingDelete.project.origin === "cloned"
-                  ? `This permanently deletes the cloned checkout for ${pendingDelete.project.name} and all of its chats.`
+                  ? `This unregisters ${pendingDelete.project.name} and deletes its Conduit chats. The cloned directory on disk is kept.`
                   : `This permanently deletes ${pendingDelete.project.name}, its working files, and all of its chats.`}
           </AlertDialogDescription>
         </AlertDialogHeader>
@@ -371,8 +378,12 @@ export function AppSidebar({
         project={pendingWorkspaceChat}
         open
         onOpenChange={(open) => !open && setPendingWorkspaceChat(null)}
-        runtime={workspaceRuntime}
-        onRuntimeChange={setWorkspaceRuntime}
+        launchOption={workspaceLaunchOption}
+        onLaunchOptionChange={(launchOption) => {
+          setWorkspaceLaunchOption(launchOption);
+          setNativeTrustChoice("ignore_project_resources");
+        }}
+        profiles={templates.filter((template) => template.defaultable !== false && template.special !== true)}
         installations={installations}
         preflight={nativePreflight}
         loading={nativeLoading}
@@ -397,7 +408,7 @@ export function AppSidebar({
             <DialogTitle>{newProjectDialog === "workspace" ? "New workspace" : "New folder"}</DialogTitle>
             <DialogDescription>
               {newProjectDialog === "workspace"
-                ? "Link an existing allow-listed directory or clone a repository into Conduit."
+                ? "Link an existing allow-listed directory or clone a repository into a chosen host directory."
                 : "Create a separate managed working directory and chat scope."}
             </DialogDescription>
           </DialogHeader>
@@ -426,16 +437,16 @@ export function AppSidebar({
                 placeholder={newFolderMode === "managed" ? "Research" : "My project"}
               />
             </Field>
-            {newFolderMode === "linked" && <Field>
-              <FieldLabel htmlFor="folder-path">Absolute path</FieldLabel>
+            {(newFolderMode === "linked" || newFolderMode === "cloned") && <Field>
+              <FieldLabel htmlFor="folder-path">{newFolderMode === "cloned" ? "Clone location" : "Absolute path"}</FieldLabel>
               <Input
                 id="folder-path"
-                autoFocus
+                autoFocus={newFolderMode === "linked"}
                 list="workspace-path-suggestions"
                 value={newFolderPath}
                 disabled={newFolderSubmitting}
                 onChange={(event) => setNewFolderPath(event.target.value)}
-                placeholder="~/code/my-repo"
+                placeholder={newFolderMode === "cloned" ? "~/code/new-repo" : "~/code/my-repo"}
               />
               <datalist id="workspace-path-suggestions">
                 {workspaceSuggestions.map((folder) => (

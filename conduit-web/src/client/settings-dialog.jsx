@@ -35,7 +35,7 @@ function Placeholder({ title }) {
   </Empty>;
 }
 
-function RuntimeSettings() {
+function RuntimeSettings({ installations = [], onInstallationsChange }) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -44,30 +44,24 @@ function RuntimeSettings() {
   const [idleMinutes, setIdleMinutes] = useState(2);
   const [liveCount, setLiveCount] = useState(0);
   const [generatingCount, setGeneratingCount] = useState(0);
-  const [installations, setInstallations] = useState([]);
   const [detecting, setDetecting] = useState(false);
 
   useEffect(() => {
     let active = true;
     setLoading(true);
-    Promise.all([
-      fetch("/v0/runtime/settings").then(async (response) => {
-          const body = await response.json().catch(() => ({}));
-          if (!response.ok) throw new Error(body.message || body.error || "Could not load runtime settings");
-          return body;
-        }),
-      fetch("/v0/pi-installations")
-        .then(async (response) => response.ok ? response.json() : { installations: [] })
-        .catch(() => ({ installations: [] })),
-    ])
-      .then(([body, catalog]) => {
+    fetch("/v0/runtime/settings")
+      .then(async (response) => {
+        const body = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(body.message || body.error || "Could not load runtime settings");
+        return body;
+      })
+      .then((body) => {
         if (!active) return;
         setMaxLiveProcesses(body.maxLiveProcesses ?? 12);
         setMaxGeneratingProcesses(body.maxGeneratingProcesses ?? 2);
         setIdleMinutes(Math.max(1, Math.round((body.idleProcessTtlMs || 120_000) / 60_000)));
         setLiveCount(body.liveCount ?? 0);
         setGeneratingCount(body.generatingCount ?? 0);
-        setInstallations(catalog.installations || []);
         setError("");
       })
       .catch((caught) => {
@@ -113,7 +107,7 @@ function RuntimeSettings() {
       const response = await fetch("/v0/pi-installations/host/detect", { method: "POST" });
       const body = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(body.message || body.error || "Could not detect host Pi");
-      setInstallations((current) => [...current.filter((item) => item.id !== body.id), body]);
+      onInstallationsChange?.((current) => [...current.filter((item) => item.id !== body.id), body]);
     } catch (caught) {
       setError(caught.message);
     } finally {
@@ -140,7 +134,7 @@ function RuntimeSettings() {
             <Badge variant={installation.available ? "secondary" : "outline"}>{installation.available ? "Available" : "Unavailable"}</Badge>
           </div>)}
         </div>
-        <FieldDescription>Conduit uses its bundled Pi and isolated home. Workspace chats may explicitly use the host Pi installation and native home.</FieldDescription>
+        <FieldDescription>Ordinary profiles use the bundled Isolated Pi and its private home. Workspace chats may instead select Host Pi.</FieldDescription>
         <Button type="button" variant="outline" disabled={detecting} onClick={detectHostPi}>
           {detecting && <Spinner data-icon="inline-start" />}
           {detecting ? "Detecting…" : "Re-detect host Pi"}
@@ -266,7 +260,7 @@ function ProfileSettings({
           </SelectContent>
         </Select>
         <FieldDescription>
-          Command palette and New chat use this default. Linked and cloned workspaces default to Workspace.
+          Command palette and New chat use this default. Linked and cloned Workspaces default to Coding.
         </FieldDescription>
       </Field>
       {active && <Field>
@@ -323,6 +317,8 @@ export function SettingsDialog({
   defaultTemplateId = "chat",
   onDefaultTemplateChange,
   onOpenRuntimeChat,
+  installations = [],
+  onInstallationsChange,
 }) {
   const [section, setSection] = useState(initialSection);
   const [enabled, setEnabled] = useState(modelSettings.enabledModels);
@@ -396,7 +392,7 @@ export function SettingsDialog({
               onOpenRuntimeChat={onOpenRuntimeChat}
             />
           </TabsContent>
-          <TabsContent value="runtime"><RuntimeSettings /></TabsContent>
+          <TabsContent value="runtime"><RuntimeSettings installations={installations} onInstallationsChange={onInstallationsChange} /></TabsContent>
           {sections.filter((item) => !["models", "profiles", "runtime"].includes(item.id)).map((item) => (
             <TabsContent key={item.id} value={item.id}><Placeholder title={item.label} /></TabsContent>
           ))}

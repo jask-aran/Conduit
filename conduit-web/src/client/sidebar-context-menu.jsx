@@ -85,7 +85,7 @@ export function ProjectContextMenu({
   onRename,
 }) {
   const isWorkspace = currentProject.origin === "linked" || currentProject.origin === "cloned";
-  const deleteLabel = currentProject.origin === "linked"
+  const deleteLabel = currentProject.deletesFilesOnRemove === false
     ? "Unlink workspace"
     : isWorkspace
       ? "Delete workspace"

@@ -23,7 +23,7 @@ test("repository templates are discoverable launch presets", () => {
   const workspace = templates.find((template) => template.id === "workspace");
   const general = templates.find((template) => template.id === "chat");
   const view = templatePublicView(workspace);
-  assert.equal(view.label, "Workspace");
+  assert.equal(view.label, "Coding");
   assert.equal(view.defaultable, true);
   assert.ok(view.tools.includes("edit"));
   assert.ok(view.skillCount >= 1);

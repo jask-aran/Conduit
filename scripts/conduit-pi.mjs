@@ -18,7 +18,7 @@ const bundledPi = path.join(repositoryRoot, "conduit-web/node_modules/@earendil-
 
 await fs.mkdir(agentDir, { recursive: true });
 const models = loadPiModelPatterns(agentDir, template.models);
-const child = spawn(process.env.CONDUIT_PI_COMMAND || process.env.PI_COMMAND || bundledPi, [
+const child = spawn(process.env.CONDUIT_PI_COMMAND || bundledPi, [
   ...buildPiResourceArgs({ ...template, models }),
   ...process.argv.slice(2),
 ], {

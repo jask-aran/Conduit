@@ -54,7 +54,7 @@ Cmd/Ctrl+Shift+O opens Go to mode directly; Cmd/Ctrl+Shift+C starts a new chat.
 The composer slash Popover contains only `/attach`. A project-aware breadcrumb
 identifies where each chat belongs.
 
-Every Conduit-profile Pi process receives:
+Every Isolated Pi profile process receives:
 
 - `PI_CODING_AGENT_DIR=data/pi`;
 - the selected project directory as `cwd`;
@@ -65,13 +65,14 @@ No session-directory override is supplied. Pi writes native JSONL sessions to
 `data/pi/sessions/<encoded-cwd>/`, and Conduit verifies each JSONL header's `cwd`
 when associating sessions with projects.
 
-Native Pi Workspace processes instead use the detected absolute host executable,
-the host Pi home and configuration, the Workspace as `cwd`, and only the
+Host Pi Workspace processes instead use the detected absolute host executable,
+login-shell environment and effective Pi home/configuration, the Workspace as `cwd`, and only the
 additive Conduit attachment bridge. They never receive `PI_CODING_AGENT_DIR`, a
-Conduit profile, model scope, or tool allow-list. Saved native project trust is
+tracked profile, model scope, or tool allow-list. Saved host project trust is
 honored; otherwise the browser must choose trust-once or no project resources.
 One `PiManager` owns both launch forms and enforces shared writer and process
-limits.
+limits. Workspace drafts expose ordinary profiles and a synthetic Host Pi choice
+in one selector; the selected launch form becomes immutable when Pi first starts.
 
 JSONL remains authoritative for persisted messages, tool calls, model changes,
 and thinking-level changes. Opening a chat reconstructs that state from its
