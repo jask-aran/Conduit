@@ -921,7 +921,6 @@ app.post("/v0/live-sessions", async (request, response, next) => {
     launchedRecord = live;
     await manager.waitForSession(live.id);
     if (!live.sessionFile) throw Object.assign(new Error("Pi did not report a session file"), { code: "invalid_session_mapping" });
-    await validateSessionFile(live.sessionFile, context.project);
     const mapping = {
       templateId: template.id,
       templateVersion: template.version,
