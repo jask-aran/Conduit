@@ -28,6 +28,22 @@ const plainModel = {
   thinkingLevels: ["off"],
 };
 
+const templates = [{
+  id: "chat",
+  label: "General",
+  version: 1,
+  defaultable: true,
+  tools: ["read", "write", "edit", "bash"],
+}, {
+  id: "workspace",
+  label: "Coding",
+  version: 1,
+  defaultable: true,
+  tools: ["read", "write", "edit", "bash"],
+}];
+
+const unhandledApiRequests = new WeakMap();
+
 async function openSidebar(page, testInfo) {
   if (testInfo.project.name === "mobile-chromium") {
     await page.getByRole("button", { name: "Toggle Sidebar" }).click();
@@ -74,6 +90,32 @@ test.beforeEach(async ({ page }) => {
       }
     }
     Object.defineProperty(window, "EventSource", { configurable: true, value: MockEventSource });
+  });
+  const unhandled = [];
+  unhandledApiRequests.set(page, unhandled);
+  await page.route("**/v0/**", async (route) => {
+    const request = route.request();
+    unhandled.push(`${request.method()} ${new URL(request.url()).pathname}`);
+    await route.fulfill({ status: 501, json: { error: "unhandled_browser_test_api" } });
+  });
+  await page.route("**/v0/templates", async (route) => {
+    await route.fulfill({ json: { templates, defaultTemplateId: "chat" } });
+  });
+  await page.route("**/v0/workspaces/suggestions", async (route) => {
+    await route.fulfill({ json: { folders: [] } });
+  });
+  await page.route("**/v0/preferences", async (route) => {
+    const body = route.request().postDataJSON?.() || {};
+    await route.fulfill({ json: { defaultTemplateId: body.defaultTemplateId || "chat" } });
+  });
+  await page.route("**/v0/runtime/settings", async (route) => {
+    await route.fulfill({ json: {
+      maxLiveProcesses: 12,
+      maxGeneratingProcesses: 2,
+      idleProcessTtlMs: 120_000,
+      liveCount: 0,
+      generatingCount: 0,
+    } });
   });
   await page.route("**/v0/capabilities", async (route) => {
     await route.fulfill({ json: { partialContinue: true, globalRuntime: "sse" } });
@@ -192,6 +234,10 @@ test.beforeEach(async ({ page }) => {
   await page.route("**/v0/live-sessions", async (route) => {
     await route.fulfill({ json: { id: "live_existing", streamUrl: "/v0/live-sessions/live_existing/stream" } });
   });
+});
+
+test.afterEach(async ({ page }) => {
+  expect(unhandledApiRequests.get(page) || [], "all browser API requests must use deterministic mocks").toEqual([]);
 });
 
 test("creates a durable chat route and renders the primary surface", async ({ page }) => {
