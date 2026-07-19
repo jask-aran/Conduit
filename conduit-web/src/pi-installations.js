@@ -8,6 +8,10 @@ import { VERSION } from "@earendil-works/pi-coding-agent";
 const bundledCli = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../node_modules/@earendil-works/pi-coding-agent/dist/cli.js");
 const REQUIRED_NATIVE_FLAGS = ["--mode", "--session", "--append-system-prompt", "--skill", "--approve", "--no-approve"];
 
+function capabilitiesFromHelp(help, available = true) {
+  return Object.fromEntries(REQUIRED_NATIVE_FLAGS.map((flag) => [flag.slice(2).replaceAll("-", "_"), Boolean(available && help.includes(flag))]));
+}
+
 function parseVersion(output) {
   return String(output || "").match(/\d+\.\d+\.\d+(?:[-+][\w.-]+)?/)?.[0] || null;
 }
@@ -51,12 +55,13 @@ function resolveCommandSync(override, environment) {
 }
 
 function probeSync(command, environment) {
-  if (!command) return { version: null, compatible: false };
+  if (!command) return { version: null, compatible: false, capabilities: capabilitiesFromHelp("", false) };
   const versionResult = spawnSync(command, ["--version"], { encoding: "utf8", env: environment, timeout: 5000 });
   const helpResult = spawnSync(command, ["--help"], { encoding: "utf8", env: environment, timeout: 5000 });
   const version = versionResult.status === 0 ? parseVersion(versionResult.stdout || versionResult.stderr) : null;
   const help = String(helpResult.stdout || helpResult.stderr || "");
-  return { version, compatible: Boolean(version && helpResult.status === 0 && REQUIRED_NATIVE_FLAGS.every((flag) => help.includes(flag))) };
+  const capabilities = capabilitiesFromHelp(help, helpResult.status === 0);
+  return { version, capabilities, compatible: Boolean(version && Object.values(capabilities).every(Boolean)) };
 }
 
 function run(command, args, environment, { encoding = "utf8" } = {}) {
@@ -95,17 +100,18 @@ async function resolveCommand(override, environment) {
 }
 
 async function probe(command, environment) {
-  if (!command) return { version: null, compatible: false };
+  if (!command) return { version: null, compatible: false, capabilities: capabilitiesFromHelp("", false) };
   const [versionResult, helpResult] = await Promise.all([
     run(command, ["--version"], environment),
     run(command, ["--help"], environment),
   ]);
   const version = versionResult.status === 0 ? parseVersion(versionResult.stdout || versionResult.stderr) : null;
   const help = String(helpResult.stdout || helpResult.stderr || "");
-  return { version, compatible: Boolean(version && helpResult.status === 0 && REQUIRED_NATIVE_FLAGS.every((flag) => help.includes(flag))) };
+  const capabilities = capabilitiesFromHelp(help, helpResult.status === 0);
+  return { version, capabilities, compatible: Boolean(version && Object.values(capabilities).every(Boolean)) };
 }
 
-function nativeDescriptor({ command, environment, version, compatible, checkedAt, agentDirOverride }) {
+function nativeDescriptor({ command, environment, version, compatible, capabilities, checkedAt, agentDirOverride, commandSource }) {
   const explicitAgentDir = String(agentDirOverride || environment.PI_CODING_AGENT_DIR || "").trim();
   const home = environment.HOME || os.homedir();
   const expandedAgentDir = explicitAgentDir === "~"
@@ -116,14 +122,16 @@ function nativeDescriptor({ command, environment, version, compatible, checkedAt
   return {
     id: "host-pi",
     label: "Host Pi",
-    source: "host",
+    source: commandSource,
     command,
     commandArgs: [],
     agentDir,
     agentDirExplicit: Boolean(explicitAgentDir),
+    agentDirSource: agentDirOverride ? "override" : environment.PI_CODING_AGENT_DIR ? "login-shell" : "default",
     environment,
     version,
     compatible,
+    capabilities,
     available,
     checkedAt,
     error: !command
@@ -148,7 +156,9 @@ export class PiInstallationRegistry {
     const conduitCommand = this.conduitCommandOverride && path.isAbsolute(this.conduitCommandOverride)
       ? path.resolve(this.conduitCommandOverride)
       : this.conduitCommandOverride ? null : bundledCli;
-    const conduitProbe = this.conduitCommandOverride ? probeSync(conduitCommand, process.env) : { version: VERSION, compatible: true };
+    const conduitProbe = this.conduitCommandOverride
+      ? probeSync(conduitCommand, process.env)
+      : { version: VERSION, compatible: true, capabilities: capabilitiesFromHelp(REQUIRED_NATIVE_FLAGS.join(" ")) };
     const conduitAvailable = Boolean(conduitCommand && fs.existsSync(conduitCommand) && conduitProbe.version);
     this.installations.set("conduit-pinned", {
       id: "conduit-pinned",
@@ -160,6 +170,7 @@ export class PiInstallationRegistry {
       environment: process.env,
       version: conduitProbe.version,
       compatible: conduitProbe.compatible,
+      capabilities: conduitProbe.capabilities,
       available: conduitAvailable,
       checkedAt,
       error: conduitAvailable ? null : "Conduit Pi executable is missing or did not report a version",
@@ -173,6 +184,7 @@ export class PiInstallationRegistry {
       ...probeSync(command, environment),
       checkedAt,
       agentDirOverride: this.nativeAgentDirOverride,
+      commandSource: this.nativeCommandOverride ? "override" : "login-shell",
     }));
     return this.list();
   }
@@ -187,6 +199,7 @@ export class PiInstallationRegistry {
       ...await probe(command, environment),
       checkedAt,
       agentDirOverride: this.nativeAgentDirOverride,
+      commandSource: this.nativeCommandOverride ? "override" : "login-shell",
     });
     this.installations.set("host-pi", installation);
     return installation;
@@ -202,12 +215,12 @@ export class PiInstallationRegistry {
 
   publicList() {
     return this.list().map(({
-      command: _command,
+      command,
       commandArgs: _args,
-      agentDir: _agentDir,
+      agentDir,
       agentDirExplicit: _agentDirExplicit,
       environment: _environment,
       ...installation
-    }) => installation);
+    }) => ({ ...installation, executablePath: command || null, agentHome: { path: agentDir, source: installation.agentDirSource || installation.source } }));
   }
 }

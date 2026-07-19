@@ -66,6 +66,7 @@ manager.on("process_removed", ({ id, chatId }) => {
   runtimeHub.publishProcessRemoved(id, chatId);
 });
 const modelCatalog = new PiModelCatalog({ agentDir: config.piAgentDir, modelPatterns: config.piTemplate.models });
+const modelCatalogs = new Map();
 const nativeTrustTokens = new Map();
 const launchingChats = new Set();
 const app = express();
@@ -74,6 +75,103 @@ const dist = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../dist
 function defaultTemplate() {
   const selected = resolveTemplate(config, preferences.get().defaultTemplateId);
   return selected?.defaultable !== false ? selected : config.piTemplate;
+}
+
+function catalogFor(runtime, template) {
+  const installation = config.installations.get(runtime.installationId);
+  const key = runtime.kind === "native_pi"
+    ? `host:${installation?.agentDir || "unavailable"}`
+    : `isolated:${template?.id || config.piTemplate.id}`;
+  if (!modelCatalogs.has(key)) {
+    modelCatalogs.set(key, runtime.kind === "native_pi"
+      ? new PiModelCatalog({ agentDir: installation.agentDir })
+      : new PiModelCatalog({ agentDir: config.piAgentDir, modelPatterns: template?.models || config.piTemplate.models }));
+  }
+  return modelCatalogs.get(key);
+}
+
+async function chatModelView(context) {
+  const template = templateForChat(context.chat, context.project);
+  const runtime = context.chat.runtime || runtimeFor({ runtimeKind: "conduit_profile", template });
+  const catalog = catalogFor(runtime, template);
+  const catalogView = await catalog.list(context.project.path);
+  let model = catalogView.defaultModel;
+  let thinkingLevel = catalogView.defaultThinkingLevel;
+  let source = "runtime_default";
+  if (context.chat.piSessionFile) {
+    const session = await findDeletableSession(await projects.list(), context.chat);
+    if (session) {
+      const persisted = settingsFromEntries(session.entries);
+      model = persisted.model || model;
+      thinkingLevel = persisted.thinkingLevel || thinkingLevel;
+      source = "jsonl";
+    }
+  }
+  const resident = manager.getByChatId(context.chat.id);
+  let models = catalogView.models;
+  if (resident) {
+    const [available, state] = await Promise.all([
+      manager.getAvailableModels(resident.id),
+      manager.getModelState(resident.id),
+    ]);
+    const enabled = new Set(catalogView.models.map((item) => item.spec));
+    const liveModels = available.map((item) => catalog.modelView({ model: item }));
+    models = enabled.size ? liveModels.filter((item) => enabled.has(item.spec)) : liveModels;
+    model = state.model || model;
+    thinkingLevel = state.thinkingLevel || thinkingLevel;
+    const currentModel = liveModels.find((item) => item.spec === model);
+    if (currentModel && !models.some((item) => item.spec === model)) models = [...models, currentModel];
+    source = "live";
+  }
+  if (model && !models.some((item) => item.spec === model)) {
+    const [provider, ...modelParts] = model.split("/");
+    models = [...models, {
+      provider,
+      id: modelParts.join("/"),
+      spec: model,
+      label: modelParts.at(-1) || model,
+      reasoning: thinkingLevel !== "off",
+      thinkingLevels: thinkingLevel ? [...new Set(["off", thinkingLevel])] : ["off"],
+      outsideScope: true,
+    }];
+  }
+  return {
+    installationId: runtime.installationId,
+    runtimeKind: runtime.kind,
+    models,
+    model,
+    thinkingLevel,
+    defaultModel: catalogView.defaultModel,
+    defaultThinkingLevel: catalogView.defaultThinkingLevel,
+    requiresAuthentication: catalogView.requiresAuthentication,
+    warnings: catalogView.warnings,
+    source,
+  };
+}
+
+async function installationViews() {
+  const project = await projects.get("chat");
+  return Promise.all(config.installations.publicList().map(async (installation) => {
+    if (!installation.available || !project) return { ...installation, models: null };
+    const runtime = installation.id === "host-pi"
+      ? { kind: "native_pi", installationId: installation.id }
+      : { kind: "conduit_profile", installationId: installation.id };
+    const catalog = catalogFor(runtime, config.piTemplate);
+    try {
+      const view = await catalog.list(project.path);
+      return {
+        ...installation,
+        models: {
+          access: installation.id === "host-pi" ? "read-only" : "managed",
+          enabledModels: view.models.map((model) => model.spec),
+          defaultModel: view.defaultModel,
+          warnings: view.warnings,
+        },
+      };
+    } catch (error) {
+      return { ...installation, models: { access: "unavailable", enabledModels: [], defaultModel: null, warnings: [{ type: "warning", message: error.message }] } };
+    }
+  }));
 }
 
 function templateForId(templateId) {
@@ -296,14 +394,15 @@ app.get("/v0/capabilities", (_request, response) => response.json({
   piRuntimes: ["conduit_profile", "native_pi"],
 }));
 
-app.get("/v0/pi-installations", (_request, response) => {
-  response.json({ installations: config.installations.publicList() });
+app.get("/v0/pi-installations", async (_request, response, next) => {
+  try { response.json({ installations: await installationViews() }); }
+  catch (error) { next(error); }
 });
 
 app.post("/v0/pi-installations/host/detect", async (_request, response, next) => {
   try {
     await config.installations.detectHost();
-    response.json(config.installations.publicList().find((item) => item.id === "host-pi"));
+    response.json((await installationViews()).find((item) => item.id === "host-pi"));
   } catch (error) { next(error); }
 });
 
@@ -566,7 +665,7 @@ app.get("/v0/models", async (request, response, next) => {
   try {
     const project = await projects.get(request.query.projectId || "chat");
     if (!project) return response.status(404).json({ error: "project_not_found" });
-    response.json(await modelCatalog.list(project.path));
+    response.json({ installationId: "conduit-pinned", runtimeKind: "conduit_profile", ...await modelCatalog.list(project.path) });
   } catch (error) {
     next(error);
   }
@@ -576,7 +675,7 @@ app.get("/v0/settings", async (request, response, next) => {
   try {
     const project = await projects.get(request.query.projectId || "chat");
     if (!project) return response.status(404).json({ error: "project_not_found" });
-    response.json(await modelCatalog.getSettings(project.path));
+    response.json({ installationId: "conduit-pinned", runtimeKind: "conduit_profile", ...await modelCatalog.getSettings(project.path) });
   } catch (error) {
     next(error);
   }
@@ -587,7 +686,7 @@ app.patch("/v0/settings", async (request, response, next) => {
     const project = await projects.get(request.body?.projectId || "chat");
     if (!project) return response.status(404).json({ error: "project_not_found" });
     await projects.validate(project);
-    response.json(await modelCatalog.updateSettings(project.path, request.body));
+    response.json({ installationId: "conduit-pinned", runtimeKind: "conduit_profile", ...await modelCatalog.updateSettings(project.path, request.body) });
   } catch (error) {
     next(error);
   }
@@ -679,6 +778,43 @@ app.patch("/v0/chats/:chatId", async (request, response, next) => {
       await registry.update(context.chat.id, { runtime });
     }
     response.json(chatView(registry.metadata(context.chat.id)));
+  } catch (error) { next(error); }
+});
+
+app.get("/v0/chats/:chatId/models", async (request, response, next) => {
+  try {
+    const context = await findChatContext(request.params.chatId);
+    if (!context) return response.status(404).json({ error: "chat_not_found" });
+    response.json(await chatModelView(context));
+  } catch (error) { next(error); }
+});
+
+app.patch("/v0/chats/:chatId/models", async (request, response, next) => {
+  try {
+    const context = await findChatContext(request.params.chatId);
+    if (!context) return response.status(404).json({ error: "chat_not_found" });
+    const spec = String(request.body?.model || "").trim();
+    const thinkingLevel = String(request.body?.thinkingLevel || "").trim();
+    const current = await chatModelView(context);
+    if (spec && !current.models.some((item) => item.spec === spec)) {
+      return response.status(400).json({ error: "invalid_model" });
+    }
+    const resident = manager.getByChatId(context.chat.id);
+    if (resident) {
+      if (spec && spec !== current.model) await manager.setModel(resident.id, spec);
+      if (thinkingLevel) await manager.setThinkingLevel(resident.id, thinkingLevel);
+    } else {
+      if (context.chat.status !== "draft" || context.chat.piSessionFile) {
+        return response.status(409).json({ error: "live_session_required" });
+      }
+      const template = templateForChat(context.chat, context.project);
+      const runtime = context.chat.runtime || runtimeFor({ runtimeKind: "conduit_profile", template });
+      if (runtime.kind === "native_pi") {
+        return response.json({ ...current, model: spec || current.model, thinkingLevel: thinkingLevel || current.thinkingLevel });
+      }
+      if (spec) await catalogFor(runtime, template).updateDefault(context.project.path, spec, thinkingLevel);
+    }
+    response.json(await chatModelView(context));
   } catch (error) { next(error); }
 });
 
@@ -918,14 +1054,23 @@ app.post("/v0/live-sessions", async (request, response, next) => {
       } else if (preflight.savedTrust === true) trustChoice = "native_saved_trust";
       else trustChoice = "ignore_project_resources";
     }
+    const seedModel = context.chat.piSessionFile ? "" : request.body?.model || "";
+    const seedThinkingLevel = context.chat.piSessionFile ? "" : request.body?.thinkingLevel || "";
+    const runtimeCatalog = catalogFor(runtime, template);
+    if (seedModel) {
+      const allowed = await runtimeCatalog.list(context.project.path);
+      if (!allowed.models.some((model) => model.spec === seedModel)) {
+        return response.status(400).json({ error: "invalid_model" });
+      }
+    }
     const launchSpec = resolvePiLaunch({
       chat: context.chat,
       project: context.project,
       installation,
       template: runtime.kind === "conduit_profile" ? template : null,
-      models: runtime.kind === "conduit_profile" ? modelCatalog.getLaunchModels(context.project.path) : null,
-      model: runtime.kind === "conduit_profile" ? request.body?.model || "" : "",
-      thinkingLevel: runtime.kind === "conduit_profile" ? request.body?.thinkingLevel || "" : "",
+      models: runtime.kind === "conduit_profile" ? runtimeCatalog.getLaunchModels(context.project.path) : null,
+      model: seedModel,
+      thinkingLevel: seedThinkingLevel,
       trustChoice,
       bridgeSystemPrompt: config.bridgeSystemPrompt,
       bridgeSkill: config.bridgeSkill,
@@ -946,13 +1091,17 @@ app.post("/v0/live-sessions", async (request, response, next) => {
       project: context.project,
       chatId: context.chat.id,
       sessionFile: context.chat.piSessionFile,
-      model: runtime.kind === "conduit_profile" ? request.body?.model || "" : "",
-      thinkingLevel: runtime.kind === "conduit_profile" ? request.body?.thinkingLevel || "" : "",
+      model: seedModel,
+      thinkingLevel: seedThinkingLevel,
       template: runtime.kind === "conduit_profile" ? template : null,
       launchSpec,
     });
     launchedRecord = live;
     await manager.waitForSession(live.id);
+    if (runtime.kind === "native_pi" && seedModel) {
+      await manager.setModel(live.id, seedModel);
+      if (seedThinkingLevel) await manager.setThinkingLevel(live.id, seedThinkingLevel);
+    }
     if (!live.sessionFile) throw Object.assign(new Error("Pi did not report a session file"), { code: "invalid_session_mapping" });
     const mapping = {
       templateId: template.id,

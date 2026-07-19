@@ -47,7 +47,7 @@ test("Isolated Pi profile launch uses the pinned installation and isolated agent
   assert.ok(launch.args.includes("--session"));
 });
 
-test("Native Pi launch uses host state and only the additive Conduit bridge", () => {
+test("Host Pi launch uses host state, a draft model, and only the additive Conduit bridge", () => {
   const chat = {
     runtime: {
       kind: "native_pi",
@@ -69,6 +69,8 @@ test("Native Pi launch uses host state and only the additive Conduit bridge", ()
       environment: { HOME: "/home/user", PATH: "/home/user/bin:/usr/bin", TOOL_TOKEN: "keep", CONDUIT_SECRET: "strip" },
     },
     trustChoice: "trusted_once",
+    model: "example/reasoner",
+    thinkingLevel: "high",
     bridgeSystemPrompt: "/repo/templates/conduit-workspace/SYSTEM.md",
     bridgeSkill: "/repo/templates/conduit-workspace/SKILL.md",
   });
@@ -83,6 +85,7 @@ test("Native Pi launch uses host state and only the additive Conduit bridge", ()
   assert.equal(launch.args.includes("--system-prompt"), false);
   assert.equal(launch.args.includes("--tools"), false);
   assert.equal(launch.args.includes("--models"), false);
+  assert.deepEqual(launch.args.slice(launch.args.indexOf("--model"), launch.args.indexOf("--model") + 4), ["--model", "example/reasoner", "--thinking", "high"]);
   assert.equal(launch.trustPosture, "trusted_once");
 });
 

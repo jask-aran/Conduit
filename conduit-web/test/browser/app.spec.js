@@ -118,6 +118,21 @@ test.beforeEach(async ({ page }) => {
   await page.route("**/v0/chats/*?ifEmpty=true", async (route) => {
     await route.fulfill({ status: 204, body: "" });
   });
+  await page.route("**/v0/chats/*/models", async (route) => {
+    const body = route.request().postDataJSON?.() || {};
+    await route.fulfill({ json: {
+      installationId: "conduit-pinned",
+      runtimeKind: "conduit_profile",
+      models: [model, plainModel],
+      model: body.model || model.spec,
+      thinkingLevel: body.thinkingLevel || "medium",
+      defaultModel: model.spec,
+      defaultThinkingLevel: "medium",
+      requiresAuthentication: false,
+      warnings: [],
+      source: route.request().method() === "PATCH" ? "runtime_default" : "jsonl",
+    } });
+  });
   await page.route("**/v0/projects", async (route) => {
     await route.fulfill({ json: { projects } });
   });
@@ -681,7 +696,7 @@ test("keeps linked workspaces in their own sidebar group", async ({ page }, test
   await expect(page.getByRole("button", { name: "New workspace" })).toBeVisible();
 });
 
-test("workspace new chat chooses Host Pi after trust preflight", async ({ page }, testInfo) => {
+test("workspace draft chooses Host Pi and resolves trust on first send", async ({ page }, testInfo) => {
   const workspace = {
     id: "project_workspace",
     slug: "jaskfish",
@@ -693,13 +708,6 @@ test("workspace new chat chooses Host Pi after trust preflight", async ({ page }
   };
   await page.unroute("**/v0/projects");
   await page.route("**/v0/projects", (route) => route.fulfill({ json: { projects: [...projects, workspace] } }));
-  await page.route("**/v0/workspaces/project_workspace/native-preflight", (route) => route.fulfill({ json: {
-    available: true,
-    version: "0.80.10",
-    trustRequired: true,
-    resources: ["settings", "skills"],
-    token: "trust-token",
-  } }));
   await page.unroute("**/v0/chats");
   await page.route("**/v0/chats", async (route) => {
     const body = route.request().postDataJSON();
@@ -709,31 +717,9 @@ test("workspace new chat chooses Host Pi after trust preflight", async ({ page }
       status: "draft",
       title: "New chat",
       templateId: body.templateId,
-      runtime: { kind: body.runtimeKind, installationId: "host-pi", binaryVersion: "0.80.10" },
+      runtime: { kind: body.runtimeKind, installationId: "conduit-pinned", binaryVersion: "0.80.6", profileId: body.templateId },
     } });
   });
-  await page.goto("/");
-  await openSidebar(page, testInfo);
-  await page.getByRole("button", { name: "JaskFish" }).click({ button: "right" });
-  await page.getByRole("menuitem", { name: "New chat" }).click();
-  const dialog = page.getByRole("dialog", { name: "New chat in JaskFish" });
-  await expect(dialog).toBeVisible();
-  await dialog.getByRole("combobox", { name: "Profile" }).click();
-  await expect(page.getByRole("option", { name: "Coding" })).toBeVisible();
-  await expect(page.getByRole("option", { name: "Runtime" })).toHaveCount(0);
-  await page.getByRole("option", { name: "Host Pi" }).click();
-  await expect(dialog.getByText(/Found settings, skills/)).toBeVisible();
-  const requestPromise = page.waitForRequest((request) => request.url().endsWith("/v0/chats")
-    && request.method() === "POST" && request.postDataJSON().runtimeKind === "native_pi");
-  await dialog.getByRole("button", { name: "Create chat" }).click();
-  const request = await requestPromise;
-  expect(request.postDataJSON()).toMatchObject({
-    projectId: "project_workspace",
-    templateId: "workspace",
-    runtimeKind: "native_pi",
-  });
-  await expect(page.getByRole("button", { name: "Profile Host Pi" })).toBeVisible();
-
   await page.route("**/v0/chats/550e8400-e29b-41d4-a716-446655440088", async (route) => {
     const body = route.request().postDataJSON();
     await route.fulfill({ json: {
@@ -742,17 +728,78 @@ test("workspace new chat chooses Host Pi after trust preflight", async ({ page }
       status: "draft",
       title: "New chat",
       templateId: body.templateId,
-      runtime: { kind: body.runtimeKind, installationId: "conduit-pinned", profileId: body.templateId },
+      runtime: { kind: body.runtimeKind, installationId: body.runtimeKind === "native_pi" ? "host-pi" : "conduit-pinned", profileId: body.templateId },
     } });
   });
-  await page.getByRole("button", { name: "Profile Host Pi" }).click();
+  await page.route("**/v0/chats/550e8400-e29b-41d4-a716-446655440088/models", async (route) => {
+    const body = route.request().postDataJSON?.() || {};
+    await route.fulfill({ json: {
+      installationId: "host-pi",
+      runtimeKind: "native_pi",
+      models: [model, plainModel],
+      model: body.model || model.spec,
+      thinkingLevel: body.thinkingLevel || "medium",
+      defaultModel: model.spec,
+      defaultThinkingLevel: "medium",
+      requiresAuthentication: false,
+      source: "runtime_default",
+    } });
+  });
+  await page.unroute("**/v0/live-sessions");
+  let liveAttempts = 0;
+  await page.route("**/v0/live-sessions", async (route) => {
+    liveAttempts += 1;
+    if (liveAttempts === 1) {
+      await route.fulfill({ status: 409, json: {
+        error: "native_trust_required",
+        resources: ["settings", "skills"],
+        trustToken: "trust-token",
+      } });
+      return;
+    }
+    await route.fulfill({ status: 201, json: {
+      id: "live_host",
+      streamUrl: "/v0/live-sessions/live_host/stream",
+      runtime: { kind: "native_pi", installationId: "host-pi" },
+    } });
+  });
+  await page.goto("/");
+  await openSidebar(page, testInfo);
+  const createRequest = page.waitForRequest((request) => request.url().endsWith("/v0/chats")
+    && request.method() === "POST" && request.postDataJSON()?.projectId === "project_workspace");
+  await page.getByRole("button", { name: "JaskFish" }).click({ button: "right" });
+  await page.getByRole("menuitem", { name: "New chat" }).click();
+  expect((await createRequest).postDataJSON()).toMatchObject({
+    projectId: "project_workspace",
+    templateId: "workspace",
+    runtimeKind: "conduit_profile",
+  });
+  await expect(page.getByRole("dialog", { name: /New chat in/ })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Profile Coding" })).toBeVisible();
+  await page.getByRole("button", { name: "Profile Coding" }).click();
   const switchRequest = page.waitForRequest((candidate) => candidate.method() === "PATCH"
-    && candidate.postDataJSON()?.templateId === "workspace"
-    && candidate.postDataJSON()?.runtimeKind === "conduit_profile");
-  await page.getByRole("menuitemradio", { name: /Coding/ }).click();
+    && candidate.postDataJSON()?.runtimeKind === "native_pi");
+  await page.getByRole("menuitemradio", { name: /Host Pi/ }).click();
   await switchRequest;
   await page.keyboard.press("Escape");
-  await expect(page.getByRole("button", { name: "Profile Coding" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Profile Host Pi" })).toBeVisible();
+  await expect(page.getByRole("button", { name: /Reasoner medium/ })).toBeVisible();
+
+  await page.getByRole("textbox", { name: "Message Pi" }).fill("Inspect this workspace");
+  await page.getByRole("button", { name: "Send message" }).click();
+  const trustDialog = page.getByRole("alertdialog", { name: "Host Pi project resources" });
+  await expect(trustDialog).toContainText("settings, skills");
+  const retryRequest = page.waitForRequest((request) => request.url().endsWith("/v0/live-sessions")
+    && request.method() === "POST" && request.postDataJSON()?.trustChoice === "trusted_once");
+  await trustDialog.getByRole("button", { name: "Trust once and start" }).click();
+  const retry = await retryRequest;
+  expect(retry.postDataJSON()).toMatchObject({
+    chatId: "550e8400-e29b-41d4-a716-446655440088",
+    model: model.spec,
+    trustChoice: "trusted_once",
+    trustToken: "trust-token",
+  });
+  await expect(page.getByRole("textbox", { name: "Message Pi" })).toHaveValue("");
 });
 
 test("clone workspace requires a repository and absolute target location", async ({ page }, testInfo) => {
@@ -840,20 +887,16 @@ test("composer model picker exposes model and thinking selectors", async ({ page
   await expect(page.getByRole("menuitemradio", { name: "High" })).toBeVisible();
 });
 
-test("persists a selected model as Pi's next-chat default", async ({ page }) => {
+test("selects a chat model through the runtime-aware model route", async ({ page }) => {
   const settingsRequest = page.waitForRequest((request) =>
-    request.url().endsWith("/v0/settings") && request.method() === "PATCH");
+    /\/v0\/chats\/[^/]+\/models$/.test(new URL(request.url()).pathname) && request.method() === "PATCH");
   await page.goto("/");
 
   await page.getByRole("button", { name: /Reasoner medium/ }).click();
   await page.getByRole("menuitemradio", { name: "Plain example" }).click();
 
   const request = await settingsRequest;
-  expect(request.postDataJSON()).toEqual({
-    projectId: "project_chat",
-    enabledModels: ["example/reasoner", "example/plain"],
-    defaultModel: "example/plain",
-  });
+  expect(request.postDataJSON()).toEqual({ model: "example/plain", thinkingLevel: "off" });
   await page.keyboard.press("Escape");
   await expect(page.getByRole("button", { name: /Plain off/ })).toBeVisible();
 });
@@ -1091,7 +1134,8 @@ test("global commands and slash suggestions preserve their intended focus models
   await palette.getByPlaceholder("Search commands…").fill("example plain");
   await expect(palette.getByRole("group", { name: "Models" })).toBeVisible();
   await expect(palette.getByRole("option", { name: /Plain/ })).toBeVisible();
-  const settingsRequest = page.waitForRequest((request) => request.url().endsWith("/v0/settings") && request.method() === "PATCH");
+  const settingsRequest = page.waitForRequest((request) => /\/v0\/chats\/[^/]+\/models$/.test(new URL(request.url()).pathname)
+    && request.method() === "PATCH");
   await palette.getByRole("option", { name: /Plain/ }).click();
   await settingsRequest;
 
@@ -1248,13 +1292,14 @@ test("runtime settings exposes warm pool and concurrent generation caps", async 
   await expect(dialog.getByText("1 generating")).toBeVisible();
 });
 
-test("host Pi re-detection immediately updates the Workspace chooser", async ({ page }, testInfo) => {
+test("host Pi re-detection immediately updates the Workspace profile menu", async ({ page }, testInfo) => {
   const workspace = {
     id: "project_workspace",
     slug: "workspace",
     name: "Workspace",
     kind: "workspace",
     origin: "linked",
+    defaultTemplateId: "workspace",
     sessions: [],
   };
   await page.unroute("**/v0/projects");
@@ -1267,19 +1312,30 @@ test("host Pi re-detection immediately updates the Workspace chooser", async ({ 
   await page.route("**/v0/pi-installations/host/detect", (route) => route.fulfill({ json: {
     id: "host-pi", label: "Host Pi", version: "0.80.10", compatible: true, available: true,
   } }));
+  await page.unroute("**/v0/chats");
+  await page.route("**/v0/chats", async (route) => {
+    const body = route.request().postDataJSON();
+    await route.fulfill({ status: 201, json: {
+      id: "550e8400-e29b-41d4-a716-446655440077",
+      projectId: body.projectId,
+      status: "draft",
+      title: "New chat",
+      templateId: body.templateId,
+      runtime: { kind: body.runtimeKind, installationId: "conduit-pinned", profileId: body.templateId },
+    } });
+  });
   await page.goto("/");
   await openSidebar(page, testInfo);
   await page.locator('[data-sidebar="footer"]').getByRole("button", { name: /Conduit/ }).click();
   await page.getByRole("menuitem", { name: "Manage settings" }).click();
   const settings = page.getByRole("dialog", { name: "Settings" });
   await settings.getByRole("tab", { name: /Runtime/ }).click();
-  await settings.getByRole("button", { name: "Re-detect host Pi" }).click();
+  await settings.getByRole("button", { name: "Re-detect Host Pi" }).click();
   await expect(settings.getByText("Pi 0.80.10")).toBeVisible();
   await page.keyboard.press("Escape");
   await openSidebar(page, testInfo);
   await page.getByRole("button", { name: "Workspace", exact: true }).click({ button: "right" });
   await page.getByRole("menuitem", { name: "New chat" }).click();
-  const runtimeDialog = page.getByRole("dialog", { name: "New chat in Workspace" });
-  await runtimeDialog.getByRole("combobox", { name: "Profile" }).click();
-  await expect(page.getByRole("option", { name: "Host Pi" })).toBeEnabled();
+  await page.getByRole("button", { name: "Profile Coding" }).click();
+  await expect(page.getByRole("menuitemradio", { name: /Host Pi/ })).toBeEnabled();
 });

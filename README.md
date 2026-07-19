@@ -118,14 +118,15 @@ session directory from the process working directory and records the canonical
 matching that header exactly, rather than trusting the lossy encoded directory
 name.
 
-Workspace drafts present ordinary profiles and **Host Pi** in one profile
-selector. Ordinary profiles use the bundled **Isolated Pi**, isolated home, and
+Creating a Workspace chat immediately opens a draft using its default profile.
+The composer presents ordinary profiles and **Host Pi** in one selector.
+Ordinary profiles use the bundled **Isolated Pi**, isolated home, and
 their explicit tracked resources. Host Pi uses
 the executable, environment, and optional `PI_CODING_AGENT_DIR` discovered
 through the server user's login shell (otherwise `$HOME/.pi/agent`), native
 authentication and resources, plus a minimal Conduit attachment bridge. Native
 project resources require an existing saved
-trust decision or a one-run choice to trust them or start without them. The
+trust decision or a one-run choice on first send to trust them or start without them. The
 choice may change until the first prompt starts Pi, then becomes immutable. Both
 runtimes use the Workspace as canonical `cwd`, share one process manager and
 global capacity limits, and preserve the one-writer-per-JSONL invariant. The
@@ -148,9 +149,11 @@ Opening a chat returns at most ten recent complete turns with a 50,000-character
 soft limit. Older ten-turn pages load when the transcript is scrolled upward.
 Large tool results are fetched only when their card is expanded.
 Reopening a chat restores its recorded model, thinking level, messages, and tool
-calls from JSONL. Selecting a model updates the active Pi process and
-`data/pi/settings.json`, making it the default for the next chat without
-replacing the model recorded by existing chats.
+calls from JSONL. Each chat resolves models from its selected installation.
+Selecting a model updates the active Pi process and that installation's saved
+default without replacing the model recorded by existing chats. Settings can
+edit the Isolated Pi scope; Host Pi scope and installation ownership remain
+read-only diagnostics.
 
 Chat renames append Pi's native `session_info` entry. Editing an earlier user
 message and regenerating a response use Pi's public `fork` RPC while retaining
@@ -189,16 +192,18 @@ The sidebar presents managed folders under **Projects**. **Workspaces** register
 an existing allow-listed host directory; cloning first creates a checkout under
 the user-selected absolute location and then registers that checkout as a
 Workspace. Unlinking either kind keeps the working tree. Shipped profiles:
-General (restrained tools), Workspace
+General (restrained tools), Coding
 (full tools + skills), and Runtime (a special one-off admin chat for templates
 and `pi install`). Runtime is not a valid app/project default or ordinary chat
 profile; Settings → Profiles shows it separately and creates a fresh instance
 when requested.
 
-Pi's global `enabledModels` setting is the authoritative model scope shared by
-the terminal and web interface. Conduit reloads `data/pi/settings.json` for
-model and settings requests and uses the saved scope for new Pi processes. The
-template model list applies only when Pi has no saved `enabledModels` value.
+Isolated Pi's global `enabledModels` setting is the authoritative scope shared
+by the terminal and web interface. Conduit reloads `data/pi/settings.json` for
+model and settings requests. Host Pi uses its detected agent home's scope and
+default; Conduit displays those settings read-only and routes chat selections
+through Host Pi's public RPC. Template model lists apply only when the selected
+installation has no saved `enabledModels` value.
 
 ## Interface development
 
@@ -222,8 +227,9 @@ The application shell composes Shadcn Sidebar, Button Group, Dropdown Menu,
 Context Menu, Input Group, Field, and Card primitives. Chat transcripts use the
 first-party Message Scroller, Message, and Bubble components: Message Scroller
 owns streaming follow, turn anchoring, and jump-to-latest behavior while Pi RPC
-continues to own transport and message state. The settings surface writes Pi's
-global scoped-model setting through the Conduit server.
+continues to own transport and message state. The settings surface writes only
+Isolated Pi's global scoped-model setting and reports Host Pi diagnostics without
+claiming ownership of its configuration.
 
 The composer is a bounded native textarea with a compact model selector and
 Shadcn Attachment cards above it. Upload progress appears in those cards; after

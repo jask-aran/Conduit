@@ -138,6 +138,23 @@ export class PiModelCatalog {
     return this.getSettings(cwd);
   }
 
+  async updateDefault(cwd, spec, thinkingLevel = "") {
+    const snapshot = await this.snapshot(cwd);
+    if (snapshot.settingsErrors.length) throw snapshot.settingsErrors[0].error;
+    const entry = snapshot.entries.find(({ model }) => `${model.provider}/${model.id}` === spec);
+    if (!entry) {
+      const error = new Error("The selected model is not in this Pi installation's enabled scope");
+      error.code = "invalid_model";
+      throw error;
+    }
+    snapshot.settings.setDefaultModelAndProvider(entry.model.provider, entry.model.id);
+    if (thinkingLevel) snapshot.settings.setDefaultThinkingLevel(clampThinkingLevel(entry.model, thinkingLevel));
+    await snapshot.settings.flush();
+    const writeErrors = snapshot.settings.drainErrors();
+    if (writeErrors.length) throw writeErrors[0].error;
+    return this.list(cwd);
+  }
+
   getLaunchModels(cwd) {
     const configured = this.settingsFactory(cwd).getEnabledModels?.();
     return Array.isArray(configured) ? configured : this.modelPatterns;

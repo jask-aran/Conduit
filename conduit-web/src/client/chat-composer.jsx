@@ -177,9 +177,7 @@ export function ChatComposer({
             onClick={() => attachments.inputRef.current?.click()}
             disabled={!serverOnline}
           ><PaperclipIcon /></InputGroupButton>
-          {nativeRuntime ? <InputGroupButton variant="ghost" size="sm" disabled aria-label="Host Pi uses the host model">
-            <span>Host model</span>
-          </InputGroupButton> : <DropdownMenu>
+          <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <InputGroupButton variant="ghost" size="sm" aria-label={`${modelLabel} ${effort || "off"}`} disabled={!serverOnline}>
                 <span className="max-w-24 truncate sm:max-w-36">{modelLabel}</span>
@@ -206,9 +204,11 @@ export function ChatComposer({
                 </DropdownMenuRadioGroup>
               </DropdownMenuGroup>
               <DropdownMenuSeparator />
-              <DropdownMenuItem onSelect={() => requestAnimationFrame(() => commandActions.settings?.("models"))}>Manage models…</DropdownMenuItem>
+              {nativeRuntime
+                ? <DropdownMenuItem disabled>Host model scope is managed externally</DropdownMenuItem>
+                : <DropdownMenuItem onSelect={() => requestAnimationFrame(() => commandActions.settings?.("models"))}>Manage models…</DropdownMenuItem>}
             </DropdownMenuContent>
-          </DropdownMenu>}
+          </DropdownMenu>
           {list(profiles).length > 0 && <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <InputGroupButton

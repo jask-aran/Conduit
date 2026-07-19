@@ -457,6 +457,8 @@ export class PiManager extends EventEmitter {
       if (data.isStreaming != null && !record.stopping) {
         record.active = Boolean(data.isStreaming);
       }
+      if (data.model?.provider && data.model?.id) record.model = `${data.model.provider}/${data.model.id}`;
+      if (data.thinkingLevel != null) record.thinkingLevel = data.thinkingLevel;
       record.activity = deriveCoarseActivity(record);
       this.emit("process_changed", { record, reason: "state" });
     }
@@ -600,6 +602,34 @@ export class PiManager extends EventEmitter {
   /** Persist a display name via the live writer's public RPC (do not dual-write JSONL). */
   async setSessionName(id, name) {
     await this.request(id, { type: "set_session_name", name: String(name || "").trim() });
+  }
+
+  async getAvailableModels(id) {
+    const response = await this.request(id, { type: "get_available_models" });
+    return Array.isArray(response.data?.models) ? response.data.models : [];
+  }
+
+  async getModelState(id) {
+    const response = await this.request(id, { type: "get_state" });
+    const record = this.processes.get(id);
+    return { model: record?.model || null, thinkingLevel: record?.thinkingLevel || "", state: response.data || {} };
+  }
+
+  async setModel(id, spec) {
+    const [provider, ...modelParts] = String(spec || "").split("/");
+    const modelId = modelParts.join("/");
+    if (!provider || !modelId) throw Object.assign(new Error("Invalid model specification"), { code: "invalid_model" });
+    await this.request(id, { type: "set_model", provider, modelId });
+    await this.request(id, { type: "get_state" });
+    const record = this.processes.get(id);
+    return { model: record?.model || null, thinkingLevel: record?.thinkingLevel || "" };
+  }
+
+  async setThinkingLevel(id, level) {
+    await this.request(id, { type: "set_thinking_level", level });
+    await this.request(id, { type: "get_state" });
+    const record = this.processes.get(id);
+    return { model: record?.model || null, thinkingLevel: record?.thinkingLevel || "" };
   }
 
   prompt(id, message, { continuationBase = "", streamingBehavior = null } = {}) {

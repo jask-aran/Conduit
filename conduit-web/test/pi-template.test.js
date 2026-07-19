@@ -323,6 +323,27 @@ function rpcFixture(onCommand) {
   return { manager, child, record };
 }
 
+test("model RPC methods correlate catalog and state changes", async () => {
+  const selected = { provider: "example", id: "reasoner", name: "Reasoner", reasoning: true };
+  const { manager, record } = rpcFixture((command, process) => {
+    if (!command.id) return;
+    const data = command.type === "get_available_models"
+      ? { models: [selected] }
+      : command.type === "get_state" ? { model: selected, thinkingLevel: "high", sessionFile: "/tmp/sessions/original.jsonl" }
+        : command.type === "set_model" ? selected : {};
+    queueMicrotask(() => process.stdout.write(`${JSON.stringify({
+      id: command.id, type: "response", command: command.type, success: true, data,
+    })}\n`));
+  });
+
+  assert.deepEqual(await manager.getAvailableModels(record.id), [selected]);
+  assert.deepEqual(await manager.setModel(record.id, "example/reasoner"), {
+    model: "example/reasoner",
+    thinkingLevel: "high",
+  });
+  assert.equal(manager.view(record).model, "example/reasoner");
+});
+
 test("normal abort closes the generation before late deltas can be published", async () => {
   const { manager, child, record } = rpcFixture((command, process) => {
     if (command.type === "abort") queueMicrotask(() => process.stdout.write(`${JSON.stringify({

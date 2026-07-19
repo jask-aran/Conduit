@@ -39,12 +39,14 @@ linked and cloned roots uniformly as non-owning Workspaces; a clone is
 functionally a checkout followed by Workspace registration, and unregistering
 does not delete either working tree.
 
-Each Workspace draft uses one profile selector. Ordinary profiles launch the
+Creating a Workspace chat immediately opens a draft with its default profile.
+The composer uses one profile selector. Ordinary profiles launch the
 bundled Isolated Pi with the private `data/pi` home; the synthetic **Host Pi**
 choice uses the host executable/home/resources plus the additive resources under
 `templates/conduit-workspace/`. Host Pi does not load an ordinary tracked
 profile, and its mandatory bridge remains hidden from profile selection. The
-choice is mutable until the first prompt starts Pi and immutable afterward.
+choice is mutable until the first prompt starts Pi and immutable afterward; any
+required Host project trust decision is requested on first send.
 
 Allow-list roots come from `CONDUIT_WORKSPACE_ALLOWLIST` (default: home,
 repository root, and the managed files root). Browser-supplied paths never become
