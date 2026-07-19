@@ -9,7 +9,7 @@ Shipped profiles:
 | id | Label | Role |
 |----|--------|------|
 | `chat` | General | Restrained tools (`read`, `bash`) for ordinary conversation |
-| `workspace` | Workspace | Full tools + git/web/develop skills for real folders |
+| `workspace` | Coding | Full tools + git/web/develop skills for real folders |
 | `runtime` | Runtime | Special one-off admin chat for templates and Pi package management |
 
 ## Discovery and durable identity
@@ -20,7 +20,7 @@ stores `templateId` and `templateVersion` in `data/sessions.json`. Missing
 identity is stamped with the app (or project) default the next time the runtime
 touches the chat. Resume reloads the template by id from disk.
 
-General and Workspace are ordinary selectable profiles. Runtime is special: it
+General and Coding are ordinary selectable profiles. Runtime is special: it
 cannot be an app or project default and does not appear in ordinary profile
 switching. Settings → Profiles shows its details separately and provides
 **Open runtime chat**; each activation creates a fresh management chat.
@@ -31,16 +31,20 @@ Projects may be:
 
 - **managed** — directory under `data/chat/files/<slug>`
 - **linked** — allow-listed absolute path already on the machine (unregister does not delete files)
-- **cloned** — `git clone` into the managed root
+- **cloned** — `gh repo clone` when available for GitHub sources, otherwise
+  `git clone`, into a user-selected allow-listed absolute path
 
 These are catalog origins, not separate agent products. The interface presents
-linked and cloned roots uniformly as Workspaces; a clone is functionally a
-checkout followed by Workspace registration.
+linked and cloned roots uniformly as non-owning Workspaces; a clone is
+functionally a checkout followed by Workspace registration, and unregistering
+does not delete either working tree.
 
-Each Workspace chat independently chooses **Conduit profile** or **Native Pi**.
-Conduit profile uses the bundled Pi and isolated `data/pi` home. Native Pi uses
-the host executable/home/resources plus the additive resources under
-`templates/conduit-workspace/`; it does not load the selected Conduit profile.
+Each Workspace draft uses one profile selector. Ordinary profiles launch the
+bundled Isolated Pi with the private `data/pi` home; the synthetic **Host Pi**
+choice uses the host executable/home/resources plus the additive resources under
+`templates/conduit-workspace/`. Host Pi does not load an ordinary tracked
+profile, and its mandatory bridge remains hidden from profile selection. The
+choice is mutable until the first prompt starts Pi and immutable afterward.
 
 Allow-list roots come from `CONDUIT_WORKSPACE_ALLOWLIST` (default: home,
 repository root, and the managed files root). Browser-supplied paths never become

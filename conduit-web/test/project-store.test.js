@@ -184,7 +184,7 @@ async function initGitRepo(source) {
   git(["commit", "-m", "init"]);
 }
 
-test("clones a repository into the managed files root", async () => {
+test("clones a repository into a user-selected non-owning workspace path", async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-project-clone-"));
   const source = path.join(root, "source");
   await initGitRepo(source);
@@ -196,10 +196,15 @@ test("clones a repository into the managed files root", async () => {
     workspaceAllowlist: [root],
   });
   await store.initialize();
-  const cloned = await store.create({ mode: "cloned", name: "Cloned App", cloneUrl: source });
+  const target = path.join(root, "workspaces", "cloned-app");
+  await fs.mkdir(path.dirname(target));
+  const cloned = await store.create({ mode: "cloned", name: "Cloned App", cloneUrl: source, path: target });
   assert.equal(cloned.origin, "cloned");
-  assert.equal(cloned.path, path.join(root, "data/chat/files", "cloned-app"));
+  assert.equal(cloned.path, target);
+  assert.equal(cloned.deletesFilesOnRemove, false);
   assert.equal(await fs.readFile(path.join(cloned.path, "app.js"), "utf8"), "console.log(1)\n");
+  await store.remove(cloned.id);
+  assert.equal(await fs.readFile(path.join(target, "app.js"), "utf8"), "console.log(1)\n");
   await fs.rm(root, { recursive: true, force: true });
 });
 
@@ -215,15 +220,35 @@ test("concurrent clones with the same name get distinct slugs and keep both tree
     workspaceAllowlist: [root],
   });
   await store.initialize();
+  const firstTarget = path.join(root, "workspace-one");
+  const secondTarget = path.join(root, "workspace-two");
 
   const [first, second] = await Promise.all([
-    store.create({ mode: "cloned", name: "Race", cloneUrl: source }),
-    store.create({ mode: "cloned", name: "Race", cloneUrl: source }),
+    store.create({ mode: "cloned", name: "Race", cloneUrl: source, path: firstTarget }),
+    store.create({ mode: "cloned", name: "Race", cloneUrl: source, path: secondTarget }),
   ]);
   assert.notEqual(first.slug, second.slug);
   assert.equal(await fs.readFile(path.join(first.path, "app.js"), "utf8"), "console.log(1)\n");
   assert.equal(await fs.readFile(path.join(second.path, "app.js"), "utf8"), "console.log(1)\n");
   const listed = await store.list();
   assert.equal(listed.filter((item) => item.origin === "cloned").length, 2);
+  await fs.rm(root, { recursive: true, force: true });
+});
+
+test("clone requires an absolute user-selected target and rejects git protocol", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-project-clone-policy-"));
+  const store = new ProjectStore({
+    filesRoot: path.join(root, "data/chat/files"),
+    catalogFile: path.join(root, "data/conduit.json"),
+    piAgentDir: path.join(root, "data/pi"),
+    workspaceAllowlist: [root],
+  });
+  await store.initialize();
+  await assert.rejects(store.create({ mode: "cloned", cloneUrl: "https://github.com/org/repo.git" }), {
+    code: "workspace_path_required",
+  });
+  await assert.rejects(store.create({ mode: "cloned", cloneUrl: "git://github.com/org/repo.git", path: path.join(root, "repo") }), {
+    code: "clone_url_not_allowed",
+  });
   await fs.rm(root, { recursive: true, force: true });
 });

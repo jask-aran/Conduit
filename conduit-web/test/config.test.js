@@ -19,7 +19,7 @@ test("default runtime paths are owned by the repository root", () => {
   assert.ok(config.piTemplates.some((template) => template.id === "chat"));
   assert.ok(config.piTemplates.some((template) => template.id === "workspace"));
   assert.ok(config.piTemplates.some((template) => template.id === "runtime"));
-  assert.equal(config.piTemplateById.get("workspace")?.label, "Workspace");
+  assert.equal(config.piTemplateById.get("workspace")?.label, "Coding");
   assert.ok(config.piTemplateById.get("workspace")?.skills?.length >= 1);
   assert.ok(config.workspaceAllowlist.length >= 1);
   assert.equal(config.filesRoot.endsWith(path.join("data", "chat", "files")), true);

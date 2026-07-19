@@ -112,12 +112,26 @@ async function nativeResourceClasses(cwd) {
     [".pi/packages", "packages"],
     [".pi/skills", "skills"],
     [".pi/prompts", "prompts"],
+    [".pi/themes", "themes"],
+    [".pi/SYSTEM.md", "system prompt"],
+    [".pi/APPEND_SYSTEM.md", "appended system prompt"],
     [".agents/skills", "agent skills"],
   ];
   const found = [];
   for (const [relative, label] of candidates) {
     try { await fs.access(path.join(cwd, relative)); found.push(label); }
     catch (error) { if (error.code !== "ENOENT") throw error; }
+  }
+  let current = path.dirname(path.resolve(cwd));
+  while (true) {
+    const inherited = path.join(current, ".agents", "skills");
+    if (inherited !== path.join(os.homedir(), ".agents", "skills")) {
+      try { await fs.access(inherited); if (!found.includes("agent skills")) found.push("agent skills"); }
+      catch (error) { if (error.code !== "ENOENT") throw error; }
+    }
+    const parent = path.dirname(current);
+    if (parent === current) break;
+    current = parent;
   }
   return found;
 }
@@ -134,6 +148,22 @@ async function nativeResourceFingerprint(cwd) {
   }
   const entries = [];
   let totalBytes = 0;
+  const assertRealDirectory = async (target) => {
+    let stat;
+    try { stat = await fs.lstat(target); }
+    catch (error) { if (error.code === "ENOENT") return false; throw error; }
+    if (stat.isSymbolicLink()) {
+      throw Object.assign(new Error("Symlinked project resources cannot be trusted through Conduit"), {
+        code: "native_resource_symlink",
+        path: target,
+      });
+    }
+    return stat.isDirectory();
+  };
+  for (const root of roots.filter((item) => item.endsWith(`${path.sep}.agents${path.sep}skills`))) {
+    const agentsRoot = path.dirname(root);
+    if (await assertRealDirectory(agentsRoot)) await assertRealDirectory(root);
+  }
   const visit = async (target) => {
     if (entries.length >= 10_000) {
       throw Object.assign(new Error("Too many project resources to preflight safely"), { code: "native_resource_limit" });
@@ -453,10 +483,12 @@ app.post("/v0/projects", async (request, response, next) => {
     }
     if (mode === "clone" || mode === "cloned") {
       if (!request.body?.cloneUrl) return response.status(400).json({ error: "clone_url_required" });
+      if (!request.body?.path) return response.status(400).json({ error: "workspace_path_required" });
       const created = await projects.create({
         mode: "cloned",
         name: name || undefined,
         cloneUrl: request.body.cloneUrl,
+        path: request.body.path,
         defaultTemplateId: resolveProjectDefaultTemplateId(request.body?.defaultTemplateId, "workspace"),
       });
       return response.status(201).json(created);
@@ -491,7 +523,7 @@ app.post("/v0/projects/:id/move-sessions", async (request, response, next) => {
     const projectList = await projects.list();
     const chats = registry.listProject(source.id, { includeHidden: true });
     if (chats.some((chat) => chat.runtime?.kind === "native_pi")) {
-      return response.status(409).json({ error: "chat_move_not_supported", message: "Native Pi chats cannot move between working roots." });
+      return response.status(409).json({ error: "chat_move_not_supported", message: "Host Pi chats cannot move between working roots." });
     }
     const moved = [];
     for (const chat of chats) {
@@ -607,6 +639,7 @@ app.patch("/v0/chats/:chatId", async (request, response, next) => {
     if (launchingChats.has(context.chat.id) && (request.body?.templateId != null || request.body?.runtimeKind != null)) {
       return response.status(409).json({ error: "runtime_locked", message: "Pi is already starting for this chat." });
     }
+    let selectedTemplate = templateForChat(context.chat, context.project);
     if (request.body?.templateId != null) {
       const currentTemplate = resolveTemplate(config, context.chat.templateId);
       if (currentTemplate?.special === true) {
@@ -626,6 +659,7 @@ app.patch("/v0/chats/:chatId", async (request, response, next) => {
         templateId: template.id,
         templateVersion: template.version,
       });
+      selectedTemplate = template;
     }
     if (request.body?.runtimeKind != null) {
       if (context.project.kind !== "workspace") {
@@ -638,8 +672,7 @@ app.patch("/v0/chats/:chatId", async (request, response, next) => {
       if (!new Set(["conduit_profile", "native_pi"]).has(runtimeKind)) {
         return response.status(400).json({ error: "unknown_runtime_kind" });
       }
-      const template = templateForChat(context.chat, context.project);
-      const runtime = runtimeFor({ runtimeKind, template });
+      const runtime = runtimeFor({ runtimeKind, template: selectedTemplate });
       if (runtimeKind === "native_pi" && !config.installations.get("host-pi").available) {
         return response.status(409).json({ error: "native_pi_unavailable" });
       }
@@ -794,7 +827,7 @@ app.post("/v0/sessions/:id/move", async (request, response, next) => {
     const context = await findChatContext(request.params.id);
     if (!context) return response.status(404).json({ error: "chat_not_found" });
     if (context.chat.runtime?.kind === "native_pi") {
-      return response.status(409).json({ error: "chat_move_not_supported", message: "Native Pi chats cannot move between working roots." });
+      return response.status(409).json({ error: "chat_move_not_supported", message: "Host Pi chats cannot move between working roots." });
     }
     const session = await registry.find(projectList, request.params.id);
     const target = projectList.find((item) => item.id === request.body?.projectId || item.slug === request.body?.projectId);

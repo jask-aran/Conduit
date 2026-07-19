@@ -74,7 +74,7 @@ class AppErrorBoundary extends React.Component {
 
 function ChatHeader({ project, title, profile, runtime, live }) {
   const projectLabel = project?.slug === "chat" ? "Chats" : project?.slug || project?.name || "Chats";
-  const profileLabel = runtime?.kind === "native_pi" ? "host setup" : profile?.label || profile?.id || null;
+  const profileLabel = runtime?.kind === "native_pi" ? null : profile?.label || profile?.id || null;
   const posture = runtime?.kind === "native_pi"
     ? "host resources"
     : profile?.posture || (Array.isArray(profile?.tools) ? profile.tools.join(" / ") : "");
@@ -85,7 +85,7 @@ function ChatHeader({ project, title, profile, runtime, live }) {
       : project?.slug === "chat"
         ? null
         : "folder";
-  const runtimeLabel = runtime?.kind === "native_pi" ? "Native Pi" : "Conduit";
+  const runtimeLabel = runtime?.kind === "native_pi" ? "Host Pi" : "Isolated Pi";
   const runtimeVersion = live?.binaryVersion || runtime?.binaryVersion;
   const postureLine = [runtimeLabel, runtimeVersion ? `Pi ${runtimeVersion}` : null, profileLabel, projectLabel !== "Chats" ? projectLabel : null, posture]
     .filter(Boolean).join(" · ");
@@ -721,18 +721,29 @@ function App() {
     newChat(target, options).catch((caught) => setError(caught.message));
   }
 
-  async function setChatProfile(templateId) {
-    if (!selectedId || !templateId || templateId === chatTemplateId) return;
+  async function setChatLaunchOption(optionId) {
+    if (!selectedId || !optionId) return;
     if (chatStatus !== "draft") {
       setError("Profile is locked after the first message. Start a new chat to switch.");
       return;
     }
+    const project = projects.find((item) => item.id === projectId);
+    const hostPi = optionId === "host-pi";
+    if (hostPi && project?.kind !== "workspace") return;
+    const templateId = hostPi ? chatTemplateId : optionId;
+    if (!hostPi && templateId === chatTemplateId && chatRuntime?.kind !== "native_pi") return;
     const chat = await api(`/v0/chats/${encodeURIComponent(selectedId)}`, {
       method: "PATCH",
-      body: JSON.stringify({ templateId }),
+      body: JSON.stringify({
+        templateId,
+        ...(project?.kind === "workspace" ? { runtimeKind: hostPi ? "native_pi" : "conduit_profile" } : {}),
+      }),
     });
     setChatTemplateId(chat.templateId || templateId);
+    setChatRuntime(chat.runtime || null);
   }
+
+  const setChatProfile = (templateId) => setChatLaunchOption(templateId);
 
   async function saveDefaultTemplate(templateId) {
     const saved = await api("/v0/preferences", {
@@ -1110,7 +1121,7 @@ function App() {
     <AlertDialog open={Boolean(nativeTrustRequest)} onOpenChange={(open) => !open && setNativeTrustRequest(null)}>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>Native Pi project resources</AlertDialogTitle>
+          <AlertDialogTitle>Host Pi project resources</AlertDialogTitle>
           <AlertDialogDescription>
             This Workspace contains {nativeTrustRequest?.resources.join(", ") || "project-local resources"}. Trusted resources can execute code with the Conduit server user's permissions.
           </AlertDialogDescription>
@@ -1138,6 +1149,7 @@ function App() {
         onAddProject={addProject}
         workspaceSuggestions={workspaceSuggestions}
         installations={installations}
+        templates={templates}
         onCommandHandled={() => setSidebarCommand(null)}
         onCopyTranscript={copyTranscript}
         onDeleteProject={deleteProject}
@@ -1207,14 +1219,26 @@ function App() {
             compacting={compacting}
             queue={queue}
             serverOnline={serverOnline}
-            profile={activeProfile}
+            profile={chatRuntime?.kind === "native_pi"
+              ? { id: "host-pi", label: "Host Pi", description: "Uses your host Pi installation, authentication, and project resources." }
+              : activeProfile}
             runtime={chatRuntime}
-            profiles={chatTemplateId === "runtime" ? [] : templates.filter((item) => item.defaultable !== false)}
-            profileLocked={chatStatus !== "draft" || chatRuntime?.kind === "native_pi"}
+            profiles={chatTemplateId === "runtime" ? [] : [
+              ...templates.filter((item) => item.defaultable !== false && item.special !== true),
+              ...(selectedProject?.kind === "workspace" ? [{
+                id: "host-pi",
+                label: "Host Pi",
+                description: installations.find((item) => item.id === "host-pi")?.available
+                  ? "Uses your host Pi installation, authentication, and project resources."
+                  : "Host Pi is unavailable.",
+                disabled: !installations.find((item) => item.id === "host-pi")?.available,
+              }] : []),
+            ]}
+            profileLocked={chatStatus !== "draft"}
             onDraftChange={setDraft}
             onChooseModel={modelSettings.chooseModel}
             onChooseEffort={modelSettings.chooseEffort}
-            onChooseProfile={(templateId) => setChatProfile(templateId).catch((caught) => setError(caught.message))}
+            onChooseProfile={(optionId) => setChatLaunchOption(optionId).catch((caught) => setError(caught.message))}
             onSend={() => send()}
             onStop={stopResponse}
             onSteer={() => send({ steer: true })}
@@ -1246,6 +1270,8 @@ function App() {
           defaultTemplateId={defaultTemplateId}
           onDefaultTemplateChange={saveDefaultTemplate}
           onOpenRuntimeChat={() => openRuntimeChat().catch((caught) => setError(caught.message))}
+          installations={installations}
+          onInstallationsChange={setInstallations}
         />}
       </Suspense>
     </SidebarProvider>

@@ -15,7 +15,7 @@ const template = {
   promptTemplates: [],
 };
 
-test("Conduit profile launch uses the pinned installation and isolated agent home", () => {
+test("Isolated Pi profile launch uses the pinned installation and isolated agent home", () => {
   const chat = {
     runtime: {
       kind: "conduit_profile",
@@ -66,6 +66,7 @@ test("Native Pi launch uses host state and only the additive Conduit bridge", ()
       command: "/home/user/.local/bin/pi",
       commandArgs: [],
       agentDir: "/home/user/.pi/agent",
+      environment: { HOME: "/home/user", PATH: "/home/user/bin:/usr/bin", TOOL_TOKEN: "keep", CONDUIT_SECRET: "strip" },
     },
     trustChoice: "trusted_once",
     bridgeSystemPrompt: "/repo/templates/conduit-workspace/SYSTEM.md",
@@ -73,6 +74,9 @@ test("Native Pi launch uses host state and only the additive Conduit bridge", ()
   });
   assert.equal(launch.command, "/home/user/.local/bin/pi");
   assert.equal("PI_CODING_AGENT_DIR" in launch.env, false);
+  assert.equal(launch.env.PATH, "/home/user/bin:/usr/bin");
+  assert.equal(launch.env.TOOL_TOKEN, "keep");
+  assert.equal("CONDUIT_SECRET" in launch.env, false);
   assert.ok(launch.args.includes("--approve"));
   assert.ok(launch.args.includes("--append-system-prompt"));
   assert.ok(launch.args.includes("--skill"));
@@ -80,6 +84,26 @@ test("Native Pi launch uses host state and only the additive Conduit bridge", ()
   assert.equal(launch.args.includes("--tools"), false);
   assert.equal(launch.args.includes("--models"), false);
   assert.equal(launch.trustPosture, "trusted_once");
+});
+
+test("Native Pi launch preserves an explicitly resolved host agent home", () => {
+  const launch = resolvePiLaunch({
+    chat: { runtime: { kind: "native_pi", installationId: "host-pi" }, piSessionFile: null },
+    project,
+    installation: {
+      available: true,
+      command: "/home/user/bin/pi",
+      commandArgs: [],
+      agentDir: "/mnt/native-pi-home",
+      agentDirExplicit: true,
+      environment: { HOME: "/home/user", PI_CODING_AGENT_DIR: "/mnt/native-pi-home" },
+      version: "0.80.10",
+    },
+    trustChoice: "ignore_project_resources",
+    bridgeSystemPrompt: "/repo/templates/conduit-workspace/SYSTEM.md",
+    bridgeSkill: "/repo/templates/conduit-workspace/SKILL.md",
+  });
+  assert.equal(launch.env.PI_CODING_AGENT_DIR, "/mnt/native-pi-home");
 });
 
 test("Unavailable installations fail closed without substituting another Pi", () => {

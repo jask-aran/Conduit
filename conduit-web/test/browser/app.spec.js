@@ -83,8 +83,8 @@ test.beforeEach(async ({ page }) => {
   });
   await page.route("**/v0/pi-installations", async (route) => {
     await route.fulfill({ json: { installations: [
-      { id: "conduit-pinned", label: "Conduit", version: "0.80.6", available: true },
-      { id: "host-pi", label: "Native Pi", version: "0.80.10", available: true },
+      { id: "conduit-pinned", label: "Isolated Pi", version: "0.80.6", available: true },
+      { id: "host-pi", label: "Host Pi", version: "0.80.10", available: true },
     ] } });
   });
   await page.route("**/v0/chats", async (route) => {
@@ -681,7 +681,7 @@ test("keeps linked workspaces in their own sidebar group", async ({ page }, test
   await expect(page.getByRole("button", { name: "New workspace" })).toBeVisible();
 });
 
-test("workspace new chat chooses Native Pi after trust preflight", async ({ page }, testInfo) => {
+test("workspace new chat chooses Host Pi after trust preflight", async ({ page }, testInfo) => {
   const workspace = {
     id: "project_workspace",
     slug: "jaskfish",
@@ -718,8 +718,10 @@ test("workspace new chat chooses Native Pi after trust preflight", async ({ page
   await page.getByRole("menuitem", { name: "New chat" }).click();
   const dialog = page.getByRole("dialog", { name: "New chat in JaskFish" });
   await expect(dialog).toBeVisible();
-  await dialog.getByRole("combobox", { name: "Runtime" }).click();
-  await page.getByRole("option", { name: "Native Pi (host setup)" }).click();
+  await dialog.getByRole("combobox", { name: "Profile" }).click();
+  await expect(page.getByRole("option", { name: "Coding" })).toBeVisible();
+  await expect(page.getByRole("option", { name: "Runtime" })).toHaveCount(0);
+  await page.getByRole("option", { name: "Host Pi" }).click();
   await expect(dialog.getByText(/Found settings, skills/)).toBeVisible();
   const requestPromise = page.waitForRequest((request) => request.url().endsWith("/v0/chats")
     && request.method() === "POST" && request.postDataJSON().runtimeKind === "native_pi");
@@ -729,6 +731,68 @@ test("workspace new chat chooses Native Pi after trust preflight", async ({ page
     projectId: "project_workspace",
     templateId: "workspace",
     runtimeKind: "native_pi",
+  });
+  await expect(page.getByRole("button", { name: "Profile Host Pi" })).toBeVisible();
+
+  await page.route("**/v0/chats/550e8400-e29b-41d4-a716-446655440088", async (route) => {
+    const body = route.request().postDataJSON();
+    await route.fulfill({ json: {
+      id: "550e8400-e29b-41d4-a716-446655440088",
+      projectId: "project_workspace",
+      status: "draft",
+      title: "New chat",
+      templateId: body.templateId,
+      runtime: { kind: body.runtimeKind, installationId: "conduit-pinned", profileId: body.templateId },
+    } });
+  });
+  await page.getByRole("button", { name: "Profile Host Pi" }).click();
+  const switchRequest = page.waitForRequest((candidate) => candidate.method() === "PATCH"
+    && candidate.postDataJSON()?.templateId === "workspace"
+    && candidate.postDataJSON()?.runtimeKind === "conduit_profile");
+  await page.getByRole("menuitemradio", { name: /Coding/ }).click();
+  await switchRequest;
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("button", { name: "Profile Coding" })).toBeVisible();
+});
+
+test("clone workspace requires a repository and absolute target location", async ({ page }, testInfo) => {
+  await page.unroute("**/v0/projects");
+  await page.route("**/v0/projects", async (route) => {
+    if (route.request().method() === "POST") {
+      const body = route.request().postDataJSON();
+      await route.fulfill({ status: 201, json: {
+        id: "project_clone",
+        slug: "cloned-repo",
+        name: body.name || "cloned-repo",
+        kind: "workspace",
+        origin: "cloned",
+        externalPath: body.path,
+        path: body.path,
+        defaultTemplateId: "workspace",
+        deletesFilesOnRemove: false,
+        sessions: [],
+      } });
+      return;
+    }
+    await route.fulfill({ json: { projects } });
+  });
+  await page.goto("/");
+  await openSidebar(page, testInfo);
+  await page.getByRole("button", { name: "New workspace" }).click();
+  const dialog = page.getByRole("dialog", { name: "New workspace" });
+  await dialog.locator("#folder-mode").selectOption("cloned");
+  await expect(dialog.getByLabel("Clone location")).toBeVisible();
+  await dialog.getByLabel("Git URL").fill("https://github.com/example/repo.git");
+  await expect(dialog.getByRole("button", { name: "Clone workspace" })).toBeDisabled();
+  await dialog.getByLabel("Clone location").fill("/home/user/code/repo");
+  const requestPromise = page.waitForRequest((request) => request.url().endsWith("/v0/projects") && request.method() === "POST");
+  await dialog.getByRole("button", { name: "Clone workspace" }).click();
+  const request = await requestPromise;
+  expect(request.postDataJSON()).toMatchObject({
+    mode: "cloned",
+    cloneUrl: "https://github.com/example/repo.git",
+    path: "/home/user/code/repo",
+    defaultTemplateId: "workspace",
   });
 });
 
@@ -1182,4 +1246,40 @@ test("runtime settings exposes warm pool and concurrent generation caps", async 
   await expect(dialog.getByText("Max concurrent generations")).toBeVisible();
   await expect(dialog.getByText("3 live now")).toBeVisible();
   await expect(dialog.getByText("1 generating")).toBeVisible();
+});
+
+test("host Pi re-detection immediately updates the Workspace chooser", async ({ page }, testInfo) => {
+  const workspace = {
+    id: "project_workspace",
+    slug: "workspace",
+    name: "Workspace",
+    kind: "workspace",
+    origin: "linked",
+    sessions: [],
+  };
+  await page.unroute("**/v0/projects");
+  await page.route("**/v0/projects", (route) => route.fulfill({ json: { projects: [...projects, workspace] } }));
+  await page.unroute("**/v0/pi-installations");
+  await page.route("**/v0/pi-installations", (route) => route.fulfill({ json: { installations: [
+    { id: "conduit-pinned", label: "Isolated Pi", version: "0.80.6", available: true },
+    { id: "host-pi", label: "Host Pi", version: null, available: false, error: "Host Pi was not found" },
+  ] } }));
+  await page.route("**/v0/pi-installations/host/detect", (route) => route.fulfill({ json: {
+    id: "host-pi", label: "Host Pi", version: "0.80.10", compatible: true, available: true,
+  } }));
+  await page.goto("/");
+  await openSidebar(page, testInfo);
+  await page.locator('[data-sidebar="footer"]').getByRole("button", { name: /Conduit/ }).click();
+  await page.getByRole("menuitem", { name: "Manage settings" }).click();
+  const settings = page.getByRole("dialog", { name: "Settings" });
+  await settings.getByRole("tab", { name: /Runtime/ }).click();
+  await settings.getByRole("button", { name: "Re-detect host Pi" }).click();
+  await expect(settings.getByText("Pi 0.80.10")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await openSidebar(page, testInfo);
+  await page.getByRole("button", { name: "Workspace", exact: true }).click({ button: "right" });
+  await page.getByRole("menuitem", { name: "New chat" }).click();
+  const runtimeDialog = page.getByRole("dialog", { name: "New chat in Workspace" });
+  await runtimeDialog.getByRole("combobox", { name: "Profile" }).click();
+  await expect(page.getByRole("option", { name: "Host Pi" })).toBeEnabled();
 });

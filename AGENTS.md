@@ -42,9 +42,10 @@ data/runtime.json     warm-pool and generation policy
 ```
 
 The reserved unstructured project uses `data/chat/files` itself as its working
-directory. Managed named projects use `data/chat/files/<slug>`. Linked workspaces
-point at allow-listed absolute directories already on the host (unregister does
-not delete them). Cloned workspaces `git clone` into the managed root. Keep Pi
+directory. Managed named projects use `data/chat/files/<slug>`. Workspaces point
+at allow-listed absolute directories (unregister does not delete them). Clone
+creation runs `gh repo clone` for GitHub sources when available, otherwise `git
+clone`, at a user-selected absolute path and then registers that path. Keep Pi
 configuration and native session files out of these roots. Conduit owns only
 `.conduit/chats/<chat-id>/attachments` and `.partial` beneath each working root;
 Pi continues to run with the project root as `cwd`. Browser-supplied paths never
@@ -63,16 +64,19 @@ connections, and template/profile selection. Each chat durably stores
 template by id from the repository registry; drafts may change profile until the
 first Pi process attaches. Special templates such as `runtime` are not valid
 defaults or ordinary profile choices and are launched through dedicated routes.
-Native Pi IDs and paths are private mappings; browser routes always use the stable
+Host Pi IDs and paths are private mappings; browser routes always use the stable
 Conduit chat ID.
 
-Workspace chats persist an immutable runtime kind. `conduit_profile` launches the
+Workspace drafts expose ordinary profiles plus a synthetic Host Pi option in one
+user-facing selector. Drafts may change that choice until the first Pi process
+attaches; the runtime kind is immutable afterward. `conduit_profile` launches the
 bundled 0.80.6 executable with `data/pi`, explicit profile resources, and no
 ambient project resources. `native_pi` launches the detected absolute host Pi
-executable with the server user's native Pi home/resources and the versioned
-Conduit Workspace bridge only. Native Pi is available only for Workspaces and
+executable with the server user's login-shell environment and effective native
+Pi home/resources and the versioned
+Conduit Workspace bridge only. Host Pi is available only for Workspaces and
 requires saved host trust or a one-run trust/ignore choice. One `PiManager` owns
-both runtimes so process limits and writer exclusion remain global. Native Pi
+both runtimes so process limits and writer exclusion remain global. Host Pi
 chat movement is unavailable because moving would re-home its host-native JSONL
 through Conduit's isolated session store.
 

@@ -46,8 +46,8 @@ data/
 
 `conduit-web/`, `templates/`, and `scripts/` are tracked product source.
 `data/` is ignored mutable application data and forms one backup or mount
-boundary for working files, project metadata, Conduit-profile credentials,
-preferences, and Conduit-profile session history. Native Pi history remains in
+boundary for working files, project metadata, Isolated Pi credentials,
+preferences, and Isolated Pi session history. Host Pi history remains in
 the host Pi home and needs a separate backup.
 
 ## Data model
@@ -98,7 +98,7 @@ browser, network, and proxy limits can still reject an upload. Attachment bytes
 are never injected into model context. The user prompt instead carries validated
 relative paths in a small envelope that transcript presentation hides again.
 
-`data/pi` is the isolated agent home for Conduit-profile chats:
+`data/pi` is the isolated agent home for ordinary profile chats:
 
 ```text
 data/pi/
@@ -110,7 +110,7 @@ data/pi/
       <timestamp>_<id>.jsonl
 ```
 
-Conduit-profile chats use the bundled, pinned Pi executable and set
+Isolated-profile chats use the bundled, pinned Pi executable and set
 `PI_CODING_AGENT_DIR=data/pi` but do not set
 `PI_CODING_AGENT_SESSION_DIR` or pass `--session-dir`. Pi derives its native
 session directory from the process working directory and records the canonical
@@ -118,14 +118,18 @@ session directory from the process working directory and records the canonical
 matching that header exactly, rather than trusting the lossy encoded directory
 name.
 
-Workspace chats choose their runtime when created. **Conduit profile** uses the
-bundled Pi, isolated home, and an explicit tracked profile. **Native Pi** uses
-the host Pi executable discovered through the server user's login shell, the
-host `~/.pi/agent` home, native authentication and resources, plus a minimal
-Conduit attachment bridge. Native project resources require an existing saved
-trust decision or a one-run choice to trust them or start without them. Both
+Workspace drafts present ordinary profiles and **Host Pi** in one profile
+selector. Ordinary profiles use the bundled **Isolated Pi**, isolated home, and
+their explicit tracked resources. Host Pi uses
+the executable, environment, and optional `PI_CODING_AGENT_DIR` discovered
+through the server user's login shell (otherwise `$HOME/.pi/agent`), native
+authentication and resources, plus a minimal Conduit attachment bridge. Native
+project resources require an existing saved
+trust decision or a one-run choice to trust them or start without them. The
+choice may change until the first prompt starts Pi, then becomes immutable. Both
 runtimes use the Workspace as canonical `cwd`, share one process manager and
-global capacity limits, and preserve the one-writer-per-JSONL invariant.
+global capacity limits, and preserve the one-writer-per-JSONL invariant. The
+internal Native bridge is not exposed as a profile.
 
 Pi JSONL is the authoritative transcript. `data/conduit.json` stores stable
 project IDs, display names, kinds, and creation times. `data/sessions.json` is an
@@ -153,10 +157,10 @@ message and regenerating a response use Pi's public `fork` RPC while retaining
 the Conduit chat ID and attachment folder; the registry advances to the new
 private Pi mapping and preserves the old native session file. Chat duplication
 is deliberately unavailable because attachment ownership semantics are not yet
-defined. Moving a Conduit-profile chat creates a native cross-directory fork with the
+defined. Moving an Isolated Pi chat creates a native cross-directory fork with the
 destination project's canonical `cwd`, moves its Conduit folder, and deletes the
 source only after the destination JSONL has been created. Moving all chats from
-a project follows the same rule as one batch. Native Pi chats cannot move
+a project follows the same rule as one batch. Host Pi chats cannot move
 between working roots.
 
 Deleting a chat stops any live process writing that session and deletes its
@@ -183,8 +187,8 @@ change profile until the first Pi process attaches.
 
 The sidebar presents managed folders under **Projects**. **Workspaces** register
 an existing allow-listed host directory; cloning first creates a checkout under
-the managed files root and then registers that checkout as a Workspace. Unlinking
-an existing-directory Workspace keeps its external tree. Shipped profiles:
+the user-selected absolute location and then registers that checkout as a
+Workspace. Unlinking either kind keeps the working tree. Shipped profiles:
 General (restrained tools), Workspace
 (full tools + skills), and Runtime (a special one-off admin chat for templates
 and `pi install`). Runtime is not a valid app/project default or ordinary chat
