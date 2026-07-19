@@ -31,6 +31,8 @@ test("migrates Pi sessions behind stable Conduit chat metadata", async () => {
   await store.initialize([project]);
   assert.equal(store.listProject(project.id)[0].id, "session-test");
   assert.equal(store.metadata("session-test").piSessionFile, sessionFile);
+  assert.equal(store.metadata("session-test").runtime.kind, "conduit_profile");
+  assert.equal(store.metadata("session-test").runtime.installationId, "conduit-pinned");
   assert.equal((await store.find([project], "session-test")).file, sessionFile);
   assert.equal((await fs.readFile(registryFile, "utf8")).includes('"entries"'), false);
   await fs.access(path.join(chatDirectory(project, "session-test"), "attachments"));
@@ -59,6 +61,52 @@ test("discovers sessions by canonical cwd when Pi directory encodings collide", 
   await fs.rm(root, { recursive: true, force: true });
 });
 
+test("stored session mappings fail closed when the JSONL cwd belongs to another workspace", async () => {
+  const { root, project, registryFile } = await fixture();
+  const sessionFile = path.join(project.sessionsDir, "foreign.jsonl");
+  await fs.writeFile(sessionFile, `${JSON.stringify({ type: "session", id: "foreign-session", cwd: path.join(root, "elsewhere") })}\n`);
+  await fs.writeFile(registryFile, `${JSON.stringify({ version: 2, chats: [{
+    id: "chat-foreign", projectId: project.id, status: "active", title: "Foreign",
+    piSessionId: "foreign-session", piSessionFile: sessionFile,
+    createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+  }] })}\n`);
+  const store = new ChatStore(registryFile);
+  await store.initialize([project]);
+  assert.equal(store.metadata("chat-foreign"), null);
+  await fs.rm(root, { recursive: true, force: true });
+});
+
+test("stored session mappings reject headerless JSONL", async () => {
+  const { root, project, registryFile } = await fixture();
+  const sessionFile = path.join(project.sessionsDir, "headerless.jsonl");
+  await fs.writeFile(sessionFile, `${JSON.stringify({ type: "message", message: { role: "user", content: "No header" } })}\n`);
+  await fs.writeFile(registryFile, `${JSON.stringify({ version: 3, chats: [{
+    id: "chat-headerless", projectId: project.id, status: "active", title: "Broken",
+    piSessionId: "missing-header", piSessionFile: sessionFile,
+    createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+  }] })}\n`);
+  const store = new ChatStore(registryFile);
+  await store.initialize([project]);
+  assert.equal(store.metadata("chat-headerless"), null);
+  await fs.rm(root, { recursive: true, force: true });
+});
+
+test("temporarily missing Native Pi files retain their durable chat mapping", async () => {
+  const { root, project, registryFile } = await fixture();
+  const missingFile = path.join(root, "host-pi", "missing.jsonl");
+  await fs.writeFile(registryFile, `${JSON.stringify({ version: 3, chats: [{
+    id: "chat-native-missing", projectId: project.id, status: "active", title: "Native",
+    runtime: { kind: "native_pi", installationId: "host-pi", binaryVersion: "0.80.10" },
+    piSessionId: "native-missing", piSessionFile: missingFile,
+    createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+  }] })}\n`);
+  const store = new ChatStore(registryFile);
+  await store.initialize([project]);
+  assert.equal(store.metadata("chat-native-missing").piSessionFile, missingFile);
+  assert.equal(store.metadata("chat-native-missing").runtime.kind, "native_pi");
+  await fs.rm(root, { recursive: true, force: true });
+});
+
 test("creates invisible drafts before Pi and reveals them after a completed attachment", async () => {
   const { root, project, registryFile } = await fixture();
   const store = new ChatStore(registryFile);
@@ -68,6 +116,10 @@ test("creates invisible drafts before Pi and reveals them after a completed atta
   assert.equal(chat.templateId, "workspace");
   assert.equal(chat.templateVersion, "1");
   assert.equal(chat.piSessionId, null);
+  assert.equal(chat.runtime.profileId, "workspace");
+  await store.update(chat.id, { templateId: "chat", templateVersion: "3" });
+  assert.equal(store.metadata(chat.id).runtime.profileId, "chat");
+  assert.equal(store.metadata(chat.id).runtime.profileVersion, "3");
   assert.deepEqual(store.listProject(project.id), []);
 
   const bare = await store.create(project);

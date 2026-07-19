@@ -42,9 +42,10 @@ data/runtime.json     warm-pool and generation policy
 ```
 
 The reserved unstructured project uses `data/chat/files` itself as its working
-directory. Managed named projects use `data/chat/files/<slug>`. Linked workspaces
-point at allow-listed absolute directories already on the host (unregister does
-not delete them). Cloned workspaces `git clone` into the managed root. Keep Pi
+directory. Managed named projects use `data/chat/files/<slug>`. Workspaces point
+at allow-listed absolute directories (unregister does not delete them). Clone
+creation runs `gh repo clone` for GitHub sources when available, otherwise `git
+clone`, at a user-selected absolute path and then registers that path. Keep Pi
 configuration and native session files out of these roots. Conduit owns only
 `.conduit/chats/<chat-id>/attachments` and `.partial` beneath each working root;
 Pi continues to run with the project root as `cwd`. Browser-supplied paths never
@@ -63,19 +64,52 @@ connections, and template/profile selection. Each chat durably stores
 template by id from the repository registry; drafts may change profile until the
 first Pi process attaches. Special templates such as `runtime` are not valid
 defaults or ordinary profile choices and are launched through dedicated routes.
-Native Pi IDs and paths are private mappings; browser routes always use the stable
-Conduit chat ID.
+Host Pi session IDs and JSONL paths are private mappings; browser routes always
+use the stable Conduit chat ID. Settings may report the detected installation
+executable and agent-home paths as local runtime diagnostics.
 
-`data/pi/settings.json` is authoritative for scoped models. Terminal and web
+Workspace creation immediately opens a draft using its default ordinary profile;
+the composer exposes ordinary profiles plus a synthetic Host Pi option in one
+selector. Drafts may change that choice until the first Pi process attaches; the
+runtime kind is immutable afterward. `conduit_profile` launches the
+bundled 0.80.6 executable with `data/pi`, explicit profile resources, and no
+ambient project resources. `native_pi` launches the detected absolute host Pi
+executable with the server user's login-shell environment and effective native
+Pi home/resources and the versioned
+Conduit Workspace bridge only. Host Pi is available only for Workspaces. Before
+each Host launch, validate Pi project-resource paths and persist trust for that
+registered Workspace in Host Pi's trust store without a browser prompt. Surface
+the active process posture in the chat header. One `PiManager` owns
+both runtimes so process limits and writer exclusion remain global. Host Pi
+chat movement is unavailable because moving would re-home its host-native JSONL
+through Conduit's isolated session store.
+
+New Workspaces inherit the app default profile from `data/preferences.json`.
+`data/conduit.json` may store a nullable per-Workspace `defaultTemplateId`;
+`null` means inheritance, an ordinary template id is a profile override, and
+`host-pi` selects the synthetic Host Pi launch option. If Host Pi is unavailable
+at detection, chat creation, or launch, clear that override to `null` and retry
+with the inherited ordinary profile.
+Settings → Workspaces, the Settings command page, and the Workspace context menu
+edit that override. Host trust applies only to Pi project resources detected by
+Pi (for example `.pi` or `.agents`); ordinary files, context files, and Conduit
+attachments do not trigger a trust prompt.
+
+`data/pi/settings.json` is authoritative for Isolated Pi scoped models. Terminal and web
 saves share it, the latest successful save wins, and Conduit reloads it for
 model requests and new processes. The template model list is only the fallback
-when Pi has no saved `enabledModels` value.
+when Pi has no saved `enabledModels` value. Host Pi uses the detected agent
+home's scoped models and default. Settings reports that scope read-only; chat
+model changes go through Host Pi's RPC and therefore update its future-chat
+default.
 
 Pi JSONL entries are authoritative for an existing session's model, thinking
 level, messages, and tool calls. Opening a session must reconstruct those values
-from JSONL. The saved `defaultModel` seeds new chats; choosing a model updates
-both the attached live process and Pi settings, but must not overwrite the model
-recorded by another session.
+from JSONL. Runtime-aware chat model APIs resolve the selected installation and
+must never expose Isolated Pi models to a Host Pi chat. The saved `defaultModel`
+seeds new chats; choosing a model updates both the attached live process and that
+installation's settings, but existing-session launches must not pass model flags
+that overwrite the model recorded by another session.
 
 Conduit sets `PI_CODING_AGENT_DIR` to `data/pi` and lets Pi derive its native
 session directory from `cwd`. Do not add `PI_CODING_AGENT_SESSION_DIR`,

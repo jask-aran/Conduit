@@ -57,6 +57,29 @@ export async function parseSession(file, project) {
   };
 }
 
+export async function validateSessionFile(file, project) {
+  const resolved = path.resolve(file);
+  const stat = await fs.lstat(resolved);
+  if (!stat.isFile() || stat.isSymbolicLink() || path.extname(resolved) !== ".jsonl") {
+    const error = new Error("Pi session mapping is not a regular JSONL file");
+    error.code = "invalid_session_mapping";
+    throw error;
+  }
+  const session = await parseSession(resolved, project);
+  const header = session.entries.find((entry) => entry.type === "session");
+  if (!header || typeof header.cwd !== "string" || !header.cwd.trim()) {
+    const error = new Error("Pi session JSONL has no valid session header");
+    error.code = "invalid_session_mapping";
+    throw error;
+  }
+  if (path.resolve(header.cwd) !== path.resolve(project.path)) {
+    const error = new Error("Pi session working directory does not match its Conduit workspace");
+    error.code = "session_cwd_mismatch";
+    throw error;
+  }
+  return session;
+}
+
 export async function discoverProjectSessions(project) {
   let entries;
   try { entries = await fs.readdir(project.sessionsDir, { withFileTypes: true }); }
@@ -68,8 +91,7 @@ export async function discoverProjectSessions(project) {
   for (const entry of entries) {
     if (!entry.isFile() || !entry.name.endsWith(".jsonl")) continue;
     try {
-      const session = await parseSession(path.join(project.sessionsDir, entry.name), project);
-      if (path.resolve(session.cwd) === path.resolve(project.path)) sessions.push(session);
+      sessions.push(await validateSessionFile(path.join(project.sessionsDir, entry.name), project));
     } catch {}
   }
   return sessions.sort(compareSessionsByCreatedAt);

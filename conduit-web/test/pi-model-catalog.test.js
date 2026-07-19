@@ -133,6 +133,30 @@ test("model settings persist an explicitly selected default", async () => {
   assert.equal(result.defaultModel, "example/plain");
 });
 
+test("runtime model selection updates only the enabled default and thinking level", async () => {
+  const calls = [];
+  const models = [{ provider: "example", id: "reasoner", reasoning: true }];
+  const settings = {
+    getEnabledModels: () => ["example/reasoner"],
+    getDefaultProvider: () => "example",
+    getDefaultModel: () => "reasoner",
+    getDefaultThinkingLevel: () => "medium",
+    setDefaultModelAndProvider: (provider, model) => calls.push(["model", provider, model]),
+    setDefaultThinkingLevel: (level) => calls.push(["thinking", level]),
+    flush: async () => calls.push(["flush"]),
+    drainErrors: () => [],
+  };
+  const catalog = new PiModelCatalog({
+    modelRegistry: { refresh() {}, getAvailable: () => models },
+    settingsFactory: () => settings,
+  });
+
+  await catalog.updateDefault("/tmp/project", "example/reasoner", "high");
+
+  assert.deepEqual(calls, [["model", "example", "reasoner"], ["thinking", "high"], ["flush"]]);
+  await assert.rejects(() => catalog.updateDefault("/tmp/project", "example/missing"), { code: "invalid_model" });
+});
+
 test("model settings reject empty and unknown scopes", async () => {
   const settings = {
     getEnabledModels: () => undefined,

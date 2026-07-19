@@ -23,7 +23,7 @@ test("repository templates are discoverable launch presets", () => {
   const workspace = templates.find((template) => template.id === "workspace");
   const general = templates.find((template) => template.id === "chat");
   const view = templatePublicView(workspace);
-  assert.equal(view.label, "Workspace");
+  assert.equal(view.label, "Coding");
   assert.equal(view.defaultable, true);
   assert.ok(view.tools.includes("edit"));
   assert.ok(view.skillCount >= 1);
@@ -210,6 +210,81 @@ test("create can launch a non-default template and exposes it on the process vie
   assert.deepEqual(view.template.tools, ["read", "bash", "edit", "write"]);
 });
 
+test("one manager launches a resolved Native Pi specification under shared process limits", () => {
+  let invocation;
+  const manager = new PiManager({
+    agentDir: "/tmp/conduit-pi-native-manager-test",
+    spawnImpl: (command, args, options) => {
+      invocation = { command, args, options };
+      const child = new EventEmitter();
+      child.stdout = new PassThrough();
+      child.stderr = new PassThrough();
+      child.stdin = { write() {} };
+      child.kill = () => true;
+      return child;
+    },
+    template: { id: "chat", version: "3", models: [], tools: [], extensions: [], skills: [], promptTemplates: [] },
+  });
+  const project = { id: "project_workspace", slug: "workspace", path: "/tmp/workspace", sessionsDir: "/tmp/native-sessions" };
+  const runtime = { kind: "native_pi", installationId: "host-pi", binaryVersion: "0.80.10" };
+  const record = manager.create({
+    project,
+    chatId: "chat-native",
+    launchSpec: {
+      command: "/home/user/bin/pi",
+      args: ["--mode", "rpc", "--no-approve"],
+      cwd: project.path,
+      env: { HOME: "/home/user" },
+      sessionFile: null,
+      runtime,
+      binaryVersion: "0.80.10",
+      trustPosture: "ignore_project_resources",
+    },
+  });
+  assert.equal(invocation.command, "/home/user/bin/pi");
+  assert.deepEqual(invocation.args, ["--mode", "rpc", "--no-approve"]);
+  assert.equal(invocation.options.cwd, project.path);
+  assert.equal(invocation.options.env.PI_CODING_AGENT_DIR, undefined);
+  assert.equal(manager.view(record).runtime.kind, "native_pi");
+  assert.equal(manager.view(record).binaryVersion, "0.80.10");
+  record.sessionFile = "/home/user/.pi/agent/sessions/private.jsonl";
+  assert.equal(manager.view(record).sessionFile, null);
+});
+
+test("an existing writer cannot be reused through a different runtime", () => {
+  const manager = new PiManager({
+    agentDir: "/tmp/conduit-runtime-conflict",
+    spawnImpl: () => {
+      const child = new EventEmitter();
+      child.stdout = new PassThrough();
+      child.stderr = new PassThrough();
+      child.stdin = { write() {} };
+      child.kill = () => true;
+      return child;
+    },
+    template: { id: "chat", version: "3", models: [], tools: [], extensions: [], skills: [], promptTemplates: [] },
+  });
+  const project = { id: "project_workspace", slug: "workspace", path: "/tmp/workspace", sessionsDir: "/tmp/sessions" };
+  manager.create({
+    project,
+    chatId: "chat-runtime-conflict",
+    launchSpec: {
+      command: "/tmp/conduit-pi",
+      args: [], cwd: project.path, env: {}, sessionFile: null,
+      runtime: { kind: "conduit_profile" },
+    },
+  });
+  assert.throws(() => manager.create({
+    project,
+    chatId: "chat-runtime-conflict",
+    launchSpec: {
+      command: "/tmp/native-pi",
+      args: [], cwd: project.path, env: {}, sessionFile: null,
+      runtime: { kind: "native_pi" },
+    },
+  }), { code: "session_writer_conflict" });
+});
+
 test("forwards each text delta immediately and preserves chunk ordering", () => {
   const manager = new PiManager({
     agentDir: "/tmp/conduit-pi-stream-test",
@@ -248,6 +323,27 @@ function rpcFixture(onCommand) {
   return { manager, child, record };
 }
 
+test("model RPC methods correlate catalog and state changes", async () => {
+  const selected = { provider: "example", id: "reasoner", name: "Reasoner", reasoning: true };
+  const { manager, record } = rpcFixture((command, process) => {
+    if (!command.id) return;
+    const data = command.type === "get_available_models"
+      ? { models: [selected] }
+      : command.type === "get_state" ? { model: selected, thinkingLevel: "high", sessionFile: "/tmp/sessions/original.jsonl" }
+        : command.type === "set_model" ? selected : {};
+    queueMicrotask(() => process.stdout.write(`${JSON.stringify({
+      id: command.id, type: "response", command: command.type, success: true, data,
+    })}\n`));
+  });
+
+  assert.deepEqual(await manager.getAvailableModels(record.id), [selected]);
+  assert.deepEqual(await manager.setModel(record.id, "example/reasoner"), {
+    model: "example/reasoner",
+    thinkingLevel: "high",
+  });
+  assert.equal(manager.view(record).model, "example/reasoner");
+});
+
 test("normal abort closes the generation before late deltas can be published", async () => {
   const { manager, child, record } = rpcFixture((command, process) => {
     if (command.type === "abort") queueMicrotask(() => process.stdout.write(`${JSON.stringify({
@@ -277,6 +373,21 @@ test("a new prompt cannot race an in-flight abort", async () => {
   assert.throws(() => manager.prompt(record.id, "Too soon"), { code: "generation_stopping" });
   await stopping;
   assert.equal(manager.prompt(record.id, "After stop"), "g2");
+});
+
+test("correlated prompt rejection restores generation state before activation", async () => {
+  const { manager, record } = rpcFixture((command, process) => {
+    if (command.type === "prompt" && command.id) queueMicrotask(() => process.stdout.write(`${JSON.stringify({
+      id: command.id,
+      type: "response",
+      command: "prompt",
+      success: false,
+      error: "prompt rejected",
+    })}\n`));
+  });
+  await assert.rejects(manager.promptAccepted(record.id, "Hello"), /prompt rejected/);
+  assert.equal(record.generation, null);
+  assert.equal(record.events.some((event) => event.type === "generation_started"), false);
 });
 
 test("a hung abort terminates Pi at the deadline and leaves the persisted file resumable", async () => {

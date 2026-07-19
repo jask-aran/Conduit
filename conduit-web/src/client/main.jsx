@@ -36,7 +36,7 @@ const api = async (url, options) => {
   const response = await fetch(url, { headers: { "content-type": "application/json" }, ...options });
   const text = await response.text();
   const body = text ? JSON.parse(text) : {};
-  if (!response.ok) throw new Error(body.message || body.error || "Request failed");
+  if (!response.ok) throw Object.assign(new Error(body.message || body.error || "Request failed"), body);
   return body;
 };
 const list = (value) => Array.isArray(value) ? value : [];
@@ -62,10 +62,15 @@ class AppErrorBoundary extends React.Component {
   }
 }
 
-function ChatHeader({ project, title, profile }) {
+function ChatHeader({ project, title, profile, runtime, live }) {
   const projectLabel = project?.slug === "chat" ? "Chats" : project?.slug || project?.name || "Chats";
-  const profileLabel = profile?.label || profile?.id || null;
-  const posture = profile?.posture || (Array.isArray(profile?.tools) ? profile.tools.join(" / ") : "");
+  const profileLabel = runtime?.kind === "native_pi" ? null : profile?.label || profile?.id || null;
+  const hostTrustLabel = live?.trustPosture === "native_saved_trust"
+    ? "project resources trusted"
+    : "project trust pending";
+  const posture = runtime?.kind === "native_pi"
+    ? hostTrustLabel
+    : profile?.posture || (Array.isArray(profile?.tools) ? profile.tools.join(" / ") : "");
   const workspaceHint = project?.origin === "linked"
     ? "linked"
     : project?.origin === "cloned"
@@ -73,7 +78,10 @@ function ChatHeader({ project, title, profile }) {
       : project?.slug === "chat"
         ? null
         : "folder";
-  const postureLine = [profileLabel, projectLabel !== "Chats" ? projectLabel : null, posture].filter(Boolean).join(" · ");
+  const runtimeLabel = runtime?.kind === "native_pi" ? "Host Pi" : "Isolated Pi";
+  const runtimeVersion = live?.binaryVersion || runtime?.binaryVersion;
+  const postureLine = [runtimeLabel, runtimeVersion ? `Pi ${runtimeVersion}` : null, profileLabel, projectLabel !== "Chats" ? projectLabel : null, posture]
+    .filter(Boolean).join(" · ");
   return <header className="chat-header">
     <SidebarTrigger className="-ml-1" />
     {title && <Breadcrumb className="chat-header-title">
@@ -84,8 +92,17 @@ function ChatHeader({ project, title, profile }) {
       </BreadcrumbList>
     </Breadcrumb>}
     {postureLine && <span
-      className="chat-profile-posture text-muted-foreground ml-auto hidden truncate text-xs sm:inline"
-      title={[postureLine, project?.path, workspaceHint].filter(Boolean).join("\n")}
+      className="chat-profile-posture text-muted-foreground ml-auto truncate text-xs"
+      title={[
+        postureLine,
+        project?.path ? `cwd: ${project.path}` : null,
+        live?.sessionFile ? `session: ${live.sessionFile}` : null,
+        runtime?.binaryVersion && live?.binaryVersion && runtime.binaryVersion !== live.binaryVersion
+          ? `created with Pi ${runtime.binaryVersion}; launched with Pi ${live.binaryVersion}`
+          : null,
+        live?.trustPosture ? `trust: ${live.trustPosture}` : null,
+        workspaceHint,
+      ].filter(Boolean).join("\n")}
     >
       {postureLine}
     </span>}
@@ -111,12 +128,15 @@ function App() {
   const [error, setError] = useState("");
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsSection, setSettingsSection] = useState("models");
+  const [settingsWorkspaceId, setSettingsWorkspaceId] = useState(null);
   const [commandOpen, setCommandOpen] = useState(false);
   const [commandPage, setCommandPage] = useState(null);
   const [templates, setTemplates] = useState([]);
   const [workspaceSuggestions, setWorkspaceSuggestions] = useState([]);
   const [defaultTemplateId, setDefaultTemplateId] = useState("chat");
   const [chatTemplateId, setChatTemplateId] = useState(null);
+  const [chatRuntime, setChatRuntime] = useState(null);
+  const [installations, setInstallations] = useState([]);
   const [commandLaunchNonce, setCommandLaunchNonce] = useState(0);
   const [sidebarCommand, setSidebarCommand] = useState(null);
   const [editEntryId, setEditEntryId] = useState(null);
@@ -140,7 +160,9 @@ function App() {
   const openLiveToken = useRef(0);
   const [connectingChatId, setConnectingChatId] = useState(null);
   const selectedIdRef = useRef(null);
+  const chatRuntimeRef = useRef(chatRuntime);
   selectedIdRef.current = selectedId;
+  chatRuntimeRef.current = chatRuntime;
   if (!liveStream.current) liveStream.current = createLiveStreamStore();
 
   const streaming = generation === "active" || generation === "submitting";
@@ -167,7 +189,7 @@ function App() {
     toast.error(error);
     setError("");
   }, [error]);
-  const modelSettings = useModelSettings(projectId, { onError: showError, socketRef: ws });
+  const modelSettings = useModelSettings(projectId, selectedId, { onError: showError });
   const attachmentState = useAttachments(selectedId, showError);
   const drop = useChatDrop(attachmentState.addFiles);
 
@@ -179,6 +201,7 @@ function App() {
     if (selected) {
       setChatTitle(selected.title);
       setChatStatus(selected.status);
+      if (selected.runtime) setChatRuntime(selected.runtime);
     }
     return next;
   }, []);
@@ -196,6 +219,7 @@ function App() {
     setChatStatus(detail.status || "draft");
     setChatTitle(detail.title || "New chat");
     if (detail.templateId) setChatTemplateId(detail.templateId);
+    if (detail.runtime) setChatRuntime(detail.runtime);
     setLoadedSessionId(chatId);
     return detail;
   }, []);
@@ -258,6 +282,13 @@ function App() {
   }
 
   async function openLive(chatId, owningProjectId, options = {}) {
+    const {
+      intent = "open",
+      hostFallback = false,
+      modelOverride,
+      thinkingOverride,
+      ...launchOptions
+    } = options;
     const token = ++openLiveToken.current;
     setConnectingChatId(chatId);
     try {
@@ -266,13 +297,14 @@ function App() {
         body: JSON.stringify({
           chatId,
           projectId: owningProjectId,
-          model: modelSettings.model,
-          thinkingLevel: modelSettings.effort,
-          ...options,
+          model: modelOverride ?? modelSettings.model,
+          thinkingLevel: thinkingOverride ?? modelSettings.effort,
+          ...launchOptions,
         }),
       });
       if (token !== openLiveToken.current || selectedIdRef.current !== chatId) return null;
       setLive(record);
+      if (record.runtime) setChatRuntime(record.runtime);
       if (record.contextUsage) setContextUsage(record.contextUsage);
       connect(record);
       await new Promise((resolve, reject) => {
@@ -291,9 +323,32 @@ function App() {
         socket.addEventListener("error", onError, { once: true });
       });
       if (token !== openLiveToken.current || selectedIdRef.current !== chatId) return null;
+      await modelSettings.reloadChat();
       return record;
     } catch (caught) {
       if (token !== openLiveToken.current || selectedIdRef.current !== chatId) return null;
+      const owningProject = projects.find((project) => project.id === owningProjectId);
+      const hostDefaultFailed = !hostFallback
+        && chatRuntimeRef.current?.kind === "native_pi"
+        && owningProject?.defaultTemplateId === "host-pi"
+        && !["live_process_limit", "generation_limit"].includes(caught.error);
+      if (hostDefaultFailed) {
+        await saveWorkspaceDefault(owningProject.id, null);
+        const fallbackTemplateId = defaultTemplateId || "chat";
+        const fallbackChat = await api(`/v0/chats/${encodeURIComponent(chatId)}`, {
+          method: "PATCH",
+          body: JSON.stringify({ templateId: fallbackTemplateId, runtimeKind: "conduit_profile" }),
+        });
+        setChatTemplateId(fallbackChat.templateId || fallbackTemplateId);
+        setChatRuntime(fallbackChat.runtime || null);
+        await modelSettings.reloadChat();
+        return openLive(chatId, owningProjectId, {
+          intent,
+          hostFallback: true,
+          modelOverride: "",
+          thinkingOverride: "",
+        });
+      }
       if (caught.message?.includes("Too many live Pi") || caught.message?.includes("live_process_limit")) {
         throw new Error(caught.message || "Too many live Pi processes. Wait for idle chats to free up.");
       }
@@ -310,14 +365,16 @@ function App() {
       api("/v0/capabilities").catch(() => ({ partialContinue: true })),
       api("/v0/templates").catch(() => ({ templates: [], defaultTemplateId: "chat" })),
       api("/v0/workspaces/suggestions").catch(() => ({ folders: [] })),
+      api("/v0/pi-installations").catch(() => ({ installations: [] })),
     ])
-      .then(async ([payload, capabilities, templateCatalog, workspaceCatalog]) => {
+      .then(async ([payload, capabilities, templateCatalog, workspaceCatalog, installationCatalog]) => {
         if (!active) return;
         const nextProjects = list(payload.projects).map((project) => ({ ...project, sessions: list(project.sessions) }));
         setProjects(nextProjects);
         setPartialContinue(capabilities.partialContinue !== false);
         setTemplates(list(templateCatalog.templates));
         setWorkspaceSuggestions(list(workspaceCatalog.folders));
+        setInstallations(list(installationCatalog.installations));
         setDefaultTemplateId(templateCatalog.defaultTemplateId || "chat");
         const routeId = pathChatId();
         if (routeId) {
@@ -326,6 +383,7 @@ function App() {
           selectedIdRef.current = chat.id;
           setSelectedId(chat.id); setProjectId(chat.projectId); setChatStatus(chat.status); setChatTitle(chat.title);
           setChatTemplateId(chat.templateId || templateCatalog.defaultTemplateId || "chat");
+          setChatRuntime(chat.runtime || null);
           await loadDetail(chat.id);
           if (chat.status === "active") await openLive(chat.id, chat.projectId);
           return;
@@ -344,6 +402,7 @@ function App() {
         selectedIdRef.current = chat.id;
         setSelectedId(chat.id); setProjectId(chat.projectId); setChatStatus(chat.status); setChatTitle(chat.title);
         setChatTemplateId(chat.templateId || templateCatalog.defaultTemplateId || "chat");
+        setChatRuntime(chat.runtime || null);
         setMessages([]); setTools([]); setPageBefore(null); setLoadedSessionId(chat.id);
       })
       .catch((caught) => active && setError(caught.message));
@@ -376,7 +435,7 @@ function App() {
       // ⌘⇧C — new chat (⌘N is new-window in browsers).
       if (key === "c" && event.shiftKey) {
         event.preventDefault();
-        newChat().catch((caught) => setError(caught.message));
+        requestNewChat();
         return;
       }
       if (key === ",") {
@@ -638,33 +697,69 @@ function App() {
   async function newChat(target, options = {}) {
     const nextProject = target || projects.find((item) => item.id === projectId) || projects[0];
     if (!nextProject) return;
-    const templateId = options.templateId || defaultTemplateId || "chat";
+    const hostDefault = nextProject.defaultTemplateId === "host-pi" && !options.templateId && !options.runtimeKind;
+    const templateId = options.templateId
+      || (nextProject.defaultTemplateId === "host-pi" ? null : nextProject.defaultTemplateId)
+      || defaultTemplateId
+      || "chat";
     await discardEmptyDraft();
     resetChatState();
     const specialRuntimeChat = templateId === "runtime";
     const chat = await api(specialRuntimeChat ? "/v0/runtime/chats" : "/v0/chats", {
       method: "POST",
-      body: JSON.stringify(specialRuntimeChat ? {} : { projectId: nextProject.id, templateId }),
+      body: JSON.stringify(specialRuntimeChat ? {} : hostDefault
+        ? { projectId: nextProject.id }
+        : {
+          projectId: nextProject.id,
+          templateId,
+          runtimeKind: options.runtimeKind || "conduit_profile",
+        }),
     });
     history.replaceState({}, "", `/chat/${chat.id}`);
     selectedIdRef.current = chat.id;
     setSelectedId(chat.id); setProjectId(chat.projectId); setChatStatus(chat.status); setChatTitle(chat.title);
     setChatTemplateId(chat.templateId || templateId);
+    setChatRuntime(chat.runtime || null);
+    if (hostDefault && chat.runtime?.kind !== "native_pi") {
+      setProjects((current) => current.map((project) => project.id === nextProject.id
+        ? { ...project, defaultTemplateId: null }
+        : project));
+    }
     setMessages([]); setTools([]); setPageBefore(null); setLoadedSessionId(chat.id);
   }
 
-  async function setChatProfile(templateId) {
-    if (!selectedId || !templateId || templateId === chatTemplateId) return;
+  function requestNewChat(target = null, options = {}) {
+    if (!target && !options.templateId && !options.runtimeKind) {
+      setSidebarCommand({ type: "new-chat", nonce: Date.now() });
+      return;
+    }
+    newChat(target, options).catch((caught) => setError(caught.message));
+  }
+
+  async function setChatLaunchOption(optionId) {
+    if (!selectedId || !optionId) return;
     if (chatStatus !== "draft") {
       setError("Profile is locked after the first message. Start a new chat to switch.");
       return;
     }
+    const project = projects.find((item) => item.id === projectId);
+    const hostPi = optionId === "host-pi";
+    if (hostPi && project?.kind !== "workspace") return;
+    const templateId = hostPi ? chatTemplateId : optionId;
+    if (!hostPi && templateId === chatTemplateId && chatRuntime?.kind !== "native_pi") return;
     const chat = await api(`/v0/chats/${encodeURIComponent(selectedId)}`, {
       method: "PATCH",
-      body: JSON.stringify({ templateId }),
+      body: JSON.stringify({
+        templateId,
+        ...(project?.kind === "workspace" ? { runtimeKind: hostPi ? "native_pi" : "conduit_profile" } : {}),
+      }),
     });
     setChatTemplateId(chat.templateId || templateId);
+    setChatRuntime(chat.runtime || null);
+    await modelSettings.reloadChat();
   }
+
+  const setChatProfile = (templateId) => setChatLaunchOption(templateId);
 
   async function saveDefaultTemplate(templateId) {
     const saved = await api("/v0/preferences", {
@@ -681,9 +776,11 @@ function App() {
     selectedIdRef.current = session.id;
     setProjectId(owningProject.id); setSelectedId(session.id); setChatTitle(session.title); setChatStatus(session.status);
     setChatTemplateId(session.templateId || defaultTemplateId || "chat");
+    setChatRuntime(session.runtime || null);
     history.replaceState({}, "", `/chat/${session.id}`);
     const detail = await loadDetail(session.id);
     if (detail?.templateId) setChatTemplateId(detail.templateId);
+    if (detail?.runtime) setChatRuntime(detail.runtime);
     if (selectedIdRef.current === session.id && detail.status === "active") {
       try {
         await openLive(session.id, owningProject.id);
@@ -693,10 +790,10 @@ function App() {
     }
   }
 
-  async function ensureLive() {
+  async function ensureLive(intent = "open") {
     if (live && ws.current?.readyState === WebSocket.OPEN) return live;
     if (!selectedId) throw new Error("Chat is not ready yet");
-    const record = await openLive(selectedId, projectId);
+    const record = await openLive(selectedId, projectId, { intent });
     if (!record) throw new Error("Chat switched before Pi was ready");
     return record;
   }
@@ -765,6 +862,17 @@ function App() {
       return;
     }
 
+    if (!live || ws.current?.readyState !== WebSocket.OPEN) {
+      setGeneration("submitting");
+      try {
+        await ensureLive("prompt");
+      } catch (caught) {
+        setGeneration("idle");
+        setError(caught.message);
+        return;
+      }
+    }
+
     const attachmentIds = attachmentState.pendingIds;
     const previousMessages = messages;
     const previousEditEntryId = editEntryId;
@@ -788,7 +896,6 @@ function App() {
     attachmentState.markAnnounced(attachmentIds);
     setGeneration("submitting");
     try {
-      await ensureLive();
       ws.current.send(JSON.stringify(editEntryId
         ? { type: "fork_and_prompt", entryId: editEntryId, message: text, attachmentIds }
         : { type: "prompt", message: text, attachmentIds }));
@@ -876,7 +983,7 @@ function App() {
         };
       const created = await api("/v0/projects", { method: "POST", body: JSON.stringify(body) });
       await refresh();
-      const templateId = created.defaultTemplateId || (created.origin === "managed" ? defaultTemplateId : "workspace");
+      const templateId = created.defaultTemplateId || defaultTemplateId || "chat";
       await newChat(created, { templateId });
       return true;
     } catch (caught) { setError(caught.message); return false; }
@@ -887,6 +994,17 @@ function App() {
     if (!project) throw new Error("No chat project");
     setSettingsOpen(false);
     await newChat(project, { templateId: "runtime" });
+  }
+
+  async function saveWorkspaceDefault(workspaceId, templateId) {
+    const saved = await api(`/v0/projects/${encodeURIComponent(workspaceId)}`, {
+      method: "PATCH",
+      body: JSON.stringify({ defaultTemplateId: templateId }),
+    });
+    setProjects((current) => current.map((project) => project.id === workspaceId
+      ? { ...project, ...saved, sessions: project.sessions }
+      : project));
+    return saved;
   }
 
   async function deleteSession(session, owningProject) {
@@ -992,17 +1110,22 @@ function App() {
     templateId: chatTemplateId || defaultTemplateId,
     defaultTemplateId,
   };
-  const openSettings = (section = "models") => { setSettingsSection(section); setSettingsOpen(true); };
+  const openSettings = (section = "models", workspaceId = null) => {
+    setSettingsSection(section);
+    setSettingsWorkspaceId(workspaceId);
+    setSettingsOpen(true);
+  };
   const activeProfile = templates.find((item) => item.id === chatTemplateId)
     || templates.find((item) => item.id === defaultTemplateId)
     || templates[0]
     || null;
   const commandActions = {
-    newChat: (project, options) => newChat(project, options).catch((caught) => setError(caught.message)),
+    newChat: requestNewChat,
     newFolder: () => setSidebarCommand({ type: "new-folder", nonce: Date.now() }),
     newWorkspace: () => setSidebarCommand({ type: "new-workspace", nonce: Date.now() }),
     attach: attachmentState.openPicker,
     settings: (section = "general") => openSettings(section),
+    workspaceSettings: (workspaceId) => openSettings("workspaces", workspaceId),
     rename: () => setSidebarCommand({ type: "rename", nonce: Date.now() }),
     renameFolder: () => setSidebarCommand({ type: "rename-folder", nonce: Date.now() }),
     move: () => setSidebarCommand({ type: "move", nonce: Date.now() }),
@@ -1024,6 +1147,10 @@ function App() {
   const threadReady = loadedSessionId === selectedId;
   const emptyChat = threadReady && messages.length === 0 && tools.length === 0 && !displayActivity?.label;
   const selectedProject = projects.find((project) => project.id === projectId);
+  const sharedWorkspaceGeneration = selectedProject?.kind === "workspace"
+    && [...globalRuntime.processes.values()].some((process) => process.projectId === selectedProject.id
+      && process.chatId !== selectedId
+      && (process.active || ["working", "compacting", "retrying"].includes(process.activity)));
   return <TooltipProvider>
     <Toaster richColors />
     <SidebarProvider defaultOpen>
@@ -1047,8 +1174,9 @@ function App() {
         onDeleteSession={deleteSession}
         onMoveProjectSessions={moveProjectSessions}
         onMoveSession={moveSession}
-        onNewChat={(project) => newChat(project).catch((caught) => setError(caught.message))}
+        onNewChat={(project, options) => newChat(project, options).catch((caught) => setError(caught.message))}
         onOpenSettings={() => openSettings("models")}
+        onOpenWorkspaceSettings={(workspace) => openSettings("workspaces", workspace.id)}
         onOpenSession={(session, project) => openSession(session, project).catch((caught) => setError(caught.message))}
         onRenameProject={renameProject}
         onRenameSession={renameSession}
@@ -1056,7 +1184,12 @@ function App() {
       <SidebarInset className={`chat-main${emptyChat ? " chat-main-empty" : ""}`} {...drop.handlers}>
         <ChatDropOverlay active={drop.active} />
         <div className="chat-meteors" aria-hidden="true"><Meteors number={30} minDelay={0} maxDelay={1} minDuration={12} maxDuration={20} /></div>
-        <ChatHeader project={selectedProject} title={chatTitle} profile={activeProfile} />
+        <ChatHeader project={selectedProject} title={chatTitle} profile={activeProfile} runtime={chatRuntime} live={live} />
+        {sharedWorkspaceGeneration && <Alert className="mx-auto mt-3 max-w-3xl" variant="default">
+          <TriangleAlertIcon />
+          <AlertTitle>Another chat is working in this Workspace</AlertTitle>
+          <AlertDescription>Both agents can edit the same files. Conduit does not lock the Workspace or create worktrees automatically.</AlertDescription>
+        </Alert>}
         <ChatThread
           key={loadedSessionId ?? "boot"}
           messages={messages}
@@ -1105,13 +1238,26 @@ function App() {
             compacting={compacting}
             queue={queue}
             serverOnline={serverOnline}
-            profile={activeProfile}
-            profiles={chatTemplateId === "runtime" ? [] : templates.filter((item) => item.defaultable !== false)}
+            profile={chatRuntime?.kind === "native_pi"
+              ? { id: "host-pi", label: "Host Pi", description: "Uses your host Pi installation, authentication, and project resources." }
+              : activeProfile}
+            runtime={chatRuntime}
+            profiles={chatTemplateId === "runtime" ? [] : [
+              ...templates.filter((item) => item.defaultable !== false && item.special !== true),
+              ...(selectedProject?.kind === "workspace" ? [{
+                id: "host-pi",
+                label: "Host Pi",
+                description: installations.find((item) => item.id === "host-pi")?.available
+                  ? "Uses your host Pi installation, authentication, and project resources."
+                  : "Host Pi is unavailable.",
+                disabled: !installations.find((item) => item.id === "host-pi")?.available,
+              }] : []),
+            ]}
             profileLocked={chatStatus !== "draft"}
             onDraftChange={setDraft}
             onChooseModel={modelSettings.chooseModel}
             onChooseEffort={modelSettings.chooseEffort}
-            onChooseProfile={(templateId) => setChatProfile(templateId).catch((caught) => setError(caught.message))}
+            onChooseProfile={(optionId) => setChatLaunchOption(optionId).catch((caught) => setError(caught.message))}
             onSend={() => send()}
             onStop={stopResponse}
             onSteer={() => send({ steer: true })}
@@ -1143,6 +1289,14 @@ function App() {
           defaultTemplateId={defaultTemplateId}
           onDefaultTemplateChange={saveDefaultTemplate}
           onOpenRuntimeChat={() => openRuntimeChat().catch((caught) => setError(caught.message))}
+          installations={installations}
+          onInstallationsChange={setInstallations}
+          projects={projects}
+          initialWorkspaceId={settingsWorkspaceId}
+          onWorkspaceDefaultChange={saveWorkspaceDefault}
+          onHostUnavailable={() => setProjects((current) => current.map((project) => project.defaultTemplateId === "host-pi"
+            ? { ...project, defaultTemplateId: null }
+            : project))}
         />}
       </Suspense>
     </SidebarProvider>

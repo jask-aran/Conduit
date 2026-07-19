@@ -1,9 +1,12 @@
 import crypto from "node:crypto";
+import { spawn } from "node:child_process";
 import fs from "node:fs";
 import fsp from "node:fs/promises";
 import path from "node:path";
+import { constants } from "node:fs";
 import { pipeline } from "node:stream/promises";
 import { chatDirectory } from "./chat-store.js";
+import { ensureChatTree } from "./owned-paths.js";
 
 const ATTACHMENT_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const STORED_FILE = /^([0-9a-f-]{36})--(.+)$/i;
@@ -38,6 +41,53 @@ function mimeFor(name) {
   })[extension] || "application/octet-stream";
 }
 
+async function excludeConduitFromGit(projectPath) {
+  const excludeFile = await new Promise((resolve, reject) => {
+    const child = spawn("git", ["rev-parse", "--git-path", "info/exclude"], {
+      cwd: projectPath,
+      stdio: ["ignore", "pipe", "ignore"],
+    });
+    let output = "";
+    child.stdout.setEncoding("utf8");
+    child.stdout.on("data", (chunk) => { output += chunk; });
+    child.on("error", reject);
+    child.on("close", (code) => code === 0 ? resolve(output.trim()) : resolve(null));
+  });
+  if (!excludeFile) return null;
+  const resolved = path.isAbsolute(excludeFile) ? excludeFile : path.resolve(projectPath, excludeFile);
+  try {
+    const stat = await fsp.lstat(resolved);
+    if (!stat.isFile() || stat.isSymbolicLink()) return "Could not update Git's local exclude file safely";
+  } catch (error) {
+    if (error.code !== "ENOENT") throw error;
+    await fsp.mkdir(path.dirname(resolved), { recursive: true });
+  }
+  const existing = await fsp.readFile(resolved, "utf8").catch((error) => error.code === "ENOENT" ? "" : Promise.reject(error));
+  if (!existing.split("\n").includes(".conduit/")) {
+    const separator = existing && !existing.endsWith("\n") ? "\n" : "";
+    await fsp.appendFile(resolved, `${separator}# Conduit chat attachments\n.conduit/\n`, "utf8");
+  }
+  return null;
+}
+
+async function mimeForFile(file, name) {
+  const expected = mimeFor(name);
+  if (!expected.startsWith("image/") || expected === "image/svg+xml") return expected;
+  const handle = await fsp.open(file, constants.O_RDONLY | (constants.O_NOFOLLOW || 0));
+  try {
+    const buffer = Buffer.alloc(12);
+    const { bytesRead } = await handle.read(buffer, 0, buffer.length, 0);
+    const bytes = buffer.subarray(0, bytesRead);
+    if (expected === "image/png" && bytes.length >= 8 && bytes.equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) return expected;
+    if (expected === "image/jpeg" && bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return expected;
+    if (expected === "image/gif" && ["GIF87a", "GIF89a"].includes(bytes.subarray(0, 6).toString("ascii"))) return expected;
+    if (expected === "image/webp" && bytes.subarray(0, 4).toString("ascii") === "RIFF" && bytes.subarray(8, 12).toString("ascii") === "WEBP") return expected;
+    return "application/octet-stream";
+  } finally {
+    await handle.close();
+  }
+}
+
 export class AttachmentStore {
   constructor(chatStore) {
     this.chatStore = chatStore;
@@ -49,7 +99,7 @@ export class AttachmentStore {
   }
 
   async list(project, chatId) {
-    const { attachments } = this.directories(project, chatId);
+    const { attachments } = await ensureChatTree(project, chatId);
     let entries = [];
     try { entries = await fsp.readdir(attachments, { withFileTypes: true }); }
     catch (error) { if (error.code === "ENOENT") return []; throw error; }
@@ -67,7 +117,7 @@ export class AttachmentStore {
         storedName: entry.name,
         size: stat.size,
         modifiedAt: stat.mtime.toISOString(),
-        type: mimeFor(match[2]),
+        type: await mimeForFile(file, match[2]),
       });
     }
     return items.sort((a, b) => a.modifiedAt.localeCompare(b.modifiedAt));
@@ -89,11 +139,11 @@ export class AttachmentStore {
 
   async write(project, chatId, attachmentId, suppliedName, readable) {
     if (!isAttachmentId(attachmentId)) throw Object.assign(new Error("Invalid attachment ID"), { code: "invalid_attachment_id" });
-    if (await this.resolve(project, chatId, attachmentId)) {
+    const existingAttachments = await this.list(project, chatId);
+    if (existingAttachments.some((item) => item.id === attachmentId.toLowerCase())) {
       throw Object.assign(new Error("That attachment ID already exists"), { code: "EEXIST" });
     }
-    const { attachments, partial } = this.directories(project, chatId);
-    await Promise.all([fsp.mkdir(attachments, { recursive: true }), fsp.mkdir(partial, { recursive: true })]);
+    const { attachments, partial } = await ensureChatTree(project, chatId);
     const name = safeAttachmentName(suppliedName);
     const storedName = `${attachmentId.toLowerCase()}--${name}`;
     const partPath = path.join(partial, `${attachmentId.toLowerCase()}.part`);
@@ -102,9 +152,20 @@ export class AttachmentStore {
     try {
       await pipeline(readable, stream);
       await fsp.rename(partPath, finalPath);
+      const workspaceWarning = existingAttachments.length === 0
+        ? await excludeConduitFromGit(project.path).catch(() => "Could not add .conduit/ to Git's local exclude file")
+        : null;
       this.chatStore.markAttachments(chatId, true);
       const stat = await fsp.stat(finalPath);
-      return { id: attachmentId.toLowerCase(), name, storedName, size: stat.size, modifiedAt: stat.mtime.toISOString(), type: mimeFor(name) };
+      return {
+        id: attachmentId.toLowerCase(),
+        name,
+        storedName,
+        size: stat.size,
+        modifiedAt: stat.mtime.toISOString(),
+        type: await mimeForFile(finalPath, name),
+        workspaceWarning,
+      };
     } catch (error) {
       stream.destroy();
       await fsp.rm(partPath, { force: true }).catch(() => {});
@@ -124,34 +185,17 @@ export class AttachmentStore {
   }
 
   async open(project, chatId, attachmentId) {
-    let item = await this.resolve(project, chatId, attachmentId);
-    let ownerChatId = chatId;
-    // Envelope paths can outlive chat remaps; fall back to any chat under this project.
-    if (!item && project?.path && isAttachmentId(attachmentId)) {
-      const found = await this.findInProject(project, attachmentId);
-      if (found) {
-        item = found.item;
-        ownerChatId = found.chatId;
-      }
-    }
+    const item = await this.resolve(project, chatId, attachmentId);
     if (!item) return null;
-    const file = path.join(this.directories(project, ownerChatId).attachments, item.storedName);
+    const file = path.join(this.directories(project, chatId).attachments, item.storedName);
     const stat = await fsp.lstat(file);
     if (!stat.isFile() || stat.isSymbolicLink()) return null;
-    return { ...item, chatId: ownerChatId, file, stream: () => fs.createReadStream(file) };
-  }
-
-  async findInProject(project, attachmentId) {
-    const root = path.join(project.path, ".conduit", "chats");
-    let chatDirs = [];
-    try { chatDirs = await fsp.readdir(root, { withFileTypes: true }); }
-    catch (error) { if (error.code === "ENOENT") return null; throw error; }
-    for (const entry of chatDirs) {
-      if (!entry.isDirectory()) continue;
-      const item = await this.resolve(project, entry.name, attachmentId);
-      if (item) return { chatId: entry.name, item };
-    }
-    return null;
+    return {
+      ...item,
+      chatId,
+      file,
+      stream: () => fs.createReadStream(file, { flags: constants.O_RDONLY | (constants.O_NOFOLLOW || 0) }),
+    };
   }
 }
 

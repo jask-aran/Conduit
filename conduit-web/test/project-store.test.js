@@ -77,12 +77,100 @@ test("links allow-listed directories without deleting them on unregister", async
   const linked = await store.create({ mode: "linked", name: "External", path: external });
   assert.equal(linked.origin, "linked");
   assert.equal(linked.path, external);
-  assert.equal(linked.defaultTemplateId, "workspace");
+  assert.equal(linked.defaultTemplateId, null);
+  assert.equal((await store.update(linked.id, { defaultTemplateId: "workspace" })).defaultTemplateId, "workspace");
+  assert.equal((await store.update(linked.id, { defaultTemplateId: "host-pi" })).defaultTemplateId, "host-pi");
+  assert.equal((await store.update(linked.id, { defaultTemplateId: null })).defaultTemplateId, null);
   assert.equal(linked.deletesFilesOnRemove, false);
+  await fs.writeFile(path.join(external, ".conduit", "user-owned.txt"), "keep");
   await store.remove(linked.id);
   assert.equal(await fs.readFile(path.join(external, "README.md"), "utf8"), "hello");
+  assert.equal(await fs.readFile(path.join(external, ".conduit", "user-owned.txt"), "utf8"), "keep");
   assert.equal(await store.get(linked.id), null);
   await assert.rejects(store.create({ mode: "linked", path: path.join(root, "nope") }), { code: "path_not_found" });
+  await fs.rm(root, { recursive: true, force: true });
+});
+
+test("migrates implicit Workspace profile defaults to global inheritance", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-project-default-migration-"));
+  const external = path.join(root, "external");
+  const catalogFile = path.join(root, "data/conduit.json");
+  await fs.mkdir(external);
+  await fs.mkdir(path.dirname(catalogFile), { recursive: true });
+  await fs.writeFile(catalogFile, `${JSON.stringify({
+    version: 1,
+    projects: [{
+      id: "project_external",
+      slug: "external",
+      name: "External",
+      kind: "workspace",
+      origin: "linked",
+      externalPath: external,
+      defaultTemplateId: "workspace",
+      createdAt: "2026-01-01T00:00:00.000Z",
+    }],
+  })}\n`);
+  const store = new ProjectStore({
+    filesRoot: path.join(root, "data/chat/files"),
+    catalogFile,
+    piAgentDir: path.join(root, "data/pi"),
+    workspaceAllowlist: [root],
+  });
+
+  await store.initialize();
+
+  assert.equal((await store.get("project_external")).defaultTemplateId, null);
+  assert.equal(JSON.parse(await fs.readFile(catalogFile, "utf8")).version, 2);
+  await fs.rm(root, { recursive: true, force: true });
+});
+
+test("linked workspace cannot alias an existing managed working root", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-project-alias-"));
+  const store = new ProjectStore({
+    filesRoot: path.join(root, "data/chat/files"),
+    catalogFile: path.join(root, "data/conduit.json"),
+    piAgentDir: path.join(root, "data/pi"),
+    workspaceAllowlist: [root],
+  });
+  await store.initialize();
+  const managed = await store.create({ name: "Existing" });
+  await assert.rejects(store.create({ mode: "linked", path: managed.path }), { code: "workspace_already_linked" });
+  await fs.rm(root, { recursive: true, force: true });
+});
+
+test("linking rejects a pre-existing symlinked Conduit metadata root", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-project-symlink-"));
+  const external = path.join(root, "external");
+  const outside = path.join(root, "outside");
+  await fs.mkdir(external);
+  await fs.mkdir(outside);
+  await fs.symlink(outside, path.join(external, ".conduit"));
+  const store = new ProjectStore({
+    filesRoot: path.join(root, "data/chat/files"),
+    catalogFile: path.join(root, "data/conduit.json"),
+    piAgentDir: path.join(root, "data/pi"),
+    workspaceAllowlist: [root],
+  });
+  await store.initialize();
+  await assert.rejects(store.create({ mode: "linked", path: external }), { code: "unsafe_conduit_path" });
+  await fs.rm(root, { recursive: true, force: true });
+});
+
+test("missing linked workspaces can be forgotten without touching a replacement path", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-project-forget-"));
+  const external = path.join(root, "external");
+  await fs.mkdir(external);
+  const store = new ProjectStore({
+    filesRoot: path.join(root, "data/chat/files"),
+    catalogFile: path.join(root, "data/conduit.json"),
+    piAgentDir: path.join(root, "data/pi"),
+    workspaceAllowlist: [root],
+  });
+  await store.initialize();
+  const linked = await store.create({ mode: "linked", path: external });
+  await fs.rm(external, { recursive: true });
+  await store.remove(linked.id, { skipWorkingTree: true });
+  assert.equal(await store.get(linked.id), null);
   await fs.rm(root, { recursive: true, force: true });
 });
 
@@ -132,7 +220,7 @@ async function initGitRepo(source) {
   git(["commit", "-m", "init"]);
 }
 
-test("clones a repository into the managed files root", async () => {
+test("clones a repository into a user-selected non-owning workspace path", async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-project-clone-"));
   const source = path.join(root, "source");
   await initGitRepo(source);
@@ -144,10 +232,15 @@ test("clones a repository into the managed files root", async () => {
     workspaceAllowlist: [root],
   });
   await store.initialize();
-  const cloned = await store.create({ mode: "cloned", name: "Cloned App", cloneUrl: source });
+  const target = path.join(root, "workspaces", "cloned-app");
+  await fs.mkdir(path.dirname(target));
+  const cloned = await store.create({ mode: "cloned", name: "Cloned App", cloneUrl: source, path: target });
   assert.equal(cloned.origin, "cloned");
-  assert.equal(cloned.path, path.join(root, "data/chat/files", "cloned-app"));
+  assert.equal(cloned.path, target);
+  assert.equal(cloned.deletesFilesOnRemove, false);
   assert.equal(await fs.readFile(path.join(cloned.path, "app.js"), "utf8"), "console.log(1)\n");
+  await store.remove(cloned.id);
+  assert.equal(await fs.readFile(path.join(target, "app.js"), "utf8"), "console.log(1)\n");
   await fs.rm(root, { recursive: true, force: true });
 });
 
@@ -163,15 +256,35 @@ test("concurrent clones with the same name get distinct slugs and keep both tree
     workspaceAllowlist: [root],
   });
   await store.initialize();
+  const firstTarget = path.join(root, "workspace-one");
+  const secondTarget = path.join(root, "workspace-two");
 
   const [first, second] = await Promise.all([
-    store.create({ mode: "cloned", name: "Race", cloneUrl: source }),
-    store.create({ mode: "cloned", name: "Race", cloneUrl: source }),
+    store.create({ mode: "cloned", name: "Race", cloneUrl: source, path: firstTarget }),
+    store.create({ mode: "cloned", name: "Race", cloneUrl: source, path: secondTarget }),
   ]);
   assert.notEqual(first.slug, second.slug);
   assert.equal(await fs.readFile(path.join(first.path, "app.js"), "utf8"), "console.log(1)\n");
   assert.equal(await fs.readFile(path.join(second.path, "app.js"), "utf8"), "console.log(1)\n");
   const listed = await store.list();
   assert.equal(listed.filter((item) => item.origin === "cloned").length, 2);
+  await fs.rm(root, { recursive: true, force: true });
+});
+
+test("clone requires an absolute user-selected target and rejects git protocol", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-project-clone-policy-"));
+  const store = new ProjectStore({
+    filesRoot: path.join(root, "data/chat/files"),
+    catalogFile: path.join(root, "data/conduit.json"),
+    piAgentDir: path.join(root, "data/pi"),
+    workspaceAllowlist: [root],
+  });
+  await store.initialize();
+  await assert.rejects(store.create({ mode: "cloned", cloneUrl: "https://github.com/org/repo.git" }), {
+    code: "workspace_path_required",
+  });
+  await assert.rejects(store.create({ mode: "cloned", cloneUrl: "git://github.com/org/repo.git", path: path.join(root, "repo") }), {
+    code: "clone_url_not_allowed",
+  });
   await fs.rm(root, { recursive: true, force: true });
 });

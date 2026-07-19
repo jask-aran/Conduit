@@ -75,6 +75,7 @@ export function AppSidebar({
   onNewChat,
   onOpenSession,
   onOpenSettings,
+  onOpenWorkspaceSettings,
   onRenameProject,
   onRenameSession,
 }) {
@@ -114,6 +115,12 @@ export function AppSidebar({
       onCommandHandled?.();
       return;
     }
+    if (commandRequest.type === "new-chat") {
+      const project = projects.find((item) => item.id === (commandRequest.projectId || projectId)) || chatsProject;
+      chooseNewChat(project);
+      onCommandHandled?.();
+      return;
+    }
     if (!selectedTarget) return;
     if (commandRequest.type === "rename") requestRename({ type: "session", ...selectedTarget });
     if (commandRequest.type === "rename-folder") {
@@ -134,9 +141,9 @@ export function AppSidebar({
     onOpenSession(session, project);
   };
 
-  const chooseNewChat = (project = chatsProject) => {
+  const chooseNewChat = (project = chatsProject, options = null) => {
     setOpenMobile(false);
-    onNewChat(project);
+    onNewChat(project, options || {});
   };
 
   const chooseSettings = () => {
@@ -180,12 +187,12 @@ export function AppSidebar({
     const cloneUrl = newFolderCloneUrl.trim();
     if (newFolderMode === "managed" && !name) return;
     if (newFolderMode === "linked" && !pathValue) return;
-    if (newFolderMode === "cloned" && !cloneUrl) return;
+    if (newFolderMode === "cloned" && (!cloneUrl || !pathValue)) return;
     const payload = newFolderMode === "managed"
       ? { mode: "managed", name }
       : newFolderMode === "linked"
-        ? { mode: "linked", name: name || undefined, path: pathValue, defaultTemplateId: "workspace" }
-        : { mode: "cloned", name: name || undefined, cloneUrl, defaultTemplateId: "workspace" };
+        ? { mode: "linked", name: name || undefined, path: pathValue }
+        : { mode: "cloned", name: name || undefined, cloneUrl, path: pathValue };
     setNewFolderSubmitting(true);
     try {
       if (!await onAddProject(payload)) return;
@@ -205,7 +212,7 @@ export function AppSidebar({
       ? Boolean(newFolderName.trim())
       : newFolderMode === "linked"
         ? Boolean(newFolderPath.trim())
-        : Boolean(newFolderCloneUrl.trim())
+        : Boolean(newFolderCloneUrl.trim() && newFolderPath.trim())
   );
 
   return <>
@@ -271,6 +278,7 @@ export function AppSidebar({
           onMoveSession={onMoveSession}
           onNewChat={chooseNewChat}
           onOpenSession={chooseSession}
+          onOpenProjectSettings={onOpenWorkspaceSettings}
           onRenameProject={(project) => requestRename({ type: "project", project })}
           onRenameSession={(session, project) => requestRename({ type: "session", session, project })}
           onDeleteProject={(project) => setPendingDelete({ type: "project", project })}
@@ -297,7 +305,7 @@ export function AppSidebar({
               : pendingDelete.project.origin === "linked"
                 ? "Unlink this workspace?"
                 : pendingDelete.project.origin === "cloned"
-                  ? "Delete this workspace?"
+                  ? "Unlink this workspace?"
                   : "Delete this folder?"}
           </AlertDialogTitle>
           <AlertDialogDescription>
@@ -306,7 +314,7 @@ export function AppSidebar({
               : pendingDelete.project.origin === "linked"
                 ? `This unregisters ${pendingDelete.project.name} and deletes its Conduit chats. The linked directory on disk is kept.`
                 : pendingDelete.project.origin === "cloned"
-                  ? `This permanently deletes the cloned checkout for ${pendingDelete.project.name} and all of its chats.`
+                  ? `This unregisters ${pendingDelete.project.name} and deletes its Conduit chats. The cloned directory on disk is kept.`
                   : `This permanently deletes ${pendingDelete.project.name}, its working files, and all of its chats.`}
           </AlertDialogDescription>
         </AlertDialogHeader>
@@ -332,7 +340,7 @@ export function AppSidebar({
             <DialogTitle>{newProjectDialog === "workspace" ? "New workspace" : "New folder"}</DialogTitle>
             <DialogDescription>
               {newProjectDialog === "workspace"
-                ? "Link an existing allow-listed directory or clone a repository into Conduit."
+                ? "Link an existing allow-listed directory or clone a repository into a chosen host directory."
                 : "Create a separate managed working directory and chat scope."}
             </DialogDescription>
           </DialogHeader>
@@ -361,16 +369,16 @@ export function AppSidebar({
                 placeholder={newFolderMode === "managed" ? "Research" : "My project"}
               />
             </Field>
-            {newFolderMode === "linked" && <Field>
-              <FieldLabel htmlFor="folder-path">Absolute path</FieldLabel>
+            {(newFolderMode === "linked" || newFolderMode === "cloned") && <Field>
+              <FieldLabel htmlFor="folder-path">{newFolderMode === "cloned" ? "Clone location" : "Absolute path"}</FieldLabel>
               <Input
                 id="folder-path"
-                autoFocus
+                autoFocus={newFolderMode === "linked"}
                 list="workspace-path-suggestions"
                 value={newFolderPath}
                 disabled={newFolderSubmitting}
                 onChange={(event) => setNewFolderPath(event.target.value)}
-                placeholder="~/code/my-repo"
+                placeholder={newFolderMode === "cloned" ? "~/code/new-repo" : "~/code/my-repo"}
               />
               <datalist id="workspace-path-suggestions">
                 {workspaceSuggestions.map((folder) => (

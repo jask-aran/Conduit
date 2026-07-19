@@ -25,6 +25,7 @@ export const PALETTE_GROUPS = [
 export const SETTINGS_SECTIONS = [
   { id: "models", label: "Models", keywords: ["model", "llm", "provider"] },
   { id: "profiles", label: "Profiles", keywords: ["template", "tools", "workspace", "general", "agent"] },
+  { id: "workspaces", label: "Workspaces", keywords: ["workspace", "folder", "default", "profile"] },
   { id: "runtime", label: "Runtime", keywords: ["processes", "pool", "idle", "generation"] },
   { id: "general", label: "General", keywords: ["preferences"] },
   { id: "appearance", label: "Appearance", keywords: ["theme", "display", "ui"] },
@@ -245,7 +246,7 @@ export const composerCommands = [{
 
 const NAV_CHAT_LIMIT = 25;
 
-function settingsSectionCommands() {
+function settingsSectionCommands(context = {}) {
   return SETTINGS_SECTIONS.map((section) => ({
     id: `settings:${section.id}`,
     group: "settings",
@@ -256,7 +257,9 @@ function settingsSectionCommands() {
     keywords: ["settings", "preferences", section.label, ...section.keywords],
     searchValue: `settings ${section.label} ${section.keywords.join(" ")}`,
     isAvailable: () => true,
-    run: (actions) => actions.settings(section.id),
+    run: (actions) => section.id === "workspaces" && context.project?.kind === "workspace"
+      ? actions.workspaceSettings?.(context.project.id)
+      : actions.settings(section.id),
   }));
 }
 
@@ -308,7 +311,7 @@ function folderCommands(context) {
 export const paletteSources = [{
   id: "settings-sections",
   page: "settings",
-  commands: () => settingsSectionCommands(),
+  commands: settingsSectionCommands,
 }, {
   id: "profiles",
   page: null,

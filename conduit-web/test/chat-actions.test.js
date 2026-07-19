@@ -55,6 +55,19 @@ test("root search never leaks page children", () => {
 test("settings page lists sections only", () => {
   const page = resolvePaletteCommands({}, { page: "settings" });
   assert.deepEqual(page.map((command) => command.id), SETTINGS_SECTIONS.map((section) => `settings:${section.id}`));
+  assert.ok(page.some((command) => command.id === "settings:workspaces"));
+});
+
+test("Workspace settings command targets the current Workspace", () => {
+  const command = resolvePaletteCommands({
+    project: { id: "project_workspace", kind: "workspace" },
+  }, { page: "settings" }).find((item) => item.id === "settings:workspaces");
+  const calls = [];
+  command.run({
+    workspaceSettings: (id) => calls.push(["workspace", id]),
+    settings: (section) => calls.push(["settings", section]),
+  });
+  assert.deepEqual(calls, [["workspace", "project_workspace"]]);
 });
 
 test("palette exposes chat actions only when a chat is selected", () => {

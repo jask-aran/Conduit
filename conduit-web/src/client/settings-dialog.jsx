@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
-import { BotIcon, CircleHelpIcon, CpuIcon, LayersIcon, LinkIcon, MonitorIcon, Settings2Icon } from "lucide-react";
+import { BotIcon, CircleHelpIcon, CpuIcon, FolderCogIcon, LayersIcon, LinkIcon, MonitorIcon, Settings2Icon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
@@ -10,6 +11,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
   SelectTrigger,
   SelectValue,
@@ -22,6 +24,7 @@ import { ModelScopeCombobox } from "./model-picker";
 const sections = [
   { id: "models", label: "Models", short: "Models", icon: BotIcon },
   { id: "profiles", label: "Profiles", short: "Profiles", icon: LayersIcon },
+  { id: "workspaces", label: "Workspaces", short: "Workspaces", icon: FolderCogIcon },
   { id: "runtime", label: "Runtime", short: "Runtime", icon: CpuIcon },
   { id: "general", label: "General", short: "General", icon: Settings2Icon },
   { id: "appearance", label: "Appearance", short: "Display", icon: MonitorIcon },
@@ -35,7 +38,7 @@ function Placeholder({ title }) {
   </Empty>;
 }
 
-function RuntimeSettings() {
+function RuntimeSettings({ installations = [], onInstallationsChange, onHostUnavailable, onManageModels }) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -44,6 +47,7 @@ function RuntimeSettings() {
   const [idleMinutes, setIdleMinutes] = useState(2);
   const [liveCount, setLiveCount] = useState(0);
   const [generatingCount, setGeneratingCount] = useState(0);
+  const [detecting, setDetecting] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -99,14 +103,65 @@ function RuntimeSettings() {
     }
   }
 
+  async function detectHostPi() {
+    setDetecting(true);
+    setError("");
+    try {
+      const response = await fetch("/v0/pi-installations/host/detect", { method: "POST" });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(body.message || body.error || "Could not detect host Pi");
+      onInstallationsChange?.((current) => [...current.filter((item) => item.id !== body.id), body]);
+      if (!body.available) onHostUnavailable?.();
+    } catch (caught) {
+      setError(caught.message);
+    } finally {
+      setDetecting(false);
+    }
+  }
+
   if (loading) return <div className="flex items-center gap-2 text-sm text-muted-foreground"><Spinner />Loading runtime settings…</div>;
 
   return <>
     <div className="settings-section-heading">
       <h2>Runtime</h2>
-      <p>Keep many chats warm; limit how many agent loops run at once. Idle warms reclaim after you leave.</p>
+      <p>Inspect the Pi installations Conduit can launch, then configure shared process limits.</p>
     </div>
     <FieldGroup>
+      <Field>
+        <FieldLabel>Pi installations</FieldLabel>
+        <div className="flex flex-col gap-2">
+          {installations.map((installation) => <Card key={installation.id} size="sm">
+            <CardHeader>
+              <div className="flex items-center justify-between gap-3">
+                <CardTitle>{installation.label}</CardTitle>
+                <Badge variant={installation.available ? "secondary" : "outline"}>{installation.available ? "Available" : "Unavailable"}</Badge>
+              </div>
+              <CardDescription>
+                {installation.id === "host-pi"
+                  ? "Detected and owned by the server user's host environment. Conduit does not manage its authentication, packages, or model scope."
+                  : "Bundled and isolated by Conduit. Profiles and model scope use Conduit's private Pi home."}
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-1 text-xs">
+              <span><strong>Version:</strong> {installation.version ? `Pi ${installation.version}` : installation.error || "Unavailable"}</span>
+              <span className="break-all"><strong>Executable:</strong> {installation.executablePath || "Not detected"}</span>
+              <span className="break-all"><strong>Agent home:</strong> {installation.agentHome?.path || "Unknown"} ({installation.agentHome?.source || "unknown"})</span>
+              <span><strong>Capabilities:</strong> {Object.values(installation.capabilities || {}).filter(Boolean).length}/{Object.keys(installation.capabilities || {}).length || 0} required</span>
+              <span className="break-all"><strong>Scoped models:</strong> {installation.models?.enabledModels?.join(", ") || "None available"}</span>
+              <span className="break-all"><strong>Default:</strong> {installation.models?.defaultModel || "None"}</span>
+            </CardContent>
+            <CardFooter>
+              {installation.id === "host-pi"
+                ? <Button type="button" variant="outline" disabled={detecting} onClick={detectHostPi}>
+                    {detecting && <Spinner data-icon="inline-start" />}
+                    {detecting ? "Detecting…" : "Re-detect Host Pi"}
+                  </Button>
+                : <Button type="button" variant="outline" onClick={onManageModels}>Manage Isolated Pi models</Button>}
+            </CardFooter>
+          </Card>)}
+        </div>
+      </Field>
+      <Field><FieldLabel>Process limits</FieldLabel><FieldDescription>These limits are shared by Isolated Pi and Host Pi.</FieldDescription></Field>
       <Field>
         <FieldLabel className="justify-between">
           Max warm Pi processes
@@ -227,7 +282,7 @@ function ProfileSettings({
           </SelectContent>
         </Select>
         <FieldDescription>
-          Command palette and New chat use this default. Linked and cloned workspaces default to Workspace.
+          Command palette and New chat use this default. Workspaces inherit it unless their Workspaces setting overrides it.
         </FieldDescription>
       </Field>
       {active && <Field>
@@ -275,6 +330,82 @@ function ProfileSettings({
   </>;
 }
 
+function WorkspaceSettings({
+  projects = [],
+  templates = [],
+  defaultTemplateId = "chat",
+  initialWorkspaceId = null,
+  installations = [],
+  onWorkspaceDefaultChange,
+}) {
+  const [savingId, setSavingId] = useState(null);
+  const [error, setError] = useState("");
+  const workspaces = projects.filter((project) => ["linked", "cloned"].includes(project.origin));
+  const profiles = templates.filter((template) => template.defaultable !== false && template.special !== true);
+  const globalProfile = profiles.find((template) => template.id === defaultTemplateId) || profiles[0];
+  const hostAvailable = installations.find((installation) => installation.id === "host-pi")?.available === true;
+
+  useEffect(() => {
+    if (!initialWorkspaceId) return;
+    requestAnimationFrame(() => document.getElementById(`workspace-setting-${initialWorkspaceId}`)?.scrollIntoView({ block: "nearest" }));
+  }, [initialWorkspaceId]);
+
+  async function changeDefault(project, value) {
+    setSavingId(project.id);
+    setError("");
+    try {
+      await onWorkspaceDefaultChange?.(project.id, value === "inherit" ? null : value);
+    } catch (caught) {
+      setError(caught.message);
+    } finally {
+      setSavingId(null);
+    }
+  }
+
+  return <>
+    <div className="settings-section-heading">
+      <h2>Workspaces</h2>
+      <p>Workspace chats inherit the global profile unless that Workspace has an explicit override.</p>
+    </div>
+    {workspaces.length === 0 ? <Empty>
+      <EmptyHeader><EmptyTitle>No Workspaces</EmptyTitle><EmptyDescription>Link or clone a Workspace to configure its default profile.</EmptyDescription></EmptyHeader>
+    </Empty> : <div className="flex flex-col gap-3">
+      {workspaces.map((project) => {
+        const selected = project.defaultTemplateId || "inherit";
+        const selectedProfile = project.defaultTemplateId === "host-pi"
+          ? { label: "Host Pi" }
+          : profiles.find((template) => template.id === project.defaultTemplateId);
+        return <Card key={project.id} id={`workspace-setting-${project.id}`} size="sm">
+          <CardHeader>
+            <CardTitle>{project.name}</CardTitle>
+            <CardDescription className="break-all">{project.path || project.externalPath}</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Field>
+              <FieldLabel htmlFor={`workspace-profile-${project.id}`}>Default profile</FieldLabel>
+              <Select value={selected} disabled={savingId === project.id} onValueChange={(value) => changeDefault(project, value)}>
+                <SelectTrigger id={`workspace-profile-${project.id}`} className="w-full"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectGroup>
+                    <SelectItem value="inherit">Inherit global ({globalProfile?.label || "General"})</SelectItem>
+                    {profiles.map((profile) => <SelectItem key={profile.id} value={profile.id}>{profile.label || profile.id}</SelectItem>)}
+                    <SelectItem value="host-pi" disabled={!hostAvailable}>Host Pi{hostAvailable ? "" : " (unavailable)"}</SelectItem>
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+              <FieldDescription>Applies to new chats only. Existing chats keep their selected profile.</FieldDescription>
+            </Field>
+          </CardContent>
+          <CardFooter>
+            <Badge variant="secondary">{selectedProfile ? `Override: ${selectedProfile.label}` : `Inherits ${globalProfile?.label || "global"}`}</Badge>
+          </CardFooter>
+        </Card>;
+      })}
+    </div>}
+    {error && <p className="text-destructive mt-3 text-sm">{error}</p>}
+  </>;
+}
+
 export function SettingsDialog({
   open,
   onOpenChange,
@@ -284,6 +415,12 @@ export function SettingsDialog({
   defaultTemplateId = "chat",
   onDefaultTemplateChange,
   onOpenRuntimeChat,
+  installations = [],
+  onInstallationsChange,
+  projects = [],
+  initialWorkspaceId = null,
+  onWorkspaceDefaultChange,
+  onHostUnavailable,
 }) {
   const [section, setSection] = useState(initialSection);
   const [enabled, setEnabled] = useState(modelSettings.enabledModels);
@@ -293,6 +430,18 @@ export function SettingsDialog({
   useEffect(() => { if (open) setSection(initialSection); }, [initialSection, open]);
   useEffect(() => { setEnabled(modelSettings.enabledModels); }, [modelSettings.enabledModels]);
   useEffect(() => { setScopeOpen(open && section === "models" && !modelSettings.loading); }, [modelSettings.loading, open, section]);
+  useEffect(() => {
+    if (!open || section !== "runtime" || !onInstallationsChange) return;
+    let active = true;
+    fetch("/v0/pi-installations")
+      .then((response) => response.json().then((body) => ({ response, body })))
+      .then(({ response, body }) => {
+        if (!response.ok) throw new Error(body.message || body.error || "Could not load Pi installations");
+        if (active) onInstallationsChange(body.installations || []);
+      })
+      .catch(() => {});
+    return () => { active = false; };
+  }, [onInstallationsChange, open, section]);
 
   return <Dialog open={open} onOpenChange={onOpenChange}>
     <DialogContent
@@ -306,7 +455,7 @@ export function SettingsDialog({
     >
       <DialogHeader className="settings-dialog-header">
         <DialogTitle>Settings</DialogTitle>
-        <DialogDescription>Configure the isolated Pi runtime used by Conduit.</DialogDescription>
+        <DialogDescription>Configure Conduit profiles, Pi installations, models, and process limits.</DialogDescription>
       </DialogHeader>
       <Tabs value={section} onValueChange={setSection} orientation="vertical" activationMode="manual" className="settings-tabs">
         <TabsList variant="line" aria-label="Settings sections" className="settings-rail">
@@ -319,7 +468,7 @@ export function SettingsDialog({
         </TabsList>
         <ScrollArea className="settings-panel">
           <TabsContent value="models">
-            <div className="settings-section-heading"><h2>Models</h2><p>Choose the models available in Conduit. Pi and the terminal share this saved scope.</p></div>
+            <div className="settings-section-heading"><h2>Isolated Pi models</h2><p>Choose the models available to ordinary profiles. Isolated Pi and the Conduit terminal launcher share this saved scope; Host Pi remains host-owned.</p></div>
             {modelSettings.loading ? <div className="flex items-center gap-2 text-sm text-muted-foreground"><Spinner />Loading models…</div>
               : modelSettings.allModels.length > 0 ? <FieldGroup>
                 <Field>
@@ -357,8 +506,18 @@ export function SettingsDialog({
               onOpenRuntimeChat={onOpenRuntimeChat}
             />
           </TabsContent>
-          <TabsContent value="runtime"><RuntimeSettings /></TabsContent>
-          {sections.filter((item) => !["models", "profiles", "runtime"].includes(item.id)).map((item) => (
+          <TabsContent value="workspaces">
+            <WorkspaceSettings
+              projects={projects}
+              templates={templates}
+              defaultTemplateId={defaultTemplateId}
+              initialWorkspaceId={initialWorkspaceId}
+              installations={installations}
+              onWorkspaceDefaultChange={onWorkspaceDefaultChange}
+            />
+          </TabsContent>
+          <TabsContent value="runtime"><RuntimeSettings installations={installations} onInstallationsChange={onInstallationsChange} onHostUnavailable={onHostUnavailable} onManageModels={() => setSection("models")} /></TabsContent>
+          {sections.filter((item) => !["models", "profiles", "workspaces", "runtime"].includes(item.id)).map((item) => (
             <TabsContent key={item.id} value={item.id}><Placeholder title={item.label} /></TabsContent>
           ))}
         </ScrollArea>

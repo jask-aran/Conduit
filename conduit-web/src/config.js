@@ -3,6 +3,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { listPiTemplates, loadPiTemplate } from "../../scripts/pi-runtime.mjs";
 import { expandHome, parseAllowlist } from "./workspace-paths.js";
+import { PiInstallationRegistry } from "./pi-installations.js";
 
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 
@@ -27,16 +28,28 @@ export function loadConfig(env = process.env) {
   const workspaceAllowlist = parseAllowlist(env.CONDUIT_WORKSPACE_ALLOWLIST, {
     fallback: [os.homedir(), repositoryRoot, filesRoot],
   });
+  const piAgentDir = absolute(env.CONDUIT_PI_AGENT_DIR || path.join(repositoryRoot, "data/pi"));
+  const installations = new PiInstallationRegistry({
+    conduitAgentDir: piAgentDir,
+    conduitCommand: env.CONDUIT_PI_COMMAND || "",
+    nativeCommand: env.CONDUIT_NATIVE_PI_COMMAND || "",
+    nativeAgentDir: env.CONDUIT_NATIVE_PI_AGENT_DIR || "",
+  });
   return {
     host: env.CONDUIT_HOST || env.HOST || "127.0.0.1",
     port: Number(env.CONDUIT_PORT || env.PORT || 4310),
-    piCommand: env.PI_COMMAND || "pi",
+    piCommand: installations.get("conduit-pinned").command,
     repositoryRoot,
+    dataRoot,
     filesRoot,
     catalogFile: absolute(env.CONDUIT_CATALOG_FILE || path.join(repositoryRoot, "data/conduit.json")),
     sessionRegistryFile: absolute(env.CONDUIT_SESSION_REGISTRY_FILE || path.join(repositoryRoot, "data/sessions.json")),
     preferencesFile: absolute(env.CONDUIT_PREFERENCES_FILE || path.join(dataRoot, "preferences.json")),
-    piAgentDir: absolute(env.CONDUIT_PI_AGENT_DIR || path.join(repositoryRoot, "data/pi")),
+    piAgentDir,
+    installations,
+    defaultInstallationId: "conduit-pinned",
+    bridgeSystemPrompt: path.join(templatesRoot, "conduit-workspace", "SYSTEM.md"),
+    bridgeSkill: path.join(templatesRoot, "conduit-workspace", "SKILL.md"),
     runtimeSettingsFile: absolute(env.CONDUIT_RUNTIME_SETTINGS_FILE || path.join(dataRoot, "runtime.json")),
     templatesRoot,
     workspaceAllowlist,
