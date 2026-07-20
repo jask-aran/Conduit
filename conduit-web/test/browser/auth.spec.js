@@ -41,10 +41,6 @@ async function spawnAuthServer({ password }) {
   const authFile = path.join(root, "auth.json");
   const store = new AuthStore(authFile);
   if (password) await store.setPassword(password);
-  const dist = path.resolve(import.meta.dirname, "../../dist");
-  if (!await fs.access(path.join(dist, "index.html")).then(() => true).catch(() => false)) {
-    throw new Error("Conduit dist is not built; run `npm run build` before the auth browser spec.");
-  }
   const child = spawn(process.execPath, ["src/server.js"], {
     cwd: path.resolve(import.meta.dirname, "../.."),
     stdio: ["ignore", "pipe", "pipe"],
@@ -85,7 +81,7 @@ async function stop(server) {
 }
 
 const test = base.extend({ server: async ({}, use) => {
-  const server = await spawnAuthServer({ password: "secret" });
+  const server = await spawnAuthServer({ password: "fixture-pw" });
   await use(server);
   await stop(server);
 }});
@@ -114,7 +110,7 @@ test.beforeEach(async ({ page, server }) => {
 test("unauthenticated visit lands on /login; wrong password surfaces an error", async ({ page, server }) => {
   await page.goto(server.origin, { waitUntil: "domcontentloaded" });
   await expect(page).toHaveURL(/\/login$/);
-  await page.getByLabel("Password").fill("nope");
+  await page.getByLabel("Password").fill("fixture-wrong");
   await page.getByRole("button", { name: "Sign in" }).click();
   await expect(page.getByRole("alert")).toContainText(/Incorrect password/);
 });
@@ -122,7 +118,7 @@ test("unauthenticated visit lands on /login; wrong password surfaces an error", 
 test("correct password reaches the app, reload stays authenticated, logout returns to /login", async ({ page, server, isMobile }) => {
   test.skip(isMobile, "sidebar footer is rendered behind the mobile sheet; covered by the desktop run");
   await page.goto(server.origin, { waitUntil: "domcontentloaded" });
-  await page.getByLabel("Password").fill("secret");
+  await page.getByLabel("Password").fill("fixture-pw");
   await page.getByRole("button", { name: "Sign in" }).click();
   await expect(page).toHaveURL(server.origin + "/");
 
