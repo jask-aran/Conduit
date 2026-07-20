@@ -291,6 +291,11 @@ export function AppSidebar({
           onOpenSettings={chooseSettings}
           connectivity={connectivity}
           onRetryConnection={onRetryConnection}
+          onLogout={() => {
+            fetch("/v0/auth/logout", { method: "POST" })
+              .catch(() => {})
+              .finally(() => { location.href = "/login"; });
+          }}
         />
       </SidebarFooter>
       <SidebarRail />

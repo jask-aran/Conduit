@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
 import {
   ArrowLeftIcon, BrainIcon, CopyIcon, FilePlus2Icon, FolderInputIcon, FolderPlusIcon,
-  LayersIcon, MessageSquareIcon, MessageSquarePlusIcon, PanelLeftIcon, PencilIcon,
+  LayersIcon, LogOutIcon, MessageSquareIcon, MessageSquarePlusIcon, PanelLeftIcon, PencilIcon,
   PlayIcon, RefreshCwIcon, SettingsIcon, SlidersHorizontalIcon, SquareIcon,
   Trash2Icon,
 } from "lucide-react";
@@ -37,6 +37,7 @@ const icons = {
   retry: RefreshCwIcon,
   reload: RefreshCwIcon,
   back: ArrowLeftIcon,
+  logout: LogOutIcon,
 };
 
 const GROUP_HEADINGS = {

@@ -10,6 +10,9 @@ data/sessions.json
 data/sessions.json.tmp
 data/runtime.json
 data/runtime.json.*.tmp
+data/auth.json
+data/auth.json.*.tmp
+data/preferences.json
 conduit-web/dist/
 conduit-web/playwright-report/
 conduit-web/test-results/
