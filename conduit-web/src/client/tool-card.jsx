@@ -5,20 +5,20 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
 import { getToolRenderer, registerTimelineItemRenderer, setDefaultToolRenderer } from "./tool-registry.js";
-import { formatToolDuration, previewValue, summarizeTool } from "./tool-summary.js";
+import { formatToolDuration, previewToolValue, summarizeTool, toolResultPreviewDirection } from "./tool-summary.js";
 
 // Same lazy convention as chat-thread.jsx's ChatMarkdown: the JSON
 // pretty-printer pulls in the shared shiki-highlight.js singleton, so it
 // only loads once a section is actually expanded.
 const ToolJsonBlock = lazy(() => import("./tool-json-block.jsx"));
 
-function ExpandableSection({ available, label, loading, onOpenChange, tone, value }) {
+function ExpandableSection({ available, direction = "head", fullLabel = "content", label, loading, onOpenChange, tone, value }) {
   const [open, setOpen] = useState(false);
   const [showFull, setShowFull] = useState(false);
   if (!available && (value == null || value === "")) return null;
   const isJson = typeof value !== "string";
-  const preview = previewValue(value);
-  const displayed = showFull ? previewValue(value, Number.POSITIVE_INFINITY).text : preview.text;
+  const preview = previewToolValue(value, { direction });
+  const displayed = showFull ? previewToolValue(value, { maxChars: Number.POSITIVE_INFINITY, maxLines: Number.POSITIVE_INFINITY }).text : preview.text;
   const updateOpen = (nextOpen) => {
     setOpen(nextOpen);
     onOpenChange?.(nextOpen);
@@ -39,14 +39,21 @@ function ExpandableSection({ available, label, loading, onOpenChange, tone, valu
                 <ToolJsonBlock code={displayed} />
               </Suspense>
             : <pre className="overflow-x-auto whitespace-pre-wrap break-words p-2 text-xs">{displayed}</pre>}
-        {!loading && preview.truncated && <Button
-          variant="ghost"
-          size="sm"
-          className="m-1 text-xs"
-          onClick={() => setShowFull((current) => !current)}
-        >
-          {showFull ? "Show less" : "Show full content"}
-        </Button>}
+        {!loading && preview.truncated && <div className="flex flex-wrap items-center gap-1 px-1 pb-1 text-xs text-muted-foreground">
+          {!showFull && <span>
+            {preview.hiddenLines > 0
+              ? `${preview.hiddenLines} ${direction === "tail" ? "earlier" : "more"} lines hidden`
+              : `${preview.hiddenChars} characters hidden`}
+          </span>}
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-xs"
+            onClick={() => setShowFull((current) => !current)}
+          >
+            {showFull ? "Show preview" : `Show full ${fullLabel}`}
+          </Button>
+        </div>}
       </div>
     </CollapsibleContent>
   </Collapsible>;
@@ -110,9 +117,11 @@ export function ToolCard({ tool, sessionId }) {
       </Button>
     </CollapsibleTrigger>
     <CollapsibleContent className="tool-card-body space-y-1 pt-1">
-      <ExpandableSection label="Arguments" value={tool.args} />
+      <ExpandableSection fullLabel="arguments" label="Arguments" value={tool.args} />
       <ExpandableSection
         available={tool.resultDeferred || loading}
+        direction={toolResultPreviewDirection(tool)}
+        fullLabel="output"
         label={loading ? "Result (loading…)" : "Result"}
         loading={loading}
         onOpenChange={loadDeferredResult}
