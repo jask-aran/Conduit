@@ -70,6 +70,7 @@ input.on("line", (line) => {
       CONDUIT_CATALOG_FILE: path.join(root, "conduit.json"),
       CONDUIT_SESSION_REGISTRY_FILE: path.join(root, "sessions.json"),
       CONDUIT_PREFERENCES_FILE: path.join(root, "preferences.json"),
+      CONDUIT_AUTH_FILE: path.join(root, "auth.json"),
       CONDUIT_PI_AGENT_DIR: path.join(root, "pi"),
       CONDUIT_PI_COMMAND: conduitPi,
       CONDUIT_NATIVE_PI_COMMAND: nativePi,
