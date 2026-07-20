@@ -50,4 +50,7 @@ jobs:
       - name: Install Playwright browsers
         if: steps.playwright-cache.outputs.cache-hit != 'true'
         run: npx playwright install --with-deps chromium
-      - run: npm run test:browser
+      - run: npm run build
+      - env:
+          CONDUIT_ALLOW_INSECURE: "1"
+        run: npm run test:browser

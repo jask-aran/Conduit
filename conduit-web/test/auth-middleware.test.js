@@ -33,7 +33,7 @@ test("authStartupViolation rejects non-loopback + no password unless override is
   assert.equal(authStartupViolation(mockConfig("127.0.0.1"), store), null);
   assert.ok(authStartupViolation(mockConfig("0.0.0.0", false), store) instanceof Error);
   assert.equal(authStartupViolation(mockConfig("0.0.0.0", true), store), null);
-  await store.setPassword("pw");
+  await store.setPassword("fixture-pw");
   assert.equal(authStartupViolation(mockConfig("0.0.0.0", false), store), null);
   await fs.rm(root, { recursive: true, force: true });
 });
