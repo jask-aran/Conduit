@@ -117,6 +117,48 @@ that could replace it.
 
 ## Runtime API
 
+### Auth
+
+Every route below — plus the SPA bundle, every static asset, every upload, and
+every WebSocket upgrade — requires an authenticated session except the login flow.
+Provision one user, one password from the CLI:
+
+```bash
+node scripts/conduit-auth.mjs set-password     # hidden prompt, twice
+node scripts/conduit-auth.mjs reset-sessions   # sign out every device
+node scripts/conduit-auth.mjs status           # password set? session count?
+```
+
+Credentials live in `data/auth.json` (mode `0600`, atomic writes). Tokens are
+32-byte `crypto.randomBytes`, sent to the browser raw as the `conduit_session`
+cookie (`HttpOnly`, `SameSite=Lax`, `Secure` over HTTPS/X-Forwarded-Proto),
+30-day rolling expiry, capped at 20 stored sessions. The hashed session row
+(SHA-256) is the only thing persisted server-side.
+
+Enforcement is a single `requireAuth` middleware mounted before every other
+route and static handler, plus the WebSocket upgrade validator. The allowlist
+is just `GET /login`, `POST /v0/auth/login`, and `GET /healthz`. Logout
+(`POST /v0/auth/logout`) requires a valid session like any other route. Loopback
+binding without a configured password stays open for local dev; non-loopback
+binding refuses to start without a password or `CONDUIT_ALLOW_INSECURE=1`.
+Per-IP rate limiting is meaningless behind a tunnel, so `POST /v0/auth/login`
+applies a global cap: after five failures the next attempt is rejected with
+exponential backoff (5 s → 5 min); scrypt compare runs even on throttled paths
+so timing reveals nothing.
+
+- `GET /login` — server-rendered HTML form, no SPA code
+- `POST /v0/auth/login` — accepts `application/json` (SPA fetch) or
+  `application/x-www-form-urlencoded` (plain form POST); on success issues the
+  cookie and returns `303 → after` (form) or `{ ok, redirect }` (JSON). Wrong
+  password re-renders the page with an inline error (form) or returns `401`
+  JSON (fetch).
+- `POST /v0/auth/logout` — clears the current session row and cookie
+- `GET /v0/auth/status` — `{ hasPassword, authenticated, sessionCount }`
+- `POST /v0/auth/reset-sessions` — keeps the caller's token, signs out everyone
+  else
+
+### Application routes
+
 - `GET /healthz`
 - `GET /v0/capabilities`
 - `POST /v0/chats`

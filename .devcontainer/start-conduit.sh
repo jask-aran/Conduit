@@ -7,6 +7,9 @@ PID_FILE="$STATE_DIR/conduit.pid"
 LOG_FILE="$STATE_DIR/conduit.log"
 export CONDUIT_HOST="${CONDUIT_HOST:-0.0.0.0}"
 export CONDUIT_PORT="${CONDUIT_PORT:-4310}"
+# The dev container binds a non-loopback address; until a password is
+# provisioned via scripts/conduit-auth.mjs, allow insecure open access.
+export CONDUIT_ALLOW_INSECURE="${CONDUIT_ALLOW_INSECURE:-1}"
 export CONDUIT_FILES_ROOT="${CONDUIT_FILES_ROOT:-$ROOT/data/chat/files}"
 export CONDUIT_CATALOG_FILE="${CONDUIT_CATALOG_FILE:-$ROOT/data/conduit.json}"
 export CONDUIT_SESSION_REGISTRY_FILE="${CONDUIT_SESSION_REGISTRY_FILE:-$ROOT/data/sessions.json}"
