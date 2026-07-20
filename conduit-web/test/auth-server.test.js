@@ -90,7 +90,7 @@ async function stop({ child, root }) {
 }
 
 test("unauthenticated routes redirect or return 401; only the allowlist is public", async () => {
-  const server = await spawnServer({}, { password: "hunter2" });
+  const server = await spawnServer({}, { password: "fixture-pw" });
   const { origin } = server;
   try {
     // Allowlist is reachable without a cookie.
@@ -142,13 +142,13 @@ test("unauthenticated routes redirect or return 401; only the allowlist is publi
 });
 
 test("login flow issues a cookie; logout clears it; rate limiting kicks in", async () => {
-  const server = await spawnServer({}, { password: "secret" });
+  const server = await spawnServer({}, { password: "fixture-pw" });
   const { origin } = server;
   try {
     const wrong = await fetch(`${origin}/v0/auth/login`, {
       method: "POST",
       headers: { "content-type": "application/json", accept: "application/json" },
-      body: JSON.stringify({ password: "wrong" }),
+      body: JSON.stringify({ password: "fixture-wrong" }),
     });
     assert.equal(wrong.status, 401);
 
@@ -157,13 +157,13 @@ test("login flow issues a cookie; logout clears it; rate limiting kicks in", asy
       await fetch(`${origin}/v0/auth/login`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ password: "bad" }),
+        body: JSON.stringify({ password: "fixture-wrong" }),
       });
     }
     const throttled = await fetch(`${origin}/v0/auth/login`, {
       method: "POST",
       headers: { "content-type": "application/json", accept: "application/json" },
-      body: JSON.stringify({ password: "secret" }),
+      body: JSON.stringify({ password: "fixture-pw" }),
     });
     assert.equal(throttled.status, 429);
 
@@ -172,7 +172,7 @@ test("login flow issues a cookie; logout clears it; rate limiting kicks in", asy
     const login = await fetch(`${origin}/v0/auth/login`, {
       method: "POST",
       headers: { "content-type": "application/json", accept: "application/json" },
-      body: JSON.stringify({ password: "secret" }),
+      body: JSON.stringify({ password: "fixture-pw" }),
     });
     assert.equal(login.status, 200);
     const setCookie = login.headers.get("set-cookie") || "";
@@ -248,14 +248,14 @@ test("loopback bind without a password starts open and serves the SPA", async ()
 });
 
 test("login redirect target rejects protocol-relative and backslash schemes", async () => {
-  const server = await spawnServer({}, { password: "secret" });
+  const server = await spawnServer({}, { password: "fixture-pw" });
   try {
     const bad = ["//evil.com/x", "/\\evil.com", "https://evil.com", "/a\\b"];
     for (const after of bad) {
       const login = await fetch(`${server.origin}/v0/auth/login`, {
         method: "POST",
         headers: { "content-type": "application/json", accept: "application/json" },
-        body: JSON.stringify({ password: "secret", after }),
+        body: JSON.stringify({ password: "fixture-pw", after }),
       });
       assert.equal(login.status, 200);
       const body = await login.json();
@@ -264,7 +264,7 @@ test("login redirect target rejects protocol-relative and backslash schemes", as
     const good = await fetch(`${server.origin}/v0/auth/login`, {
       method: "POST",
       headers: { "content-type": "application/json", accept: "application/json" },
-      body: JSON.stringify({ password: "secret", after: "/chat/abc" }),
+      body: JSON.stringify({ password: "fixture-pw", after: "/chat/abc" }),
     });
     const goodBody = await good.json();
     assert.equal(goodBody.redirect, "/chat/abc");
@@ -279,12 +279,12 @@ test("login redirect target rejects protocol-relative and backslash schemes", as
 });
 
 test("/v0/auth/status reports authenticated without re-validating the cookie", async () => {
-  const server = await spawnServer({}, { password: "secret" });
+  const server = await spawnServer({}, { password: "fixture-pw" });
   try {
     const login = await fetch(`${server.origin}/v0/auth/login`, {
       method: "POST",
       headers: { "content-type": "application/json", accept: "application/json" },
-      body: JSON.stringify({ password: "secret" }),
+      body: JSON.stringify({ password: "fixture-pw" }),
     });
     const setCookie = login.headers.get("set-cookie") || "";
     const cookieHeader = setCookie.split(";")[0];
@@ -300,14 +300,14 @@ test("/v0/auth/status reports authenticated without re-validating the cookie", a
 
 test("a long-dormant session is pruned at server startup and rejected on use", async () => {
   // First server: log in, capture the cookie, then kill it but keep its data dir.
-  const first = await spawnServer({}, { password: "secret" });
+  const first = await spawnServer({}, { password: "fixture-pw" });
   const root = first.root;
   let cookieHeader;
   try {
     const login = await fetch(`${first.origin}/v0/auth/login`, {
       method: "POST",
       headers: { "content-type": "application/json", accept: "application/json" },
-      body: JSON.stringify({ password: "secret" }),
+      body: JSON.stringify({ password: "fixture-pw" }),
     });
     cookieHeader = (login.headers.get("set-cookie") || "").split(";")[0];
   } finally {

@@ -6,9 +6,9 @@ import test from "node:test";
 import { AuthStore, hashPassword, verifyPassword } from "../src/auth-store.js";
 
 test("scrypt round-trip verifies the set password and rejects others", async () => {
-  const hashed = await hashPassword("hunter2");
-  assert.equal(await verifyPassword("hunter2", hashed), true);
-  assert.equal(await verifyPassword("wrong", hashed), false);
+  const hashed = await hashPassword("fixture-pw");
+  assert.equal(await verifyPassword("fixture-pw", hashed), true);
+  assert.equal(await verifyPassword("fixture-wrong", hashed), false);
 });
 
 test("verifyPassword rejects a malformed stored hash without throwing", async () => {
@@ -21,32 +21,32 @@ test("AuthStore writes auth.json mode 0600 and reloads it across instances", asy
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-auth-"));
   const file = path.join(root, "auth.json");
   const store = new AuthStore(file);
-  await store.setPassword("hello123");
+  await store.setPassword("fixture-pw");
   const stat = await fs.stat(file);
   assert.equal(stat.mode & 0o777, 0o600);
 
   const second = new AuthStore(file);
   await second.load({ force: true });
   assert.equal(second.hasPassword(), true);
-  assert.equal(await second.verifyPassword("hello123"), true);
-  assert.equal(await second.verifyPassword("goodbye"), false);
+  assert.equal(await second.verifyPassword("fixture-pw"), true);
+  assert.equal(await second.verifyPassword("fixture-wrong"), false);
   await fs.rm(root, { recursive: true, force: true });
 });
 
 test("setPassword invalidates prior sessions and caps stored sessions at 20", async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-auth-"));
   const store = new AuthStore(path.join(root, "auth.json"));
-  await store.setPassword("first");
+  await store.setPassword("fixture-pw-first");
   for (let i = 0; i < 25; i += 1) {
     await store.createSession({ userAgent: `agent-${i}` });
   }
   assert.equal(store.sessions().length, 20);
   const oldestKept = store.sessions()[0].userAgent;
   assert.notEqual(oldestKept, "agent-0");
-  await store.setPassword("second");
+  await store.setPassword("fixture-pw-second");
   assert.equal(store.sessions().length, 0);
-  assert.equal(await store.verifyPassword("first"), false);
-  assert.equal(await store.verifyPassword("second"), true);
+  assert.equal(await store.verifyPassword("fixture-pw-first"), false);
+  assert.equal(await store.verifyPassword("fixture-pw-second"), true);
   await fs.rm(root, { recursive: true, force: true });
 });
 
@@ -54,7 +54,7 @@ test("findSession recovers across instances and removeSession prunes by token", 
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-auth-"));
   const file = path.join(root, "auth.json");
   const store = new AuthStore(file);
-  await store.setPassword("pw");
+  await store.setPassword("fixture-pw");
   const { token } = await store.createSession({ userAgent: "browser-a" });
   const second = new AuthStore(file);
   const found = await second.findSession(token);
@@ -70,20 +70,20 @@ test("findSession recovers across instances and removeSession prunes by token", 
 test("resetSessions signs out every device without changing the password", async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-auth-"));
   const store = new AuthStore(path.join(root, "auth.json"));
-  await store.setPassword("kept");
+  await store.setPassword("fixture-pw-kept");
   await store.createSession();
   await store.createSession();
   assert.equal(store.sessions().length, 2);
   await store.resetSessions();
   assert.equal(store.sessions().length, 0);
-  assert.equal(await store.verifyPassword("kept"), true);
+  assert.equal(await store.verifyPassword("fixture-pw-kept"), true);
   await fs.rm(root, { recursive: true, force: true });
 });
 
 test("removeOtherSessions preserves only the supplied token's row", async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-auth-"));
   const store = new AuthStore(path.join(root, "auth.json"));
-  await store.setPassword("pw");
+  await store.setPassword("fixture-pw");
   const { token: keep } = await store.createSession();
   await store.createSession();
   await store.createSession();
@@ -98,7 +98,7 @@ test("findSession reloads from disk on a cache miss", async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-auth-"));
   const file = path.join(root, "auth.json");
   const a = new AuthStore(file);
-  await a.setPassword("pw");
+  await a.setPassword("fixture-pw");
   const { token } = await a.createSession();
   const b = new AuthStore(file);
   await b.load();
@@ -112,7 +112,7 @@ test("findSession rejects a session past the 30-day TTL and prunes it", async ()
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-auth-"));
   const file = path.join(root, "auth.json");
   const store = new AuthStore(file);
-  await store.setPassword("pw");
+  await store.setPassword("fixture-pw");
   const { token } = await store.createSession();
   // Fast-forward lastSeenAt past the TTL.
   await store.load({ force: true });
@@ -132,7 +132,7 @@ test("pruneExpired removes only stale rows and persists the deletion", async () 
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-auth-"));
   const file = path.join(root, "auth.json");
   const store = new AuthStore(file);
-  await store.setPassword("pw");
+  await store.setPassword("fixture-pw");
   await store.createSession();
   const { token: live } = await store.createSession();
   await store.load({ force: true });
@@ -151,7 +151,7 @@ test("concurrent flushes use unique temp paths and never fail on ENOENT", async 
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-auth-flush-"));
   const file = path.join(root, "auth.json");
   const store = new AuthStore(file);
-  await store.setPassword("pw");
+  await store.setPassword("fixture-pw");
   for (let i = 0; i < 5; i += 1) await store.createSession({ userAgent: `agent-${i}` });
 
   // Fire many concurrent session mutations that each call _flush. The unique
