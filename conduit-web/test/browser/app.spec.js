@@ -320,7 +320,7 @@ test("keeps the native textarea composer bounded in a thread", async ({ page }, 
   await openSidebar(page, testInfo);
   await page.getByRole("button", { name: "Existing chat" }).click();
   await expect(page.getByText("Previous question")).toBeVisible();
-  await expect(page.getByRole("button", { name: /write Complete/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /write\(path: note\.md\).*Complete/ })).toBeVisible();
   await expect(page.locator('[data-slot="message-header"]')).toHaveCount(0);
 
   const composerGroup = page.locator(".composer");
@@ -337,6 +337,119 @@ test("keeps the native textarea composer bounded in a thread", async ({ page }, 
   expect(sendBox.y).toBeGreaterThan(inputBox.y);
   await expect(composerWrap).toHaveCSS("position", "static");
   await expect(page.locator(".chat-meteors")).toBeVisible();
+});
+
+test("tool card v2 expands args/result, pretty-prints JSON, lazy-fetches deferred results, and falls back for unknown tools", async ({ page }, testInfo) => {
+  await page.route("**/v0/sessions/session_existing", async (route) => {
+    await route.fulfill({ json: {
+      messages: [
+        { id: "message_existing", role: "user", content: "Previous question" },
+      ],
+      tools: [
+        {
+          id: "call_write",
+          name: "write",
+          args: { path: "note.md", content: "hello" },
+          done: true,
+          status: "done",
+          result: "Saved",
+          timestamp: "2026-07-15T06:49:27.768Z",
+          startedAt: "2026-07-15T06:49:27.768Z",
+          completedAt: "2026-07-15T06:49:29.018Z",
+        },
+        {
+          id: "call_deferred",
+          name: "grep",
+          args: { pattern: "foo" },
+          done: true,
+          resultDeferred: true,
+          timestamp: "2026-07-15T06:49:28.768Z",
+        },
+        {
+          id: "call_failed",
+          name: "run_shell",
+          args: { command: "exit 1" },
+          done: true,
+          error: true,
+          result: "command failed",
+          timestamp: "2026-07-15T06:49:29.768Z",
+        },
+        {
+          id: "call_unknown",
+          name: "totally_unregistered_tool",
+          args: null,
+          done: true,
+          result: "ok",
+          timestamp: "2026-07-15T06:49:30.768Z",
+        },
+        {
+          id: "call_pending",
+          name: "queued_tool",
+          args: { path: "later.txt" },
+          done: false,
+          status: "pending",
+          timestamp: "2026-07-15T06:49:31.768Z",
+        },
+        {
+          id: "call_long",
+          name: "long_output",
+          args: { content: "x".repeat(5000) },
+          done: true,
+          result: "ok",
+          timestamp: "2026-07-15T06:49:32.768Z",
+        },
+      ],
+    } });
+  });
+  let deferredFetches = 0;
+  await page.route("**/v0/sessions/session_existing/tools/call_deferred", async (route) => {
+    deferredFetches += 1;
+    await route.fulfill({ json: { id: "call_deferred", result: "3 matches" } });
+  });
+  await page.goto("/");
+  await openSidebar(page, testInfo);
+  await page.getByRole("button", { name: "Existing chat" }).click();
+
+  const writeTrigger = page.getByRole("button", { name: /write\(path: note\.md, content: hello\).*Complete/ });
+  const writeCard = page.locator(".tool-card").filter({ has: writeTrigger });
+  await expect(writeTrigger).toBeVisible();
+  await expect(writeTrigger).toContainText("1.3s");
+  await expect(page.getByRole("button", { name: /queued_tool.*Pending/ })).toBeVisible();
+  await writeTrigger.click();
+  await writeCard.getByRole("button", { name: "Arguments" }).click();
+  await expect(writeCard.locator("pre code")).toBeVisible();
+  await expect(writeCard.locator("pre code")).toContainText("note.md");
+
+  // Unknown tool name falls back to the generic card without error.
+  await expect(page.getByRole("button", { name: /totally_unregistered_tool.*Complete/ })).toBeVisible();
+
+  // Error state renders distinctly (destructive tone on the result section).
+  const failedTrigger = page.getByRole("button", { name: /run_shell.*Error/ });
+  const failedCard = page.locator(".tool-card").filter({ has: failedTrigger });
+  await expect(failedTrigger).toBeVisible();
+  await failedTrigger.click();
+  await failedCard.getByRole("button", { name: "Result" }).click();
+  await expect(failedCard.locator(".border-destructive\\/50")).toContainText("command failed");
+
+  // Deferred result is lazy-fetched on expand, not before.
+  const deferredTrigger = page.getByRole("button", { name: /grep\(pattern: foo\)/ });
+  const deferredCard = page.locator(".tool-card").filter({ has: deferredTrigger });
+  await expect(deferredTrigger).toBeVisible();
+  await deferredTrigger.click();
+  await expect(deferredCard.getByRole("button", { name: "Result" })).toBeVisible();
+  expect(deferredFetches).toBe(0);
+  await deferredCard.getByRole("button", { name: "Result" }).click();
+  await expect.poll(() => deferredFetches).toBe(1);
+  await expect(deferredCard.getByText("3 matches")).toBeVisible();
+
+  const longTrigger = page.getByRole("button", { name: /long_output/ });
+  const longCard = page.locator(".tool-card").filter({ has: longTrigger });
+  await longTrigger.click();
+  await longCard.getByRole("button", { name: "Arguments" }).click();
+  await expect(longCard.getByRole("button", { name: "Show full content" })).toBeVisible();
+  await expect(longCard.locator(".tool-card-value")).not.toContainText("x".repeat(5000));
+  await longCard.getByRole("button", { name: "Show full content" }).click();
+  await expect(longCard.locator(".tool-card-value")).toContainText("x".repeat(5000));
 });
 
 test("renders persisted assistant Markdown with safe interactive controls", async ({ page }, testInfo) => {

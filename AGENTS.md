@@ -71,6 +71,17 @@ explicit registries in `command-registry.js`.
 Assistant Markdown renders only through `src/client/chat-markdown.jsx` and
 Streamdown's hardened pipeline; user prompts remain literal text; do not
 introduce a parallel Markdown parser or import the full `shiki` bundle.
+`src/client/shiki-highlight.js` is that one Shiki import site — new
+Shiki-backed leaves (e.g. `tool-json-block.jsx`) import its shared lazy
+highlighter singleton instead of adding another.
+
+Non-message timeline item types (tool calls, host-UI questions, …) render
+through the registries in `src/client/tool-registry.js`:
+`timelineItemRenderers[item.type]` replaces per-type conditionals in
+chat-thread.jsx's timeline loop, and `toolRenderers`/`getToolRenderer(name)`
+looks up a tool-name-specific card component, falling back to a generic card
+for unregistered names. New timeline item types or tool cards register into
+these plain objects at module load instead of growing an inline conditional.
 
 Rendering stability (hard-won — do not regress):
 

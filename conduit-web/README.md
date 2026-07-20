@@ -108,6 +108,23 @@ responses stream as raw deltas coalesced per animation frame by
 HTML is sanitized, unsafe URLs are removed, remote images become alt text, and
 external links require confirmation. User messages are displayed literally.
 
+`src/client/shiki-highlight.js` is the one Shiki import site in the codebase:
+the fenced-code highlighter (`src/components/ai-elements/code-block.jsx`) and
+the tool-card JSON pretty-printer (`src/client/tool-json-block.jsx`) both
+import its shared lazy highlighter singleton rather than bundling a second
+copy of `shiki/core`.
+
+Non-message timeline items (currently tool calls) render through
+`src/client/tool-registry.js`: `timelineItemRenderers[item.type]` dispatches
+the chat-thread timeline loop, and `toolRenderers`/`getToolRenderer(name)`
+looks up a tool-name-specific card, falling back to the generic `ToolCard`
+(`src/client/tool-card.jsx`) for any unregistered tool name. `ToolCard` shows
+a one-line `name(args…)` smart summary and live status in its header;
+arguments and result are separate collapsed sections, pretty-printed as JSON
+through the lazy Shiki singleton above when they aren't plain strings, with
+the result lazy-fetched from `GET /v0/sessions/:id/tools/:toolId` on first
+expand when the initial payload omitted it for size.
+
 The single-line composer owns runtime-aware model and thinking controls. Isolated
 Pi reads `data/pi`; Host Pi reads its detected agent home and reconciles against
 the live process through `get_available_models` and `get_state`. A selection is
