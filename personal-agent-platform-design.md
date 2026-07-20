@@ -42,7 +42,7 @@ The canonical nouns. Sections after this one use them exactly.
 
 **Profile** — a configured agent role: harness, system prompt, tool **posture** (the tool/permission stance), memory scope, packages. **Harness** — the agent program itself: pi, Claude Code, Codex. **Agent instance** (colloquially "the agent") — a profile running via a harness on a target. **Session** — the persistent interaction context with one canonical event record (conversation/event files; for terminal-tier sessions, the byte stream plus metadata). Sessions outlive both browser connections and instances: an instance can die and a new one can resume the session from its files. Chats and the Assistant are **opened**; Remotes sessions are **attached** to. A session contains tasks; a task may have multiple runs.
 
-**Host** — hardware or VM: the VPS, the home machine. **Target** — a spawnable execution location the broker knows: vps-container, home, codespace. Targets live on hosts. **Container runtime** — Docker/podman-class machinery, held by the broker.
+**Host** — hardware or VM: the VPS, the home machine. **Target** — a spawnable execution location the broker knows: local (the host serving the Interface), vps-container, home, codespace. Targets live on hosts. **Container runtime** — Docker/podman-class machinery, held by the broker.
 
 **Task** — a bounded unit of work. **Run** — one execution of a task (an autonomous run, a scheduled run). **Dispatch** — the intent-level act, by the user or an agent, of initiating work elsewhere; it usually triggers a **spawn** (the broker creating an instance) and always records **lineage** (which session originated the work). **Seed** — the explicit context a dispatch carries. **Artifact** — a durable output (PR, file, widget render, report) linked to its producing task and originating session. **Instruct** — sending input to an existing session through the control plane or its renderer. **Collect** — retrieving a task's declared artifacts or completion report into the platform (and, in the completed vision, into the parent session). **Relocate** — resuming a session elsewhere. A relocation is **compatible** when the destination offers the same harness and profile and the state volume is available, so the same session resumes under a new instance; anything else (different harness, partial context) is not relocation but a child-session dispatch with lineage.
 
@@ -103,13 +103,17 @@ Constraints that later contract and implementation work must respect. Not schema
         pi+tau, Claude Code, Codex   tau via port forwarding
 ```
 
+(Deployment note, 2026-07: the shipped topology inverts the diagram's default — the always-on host is currently the home machine, serving the Interface behind Tailscale with Funnel for off-tailnet reachability; the VPS tier is optional and later. The diagram remains the target shape for a cloud-default deployment.)
+
 ### Trust domains
 
 Three domains, so that the publicly reachable component is never root over the system. The edge/application handles authentication, browser sessions, rendering, and the user API, and submits desired actions only. The control broker validates session-control requests, applies policy, issues short-lived target grants, and maintains lifecycle state; it alone touches the container runtime (rootless runtime or allow-listed spawn helper preferred; if a Docker socket remains necessary it is reachable only by the broker, never the web process), the gh credentials, and tailnet control. Target daemons on each host perform a constrained set: start an allow-listed profile, stop it, report status, relay events, collect declared artifacts. On a single personal VPS this is two processes and a narrow RPC, not a distributed system; the split is a security boundary, not an operational burden.
 
 The broker mediates control, not bytes: session streams (tau WebSocket, PTY, ACP) travel between the edge/app proxy and target daemons over direct or relayed connections authorized by short-lived broker-issued grants; the broker itself carries lifecycle and policy traffic only. A minimal broker (registry; spawn, attach, stop, status) exists from the remote-control phase, because Remotes needs authenticated session control from day one of multi-host operation; the hardened broker (policy engine, custody of gh credentials and the container runtime) follows at its own phase.
 
-Staged exception, time-boxed to the chat phase: the v0 seed tool in the chat profile holds gh/spawn actions directly via runline + psst until the minimal broker exists, at which point it becomes a thin broker client. This is consistent with invariant 6's configured-actions posture but violates the sole-holder rule during that window. Accepted knowingly: edge auth secures who talks to Chat, and the residual vector (injected web content triggering the seed action) is bounded by the action's narrow scope and the window's brevity.
+Staged exception, superseded 2026-07: the original plan had the v0 seed tool holding gh/spawn actions directly via runline + psst until the minimal broker existed. The revised order builds the in-process broker first, so v0 seeding instead calls the broker's spawn verb over loopback with a narrow per-process token scoped to local spawns only (`specs/seed-tool.md`). The residual vector (injected web content triggering a seed) remains bounded by that scope; the sole-holder rule proper still arrives with the hardened, separate-process broker.
+
+**The local target (amendment, 2026-07).** The first implemented execution lane is the **local target**: Workspaces (managed, linked, or cloned host directories) and the Host Pi runtime executing directly on the machine that serves the Interface — optionally with the user's native Pi installation, home, and credentials. This deliberately collapses the edge/app and target-daemon domains onto one machine, and it is accepted as a first-class target tier rather than a violation, under three conditions: (1) authentication stands in front of every route and socket before any non-loopback exposure; (2) the machine is user-owned hardware, never a shared or public host; (3) a publicly-reachable VPS deployment can disable Host Pi and linked Workspaces by configuration, retaining Isolated Pi only. Host Pi sessions also except invariant 6: the user's native Pi credentials are deliberately in play, accepted only on the local target — dispatch to any other target never carries them. Rationale: the immediate product need is controlling one's own coding agents, on one's own machine and repos, from anywhere — escaping the vendor-locked remote-control offerings around Claude Code and Codex — and the local lane exercises the same abstractions (profiles, installations, workspaces, session registry, process lifecycle) that the broker phase later lifts to remote targets. The three-domain split remains the commitment wherever the edge is not the execution host.
 
 ### The Interface
 
@@ -147,14 +151,14 @@ Scoped by default (invariant 9), concretely: the Assistant owns a single persist
 | The Interface | VPS, edge/app domain | Native shell + chat renderer (base: pi-web-ui components / Zetaphor pi-webui, D1); embedded tau frontend, ttyd/xterm.js panes | The product (T4); surfaces: Chat, Assistant, Remotes, Dashboard |
 | Control broker | VPS, private domain | Custom (thin); container runtime; gh CLI; Tailscale | Policy, session control, lifecycle, grants |
 | Target daemon | each host (home = WSL2) | pi + tau, ACP adapters, ttyd; Tailscale | Constrained start/stop/status/relay |
-| Chat profile | VPS container | pi + chat system prompt; runline (code mode, 188 typed integrations), markit (anything→markdown), napkin (folder pools only; ungrouped chats have session history), search provider (D12), psst (secrets); v0 seed tool | The claude.ai-equivalent default surface |
+| Chat profile | VPS container | pi + chat system prompt; runline (code mode, 188 typed integrations), markit (anything→markdown), napkin (folder pools only; ungrouped chats have session history), search provider (D12), psst (secrets); v0 seed tool. (Target composition — Conduit today ships General/Coding/Runtime templates over bare Pi tools; the toolbelt is not yet adopted.) | The claude.ai-equivalent default surface |
 | The Assistant | VPS container | pi + cron/loop sidecar + napkin + runline + psst + pi-goal + pi-system-reminders + pi-subagents; supervision patterns cherry-picked from Mercury (the "Mercury clone" build recipe), channels stripped | The persistent agent |
 | Pi session web view | anywhere pi runs | tau (pi install npm:tau-mirror); tau-plus fork as IDE-layout reference | Self-hosted mirror, embedded as a Remotes pane |
 | ACP renderer | Interface (later phase) | Agent Client Protocol; adapters: claude-agent-acp, codex-acp, gemini --acp, pi-acp / acp-adapter | One structured client for foreign harnesses |
 | Generative UI channel | cross-cutting | pi-generative-ui (visualize_read_me + show_widget + guideline modules); renderers: sandboxed panel in the chat renderer, sidecar pane by terminals, Glimpse (+ Linux fork) when physically local | show_widget everywhere |
 | Codespace target | GitHub | gh codespace create + devcontainer postCreate | Ephemeral repo-scoped execution |
 | Review agent | the repo, not the platform | OTS: Qodo PR-Agent (OSS candidate), CodeRabbit, Copilot review (D17) | Review and merge-gating, delegated (T6) |
-| Seed/dispatch tool | chat + Assistant profiles | small pi extension; chat phase = runline+psst pragmatic path, from the remote-control phase = thin client of the minimal broker | Starting work elsewhere |
+| Seed/dispatch tool | chat + Assistant profiles | small pi extension; v0 = scoped client of the in-process broker's spawn verb, local target only (`specs/seed-tool.md`); later a thin client of the hardened broker | Starting work elsewhere |
 
 ### State model
 
@@ -167,7 +171,7 @@ Ordered by product weight. Legend: [D#] = open decision (section 6).
 ### Journey A: Chat (the complete minimum experience and default entry point)
 
 ```
-open your.domain ──▶ edge auth (Google)
+open your.domain ──▶ auth (password login per D2; Google at a public-VPS phase)
    │
    ▶ Chat surface (pi, chat profile)
        │
@@ -180,7 +184,8 @@ open your.domain ──▶ edge auth (Google)
        └─ "go do this elsewhere" ──▶ seed tool
               │  seed = structured context export: goal + selected
               │  transcript refs + memory note refs (invariant 8)
-              ▶ starts an instance (v0: runline+psst path; later: broker)
+              ▶ starts an instance (v0: broker spawn verb, local target;
+              │  later: remote targets)
               ▶ lineage recorded; a session link appears; the work is
                 then observed in Remotes or lands as a PR
               ▶ (north star, later: artifacts + completion report
@@ -274,7 +279,7 @@ Staging: (1) tools + guidelines in every pi profile → (2) web rendering → (3
 
 Tags: **[C]** = architectural commitment, durable; **[S]** = current implementation strategy, expected to evolve without changing the vision.
 
-**S1 [C]. Hybrid topology, cloud-default.** VPS always on (Interface, broker, chat pool, the Assistant); home machine is an opt-in target powered on when wanted; Codespaces for ephemeral repo work. ([S] sizing note: agent loops are I/O-bound; a 2 vCPU / 4GB VPS suffices; tokens are the real spend.)
+**S1 [C]. Hybrid topology, cloud-default.** VPS always on (Interface, broker, chat pool, the Assistant); home machine is an opt-in target powered on when wanted; Codespaces for ephemeral repo work. ([S] sizing note: agent loops are I/O-bound; a 2 vCPU / 4GB VPS suffices; tokens are the real spend.) (Amended 2026-07: near-term the always-on host is the home machine behind the tailnet, serving the Interface and the local target; a VPS resumes the cloud-default role if and when one is provisioned.)
 
 **S2 [C]. Pi-native, harness-extensible (T5).** Chat, the Assistant, and the default coding harness are pi. Claude Code / Codex are first-class guests via adapters, with honestly tiered capability.
 
@@ -282,11 +287,11 @@ Tags: **[C]** = architectural commitment, durable; **[S]** = current implementat
 
 **S4 [C]. Machine plane on Tailscale regardless of front door.** VPS↔home traffic never touches the public internet; no router port forwarding; target daemons unreachable except via tailnet.
 
-**S5 [C]. Auth at the edge, Google identity; only the edge/app is publicly reachable; instances get no public routes.** ([S] flavor, pick one: Cloudflare Tunnel + Access, or Caddy + oauth2-proxy self-hosted; D2.)
+**S5 [C]. Auth in front of every route and socket; only the edge/app is publicly reachable; instances get no public routes.** (Amended 2026-07: the standing posture is a private overlay front door — Tailscale, with Funnel or a Cloudflare Tunnel for off-tailnet reachability — plus application-level password auth in Conduit itself; see D2. Google-at-edge remains the intended posture for a genuinely public VPS deployment, if one ever exists.)
 
 **S6 [C]. Credential and capability containment.** Instances act through configured actions (runline connections), secrets held by psst; scope limits exposure and blast radius; approval policy (D10) governs consequential use; external content is adversarial input (invariant 6).
 
-**S7 [C]. Three trust domains** (section 3): edge/application, control broker, target daemons; the container runtime socket is never reachable from the web process; the broker mediates control, not bytes (session streams are data plane, flowing under broker-issued grants). [S] a minimal broker ships with the remote-control phase; staged exception, chat phase only: the v0 seed tool holds gh/spawn actions via runline + psst until then, documented and time-boxed.
+**S7 [C]. Three trust domains** (section 3): edge/application, control broker, target daemons; the container runtime socket is never reachable from the web process; the broker mediates control, not bytes (session streams are data plane, flowing under broker-issued grants). [S] a minimal broker ships early as an in-process module (`specs/broker-registry.md`); the v0 seed tool is a scoped client of its spawn verb rather than holding gh/spawn actions itself; the local target knowingly collapses the domains onto one machine (2026-07 amendment, section 3).
 
 **S8 [C]. One Interface, four surfaces (Chat, Assistant, Remotes, Dashboard), composition-first as the path [S].** Native shell + chat renderer; embedded tau and PTY panes in Remotes; every session registered with status from day one; tau view as the mobile default; nativization lane-by-lane, triggered by the first cross-session feature. (Details in section 3.)
 
@@ -312,13 +317,15 @@ Tags: **[C]** = architectural commitment, durable; **[S]** = current implementat
 
 **S19 [S]. Tool-output rendering: plain now.** Generic code-mode card + genUI-on-demand later; optionally handcraft the 3-5 daily-use plugins after the Interface matures.
 
-**S20 [S]. Build order, remote-control-first.** (0) VPS + edge auth + a pi web surface, usable from a phone. (1) Chat profile + toolbelt; event vocabulary drafted; v0 seed tool (runline+psst path). (2) Remote-control core: minimal broker (registry; spawn/attach/stop/status), home target daemon over tailnet, attach in Remotes (tau proxy + PTY pane); the seed tool becomes a broker client. (3) Codespace target (seed a goal loop; output = the PR). (4) Broker hardened: policy, grants, credential and runtime custody, event contract formalized. (5) The Assistant, basic claw mode. (6) ACP renderer. (7) Return-to-origin: the collect verb ships and completion reports land in the parent session (the north star closes; ACP's structured results make collect clean). (8) GenUI streaming; Assistant dispatch authority.
+**S20 [S]. Build order, remote-control-first.** (0) VPS + edge auth + a pi web surface, usable from a phone. (1) Chat profile + toolbelt; event vocabulary drafted; v0 seed tool (originally runline+psst; now a broker client — see staging note). (2) Remote-control core: minimal broker (registry; spawn/attach/stop/status), home target daemon over tailnet, attach in Remotes (tau proxy + PTY pane); the seed tool becomes a broker client. (3) Codespace target (seed a goal loop; output = the PR). (4) Broker hardened: policy, grants, credential and runtime custody, event contract formalized. (5) The Assistant, basic claw mode. (6) ACP renderer. (7) Return-to-origin: the collect verb ships and completion reports land in the parent session (the north star closes; ACP's structured results make collect clean). (8) GenUI streaming; Assistant dispatch authority.
+
+(Staging as built, 2026-07: phases 0–1 shipped as Conduit's Chat surface, which then deepened into the local target lane — profiles, Workspaces, dual Isolated/Host Pi runtimes — before phase 2, deferring the seed tool. The revised near-term order is: edge auth → interface parity (tool rendering, /commands, side panels) → Remotes v0 as local PTY panes → minimal broker/registry → v0 seed tool dispatching to the local target first, remote targets after. Roadmap and specs: `specs/`.)
 
 ## 6. Open decisions
 
 **D1. Webapp base for shell + chat renderer.** Fork Zetaphor pi-webui (fastest to polished chat; small third-party codebase you then own) vs build on @mariozechner/pi-web-ui components directly (maximum control for the genUI panel and dispatch UX; write the server glue yourself, with Zetaphor's repo as reference). Tau covers phase 0 either way. Decide at phase 1 by how much you want to own the flagship. (Resolved in practice by Conduit: neither — a native shell and chat renderer built from Shadcn primitives with Streamdown rendering over a custom Express + Pi RPC server, owning the flagship outright; Zetaphor's repo and pi-web-ui remain references only.)
 
-**D2. Edge auth flavor** (S5). Operational zero-effort + a corporation in the path, vs sovereignty + you patch the edge. Decide by comfort with Cloudflare seeing traffic metadata.
+**D2. Edge auth flavor** (S5). Operational zero-effort + a corporation in the path, vs sovereignty + you patch the edge. Decide by comfort with Cloudflare seeing traffic metadata. (Resolved in practice by Conduit: neither, for now. The server sits behind Tailscale — Funnel or a Cloudflare Tunnel for off-tailnet reachability — and Conduit enforces a single-user password: CLI-provisioned, scrypt-hashed, deny-by-default middleware across every HTTP route and WebSocket upgrade, with a minimal Open-WebUI-style login page. The overlay network is the perimeter; app auth is the lock on the door. Revisit only for a genuinely public deployment. Spec: `specs/edge-auth.md`.)
 
 **D3. VPS provider and region.** Latency and price only; trivially reversible thanks to S3.
 
