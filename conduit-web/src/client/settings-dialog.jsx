@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { BotIcon, CircleHelpIcon, CpuIcon, FolderCogIcon, LayersIcon, LinkIcon, MonitorIcon, Settings2Icon } from "lucide-react";
+import { BotIcon, CircleHelpIcon, CpuIcon, FolderCogIcon, LayersIcon, LinkIcon, LockIcon, MonitorIcon, Settings2Icon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
@@ -26,6 +26,7 @@ const sections = [
   { id: "profiles", label: "Profiles", short: "Profiles", icon: LayersIcon },
   { id: "workspaces", label: "Workspaces", short: "Workspaces", icon: FolderCogIcon },
   { id: "runtime", label: "Runtime", short: "Runtime", icon: CpuIcon },
+  { id: "auth", label: "Auth", short: "Auth", icon: LockIcon },
   { id: "general", label: "General", short: "General", icon: Settings2Icon },
   { id: "appearance", label: "Appearance", short: "Display", icon: MonitorIcon },
   { id: "connections", label: "Connections", short: "Links", icon: LinkIcon },
@@ -406,6 +407,91 @@ function WorkspaceSettings({
   </>;
 }
 
+function AuthSettings() {
+  const [loading, setLoading] = useState(true);
+  const [hasPassword, setHasPassword] = useState(false);
+  const [sessionCount, setSessionCount] = useState(0);
+  const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+  const [resetting, setResetting] = useState(false);
+
+  async function load() {
+    setLoading(true);
+    setError("");
+    try {
+      const response = await fetch("/v0/auth/status");
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(body.message || body.error || "Could not load auth status");
+      setHasPassword(Boolean(body.hasPassword));
+      setSessionCount(Number(body.sessionCount) || 0);
+    } catch (caught) {
+      setError(caught.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => { load(); }, []);
+
+  async function resetOthers() {
+    setResetting(true);
+    setError("");
+    setNotice("");
+    try {
+      const response = await fetch("/v0/auth/reset-sessions", { method: "POST" });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(body.message || body.error || "Could not sign out other devices");
+      setNotice("Other devices have been signed out.");
+      await load();
+    } catch (caught) {
+      setError(caught.message);
+    } finally {
+      setResetting(false);
+    }
+  }
+
+  if (loading) return <div className="flex items-center gap-2 text-sm text-muted-foreground"><Spinner />Loading auth status…</div>;
+
+  return <>
+    <div className="settings-section-heading">
+      <h2>Auth</h2>
+      <p>Single-user password login gates every API route, static asset, and WebSocket. Tailscale or a tunnel keeps the address quiet; the password is the lock on the door.</p>
+    </div>
+    <FieldGroup>
+      <Field>
+        <FieldLabel className="justify-between">
+          Login password
+          <Badge variant={hasPassword ? "secondary" : "outline"}>{hasPassword ? "Configured" : "Not configured"}</Badge>
+        </FieldLabel>
+        <FieldDescription>
+          {hasPassword
+            ? "Password is set. Use the CLI to change it; Conduit does not store or expose the password in the browser."
+            : "No password is configured. The server is open until one is set on the host."}
+        </FieldDescription>
+        <div className="bg-muted/40 space-y-2 rounded-lg border p-3 text-sm">
+          <p className="text-muted-foreground">From the repo root on the host:</p>
+          <pre className="whitespace-pre-wrap break-all font-mono text-xs">node scripts/conduit-auth.mjs set-password</pre>
+          <pre className="whitespace-pre-wrap break-all font-mono text-xs">node scripts/conduit-auth.mjs reset-sessions</pre>
+          <pre className="whitespace-pre-wrap break-all font-mono text-xs">node scripts/conduit-auth.mjs status</pre>
+        </div>
+      </Field>
+      <Field>
+        <FieldLabel className="justify-between">
+          Active sessions
+          <Badge variant="secondary">{sessionCount} active</Badge>
+        </FieldLabel>
+        <FieldDescription>Each signed-in browser is one session row in <code>data/auth.json</code>, capped at 20 and rolled for 30 days.</FieldDescription>
+        <Button type="button" variant="outline" disabled={!hasPassword || resetting || sessionCount <= 1} onClick={resetOthers}>
+          {resetting && <Spinner data-icon="inline-start" />}
+          {resetting ? "Signing out…" : "Sign out other devices"}
+        </Button>
+      </Field>
+    </FieldGroup>
+    {error && <p className="text-destructive mt-3 text-sm">{error}</p>}
+    {notice && <p className="text-muted-foreground mt-3 text-sm">{notice}</p>}
+  </>;
+}
+
 export function SettingsDialog({
   open,
   onOpenChange,
@@ -517,7 +603,8 @@ export function SettingsDialog({
             />
           </TabsContent>
           <TabsContent value="runtime"><RuntimeSettings installations={installations} onInstallationsChange={onInstallationsChange} onHostUnavailable={onHostUnavailable} onManageModels={() => setSection("models")} /></TabsContent>
-          {sections.filter((item) => !["models", "profiles", "workspaces", "runtime"].includes(item.id)).map((item) => (
+          <TabsContent value="auth"><AuthSettings /></TabsContent>
+          {sections.filter((item) => !["models", "profiles", "workspaces", "runtime", "auth"].includes(item.id)).map((item) => (
             <TabsContent key={item.id} value={item.id}><Placeholder title={item.label} /></TabsContent>
           ))}
         </ScrollArea>

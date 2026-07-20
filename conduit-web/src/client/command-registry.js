@@ -27,6 +27,7 @@ export const SETTINGS_SECTIONS = [
   { id: "profiles", label: "Profiles", keywords: ["template", "tools", "workspace", "general", "agent"] },
   { id: "workspaces", label: "Workspaces", keywords: ["workspace", "folder", "default", "profile"] },
   { id: "runtime", label: "Runtime", keywords: ["processes", "pool", "idle", "generation"] },
+  { id: "auth", label: "Auth", keywords: ["password", "login", "sessions", "logout", "security"] },
   { id: "general", label: "General", keywords: ["preferences"] },
   { id: "appearance", label: "Appearance", keywords: ["theme", "display", "ui"] },
   { id: "connections", label: "Connections", keywords: ["auth", "api", "keys"] },
@@ -66,6 +67,15 @@ const isNamedFolder = (context) => Boolean(context.project && context.project.sl
 
 /** Static palette actions. Prefer this list for one-shot app operations. */
 export const paletteCommands = [{
+  id: "logout",
+  group: "danger",
+  label: "Sign out",
+  description: "Ends this browser's Conduit session",
+  icon: "logout",
+  keywords: ["logout", "sign out", "session", "auth"],
+  isAvailable: () => true,
+  run: (actions) => actions.logout(),
+}, {
   id: "new-chat",
   group: "commands",
   label: "New chat",

@@ -34,6 +34,9 @@ const SettingsDialog = lazy(() => import("./settings-dialog").then((module) => (
 
 const api = async (url, options) => {
   const response = await fetch(url, { headers: { "content-type": "application/json" }, ...options });
+  if (response.status === 401 && (url.startsWith("/v0/") || url.startsWith("/"))) {
+    location.href = "/login";
+  }
   const text = await response.text();
   const body = text ? JSON.parse(text) : {};
   if (!response.ok) throw Object.assign(new Error(body.message || body.error || "Request failed"), body);
@@ -1142,6 +1145,11 @@ function App() {
     openRuntimeChat: () => openRuntimeChat().catch((caught) => setError(caught.message)),
     retryConnection: globalRuntime.retry,
     reload: () => location.reload(),
+    logout: () => {
+      fetch("/v0/auth/logout", { method: "POST" })
+        .catch(() => {})
+        .finally(() => { location.href = "/login"; });
+    },
   };
 
   const threadReady = loadedSessionId === selectedId;
