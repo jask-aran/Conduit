@@ -1,4 +1,4 @@
-import { ChevronsUpDownIcon, RefreshCwIcon, SettingsIcon, UserRoundIcon } from "lucide-react";
+import { ChevronsUpDownIcon, LogOutIcon, RefreshCwIcon, SettingsIcon, UserRoundIcon } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   DropdownMenu,
@@ -25,7 +25,7 @@ const connectivityCopy = {
   offline: "Server unavailable",
 };
 
-export function NavUser({ onOpenSettings, connectivity = "online", onRetryConnection }) {
+export function NavUser({ onOpenSettings, connectivity = "online", onRetryConnection, onLogout }) {
   const { isMobile } = useSidebar();
   const status = connectivityCopy[connectivity] || connectivityCopy.online;
   const tone = {
@@ -75,6 +75,10 @@ export function NavUser({ onOpenSettings, connectivity = "online", onRetryConnec
               <SettingsIcon absoluteStrokeWidth />
               Manage settings
             </DropdownMenuItem>
+            {onLogout && <DropdownMenuItem onSelect={onLogout}>
+              <LogOutIcon absoluteStrokeWidth />
+              Sign out
+            </DropdownMenuItem>}
             {connectivity !== "online" && onRetryConnection && <DropdownMenuItem onSelect={onRetryConnection}>
               <RefreshCwIcon absoluteStrokeWidth />
               Retry connection
