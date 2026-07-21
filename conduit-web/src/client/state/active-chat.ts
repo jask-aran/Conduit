@@ -87,6 +87,7 @@ export function createActiveChat(options: ActiveChatOptions) {
   let stopPending = false;
   let continuation = false;
   let openToken = 0;
+  let selectionToken = 0;
   let toolSeq = 0;
   const closedGenerations = new Set<string>();
 
@@ -105,6 +106,7 @@ export function createActiveChat(options: ActiveChatOptions) {
   };
 
   const reset = () => {
+    selectionToken += 1;
     openToken += 1;
     setConnectingId(null);
     socket?.close();
@@ -114,6 +116,7 @@ export function createActiveChat(options: ActiveChatOptions) {
     setDraft("");
     setEditingEntryId(null);
     setContextUsage(null);
+    setLoadingOlder(false);
     setHostUiRequests([]);
     setQueue({ steering: [], followUp: [] });
     resetLiveFlags();
@@ -140,9 +143,9 @@ export function createActiveChat(options: ActiveChatOptions) {
     });
   };
 
-  const loadDetail = async (chatId: string, reconcile = false) => {
+  const loadDetail = async (chatId: string, reconcile = false, selection = selectionToken) => {
     const detail = await api<TranscriptDetail>(`/v0/sessions/${encodeURIComponent(chatId)}`);
-    if (selectedId() === chatId) applyDetail(detail, reconcile);
+    if (selection === selectionToken && selectedId() === chatId) applyDetail(detail, reconcile);
     return detail;
   };
 
@@ -161,11 +164,12 @@ export function createActiveChat(options: ActiveChatOptions) {
     else setGeneration((current) => current === "stopping" ? current : "idle");
   };
 
-  const connect = (record: LiveRecord) => {
+  const connect = (record: LiveRecord, chatId: string, selection: number) => {
     socket?.close();
     const next = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}${record.streamUrl || `/v0/live-sessions/${record.id}/stream`}`);
     socket = next;
     next.onmessage = ({ data }) => {
+      if (socket !== next || selection !== selectionToken || selectedId() !== chatId) return;
       try {
         const event = JSON.parse(String(data)) as LiveEvent;
         if (event.type === "runtime_snapshot") {
@@ -184,7 +188,8 @@ export function createActiveChat(options: ActiveChatOptions) {
     next.addEventListener("close", () => { if (socket === next) socket = null; });
   };
 
-  const openLive = async (chatId: string, ownerProjectId: string, launch: UnknownRecord = {}): Promise<LiveRecord | null> => {
+  const openLive = async (chatId: string, ownerProjectId: string, launch: UnknownRecord = {}, selection = selectionToken): Promise<LiveRecord | null> => {
+    if (selection !== selectionToken || selectedId() !== chatId) return null;
     const token = ++openToken;
     setConnectingId(chatId);
     const intent = String(launch.intent || "open");
@@ -200,11 +205,11 @@ export function createActiveChat(options: ActiveChatOptions) {
           intent,
         }),
       });
-      if (token !== openToken || selectedId() !== chatId) return null;
+      if (token !== openToken || selection !== selectionToken || selectedId() !== chatId) return null;
       setLive(record);
       if (record.runtime) setRuntimeIdentity(record.runtime);
       if (record.contextUsage) setContextUsage(record.contextUsage);
-      connect(record);
+      connect(record, chatId, selection);
       await new Promise<void>((resolve, reject) => {
         const current = socket;
         if (!current) return reject(new Error("Could not connect to Pi"));
@@ -212,26 +217,29 @@ export function createActiveChat(options: ActiveChatOptions) {
         current.addEventListener("open", () => resolve(), { once: true });
         current.addEventListener("error", () => reject(new Error("Pi is starting or the live stream failed. Try again.")), { once: true });
       });
-      if (token !== openToken || selectedId() !== chatId) return null;
+      if (token !== openToken || selection !== selectionToken || selectedId() !== chatId) return null;
       await models.reloadChat(chatId);
       return record;
     } catch (error) {
-      if (token !== openToken || selectedId() !== chatId) return null;
+      if (token !== openToken || selection !== selectionToken || selectedId() !== chatId) return null;
       const detail = error as Error & { error?: string };
       const project = catalogue.projects().find((item) => item.id === ownerProjectId);
       const hostFailed = !hostFallback && runtimeIdentity()?.kind === "native_pi" && project?.defaultTemplateId === "host-pi"
         && !["live_process_limit", "generation_limit"].includes(detail.error || "");
       if (hostFailed && project) {
         await options.saveWorkspaceDefault(project.id, null);
+        if (token !== openToken || selection !== selectionToken || selectedId() !== chatId) return null;
         const fallback = options.defaultTemplateId() || "chat";
         const chat = await api<ChatSummary>(`/v0/chats/${encodeURIComponent(chatId)}`, {
           method: "PATCH",
           body: JSON.stringify({ templateId: fallback, runtimeKind: "conduit_profile" }),
         });
+        if (token !== openToken || selection !== selectionToken || selectedId() !== chatId) return null;
         setTemplateId(chat.templateId || fallback);
         setRuntimeIdentity(chat.runtime || null);
         await models.reloadChat(chatId);
-        return openLive(chatId, ownerProjectId, { intent, hostFallback: true, modelOverride: "", thinkingOverride: "" });
+        if (token !== openToken || selection !== selectionToken || selectedId() !== chatId) return null;
+        return openLive(chatId, ownerProjectId, { intent, hostFallback: true, modelOverride: "", thinkingOverride: "" }, selection);
       }
       throw error;
     } finally { if (token === openToken) setConnectingId(null); }
@@ -241,7 +249,8 @@ export function createActiveChat(options: ActiveChatOptions) {
     if (live() && socket?.readyState === WebSocket.OPEN) return live()!;
     const chatId = selectedId();
     if (!chatId) throw new Error("Chat is not ready yet");
-    const record = await openLive(chatId, projectId(), { intent });
+    const selection = selectionToken;
+    const record = await openLive(chatId, projectId(), { intent }, selection);
     if (!record) throw new Error("Chat switched before Pi was ready");
     return record;
   };
@@ -324,18 +333,20 @@ export function createActiveChat(options: ActiveChatOptions) {
     }
     if (type === "assistant_stream_delta" && eventGeneration) { setResponding(true); liveStream.append(eventGeneration, String(event.delta || "")); }
     if (type === "assistant_stream_final") {
-      continuation = false;
-      setResponding(false);
-      setThinking(false);
-      setMessages((current) => {
-        const copy = [...current];
-        const index = lastIndex(copy, (message) => message.role === "assistant");
-        const final: Partial<Message> = { content: String(event.content || ""), stopped: false, continuing: false };
-        if (index >= 0) copy[index] = { ...copy[index]!, ...final };
-        else copy.push({ id: `end_${Date.now()}`, role: "assistant", ...final });
-        return copy;
+      batch(() => {
+        continuation = false;
+        setResponding(false);
+        setThinking(false);
+        setMessages((current) => {
+          const copy = [...current];
+          const index = lastIndex(copy, (message) => message.role === "assistant");
+          const final: Partial<Message> = { content: String(event.content || ""), stopped: false, continuing: false };
+          if (index >= 0) copy[index] = { ...copy[index]!, ...final };
+          else copy.push({ id: `end_${Date.now()}`, role: "assistant", ...final });
+          return copy;
+        });
+        liveStream.clear();
       });
-      liveStream.clear();
     }
     if (type === "message_end" && eventMessage.role === "user") {
       void catalogue.refresh();
@@ -366,6 +377,7 @@ export function createActiveChat(options: ActiveChatOptions) {
 
   const select = async (chat: ChatSummary, project: Project) => {
     reset();
+    const selection = selectionToken;
     catalogue.select(chat, project);
     setStatus(chat.status);
     setTitle(chat.title);
@@ -374,8 +386,9 @@ export function createActiveChat(options: ActiveChatOptions) {
     history.replaceState({}, "", `/chat/${chat.id}`);
     models.select(project.id, chat.id);
     void attachments.select(chat.id);
-    const detail = await loadDetail(chat.id);
-    if (detail.status === "active") await openLive(chat.id, project.id);
+    const detail = await loadDetail(chat.id, false, selection);
+    if (selection !== selectionToken || selectedId() !== chat.id) return;
+    if (detail.status === "active") await openLive(chat.id, project.id, {}, selection);
   };
 
   const initialize = (chat: ChatSummary, project: Project, detail?: TranscriptDetail) => {
@@ -439,7 +452,7 @@ export function createActiveChat(options: ActiveChatOptions) {
     } catch (error) {
       setMessages(previous);
       setEditingEntryId(editId);
-      attachments.restore(sentAttachments);
+      attachments.restoreDraft(sentAttachments);
       setDraft(text);
       setGeneration("idle");
       onError((error as Error).message);
@@ -479,14 +492,17 @@ export function createActiveChat(options: ActiveChatOptions) {
 
   const loadOlder = async () => {
     if (!selectedId() || !pageBefore() || loadingOlder()) return;
+    const chatId = selectedId()!;
+    const selection = selectionToken;
     setLoadingOlder(true);
     try {
-      const detail = await api<TranscriptDetail>(`/v0/sessions/${selectedId()}?before=${encodeURIComponent(pageBefore()!)}`);
+      const detail = await api<TranscriptDetail>(`/v0/sessions/${chatId}?before=${encodeURIComponent(pageBefore()!)}`);
+      if (selection !== selectionToken || selectedId() !== chatId) return;
       setMessages((current) => [...asList<Message>(detail.messages), ...current]);
       setTools((current) => [...assignToolSeq(asList<ToolItem>(detail.tools)), ...current] as ToolItem[]);
       setPageBefore(detail.page?.before || null);
-    } catch (error) { onError((error as Error).message); }
-    finally { setLoadingOlder(false); }
+    } catch (error) { if (selection === selectionToken && selectedId() === chatId) onError((error as Error).message); }
+    finally { if (selection === selectionToken) setLoadingOlder(false); }
   };
 
   const edit = (message: Message) => {

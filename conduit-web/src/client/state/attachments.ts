@@ -21,6 +21,7 @@ export function createAttachments(onError: (message: string) => void) {
   const objectUrls = new Set<string>();
   let active = 0;
   let loadSequence = 0;
+  let uploadEpoch = 0;
 
   const update = (id: string, patch: Partial<UploadAttachment>) => setItems((current) => current.map((item) => item.id === id ? { ...item, ...patch } : item));
 
@@ -34,6 +35,7 @@ export function createAttachments(onError: (message: string) => void) {
   const upload = (item: UploadAttachment) => {
     const owner = chatId();
     if (!owner || !item.file) return;
+    const epoch = uploadEpoch;
     active += 1;
     update(item.id, { status: "uploading", progress: 0 });
     const request = new XMLHttpRequest();
@@ -44,8 +46,9 @@ export function createAttachments(onError: (message: string) => void) {
     const finish = () => {
       if (finished) return;
       finished = true;
-      active -= 1;
       requests.delete(item.id);
+      if (epoch !== uploadEpoch) return;
+      active = Math.max(0, active - 1);
       drain();
     };
     request.upload.addEventListener("progress", (event) => {
@@ -79,14 +82,28 @@ export function createAttachments(onError: (message: string) => void) {
     drain();
   };
 
-  const select = async (nextChatId: string) => {
+  const clear = () => {
     loadSequence += 1;
-    const sequence = loadSequence;
+    const owner = chatId();
+    const abandoned = items();
+    uploadEpoch += 1;
+    queue.splice(0);
     for (const request of requests.values()) request.abort();
     requests.clear();
-    queue.splice(0);
     active = 0;
+    for (const item of abandoned) {
+      if (item.objectUrl) { URL.revokeObjectURL(item.objectUrl); objectUrls.delete(item.objectUrl); }
+      if (owner && item.status === "done" && !item.restored) {
+        void api(`/v0/chats/${encodeURIComponent(owner)}/attachments/${item.id}`, { method: "DELETE" })
+          .catch(() => onError("Could not discard attachment"));
+      }
+    }
     setItems([]);
+  };
+
+  const select = async (nextChatId: string) => {
+    clear();
+    const sequence = loadSequence;
     setChatId(nextChatId);
     if (!nextChatId) return;
     try {
@@ -110,14 +127,22 @@ export function createAttachments(onError: (message: string) => void) {
 
   const pendingIds = createMemo(() => items().filter((item) => item.status === "done" && !item.announced).map((item) => item.id));
   const markAnnounced = (ids: string[]) => { const sent = new Set(ids); setItems((current) => current.filter((item) => !sent.has(item.id))); };
-  const restore = (restored: Attachment[]) => setItems(asList<Attachment>(restored).map((item) => ({ ...item, status: "done", progress: 100, announced: false, restored: true })));
+  const restore = (restored: Attachment[]) => {
+    clear();
+    setItems(asList<Attachment>(restored).map((item) => ({ ...item, status: "done", progress: 100, announced: false, restored: true })));
+  };
+  const restoreDraft = (restored: Attachment[]) => {
+    const draftItems = asList<Attachment>(restored).map((item) => ({ ...item, status: "done" as const, progress: 100, announced: false, restored: false }));
+    const draftIds = new Set(draftItems.map((item) => item.id));
+    setItems((current) => [...draftItems, ...current.filter((item) => !draftIds.has(item.id))]);
+  };
 
   onCleanup(() => {
     for (const request of requests.values()) request.abort();
     for (const url of objectUrls) URL.revokeObjectURL(url);
   });
 
-  return { items, chatId, select, addFiles, remove, pendingIds, markAnnounced, restore };
+  return { items, chatId, select, addFiles, remove, pendingIds, markAnnounced, clear, restore, restoreDraft };
 }
 
 export type AttachmentsStore = ReturnType<typeof createAttachments>;
