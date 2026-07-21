@@ -101,6 +101,12 @@ It rebuilds when needed and owns the PID/log on port 4310. Do not launch
 `npm run build` (bundle budgets enforced — treat budget increases as reviewed
 architectural changes).
 
+Before committing, run the complete local verification suite: `npm run
+typecheck`, `npm test`, `npm run build`, and `npm run test:browser`. GitHub
+Actions intentionally does not repeat the test suites; its manual static check
+only verifies a clean install, strict TypeScript, and the production bundle
+budgets. GitGuardian remains the automatic repository security check.
+
 Run a single server suite with `node --test test/<name>.test.js`; run a
 single browser spec with `npx playwright test test/browser/app.spec.js
 -g "<test name>"`. Server tests are `test/*.test.js` with `node:test`;
