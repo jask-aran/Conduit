@@ -1,26 +1,22 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createLiveStreamStore } from "../src/client/live-stream-store.js";
+import { createLiveStream } from "../src/client/state/live-stream.ts";
 
 function fixture() {
   const frames = [];
-  const store = createLiveStreamStore({ scheduleFrame: (callback) => { frames.push(callback); return callback; }, cancelFrame: () => {} });
+  const store = createLiveStream({ scheduleFrame: (callback) => { frames.push(callback); return frames.length; }, cancelFrame: () => {} });
   return { frames, store };
 }
 
-test("coalesces deltas into one immutable frame snapshot", () => {
+test("coalesces deltas into one Solid signal update per frame", () => {
   const { frames, store } = fixture();
-  const snapshots = [];
-  store.subscribe(() => snapshots.push(store.getSnapshot()));
   store.start("g1");
-  snapshots.length = 0;
   store.append("g1", "one");
   store.append("g1", " two");
   assert.equal(frames.length, 1);
+  assert.equal(store.content(), "");
   frames.shift()();
-  assert.equal(snapshots.length, 1);
-  assert.equal(snapshots[0].content, "one two");
-  assert.equal(Object.isFrozen(snapshots[0]), true);
+  assert.equal(store.content(), "one two");
 });
 
 test("flush publishes pending content and rejects stale generations", () => {
@@ -29,17 +25,15 @@ test("flush publishes pending content and rejects stale generations", () => {
   store.append("g1", "visible");
   assert.equal(store.append("g2", "late"), false);
   store.flush();
-  assert.equal(store.getSnapshot().content, "visible");
+  assert.equal(store.content(), "visible");
   assert.equal(frames.length, 1);
 });
 
-test("ordinary clear resets the generation and notifies subscribers", () => {
+test("ordinary clear resets visible and pending content", () => {
   const { store } = fixture();
-  let notifications = 0;
-  store.subscribe(() => { notifications += 1; });
   store.start("g1");
-  notifications = 0;
+  store.append("g1", "pending");
   store.clear();
-  assert.deepEqual(store.getSnapshot(), { generationId: null, content: "" });
-  assert.equal(notifications, 1);
+  assert.equal(store.content(), "");
+  assert.equal(store.append("g2", "new"), true);
 });

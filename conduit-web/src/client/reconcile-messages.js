@@ -1,5 +1,5 @@
 // Reconcile a rendered message list with a freshly fetched (durable) list while
-// preserving each row's render identity. Timeline React keys are `message.key ??
+// preserving each row's render identity. Timeline keys are `message.key ??
 // message.id`; when the server confirms an optimistic client entry we adopt its
 // durable id but keep the original key so the DOM node survives (no remount, no
 // scroll-anchor churn, no Markdown re-parse). See AGENTS.md "Rendering stability".

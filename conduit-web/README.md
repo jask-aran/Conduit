@@ -1,7 +1,7 @@
 # Conduit Web
 
 The Conduit web surface combines an Express server, server-owned Pi RPC
-processes, and a React/Vite client.
+processes, and a strict TypeScript SolidJS/Vite client.
 
 ## Run
 
@@ -45,10 +45,9 @@ The interface keeps uploaded Attachment cards above the bounded native
 textarea until send, then renders the same cards beneath their user message.
 Persisted image cards use the attachment preview route, including when restored
 for edit. The compact composer model menu remains separate from Settings'
-searchable, grouped multi-model Combobox. Cmd/Ctrl+K opens the application
-Command palette (`src/client/command-registry.js` + ranked search in
-`palette-search.js`). Root lists chat actions, portals, thinking levels, and
-models; Settings… and Go to… are drill-down pages with search prefixes
+searchable multi-model picker. Cmd/Ctrl+K opens the typed application command
+palette. Root lists concrete app actions and models; Settings… and Go to… are
+drill-down pages with search prefixes
 (`Settings ›`, `Go to ›`) so sections and chats do not flood the root list.
 Cmd/Ctrl+Shift+O opens Go to mode directly; Cmd/Ctrl+Shift+C starts a new chat.
 The composer slash Popover contains only `/attach`. A project-aware breadcrumb
@@ -87,26 +86,30 @@ retains its recorded model.
 
 ## Client composition
 
-The Shadcn icon-collapsible sidebar separates first-class Chats from expandable
-Projects. Draft chats stay out of navigation until their first message creates a
-session, after which the new session is selected. Context menus expose chat
-rename, move, duplicate, transcript copy, and delete operations, plus project
-chat creation, rename, bulk move, and delete operations. The same chat and
-folder mutations are available from the command palette (root actions or the
-Go to / Settings pages) so keyboard users do not depend on the sidebar alone.
-Settings → Workspaces contains one card per linked/cloned root and stores either
-global-profile inheritance, an explicit ordinary-profile override, or Host Pi.
-If Host Pi becomes unavailable, Conduit clears that override and retries with the
-inherited profile.
+The Solid client has three state owners: the catalogue store owns projects and
+selection, the runtime store owns the global SSE process map, and the active-chat
+store owns one transcript, WebSocket, generation state, queue, and host UI.
+Model settings and attachments are narrow helpers. Components consume those
+stores directly; there is no compatibility layer or parallel client runtime.
 
-Assistant messages pass through `src/client/chat-markdown.jsx`, which configures
-Streamdown for live and restored content. GFM, partial streaming Markdown,
-KaTeX math, and Artifact-carded Shiki fenced-code highlighting (fine-grained
-core, JavaScript regex engine, pinned languages) share one renderer. Live
-responses stream as raw deltas coalesced per animation frame by
-`src/client/live-stream-store.js`.
-HTML is sanitized, unsafe URLs are removed, remote images become alt text, and
-external links require confirmation. User messages are displayed literally.
+The concrete icon-collapsible sidebar separates first-class Chats, Projects,
+and Workspaces. Draft chats stay out of navigation until their first message
+creates a session. Kobalte provides accessible menu and context-menu behavior;
+the surrounding sidebar, composer, transcript, command palette, and Settings
+surfaces are direct Solid components rather than a copied component catalogue.
+Settings → Workspaces stores global-profile inheritance, an explicit ordinary
+profile, or Host Pi. If Host Pi becomes unavailable, Conduit clears that
+override and retries with the inherited profile.
+
+Assistant messages pass through `src/client/chat/markdown.tsx`. Marked parses
+GFM and fenced code, the KaTeX extension renders math, and DOMPurify enforces the
+client boundary. The renderer is lazy-loaded, strips remote images and unsafe
+URLs, requires confirmation for external links, and keeps user messages literal.
+Live deltas are coalesced into one Solid signal update per animation frame, and
+stable render keys preserve the Markdown DOM through streaming, finalization,
+and durable checkpoint reconciliation. Tool calls use one generic disclosure
+card with lifecycle status, deterministic summaries, lazy deferred results, and
+bounded previews; tools are data, not component registry keys.
 
 The single-line composer owns runtime-aware model and thinking controls. Isolated
 Pi reads `data/pi`; Host Pi reads its detected agent home and reconciles against

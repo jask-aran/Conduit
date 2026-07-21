@@ -15,7 +15,7 @@ Dashboard are future surfaces.
 
 One Express server owns a pool of `pi --mode rpc` child processes — one per
 live chat, across two installations (bundled Isolated Pi and the user's
-native Host Pi) — and relays their events to a React/Vite client over
+native Host Pi) — and relays their events to a strict TypeScript SolidJS/Vite client over
 per-chat WebSockets plus a global SSE runtime channel. Pi's JSONL files are
 the authoritative transcripts; Conduit's `data/*.json` stores hold identity,
 registry, and preferences only. Sessions outlive browser connections and
@@ -45,8 +45,8 @@ and feature specs).
 ```text
 conduit-web/
   src/                 Express server and Pi RPC lifecycle
-  src/client/          React/Vite interface
-  src/components/ui/   Shadcn component source
+  src/client/          SolidJS client, typed API boundary, and state stores
+  src/components/      Small Kobalte-backed primitive boundary
   test/                Node test suites
   test/browser/        Playwright browser tests
 
@@ -132,12 +132,12 @@ overrides for dev). Full contract in `conduit-web/README.md`.
 
 ## Interface
 
-Shadcn (Radix Nova preset) + Tailwind v4 + Lucide + Geist, dark neutral
-tokens; components are added as repository-owned source with
-`npm run ui:add -- <component>`. Transcripts render assistant Markdown
-client-side through Streamdown (GFM, KaTeX, Shiki-highlighted code in
-Artifact cards, sanitized HTML); streaming relays raw deltas coalesced per
-animation frame. Cmd/Ctrl+K opens the command palette; Settings is a centered
+SolidJS + strict TypeScript + Tailwind v4 + Lucide + Geist, with Kobalte used
+selectively for accessible menus and context menus. Concrete app components
+replace the former generic component catalogue. Transcripts render assistant
+Markdown client-side through Marked, DOMPurify, and KaTeX; fenced code uses
+bounded Artifact cards, and streaming relays raw deltas coalesced per animation
+frame. Cmd/Ctrl+K opens the command palette; Settings is a centered
 tabbed dialog; response controls cover copy, fork/edit, regenerate, stop, and
 experimental partial continue (`ENABLE_PARTIAL_CONTINUE`). Production builds
 enforce gzip bundle budgets (`dist/bundle-report.json`). Composition rules
