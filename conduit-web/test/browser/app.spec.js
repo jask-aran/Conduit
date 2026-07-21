@@ -385,7 +385,7 @@ test("renders persisted assistant Markdown with safe interactive controls", asyn
   await page.getByRole("button", { name: "Existing chat" }).click();
 
   await expect(page.getByRole("heading", { name: "Markdown sample" })).toBeVisible();
-  await expect(page.locator('[data-streamdown="strong"]')).toHaveText("strong");
+  await expect(page.locator('[data-markdown="strong"]')).toHaveText("strong");
   await expect(page.locator(".chat-markdown ul li")).toHaveCount(2);
   await expect(page.locator(".chat-markdown blockquote")).toContainText("useful quotation");
   await expect(page.locator(".chat-markdown table")).toContainText("Tables");

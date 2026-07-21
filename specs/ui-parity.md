@@ -23,9 +23,9 @@ one flexible card used by every tool that lacks a native renderer:
 - Result: collapsed by default, lazy-fetched on expand (existing behavior
   preserved); render text as text, JSON pretty-printed, errors in a
   destructive-toned block.
-- A renderer registry maps tool name → component, defaulting to this card.
-  Native components (phases 3+, `rhs-panel.md`) register into it. The registry
-  is the extension point; no switch statements in the timeline.
+- Tool names remain data. The generic card must render unknown tools without a
+  renderer registry; native interactive requests use their protocol type at the
+  host-UI boundary rather than registering tool-name components.
 - Timeline stability rules from `AGENTS.md` apply: one element type per slot
   across the streaming→final lifecycle.
 
@@ -35,7 +35,7 @@ Two defects:
 
 1. **Startup flicker**: at chat start the thinking indicator mounts,
    unmounts, and remounts. Diagnose the event ordering in
-   `live-stream-store.js`/timeline mapping before fixing (systematic:
+   `state/live-stream.ts`/timeline mapping before fixing (systematic:
    reproduce with a logged event trace, identify which transition unmounts the
    slot). Expected shape of fix: a stable per-generation thinking slot that
    appears once and transitions in place — never keyed off transient delta
@@ -53,7 +53,7 @@ interactive requests arrive as `extension_ui_request` events, are answered
 with the `extension_ui_response` / `host_ui_response` WS commands, appear in
 `hostUiRequests` on runtime snapshots, and drive the `waiting_for_user`
 activity. What's missing is presentation: render the request as a native card
-in the transcript — question text, option buttons (Shadcn), free-text
+in the transcript — question text, option buttons (direct Solid controls), free-text
 fallback where the request allows it — instead of the current generic host-UI
 handling. Submitting sends the existing response command and freezes the card
 to show what was chosen; resolved requests (`extension_ui_resolved`) freeze
