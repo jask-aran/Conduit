@@ -26,11 +26,7 @@ const tokensCache = new Map();
 // Subscribers for async token updates
 const subscribers = new Map();
 
-const getTokensCacheKey = (code, language) => {
-  const start = code.slice(0, 100);
-  const end = code.length > 100 ? code.slice(-100) : "";
-  return `${language}:${code.length}:${start}:${end}`;
-};
+const getTokensCacheKey = (code, language) => `${language}:${code}`;
 
 // Single shared highlighter instance (JS regex engine, no oniguruma/wasm),
 // with only the two pinned themes preloaded. Languages are loaded lazily.

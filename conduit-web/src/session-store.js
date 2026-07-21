@@ -299,7 +299,9 @@ export function toolsFromEntries(entries) {
           name: block.name,
           args: block.arguments,
           done: false,
+          status: "pending",
           timestamp: entry.timestamp || null,
+          startedAt: entry.timestamp || null,
         });
       }
     }
@@ -313,7 +315,10 @@ export function toolsFromEntries(entries) {
         ...current,
         name: current.name || message.toolName,
         done: true,
+        ...(message.isError ? { error: true } : {}),
+        status: message.isError ? "error" : "done",
         result: textContent(message.content),
+        completedAt: entry.timestamp || null,
       });
     }
   }

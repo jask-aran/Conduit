@@ -16,12 +16,14 @@ test("session IDs prefer Pi's native ID and otherwise remain stable", () => {
 test("restores completed tool calls from persisted messages", () => {
   const entries = [{
     type: "message",
+    timestamp: "2026-01-01T00:00:00.000Z",
     message: {
       role: "assistant",
       content: [{ type: "toolCall", id: "call_1", name: "write", arguments: { path: "note.md" } }],
     },
   }, {
     type: "message",
+    timestamp: "2026-01-01T00:00:01.250Z",
     message: {
       role: "toolResult",
       toolCallId: "call_1",
@@ -35,8 +37,11 @@ test("restores completed tool calls from persisted messages", () => {
     name: "write",
     args: { path: "note.md" },
     done: true,
+    status: "done",
     result: "Successfully wrote note.md",
-    timestamp: null,
+    timestamp: "2026-01-01T00:00:00.000Z",
+    startedAt: "2026-01-01T00:00:00.000Z",
+    completedAt: "2026-01-01T00:00:01.250Z",
   }]);
 });
 

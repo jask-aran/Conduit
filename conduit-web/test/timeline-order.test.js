@@ -29,6 +29,25 @@ test("mergeToolEvent preserves first-seen timestamp and seq on reconnect replay"
   assert.equal(replay.tools[0].seq, 0);
 });
 
+test("mergeToolEvent records running and completed lifecycle timestamps", () => {
+  const started = mergeToolEvent([], {
+    type: "tool_execution_start",
+    toolCallId: "t1",
+    toolName: "read",
+    timestamp: "2026-01-01T00:00:00.000Z",
+  });
+  assert.equal(started.tools[0].status, "running");
+  assert.equal(started.tools[0].startedAt, "2026-01-01T00:00:00.000Z");
+
+  const completed = mergeToolEvent(started.tools, {
+    type: "tool_execution_end",
+    toolCallId: "t1",
+    timestamp: "2026-01-01T00:00:01.250Z",
+  });
+  assert.equal(completed.tools[0].status, "done");
+  assert.equal(completed.tools[0].completedAt, "2026-01-01T00:00:01.250Z");
+});
+
 test("buildTimeline keeps tools between messages when timestamps order them", () => {
   const messages = [
     { id: "u1", role: "user", content: "go", timestamp: "2026-01-01T00:00:00.000Z" },

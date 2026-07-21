@@ -16,6 +16,14 @@ export function displayUserText(message) {
   return parseAttachmentEnvelope(raw).message || raw;
 }
 
+function toolEventStatus(event, currentStatus = "pending") {
+  if (event.cancelled) return "cancelled";
+  if (event.isError || event.error) return "error";
+  if (event.done || event.type === "tool_execution_end") return "done";
+  if (["tool_execution_start", "tool_execution_update"].includes(event.type)) return "running";
+  return event.status || currentStatus;
+}
+
 export function mergeToolEvent(tools, event, { nextSeq } = {}) {
   const id = event.toolCallId || event.id;
   if (!id) return { tools, created: false };
@@ -33,19 +41,28 @@ export function mergeToolEvent(tools, event, { nextSeq } = {}) {
           error: event.isError != null
             ? Boolean(event.isError)
             : (event.error != null ? Boolean(event.error) : item.error),
+          status: toolEventStatus(event, item.status),
+          startedAt: event.type === "tool_execution_start"
+            ? (event.timestamp || item.startedAt)
+            : (item.startedAt || (event.type === "tool_execution_update" ? event.timestamp : undefined)),
+          completedAt: event.type === "tool_execution_end" ? (event.timestamp || item.completedAt) : item.completedAt,
         }
         : item)),
       created: false,
     };
   }
   const seq = typeof nextSeq === "function" ? nextSeq() : (event.seq ?? tools.length);
+  const timestamp = event.timestamp || new Date().toISOString();
   const tool = {
     id,
     name: event.toolName || event.name || "tool",
     args: event.args,
     done: Boolean(event.done) || event.type === "tool_execution_end",
     error: Boolean(event.isError || event.error),
-    timestamp: event.timestamp || new Date().toISOString(),
+    status: toolEventStatus(event),
+    timestamp,
+    startedAt: ["tool_execution_start", "tool_execution_update"].includes(event.type) ? timestamp : undefined,
+    completedAt: event.type === "tool_execution_end" ? timestamp : undefined,
     seq,
     result: event.result,
     partialResult: event.partialResult,

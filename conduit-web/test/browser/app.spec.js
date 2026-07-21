@@ -320,7 +320,7 @@ test("keeps the native textarea composer bounded in a thread", async ({ page }, 
   await openSidebar(page, testInfo);
   await page.getByRole("button", { name: "Existing chat" }).click();
   await expect(page.getByText("Previous question")).toBeVisible();
-  await expect(page.getByRole("button", { name: /write\(path: note\.md\).*Complete/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /write note\.md.*Complete/ })).toBeVisible();
   await expect(page.locator('[data-slot="message-header"]')).toHaveCount(0);
 
   const composerGroup = page.locator(".composer");
@@ -351,8 +351,11 @@ test("tool card v2 expands args/result, pretty-prints JSON, lazy-fetches deferre
           name: "write",
           args: { path: "note.md", content: "hello" },
           done: true,
+          status: "done",
           result: "Saved",
           timestamp: "2026-07-15T06:49:27.768Z",
+          startedAt: "2026-07-15T06:49:27.768Z",
+          completedAt: "2026-07-15T06:49:29.018Z",
         },
         {
           id: "call_deferred",
@@ -379,20 +382,47 @@ test("tool card v2 expands args/result, pretty-prints JSON, lazy-fetches deferre
           result: "ok",
           timestamp: "2026-07-15T06:49:30.768Z",
         },
+        {
+          id: "call_pending",
+          name: "queued_tool",
+          args: { path: "later.txt" },
+          done: false,
+          status: "pending",
+          timestamp: "2026-07-15T06:49:31.768Z",
+        },
+        {
+          id: "call_long",
+          name: "long_output",
+          args: { content: "x".repeat(5000) },
+          done: true,
+          result: "ok",
+          timestamp: "2026-07-15T06:49:32.768Z",
+        },
+        {
+          id: "call_bash",
+          name: "bash",
+          args: { command: "python3 fizzbuzz.py", timeout: 30 },
+          done: true,
+          result: Array.from({ length: 20 }, (_, index) => `line ${index + 1}`).join("\n"),
+          timestamp: "2026-07-15T06:49:33.768Z",
+        },
       ],
     } });
   });
-  const toolFetch = page.waitForRequest("**/v0/sessions/session_existing/tools/call_deferred");
+  let deferredFetches = 0;
   await page.route("**/v0/sessions/session_existing/tools/call_deferred", async (route) => {
+    deferredFetches += 1;
     await route.fulfill({ json: { id: "call_deferred", result: "3 matches" } });
   });
   await page.goto("/");
   await openSidebar(page, testInfo);
   await page.getByRole("button", { name: "Existing chat" }).click();
 
-  const writeTrigger = page.getByRole("button", { name: /write\(path: note\.md, content: hello\).*Complete/ });
+  const writeTrigger = page.getByRole("button", { name: /write note\.md · \+1.*Complete/ });
   const writeCard = page.locator(".tool-card").filter({ has: writeTrigger });
   await expect(writeTrigger).toBeVisible();
+  await expect(writeTrigger).toContainText("1.3s");
+  await expect(page.getByRole("button", { name: /queued_tool.*Pending/ })).toBeVisible();
   await writeTrigger.click();
   await writeCard.getByRole("button", { name: "Arguments" }).click();
   await expect(writeCard.locator("pre code")).toBeVisible();
@@ -410,13 +440,34 @@ test("tool card v2 expands args/result, pretty-prints JSON, lazy-fetches deferre
   await expect(failedCard.locator(".border-destructive\\/50")).toContainText("command failed");
 
   // Deferred result is lazy-fetched on expand, not before.
-  const deferredTrigger = page.getByRole("button", { name: /grep\(pattern: foo\)/ });
+  const deferredTrigger = page.getByRole("button", { name: /grep foo/ });
   const deferredCard = page.locator(".tool-card").filter({ has: deferredTrigger });
   await expect(deferredTrigger).toBeVisible();
   await deferredTrigger.click();
+  await expect(deferredCard.getByRole("button", { name: "Result" })).toBeVisible();
+  expect(deferredFetches).toBe(0);
   await deferredCard.getByRole("button", { name: "Result" }).click();
-  await toolFetch;
+  await expect.poll(() => deferredFetches).toBe(1);
   await expect(deferredCard.getByText("3 matches")).toBeVisible();
+
+  const longTrigger = page.getByRole("button", { name: /long_output/ });
+  const longCard = page.locator(".tool-card").filter({ has: longTrigger });
+  await longTrigger.click();
+  await longCard.getByRole("button", { name: "Arguments" }).click();
+  await expect(longCard.getByRole("button", { name: "Show full arguments" })).toBeVisible();
+  await expect(longCard.locator(".tool-card-value")).not.toContainText("x".repeat(5000));
+  await longCard.getByRole("button", { name: "Show full arguments" }).click();
+  await expect(longCard.locator(".tool-card-value")).toContainText("x".repeat(5000));
+
+  const bashTrigger = page.getByRole("button", { name: /bash python3 fizzbuzz\.py · \+1/ });
+  const bashCard = page.locator(".tool-card").filter({ has: bashTrigger });
+  await bashTrigger.click();
+  await bashCard.getByRole("button", { name: "Result" }).click();
+  const bashOutput = bashCard.locator(".tool-card-value pre");
+  await expect(bashOutput).toHaveText(Array.from({ length: 10 }, (_, index) => `line ${index + 11}`).join("\n"));
+  await expect(bashCard.getByText("10 earlier lines hidden")).toBeVisible();
+  await bashCard.getByRole("button", { name: "Show full output" }).click();
+  await expect(bashOutput).toHaveText(Array.from({ length: 20 }, (_, index) => `line ${index + 1}`).join("\n"));
 });
 
 test("renders persisted assistant Markdown with safe interactive controls", async ({ page }, testInfo) => {

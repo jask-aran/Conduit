@@ -1,23 +1,29 @@
-import { lazy, Suspense, useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { CheckIcon, ChevronDownIcon, ChevronUpIcon, XIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
 import { getToolRenderer, registerTimelineItemRenderer, setDefaultToolRenderer } from "./tool-registry.js";
-import { prettyPrintValue, summarizeTool } from "./tool-summary.js";
+import { formatToolDuration, previewToolValue, summarizeTool, toolResultPreviewDirection } from "./tool-summary.js";
 
 // Same lazy convention as chat-thread.jsx's ChatMarkdown: the JSON
 // pretty-printer pulls in the shared shiki-highlight.js singleton, so it
 // only loads once a section is actually expanded.
 const ToolJsonBlock = lazy(() => import("./tool-json-block.jsx"));
 
-function ExpandableSection({ label, value, tone }) {
+function ExpandableSection({ available, direction = "head", fullLabel = "content", label, loading, onOpenChange, tone, value }) {
   const [open, setOpen] = useState(false);
-  if (value == null || value === "") return null;
+  const [showFull, setShowFull] = useState(false);
+  if (!available && (value == null || value === "")) return null;
   const isJson = typeof value !== "string";
-  const pretty = prettyPrintValue(value);
-  return <Collapsible open={open} onOpenChange={setOpen} className="tool-card-section">
+  const preview = previewToolValue(value, { direction });
+  const displayed = showFull ? previewToolValue(value, { maxChars: Number.POSITIVE_INFINITY, maxLines: Number.POSITIVE_INFINITY }).text : preview.text;
+  const updateOpen = (nextOpen) => {
+    setOpen(nextOpen);
+    onOpenChange?.(nextOpen);
+  };
+  return <Collapsible open={open} onOpenChange={updateOpen} className="tool-card-section">
     <CollapsibleTrigger asChild>
       <Button variant="ghost" size="sm" className="w-full justify-start gap-1.5 text-xs text-muted-foreground">
         {open ? <ChevronUpIcon data-icon="inline-start" className="size-3.5" /> : <ChevronDownIcon data-icon="inline-start" className="size-3.5" />}
@@ -26,11 +32,28 @@ function ExpandableSection({ label, value, tone }) {
     </CollapsibleTrigger>
     <CollapsibleContent>
       <div className={cn("tool-card-value", tone === "destructive" && "rounded-md border border-destructive/50 bg-destructive/10 p-2")}>
-        {isJson
-          ? <Suspense fallback={<pre className="overflow-x-auto whitespace-pre-wrap break-words p-2 text-xs">{pretty}</pre>}>
-              <ToolJsonBlock code={pretty} />
-            </Suspense>
-          : <pre className="overflow-x-auto whitespace-pre-wrap break-words p-2 text-xs">{pretty}</pre>}
+        {loading
+          ? <div className="flex items-center gap-2 p-2 text-xs text-muted-foreground"><Spinner className="size-3.5" /> Loading…</div>
+          : isJson
+            ? <Suspense fallback={<pre className="overflow-x-auto whitespace-pre-wrap break-words p-2 text-xs">{displayed}</pre>}>
+                <ToolJsonBlock code={displayed} />
+              </Suspense>
+            : <pre className="overflow-x-auto whitespace-pre-wrap break-words p-2 text-xs">{displayed}</pre>}
+        {!loading && preview.truncated && <div className="flex flex-wrap items-center gap-1 px-1 pb-1 text-xs text-muted-foreground">
+          {!showFull && <span>
+            {preview.hiddenLines > 0
+              ? `${preview.hiddenLines} ${direction === "tail" ? "earlier" : "more"} lines hidden`
+              : `${preview.hiddenChars} characters hidden`}
+          </span>}
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-xs"
+            onClick={() => setShowFull((current) => !current)}
+          >
+            {showFull ? "Show preview" : `Show full ${fullLabel}`}
+          </Button>
+        </div>}
       </div>
     </CollapsibleContent>
   </Collapsible>;
@@ -47,46 +70,61 @@ export function ToolCard({ tool, sessionId }) {
   const [open, setOpen] = useState(false);
   const [result, setResult] = useState(tool.result);
   const [loading, setLoading] = useState(false);
+  const resultRequested = useRef(false);
 
-  // Deferred result fetch, preserved verbatim from the v1 card: large
-  // results are omitted from the initial session payload and lazy-fetched
-  // from GET /v0/sessions/:id/tools/:toolId on first expand.
   useEffect(() => {
     if (tool.result != null) setResult(tool.result);
   }, [tool.result]);
-  useEffect(() => {
-    if (!open || !tool.resultDeferred || result != null || loading || !sessionId) return;
+
+  const loadDeferredResult = (resultOpen) => {
+    if (!resultOpen || !tool.resultDeferred || result != null || loading || resultRequested.current || !sessionId) return;
+    resultRequested.current = true;
     setLoading(true);
     fetch(`/v0/sessions/${encodeURIComponent(sessionId)}/tools/${encodeURIComponent(tool.id)}`)
       .then((response) => response.ok ? response.json() : Promise.reject(new Error("Could not load tool output")))
-      .then((payload) => setResult(payload.result || ""))
+      .then((payload) => setResult(payload.result ?? ""))
       .catch(() => setResult("Could not load tool output"))
       .finally(() => setLoading(false));
-  }, [loading, open, result, sessionId, tool.id, tool.resultDeferred]);
+  };
 
-  const status = tool.error ? "Error" : tool.cancelled ? "Cancelled" : tool.done ? "Complete" : "Running";
+  const statusKey = tool.status || (tool.error ? "error" : tool.cancelled ? "cancelled" : tool.done ? "done" : "pending");
+  const status = {
+    cancelled: "Cancelled",
+    done: "Complete",
+    error: "Error",
+    pending: "Pending",
+    running: "Running",
+  }[statusKey] || "Pending";
   const summary = summarizeTool(tool);
-  const resultValue = loading ? null : (result != null ? result : tool.partialResult);
+  const duration = ["done", "error", "cancelled"].includes(statusKey) ? formatToolDuration(tool) : "";
+  const resultValue = result != null ? result : tool.partialResult;
 
   return <Collapsible open={open} onOpenChange={setOpen} className="tool-card">
     <CollapsibleTrigger asChild>
       <Button
         variant="outline"
         className="w-full justify-start gap-2"
-        data-state={tool.error ? "error" : tool.done ? "done" : "running"}
+        data-state={statusKey}
       >
-        {tool.error ? <XIcon data-icon="inline-start" className="size-3.5 text-destructive" />
-          : tool.done ? <CheckIcon data-icon="inline-start" className="size-3.5" />
+        {statusKey === "error" ? <XIcon data-icon="inline-start" className="size-3.5 text-destructive" />
+          : statusKey === "done" ? <CheckIcon data-icon="inline-start" className="size-3.5" />
           : <Spinner data-icon="inline-start" className="size-3.5" />}
         <span className="truncate font-mono text-sm">{summary}</span>
-        <span className={cn("ml-auto text-xs", tool.error ? "text-destructive" : "text-muted-foreground")}>{status}</span>
+        <span className={cn("ml-auto text-xs", statusKey === "error" ? "text-destructive" : "text-muted-foreground")}>
+          {status}{duration ? ` · ${duration}` : ""}
+        </span>
         {open ? <ChevronUpIcon data-icon="inline-end" /> : <ChevronDownIcon data-icon="inline-end" />}
       </Button>
     </CollapsibleTrigger>
     <CollapsibleContent className="tool-card-body space-y-1 pt-1">
-      <ExpandableSection label="Arguments" value={tool.args} />
+      <ExpandableSection fullLabel="arguments" label="Arguments" value={tool.args} />
       <ExpandableSection
+        available={tool.resultDeferred || loading}
+        direction={toolResultPreviewDirection(tool)}
+        fullLabel="output"
         label={loading ? "Result (loading…)" : "Result"}
+        loading={loading}
+        onOpenChange={loadDeferredResult}
         value={resultValue}
         tone={tool.error ? "destructive" : undefined}
       />
