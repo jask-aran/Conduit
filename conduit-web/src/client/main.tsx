@@ -5,7 +5,7 @@ import { Toaster, toast } from "solid-sonner";
 import "solid-sonner/styles.css";
 import { Button } from "@/components/primitives";
 import { api, asList, pathChatId } from "./api/client";
-import type { ChatSummary, Installation, Project, RuntimeIdentity, Template, TranscriptDetail } from "./api/contracts";
+import type { ChatSummary, Installation, Project, RuntimeIdentity, Template, TranscriptDetail, WorkspaceSuggestion } from "./api/contracts";
 import { Composer } from "./chat/composer";
 import { HostUiRequests } from "./chat/host-ui-card";
 import { Transcript } from "./chat/transcript";
@@ -40,7 +40,7 @@ function ChatHeader(props: { project?: Project; title: string; profile?: Templat
 function App() {
   const [templates, setTemplates] = createSignal<Template[]>([]);
   const [installations, setInstallations] = createSignal<Installation[]>([]);
-  const [workspaceSuggestions, setWorkspaceSuggestions] = createSignal<string[]>([]);
+  const [workspaceSuggestions, setWorkspaceSuggestions] = createSignal<WorkspaceSuggestion[]>([]);
   const [defaultTemplateId, setDefaultTemplateId] = createSignal("chat");
   const [partialContinue, setPartialContinue] = createSignal(true);
   const [settingsOpen, setSettingsOpen] = createSignal(false);
@@ -262,7 +262,7 @@ function App() {
       catalogue.setProjects(projects);
       setPartialContinue(capabilities.partialContinue !== false);
       setTemplates(asList<Template>(templatePayload.templates));
-      setWorkspaceSuggestions(asList<string>(workspacePayload.folders));
+      setWorkspaceSuggestions(asList<WorkspaceSuggestion>(workspacePayload.folders));
       setInstallations(asList<Installation>(installationPayload.installations));
       setDefaultTemplateId(templatePayload.defaultTemplateId || "chat");
       const routeId = pathChatId();

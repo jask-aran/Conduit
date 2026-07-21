@@ -16,6 +16,10 @@ export interface ChatSummary {
   runtime?: RuntimeIdentity;
   createdAt?: string;
   updatedAt?: string;
+  /** Server-side live snapshot for offline indicator fallback (SSE owns truth while online). */
+  liveStatus?: string | null;
+  liveActivity?: string | null;
+  liveActive?: boolean;
 }
 
 export interface Project {
@@ -27,7 +31,14 @@ export interface Project {
   path?: string;
   externalPath?: string;
   defaultTemplateId?: string | null;
+  deletesFilesOnRemove?: boolean;
   sessions: ChatSummary[];
+}
+
+export interface WorkspaceSuggestion {
+  name: string;
+  path: string;
+  displayPath?: string;
 }
 
 export interface Attachment {
