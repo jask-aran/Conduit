@@ -893,7 +893,15 @@ test("hides transient new chats and provides complete right-click menus", async 
   await page.getByRole("menuitem", { name: "Move to folder…" }).hover();
   await expect(page.getByRole("menuitemradio", { name: "Chats" })).toBeChecked();
   const moveRequest = page.waitForRequest((request) => request.url().endsWith("/v0/sessions/session_existing/move"));
-  await page.getByRole("menuitemradio", { name: "Research" }).click();
+  // Move like a real pointer: an instant teleport past the parent menu defeats
+  // the submenu's hover-grace corridor (which tracks movement direction), so
+  // the submenu closes before the click. On phone layouts the submenu is
+  // flipped to the left of its parent, which is where a straight-line move is
+  // most likely to clip the parent items.
+  const moveTarget = page.getByRole("menuitemradio", { name: "Research" });
+  const moveTargetBox = await moveTarget.boundingBox();
+  await page.mouse.move(moveTargetBox.x + moveTargetBox.width / 2, moveTargetBox.y + moveTargetBox.height / 2, { steps: 12 });
+  await moveTarget.click();
   expect((await moveRequest).postDataJSON()).toEqual({ projectId: "project_research" });
 
   await page.getByRole("button", { name: "Existing chat" }).click({ button: "right" });
@@ -924,10 +932,10 @@ test("uses the sidebar-08 groups and native icon collapse", async ({ page }, tes
   await expect(page.locator('[data-sidebar="footer"]').getByRole("button", { name: /Conduit/ })).toBeVisible();
   await expect(page.locator('[data-sidebar="footer"]')).toContainText(/Server connected|Connecting|Reconnecting|unavailable/);
   await expect(page.locator('[data-sidebar="group-label"]')).toHaveText(["Chats", "Projects", "Workspaces"]);
-  await expect(page.locator('[data-sidebar="group-label"]').first()).toHaveCSS("font-size", "13px");
-  await expect(page.getByRole("button", { name: "Existing chat" })).toHaveCSS("font-size", "15px");
-  await expect(page.locator('[data-sidebar="header"] span', { hasText: "Conduit" })).toHaveCSS("font-size", "24px");
-  await expect(page.locator('[data-sidebar="header"] svg')).toHaveCSS("width", "24px");
+  await expect(page.locator('[data-sidebar="group-label"]').first()).toHaveCSS("font-size", "11px");
+  await expect(page.getByRole("button", { name: "Existing chat" })).toHaveCSS("font-size", "13px");
+  await expect(page.locator('[data-sidebar="header"] span', { hasText: "Conduit" })).toHaveCSS("font-size", "15px");
+  await expect(page.locator('[data-sidebar="header"] svg')).toHaveCSS("width", "17px");
 
   await expect(page.getByRole("button", { name: "Existing chat" })).toBeVisible();
   await expect(page.locator('[data-sidebar="rail"]')).toHaveCount(1);

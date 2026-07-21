@@ -12,3 +12,4 @@ export interface FineActivityInput {
 
 export function deriveFineActivity(input?: FineActivityInput): { kind: string; label: string | null };
 export function normalizeHostUiRequest(event: unknown): HostUiRequest | null;
+export function activityLabel(activity: string, detail?: string | null): string;
