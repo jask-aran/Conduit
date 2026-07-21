@@ -3,7 +3,8 @@ import { Show, splitProps } from "solid-js";
 import * as KDialog from "@kobalte/core/dialog";
 import { DropdownMenu as KMenu } from "@kobalte/core/dropdown-menu";
 import { ContextMenu as KContextMenu } from "@kobalte/core/context-menu";
-import { LoaderCircleIcon, XIcon } from "lucide-solid";
+import * as KTooltip from "@kobalte/core/tooltip";
+import { ChevronRightIcon, LoaderCircleIcon, XIcon } from "lucide-solid";
 import { cn } from "@/lib/utils";
 
 type ButtonProps = JSX.ButtonHTMLAttributes<HTMLButtonElement> & {
@@ -71,6 +72,15 @@ export function DialogClose(props: ParentProps<{ class?: string }>) {
   return <KDialog.CloseButton class={props.class}>{props.children}</KDialog.CloseButton>;
 }
 
+/* Menus share one dark, solid surface profile: --popover ground, hairline ring,
+   rounded-lg shell over rounded-md items. Kept deliberately un-glassy — the
+   liquid-glass treatment is reserved for the composer. */
+const menuContentClass = "z-[100] min-w-40 rounded-lg bg-popover p-1 text-popover-foreground shadow-md ring-1 ring-foreground/10 outline-none";
+/* Submenus get a smaller min-width so a flipped submenu can still fit beside
+   its parent on narrow viewports instead of overflowing offscreen. */
+const menuSubContentClass = "z-[100] min-w-28 rounded-lg bg-popover p-1 text-popover-foreground shadow-md ring-1 ring-foreground/10 outline-none";
+const menuItemClass = "relative flex cursor-default select-none items-center gap-1.5 rounded-md px-1.5 py-1 text-sm outline-none data-[highlighted]:bg-accent data-[highlighted]:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50 data-[variant=destructive]:text-destructive data-[variant=destructive]:data-[highlighted]:bg-destructive/15";
+
 export const Menu = KMenu;
 export const MenuTrigger = KMenu.Trigger;
 export const MenuGroup = KMenu.Group;
@@ -78,29 +88,36 @@ export const MenuRadioGroup = KMenu.RadioGroup;
 export const MenuSub = KMenu.Sub;
 
 export function MenuContent(props: ParentProps<{ class?: string }>) {
-  return <KMenu.Portal><KMenu.Content class={cn("z-[100] min-w-40 rounded-md border bg-popover p-1 text-popover-foreground shadow-md outline-none", props.class)}>{props.children}</KMenu.Content></KMenu.Portal>;
+  return <KMenu.Portal><KMenu.Content data-slot="menu-content" class={cn(menuContentClass, props.class)}>{props.children}</KMenu.Content></KMenu.Portal>;
 }
-export function MenuItem(props: ParentProps<{ class?: string; disabled?: boolean; onSelect?: () => void; textValue?: string }>) {
-  return <KMenu.Item disabled={props.disabled} onSelect={props.onSelect} textValue={props.textValue} class={cn("relative flex cursor-default select-none items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-none data-[highlighted]:bg-accent data-[disabled]:pointer-events-none data-[disabled]:opacity-50", props.class)}>{props.children}</KMenu.Item>;
+export function MenuItem(props: ParentProps<{ class?: string; disabled?: boolean; variant?: "destructive"; onSelect?: () => void; textValue?: string }>) {
+  return <KMenu.Item disabled={props.disabled} onSelect={props.onSelect} textValue={props.textValue} data-variant={props.variant} class={cn(menuItemClass, props.class)}>{props.children}</KMenu.Item>;
 }
 export function MenuRadioItem(props: ParentProps<{ class?: string; value: string; disabled?: boolean }>) {
-  return <KMenu.RadioItem value={props.value} disabled={props.disabled} class={cn("relative flex cursor-default select-none items-center gap-2 rounded-sm py-1.5 pl-8 pr-2 text-sm outline-none data-[highlighted]:bg-accent data-[disabled]:opacity-50", props.class)}><KMenu.ItemIndicator class="absolute left-2">✓</KMenu.ItemIndicator>{props.children}</KMenu.RadioItem>;
+  return <KMenu.RadioItem value={props.value} disabled={props.disabled} class={cn(menuItemClass, "pl-8", props.class)}><KMenu.ItemIndicator class="absolute left-2">✓</KMenu.ItemIndicator>{props.children}</KMenu.RadioItem>;
 }
-export function MenuLabel(props: ParentProps<{ class?: string }>) { return <KMenu.GroupLabel class={cn("px-2 py-1.5 text-xs font-medium text-muted-foreground", props.class)}>{props.children}</KMenu.GroupLabel>; }
+export function MenuLabel(props: ParentProps<{ class?: string }>) { return <KMenu.GroupLabel class={cn("px-1.5 py-1.5 text-xs font-medium text-muted-foreground", props.class)}>{props.children}</KMenu.GroupLabel>; }
 export function MenuSeparator() { return <KMenu.Separator class="-mx-1 my-1 h-px bg-border" />; }
-export function MenuSubTrigger(props: ParentProps<{ class?: string; disabled?: boolean }>) { return <KMenu.SubTrigger disabled={props.disabled} class={cn("flex cursor-default items-center rounded-sm px-2 py-1.5 text-sm outline-none data-[highlighted]:bg-accent data-[disabled]:opacity-50", props.class)}>{props.children}</KMenu.SubTrigger>; }
-export function MenuSubContent(props: ParentProps<{ class?: string }>) { return <KMenu.Portal><KMenu.SubContent class={cn("z-[100] min-w-40 rounded-md border bg-popover p-1 shadow-md outline-none", props.class)}>{props.children}</KMenu.SubContent></KMenu.Portal>; }
+export function MenuSubTrigger(props: ParentProps<{ class?: string; disabled?: boolean }>) { return <KMenu.SubTrigger disabled={props.disabled} class={cn(menuItemClass, "data-[expanded]:bg-accent", props.class)}>{props.children}<ChevronRightIcon class="menu-chevron" /></KMenu.SubTrigger>; }
+export function MenuSubContent(props: ParentProps<{ class?: string }>) { return <KMenu.Portal><KMenu.SubContent data-slot="menu-content" class={cn(menuSubContentClass, props.class)}>{props.children}</KMenu.SubContent></KMenu.Portal>; }
 
 export function ContextMenu(props: ParentProps) { return <KContextMenu modal={false}>{props.children}</KContextMenu>; }
 export const ContextMenuTrigger = KContextMenu.Trigger;
-export function ContextMenuContent(props: ParentProps<{ class?: string }>) { return <KContextMenu.Portal><KContextMenu.Content class={cn("z-[100] min-w-36 rounded-md border bg-popover p-1 shadow-md outline-none", props.class)}>{props.children}</KContextMenu.Content></KContextMenu.Portal>; }
-export function ContextMenuItem(props: ParentProps<{ disabled?: boolean; onSelect?: () => void; class?: string }>) { return <KContextMenu.Item disabled={props.disabled} onSelect={props.onSelect} class={cn("flex cursor-default items-center rounded-sm px-2 py-1.5 text-sm outline-none data-[highlighted]:bg-accent data-[disabled]:opacity-50", props.class)}>{props.children}</KContextMenu.Item>; }
+export const ContextMenuGroup = KContextMenu.Group;
+export function ContextMenuContent(props: ParentProps<{ class?: string }>) { return <KContextMenu.Portal><KContextMenu.Content data-slot="context-menu-content" class={cn(menuContentClass, props.class)}>{props.children}</KContextMenu.Content></KContextMenu.Portal>; }
+export function ContextMenuItem(props: ParentProps<{ disabled?: boolean; variant?: "destructive"; onSelect?: () => void; class?: string }>) { return <KContextMenu.Item disabled={props.disabled} onSelect={props.onSelect} data-variant={props.variant} class={cn(menuItemClass, props.class)}>{props.children}</KContextMenu.Item>; }
 export const ContextMenuSub = KContextMenu.Sub;
-export function ContextMenuSubTrigger(props: ParentProps<{ disabled?: boolean }>) { return <KContextMenu.SubTrigger disabled={props.disabled} class="flex cursor-default items-center rounded-sm px-2 py-1.5 text-sm outline-none data-[highlighted]:bg-accent data-[disabled]:opacity-50">{props.children}</KContextMenu.SubTrigger>; }
-export function ContextMenuSubContent(props: ParentProps) { return <KContextMenu.Portal><KContextMenu.SubContent class="pointer-events-auto z-[100] min-w-28 rounded-md border bg-popover p-1 shadow-md outline-none">{props.children}</KContextMenu.SubContent></KContextMenu.Portal>; }
+export function ContextMenuSubTrigger(props: ParentProps<{ disabled?: boolean }>) { return <KContextMenu.SubTrigger disabled={props.disabled} class={cn(menuItemClass, "data-[expanded]:bg-accent")}>{props.children}<ChevronRightIcon class="menu-chevron" /></KContextMenu.SubTrigger>; }
+export function ContextMenuSubContent(props: ParentProps<{ class?: string }>) { return <KContextMenu.Portal><KContextMenu.SubContent data-slot="context-menu-sub-content" class={cn(menuSubContentClass, "pointer-events-auto", props.class)}>{props.children}</KContextMenu.SubContent></KContextMenu.Portal>; }
 export const ContextMenuRadioGroup = KContextMenu.RadioGroup;
-export function ContextMenuRadioItem(props: ParentProps<{ value: string }>) { return <KContextMenu.RadioItem value={props.value} class="relative flex cursor-default items-center rounded-sm py-1.5 pl-8 pr-2 text-sm outline-none data-[highlighted]:bg-accent"><KContextMenu.ItemIndicator class="absolute left-2">✓</KContextMenu.ItemIndicator>{props.children}</KContextMenu.RadioItem>; }
+export function ContextMenuRadioItem(props: ParentProps<{ value: string }>) { return <KContextMenu.RadioItem value={props.value} class={cn(menuItemClass, "pl-8")}><KContextMenu.ItemIndicator class="absolute left-2">✓</KContextMenu.ItemIndicator>{props.children}</KContextMenu.RadioItem>; }
 export function ContextMenuSeparator() { return <KContextMenu.Separator class="-mx-1 my-1 h-px bg-border" />; }
+
+export function Tooltip(props: ParentProps) { return <KTooltip.Root placement="right" openDelay={350}>{props.children}</KTooltip.Root>; }
+export const TooltipTrigger = KTooltip.Trigger;
+export function TooltipContent(props: ParentProps<{ class?: string }>) {
+  return <KTooltip.Portal><KTooltip.Content class={cn("z-[120] rounded-md bg-popover px-2.5 py-1.5 text-xs text-popover-foreground shadow-md ring-1 ring-foreground/10", props.class)}>{props.children}</KTooltip.Content></KTooltip.Portal>;
+}
 
 export function Field(props: ParentProps<{ class?: string }>) { return <div data-slot="field" class={cn("flex flex-col gap-2", props.class)}>{props.children}</div>; }
 export function FieldGroup(props: ParentProps<{ class?: string }>) { return <div data-slot="field-group" class={cn("flex flex-col gap-4", props.class)}>{props.children}</div>; }
