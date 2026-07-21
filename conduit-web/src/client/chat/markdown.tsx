@@ -2,6 +2,7 @@ import { createEffect, createSignal, onCleanup, onMount } from "solid-js";
 import DOMPurify from "dompurify";
 import { marked } from "marked";
 import markedKatex from "marked-katex-extension";
+import * as KAlertDialog from "@kobalte/core/alert-dialog";
 import "katex/dist/katex.min.css";
 import { Button } from "@/components/primitives";
 
@@ -50,13 +51,13 @@ function renderMarkdown(source: string) {
   }) as DocumentFragment;
 }
 
-export function ChatMarkdown(props: { children?: string; streaming?: boolean }) {
+export function ChatMarkdown(props: { children?: string; streaming?: boolean; streamVersion?: number }) {
   let root!: HTMLDivElement;
   const [externalUrl, setExternalUrl] = createSignal<string | null>(null);
+  let externalReturnFocus: HTMLElement | null = null;
   let renderedSource = "";
   let streamLength = 0;
-  let streamHead = "";
-  let streamSuffix = "";
+  let activeStreamVersion = -1;
   let streamChunks: string[] = [];
   let streamLineChunks: string[] = [];
   let streamTail: HTMLSpanElement | null = null;
@@ -65,18 +66,6 @@ export function ChatMarkdown(props: { children?: string; streaming?: boolean }) 
   let displayMath = false;
   let commitAtBlankLine: boolean | null = null;
   let streaming = false;
-
-  const updateStreamFingerprint = (delta: string) => {
-    if (streamHead.length < 128) streamHead += delta.slice(0, 128 - streamHead.length);
-    streamSuffix = delta.length >= 128 ? delta.slice(-128) : `${streamSuffix}${delta}`.slice(-128);
-    streamLength += delta.length;
-  };
-
-  const isAppendOnly = (source: string) => {
-    if (source.length < streamLength) return false;
-    if (source.slice(0, streamHead.length) !== streamHead) return false;
-    return source.slice(streamLength - streamSuffix.length, streamLength) === streamSuffix;
-  };
 
   const appendRendered = (source: string) => {
     if (!source) return;
@@ -124,7 +113,7 @@ export function ChatMarkdown(props: { children?: string; streaming?: boolean }) 
 
   const appendStream = (delta: string) => {
     if (!delta || !streamText) return;
-    updateStreamFingerprint(delta);
+    streamLength += delta.length;
     let start = 0;
     for (let newline = delta.indexOf("\n"); newline >= 0; newline = delta.indexOf("\n", start)) {
       const segment = delta.slice(start, newline + 1);
@@ -141,12 +130,11 @@ export function ChatMarkdown(props: { children?: string; streaming?: boolean }) 
     streamText.appendData(remainder);
   };
 
-  const beginStream = (source: string) => {
+  const beginStream = (source: string, version: number) => {
     root.replaceChildren();
     renderedSource = "";
     streamLength = 0;
-    streamHead = "";
-    streamSuffix = "";
+    activeStreamVersion = version;
     streamChunks = [];
     streamLineChunks = [];
     fence = null;
@@ -163,19 +151,13 @@ export function ChatMarkdown(props: { children?: string; streaming?: boolean }) 
   };
 
   const finishStream = (source: string) => {
-    if (isAppendOnly(source)) appendStream(source.slice(streamLength));
-    else {
-      root.replaceChildren(renderMarkdown(source));
-      renderedSource = source;
-      streaming = false;
-      streamTail = null;
-      streamText = null;
-      return;
-    }
-    commitStreamBuffer();
-    streamTail?.remove();
+    // Fragments are useful while tokens arrive, but only a canonical parse of
+    // the whole document can resolve cross-block Markdown such as reference
+    // definitions. This is the stream's single full parse.
+    root.replaceChildren(renderMarkdown(source));
     streamTail = null;
     streamText = null;
+    streamChunks = [];
     streamLineChunks = [];
     renderedSource = source;
     streaming = false;
@@ -183,8 +165,9 @@ export function ChatMarkdown(props: { children?: string; streaming?: boolean }) 
 
   createEffect(() => {
     const source = String(props.children || "");
+    const version = Number(props.streamVersion || 0);
     if (props.streaming) {
-      if (!streaming || !isAppendOnly(source)) beginStream(source);
+      if (!streaming || version !== activeStreamVersion || source.length < streamLength) beginStream(source, version);
       else appendStream(source.slice(streamLength));
       return;
     }
@@ -201,6 +184,7 @@ export function ChatMarkdown(props: { children?: string; streaming?: boolean }) 
     if (target.hasAttribute("data-copy-code")) {
       await navigator.clipboard.writeText(target.closest("[data-language]")?.querySelector("code")?.textContent || "");
     } else {
+      externalReturnFocus = target;
       setExternalUrl(target.dataset.externalUrl || null);
     }
   };
@@ -210,22 +194,18 @@ export function ChatMarkdown(props: { children?: string; streaming?: boolean }) 
 
   return <>
     <div ref={root} class="chat-markdown" data-streaming={props.streaming || undefined} />
-    <div
-      role="alertdialog"
-      aria-modal="true"
-      aria-label="Open external link?"
-      data-state={externalUrl() ? "open" : "closed"}
-      class="external-link-dialog"
-    >
-      <div class="external-link-dialog-card">
-        <h2>Open external link?</h2>
-        <p>This link opens outside Conduit.</p>
-        <code class="external-link-url">{externalUrl()}</code>
-        <div class="flex justify-end gap-2">
-          <Button variant="outline" onClick={() => setExternalUrl(null)}>Cancel</Button>
-          <Button onClick={() => { if (externalUrl()) window.open(externalUrl()!, "_blank", "noopener,noreferrer"); setExternalUrl(null); }}>Open link</Button>
+    <KAlertDialog.Root open={Boolean(externalUrl())} onOpenChange={(open) => { if (!open) setExternalUrl(null); }}>
+      <KAlertDialog.Portal><KAlertDialog.Content data-state={externalUrl() ? "open" : "closed"} class="external-link-dialog" onCloseAutoFocus={(event) => { event.preventDefault(); if (externalReturnFocus?.isConnected) externalReturnFocus.focus(); externalReturnFocus = null; }}>
+        <div class="external-link-dialog-card">
+          <KAlertDialog.Title>Open external link?</KAlertDialog.Title>
+          <KAlertDialog.Description>This link opens outside Conduit.</KAlertDialog.Description>
+          <code class="external-link-url">{externalUrl()}</code>
+          <div class="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setExternalUrl(null)}>Cancel</Button>
+            <Button onClick={() => { if (externalUrl()) window.open(externalUrl()!, "_blank", "noopener,noreferrer"); setExternalUrl(null); }}>Open link</Button>
+          </div>
         </div>
-      </div>
-    </div>
+      </KAlertDialog.Content></KAlertDialog.Portal>
+    </KAlertDialog.Root>
   </>;
 }

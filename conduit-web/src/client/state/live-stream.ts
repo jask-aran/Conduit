@@ -7,6 +7,7 @@ interface LiveStreamOptions {
 
 export function createLiveStream(options: LiveStreamOptions = {}) {
   const [content, setContent] = createSignal("");
+  const [version, setVersion] = createSignal(0);
   const scheduleFrame = options.scheduleFrame || requestAnimationFrame;
   const cancelFrame = options.cancelFrame || cancelAnimationFrame;
   let generationId: string | null = null;
@@ -23,9 +24,11 @@ export function createLiveStream(options: LiveStreamOptions = {}) {
 
   return {
     content,
+    version,
     start(id: string) {
       generationId = id;
       pending = "";
+      setVersion((current) => current + 1);
       setContent("");
     },
     append(id: string, delta: string) {
@@ -40,6 +43,7 @@ export function createLiveStream(options: LiveStreamOptions = {}) {
       frame = 0;
       pending = "";
       generationId = id;
+      setVersion((current) => current + 1);
       setContent(value || "");
     },
     clear() {

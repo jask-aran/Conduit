@@ -1,4 +1,6 @@
-import { createEffect, createSignal, For, onCleanup, onMount, Show } from "solid-js";
+import { createEffect, createSignal, For, Show } from "solid-js";
+import * as KAlertDialog from "@kobalte/core/alert-dialog";
+import * as KDialog from "@kobalte/core/dialog";
 import { CableIcon, FolderIcon, FolderPlusIcon, MessageSquareIcon, PanelLeftIcon, PlusIcon, SettingsIcon } from "lucide-solid";
 import {
   Button,
@@ -26,16 +28,33 @@ import type { RuntimeStore } from "../state/runtime";
 
 type ProjectInput = { mode: string; name?: string; path?: string; cloneUrl?: string };
 
-function Modal(props: { open: boolean; title: string; description?: string; role?: "dialog" | "alertdialog"; children: unknown; onClose: () => void; class?: string }) {
-  const keydown = (event: KeyboardEvent) => { if (props.open && event.key === "Escape") props.onClose(); };
-  onMount(() => window.addEventListener("keydown", keydown));
-  onCleanup(() => window.removeEventListener("keydown", keydown));
-  return <div role={props.role || "dialog"} aria-modal="true" aria-label={props.title} data-state={props.open ? "open" : "closed"} class="conduit-modal">
-    <div class={`conduit-modal-card ${props.class || ""}`}>
-      <h2>{props.title}</h2><Show when={props.description}><p class="text-muted-foreground">{props.description}</p></Show>
-      {props.children as never}
-    </div>
-  </div>;
+function Modal(props: { open: boolean; title: string; description?: string; children: unknown; onClose: () => void; class?: string }) {
+  let returnFocus: HTMLElement | null = null;
+  let wasOpen = false;
+  createEffect(() => { if (props.open && !wasOpen) returnFocus = document.activeElement as HTMLElement | null; wasOpen = props.open; });
+  return <KDialog.Root open={props.open} onOpenChange={(open) => { if (!open) props.onClose(); }}>
+    <KDialog.Portal><KDialog.Content data-state={props.open ? "open" : "closed"} class="conduit-modal" onCloseAutoFocus={(event) => { event.preventDefault(); if (returnFocus?.isConnected) returnFocus.focus(); returnFocus = null; }}>
+      <div class={`conduit-modal-card ${props.class || ""}`}>
+        <KDialog.Title>{props.title}</KDialog.Title><Show when={props.description}><KDialog.Description class="text-muted-foreground">{props.description}</KDialog.Description></Show>
+        {props.children as never}
+      </div>
+    </KDialog.Content></KDialog.Portal>
+  </KDialog.Root>;
+}
+
+function AlertModal(props: { open: boolean; title: string; description: string; children: unknown; onClose: () => void }) {
+  let returnFocus: HTMLElement | null = null;
+  let wasOpen = false;
+  createEffect(() => { if (props.open && !wasOpen) returnFocus = document.activeElement as HTMLElement | null; wasOpen = props.open; });
+  return <KAlertDialog.Root open={props.open} onOpenChange={(open) => { if (!open) props.onClose(); }}>
+    <KAlertDialog.Portal><KAlertDialog.Content data-state={props.open ? "open" : "closed"} class="conduit-modal" onCloseAutoFocus={(event) => { event.preventDefault(); if (returnFocus?.isConnected) returnFocus.focus(); returnFocus = null; }}>
+      <div class="conduit-modal-card">
+        <KAlertDialog.Title>{props.title}</KAlertDialog.Title>
+        <KAlertDialog.Description>{props.description}</KAlertDialog.Description>
+        {props.children as never}
+      </div>
+    </KAlertDialog.Content></KAlertDialog.Portal>
+  </KAlertDialog.Root>;
 }
 
 function RuntimeDot(props: { chatId: string; runtime: RuntimeStore }) {
@@ -207,8 +226,8 @@ export function Sidebar(props: {
       <form onSubmit={submitRename}><Field><FieldLabel for="rename-name">Name</FieldLabel><Input id="rename-name" aria-label="Name" value={renameValue()} onInput={(event) => setRenameValue(event.currentTarget.value)} /></Field><div class="mt-4 flex justify-end gap-2"><Button type="button" variant="outline" onClick={() => setRename(null)}>Cancel</Button><Button type="submit" disabled={!renameValue().trim()}>Rename</Button></div></form>
     </Modal>
 
-    <Modal open={Boolean(deleting())} role="alertdialog" title={deleting()?.type === "chat" ? "Delete this chat?" : deleting()?.type === "project" && deleting()!.project.origin !== "managed" ? "Unlink this workspace?" : "Delete this folder?"} onClose={() => setDeleting(null)}>
-      <p>{deleting()?.type === "chat" ? "This permanently deletes the Pi session transcript and this chat's attached files." : "This removes the folder and its Conduit chats."}</p><div class="mt-4 flex justify-end gap-2"><Button variant="outline" onClick={() => setDeleting(null)}>Cancel</Button><Button variant="destructive" onClick={() => void confirmDelete()}>Delete</Button></div>
-    </Modal>
+    <AlertModal open={Boolean(deleting())} title={deleting()?.type === "chat" ? "Delete this chat?" : deleting()?.type === "project" && deleting()!.project.origin !== "managed" ? "Unlink this workspace?" : "Delete this folder?"} description={deleting()?.type === "chat" ? "This permanently deletes the Pi session transcript and this chat's attached files." : "This removes the folder and its Conduit chats."} onClose={() => setDeleting(null)}>
+      <div class="mt-4 flex justify-end gap-2"><Button variant="outline" onClick={() => setDeleting(null)}>Cancel</Button><Button variant="destructive" onClick={() => void confirmDelete()}>Delete</Button></div>
+    </AlertModal>
   </>;
 }

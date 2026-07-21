@@ -46,7 +46,6 @@ function App() {
   const [settingsSection, setSettingsSection] = createSignal<SettingsSection>("models");
   const [settingsWorkspaceId, setSettingsWorkspaceId] = createSignal<string | null>(null);
   const [paletteOpen, setPaletteOpen] = createSignal(false);
-  const [palettePage, setPalettePage] = createSignal<"settings" | "goto" | null>(null);
   const [sidebarCommand, setSidebarCommand] = createSignal<{ type: string; nonce: number } | null>(null);
   const [dropActive, setDropActive] = createSignal(false);
   let dragDepth = 0;
@@ -78,29 +77,40 @@ function App() {
     : profiles().find((item) => item.id === chat.templateId()) || templates().find((item) => item.id === defaultTemplateId()) || null);
   const emptyChat = createMemo(() => chat.loadedId() === catalogue.selectedId() && !chat.messages().length && !chat.tools().length && !chat.activity()?.label);
 
-  const discardDraft = async () => {
-    const id = catalogue.selectedId();
-    if (id && chat.status() === "draft") await fetch(`/v0/chats/${encodeURIComponent(id)}?ifEmpty=true`, { method: "DELETE" }).catch(() => {});
+  const currentDraftId = () => chat.status() === "draft" ? catalogue.selectedId() : null;
+
+  const discardDraft = async (id = currentDraftId()) => {
+    if (id) await api(`/v0/chats/${encodeURIComponent(id)}?ifEmpty=true`, { method: "DELETE" });
   };
 
   const createChat = async (target?: Project, launch: { templateId?: string; runtimeKind?: string } = {}) => {
     const project = target || selectedProject() || catalogue.projects().find((item) => item.slug === "chat") || catalogue.projects()[0];
     if (!project) return;
-    await discardDraft();
-    chat.reset();
-    const hostDefault = project.defaultTemplateId === "host-pi" && !launch.templateId && !launch.runtimeKind;
-    const profileId = launch.templateId || (project.defaultTemplateId === "host-pi" ? null : project.defaultTemplateId) || defaultTemplateId() || "chat";
-    const created = await api<ChatSummary>(profileId === "runtime" ? "/v0/runtime/chats" : "/v0/chats", {
-      method: "POST",
-      body: JSON.stringify(profileId === "runtime" ? {} : hostDefault ? { projectId: project.id } : { projectId: project.id, templateId: profileId, runtimeKind: launch.runtimeKind || "conduit_profile" }),
-    });
-    history.replaceState({}, "", `/chat/${created.id}`);
-    chat.initialize({ ...created, templateId: created.templateId || profileId || undefined }, project);
+    const replacedDraftId = currentDraftId();
+    try {
+      const hostDefault = project.defaultTemplateId === "host-pi" && !launch.templateId && !launch.runtimeKind;
+      const profileId = launch.templateId || (project.defaultTemplateId === "host-pi" ? null : project.defaultTemplateId) || defaultTemplateId() || "chat";
+      const created = await api<ChatSummary>(profileId === "runtime" ? "/v0/runtime/chats" : "/v0/chats", {
+        method: "POST",
+        body: JSON.stringify(profileId === "runtime" ? {} : hostDefault ? { projectId: project.id } : { projectId: project.id, templateId: profileId, runtimeKind: launch.runtimeKind || "conduit_profile" }),
+      });
+
+      // Commit the visible transition only after the durable replacement exists.
+      history.replaceState({}, "", `/chat/${created.id}`);
+      chat.initialize({ ...created, templateId: created.templateId || profileId || undefined }, project);
+
+      if (replacedDraftId && replacedDraftId !== created.id) {
+        try { await discardDraft(replacedDraftId); }
+        catch (error) { showError(`The new chat was created, but the old empty draft could not be removed: ${(error as Error).message}`); }
+      }
+    } catch (error) {
+      showError((error as Error).message);
+    }
   };
 
   const openChat = async (target: ChatSummary, project: Project) => {
-    await discardDraft();
-    try { await chat.select(target, project); } catch (error) { showError((error as Error).message); }
+    try { await discardDraft(); await chat.select(target, project); }
+    catch (error) { showError((error as Error).message); }
   };
 
   const switchProfile = async (id: string) => {
@@ -175,8 +185,8 @@ function App() {
   const keydown = (event: KeyboardEvent) => {
     if (!(event.metaKey || event.ctrlKey) || event.altKey) return;
     const key = event.key.toLowerCase();
-    if (key === "k" && !event.shiftKey) { event.preventDefault(); setPalettePage(null); setPaletteOpen((value) => !value); }
-    if (key === "o" && event.shiftKey) { event.preventDefault(); setPalettePage("goto"); setPaletteOpen(true); }
+    if (key === "k" && !event.shiftKey) { event.preventDefault(); setPaletteOpen((value) => !value); }
+    if (key === "o" && event.shiftKey) { event.preventDefault(); setPaletteOpen(true); }
     if (key === "c" && event.shiftKey) { event.preventDefault(); void createChat(); }
     if (key === ",") { event.preventDefault(); openSettings("general"); }
   };
@@ -229,7 +239,7 @@ function App() {
       connectivity={runtime.connectivity()} workspaceSuggestions={workspaceSuggestions()} command={sidebarCommand()}
       onNewChat={createChat} onOpenChat={openChat} onAddProject={addProject} onRenameChat={renameChat} onRenameProject={renameProject}
       onMoveChat={moveChat} onMoveProjectChats={moveProjectChats} onCopyTranscript={copyTranscript} onDeleteChat={deleteChat} onDeleteProject={deleteProject}
-      onOpenSettings={openSettings} onOpenPalette={() => { setPalettePage(null); setPaletteOpen(true); }} />
+      onOpenSettings={openSettings} onOpenPalette={() => setPaletteOpen(true)} />
     <main data-slot="sidebar-inset" class={`chat-main${emptyChat() ? " chat-main-empty" : ""}`} {...dropHandlers}>
       <Show when={dropActive()}><div class="chat-drop-overlay"><div>Drop files to attach</div></div></Show>
       <div class="chat-meteors" aria-hidden="true"><For each={Array.from({ length: 30 })}>{(_, index) => <span style={{ left: `calc(${(index() * 37) % 101}% + ${(index() % 5) * 0.1}dvh)`, "animation-delay": `-${(index() * 0.73).toFixed(2)}s`, "animation-duration": `${12 + (index() % 9)}s` }} />}</For></div>
@@ -239,7 +249,7 @@ function App() {
       <div class="composer-stack"><HostUiRequests requests={chat.hostUiRequests()} onRespond={chat.respondHostUi} />
         <Composer chat={chat} attachments={attachments} models={models} profiles={profiles()} activeProfile={activeProfile()} serverOnline={runtime.connectivity() === "online"} onChooseProfile={(id) => void switchProfile(id)} onOpenSettings={openSettings} /></div>
     </main>
-    <CommandMenu open={paletteOpen()} initialPage={palettePage()} onOpenChange={setPaletteOpen} projects={catalogue.projects()} models={models.models()} onSettings={openSettings}
+    <CommandMenu open={paletteOpen()} onOpenChange={setPaletteOpen} projects={catalogue.projects()} models={models.models()} onSettings={openSettings}
       onNewChat={() => void createChat()} onNewFolder={() => setSidebarCommand({ type: "new-folder", nonce: Date.now() })} onNewWorkspace={() => setSidebarCommand({ type: "new-workspace", nonce: Date.now() })}
       onOpenChat={openPaletteChat} onChooseModel={(spec) => void models.chooseModel(spec)} onDeleteChat={() => setSidebarCommand({ type: "delete-chat", nonce: Date.now() })} />
     <Settings open={settingsOpen()} initialSection={settingsSection()} initialWorkspaceId={settingsWorkspaceId()} onOpenChange={setSettingsOpen} models={models} templates={templates()} defaultTemplateId={defaultTemplateId()} projects={catalogue.projects()} installations={installations()} onInstallationsChange={setInstallations} onDefaultTemplateChange={saveDefaultTemplate} onWorkspaceDefaultChange={saveWorkspaceDefault} />
