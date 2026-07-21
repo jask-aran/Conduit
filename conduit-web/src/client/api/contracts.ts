@@ -53,6 +53,7 @@ export interface Message {
   pending?: boolean;
   queueMode?: "steer" | "follow_up";
   attachments?: Attachment[];
+  order?: number;
 }
 
 export interface ToolItem {
@@ -69,6 +70,7 @@ export interface ToolItem {
   timestamp?: string;
   completedAt?: string;
   seq?: number;
+  order?: number;
 }
 
 export interface TranscriptDetail extends ChatSummary {
@@ -176,5 +178,3 @@ export interface LiveRecord {
   trustPosture?: string;
   sessionFile?: string;
 }
-
-export type LiveEvent = { type: string; [key: string]: unknown };

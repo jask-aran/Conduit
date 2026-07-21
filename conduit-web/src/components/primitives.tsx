@@ -1,6 +1,6 @@
 import type { JSX, ParentProps } from "solid-js";
 import { Show, splitProps } from "solid-js";
-import { Dialog as KDialog } from "@kobalte/core/dialog";
+import * as KDialog from "@kobalte/core/dialog";
 import { DropdownMenu as KMenu } from "@kobalte/core/dropdown-menu";
 import { ContextMenu as KContextMenu } from "@kobalte/core/context-menu";
 import { LoaderCircleIcon, XIcon } from "lucide-solid";
@@ -40,7 +40,7 @@ export function Badge(props: ParentProps<{ class?: string; variant?: "default" |
 }
 
 export function Dialog(props: ParentProps<{ open: boolean; onOpenChange: (open: boolean) => void }>) {
-  return <KDialog open={props.open} onOpenChange={props.onOpenChange}>{props.children}</KDialog>;
+  return <KDialog.Root open={props.open} onOpenChange={props.onOpenChange}>{props.children}</KDialog.Root>;
 }
 
 export function DialogTrigger(props: ParentProps<{ as?: keyof JSX.IntrinsicElements; class?: string }>) {

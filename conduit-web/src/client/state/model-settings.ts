@@ -12,7 +12,9 @@ export function createModelSettings(onError: ErrorHandler) {
   const [model, setModel] = createSignal("");
   const [effort, setEffort] = createSignal("");
   const [notice, setNotice] = createSignal("");
-  const [loading, setLoading] = createSignal(true);
+  const [settingsError, setSettingsError] = createSignal("");
+  const [settingsLoading, setSettingsLoading] = createSignal(true);
+  const [chatLoading, setChatLoading] = createSignal(true);
   const [saving, setSaving] = createSignal(false);
   let activeProjectId = "";
   let activeChatId = "";
@@ -31,22 +33,23 @@ export function createModelSettings(onError: ErrorHandler) {
   const reload = async (projectId = activeProjectId) => {
     if (!projectId) return;
     activeProjectId = projectId;
-    setLoading(true);
+    setSettingsLoading(true);
+    setSettingsError("");
     try {
       const [settings, catalog] = await Promise.all([
         api<ModelState>(`/v0/settings?projectId=${encodeURIComponent(projectId)}`),
         api<ModelState>(`/v0/models?projectId=${encodeURIComponent(projectId)}`),
       ]);
       if (activeProjectId === projectId) applySettings(settings, catalog);
-    } catch (error) { onError((error as Error).message); }
-    finally { if (activeProjectId === projectId) setLoading(false); }
+    } catch (error) { setSettingsError((error as Error).message); onError((error as Error).message); }
+    finally { if (activeProjectId === projectId) setSettingsLoading(false); }
   };
 
   const reloadChat = async (chatId = activeChatId) => {
     if (!chatId) return;
     activeChatId = chatId;
     const requestId = ++requestSequence;
-    setLoading(true);
+    setChatLoading(true);
     try {
       const catalog = await api<ModelState>(`/v0/chats/${encodeURIComponent(chatId)}/models`);
       if (activeChatId !== chatId || requestId !== requestSequence) return;
@@ -64,7 +67,7 @@ export function createModelSettings(onError: ErrorHandler) {
     } catch (error) {
       if (activeChatId === chatId && requestId === requestSequence) onError((error as Error).message);
     } finally {
-      if (activeChatId === chatId && requestId === requestSequence) setLoading(false);
+      if (activeChatId === chatId && requestId === requestSequence) setChatLoading(false);
     }
   };
 
@@ -84,6 +87,7 @@ export function createModelSettings(onError: ErrorHandler) {
     setEnabledModels(nextEnabled);
     setSettingsDefaultModel(allowedDefault);
     setSaving(true);
+    setSettingsError("");
     try {
       const payload = await api<ModelState>("/v0/settings", {
         method: "PATCH",
@@ -95,6 +99,7 @@ export function createModelSettings(onError: ErrorHandler) {
     } catch (error) {
       setEnabledModels(previousEnabled);
       setSettingsDefaultModel(previousDefault);
+      setSettingsError((error as Error).message);
       onError((error as Error).message);
       return false;
     } finally { setSaving(false); }
@@ -143,10 +148,9 @@ export function createModelSettings(onError: ErrorHandler) {
   };
 
   return {
-    allModels, enabledModels, models, settingsDefaultModel, model, effort, notice, loading, saving,
+    allModels, enabledModels, models, settingsDefaultModel, model, effort, notice, settingsError, settingsLoading, chatLoading, saving,
     select, reload, reloadChat, saveScope, chooseModel, chooseEffort,
   };
 }
 
 export type ModelSettings = ReturnType<typeof createModelSettings>;
-

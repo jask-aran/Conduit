@@ -1,13 +1,14 @@
 import { batch, createMemo, createSignal, onCleanup } from "solid-js";
-import { deriveFineActivity, normalizeHostUiRequest } from "../../activity.js";
+import { deriveFineActivity } from "../../activity.js";
 import { api, asList } from "../api/client";
+import { normalizeLiveEvent } from "../api/live-events";
+import type { LiveEvent, RuntimeSnapshotEvent, RuntimeStateEvent } from "../api/live-events";
 import type {
   ChatStatus,
   ChatSummary,
   ContextUsage,
   GenerationState,
   HostUiRequest,
-  LiveEvent,
   LiveRecord,
   Message,
   Project,
@@ -17,8 +18,8 @@ import type {
   ToolItem,
   TranscriptDetail,
 } from "../api/contracts";
-import { assignToolSeq, maxToolSeq, mergeToolEvent, promotePendingUser } from "../timeline-order.js";
-import { reconcileMessages } from "../reconcile-messages.js";
+import { assignToolSeq, maxToolSeq, mergeToolEvent, promotePendingUser } from "../timeline-order";
+import { reconcileMessages } from "../reconcile-messages";
 import type { AttachmentsStore, UploadAttachment } from "./attachments";
 import type { CatalogueStore } from "./catalogue";
 import { createLiveStream } from "./live-stream";
@@ -27,15 +28,6 @@ import type { RuntimeStore } from "./runtime";
 
 type UnknownRecord = Record<string, unknown>;
 type ErrorHandler = (message: string) => void;
-const fineActivity = deriveFineActivity as (input: {
-  generation: string;
-  processStatus: string;
-  coarse: string;
-  thinking: boolean;
-  responding: boolean;
-  toolName: string | null;
-  retry: RetryState | null;
-}) => { kind: string; label: string | null };
 
 interface ActiveChatOptions {
   catalogue: CatalogueStore;
@@ -50,10 +42,6 @@ interface ActiveChatOptions {
 function lastIndex<T>(items: T[], predicate: (item: T) => boolean) {
   for (let index = items.length - 1; index >= 0; index -= 1) if (predicate(items[index]!)) return index;
   return -1;
-}
-
-function eventRecord(value: unknown): UnknownRecord {
-  return value && typeof value === "object" ? value as UnknownRecord : {};
 }
 
 export function createActiveChat(options: ActiveChatOptions) {
@@ -149,16 +137,14 @@ export function createActiveChat(options: ActiveChatOptions) {
     return detail;
   };
 
-  const applySnapshot = (event: UnknownRecord) => {
-    const session = eventRecord(event.session);
-    if (event.contextUsage || session.contextUsage) setContextUsage((event.contextUsage || session.contextUsage) as ContextUsage);
-    if (event.queue || session.queue) setQueue((event.queue || session.queue) as QueueState);
-    const requests = event.hostUiRequests || session.hostUiRequests;
-    if (requests) setHostUiRequests(asList<HostUiRequest>(requests));
-    if (session.compacting != null) setCompacting(Boolean(session.compacting));
-    if (session.retry !== undefined) setRetry(session.retry as RetryState | null);
-    const turn = eventRecord(session.generation);
-    const turnOpen = Boolean(Object.keys(turn).length && !turn.closed && !turn.settled);
+  const applySnapshot = (event: RuntimeSnapshotEvent | RuntimeStateEvent) => {
+    const { session } = event;
+    if (event.contextUsage || session.contextUsage) setContextUsage(event.contextUsage || session.contextUsage);
+    if (event.queue || session.queue) setQueue(event.queue || session.queue!);
+    if (event.hostUiRequests || session.hostUiRequests) setHostUiRequests(event.hostUiRequests || session.hostUiRequests!);
+    if (session.compacting != null) setCompacting(session.compacting);
+    if (session.retry !== undefined) setRetry(session.retry);
+    const turnOpen = Boolean(session.generation && !session.generation.closed && !session.generation.settled);
     if (session.stopping) setGeneration("stopping");
     else if (turnOpen || session.active) setGeneration("active");
     else setGeneration((current) => current === "stopping" ? current : "idle");
@@ -171,17 +157,16 @@ export function createActiveChat(options: ActiveChatOptions) {
     next.onmessage = ({ data }) => {
       if (socket !== next || selection !== selectionToken || selectedId() !== chatId) return;
       try {
-        const event = JSON.parse(String(data)) as LiveEvent;
+        const event = normalizeLiveEvent(JSON.parse(String(data)));
         if (event.type === "runtime_snapshot") {
-          const session = eventRecord(event.session);
-          const turn = eventRecord(session.generation);
-          if (turn.id && !turn.closed) currentGeneration = String(turn.id);
+          const { session } = event;
+          const turn = session.generation;
+          if (turn?.id && !turn.closed) currentGeneration = turn.id;
           applySnapshot(event);
-          if ((Object.keys(turn).length && !turn.closed && !turn.settled) || session.active) {
-            asList<LiveEvent>(event.events).forEach(consume);
+          if ((turn && !turn.closed && !turn.settled) || session.active) {
+            event.events.forEach(consume);
           }
-          const stream = eventRecord(event.stream);
-          if (stream.generationId && !turn.closed) liveStream.setSnapshot(String(stream.generationId), String(stream.content || ""));
+          if (event.stream && !turn?.closed) liveStream.setSnapshot(event.stream.generationId, event.stream.content);
         } else consume(event);
       } catch (error) { onError((error as Error).message); }
     };
@@ -255,123 +240,160 @@ export function createActiveChat(options: ActiveChatOptions) {
     return record;
   };
 
-  function consume(raw: LiveEvent) {
-    const event = raw as UnknownRecord;
-    const type = String(event.type || "");
-    const eventGeneration = event.generationId ? String(event.generationId) : null;
-    if (eventGeneration && closedGenerations.has(eventGeneration) && !["generation_stopped", "generation_started"].includes(type)) return;
-    if (stopPending && ["message_start", "assistant_stream_delta", "assistant_stream_final"].includes(type)) return;
+  function consume(event: LiveEvent) {
+    const eventGeneration = event.generationId;
+    if (eventGeneration && closedGenerations.has(eventGeneration) && !["generation_stopped", "generation_started"].includes(event.type)) return;
+    if (stopPending && ["message_start", "assistant_stream_delta", "assistant_stream_final"].includes(event.type)) return;
 
-    if (type === "generation_started") {
-      currentGeneration = eventGeneration;
-      stopPending = false;
-      setGeneration("active");
-      resetLiveFlags();
-      if (eventGeneration) liveStream.start(eventGeneration);
-      if (event.continuation) {
-        continuation = true;
-        setMessages((current) => {
-          const copy = [...current];
-          const index = lastIndex(copy, (message) => message.role === "assistant" && Boolean(message.stopped));
-          if (index >= 0) copy[index] = { ...copy[index]!, stopped: false, status: null, continuing: true };
-          return copy;
-        });
-      }
-    }
-    if (type === "agent_start") setGeneration((current) => current === "stopping" ? current : "active");
-    if (["agent_end", "agent_settled"].includes(type) && !event.willRetry && !stopPending) {
-      setGeneration((current) => current === "stopping" ? current : "idle");
-      resetLiveFlags();
-    }
-    if (type === "runtime_exit") { setGeneration("idle"); resetLiveFlags(); setLive(null); }
-    if (type === "runtime_state") applySnapshot(event);
-    if (type === "context_usage" && event.contextUsage) setContextUsage(event.contextUsage as ContextUsage);
-    if (type === "compaction_start") setCompacting(true);
-    if (type === "compaction_end") setCompacting(false);
-    if (type === "auto_retry_start") {
-      setRetry({ attempt: Number(event.attempt), maxAttempts: Number(event.maxAttempts), delayMs: Number(event.delayMs), errorMessage: String(event.errorMessage || "") || null });
-      setGeneration((current) => current === "stopping" ? current : "active");
-    }
-    if (type === "auto_retry_end") setRetry(null);
-    if (type === "queue_update") setQueue({ steering: asList(event.steering), followUp: asList(event.followUp) });
-    if (type === "extension_ui_request") {
-      const request = normalizeHostUiRequest(event) as HostUiRequest | null;
-      if (request) setHostUiRequests((current) => current.some((item) => item.id === request.id) ? current : [...current, request]);
-    }
-    if (type === "extension_ui_resolved") {
-      const requestId = String(event.requestId || event.id || "");
-      setHostUiRequests((current) => current.filter((item) => item.id !== requestId));
-    }
-    if (type === "generation_stopped") {
-      stopPending = false;
-      setGeneration("idle");
-      resetLiveFlags();
-      setMessages((current) => {
-        const copy = [...current];
-        const index = lastIndex(copy, (message) => message.role === "assistant");
-        if (index >= 0) copy[index] = { ...copy[index]!, stopped: true, status: "stopped" };
-        return copy;
-      });
-      if (event.processTerminated) { setLive(null); socket?.close(); }
-    }
-    if (type === "session_checkpoint") {
-      void catalogue.refresh();
-      const chat = eventRecord(event.chat);
-      if (chat.id === selectedId()) void loadDetail(String(chat.id), true);
-    }
-    const eventMessage = eventRecord(event.message);
-    if (type === "message_start" && eventMessage.role === "assistant" && !continuation) {
-      setMessages((current) => [...current, { id: `live_${Date.now()}`, role: "assistant", content: "", timestamp: new Date().toISOString() }]);
-    }
-    const delta = eventRecord(event.assistantMessageEvent);
-    if (type === "message_update" && Object.keys(delta).length) {
-      if (delta.type === "thinking_start") { setThinking(true); setResponding(false); setReasoning((current) => ({ ...current, active: true })); }
-      if (delta.type === "thinking_delta") { setThinking(true); setReasoning((current) => ({ ...current, active: true, content: current.content + String(delta.delta || "") })); }
-      if (delta.type === "thinking_end") { setThinking(false); setReasoning((current) => ({ ...current, active: false, content: String(delta.content || current.content) })); }
-      if (["text_start", "text_delta"].includes(String(delta.type))) { setResponding(true); setThinking(false); }
-      if (delta.type === "text_end") setResponding(false);
-    }
-    if (type === "assistant_stream_delta" && eventGeneration) { setResponding(true); liveStream.append(eventGeneration, String(event.delta || "")); }
-    if (type === "assistant_stream_final") {
-      batch(() => {
-        continuation = false;
-        setResponding(false);
-        setThinking(false);
+    switch (event.type) {
+      case "runtime_snapshot":
+        applySnapshot(event);
+        event.events.forEach(consume);
+        if (event.stream && !event.session.generation?.closed) liveStream.setSnapshot(event.stream.generationId, event.stream.content);
+        break;
+      case "runtime_state":
+        applySnapshot(event);
+        break;
+      case "generation_started":
+        currentGeneration = eventGeneration;
+        if (eventGeneration) closedGenerations.delete(eventGeneration);
+        stopPending = false;
+        setGeneration("active");
+        resetLiveFlags();
+        if (eventGeneration) liveStream.start(eventGeneration);
+        if (event.continuation) {
+          continuation = true;
+          setMessages((current) => {
+            const copy = [...current];
+            const index = lastIndex(copy, (message) => message.role === "assistant" && Boolean(message.stopped));
+            if (index >= 0) copy[index] = { ...copy[index]!, stopped: false, status: null, continuing: true };
+            return copy;
+          });
+        }
+        break;
+      case "agent_start":
+        setGeneration((current) => current === "stopping" ? current : "active");
+        break;
+      case "agent_end":
+      case "agent_settled":
+        if (!event.willRetry && !stopPending) {
+          setGeneration((current) => current === "stopping" ? current : "idle");
+          resetLiveFlags();
+        }
+        break;
+      case "runtime_exit":
+        setGeneration("idle");
+        resetLiveFlags();
+        setLive(null);
+        break;
+      case "context_usage":
+        if (event.contextUsage) setContextUsage(event.contextUsage);
+        break;
+      case "compaction_start":
+        setCompacting(true);
+        break;
+      case "compaction_end":
+        setCompacting(false);
+        break;
+      case "auto_retry_start":
+        setRetry(event.retry);
+        setGeneration((current) => current === "stopping" ? current : "active");
+        break;
+      case "auto_retry_end":
+        setRetry(null);
+        break;
+      case "queue_update":
+        setQueue(event.queue);
+        break;
+      case "extension_ui_request":
+        if (event.request) setHostUiRequests((current) => current.some((item) => item.id === event.request!.id) ? current : [...current, event.request!]);
+        break;
+      case "extension_ui_resolved":
+        setHostUiRequests((current) => current.filter((item) => item.id !== event.requestId));
+        break;
+      case "generation_stopped":
+        stopPending = false;
+        setGeneration("idle");
+        resetLiveFlags();
         setMessages((current) => {
           const copy = [...current];
           const index = lastIndex(copy, (message) => message.role === "assistant");
-          const final: Partial<Message> = { content: String(event.content || ""), stopped: false, continuing: false };
-          if (index >= 0) copy[index] = { ...copy[index]!, ...final };
-          else copy.push({ id: `end_${Date.now()}`, role: "assistant", ...final });
+          if (index >= 0) copy[index] = { ...copy[index]!, stopped: true, status: "stopped" };
           return copy;
         });
-        liveStream.clear();
-      });
-    }
-    if (type === "message_end" && eventMessage.role === "user") {
-      void catalogue.refresh();
-      setMessages((current) => promotePendingUser(current, eventMessage) as Message[]);
-    }
-    if (type === "tool_execution_start") {
-      setActiveToolName(String(event.toolName || "tool"));
-      setTools((current) => (mergeToolEvent(current, event, { nextSeq: () => toolSeq++ }).tools as ToolItem[]));
-    }
-    if (type === "tool_execution_update") setTools((current) => mergeToolEvent(current, event).tools as ToolItem[]);
-    if (type === "tool_execution_end") {
-      setActiveToolName(null);
-      setTools((current) => mergeToolEvent(current, { ...event, done: true }).tools as ToolItem[]);
-    }
-    if (["runtime_error", "client_error"].includes(type)) {
-      if (!stopPending) setGeneration(type === "runtime_error" ? "failed" : "idle");
-      resetLiveFlags();
-      if (event.code === "generation_limit") {
-        setMessages((current) => {
-          const last = current.at(-1);
-          if (last?.role === "user" && last.id.startsWith("user_")) { setDraft((value) => value || last.content || ""); return current.slice(0, -1); }
-          return current;
+        if (event.processTerminated) { setLive(null); socket?.close(); }
+        break;
+      case "session_checkpoint":
+        void catalogue.refresh();
+        if (event.chatId === selectedId()) void loadDetail(event.chatId, true);
+        break;
+      case "message_start":
+        if (event.message.role === "assistant" && !continuation) {
+          setMessages((current) => [...current, { id: `live_${Date.now()}`, role: "assistant", content: "", timestamp: new Date().toISOString() }]);
+        }
+        break;
+      case "message_update":
+        switch (event.update.type) {
+          case "thinking_start": setThinking(true); setResponding(false); setReasoning((current) => ({ ...current, active: true })); break;
+          case "thinking_delta": { const delta = event.update.delta; setThinking(true); setReasoning((current) => ({ ...current, active: true, content: current.content + delta })); break; }
+          case "thinking_end": { const content = event.update.content; setThinking(false); setReasoning((current) => ({ ...current, active: false, content: content || current.content })); break; }
+          case "text_start":
+          case "text_delta": setResponding(true); setThinking(false); break;
+          case "text_end": setResponding(false); break;
+          case "unknown": break;
+        }
+        break;
+      case "assistant_stream_delta":
+        if (eventGeneration) { setResponding(true); liveStream.append(eventGeneration, event.delta); }
+        break;
+      case "assistant_stream_final":
+        batch(() => {
+          continuation = false;
+          setResponding(false);
+          setThinking(false);
+          setMessages((current) => {
+            const copy = [...current];
+            const index = lastIndex(copy, (message) => message.role === "assistant");
+            const final: Partial<Message> = { content: event.content, stopped: false, continuing: false };
+            if (index >= 0) copy[index] = { ...copy[index]!, ...final };
+            else copy.push({ id: `end_${Date.now()}`, role: "assistant", ...final });
+            return copy;
+          });
+          liveStream.clear();
         });
-      }
-      onError(String(event.message || (event.code === "generation_limit" ? "Too many concurrent generations. Wait for another chat to finish." : "Runtime error")));
+        break;
+      case "message_end":
+        if (event.message.role === "user") {
+          void catalogue.refresh();
+          setMessages((current) => promotePendingUser(current, event.message));
+        }
+        break;
+      case "tool_execution_start":
+        setActiveToolName(event.toolName || "tool");
+        setTools((current) => mergeToolEvent(current, event, { nextSeq: () => toolSeq++ }).tools);
+        break;
+      case "tool_execution_update":
+        setTools((current) => mergeToolEvent(current, event).tools);
+        break;
+      case "tool_execution_end":
+        setActiveToolName(null);
+        setTools((current) => mergeToolEvent(current, { ...event, done: true }).tools);
+        break;
+      case "runtime_error":
+      case "client_error":
+        if (!stopPending) setGeneration(event.type === "runtime_error" ? "failed" : "idle");
+        resetLiveFlags();
+        if (event.code === "generation_limit") {
+          setMessages((current) => {
+            const last = current.at(-1);
+            if (last?.role === "user" && last.id.startsWith("user_")) { setDraft((value) => value || last.content || ""); return current.slice(0, -1); }
+            return current;
+          });
+        }
+        onError(event.message || (event.code === "generation_limit" ? "Too many concurrent generations. Wait for another chat to finish." : "Runtime error"));
+        break;
+      case "unknown":
+        break;
     }
   }
 
@@ -527,7 +549,7 @@ export function createActiveChat(options: ActiveChatOptions) {
 
   const activity = createMemo(() => {
     const process = options.runtime.getProcess(selectedId());
-    const derived = fineActivity({
+    const derived = deriveFineActivity({
       generation: generation(),
       processStatus: process?.status || (live() ? "running" : "none"),
       coarse: typeof process?.activity === "string" ? process.activity : process?.activity?.kind || "idle",

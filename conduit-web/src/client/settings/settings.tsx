@@ -1,8 +1,10 @@
-import { createEffect, createMemo, createSignal, For, on, onCleanup, onMount, Show } from "solid-js";
+import { createEffect, createMemo, createSignal, For, on, onCleanup, Show } from "solid-js";
+import { Combobox as KCombobox } from "@kobalte/core/combobox";
+import * as KDialog from "@kobalte/core/dialog";
 import { CheckIcon, SearchIcon } from "lucide-solid";
 import { Button, Field, FieldGroup, FieldLabel, Input, Spinner } from "@/components/primitives";
 import { api } from "../api/client";
-import type { Installation, Project, Template } from "../api/contracts";
+import type { Installation, ModelOption, Project, Template } from "../api/contracts";
 import type { ModelSettings } from "../state/model-settings";
 
 const sections = ["general", "models", "profiles", "runtime", "workspaces", "auth"] as const;
@@ -16,6 +18,12 @@ interface RuntimeSettings {
   liveCount?: number;
   generatingCount?: number;
 }
+
+const sameScope = (left: string[], right: string[]) => [...left].sort().join("\n") === [...right].sort().join("\n");
+const sameRuntime = (left: RuntimeSettings | null, right: RuntimeSettings | null) => Boolean(left && right
+  && left.maxLiveProcesses === right.maxLiveProcesses
+  && left.maxGeneratingProcesses === right.maxGeneratingProcesses
+  && left.idleProcessTtlMs === right.idleProcessTtlMs);
 
 export function Settings(props: {
   open: boolean;
@@ -32,29 +40,38 @@ export function Settings(props: {
   onWorkspaceDefaultChange: (id: string, templateId: string | null) => Promise<Project>;
 }) {
   const [section, setSection] = createSignal<Section>(props.initialSection || "models");
-  const [query, setQuery] = createSignal("");
   const [scope, setScope] = createSignal<string[]>([]);
-  const [highlighted, setHighlighted] = createSignal(0);
+  const [scopeEdited, setScopeEdited] = createSignal(false);
   const [runtime, setRuntime] = createSignal<RuntimeSettings | null>(null);
+  const [runtimeBaseline, setRuntimeBaseline] = createSignal<RuntimeSettings | null>(null);
+  const [runtimeStatus, setRuntimeStatus] = createSignal<"idle" | "loading" | "ready" | "error">("idle");
+  const [runtimeError, setRuntimeError] = createSignal("");
+  const [runtimeEdited, setRuntimeEdited] = createSignal(false);
+  const [runtimeSaving, setRuntimeSaving] = createSignal(false);
   const [detecting, setDetecting] = createSignal(false);
   const [workspaceId, setWorkspaceId] = createSignal<string | null>(null);
-  const [workspaceMenu, setWorkspaceMenu] = createSignal(false);
+  let runtimeRequest = 0;
   let search!: HTMLInputElement;
+  let returnFocus: HTMLElement | null = null;
+  let wasOpen = false;
   const focusSearch = () => requestAnimationFrame(() => requestAnimationFrame(() => search?.focus()));
 
-  const keydownWindow = (event: KeyboardEvent) => { if (props.open && event.key === "Escape") props.onOpenChange(false); };
-  onMount(() => window.addEventListener("keydown", keydownWindow));
-  onCleanup(() => window.removeEventListener("keydown", keydownWindow));
-
   createEffect(on(() => props.open, (open) => {
+    if (open && !wasOpen) returnFocus = document.activeElement as HTMLElement | null;
+    wasOpen = open;
     if (!open) return;
     const initial = props.initialSection || "models";
     setSection(initial);
     setWorkspaceId(props.initialWorkspaceId || props.projects.find((project) => project.kind === "workspace" || project.origin === "linked" || project.origin === "cloned")?.id || null);
-    setScope([...props.models.enabledModels()]);
-    setQuery("");
+    setScopeEdited(false);
     if (initial === "models") focusSearch();
   }));
+
+  // Remote model settings remain authoritative until the user actually edits.
+  createEffect(() => {
+    if (!props.open || section() !== "models" || scopeEdited()) return;
+    setScope([...props.models.enabledModels()]);
+  });
 
   createEffect(() => {
     if (!props.open || section() !== "models") return;
@@ -66,21 +83,39 @@ export function Settings(props: {
   });
 
   const loadRuntime = async () => {
-    try { setRuntime(await api<RuntimeSettings>("/v0/runtime/settings")); } catch { /* surfaced by the app if saved */ }
+    const request = ++runtimeRequest;
+    setRuntimeStatus("loading");
+    setRuntimeError("");
+    try {
+      const loaded = await api<RuntimeSettings>("/v0/runtime/settings");
+      if (request !== runtimeRequest) return;
+      setRuntime(loaded);
+      setRuntimeBaseline({ ...loaded });
+      setRuntimeEdited(false);
+      setRuntimeStatus("ready");
+    } catch (error) {
+      if (request !== runtimeRequest) return;
+      setRuntimeError((error as Error).message);
+      setRuntimeStatus("error");
+    }
   };
   createEffect(() => { if (props.open && section() === "runtime") void loadRuntime(); });
 
-  const filtered = createMemo(() => {
-    const words = query().toLowerCase().trim().split(/\s+/).filter(Boolean);
-    return props.models.allModels().filter((model) => words.every((word) => `${model.label} ${model.spec} ${model.provider}`.toLowerCase().includes(word)));
-  });
-  createEffect(() => { filtered(); setHighlighted(0); });
-  const scopeDirty = createMemo(() => [...scope()].sort().join("\n") !== [...props.models.enabledModels()].sort().join("\n"));
-  const toggle = (spec: string) => setScope((current) => current.includes(spec) ? current.filter((item) => item !== spec) : [...current, spec]);
-  const modelKeydown = (event: KeyboardEvent) => {
-    if (event.key === "ArrowDown") { event.preventDefault(); setHighlighted((value) => Math.min(value + 1, Math.max(filtered().length - 1, 0))); }
-    if (event.key === "ArrowUp") { event.preventDefault(); setHighlighted((value) => Math.max(value - 1, 0)); }
-    if (event.key === "Enter") { event.preventDefault(); const item = filtered()[highlighted()]; if (item) toggle(item.spec); }
+  const selectedModels = createMemo(() => props.models.allModels().filter((model) => scope().includes(model.spec)));
+  const scopeDirty = createMemo(() => scopeEdited() && !sameScope(scope(), props.models.enabledModels()));
+  const modelFilter = (model: ModelOption, input: string) => {
+    const words = input.toLowerCase().trim().split(/\s+/).filter(Boolean);
+    return words.every((word) => `${model.label} ${model.spec} ${model.provider}`.toLowerCase().includes(word));
+  };
+  const updateScope = (models: ModelOption[]) => {
+    setScope(models.map((model) => model.spec));
+    setScopeEdited(true);
+  };
+  const saveScope = async () => {
+    if (await props.models.saveScope(scope())) {
+      setScope([...props.models.enabledModels()]);
+      setScopeEdited(false);
+    }
   };
 
   const selectedWorkspace = createMemo(() => props.projects.find((project) => project.id === workspaceId()) || null);
@@ -89,69 +124,109 @@ export function Settings(props: {
     if (id === "host-pi") return "Host Pi";
     return props.templates.find((item) => item.id === id)?.label || `Inherit global (${props.templates.find((item) => item.id === props.defaultTemplateId)?.label || "General"})`;
   });
-
   const saveWorkspace = async (templateId: string | null) => {
     const workspace = selectedWorkspace();
-    if (!workspace) return;
-    await props.onWorkspaceDefaultChange(workspace.id, templateId);
-    setWorkspaceMenu(false);
+    if (workspace) await props.onWorkspaceDefaultChange(workspace.id, templateId);
   };
 
   const redetect = async () => {
     setDetecting(true);
+    setRuntimeError("");
     try {
       const host = await api<Installation>("/v0/pi-installations/host/detect", { method: "POST" });
       props.onInstallationsChange(props.installations.some((item) => item.id === "host-pi")
         ? props.installations.map((item) => item.id === "host-pi" ? host : item)
         : [...props.installations, host]);
-    } finally { setDetecting(false); }
+    } catch (error) { setRuntimeError((error as Error).message); }
+    finally { setDetecting(false); }
   };
 
+  const updateRuntime = (next: RuntimeSettings) => { setRuntime(next); setRuntimeEdited(true); setRuntimeError(""); };
+  const runtimeDirty = createMemo(() => runtimeEdited() && !sameRuntime(runtime(), runtimeBaseline()));
   const saveRuntime = async () => {
     if (!runtime()) return;
-    setRuntime(await api<RuntimeSettings>("/v0/runtime/settings", { method: "PATCH", body: JSON.stringify(runtime()) }));
+    setRuntimeSaving(true);
+    setRuntimeError("");
+    try {
+      const saved = await api<RuntimeSettings>("/v0/runtime/settings", { method: "PATCH", body: JSON.stringify(runtime()) });
+      setRuntime(saved);
+      setRuntimeBaseline({ ...saved });
+      setRuntimeEdited(false);
+    } catch (error) { setRuntimeError((error as Error).message); }
+    finally { setRuntimeSaving(false); }
   };
 
-  return <div role="dialog" aria-modal="true" aria-label="Settings" data-state={props.open ? "open" : "closed"} class="settings-dialog">
-    <div class="settings-shell">
-      <nav data-slot="tabs-list" role="tablist" aria-orientation="vertical" class="settings-rail">
-        <h2>Settings</h2>
-        <For each={sections}>{(item) => <button role="tab" aria-selected={section() === item} onClick={() => { setSection(item); if (item === "models") focusSearch(); }}>{label(item)}</button>}</For>
-      </nav>
-      <main class="settings-content">
-        <header><h2>{label(section())}</h2><Button variant="ghost" size="icon-sm" aria-label="Close" onClick={() => props.onOpenChange(false)}>×</Button></header>
-        <Show when={section() === "general"}><FieldGroup><Field><FieldLabel for="default-profile">Default profile</FieldLabel><select id="default-profile" value={props.defaultTemplateId} onChange={(event) => void props.onDefaultTemplateChange(event.currentTarget.value)}><For each={props.templates.filter((item) => item.defaultable !== false)}>{(item) => <option value={item.id}>{item.label}</option>}</For></select></Field></FieldGroup></Show>
-        <Show when={section() === "models"}>
-          <div class="model-scope"><label class="model-search"><SearchIcon /><input ref={search} role="combobox" aria-label="Search available models" aria-controls="model-scope-list" value={query()} onInput={(event) => setQuery(event.currentTarget.value)} onKeyDown={modelKeydown} /></label>
-            <div id="model-scope-list" role="listbox" aria-multiselectable="true" data-slot="combobox-list" class="model-scope-list">
-              <For each={filtered()}>{(model, index) => <button type="button" role="option" aria-selected={scope().includes(model.spec)} data-slot="combobox-item" data-highlighted={index() === highlighted() ? "" : undefined} onMouseEnter={() => setHighlighted(index())} onClick={() => toggle(model.spec)}>
-                <span class="model-check"><Show when={scope().includes(model.spec)}><CheckIcon /></Show></span><span><strong>{model.label}</strong><small>{model.spec}</small></span>
-              </button>}</For>
-            </div>
-            <div class="settings-actions"><span>{scope().length} enabled</span><Button disabled={!scopeDirty() || !scope().length || props.models.saving()} onClick={() => void props.models.saveScope(scope())}>{props.models.saving() ? <Spinner /> : null}Save changes</Button></div>
-          </div>
-        </Show>
-        <Show when={section() === "profiles"}><div class="settings-cards"><For each={props.templates}>{(item) => <article><h3>{item.label}</h3><p>{item.description || item.posture || item.tools?.join(" · ")}</p></article>}</For></div></Show>
-        <Show when={section() === "runtime"}>
-          <Show when={runtime()} fallback={<Spinner />}><FieldGroup>
-            <Field><FieldLabel for="warm-processes">Max warm Pi processes</FieldLabel><Input id="warm-processes" type="number" value={runtime()!.maxLiveProcesses} onInput={(event) => setRuntime({ ...runtime()!, maxLiveProcesses: Number(event.currentTarget.value) })} /><small>{runtime()!.liveCount || 0} live now</small></Field>
-            <Field><FieldLabel for="generations">Max concurrent generations</FieldLabel><Input id="generations" type="number" value={runtime()!.maxGeneratingProcesses} onInput={(event) => setRuntime({ ...runtime()!, maxGeneratingProcesses: Number(event.currentTarget.value) })} /><small>{runtime()!.generatingCount || 0} generating</small></Field>
-            <Field><FieldLabel for="idle-ttl">Idle process TTL (seconds)</FieldLabel><Input id="idle-ttl" type="number" value={Math.round(runtime()!.idleProcessTtlMs / 1000)} onInput={(event) => setRuntime({ ...runtime()!, idleProcessTtlMs: Number(event.currentTarget.value) * 1000 })} /></Field>
-            <Button onClick={() => void saveRuntime()}>Save runtime settings</Button>
-          </FieldGroup></Show>
-          <div class="installations"><For each={props.installations}>{(item) => <article><h3>{item.label}</h3><p>{item.available ? item.version ? `Pi ${item.version}` : "Available" : item.reason || (item as Installation & { error?: string }).error || "Unavailable"}</p></article>}</For><Button variant="outline" disabled={detecting()} onClick={() => void redetect()}>{detecting() ? <Spinner /> : null}Re-detect Host Pi</Button></div>
-        </Show>
-        <Show when={section() === "workspaces"}>
-          <Show when={selectedWorkspace()} fallback={<p>No workspaces registered.</p>}>
-            <div class="workspace-settings-card"><h3>{selectedWorkspace()!.name}</h3><p>{selectedWorkspace()!.path || selectedWorkspace()!.externalPath}</p><p>Override: {workspaceDefaultLabel().startsWith("Inherit") ? "None" : workspaceDefaultLabel()}</p>
-              <Field><FieldLabel>Default profile</FieldLabel><button role="combobox" aria-label="Default profile" aria-expanded={workspaceMenu()} onClick={() => setWorkspaceMenu((value) => !value)}>{workspaceDefaultLabel()}</button>
-                <Show when={workspaceMenu()}><div role="listbox" class="settings-select-list"><button role="option" aria-selected={!selectedWorkspace()!.defaultTemplateId} onClick={() => void saveWorkspace(null)}>Inherit global ({props.templates.find((item) => item.id === props.defaultTemplateId)?.label || "General"})</button><For each={props.templates.filter((item) => item.defaultable !== false)}>{(item) => <button role="option" aria-selected={selectedWorkspace()!.defaultTemplateId === item.id} onClick={() => void saveWorkspace(item.id)}>{item.label}</button>}</For><button role="option" aria-selected={selectedWorkspace()!.defaultTemplateId === "host-pi"} disabled={!props.installations.find((item) => item.id === "host-pi")?.available} onClick={() => void saveWorkspace("host-pi")}>Host Pi</button></div></Show>
-              </Field>
+  return <KDialog.Root open={props.open} onOpenChange={props.onOpenChange}>
+    <KDialog.Portal><KDialog.Content data-state={props.open ? "open" : "closed"} class="settings-dialog" onCloseAutoFocus={(event) => { event.preventDefault(); if (returnFocus?.isConnected) returnFocus.focus(); returnFocus = null; }}>
+      <div class="settings-shell">
+        <nav data-slot="tabs-list" role="tablist" aria-orientation="vertical" class="settings-rail">
+          <KDialog.Title>Settings</KDialog.Title>
+          <For each={sections}>{(item) => <button role="tab" aria-selected={section() === item} onClick={() => { setSection(item); if (item === "models") focusSearch(); }}>{label(item)}</button>}</For>
+        </nav>
+        <main class="settings-content">
+          <header><h2>{label(section())}</h2><Button variant="ghost" size="icon-sm" aria-label="Close" onClick={() => props.onOpenChange(false)}>×</Button></header>
+          <Show when={section() === "general"}><FieldGroup><Field><FieldLabel for="default-profile">Default profile</FieldLabel><select id="default-profile" value={props.defaultTemplateId} onChange={(event) => void props.onDefaultTemplateChange(event.currentTarget.value)}><For each={props.templates.filter((item) => item.defaultable !== false)}>{(item) => <option value={item.id}>{item.label}</option>}</For></select></Field></FieldGroup></Show>
+          <Show when={props.open && section() === "models"}>
+            <div class="model-scope">
+              <Show when={props.models.settingsError()}><div role="alert" class="settings-error"><span>{props.models.settingsError()}</span><Button variant="outline" size="sm" onClick={() => void props.models.reload()}>Retry</Button></div></Show>
+              <Show when={!props.models.settingsLoading() || props.models.allModels().length} fallback={<div class="settings-loading"><Spinner /><span>Loading models…</span></div>}>
+                <KCombobox<ModelOption>
+                  multiple
+                  options={props.models.allModels()}
+                  value={selectedModels()}
+                  onChange={updateScope}
+                  optionValue="spec"
+                  optionTextValue={(model) => `${model.label} ${model.spec} ${model.provider}`}
+                  optionLabel="label"
+                  defaultFilter={modelFilter}
+                  open
+                  closeOnSelection={false}
+                  selectionBehavior="toggle"
+                  modal={false}
+                  itemComponent={(itemProps) => <KCombobox.Item item={itemProps.item} data-slot="combobox-item">
+                    <span class="model-check"><KCombobox.ItemIndicator><CheckIcon /></KCombobox.ItemIndicator></span>
+                    <span><strong>{itemProps.item.rawValue.label}</strong><small>{itemProps.item.rawValue.spec}</small></span>
+                  </KCombobox.Item>}
+                >
+                  <KCombobox.Control class="model-search"><SearchIcon /><KCombobox.Input ref={search} aria-label="Search available models" onKeyDown={(event) => {
+                    if (event.key !== "Escape") return;
+                    event.preventDefault();
+                    event.stopPropagation();
+                    props.onOpenChange(false);
+                  }} /></KCombobox.Control>
+                  <KCombobox.Content class="model-scope-list" data-slot="combobox-list"><KCombobox.Listbox /></KCombobox.Content>
+                </KCombobox>
+              </Show>
+              <div class="settings-actions"><span>{scope().length} enabled</span><Button disabled={!scopeDirty() || !scope().length || props.models.saving()} onClick={() => void saveScope()}>{props.models.saving() ? <Spinner /> : null}Save changes</Button></div>
             </div>
           </Show>
-        </Show>
-        <Show when={section() === "auth"}><p>Authentication is managed by the Conduit server.</p></Show>
-      </main>
-    </div>
-  </div>;
+          <Show when={section() === "profiles"}><div class="settings-cards"><For each={props.templates}>{(item) => <article><h3>{item.label}</h3><p>{item.description || item.posture || item.tools?.join(" · ")}</p></article>}</For></div></Show>
+          <Show when={section() === "runtime"}>
+            <Show when={runtimeStatus() === "ready" && runtime()} fallback={<Show when={runtimeStatus() === "error"} fallback={<div class="settings-loading"><Spinner /><span>Loading runtime settings…</span></div>}><div role="alert" class="settings-error"><span>{runtimeError() || "Runtime settings could not be loaded."}</span><Button variant="outline" size="sm" onClick={() => void loadRuntime()}>Retry</Button></div></Show>}>
+              <FieldGroup>
+                <Field><FieldLabel for="warm-processes">Max warm Pi processes</FieldLabel><Input id="warm-processes" type="number" value={runtime()!.maxLiveProcesses} onInput={(event) => updateRuntime({ ...runtime()!, maxLiveProcesses: Number(event.currentTarget.value) })} /><small>{runtime()!.liveCount || 0} live now</small></Field>
+                <Field><FieldLabel for="generations">Max concurrent generations</FieldLabel><Input id="generations" type="number" value={runtime()!.maxGeneratingProcesses} onInput={(event) => updateRuntime({ ...runtime()!, maxGeneratingProcesses: Number(event.currentTarget.value) })} /><small>{runtime()!.generatingCount || 0} generating</small></Field>
+                <Field><FieldLabel for="idle-ttl">Idle process TTL (seconds)</FieldLabel><Input id="idle-ttl" type="number" value={Math.round(runtime()!.idleProcessTtlMs / 1000)} onInput={(event) => updateRuntime({ ...runtime()!, idleProcessTtlMs: Number(event.currentTarget.value) * 1000 })} /></Field>
+                <Show when={runtimeError()}><p role="alert" class="settings-inline-error">{runtimeError()}</p></Show>
+                <Button disabled={!runtimeDirty() || runtimeSaving()} onClick={() => void saveRuntime()}>{runtimeSaving() ? <Spinner /> : null}Save runtime settings</Button>
+              </FieldGroup>
+            </Show>
+            <div class="installations"><For each={props.installations}>{(item) => <article><h3>{item.label}</h3><p>{item.available ? item.version ? `Pi ${item.version}` : "Available" : item.reason || (item as Installation & { error?: string }).error || "Unavailable"}</p></article>}</For><Button variant="outline" disabled={detecting()} onClick={() => void redetect()}>{detecting() ? <Spinner /> : null}Re-detect Host Pi</Button></div>
+          </Show>
+          <Show when={section() === "workspaces"}>
+            <Show when={selectedWorkspace()} fallback={<p>No workspaces registered.</p>}>
+              <div class="workspace-settings-card"><h3>{selectedWorkspace()!.name}</h3><p>{selectedWorkspace()!.path || selectedWorkspace()!.externalPath}</p><p>Override: {workspaceDefaultLabel().startsWith("Inherit") ? "None" : workspaceDefaultLabel()}</p>
+                <Field><FieldLabel for="workspace-default-profile">Default profile</FieldLabel><select id="workspace-default-profile" aria-label="Default profile" value={selectedWorkspace()!.defaultTemplateId || ""} onChange={(event) => void saveWorkspace(event.currentTarget.value || null)}>
+                  <option value="">Inherit global ({props.templates.find((item) => item.id === props.defaultTemplateId)?.label || "General"})</option>
+                  <For each={props.templates.filter((item) => item.defaultable !== false)}>{(item) => <option value={item.id}>{item.label}</option>}</For>
+                  <option value="host-pi" disabled={!props.installations.find((item) => item.id === "host-pi")?.available}>Host Pi</option>
+                </select></Field>
+              </div>
+            </Show>
+          </Show>
+          <Show when={section() === "auth"}><p>Authentication is managed by the Conduit server.</p></Show>
+        </main>
+      </div>
+    </KDialog.Content></KDialog.Portal>
+  </KDialog.Root>;
 }

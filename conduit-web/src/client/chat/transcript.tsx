@@ -5,18 +5,9 @@ import type { Message, RuntimeActivity, ToolItem } from "../api/contracts";
 import type { ActiveChatStore } from "../state/active-chat";
 import { AttachmentCards } from "./attachments";
 import { ToolCard } from "./tool-card";
-import { buildTimeline } from "../timeline-order.js";
+import { createTimelineStore } from "../state/timeline-store";
 
 const ChatMarkdown = lazy(() => import("./markdown").then((module) => ({ default: module.ChatMarkdown })));
-type TimelineValue = Message | ToolItem;
-type TimelineRow = {
-  type: "message" | "tool";
-  value: () => TimelineValue;
-  index: () => number;
-  setValue: (value: TimelineValue) => void;
-  setIndex: (value: number) => void;
-};
-
 function Actions(props: { message: Message; precedingUserId?: string; chat: ActiveChatStore; partialContinue: boolean }) {
   const [copied, setCopied] = createSignal(false);
   const assistant = () => props.message.role !== "user";
@@ -36,30 +27,8 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
   let viewport!: HTMLDivElement;
   let previousLoaded: string | null = null;
   let following = true;
-  const rowCache = new Map<string, TimelineRow>();
-  const timeline = createMemo(() => {
-    const source = buildTimeline(props.chat.messages(), props.chat.tools(), { streaming: props.chat.streaming() }) as Array<{ type: "message" | "tool"; value: TimelineValue; index: number }>;
-    const liveKeys = new Set<string>();
-    const rows = source.map((item) => {
-      const renderKey = item.type === "message" ? (item.value as Message).key || item.value.id : item.value.id;
-      const key = `${item.type}:${renderKey || item.index}`;
-      liveKeys.add(key);
-      const cached = rowCache.get(key);
-      if (cached) {
-        cached.setValue(item.value);
-        cached.setIndex(item.index);
-        return cached;
-      }
-      const [value, setValue] = createSignal(item.value);
-      const [index, setIndex] = createSignal(item.index);
-      const row: TimelineRow = { type: item.type, value, index, setValue, setIndex };
-      rowCache.set(key, row);
-      return row;
-    });
-    for (const key of rowCache.keys()) if (!liveKeys.has(key)) rowCache.delete(key);
-    return rows;
-  });
-  const empty = createMemo(() => !timeline().length && !props.chat.activity()?.label);
+  const timeline = createTimelineStore(props.chat.messages, props.chat.tools, props.chat.streaming);
+  const empty = createMemo(() => !timeline.length && !props.chat.activity()?.label);
 
   const scrollBottom = () => requestAnimationFrame(() => { viewport.scrollTop = viewport.scrollHeight; });
   createEffect(() => {
@@ -79,12 +48,15 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
           <div data-slot="message-scroller-item"><Button variant="ghost" class="mx-auto" onClick={() => void props.chat.loadOlder()} disabled={props.chat.loadingOlder()}><Show when={props.chat.loadingOlder()}><Spinner /></Show>{props.chat.loadingOlder() ? "Loading earlier messages…" : "Load earlier messages"}</Button></div>
         </Show>
         <Show when={empty()}><div class="empty-thread" data-slot="message-scroller-item"><div class="welcome"><h1>How can I help you today?</h1></div></div></Show>
-        <For each={timeline()}>{(item) => {
-          if (item.type === "tool") return <div data-slot="message-scroller-item"><ToolCard tool={item.value() as ToolItem} sessionId={props.chat.loadedId()} /></div>;
-          const message = createMemo(() => item.value() as Message);
+        <For each={timeline}>{(item) => {
+          if (item.type === "tool") return <div data-slot="message-scroller-item"><ToolCard tool={item.value} sessionId={props.chat.loadedId()} /></div>;
+          const message = createMemo(() => item.value);
           const user = createMemo(() => message().role === "user");
-          const live = createMemo(() => props.chat.streaming() && message() === props.chat.messages().at(-1) && !user());
-          const preceding = createMemo(() => !user() ? props.chat.messages().slice(0, item.index()).findLast((candidate) => candidate.role === "user") : undefined);
+          const live = createMemo(() => {
+            const last = props.chat.messages().at(-1);
+            return props.chat.streaming() && !user() && Boolean(last && (message().key || message().id) === (last.key || last.id));
+          });
+          const preceding = createMemo(() => !user() ? props.chat.messages().slice(0, item.index).findLast((candidate) => candidate.role === "user") : undefined);
           return <div data-slot="message-scroller-item" data-message-id={message().id}>
             <article data-slot="message" data-align={user() ? "end" : "start"} class={user() ? "message-user" : "message-assistant"}>
               <div data-slot="message-content">
@@ -93,7 +65,7 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
                   <div data-slot="bubble-content">
                     <Show when={user()} fallback={<>
                       <Show when={live() && (props.chat.reasoning().content || props.chat.reasoning().active)}><details class="reasoning" open={props.chat.reasoning().active}><summary>{props.chat.reasoning().active ? "Thinking…" : "Reasoning"}</summary><p>{props.chat.reasoning().content}</p></details></Show>
-                      <Suspense fallback={<div class="markdown-skeleton" />}><ChatMarkdown streaming={live()}>{`${message().content || ""}${live() ? props.chat.liveStream.content() : ""}`}</ChatMarkdown></Suspense>
+                      <Suspense fallback={<div class="markdown-skeleton" />}><ChatMarkdown streaming={live()} streamVersion={props.chat.liveStream.version()}>{`${message().content || ""}${live() ? props.chat.liveStream.content() : ""}`}</ChatMarkdown></Suspense>
                     </>}><span class="user-message-text">{message().content || ""}</span></Show>
                   </div>
                 </div>
