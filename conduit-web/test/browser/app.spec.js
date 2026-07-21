@@ -440,23 +440,43 @@ test("repairs unfinished Markdown while an assistant response streams", async ({
           this.onmessage?.({ data: JSON.stringify({
             type: "assistant_stream_delta",
             generationId: "g1",
-            delta: "## Live response\n\n**still streaming**\n\n```javascript\nconst answer = 42;\n```\n\n$$\nE = mc^2\n$$",
+            delta: "## Live response\n\n",
           }) });
+          setTimeout(() => this.onmessage?.({ data: JSON.stringify({
+            type: "assistant_stream_delta",
+            generationId: "g1",
+            delta: "**still streaming**\n\n",
+          }) }), 150);
+          setTimeout(() => this.onmessage?.({ data: JSON.stringify({
+            type: "assistant_stream_delta",
+            generationId: "g1",
+            delta: "```javascript\nconst answer = 42;\n```\n\n",
+          }) }), 300);
+          setTimeout(() => this.onmessage?.({ data: JSON.stringify({
+            type: "assistant_stream_delta",
+            generationId: "g1",
+            delta: "$$\nE = mc^2\n$$",
+          }) }), 450);
+          setTimeout(() => this.onmessage?.({ data: JSON.stringify({
+            type: "assistant_stream_delta",
+            generationId: "g1",
+            delta: "\n\n- first item\n\n  continued first item\n\n- second item",
+          }) }), 550);
           setTimeout(() => this.onmessage?.({ data: JSON.stringify({
             type: "assistant_stream_final",
             generationId: "g1",
-            content: "## Live response\n\n**still streaming**\n\n```javascript\nconst answer = 42;\n```\n\n$$\nE = mc^2\n$$",
+            content: "## Live response\n\n**still streaming**\n\n```javascript\nconst answer = 42;\n```\n\n$$\nE = mc^2\n$$\n\n- first item\n\n  continued first item\n\n- second item",
             html: '<div class="server-markdown">Bogus legacy HTML</div>',
-          }) }), 600);
+          }) }), 800);
           setTimeout(() => this.onmessage?.({ data: JSON.stringify({
             type: "agent_end",
             generationId: "g1",
             willRetry: false,
-          }) }), 700);
+          }) }), 900);
           setTimeout(() => this.onmessage?.({ data: JSON.stringify({
             type: "session_checkpoint",
             chat: { id: "550e8400-e29b-41d4-a716-446655440099" },
-          }) }), 900);
+          }) }), 1100);
         }, 0);
       }
     }
@@ -466,7 +486,7 @@ test("repairs unfinished Markdown while an assistant response streams", async ({
       value: MockWebSocket,
     });
   });
-  const streamedContent = "## Live response\n\n**still streaming**\n\n```javascript\nconst answer = 42;\n```\n\n$$\nE = mc^2\n$$";
+  const streamedContent = "## Live response\n\n**still streaming**\n\n```javascript\nconst answer = 42;\n```\n\n$$\nE = mc^2\n$$\n\n- first item\n\n  continued first item\n\n- second item";
   await page.route("**/v0/sessions/550e8400-e29b-41d4-a716-446655440099", async (route) => {
     await route.fulfill({ json: {
       id: "550e8400-e29b-41d4-a716-446655440099",
@@ -488,6 +508,10 @@ test("repairs unfinished Markdown while an assistant response streams", async ({
   await page.getByRole("button", { name: "Send message" }).click();
 
   await expect(page.getByRole("heading", { name: "Live response" })).toBeVisible();
+  const liveHeading = page.getByRole("heading", { name: "Live response" });
+  const liveHeadingNode = await liveHeading.elementHandle();
+  expect(liveHeadingNode).not.toBeNull();
+  await liveHeadingNode.evaluate((node) => node.setAttribute("data-stable-stream-node", "true"));
   const liveMarkdown = page.locator(".chat-markdown");
   await expect(liveMarkdown).toContainText("still streaming");
   const liveMarkdownNode = await liveMarkdown.elementHandle();
@@ -496,6 +520,10 @@ test("repairs unfinished Markdown while an assistant response streams", async ({
   await expect(page.locator('[data-language="javascript"]')).toBeVisible();
   await expect(page.locator('[data-language="javascript"] button[aria-label="Copy code"]')).toBeVisible();
   await expect(page.locator(".katex-display")).toBeVisible();
+  await expect(page.locator(".chat-markdown li")).toHaveCount(2);
+  await expect(page.locator(".chat-markdown li").first()).toContainText("continued first item");
+  await expect(page.locator("[data-stable-stream-node]")).toHaveCount(1);
+  expect(await liveHeadingNode.evaluate((node) => node.isConnected && node === document.querySelector("[data-stable-stream-node]"))).toBe(true);
   await expect(page.getByRole("button", { name: "Copy Markdown" })).toBeVisible();
   await expect(page.locator(".chat-markdown[data-before-final]")).toHaveCount(1);
   expect(await liveMarkdownNode.evaluate((node) => node.isConnected && node === document.querySelector(".chat-markdown"))).toBe(true);
@@ -509,8 +537,59 @@ test("repairs unfinished Markdown while an assistant response streams", async ({
   await expect(page.locator(".chat-markdown[data-before-final]")).toHaveCount(1);
   await expect(page.getByRole("heading", { name: "How can I help you today?" })).toHaveCount(0);
   expect(await liveMarkdownNode.evaluate((node) => node.isConnected && node === document.querySelector(".chat-markdown"))).toBe(true);
+  expect(await liveHeadingNode.evaluate((node) => node.isConnected && node === document.querySelector("[data-stable-stream-node]"))).toBe(true);
   await expect(page.locator('[data-language="javascript"]')).toBeVisible();
   await expect(page.locator(".katex-display")).toBeVisible();
+});
+
+test("renders and answers every blocking host UI request kind", async ({ page }, testInfo) => {
+  await page.addInitScript(() => {
+    class HostUiWebSocket extends EventTarget {
+      static OPEN = 1;
+      constructor() {
+        super();
+        this.readyState = 0;
+        window.__hostUiSocket = this;
+        queueMicrotask(() => { this.readyState = HostUiWebSocket.OPEN; this.dispatchEvent(new Event("open")); });
+      }
+      close() { this.readyState = 3; this.dispatchEvent(new Event("close")); }
+      send(data) { (window.__hostUiCommands ||= []).push(JSON.parse(data)); }
+    }
+    Object.defineProperty(window, "WebSocket", { configurable: true, value: HostUiWebSocket });
+  });
+  await page.goto("/");
+  await openSidebar(page, testInfo);
+  await page.getByRole("button", { name: "Existing chat" }).click();
+
+  const request = async (payload) => page.evaluate((event) => {
+    window.__hostUiSocket.onmessage({ data: JSON.stringify({ type: "extension_ui_request", ...event }) });
+  }, payload);
+  const lastCommand = () => page.evaluate(() => window.__hostUiCommands?.at(-1));
+  await expect.poll(() => page.evaluate(() => typeof window.__hostUiSocket?.onmessage)).toBe("function");
+
+  await request({ id: "confirm-1", method: "confirm", title: "Run command?", message: "This changes files." });
+  const confirm = page.getByRole("region", { name: "Run command?" });
+  await expect(confirm).toContainText("This changes files.");
+  await confirm.getByRole("button", { name: "Approve" }).click();
+  await expect.poll(lastCommand).toEqual({ type: "extension_ui_response", id: "confirm-1", confirmed: true });
+
+  await request({ id: "select-1", method: "select", title: "Choose target", options: ["Alpha", "Beta"] });
+  const select = page.getByRole("region", { name: "Choose target" });
+  await expect(select.getByRole("button", { name: "Alpha" })).toBeVisible();
+  await select.getByRole("button", { name: "Beta" }).click();
+  await expect.poll(lastCommand).toEqual({ type: "extension_ui_response", id: "select-1", value: "Beta" });
+
+  await request({ id: "input-1", method: "input", title: "Your name", placeholder: "Name", prefill: "Grace" });
+  const input = page.getByRole("region", { name: "Your name" });
+  await input.getByRole("textbox", { name: "Your name" }).fill("Ada");
+  await input.getByRole("button", { name: "Submit" }).click();
+  await expect.poll(lastCommand).toEqual({ type: "extension_ui_response", id: "input-1", value: "Ada" });
+
+  await request({ id: "editor-1", method: "editor", title: "Edit plan", prefill: "First draft" });
+  const editor = page.getByRole("region", { name: "Edit plan" });
+  await editor.getByRole("textbox", { name: "Edit plan" }).fill("Revised plan");
+  await editor.getByRole("button", { name: "Submit" }).click();
+  await expect.poll(lastCommand).toEqual({ type: "extension_ui_response", id: "editor-1", value: "Revised plan" });
 });
 
 test("switches threads atomically without flashing the welcome screen", async ({ page }, testInfo) => {
@@ -557,6 +636,101 @@ test("switches threads atomically without flashing the welcome screen", async ({
   await expect(page.getByText("Second thread body")).toBeVisible();
   await expect(page.getByText("First thread body")).toHaveCount(0);
   await expect(page.getByRole("heading", { name: "How can I help you today?" })).toHaveCount(0);
+});
+
+test("does not launch an abandoned active chat during rapid switching", async ({ page }, testInfo) => {
+  await page.route("**/v0/projects", async (route) => route.fulfill({ json: { projects: [{
+    id: "project_chat", slug: "chat", name: "Chats",
+    sessions: [
+      { id: "session_first", projectId: "project_chat", status: "active", title: "First chat" },
+      { id: "session_second", projectId: "project_chat", status: "active", title: "Second chat" },
+    ],
+  }, projects[1]] } }));
+  let firstDetailResolved = false;
+  await page.route("**/v0/sessions/session_first", async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    await route.fulfill({ json: {
+      id: "session_first", projectId: "project_chat", status: "active", title: "First chat",
+      messages: [{ id: "entry-first", role: "user", content: "Abandoned thread" }], tools: [], page: { before: null },
+    } });
+    firstDetailResolved = true;
+  });
+  await page.route("**/v0/sessions/session_second", async (route) => route.fulfill({ json: {
+    id: "session_second", projectId: "project_chat", status: "active", title: "Second chat",
+    messages: [{ id: "entry-second", role: "user", content: "Selected thread" }], tools: [], page: { before: null },
+  } }));
+  const launches = [];
+  await page.route("**/v0/live-sessions", async (route) => {
+    const body = route.request().postDataJSON();
+    launches.push(body.chatId);
+    await route.fulfill({ json: { id: `live_${body.chatId}`, streamUrl: `/v0/live-sessions/live_${body.chatId}/stream` } });
+  });
+
+  await page.goto("/");
+  await openSidebar(page, testInfo);
+  await page.getByRole("button", { name: "First chat" }).click();
+  await openSidebar(page, testInfo);
+  await page.getByRole("button", { name: "Second chat" }).click();
+  await expect(page.getByText("Selected thread")).toBeVisible();
+  await expect.poll(() => firstDetailResolved).toBe(true);
+  await expect.poll(() => launches).toEqual(["session_second"]);
+});
+
+test("ignores queued events from the previous chat socket", async ({ page }, testInfo) => {
+  await page.addInitScript(() => {
+    class SwitchingWebSocket extends EventTarget {
+      static OPEN = 1;
+      constructor() {
+        super();
+        this.readyState = 0;
+        (window.__switchSockets ||= []).push(this);
+        queueMicrotask(() => { this.readyState = SwitchingWebSocket.OPEN; this.dispatchEvent(new Event("open")); });
+      }
+      close() { this.readyState = 3; this.dispatchEvent(new Event("close")); }
+      send() {}
+    }
+    Object.defineProperty(window, "WebSocket", { configurable: true, value: SwitchingWebSocket });
+  });
+  await page.route("**/v0/projects", async (route) => route.fulfill({ json: { projects: [{
+    id: "project_chat", slug: "chat", name: "Chats",
+    sessions: [
+      { id: "session_first", projectId: "project_chat", status: "active", title: "First chat" },
+      { id: "session_second", projectId: "project_chat", status: "active", title: "Second chat" },
+    ],
+  }, projects[1]] } }));
+  for (const [id, title, content] of [
+    ["session_first", "First chat", "First body"],
+    ["session_second", "Second chat", "Second body"],
+  ]) {
+    await page.route(`**/v0/sessions/${id}`, async (route) => route.fulfill({ json: {
+      id, projectId: "project_chat", status: "active", title,
+      messages: [{ id: `entry-${id}`, role: "user", content }], tools: [], page: { before: null },
+    } }));
+  }
+  await page.route("**/v0/live-sessions", async (route) => {
+    const { chatId } = route.request().postDataJSON();
+    await route.fulfill({ json: { id: `live_${chatId}`, streamUrl: `/v0/live-sessions/live_${chatId}/stream` } });
+  });
+
+  await page.goto("/");
+  await openSidebar(page, testInfo);
+  await page.getByRole("button", { name: "First chat" }).click();
+  await expect(page.getByText("First body")).toBeVisible();
+  await expect.poll(() => page.evaluate(() => window.__switchSockets?.some((socket) => typeof socket.onmessage === "function"))).toBe(true);
+  await page.evaluate(() => {
+    window.__staleSocketHandler = window.__switchSockets.find((socket) => typeof socket.onmessage === "function").onmessage;
+  });
+  await openSidebar(page, testInfo);
+  await page.getByRole("button", { name: "Second chat" }).click();
+  await expect(page.getByText("Second body")).toBeVisible();
+  await page.evaluate(() => {
+    const handler = window.__staleSocketHandler;
+    handler({ data: JSON.stringify({ type: "generation_started", generationId: "stale-generation" }) });
+    handler({ data: JSON.stringify({ type: "message_start", generationId: "stale-generation", message: { role: "assistant" } }) });
+    handler({ data: JSON.stringify({ type: "assistant_stream_delta", generationId: "stale-generation", delta: "STALE OUTPUT" }) });
+  });
+  await expect(page.getByText("STALE OUTPUT")).toHaveCount(0);
+  await expect(page.getByText("Second body")).toBeVisible();
 });
 
 test("opens a viewport-filling thread pinned to the true bottom without an upward flash", async ({ page }, testInfo) => {
@@ -1164,6 +1338,76 @@ test("uploads picker and dropped files through the same attachment surface", asy
   await expect(messageAttachments).toContainText("picker.txt");
   await expect(messageAttachments).toContainText("dropped.txt");
   await expect(page.locator(".composer-wrap > .attachment-tray")).toHaveCount(0);
+});
+
+test("editing from history abandons the current attachment draft cleanly", async ({ page }, testInfo) => {
+  await page.addInitScript(() => {
+    let nextObjectUrl = 0;
+    window.__createdObjectUrls = [];
+    window.__revokedObjectUrls = [];
+    Object.defineProperty(URL, "createObjectURL", { configurable: true, value: () => {
+      const value = `blob:conduit-test-${++nextObjectUrl}`;
+      window.__createdObjectUrls.push(value);
+      return value;
+    } });
+    Object.defineProperty(URL, "revokeObjectURL", { configurable: true, value: (value) => window.__revokedObjectUrls.push(value) });
+  });
+  await page.route("**/v0/sessions/session_existing", async (route) => route.fulfill({ json: {
+    id: "session_existing", projectId: "project_chat", status: "active", title: "Existing chat",
+    messages: [{ id: "entry-user", role: "user", content: "Edit this prompt", attachments: [
+      { id: "transcript-file", name: "transcript-notes.md", type: "text/markdown", size: 42 },
+    ] }],
+    tools: [], page: { before: null },
+  } }));
+  const uploads = [];
+  const deletes = [];
+  await page.route("**/v0/chats/session_existing/attachments/*", async (route) => {
+    if (route.request().method() !== "DELETE") return route.fallback();
+    deletes.push(new URL(route.request().url()).pathname.split("/").at(-1));
+    await route.fulfill({ status: 204, body: "" });
+  });
+  await page.route("**/v0/chats/session_existing/attachments/*?name=*", async (route) => {
+    const url = new URL(route.request().url());
+    const id = url.pathname.split("/").at(-1);
+    const name = url.searchParams.get("name");
+    uploads.push({ id, name });
+    if (name !== "draft-complete.png") await new Promise((resolve) => setTimeout(resolve, 1500));
+    try {
+      await route.fulfill({ status: 201, json: { id, name, storedName: `${id}--${name}`, size: 3, type: "image/png" } });
+    } catch {
+      // The expected XHR abort closes the intercepted request before fulfillment.
+    }
+  });
+
+  await page.goto("/");
+  await openSidebar(page, testInfo);
+  await page.getByRole("button", { name: "Existing chat" }).click();
+  const picker = page.locator('input[type="file"]');
+  await picker.setInputFiles({ name: "draft-complete.png", mimeType: "image/png", buffer: Buffer.from("one") });
+  await expect.poll(() => uploads.map((item) => item.name)).toContain("draft-complete.png");
+  await expect(page.getByText("draft-complete.png", { exact: true })).toBeVisible();
+  await picker.setInputFiles(["a", "b", "c", "d"].map((name) => ({
+    name: `draft-pending-${name}.png`, mimeType: "image/png", buffer: Buffer.from(name),
+  })));
+  await expect.poll(() => uploads.filter((item) => item.name.startsWith("draft-pending-")).length).toBe(3);
+
+  await page.locator(".user-message-text", { hasText: "Edit this prompt" }).hover();
+  await page.getByRole("button", { name: "Edit from here" }).click();
+  await expect(page.locator(".composer-wrap > .attachment-tray")).toContainText("transcript-notes.md");
+  await expect(page.locator(".composer-wrap > .attachment-tray")).not.toContainText("draft-complete.png");
+  await expect.poll(() => deletes.length).toBe(1);
+  await expect.poll(() => page.evaluate(() => window.__revokedObjectUrls.length)).toBe(5);
+  await page.waitForTimeout(1700);
+  expect(uploads.map((item) => item.name)).toEqual([
+    "draft-complete.png",
+    "draft-pending-a.png",
+    "draft-pending-b.png",
+    "draft-pending-c.png",
+  ]);
+  expect(await page.evaluate(() => ({ created: window.__createdObjectUrls, revoked: window.__revokedObjectUrls }))).toEqual({
+    created: ["blob:conduit-test-1", "blob:conduit-test-2", "blob:conduit-test-3", "blob:conduit-test-4", "blob:conduit-test-5"],
+    revoked: ["blob:conduit-test-1", "blob:conduit-test-2", "blob:conduit-test-3", "blob:conduit-test-4", "blob:conduit-test-5"],
+  });
 });
 
 test("stop freezes the visible response and rejects late generation deltas", async ({ page }) => {

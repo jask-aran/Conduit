@@ -144,6 +144,7 @@ button, textarea, input, select { font: inherit; }
 .chat-markdown table { width: 100%; margin: 1em 0; border-collapse: collapse; }
 .chat-markdown th, .chat-markdown td { padding: 7px 9px; border: 1px solid var(--border); text-align: left; }
 .chat-markdown :not(pre) > code { border-radius: 4px; background: var(--muted); padding: 0.12em 0.35em; font-family: ui-monospace, monospace; }
+.markdown-stream-tail { display: block; white-space: pre-wrap; }
 .external-markdown-link { border: 0; background: none; padding: 0; color: oklch(0.7 0.16 250); text-decoration: underline; }
 .artifact { margin: 1em 0; overflow: hidden; border: 1px solid var(--border); border-radius: 10px; background: var(--card); }
 .artifact-header { display: flex; align-items: center; justify-content: space-between; padding: 7px 10px; border-bottom: 1px solid var(--border); color: var(--muted-foreground); font-size: 12px; }
@@ -173,6 +174,11 @@ button, textarea, input, select { font: inherit; }
 .slash-suggestions span { color: var(--muted-foreground); font-size: 12px; }
 .composer-queue, .host-ui-card { width: min(760px, 100%); margin-inline: auto; padding: 8px 10px; border: 1px solid var(--border); border-radius: 10px; background: var(--card); }
 .composer-queue { display: flex; align-items: center; justify-content: space-between; }
+.host-ui-card { display: flex; flex-direction: column; gap: 8px; padding: 12px; }
+.host-ui-card p { margin: 0; color: var(--muted-foreground); font-size: 13px; }
+.host-ui-options, .host-ui-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.host-ui-actions { justify-content: flex-end; }
+.host-ui-editor { min-height: 112px; font: 12px/1.5 ui-monospace, monospace; }
 
 .attachment-tray { display: flex; width: min(760px, 100%); max-height: min(320px, 40dvh); flex-direction: column; gap: 8px; margin: 0 auto 10px; overflow-y: auto; }
 .attachment-card { display: flex; width: min(400px, 100%); align-items: center; gap: 9px; padding: 6px; border: 1px solid var(--border); border-radius: 10px; background: var(--card); }

@@ -143,10 +143,13 @@ export interface RetryState {
 
 export interface HostUiRequest {
   id: string;
-  method?: string;
+  kind: "confirm" | "select" | "input" | "editor";
   title?: string;
   message?: string;
-  options?: Array<{ label: string; value: string }>;
+  options?: string[];
+  placeholder?: string;
+  prefill?: string;
+  timeoutMs?: number | null;
 }
 
 export interface RuntimeProcess {

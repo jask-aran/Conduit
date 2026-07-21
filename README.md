@@ -136,8 +136,9 @@ SolidJS + strict TypeScript + Tailwind v4 + Lucide + Geist, with Kobalte used
 selectively for accessible menus and context menus. Concrete app components
 replace the former generic component catalogue. Transcripts render assistant
 Markdown client-side through Marked, DOMPurify, and KaTeX; fenced code uses
-bounded Artifact cards, and streaming relays raw deltas coalesced per animation
-frame. Cmd/Ctrl+K opens the command palette; Settings is a centered
+bounded Artifact cards. Streaming relays raw deltas coalesced per animation
+frame, parses and sanitizes completed blocks once, and mutates only the
+unfinished text tail. Cmd/Ctrl+K opens the command palette; Settings is a centered
 tabbed dialog; response controls cover copy, fork/edit, regenerate, stop, and
 experimental partial continue (`ENABLE_PARTIAL_CONTINUE`). Production builds
 enforce gzip bundle budgets (`dist/bundle-report.json`). Composition rules

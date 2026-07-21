@@ -7,6 +7,7 @@ import { Button } from "@/components/primitives";
 import { api, asList, pathChatId } from "./api/client";
 import type { ChatSummary, Installation, Project, RuntimeIdentity, Template, TranscriptDetail } from "./api/contracts";
 import { Composer } from "./chat/composer";
+import { HostUiRequests } from "./chat/host-ui-card";
 import { Transcript } from "./chat/transcript";
 import { CommandMenu } from "./navigation/command-menu";
 import { Sidebar } from "./navigation/sidebar";
@@ -235,7 +236,7 @@ function App() {
       <ChatHeader project={selectedProject()} title={chat.title()} profile={activeProfile()} runtime={chat.runtimeIdentity()} live={chat.live() as unknown as Record<string, unknown>} />
       <Show when={selectedProject()?.kind === "workspace" && [...runtime.processes().values()].some((process) => process.chatId !== catalogue.selectedId() && process.active)}><div class="workspace-warning"><TriangleAlertIcon /><div><strong>Another chat is working in this Workspace</strong><p>Both agents can edit the same files. Conduit does not lock the Workspace or create worktrees automatically.</p></div></div></Show>
       <Transcript chat={chat} partialContinue={partialContinue()} />
-      <div class="composer-stack"><For each={chat.hostUiRequests()}>{(request) => <div class="host-ui-card"><strong>{request.title || "Pi needs your input"}</strong><p>{request.message}</p><For each={request.options || []}>{(option) => <Button onClick={() => chat.respondHostUi({ id: request.id, value: option.value })}>{option.label}</Button>}</For></div>}</For>
+      <div class="composer-stack"><HostUiRequests requests={chat.hostUiRequests()} onRespond={chat.respondHostUi} />
         <Composer chat={chat} attachments={attachments} models={models} profiles={profiles()} activeProfile={activeProfile()} serverOnline={runtime.connectivity() === "online"} onChooseProfile={(id) => void switchProfile(id)} onOpenSettings={openSettings} /></div>
     </main>
     <CommandMenu open={paletteOpen()} initialPage={palettePage()} onOpenChange={setPaletteOpen} projects={catalogue.projects()} models={models.models()} onSettings={openSettings}
