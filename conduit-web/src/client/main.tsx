@@ -1,4 +1,4 @@
-import { createMemo, createSignal, ErrorBoundary, For, onCleanup, onMount, Show } from "solid-js";
+import { createMemo, createSignal, ErrorBoundary, onCleanup, onMount, Show } from "solid-js";
 import { render } from "solid-js/web";
 import { ShareIcon, TriangleAlertIcon } from "lucide-solid";
 import { Toaster, toast } from "solid-sonner";
@@ -301,7 +301,7 @@ function App() {
       onOpenSettings={openSettings} onOpenPalette={() => setPaletteOpen(true)} />
     <main data-slot="sidebar-inset" class={`chat-main${emptyChat() ? " chat-main-empty" : ""}`} {...dropHandlers}>
       <Show when={dropActive()}><div class="chat-drop-overlay"><div>Drop files to attach</div></div></Show>
-      <div class="chat-meteors" aria-hidden="true"><For each={Array.from({ length: 30 })}>{(_, index) => <span style={{ left: `calc(${(index() * 37) % 101}% + ${(index() % 5) * 0.1}dvh)`, "animation-delay": `-${(index() * 0.73).toFixed(2)}s`, "animation-duration": `${12 + (index() % 9)}s` }} />}</For></div>
+      <div class="chat-ambient" aria-hidden="true" />
       <ChatHeader project={selectedProject()} title={chat.title()} profile={activeProfile()} runtime={chat.runtimeIdentity()} live={chat.live() as unknown as Record<string, unknown>} />
       <Show when={selectedProject()?.kind === "workspace" && [...runtime.processes().values()].some((process) => process.chatId !== catalogue.selectedId() && process.active)}><div class="workspace-warning"><TriangleAlertIcon /><div><strong>Another chat is working in this Workspace</strong><p>Both agents can edit the same files. Conduit does not lock the Workspace or create worktrees automatically.</p></div></div></Show>
       <Transcript chat={chat} partialContinue={partialContinue()} />
