@@ -383,7 +383,7 @@ test("keeps the native textarea composer bounded in a thread", async ({ page }, 
   expect(inputBox.height).toBeLessThanOrEqual(192);
   expect(sendBox.y).toBeGreaterThan(inputBox.y);
   await expect(composerWrap).toHaveCSS("position", "static");
-  await expect(page.locator(".chat-meteors")).toBeVisible();
+  await expect(page.locator(".chat-ambient")).toBeVisible();
 });
 
 test("renders persisted assistant Markdown with safe interactive controls", async ({ page }, testInfo) => {
@@ -1206,35 +1206,19 @@ test("clone workspace requires a repository and absolute target location", async
   });
 });
 
-test("sizes the meteor field with the chat viewport", async ({ page }, testInfo) => {
+test("the ambient layer fills the chat viewport", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "desktop-chromium");
   await page.goto("/");
 
   const main = page.locator('[data-slot="sidebar-inset"]');
-  const meteorField = page.locator(".chat-meteors");
-  const meteor = meteorField.locator(":scope > span").first();
-  const meteors = meteorField.locator(":scope > span");
-  await expect(meteors).toHaveCount(30);
+  const ambient = page.locator(".chat-ambient");
+  await expect(ambient).toBeVisible();
 
-  const [initialMain, initialField, initialLeft, delays, durations] = await Promise.all([
-    main.boundingBox(),
-    meteorField.boundingBox(),
-    meteor.evaluate((element) => element.style.left),
-    meteors.evaluateAll((elements) => elements.map((element) => Number.parseFloat(element.style.animationDelay))),
-    meteors.evaluateAll((elements) => elements.map((element) => Number.parseFloat(element.style.animationDuration))),
-  ]);
+  const [initialMain, initialField] = await Promise.all([main.boundingBox(), ambient.boundingBox()]);
   expect(initialField).toEqual(initialMain);
-  expect(initialLeft.includes("dvh")).toBe(true);
-  expect(delays.some((delay) => delay < 0)).toBe(true);
-  expect(new Set(delays).size).toBeGreaterThan(20);
-  expect(Math.min(...durations)).toBeGreaterThanOrEqual(12);
-  expect(Math.max(...durations)).toBeLessThanOrEqual(20);
 
   await page.setViewportSize({ width: 1600, height: 900 });
-  const [resizedMain, resizedField] = await Promise.all([
-    main.boundingBox(),
-    meteorField.boundingBox(),
-  ]);
+  const [resizedMain, resizedField] = await Promise.all([main.boundingBox(), ambient.boundingBox()]);
   expect(resizedField).toEqual(resizedMain);
   expect(resizedField.width).toBeGreaterThan(initialField.width);
   expect(resizedField.height).toBeGreaterThan(initialField.height);
