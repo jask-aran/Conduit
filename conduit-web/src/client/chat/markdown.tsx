@@ -46,16 +46,153 @@ function renderMarkdown(source: string) {
     USE_PROFILES: { html: true },
     ADD_ATTR: ["aria-label", "data-copy-code", "data-external-url", "data-language", "data-markdown", "class"],
     FORBID_TAGS: ["img", "script", "style", "iframe", "object", "embed"],
-  });
+    RETURN_DOM_FRAGMENT: true,
+  }) as DocumentFragment;
 }
 
 export function ChatMarkdown(props: { children?: string; streaming?: boolean }) {
   let root!: HTMLDivElement;
   const [externalUrl, setExternalUrl] = createSignal<string | null>(null);
+  let renderedSource = "";
+  let streamLength = 0;
+  let streamHead = "";
+  let streamSuffix = "";
+  let streamChunks: string[] = [];
+  let streamLineChunks: string[] = [];
+  let streamTail: HTMLSpanElement | null = null;
+  let streamText: Text | null = null;
+  let fence: { character: string; length: number } | null = null;
+  let displayMath = false;
+  let commitAtBlankLine: boolean | null = null;
+  let streaming = false;
+
+  const updateStreamFingerprint = (delta: string) => {
+    if (streamHead.length < 128) streamHead += delta.slice(0, 128 - streamHead.length);
+    streamSuffix = delta.length >= 128 ? delta.slice(-128) : `${streamSuffix}${delta}`.slice(-128);
+    streamLength += delta.length;
+  };
+
+  const isAppendOnly = (source: string) => {
+    if (source.length < streamLength) return false;
+    if (source.slice(0, streamHead.length) !== streamHead) return false;
+    return source.slice(streamLength - streamSuffix.length, streamLength) === streamSuffix;
+  };
+
+  const appendRendered = (source: string) => {
+    if (!source) return;
+    root.insertBefore(renderMarkdown(source), streamTail);
+  };
+
+  const commitStreamBuffer = () => {
+    const source = streamChunks.join("");
+    if (source.trim()) appendRendered(source);
+    streamChunks = [];
+    commitAtBlankLine = null;
+    if (streamText) streamText.data = "";
+  };
+
+  const finishLine = () => {
+    const line = streamLineChunks.join("").slice(0, -1).replace(/\r$/, "");
+    const trimmed = line.trim();
+    const marker = /^ {0,3}(`{3,}|~{3,})/.exec(line)?.[1] || null;
+    const closingMarker = /^ {0,3}(`{3,}|~{3,})[ \t]*$/.exec(line)?.[1] || null;
+    streamLineChunks = [];
+    if (commitAtBlankLine == null && trimmed) {
+      // Containers can legally continue after blank lines. Keep their entire
+      // tail raw rather than split one Markdown block into several documents.
+      commitAtBlankLine = !/^(?: {0,3}(?:[-+*]|\d+[.)])\s| {0,3}>|(?: {4}|\t)| {0,3}<[A-Za-z!/]| {0,3}\[[^\]]+\]:)/.test(line);
+    }
+
+    if (fence) {
+      if (closingMarker?.[0] === fence.character && closingMarker.length >= fence.length) {
+        fence = null;
+        commitStreamBuffer();
+      }
+      return;
+    }
+    if (marker) {
+      fence = { character: marker[0]!, length: marker.length };
+      return;
+    }
+    if (trimmed === "$$") {
+      displayMath = !displayMath;
+      if (!displayMath) commitStreamBuffer();
+      return;
+    }
+    if (!displayMath && !trimmed && commitAtBlankLine !== false) commitStreamBuffer();
+  };
+
+  const appendStream = (delta: string) => {
+    if (!delta || !streamText) return;
+    updateStreamFingerprint(delta);
+    let start = 0;
+    for (let newline = delta.indexOf("\n"); newline >= 0; newline = delta.indexOf("\n", start)) {
+      const segment = delta.slice(start, newline + 1);
+      streamChunks.push(segment);
+      streamLineChunks.push(segment);
+      streamText.appendData(segment);
+      finishLine();
+      start = newline + 1;
+    }
+    const remainder = delta.slice(start);
+    if (!remainder) return;
+    streamChunks.push(remainder);
+    streamLineChunks.push(remainder);
+    streamText.appendData(remainder);
+  };
+
+  const beginStream = (source: string) => {
+    root.replaceChildren();
+    renderedSource = "";
+    streamLength = 0;
+    streamHead = "";
+    streamSuffix = "";
+    streamChunks = [];
+    streamLineChunks = [];
+    fence = null;
+    displayMath = false;
+    commitAtBlankLine = null;
+    streaming = true;
+    streamTail = document.createElement("span");
+    streamTail.className = "markdown-stream-tail";
+    streamTail.dataset.markdownStreamTail = "";
+    streamText = document.createTextNode("");
+    streamTail.append(streamText);
+    root.append(streamTail);
+    appendStream(source);
+  };
+
+  const finishStream = (source: string) => {
+    if (isAppendOnly(source)) appendStream(source.slice(streamLength));
+    else {
+      root.replaceChildren(renderMarkdown(source));
+      renderedSource = source;
+      streaming = false;
+      streamTail = null;
+      streamText = null;
+      return;
+    }
+    commitStreamBuffer();
+    streamTail?.remove();
+    streamTail = null;
+    streamText = null;
+    streamLineChunks = [];
+    renderedSource = source;
+    streaming = false;
+  };
 
   createEffect(() => {
     const source = String(props.children || "");
-    root.innerHTML = renderMarkdown(source);
+    if (props.streaming) {
+      if (!streaming || !isAppendOnly(source)) beginStream(source);
+      else appendStream(source.slice(streamLength));
+      return;
+    }
+    if (streaming) finishStream(source);
+    else if (source !== renderedSource) {
+      root.replaceChildren(renderMarkdown(source));
+      renderedSource = source;
+    }
   });
 
   const click = async (event: MouseEvent) => {
