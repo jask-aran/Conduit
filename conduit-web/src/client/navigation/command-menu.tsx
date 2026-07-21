@@ -1,117 +1,261 @@
-import { createEffect, createMemo, createSignal, Show } from "solid-js";
-import { Combobox as KCombobox } from "@kobalte/core/combobox";
+import { createEffect, createMemo, createSignal, For, Show } from "solid-js";
+import type { JSX } from "solid-js";
 import * as KDialog from "@kobalte/core/dialog";
-import type { ModelOption, Project } from "../api/contracts";
+import {
+  ArrowLeftIcon, BrainIcon, ChevronRightIcon, CopyIcon, FileInputIcon, FilePlus2Icon,
+  FolderInputIcon, FolderPlusIcon, LayersIcon, LogOutIcon, MessageSquareIcon,
+  MessageSquarePlusIcon, PanelLeftIcon, PencilIcon, PlayIcon, RefreshCwIcon, SettingsIcon,
+  SlashIcon, SlidersHorizontalIcon, SquareIcon, TerminalIcon, Trash2Icon,
+} from "lucide-solid";
+import type { ModelOption } from "../api/contracts";
+import {
+  groupPaletteCommands, PALETTE_PAGES, resolvePaletteCommands,
+} from "../palette/command-registry";
+import type { PaletteActions, PaletteCommand, PaletteContext } from "../palette/command-registry";
+import { rankPaletteResults } from "../palette/palette-search";
 
-interface CommandItem { id: string; label: string; keywords?: string; group: string; action: () => void; danger?: boolean; }
+const icons: Record<string, (props: { class?: string }) => JSX.Element> = {
+  "new-chat": MessageSquarePlusIcon,
+  "new-folder": FolderPlusIcon,
+  attach: FilePlus2Icon,
+  settings: SettingsIcon,
+  model: SlidersHorizontalIcon,
+  profile: LayersIcon,
+  rename: PencilIcon,
+  move: FolderInputIcon,
+  stop: SquareIcon,
+  regenerate: RefreshCwIcon,
+  continue: PlayIcon,
+  copy: CopyIcon,
+  "copy-transcript": FileInputIcon,
+  delete: Trash2Icon,
+  sidebar: PanelLeftIcon,
+  chat: MessageSquareIcon,
+  thinking: BrainIcon,
+  retry: RefreshCwIcon,
+  reload: RefreshCwIcon,
+  back: ArrowLeftIcon,
+  logout: LogOutIcon,
+  command: TerminalIcon,
+  slash: SlashIcon,
+};
+
+const GROUP_HEADINGS: Record<string, string> = {
+  commands: "Commands",
+  settings: "Settings",
+  navigation: "Go to",
+  profiles: "Profiles",
+  thinking: "Thinking level",
+  danger: "Danger zone",
+  models: "Models",
+};
+
+const BACK_COMMAND: PaletteCommand = {
+  id: "page-back", label: "Back", icon: "back", group: "commands", keywords: [], run: () => {},
+};
+
+type Row =
+  | { type: "heading"; key: string; label: string }
+  | { type: "command"; key: string; index: number; command: PaletteCommand }
+  | { type: "model"; key: string; index: number; model: ModelOption };
+
+function groupModels(models: ModelOption[]): { provider: string; items: ModelOption[] }[] {
+  const order: string[] = [];
+  const byProvider = new Map<string, ModelOption[]>();
+  for (const model of models) {
+    const provider = model.provider || "Other";
+    if (!byProvider.has(provider)) { byProvider.set(provider, []); order.push(provider); }
+    byProvider.get(provider)!.push(model);
+  }
+  return order.map((provider) => ({ provider, items: byProvider.get(provider)! }));
+}
+
+const optionId = (index: number) => `command-option-${index}`;
 
 export function CommandMenu(props: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  projects: Project[];
+  initialPage?: string | null;
+  launchNonce?: number;
+  context: PaletteContext;
+  actions: PaletteActions;
   models: ModelOption[];
-  onSettings: (section: string) => void;
-  onNewChat: () => void;
-  onNewFolder: () => void;
-  onNewWorkspace: () => void;
-  onOpenChat: (chatId: string) => void;
+  currentModel: string;
   onChooseModel: (spec: string) => void;
-  onDeleteChat: () => void;
 }) {
   const [query, setQuery] = createSignal("");
+  const [page, setPage] = createSignal<string | null>(null);
+  const [active, setActive] = createSignal(0);
   let input!: HTMLInputElement;
   let returnFocus: HTMLElement | null = null;
   let wasOpen = false;
-  const close = () => { setQuery(""); props.onOpenChange(false); };
-  const changeOpen = (open: boolean) => { if (!open) setQuery(""); props.onOpenChange(open); };
+
+  const pageMeta = createMemo(() => (page() ? PALETTE_PAGES[page()!] : null));
+  const searching = createMemo(() => Boolean(query().trim()));
 
   createEffect(() => {
-    if (props.open && !wasOpen) returnFocus = document.activeElement as HTMLElement | null;
+    // Track launchNonce so re-opening on the same page re-applies the initial page.
+    void props.launchNonce;
+    if (props.open && !wasOpen) {
+      returnFocus = document.activeElement as HTMLElement | null;
+      setPage(props.initialPage || null);
+      setQuery("");
+      queueMicrotask(() => input?.focus());
+    }
+    if (!props.open && wasOpen) { setPage(null); setQuery(""); }
     wasOpen = props.open;
-    if (!props.open) return;
-    setQuery("");
-    queueMicrotask(() => input?.focus());
   });
 
-  const items = createMemo<CommandItem[]>(() => [
-    { id: "settings", label: "Settings…", keywords: "preferences configure general", group: "Commands", action: () => { close(); props.onSettings("general"); } },
-    { id: "new-chat", label: "New chat", group: "Commands", action: () => { close(); props.onNewChat(); } },
-    { id: "new-folder", label: "New folder", group: "Commands", action: () => { close(); props.onNewFolder(); } },
-    { id: "new-workspace", label: "New workspace", group: "Commands", action: () => { close(); props.onNewWorkspace(); } },
-    { id: "delete-chat", label: "Delete chat", keywords: "remove conversation", group: "Commands", danger: true, action: () => { close(); props.onDeleteChat(); } },
-    ...["models", "profiles", "runtime", "workspaces", "auth"].map((id): CommandItem => ({
-      id: `settings:${id}`,
-      label: id === "auth" ? "Authentication" : id[0]!.toUpperCase() + id.slice(1),
-      keywords: `settings preferences ${id}`,
-      group: "Settings",
-      action: () => { close(); props.onSettings(id); },
-    })),
-    ...props.projects.flatMap((project) => project.sessions.map((chat): CommandItem => ({
-      id: `chat:${chat.id}`,
-      label: chat.title,
-      keywords: `${project.name} chat conversation`,
-      group: project.name,
-      action: () => { close(); props.onOpenChat(chat.id); },
-    }))),
-    ...props.models.map((model): CommandItem => ({
-      id: `model:${model.spec}`,
-      label: model.label,
-      keywords: `${model.spec} ${model.provider} model`,
-      group: "Models",
-      action: () => { close(); props.onChooseModel(model.spec); },
-    })),
-  ]);
+  const rows = createMemo<Row[]>(() => {
+    if (!props.open) return [];
+    const currentPage = page();
+    const commands = resolvePaletteCommands(props.context, { page: currentPage });
+    const out: Row[] = [];
+    let index = 0;
+    const push = (row: Row) => out.push(row);
 
-  const commandFilter = (item: CommandItem, inputValue: string) => {
-    const words = inputValue.toLowerCase().trim().split(/\s+/).filter(Boolean);
-    if (!words.length) return item.group === "Commands";
-    return words.every((word) => `${item.label} ${item.keywords || ""} ${item.group}`.toLowerCase().includes(word));
+    if (searching()) {
+      const ranked = rankPaletteResults<PaletteCommand, ModelOption>({
+        commands,
+        models: currentPage ? [] : props.models,
+        query: query(),
+        currentModel: props.currentModel,
+      }) || [];
+      let lastGroup = "";
+      for (const row of ranked) {
+        if (row.group !== lastGroup) {
+          push({ type: "heading", key: `h-${row.group}-${index}`, label: GROUP_HEADINGS[row.group] || row.group });
+          lastGroup = row.group;
+        }
+        if (row.kind === "model" && row.model) push({ type: "model", key: row.id, index: index++, model: row.model });
+        else if (row.command) push({ type: "command", key: row.command.id, index: index++, command: row.command });
+      }
+      return out;
+    }
+
+    if (currentPage) {
+      push({ type: "command", key: "page-back", index: index++, command: BACK_COMMAND });
+      push({ type: "heading", key: "page-heading", label: pageMeta()?.heading || "Results" });
+      for (const command of commands) push({ type: "command", key: command.id, index: index++, command });
+      return out;
+    }
+
+    for (const group of groupPaletteCommands(commands)) {
+      push({ type: "heading", key: `g-${group.id}`, label: group.heading });
+      for (const command of group.items) push({ type: "command", key: command.id, index: index++, command });
+    }
+    for (const group of groupModels(props.models)) {
+      push({ type: "heading", key: `m-${group.provider}`, label: `Models · ${group.provider}` });
+      for (const model of group.items) push({ type: "model", key: `model:${model.spec}`, index: index++, model });
+    }
+    return out;
+  });
+
+  const selectable = createMemo(() => rows().filter((row): row is Exclude<Row, { type: "heading" }> => row.type !== "heading"));
+
+  // Keep the active index in range whenever the visible set changes.
+  createEffect(() => { const count = selectable().length; if (active() >= count) setActive(count ? count - 1 : 0); });
+  createEffect(() => { void query(); void page(); setActive(0); if (props.open) queueMicrotask(() => input?.focus()); });
+  createEffect(() => { if (props.open) document.getElementById(optionId(active()))?.scrollIntoView({ block: "nearest" }); });
+
+  const close = () => { setQuery(""); setPage(null); props.onOpenChange(false); };
+  const goBack = () => { setPage(null); setQuery(""); };
+
+  const runRow = (row?: Exclude<Row, { type: "heading" }>) => {
+    if (!row) return;
+    if (row.type === "model") { close(); requestAnimationFrame(() => props.onChooseModel(row.model.spec)); return; }
+    const command = row.command;
+    if (command.id === "page-back") { goBack(); return; }
+    if (command.kind === "page" && command.page) { setPage(command.page); setQuery(""); return; }
+    close();
+    requestAnimationFrame(() => command.run(props.actions));
   };
-  const hasMatches = createMemo(() => items().some((item) => commandFilter(item, query())));
-  const runCommand = (id: string | undefined) => { if (id) items().find((item) => item.id === id)?.action(); };
-  const inputKeydown = (event: KeyboardEvent) => {
+
+  const move = (delta: number) => {
+    const count = selectable().length;
+    if (!count) return;
+    setActive((current) => (current + delta + count) % count);
+  };
+
+  const keydown = (event: KeyboardEvent) => {
+    if (event.key === "ArrowDown") { event.preventDefault(); move(1); return; }
+    if (event.key === "ArrowUp") { event.preventDefault(); move(-1); return; }
+    if (event.key === "Home") { event.preventDefault(); setActive(0); return; }
+    if (event.key === "End") { event.preventDefault(); setActive(Math.max(0, selectable().length - 1)); return; }
+    if (event.key === "Enter") { event.preventDefault(); runRow(selectable()[active()]); return; }
     if (event.key === "Escape") {
       event.preventDefault();
       event.stopPropagation();
-      close();
+      if (page()) goBack(); else close();
       return;
     }
-    if (event.key !== "Enter") return;
-    const active = document.getElementById(input.getAttribute("aria-activedescendant") || "");
-    if (active?.dataset.key) { event.preventDefault(); runCommand(active.dataset.key); }
+    if (event.key === "Backspace" && page() && !query()) { event.preventDefault(); goBack(); }
+  };
+
+  const changeOpen = (open: boolean) => { if (!open) close(); else props.onOpenChange(true); };
+
+  const renderRow = (row: Row) => {
+    if (row.type === "heading") return <p class="command-group-label" role="presentation">{row.label}</p>;
+    const selected = () => active() === row.index;
+    const commonProps = {
+      id: optionId(row.index),
+      role: "option",
+      "aria-selected": selected(),
+      class: "command-option",
+      // Keep focus in the input so keyboard control (Escape/paging) survives a click.
+      onMouseDown: (event: MouseEvent) => event.preventDefault(),
+      onMouseMove: () => setActive(row.index),
+      onClick: () => runRow(row),
+    } as const;
+    if (row.type === "model") {
+      const Icon = icons.model!;
+      return <div {...commonProps} data-highlighted={selected() || undefined}>
+        <Icon class="command-icon" />
+        <span class="command-copy"><span class="command-label">{row.model.label}</span><small>{row.model.spec}</small></span>
+      </div>;
+    }
+    const command = row.command;
+    const Icon = icons[command.icon];
+    return <div {...commonProps} data-highlighted={selected() || undefined} data-danger={command.destructive || undefined} data-checked={command.checked || undefined}>
+      <Show when={Icon}>{(resolved) => { const C = resolved(); return <C class="command-icon" />; }}</Show>
+      <span class="command-copy">
+        <span class="command-label">{command.label}</span>
+        <Show when={command.detail}><small>{command.detail}</small></Show>
+      </span>
+      <Show when={command.kind === "page"}><ChevronRightIcon class="command-chevron" /></Show>
+      <Show when={command.shortcut}><kbd class="command-shortcut">{command.shortcut}</kbd></Show>
+    </div>;
   };
 
   return <KDialog.Root open={props.open} onOpenChange={changeOpen}>
-    <KDialog.Portal><KDialog.Content class="command-dialog" onCloseAutoFocus={(event) => { event.preventDefault(); if (returnFocus?.isConnected) returnFocus.focus(); returnFocus = null; }}>
-      <div class="command-shell">
-        <KDialog.Title class="sr-only">Command Palette</KDialog.Title>
-        <KDialog.Description class="sr-only">Search commands, chats, settings, and models.</KDialog.Description>
-        <KCombobox<CommandItem>
-          options={items()}
-          optionValue="id"
-          optionTextValue={(item) => `${item.label} ${item.keywords || ""} ${item.group}`}
-          optionLabel="label"
-          onInputChange={setQuery}
-          value={null}
-          open={props.open}
-          allowsEmptyCollection
-          closeOnSelection={false}
-          defaultFilter={commandFilter}
-          modal={false}
-          // Route activation through the rendered item's stable id. Kobalte
-          // retains the last selected option while its closing presence runs,
-          // whereas commands must be repeatable immediately after reopening.
-          itemComponent={(itemProps) => <KCombobox.Item item={itemProps.item} class="command-option" data-danger={itemProps.item.rawValue.danger || undefined} onPointerDown={(event) => runCommand(event.currentTarget.dataset.key)}>
-            <span>{itemProps.item.rawValue.label}</span><small aria-hidden="true">{itemProps.item.rawValue.group}<Show when={itemProps.item.rawValue.group === "Models"}> · {itemProps.item.rawValue.keywords}</Show></small>
-          </KCombobox.Item>}
-        >
-          <KCombobox.Control class="command-input-row"><KCombobox.Input ref={input} aria-label="Search commands" placeholder="Search commands…" onKeyDown={inputKeydown} /></KCombobox.Control>
-          <KCombobox.Content class="command-list" data-slot="command-list">
-            <Show when={!hasMatches()}><p>No commands found.</p></Show>
-            <KCombobox.Listbox />
-          </KCombobox.Content>
-        </KCombobox>
-      </div>
-    </KDialog.Content></KDialog.Portal>
+    <KDialog.Portal>
+      <KDialog.Content class="command-dialog" onCloseAutoFocus={(event) => { event.preventDefault(); if (returnFocus?.isConnected) returnFocus.focus(); returnFocus = null; }}>
+        <div class="command-shell">
+          <KDialog.Title class="sr-only">Command Palette</KDialog.Title>
+          <KDialog.Description class="sr-only">Search commands, chats, settings, and models.</KDialog.Description>
+          <div class="command-input-row">
+            <Show when={pageMeta()}><span class="command-page-prefix">{pageMeta()!.prefix}</span></Show>
+            <input
+              ref={input}
+              class="command-input"
+              role="combobox"
+              aria-expanded="true"
+              aria-controls="command-listbox"
+              aria-autocomplete="list"
+              aria-activedescendant={selectable().length ? optionId(active()) : undefined}
+              aria-label="Search commands"
+              placeholder={pageMeta()?.placeholder || "Search commands…"}
+              value={query()}
+              onInput={(event) => setQuery(event.currentTarget.value)}
+              onKeyDown={keydown}
+            />
+          </div>
+          <div id="command-listbox" role="listbox" aria-label="Commands" class="command-list">
+            <Show when={!selectable().length}><p class="command-empty">No matching commands.</p></Show>
+            <For each={rows()}>{renderRow}</For>
+          </div>
+        </div>
+      </KDialog.Content>
+    </KDialog.Portal>
   </KDialog.Root>;
 }

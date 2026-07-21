@@ -30,9 +30,9 @@ export function Composer(props: {
   serverOnline: boolean;
   onChooseProfile: (id: string) => void;
   onOpenSettings: (section: string) => void;
+  onOpenAttachments: () => void;
 }) {
   let input!: HTMLTextAreaElement;
-  let fileInput!: HTMLInputElement;
   const [slashOpen, setSlashOpen] = createSignal(false);
   const selectedModel = createMemo(() => props.models.models().find((item) => item.spec === props.models.model()));
   const levels = createMemo(() => selectedModel()?.thinkingLevels || ["off"]);
@@ -53,7 +53,7 @@ export function Composer(props: {
 
   const attach = () => {
     setSlashOpen(false);
-    fileInput.click();
+    props.onOpenAttachments();
     queueMicrotask(() => input.focus());
   };
 
@@ -78,7 +78,6 @@ export function Composer(props: {
       <div class="composer-queue"><span>Queued messages</span><Button variant="ghost" size="sm" onClick={props.chat.clearQueue}>Restore to draft</Button></div>
     </Show>
     <div class="composer">
-      <input ref={fileInput} type="file" multiple hidden onChange={(event) => { if (event.currentTarget.files) props.attachments.addFiles(event.currentTarget.files); event.currentTarget.value = ""; }} />
       <textarea
         ref={input}
         aria-label="Message Pi"
