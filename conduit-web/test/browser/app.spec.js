@@ -1565,17 +1565,24 @@ test("global commands and slash suggestions preserve their intended focus models
   await expect(palette).toHaveCount(0);
   await expect(composer).toBeFocused();
 
+  // Settings is a drill-down page: sections live behind it and never leak into
+  // the root list. Opening a section from the page opens the Settings dialog.
   await page.keyboard.press("Control+k");
-  await expect(palette.getByRole("option", { name: /Settings…/ })).toBeVisible();
+  await expect(palette.getByRole("option", { name: /^Settings…/ })).toBeVisible();
   await expect(palette.getByRole("option", { name: /^Runtime$/ })).toHaveCount(0);
-  await palette.getByRole("option", { name: /Settings…/ }).click();
+  await palette.getByRole("option", { name: /^Settings…/ }).click();
+  await expect(palette.getByText("Settings ›")).toBeVisible();
+  await expect(palette.getByRole("option", { name: /^General/ })).toBeVisible();
+  await palette.getByRole("option", { name: /^General/ }).click();
   let settingsDialog = page.getByRole("dialog", { name: "Settings" });
   await expect(settingsDialog).toBeVisible();
   await expect(settingsDialog.getByRole("tab", { name: /General/ })).toHaveAttribute("aria-selected", "true");
   await page.keyboard.press("Escape");
 
+  // Runtime is reached by drilling into Settings, then searching within the page.
   await page.keyboard.press("Control+k");
-  await palette.getByPlaceholder("Search commands…").fill("runtime");
+  await palette.getByRole("option", { name: /^Settings…/ }).click();
+  await palette.getByRole("combobox").fill("runtime");
   await expect(palette.getByRole("option", { name: /^Runtime$/ })).toBeVisible();
   await palette.getByRole("option", { name: /^Runtime$/ }).click();
   settingsDialog = page.getByRole("dialog", { name: "Settings" });
@@ -1584,14 +1591,13 @@ test("global commands and slash suggestions preserve their intended focus models
   await page.keyboard.press("Escape");
 
   await page.keyboard.press("Control+k");
-  await palette.getByPlaceholder("Search commands…").fill("new folder");
+  await palette.getByRole("combobox").fill("new folder");
   await palette.getByRole("option", { name: /^New folder/ }).click();
   await expect(page.getByRole("dialog", { name: "New folder" })).toBeVisible();
   await page.keyboard.press("Escape");
 
   await page.keyboard.press("Control+k");
-  await palette.getByPlaceholder("Search commands…").fill("example plain");
-  await expect(palette.getByRole("listbox", { name: "Suggestions" })).toBeVisible();
+  await palette.getByRole("combobox").fill("example plain");
   await expect(palette.getByRole("option", { name: /Plain/ })).toBeVisible();
   const settingsRequest = page.waitForRequest((request) => /\/v0\/chats\/[^/]+\/models$/.test(new URL(request.url()).pathname)
     && request.method() === "PATCH");
@@ -1599,8 +1605,8 @@ test("global commands and slash suggestions preserve their intended focus models
   await settingsRequest;
 
   await page.keyboard.press("Control+k");
-  await page.getByPlaceholder("Search commands…").fill("delete chat");
-  await page.getByRole("option", { name: /Delete chat/ }).click();
+  await palette.getByRole("combobox").fill("delete chat");
+  await palette.getByRole("option", { name: /Delete chat/ }).click();
   await expect(page.getByRole("alertdialog", { name: "Delete this chat?" })).toBeVisible();
 });
 
