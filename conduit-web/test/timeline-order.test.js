@@ -5,7 +5,7 @@ import {
   buildTimeline,
   mergeToolEvent,
   promotePendingUser,
-} from "../src/client/timeline-order.js";
+} from "../src/client/timeline-order.ts";
 
 test("mergeToolEvent preserves first-seen timestamp and seq on reconnect replay", () => {
   let seq = 0;

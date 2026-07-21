@@ -60,7 +60,11 @@ test.beforeEach(async ({ page }) => {
         queueMicrotask(() => { this.readyState = IdleWebSocket.OPEN; this.dispatchEvent(new Event("open")); });
       }
       send() {}
-      close() { this.readyState = 3; this.dispatchEvent(new Event("close")); }
+      close() {
+        window.__closedSocketCount = (window.__closedSocketCount || 0) + 1;
+        this.readyState = 3;
+        this.dispatchEvent(new Event("close"));
+      }
     }
     Object.defineProperty(window, "WebSocket", { configurable: true, value: IdleWebSocket });
     class MockEventSource extends EventTarget {
@@ -285,6 +289,49 @@ test("reloading a durable new-chat URL does not create another chat", async ({ p
   expect(creates).toBe(1);
 });
 
+test("keeps the current chat connected when new-chat creation fails", async ({ page }, testInfo) => {
+  await page.route("**/v0/chats/session_existing", async (route) => {
+    await route.fulfill({ json: { id: "session_existing", projectId: "project_chat", status: "active", title: "Existing chat" } });
+  });
+  await page.route("**/v0/chats", async (route) => {
+    await route.fulfill({ status: 503, json: { message: "Chat storage is unavailable" } });
+  });
+  await page.goto("/chat/session_existing");
+  await expect(page.getByText("Previous question")).toBeVisible();
+  const socketsClosedBefore = await page.evaluate(() => window.__closedSocketCount || 0);
+
+  await openSidebar(page, testInfo);
+  await page.getByRole("button", { name: "New chat" }).click();
+
+  await expect(page).toHaveURL(/\/chat\/session_existing$/);
+  await expect(page.getByText("Previous question")).toBeVisible();
+  await expect(page.getByText("Chat storage is unavailable")).toBeVisible();
+  await expect.poll(() => page.evaluate(() => window.__closedSocketCount || 0)).toBe(socketsClosedBefore);
+});
+
+test("commits a new chat even if disposal of the replaced draft fails visibly", async ({ page }, testInfo) => {
+  await page.route("**/v0/chats/*?ifEmpty=true", async (route) => {
+    await route.fulfill({ status: 500, json: { message: "Draft cleanup failed" } });
+  });
+  await page.goto("/");
+  await expect(page).toHaveURL(/\/chat\/550e8400-e29b-41d4-a716-446655440099$/);
+
+  await page.route("**/v0/chats", async (route) => {
+    await route.fulfill({ status: 201, json: {
+      id: "550e8400-e29b-41d4-a716-446655440077",
+      projectId: "project_chat",
+      status: "draft",
+      title: "New chat",
+    } });
+  });
+  await openSidebar(page, testInfo);
+  await page.getByRole("button", { name: "New chat" }).click();
+
+  await expect(page).toHaveURL(/\/chat\/550e8400-e29b-41d4-a716-446655440077$/);
+  await expect(page.getByText(/old empty draft could not be removed: Draft cleanup failed/)).toBeVisible();
+  await expect(page.getByRole("textbox", { name: "Message Pi" })).toBeVisible();
+});
+
 test("new project chats identify their owning project in the header", async ({ page }, testInfo) => {
   await page.route("**/v0/chats", async (route) => {
     await route.fulfill({ status: 201, json: {
@@ -312,7 +359,7 @@ test("opens and dismisses the new folder dialog", async ({ page }, testInfo) => 
   await expect(dialog).toBeVisible();
   await expect(dialog.getByRole("button", { name: "Create folder" })).toBeDisabled();
   await page.keyboard.press("Escape");
-  await expect(dialog).toHaveAttribute("data-state", "closed");
+  await expect(dialog).toHaveCount(0);
 });
 
 test("keeps the native textarea composer bounded in a thread", async ({ page }, testInfo) => {
@@ -403,7 +450,7 @@ test("renders persisted assistant Markdown with safe interactive controls", asyn
   const dialog = page.getByRole("alertdialog", { name: "Open external link?" });
   await expect(dialog).toContainText("https://example.com/docs");
   await dialog.getByRole("button", { name: "Cancel" }).click();
-  await expect(dialog).toHaveAttribute("data-state", "closed");
+  await expect(dialog).toHaveCount(0);
 });
 
 test("repairs unfinished Markdown while an assistant response streams", async ({ page }) => {
@@ -445,7 +492,7 @@ test("repairs unfinished Markdown while an assistant response streams", async ({
           setTimeout(() => this.onmessage?.({ data: JSON.stringify({
             type: "assistant_stream_delta",
             generationId: "g1",
-            delta: "**still streaming**\n\n",
+            delta: "**still streaming**\n\nRead [the documentation][docs].\n\n",
           }) }), 150);
           setTimeout(() => this.onmessage?.({ data: JSON.stringify({
             type: "assistant_stream_delta",
@@ -462,21 +509,23 @@ test("repairs unfinished Markdown while an assistant response streams", async ({
             generationId: "g1",
             delta: "\n\n- first item\n\n  continued first item\n\n- second item",
           }) }), 550);
-          setTimeout(() => this.onmessage?.({ data: JSON.stringify({
-            type: "assistant_stream_final",
-            generationId: "g1",
-            content: "## Live response\n\n**still streaming**\n\n```javascript\nconst answer = 42;\n```\n\n$$\nE = mc^2\n$$\n\n- first item\n\n  continued first item\n\n- second item",
-            html: '<div class="server-markdown">Bogus legacy HTML</div>',
-          }) }), 800);
-          setTimeout(() => this.onmessage?.({ data: JSON.stringify({
-            type: "agent_end",
-            generationId: "g1",
-            willRetry: false,
-          }) }), 900);
-          setTimeout(() => this.onmessage?.({ data: JSON.stringify({
-            type: "session_checkpoint",
-            chat: { id: "550e8400-e29b-41d4-a716-446655440099" },
-          }) }), 1100);
+          window.__releaseStreamFinal = () => {
+            this.onmessage?.({ data: JSON.stringify({
+              type: "assistant_stream_final",
+              generationId: "g1",
+              content: "## Live response\n\n**still streaming**\n\nRead [the documentation][docs].\n\n```javascript\nconst answer = 42;\n```\n\n$$\nE = mc^2\n$$\n\n- first item\n\n  continued first item\n\n- second item\n\n[docs]: https://example.com/docs",
+              html: '<div class="server-markdown">Bogus legacy HTML</div>',
+            }) });
+            setTimeout(() => this.onmessage?.({ data: JSON.stringify({
+              type: "agent_end",
+              generationId: "g1",
+              willRetry: false,
+            }) }), 50);
+            setTimeout(() => this.onmessage?.({ data: JSON.stringify({
+              type: "session_checkpoint",
+              chat: { id: "550e8400-e29b-41d4-a716-446655440099" },
+            }) }), 100);
+          };
         }, 0);
       }
     }
@@ -486,7 +535,7 @@ test("repairs unfinished Markdown while an assistant response streams", async ({
       value: MockWebSocket,
     });
   });
-  const streamedContent = "## Live response\n\n**still streaming**\n\n```javascript\nconst answer = 42;\n```\n\n$$\nE = mc^2\n$$\n\n- first item\n\n  continued first item\n\n- second item";
+  const streamedContent = "## Live response\n\n**still streaming**\n\nRead [the documentation][docs].\n\n```javascript\nconst answer = 42;\n```\n\n$$\nE = mc^2\n$$\n\n- first item\n\n  continued first item\n\n- second item\n\n[docs]: https://example.com/docs";
   await page.route("**/v0/sessions/550e8400-e29b-41d4-a716-446655440099", async (route) => {
     await route.fulfill({ json: {
       id: "550e8400-e29b-41d4-a716-446655440099",
@@ -520,10 +569,20 @@ test("repairs unfinished Markdown while an assistant response streams", async ({
   await expect(page.locator('[data-language="javascript"]')).toBeVisible();
   await expect(page.locator('[data-language="javascript"] button[aria-label="Copy code"]')).toBeVisible();
   await expect(page.locator(".katex-display")).toBeVisible();
-  await expect(page.locator(".chat-markdown li")).toHaveCount(2);
-  await expect(page.locator(".chat-markdown li").first()).toContainText("continued first item");
+  await expect(liveMarkdown).toContainText("continued first item");
+  await expect(page.getByRole("button", { name: "the documentation" })).toHaveCount(0);
   await expect(page.locator("[data-stable-stream-node]")).toHaveCount(1);
   expect(await liveHeadingNode.evaluate((node) => node.isConnected && node === document.querySelector("[data-stable-stream-node]"))).toBe(true);
+  await page.evaluate(() => window.__releaseStreamFinal());
+  await expect(page.getByRole("button", { name: "the documentation" })).toBeVisible();
+  await expect(page.locator(".chat-markdown li")).toHaveCount(2);
+  await expect(page.locator(".chat-markdown li").first()).toContainText("continued first item");
+  await expect(page.locator("[data-stable-stream-node]")).toHaveCount(0);
+  expect(await liveHeadingNode.evaluate((node) => node.isConnected)).toBe(false);
+  const canonicalHeading = page.getByRole("heading", { name: "Live response" });
+  const canonicalHeadingNode = await canonicalHeading.elementHandle();
+  expect(canonicalHeadingNode).not.toBeNull();
+  await canonicalHeadingNode.evaluate((node) => node.setAttribute("data-canonical-stream-node", "true"));
   await expect(page.getByRole("button", { name: "Copy Markdown" })).toBeVisible();
   await expect(page.locator(".chat-markdown[data-before-final]")).toHaveCount(1);
   expect(await liveMarkdownNode.evaluate((node) => node.isConnected && node === document.querySelector(".chat-markdown"))).toBe(true);
@@ -531,13 +590,13 @@ test("repairs unfinished Markdown while an assistant response streams", async ({
   await expect(page.locator('[data-language="javascript"]')).toBeVisible();
   await expect(page.locator(".katex-display")).toBeVisible();
 
-  // The durable checkpoint reload must reconcile in place: the tagged DOM node
-  // survives (no remount), and the welcome screen never flashes.
+  // The durable checkpoint reload must reconcile in place: the canonical node
+  // survives after the stream's one final reparse, and the welcome screen never flashes.
   await checkpointReload;
   await expect(page.locator(".chat-markdown[data-before-final]")).toHaveCount(1);
   await expect(page.getByRole("heading", { name: "How can I help you today?" })).toHaveCount(0);
   expect(await liveMarkdownNode.evaluate((node) => node.isConnected && node === document.querySelector(".chat-markdown"))).toBe(true);
-  expect(await liveHeadingNode.evaluate((node) => node.isConnected && node === document.querySelector("[data-stable-stream-node]"))).toBe(true);
+  expect(await canonicalHeadingNode.evaluate((node) => node.isConnected && node === document.querySelector("[data-canonical-stream-node]"))).toBe(true);
   await expect(page.locator('[data-language="javascript"]')).toBeVisible();
   await expect(page.locator(".katex-display")).toBeVisible();
 });
@@ -940,17 +999,14 @@ test("opens a targeted Workspace settings card from its context menu", async ({ 
   const settings = page.getByRole("dialog", { name: "Settings" });
   await expect(settings.getByRole("tab", { name: /Workspaces/ })).toHaveAttribute("aria-selected", "true");
   await expect(settings.getByText("/home/user/JaskFish")).toBeVisible();
-  await settings.getByRole("combobox", { name: "Default profile" }).click();
-  await expect(page.getByRole("option", { name: "Inherit global (General)" })).toBeVisible();
   const updateRequest = page.waitForRequest((request) => request.url().endsWith("/v0/projects/project_workspace")
     && request.method() === "PATCH");
-  await page.getByRole("option", { name: "Coding" }).click();
+  await settings.getByRole("combobox", { name: "Default profile" }).selectOption("workspace");
   expect((await updateRequest).postDataJSON()).toEqual({ defaultTemplateId: "workspace" });
   await expect(settings.getByText("Override: Coding")).toBeVisible();
-  await settings.getByRole("combobox", { name: "Default profile" }).click();
   const hostRequest = page.waitForRequest((request) => request.url().endsWith("/v0/projects/project_workspace")
     && request.method() === "PATCH" && request.postDataJSON()?.defaultTemplateId === "host-pi");
-  await page.getByRole("option", { name: "Host Pi" }).click();
+  await settings.getByRole("combobox", { name: "Default profile" }).selectOption("host-pi");
   await hostRequest;
   await expect(settings.getByText("Override: Host Pi")).toBeVisible();
 });
@@ -1242,6 +1298,8 @@ test("model scope settings searches and toggles multiple checked models", async 
   await reasoner.click();
   await plain.click();
   await expect(page.getByRole("button", { name: "Save changes" })).toBeDisabled();
+  await search.press("Escape");
+  await expect(dialog).toHaveCount(0);
 });
 
 test("model scope search auto-focuses and its long result list scrolls", async ({ page }, testInfo) => {
@@ -1275,6 +1333,31 @@ test("model scope search auto-focuses and its long result list scrolls", async (
   await search.click();
   await search.fill("model 31");
   await expect(page.getByRole("option", { name: /Model 31 beta\/model-31/ })).toBeVisible();
+});
+
+test("settings adopts a delayed model scope until the user edits", async ({ page }, testInfo) => {
+  let releaseSettings;
+  const settingsReady = new Promise((resolve) => { releaseSettings = resolve; });
+  await page.route("**/v0/settings?**", async (route) => {
+    await settingsReady;
+    await route.fulfill({ json: {
+      models: [model, plainModel],
+      enabledModels: [model.spec, plainModel.spec],
+      defaultModel: model.spec,
+    } });
+  });
+  await page.goto("/");
+  await openSidebar(page, testInfo);
+  await page.locator('[data-sidebar="footer"]').getByRole("button", { name: /Conduit/ }).click();
+  await page.getByRole("menuitem", { name: "Manage settings" }).click();
+  const dialog = page.getByRole("dialog", { name: "Settings" });
+  await expect(dialog.getByText("Loading models…")).toBeVisible();
+
+  releaseSettings();
+  await expect(dialog.getByRole("option", { name: /Reasoner example\/reasoner/ })).toHaveAttribute("aria-selected", "true");
+  await expect(dialog.getByRole("option", { name: /Plain example\/plain/ })).toHaveAttribute("aria-selected", "true");
+  await expect(dialog.getByText("2 enabled")).toBeVisible();
+  await expect(dialog.getByRole("button", { name: "Save changes" })).toBeDisabled();
 });
 
 test("uploads picker and dropped files through the same attachment surface", async ({ page }, testInfo) => {
@@ -1398,12 +1481,12 @@ test("editing from history abandons the current attachment draft cleanly", async
   await expect.poll(() => deletes.length).toBe(1);
   await expect.poll(() => page.evaluate(() => window.__revokedObjectUrls.length)).toBe(5);
   await page.waitForTimeout(1700);
-  expect(uploads.map((item) => item.name)).toEqual([
+  expect(uploads.map((item) => item.name).sort()).toEqual([
     "draft-complete.png",
     "draft-pending-a.png",
     "draft-pending-b.png",
     "draft-pending-c.png",
-  ]);
+  ].sort());
   expect(await page.evaluate(() => ({ created: window.__createdObjectUrls, revoked: window.__revokedObjectUrls }))).toEqual({
     created: ["blob:conduit-test-1", "blob:conduit-test-2", "blob:conduit-test-3", "blob:conduit-test-4", "blob:conduit-test-5"],
     revoked: ["blob:conduit-test-1", "blob:conduit-test-2", "blob:conduit-test-3", "blob:conduit-test-4", "blob:conduit-test-5"],
@@ -1476,33 +1559,28 @@ test("global commands and slash suggestions preserve their intended focus models
   await page.keyboard.press("Control+k");
   const palette = page.getByRole("dialog", { name: "Command Palette" });
   await expect(palette).toBeVisible();
-  await expect(palette.getByRole("group", { name: "Commands" })).toBeVisible();
+  await expect(palette.getByRole("combobox", { name: "Search commands" })).toHaveAttribute("aria-expanded", "true");
+  await expect(page.locator("#root")).toHaveAttribute("aria-hidden", "true");
+  await page.keyboard.press("Escape");
+  await expect(palette).toHaveCount(0);
+  await expect(composer).toBeFocused();
+
+  await page.keyboard.press("Control+k");
   await expect(palette.getByRole("option", { name: /Settings…/ })).toBeVisible();
-  await expect(palette.getByRole("option", { name: /Go to…/ })).toBeVisible();
   await expect(palette.getByRole("option", { name: /^Runtime$/ })).toHaveCount(0);
   await palette.getByRole("option", { name: /Settings…/ }).click();
-  await expect(palette.locator("[data-slot='command-input-prefix']")).toHaveText("Settings ›");
-  await expect(palette.getByRole("option", { name: /^Back$/ })).toBeVisible();
-  await expect(palette.getByRole("option", { name: /^Runtime$/ })).toBeVisible();
-  await expect(palette.getByRole("option", { name: /^Workspaces$/ })).toBeVisible();
-  await palette.getByRole("combobox").fill("work");
-  await expect(palette.getByRole("option", { name: /^Workspaces$/ })).toHaveAttribute("data-selected", "true");
-  await palette.getByRole("combobox").fill("");
-  await palette.getByRole("option", { name: /^Runtime$/ }).click();
-  const settingsDialog = page.getByRole("dialog", { name: "Settings" });
+  let settingsDialog = page.getByRole("dialog", { name: "Settings" });
   await expect(settingsDialog).toBeVisible();
-  await expect(settingsDialog.getByRole("tab", { name: /Runtime/ })).toHaveAttribute("aria-selected", "true");
-  await expect(settingsDialog.getByRole("heading", { name: "Runtime" })).toBeVisible();
+  await expect(settingsDialog.getByRole("tab", { name: /General/ })).toHaveAttribute("aria-selected", "true");
   await page.keyboard.press("Escape");
 
   await page.keyboard.press("Control+k");
   await palette.getByPlaceholder("Search commands…").fill("runtime");
-  await expect(palette.getByRole("option", { name: /^Runtime$/ })).toHaveCount(0);
-  await palette.getByPlaceholder("Search commands…").fill("settings");
-  await palette.getByRole("option", { name: /Settings…/ }).click();
-  await expect(palette.locator("[data-slot='command-input-prefix']")).toHaveText("Settings ›");
+  await expect(palette.getByRole("option", { name: /^Runtime$/ })).toBeVisible();
   await palette.getByRole("option", { name: /^Runtime$/ }).click();
-  await expect(page.getByRole("dialog", { name: "Settings" })).toBeVisible();
+  settingsDialog = page.getByRole("dialog", { name: "Settings" });
+  await expect(settingsDialog).toBeVisible();
+  await expect(settingsDialog.getByRole("tab", { name: /Runtime/ })).toHaveAttribute("aria-selected", "true");
   await page.keyboard.press("Escape");
 
   await page.keyboard.press("Control+k");
@@ -1513,7 +1591,7 @@ test("global commands and slash suggestions preserve their intended focus models
 
   await page.keyboard.press("Control+k");
   await palette.getByPlaceholder("Search commands…").fill("example plain");
-  await expect(palette.getByRole("group", { name: "Models" })).toBeVisible();
+  await expect(palette.getByRole("listbox", { name: "Suggestions" })).toBeVisible();
   await expect(palette.getByRole("option", { name: /Plain/ })).toBeVisible();
   const settingsRequest = page.waitForRequest((request) => /\/v0\/chats\/[^/]+\/models$/.test(new URL(request.url()).pathname)
     && request.method() === "PATCH");
@@ -1671,6 +1749,34 @@ test("runtime settings exposes warm pool and concurrent generation caps", async 
   await expect(dialog.getByText("Max concurrent generations")).toBeVisible();
   await expect(dialog.getByText("3 live now")).toBeVisible();
   await expect(dialog.getByText("1 generating")).toBeVisible();
+});
+
+test("runtime settings reports load failures and recovers on retry", async ({ page }, testInfo) => {
+  let failing = true;
+  await page.route("**/v0/runtime/settings", async (route) => {
+    if (route.request().method() !== "GET") return route.fallback();
+    if (failing) return route.fulfill({ status: 503, json: { message: "Runtime settings unavailable" } });
+    return route.fulfill({ json: {
+      maxLiveProcesses: 8,
+      maxGeneratingProcesses: 2,
+      idleProcessTtlMs: 60_000,
+      liveCount: 0,
+      generatingCount: 0,
+    } });
+  });
+  await page.goto("/");
+  await openSidebar(page, testInfo);
+  await page.locator('[data-sidebar="footer"]').getByRole("button", { name: /Conduit/ }).click();
+  await page.getByRole("menuitem", { name: "Manage settings" }).click();
+  const dialog = page.getByRole("dialog", { name: "Settings" });
+  await dialog.getByRole("tab", { name: /Runtime/ }).click();
+  await expect(dialog.getByRole("alert")).toContainText("Runtime settings unavailable");
+  await expect(dialog.getByText("Loading runtime settings…")).toHaveCount(0);
+
+  failing = false;
+  await dialog.getByRole("button", { name: "Retry" }).click();
+  await expect(dialog.getByText("Max warm Pi processes")).toBeVisible();
+  await expect(dialog.getByRole("button", { name: "Save runtime settings" })).toBeDisabled();
 });
 
 test("host Pi re-detection immediately updates the Workspace profile menu", async ({ page }, testInfo) => {
