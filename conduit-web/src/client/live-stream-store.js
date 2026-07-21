@@ -24,10 +24,20 @@ export function createLiveStreamStore({ scheduleFrame, cancelFrame } = {}) {
       return () => listeners.delete(listener);
     },
     start(generationId, initialContent = "") {
+      const nextGenerationId = generationId || null;
+      if (snapshot.generationId === nextGenerationId) {
+        if (frame != null) cancel(frame);
+        frame = null;
+        if (snapshot.content !== content) {
+          snapshot = Object.freeze({ generationId: nextGenerationId, content });
+          listeners.forEach((listener) => listener());
+        }
+        return;
+      }
       if (frame != null) cancel(frame);
       frame = null;
       content = String(initialContent || "");
-      snapshot = Object.freeze({ generationId: generationId || null, content });
+      snapshot = Object.freeze({ generationId: nextGenerationId, content });
       listeners.forEach((listener) => listener());
     },
     setSnapshot(generationId, nextContent) {

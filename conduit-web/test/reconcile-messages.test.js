@@ -29,6 +29,54 @@ test("keeps the key but adopts new content when an id match changed", () => {
   assert.equal(result[0].content, "final answer");
 });
 
+test("adopts authoritative reasoning without changing the durable render key", () => {
+  const current = [{
+    id: "entry-assistant",
+    key: "live_2",
+    role: "assistant",
+    content: "Answer",
+    reasoning: {
+      status: "completed",
+      content: "partial",
+      redacted: false,
+      durationSeconds: 1,
+      observed: true,
+    },
+  }];
+  const incoming = [{
+    id: "entry-assistant",
+    role: "assistant",
+    content: "Answer",
+    reasoning: {
+      status: "completed",
+      content: "authoritative",
+      redacted: false,
+      durationSeconds: 2,
+      observed: true,
+    },
+  }];
+
+  const result = reconcileMessages(current, incoming);
+  assert.notEqual(result[0], current[0]);
+  assert.equal(result[0].key, "live_2");
+  assert.deepEqual(result[0].reasoning, incoming[0].reasoning);
+});
+
+test("keeps object identity when authoritative reasoning is unchanged", () => {
+  const reasoning = {
+    status: "completed",
+    content: "authoritative",
+    redacted: false,
+    durationSeconds: 2,
+    observed: true,
+  };
+  const current = [{ id: "entry-assistant", key: "live_2", role: "assistant", content: "Answer", reasoning }];
+  const incoming = [{ id: "entry-assistant", role: "assistant", content: "Answer", reasoning: { ...reasoning } }];
+
+  const result = reconcileMessages(current, incoming);
+  assert.equal(result[0], current[0]);
+});
+
 test("pairs the optimistic tail by role so durable ids inherit their keys", () => {
   const current = [
     { id: "entry-user-1", key: "user_1", role: "user", content: "First" },

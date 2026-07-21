@@ -1,4 +1,5 @@
 import { parseAttachmentEnvelope } from "../attachment-envelope.js";
+import { isInteractiveRequestKind } from "./interactive-request-state.js";
 
 export function messageText(message) {
   const content = message?.content;
@@ -66,7 +67,7 @@ export function maxToolSeq(tools) {
   }, -1);
 }
 
-export function buildTimeline(messages, tools, { streaming = false } = {}) {
+export function buildTimeline(messages, tools, { streaming = false, requests = [] } = {}) {
   const list = messages || [];
   const lastMessage = list[list.length - 1];
   const messageItems = list.flatMap((message, index) => {
@@ -81,7 +82,20 @@ export function buildTimeline(messages, tools, { streaming = false } = {}) {
     index: messageItems.length + index,
     order: tool.seq ?? tool.order ?? (messageItems.length + index),
   }));
-  return [...messageItems, ...toolItems].sort((left, right) => {
+  const requestIds = new Set();
+  const requestItems = (requests || []).flatMap((request, index) => {
+    if (!request?.id || !isInteractiveRequestKind(request.kind) || requestIds.has(request.id)) return [];
+    requestIds.add(request.id);
+    const itemIndex = messageItems.length + toolItems.length + index;
+    return [{
+      type: "question",
+      value: request,
+      index: itemIndex,
+      order: request.seq ?? request.order ?? itemIndex,
+    }];
+  });
+  const typeRank = { message: 0, tool: 1, question: 2 };
+  return [...messageItems, ...toolItems, ...requestItems].sort((left, right) => {
     const leftTime = Date.parse(left.value.timestamp || "");
     const rightTime = Date.parse(right.value.timestamp || "");
     const leftHasTime = !Number.isNaN(leftTime);
@@ -90,7 +104,7 @@ export function buildTimeline(messages, tools, { streaming = false } = {}) {
     if (left.order != null && right.order != null && left.order !== right.order) {
       return left.order - right.order;
     }
-    if (left.type !== right.type) return left.type === "message" ? -1 : 1;
+    if (left.type !== right.type) return (typeRank[left.type] ?? 99) - (typeRank[right.type] ?? 99);
     return left.index - right.index;
   });
 }

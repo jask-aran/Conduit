@@ -10,13 +10,24 @@ const isOptimisticId = (id) => OPTIMISTIC_PREFIXES.some((prefix) => String(id ||
 
 const keyOf = (message) => message.key ?? message.id;
 
+function sameReasoning(a, b) {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  return a.status === b.status
+    && a.content === b.content
+    && Boolean(a.redacted) === Boolean(b.redacted)
+    && (a.durationSeconds ?? null) === (b.durationSeconds ?? null)
+    && Boolean(a.observed) === Boolean(b.observed);
+}
+
 function sameMessage(a, b) {
   return a.role === b.role
     && a.content === b.content
     && (a.timestamp || null) === (b.timestamp || null)
     && Boolean(a.stopped) === Boolean(b.stopped)
     && (a.status || null) === (b.status || null)
-    && Boolean(a.continuing) === Boolean(b.continuing);
+    && Boolean(a.continuing) === Boolean(b.continuing)
+    && sameReasoning(a.reasoning, b.reasoning);
 }
 
 export function reconcileMessages(current, incoming) {

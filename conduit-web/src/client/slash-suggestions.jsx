@@ -1,4 +1,4 @@
-import { FilePlus2Icon } from "lucide-react";
+import { FilePlus2Icon, TerminalIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PopoverContent } from "@/components/ui/popover";
 
@@ -28,7 +28,7 @@ export function SlashSuggestions({ commands, activeIndex, onSelect }) {
         onPointerDown={(event) => event.preventDefault()}
         onClick={() => onSelect(command)}
       >
-        <FilePlus2Icon />
+        {command.id === "attach" ? <FilePlus2Icon /> : <TerminalIcon />}
         <span className="flex min-w-0 flex-col items-start gap-0.5">
           <span className="font-medium">/{command.slash}</span>
           <span className="text-xs leading-tight text-muted-foreground">{command.description}</span>

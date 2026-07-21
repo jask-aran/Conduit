@@ -21,6 +21,40 @@ function textContent(content) {
   return content.filter((block) => block?.type === "text").map((block) => block.text || "").join("\n");
 }
 
+function timestampMs(value) {
+  if (typeof value === "number") return Number.isFinite(value) ? value : null;
+  if (typeof value !== "string" || !value.trim()) return null;
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function reasoningFromEntry(entry) {
+  if (!Array.isArray(entry.message?.content)) return null;
+  const blocks = entry.message.content.filter((block) => block?.type === "thinking");
+  if (!blocks.length) return null;
+  const startedAt = timestampMs(entry.message.timestamp);
+  const completedAt = timestampMs(entry.timestamp);
+  const durationSeconds = startedAt != null && completedAt != null && completedAt >= startedAt
+    ? Math.max(0, Math.round((completedAt - startedAt) / 1_000))
+    : null;
+  return {
+    status: "completed",
+    content: blocks.map((block) => typeof block.thinking === "string" ? block.thinking : "").join("\n"),
+    redacted: blocks.some((block) => block.redacted === true),
+    durationSeconds,
+    observed: true,
+  };
+}
+
+function publicBlocks(content) {
+  if (!Array.isArray(content)) return [];
+  return content.map((block) => {
+    if (block?.type !== "thinking") return block;
+    const { thinkingSignature, ...safe } = block;
+    return safe;
+  });
+}
+
 export async function parseSession(file, project) {
   const raw = await fs.readFile(file, "utf8");
   const entries = [];
@@ -187,13 +221,15 @@ export function messagesFromEntries(entries) {
       id: entry.id || `entry_${index}`,
       role,
       content: envelope?.message ?? rawContent,
-      blocks: Array.isArray(entry.message.content) ? entry.message.content : [],
+      blocks: publicBlocks(entry.message.content),
       usage: entry.message.usage || null,
       timestamp: entry.timestamp || null,
       stopReason: entry.message.stopReason || null,
       stopped: entry.message.stopReason === "aborted",
       attachments: envelope?.attachments || [],
     };
+    const reasoning = role === "assistant" ? reasoningFromEntry(entry) : null;
+    if (reasoning) message.reasoning = reasoning;
     if (role === "assistant" && continuation) {
       if (!message.content) return;
       const previous = messages.findLast((item) => item.role === "assistant");

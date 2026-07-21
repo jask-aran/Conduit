@@ -1,3 +1,5 @@
+import { normalizeInteractiveRequest } from "./client/interactive-request-state.js";
+
 /**
  * Coarse process activity for global runtime indicators.
  * Precedence: failed > stopping > waiting_for_user > compacting > retrying > working > starting > idle
@@ -147,25 +149,11 @@ export function applyActivityEvent(record, event) {
 }
 
 export function isBlockingHostUi(event) {
-  const method = event.method || event.request?.method || event.request?.kind;
-  return ["confirm", "select", "input", "editor"].includes(method);
+  return Boolean(normalizeInteractiveRequest(event));
 }
 
-export function normalizeHostUiRequest(event) {
-  const method = event.method || event.request?.method;
-  if (!["confirm", "select", "input", "editor"].includes(method)) return null;
-  const id = event.id || event.request?.id;
-  if (!id) return null;
-  return {
-    id,
-    kind: method,
-    title: event.title || event.request?.title || "Request",
-    message: event.message || event.request?.message || "",
-    options: listStrings(event.options || event.request?.options),
-    placeholder: event.placeholder || event.request?.placeholder || "",
-    prefill: event.prefill || event.request?.prefill || "",
-    timeoutMs: event.timeout ?? event.timeoutMs ?? event.request?.timeout ?? null,
-  };
+export function normalizeHostUiRequest(event, options) {
+  return normalizeInteractiveRequest(event, options);
 }
 
 export function activityLabel(activity, detail = null) {

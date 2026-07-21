@@ -1,8 +1,6 @@
-import { lazy, memo, Suspense, useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { CheckIcon, ChevronDownIcon, ChevronUpIcon } from "lucide-react";
+import { lazy, memo, Suspense, useEffect, useRef, useSyncExternalStore } from "react";
 import { Bubble, BubbleContent } from "@/components/ui/bubble";
 import { Button } from "@/components/ui/button";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Empty, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
 import {
   Message,
@@ -25,6 +23,9 @@ import { ReasoningBlock } from "./reasoning-block";
 import { ResponseActions } from "./response-actions";
 import { AttachmentCards } from "./attachment-tray";
 import { buildTimeline } from "./timeline-order";
+import { timelineItemRenderers } from "./tool-registry.js";
+import "./tool-card.jsx"; // registers the default tool renderer + timelineItemRenderers.tool
+import "./question-card.jsx"; // registers timelineItemRenderers.question
 
 const ChatMarkdown = lazy(() => import("./chat-markdown").then((module) => ({
   default: module.ChatMarkdown,
@@ -40,39 +41,6 @@ const time = (value) => value
   ? new Date(value).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
   : "";
 
-function ToolCard({ tool, sessionId }) {
-  const [open, setOpen] = useState(false);
-  const [result, setResult] = useState(tool.result);
-  const [loading, setLoading] = useState(false);
-  useEffect(() => {
-    if (tool.result != null) setResult(tool.result);
-  }, [tool.result]);
-  useEffect(() => {
-    if (!open || !tool.resultDeferred || result != null || loading || !sessionId) return;
-    setLoading(true);
-    fetch(`/v0/sessions/${encodeURIComponent(sessionId)}/tools/${encodeURIComponent(tool.id)}`)
-      .then((response) => response.ok ? response.json() : Promise.reject(new Error("Could not load tool output")))
-      .then((payload) => setResult(payload.result || ""))
-      .catch(() => setResult("Could not load tool output"))
-      .finally(() => setLoading(false));
-  }, [loading, open, result, sessionId, tool.id, tool.resultDeferred]);
-  const status = tool.error ? "Error" : tool.cancelled ? "Cancelled" : tool.done ? "Complete" : "Running";
-  return <Collapsible open={open} onOpenChange={setOpen} className="tool-card">
-    <CollapsibleTrigger asChild>
-      <Button variant="outline" className="w-full justify-start">
-        {tool.done && !tool.error && <CheckIcon data-icon="inline-start" />}
-        {!tool.done && <Spinner data-icon="inline-start" className="size-3.5" />}
-        <span className="truncate">{tool.name || "Tool"}</span>
-        <span className="ml-auto text-xs text-muted-foreground">{status}</span>
-        {open ? <ChevronUpIcon data-icon="inline-end" /> : <ChevronDownIcon data-icon="inline-end" />}
-      </Button>
-    </CollapsibleTrigger>
-    <CollapsibleContent>
-      <pre>{loading ? <span className="flex items-center gap-2"><Spinner />Loading…</span> : typeof result === "string" ? result : JSON.stringify(result || tool.partialResult || tool.args || {}, null, 2)}</pre>
-    </CollapsibleContent>
-  </Collapsible>;
-}
-
 function AssistantMessage({ message, liveStore, live }) {
   const stream = useSyncExternalStore(liveStore.subscribe, liveStore.getSnapshot, liveStore.getServerSnapshot);
   const text = live ? `${message.content || ""}${stream.content}` : String(message.content || "");
@@ -82,7 +50,7 @@ function AssistantMessage({ message, liveStore, live }) {
 export const ChatThread = memo(function ChatThread({
   messages, tools, streaming, sessionId, hasOlder, loadingOlder, partialContinue,
   editingEntryId, onLoadOlder, onCopyMessage, onEditMessage, onRegenerate, onContinue, liveStore,
-  activity = null, reasoning = null,
+  activity = null, reasoning = null, requests = [], onRespond,
 }) {
   const older = useRef(null);
   useEffect(() => {
@@ -93,7 +61,7 @@ export const ChatThread = memo(function ChatThread({
     observer.observe(older.current);
     return () => observer.disconnect();
   }, [hasOlder, onLoadOlder]);
-  const timeline = buildTimeline(messages, tools, { streaming });
+  const timeline = buildTimeline(messages, tools, { streaming, requests });
   const lastMessage = messages[messages.length - 1];
   const empty = timeline.length === 0;
 
@@ -110,13 +78,16 @@ export const ChatThread = memo(function ChatThread({
             <Empty className="welcome"><EmptyHeader><EmptyTitle><h1>How can I help you today?</h1></EmptyTitle></EmptyHeader></Empty>
           </MessageScrollerItem>}
           {timeline.map((item) => {
-            if (item.type === "tool") return <MessageScrollerItem key={`tool_${item.value.id}`} className={eagerItem}>
-              <ToolCard tool={item.value} sessionId={sessionId} />
+            const ItemRenderer = timelineItemRenderers[item.type];
+            if (ItemRenderer) return <MessageScrollerItem key={`${item.type}_${item.value.id}`} className={eagerItem}>
+              <ItemRenderer item={item} sessionId={sessionId} onRespond={onRespond} />
             </MessageScrollerItem>;
             const message = item.value;
             const isUser = message.role === "user";
             const isEditing = message.id === editingEntryId;
             const live = streaming && message === lastMessage && !isUser;
+            const candidateReasoning = live ? reasoning : message.reasoning;
+            const messageReasoning = candidateReasoning?.observed ? candidateReasoning : null;
             const precedingUser = !isUser ? messages.slice(0, item.index).findLast((candidate) => candidate.role === "user") : null;
             return <MessageScrollerItem
               key={`message_${message.key ?? message.id}`}
@@ -136,11 +107,12 @@ export const ChatThread = memo(function ChatThread({
                     <BubbleContent>
                       {isUser ? <span className="user-message-text">{String(message.content || "")}</span>
                         : <>
-                            {live && reasoning && (reasoning.content || reasoning.active) && (
+                            {messageReasoning && (
                               <ReasoningBlock
-                                content={reasoning.content}
-                                redacted={reasoning.redacted}
-                                active={reasoning.active}
+                                content={messageReasoning.content}
+                                redacted={messageReasoning.redacted}
+                                active={messageReasoning.status === "active"}
+                                durationSeconds={messageReasoning.durationSeconds}
                               />
                             )}
                             <Suspense fallback={<Skeleton className="h-16 w-full" />}>

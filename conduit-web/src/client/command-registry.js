@@ -23,15 +23,12 @@ export const PALETTE_GROUPS = [
 ];
 
 export const SETTINGS_SECTIONS = [
-  { id: "models", label: "Models", keywords: ["model", "llm", "provider"] },
   { id: "profiles", label: "Profiles", keywords: ["template", "tools", "workspace", "general", "agent"] },
   { id: "workspaces", label: "Workspaces", keywords: ["workspace", "folder", "default", "profile"] },
+  { id: "models", label: "Models", keywords: ["model", "llm", "provider"] },
   { id: "runtime", label: "Runtime", keywords: ["processes", "pool", "idle", "generation"] },
   { id: "auth", label: "Auth", keywords: ["password", "login", "sessions", "logout", "security"] },
-  { id: "general", label: "General", keywords: ["preferences"] },
-  { id: "appearance", label: "Appearance", keywords: ["theme", "display", "ui"] },
-  { id: "connections", label: "Connections", keywords: ["auth", "api", "keys"] },
-  { id: "about", label: "About", keywords: ["version", "help"] },
+  { id: "diagnostics", label: "Diagnostics", keywords: ["installations", "processes", "storage", "version", "detection"] },
 ];
 
 /** Drill-down pages. Root browse shows a portal; page view shows children only. */
@@ -359,6 +356,27 @@ export const paletteSources = [{
     });
   },
 }, {
+  id: "pi-commands",
+  page: null,
+  commands(context) {
+    const commands = Array.isArray(context.commands) ? context.commands : [];
+    return commands
+      .filter((command) => command && typeof command.name === "string" && command.name)
+      .map((command) => ({
+        id: `pi-command:${command.name}`,
+        group: "commands",
+        label: `/${command.name}`,
+        description: command.description || `Run the ${command.name} command`,
+        icon: "command",
+        keywords: ["command", "slash", command.name, command.source],
+        searchValue: `command ${command.name} ${command.description || ""}`,
+        isAvailable: (ctx) => Boolean(ctx.chatId),
+        run: (actions) => command.dispatch === "insert"
+          ? actions.insertCommand?.(`/${command.name}`)
+          : actions.sendText?.(`/${command.name}`),
+      }));
+  },
+}, {
   id: "thinking-levels",
   page: null,
   commands(context) {
@@ -459,6 +477,31 @@ export function commandSearchValue(command) {
   return [command.id, command.label, ...(command.keywords || [])].filter(Boolean).join(" ");
 }
 
+/** Map server-provided Pi commands into composer slash descriptors. */
+function piCommandDescriptors(context = {}) {
+  const commands = Array.isArray(context.commands) ? context.commands : [];
+  return commands
+    .filter((command) => command && typeof command.name === "string" && command.name)
+    .map((command) => ({
+      id: `pi:${command.name}`,
+      slash: command.name,
+      label: `/${command.name}`,
+      description: command.description || "",
+      icon: "command",
+      keywords: [command.name, command.source, ...(command.description ? [command.description] : [])],
+      dispatch: command.dispatch === "insert" ? "insert" : "prompt",
+      text: `/${command.name}`,
+      isAvailable: hasChat,
+    }));
+}
+
 export function availableComposerCommands(context) {
-  return composerCommands.filter((command) => command.isAvailable(context));
+  const staticCommands = composerCommands.filter((command) => command.isAvailable(context));
+  const seen = new Set(staticCommands.map((command) => command.slash));
+  const dynamic = piCommandDescriptors(context).filter((command) => {
+    if (seen.has(command.slash)) return false;
+    seen.add(command.slash);
+    return command.isAvailable(context);
+  });
+  return [...staticCommands, ...dynamic];
 }

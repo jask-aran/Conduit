@@ -72,21 +72,29 @@ test("applyActivityEvent tracks tools, compaction, retry, and host UI", () => {
     method: "confirm",
     title: "Allow write?",
     message: "Write file",
+    timestamp: "2026-07-20T12:00:00.000Z",
+    seq: 3,
   });
   assert.equal(state.activity, "waiting_for_user");
   assert.equal(state.hostUiRequests.length, 1);
+  assert.equal(state.hostUiRequests[0].status, "pending");
+  assert.equal(state.hostUiRequests[0].timestamp, "2026-07-20T12:00:00.000Z");
+  assert.equal(state.hostUiRequests[0].seq, 3);
 
   applyActivityEvent(state, { type: "extension_ui_resolved", requestId: "req1" });
   assert.equal(state.hostUiRequests.length, 0);
 });
 
-test("normalizeHostUiRequest maps RPC methods", () => {
+test("normalizeHostUiRequest uses the transcript request shape and excludes fire-and-forget methods", () => {
   const request = normalizeHostUiRequest({
     type: "extension_ui_request",
     id: "x",
     method: "select",
     title: "Pick",
     options: ["a", "b"],
+  }, {
+    timestamp: "2026-07-20T12:00:00.000Z",
+    seq: 7,
   });
   assert.deepEqual(request, {
     id: "x",
@@ -97,8 +105,15 @@ test("normalizeHostUiRequest maps RPC methods", () => {
     placeholder: "",
     prefill: "",
     timeoutMs: null,
+    status: "pending",
+    response: null,
+    error: null,
+    timestamp: "2026-07-20T12:00:00.000Z",
+    seq: 7,
   });
-  assert.equal(normalizeHostUiRequest({ method: "notify", id: "n" }), null);
+  for (const method of ["notify", "setStatus", "setWidget", "setTitle", "set_editor_text"]) {
+    assert.equal(normalizeHostUiRequest({ method, id: `fire-${method}` }), null);
+  }
 });
 
 test("fine activity prefers tools and stop over generic working", () => {

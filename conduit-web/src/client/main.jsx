@@ -10,13 +10,20 @@ import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/s
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { toast } from "sonner";
-import { deriveFineActivity, normalizeHostUiRequest } from "../activity.js";
+import { deriveFineActivity } from "../activity.js";
 import { AppSidebar } from "./app-sidebar";
 import { ChatComposer } from "./chat-composer";
 import { ChatDropOverlay, useChatDrop } from "./chat-drop-overlay";
 import { ChatThread } from "./chat-thread";
-import { HostUiRequests } from "./host-ui-card";
+import {
+  failInteractiveRequest,
+  markInteractiveRequestSubmitting,
+  mergeInteractiveRequestSnapshot,
+  normalizeInteractiveRequest,
+  resolveInteractiveRequest,
+} from "./interactive-request-state";
 import { createLiveStreamStore } from "./live-stream-store";
+import { createInitialReasoningState, reduceReasoningState } from "./reasoning-state";
 import { reconcileMessages } from "./reconcile-messages";
 import { useGlobalRuntime } from "./runtime/use-global-runtime";
 import { useAttachments } from "./use-attachments";
@@ -65,7 +72,7 @@ class AppErrorBoundary extends React.Component {
   }
 }
 
-function ChatHeader({ project, title, profile, runtime, live }) {
+function ChatHeader({ project, title, profile, runtime, live, attentionCount = 0 }) {
   const projectLabel = project?.slug === "chat" ? "Chats" : project?.slug || project?.name || "Chats";
   const profileLabel = runtime?.kind === "native_pi" ? null : profile?.label || profile?.id || null;
   const hostTrustLabel = live?.trustPosture === "native_saved_trust"
@@ -94,8 +101,11 @@ function ChatHeader({ project, title, profile, runtime, live }) {
         <BreadcrumbItem className="min-w-0"><BreadcrumbPage className="truncate font-semibold">{title}</BreadcrumbPage></BreadcrumbItem>
       </BreadcrumbList>
     </Breadcrumb>}
+    {attentionCount > 0 && <span className="chat-attention" role="status">
+      {attentionCount} {attentionCount === 1 ? "question" : "questions"} waiting
+    </span>}
     {postureLine && <span
-      className="chat-profile-posture text-muted-foreground ml-auto truncate text-xs"
+      className={`chat-profile-posture text-muted-foreground truncate text-xs${attentionCount ? "" : " ml-auto"}`}
       title={[
         postureLine,
         project?.path ? `cwd: ${project.path}` : null,
@@ -109,7 +119,7 @@ function ChatHeader({ project, title, profile, runtime, live }) {
     >
       {postureLine}
     </span>}
-    <Button variant="ghost" size="icon-sm" className={postureLine ? "" : "ml-auto"} aria-label="Share chat"><ShareIcon /></Button>
+    <Button variant="ghost" size="icon-sm" className={postureLine || attentionCount ? "" : "ml-auto"} aria-label="Share chat"><ShareIcon /></Button>
   </header>;
 }
 
@@ -146,20 +156,23 @@ function App() {
   const [partialContinue, setPartialContinue] = useState(true);
   const [contextUsage, setContextUsage] = useState(null);
   const [compacting, setCompacting] = useState(false);
-  const [hostUiRequests, setHostUiRequests] = useState([]);
+  const [interactiveRequests, setInteractiveRequests] = useState([]);
+  const [commands, setCommands] = useState([]);
   const [queue, setQueue] = useState({ steering: [], followUp: [] });
   const [thinking, setThinking] = useState(false);
   const [responding, setResponding] = useState(false);
   const [activeToolName, setActiveToolName] = useState(null);
   const [retry, setRetry] = useState(null);
-  const [reasoning, setReasoning] = useState({ content: "", active: false, redacted: false });
+  const [reasoning, setReasoning] = useState(createInitialReasoningState);
   const ws = useRef(null);
+  const reasoningRef = useRef(null);
   const currentGeneration = useRef(null);
   const closedGenerations = useRef(new Set());
   const stopPending = useRef(false);
   const continuation = useRef(null);
   const liveStream = useRef(null);
   const toolSeq = useRef(0);
+  const requestSeq = useRef(0);
   const openLiveToken = useRef(0);
   const [connectingChatId, setConnectingChatId] = useState(null);
   const selectedIdRef = useRef(null);
@@ -217,6 +230,7 @@ function App() {
     else setMessages(incoming);
     const nextTools = assignToolSeq(list(detail.tools));
     setTools(nextTools);
+    setCommands(list(detail.commands));
     toolSeq.current = maxToolSeq(nextTools) + 1;
     setPageBefore(detail.page?.before || null);
     setChatStatus(detail.status || "draft");
@@ -233,7 +247,6 @@ function App() {
     setActiveToolName(null);
     setRetry(null);
     setCompacting(false);
-    setReasoning({ content: "", active: false, redacted: false });
   }
 
   function applySnapshotExtras(event) {
@@ -241,8 +254,11 @@ function App() {
     else if (event.session?.contextUsage) setContextUsage(event.session.contextUsage);
     if (event.queue) setQueue(event.queue);
     else if (event.session?.queue) setQueue(event.session.queue);
-    const requests = event.hostUiRequests || event.session?.hostUiRequests;
-    if (requests) setHostUiRequests(list(requests));
+    const requests = event.interactiveRequests
+      || event.session?.interactiveRequests
+      || event.hostUiRequests
+      || event.session?.hostUiRequests;
+    if (requests) setInteractiveRequests((current) => mergeInteractiveRequestSnapshot(current, list(requests)));
     if (event.session?.compacting != null) setCompacting(Boolean(event.session.compacting));
     if (event.session?.retry) setRetry(event.session.retry);
     const gen = event.session?.generation;
@@ -307,6 +323,7 @@ function App() {
       });
       if (token !== openLiveToken.current || selectedIdRef.current !== chatId) return null;
       setLive(record);
+      setCommands(list(record.commands));
       if (record.runtime) setChatRuntime(record.runtime);
       if (record.contextUsage) setContextUsage(record.contextUsage);
       connect(record);
@@ -443,7 +460,7 @@ function App() {
       }
       if (key === ",") {
         event.preventDefault();
-        setSettingsSection("general");
+        setSettingsSection("profiles");
         setSettingsOpen(true);
       }
     };
@@ -455,6 +472,12 @@ function App() {
     if (event.generationId && closedGenerations.current.has(event.generationId)
       && !["generation_stopped", "generation_started"].includes(event.type)) return;
     if (stopPending.current && ["message_start", "assistant_stream_delta", "assistant_stream_final"].includes(event.type)) return;
+
+    if (event.generationId) {
+      const nextReasoning = reduceReasoningState(reasoningRef.current, event);
+      reasoningRef.current = nextReasoning;
+      setReasoning(nextReasoning);
+    }
 
     if (event.type === "generation_started") {
       currentGeneration.current = event.generationId;
@@ -499,7 +522,12 @@ function App() {
     if (event.type === "runtime_state" && event.session) {
       if (event.session.contextUsage) setContextUsage(event.session.contextUsage);
       if (event.session.queue) setQueue(event.session.queue);
-      if (event.session.hostUiRequests) setHostUiRequests(list(event.session.hostUiRequests));
+      if (event.session.interactiveRequests || event.session.hostUiRequests) {
+        setInteractiveRequests((current) => mergeInteractiveRequestSnapshot(
+          current,
+          list(event.session.interactiveRequests || event.session.hostUiRequests),
+        ));
+      }
       if (event.session.compacting != null) setCompacting(Boolean(event.session.compacting));
       if (event.session.retry !== undefined) setRetry(event.session.retry);
       // Prefer Conduit generation lifecycle. Clear only when the generation is
@@ -538,16 +566,15 @@ function App() {
       });
     }
     if (event.type === "extension_ui_request") {
-      const request = normalizeHostUiRequest(event);
-      if (request) {
-        setHostUiRequests((current) => current.some((item) => item.id === request.id)
-          ? current
-          : [...current, request]);
-      }
+      const request = normalizeInteractiveRequest(event, {
+        timestamp: event.timestamp || new Date().toISOString(),
+        seq: requestSeq.current++,
+      });
+      if (request) setInteractiveRequests((current) => mergeInteractiveRequestSnapshot(current, [request]));
     }
     if (event.type === "extension_ui_resolved") {
       const requestId = event.requestId || event.id;
-      setHostUiRequests((current) => current.filter((item) => item.id !== requestId));
+      setInteractiveRequests((current) => resolveInteractiveRequest(current, requestId, event));
     }
     if (event.type === "generation_stopped") {
       stopPending.current = false;
@@ -570,27 +597,11 @@ function App() {
     }
     const delta = event.assistantMessageEvent;
     if (event.type === "message_update" && delta) {
-      if (delta.type === "thinking_start") {
+      if (delta.type === "thinking_start" || delta.type === "thinking_delta") {
         setThinking(true);
         setResponding(false);
-        setReasoning((current) => ({ ...current, active: true, redacted: Boolean(delta.partial?.content?.[delta.contentIndex]?.redacted) }));
       }
-      if (delta.type === "thinking_delta") {
-        setThinking(true);
-        setReasoning((current) => ({
-          ...current,
-          active: true,
-          content: `${current.content || ""}${delta.delta || ""}`,
-        }));
-      }
-      if (delta.type === "thinking_end") {
-        setThinking(false);
-        setReasoning((current) => ({
-          ...current,
-          active: false,
-          content: delta.content || current.content,
-        }));
-      }
+      if (delta.type === "thinking_end") setThinking(false);
       if (delta.type === "text_start" || delta.type === "text_delta") {
         setResponding(true);
         setThinking(false);
@@ -608,7 +619,12 @@ function App() {
       setMessages((current) => {
         const copy = [...current];
         const index = findLastMessage(copy, (message) => message.role === "assistant");
-        const final = { content: event.content, stopped: false, continuing: false };
+        const final = {
+          content: event.content,
+          stopped: false,
+          continuing: false,
+          reasoning: reasoningRef.current?.observed ? reasoningRef.current : undefined,
+        };
         if (index >= 0) copy[index] = { ...copy[index], ...final };
         else copy.push({ id: `end_${Date.now()}`, role: "assistant", ...final });
         return copy;
@@ -660,6 +676,10 @@ function App() {
         isError: event.isError,
       }).tools);
     }
+    if (event.type === "client_error" && event.requestId) {
+      setInteractiveRequests((current) => failInteractiveRequest(current, event.requestId, event.message));
+      return;
+    }
     if (["runtime_error", "client_error"].includes(event.type)) {
       if (!stopPending.current) setGeneration(event.type === "runtime_error" ? "failed" : "idle");
       resetLiveUiFlags();
@@ -690,7 +710,9 @@ function App() {
     setConnectingChatId(null);
     ws.current?.close(); setLive(null);
     setGeneration("idle"); setDraft(""); setEditEntryId(null); setError("");
-    setContextUsage(null); setHostUiRequests([]); setQueue({ steering: [], followUp: [] });
+    setContextUsage(null); setInteractiveRequests([]); setCommands([]); setQueue({ steering: [], followUp: [] });
+    reasoningRef.current = createInitialReasoningState();
+    setReasoning(reasoningRef.current);
     resetLiveUiFlags();
     liveStream.current.clear();
     currentGeneration.current = null; stopPending.current = false; continuation.current = null;
@@ -820,13 +842,13 @@ function App() {
     ws.current?.send(JSON.stringify({ type: "stop_generation", generationId }));
   }
 
-  async function send({ streamingBehavior = null, steer = false } = {}) {
+  async function send({ streamingBehavior = null, steer = false, text: explicitText = null } = {}) {
     if (generation === "stopping") return;
     if (!serverOnline) {
       setError("Server unavailable");
       return;
     }
-    const text = draft.trim();
+    const text = String(explicitText ?? draft).trim();
     if (!text) return;
 
     const busy = generation === "active" || generation === "submitting";
@@ -939,11 +961,15 @@ function App() {
 
   function respondHostUi(response) {
     if (!ws.current || ws.current.readyState !== WebSocket.OPEN) {
-      setError("Not connected to the live session");
+      setInteractiveRequests((current) => failInteractiveRequest(current, response.id, "Not connected to the live session"));
       return;
     }
-    ws.current.send(JSON.stringify({ type: "extension_ui_response", ...response }));
-    setHostUiRequests((current) => current.filter((item) => item.id !== response.id));
+    setInteractiveRequests((current) => markInteractiveRequestSubmitting(current, response.id, response));
+    try {
+      ws.current.send(JSON.stringify({ type: "extension_ui_response", ...response }));
+    } catch (caught) {
+      setInteractiveRequests((current) => failInteractiveRequest(current, response.id, caught.message));
+    }
   }
 
   /** Local UI only: pull queue text into the draft. Pi has no clear_queue RPC and may still deliver. */
@@ -1075,6 +1101,7 @@ function App() {
     } catch (caught) { setError(caught.message); }
   }
 
+  const unresolvedRequests = interactiveRequests.filter((request) => request.status !== "resolved");
   const activity = useMemo(() => deriveFineActivity({
     generation,
     processStatus: selectedProcess?.status || (live ? "running" : "none"),
@@ -1083,11 +1110,11 @@ function App() {
     responding,
     toolName: activeToolName,
     retry,
-  }), [generation, selectedProcess, live, thinking, responding, activeToolName, retry, hostUiRequests]);
+  }), [generation, selectedProcess, live, thinking, responding, activeToolName, retry, unresolvedRequests.length]);
 
   // Transcript activity is for in-turn work only. Starting/connecting shows in the
   // sidebar RuntimeIndicator so the thread does not jump or flash the composer busy state.
-  const displayActivity = hostUiRequests.length
+  const displayActivity = unresolvedRequests.length
     ? { kind: "waiting_for_user", label: "Waiting for your confirmation" }
     : (activity.kind === "starting" ? { kind: "idle", label: null } : activity);
 
@@ -1112,8 +1139,9 @@ function App() {
     templates: templates.filter((item) => item.defaultable !== false),
     templateId: chatTemplateId || defaultTemplateId,
     defaultTemplateId,
+    commands,
   };
-  const openSettings = (section = "models", workspaceId = null) => {
+  const openSettings = (section = "profiles", workspaceId = null) => {
     setSettingsSection(section);
     setSettingsWorkspaceId(workspaceId);
     setSettingsOpen(true);
@@ -1127,7 +1155,7 @@ function App() {
     newFolder: () => setSidebarCommand({ type: "new-folder", nonce: Date.now() }),
     newWorkspace: () => setSidebarCommand({ type: "new-workspace", nonce: Date.now() }),
     attach: attachmentState.openPicker,
-    settings: (section = "general") => openSettings(section),
+    settings: (section = "profiles") => openSettings(section),
     workspaceSettings: (workspaceId) => openSettings("workspaces", workspaceId),
     rename: () => setSidebarCommand({ type: "rename", nonce: Date.now() }),
     renameFolder: () => setSidebarCommand({ type: "rename-folder", nonce: Date.now() }),
@@ -1140,6 +1168,8 @@ function App() {
     copy: () => lastAssistant && navigator.clipboard.writeText(lastAssistant.content),
     copyTranscript: () => selectedId && copyTranscript({ id: selectedId }),
     openChat: (session, project) => openSession(session, project).catch((caught) => setError(caught.message)),
+    sendText: (text) => send({ text }),
+    insertCommand: (text) => setDraft((current) => current ? `${current} ${text}` : text),
     chooseEffort: modelSettings.chooseEffort,
     setChatProfile: (templateId) => setChatProfile(templateId).catch((caught) => setError(caught.message)),
     openRuntimeChat: () => openRuntimeChat().catch((caught) => setError(caught.message)),
@@ -1192,7 +1222,14 @@ function App() {
       <SidebarInset className={`chat-main${emptyChat ? " chat-main-empty" : ""}`} {...drop.handlers}>
         <ChatDropOverlay active={drop.active} />
         <div className="chat-meteors" aria-hidden="true"><Meteors number={30} minDelay={0} maxDelay={1} minDuration={12} maxDuration={20} /></div>
-        <ChatHeader project={selectedProject} title={chatTitle} profile={activeProfile} runtime={chatRuntime} live={live} />
+        <ChatHeader
+          project={selectedProject}
+          title={chatTitle}
+          profile={activeProfile}
+          runtime={chatRuntime}
+          live={live}
+          attentionCount={unresolvedRequests.length}
+        />
         {sharedWorkspaceGeneration && <Alert className="mx-auto mt-3 max-w-3xl" variant="default">
           <TriangleAlertIcon />
           <AlertTitle>Another chat is working in this Workspace</AlertTitle>
@@ -1211,6 +1248,8 @@ function App() {
           editingEntryId={editEntryId}
           activity={displayActivity}
           reasoning={reasoning}
+          requests={interactiveRequests}
+          onRespond={respondHostUi}
           onLoadOlder={loadOlder}
           onCopyMessage={(message) => navigator.clipboard.writeText(message.content || "")}
           onEditMessage={(message) => {
@@ -1228,7 +1267,6 @@ function App() {
           onContinue={continueResponse}
         />
         <div className="composer-stack">
-          <HostUiRequests requests={hostUiRequests} onRespond={respondHostUi} />
           <ChatComposer
             draft={draft}
             generation={generation}
@@ -1267,6 +1305,7 @@ function App() {
             onChooseEffort={modelSettings.chooseEffort}
             onChooseProfile={(optionId) => setChatLaunchOption(optionId).catch((caught) => setError(caught.message))}
             onSend={() => send()}
+            onSendText={(text) => send({ text })}
             onStop={stopResponse}
             onSteer={() => send({ steer: true })}
             onClearQueue={clearQueue}

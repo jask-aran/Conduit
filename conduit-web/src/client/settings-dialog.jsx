@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { BotIcon, CircleHelpIcon, CpuIcon, FolderCogIcon, LayersIcon, LinkIcon, LockIcon, MonitorIcon, Settings2Icon } from "lucide-react";
+import { BotIcon, CpuIcon, FolderCogIcon, LayersIcon, LockIcon, Settings2Icon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
@@ -19,36 +19,31 @@ import {
 import { Spinner } from "@/components/ui/spinner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { DiagnosticsSettings } from "./diagnostics-settings";
 import { ModelScopeCombobox } from "./model-picker";
 
 const sections = [
-  { id: "models", label: "Models", short: "Models", icon: BotIcon },
   { id: "profiles", label: "Profiles", short: "Profiles", icon: LayersIcon },
   { id: "workspaces", label: "Workspaces", short: "Workspaces", icon: FolderCogIcon },
+  { id: "models", label: "Models", short: "Models", icon: BotIcon },
   { id: "runtime", label: "Runtime", short: "Runtime", icon: CpuIcon },
   { id: "auth", label: "Auth", short: "Auth", icon: LockIcon },
-  { id: "general", label: "General", short: "General", icon: Settings2Icon },
-  { id: "appearance", label: "Appearance", short: "Display", icon: MonitorIcon },
-  { id: "connections", label: "Connections", short: "Links", icon: LinkIcon },
-  { id: "about", label: "About", short: "About", icon: CircleHelpIcon },
+  { id: "diagnostics", label: "Diagnostics", short: "Diagnostics", icon: Settings2Icon },
 ];
 
-function Placeholder({ title }) {
-  return <Empty>
-    <EmptyHeader><EmptyTitle>{title}</EmptyTitle><EmptyDescription>Not available yet.</EmptyDescription></EmptyHeader>
-  </Empty>;
+const sectionIds = new Set(sections.map((section) => section.id));
+
+function normalizeSection(section) {
+  return sectionIds.has(section) ? section : "profiles";
 }
 
-function RuntimeSettings({ installations = [], onInstallationsChange, onHostUnavailable, onManageModels }) {
+function RuntimeSettings() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [maxLiveProcesses, setMaxLiveProcesses] = useState(12);
   const [maxGeneratingProcesses, setMaxGeneratingProcesses] = useState(2);
   const [idleMinutes, setIdleMinutes] = useState(2);
-  const [liveCount, setLiveCount] = useState(0);
-  const [generatingCount, setGeneratingCount] = useState(0);
-  const [detecting, setDetecting] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -64,8 +59,6 @@ function RuntimeSettings({ installations = [], onInstallationsChange, onHostUnav
         setMaxLiveProcesses(body.maxLiveProcesses ?? 12);
         setMaxGeneratingProcesses(body.maxGeneratingProcesses ?? 2);
         setIdleMinutes(Math.max(1, Math.round((body.idleProcessTtlMs || 120_000) / 60_000)));
-        setLiveCount(body.liveCount ?? 0);
-        setGeneratingCount(body.generatingCount ?? 0);
         setError("");
       })
       .catch((caught) => {
@@ -95,8 +88,6 @@ function RuntimeSettings({ installations = [], onInstallationsChange, onHostUnav
       setMaxLiveProcesses(body.maxLiveProcesses ?? maxLiveProcesses);
       setMaxGeneratingProcesses(body.maxGeneratingProcesses ?? maxGeneratingProcesses);
       setIdleMinutes(Math.max(1, Math.round((body.idleProcessTtlMs || 120_000) / 60_000)));
-      setLiveCount(body.liveCount ?? liveCount);
-      setGeneratingCount(body.generatingCount ?? generatingCount);
     } catch (caught) {
       setError(caught.message);
     } finally {
@@ -104,70 +95,17 @@ function RuntimeSettings({ installations = [], onInstallationsChange, onHostUnav
     }
   }
 
-  async function detectHostPi() {
-    setDetecting(true);
-    setError("");
-    try {
-      const response = await fetch("/v0/pi-installations/host/detect", { method: "POST" });
-      const body = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(body.message || body.error || "Could not detect host Pi");
-      onInstallationsChange?.((current) => [...current.filter((item) => item.id !== body.id), body]);
-      if (!body.available) onHostUnavailable?.();
-    } catch (caught) {
-      setError(caught.message);
-    } finally {
-      setDetecting(false);
-    }
-  }
 
   if (loading) return <div className="flex items-center gap-2 text-sm text-muted-foreground"><Spinner />Loading runtime settings…</div>;
 
   return <>
     <div className="settings-section-heading">
       <h2>Runtime</h2>
-      <p>Inspect the Pi installations Conduit can launch, then configure shared process limits.</p>
+      <p>Configure the shared process policy for Isolated Pi and Host Pi.</p>
     </div>
     <FieldGroup>
       <Field>
-        <FieldLabel>Pi installations</FieldLabel>
-        <div className="flex flex-col gap-2">
-          {installations.map((installation) => <Card key={installation.id} size="sm">
-            <CardHeader>
-              <div className="flex items-center justify-between gap-3">
-                <CardTitle>{installation.label}</CardTitle>
-                <Badge variant={installation.available ? "secondary" : "outline"}>{installation.available ? "Available" : "Unavailable"}</Badge>
-              </div>
-              <CardDescription>
-                {installation.id === "host-pi"
-                  ? "Detected and owned by the server user's host environment. Conduit does not manage its authentication, packages, or model scope."
-                  : "Bundled and isolated by Conduit. Profiles and model scope use Conduit's private Pi home."}
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="flex flex-col gap-1 text-xs">
-              <span><strong>Version:</strong> {installation.version ? `Pi ${installation.version}` : installation.error || "Unavailable"}</span>
-              <span className="break-all"><strong>Executable:</strong> {installation.executablePath || "Not detected"}</span>
-              <span className="break-all"><strong>Agent home:</strong> {installation.agentHome?.path || "Unknown"} ({installation.agentHome?.source || "unknown"})</span>
-              <span><strong>Capabilities:</strong> {Object.values(installation.capabilities || {}).filter(Boolean).length}/{Object.keys(installation.capabilities || {}).length || 0} required</span>
-              <span className="break-all"><strong>Scoped models:</strong> {installation.models?.enabledModels?.join(", ") || "None available"}</span>
-              <span className="break-all"><strong>Default:</strong> {installation.models?.defaultModel || "None"}</span>
-            </CardContent>
-            <CardFooter>
-              {installation.id === "host-pi"
-                ? <Button type="button" variant="outline" disabled={detecting} onClick={detectHostPi}>
-                    {detecting && <Spinner data-icon="inline-start" />}
-                    {detecting ? "Detecting…" : "Re-detect Host Pi"}
-                  </Button>
-                : <Button type="button" variant="outline" onClick={onManageModels}>Manage Isolated Pi models</Button>}
-            </CardFooter>
-          </Card>)}
-        </div>
-      </Field>
-      <Field><FieldLabel>Process limits</FieldLabel><FieldDescription>These limits are shared by Isolated Pi and Host Pi.</FieldDescription></Field>
-      <Field>
-        <FieldLabel className="justify-between">
-          Max warm Pi processes
-          <Badge variant="secondary">{liveCount} live now</Badge>
-        </FieldLabel>
+        <FieldLabel>Max warm Pi processes</FieldLabel>
         <Input
           type="number"
           min={1}
@@ -180,10 +118,7 @@ function RuntimeSettings({ installations = [], onInstallationsChange, onHostUnav
         </FieldDescription>
       </Field>
       <Field>
-        <FieldLabel className="justify-between">
-          Max concurrent generations
-          <Badge variant="secondary">{generatingCount} generating</Badge>
-        </FieldLabel>
+        <FieldLabel>Max concurrent generations</FieldLabel>
         <Input
           type="number"
           min={1}
@@ -388,7 +323,7 @@ function WorkspaceSettings({
                 <SelectTrigger id={`workspace-profile-${project.id}`} className="w-full"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectGroup>
-                    <SelectItem value="inherit">Inherit global ({globalProfile?.label || "General"})</SelectItem>
+                    <SelectItem value="inherit">Inherit global ({globalProfile?.label || "default profile"})</SelectItem>
                     {profiles.map((profile) => <SelectItem key={profile.id} value={profile.id}>{profile.label || profile.id}</SelectItem>)}
                     <SelectItem value="host-pi" disabled={!hostAvailable}>Host Pi{hostAvailable ? "" : " (unavailable)"}</SelectItem>
                   </SelectGroup>
@@ -508,26 +443,14 @@ export function SettingsDialog({
   onWorkspaceDefaultChange,
   onHostUnavailable,
 }) {
-  const [section, setSection] = useState(initialSection);
+  const [section, setSection] = useState(() => normalizeSection(initialSection));
   const [enabled, setEnabled] = useState(modelSettings.enabledModels);
   const [scopeOpen, setScopeOpen] = useState(false);
   const dialogRef = useRef(null);
   const modelSearchRef = useRef(null);
-  useEffect(() => { if (open) setSection(initialSection); }, [initialSection, open]);
+  useEffect(() => { if (open) setSection(normalizeSection(initialSection)); }, [initialSection, open]);
   useEffect(() => { setEnabled(modelSettings.enabledModels); }, [modelSettings.enabledModels]);
   useEffect(() => { setScopeOpen(open && section === "models" && !modelSettings.loading); }, [modelSettings.loading, open, section]);
-  useEffect(() => {
-    if (!open || section !== "runtime" || !onInstallationsChange) return;
-    let active = true;
-    fetch("/v0/pi-installations")
-      .then((response) => response.json().then((body) => ({ response, body })))
-      .then(({ response, body }) => {
-        if (!response.ok) throw new Error(body.message || body.error || "Could not load Pi installations");
-        if (active) onInstallationsChange(body.installations || []);
-      })
-      .catch(() => {});
-    return () => { active = false; };
-  }, [onInstallationsChange, open, section]);
 
   return <Dialog open={open} onOpenChange={onOpenChange}>
     <DialogContent
@@ -541,7 +464,7 @@ export function SettingsDialog({
     >
       <DialogHeader className="settings-dialog-header">
         <DialogTitle>Settings</DialogTitle>
-        <DialogDescription>Configure Conduit profiles, Pi installations, models, and process limits.</DialogDescription>
+        <DialogDescription>Configure profiles, Workspaces, models, runtime policy, and authentication; inspect diagnostics.</DialogDescription>
       </DialogHeader>
       <Tabs value={section} onValueChange={setSection} orientation="vertical" activationMode="manual" className="settings-tabs">
         <TabsList variant="line" aria-label="Settings sections" className="settings-rail">
@@ -553,8 +476,26 @@ export function SettingsDialog({
           </Tooltip>)}
         </TabsList>
         <ScrollArea className="settings-panel">
+          <TabsContent value="profiles">
+            <ProfileSettings
+              templates={templates}
+              defaultTemplateId={defaultTemplateId}
+              onDefaultTemplateChange={onDefaultTemplateChange}
+              onOpenRuntimeChat={onOpenRuntimeChat}
+            />
+          </TabsContent>
+          <TabsContent value="workspaces">
+            <WorkspaceSettings
+              projects={projects}
+              templates={templates}
+              defaultTemplateId={defaultTemplateId}
+              initialWorkspaceId={initialWorkspaceId}
+              installations={installations}
+              onWorkspaceDefaultChange={onWorkspaceDefaultChange}
+            />
+          </TabsContent>
           <TabsContent value="models">
-            <div className="settings-section-heading"><h2>Isolated Pi models</h2><p>Choose the models available to ordinary profiles. Isolated Pi and the Conduit terminal launcher share this saved scope; Host Pi remains host-owned.</p></div>
+            <div className="settings-section-heading"><h2>Models</h2><p>Choose the models available to ordinary profiles. Isolated Pi and the Conduit terminal launcher share this saved scope; Host Pi remains host-owned.</p></div>
             {modelSettings.loading ? <div className="flex items-center gap-2 text-sm text-muted-foreground"><Spinner />Loading models…</div>
               : modelSettings.allModels.length > 0 ? <FieldGroup>
                 <Field>
@@ -584,29 +525,14 @@ export function SettingsDialog({
               onClick={() => modelSettings.saveScope(enabled)}
             >{modelSettings.saving && <Spinner data-icon="inline-start" />}{modelSettings.saving ? "Saving…" : "Save changes"}</Button></div>
           </TabsContent>
-          <TabsContent value="profiles">
-            <ProfileSettings
-              templates={templates}
-              defaultTemplateId={defaultTemplateId}
-              onDefaultTemplateChange={onDefaultTemplateChange}
-              onOpenRuntimeChat={onOpenRuntimeChat}
-            />
-          </TabsContent>
-          <TabsContent value="workspaces">
-            <WorkspaceSettings
-              projects={projects}
-              templates={templates}
-              defaultTemplateId={defaultTemplateId}
-              initialWorkspaceId={initialWorkspaceId}
-              installations={installations}
-              onWorkspaceDefaultChange={onWorkspaceDefaultChange}
-            />
-          </TabsContent>
-          <TabsContent value="runtime"><RuntimeSettings installations={installations} onInstallationsChange={onInstallationsChange} onHostUnavailable={onHostUnavailable} onManageModels={() => setSection("models")} /></TabsContent>
+          <TabsContent value="runtime"><RuntimeSettings /></TabsContent>
           <TabsContent value="auth"><AuthSettings /></TabsContent>
-          {sections.filter((item) => !["models", "profiles", "workspaces", "runtime", "auth"].includes(item.id)).map((item) => (
-            <TabsContent key={item.id} value={item.id}><Placeholder title={item.label} /></TabsContent>
-          ))}
+          <TabsContent value="diagnostics">
+            <DiagnosticsSettings
+              onInstallationsChange={onInstallationsChange}
+              onHostUnavailable={onHostUnavailable}
+            />
+          </TabsContent>
         </ScrollArea>
       </Tabs>
     </DialogContent>

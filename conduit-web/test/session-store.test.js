@@ -40,6 +40,82 @@ test("restores completed tool calls from persisted messages", () => {
   }]);
 });
 
+test("projects authoritative persisted reasoning without exposing signatures", () => {
+  const messages = messagesFromEntries([{
+    type: "message",
+    id: "assistant-1",
+    timestamp: "2026-01-01T00:00:03.400Z",
+    message: {
+      role: "assistant",
+      timestamp: Date.parse("2026-01-01T00:00:01.000Z"),
+      content: [
+        { type: "thinking", thinking: "First", thinkingSignature: "secret-1" },
+        { type: "text", text: "Answer" },
+        { type: "thinking", thinking: "Second", thinkingSignature: "secret-2" },
+      ],
+    },
+  }]);
+
+  assert.equal(messages.length, 1);
+  assert.equal(messages[0].content, "Answer");
+  assert.deepEqual(messages[0].reasoning, {
+    status: "completed",
+    content: "First\nSecond",
+    redacted: false,
+    durationSeconds: 2,
+    observed: true,
+  });
+  assert.equal(JSON.stringify(messages[0]).includes("thinkingSignature"), false);
+});
+
+test("projects redacted reasoning without requiring visible content", () => {
+  const [message] = messagesFromEntries([{
+    type: "message",
+    id: "assistant-redacted",
+    message: {
+      role: "assistant",
+      content: [{
+        type: "thinking",
+        thinking: "",
+        thinkingSignature: "opaque",
+        redacted: true,
+      }, { type: "text", text: "Answer" }],
+    },
+  }]);
+
+  assert.deepEqual(message.reasoning, {
+    status: "completed",
+    content: "",
+    redacted: true,
+    durationSeconds: null,
+    observed: true,
+  });
+  assert.equal(JSON.stringify(message).includes("opaque"), false);
+});
+
+test("omits reasoning without thinking blocks and tolerates malformed timestamps", () => {
+  const messages = messagesFromEntries([{
+    type: "message",
+    timestamp: "not-a-date",
+    message: {
+      role: "assistant",
+      timestamp: "also-bad",
+      content: [{ type: "text", text: "Plain" }],
+    },
+  }, {
+    type: "message",
+    timestamp: "not-a-date",
+    message: {
+      role: "assistant",
+      timestamp: "also-bad",
+      content: [{ type: "thinking", thinking: "Kept" }, { type: "text", text: "Reasoned" }],
+    },
+  }]);
+
+  assert.equal("reasoning" in messages[0], false);
+  assert.equal(messages[1].reasoning.durationSeconds, null);
+});
+
 test("restores the latest model and thinking level from a session", () => {
   const entries = [
     { type: "model_change", provider: "anthropic", modelId: "haiku" },

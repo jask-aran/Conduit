@@ -108,6 +108,42 @@ responses stream as raw deltas coalesced per animation frame by
 HTML is sanitized, unsafe URLs are removed, remote images become alt text, and
 external links require confirmation. User messages are displayed literally.
 
+`src/client/shiki-highlight.js` is the one Shiki import site in the codebase:
+the fenced-code highlighter (`src/components/ai-elements/code-block.jsx`) and
+the tool-card JSON pretty-printer (`src/client/tool-json-block.jsx`) both
+import its shared lazy highlighter singleton rather than bundling a second
+copy of `shiki/core`.
+
+Non-message timeline items (currently tool calls) render through
+`src/client/tool-registry.js`: `timelineItemRenderers[item.type]` dispatches
+the chat-thread timeline loop, and `toolRenderers`/`getToolRenderer(name)`
+looks up a tool-name-specific card, falling back to the generic `ToolCard`
+(`src/client/tool-card.jsx`) for any unregistered tool name. `ToolCard` shows
+a one-line `name(args…)` smart summary and live status in its header;
+arguments and result are separate collapsed sections, pretty-printed as JSON
+through the lazy Shiki singleton above when they aren't plain strings, with
+the result lazy-fetched from `GET /v0/sessions/:id/tools/:toolId` on first
+expand when the initial payload omitted it for size.
+
+Blocking Pi interactive requests (`extension_ui_request`) render as native
+`question` timeline items through the same registry, not a detached card. The
+server retains them per resident process in `interactiveRequests` (exposed on
+runtime snapshots) so a card stays frozen with its answer after a local
+submission or a remote `extension_ui_resolved`; unresolved requests raise a
+count in the chat header. Reasoning is owned by the assistant message it
+belongs to: a single stable slot appears once per generation, transitions in
+place to a collapsed `Thought for N s` summary, and expands only when the JSONL
+retained non-redacted thinking content.
+
+Composer slash commands beyond `/attach` are server data: `GET /v0/sessions/:id`
+and the live-session response carry a normalized `commands` array (name,
+description, source, `dispatch`) resolved from Pi's `get_commands` RPC when a
+process is live, falling back to the selected template's prompt templates,
+skills, and declared extension commands otherwise. `GET /v0/diagnostics`
+returns a read-only projection of installations, resident processes, and
+storage roots for the Settings → Diagnostics tab, omitting commands, env,
+credentials, queues, and transcript filenames.
+
 The single-line composer owns runtime-aware model and thinking controls. Isolated
 Pi reads `data/pi`; Host Pi reads its detected agent home and reconciles against
 the live process through `get_available_models` and `get_state`. A selection is

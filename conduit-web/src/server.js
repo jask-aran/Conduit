@@ -7,6 +7,8 @@ import compression from "compression";
 import { WebSocketServer } from "ws";
 import { loadConfig, resolveTemplate } from "./config.js";
 import { PiModelCatalog } from "./pi-model-catalog.js";
+import { resolvePiCommandCatalog } from "./pi-command-catalog.js";
+import { projectDiagnostics } from "./diagnostics.js";
 import { ProjectStore } from "./project-store.js";
 import { duplicateSession, messagesFromEntries, pageSessionEntries, removeProjectSessions, removeSession, renameSession, settingsFromEntries, toolsFromEntries, transcriptFromEntries, validateSessionFile } from "./session-store.js";
 import { PiManager } from "./pi-manager.js";
@@ -231,6 +233,22 @@ function runtimeFor({ runtimeKind = "conduit_profile", template }) {
         profileId: template.id,
         profileVersion: template.version,
       };
+}
+
+async function commandCatalogForContext(context, resident = manager.getByChatId(context.chat.id)) {
+  const template = templateForChat(context.chat, context.project);
+  const runtime = context.chat.runtime || runtimeFor({ runtimeKind: "conduit_profile", template });
+  let rpcCommands = null;
+  if (resident?.status === "running") {
+    try { rpcCommands = await manager.getCommands(resident.id); }
+    catch { rpcCommands = null; }
+  }
+  return resolvePiCommandCatalog({
+    rpcCommands,
+    templateDir: path.dirname(template.templateFile),
+    manifest: template,
+    hostMode: runtime.kind === "native_pi",
+  });
 }
 
 async function nativeResourceClasses(cwd) {
@@ -488,6 +506,17 @@ app.post("/v0/pi-installations/host/detect", async (_request, response, next) =>
     const detected = await config.installations.detectHost();
     if (!detected.available) await clearHostPiDefaults();
     response.json((await installationViews()).find((item) => item.id === "host-pi"));
+  } catch (error) { next(error); }
+});
+
+app.get("/v0/diagnostics", async (_request, response, next) => {
+  try {
+    response.json(projectDiagnostics({
+      installations: await installationViews(),
+      processes: manager.list(),
+      projects: await projects.list(),
+      config: { dataRoot: config.dataRoot },
+    }));
   } catch (error) { next(error); }
 });
 
@@ -988,15 +1017,17 @@ app.get("/v0/sessions/:id", async (request, response, next) => {
   try {
     const context = await findChatContext(request.params.id);
     if (!context) return response.status(404).json({ error: "chat_not_found" });
+    const commands = await commandCatalogForContext(context);
     const session = await findDeletableSession(await projects.list(), context.chat);
     if (!session) return response.json({
-      ...chatView(context.chat), messages: [], tools: [], attachments: [], page: { before: null },
+      ...chatView(context.chat), commands, messages: [], tools: [], attachments: [], page: { before: null },
     });
     const page = pageSessionEntries(session.entries, { before: request.query.before });
     const messages = messagesFromEntries(page.entries).filter((message) => ["user", "assistant"].includes(message.role));
     response.json({
       ...chatView(context.chat),
       ...settingsFromEntries(session.entries),
+      commands,
       messages,
       tools: toolsFromEntries(page.entries).map((tool) => ({ ...tool, result: tool.result?.length > 4000 ? null : tool.result, resultDeferred: tool.result?.length > 4000 })),
       page: { before: page.hasMore ? String(page.start) : null },
@@ -1121,7 +1152,8 @@ app.post("/v0/live-sessions", async (request, response, next) => {
     }
     const resident = manager.getByChatId(context.chat.id);
     if (resident) {
-      return response.status(201).json({ ...manager.view(resident), streamUrl: `/v0/live-sessions/${resident.id}/stream` });
+      const commands = await commandCatalogForContext(context, resident);
+      return response.status(201).json({ ...manager.view(resident), commands, streamUrl: `/v0/live-sessions/${resident.id}/stream` });
     }
     const template = templateForChat(context.chat, context.project);
     const runtime = context.chat.runtime || runtimeFor({ runtimeKind: "conduit_profile", template });
@@ -1200,7 +1232,8 @@ app.post("/v0/live-sessions", async (request, response, next) => {
       mapping.piSessionFile = live.sessionFile;
     }
     await registry.update(context.chat.id, mapping);
-    response.status(201).json({ ...manager.view(live), streamUrl: `/v0/live-sessions/${live.id}/stream` });
+    const commands = await commandCatalogForContext(context, live);
+    response.status(201).json({ ...manager.view(live), commands, streamUrl: `/v0/live-sessions/${live.id}/stream` });
   } catch (error) {
     if (launchedRecord && ["starting", "running"].includes(launchedRecord.status)) {
       await manager.stopAndWait(launchedRecord.id).catch(() => {});
@@ -1389,13 +1422,27 @@ server.on("upgrade", async (request, socket, head) => {
       stream,
       events: pendingEvents,
       hostUiRequests: record.hostUiRequests || [],
+      interactiveRequests: record.interactiveRequests || [],
       queue: record.queue || { steering: [], followUp: [] },
       contextUsage: record.contextUsage || null,
     }));
     ws.on("message", (data) => {
+      let command;
+      try { command = JSON.parse(String(data)); }
+      catch (error) {
+        ws.send(JSON.stringify({ type: "client_error", code: "invalid_json", message: error.message }));
+        return;
+      }
       Promise.resolve()
-        .then(() => handleClientCommand(record, JSON.parse(String(data))))
-        .catch((error) => ws.send(JSON.stringify({ type: "client_error", code: error.code, message: error.message })));
+        .then(() => handleClientCommand(record, command))
+        .catch((error) => ws.send(JSON.stringify({
+          type: "client_error",
+          code: error.code,
+          message: error.message,
+          requestId: command.type === "extension_ui_response" || command.type === "host_ui_response"
+            ? (command.id || command.requestId || null)
+            : null,
+        })));
     });
   });
 });

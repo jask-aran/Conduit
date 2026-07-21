@@ -65,3 +65,58 @@ test("assignToolSeq fills missing seq values", () => {
   assert.equal(tools[0].seq, 0);
   assert.equal(tools[1].seq, 7);
 });
+
+test("buildTimeline emits stable question items in transcript order", () => {
+  const messages = [
+    { id: "u1", role: "user", content: "deploy", timestamp: "2026-07-20T12:00:00.000Z" },
+    { id: "a1", role: "assistant", content: "Checking", timestamp: "2026-07-20T12:00:02.000Z" },
+  ];
+  const requests = [{
+    id: "request-1",
+    kind: "confirm",
+    title: "Deploy now?",
+    status: "pending",
+    timestamp: "2026-07-20T12:00:01.000Z",
+    seq: 8,
+  }];
+
+  const timeline = buildTimeline(messages, [], { requests });
+  assert.deepEqual(timeline.map((item) => item.value.id), ["u1", "request-1", "a1"]);
+  const question = timeline[1];
+  assert.equal(question.type, "question");
+  assert.equal(question.value, requests[0]);
+  assert.equal(question.index, 2);
+  assert.equal(question.order, 8);
+});
+
+test("buildTimeline de-duplicates replayed requests by stable request ID", () => {
+  const first = {
+    id: "request-1",
+    kind: "select",
+    title: "Choose",
+    timestamp: "2026-07-20T12:00:00.000Z",
+    seq: 4,
+  };
+  const replay = {
+    ...first,
+    title: "Replayed",
+    timestamp: "2026-07-20T13:00:00.000Z",
+    seq: 99,
+  };
+
+  const timeline = buildTimeline([], [], { requests: [first, replay] });
+  assert.equal(timeline.length, 1);
+  assert.equal(timeline[0].type, "question");
+  assert.equal(timeline[0].value, first);
+  assert.equal(timeline[0].order, 4);
+});
+
+test("buildTimeline excludes fire-and-forget request records", () => {
+  const timeline = buildTimeline([], [], {
+    requests: [
+      { id: "notify-1", kind: "notify", message: "Finished" },
+      { id: "status-1", kind: "setStatus", message: "Working" },
+    ],
+  });
+  assert.deepEqual(timeline, []);
+});

@@ -56,6 +56,7 @@ export function ChatComposer({
   onChooseModel,
   onChooseEffort,
   onSend,
+  onSendText,
   onStop,
   onClearQueue,
   onSteer,
@@ -80,7 +81,7 @@ export function ChatComposer({
     const query = token.query.toLowerCase();
     return availableComposerCommands(commandContext).filter((command) =>
       !query || command.slash.startsWith(query) || command.label.toLowerCase().includes(query)
-        || command.keywords.some((keyword) => keyword.includes(query)));
+        || (command.keywords || []).some((keyword) => keyword.includes(query)));
   }, [commandContext, token?.query, token?.trigger]);
   const suggestionsOpen = !dismissed && token?.trigger === "/" && slashCommands.length > 0;
 
@@ -94,13 +95,33 @@ export function ChatComposer({
 
   const chooseSlash = (command) => {
     if (!token) return;
+    const commandText = typeof command.text === "string" && command.text
+      ? command.text
+      : `/${command.slash}`;
+    setDismissed(true);
+
+    if (command.dispatch === "insert") {
+      const next = replaceCommandToken(draft, token, commandText);
+      const nextCaret = token.start + commandText.length;
+      onDraftChange(next);
+      requestAnimationFrame(() => {
+        textarea.current?.focus();
+        textarea.current?.setSelectionRange(nextCaret, nextCaret);
+      });
+      return;
+    }
+
+    if (command.dispatch === "prompt") {
+      (onSendText || onSend)?.(commandText);
+      return;
+    }
+
     const next = replaceCommandToken(draft, token);
     onDraftChange(next);
-    setDismissed(true);
     requestAnimationFrame(() => {
       textarea.current?.focus();
       textarea.current?.setSelectionRange(token.start, token.start);
-      command.run(commandActions);
+      command.run?.(commandActions);
     });
   };
 

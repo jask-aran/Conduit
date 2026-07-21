@@ -33,6 +33,15 @@ test("flush publishes pending content and rejects stale generations", () => {
   assert.equal(frames.length, 1);
 });
 
+test("same-generation start preserves early content while a new generation resets it", () => {
+  const { store } = fixture();
+  store.append("g1", "early");
+  store.start("g1");
+  assert.equal(store.getSnapshot().content, "early");
+  store.start("g2");
+  assert.equal(store.getSnapshot().content, "");
+});
+
 test("ordinary clear resets the generation and notifies subscribers", () => {
   const { store } = fixture();
   let notifications = 0;

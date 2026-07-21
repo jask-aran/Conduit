@@ -293,6 +293,7 @@ export class PiManager extends EventEmitter {
       retrying: false,
       retry: null,
       hostUiRequests: [],
+      interactiveRequests: [],
       queue: emptyQueue(),
       contextUsage: emptyContextUsage(),
       clients: new Set(),
@@ -340,6 +341,7 @@ export class PiManager extends EventEmitter {
       record.stopping = false;
       record.activity = "idle";
       record.hostUiRequests = [];
+      record.interactiveRequests = [];
       if (record.sessionFile) this.bySessionFile.delete(record.sessionFile);
       for (const pending of record.pendingRequests.values()) pending.reject(new Error("Pi process exited before replying"));
       record.pendingRequests.clear();
@@ -387,6 +389,13 @@ export class PiManager extends EventEmitter {
         }
 
         if (event.type === "extension_ui_request" && isBlockingHostUi(event)) {
+          const request = normalizeHostUiRequest(event, {
+            timestamp: event.timestamp || new Date(this.now()).toISOString(),
+            seq: record.events.length,
+          });
+          if (request && !record.interactiveRequests.some((item) => item.id === request.id)) {
+            record.interactiveRequests.push(request);
+          }
           applyActivityEvent(record, event);
           this.publishGeneration(record, event);
           this.publishState(record);
@@ -609,6 +618,13 @@ export class PiManager extends EventEmitter {
     return Array.isArray(response.data?.models) ? response.data.models : [];
   }
 
+  async getCommands(id) {
+    const response = await this.request(id, { type: "get_commands" });
+    return Array.isArray(response.data?.commands)
+      ? response.data.commands
+      : (Array.isArray(response.commands) ? response.commands : []);
+  }
+
   async getModelState(id) {
     const response = await this.request(id, { type: "get_state" });
     const record = this.processes.get(id);
@@ -727,9 +743,15 @@ export class PiManager extends EventEmitter {
     else throw Object.assign(new Error("Host UI response requires confirmed, value, or cancelled"), { code: "host_ui_response_invalid" });
     this.send(id, payload);
     record.hostUiRequests = record.hostUiRequests.filter((item) => item.id !== requestId);
+    const responseView = payload.cancelled
+      ? { cancelled: true }
+      : (typeof payload.confirmed === "boolean" ? { confirmed: payload.confirmed } : { value: payload.value });
+    record.interactiveRequests = record.interactiveRequests.map((item) => item.id === requestId
+      ? { ...item, status: "resolved", response: responseView, error: null }
+      : item);
     applyActivityEvent(record, { type: "extension_ui_resolved", requestId });
     record.activity = deriveCoarseActivity(record);
-    this.publish(record, { type: "extension_ui_resolved", requestId });
+    this.publish(record, { type: "extension_ui_resolved", requestId, ...responseView });
     this.publishState(record);
   }
 
@@ -827,6 +849,7 @@ export class PiManager extends EventEmitter {
       retrying: Boolean(safe.retrying),
       retry: safe.retry || null,
       hostUiRequests: [...(safe.hostUiRequests || [])],
+      interactiveRequests: [...(safe.interactiveRequests || [])],
       queue: safe.queue || emptyQueue(),
       contextUsage: safe.contextUsage || emptyContextUsage(),
       createdAt: safe.createdAt,

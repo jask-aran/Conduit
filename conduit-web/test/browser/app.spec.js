@@ -320,7 +320,7 @@ test("keeps the native textarea composer bounded in a thread", async ({ page }, 
   await openSidebar(page, testInfo);
   await page.getByRole("button", { name: "Existing chat" }).click();
   await expect(page.getByText("Previous question")).toBeVisible();
-  await expect(page.getByRole("button", { name: /write Complete/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /write\(path: note\.md\).*Complete/ })).toBeVisible();
   await expect(page.locator('[data-slot="message-header"]')).toHaveCount(0);
 
   const composerGroup = page.locator(".composer");
@@ -337,6 +337,86 @@ test("keeps the native textarea composer bounded in a thread", async ({ page }, 
   expect(sendBox.y).toBeGreaterThan(inputBox.y);
   await expect(composerWrap).toHaveCSS("position", "static");
   await expect(page.locator(".chat-meteors")).toBeVisible();
+});
+
+test("tool card v2 expands args/result, pretty-prints JSON, lazy-fetches deferred results, and falls back for unknown tools", async ({ page }, testInfo) => {
+  await page.route("**/v0/sessions/session_existing", async (route) => {
+    await route.fulfill({ json: {
+      messages: [
+        { id: "message_existing", role: "user", content: "Previous question" },
+      ],
+      tools: [
+        {
+          id: "call_write",
+          name: "write",
+          args: { path: "note.md", content: "hello" },
+          done: true,
+          result: "Saved",
+          timestamp: "2026-07-15T06:49:27.768Z",
+        },
+        {
+          id: "call_deferred",
+          name: "grep",
+          args: { pattern: "foo" },
+          done: true,
+          resultDeferred: true,
+          timestamp: "2026-07-15T06:49:28.768Z",
+        },
+        {
+          id: "call_failed",
+          name: "run_shell",
+          args: { command: "exit 1" },
+          done: true,
+          error: true,
+          result: "command failed",
+          timestamp: "2026-07-15T06:49:29.768Z",
+        },
+        {
+          id: "call_unknown",
+          name: "totally_unregistered_tool",
+          args: null,
+          done: true,
+          result: "ok",
+          timestamp: "2026-07-15T06:49:30.768Z",
+        },
+      ],
+    } });
+  });
+  const toolFetch = page.waitForRequest("**/v0/sessions/session_existing/tools/call_deferred");
+  await page.route("**/v0/sessions/session_existing/tools/call_deferred", async (route) => {
+    await route.fulfill({ json: { id: "call_deferred", result: "3 matches" } });
+  });
+  await page.goto("/");
+  await openSidebar(page, testInfo);
+  await page.getByRole("button", { name: "Existing chat" }).click();
+
+  const writeTrigger = page.getByRole("button", { name: /write\(path: note\.md, content: hello\).*Complete/ });
+  const writeCard = page.locator(".tool-card").filter({ has: writeTrigger });
+  await expect(writeTrigger).toBeVisible();
+  await writeTrigger.click();
+  await writeCard.getByRole("button", { name: "Arguments" }).click();
+  await expect(writeCard.locator("pre code")).toBeVisible();
+  await expect(writeCard.locator("pre code")).toContainText("note.md");
+
+  // Unknown tool name falls back to the generic card without error.
+  await expect(page.getByRole("button", { name: /totally_unregistered_tool.*Complete/ })).toBeVisible();
+
+  // Error state renders distinctly (destructive tone on the result section).
+  const failedTrigger = page.getByRole("button", { name: /run_shell.*Error/ });
+  const failedCard = page.locator(".tool-card").filter({ has: failedTrigger });
+  await expect(failedTrigger).toBeVisible();
+  await failedTrigger.click();
+  await failedCard.getByRole("button", { name: "Result" }).click();
+  await expect(failedCard.locator(".border-destructive\\/50")).toContainText("command failed");
+
+  // Deferred result is lazy-fetched on expand, not before.
+  const deferredTrigger = page.getByRole("button", { name: /grep\(pattern: foo\)/ });
+  const deferredCard = page.locator(".tool-card").filter({ has: deferredTrigger });
+  await expect(deferredTrigger).toBeVisible();
+  await deferredTrigger.click();
+  await deferredCard.getByRole("button", { name: "Result" }).click();
+  await toolFetch;
+  await expect(deferredCard.getByText("3 matches")).toBeVisible();
 });
 
 test("renders persisted assistant Markdown with safe interactive controls", async ({ page }, testInfo) => {
@@ -1425,8 +1505,7 @@ test("runtime settings exposes warm pool and concurrent generation caps", async 
   await dialog.getByRole("tab", { name: /Runtime/ }).click();
   await expect(dialog.getByText("Max warm Pi processes")).toBeVisible();
   await expect(dialog.getByText("Max concurrent generations")).toBeVisible();
-  await expect(dialog.getByText("3 live now")).toBeVisible();
-  await expect(dialog.getByText("1 generating")).toBeVisible();
+  await expect(dialog.getByText("Idle reclaim (minutes)")).toBeVisible();
 });
 
 test("host Pi re-detection immediately updates the Workspace profile menu", async ({ page }, testInfo) => {
@@ -1446,8 +1525,20 @@ test("host Pi re-detection immediately updates the Workspace profile menu", asyn
     { id: "conduit-pinned", label: "Isolated Pi", version: "0.80.6", available: true },
     { id: "host-pi", label: "Host Pi", version: null, available: false, error: "Host Pi was not found" },
   ] } }));
-  await page.route("**/v0/pi-installations/host/detect", (route) => route.fulfill({ json: {
-    id: "host-pi", label: "Host Pi", version: "0.80.10", compatible: true, available: true,
+  let hostDetected = false;
+  await page.route("**/v0/pi-installations/host/detect", (route) => {
+    hostDetected = true;
+    return route.fulfill({ json: {
+      id: "host-pi", label: "Host Pi", version: "0.80.10", compatible: true, available: true,
+    } });
+  });
+  await page.route("**/v0/diagnostics", (route) => route.fulfill({ json: {
+    installations: [
+      { id: "conduit-pinned", label: "Isolated Pi", version: "0.80.6", available: true, compatible: true },
+      { id: "host-pi", label: "Host Pi", version: hostDetected ? "0.80.10" : null, available: hostDetected, compatible: hostDetected },
+    ],
+    processes: [],
+    storage: { dataRoot: "/data", transcriptRoots: [], uploadRoots: [] },
   } }));
   await page.unroute("**/v0/chats");
   await page.route("**/v0/chats", async (route) => {
@@ -1466,7 +1557,7 @@ test("host Pi re-detection immediately updates the Workspace profile menu", asyn
   await page.locator('[data-sidebar="footer"]').getByRole("button", { name: /Conduit/ }).click();
   await page.getByRole("menuitem", { name: "Manage settings" }).click();
   const settings = page.getByRole("dialog", { name: "Settings" });
-  await settings.getByRole("tab", { name: /Runtime/ }).click();
+  await settings.getByRole("tab", { name: /Diagnostics/ }).click();
   await settings.getByRole("button", { name: "Re-detect Host Pi" }).click();
   await expect(settings.getByText("Pi 0.80.10")).toBeVisible();
   await page.keyboard.press("Escape");
