@@ -94,19 +94,36 @@ export function Sidebar(props: {
   const [rename, setRename] = createSignal<{ type: "chat"; chat: ChatSummary; project: Project } | { type: "project"; project: Project } | null>(null);
   const [renameValue, setRenameValue] = createSignal("");
   const [deleting, setDeleting] = createSignal<{ type: "chat"; chat: ChatSummary; project: Project } | { type: "project"; project: Project } | null>(null);
+  const [moving, setMoving] = createSignal<{ chat: ChatSummary; project: Project } | null>(null);
+
+  const currentProject = () => props.projects.find((item) => item.sessions.some((chat) => chat.id === props.selectedId))
+    || props.projects.find((item) => item.id === props.projectId);
+  const currentChat = (project = currentProject()): ChatSummary | null => project?.sessions.find((item) => item.id === props.selectedId)
+    || (project && props.selectedId ? { id: props.selectedId, projectId: project.id, status: "draft" as const, title: "New chat" } : null);
 
   createEffect(() => {
     const command = props.command;
     if (!command) return;
     if (command.type === "new-folder") { setMode("managed"); setNewKind("folder"); }
     if (command.type === "new-workspace") { setMode("linked"); setNewKind("workspace"); }
+    if (command.type === "toggle-sidebar") setCollapsed((value) => !value);
     if (command.type === "delete-chat") {
-      const project = props.projects.find((item) => item.sessions.some((chat) => chat.id === props.selectedId))
-        || props.projects.find((item) => item.id === props.projectId);
-      const chat = project?.sessions.find((item) => item.id === props.selectedId)
-        || (project && props.selectedId ? { id: props.selectedId, projectId: project.id, status: "draft" as const, title: "New chat" } : null);
+      const project = currentProject();
+      const chat = currentChat(project);
       if (project && chat) setDeleting({ type: "chat", project, chat });
     }
+    if (command.type === "rename-chat") {
+      const project = currentProject();
+      const chat = currentChat(project);
+      if (project && chat) requestRenameChat(chat, project);
+    }
+    if (command.type === "move-chat") {
+      const project = currentProject();
+      const chat = currentChat(project);
+      if (project && chat) setMoving({ chat, project });
+    }
+    if (command.type === "rename-folder") { const project = currentProject(); if (project && project.slug !== "chat") requestRenameProject(project); }
+    if (command.type === "delete-project") { const project = currentProject(); if (project && project.slug !== "chat") setDeleting({ type: "project", project }); }
   });
 
   createEffect(() => localStorage.setItem("conduit.sidebar", collapsed() ? "collapsed" : "expanded"));
@@ -229,5 +246,17 @@ export function Sidebar(props: {
     <AlertModal open={Boolean(deleting())} title={deleting()?.type === "chat" ? "Delete this chat?" : deleting()?.type === "project" && deleting()!.project.origin !== "managed" ? "Unlink this workspace?" : "Delete this folder?"} description={deleting()?.type === "chat" ? "This permanently deletes the Pi session transcript and this chat's attached files." : "This removes the folder and its Conduit chats."} onClose={() => setDeleting(null)}>
       <div class="mt-4 flex justify-end gap-2"><Button variant="outline" onClick={() => setDeleting(null)}>Cancel</Button><Button variant="destructive" onClick={() => void confirmDelete()}>Delete</Button></div>
     </AlertModal>
+
+    <Modal open={Boolean(moving())} title="Move chat to folder" description={moving()?.chat.title} onClose={() => setMoving(null)}>
+      <div class="palette-move-list">
+        <For each={props.projects.filter((item) => item.id !== moving()?.project.id && item.kind !== "workspace" && item.origin !== "linked" && item.origin !== "cloned")}>
+          {(target) => <Button variant="ghost" class="palette-move-option" onClick={() => { const current = moving(); if (current) void props.onMoveChat(current.chat, current.project, target); setMoving(null); }}><FolderIcon /><span>{target.name}</span></Button>}
+        </For>
+        <Show when={!props.projects.some((item) => item.id !== moving()?.project.id && item.kind !== "workspace" && item.origin !== "linked" && item.origin !== "cloned")}>
+          <p class="text-sm text-muted-foreground">No other folders to move this chat to.</p>
+        </Show>
+      </div>
+      <div class="mt-4 flex justify-end"><Button type="button" variant="outline" onClick={() => setMoving(null)}>Cancel</Button></div>
+    </Modal>
   </>;
 }

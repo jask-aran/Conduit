@@ -10,6 +10,7 @@ import { Composer } from "./chat/composer";
 import { HostUiRequests } from "./chat/host-ui-card";
 import { Transcript } from "./chat/transcript";
 import { CommandMenu } from "./navigation/command-menu";
+import type { PaletteActions, PaletteContext } from "./palette/command-registry";
 import { Sidebar } from "./navigation/sidebar";
 import { Settings } from "./settings/settings";
 import { createActiveChat } from "./state/active-chat";
@@ -46,9 +47,12 @@ function App() {
   const [settingsSection, setSettingsSection] = createSignal<SettingsSection>("models");
   const [settingsWorkspaceId, setSettingsWorkspaceId] = createSignal<string | null>(null);
   const [paletteOpen, setPaletteOpen] = createSignal(false);
+  const [palettePage, setPalettePage] = createSignal<string | null>(null);
+  const [paletteNonce, setPaletteNonce] = createSignal(0);
   const [sidebarCommand, setSidebarCommand] = createSignal<{ type: string; nonce: number } | null>(null);
   const [dropActive, setDropActive] = createSignal(false);
   let dragDepth = 0;
+  let attachFileInput: HTMLInputElement | undefined;
 
   const showError = (message: string) => toast.error(message);
   const catalogue = createCatalogueStore();
@@ -175,19 +179,73 @@ function App() {
     setDefaultTemplateId(saved.defaultTemplateId || id);
     return saved;
   };
-  const openPaletteChat = (chatId: string) => {
-    for (const project of catalogue.projects()) {
-      const target = project.sessions.find((item) => item.id === chatId);
-      if (target) { void openChat(target, project); return; }
-    }
+  const openPalette = (page: string | null = null) => { setPalettePage(page); setPaletteNonce((value) => value + 1); setPaletteOpen(true); };
+  const runSidebar = (type: string) => setSidebarCommand({ type, nonce: Date.now() });
+
+  const lastAssistant = createMemo(() => {
+    const list = chat.messages();
+    for (let index = list.length - 1; index >= 0; index -= 1) if (list[index]!.role === "assistant") return list[index]!;
+    return undefined;
+  });
+  const lastUserEntryId = createMemo(() => {
+    const list = chat.messages();
+    for (let index = list.length - 1; index >= 0; index -= 1) { const message = list[index]!; if (message.role === "user" && !message.pending) return message.id; }
+    return null;
+  });
+  const thinkingLevels = createMemo(() => models.models().find((item) => item.spec === models.model())?.thinkingLevels ?? []);
+
+  const paletteContext = createMemo<PaletteContext>(() => ({
+    chatId: catalogue.selectedId(),
+    project: selectedProject(),
+    projects: catalogue.projects(),
+    templates: templates(),
+    templateId: chat.templateId(),
+    chatStatus: chat.status(),
+    streaming: chat.streaming(),
+    connectivity: runtime.connectivity(),
+    effort: models.effort(),
+    thinkingLevels: thinkingLevels(),
+    canRegenerate: Boolean(lastUserEntryId()) && !chat.streaming() && !chat.stopping(),
+    canContinue: partialContinue() && Boolean(lastAssistant()?.stopped) && !chat.streaming(),
+    canCopy: Boolean(lastAssistant()?.content),
+    commands: [],
+  }));
+
+  const paletteActions: PaletteActions = {
+    logout: () => { void fetch("/v0/auth/logout", { method: "POST" }).finally(() => { location.href = "/login"; }); },
+    newChat: (project, launch) => void createChat(project ?? undefined, launch ?? {}),
+    newFolder: () => runSidebar("new-folder"),
+    newWorkspace: () => runSidebar("new-workspace"),
+    openRuntimeChat: () => void createChat(undefined, { templateId: "runtime" }),
+    attach: () => attachFileInput?.click(),
+    toggleSidebar: () => runSidebar("toggle-sidebar"),
+    copyTranscript: () => { const id = catalogue.selectedId(); if (id) void copyTranscript({ id } as ChatSummary); },
+    rename: () => runSidebar("rename-chat"),
+    move: () => runSidebar("move-chat"),
+    renameFolder: () => runSidebar("rename-folder"),
+    stop: () => chat.stop(),
+    regenerate: () => { const id = lastUserEntryId(); if (id) void chat.regenerate(id); },
+    continue: () => void chat.continueResponse(),
+    copy: () => { const content = lastAssistant()?.content; if (content) void navigator.clipboard.writeText(content); },
+    retryConnection: () => runtime.retry(),
+    reload: () => location.reload(),
+    delete: () => runSidebar("delete-chat"),
+    deleteFolder: () => runSidebar("delete-project"),
+    settings: (section) => openSettings(section),
+    workspaceSettings: (id) => openSettings("workspaces", id),
+    openChat: (session, project) => void openChat(session, project),
+    chooseModel: (spec) => void models.chooseModel(spec),
+    chooseEffort: (level) => void models.chooseEffort(level),
+    setChatProfile: (id) => void switchProfile(id),
   };
 
   const keydown = (event: KeyboardEvent) => {
     if (!(event.metaKey || event.ctrlKey) || event.altKey) return;
     const key = event.key.toLowerCase();
-    if (key === "k" && !event.shiftKey) { event.preventDefault(); setPaletteOpen((value) => !value); }
-    if (key === "o" && event.shiftKey) { event.preventDefault(); setPaletteOpen(true); }
+    if (key === "k" && !event.shiftKey) { event.preventDefault(); if (paletteOpen()) setPaletteOpen(false); else openPalette(null); }
+    if (key === "o" && event.shiftKey) { event.preventDefault(); openPalette("goto"); }
     if (key === "c" && event.shiftKey) { event.preventDefault(); void createChat(); }
+    if (key === "b" && !event.shiftKey) { event.preventDefault(); runSidebar("toggle-sidebar"); }
     if (key === ",") { event.preventDefault(); openSettings("general"); }
   };
 
@@ -235,6 +293,7 @@ function App() {
 
   return <>
     <Toaster richColors />
+    <input ref={attachFileInput} type="file" multiple hidden aria-hidden="true" onChange={(event) => { if (event.currentTarget.files) attachments.addFiles(event.currentTarget.files); event.currentTarget.value = ""; }} />
     <Sidebar projects={catalogue.projects()} projectId={catalogue.projectId()} selectedId={catalogue.selectedId()} runtime={runtime}
       connectivity={runtime.connectivity()} workspaceSuggestions={workspaceSuggestions()} command={sidebarCommand()}
       onNewChat={createChat} onOpenChat={openChat} onAddProject={addProject} onRenameChat={renameChat} onRenameProject={renameProject}
@@ -247,11 +306,10 @@ function App() {
       <Show when={selectedProject()?.kind === "workspace" && [...runtime.processes().values()].some((process) => process.chatId !== catalogue.selectedId() && process.active)}><div class="workspace-warning"><TriangleAlertIcon /><div><strong>Another chat is working in this Workspace</strong><p>Both agents can edit the same files. Conduit does not lock the Workspace or create worktrees automatically.</p></div></div></Show>
       <Transcript chat={chat} partialContinue={partialContinue()} />
       <div class="composer-stack"><HostUiRequests requests={chat.hostUiRequests()} onRespond={chat.respondHostUi} />
-        <Composer chat={chat} attachments={attachments} models={models} profiles={profiles()} activeProfile={activeProfile()} serverOnline={runtime.connectivity() === "online"} onChooseProfile={(id) => void switchProfile(id)} onOpenSettings={openSettings} /></div>
+        <Composer chat={chat} attachments={attachments} models={models} profiles={profiles()} activeProfile={activeProfile()} serverOnline={runtime.connectivity() === "online"} onChooseProfile={(id) => void switchProfile(id)} onOpenSettings={openSettings} onOpenAttachments={() => attachFileInput?.click()} /></div>
     </main>
-    <CommandMenu open={paletteOpen()} onOpenChange={setPaletteOpen} projects={catalogue.projects()} models={models.models()} onSettings={openSettings}
-      onNewChat={() => void createChat()} onNewFolder={() => setSidebarCommand({ type: "new-folder", nonce: Date.now() })} onNewWorkspace={() => setSidebarCommand({ type: "new-workspace", nonce: Date.now() })}
-      onOpenChat={openPaletteChat} onChooseModel={(spec) => void models.chooseModel(spec)} onDeleteChat={() => setSidebarCommand({ type: "delete-chat", nonce: Date.now() })} />
+    <CommandMenu open={paletteOpen()} onOpenChange={setPaletteOpen} initialPage={palettePage()} launchNonce={paletteNonce()}
+      context={paletteContext()} actions={paletteActions} models={models.models()} currentModel={models.model()} onChooseModel={(spec) => void models.chooseModel(spec)} />
     <Settings open={settingsOpen()} initialSection={settingsSection()} initialWorkspaceId={settingsWorkspaceId()} onOpenChange={setSettingsOpen} models={models} templates={templates()} defaultTemplateId={defaultTemplateId()} projects={catalogue.projects()} installations={installations()} onInstallationsChange={setInstallations} onDefaultTemplateChange={saveDefaultTemplate} onWorkspaceDefaultChange={saveWorkspaceDefault} />
   </>;
 }
