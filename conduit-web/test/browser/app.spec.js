@@ -1396,18 +1396,23 @@ test("previews the latest trace activity while a turn runs and keeps it after co
         emit({ type: "message_update", generationId: "g1", assistantMessageEvent: { type: "thinking_start" } }, 20);
         emit({ type: "message_update", generationId: "g1", assistantMessageEvent: { type: "thinking_delta", delta: "Let me explore the workspace " } }, 30);
         emit({ type: "message_update", generationId: "g1", assistantMessageEvent: { type: "thinking_delta", delta: "before answering." } }, 40);
-        emit({ type: "assistant_stream_delta", generationId: "g1", delta: "Let me check the files." }, 60);
-        emit({ type: "message_end", generationId: "g1", message: { role: "assistant", stopReason: "toolUse", content: [
-          { type: "thinking", thinking: "Let me explore the workspace before answering." },
-          { type: "text", text: "Let me check the files." },
-          { type: "toolCall", id: "call_1", name: "bash", arguments: { command: "ls" } },
-        ] } }, 1000);
-        emit({ type: "tool_execution_start", generationId: "g1", toolCallId: "call_1", toolName: "bash", args: { command: "ls" } }, 1010);
-        emit({ type: "tool_execution_end", generationId: "g1", toolCallId: "call_1", toolName: "bash", isError: false }, 2200);
-        emit({ type: "message_start", generationId: "g1", message: { role: "assistant" } }, 2210);
-        emit({ type: "assistant_stream_delta", generationId: "g1", delta: "Here is what I found." }, 2220);
+        // Real bridge shape: tool execution begins without an assistant
+        // message_end carrying the completed content blocks.
+        emit({ type: "tool_execution_start", generationId: "g1", toolCallId: "call_1", toolName: "bash", args: { command: "ls" } }, 1000);
+        emit({ type: "tool_execution_start", generationId: "g1", toolCallId: "call_2", toolName: "read", args: { path: "README.md" } }, 1050);
+        emit({ type: "tool_execution_end", generationId: "g1", toolCallId: "call_1", toolName: "bash", isError: false }, 1400);
+        emit({ type: "tool_execution_end", generationId: "g1", toolCallId: "call_2", toolName: "read", isError: false }, 1450);
+        emit({ type: "message_start", generationId: "g1", message: { role: "assistant" } }, 1500);
+        emit({ type: "message_update", generationId: "g1", assistantMessageEvent: { type: "thinking_delta", delta: "Let me get more details about the project." } }, 1520);
+        emit({ type: "tool_execution_start", generationId: "g1", toolCallId: "call_3", toolName: "read", args: { path: "config.json" } }, 2000);
+        emit({ type: "tool_execution_end", generationId: "g1", toolCallId: "call_3", toolName: "read", isError: false }, 2300);
+        emit({ type: "message_start", generationId: "g1", message: { role: "assistant" } }, 2400);
+        emit({ type: "assistant_stream_delta", generationId: "g1", delta: "Here is what I found." }, 2420);
         emit({ type: "assistant_stream_final", generationId: "g1", content: "Here is what I found." }, 3200);
-        emit({ type: "agent_end", generationId: "g1", willRetry: false }, 3300);
+        setTimeout(() => {
+          window.__agentEnded = true;
+          this.onmessage?.({ data: JSON.stringify({ type: "agent_end", generationId: "g1", willRetry: false }) });
+        }, 5000);
       }
     }
     Object.defineProperty(window, "WebSocket", { configurable: true, value: MockWebSocket });
@@ -1419,26 +1424,24 @@ test("previews the latest trace activity while a turn runs and keeps it after co
   await composer.press("Enter");
 
   const header = page.locator(".turn-trace-header");
-  // While the interim segment streams, its text is the live bubble.
-  await expect(page.locator(".bubble-assistant")).toContainText("Let me check the files.", { timeout: 4000 });
-  // Once message_end marks it tool-use, the text becomes trace narration in
-  // chronological position — never a bubble and a trace copy at once.
-  await expect(header).toContainText("Let me check the files.", { timeout: 4000 });
-  await expect(header).toContainText("1 tool call", { timeout: 4000 });
-  await expect(page.locator(".bubble-assistant", { hasText: "Let me check the files." })).toHaveCount(0);
+  await expect(header).toContainText("Let me explore the workspace before answering.", { timeout: 4000 });
+  await expect(header).toContainText("2 tool calls", { timeout: 4000 });
   await expect(page.locator(".turn-trace-body")).toHaveCount(0);
+  await expect(header).toContainText("Let me get more details about the project.", { timeout: 4000 });
+  await expect(header).toContainText("1 tool call (3 total)", { timeout: 4000 });
   await expect(page.locator(".bubble-assistant")).toContainText("Here is what I found.", { timeout: 4000 });
-  await expect(page.locator(".agent-activity")).toHaveCount(0, { timeout: 4000 });
 
   await header.click();
   const body = page.locator(".turn-trace-body");
   await expect(body).toContainText("Let me explore the workspace before answering.");
-  await expect(body).toContainText("Let me check the files.");
-  await expect(body.locator(".tool-card")).toHaveCount(1);
+  await expect(body).toContainText("Let me get more details about the project.");
+  await expect(body.locator(".tool-card")).toHaveCount(3);
   const kinds = await body.evaluate((element) => [...element.children].map((child) => child.classList.contains("tool-card") ? "tool" : "text"));
-  expect(kinds).toEqual(["text", "text", "tool"]);
-  // Exactly one rendered copy of the interim text inside the trace.
-  await expect(body.getByText("Let me check the files.")).toHaveCount(1);
+  expect(kinds).toEqual(["text", "tool", "tool", "text", "tool"]);
+  // The complete chronology is already present while the final answer streams,
+  // before agent_end or a checkpoint reload can rebuild it from JSONL.
+  expect(await page.evaluate(() => Boolean(window.__agentEnded))).toBe(false);
+  await expect(page.locator(".agent-activity")).toHaveCount(0, { timeout: 6000 });
 });
 
 test("selects a chat model through the runtime-aware model route", async ({ page }) => {
