@@ -60,8 +60,7 @@ export function ChatMarkdown(props: { children?: string; streaming?: boolean; st
   let activeStreamVersion = -1;
   let streamChunks: string[] = [];
   let streamLineChunks: string[] = [];
-  let streamTail: HTMLSpanElement | null = null;
-  let streamText: Text | null = null;
+  let streamTail: HTMLDivElement | null = null;
   let fence: { character: string; length: number } | null = null;
   let displayMath = false;
   let commitAtBlankLine: boolean | null = null;
@@ -72,12 +71,18 @@ export function ChatMarkdown(props: { children?: string; streaming?: boolean; st
     root.insertBefore(renderMarkdown(source), streamTail);
   };
 
+  const renderStreamTail = () => {
+    if (!streamTail) return;
+    const source = streamChunks.join("");
+    streamTail.replaceChildren(source ? renderMarkdown(source) : document.createTextNode(""));
+  };
+
   const commitStreamBuffer = () => {
     const source = streamChunks.join("");
     if (source.trim()) appendRendered(source);
     streamChunks = [];
     commitAtBlankLine = null;
-    if (streamText) streamText.data = "";
+    renderStreamTail();
   };
 
   const finishLine = () => {
@@ -112,22 +117,25 @@ export function ChatMarkdown(props: { children?: string; streaming?: boolean; st
   };
 
   const appendStream = (delta: string) => {
-    if (!delta || !streamText) return;
+    if (!delta || !streamTail) return;
     streamLength += delta.length;
     let start = 0;
     for (let newline = delta.indexOf("\n"); newline >= 0; newline = delta.indexOf("\n", start)) {
       const segment = delta.slice(start, newline + 1);
       streamChunks.push(segment);
       streamLineChunks.push(segment);
-      streamText.appendData(segment);
       finishLine();
       start = newline + 1;
     }
     const remainder = delta.slice(start);
-    if (!remainder) return;
-    streamChunks.push(remainder);
-    streamLineChunks.push(remainder);
-    streamText.appendData(remainder);
+    if (remainder) {
+      streamChunks.push(remainder);
+      streamLineChunks.push(remainder);
+    }
+    // Reparse only the mutable tail once per batched stream update. Completed
+    // blocks remain untouched/stable, while closed Markdown inside a long list
+    // no longer sits as raw ** / backtick source until generation ends.
+    renderStreamTail();
   };
 
   const beginStream = (source: string, version: number) => {
@@ -141,11 +149,9 @@ export function ChatMarkdown(props: { children?: string; streaming?: boolean; st
     displayMath = false;
     commitAtBlankLine = null;
     streaming = true;
-    streamTail = document.createElement("span");
+    streamTail = document.createElement("div");
     streamTail.className = "markdown-stream-tail";
     streamTail.dataset.markdownStreamTail = "";
-    streamText = document.createTextNode("");
-    streamTail.append(streamText);
     root.append(streamTail);
     appendStream(source);
   };
@@ -156,7 +162,6 @@ export function ChatMarkdown(props: { children?: string; streaming?: boolean; st
     // definitions. This is the stream's single full parse.
     root.replaceChildren(renderMarkdown(source));
     streamTail = null;
-    streamText = null;
     streamChunks = [];
     streamLineChunks = [];
     renderedSource = source;
