@@ -79,11 +79,15 @@ export function buildTurnRows(
     const segments: TraceSegment[] = [];
     const claimed = new Set<string>();
     const toolById = new Map(tools.map((tool) => [tool.id, tool]));
-    const last = turn.assistants[turn.assistants.length - 1]!;
+    // The bubble is the turn's final answer: the last assistant message that was
+    // not a tool-use step. Interim (stopReason "toolUse") text joins the trace
+    // as narration in chronological position as soon as message_end lands,
+    // instead of lingering as a bubble until the next segment starts.
+    const bubble = [...turn.assistants].reverse().find((assistant) => assistant.stopReason !== "toolUse");
     for (const assistant of turn.assistants) {
       const thinking = thinkingOf(assistant);
       if (thinking) segments.push({ kind: "thinking", id: `thinking:${assistant.id}`, text: thinking });
-      if (assistant !== last && String(assistant.content || "").trim()) {
+      if (assistant !== bubble && String(assistant.content || "").trim()) {
         segments.push({ kind: "narration", id: `narration:${assistant.id}`, text: String(assistant.content) });
       }
       for (const id of toolCallIdsOf(assistant)) {
@@ -99,8 +103,8 @@ export function buildTurnRows(
       if (thinking) segments.push({ kind: "thinking", id: "thinking:live", text: thinking });
     }
     if (segments.length > 0) rows.push({ key: `trace:${turn.userMessage ? messageKey(turn.userMessage) : messageKey(turn.assistants[0]!)}`, type: "trace", value: { active: live, segments } });
-    const text = String(last.content || "").trim();
-    if (text || live) rows.push({ key: `message:${messageKey(last)}`, type: "message", value: last, index: messages.indexOf(last) });
+    const text = String(bubble?.content || "").trim();
+    if (bubble && (text || live)) rows.push({ key: `message:${messageKey(bubble)}`, type: "message", value: bubble, index: messages.indexOf(bubble) });
   });
   return rows;
 }

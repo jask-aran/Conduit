@@ -74,7 +74,6 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
             </article>
           </div>;
         }}</For>
-        <Show when={props.chat.activity()?.label && props.chat.activity()?.kind !== "idle"}><div data-slot="message-scroller-item" class="agent-activity"><Spinner /><span>{props.chat.activity()?.label}</span></div></Show>
       </div>
     </div>
     <Show when={!following}><Button class="message-scroller-button" aria-label="Scroll to latest" onClick={() => { following = true; scrollBottom(); }}>↓</Button></Show>
