@@ -139,6 +139,7 @@ function protocolMessage(value: unknown): ProtocolMessage {
     role: optionalText(source.role) || undefined,
     content: source.content,
     timestamp: optionalText(source.timestamp) || undefined,
+    stopReason: optionalText(source.stopReason) || undefined,
   };
 }
 
