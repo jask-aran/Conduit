@@ -94,7 +94,9 @@ export function MenuItem(props: ParentProps<{ class?: string; disabled?: boolean
   return <KMenu.Item disabled={props.disabled} onSelect={props.onSelect} textValue={props.textValue} data-variant={props.variant} class={cn(menuItemClass, props.class)}>{props.children}</KMenu.Item>;
 }
 export function MenuRadioItem(props: ParentProps<{ class?: string; value: string; disabled?: boolean }>) {
-  return <KMenu.RadioItem value={props.value} disabled={props.disabled} class={cn(menuItemClass, "pl-8", props.class)}><KMenu.ItemIndicator class="absolute left-2">✓</KMenu.ItemIndicator>{props.children}</KMenu.RadioItem>;
+  /* Kobalte defaults radio items to closeOnSelect=false; Conduit menus are
+     single-choice pickers, so a selection commits and closes (main parity). */
+  return <KMenu.RadioItem value={props.value} disabled={props.disabled} closeOnSelect={true} class={cn(menuItemClass, "pl-8", props.class)}><KMenu.ItemIndicator class="absolute left-2">✓</KMenu.ItemIndicator>{props.children}</KMenu.RadioItem>;
 }
 export function MenuLabel(props: ParentProps<{ class?: string }>) { return <KMenu.GroupLabel class={cn("px-1.5 py-1.5 text-xs font-medium text-muted-foreground", props.class)}>{props.children}</KMenu.GroupLabel>; }
 export function MenuSeparator() { return <KMenu.Separator class="-mx-1 my-1 h-px bg-border" />; }
@@ -110,7 +112,7 @@ export const ContextMenuSub = KContextMenu.Sub;
 export function ContextMenuSubTrigger(props: ParentProps<{ disabled?: boolean }>) { return <KContextMenu.SubTrigger disabled={props.disabled} class={cn(menuItemClass, "data-[expanded]:bg-accent")}>{props.children}<ChevronRightIcon class="menu-chevron" /></KContextMenu.SubTrigger>; }
 export function ContextMenuSubContent(props: ParentProps<{ class?: string }>) { return <KContextMenu.Portal><KContextMenu.SubContent data-slot="context-menu-sub-content" class={cn(menuSubContentClass, "pointer-events-auto", props.class)}>{props.children}</KContextMenu.SubContent></KContextMenu.Portal>; }
 export const ContextMenuRadioGroup = KContextMenu.RadioGroup;
-export function ContextMenuRadioItem(props: ParentProps<{ value: string }>) { return <KContextMenu.RadioItem value={props.value} class={cn(menuItemClass, "pl-8")}><KContextMenu.ItemIndicator class="absolute left-2">✓</KContextMenu.ItemIndicator>{props.children}</KContextMenu.RadioItem>; }
+export function ContextMenuRadioItem(props: ParentProps<{ value: string }>) { return <KContextMenu.RadioItem value={props.value} closeOnSelect={true} class={cn(menuItemClass, "pl-8")}><KContextMenu.ItemIndicator class="absolute left-2">✓</KContextMenu.ItemIndicator>{props.children}</KContextMenu.RadioItem>; }
 export function ContextMenuSeparator() { return <KContextMenu.Separator class="-mx-1 my-1 h-px bg-border" />; }
 
 export function Tooltip(props: ParentProps) { return <KTooltip.Root placement="right" openDelay={350}>{props.children}</KTooltip.Root>; }
