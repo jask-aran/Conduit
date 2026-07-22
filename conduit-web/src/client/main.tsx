@@ -100,8 +100,10 @@ function App() {
       });
 
       // Commit the visible transition only after the durable replacement exists.
-      history.replaceState({}, "", `/chat/${created.id}`);
+      // initialize() first: it resets the previous chat's live socket, and the
+      // URL must not advertise the new chat while a send could still target the old one.
       chat.initialize({ ...created, templateId: created.templateId || profileId || undefined }, project);
+      history.replaceState({}, "", `/chat/${created.id}`);
       // Show the new chat in the sidebar immediately instead of waiting for the
       // first server checkpoint refresh; drop the empty draft it replaced.
       catalogue.setProjects((current) => current.map((item) => item.id === project.id

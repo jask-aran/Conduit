@@ -231,7 +231,7 @@ export function createActiveChat(options: ActiveChatOptions) {
   };
 
   const ensureLive = async (intent = "open") => {
-    if (live() && socket?.readyState === WebSocket.OPEN) return live()!;
+    if (live() && live()!.chatId === selectedId() && socket?.readyState === WebSocket.OPEN) return live()!;
     const chatId = selectedId();
     if (!chatId) throw new Error("Chat is not ready yet");
     const selection = selectionToken;
@@ -414,6 +414,10 @@ export function createActiveChat(options: ActiveChatOptions) {
   };
 
   const initialize = (chat: ChatSummary, project: Project, detail?: TranscriptDetail) => {
+    // Drop any previous chat's live socket/record first: send() reuses an open
+    // socket without re-checking ownership, so a stale stream would carry this
+    // chat's prompts into the previous chat's Pi process.
+    reset();
     catalogue.select(chat, project);
     setStatus(chat.status);
     setTitle(chat.title);
@@ -449,7 +453,7 @@ export function createActiveChat(options: ActiveChatOptions) {
       return;
     }
 
-    if (!live() || socket?.readyState !== WebSocket.OPEN) {
+    if (!live() || live()!.chatId !== selectedId() || socket?.readyState !== WebSocket.OPEN) {
       setGeneration("submitting");
       try { await ensureLive("prompt"); } catch (error) { setGeneration("idle"); onError((error as Error).message); return; }
     }
