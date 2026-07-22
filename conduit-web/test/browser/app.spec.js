@@ -574,6 +574,11 @@ test("repairs unfinished Markdown while an assistant response streams", async ({
   await expect(page.locator(".markdown-stream-tail li")).toHaveCount(2);
   await expect(page.locator(".markdown-stream-tail strong", { hasText: "first item" })).toBeVisible();
   await expect(page.locator(".markdown-stream-tail code", { hasText: "second item" })).toBeVisible();
+  const liveListGap = await page.locator(".chat-markdown li").evaluateAll((items) => {
+    const [first, second] = items.map((item) => item.getBoundingClientRect());
+    return second.top - first.top;
+  });
+  const liveMarkdownHeight = await liveMarkdown.evaluate((element) => element.getBoundingClientRect().height);
   await expect(page.getByRole("button", { name: "the documentation" })).toHaveCount(0);
   await expect(page.locator("[data-stable-stream-node]")).toHaveCount(1);
   expect(await liveHeadingNode.evaluate((node) => node.isConnected && node === document.querySelector("[data-stable-stream-node]"))).toBe(true);
@@ -581,6 +586,13 @@ test("repairs unfinished Markdown while an assistant response streams", async ({
   await expect(page.getByRole("button", { name: "the documentation" })).toBeVisible();
   await expect(page.locator(".chat-markdown li")).toHaveCount(2);
   await expect(page.locator(".chat-markdown li").first()).toContainText("continued first item");
+  const settledListGap = await page.locator(".chat-markdown li").evaluateAll((items) => {
+    const [first, second] = items.map((item) => item.getBoundingClientRect());
+    return second.top - first.top;
+  });
+  expect(Math.abs(liveListGap - settledListGap)).toBeLessThanOrEqual(2);
+  const settledMarkdownHeight = await liveMarkdown.evaluate((element) => element.getBoundingClientRect().height);
+  expect(Math.abs(liveMarkdownHeight - settledMarkdownHeight)).toBeLessThanOrEqual(4);
   await expect(page.locator("[data-stable-stream-node]")).toHaveCount(0);
   expect(await liveHeadingNode.evaluate((node) => node.isConnected)).toBe(false);
   const canonicalHeading = page.getByRole("heading", { name: "Live response" });
