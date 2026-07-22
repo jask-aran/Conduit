@@ -12,9 +12,6 @@ import {
   MenuSeparator,
   MenuTrigger,
   Spinner,
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
 } from "@/components/primitives";
 import type { Template } from "../api/contracts";
 import type { ActiveChatStore } from "../state/active-chat";
@@ -42,6 +39,15 @@ export function Composer(props: {
   const busy = createMemo(() => props.chat.streaming());
   const hasText = createMemo(() => Boolean(props.chat.draft().trim()));
   const canSend = createMemo(() => hasText() && props.serverOnline && props.chat.generation() !== "stopping");
+  const activity = createMemo(() => props.chat.activity());
+  const contextPercent = () => Math.round((props.chat.contextUsage()?.percent || 0) * (props.chat.contextUsage()?.percent && props.chat.contextUsage()!.percent! <= 1 ? 100 : 1));
+  const contextDetail = () => {
+    const usage = props.chat.contextUsage();
+    if (!usage) return "Context unavailable";
+    if (!usage.contextWindow) return `Context ${contextPercent()}%`;
+    return `Context ${(usage.tokens || 0).toLocaleString()} / ${usage.contextWindow.toLocaleString()} · ${contextPercent()}%`;
+  };
+  const queueCount = createMemo(() => props.chat.queue().steering.length + props.chat.queue().followUp.length);
 
   const resize = () => {
     input.style.height = "auto";
@@ -128,23 +134,16 @@ export function Composer(props: {
           </Show>
         </div>
         <div class="composer-actions-right">
-          <Show when={props.chat.contextUsage()}>{(() => {
-            const percent = () => Math.round((props.chat.contextUsage()?.percent || 0) * (props.chat.contextUsage()?.percent && props.chat.contextUsage()!.percent! <= 1 ? 100 : 1));
-            const detail = () => {
-              const usage = props.chat.contextUsage();
-              if (!usage?.contextWindow) return `${percent()}% of context used`;
-              return `${(usage.tokens || 0).toLocaleString()} of ${usage.contextWindow.toLocaleString()} tokens (${percent()}%)`;
-            };
-            return <Tooltip>
-              <TooltipTrigger as="span" class="context-ring" aria-label={`Context usage: ${detail()}`}>{percent()}%</TooltipTrigger>
-              <TooltipContent>{detail()}</TooltipContent>
-            </Tooltip>;
-          })()}</Show>
           <Show when={busy()}><Button variant={hasText() ? "outline" : "default"} size="icon-sm" aria-label="Stop response" onClick={props.chat.stop}><Show when={props.chat.stopping()} fallback={<SquareIcon />}><Spinner /></Show></Button></Show>
           <Show when={busy() && hasText()}><Button variant="outline" size="icon-sm" aria-label="Steer after tools" onClick={() => void props.chat.send("steer")}><WaypointsIcon /></Button></Show>
           <Button size="icon-sm" aria-label={busy() ? "Queue follow-up" : "Send message"} disabled={!canSend()} onClick={() => void props.chat.send()}><Show when={props.chat.generation() === "submitting"} fallback={<ArrowUpIcon />}><Spinner /></Show></Button>
         </div>
       </div>
+    </div>
+    <div class="agent-activity composer-status" role="status" aria-live="polite">
+      <span class="composer-status-state"><Show when={activity()?.kind && activity()?.kind !== "idle"}><Spinner /></Show>{activity()?.label || "Ready"}</span>
+      <span class="composer-status-segment">{contextDetail()}</span>
+      <Show when={queueCount()}><span class="composer-status-segment">Queue {queueCount()}</span></Show>
     </div>
   </div>;
 }

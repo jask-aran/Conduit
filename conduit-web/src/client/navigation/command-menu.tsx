@@ -4,7 +4,7 @@ import * as KDialog from "@kobalte/core/dialog";
 import {
   ArrowLeftIcon, BrainIcon, ChevronRightIcon, CopyIcon, FileInputIcon, FilePlus2Icon,
   FolderInputIcon, FolderPlusIcon, LayersIcon, LogOutIcon, MessageSquareIcon,
-  MessageSquarePlusIcon, PanelLeftIcon, PencilIcon, PlayIcon, RefreshCwIcon, SettingsIcon,
+  MessageSquarePlusIcon, PanelLeftIcon, PanelRightIcon, PencilIcon, PlayIcon, RefreshCwIcon, SettingsIcon,
   SlashIcon, SlidersHorizontalIcon, SquareIcon, TerminalIcon, Trash2Icon,
 } from "lucide-solid";
 import type { ModelOption } from "../api/contracts";
@@ -30,6 +30,7 @@ const icons: Record<string, (props: { class?: string }) => JSX.Element> = {
   "copy-transcript": FileInputIcon,
   delete: Trash2Icon,
   sidebar: PanelLeftIcon,
+  "workspace-panel": PanelRightIcon,
   chat: MessageSquareIcon,
   thinking: BrainIcon,
   retry: RefreshCwIcon,
