@@ -41,12 +41,12 @@ marked.use({
   },
 });
 
-function renderMarkdown(source: string) {
-  const html = marked.parse(source, { async: false }) as string;
+function renderMarkdown(source: string, inline = false) {
+  const html = (inline ? marked.parseInline(source, { async: false }) : marked.parse(source, { async: false })) as string;
   return DOMPurify.sanitize(html, {
     USE_PROFILES: { html: true },
     ADD_ATTR: ["aria-label", "data-copy-code", "data-external-url", "data-language", "data-markdown", "class"],
-    FORBID_TAGS: ["img", "script", "style", "iframe", "object", "embed"],
+    FORBID_TAGS: ["img", "script", "style", "iframe", "object", "embed", ...(inline ? ["a", "button"] : [])],
     RETURN_DOM_FRAGMENT: true,
   }) as DocumentFragment;
 }
@@ -92,7 +92,7 @@ function reconcileChildren(current: Node, next: Node) {
   while (current.childNodes.length > next.childNodes.length) current.lastChild?.remove();
 }
 
-export function ChatMarkdown(props: { children?: string; streaming?: boolean; streamVersion?: number }) {
+export function ChatMarkdown(props: { children?: string; streaming?: boolean; streamVersion?: number; inline?: boolean }) {
   let root!: HTMLDivElement;
   const [externalUrl, setExternalUrl] = createSignal<string | null>(null);
   let externalReturnFocus: HTMLElement | null = null;
@@ -103,7 +103,7 @@ export function ChatMarkdown(props: { children?: string; streaming?: boolean; st
     const source = String(props.children || "");
     const version = Number(props.streamVersion || 0);
     if (source === renderedSource && version === renderedVersion) return;
-    reconcileChildren(root, renderMarkdown(source));
+    reconcileChildren(root, renderMarkdown(source, props.inline));
     renderedSource = source;
     renderedVersion = version;
   });

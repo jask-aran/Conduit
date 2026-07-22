@@ -161,6 +161,19 @@ test.beforeEach(async ({ page }) => {
   await page.route("**/v0/chats/*/attachments", async (route) => {
     await route.fulfill({ json: { attachments: [] } });
   });
+  await page.route("**/v0/projects/*/tree?*", async (route) => {
+    const directory = new URL(route.request().url()).searchParams.get("path") || "";
+    await route.fulfill({ json: { path: directory, entries: directory === "src"
+      ? [{ name: "main.ts", path: "src/main.ts", type: "file" }]
+      : [{ name: "src", path: "src", type: "directory" }, { name: "README.md", path: "README.md", type: "file" }] } });
+  });
+  await page.route("**/v0/projects/*/file?*", async (route) => {
+    const file = new URL(route.request().url()).searchParams.get("path");
+    await route.fulfill({ json: { path: file, size: 31, content: "export function startConduit() {}\n" } });
+  });
+  await page.route("**/v0/projects/*/diff", async (route) => {
+    await route.fulfill({ json: { repository: true, branch: "agent/rhs-panel-mvp", upstream: "origin/agent/rhs-panel-mvp", ahead: 2, behind: 0, commits: [{ graph: "*", hash: "1234567890abcdef", shortHash: "1234567", subject: "Add workspace panel", author: "Conduit", authoredAt: "2026-07-22T10:00:00Z" }], files: [{ status: " M", path: "src/main.ts" }], diff: "# Working tree\n@@ -1 +1 @@\n-old\n+new\n" } });
+  });
   await page.route("**/v0/chats/*?ifEmpty=true", async (route) => {
     await route.fulfill({ status: 204, body: "" });
   });
@@ -238,6 +251,31 @@ test.beforeEach(async ({ page }) => {
   await page.route("**/v0/live-sessions", async (route) => {
     await route.fulfill({ json: { id: "live_existing", streamUrl: "/v0/live-sessions/live_existing/stream" } });
   });
+});
+
+test("workspace panel previews files, shows diff, and persists per chat", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: "Toggle workspace panel" }).click();
+  const panel = page.getByRole("complementary", { name: "Workspace panel" });
+  await expect(panel).toBeVisible();
+  await panel.getByRole("button", { name: "src" }).click();
+  await panel.getByRole("button", { name: "main.ts" }).click();
+  await expect(panel.getByText("export function startConduit() {}" )).toBeVisible();
+  await panel.getByRole("tab", { name: "Diff" }).click();
+  await expect(panel.getByText("1 changed file")).toBeVisible();
+  await expect(panel.getByText("src/main.ts")).toBeVisible();
+  await expect(panel.getByText("agent/rhs-panel-mvp", { exact: true })).toBeVisible();
+  await expect(panel.getByText("Add workspace panel")).toBeVisible();
+  await panel.getByRole("tab", { name: "Artifacts" }).click();
+  await expect(panel.getByText("No artifacts in the loaded transcript")).toBeVisible();
+  await panel.getByRole("radio", { name: "Interactive UI" }).click();
+  await expect(panel.getByText("Interactive artifacts are not enabled")).toBeVisible();
+  await panel.getByRole("tab", { name: "Diff" }).click();
+  await page.reload();
+  await expect(page.getByRole("complementary", { name: "Workspace panel" })).toBeVisible();
+  await expect(page.getByRole("tab", { name: "Diff" })).toHaveAttribute("aria-selected", "true");
+  await page.keyboard.press(process.platform === "darwin" ? "Meta+." : "Control+.");
+  await expect(page.getByRole("complementary", { name: "Workspace panel" })).toHaveCount(0);
 });
 
 test.afterEach(async ({ page }) => {
@@ -937,7 +975,6 @@ test("hides transient new chats and provides complete right-click menus", async 
 test("uses compact sidebar groups and preserves collapse without a brand icon", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "desktop-chromium");
   await page.goto("/");
-
   const sidebar = page.locator('[data-slot="sidebar"][data-state]');
   const main = page.locator('[data-slot="sidebar-inset"]');
   const mainBox = await main.boundingBox();
@@ -948,10 +985,13 @@ test("uses compact sidebar groups and preserves collapse without a brand icon", 
   await expect(page.locator('[data-sidebar="footer"]').getByRole("button", { name: /Conduit/ })).toBeVisible();
   await expect(page.locator('[data-sidebar="footer"]')).toContainText(/Server connected|Connecting|Reconnecting|unavailable/);
   await expect(page.locator('[data-sidebar="group-label"]')).toHaveText(["Chats", "Projects", "Workspaces"]);
-  await expect(page.locator('[data-sidebar="group-label"]').first()).toHaveCSS("font-size", "11px");
+  await expect(page.locator('[data-sidebar="group-label"]').first()).toHaveCSS("font-size", "12px");
+  await expect(page.locator('[data-sidebar="group-label"]').first()).toHaveCSS("font-weight", "700");
   await expect(page.getByRole("button", { name: "Existing chat" })).toHaveCSS("font-size", "13px");
-  await expect(page.locator('[data-sidebar="header"] span', { hasText: "Conduit" })).toHaveCSS("font-size", "30px");
+  await expect(page.locator('[data-sidebar="header"] span', { hasText: "Conduit" })).toHaveCSS("font-size", "32px");
   await expect(page.locator('[data-sidebar="header"] svg')).toHaveCount(0);
+  await expect(page.locator(".server-status-dot")).toHaveCSS("width", "24px");
+  await expect(page.locator(".server-status-dot")).toHaveCSS("border-radius", "999px");
 
   await expect(page.getByRole("button", { name: "Existing chat" })).toBeVisible();
   await expect(page.locator('[data-sidebar="rail"]')).toHaveCount(1);
@@ -995,6 +1035,17 @@ test("keeps linked workspaces in their own sidebar group", async ({ page }, test
   });
   await page.goto("/");
   await openSidebar(page, testInfo);
+  if (testInfo.project.name === "mobile-chromium") {
+    const drawer = page.locator(".conduit-sidebar");
+    await expect(drawer).toHaveCSS("position", "fixed");
+    await expect(drawer).toHaveCSS("width", `${await page.evaluate(() => innerWidth)}px`);
+    await expect(drawer).not.toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+    await expect(drawer.locator(".sidebar-container")).not.toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+    const [drawerBox, firstLabelBox] = await Promise.all([drawer.boundingBox(), drawer.locator('[data-sidebar="group-label"]').first().boundingBox()]);
+    expect(firstLabelBox.x).toBeGreaterThanOrEqual(drawerBox.x);
+    await expect(page.locator(".mobile-sidebar-trigger")).toHaveAttribute("data-mobile-open", "true");
+    await expect(drawer.locator('[data-sidebar="header"] button')).toHaveCSS("justify-content", "flex-start");
+  }
   await expect(page.locator('[data-sidebar="group-label"]')).toHaveText(["Chats", "Projects", "Workspaces"]);
   await expect(page.getByRole("button", { name: "JaskFish" })).toBeVisible();
   await expect(page.getByRole("button", { name: "New workspace" })).toBeVisible();
@@ -1377,7 +1428,7 @@ test("collapses a turn's thinking, narration, and tools into one trace", async (
           { type: "toolCall", id: "call_2", name: "read", arguments: { path: "README.md" } },
         ] },
         { id: "a3", role: "assistant", content: "This repo is an analytics project.", timestamp: "2026-07-22T01:58:09.000Z", blocks: [
-          { type: "thinking", thinking: "Time to summarize." },
+          { type: "thinking", thinking: "Time to **summarize**." },
           { type: "text", text: "This repo is an analytics project." },
         ] },
       ],
@@ -1396,6 +1447,8 @@ test("collapses a turn's thinking, narration, and tools into one trace", async (
   const trace = page.locator(".turn-trace");
   await expect(trace.locator(".turn-trace-header")).toContainText("Time to summarize.");
   await expect(trace.locator(".turn-trace-header")).toContainText("2 tool calls");
+  await expect(trace.locator(".turn-trace-preview strong")).toHaveText("summarize");
+  await expect(trace.locator(".turn-trace-preview")).not.toContainText("**");
   await expect(trace.locator(".turn-trace-body")).toHaveCount(0);
   await expect(page.locator(".bubble-assistant")).toHaveCount(1);
   await expect(page.locator(".bubble-assistant")).toContainText("This repo is an analytics project.");
@@ -1475,7 +1528,7 @@ test("previews the latest trace activity while a turn runs and keeps it after co
   // The complete chronology is already present while the final answer streams,
   // before agent_end or a checkpoint reload can rebuild it from JSONL.
   expect(await page.evaluate(() => Boolean(window.__agentEnded))).toBe(false);
-  await expect(page.locator(".agent-activity")).toHaveCount(0, { timeout: 6000 });
+  await expect(page.locator(".agent-activity")).toContainText("Ready", { timeout: 6000 });
 });
 
 test("selects a chat model through the runtime-aware model route", async ({ page }) => {
@@ -1787,6 +1840,14 @@ test("global commands and slash suggestions preserve their intended focus models
   await page.keyboard.press("Control+k");
   const palette = page.getByRole("dialog", { name: "Command Palette" });
   await expect(palette).toBeVisible();
+  const [paletteBox, viewport] = await Promise.all([palette.locator(".command-shell").boundingBox(), page.evaluate(() => ({ width: innerWidth, height: innerHeight }))]);
+  // Mobile Chromium reserves a fractional scrollbar gutter, producing at most
+  // a two-device-pixel rounding difference from the visual viewport center.
+  expect(Math.abs(paletteBox.x + paletteBox.width / 2 - viewport.width / 2)).toBeLessThanOrEqual(2);
+  expect(Math.abs(paletteBox.y + paletteBox.height / 2 - viewport.height / 2)).toBeLessThanOrEqual(2);
+  const [statusBox, composerBox] = await Promise.all([page.locator(".composer-status").boundingBox(), page.locator(".composer").boundingBox()]);
+  expect(statusBox.width).toBe(composerBox.width);
+  await expect(page.locator(".composer-status")).toContainText(/Ready|Responding|Thinking/);
   await expect(palette.getByRole("combobox", { name: "Search commands" })).toHaveAttribute("aria-expanded", "true");
   await expect(page.locator("#root")).toHaveAttribute("aria-hidden", "true");
   await page.keyboard.press("Escape");

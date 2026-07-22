@@ -139,7 +139,9 @@ Markdown client-side through Marked, DOMPurify, and KaTeX; fenced code uses
 bounded Artifact cards. Streaming relays raw deltas coalesced per animation
 frame, parses and sanitizes the canonical document, and reconciles it into the
 existing DOM so semantic nodes remain stable as unfinished syntax takes shape.
-Cmd/Ctrl+K opens the command palette; Settings is a centered
+Cmd/Ctrl+K opens the command palette; Cmd/Ctrl+. opens a read-only Workspace
+panel with a resizable lazy file tree, Git history/working-tree context, and an
+Artifacts boundary for transcript outputs and future interactive UI; Settings is a centered
 tabbed dialog; response controls cover copy, fork/edit, regenerate, stop, and
 experimental partial continue (`ENABLE_PARTIAL_CONTINUE`). Production builds
 enforce gzip bundle budgets (`dist/bundle-report.json`). Composition rules
