@@ -55,11 +55,22 @@ export interface Attachment {
   error?: string;
 }
 
+export interface ContentBlock {
+  type: string;
+  id?: string;
+  text?: string;
+  thinking?: string;
+  name?: string;
+  arguments?: unknown;
+}
+
 export interface Message {
   id: string;
   key?: string;
   role: "user" | "assistant" | "system" | "tool";
   content?: string;
+  /** Raw Pi content blocks (text / thinking / toolCall) — source of persisted reasoning. */
+  blocks?: ContentBlock[];
   timestamp?: string;
   stopped?: boolean;
   status?: string | null;

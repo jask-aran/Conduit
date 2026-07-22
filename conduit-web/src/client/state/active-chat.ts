@@ -330,6 +330,8 @@ export function createActiveChat(options: ActiveChatOptions) {
       case "message_start":
         if (event.message.role === "assistant" && !continuation) {
           setMessages((current) => [...current, { id: `live_${Date.now()}`, role: "assistant", content: "", timestamp: new Date().toISOString() }]);
+          // Reasoning accumulates per assistant segment; a new segment starts fresh.
+          setReasoning({ content: "", active: false, redacted: false });
         }
         break;
       case "message_update":
@@ -366,6 +368,19 @@ export function createActiveChat(options: ActiveChatOptions) {
         if (event.message.role === "user") {
           void catalogue.refresh();
           setMessages((current) => promotePendingUser(current, event.message));
+        }
+        if (event.message.role === "assistant") {
+          // Persist the segment's content blocks (thinking + toolCall refs) so the
+          // turn trace keeps them after the live reasoning signal resets.
+          const blocks = (Array.isArray(event.message.content) ? event.message.content : []) as Message["blocks"];
+          const text = (blocks || []).filter((block) => block.type === "text").map((block) => block.text || "").join("\n").trim();
+          setMessages((current) => {
+            const copy = [...current];
+            const index = lastIndex(copy, (message) => message.role === "assistant");
+            if (index < 0) return current;
+            copy[index] = { ...copy[index]!, blocks, ...(text ? { content: text } : {}) };
+            return copy;
+          });
         }
         break;
       case "tool_execution_start":
