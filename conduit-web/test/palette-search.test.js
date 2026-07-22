@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { rankPaletteResults, scorePaletteMatch } from "../src/client/palette-search.js";
+import { rankPaletteResults, scorePaletteMatch } from "../src/client/palette/palette-search.ts";
 
 test("label word and prefix matches beat weak fuzzy noise", () => {
   assert.ok(scorePaletteMatch({ label: "GPT-5.6 Sol", haystack: "openai/gpt-5.6-sol", query: "sol" }) >= 0.9);
