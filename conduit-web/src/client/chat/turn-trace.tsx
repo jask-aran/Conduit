@@ -9,7 +9,7 @@ const ChatMarkdown = lazy(() => import("./markdown").then((module) => ({ default
     preview doesn't flicker between tool names, with tool counters beside it —
     calls since that text, plus the turn total when they differ ("3 tool calls
     (5 total)"). Falls back to a neutral label before any text exists. */
-function previewOf(trace: TurnTraceData): string {
+function previewOf(trace: TurnTraceData): { text: string; counters: string } {
   let latestText: string | null = null;
   let callsAfterText = 0;
   let totalCalls = 0;
@@ -21,10 +21,10 @@ function previewOf(trace: TurnTraceData): string {
   const counters = totalCalls > 0
     ? `${shown} tool call${shown === 1 ? "" : "s"}${totalCalls > shown ? ` (${totalCalls} total)` : ""}`
     : "";
-  if (!latestText) return [trace.active ? "Thinking…" : "Thinking process", counters].filter(Boolean).join(" · ");
+  if (!latestText) return { text: trace.active ? "Thinking…" : "Thinking process", counters };
   const text = latestText.replace(/\s+/g, " ").trim();
   const clipped = text.length > 120 ? `…${text.slice(-120)}` : text;
-  return [clipped, counters].filter(Boolean).join(" · ");
+  return { text: clipped, counters };
 }
 
 export function TurnTrace(props: { trace: TurnTraceData; sessionId: string | null }) {
@@ -32,7 +32,10 @@ export function TurnTrace(props: { trace: TurnTraceData; sessionId: string | nul
   return <div class="turn-trace" data-active={props.trace.active ? "true" : "false"}>
     <button type="button" class="turn-trace-header" aria-expanded={open()} onClick={() => setOpen(!open())}>
       <BrainIcon />
-      <span class="turn-trace-preview">{previewOf(props.trace)}</span>
+      <div class="turn-trace-preview">
+        <Suspense fallback={<span>{previewOf(props.trace).text}</span>}><ChatMarkdown inline>{previewOf(props.trace).text}</ChatMarkdown></Suspense>
+        <Show when={previewOf(props.trace).counters}><span class="turn-trace-counter"> · {previewOf(props.trace).counters}</span></Show>
+      </div>
       <ChevronDownIcon class="turn-trace-chevron" data-open={open() ? "true" : "false"} />
     </button>
     <Show when={open()}>
