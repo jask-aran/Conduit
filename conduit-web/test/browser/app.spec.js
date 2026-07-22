@@ -1261,6 +1261,61 @@ test("shows a newly created chat in the sidebar immediately", async ({ page }, t
   await expect(page.locator(".sidebar-chat", { hasText: "New chat" })).toBeVisible();
 });
 
+test("a prompt sent from a brand-new chat never travels over the previous chat's live stream", async ({ page }, testInfo) => {
+  const livePosts = [];
+  await page.addInitScript(() => {
+    class RecordingWebSocket extends EventTarget {
+      static instances = [];
+      constructor(url) {
+        super();
+        this.url = url;
+        this.readyState = 0;
+        this.sent = [];
+        RecordingWebSocket.instances.push(this);
+        queueMicrotask(() => { this.readyState = 1; this.dispatchEvent(new Event("open")); });
+      }
+      send(payload) { this.sent.push(JSON.parse(payload)); }
+      close() { this.readyState = 3; this.dispatchEvent(new Event("close")); }
+    }
+    Object.defineProperty(window, "WebSocket", { configurable: true, value: RecordingWebSocket });
+    Object.defineProperty(window, "__wsInstances", { configurable: true, get: () => RecordingWebSocket.instances });
+  });
+  await page.route("**/v0/live-sessions", async (route) => {
+    if (route.request().method() === "POST") {
+      const body = route.request().postDataJSON();
+      livePosts.push(body);
+      const id = `live_${livePosts.length}`;
+      return route.fulfill({ status: 201, json: { id, chatId: body.chatId, streamUrl: `/v0/live-sessions/${id}/stream` } });
+    }
+    return route.fulfill({ json: { sessions: [] } });
+  });
+
+  await page.goto("/");
+  await openSidebar(page, testInfo);
+  await page.getByRole("button", { name: "Existing chat" }).click();
+  await expect.poll(() => livePosts.length).toBe(1);
+
+  await openSidebar(page, testInfo);
+  await page.getByRole("button", { name: "New chat" }).click();
+  await page.waitForURL(/\/chat\/550e8400-e29b-41d4-a716-446655440099/);
+  const composer = page.getByRole("textbox", { name: "Message Pi" });
+  await expect(composer).toBeEditable();
+  await composer.fill("hello");
+  await expect(composer).toHaveValue("hello");
+  await composer.press("Enter");
+  await expect.poll(() => livePosts.length).toBe(2);
+
+  expect(livePosts[0].chatId).toBe("session_existing");
+  expect(livePosts[1].chatId).toBe("550e8400-e29b-41d4-a716-446655440099");
+  const readPromptFrames = () => page.evaluate(() => window.__wsInstances
+    .filter((socket) => socket.url.includes("/v0/live-sessions/"))
+    .flatMap((socket) => socket.sent.filter((frame) => frame.type === "prompt").map((frame) => ({ url: socket.url, frame }))));
+  await expect.poll(async () => (await readPromptFrames()).length).toBe(1);
+  const promptFrames = await readPromptFrames();
+  expect(promptFrames[0].frame.message).toBe("hello");
+  expect(promptFrames[0].url.endsWith("/live_2/stream")).toBe(true);
+});
+
 test("selects a chat model through the runtime-aware model route", async ({ page }) => {
   const settingsRequest = page.waitForRequest((request) =>
     /\/v0\/chats\/[^/]+\/models$/.test(new URL(request.url()).pathname) && request.method() === "PATCH");

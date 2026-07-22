@@ -185,6 +185,7 @@ export interface RuntimeProcess {
 
 export interface LiveRecord {
   id: string;
+  chatId?: string;
   streamUrl?: string;
   runtime?: RuntimeIdentity;
   contextUsage?: ContextUsage;
