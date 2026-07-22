@@ -36,6 +36,7 @@ import {
   validateSession,
 } from "./auth-middleware.js";
 import { renderLoginPage } from "./auth-login-page.js";
+import { listWorkspaceDirectory, readWorkspaceDiff, readWorkspaceFile } from "./workspace-inspector.js";
 
 const config = loadConfig();
 const projects = new ProjectStore(config);
@@ -706,6 +707,34 @@ app.patch("/v0/projects/:id", async (request, response, next) => {
   } catch (error) { next(error); }
 });
 
+app.get("/v0/projects/:id/tree", async (request, response, next) => {
+  try {
+    const project = await projects.get(request.params.id);
+    if (!project) return response.status(404).json({ error: "project_not_found" });
+    await projects.validate(project);
+    response.json({ path: String(request.query.path || ""), entries: await listWorkspaceDirectory(project.path, request.query.path) });
+  } catch (error) { next(error); }
+});
+
+app.get("/v0/projects/:id/file", async (request, response, next) => {
+  try {
+    const project = await projects.get(request.params.id);
+    if (!project) return response.status(404).json({ error: "project_not_found" });
+    if (!request.query.path) return response.status(400).json({ error: "workspace_path_required" });
+    await projects.validate(project);
+    response.json(await readWorkspaceFile(project.path, request.query.path));
+  } catch (error) { next(error); }
+});
+
+app.get("/v0/projects/:id/diff", async (request, response, next) => {
+  try {
+    const project = await projects.get(request.params.id);
+    if (!project) return response.status(404).json({ error: "project_not_found" });
+    await projects.validate(project);
+    response.json(await readWorkspaceDiff(project.path));
+  } catch (error) { next(error); }
+});
+
 app.post("/v0/projects/:id/move-sessions", async (request, response, next) => {
   try {
     const source = await projects.get(request.params.id);
@@ -1132,7 +1161,12 @@ app.post("/v0/live-sessions", async (request, response, next) => {
     if (context.chat.piSessionFile) {
       try { await validateSessionFile(context.chat.piSessionFile, context.project); }
       catch (error) {
-        return response.status(409).json({ error: "session_file_unavailable", message: error.message });
+        // A mapping to a file that no longer exists is a stale reference (e.g. a
+        // chat left over from a failed launch), not an integrity error. Drop it
+        // and start a fresh session rather than dead-ending the send. Genuine
+        // integrity problems (bad mapping, cwd mismatch) still surface as 409.
+        if (error.code === "ENOENT") context.chat.piSessionFile = null;
+        else return response.status(409).json({ error: "session_file_unavailable", message: error.message });
       }
     }
     if (runtime.kind === "native_pi") {
@@ -1266,6 +1300,13 @@ app.use((error, _request, response, _next) => {
       "unknown_template",
       "unknown_runtime_kind",
       "native_pi_requires_workspace",
+      "invalid_workspace_path",
+      "hidden_workspace_path",
+      "workspace_path_symlink",
+      "workspace_path_required",
+      "path_not_file",
+      "file_too_large",
+      "file_not_text",
     ].includes(error.code)
     || error.message?.includes("Project names")) status = 400;
   response.status(status).json({
@@ -1361,8 +1402,14 @@ server.on("upgrade", async (request, socket, head) => {
   const match = new URL(request.url, "http://localhost").pathname.match(/^\/v0\/live-sessions\/([a-f0-9]{24})\/stream$/);
   if (!match || !manager.get(match[1])) return socket.destroy();
   try {
-    const context = await validateSession(authStore, request);
-    if (!context) return socket.destroy();
+    // Mirror the HTTP auth middleware: with no password configured, Conduit runs
+    // fully open (local mode), so the live-session upgrade must not demand a
+    // session cookie the open app never issues. Upgrades bypass Express, so this
+    // bypass has to be repeated here or every generation stream is destroyed.
+    if (authStore.hasPassword()) {
+      const context = await validateSession(authStore, request);
+      if (!context) return socket.destroy();
+    }
   } catch (error) {
     console.error("WebSocket session validation failed", error);
     return socket.destroy();
