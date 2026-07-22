@@ -36,6 +36,7 @@ import {
   MenuContent,
   MenuItem,
   MenuTrigger,
+  Spinner,
 } from "@/components/primitives";
 import type { ChatSummary, Project, RuntimeProcess, WorkspaceSuggestion } from "../api/contracts";
 import type { RuntimeStore } from "../state/runtime";
@@ -208,7 +209,7 @@ export function Sidebar(props: {
   const ChatMenu = (menuProps: { chat: ChatSummary; project: Project }) => <ContextMenu>
     <ContextMenuTrigger as="button" class="sidebar-row sidebar-chat" aria-current={props.selectedId === menuProps.chat.id ? "page" : undefined} onClick={() => { closeMobile(); void props.onOpenChat(menuProps.chat, menuProps.project); }}>
       <RuntimeIndicator process={processFor(menuProps.chat)} stale={props.runtime.stale()} />
-      <span>{menuProps.chat.title}</span>
+      <span>{menuProps.chat.title || "New chat"}</span>
     </ContextMenuTrigger>
     <ContextMenuContent class="w-60 sidebar-context-menu">
       <ContextMenuGroup>
@@ -281,25 +282,28 @@ export function Sidebar(props: {
       </Show>
     </div>
     <Show when={groupProps.chatRoot}>
-      <For each={groupProps.chatRoot!.sessions.filter((chat) => chat.status !== "draft" || chat.id !== props.selectedId)}>{(chat) => <ChatMenu chat={chat} project={groupProps.chatRoot!} />}</For>
+      {/* Hide the transient auto-created draft while it's selected; keep
+          explicitly created (pinned) drafts and any chat with a live process. */}
+      <For each={groupProps.chatRoot!.sessions.filter((chat) => chat.status !== "draft" || chat.id !== props.selectedId || chat.pinned || Boolean(props.runtime.getProcess(chat.id)))}>{(chat) => <ChatMenu chat={chat} project={groupProps.chatRoot!} />}</For>
     </Show>
     <For each={groupProps.projects}>{(project) => <ProjectBlock project={project} workspace={groupProps.workspace} />}</For>
     <Show when={!groupProps.chatRoot && !groupProps.projects.length && groupProps.emptyLabel}><div class="sidebar-empty">{groupProps.emptyLabel}</div></Show>
   </section>;
 
   const connectionLabel = () => props.connectivity === "online" ? "Server connected" : props.connectivity === "offline" ? "Server unavailable" : props.connectivity === "reconnecting" ? "Reconnecting" : "Connecting";
+  const connectionTone = () => props.connectivity === "online" ? "success" : props.connectivity === "offline" ? "danger" : props.connectivity === "reconnecting" ? "warn" : "muted";
 
   return <>
     <Button variant="ghost" size="icon" class="mobile-sidebar-trigger" aria-label="Toggle Sidebar" onClick={() => setMobileOpen((value) => !value)}><PanelLeftIcon /></Button>
     <aside data-slot="sidebar" data-state={collapsed() ? "collapsed" : "expanded"} data-mobile-open={mobileOpen()} class="conduit-sidebar">
       <div data-slot="sidebar-container" class="sidebar-container">
-        <div data-sidebar="header"><button aria-label="Conduit" onClick={() => chats() && void props.onNewChat(chats()!)}><CableIcon /><span>Conduit</span></button></div>
+        <div data-sidebar="header"><button aria-label="Conduit" onClick={() => chats() && void props.onNewChat(chats()!)}><span class="brand-icon"><CableIcon /></span><span>Conduit</span></button></div>
         <div data-sidebar="content" class="sidebar-content">
           <Group label="Chats" projects={[]} chatRoot={chats()} addLabel="New chat" onAdd={() => chats() && void props.onNewChat(chats()!)} />
           <Group label="Projects" projects={folders()} emptyLabel="No projects" addLabel="New folder" onAdd={() => openNewDialog("folder")} />
           <Group label="Workspaces" projects={workspaces()} workspace emptyLabel="No workspaces" addLabel="New workspace" onAdd={() => openNewDialog("workspace")} />
         </div>
-        <div data-sidebar="footer"><Menu><MenuTrigger class="sidebar-user"><CableIcon /><span><strong>Conduit</strong><small>{connectionLabel()}</small></span></MenuTrigger><MenuContent>
+        <div data-sidebar="footer"><Menu><MenuTrigger class="sidebar-user"><CableIcon /><span><strong>Conduit</strong><small>{connectionLabel()}</small></span><span class={`server-status-dot server-status-${connectionTone()}`} aria-hidden="true"><Show when={props.connectivity === "connecting" || props.connectivity === "reconnecting"} fallback={<span class="server-status-mark" />}><Spinner class="size-3" /></Show></span></MenuTrigger><MenuContent>
           <MenuItem onSelect={() => { closeMobile(); props.onOpenSettings("models"); }}>Manage settings</MenuItem>
           <MenuItem onSelect={() => { closeMobile(); props.onOpenPalette(); }}>Command Palette</MenuItem>
           <MenuItem onSelect={() => fetch("/v0/auth/logout", { method: "POST" }).finally(() => { location.href = "/login"; })}>Sign out</MenuItem>
