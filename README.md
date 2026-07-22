@@ -137,8 +137,9 @@ selectively for accessible menus and context menus. Concrete app components
 replace the former generic component catalogue. Transcripts render assistant
 Markdown client-side through Marked, DOMPurify, and KaTeX; fenced code uses
 bounded Artifact cards. Streaming relays raw deltas coalesced per animation
-frame, parses and sanitizes completed blocks once, and mutates only the
-unfinished text tail. Cmd/Ctrl+K opens the command palette; Settings is a centered
+frame, parses and sanitizes the canonical document, and reconciles it into the
+existing DOM so semantic nodes remain stable as unfinished syntax takes shape.
+Cmd/Ctrl+K opens the command palette; Settings is a centered
 tabbed dialog; response controls cover copy, fork/edit, regenerate, stop, and
 experimental partial continue (`ENABLE_PARTIAL_CONTINUE`). Production builds
 enforce gzip bundle budgets (`dist/bundle-report.json`). Composition rules

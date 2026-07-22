@@ -35,6 +35,8 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
     const loaded = props.chat.loadedId();
     props.chat.messages().length;
     props.chat.liveStream.content();
+    props.chat.reasoning().content;
+    props.chat.tools();
     if (loaded !== previousLoaded) { previousLoaded = loaded; following = true; scrollBottom(); }
     else if (following) scrollBottom();
   });

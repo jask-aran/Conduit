@@ -571,9 +571,9 @@ test("repairs unfinished Markdown while an assistant response streams", async ({
   await expect(page.locator('[data-language="javascript"] button[aria-label="Copy code"]')).toBeVisible();
   await expect(page.locator(".katex-display")).toBeVisible();
   await expect(liveMarkdown).toContainText("continued first item");
-  await expect(page.locator(".markdown-stream-tail li")).toHaveCount(2);
-  await expect(page.locator(".markdown-stream-tail strong", { hasText: "first item" })).toBeVisible();
-  await expect(page.locator(".markdown-stream-tail code", { hasText: "second item" })).toBeVisible();
+  await expect(page.locator(".chat-markdown li")).toHaveCount(2);
+  await expect(page.locator(".chat-markdown strong", { hasText: "first item" })).toBeVisible();
+  await expect(page.locator(".chat-markdown code", { hasText: "second item" })).toBeVisible();
   const liveListGap = await page.locator(".chat-markdown li").evaluateAll((items) => {
     const [first, second] = items.map((item) => item.getBoundingClientRect());
     return second.top - first.top;
@@ -593,8 +593,8 @@ test("repairs unfinished Markdown while an assistant response streams", async ({
   expect(Math.abs(liveListGap - settledListGap)).toBeLessThanOrEqual(2);
   const settledMarkdownHeight = await liveMarkdown.evaluate((element) => element.getBoundingClientRect().height);
   expect(Math.abs(liveMarkdownHeight - settledMarkdownHeight)).toBeLessThanOrEqual(4);
-  await expect(page.locator("[data-stable-stream-node]")).toHaveCount(0);
-  expect(await liveHeadingNode.evaluate((node) => node.isConnected)).toBe(false);
+  await expect(page.locator("[data-stable-stream-node]")).toHaveCount(1);
+  expect(await liveHeadingNode.evaluate((node) => node.isConnected)).toBe(true);
   const canonicalHeading = page.getByRole("heading", { name: "Live response" });
   const canonicalHeadingNode = await canonicalHeading.elementHandle();
   expect(canonicalHeadingNode).not.toBeNull();
@@ -606,8 +606,8 @@ test("repairs unfinished Markdown while an assistant response streams", async ({
   await expect(page.locator('[data-language="javascript"]')).toBeVisible();
   await expect(page.locator(".katex-display")).toBeVisible();
 
-  // The durable checkpoint reload must reconcile in place: the canonical node
-  // survives after the stream's one final reparse, and the welcome screen never flashes.
+  // Finalization and the durable checkpoint both reconcile in place: the live
+  // canonical node survives and the welcome screen never flashes.
   await checkpointReload;
   await expect(page.locator(".chat-markdown[data-before-final]")).toHaveCount(1);
   await expect(page.getByRole("heading", { name: "How can I help you today?" })).toHaveCount(0);
@@ -934,7 +934,7 @@ test("hides transient new chats and provides complete right-click menus", async 
   await expect(page.getByRole("menuitem", { name: "Move chats to…" })).toBeDisabled();
 });
 
-test("uses the sidebar-08 groups and native icon collapse", async ({ page }, testInfo) => {
+test("uses compact sidebar groups and preserves collapse without a brand icon", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "desktop-chromium");
   await page.goto("/");
 
@@ -950,8 +950,8 @@ test("uses the sidebar-08 groups and native icon collapse", async ({ page }, tes
   await expect(page.locator('[data-sidebar="group-label"]')).toHaveText(["Chats", "Projects", "Workspaces"]);
   await expect(page.locator('[data-sidebar="group-label"]').first()).toHaveCSS("font-size", "11px");
   await expect(page.getByRole("button", { name: "Existing chat" })).toHaveCSS("font-size", "13px");
-  await expect(page.locator('[data-sidebar="header"] span', { hasText: "Conduit" })).toHaveCSS("font-size", "24px");
-  await expect(page.locator('[data-sidebar="header"] svg')).toHaveCSS("width", "24px");
+  await expect(page.locator('[data-sidebar="header"] span', { hasText: "Conduit" })).toHaveCSS("font-size", "30px");
+  await expect(page.locator('[data-sidebar="header"] svg')).toHaveCount(0);
 
   await expect(page.getByRole("button", { name: "Existing chat" })).toBeVisible();
   await expect(page.locator('[data-sidebar="rail"]')).toHaveCount(1);
@@ -965,6 +965,7 @@ test("uses the sidebar-08 groups and native icon collapse", async ({ page }, tes
   await page.locator('[data-sidebar="trigger"]:visible').click();
   await expect(sidebar).toHaveAttribute("data-state", "collapsed");
   await expect.poll(async () => (await main.boundingBox()).x).toBeLessThan(mainBox.x);
+  await expect(sidebar).toHaveCSS("width", "52px");
   await expect(page.locator('[data-sidebar="header"] span', { hasText: "Conduit" })).toBeHidden();
 
   const [collapsedSidebarBox, collapsedTriggerBox] = await Promise.all([
@@ -1834,7 +1835,14 @@ test("global commands and slash suggestions preserve their intended focus models
   await page.keyboard.press("Control+k");
   await palette.getByRole("combobox").fill("delete chat");
   await palette.getByRole("option", { name: /Delete chat/ }).click();
-  await expect(page.getByRole("alertdialog", { name: "Delete this chat?" })).toBeVisible();
+  const deleteDialog = page.getByRole("alertdialog", { name: "Delete this chat?" });
+  await expect(deleteDialog).toBeVisible();
+  const deleteRequest = page.waitForRequest((request) => request.method() === "DELETE" && /\/v0\/sessions\/[^/]+$/.test(new URL(request.url()).pathname));
+  await deleteDialog.getByRole("button", { name: "Delete", exact: true }).click();
+  await deleteRequest;
+  await expect(deleteDialog).toHaveCount(0);
+  await page.waitForTimeout(250);
+  await expect(page.getByRole("alertdialog", { name: "Delete this chat?" })).toHaveCount(0);
 });
 
 test("message actions copy source, edit from a Pi entry, and regenerate via fork", async ({ page }, testInfo) => {
