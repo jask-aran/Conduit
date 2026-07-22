@@ -367,6 +367,7 @@ test("keeps the native textarea composer bounded in a thread", async ({ page }, 
   await openSidebar(page, testInfo);
   await page.getByRole("button", { name: "Existing chat" }).click();
   await expect(page.getByText("Previous question")).toBeVisible();
+  await page.locator(".turn-trace-header").click();
   await expect(page.getByRole("button", { name: /write Complete/ })).toBeVisible();
   await expect(page.locator('[data-slot="message-header"]')).toHaveCount(0);
 
@@ -1314,6 +1315,116 @@ test("a prompt sent from a brand-new chat never travels over the previous chat's
   const promptFrames = await readPromptFrames();
   expect(promptFrames[0].frame.message).toBe("hello");
   expect(promptFrames[0].url.endsWith("/live_2/stream")).toBe(true);
+});
+
+test("collapses a turn's thinking, narration, and tools into one trace", async ({ page }, testInfo) => {
+  await page.route("**/v0/projects", async (route) => {
+    await route.fulfill({ json: { projects: [
+      { id: "project_chat", slug: "chat", name: "Chats", sessions: [
+        { id: "session_thinking", projectId: "project_chat", status: "active", title: "Thinking chat" },
+      ] },
+    ] } });
+  });
+  await page.route("**/v0/sessions/session_thinking", async (route) => {
+    await route.fulfill({ json: {
+      id: "session_thinking",
+      projectId: "project_chat",
+      status: "active",
+      title: "Thinking chat",
+      messages: [
+        { id: "u1", role: "user", content: "What does this repo do", timestamp: "2026-07-22T01:58:00.000Z" },
+        { id: "a1", role: "assistant", content: "", timestamp: "2026-07-22T01:58:01.000Z", blocks: [
+          { type: "thinking", thinking: "Let me explore the workspace first." },
+          { type: "toolCall", id: "call_1", name: "bash", arguments: { command: "ls" } },
+        ] },
+        { id: "a2", role: "assistant", content: "Now reading the readme.", timestamp: "2026-07-22T01:58:05.000Z", blocks: [
+          { type: "thinking", thinking: "Now for the readme." },
+          { type: "text", text: "Now reading the readme." },
+          { type: "toolCall", id: "call_2", name: "read", arguments: { path: "README.md" } },
+        ] },
+        { id: "a3", role: "assistant", content: "This repo is an analytics project.", timestamp: "2026-07-22T01:58:09.000Z", blocks: [
+          { type: "thinking", thinking: "Time to summarize." },
+          { type: "text", text: "This repo is an analytics project." },
+        ] },
+      ],
+      tools: [
+        { id: "call_1", name: "bash", args: { command: "ls" }, done: true, result: "file.py", timestamp: "2026-07-22T01:58:02.000Z" },
+        { id: "call_2", name: "read", args: { path: "README.md" }, done: true, result: "# Readme", timestamp: "2026-07-22T01:58:06.000Z" },
+      ],
+      page: { before: null },
+    } });
+  });
+
+  await page.goto("/");
+  await openSidebar(page, testInfo);
+  await page.getByRole("button", { name: "Thinking chat" }).click();
+
+  const trace = page.locator(".turn-trace");
+  await expect(trace.locator(".turn-trace-header")).toContainText("Thinking process");
+  await expect(trace.locator(".turn-trace-body")).toHaveCount(0);
+  await expect(page.locator(".bubble-assistant")).toHaveCount(1);
+  await expect(page.locator(".bubble-assistant")).toContainText("This repo is an analytics project.");
+
+  await trace.locator(".turn-trace-header").click();
+  const body = trace.locator(".turn-trace-body");
+  await expect(body).toContainText("Let me explore the workspace first.");
+  await expect(body).toContainText("Now for the readme.");
+  await expect(body).toContainText("Now reading the readme.");
+  await expect(body).toContainText("Time to summarize.");
+  await expect(body.locator(".tool-card")).toHaveCount(2);
+  const kinds = await body.evaluate((element) => [...element.children].map((child) => child.classList.contains("tool-card") ? "tool" : "text"));
+  expect(kinds).toEqual(["text", "tool", "text", "text", "tool", "text"]);
+});
+
+test("previews the latest trace activity while a turn runs and keeps it after completion", async ({ page }) => {
+  await page.addInitScript(() => {
+    class MockWebSocket extends EventTarget {
+      static OPEN = 1;
+      constructor() {
+        super();
+        this.readyState = 0;
+        queueMicrotask(() => { this.readyState = MockWebSocket.OPEN; this.dispatchEvent(new Event("open")); });
+      }
+      close() { this.readyState = 3; }
+      send(data) {
+        const request = JSON.parse(data);
+        if (request.type !== "prompt") return;
+        const emit = (payload, delay) => setTimeout(() => this.onmessage?.({ data: JSON.stringify(payload) }), delay);
+        emit({ type: "generation_started", generationId: "g1" }, 0);
+        emit({ type: "message_start", generationId: "g1", message: { role: "assistant" } }, 10);
+        emit({ type: "message_update", generationId: "g1", assistantMessageEvent: { type: "thinking_start" } }, 20);
+        emit({ type: "message_update", generationId: "g1", assistantMessageEvent: { type: "thinking_delta", delta: "Let me explore the workspace " } }, 30);
+        emit({ type: "message_update", generationId: "g1", assistantMessageEvent: { type: "thinking_delta", delta: "before answering." } }, 40);
+        emit({ type: "tool_execution_start", generationId: "g1", toolCallId: "call_1", toolName: "bash", args: { command: "ls" } }, 1000);
+        emit({ type: "tool_execution_end", generationId: "g1", toolCallId: "call_1", toolName: "bash", isError: false }, 2200);
+        emit({ type: "message_end", generationId: "g1", message: { role: "assistant", content: [
+          { type: "thinking", thinking: "Let me explore the workspace before answering." },
+          { type: "toolCall", id: "call_1", name: "bash", arguments: { command: "ls" } },
+        ] } }, 2210);
+        emit({ type: "message_start", generationId: "g1", message: { role: "assistant" } }, 2220);
+        emit({ type: "assistant_stream_delta", generationId: "g1", delta: "Here is what I found." }, 2230);
+        emit({ type: "assistant_stream_final", generationId: "g1", content: "Here is what I found." }, 3200);
+        emit({ type: "agent_end", generationId: "g1", willRetry: false }, 3300);
+      }
+    }
+    Object.defineProperty(window, "WebSocket", { configurable: true, value: MockWebSocket });
+  });
+
+  await page.goto("/");
+  const composer = page.getByRole("textbox", { name: "Message Pi" });
+  await composer.fill("hi");
+  await composer.press("Enter");
+
+  const header = page.locator(".turn-trace-header");
+  await expect(header).toContainText("Let me explore the workspace", { timeout: 4000 });
+  await expect(page.locator(".turn-trace-body")).toHaveCount(0);
+  await expect(header).toContainText("bash", { timeout: 4000 });
+  await expect(page.locator(".bubble-assistant")).toContainText("Here is what I found.", { timeout: 4000 });
+  await expect(header).toContainText("Thinking process", { timeout: 4000 });
+
+  await header.click();
+  await expect(page.locator(".turn-trace-body")).toContainText("Let me explore the workspace before answering.");
+  await expect(page.locator(".turn-trace-body .tool-card")).toHaveCount(1);
 });
 
 test("selects a chat model through the runtime-aware model route", async ({ page }) => {
