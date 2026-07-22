@@ -120,8 +120,21 @@ function App() {
   };
 
   const openChat = async (target: ChatSummary, project: Project) => {
-    try { await discardDraft(); await chat.select(target, project); }
-    catch (error) { showError((error as Error).message); }
+    const abandonedDraftId = currentDraftId();
+    try { await chat.select(target, project); }
+    catch (error) { showError((error as Error).message); return; }
+    if (!abandonedDraftId || abandonedDraftId === target.id) return;
+    try {
+      await discardDraft(abandonedDraftId);
+      catalogue.setProjects((current) => current.map((item) => ({ ...item, sessions: item.sessions.filter((session) => session.id !== abandonedDraftId) })));
+    } catch (error) {
+      const detail = error as Error & { error?: string };
+      if (detail.error === "chat_not_found") {
+        // Already discarded server-side: finish the local cleanup instead of
+        // rolling back a successful target navigation.
+        catalogue.setProjects((current) => current.map((item) => ({ ...item, sessions: item.sessions.filter((session) => session.id !== abandonedDraftId) })));
+      } else showError(`Opened ${target.title || "chat"}, but the abandoned draft could not be removed: ${detail.message}`);
+    }
   };
 
   const switchProfile = async (id: string) => {
