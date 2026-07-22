@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { reconcileMessages } from "../src/client/reconcile-messages.js";
+import { reconcileMessages } from "../src/client/reconcile-messages.ts";
 
 test("keeps the render key and object identity when an id match is unchanged", () => {
   const current = [

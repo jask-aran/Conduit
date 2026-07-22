@@ -87,7 +87,7 @@ const test = base.extend({ server: async ({}, use) => {
 }});
 
 test.beforeEach(async ({ page, server }) => {
-  // Mock the SPA's API surface so the React shell loads quickly after login.
+  // Mock the SPA's API surface so the Solid shell loads quickly after login.
   await page.route("**/v0/templates", (route) => route.fulfill({ json: { templates: [{
     id: "chat", label: "General", version: 1, defaultable: true, tools: ["read", "bash"],
   }], defaultTemplateId: "chat" } }));
@@ -110,6 +110,10 @@ test.beforeEach(async ({ page, server }) => {
 test("unauthenticated visit lands on /login; wrong password surfaces an error", async ({ page, server }) => {
   await page.goto(server.origin, { waitUntil: "domcontentloaded" });
   await expect(page).toHaveURL(/\/login$/);
+  await expect(page.locator(".login-card")).toHaveCSS("border-radius", "24px");
+  await expect(page.locator(".login-card")).not.toHaveCSS("backdrop-filter", "none");
+  await expect(page.locator(".login-card h1")).toHaveCSS("font-family", /Georgia/);
+  await expect(page.getByLabel("Password")).toHaveCSS("border-radius", "14px");
   await page.getByLabel("Password").fill("fixture-wrong");
   await page.getByRole("button", { name: "Sign in" }).click();
   await expect(page.getByRole("alert")).toContainText(/Incorrect password/);
@@ -120,11 +124,12 @@ test("correct password reaches the app, reload stays authenticated, logout retur
   await page.goto(server.origin, { waitUntil: "domcontentloaded" });
   await page.getByLabel("Password").fill("fixture-pw");
   await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page).toHaveURL(server.origin + "/");
+  await expect(page).toHaveURL(new RegExp(`^${server.origin}/chat/[0-9a-f-]+$`));
+  const durableUrl = page.url();
 
-  // Reload must remain authenticated (cookie survives).
+  // Reload must remain authenticated and keep the same durable chat route.
   await page.reload({ waitUntil: "domcontentloaded" });
-  await expect(page).toHaveURL(server.origin + "/");
+  await expect(page).toHaveURL(durableUrl);
 
   // Sign out from the sidebar footer surfaces the login screen again.
   await page.locator('[data-sidebar="footer"]').getByRole("button", { name: /Conduit/ }).click();

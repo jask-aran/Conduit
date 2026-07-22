@@ -12,9 +12,9 @@ local-target experience.
 
 ## Shape
 
-- Desktop: a resizable right panel (Shadcn Resizable alongside the existing
+- Desktop: a direct resizable right panel alongside the existing
   left Sidebar; do not nest a second `Sidebar` if it fights the shell).
-  Mobile: a Sheet overlay. Lazy-loaded chunk; closed by default; state
+  Mobile: an accessible overlay. Lazy-loaded chunk; closed by default; state
   persists per chat. Toggles: header button, `⌘/Ctrl+.`, palette.
 - Three tabs: **Files**, **Diff**, **Artifacts**.
 

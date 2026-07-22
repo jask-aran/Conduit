@@ -1,11 +1,11 @@
 const COLOR_TOKENS = {
-  background: "#161618",
+  background: "#111114",
   foreground: "#fafafa",
-  card: "#1f1f23",
+  card: "rgba(48,48,54,0.52)",
   cardForeground: "#fafafa",
   border: "rgba(255,255,255,0.10)",
-  primary: "oklch(0.488 0.243 264.376)",
-  primaryForeground: "#fbfbfd",
+  primary: "#f3f3f4",
+  primaryForeground: "#242428",
   mutedForeground: "#b5b5be",
   destructive: "#f97161",
   input: "rgba(255,255,255,0.15)",
@@ -39,20 +39,25 @@ export function renderLoginPage({ error = null, after = "/" } = {}) {
         padding: 24px;
       }
       .login-card {
-        background: ${COLOR_TOKENS.card};
+        position: relative;
+        background: linear-gradient(180deg, rgba(255,255,255,0.09), rgba(255,255,255,0.02) 58%), ${COLOR_TOKENS.card};
         color: ${COLOR_TOKENS.cardForeground};
         width: 100%;
-        max-width: 360px;
-        border-radius: 14px;
+        max-width: 390px;
+        border-radius: 24px;
         border: 1px solid ${COLOR_TOKENS.border};
-        padding: 28px 26px;
-        box-shadow: 0 24px 60px rgba(0,0,0,0.45);
+        padding: 30px 28px 28px;
+        backdrop-filter: blur(30px) saturate(168%) brightness(1.05);
+        -webkit-backdrop-filter: blur(30px) saturate(168%) brightness(1.05);
+        box-shadow: inset 0 1px 0 rgba(255,255,255,0.28), inset 0 -1px 1px rgba(0,0,0,0.20), 0 28px 58px -22px rgba(0,0,0,0.72);
       }
       .login-card h1 {
-        font-size: 22px;
-        font-weight: 600;
-        letter-spacing: -0.01em;
-        margin: 0 0 4px;
+        font-family: Georgia, "Times New Roman", serif;
+        font-size: 32px;
+        font-weight: 500;
+        letter-spacing: -0.035em;
+        line-height: 34px;
+        margin: 0 0 6px;
       }
       .login-card p.label {
         margin: 0 0 20px;
@@ -62,30 +67,32 @@ export function renderLoginPage({ error = null, after = "/" } = {}) {
       form { display: flex; flex-direction: column; gap: 14px; }
       label { display: flex; flex-direction: column; gap: 6px; font-size: 12px; color: ${COLOR_TOKENS.mutedForeground}; letter-spacing: 0.02em; }
       input[type="password"] {
-        background: ${COLOR_TOKENS.background};
+        background: linear-gradient(180deg, rgba(255,255,255,0.07), rgba(255,255,255,0.015)), rgba(22,22,26,0.72);
         color: ${COLOR_TOKENS.foreground};
-        border: 1px solid ${COLOR_TOKENS.input};
-        border-radius: 10px;
-        padding: 10px 12px;
+        border: 1px solid rgba(255,255,255,0.13);
+        border-radius: 14px;
+        padding: 12px 14px;
         font-size: 15px;
         outline: none;
         font-family: inherit;
+        box-shadow: inset 0 1px 0 rgba(255,255,255,0.10), inset 0 -1px 1px rgba(0,0,0,0.24);
       }
       input[type="password"]:focus {
-        border-color: ${COLOR_TOKENS.primary};
-        box-shadow: 0 0 0 4px color-mix(in oklch, ${COLOR_TOKENS.primary}, transparent 75%);
+        border-color: rgba(255,255,255,0.36);
+        box-shadow: inset 0 1px 0 rgba(255,255,255,0.16), 0 0 0 3px rgba(255,255,255,0.08);
       }
       button {
         background: ${COLOR_TOKENS.primary};
         color: ${COLOR_TOKENS.primaryForeground};
         border: none;
-        border-radius: 10px;
-        padding: 10px 16px;
+        border-radius: 12px;
+        padding: 11px 16px;
         font-size: 14px;
         font-weight: 600;
         font-family: inherit;
         letter-spacing: 0.01em;
         cursor: pointer;
+        box-shadow: inset 0 1px 0 rgba(255,255,255,0.62), 0 8px 20px -10px rgba(0,0,0,0.65);
       }
       button:hover { filter: brightness(1.08); }
       .login-error {
@@ -100,6 +107,10 @@ export function renderLoginPage({ error = null, after = "/" } = {}) {
       .login-foot { margin-top: 18px; color: ${COLOR_TOKENS.mutedForeground}; font-size: 12px; }
       .login-foot code { color: ${COLOR_TOKENS.foreground}; }
       input[name="after"] { display: none; }
+      @media (max-width: 520px) {
+        body { padding: 18px; }
+        .login-card { padding: 26px 22px 24px; }
+      }
     </style>
   </head>
   <body>

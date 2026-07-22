@@ -45,7 +45,7 @@ S20 phase 2–3 proper.
 ## Conventions
 
 - Specs describe behavior contracts and constraints, not line-by-line diffs.
-  `AGENTS.md` remains the implementation contract (style, testing, Shadcn-first,
+  `AGENTS.md` remains the implementation contract (style, testing, Solid/Kobalte boundaries,
   data ownership); specs do not restate it.
 - Each spec ends with a verification section listing the checks a PR must
   pass. Per `AGENTS.md`, every spec's PR additionally restarts the managed

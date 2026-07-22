@@ -1,9 +1,11 @@
-name: CI
+name: Static checks
 
 on:
+  workflow_dispatch:
+  # Validate policy edits once; ordinary pull requests do not run Actions.
   pull_request:
-  push:
-    branches: [main]
+    paths:
+      - .github/workflows/ci.yml
 
 jobs:
   static:
@@ -19,38 +21,5 @@ jobs:
           cache: npm
           cache-dependency-path: conduit-web/package-lock.json
       - run: npm ci
-      - env:
-          # The committed dev host is 0.0.0.0; tests spawn the server on
-          # loopback, but export the override so any non-loopback bind is open.
-          CONDUIT_ALLOW_INSECURE: "1"
-        run: npm test
+      - run: npm run typecheck
       - run: npm run build
-  browser:
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: conduit-web
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-          cache-dependency-path: conduit-web/package-lock.json
-      - run: npm ci
-      - name: Cache Playwright browsers
-        id: playwright-cache
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-chromium-${{ hashFiles('conduit-web/package-lock.json') }}
-          restore-keys: |
-            playwright-${{ runner.os }}-chromium-
-      - name: Install Playwright browsers
-        if: steps.playwright-cache.outputs.cache-hit != 'true'
-        run: npx playwright install --with-deps chromium
-      - run: npm run build
-      - env:
-          CONDUIT_ALLOW_INSECURE: "1"
-        run: npm run test:browser

@@ -60,7 +60,11 @@ test.beforeEach(async ({ page }) => {
         queueMicrotask(() => { this.readyState = IdleWebSocket.OPEN; this.dispatchEvent(new Event("open")); });
       }
       send() {}
-      close() { this.readyState = 3; this.dispatchEvent(new Event("close")); }
+      close() {
+        window.__closedSocketCount = (window.__closedSocketCount || 0) + 1;
+        this.readyState = 3;
+        this.dispatchEvent(new Event("close"));
+      }
     }
     Object.defineProperty(window, "WebSocket", { configurable: true, value: IdleWebSocket });
     class MockEventSource extends EventTarget {
@@ -157,6 +161,19 @@ test.beforeEach(async ({ page }) => {
   await page.route("**/v0/chats/*/attachments", async (route) => {
     await route.fulfill({ json: { attachments: [] } });
   });
+  await page.route("**/v0/projects/*/tree?*", async (route) => {
+    const directory = new URL(route.request().url()).searchParams.get("path") || "";
+    await route.fulfill({ json: { path: directory, entries: directory === "src"
+      ? [{ name: "main.ts", path: "src/main.ts", type: "file" }]
+      : [{ name: "src", path: "src", type: "directory" }, { name: "README.md", path: "README.md", type: "file" }] } });
+  });
+  await page.route("**/v0/projects/*/file?*", async (route) => {
+    const file = new URL(route.request().url()).searchParams.get("path");
+    await route.fulfill({ json: { path: file, size: 31, content: "export function startConduit() {}\n" } });
+  });
+  await page.route("**/v0/projects/*/diff", async (route) => {
+    await route.fulfill({ json: { repository: true, branch: "agent/rhs-panel-mvp", upstream: "origin/agent/rhs-panel-mvp", ahead: 2, behind: 0, commits: [{ graph: "*", hash: "1234567890abcdef", shortHash: "1234567", subject: "Add workspace panel", author: "Conduit", authoredAt: "2026-07-22T10:00:00Z" }], files: [{ status: " M", path: "src/main.ts" }], diff: "# Working tree\n@@ -1 +1 @@\n-old\n+new\n" } });
+  });
   await page.route("**/v0/chats/*?ifEmpty=true", async (route) => {
     await route.fulfill({ status: 204, body: "" });
   });
@@ -236,6 +253,31 @@ test.beforeEach(async ({ page }) => {
   });
 });
 
+test("workspace panel previews files, shows diff, and persists per chat", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: "Toggle workspace panel" }).click();
+  const panel = page.getByRole("complementary", { name: "Workspace panel" });
+  await expect(panel).toBeVisible();
+  await panel.getByRole("button", { name: "src" }).click();
+  await panel.getByRole("button", { name: "main.ts" }).click();
+  await expect(panel.getByText("export function startConduit() {}" )).toBeVisible();
+  await panel.getByRole("tab", { name: "Diff" }).click();
+  await expect(panel.getByText("1 changed file")).toBeVisible();
+  await expect(panel.getByText("src/main.ts")).toBeVisible();
+  await expect(panel.getByText("agent/rhs-panel-mvp", { exact: true })).toBeVisible();
+  await expect(panel.getByText("Add workspace panel")).toBeVisible();
+  await panel.getByRole("tab", { name: "Artifacts" }).click();
+  await expect(panel.getByText("No artifacts in the loaded transcript")).toBeVisible();
+  await panel.getByRole("radio", { name: "Interactive UI" }).click();
+  await expect(panel.getByText("Interactive artifacts are not enabled")).toBeVisible();
+  await panel.getByRole("tab", { name: "Diff" }).click();
+  await page.reload();
+  await expect(page.getByRole("complementary", { name: "Workspace panel" })).toBeVisible();
+  await expect(page.getByRole("tab", { name: "Diff" })).toHaveAttribute("aria-selected", "true");
+  await page.keyboard.press(process.platform === "darwin" ? "Meta+." : "Control+.");
+  await expect(page.getByRole("complementary", { name: "Workspace panel" })).toHaveCount(0);
+});
+
 test.afterEach(async ({ page }) => {
   expect(unhandledApiRequests.get(page) || [], "all browser API requests must use deterministic mocks").toEqual([]);
 });
@@ -285,6 +327,49 @@ test("reloading a durable new-chat URL does not create another chat", async ({ p
   expect(creates).toBe(1);
 });
 
+test("keeps the current chat connected when new-chat creation fails", async ({ page }, testInfo) => {
+  await page.route("**/v0/chats/session_existing", async (route) => {
+    await route.fulfill({ json: { id: "session_existing", projectId: "project_chat", status: "active", title: "Existing chat" } });
+  });
+  await page.route("**/v0/chats", async (route) => {
+    await route.fulfill({ status: 503, json: { message: "Chat storage is unavailable" } });
+  });
+  await page.goto("/chat/session_existing");
+  await expect(page.getByText("Previous question")).toBeVisible();
+  const socketsClosedBefore = await page.evaluate(() => window.__closedSocketCount || 0);
+
+  await openSidebar(page, testInfo);
+  await page.getByRole("button", { name: "New chat" }).click();
+
+  await expect(page).toHaveURL(/\/chat\/session_existing$/);
+  await expect(page.getByText("Previous question")).toBeVisible();
+  await expect(page.getByText("Chat storage is unavailable")).toBeVisible();
+  await expect.poll(() => page.evaluate(() => window.__closedSocketCount || 0)).toBe(socketsClosedBefore);
+});
+
+test("commits a new chat even if disposal of the replaced draft fails visibly", async ({ page }, testInfo) => {
+  await page.route("**/v0/chats/*?ifEmpty=true", async (route) => {
+    await route.fulfill({ status: 500, json: { message: "Draft cleanup failed" } });
+  });
+  await page.goto("/");
+  await expect(page).toHaveURL(/\/chat\/550e8400-e29b-41d4-a716-446655440099$/);
+
+  await page.route("**/v0/chats", async (route) => {
+    await route.fulfill({ status: 201, json: {
+      id: "550e8400-e29b-41d4-a716-446655440077",
+      projectId: "project_chat",
+      status: "draft",
+      title: "New chat",
+    } });
+  });
+  await openSidebar(page, testInfo);
+  await page.getByRole("button", { name: "New chat" }).click();
+
+  await expect(page).toHaveURL(/\/chat\/550e8400-e29b-41d4-a716-446655440077$/);
+  await expect(page.getByText(/old empty draft could not be removed: Draft cleanup failed/)).toBeVisible();
+  await expect(page.getByRole("textbox", { name: "Message Pi" })).toBeVisible();
+});
+
 test("new project chats identify their owning project in the header", async ({ page }, testInfo) => {
   await page.route("**/v0/chats", async (route) => {
     await route.fulfill({ status: 201, json: {
@@ -312,7 +397,7 @@ test("opens and dismisses the new folder dialog", async ({ page }, testInfo) => 
   await expect(dialog).toBeVisible();
   await expect(dialog.getByRole("button", { name: "Create folder" })).toBeDisabled();
   await page.keyboard.press("Escape");
-  await expect(dialog).toHaveAttribute("data-state", "closed");
+  await expect(dialog).toHaveCount(0);
 });
 
 test("keeps the native textarea composer bounded in a thread", async ({ page }, testInfo) => {
@@ -320,6 +405,7 @@ test("keeps the native textarea composer bounded in a thread", async ({ page }, 
   await openSidebar(page, testInfo);
   await page.getByRole("button", { name: "Existing chat" }).click();
   await expect(page.getByText("Previous question")).toBeVisible();
+  await page.locator(".turn-trace-header").click();
   await expect(page.getByRole("button", { name: /write Complete/ })).toBeVisible();
   await expect(page.locator('[data-slot="message-header"]')).toHaveCount(0);
 
@@ -336,7 +422,7 @@ test("keeps the native textarea composer bounded in a thread", async ({ page }, 
   expect(inputBox.height).toBeLessThanOrEqual(192);
   expect(sendBox.y).toBeGreaterThan(inputBox.y);
   await expect(composerWrap).toHaveCSS("position", "static");
-  await expect(page.locator(".chat-meteors")).toBeVisible();
+  await expect(page.locator(".chat-ambient")).toBeVisible();
 });
 
 test("renders persisted assistant Markdown with safe interactive controls", async ({ page }, testInfo) => {
@@ -385,7 +471,7 @@ test("renders persisted assistant Markdown with safe interactive controls", asyn
   await page.getByRole("button", { name: "Existing chat" }).click();
 
   await expect(page.getByRole("heading", { name: "Markdown sample" })).toBeVisible();
-  await expect(page.locator('[data-streamdown="strong"]')).toHaveText("strong");
+  await expect(page.locator('[data-markdown="strong"]')).toHaveText("strong");
   await expect(page.locator(".chat-markdown ul li")).toHaveCount(2);
   await expect(page.locator(".chat-markdown blockquote")).toContainText("useful quotation");
   await expect(page.locator(".chat-markdown table")).toContainText("Tables");
@@ -403,7 +489,7 @@ test("renders persisted assistant Markdown with safe interactive controls", asyn
   const dialog = page.getByRole("alertdialog", { name: "Open external link?" });
   await expect(dialog).toContainText("https://example.com/docs");
   await dialog.getByRole("button", { name: "Cancel" }).click();
-  await expect(dialog).toHaveAttribute("data-state", "closed");
+  await expect(dialog).toHaveCount(0);
 });
 
 test("repairs unfinished Markdown while an assistant response streams", async ({ page }) => {
@@ -440,23 +526,45 @@ test("repairs unfinished Markdown while an assistant response streams", async ({
           this.onmessage?.({ data: JSON.stringify({
             type: "assistant_stream_delta",
             generationId: "g1",
-            delta: "## Live response\n\n**still streaming**\n\n```javascript\nconst answer = 42;\n```\n\n$$\nE = mc^2\n$$",
+            delta: "## Live response\n\n",
           }) });
           setTimeout(() => this.onmessage?.({ data: JSON.stringify({
-            type: "assistant_stream_final",
+            type: "assistant_stream_delta",
             generationId: "g1",
-            content: "## Live response\n\n**still streaming**\n\n```javascript\nconst answer = 42;\n```\n\n$$\nE = mc^2\n$$",
-            html: '<div class="server-markdown">Bogus legacy HTML</div>',
-          }) }), 600);
+            delta: "**still streaming**\n\nRead [the documentation][docs].\n\n",
+          }) }), 150);
           setTimeout(() => this.onmessage?.({ data: JSON.stringify({
-            type: "agent_end",
+            type: "assistant_stream_delta",
             generationId: "g1",
-            willRetry: false,
-          }) }), 700);
+            delta: "```javascript\nconst answer = 42;\n```\n\n",
+          }) }), 300);
           setTimeout(() => this.onmessage?.({ data: JSON.stringify({
-            type: "session_checkpoint",
-            chat: { id: "550e8400-e29b-41d4-a716-446655440099" },
-          }) }), 900);
+            type: "assistant_stream_delta",
+            generationId: "g1",
+            delta: "$$\nE = mc^2\n$$",
+          }) }), 450);
+          setTimeout(() => this.onmessage?.({ data: JSON.stringify({
+            type: "assistant_stream_delta",
+            generationId: "g1",
+            delta: "\n\n- **first item**\n\n  continued first item\n\n- `second item`",
+          }) }), 550);
+          window.__releaseStreamFinal = () => {
+            this.onmessage?.({ data: JSON.stringify({
+              type: "assistant_stream_final",
+              generationId: "g1",
+              content: "## Live response\n\n**still streaming**\n\nRead [the documentation][docs].\n\n```javascript\nconst answer = 42;\n```\n\n$$\nE = mc^2\n$$\n\n- **first item**\n\n  continued first item\n\n- `second item`\n\n[docs]: https://example.com/docs",
+              html: '<div class="server-markdown">Bogus legacy HTML</div>',
+            }) });
+            setTimeout(() => this.onmessage?.({ data: JSON.stringify({
+              type: "agent_end",
+              generationId: "g1",
+              willRetry: false,
+            }) }), 50);
+            setTimeout(() => this.onmessage?.({ data: JSON.stringify({
+              type: "session_checkpoint",
+              chat: { id: "550e8400-e29b-41d4-a716-446655440099" },
+            }) }), 100);
+          };
         }, 0);
       }
     }
@@ -466,7 +574,7 @@ test("repairs unfinished Markdown while an assistant response streams", async ({
       value: MockWebSocket,
     });
   });
-  const streamedContent = "## Live response\n\n**still streaming**\n\n```javascript\nconst answer = 42;\n```\n\n$$\nE = mc^2\n$$";
+  const streamedContent = "## Live response\n\n**still streaming**\n\nRead [the documentation][docs].\n\n```javascript\nconst answer = 42;\n```\n\n$$\nE = mc^2\n$$\n\n- **first item**\n\n  continued first item\n\n- `second item`\n\n[docs]: https://example.com/docs";
   await page.route("**/v0/sessions/550e8400-e29b-41d4-a716-446655440099", async (route) => {
     await route.fulfill({ json: {
       id: "550e8400-e29b-41d4-a716-446655440099",
@@ -488,6 +596,10 @@ test("repairs unfinished Markdown while an assistant response streams", async ({
   await page.getByRole("button", { name: "Send message" }).click();
 
   await expect(page.getByRole("heading", { name: "Live response" })).toBeVisible();
+  const liveHeading = page.getByRole("heading", { name: "Live response" });
+  const liveHeadingNode = await liveHeading.elementHandle();
+  expect(liveHeadingNode).not.toBeNull();
+  await liveHeadingNode.evaluate((node) => node.setAttribute("data-stable-stream-node", "true"));
   const liveMarkdown = page.locator(".chat-markdown");
   await expect(liveMarkdown).toContainText("still streaming");
   const liveMarkdownNode = await liveMarkdown.elementHandle();
@@ -496,6 +608,35 @@ test("repairs unfinished Markdown while an assistant response streams", async ({
   await expect(page.locator('[data-language="javascript"]')).toBeVisible();
   await expect(page.locator('[data-language="javascript"] button[aria-label="Copy code"]')).toBeVisible();
   await expect(page.locator(".katex-display")).toBeVisible();
+  await expect(liveMarkdown).toContainText("continued first item");
+  await expect(page.locator(".chat-markdown li")).toHaveCount(2);
+  await expect(page.locator(".chat-markdown strong", { hasText: "first item" })).toBeVisible();
+  await expect(page.locator(".chat-markdown code", { hasText: "second item" })).toBeVisible();
+  const liveListGap = await page.locator(".chat-markdown li").evaluateAll((items) => {
+    const [first, second] = items.map((item) => item.getBoundingClientRect());
+    return second.top - first.top;
+  });
+  const liveMarkdownHeight = await liveMarkdown.evaluate((element) => element.getBoundingClientRect().height);
+  await expect(page.getByRole("button", { name: "the documentation" })).toHaveCount(0);
+  await expect(page.locator("[data-stable-stream-node]")).toHaveCount(1);
+  expect(await liveHeadingNode.evaluate((node) => node.isConnected && node === document.querySelector("[data-stable-stream-node]"))).toBe(true);
+  await page.evaluate(() => window.__releaseStreamFinal());
+  await expect(page.getByRole("button", { name: "the documentation" })).toBeVisible();
+  await expect(page.locator(".chat-markdown li")).toHaveCount(2);
+  await expect(page.locator(".chat-markdown li").first()).toContainText("continued first item");
+  const settledListGap = await page.locator(".chat-markdown li").evaluateAll((items) => {
+    const [first, second] = items.map((item) => item.getBoundingClientRect());
+    return second.top - first.top;
+  });
+  expect(Math.abs(liveListGap - settledListGap)).toBeLessThanOrEqual(2);
+  const settledMarkdownHeight = await liveMarkdown.evaluate((element) => element.getBoundingClientRect().height);
+  expect(Math.abs(liveMarkdownHeight - settledMarkdownHeight)).toBeLessThanOrEqual(4);
+  await expect(page.locator("[data-stable-stream-node]")).toHaveCount(1);
+  expect(await liveHeadingNode.evaluate((node) => node.isConnected)).toBe(true);
+  const canonicalHeading = page.getByRole("heading", { name: "Live response" });
+  const canonicalHeadingNode = await canonicalHeading.elementHandle();
+  expect(canonicalHeadingNode).not.toBeNull();
+  await canonicalHeadingNode.evaluate((node) => node.setAttribute("data-canonical-stream-node", "true"));
   await expect(page.getByRole("button", { name: "Copy Markdown" })).toBeVisible();
   await expect(page.locator(".chat-markdown[data-before-final]")).toHaveCount(1);
   expect(await liveMarkdownNode.evaluate((node) => node.isConnected && node === document.querySelector(".chat-markdown"))).toBe(true);
@@ -503,14 +644,65 @@ test("repairs unfinished Markdown while an assistant response streams", async ({
   await expect(page.locator('[data-language="javascript"]')).toBeVisible();
   await expect(page.locator(".katex-display")).toBeVisible();
 
-  // The durable checkpoint reload must reconcile in place: the tagged DOM node
-  // survives (no remount), and the welcome screen never flashes.
+  // Finalization and the durable checkpoint both reconcile in place: the live
+  // canonical node survives and the welcome screen never flashes.
   await checkpointReload;
   await expect(page.locator(".chat-markdown[data-before-final]")).toHaveCount(1);
   await expect(page.getByRole("heading", { name: "How can I help you today?" })).toHaveCount(0);
   expect(await liveMarkdownNode.evaluate((node) => node.isConnected && node === document.querySelector(".chat-markdown"))).toBe(true);
+  expect(await canonicalHeadingNode.evaluate((node) => node.isConnected && node === document.querySelector("[data-canonical-stream-node]"))).toBe(true);
   await expect(page.locator('[data-language="javascript"]')).toBeVisible();
   await expect(page.locator(".katex-display")).toBeVisible();
+});
+
+test("renders and answers every blocking host UI request kind", async ({ page }, testInfo) => {
+  await page.addInitScript(() => {
+    class HostUiWebSocket extends EventTarget {
+      static OPEN = 1;
+      constructor() {
+        super();
+        this.readyState = 0;
+        window.__hostUiSocket = this;
+        queueMicrotask(() => { this.readyState = HostUiWebSocket.OPEN; this.dispatchEvent(new Event("open")); });
+      }
+      close() { this.readyState = 3; this.dispatchEvent(new Event("close")); }
+      send(data) { (window.__hostUiCommands ||= []).push(JSON.parse(data)); }
+    }
+    Object.defineProperty(window, "WebSocket", { configurable: true, value: HostUiWebSocket });
+  });
+  await page.goto("/");
+  await openSidebar(page, testInfo);
+  await page.getByRole("button", { name: "Existing chat" }).click();
+
+  const request = async (payload) => page.evaluate((event) => {
+    window.__hostUiSocket.onmessage({ data: JSON.stringify({ type: "extension_ui_request", ...event }) });
+  }, payload);
+  const lastCommand = () => page.evaluate(() => window.__hostUiCommands?.at(-1));
+  await expect.poll(() => page.evaluate(() => typeof window.__hostUiSocket?.onmessage)).toBe("function");
+
+  await request({ id: "confirm-1", method: "confirm", title: "Run command?", message: "This changes files." });
+  const confirm = page.getByRole("region", { name: "Run command?" });
+  await expect(confirm).toContainText("This changes files.");
+  await confirm.getByRole("button", { name: "Approve" }).click();
+  await expect.poll(lastCommand).toEqual({ type: "extension_ui_response", id: "confirm-1", confirmed: true });
+
+  await request({ id: "select-1", method: "select", title: "Choose target", options: ["Alpha", "Beta"] });
+  const select = page.getByRole("region", { name: "Choose target" });
+  await expect(select.getByRole("button", { name: "Alpha" })).toBeVisible();
+  await select.getByRole("button", { name: "Beta" }).click();
+  await expect.poll(lastCommand).toEqual({ type: "extension_ui_response", id: "select-1", value: "Beta" });
+
+  await request({ id: "input-1", method: "input", title: "Your name", placeholder: "Name", prefill: "Grace" });
+  const input = page.getByRole("region", { name: "Your name" });
+  await input.getByRole("textbox", { name: "Your name" }).fill("Ada");
+  await input.getByRole("button", { name: "Submit" }).click();
+  await expect.poll(lastCommand).toEqual({ type: "extension_ui_response", id: "input-1", value: "Ada" });
+
+  await request({ id: "editor-1", method: "editor", title: "Edit plan", prefill: "First draft" });
+  const editor = page.getByRole("region", { name: "Edit plan" });
+  await editor.getByRole("textbox", { name: "Edit plan" }).fill("Revised plan");
+  await editor.getByRole("button", { name: "Submit" }).click();
+  await expect.poll(lastCommand).toEqual({ type: "extension_ui_response", id: "editor-1", value: "Revised plan" });
 });
 
 test("switches threads atomically without flashing the welcome screen", async ({ page }, testInfo) => {
@@ -557,6 +749,101 @@ test("switches threads atomically without flashing the welcome screen", async ({
   await expect(page.getByText("Second thread body")).toBeVisible();
   await expect(page.getByText("First thread body")).toHaveCount(0);
   await expect(page.getByRole("heading", { name: "How can I help you today?" })).toHaveCount(0);
+});
+
+test("does not launch an abandoned active chat during rapid switching", async ({ page }, testInfo) => {
+  await page.route("**/v0/projects", async (route) => route.fulfill({ json: { projects: [{
+    id: "project_chat", slug: "chat", name: "Chats",
+    sessions: [
+      { id: "session_first", projectId: "project_chat", status: "active", title: "First chat" },
+      { id: "session_second", projectId: "project_chat", status: "active", title: "Second chat" },
+    ],
+  }, projects[1]] } }));
+  let firstDetailResolved = false;
+  await page.route("**/v0/sessions/session_first", async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    await route.fulfill({ json: {
+      id: "session_first", projectId: "project_chat", status: "active", title: "First chat",
+      messages: [{ id: "entry-first", role: "user", content: "Abandoned thread" }], tools: [], page: { before: null },
+    } });
+    firstDetailResolved = true;
+  });
+  await page.route("**/v0/sessions/session_second", async (route) => route.fulfill({ json: {
+    id: "session_second", projectId: "project_chat", status: "active", title: "Second chat",
+    messages: [{ id: "entry-second", role: "user", content: "Selected thread" }], tools: [], page: { before: null },
+  } }));
+  const launches = [];
+  await page.route("**/v0/live-sessions", async (route) => {
+    const body = route.request().postDataJSON();
+    launches.push(body.chatId);
+    await route.fulfill({ json: { id: `live_${body.chatId}`, streamUrl: `/v0/live-sessions/live_${body.chatId}/stream` } });
+  });
+
+  await page.goto("/");
+  await openSidebar(page, testInfo);
+  await page.getByRole("button", { name: "First chat" }).click();
+  await openSidebar(page, testInfo);
+  await page.getByRole("button", { name: "Second chat" }).click();
+  await expect(page.getByText("Selected thread")).toBeVisible();
+  await expect.poll(() => firstDetailResolved).toBe(true);
+  await expect.poll(() => launches).toEqual(["session_second"]);
+});
+
+test("ignores queued events from the previous chat socket", async ({ page }, testInfo) => {
+  await page.addInitScript(() => {
+    class SwitchingWebSocket extends EventTarget {
+      static OPEN = 1;
+      constructor() {
+        super();
+        this.readyState = 0;
+        (window.__switchSockets ||= []).push(this);
+        queueMicrotask(() => { this.readyState = SwitchingWebSocket.OPEN; this.dispatchEvent(new Event("open")); });
+      }
+      close() { this.readyState = 3; this.dispatchEvent(new Event("close")); }
+      send() {}
+    }
+    Object.defineProperty(window, "WebSocket", { configurable: true, value: SwitchingWebSocket });
+  });
+  await page.route("**/v0/projects", async (route) => route.fulfill({ json: { projects: [{
+    id: "project_chat", slug: "chat", name: "Chats",
+    sessions: [
+      { id: "session_first", projectId: "project_chat", status: "active", title: "First chat" },
+      { id: "session_second", projectId: "project_chat", status: "active", title: "Second chat" },
+    ],
+  }, projects[1]] } }));
+  for (const [id, title, content] of [
+    ["session_first", "First chat", "First body"],
+    ["session_second", "Second chat", "Second body"],
+  ]) {
+    await page.route(`**/v0/sessions/${id}`, async (route) => route.fulfill({ json: {
+      id, projectId: "project_chat", status: "active", title,
+      messages: [{ id: `entry-${id}`, role: "user", content }], tools: [], page: { before: null },
+    } }));
+  }
+  await page.route("**/v0/live-sessions", async (route) => {
+    const { chatId } = route.request().postDataJSON();
+    await route.fulfill({ json: { id: `live_${chatId}`, streamUrl: `/v0/live-sessions/live_${chatId}/stream` } });
+  });
+
+  await page.goto("/");
+  await openSidebar(page, testInfo);
+  await page.getByRole("button", { name: "First chat" }).click();
+  await expect(page.getByText("First body")).toBeVisible();
+  await expect.poll(() => page.evaluate(() => window.__switchSockets?.some((socket) => typeof socket.onmessage === "function"))).toBe(true);
+  await page.evaluate(() => {
+    window.__staleSocketHandler = window.__switchSockets.find((socket) => typeof socket.onmessage === "function").onmessage;
+  });
+  await openSidebar(page, testInfo);
+  await page.getByRole("button", { name: "Second chat" }).click();
+  await expect(page.getByText("Second body")).toBeVisible();
+  await page.evaluate(() => {
+    const handler = window.__staleSocketHandler;
+    handler({ data: JSON.stringify({ type: "generation_started", generationId: "stale-generation" }) });
+    handler({ data: JSON.stringify({ type: "message_start", generationId: "stale-generation", message: { role: "assistant" } }) });
+    handler({ data: JSON.stringify({ type: "assistant_stream_delta", generationId: "stale-generation", delta: "STALE OUTPUT" }) });
+  });
+  await expect(page.getByText("STALE OUTPUT")).toHaveCount(0);
+  await expect(page.getByText("Second body")).toBeVisible();
 });
 
 test("opens a viewport-filling thread pinned to the true bottom without an upward flash", async ({ page }, testInfo) => {
@@ -660,7 +947,15 @@ test("hides transient new chats and provides complete right-click menus", async 
   await page.getByRole("menuitem", { name: "Move to folder…" }).hover();
   await expect(page.getByRole("menuitemradio", { name: "Chats" })).toBeChecked();
   const moveRequest = page.waitForRequest((request) => request.url().endsWith("/v0/sessions/session_existing/move"));
-  await page.getByRole("menuitemradio", { name: "Research" }).click();
+  // Move like a real pointer: an instant teleport past the parent menu defeats
+  // the submenu's hover-grace corridor (which tracks movement direction), so
+  // the submenu closes before the click. On phone layouts the submenu is
+  // flipped to the left of its parent, which is where a straight-line move is
+  // most likely to clip the parent items.
+  const moveTarget = page.getByRole("menuitemradio", { name: "Research" });
+  const moveTargetBox = await moveTarget.boundingBox();
+  await page.mouse.move(moveTargetBox.x + moveTargetBox.width / 2, moveTargetBox.y + moveTargetBox.height / 2, { steps: 12 });
+  await moveTarget.click();
   expect((await moveRequest).postDataJSON()).toEqual({ projectId: "project_research" });
 
   await page.getByRole("button", { name: "Existing chat" }).click({ button: "right" });
@@ -677,10 +972,9 @@ test("hides transient new chats and provides complete right-click menus", async 
   await expect(page.getByRole("menuitem", { name: "Move chats to…" })).toBeDisabled();
 });
 
-test("uses the sidebar-08 groups and native icon collapse", async ({ page }, testInfo) => {
+test("uses compact sidebar groups and preserves collapse without a brand icon", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "desktop-chromium");
   await page.goto("/");
-
   const sidebar = page.locator('[data-slot="sidebar"][data-state]');
   const main = page.locator('[data-slot="sidebar-inset"]');
   const mainBox = await main.boundingBox();
@@ -691,10 +985,13 @@ test("uses the sidebar-08 groups and native icon collapse", async ({ page }, tes
   await expect(page.locator('[data-sidebar="footer"]').getByRole("button", { name: /Conduit/ })).toBeVisible();
   await expect(page.locator('[data-sidebar="footer"]')).toContainText(/Server connected|Connecting|Reconnecting|unavailable/);
   await expect(page.locator('[data-sidebar="group-label"]')).toHaveText(["Chats", "Projects", "Workspaces"]);
-  await expect(page.locator('[data-sidebar="group-label"]').first()).toHaveCSS("font-size", "13px");
-  await expect(page.getByRole("button", { name: "Existing chat" })).toHaveCSS("font-size", "15px");
-  await expect(page.locator('[data-sidebar="header"] span', { hasText: "Conduit" })).toHaveCSS("font-size", "24px");
-  await expect(page.locator('[data-sidebar="header"] svg')).toHaveCSS("width", "24px");
+  await expect(page.locator('[data-sidebar="group-label"]').first()).toHaveCSS("font-size", "12px");
+  await expect(page.locator('[data-sidebar="group-label"]').first()).toHaveCSS("font-weight", "700");
+  await expect(page.getByRole("button", { name: "Existing chat" })).toHaveCSS("font-size", "13px");
+  await expect(page.locator('[data-sidebar="header"] span', { hasText: "Conduit" })).toHaveCSS("font-size", "32px");
+  await expect(page.locator('[data-sidebar="header"] svg')).toHaveCount(0);
+  await expect(page.locator(".server-status-dot")).toHaveCSS("width", "24px");
+  await expect(page.locator(".server-status-dot")).toHaveCSS("border-radius", "999px");
 
   await expect(page.getByRole("button", { name: "Existing chat" })).toBeVisible();
   await expect(page.locator('[data-sidebar="rail"]')).toHaveCount(1);
@@ -708,6 +1005,7 @@ test("uses the sidebar-08 groups and native icon collapse", async ({ page }, tes
   await page.locator('[data-sidebar="trigger"]:visible').click();
   await expect(sidebar).toHaveAttribute("data-state", "collapsed");
   await expect.poll(async () => (await main.boundingBox()).x).toBeLessThan(mainBox.x);
+  await expect(sidebar).toHaveCSS("width", "52px");
   await expect(page.locator('[data-sidebar="header"] span', { hasText: "Conduit" })).toBeHidden();
 
   const [collapsedSidebarBox, collapsedTriggerBox] = await Promise.all([
@@ -737,6 +1035,17 @@ test("keeps linked workspaces in their own sidebar group", async ({ page }, test
   });
   await page.goto("/");
   await openSidebar(page, testInfo);
+  if (testInfo.project.name === "mobile-chromium") {
+    const drawer = page.locator(".conduit-sidebar");
+    await expect(drawer).toHaveCSS("position", "fixed");
+    await expect(drawer).toHaveCSS("width", `${await page.evaluate(() => innerWidth)}px`);
+    await expect(drawer).not.toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+    await expect(drawer.locator(".sidebar-container")).not.toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+    const [drawerBox, firstLabelBox] = await Promise.all([drawer.boundingBox(), drawer.locator('[data-sidebar="group-label"]').first().boundingBox()]);
+    expect(firstLabelBox.x).toBeGreaterThanOrEqual(drawerBox.x);
+    await expect(page.locator(".mobile-sidebar-trigger")).toHaveAttribute("data-mobile-open", "true");
+    await expect(drawer.locator('[data-sidebar="header"] button')).toHaveCSS("justify-content", "flex-start");
+  }
   await expect(page.locator('[data-sidebar="group-label"]')).toHaveText(["Chats", "Projects", "Workspaces"]);
   await expect(page.getByRole("button", { name: "JaskFish" })).toBeVisible();
   await expect(page.getByRole("button", { name: "New workspace" })).toBeVisible();
@@ -766,17 +1075,14 @@ test("opens a targeted Workspace settings card from its context menu", async ({ 
   const settings = page.getByRole("dialog", { name: "Settings" });
   await expect(settings.getByRole("tab", { name: /Workspaces/ })).toHaveAttribute("aria-selected", "true");
   await expect(settings.getByText("/home/user/JaskFish")).toBeVisible();
-  await settings.getByRole("combobox", { name: "Default profile" }).click();
-  await expect(page.getByRole("option", { name: "Inherit global (General)" })).toBeVisible();
   const updateRequest = page.waitForRequest((request) => request.url().endsWith("/v0/projects/project_workspace")
     && request.method() === "PATCH");
-  await page.getByRole("option", { name: "Coding" }).click();
+  await settings.getByRole("combobox", { name: "Default profile" }).selectOption("workspace");
   expect((await updateRequest).postDataJSON()).toEqual({ defaultTemplateId: "workspace" });
   await expect(settings.getByText("Override: Coding")).toBeVisible();
-  await settings.getByRole("combobox", { name: "Default profile" }).click();
   const hostRequest = page.waitForRequest((request) => request.url().endsWith("/v0/projects/project_workspace")
     && request.method() === "PATCH" && request.postDataJSON()?.defaultTemplateId === "host-pi");
-  await page.getByRole("option", { name: "Host Pi" }).click();
+  await settings.getByRole("combobox", { name: "Default profile" }).selectOption("host-pi");
   await hostRequest;
   await expect(settings.getByText("Override: Host Pi")).toBeVisible();
 });
@@ -976,35 +1282,19 @@ test("clone workspace requires a repository and absolute target location", async
   });
 });
 
-test("sizes the meteor field with the chat viewport", async ({ page }, testInfo) => {
+test("the ambient layer fills the chat viewport", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "desktop-chromium");
   await page.goto("/");
 
   const main = page.locator('[data-slot="sidebar-inset"]');
-  const meteorField = page.locator(".chat-meteors");
-  const meteor = meteorField.locator(":scope > span").first();
-  const meteors = meteorField.locator(":scope > span");
-  await expect(meteors).toHaveCount(30);
+  const ambient = page.locator(".chat-ambient");
+  await expect(ambient).toBeVisible();
 
-  const [initialMain, initialField, initialLeft, delays, durations] = await Promise.all([
-    main.boundingBox(),
-    meteorField.boundingBox(),
-    meteor.evaluate((element) => element.style.left),
-    meteors.evaluateAll((elements) => elements.map((element) => Number.parseFloat(element.style.animationDelay))),
-    meteors.evaluateAll((elements) => elements.map((element) => Number.parseFloat(element.style.animationDuration))),
-  ]);
+  const [initialMain, initialField] = await Promise.all([main.boundingBox(), ambient.boundingBox()]);
   expect(initialField).toEqual(initialMain);
-  expect(initialLeft.includes("dvh")).toBe(true);
-  expect(delays.some((delay) => delay < 0)).toBe(true);
-  expect(new Set(delays).size).toBeGreaterThan(20);
-  expect(Math.min(...durations)).toBeGreaterThanOrEqual(12);
-  expect(Math.max(...durations)).toBeLessThanOrEqual(20);
 
   await page.setViewportSize({ width: 1600, height: 900 });
-  const [resizedMain, resizedField] = await Promise.all([
-    main.boundingBox(),
-    meteorField.boundingBox(),
-  ]);
+  const [resizedMain, resizedField] = await Promise.all([main.boundingBox(), ambient.boundingBox()]);
   expect(resizedField).toEqual(resizedMain);
   expect(resizedField.width).toBeGreaterThan(initialField.width);
   expect(resizedField.height).toBeGreaterThan(initialField.height);
@@ -1018,6 +1308,227 @@ test("composer model picker exposes model and thinking selectors", async ({ page
   await expect(page.getByText("Thinking", { exact: true })).toBeVisible();
   await expect(page.getByRole("menuitemradio", { name: "Reasoner example" })).toBeChecked();
   await expect(page.getByRole("menuitemradio", { name: "High" })).toBeVisible();
+});
+
+test("choosing a model closes the menu and restores page pointer events", async ({ page }) => {
+  await page.goto("/");
+
+  await page.getByRole("button", { name: /Reasoner medium/ }).click();
+  await expect(page.locator("body")).toHaveCSS("pointer-events", "none");
+  await page.getByRole("menuitemradio", { name: "Plain example" }).click();
+  await expect(page.getByRole("menu")).toHaveCount(0);
+  await expect(page.locator("body")).not.toHaveCSS("pointer-events", "none");
+});
+
+test("shows a newly created chat in the sidebar immediately", async ({ page }, testInfo) => {
+  await page.goto("/");
+  await openSidebar(page, testInfo);
+
+  await expect(page.locator('[data-sidebar="content"]').getByText("New chat", { exact: true })).toHaveCount(0);
+  await page.getByRole("button", { name: "New chat" }).click();
+  await expect(page.locator(".sidebar-chat", { hasText: "New chat" })).toBeVisible();
+});
+
+test("leaves an uncommitted new chat without blocking target navigation when cleanup returns chat_not_found", async ({ page }, testInfo) => {
+  await page.route("**/v0/chats/550e8400-e29b-41d4-a716-446655440099?ifEmpty=true", async (route) => {
+    await route.fulfill({ status: 404, json: { error: "chat_not_found" } });
+  });
+  await page.goto("/");
+  await openSidebar(page, testInfo);
+  await page.getByRole("button", { name: "New chat" }).click();
+  await page.waitForURL(/\/chat\/550e8400-e29b-41d4-a716-446655440099/);
+  await expect(page.locator(".sidebar-chat", { hasText: "New chat" })).toBeVisible();
+
+  await page.getByRole("button", { name: "Existing chat" }).click();
+
+  await expect(page).toHaveURL(/\/chat\/session_existing$/);
+  await expect(page.getByText("Previous question")).toBeVisible();
+  await expect(page.locator('[data-sidebar="content"]').getByText("New chat", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("chat_not_found", { exact: true })).toHaveCount(0);
+});
+
+test("a prompt sent from a brand-new chat never travels over the previous chat's live stream", async ({ page }, testInfo) => {
+  const livePosts = [];
+  await page.addInitScript(() => {
+    class RecordingWebSocket extends EventTarget {
+      static instances = [];
+      constructor(url) {
+        super();
+        this.url = url;
+        this.readyState = 0;
+        this.sent = [];
+        RecordingWebSocket.instances.push(this);
+        queueMicrotask(() => { this.readyState = 1; this.dispatchEvent(new Event("open")); });
+      }
+      send(payload) { this.sent.push(JSON.parse(payload)); }
+      close() { this.readyState = 3; this.dispatchEvent(new Event("close")); }
+    }
+    Object.defineProperty(window, "WebSocket", { configurable: true, value: RecordingWebSocket });
+    Object.defineProperty(window, "__wsInstances", { configurable: true, get: () => RecordingWebSocket.instances });
+  });
+  await page.route("**/v0/live-sessions", async (route) => {
+    if (route.request().method() === "POST") {
+      const body = route.request().postDataJSON();
+      livePosts.push(body);
+      const id = `live_${livePosts.length}`;
+      return route.fulfill({ status: 201, json: { id, chatId: body.chatId, streamUrl: `/v0/live-sessions/${id}/stream` } });
+    }
+    return route.fulfill({ json: { sessions: [] } });
+  });
+
+  await page.goto("/");
+  await openSidebar(page, testInfo);
+  await page.getByRole("button", { name: "Existing chat" }).click();
+  await expect.poll(() => livePosts.length).toBe(1);
+
+  await openSidebar(page, testInfo);
+  await page.getByRole("button", { name: "New chat" }).click();
+  await page.waitForURL(/\/chat\/550e8400-e29b-41d4-a716-446655440099/);
+  const composer = page.getByRole("textbox", { name: "Message Pi" });
+  await expect(composer).toBeEditable();
+  await composer.fill("hello");
+  await expect(composer).toHaveValue("hello");
+  await composer.press("Enter");
+  await expect.poll(() => livePosts.length).toBe(2);
+
+  expect(livePosts[0].chatId).toBe("session_existing");
+  expect(livePosts[1].chatId).toBe("550e8400-e29b-41d4-a716-446655440099");
+  const readPromptFrames = () => page.evaluate(() => window.__wsInstances
+    .filter((socket) => socket.url.includes("/v0/live-sessions/"))
+    .flatMap((socket) => socket.sent.filter((frame) => frame.type === "prompt").map((frame) => ({ url: socket.url, frame }))));
+  await expect.poll(async () => (await readPromptFrames()).length).toBe(1);
+  const promptFrames = await readPromptFrames();
+  expect(promptFrames[0].frame.message).toBe("hello");
+  expect(promptFrames[0].url.endsWith("/live_2/stream")).toBe(true);
+});
+
+test("collapses a turn's thinking, narration, and tools into one trace", async ({ page }, testInfo) => {
+  await page.route("**/v0/projects", async (route) => {
+    await route.fulfill({ json: { projects: [
+      { id: "project_chat", slug: "chat", name: "Chats", sessions: [
+        { id: "session_thinking", projectId: "project_chat", status: "active", title: "Thinking chat" },
+      ] },
+    ] } });
+  });
+  await page.route("**/v0/sessions/session_thinking", async (route) => {
+    await route.fulfill({ json: {
+      id: "session_thinking",
+      projectId: "project_chat",
+      status: "active",
+      title: "Thinking chat",
+      messages: [
+        { id: "u1", role: "user", content: "What does this repo do", timestamp: "2026-07-22T01:58:00.000Z" },
+        { id: "a1", role: "assistant", content: "", timestamp: "2026-07-22T01:58:01.000Z", blocks: [
+          { type: "thinking", thinking: "Let me explore the workspace first." },
+          { type: "toolCall", id: "call_1", name: "bash", arguments: { command: "ls" } },
+        ] },
+        { id: "a2", role: "assistant", content: "Now reading the readme.", timestamp: "2026-07-22T01:58:05.000Z", blocks: [
+          { type: "thinking", thinking: "Now for the readme." },
+          { type: "text", text: "Now reading the readme." },
+          { type: "toolCall", id: "call_2", name: "read", arguments: { path: "README.md" } },
+        ] },
+        { id: "a3", role: "assistant", content: "This repo is an analytics project.", timestamp: "2026-07-22T01:58:09.000Z", blocks: [
+          { type: "thinking", thinking: "Time to **summarize**." },
+          { type: "text", text: "This repo is an analytics project." },
+        ] },
+      ],
+      tools: [
+        { id: "call_1", name: "bash", args: { command: "ls" }, done: true, result: "file.py", timestamp: "2026-07-22T01:58:02.000Z" },
+        { id: "call_2", name: "read", args: { path: "README.md" }, done: true, result: "# Readme", timestamp: "2026-07-22T01:58:06.000Z" },
+      ],
+      page: { before: null },
+    } });
+  });
+
+  await page.goto("/");
+  await openSidebar(page, testInfo);
+  await page.getByRole("button", { name: "Thinking chat" }).click();
+
+  const trace = page.locator(".turn-trace");
+  await expect(trace.locator(".turn-trace-header")).toContainText("Time to summarize.");
+  await expect(trace.locator(".turn-trace-header")).toContainText("2 tool calls");
+  await expect(trace.locator(".turn-trace-preview strong")).toHaveText("summarize");
+  await expect(trace.locator(".turn-trace-preview")).not.toContainText("**");
+  await expect(trace.locator(".turn-trace-body")).toHaveCount(0);
+  await expect(page.locator(".bubble-assistant")).toHaveCount(1);
+  await expect(page.locator(".bubble-assistant")).toContainText("This repo is an analytics project.");
+
+  await trace.locator(".turn-trace-header").click();
+  const body = trace.locator(".turn-trace-body");
+  await expect(body).toContainText("Let me explore the workspace first.");
+  await expect(body).toContainText("Now for the readme.");
+  await expect(body).toContainText("Now reading the readme.");
+  await expect(body).toContainText("Time to summarize.");
+  await expect(body.locator(".tool-card")).toHaveCount(2);
+  const kinds = await body.evaluate((element) => [...element.children].map((child) => child.classList.contains("tool-card") ? "tool" : "text"));
+  expect(kinds).toEqual(["text", "tool", "text", "text", "tool", "text"]);
+});
+
+test("previews the latest trace activity while a turn runs and keeps it after completion", async ({ page }) => {
+  await page.addInitScript(() => {
+    class MockWebSocket extends EventTarget {
+      static OPEN = 1;
+      constructor() {
+        super();
+        this.readyState = 0;
+        queueMicrotask(() => { this.readyState = MockWebSocket.OPEN; this.dispatchEvent(new Event("open")); });
+      }
+      close() { this.readyState = 3; }
+      send(data) {
+        const request = JSON.parse(data);
+        if (request.type !== "prompt") return;
+        const emit = (payload, delay) => setTimeout(() => this.onmessage?.({ data: JSON.stringify(payload) }), delay);
+        emit({ type: "generation_started", generationId: "g1" }, 0);
+        emit({ type: "message_start", generationId: "g1", message: { role: "assistant" } }, 10);
+        emit({ type: "message_update", generationId: "g1", assistantMessageEvent: { type: "thinking_start" } }, 20);
+        emit({ type: "message_update", generationId: "g1", assistantMessageEvent: { type: "thinking_delta", delta: "Let me explore the workspace " } }, 30);
+        emit({ type: "message_update", generationId: "g1", assistantMessageEvent: { type: "thinking_delta", delta: "before answering." } }, 40);
+        // Real bridge shape: tool execution begins without an assistant
+        // message_end carrying the completed content blocks.
+        emit({ type: "tool_execution_start", generationId: "g1", toolCallId: "call_1", toolName: "bash", args: { command: "ls" } }, 1000);
+        emit({ type: "tool_execution_start", generationId: "g1", toolCallId: "call_2", toolName: "read", args: { path: "README.md" } }, 1050);
+        emit({ type: "tool_execution_end", generationId: "g1", toolCallId: "call_1", toolName: "bash", isError: false }, 1400);
+        emit({ type: "tool_execution_end", generationId: "g1", toolCallId: "call_2", toolName: "read", isError: false }, 1450);
+        emit({ type: "message_start", generationId: "g1", message: { role: "assistant" } }, 1500);
+        emit({ type: "message_update", generationId: "g1", assistantMessageEvent: { type: "thinking_delta", delta: "Let me get more details about the project." } }, 1520);
+        emit({ type: "tool_execution_start", generationId: "g1", toolCallId: "call_3", toolName: "read", args: { path: "config.json" } }, 2000);
+        emit({ type: "tool_execution_end", generationId: "g1", toolCallId: "call_3", toolName: "read", isError: false }, 2300);
+        emit({ type: "message_start", generationId: "g1", message: { role: "assistant" } }, 2400);
+        emit({ type: "assistant_stream_delta", generationId: "g1", delta: "Here is what I found." }, 2420);
+        emit({ type: "assistant_stream_final", generationId: "g1", content: "Here is what I found." }, 3200);
+        setTimeout(() => {
+          window.__agentEnded = true;
+          this.onmessage?.({ data: JSON.stringify({ type: "agent_end", generationId: "g1", willRetry: false }) });
+        }, 5000);
+      }
+    }
+    Object.defineProperty(window, "WebSocket", { configurable: true, value: MockWebSocket });
+  });
+
+  await page.goto("/");
+  const composer = page.getByRole("textbox", { name: "Message Pi" });
+  await composer.fill("hi");
+  await composer.press("Enter");
+
+  const header = page.locator(".turn-trace-header");
+  await expect(header).toContainText("Let me explore the workspace before answering.", { timeout: 4000 });
+  await expect(header).toContainText("2 tool calls", { timeout: 4000 });
+  await expect(page.locator(".turn-trace-body")).toHaveCount(0);
+  await expect(header).toContainText("Let me get more details about the project.", { timeout: 4000 });
+  await expect(header).toContainText("1 tool call (3 total)", { timeout: 4000 });
+  await expect(page.locator(".bubble-assistant")).toContainText("Here is what I found.", { timeout: 4000 });
+
+  await header.click();
+  const body = page.locator(".turn-trace-body");
+  await expect(body).toContainText("Let me explore the workspace before answering.");
+  await expect(body).toContainText("Let me get more details about the project.");
+  await expect(body.locator(".tool-card")).toHaveCount(3);
+  const kinds = await body.evaluate((element) => [...element.children].map((child) => child.classList.contains("tool-card") ? "tool" : "text"));
+  expect(kinds).toEqual(["text", "tool", "tool", "text", "tool"]);
+  // The complete chronology is already present while the final answer streams,
+  // before agent_end or a checkpoint reload can rebuild it from JSONL.
+  expect(await page.evaluate(() => Boolean(window.__agentEnded))).toBe(false);
+  await expect(page.locator(".agent-activity")).toContainText("Ready", { timeout: 6000 });
 });
 
 test("selects a chat model through the runtime-aware model route", async ({ page }) => {
@@ -1068,6 +1579,8 @@ test("model scope settings searches and toggles multiple checked models", async 
   await reasoner.click();
   await plain.click();
   await expect(page.getByRole("button", { name: "Save changes" })).toBeDisabled();
+  await search.press("Escape");
+  await expect(dialog).toHaveCount(0);
 });
 
 test("model scope search auto-focuses and its long result list scrolls", async ({ page }, testInfo) => {
@@ -1101,6 +1614,31 @@ test("model scope search auto-focuses and its long result list scrolls", async (
   await search.click();
   await search.fill("model 31");
   await expect(page.getByRole("option", { name: /Model 31 beta\/model-31/ })).toBeVisible();
+});
+
+test("settings adopts a delayed model scope until the user edits", async ({ page }, testInfo) => {
+  let releaseSettings;
+  const settingsReady = new Promise((resolve) => { releaseSettings = resolve; });
+  await page.route("**/v0/settings?**", async (route) => {
+    await settingsReady;
+    await route.fulfill({ json: {
+      models: [model, plainModel],
+      enabledModels: [model.spec, plainModel.spec],
+      defaultModel: model.spec,
+    } });
+  });
+  await page.goto("/");
+  await openSidebar(page, testInfo);
+  await page.locator('[data-sidebar="footer"]').getByRole("button", { name: /Conduit/ }).click();
+  await page.getByRole("menuitem", { name: "Manage settings" }).click();
+  const dialog = page.getByRole("dialog", { name: "Settings" });
+  await expect(dialog.getByText("Loading models…")).toBeVisible();
+
+  releaseSettings();
+  await expect(dialog.getByRole("option", { name: /Reasoner example\/reasoner/ })).toHaveAttribute("aria-selected", "true");
+  await expect(dialog.getByRole("option", { name: /Plain example\/plain/ })).toHaveAttribute("aria-selected", "true");
+  await expect(dialog.getByText("2 enabled")).toBeVisible();
+  await expect(dialog.getByRole("button", { name: "Save changes" })).toBeDisabled();
 });
 
 test("uploads picker and dropped files through the same attachment surface", async ({ page }, testInfo) => {
@@ -1164,6 +1702,76 @@ test("uploads picker and dropped files through the same attachment surface", asy
   await expect(messageAttachments).toContainText("picker.txt");
   await expect(messageAttachments).toContainText("dropped.txt");
   await expect(page.locator(".composer-wrap > .attachment-tray")).toHaveCount(0);
+});
+
+test("editing from history abandons the current attachment draft cleanly", async ({ page }, testInfo) => {
+  await page.addInitScript(() => {
+    let nextObjectUrl = 0;
+    window.__createdObjectUrls = [];
+    window.__revokedObjectUrls = [];
+    Object.defineProperty(URL, "createObjectURL", { configurable: true, value: () => {
+      const value = `blob:conduit-test-${++nextObjectUrl}`;
+      window.__createdObjectUrls.push(value);
+      return value;
+    } });
+    Object.defineProperty(URL, "revokeObjectURL", { configurable: true, value: (value) => window.__revokedObjectUrls.push(value) });
+  });
+  await page.route("**/v0/sessions/session_existing", async (route) => route.fulfill({ json: {
+    id: "session_existing", projectId: "project_chat", status: "active", title: "Existing chat",
+    messages: [{ id: "entry-user", role: "user", content: "Edit this prompt", attachments: [
+      { id: "transcript-file", name: "transcript-notes.md", type: "text/markdown", size: 42 },
+    ] }],
+    tools: [], page: { before: null },
+  } }));
+  const uploads = [];
+  const deletes = [];
+  await page.route("**/v0/chats/session_existing/attachments/*", async (route) => {
+    if (route.request().method() !== "DELETE") return route.fallback();
+    deletes.push(new URL(route.request().url()).pathname.split("/").at(-1));
+    await route.fulfill({ status: 204, body: "" });
+  });
+  await page.route("**/v0/chats/session_existing/attachments/*?name=*", async (route) => {
+    const url = new URL(route.request().url());
+    const id = url.pathname.split("/").at(-1);
+    const name = url.searchParams.get("name");
+    uploads.push({ id, name });
+    if (name !== "draft-complete.png") await new Promise((resolve) => setTimeout(resolve, 1500));
+    try {
+      await route.fulfill({ status: 201, json: { id, name, storedName: `${id}--${name}`, size: 3, type: "image/png" } });
+    } catch {
+      // The expected XHR abort closes the intercepted request before fulfillment.
+    }
+  });
+
+  await page.goto("/");
+  await openSidebar(page, testInfo);
+  await page.getByRole("button", { name: "Existing chat" }).click();
+  const picker = page.locator('input[type="file"]');
+  await picker.setInputFiles({ name: "draft-complete.png", mimeType: "image/png", buffer: Buffer.from("one") });
+  await expect.poll(() => uploads.map((item) => item.name)).toContain("draft-complete.png");
+  await expect(page.getByText("draft-complete.png", { exact: true })).toBeVisible();
+  await picker.setInputFiles(["a", "b", "c", "d"].map((name) => ({
+    name: `draft-pending-${name}.png`, mimeType: "image/png", buffer: Buffer.from(name),
+  })));
+  await expect.poll(() => uploads.filter((item) => item.name.startsWith("draft-pending-")).length).toBe(3);
+
+  await page.locator(".user-message-text", { hasText: "Edit this prompt" }).hover();
+  await page.getByRole("button", { name: "Edit from here" }).click();
+  await expect(page.locator(".composer-wrap > .attachment-tray")).toContainText("transcript-notes.md");
+  await expect(page.locator(".composer-wrap > .attachment-tray")).not.toContainText("draft-complete.png");
+  await expect.poll(() => deletes.length).toBe(1);
+  await expect.poll(() => page.evaluate(() => window.__revokedObjectUrls.length)).toBe(5);
+  await page.waitForTimeout(1700);
+  expect(uploads.map((item) => item.name).sort()).toEqual([
+    "draft-complete.png",
+    "draft-pending-a.png",
+    "draft-pending-b.png",
+    "draft-pending-c.png",
+  ].sort());
+  expect(await page.evaluate(() => ({ created: window.__createdObjectUrls, revoked: window.__revokedObjectUrls }))).toEqual({
+    created: ["blob:conduit-test-1", "blob:conduit-test-2", "blob:conduit-test-3", "blob:conduit-test-4", "blob:conduit-test-5"],
+    revoked: ["blob:conduit-test-1", "blob:conduit-test-2", "blob:conduit-test-3", "blob:conduit-test-4", "blob:conduit-test-5"],
+  });
 });
 
 test("stop freezes the visible response and rejects late generation deltas", async ({ page }) => {
@@ -1232,44 +1840,53 @@ test("global commands and slash suggestions preserve their intended focus models
   await page.keyboard.press("Control+k");
   const palette = page.getByRole("dialog", { name: "Command Palette" });
   await expect(palette).toBeVisible();
-  await expect(palette.getByRole("group", { name: "Commands" })).toBeVisible();
-  await expect(palette.getByRole("option", { name: /Settings…/ })).toBeVisible();
-  await expect(palette.getByRole("option", { name: /Go to…/ })).toBeVisible();
+  const [paletteBox, viewport] = await Promise.all([palette.locator(".command-shell").boundingBox(), page.evaluate(() => ({ width: innerWidth, height: innerHeight }))]);
+  // Mobile Chromium reserves a fractional scrollbar gutter, producing at most
+  // a two-device-pixel rounding difference from the visual viewport center.
+  expect(Math.abs(paletteBox.x + paletteBox.width / 2 - viewport.width / 2)).toBeLessThanOrEqual(2);
+  expect(Math.abs(paletteBox.y + paletteBox.height / 2 - viewport.height / 2)).toBeLessThanOrEqual(2);
+  const [statusBox, composerBox] = await Promise.all([page.locator(".composer-status").boundingBox(), page.locator(".composer").boundingBox()]);
+  expect(statusBox.width).toBe(composerBox.width);
+  await expect(page.locator(".composer-status")).toContainText(/Ready|Responding|Thinking/);
+  await expect(palette.getByRole("combobox", { name: "Search commands" })).toHaveAttribute("aria-expanded", "true");
+  await expect(page.locator("#root")).toHaveAttribute("aria-hidden", "true");
+  await page.keyboard.press("Escape");
+  await expect(palette).toHaveCount(0);
+  await expect(composer).toBeFocused();
+
+  // Settings is a drill-down page: sections live behind it and never leak into
+  // the root list. Opening a section from the page opens the Settings dialog.
+  await page.keyboard.press("Control+k");
+  await expect(palette.getByRole("option", { name: /^Settings…/ })).toBeVisible();
   await expect(palette.getByRole("option", { name: /^Runtime$/ })).toHaveCount(0);
-  await palette.getByRole("option", { name: /Settings…/ }).click();
-  await expect(palette.locator("[data-slot='command-input-prefix']")).toHaveText("Settings ›");
-  await expect(palette.getByRole("option", { name: /^Back$/ })).toBeVisible();
+  await palette.getByRole("option", { name: /^Settings…/ }).click();
+  await expect(palette.getByText("Settings ›")).toBeVisible();
+  await expect(palette.getByRole("option", { name: /^General/ })).toBeVisible();
+  await palette.getByRole("option", { name: /^General/ }).click();
+  let settingsDialog = page.getByRole("dialog", { name: "Settings" });
+  await expect(settingsDialog).toBeVisible();
+  await expect(settingsDialog.getByRole("tab", { name: /General/ })).toHaveAttribute("aria-selected", "true");
+  await page.keyboard.press("Escape");
+
+  // Runtime is reached by drilling into Settings, then searching within the page.
+  await page.keyboard.press("Control+k");
+  await palette.getByRole("option", { name: /^Settings…/ }).click();
+  await palette.getByRole("combobox").fill("runtime");
   await expect(palette.getByRole("option", { name: /^Runtime$/ })).toBeVisible();
-  await expect(palette.getByRole("option", { name: /^Workspaces$/ })).toBeVisible();
-  await palette.getByRole("combobox").fill("work");
-  await expect(palette.getByRole("option", { name: /^Workspaces$/ })).toHaveAttribute("data-selected", "true");
-  await palette.getByRole("combobox").fill("");
   await palette.getByRole("option", { name: /^Runtime$/ }).click();
-  const settingsDialog = page.getByRole("dialog", { name: "Settings" });
+  settingsDialog = page.getByRole("dialog", { name: "Settings" });
   await expect(settingsDialog).toBeVisible();
   await expect(settingsDialog.getByRole("tab", { name: /Runtime/ })).toHaveAttribute("aria-selected", "true");
-  await expect(settingsDialog.getByRole("heading", { name: "Runtime" })).toBeVisible();
   await page.keyboard.press("Escape");
 
   await page.keyboard.press("Control+k");
-  await palette.getByPlaceholder("Search commands…").fill("runtime");
-  await expect(palette.getByRole("option", { name: /^Runtime$/ })).toHaveCount(0);
-  await palette.getByPlaceholder("Search commands…").fill("settings");
-  await palette.getByRole("option", { name: /Settings…/ }).click();
-  await expect(palette.locator("[data-slot='command-input-prefix']")).toHaveText("Settings ›");
-  await palette.getByRole("option", { name: /^Runtime$/ }).click();
-  await expect(page.getByRole("dialog", { name: "Settings" })).toBeVisible();
-  await page.keyboard.press("Escape");
-
-  await page.keyboard.press("Control+k");
-  await palette.getByPlaceholder("Search commands…").fill("new folder");
+  await palette.getByRole("combobox").fill("new folder");
   await palette.getByRole("option", { name: /^New folder/ }).click();
   await expect(page.getByRole("dialog", { name: "New folder" })).toBeVisible();
   await page.keyboard.press("Escape");
 
   await page.keyboard.press("Control+k");
-  await palette.getByPlaceholder("Search commands…").fill("example plain");
-  await expect(palette.getByRole("group", { name: "Models" })).toBeVisible();
+  await palette.getByRole("combobox").fill("example plain");
   await expect(palette.getByRole("option", { name: /Plain/ })).toBeVisible();
   const settingsRequest = page.waitForRequest((request) => /\/v0\/chats\/[^/]+\/models$/.test(new URL(request.url()).pathname)
     && request.method() === "PATCH");
@@ -1277,9 +1894,16 @@ test("global commands and slash suggestions preserve their intended focus models
   await settingsRequest;
 
   await page.keyboard.press("Control+k");
-  await page.getByPlaceholder("Search commands…").fill("delete chat");
-  await page.getByRole("option", { name: /Delete chat/ }).click();
-  await expect(page.getByRole("alertdialog", { name: "Delete this chat?" })).toBeVisible();
+  await palette.getByRole("combobox").fill("delete chat");
+  await palette.getByRole("option", { name: /Delete chat/ }).click();
+  const deleteDialog = page.getByRole("alertdialog", { name: "Delete this chat?" });
+  await expect(deleteDialog).toBeVisible();
+  const deleteRequest = page.waitForRequest((request) => request.method() === "DELETE" && /\/v0\/sessions\/[^/]+$/.test(new URL(request.url()).pathname));
+  await deleteDialog.getByRole("button", { name: "Delete", exact: true }).click();
+  await deleteRequest;
+  await expect(deleteDialog).toHaveCount(0);
+  await page.waitForTimeout(250);
+  await expect(page.getByRole("alertdialog", { name: "Delete this chat?" })).toHaveCount(0);
 });
 
 test("message actions copy source, edit from a Pi entry, and regenerate via fork", async ({ page }, testInfo) => {
@@ -1427,6 +2051,34 @@ test("runtime settings exposes warm pool and concurrent generation caps", async 
   await expect(dialog.getByText("Max concurrent generations")).toBeVisible();
   await expect(dialog.getByText("3 live now")).toBeVisible();
   await expect(dialog.getByText("1 generating")).toBeVisible();
+});
+
+test("runtime settings reports load failures and recovers on retry", async ({ page }, testInfo) => {
+  let failing = true;
+  await page.route("**/v0/runtime/settings", async (route) => {
+    if (route.request().method() !== "GET") return route.fallback();
+    if (failing) return route.fulfill({ status: 503, json: { message: "Runtime settings unavailable" } });
+    return route.fulfill({ json: {
+      maxLiveProcesses: 8,
+      maxGeneratingProcesses: 2,
+      idleProcessTtlMs: 60_000,
+      liveCount: 0,
+      generatingCount: 0,
+    } });
+  });
+  await page.goto("/");
+  await openSidebar(page, testInfo);
+  await page.locator('[data-sidebar="footer"]').getByRole("button", { name: /Conduit/ }).click();
+  await page.getByRole("menuitem", { name: "Manage settings" }).click();
+  const dialog = page.getByRole("dialog", { name: "Settings" });
+  await dialog.getByRole("tab", { name: /Runtime/ }).click();
+  await expect(dialog.getByRole("alert")).toContainText("Runtime settings unavailable");
+  await expect(dialog.getByText("Loading runtime settings…")).toHaveCount(0);
+
+  failing = false;
+  await dialog.getByRole("button", { name: "Retry" }).click();
+  await expect(dialog.getByText("Max warm Pi processes")).toBeVisible();
+  await expect(dialog.getByRole("button", { name: "Save runtime settings" })).toBeDisabled();
 });
 
 test("host Pi re-detection immediately updates the Workspace profile menu", async ({ page }, testInfo) => {
