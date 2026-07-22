@@ -2,19 +2,20 @@ import type { Accessor } from "solid-js";
 import { createEffect } from "solid-js";
 import { createStore, reconcile } from "solid-js/store";
 import type { Message, ToolItem } from "../api/contracts";
-import { buildTimeline } from "../timeline-order";
+import type { TurnRow } from "../turn-rows";
+import { buildTurnRows } from "../turn-rows";
 
-export type TimelineRow =
-  | { key: string; type: "message"; value: Message; index: number }
-  | { key: string; type: "tool"; value: ToolItem; index: number };
+export type TimelineRow = TurnRow;
 
-export function createTimelineStore(messages: Accessor<Message[]>, tools: Accessor<ToolItem[]>, streaming: Accessor<boolean>) {
+export function createTimelineStore(
+  messages: Accessor<Message[]>,
+  tools: Accessor<ToolItem[]>,
+  streaming: Accessor<boolean>,
+  reasoning: Accessor<{ content: string; active: boolean; redacted: boolean }>,
+) {
   const [rows, setRows] = createStore<TimelineRow[]>([]);
   createEffect(() => {
-    const projected = buildTimeline(messages(), tools(), { streaming: streaming() }).map((item): TimelineRow => {
-      const renderKey = item.type === "message" ? item.value.key || item.value.id : item.value.id;
-      return { key: `${item.type}:${renderKey || item.index}`, type: item.type, value: item.value, index: item.index } as TimelineRow;
-    });
+    const projected = buildTurnRows(messages(), tools(), { streaming: streaming(), reasoning: reasoning() });
     setRows(reconcile(projected, { key: "key", merge: true }));
   });
   return rows;

@@ -4,7 +4,7 @@ import { Button, Spinner } from "@/components/primitives";
 import type { Message, RuntimeActivity, ToolItem } from "../api/contracts";
 import type { ActiveChatStore } from "../state/active-chat";
 import { AttachmentCards } from "./attachments";
-import { ToolCard } from "./tool-card";
+import { TurnTrace } from "./turn-trace";
 import { createTimelineStore } from "../state/timeline-store";
 
 const ChatMarkdown = lazy(() => import("./markdown").then((module) => ({ default: module.ChatMarkdown })));
@@ -27,7 +27,7 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
   let viewport!: HTMLDivElement;
   let previousLoaded: string | null = null;
   let following = true;
-  const timeline = createTimelineStore(props.chat.messages, props.chat.tools, props.chat.streaming);
+  const timeline = createTimelineStore(props.chat.messages, props.chat.tools, props.chat.streaming, props.chat.reasoning);
   const empty = createMemo(() => !timeline.length && !props.chat.activity()?.label);
 
   const scrollBottom = () => requestAnimationFrame(() => { viewport.scrollTop = viewport.scrollHeight; });
@@ -49,7 +49,7 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
         </Show>
         <Show when={empty()}><div class="empty-thread" data-slot="message-scroller-item"><div class="welcome"><h1>How can I help you today?</h1></div></div></Show>
         <For each={timeline}>{(item) => {
-          if (item.type === "tool") return <div data-slot="message-scroller-item"><ToolCard tool={item.value} sessionId={props.chat.loadedId()} /></div>;
+          if (item.type === "trace") return <div data-slot="message-scroller-item"><TurnTrace trace={item.value} sessionId={props.chat.loadedId()} /></div>;
           const message = createMemo(() => item.value);
           const user = createMemo(() => message().role === "user");
           const live = createMemo(() => {
@@ -63,10 +63,7 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
                 <Show when={message().timestamp}><time>{new Date(message().timestamp!).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</time></Show>
                 <div data-slot="bubble" data-align={user() ? "end" : "start"} data-editing={props.chat.editingEntryId() === message().id ? "true" : "false"} class={user() ? "bubble bubble-user" : "bubble bubble-assistant"}>
                   <div data-slot="bubble-content">
-                    <Show when={user()} fallback={<>
-                      <Show when={live() && (props.chat.reasoning().content || props.chat.reasoning().active)}><details class="reasoning" open={props.chat.reasoning().active}><summary>{props.chat.reasoning().active ? "Thinking…" : "Reasoning"}</summary><p>{props.chat.reasoning().content}</p></details></Show>
-                      <Suspense fallback={<div class="markdown-skeleton" />}><ChatMarkdown streaming={live()} streamVersion={props.chat.liveStream.version()}>{`${message().content || ""}${live() ? props.chat.liveStream.content() : ""}`}</ChatMarkdown></Suspense>
-                    </>}><span class="user-message-text">{message().content || ""}</span></Show>
+                    <Show when={user()} fallback={<Suspense fallback={<div class="markdown-skeleton" />}><ChatMarkdown streaming={live()} streamVersion={props.chat.liveStream.version()}>{`${message().content || ""}${live() ? props.chat.liveStream.content() : ""}`}</ChatMarkdown></Suspense>}><span class="user-message-text">{message().content || ""}</span></Show>
                   </div>
                 </div>
                 <Show when={user() && message().pending}><div class="marker">{message().queueMode === "steer" ? "Queued · steer (after tools)" : "Queued · follow-up (after turn)"}</div></Show>
