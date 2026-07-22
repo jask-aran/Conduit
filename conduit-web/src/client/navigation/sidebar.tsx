@@ -296,7 +296,7 @@ export function Sidebar(props: {
   const connectionTone = () => props.connectivity === "online" ? "success" : props.connectivity === "offline" ? "danger" : props.connectivity === "reconnecting" ? "warn" : "muted";
 
   return <>
-    <Button variant="ghost" size="icon" class="mobile-sidebar-trigger" aria-label="Toggle Sidebar" onClick={() => setMobileOpen((value) => !value)}><PanelLeftIcon /></Button>
+    <Button variant="ghost" size="icon" class="mobile-sidebar-trigger" data-mobile-open={mobileOpen() ? "true" : "false"} aria-label="Toggle Sidebar" onClick={() => setMobileOpen((value) => !value)}><PanelLeftIcon /></Button>
     <aside data-slot="sidebar" data-state={collapsed() ? "collapsed" : "expanded"} data-mobile-open={mobileOpen()} class="conduit-sidebar">
       <div data-slot="sidebar-container" class="sidebar-container">
         <div data-sidebar="header"><button aria-label="Conduit" onClick={() => chats() && void props.onNewChat(chats()!)}><span>Conduit</span></button></div>

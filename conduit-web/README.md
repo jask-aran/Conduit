@@ -53,6 +53,13 @@ Cmd/Ctrl+Shift+O opens Go to mode directly; Cmd/Ctrl+Shift+C starts a new chat.
 The composer slash Popover contains only `/attach`. A project-aware breadcrumb
 identifies where each chat belongs.
 
+The chat header, Cmd/Ctrl+., and the command palette open a per-chat read-only
+Workspace panel. Its lazy directory API hides `.conduit`, rejects symlinks and
+traversal, and caps text previews at 1 MiB. The Diff tab reports Git porcelain
+status, branch/upstream divergence, a compact recent-commit graph, and staged
+and unstaged unified diffs; non-Git projects remain usable with an explicit
+empty state. Git controls are read-only: refresh and copy branch/commit IDs.
+
 Every Isolated Pi profile process receives:
 
 - `PI_CODING_AGENT_DIR=data/pi`;
@@ -113,8 +120,10 @@ generic disclosure card with lifecycle status, deterministic summaries, lazy
 deferred results, and bounded previews; tools are data, not component registry
 keys.
 
-The single-line composer owns runtime-aware model and thinking controls. Isolated
-Pi reads `data/pi`; Host Pi reads its detected agent home and reconciles against
+The single-line composer owns runtime-aware model and thinking controls. A
+permanent TUI-like status line below it shows fine agent activity, context usage,
+and queued-message count without displacing composer controls. Isolated Pi reads
+`data/pi`; Host Pi reads its detected agent home and reconciles against
 the live process through `get_available_models` and `get_state`. A selection is
 sent through correlated RPC and saved as that installation's next-chat default.
 Opening a persisted session restores JSONL state and does not pass model flags
@@ -174,6 +183,9 @@ so timing reveals nothing.
 - `DELETE /v0/chats/:id/attachments/:attachment-id`
 - `GET|POST /v0/projects`
 - `PATCH|DELETE /v0/projects/:id`
+- `GET /v0/projects/:id/tree?path=…` lists one validated directory level
+- `GET /v0/projects/:id/file?path=…` returns a size-capped text preview
+- `GET /v0/projects/:id/diff` returns Git status and staged/unstaged unified diff
 - `POST /v0/projects/:id/move-sessions`
 - `GET /v0/workspaces/policy` returns the server-owned linked-workspace roots
 - `GET /v0/workspaces/suggestions` returns visible direct folders under `~/`
