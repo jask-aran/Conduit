@@ -1,7 +1,7 @@
 import type { Message, ToolItem } from "./api/contracts";
 
 export type TraceSegment =
-  | { kind: "thinking"; id: string; text: string }
+  | { kind: "thinking"; id: string; text: string; live?: boolean }
   | { kind: "narration"; id: string; text: string }
   | { kind: "tool"; id: string; tool: ToolItem };
 
@@ -100,7 +100,9 @@ export function buildTurnRows(
     }
     if (live) {
       const thinking = (opts.reasoning?.content || "").trim();
-      if (thinking) segments.push({ kind: "thinking", id: "thinking:live", text: thinking });
+      const currentAssistant = turn.assistants.at(-1);
+      const persistedThinking = currentAssistant ? thinkingOf(currentAssistant) : "";
+      if (thinking && thinking !== persistedThinking) segments.push({ kind: "thinking", id: `thinking:${currentAssistant?.id || "live"}`, text: thinking, live: true });
     }
     if (segments.length > 0) rows.push({ key: `trace:${turn.userMessage ? messageKey(turn.userMessage) : messageKey(turn.assistants[0]!)}`, type: "trace", value: { active: live, segments } });
     const text = String(bubble?.content || "").trim();

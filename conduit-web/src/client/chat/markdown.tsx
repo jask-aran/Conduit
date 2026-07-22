@@ -51,136 +51,61 @@ function renderMarkdown(source: string) {
   }) as DocumentFragment;
 }
 
+const sameKind = (current: Node, next: Node) => current.nodeType === next.nodeType
+  && (current.nodeType !== Node.ELEMENT_NODE || (current as Element).tagName === (next as Element).tagName);
+const managedAttributes = new Set(["class", "href", "title", "type", "aria-label", "data-copy-code", "data-external-url", "data-language", "data-markdown"]);
+
+/** Reconcile a freshly parsed canonical Markdown tree into the live tree.
+ * Nodes whose semantic position and element type survive the next token keep
+ * their identity, focus, listeners and measured box. A token that genuinely
+ * changes Markdown structure replaces only that branch. */
+function reconcileNode(current: Node, next: Node) {
+  if (current.nodeType === Node.TEXT_NODE) {
+    if (current.nodeValue !== next.nodeValue) current.nodeValue = next.nodeValue;
+    return;
+  }
+  const currentElement = current as Element;
+  const nextElement = next as Element;
+  for (const attribute of [...currentElement.attributes]) {
+    // Attributes outside the sanitized renderer's vocabulary belong to the
+    // surrounding application (measurement, focus, tests) and survive.
+    if ((managedAttributes.has(attribute.name) || !attribute.name.startsWith("data-")) && !nextElement.hasAttribute(attribute.name)) {
+      currentElement.removeAttribute(attribute.name);
+    }
+  }
+  for (const attribute of [...nextElement.attributes]) {
+    if (currentElement.getAttribute(attribute.name) !== attribute.value) currentElement.setAttribute(attribute.name, attribute.value);
+  }
+  reconcileChildren(currentElement, nextElement);
+}
+
+function reconcileChildren(current: Node, next: Node) {
+  let index = 0;
+  while (index < next.childNodes.length) {
+    const nextChild = next.childNodes[index]!;
+    const currentChild = current.childNodes[index];
+    if (!currentChild) current.appendChild(nextChild.cloneNode(true));
+    else if (!sameKind(currentChild, nextChild)) current.replaceChild(nextChild.cloneNode(true), currentChild);
+    else reconcileNode(currentChild, nextChild);
+    index += 1;
+  }
+  while (current.childNodes.length > next.childNodes.length) current.lastChild?.remove();
+}
+
 export function ChatMarkdown(props: { children?: string; streaming?: boolean; streamVersion?: number }) {
   let root!: HTMLDivElement;
   const [externalUrl, setExternalUrl] = createSignal<string | null>(null);
   let externalReturnFocus: HTMLElement | null = null;
   let renderedSource = "";
-  let streamLength = 0;
-  let activeStreamVersion = -1;
-  let streamChunks: string[] = [];
-  let streamLineChunks: string[] = [];
-  let streamTail: HTMLDivElement | null = null;
-  let fence: { character: string; length: number } | null = null;
-  let displayMath = false;
-  let commitAtBlankLine: boolean | null = null;
-  let streaming = false;
-
-  const appendRendered = (source: string) => {
-    if (!source) return;
-    root.insertBefore(renderMarkdown(source), streamTail);
-  };
-
-  const renderStreamTail = () => {
-    if (!streamTail) return;
-    const source = streamChunks.join("");
-    streamTail.replaceChildren(source ? renderMarkdown(source) : document.createTextNode(""));
-  };
-
-  const commitStreamBuffer = () => {
-    const source = streamChunks.join("");
-    if (source.trim()) appendRendered(source);
-    streamChunks = [];
-    commitAtBlankLine = null;
-    renderStreamTail();
-  };
-
-  const finishLine = () => {
-    const line = streamLineChunks.join("").slice(0, -1).replace(/\r$/, "");
-    const trimmed = line.trim();
-    const marker = /^ {0,3}(`{3,}|~{3,})/.exec(line)?.[1] || null;
-    const closingMarker = /^ {0,3}(`{3,}|~{3,})[ \t]*$/.exec(line)?.[1] || null;
-    streamLineChunks = [];
-    if (commitAtBlankLine == null && trimmed) {
-      // Containers can legally continue after blank lines. Keep their entire
-      // tail raw rather than split one Markdown block into several documents.
-      commitAtBlankLine = !/^(?: {0,3}(?:[-+*]|\d+[.)])\s| {0,3}>|(?: {4}|\t)| {0,3}<[A-Za-z!/]| {0,3}\[[^\]]+\]:)/.test(line);
-    }
-
-    if (fence) {
-      if (closingMarker?.[0] === fence.character && closingMarker.length >= fence.length) {
-        fence = null;
-        commitStreamBuffer();
-      }
-      return;
-    }
-    if (marker) {
-      fence = { character: marker[0]!, length: marker.length };
-      return;
-    }
-    if (trimmed === "$$") {
-      displayMath = !displayMath;
-      if (!displayMath) commitStreamBuffer();
-      return;
-    }
-    if (!displayMath && !trimmed && commitAtBlankLine !== false) commitStreamBuffer();
-  };
-
-  const appendStream = (delta: string) => {
-    if (!delta || !streamTail) return;
-    streamLength += delta.length;
-    let start = 0;
-    for (let newline = delta.indexOf("\n"); newline >= 0; newline = delta.indexOf("\n", start)) {
-      const segment = delta.slice(start, newline + 1);
-      streamChunks.push(segment);
-      streamLineChunks.push(segment);
-      finishLine();
-      start = newline + 1;
-    }
-    const remainder = delta.slice(start);
-    if (remainder) {
-      streamChunks.push(remainder);
-      streamLineChunks.push(remainder);
-    }
-    // Reparse only the mutable tail once per batched stream update. Completed
-    // blocks remain untouched/stable, while closed Markdown inside a long list
-    // no longer sits as raw ** / backtick source until generation ends.
-    renderStreamTail();
-  };
-
-  const beginStream = (source: string, version: number) => {
-    root.replaceChildren();
-    renderedSource = "";
-    streamLength = 0;
-    activeStreamVersion = version;
-    streamChunks = [];
-    streamLineChunks = [];
-    fence = null;
-    displayMath = false;
-    commitAtBlankLine = null;
-    streaming = true;
-    streamTail = document.createElement("div");
-    streamTail.className = "markdown-stream-tail";
-    streamTail.dataset.markdownStreamTail = "";
-    root.append(streamTail);
-    appendStream(source);
-  };
-
-  const finishStream = (source: string) => {
-    // Fragments are useful while tokens arrive, but only a canonical parse of
-    // the whole document can resolve cross-block Markdown such as reference
-    // definitions. This is the stream's single full parse.
-    root.replaceChildren(renderMarkdown(source));
-    streamTail = null;
-    streamChunks = [];
-    streamLineChunks = [];
-    renderedSource = source;
-    streaming = false;
-  };
+  let renderedVersion = -1;
 
   createEffect(() => {
     const source = String(props.children || "");
     const version = Number(props.streamVersion || 0);
-    if (props.streaming) {
-      if (!streaming || version !== activeStreamVersion || source.length < streamLength) beginStream(source, version);
-      else appendStream(source.slice(streamLength));
-      return;
-    }
-    if (streaming) finishStream(source);
-    else if (source !== renderedSource) {
-      root.replaceChildren(renderMarkdown(source));
-      renderedSource = source;
-    }
+    if (source === renderedSource && version === renderedVersion) return;
+    reconcileChildren(root, renderMarkdown(source));
+    renderedSource = source;
+    renderedVersion = version;
   });
 
   const click = async (event: MouseEvent) => {
