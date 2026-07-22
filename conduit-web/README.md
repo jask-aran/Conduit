@@ -55,10 +55,12 @@ identifies where each chat belongs.
 
 The chat header, Cmd/Ctrl+., and the command palette open a per-chat read-only
 Workspace panel. Its lazy directory API hides `.conduit`, rejects symlinks and
-traversal, and caps text previews at 1 MiB. The Diff tab reports Git porcelain
-status, branch/upstream divergence, a compact recent-commit graph, and staged
-and unstaged unified diffs; non-Git projects remain usable with an explicit
-empty state. Git controls are read-only: refresh and copy branch/commit IDs.
+traversal, and caps text previews at 1 MiB. Files combines a file tree with an
+optional resizable preview. Source Control reports Git porcelain status,
+branch/upstream divergence, a compact recent-commit graph, and staged and
+unstaged unified diffs in the same optional detail bay; non-Git projects remain
+usable with an explicit empty state. Git controls are read-only: refresh and
+copy branch/commit IDs.
 
 Every Isolated Pi profile process receives:
 

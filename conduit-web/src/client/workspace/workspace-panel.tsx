@@ -1,5 +1,5 @@
 import { createEffect, createSignal, For, onCleanup, Show } from "solid-js";
-import { BoxesIcon, ChevronRightIcon, CopyIcon, FileCode2Icon, FolderIcon, GitBranchIcon, GitCompareArrowsIcon, RefreshCwIcon, XIcon } from "lucide-solid";
+import { BoxesIcon, ChevronDownIcon, ChevronRightIcon, CopyIcon, FileCode2Icon, FolderIcon, GitBranchIcon, GitCompareArrowsIcon, RefreshCwIcon, XIcon } from "lucide-solid";
 import { Button, Spinner } from "@/components/primitives";
 import { api, asList } from "../api/client";
 
@@ -22,8 +22,43 @@ export default function WorkspacePanel(props: { projectId: string; chatId: strin
   const widthKey = () => `conduit:workspace-panel:${props.chatId}:width`;
   const [width, setWidth] = createSignal(Math.max(320, Math.min(620, Number(localStorage.getItem(widthKey())) || 420)));
   const [artifactMode, setArtifactMode] = createSignal<ArtifactMode>("outputs");
+  const detailOpenKey = () => `conduit:workspace-panel:${props.chatId}:${tab()}:detail-open`;
+  const detailHeightKey = () => `conduit:workspace-panel:${props.chatId}:${tab()}:detail-height`;
+  const [detailOpen, setDetailOpen] = createSignal(localStorage.getItem(detailOpenKey()) !== "false");
+  const [detailHeight, setDetailHeight] = createSignal(Math.max(160, Number(localStorage.getItem(detailHeightKey())) || 360));
 
-  const selectTab = (next: PanelTab) => { setTab(next); localStorage.setItem(storageKey(), next); };
+  const selectTab = (next: PanelTab) => {
+    setTab(next);
+    localStorage.setItem(storageKey(), next);
+    setDetailOpen(localStorage.getItem(`conduit:workspace-panel:${props.chatId}:${next}:detail-open`) !== "false");
+    setDetailHeight(Math.max(160, Number(localStorage.getItem(`conduit:workspace-panel:${props.chatId}:${next}:detail-height`)) || 360));
+  };
+  const toggleDetail = () => {
+    const next = !detailOpen();
+    setDetailOpen(next);
+    localStorage.setItem(detailOpenKey(), String(next));
+  };
+  const startDetailResize = (event: PointerEvent) => {
+    event.preventDefault();
+    const startY = event.clientY;
+    const startHeight = detailHeight();
+    const move = (moveEvent: PointerEvent) => {
+      const next = Math.max(160, Math.min(window.innerHeight - 230, startHeight + startY - moveEvent.clientY));
+      setDetailHeight(next);
+      localStorage.setItem(detailHeightKey(), String(next));
+    };
+    const stop = () => { window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", stop); document.body.classList.remove("workspace-detail-resizing"); };
+    document.body.classList.add("workspace-detail-resizing");
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", stop, { once: true });
+  };
+  const resizeDetailByKey = (event: KeyboardEvent) => {
+    if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
+    event.preventDefault();
+    const next = Math.max(160, Math.min(window.innerHeight - 230, detailHeight() + (event.key === "ArrowUp" ? 20 : -20)));
+    setDetailHeight(next);
+    localStorage.setItem(detailHeightKey(), String(next));
+  };
   const loadDirectory = async (directory = "") => {
     setLoading(true); setError("");
     try {
@@ -67,7 +102,7 @@ export default function WorkspacePanel(props: { projectId: string; chatId: strin
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", stop, { once: true });
   };
-  onCleanup(() => document.body.classList.remove("workspace-resizing"));
+  onCleanup(() => { document.body.classList.remove("workspace-resizing"); document.body.classList.remove("workspace-detail-resizing"); });
 
   createEffect(() => {
     void props.projectId;
@@ -88,21 +123,25 @@ export default function WorkspacePanel(props: { projectId: string; chatId: strin
     <header class="workspace-panel-header"><div><strong>Workspace</strong><small>Read-only project context</small></div><Button variant="ghost" size="icon-sm" aria-label="Close workspace panel" onClick={props.onClose}><XIcon /></Button></header>
     <div class="workspace-panel-tabs" role="tablist" aria-label="Workspace views">
       <button role="tab" aria-selected={tab() === "files"} onClick={() => { selectTab("files"); if (!directories()[""]) void loadDirectory(); }}><FolderIcon />Files</button>
-      <button role="tab" aria-selected={tab() === "diff"} onClick={() => { selectTab("diff"); if (!diff()) void loadDiff(); }}><GitCompareArrowsIcon />Diff</button>
+      <button role="tab" aria-selected={tab() === "diff"} onClick={() => { selectTab("diff"); if (!diff()) void loadDiff(); }}><GitCompareArrowsIcon />Source Control</button>
       <button role="tab" aria-selected={tab() === "artifacts"} onClick={() => selectTab("artifacts")}><BoxesIcon />Artifacts</button>
     </div>
     <Show when={error()}><div class="workspace-panel-error">{error()}</div></Show>
     <Show when={tab() === "files"}>
       <div class="workspace-files"><nav aria-label="Project files" class="workspace-tree"><Tree directory="" /></nav>
-        <section class="workspace-preview" aria-label="File preview"><Show when={preview()} fallback={<div class="workspace-panel-empty">Select a text file to preview it.</div>}>{(file) => <><header><span>{file().path}</span><small>{file().size.toLocaleString()} bytes</small></header><pre><code>{file().content}</code></pre></>}</Show></section>
+        <div class="workspace-detail-toggle"><button aria-expanded={detailOpen()} onClick={toggleDetail}><ChevronDownIcon data-open={detailOpen()} /><span>File preview</span><Show when={preview()}><small>{preview()!.path} · {preview()!.size.toLocaleString()} bytes</small></Show></button></div>
+        <Show when={detailOpen()}><><div class="workspace-detail-resize-handle" role="separator" aria-label="Resize file preview" aria-orientation="horizontal" aria-valuemin="160" aria-valuemax={Math.max(160, window.innerHeight - 230)} aria-valuenow={detailHeight()} tabIndex={0} onPointerDown={startDetailResize} onKeyDown={resizeDetailByKey} /><section class="workspace-preview" aria-label="File preview" style={{ height: `${detailHeight()}px` }}><Show when={preview()} fallback={<div class="workspace-panel-empty">Select a text file to preview it.</div>}>{(file) => <pre><code>{file().content}</code></pre>}</Show></section></></Show>
       </div>
     </Show>
     <Show when={tab() === "diff"}><section class="workspace-diff">
+      <div class="workspace-diff-overview">
       <div class="workspace-status-strip"><div><GitBranchIcon /><strong>{diff()?.repository ? diff()?.branch : "Not a Git repository"}</strong><Show when={diff()?.upstream}><small>{diff()?.upstream}</small></Show><Show when={diff()?.ahead || diff()?.behind}><span>↑{diff()?.ahead || 0} ↓{diff()?.behind || 0}</span></Show></div><div><Button variant="ghost" size="icon-sm" aria-label="Copy branch name" disabled={!diff()?.branch} onClick={() => copy(diff()?.branch)}><CopyIcon /></Button><Button variant="ghost" size="icon-sm" aria-label="Refresh Git status" onClick={() => void loadDiff()}><RefreshCwIcon /></Button></div></div>
       <Show when={diff()?.repository}><div class="workspace-git-summary"><span>{diff()?.files.length || 0} changed {(diff()?.files.length || 0) === 1 ? "file" : "files"}</span><span>{diff()?.commits?.length || 0} recent commits</span></div></Show>
       <Show when={diff()?.repository && diff()!.files.length}><div class="workspace-changes"><For each={diff()!.files}>{(file) => <div><code>{file.status}</code><span>{file.path}</span></div>}</For></div></Show>
       <Show when={diff()?.repository && diff()?.commits?.length}><div class="workspace-git-graph" aria-label="Recent commits"><For each={diff()!.commits}>{(commit) => <div class="workspace-commit"><code class="workspace-graph-rail">{commit.graph || "*"}</code><button title={`${commit.author} · ${new Date(commit.authoredAt).toLocaleString()}`} onClick={() => copy(commit.hash)}><span>{commit.subject}</span><code>{commit.shortHash}</code></button></div>}</For></div></Show>
-      <Show when={diff()?.diff} fallback={<div class="workspace-panel-empty">{diff()?.repository ? "Working tree is clean." : "Diff is available for Git projects."}</div>}>{(content) => <details class="workspace-patch"><summary>Working tree patch</summary><pre class="workspace-diff-content"><code>{content()}</code></pre></details>}</Show>
+      </div>
+      <div class="workspace-detail-toggle"><button aria-expanded={detailOpen()} onClick={toggleDetail}><ChevronDownIcon data-open={detailOpen()} /><span>Working tree patch</span><small>{diff()?.files.length || 0} changed</small></button></div>
+      <Show when={detailOpen()}><><div class="workspace-detail-resize-handle" role="separator" aria-label="Resize working tree patch" aria-orientation="horizontal" aria-valuemin="160" aria-valuemax={Math.max(160, window.innerHeight - 230)} aria-valuenow={detailHeight()} tabIndex={0} onPointerDown={startDetailResize} onKeyDown={resizeDetailByKey} /><div class="workspace-patch" style={{ height: `${detailHeight()}px` }}><Show when={diff()?.diff} fallback={<div class="workspace-panel-empty">{diff()?.repository ? "Working tree is clean." : "Diff is available for Git projects."}</div>}>{(content) => <pre class="workspace-diff-content"><code>{content()}</code></pre>}</Show></div></></Show>
     </section></Show>
     <Show when={tab() === "artifacts"}><section class="workspace-artifacts">
       <div class="workspace-artifact-modes" role="radiogroup" aria-label="Artifact modality"><button role="radio" aria-checked={artifactMode() === "outputs"} onClick={() => setArtifactMode("outputs")}>Outputs</button><button role="radio" aria-checked={artifactMode() === "interactive"} onClick={() => setArtifactMode("interactive")}>Interactive UI</button></div>

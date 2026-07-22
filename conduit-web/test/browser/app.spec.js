@@ -258,22 +258,35 @@ test("workspace panel previews files, shows diff, and persists per chat", async 
   await page.getByRole("button", { name: "Toggle workspace panel" }).click();
   const panel = page.getByRole("complementary", { name: "Workspace panel" });
   await expect(panel).toBeVisible();
+  if (page.viewportSize().width > 760) {
+    const [panelBox, widthHandleBox] = await Promise.all([panel.boundingBox(), panel.getByRole("separator", { name: "Resize workspace panel" }).boundingBox()]);
+    expect(widthHandleBox.x).toBeLessThan(panelBox.x);
+  }
   await panel.getByRole("button", { name: "src" }).click();
   await panel.getByRole("button", { name: "main.ts" }).click();
   await expect(panel.getByText("export function startConduit() {}" )).toBeVisible();
-  await panel.getByRole("tab", { name: "Diff" }).click();
+  await panel.getByRole("button", { name: /File preview/ }).click();
+  await expect(panel.getByRole("region", { name: "File preview" })).toHaveCount(0);
+  await panel.getByRole("button", { name: /File preview/ }).click();
+  await panel.getByRole("tab", { name: "Source Control" }).click();
   await expect(panel.getByText("1 changed file")).toBeVisible();
   await expect(panel.getByText("src/main.ts")).toBeVisible();
   await expect(panel.getByText("agent/rhs-panel-mvp", { exact: true })).toBeVisible();
   await expect(panel.getByText("Add workspace panel")).toBeVisible();
+  const patchHandle = panel.getByRole("separator", { name: "Resize working tree patch" });
+  await expect(patchHandle).toBeVisible();
+  const originalPatchHeight = Number(await patchHandle.getAttribute("aria-valuenow"));
+  await patchHandle.focus();
+  await page.keyboard.press("ArrowUp");
+  await expect(patchHandle).toHaveAttribute("aria-valuenow", String(originalPatchHeight + 20));
   await panel.getByRole("tab", { name: "Artifacts" }).click();
   await expect(panel.getByText("No artifacts in the loaded transcript")).toBeVisible();
   await panel.getByRole("radio", { name: "Interactive UI" }).click();
   await expect(panel.getByText("Interactive artifacts are not enabled")).toBeVisible();
-  await panel.getByRole("tab", { name: "Diff" }).click();
+  await panel.getByRole("tab", { name: "Source Control" }).click();
   await page.reload();
   await expect(page.getByRole("complementary", { name: "Workspace panel" })).toBeVisible();
-  await expect(page.getByRole("tab", { name: "Diff" })).toHaveAttribute("aria-selected", "true");
+  await expect(page.getByRole("tab", { name: "Source Control" })).toHaveAttribute("aria-selected", "true");
   await page.keyboard.press(process.platform === "darwin" ? "Meta+." : "Control+.");
   await expect(page.getByRole("complementary", { name: "Workspace panel" })).toHaveCount(0);
 });
@@ -990,8 +1003,8 @@ test("uses compact sidebar groups and preserves collapse without a brand icon", 
   await expect(page.getByRole("button", { name: "Existing chat" })).toHaveCSS("font-size", "13px");
   await expect(page.locator('[data-sidebar="header"] span', { hasText: "Conduit" })).toHaveCSS("font-size", "32px");
   await expect(page.locator('[data-sidebar="header"] svg')).toHaveCount(0);
-  await expect(page.locator(".server-status-dot")).toHaveCSS("width", "24px");
-  await expect(page.locator(".server-status-dot")).toHaveCSS("border-radius", "999px");
+  await expect(page.locator(".server-status-indicator")).toHaveCSS("width", "16px");
+  await expect(page.locator(".server-status-indicator .runtime-indicator-dot")).toHaveCSS("width", "8px");
 
   await expect(page.getByRole("button", { name: "Existing chat" })).toBeVisible();
   await expect(page.locator('[data-sidebar="rail"]')).toHaveCount(1);
