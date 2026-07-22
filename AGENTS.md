@@ -16,7 +16,7 @@ reference documentation:
 Architecture in one breath: one Express server (`conduit-web/src/server.js`)
 owns a pool of `pi --mode rpc` child processes — one per live chat, across two
 installations (bundled Isolated Pi and the user's native Host Pi) — and
-relays their events to a React/Vite client over per-chat WebSockets plus a
+relays their events to a strict TypeScript SolidJS/Vite client over per-chat WebSockets plus a
 global SSE runtime channel. Pi's JSONL files are the authoritative
 transcripts; Conduit's stores (`data/*.json`) hold identity, registry, and
 preferences only, and the browser is a reconnectable client of server-owned
@@ -61,24 +61,26 @@ that alters behavior they describe.
 
 ## Interface
 
-Shadcn first: build controls from Shadcn primitives added as repository-owned
-source (`npm run ui:add -- <component>`), customized through composition and
-tokens — never a bespoke primitive just for styling. Magic UI is the secondary
-registry for purposeful motion only. New surface features should be reachable
-from the Cmd/Ctrl+K palette; palette and composer commands live in the
-explicit registries in `command-registry.js`.
+Build concrete Solid components for concrete Conduit surfaces. Use Kobalte
+selectively when accessible behavior (menus, context menus, focus management)
+earns the dependency; keep the local primitive boundary small and do not copy a
+generic component catalogue. New surface features should be reachable from the
+typed Cmd/Ctrl+K palette when that improves keyboard access. Do not introduce
+parallel command or tool registries: tool names are data and generic tool cards
+must remain useful for unknown tools.
 
-Assistant Markdown renders only through `src/client/chat-markdown.jsx` and
-Streamdown's hardened pipeline; user prompts remain literal text; do not
-introduce a parallel Markdown parser or import the full `shiki` bundle.
+Assistant Markdown renders only through `src/client/chat/markdown.tsx` using
+Marked, DOMPurify, and the KaTeX extension; user prompts remain literal text.
+Do not introduce a parallel Markdown parser.
 
 Rendering stability (hard-won — do not regress):
 
-- Timeline React keys are durable identities: reconcile optimistic entries in
+- Timeline render keys are durable identities: reconcile optimistic entries in
   place, never re-key rendered lists of the same content.
 - A timeline slot keeps one element type across its streaming→final
   lifecycle; vary props, never component identity mid-life.
-- Read mutable external stores during render only via `useSyncExternalStore`.
+- Browser state has three owners: catalogue, global runtime, and active chat.
+  Keep new state in the narrowest owner and expose it through Solid signals.
 - Navigation is load-then-commit: never commit a cleared intermediate state
   while replacement data is in flight; key per-thread UI state by session id.
 - No `content-visibility` or intrinsic-size placeholders on elements in
@@ -99,6 +101,12 @@ It rebuilds when needed and owns the PID/log on port 4310. Do not launch
 `npm run build` (bundle budgets enforced — treat budget increases as reviewed
 architectural changes).
 
+Before committing, run the complete local verification suite: `npm run
+typecheck`, `npm test`, `npm run build`, and `npm run test:browser`. GitHub
+Actions intentionally does not repeat the test suites; its manual static check
+only verifies a clean install, strict TypeScript, and the production bundle
+budgets. GitGuardian remains the automatic repository security check.
+
 Run a single server suite with `node --test test/<name>.test.js`; run a
 single browser spec with `npx playwright test test/browser/app.spec.js
 -g "<test name>"`. Server tests are `test/*.test.js` with `node:test`;
@@ -115,10 +123,9 @@ and URLs the user should walk through to validate the change themselves.
 ## Style
 
 ES modules, two-space indent, semicolons, double quotes; `camelCase`
-functions, `PascalCase` components, kebab-case filenames. Generated
-`src/components/ui/` files keep Shadcn's upstream formatting; keep React and
-the Shadcn package pinned exactly and commit lockfile changes. Configuration
-lives in env vars documented by `.env.example`. No repo-wide formatter: avoid
+functions, `PascalCase` components, kebab-case filenames. Client code is strict
+TypeScript and must not add React production dependencies. Configuration lives
+in env vars documented by `.env.example`. No repo-wide formatter: avoid
 formatting changes unrelated to the task.
 
 ## Commits and pull requests
