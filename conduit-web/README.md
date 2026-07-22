@@ -105,10 +105,10 @@ Assistant messages pass through `src/client/chat/markdown.tsx`. Marked parses
 GFM and fenced code, the KaTeX extension renders math, and DOMPurify enforces the
 client boundary. The renderer is lazy-loaded, strips remote images and unsafe
 URLs, requires confirmation for external links, and keeps user messages literal.
-Live deltas are coalesced into one Solid signal update per animation frame;
-completed blocks are parsed, sanitized, and appended once while only the raw
-unfinished tail remains mutable. Stable render keys preserve that Markdown DOM
-through finalization and durable checkpoint reconciliation. Tool calls use one
+Live deltas are coalesced into one Solid signal update per animation frame. The
+canonical Markdown document is parsed and sanitized, then reconciled into the
+existing DOM so semantic nodes remain stable while unfinished syntax takes
+shape and through durable checkpoint reconciliation. Tool calls use one
 generic disclosure card with lifecycle status, deterministic summaries, lazy
 deferred results, and bounded previews; tools are data, not component registry
 keys.

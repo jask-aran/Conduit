@@ -1,4 +1,4 @@
-import { createSignal, For, lazy, Show, Suspense } from "solid-js";
+import { createSignal, Index, lazy, Show, Suspense } from "solid-js";
 import { BrainIcon, ChevronDownIcon } from "lucide-solid";
 import type { TurnTraceData } from "../turn-rows";
 import { ToolCard } from "./tool-card";
@@ -37,12 +37,15 @@ export function TurnTrace(props: { trace: TurnTraceData; sessionId: string | nul
     </button>
     <Show when={open()}>
       <div class="turn-trace-body">
-        <For each={props.trace.segments}>{(segment) => {
-          if (segment.kind === "tool") return segment.tool ? <ToolCard tool={segment.tool} sessionId={props.sessionId} /> : null;
-          return <div class="turn-trace-text" data-kind={segment.kind}>
-            <Suspense fallback={<div class="markdown-skeleton" />}><ChatMarkdown streaming={segment.id === "thinking:live"}>{segment.text}</ChatMarkdown></Suspense>
+        <Index each={props.trace.segments}>{(segment) => {
+          const tool = () => { const value = segment(); return value.kind === "tool" ? value.tool : null; };
+          const text = () => { const value = segment(); return value.kind === "tool" ? "" : value.text; };
+          const live = () => { const value = segment(); return value.kind === "thinking" && Boolean(value.live); };
+          if (tool()) return <ToolCard tool={tool()!} sessionId={props.sessionId} />;
+          return <div class="turn-trace-text" data-kind={segment().kind}>
+            <Suspense fallback={<div class="markdown-skeleton" />}><ChatMarkdown streaming={live()}>{text()}</ChatMarkdown></Suspense>
           </div>;
-        }}</For>
+        }}</Index>
       </div>
     </Show>
   </div>;

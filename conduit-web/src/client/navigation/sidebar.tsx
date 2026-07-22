@@ -106,6 +106,7 @@ export function Sidebar(props: {
   const [renameValue, setRenameValue] = createSignal("");
   const [deleting, setDeleting] = createSignal<{ type: "chat"; chat: ChatSummary; project: Project } | { type: "project"; project: Project } | null>(null);
   const [moving, setMoving] = createSignal<{ chat: ChatSummary; project: Project } | null>(null);
+  let handledCommandNonce: number | null = null;
 
   const currentProject = () => props.projects.find((item) => item.sessions.some((chat) => chat.id === props.selectedId))
     || props.projects.find((item) => item.id === props.projectId);
@@ -114,7 +115,8 @@ export function Sidebar(props: {
 
   createEffect(() => {
     const command = props.command;
-    if (!command) return;
+    if (!command || command.nonce === handledCommandNonce) return;
+    handledCommandNonce = command.nonce;
     if (command.type === "new-folder") openNewDialog("folder");
     if (command.type === "new-workspace") openNewDialog("workspace");
     if (command.type === "toggle-sidebar") setCollapsed((value) => !value);
@@ -297,7 +299,7 @@ export function Sidebar(props: {
     <Button variant="ghost" size="icon" class="mobile-sidebar-trigger" aria-label="Toggle Sidebar" onClick={() => setMobileOpen((value) => !value)}><PanelLeftIcon /></Button>
     <aside data-slot="sidebar" data-state={collapsed() ? "collapsed" : "expanded"} data-mobile-open={mobileOpen()} class="conduit-sidebar">
       <div data-slot="sidebar-container" class="sidebar-container">
-        <div data-sidebar="header"><button aria-label="Conduit" onClick={() => chats() && void props.onNewChat(chats()!)}><span class="brand-icon"><CableIcon /></span><span>Conduit</span></button></div>
+        <div data-sidebar="header"><button aria-label="Conduit" onClick={() => chats() && void props.onNewChat(chats()!)}><span>Conduit</span></button></div>
         <div data-sidebar="content" class="sidebar-content">
           <Group label="Chats" projects={[]} chatRoot={chats()} addLabel="New chat" onAdd={() => chats() && void props.onNewChat(chats()!)} />
           <Group label="Projects" projects={folders()} emptyLabel="No projects" addLabel="New folder" onAdd={() => openNewDialog("folder")} />
