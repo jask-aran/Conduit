@@ -1360,7 +1360,8 @@ test("collapses a turn's thinking, narration, and tools into one trace", async (
   await page.getByRole("button", { name: "Thinking chat" }).click();
 
   const trace = page.locator(".turn-trace");
-  await expect(trace.locator(".turn-trace-header")).toContainText("Thinking process");
+  await expect(trace.locator(".turn-trace-header")).toContainText("Time to summarize.");
+  await expect(trace.locator(".turn-trace-header")).toContainText("2 tool calls");
   await expect(trace.locator(".turn-trace-body")).toHaveCount(0);
   await expect(page.locator(".bubble-assistant")).toHaveCount(1);
   await expect(page.locator(".bubble-assistant")).toContainText("This repo is an analytics project.");
@@ -1395,14 +1396,16 @@ test("previews the latest trace activity while a turn runs and keeps it after co
         emit({ type: "message_update", generationId: "g1", assistantMessageEvent: { type: "thinking_start" } }, 20);
         emit({ type: "message_update", generationId: "g1", assistantMessageEvent: { type: "thinking_delta", delta: "Let me explore the workspace " } }, 30);
         emit({ type: "message_update", generationId: "g1", assistantMessageEvent: { type: "thinking_delta", delta: "before answering." } }, 40);
-        emit({ type: "tool_execution_start", generationId: "g1", toolCallId: "call_1", toolName: "bash", args: { command: "ls" } }, 1000);
-        emit({ type: "tool_execution_end", generationId: "g1", toolCallId: "call_1", toolName: "bash", isError: false }, 2200);
-        emit({ type: "message_end", generationId: "g1", message: { role: "assistant", content: [
+        emit({ type: "assistant_stream_delta", generationId: "g1", delta: "Let me check the files." }, 60);
+        emit({ type: "message_end", generationId: "g1", message: { role: "assistant", stopReason: "toolUse", content: [
           { type: "thinking", thinking: "Let me explore the workspace before answering." },
+          { type: "text", text: "Let me check the files." },
           { type: "toolCall", id: "call_1", name: "bash", arguments: { command: "ls" } },
-        ] } }, 2210);
-        emit({ type: "message_start", generationId: "g1", message: { role: "assistant" } }, 2220);
-        emit({ type: "assistant_stream_delta", generationId: "g1", delta: "Here is what I found." }, 2230);
+        ] } }, 1000);
+        emit({ type: "tool_execution_start", generationId: "g1", toolCallId: "call_1", toolName: "bash", args: { command: "ls" } }, 1010);
+        emit({ type: "tool_execution_end", generationId: "g1", toolCallId: "call_1", toolName: "bash", isError: false }, 2200);
+        emit({ type: "message_start", generationId: "g1", message: { role: "assistant" } }, 2210);
+        emit({ type: "assistant_stream_delta", generationId: "g1", delta: "Here is what I found." }, 2220);
         emit({ type: "assistant_stream_final", generationId: "g1", content: "Here is what I found." }, 3200);
         emit({ type: "agent_end", generationId: "g1", willRetry: false }, 3300);
       }
@@ -1416,15 +1419,26 @@ test("previews the latest trace activity while a turn runs and keeps it after co
   await composer.press("Enter");
 
   const header = page.locator(".turn-trace-header");
-  await expect(header).toContainText("Let me explore the workspace", { timeout: 4000 });
+  // While the interim segment streams, its text is the live bubble.
+  await expect(page.locator(".bubble-assistant")).toContainText("Let me check the files.", { timeout: 4000 });
+  // Once message_end marks it tool-use, the text becomes trace narration in
+  // chronological position — never a bubble and a trace copy at once.
+  await expect(header).toContainText("Let me check the files.", { timeout: 4000 });
+  await expect(header).toContainText("1 tool call", { timeout: 4000 });
+  await expect(page.locator(".bubble-assistant", { hasText: "Let me check the files." })).toHaveCount(0);
   await expect(page.locator(".turn-trace-body")).toHaveCount(0);
-  await expect(header).toContainText("bash", { timeout: 4000 });
   await expect(page.locator(".bubble-assistant")).toContainText("Here is what I found.", { timeout: 4000 });
-  await expect(header).toContainText("Thinking process", { timeout: 4000 });
+  await expect(page.locator(".agent-activity")).toHaveCount(0, { timeout: 4000 });
 
   await header.click();
-  await expect(page.locator(".turn-trace-body")).toContainText("Let me explore the workspace before answering.");
-  await expect(page.locator(".turn-trace-body .tool-card")).toHaveCount(1);
+  const body = page.locator(".turn-trace-body");
+  await expect(body).toContainText("Let me explore the workspace before answering.");
+  await expect(body).toContainText("Let me check the files.");
+  await expect(body.locator(".tool-card")).toHaveCount(1);
+  const kinds = await body.evaluate((element) => [...element.children].map((child) => child.classList.contains("tool-card") ? "tool" : "text"));
+  expect(kinds).toEqual(["text", "text", "tool"]);
+  // Exactly one rendered copy of the interim text inside the trace.
+  await expect(body.getByText("Let me check the files.")).toHaveCount(1);
 });
 
 test("selects a chat model through the runtime-aware model route", async ({ page }) => {
