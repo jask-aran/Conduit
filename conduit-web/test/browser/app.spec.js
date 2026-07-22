@@ -508,13 +508,13 @@ test("repairs unfinished Markdown while an assistant response streams", async ({
           setTimeout(() => this.onmessage?.({ data: JSON.stringify({
             type: "assistant_stream_delta",
             generationId: "g1",
-            delta: "\n\n- first item\n\n  continued first item\n\n- second item",
+            delta: "\n\n- **first item**\n\n  continued first item\n\n- `second item`",
           }) }), 550);
           window.__releaseStreamFinal = () => {
             this.onmessage?.({ data: JSON.stringify({
               type: "assistant_stream_final",
               generationId: "g1",
-              content: "## Live response\n\n**still streaming**\n\nRead [the documentation][docs].\n\n```javascript\nconst answer = 42;\n```\n\n$$\nE = mc^2\n$$\n\n- first item\n\n  continued first item\n\n- second item\n\n[docs]: https://example.com/docs",
+              content: "## Live response\n\n**still streaming**\n\nRead [the documentation][docs].\n\n```javascript\nconst answer = 42;\n```\n\n$$\nE = mc^2\n$$\n\n- **first item**\n\n  continued first item\n\n- `second item`\n\n[docs]: https://example.com/docs",
               html: '<div class="server-markdown">Bogus legacy HTML</div>',
             }) });
             setTimeout(() => this.onmessage?.({ data: JSON.stringify({
@@ -536,7 +536,7 @@ test("repairs unfinished Markdown while an assistant response streams", async ({
       value: MockWebSocket,
     });
   });
-  const streamedContent = "## Live response\n\n**still streaming**\n\nRead [the documentation][docs].\n\n```javascript\nconst answer = 42;\n```\n\n$$\nE = mc^2\n$$\n\n- first item\n\n  continued first item\n\n- second item\n\n[docs]: https://example.com/docs";
+  const streamedContent = "## Live response\n\n**still streaming**\n\nRead [the documentation][docs].\n\n```javascript\nconst answer = 42;\n```\n\n$$\nE = mc^2\n$$\n\n- **first item**\n\n  continued first item\n\n- `second item`\n\n[docs]: https://example.com/docs";
   await page.route("**/v0/sessions/550e8400-e29b-41d4-a716-446655440099", async (route) => {
     await route.fulfill({ json: {
       id: "550e8400-e29b-41d4-a716-446655440099",
@@ -571,6 +571,9 @@ test("repairs unfinished Markdown while an assistant response streams", async ({
   await expect(page.locator('[data-language="javascript"] button[aria-label="Copy code"]')).toBeVisible();
   await expect(page.locator(".katex-display")).toBeVisible();
   await expect(liveMarkdown).toContainText("continued first item");
+  await expect(page.locator(".markdown-stream-tail li")).toHaveCount(2);
+  await expect(page.locator(".markdown-stream-tail strong", { hasText: "first item" })).toBeVisible();
+  await expect(page.locator(".markdown-stream-tail code", { hasText: "second item" })).toBeVisible();
   await expect(page.getByRole("button", { name: "the documentation" })).toHaveCount(0);
   await expect(page.locator("[data-stable-stream-node]")).toHaveCount(1);
   expect(await liveHeadingNode.evaluate((node) => node.isConnected && node === document.querySelector("[data-stable-stream-node]"))).toBe(true);
@@ -1260,6 +1263,24 @@ test("shows a newly created chat in the sidebar immediately", async ({ page }, t
   await expect(page.locator('[data-sidebar="content"]').getByText("New chat", { exact: true })).toHaveCount(0);
   await page.getByRole("button", { name: "New chat" }).click();
   await expect(page.locator(".sidebar-chat", { hasText: "New chat" })).toBeVisible();
+});
+
+test("leaves an uncommitted new chat without blocking target navigation when cleanup returns chat_not_found", async ({ page }, testInfo) => {
+  await page.route("**/v0/chats/550e8400-e29b-41d4-a716-446655440099?ifEmpty=true", async (route) => {
+    await route.fulfill({ status: 404, json: { error: "chat_not_found" } });
+  });
+  await page.goto("/");
+  await openSidebar(page, testInfo);
+  await page.getByRole("button", { name: "New chat" }).click();
+  await page.waitForURL(/\/chat\/550e8400-e29b-41d4-a716-446655440099/);
+  await expect(page.locator(".sidebar-chat", { hasText: "New chat" })).toBeVisible();
+
+  await page.getByRole("button", { name: "Existing chat" }).click();
+
+  await expect(page).toHaveURL(/\/chat\/session_existing$/);
+  await expect(page.getByText("Previous question")).toBeVisible();
+  await expect(page.locator('[data-sidebar="content"]').getByText("New chat", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("chat_not_found", { exact: true })).toHaveCount(0);
 });
 
 test("a prompt sent from a brand-new chat never travels over the previous chat's live stream", async ({ page }, testInfo) => {

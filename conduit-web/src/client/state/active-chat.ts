@@ -76,6 +76,7 @@ export function createActiveChat(options: ActiveChatOptions) {
   let continuation = false;
   let openToken = 0;
   let selectionToken = 0;
+  let navigationToken = 0;
   let toolSeq = 0;
   const closedGenerations = new Set<string>();
 
@@ -94,6 +95,7 @@ export function createActiveChat(options: ActiveChatOptions) {
   };
 
   const reset = () => {
+    navigationToken += 1;
     selectionToken += 1;
     openToken += 1;
     setConnectingId(null);
@@ -440,18 +442,18 @@ export function createActiveChat(options: ActiveChatOptions) {
   }
 
   const select = async (chat: ChatSummary, project: Project) => {
+    // Load first, commit once: failed or superseded navigation leaves the
+    // current chat, URL, socket, and selection intact.
+    const navigation = ++navigationToken;
+    const detail = await api<TranscriptDetail>(`/v0/sessions/${encodeURIComponent(chat.id)}`);
+    if (navigation !== navigationToken) return;
     reset();
     const selection = selectionToken;
     catalogue.select(chat, project);
-    setStatus(chat.status);
-    setTitle(chat.title);
-    setTemplateId(chat.templateId || options.defaultTemplateId() || "chat");
-    setRuntimeIdentity(chat.runtime || null);
     history.replaceState({}, "", `/chat/${chat.id}`);
     models.select(project.id, chat.id);
     void attachments.select(chat.id);
-    const detail = await loadDetail(chat.id, false, selection);
-    if (selection !== selectionToken || selectedId() !== chat.id) return;
+    applyDetail(detail);
     if (detail.status === "active") await openLive(chat.id, project.id, {}, selection);
   };
 
