@@ -26,6 +26,9 @@ function stringify(value: unknown) {
 }
 
 export function ToolCard(props: { tool: ToolItem; sessionId?: string | null }) {
+  // Store-proxy churn during timeline reconciliation can briefly hand us an
+  // undefined tool; render nothing rather than crash the boundary.
+  if (!props.tool) return null;
   const [open, setOpen] = createSignal(false);
   const [loaded, setLoaded] = createSignal<unknown>(undefined);
   const [loading, setLoading] = createSignal(false);

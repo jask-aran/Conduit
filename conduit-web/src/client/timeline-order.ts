@@ -6,6 +6,7 @@ export interface ProtocolMessage {
   role?: string;
   content?: unknown;
   timestamp?: string;
+  stopReason?: string;
 }
 
 export interface ToolLifecycleEvent {

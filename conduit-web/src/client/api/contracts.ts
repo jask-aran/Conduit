@@ -71,6 +71,7 @@ export interface Message {
   content?: string;
   /** Raw Pi content blocks (text / thinking / toolCall) — source of persisted reasoning. */
   blocks?: ContentBlock[];
+  stopReason?: string;
   timestamp?: string;
   stopped?: boolean;
   status?: string | null;

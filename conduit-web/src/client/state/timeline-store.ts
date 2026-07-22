@@ -16,7 +16,10 @@ export function createTimelineStore(
   const [rows, setRows] = createStore<TimelineRow[]>([]);
   createEffect(() => {
     const projected = buildTurnRows(messages(), tools(), { streaming: streaming(), reasoning: reasoning() });
-    setRows(reconcile(projected, { key: "key", merge: true }));
+    // No merge: rows keep identity by key, but values are replaced wholesale —
+    // deep-merging trace segments positionally can breed hybrid objects when a
+    // slot changes kind between projections.
+    setRows(reconcile(projected, { key: "key" }));
   });
   return rows;
 }

@@ -378,7 +378,7 @@ export function createActiveChat(options: ActiveChatOptions) {
             const copy = [...current];
             const index = lastIndex(copy, (message) => message.role === "assistant");
             if (index < 0) return current;
-            copy[index] = { ...copy[index]!, blocks, ...(text ? { content: text } : {}) };
+            copy[index] = { ...copy[index]!, blocks, ...(text ? { content: text } : {}), ...(event.message.stopReason ? { stopReason: event.message.stopReason } : {}) };
             return copy;
           });
         }
