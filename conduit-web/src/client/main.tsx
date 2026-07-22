@@ -1,6 +1,6 @@
-import { createMemo, createSignal, ErrorBoundary, onCleanup, onMount, Show } from "solid-js";
+import { createEffect, createMemo, createSignal, ErrorBoundary, lazy, onCleanup, onMount, Show } from "solid-js";
 import { render } from "solid-js/web";
-import { ShareIcon, TriangleAlertIcon } from "lucide-solid";
+import { PanelRightIcon, ShareIcon, TriangleAlertIcon } from "lucide-solid";
 import { Toaster, toast } from "solid-sonner";
 import "solid-sonner/styles.css";
 import { Button, Spinner } from "@/components/primitives";
@@ -21,8 +21,9 @@ import { createRuntimeStore } from "./state/runtime";
 import "./styles.css";
 
 type SettingsSection = "general" | "models" | "profiles" | "runtime" | "workspaces" | "auth";
+const WorkspacePanel = lazy(() => import("./workspace/workspace-panel"));
 
-function ChatHeader(props: { project?: Project; title: string; profile?: Template | null; runtime?: RuntimeIdentity | null; live?: Record<string, unknown> | null }) {
+function ChatHeader(props: { project?: Project; title: string; profile?: Template | null; runtime?: RuntimeIdentity | null; live?: Record<string, unknown> | null; panelOpen: boolean; onTogglePanel: () => void }) {
   const projectLabel = () => props.project?.slug === "chat" ? "Chats" : props.project?.slug || props.project?.name || "Chats";
   const runtimeLabel = () => props.runtime?.kind === "native_pi" ? "Host Pi" : "Isolated Pi";
   const profileLabel = () => props.runtime?.kind === "native_pi" ? null : props.profile?.label || props.profile?.id;
@@ -33,7 +34,8 @@ function ChatHeader(props: { project?: Project; title: string; profile?: Templat
   return <header class="chat-header">
     <nav aria-label="breadcrumb" class="chat-header-title"><span>{projectLabel()}</span><span class="breadcrumb-separator" aria-hidden="true" /><strong>{props.title}</strong></nav>
     <Show when={line()}><span class="chat-profile-posture" title={line()}>{line()}</span></Show>
-    <Button variant="ghost" size="icon-sm" class={!line() ? "ml-auto" : ""} aria-label="Share chat"><ShareIcon /></Button>
+    <Button variant="ghost" size="icon-sm" class={!line() ? "ml-auto" : ""} aria-label="Toggle workspace panel" aria-expanded={props.panelOpen} onClick={props.onTogglePanel}><PanelRightIcon /></Button>
+    <Button variant="ghost" size="icon-sm" aria-label="Share chat"><ShareIcon /></Button>
   </header>;
 }
 
@@ -51,6 +53,7 @@ function App() {
   const [paletteNonce, setPaletteNonce] = createSignal(0);
   const [sidebarCommand, setSidebarCommand] = createSignal<{ type: string; nonce: number } | null>(null);
   const [dropActive, setDropActive] = createSignal(false);
+  const [panelOpen, setPanelOpen] = createSignal(false);
   let dragDepth = 0;
   let attachFileInput: HTMLInputElement | undefined;
 
@@ -80,6 +83,11 @@ function App() {
     ? profiles().find((item) => item.id === "host-pi")
     : profiles().find((item) => item.id === chat.templateId()) || templates().find((item) => item.id === defaultTemplateId()) || null);
   const emptyChat = createMemo(() => chat.loadedId() === catalogue.selectedId() && !chat.messages().length && !chat.tools().length && !chat.activity()?.label);
+
+  createEffect(() => {
+    const id = catalogue.selectedId();
+    if (id) setPanelOpen(localStorage.getItem(`conduit:workspace-panel:${id}:open`) === "true");
+  });
 
   const currentDraftId = () => chat.status() === "draft" ? catalogue.selectedId() : null;
 
@@ -200,6 +208,10 @@ function App() {
     return saved;
   };
   const openPalette = (page: string | null = null) => { setPalettePage(page); setPaletteNonce((value) => value + 1); setPaletteOpen(true); };
+  const togglePanel = () => {
+    const id = catalogue.selectedId();
+    setPanelOpen((open) => { const next = !open; if (id) localStorage.setItem(`conduit:workspace-panel:${id}:open`, String(next)); return next; });
+  };
   const runSidebar = (type: string) => setSidebarCommand({ type, nonce: Date.now() });
 
   const lastAssistant = createMemo(() => {
@@ -239,6 +251,7 @@ function App() {
     openRuntimeChat: () => void createChat(undefined, { templateId: "runtime" }),
     attach: () => attachFileInput?.click(),
     toggleSidebar: () => runSidebar("toggle-sidebar"),
+    toggleWorkspacePanel: togglePanel,
     copyTranscript: () => { const id = catalogue.selectedId(); if (id) void copyTranscript({ id } as ChatSummary); },
     rename: () => runSidebar("rename-chat"),
     move: () => runSidebar("move-chat"),
@@ -260,12 +273,14 @@ function App() {
   };
 
   const keydown = (event: KeyboardEvent) => {
+    if (event.key === "Escape" && panelOpen() && !paletteOpen() && !settingsOpen()) { event.preventDefault(); togglePanel(); return; }
     if (!(event.metaKey || event.ctrlKey) || event.altKey) return;
     const key = event.key.toLowerCase();
     if (key === "k" && !event.shiftKey) { event.preventDefault(); if (paletteOpen()) setPaletteOpen(false); else openPalette(null); }
     if (key === "o" && event.shiftKey) { event.preventDefault(); openPalette("goto"); }
     if (key === "c" && event.shiftKey) { event.preventDefault(); void createChat(); }
     if (key === "b" && !event.shiftKey) { event.preventDefault(); runSidebar("toggle-sidebar"); }
+    if (key === "." && !event.shiftKey) { event.preventDefault(); togglePanel(); }
     if (key === ",") { event.preventDefault(); openSettings("general"); }
   };
 
@@ -322,13 +337,13 @@ function App() {
     <main data-slot="sidebar-inset" class={`chat-main${emptyChat() ? " chat-main-empty" : ""}`} {...dropHandlers}>
       <Show when={dropActive()}><div class="chat-drop-overlay"><div>Drop files to attach</div></div></Show>
       <div class="chat-ambient" aria-hidden="true" />
-      <ChatHeader project={selectedProject()} title={chat.title()} profile={activeProfile()} runtime={chat.runtimeIdentity()} live={chat.live() as unknown as Record<string, unknown>} />
+      <ChatHeader project={selectedProject()} title={chat.title()} profile={activeProfile()} runtime={chat.runtimeIdentity()} live={chat.live() as unknown as Record<string, unknown>} panelOpen={panelOpen()} onTogglePanel={togglePanel} />
       <Show when={selectedProject()?.kind === "workspace" && [...runtime.processes().values()].some((process) => process.chatId !== catalogue.selectedId() && process.active)}><div class="workspace-warning"><TriangleAlertIcon /><div><strong>Another chat is working in this Workspace</strong><p>Both agents can edit the same files. Conduit does not lock the Workspace or create worktrees automatically.</p></div></div></Show>
       <Transcript chat={chat} partialContinue={partialContinue()} />
       <div class="composer-stack"><HostUiRequests requests={chat.hostUiRequests()} onRespond={chat.respondHostUi} />
-        <Composer chat={chat} attachments={attachments} models={models} profiles={profiles()} activeProfile={activeProfile()} serverOnline={runtime.connectivity() === "online"} onChooseProfile={(id) => void switchProfile(id)} onOpenSettings={openSettings} onOpenAttachments={() => attachFileInput?.click()} />
-        <Show when={Boolean(chat.activity()?.label) && chat.activity()?.kind !== "idle"}><div class="agent-activity"><Spinner /><span>{chat.activity()?.label}</span></div></Show></div>
+        <Composer chat={chat} attachments={attachments} models={models} profiles={profiles()} activeProfile={activeProfile()} serverOnline={runtime.connectivity() === "online"} onChooseProfile={(id) => void switchProfile(id)} onOpenSettings={openSettings} onOpenAttachments={() => attachFileInput?.click()} /></div>
     </main>
+    <Show when={panelOpen() && selectedProject() && catalogue.selectedId()}><WorkspacePanel projectId={selectedProject()!.id} chatId={catalogue.selectedId()!} onClose={togglePanel} /></Show>
     <CommandMenu open={paletteOpen()} onOpenChange={setPaletteOpen} initialPage={palettePage()} launchNonce={paletteNonce()}
       context={paletteContext()} actions={paletteActions} models={models.models()} currentModel={models.model()} onChooseModel={(spec) => void models.chooseModel(spec)} />
     <Settings open={settingsOpen()} initialSection={settingsSection()} initialWorkspaceId={settingsWorkspaceId()} onOpenChange={setSettingsOpen} models={models} templates={templates()} defaultTemplateId={defaultTemplateId()} projects={catalogue.projects()} installations={installations()} onInstallationsChange={setInstallations} onDefaultTemplateChange={saveDefaultTemplate} onWorkspaceDefaultChange={saveWorkspaceDefault} />

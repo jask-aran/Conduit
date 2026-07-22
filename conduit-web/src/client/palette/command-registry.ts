@@ -48,6 +48,7 @@ export interface PaletteActions {
   openRuntimeChat: () => void;
   attach: () => void;
   toggleSidebar: () => void;
+  toggleWorkspacePanel: () => void;
   copyTranscript: () => void;
   rename: () => void;
   move: () => void;
@@ -219,6 +220,16 @@ export const paletteCommands: PaletteCommand[] = [{
   shortcut: "⌘B",
   isAvailable: () => true,
   run: (actions) => actions.toggleSidebar(),
+}, {
+  id: "toggle-workspace-panel",
+  group: "commands",
+  label: "Toggle workspace panel",
+  description: "Browse project files and working-tree changes",
+  icon: "workspace-panel",
+  keywords: ["files", "diff", "inspector", "right panel"],
+  shortcut: "⌘.",
+  isAvailable: hasChat,
+  run: (actions) => actions.toggleWorkspacePanel(),
 }, {
   id: "copy-transcript",
   group: "commands",
