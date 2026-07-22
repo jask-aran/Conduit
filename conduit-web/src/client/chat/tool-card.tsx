@@ -25,30 +25,36 @@ function stringify(value: unknown) {
   return typeof value === "string" ? value : JSON.stringify(value ?? {}, null, 2);
 }
 
-export function ToolCard(props: { tool: ToolItem; sessionId?: string | null }) {
-  // Store-proxy churn during timeline reconciliation can briefly hand us an
-  // undefined tool; render nothing rather than crash the boundary.
-  if (!props.tool) return null;
+export function ToolCard(props: { tool?: ToolItem; sessionId?: string | null }) {
   const [open, setOpen] = createSignal(false);
   const [loaded, setLoaded] = createSignal<unknown>(undefined);
   const [loading, setLoading] = createSignal(false);
   const [full, setFull] = createSignal(false);
-  const status = createMemo(() => props.tool.error ? "Error" : props.tool.cancelled ? "Cancelled" : props.tool.done ? "Complete" : "Running");
-  const source = createMemo(() => loaded() ?? props.tool.result ?? props.tool.partialResult ?? props.tool.args ?? {});
+  const tool = createMemo(() => props.tool);
+  const status = createMemo(() => {
+    const current = tool();
+    return current?.error ? "Error" : current?.cancelled ? "Cancelled" : current?.done ? "Complete" : "Running";
+  });
+  const source = createMemo(() => {
+    const current = tool();
+    return loaded() ?? current?.result ?? current?.partialResult ?? current?.args ?? {};
+  });
   const output = createMemo(() => stringify(source()));
   const preview = createMemo(() => {
     const text = output();
     if (full() || text.length <= MAX_PREVIEW) return text;
-    return commandTools.has(String(props.tool.name || "").toLowerCase()) ? text.slice(-MAX_PREVIEW) : text.slice(0, MAX_PREVIEW);
+    return commandTools.has(String(tool()?.name || "").toLowerCase()) ? text.slice(-MAX_PREVIEW) : text.slice(0, MAX_PREVIEW);
   });
 
   const toggle = async () => {
+    const current = tool();
+    if (!current) return;
     const next = !open();
     setOpen(next);
-    if (!next || !props.tool.resultDeferred || loaded() !== undefined || loading() || !props.sessionId) return;
+    if (!next || !current.resultDeferred || loaded() !== undefined || loading() || !props.sessionId) return;
     setLoading(true);
     try {
-      const response = await fetch(`/v0/sessions/${encodeURIComponent(props.sessionId)}/tools/${encodeURIComponent(props.tool.id)}`);
+      const response = await fetch(`/v0/sessions/${encodeURIComponent(props.sessionId)}/tools/${encodeURIComponent(current.id)}`);
       if (!response.ok) throw new Error("Could not load tool output");
       const payload = await response.json() as { result?: unknown };
       setLoaded(payload.result ?? "");
@@ -56,10 +62,10 @@ export function ToolCard(props: { tool: ToolItem; sessionId?: string | null }) {
     finally { setLoading(false); }
   };
 
-  return <div class="tool-card" data-status={status().toLowerCase()}>
-    <Button variant="outline" class="w-full justify-start" aria-label={`${props.tool.name || "Tool"} ${status()}`} aria-expanded={open()} onClick={toggle}>
-      <Show when={props.tool.done && !props.tool.error} fallback={<Spinner data-icon="inline-start" />}><CheckIcon /></Show>
-      <span class="truncate">{props.tool.name || "Tool"}<Show when={summary(props.tool)}> · {summary(props.tool)}</Show></span>
+  return <Show when={tool()}>{(current) => <div class="tool-card" data-status={status().toLowerCase()}>
+    <Button variant="outline" class="w-full justify-start" aria-label={`${current().name || "Tool"} ${status()}`} aria-expanded={open()} onClick={toggle}>
+      <Show when={current().done && !current().error} fallback={<Spinner data-icon="inline-start" />}><CheckIcon /></Show>
+      <span class="truncate">{current().name || "Tool"}<Show when={summary(current())}> · {summary(current())}</Show></span>
       <span class="ml-auto text-xs text-muted-foreground">{status()}</span>
       <Show when={open()} fallback={<ChevronDownIcon />}><ChevronUpIcon /></Show>
     </Button>
@@ -71,5 +77,5 @@ export function ToolCard(props: { tool: ToolItem; sessionId?: string | null }) {
         </Show>
       </div>
     </Show>
-  </div>;
+  </div>}</Show>;
 }
