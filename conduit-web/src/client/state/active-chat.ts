@@ -383,10 +383,37 @@ export function createActiveChat(options: ActiveChatOptions) {
           });
         }
         break;
-      case "tool_execution_start":
+      case "tool_execution_start": {
+        const toolId = event.toolCallId || event.id;
+        const streamedText = liveStream.content().trim();
+        const streamedThinking = reasoning().content.trim();
+        // Pi's bridge does not consistently emit assistant message_end for
+        // tool-use segments. The first tool start is nevertheless a durable
+        // boundary: freeze the live reasoning/text into the current assistant
+        // message and attach every tool id in this batch to that message. This
+        // produces the same trace ordering immediately that the later JSONL
+        // checkpoint would otherwise reveal all at once.
+        setMessages((current) => {
+          const copy = [...current];
+          const index = lastIndex(copy, (message) => message.role === "assistant");
+          if (index < 0) return current;
+          const message = copy[index]!;
+          const blocks = [...(message.blocks || [])];
+          if (!blocks.some((block) => block.type === "thinking") && streamedThinking) {
+            blocks.push({ type: "thinking", thinking: streamedThinking });
+          }
+          if (toolId && !blocks.some((block) => block.type === "toolCall" && block.id === toolId)) {
+            blocks.push({ type: "toolCall", id: toolId, name: event.toolName || event.name, arguments: event.args });
+          }
+          copy[index] = { ...message, blocks, stopReason: "toolUse", content: message.content || streamedText };
+          return copy;
+        });
+        if (streamedText) liveStream.clear();
+        setResponding(false);
         setActiveToolName(event.toolName || "tool");
         setTools((current) => mergeToolEvent(current, event, { nextSeq: () => toolSeq++ }).tools);
         break;
+      }
       case "tool_execution_update":
         setTools((current) => mergeToolEvent(current, event).tools);
         break;
