@@ -20,6 +20,9 @@ export interface ChatSummary {
   liveStatus?: string | null;
   liveActivity?: string | null;
   liveActive?: boolean;
+  /** Client-only: draft created by an explicit New chat action. Lets the sidebar
+      show it while selected, unlike the transient auto-created page-load draft. */
+  pinned?: boolean;
 }
 
 export interface Project {

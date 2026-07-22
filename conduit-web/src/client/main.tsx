@@ -102,6 +102,11 @@ function App() {
       // Commit the visible transition only after the durable replacement exists.
       history.replaceState({}, "", `/chat/${created.id}`);
       chat.initialize({ ...created, templateId: created.templateId || profileId || undefined }, project);
+      // Show the new chat in the sidebar immediately instead of waiting for the
+      // first server checkpoint refresh; drop the empty draft it replaced.
+      catalogue.setProjects((current) => current.map((item) => item.id === project.id
+        ? { ...item, sessions: [{ ...created, pinned: true }, ...item.sessions.filter((session) => session.id !== created.id && session.id !== replacedDraftId)] }
+        : item));
 
       if (replacedDraftId && replacedDraftId !== created.id) {
         try { await discardDraft(replacedDraftId); }

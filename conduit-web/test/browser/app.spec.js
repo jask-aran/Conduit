@@ -934,8 +934,8 @@ test("uses the sidebar-08 groups and native icon collapse", async ({ page }, tes
   await expect(page.locator('[data-sidebar="group-label"]')).toHaveText(["Chats", "Projects", "Workspaces"]);
   await expect(page.locator('[data-sidebar="group-label"]').first()).toHaveCSS("font-size", "11px");
   await expect(page.getByRole("button", { name: "Existing chat" })).toHaveCSS("font-size", "13px");
-  await expect(page.locator('[data-sidebar="header"] span', { hasText: "Conduit" })).toHaveCSS("font-size", "15px");
-  await expect(page.locator('[data-sidebar="header"] svg')).toHaveCSS("width", "17px");
+  await expect(page.locator('[data-sidebar="header"] span', { hasText: "Conduit" })).toHaveCSS("font-size", "24px");
+  await expect(page.locator('[data-sidebar="header"] svg')).toHaveCSS("width", "24px");
 
   await expect(page.getByRole("button", { name: "Existing chat" })).toBeVisible();
   await expect(page.locator('[data-sidebar="rail"]')).toHaveCount(1);
@@ -1240,6 +1240,25 @@ test("composer model picker exposes model and thinking selectors", async ({ page
   await expect(page.getByText("Thinking", { exact: true })).toBeVisible();
   await expect(page.getByRole("menuitemradio", { name: "Reasoner example" })).toBeChecked();
   await expect(page.getByRole("menuitemradio", { name: "High" })).toBeVisible();
+});
+
+test("choosing a model closes the menu and restores page pointer events", async ({ page }) => {
+  await page.goto("/");
+
+  await page.getByRole("button", { name: /Reasoner medium/ }).click();
+  await expect(page.locator("body")).toHaveCSS("pointer-events", "none");
+  await page.getByRole("menuitemradio", { name: "Plain example" }).click();
+  await expect(page.getByRole("menu")).toHaveCount(0);
+  await expect(page.locator("body")).not.toHaveCSS("pointer-events", "none");
+});
+
+test("shows a newly created chat in the sidebar immediately", async ({ page }, testInfo) => {
+  await page.goto("/");
+  await openSidebar(page, testInfo);
+
+  await expect(page.locator('[data-sidebar="content"]').getByText("New chat", { exact: true })).toHaveCount(0);
+  await page.getByRole("button", { name: "New chat" }).click();
+  await expect(page.locator(".sidebar-chat", { hasText: "New chat" })).toBeVisible();
 });
 
 test("selects a chat model through the runtime-aware model route", async ({ page }) => {
