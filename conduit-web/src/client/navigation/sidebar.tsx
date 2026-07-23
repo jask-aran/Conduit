@@ -80,6 +80,7 @@ export function Sidebar(props: {
   runtime: RuntimeStore;
   connectivity: string;
   workspaceSuggestions: WorkspaceSuggestion[];
+  onWorkspaceSuggestionsNeeded: () => void;
   onNewChat: (project: Project) => Promise<void>;
   onOpenChat: (chat: ChatSummary, project: Project) => Promise<void>;
   onAddProject: (input: ProjectInput) => Promise<boolean>;
@@ -155,6 +156,7 @@ export function Sidebar(props: {
     } : null);
 
   const openNewDialog = (kind: "folder" | "workspace") => {
+    if (kind === "workspace") props.onWorkspaceSuggestionsNeeded();
     setMode(kind === "workspace" ? "linked" : "managed");
     setNewKind(kind);
   };

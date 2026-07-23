@@ -32,9 +32,11 @@ export function Settings(props: {
   onOpenChange: (open: boolean) => void;
   models: ModelSettings;
   templates: Template[];
+  templatesLoading: boolean;
   defaultTemplateId: string;
   projects: Project[];
   installations: Installation[];
+  installationsLoading: boolean;
   onInstallationsChange: (items: Installation[]) => void;
   onDefaultTemplateChange: (id: string) => Promise<unknown>;
   onWorkspaceDefaultChange: (id: string, templateId: string | null) => Promise<Project>;
@@ -165,7 +167,7 @@ export function Settings(props: {
         </nav>
         <main class="settings-content">
           <header><h2>{label(section())}</h2><Button variant="ghost" size="icon-sm" aria-label="Close" onClick={() => props.onOpenChange(false)}>×</Button></header>
-          <Show when={section() === "general"}><FieldGroup><Field><FieldLabel for="default-profile">Default profile</FieldLabel><select id="default-profile" value={props.defaultTemplateId} onChange={(event) => void props.onDefaultTemplateChange(event.currentTarget.value)}><For each={props.templates.filter((item) => item.defaultable !== false)}>{(item) => <option value={item.id}>{item.label}</option>}</For></select></Field></FieldGroup></Show>
+          <Show when={section() === "general"}><Show when={!props.templatesLoading} fallback={<div class="settings-loading"><Spinner /><span>Loading profiles…</span></div>}><FieldGroup><Field><FieldLabel for="default-profile">Default profile</FieldLabel><select id="default-profile" value={props.defaultTemplateId} onChange={(event) => void props.onDefaultTemplateChange(event.currentTarget.value)}><For each={props.templates.filter((item) => item.defaultable !== false)}>{(item) => <option value={item.id}>{item.label}</option>}</For></select></Field></FieldGroup></Show></Show>
           <Show when={props.open && section() === "models"}>
             <div class="model-scope">
               <Show when={props.models.settingsError()}><div role="alert" class="settings-error"><span>{props.models.settingsError()}</span><Button variant="outline" size="sm" onClick={() => void props.models.reload()}>Retry</Button></div></Show>
@@ -200,7 +202,7 @@ export function Settings(props: {
               <div class="settings-actions"><span>{scope().length} enabled</span><Button disabled={!scopeDirty() || !scope().length || props.models.saving()} onClick={() => void saveScope()}>{props.models.saving() ? <Spinner /> : null}Save changes</Button></div>
             </div>
           </Show>
-          <Show when={section() === "profiles"}><div class="settings-cards"><For each={props.templates}>{(item) => <article><h3>{item.label}</h3><p>{item.description || item.posture || item.tools?.join(" · ")}</p></article>}</For></div></Show>
+          <Show when={section() === "profiles"}><Show when={!props.templatesLoading} fallback={<div class="settings-loading"><Spinner /><span>Loading profiles…</span></div>}><div class="settings-cards"><For each={props.templates}>{(item) => <article><h3>{item.label}</h3><p>{item.description || item.posture || item.tools?.join(" · ")}</p></article>}</For></div></Show></Show>
           <Show when={section() === "runtime"}>
             <Show when={runtimeStatus() === "ready" && runtime()} fallback={<Show when={runtimeStatus() === "error"} fallback={<div class="settings-loading"><Spinner /><span>Loading runtime settings…</span></div>}><div role="alert" class="settings-error"><span>{runtimeError() || "Runtime settings could not be loaded."}</span><Button variant="outline" size="sm" onClick={() => void loadRuntime()}>Retry</Button></div></Show>}>
               <FieldGroup>
@@ -211,10 +213,10 @@ export function Settings(props: {
                 <Button disabled={!runtimeDirty() || runtimeSaving()} onClick={() => void saveRuntime()}>{runtimeSaving() ? <Spinner /> : null}Save runtime settings</Button>
               </FieldGroup>
             </Show>
-            <div class="installations"><For each={props.installations}>{(item) => <article><h3>{item.label}</h3><p>{item.available ? item.version ? `Pi ${item.version}` : "Available" : item.reason || (item as Installation & { error?: string }).error || "Unavailable"}</p></article>}</For><Button variant="outline" disabled={detecting()} onClick={() => void redetect()}>{detecting() ? <Spinner /> : null}Re-detect Host Pi</Button></div>
+            <Show when={!props.installationsLoading} fallback={<div class="settings-loading"><Spinner /><span>Loading Pi installations…</span></div>}><div class="installations"><For each={props.installations}>{(item) => <article><h3>{item.label}</h3><p>{item.available ? item.version ? `Pi ${item.version}` : "Available" : item.reason || (item as Installation & { error?: string }).error || "Unavailable"}</p></article>}</For><Button variant="outline" disabled={detecting()} onClick={() => void redetect()}>{detecting() ? <Spinner /> : null}Re-detect Host Pi</Button></div></Show>
           </Show>
           <Show when={section() === "workspaces"}>
-            <Show when={selectedWorkspace()} fallback={<p>No workspaces registered.</p>}>
+            <Show when={!props.templatesLoading && !props.installationsLoading} fallback={<div class="settings-loading"><Spinner /><span>Loading workspace settings…</span></div>}><Show when={selectedWorkspace()} fallback={<p>No workspaces registered.</p>}>
               <div class="workspace-settings-card"><h3>{selectedWorkspace()!.name}</h3><p>{selectedWorkspace()!.path || selectedWorkspace()!.externalPath}</p><p>Override: {workspaceDefaultLabel().startsWith("Inherit") ? "None" : workspaceDefaultLabel()}</p>
                 <Field><FieldLabel for="workspace-default-profile">Default profile</FieldLabel><select id="workspace-default-profile" aria-label="Default profile" value={selectedWorkspace()!.defaultTemplateId || ""} onChange={(event) => void saveWorkspace(event.currentTarget.value || null)}>
                   <option value="">Inherit global ({props.templates.find((item) => item.id === props.defaultTemplateId)?.label || "General"})</option>
@@ -222,7 +224,7 @@ export function Settings(props: {
                   <option value="host-pi" disabled={!props.installations.find((item) => item.id === "host-pi")?.available}>Host Pi</option>
                 </select></Field>
               </div>
-            </Show>
+            </Show></Show>
           </Show>
           <Show when={section() === "auth"}><p>Authentication is managed by the Conduit server.</p></Show>
         </main>
