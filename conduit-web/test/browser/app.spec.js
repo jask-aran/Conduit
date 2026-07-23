@@ -926,6 +926,53 @@ test("opens a viewport-filling thread pinned to the true bottom without an upwar
   expect(worstDistanceFromBottom).toBeLessThanOrEqual(32);
 });
 
+test("renders a selected chat before optional startup data and loads workspace suggestions on demand", async ({ page }, testInfo) => {
+  let releaseOptional;
+  const optionalGate = new Promise((resolve) => { releaseOptional = resolve; });
+  await page.unroute("**/v0/capabilities");
+  await page.unroute("**/v0/templates");
+  await page.unroute("**/v0/pi-installations");
+  await page.unroute("**/v0/workspaces/suggestions");
+  await page.route("**/v0/capabilities", async (route) => {
+    await optionalGate;
+    await route.fulfill({ json: { partialContinue: true } });
+  });
+  await page.route("**/v0/templates", async (route) => {
+    await optionalGate;
+    await route.fulfill({ json: { templates, defaultTemplateId: "chat" } });
+  });
+  await page.route("**/v0/pi-installations", async (route) => {
+    await optionalGate;
+    await route.fulfill({ json: { installations: [
+      { id: "conduit-pinned", label: "Isolated Pi", version: "0.80.6", available: true },
+      { id: "host-pi", label: "Host Pi", version: "0.80.10", available: true },
+    ] } });
+  });
+  let suggestionRequests = 0;
+  await page.route("**/v0/workspaces/suggestions", async (route) => {
+    suggestionRequests += 1;
+    await route.fulfill({ json: { folders: [] } });
+  });
+
+  await page.goto("/chat/session_existing");
+  await expect(page.getByText("Previous question")).toBeVisible();
+  expect(suggestionRequests).toBe(0);
+
+  await openSidebar(page, testInfo);
+  await page.locator('[data-sidebar="footer"]').getByRole("button", { name: /Conduit/ }).click();
+  await page.getByRole("menuitem", { name: "Manage settings" }).click();
+  const settings = page.getByRole("dialog", { name: "Settings" });
+  await settings.getByRole("tab", { name: /Runtime/ }).click();
+  await expect(settings.getByText("Loading Pi installations…")).toBeVisible();
+  releaseOptional();
+  await expect(settings.getByText("Pi 0.80.10")).toBeVisible();
+  await settings.getByRole("button", { name: "Close" }).click();
+
+  await openSidebar(page, testInfo);
+  await page.getByRole("button", { name: "New workspace" }).click();
+  await expect.poll(() => suggestionRequests).toBe(1);
+});
+
 test("loads earlier history at the top without exposing pagination or moving the visible anchor", async ({ page }) => {
   const recent = Array.from({ length: 10 }, (_, index) => ([
     { id: `recent-user-${index}`, role: "user", content: `Recent question ${index} with enough text to occupy a stable transcript row across viewport sizes.` },
@@ -1864,6 +1911,49 @@ test("stop freezes the visible response and rejects late generation deltas", asy
   await expect(page.getByText("LATE OUTPUT")).toHaveCount(0);
   await expect(page.getByText("Stopped", { exact: true })).toBeVisible();
   expect(await page.evaluate(() => window.__stopCommand)).toEqual({ type: "stop_generation", generationId: "g1" });
+});
+
+test("keeps streaming visible when a user checkpoint replaces the live placeholder", async ({ page }) => {
+  await page.addInitScript(() => {
+    class CheckpointWebSocket extends EventTarget {
+      static OPEN = 1;
+      constructor() {
+        super(); this.readyState = 0;
+        queueMicrotask(() => { this.readyState = CheckpointWebSocket.OPEN; this.dispatchEvent(new Event("open")); });
+      }
+      close() { this.readyState = 3; }
+      send(data) {
+        const command = JSON.parse(data);
+        if (command.type !== "prompt") return;
+        queueMicrotask(() => {
+          this.onmessage?.({ data: JSON.stringify({ type: "generation_started", generationId: "g1" }) });
+          this.onmessage?.({ data: JSON.stringify({ type: "message_start", generationId: "g1", message: { role: "assistant" } }) });
+          this.onmessage?.({ data: JSON.stringify({ type: "session_checkpoint", generationId: "g1", chat: { id: "550e8400-e29b-41d4-a716-446655440099" } }) });
+          setTimeout(() => this.onmessage?.({ data: JSON.stringify({
+            type: "assistant_stream_delta",
+            generationId: "g1",
+            delta: "Visible after checkpoint",
+          }) }), 200);
+        });
+      }
+    }
+    Object.defineProperty(window, "WebSocket", { configurable: true, value: CheckpointWebSocket });
+  });
+  await page.route("**/v0/sessions/550e8400-e29b-41d4-a716-446655440099", async (route) => {
+    await route.fulfill({ json: {
+      id: "550e8400-e29b-41d4-a716-446655440099",
+      projectId: "project_chat",
+      status: "active",
+      title: "New chat",
+      messages: [{ id: "durable-user", role: "user", content: "Start" }],
+      tools: [],
+      page: { before: null },
+    } });
+  });
+  await page.goto("/");
+  await page.getByRole("textbox", { name: "Message Pi" }).fill("Start");
+  await page.getByRole("button", { name: "Send message" }).click();
+  await expect(page.getByText("Visible after checkpoint")).toBeVisible();
 });
 
 test("global commands and slash suggestions preserve their intended focus models", async ({ page }) => {

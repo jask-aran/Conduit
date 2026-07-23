@@ -72,6 +72,9 @@ export function createActiveChat(options: ActiveChatOptions) {
   const liveStream = createLiveStream();
   let socket: WebSocket | null = null;
   let currentGeneration: string | null = null;
+  let currentLiveAssistantId: string | null = null;
+  let fallbackLiveAssistant = false;
+  let liveAssistantSequence = 0;
   let stopPending = false;
   let continuation = false;
   let openToken = 0;
@@ -112,6 +115,9 @@ export function createActiveChat(options: ActiveChatOptions) {
     resetLiveFlags();
     liveStream.clear();
     currentGeneration = null;
+    currentLiveAssistantId = null;
+    fallbackLiveAssistant = false;
+    liveAssistantSequence = 0;
     stopPending = false;
     continuation = false;
     toolSeq = 0;
@@ -150,6 +156,21 @@ export function createActiveChat(options: ActiveChatOptions) {
     if (session.stopping) setGeneration("stopping");
     else if (turnOpen || session.active) setGeneration("active");
     else setGeneration((current) => current === "stopping" ? current : "idle");
+  };
+
+  const appendLiveAssistant = (generationId: string | null, fallback = false) => {
+    if (continuation) return;
+    const id = `live_${generationId || "generation"}_${++liveAssistantSequence}`;
+    currentLiveAssistantId = id;
+    fallbackLiveAssistant = fallback;
+    setMessages((current) => [...current, { id, role: "assistant", content: "", timestamp: new Date().toISOString() }]);
+    setReasoning({ content: "", active: false, redacted: false });
+  };
+
+  const ensureLiveAssistant = (generationId: string | null) => {
+    if (continuation) return;
+    if (currentLiveAssistantId && messages().some((message) => message.id === currentLiveAssistantId)) return;
+    appendLiveAssistant(generationId, true);
   };
 
   const connect = (record: LiveRecord, chatId: string, selection: number) => {
@@ -258,6 +279,9 @@ export function createActiveChat(options: ActiveChatOptions) {
         break;
       case "generation_started":
         currentGeneration = eventGeneration;
+        currentLiveAssistantId = null;
+        fallbackLiveAssistant = false;
+        liveAssistantSequence = 0;
         if (eventGeneration) closedGenerations.delete(eventGeneration);
         stopPending = false;
         setGeneration("active");
@@ -315,6 +339,8 @@ export function createActiveChat(options: ActiveChatOptions) {
         break;
       case "generation_stopped":
         stopPending = false;
+        currentLiveAssistantId = null;
+        fallbackLiveAssistant = false;
         setGeneration("idle");
         resetLiveFlags();
         setMessages((current) => {
@@ -327,13 +353,17 @@ export function createActiveChat(options: ActiveChatOptions) {
         break;
       case "session_checkpoint":
         void catalogue.refresh();
-        if (event.chatId === selectedId()) void loadDetail(event.chatId, true);
+        if (event.chatId === selectedId()) {
+          void loadDetail(event.chatId, true).then(() => {
+            if (event.chatId === selectedId() && streaming()) ensureLiveAssistant(currentGeneration);
+          }).catch((error) => onError((error as Error).message));
+        }
         break;
       case "message_start":
         if (event.message.role === "assistant" && !continuation) {
-          setMessages((current) => [...current, { id: `live_${Date.now()}`, role: "assistant", content: "", timestamp: new Date().toISOString() }]);
-          // Reasoning accumulates per assistant segment; a new segment starts fresh.
-          setReasoning({ content: "", active: false, redacted: false });
+          if (fallbackLiveAssistant && currentLiveAssistantId
+            && messages().some((message) => message.id === currentLiveAssistantId)) fallbackLiveAssistant = false;
+          else appendLiveAssistant(eventGeneration);
         }
         break;
       case "message_update":
@@ -348,7 +378,11 @@ export function createActiveChat(options: ActiveChatOptions) {
         }
         break;
       case "assistant_stream_delta":
-        if (eventGeneration) { setResponding(true); liveStream.append(eventGeneration, event.delta); }
+        if (eventGeneration) {
+          ensureLiveAssistant(eventGeneration);
+          setResponding(true);
+          liveStream.append(eventGeneration, event.delta);
+        }
         break;
       case "assistant_stream_final":
         batch(() => {
@@ -364,6 +398,8 @@ export function createActiveChat(options: ActiveChatOptions) {
             return copy;
           });
           liveStream.clear();
+          currentLiveAssistantId = null;
+          fallbackLiveAssistant = false;
         });
         break;
       case "message_end":
@@ -383,6 +419,10 @@ export function createActiveChat(options: ActiveChatOptions) {
             copy[index] = { ...copy[index]!, blocks, ...(text ? { content: text } : {}), ...(event.message.stopReason ? { stopReason: event.message.stopReason } : {}) };
             return copy;
           });
+          if (event.message.stopReason === "toolUse") {
+            currentLiveAssistantId = null;
+            fallbackLiveAssistant = false;
+          }
         }
         break;
       case "tool_execution_start": {
@@ -411,6 +451,8 @@ export function createActiveChat(options: ActiveChatOptions) {
           return copy;
         });
         if (streamedText) liveStream.clear();
+        currentLiveAssistantId = null;
+        fallbackLiveAssistant = false;
         setResponding(false);
         setActiveToolName(event.toolName || "tool");
         setTools((current) => mergeToolEvent(current, event, { nextSeq: () => toolSeq++ }).tools);

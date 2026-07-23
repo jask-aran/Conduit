@@ -110,7 +110,10 @@ the surrounding sidebar, composer, transcript, command palette, and Settings
 surfaces are direct Solid components rather than a copied component catalogue.
 Transcript history loads automatically as the reader approaches the top and
 preserves the visible scroll anchor; server cursors and history windows are not
-exposed as pagination controls.
+exposed as pagination controls. Direct chat routes fetch catalogue context and
+the selected transcript concurrently; capabilities, profiles, and installation
+status load independently, while workspace-path suggestions are requested only
+when workspace creation opens.
 Settings → Workspaces stores global-profile inheritance, an explicit ordinary
 profile, or Host Pi. If Host Pi becomes unavailable, Conduit clears that
 override and retries with the inherited profile.
