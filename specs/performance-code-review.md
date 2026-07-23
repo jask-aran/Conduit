@@ -14,7 +14,19 @@ The Transcript and Live Response have their own architectural review because the
 
 ## Findings
 
-### [P1] 1. Transcript pagination still reads and parses the entire JSONL
+### [P1 — implemented 2026-07-23] 1. Transcript pagination still reads and parses the entire JSONL
+
+Conduit now builds an append-aware per-file offset and metadata index during
+registry reconciliation. Selected-chat transcript reads load only the requested
+turn window; model/thinking and attachment-announcement lookups reuse indexed
+metadata; live launch validates only the bounded header. Normal append extends
+the index, incomplete final lines remain uncommitted, and truncation,
+replacement, or prefix changes rebuild it. The client treats the byte cursor as
+an internal detail and automatically prepends history near the top while
+preserving the visible scroll anchor. Explicit full-transcript export and
+deferred single-tool-result retrieval may still scan the complete authoritative
+JSONL because those are user-requested whole-history lookups, not ordinary chat
+opening.
 
 `conduit-web/src/session-store.js::parseSession()` (session-store.js:24) loads the complete session file, splits it into lines, and JSON-parses every entry into a retained `entries` array. Only after that unbounded scan does `pageSessionEntries()` (session-store.js:216) apply the ten-turn/50,000-character response window.
 

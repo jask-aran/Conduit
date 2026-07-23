@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
-import { validateSessionFile } from "./session-store.js";
+import { readSessionMetadata, validateSessionFile } from "./session-store.js";
 import { ensureChatTree } from "./owned-paths.js";
 
 const CHAT_ID = /^[a-zA-Z0-9_-]{8,128}$/;
@@ -103,7 +103,7 @@ export class ChatStore {
         : item.status === "active";
       if (active && (!piSessionFile || !await fileExists(piSessionFile)) && !nativeRuntime) continue;
       if (piSessionFile && await fileExists(piSessionFile)) {
-        try { await validateSessionFile(piSessionFile, project); }
+        try { await readSessionMetadata(piSessionFile, project); }
         catch { if (!nativeRuntime) continue; }
       }
       if (!active && piSessionFile && !await fileExists(piSessionFile)) piSessionFile = null;
@@ -148,7 +148,7 @@ export class ChatStore {
     for (const [file, candidates] of discoveredFiles) {
       for (const project of candidates) {
         try {
-          const session = await validateSessionFile(file, project);
+          const session = await readSessionMetadata(file, project);
           const id = isChatId(session.id) && !usedIds.has(session.id) ? session.id : crypto.randomUUID();
           const chat = {
             id,

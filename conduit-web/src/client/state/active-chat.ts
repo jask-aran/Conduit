@@ -561,7 +561,7 @@ export function createActiveChat(options: ActiveChatOptions) {
   };
 
   const loadOlder = async () => {
-    if (!selectedId() || !pageBefore() || loadingOlder()) return;
+    if (!selectedId() || !pageBefore() || loadingOlder()) return false;
     const chatId = selectedId()!;
     const selection = selectionToken;
     setLoadingOlder(true);
@@ -571,7 +571,11 @@ export function createActiveChat(options: ActiveChatOptions) {
       setMessages((current) => [...asList<Message>(detail.messages), ...current]);
       setTools((current) => [...assignToolSeq(asList<ToolItem>(detail.tools)), ...current] as ToolItem[]);
       setPageBefore(detail.page?.before || null);
-    } catch (error) { if (selection === selectionToken && selectedId() === chatId) onError((error as Error).message); }
+      return true;
+    } catch (error) {
+      if (selection === selectionToken && selectedId() === chatId) onError((error as Error).message);
+      return false;
+    }
     finally { if (selection === selectionToken) setLoadingOlder(false); }
   };
 
