@@ -44,7 +44,13 @@ Note that preserving Pi's structure is what makes the settled interim-text UX *c
   overlapping provider start/delta text, prevent resumed Thinking Summary
   duplication, apply the composer model/thinking selection to retries, and
   retain a chat-local thinking-level preference for each model.
-- [ ] **Slice 4 — reconnect, batching, and backpressure.**
+- [x] **Slice 4 — reconnect, batching, and backpressure.** Approved after
+  long-stream, multi-tab, and reconnect testing. Server delivery coalesces
+  same-block deltas per client, flushes before structural boundaries, and
+  pauses a slow socket above its high-water mark until Resume State can
+  converge it. The initial client-side second frame queue caused a transient
+  line-placement regression, so server coalescing remains the sole delta
+  batching boundary before the Markdown renderer.
 - [ ] **Slice 5 — bounded Markdown rendering.**
 - [ ] **Slice 6 — compatibility-path removal.**
 
