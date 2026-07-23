@@ -94,13 +94,20 @@ the private native-session mapping and marks the row `active`. Browser routes
 stay `/chat/<conduit-chat-id>` across Pi restarts and forks. Pi JSONL is the
 authoritative transcript — the registry only lets the sidebar list chats
 without parsing transcripts, and is reconciled at startup and checkpointed
-after completed responses and explicit mutations. Selected-chat loading seeds
+after completed responses and explicit mutations. Pi records each fork's
+`parentSession`; startup follows that family to retain superseded branch files
+without importing them as additional sidebar chats.
+Selected-chat loading seeds
 the composer from indexed transcript model/thinking metadata and performs one
-runtime-aware model-catalogue reconciliation. Edit/regenerate use Pi's public
-`fork` RPC; moves fork across directories and delete the source JSONL only
-after the destination exists; deletion (always interface-confirmed) stops the
-live process and removes JSONL plus chat folder. Never let two Pi processes
-write one JSONL.
+runtime-aware model-catalogue reconciliation. During generation the server also
+maintains a sequenced, structured Active Generation independent of its bounded
+diagnostic event ring and sends that Resume State before the compatibility
+WebSocket snapshot; the client projects the structured state directly and
+retains compatibility events only during the rendering migration. Edit/regenerate use Pi's public `fork`
+RPC; moves fork across directories and delete the source JSONL only after the
+destination exists; deletion (always interface-confirmed) stops the live
+process and removes JSONL plus chat folder. Never let two Pi processes write
+one JSONL.
 
 **Attachments.** Raw request bodies stream to `.partial/<id>.part` and
 publish by atomic rename; the filesystem is the registry, with no MIME or

@@ -1,5 +1,14 @@
 # Repository Guidelines
 
+## Pi research
+
+For Pi design or API questions, use DeepWiki against `earendil-works/pi` —
+not `earendil-works/pi-coding-agent`. If a DeepWiki request fails because the
+repository or query is wrong, correct it and retry rather than abandoning the
+lookup. Before changing Conduit, verify the result against the locally pinned
+Pi package version; Isolated and Host Pi must remain compatible at their
+shared RPC contract.
+
 This file is the working contract for contributors and coding agents: hard
 invariants, verification, and steering. It deliberately does not repeat
 reference documentation:

@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
-import { readSessionMetadata, validateSessionFile } from "./session-store.js";
+import { readSessionMetadata, readSessionParentSession, validateSessionFile } from "./session-store.js";
 import { ensureChatTree } from "./owned-paths.js";
 
 const CHAT_ID = /^[a-zA-Z0-9_-]{8,128}$/;
@@ -34,6 +34,46 @@ export function chatView(chat) {
   if (!chat) return null;
   const { piSessionId, piSessionFile, ...view } = chat;
   return view;
+}
+
+function sessionFileFor(item) {
+  return item?.piSessionFile || item?.file ? path.resolve(item.piSessionFile || item.file) : null;
+}
+
+function modelThinkingLevelsFor(item) {
+  if (!item?.modelThinkingLevels || typeof item.modelThinkingLevels !== "object" || Array.isArray(item.modelThinkingLevels)) return {};
+  return Object.fromEntries(Object.entries(item.modelThinkingLevels)
+    .filter(([spec, level]) => typeof spec === "string" && spec.trim() && typeof level === "string" && level.trim())
+    .map(([spec, level]) => [spec.trim(), level.trim()]));
+}
+
+function sessionFamilies(files, parents) {
+  const links = new Map([...files].map((file) => [file, new Set()]));
+  for (const [file, parent] of parents) {
+    links.get(file)?.add(parent);
+    links.get(parent)?.add(file);
+  }
+  const families = new Map();
+  for (const file of links.keys()) {
+    if (families.has(file)) continue;
+    const members = [];
+    const pending = [file];
+    while (pending.length) {
+      const current = pending.pop();
+      if (families.has(current)) continue;
+      families.set(current, null);
+      members.push(current);
+      pending.push(...(links.get(current) || []));
+    }
+    const id = members.sort().at(0);
+    for (const member of members) families.set(member, id);
+  }
+  return families;
+}
+
+function preferredFamilyChat(rows) {
+  return rows.find((item) => item.id !== (item.piSessionId || item.nativeId))
+    || [...rows].sort((left, right) => String(right.updatedAt || right.createdAt || "").localeCompare(String(left.updatedAt || left.createdAt || "")))[0];
 }
 
 export class ChatStore {
@@ -89,6 +129,24 @@ export class ChatStore {
         discoveredFiles.set(file, [...(discoveredFiles.get(file) || []), project]);
       }
     }
+    const parentSessions = new Map();
+    for (const [file, candidates] of discoveredFiles) {
+      for (const project of candidates) {
+        try {
+          const parent = await readSessionParentSession(file, project);
+          if (parent && discoveredFiles.has(parent)) parentSessions.set(file, parent);
+          break;
+        } catch {}
+      }
+    }
+    const families = sessionFamilies(discoveredFiles.keys(), parentSessions);
+    const familyChats = new Map();
+    for (const item of rows) {
+      const family = families.get(sessionFileFor(item));
+      if (!family) continue;
+      familyChats.set(family, [...(familyChats.get(family) || []), item]);
+    }
+    const familyOwners = new Map([...familyChats].map(([family, members]) => [family, preferredFamilyChat(members).id]));
 
     const reconciled = [];
     const usedIds = new Set();
@@ -96,7 +154,11 @@ export class ChatStore {
       const project = projectById.get(item.projectId);
       if (!project) continue;
       const id = isChatId(item.id) && !usedIds.has(item.id) ? item.id : crypto.randomUUID();
-      let piSessionFile = item.piSessionFile || item.file ? path.resolve(item.piSessionFile || item.file) : null;
+      let piSessionFile = sessionFileFor(item);
+      const family = families.get(piSessionFile);
+      if (family && familyOwners.get(family) !== item.id) {
+        continue;
+      }
       const nativeRuntime = item.runtime?.kind === "native_pi";
       const active = legacyRegistry
         ? item.status === "active" || item.status === "persisted" || Boolean(item.file)
@@ -120,6 +182,7 @@ export class ChatStore {
         runtime: this.runtimeFor(item, item.templateId, item.templateVersion),
         piSessionId: item.piSessionId || item.nativeId || (active ? item.id : null),
         piSessionFile,
+        modelThinkingLevels: modelThinkingLevelsFor(item),
         createdAt,
         updatedAt: item.updatedAt || createdAt,
       };
@@ -145,30 +208,44 @@ export class ChatStore {
       reconciled.push(chat);
     }
 
+    const discoveredFamilies = new Map();
     for (const [file, candidates] of discoveredFiles) {
-      for (const project of candidates) {
-        try {
-          const session = await readSessionMetadata(file, project);
-          const id = isChatId(session.id) && !usedIds.has(session.id) ? session.id : crypto.randomUUID();
-          const chat = {
-            id,
-            projectId: project.id,
-            status: "active",
-            title: session.title,
-            templateId: null,
-            templateVersion: null,
-            runtime: this.runtimeFor(null),
-            piSessionId: session.nativeId || session.id,
-            piSessionFile: session.file,
-            createdAt: session.createdAt,
-            updatedAt: session.updatedAt,
-          };
-          await this.ensureDirectories(project, id);
-          await this.removePartials(project, id);
-          usedIds.add(id);
-          reconciled.push(chat);
-          break;
-        } catch {}
+      const family = families.get(file) || file;
+      discoveredFamilies.set(family, [...(discoveredFamilies.get(family) || []), { file, candidates }]);
+    }
+    const parentFiles = new Set(parentSessions.values());
+    for (const [family, files] of discoveredFamilies) {
+      if (usedIds.has(familyOwners.get(family))) continue;
+      files.sort((left, right) => Number(parentFiles.has(left.file)) - Number(parentFiles.has(right.file)) || right.file.localeCompare(left.file));
+      let imported = false;
+      for (const { file, candidates } of files) {
+        for (const project of candidates) {
+          try {
+            const session = await readSessionMetadata(file, project);
+            const id = isChatId(session.id) && !usedIds.has(session.id) ? session.id : crypto.randomUUID();
+            const chat = {
+              id,
+              projectId: project.id,
+              status: "active",
+              title: session.title,
+              templateId: null,
+              templateVersion: null,
+              runtime: this.runtimeFor(null),
+              piSessionId: session.nativeId || session.id,
+              piSessionFile: session.file,
+              modelThinkingLevels: {},
+              createdAt: session.createdAt,
+              updatedAt: session.updatedAt,
+            };
+            await this.ensureDirectories(project, id);
+            await this.removePartials(project, id);
+            usedIds.add(id);
+            reconciled.push(chat);
+            imported = true;
+            break;
+          } catch {}
+        }
+        if (imported) break;
       }
     }
 
@@ -258,6 +335,7 @@ export class ChatStore {
       runtime: this.runtimeFor({ runtime }, templateId, templateVersion),
       piSessionId: null,
       piSessionFile: null,
+      modelThinkingLevels: {},
       createdAt: timestamp,
       updatedAt: timestamp,
     };
@@ -308,9 +386,11 @@ export class ChatStore {
       "runtime",
       "piSessionId",
       "piSessionFile",
+      "modelThinkingLevels",
       "updatedAt",
     ];
     for (const key of allowed) if (Object.hasOwn(patch, key)) chat[key] = patch[key];
+    chat.modelThinkingLevels = modelThinkingLevelsFor(chat);
     if (chat.runtime?.kind === "conduit_profile" && (Object.hasOwn(patch, "templateId") || Object.hasOwn(patch, "templateVersion"))) {
       chat.runtime.profileId = chat.templateId;
       chat.runtime.profileVersion = chat.templateVersion;

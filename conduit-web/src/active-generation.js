@@ -94,6 +94,9 @@ export function reduceActiveGeneration(current, event) {
     case "generation_running":
       next.status = "running";
       break;
+    case "generation_stopping":
+      next.status = "stopping";
+      break;
     case "assistant_message_started":
       if (!next.assistantMessages.some((message) => message.id === event.messageId)) {
         next.assistantMessages.push({

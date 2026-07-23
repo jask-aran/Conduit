@@ -1,8 +1,9 @@
 import { batch, createMemo, createSignal, onCleanup } from "solid-js";
 import { deriveFineActivity } from "../../activity.js";
+import { reduceActiveGeneration } from "../../active-generation.js";
 import { api, asList } from "../api/client";
-import { normalizeLiveEvent } from "../api/live-events";
-import type { LiveEvent, RuntimeSnapshotEvent, RuntimeStateEvent } from "../api/live-events";
+import { isStructuredGenerationEvent, normalizeLiveEvent } from "../api/live-events";
+import type { LiveEvent, RuntimeSnapshotEvent, RuntimeStateEvent, StructuredGenerationEvent } from "../api/live-events";
 import type {
   ChatStatus,
   ChatSummary,
@@ -23,6 +24,7 @@ import { reconcileMessages } from "../reconcile-messages";
 import type { AttachmentsStore, UploadAttachment } from "./attachments";
 import type { CatalogueStore } from "./catalogue";
 import { createLiveStream } from "./live-stream";
+import type { ActiveGenerationView } from "../turn-rows";
 import type { ModelSettings } from "./model-settings";
 import type { RuntimeStore } from "./runtime";
 
@@ -68,6 +70,7 @@ export function createActiveChat(options: ActiveChatOptions) {
   const [activeToolName, setActiveToolName] = createSignal<string | null>(null);
   const [retry, setRetry] = createSignal<RetryState | null>(null);
   const [reasoning, setReasoning] = createSignal({ content: "", active: false, redacted: false });
+  const [activeGeneration, setActiveGeneration] = createSignal<ActiveGenerationView | null>(null);
   const [connectingId, setConnectingId] = createSignal<string | null>(null);
   const liveStream = createLiveStream();
   let socket: WebSocket | null = null;
@@ -82,6 +85,7 @@ export function createActiveChat(options: ActiveChatOptions) {
   let navigationToken = 0;
   let toolSeq = 0;
   const closedGenerations = new Set<string>();
+  const structuredGenerations = new Set<string>();
 
   const selectedId = catalogue.selectedId;
   const projectId = catalogue.projectId;
@@ -113,6 +117,7 @@ export function createActiveChat(options: ActiveChatOptions) {
     setHostUiRequests([]);
     setQueue({ steering: [], followUp: [] });
     resetLiveFlags();
+    setActiveGeneration(null);
     liveStream.clear();
     currentGeneration = null;
     currentLiveAssistantId = null;
@@ -121,6 +126,27 @@ export function createActiveChat(options: ActiveChatOptions) {
     stopPending = false;
     continuation = false;
     toolSeq = 0;
+    structuredGenerations.clear();
+  };
+
+  const applyStructuredGeneration = (event: StructuredGenerationEvent) => {
+    if (event.generationId) structuredGenerations.add(event.generationId);
+    const next = reduceActiveGeneration(activeGeneration(), event) as ActiveGenerationView | null;
+    if (!next) return;
+    setActiveGeneration(next);
+    currentGeneration = next.id;
+    continuation = Boolean((next as { continuation?: boolean }).continuation);
+    const blocks = next.assistantMessages.flatMap((message) => message.blocks);
+    const latest = blocks.at(-1);
+    setThinking(latest?.type === "thinking" && latest.status === "streaming");
+    setResponding(latest?.type === "text" && latest.status === "streaming");
+    const runningTool = Object.values(next.toolExecutions).find((tool) => tool.status === "running");
+    setActiveToolName(runningTool?.name || null);
+    setRetry((next as { retry?: RetryState | null }).retry || null);
+    if (next.status === "stopping") setGeneration("stopping");
+    else if (next.status === "failed") setGeneration("failed");
+    else if (["stopped", "complete"].includes(next.status)) setGeneration("idle");
+    else setGeneration("active");
   };
 
   const applyDetail = (detail: TranscriptDetail, reconcile = false) => {
@@ -262,7 +288,18 @@ export function createActiveChat(options: ActiveChatOptions) {
   };
 
   function consume(event: LiveEvent) {
+    if (isStructuredGenerationEvent(event)) {
+      applyStructuredGeneration(event);
+      return;
+    }
     const eventGeneration = event.generationId;
+    const structured = Boolean(eventGeneration && structuredGenerations.has(eventGeneration));
+    if (structured && [
+      "agent_start", "agent_end", "agent_settled", "runtime_exit", "message_start", "message_update",
+      "assistant_stream_delta", "assistant_stream_final", "tool_execution_start", "tool_execution_update",
+      "tool_execution_end", "runtime_error",
+    ].includes(event.type)) return;
+    if (structured && event.type === "message_end" && event.message.role === "assistant") return;
     if (eventGeneration && closedGenerations.has(eventGeneration) && !["generation_stopped", "generation_started"].includes(event.type)) return;
     if (stopPending && ["message_start", "assistant_stream_delta", "assistant_stream_final"].includes(event.type)) return;
 
@@ -352,9 +389,21 @@ export function createActiveChat(options: ActiveChatOptions) {
       case "session_checkpoint":
         void catalogue.refresh();
         if (event.chatId === selectedId()) {
-          void loadDetail(event.chatId, true).then(() => {
-            if (event.chatId === selectedId() && streaming()) ensureLiveAssistant(currentGeneration);
-          }).catch((error) => onError((error as Error).message));
+          const current = activeGeneration();
+          if (current && ["stopped", "complete", "failed"].includes(current.status)) {
+            const selection = selectionToken;
+            void api<TranscriptDetail>(`/v0/sessions/${encodeURIComponent(event.chatId)}`).then((detail) => {
+              if (selection !== selectionToken || event.chatId !== selectedId()) return;
+              batch(() => {
+                applyDetail(detail, true);
+                setActiveGeneration(null);
+              });
+            }).catch((error) => onError((error as Error).message));
+          } else {
+            void loadDetail(event.chatId, true).then(() => {
+              if (event.chatId === selectedId() && streaming()) ensureLiveAssistant(currentGeneration);
+            }).catch((error) => onError((error as Error).message));
+          }
         }
         break;
       case "message_start":
@@ -554,7 +603,7 @@ export function createActiveChat(options: ActiveChatOptions) {
     setGeneration("submitting");
     try {
       socket!.send(JSON.stringify(editId
-        ? { type: "fork_and_prompt", entryId: editId, message: text, attachmentIds }
+        ? { type: "fork_and_prompt", entryId: editId, message: text, attachmentIds, model: models.model(), thinkingLevel: models.effort() }
         : { type: "prompt", message: text, attachmentIds }));
       setStatus("active");
       setGeneration("active");
@@ -572,6 +621,12 @@ export function createActiveChat(options: ActiveChatOptions) {
   const stop = () => {
     if (!streaming()) return;
     if (currentGeneration) closedGenerations.add(currentGeneration);
+    if (activeGeneration()) {
+      stopPending = true;
+      setGeneration("stopping");
+      socket?.send(JSON.stringify({ type: "stop_generation", generationId: currentGeneration }));
+      return;
+    }
     liveStream.flush();
     stopPending = true;
     setGeneration("stopping");
@@ -590,7 +645,7 @@ export function createActiveChat(options: ActiveChatOptions) {
       await ensureLive();
       setMessages((current) => { const index = current.findIndex((item) => item.id === entryId); return index >= 0 ? current.slice(0, index + 1) : current; });
       setGeneration("active");
-      socket!.send(JSON.stringify({ type: "regenerate", entryId }));
+      socket!.send(JSON.stringify({ type: "regenerate", entryId, model: models.model(), thinkingLevel: models.effort() }));
     } catch (error) { setGeneration("idle"); onError((error as Error).message); }
   };
 
@@ -659,7 +714,7 @@ export function createActiveChat(options: ActiveChatOptions) {
   return {
     status, setStatus, title, setTitle, templateId, setTemplateId, runtimeIdentity, setRuntimeIdentity,
     live, messages, setMessages, tools, loadedId, pageBefore, loadingOlder, draft, setDraft,
-    generation, editingEntryId, contextUsage, compacting, hostUiRequests, queue, reasoning,
+    generation, editingEntryId, contextUsage, compacting, hostUiRequests, queue, reasoning, activeGeneration,
     connectingId, streaming, stopping, liveStream, activity,
     initialize, select, loadDetail, openLive, ensureLive, reset, send, stop, regenerate,
     continueResponse, loadOlder, edit, respondHostUi, clearQueue,

@@ -59,6 +59,10 @@ export function createPiEventNormalizer(generationId, { startingSequence = 0 } =
         if (update.type.endsWith("_start")) {
           const normalized = normalizeBlock(content[contentIndex], contentIndex)
             || { type: blockType, contentIndex };
+          // Some providers include their first token in the partial block at
+          // *_start and emit that same token again as the first delta. Starts
+          // establish block identity; deltas own streaming text.
+          if (normalized.type === "thinking" || normalized.type === "text") delete normalized.text;
           return [emit({
             type: "content_block_started",
             messageId: activeMessageId,
@@ -147,13 +151,27 @@ export function createPiEventNormalizer(generationId, { startingSequence = 0 } =
       case "agent_settled":
         return [emit({ type: "generation_settled" })];
       case "generation_stopped":
-        return [emit({ type: "generation_stopped" })];
+        return [emit({
+          type: "generation_stopped",
+          status: "stopped",
+          processTerminated: Boolean(source.processTerminated),
+        })];
+      case "generation_stopping":
+        return [emit({ type: "generation_stopping" })];
       case "runtime_error":
         return [emit({
           type: "generation_failed",
           error: {
             code: source.code ? String(source.code) : "",
             message: String(source.message || "Runtime error"),
+          },
+        })];
+      case "runtime_exit":
+        return [emit({
+          type: "generation_failed",
+          error: {
+            code: "runtime_exit",
+            message: String(source.message || "Pi process exited during generation"),
           },
         })];
       default:

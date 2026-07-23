@@ -10,6 +10,11 @@ import {
   isBlockingHostUi,
   normalizeHostUiRequest,
 } from "./activity.js";
+import {
+  generationResumeEvent,
+  reduceActiveGeneration,
+} from "./active-generation.js";
+import { createPiEventNormalizer } from "./pi-event-normalizer.js";
 
 export function buildPiArgs({ sessionFile = null, model = "", thinkingLevel = "", models, template }) {
   const args = [
@@ -36,6 +41,8 @@ function emptyContextUsage() {
     lastRequestUsage: null,
   };
 }
+
+const TERMINAL_GENERATION_STATUSES = new Set(["stopped", "complete", "failed"]);
 
 export class PiManager extends EventEmitter {
   constructor({
@@ -304,6 +311,8 @@ export class PiManager extends EventEmitter {
       lastClientAt: createdAtMs,
       stdoutBuffer: "",
       stream: null,
+      activeGeneration: null,
+      generationNormalizer: null,
       generationSequence: 0,
       generation: null,
       stopping: false,
@@ -331,6 +340,7 @@ export class PiManager extends EventEmitter {
       record.activityDetail = error.message;
       for (const pending of record.pendingRequests.values()) pending.reject(error);
       record.pendingRequests.clear();
+      this.ingestGenerationEvent(record, { type: "runtime_error", message: error.message });
       this.publish(record, { type: "runtime_error", message: error.message });
       this.publishState(record);
     });
@@ -344,6 +354,10 @@ export class PiManager extends EventEmitter {
       for (const pending of record.pendingRequests.values()) pending.reject(new Error("Pi process exited before replying"));
       record.pendingRequests.clear();
       if (record.statsTimer) clearTimeout(record.statsTimer);
+      this.ingestGenerationEvent(record, {
+        type: "runtime_exit",
+        message: `Pi process exited (${signal || code || "unknown"})`,
+      });
       this.publish(record, { type: "runtime_exit", code, signal });
       this.emit("process_removed", { id: record.id, chatId: record.chatId });
       this.processes.delete(record.id);
@@ -385,6 +399,8 @@ export class PiManager extends EventEmitter {
           record.active = false;
           if (record.generation) record.generation.settled = true;
         }
+
+        this.ingestGenerationEvent(record, event);
 
         if (event.type === "extension_ui_request" && isBlockingHostUi(event)) {
           applyActivityEvent(record, event);
@@ -558,6 +574,41 @@ export class PiManager extends EventEmitter {
     record.stream = null;
   }
 
+  beginActiveGeneration(record, generationId, continuation) {
+    const previous = {
+      activeGeneration: record.activeGeneration,
+      generationNormalizer: record.generationNormalizer,
+    };
+    record.generationNormalizer = createPiEventNormalizer(generationId);
+    const [started] = record.generationNormalizer.normalize({
+      type: "generation_started",
+      continuation,
+    });
+    record.activeGeneration = reduceActiveGeneration(null, started);
+    return { previous, started };
+  }
+
+  restoreActiveGeneration(record, previous) {
+    record.activeGeneration = previous.activeGeneration;
+    record.generationNormalizer = previous.generationNormalizer;
+  }
+
+  ingestGenerationEvent(record, source, { allowClosed = false } = {}) {
+    if (!record.generationNormalizer || !record.activeGeneration) return [];
+    if (record.generation?.closed && !allowClosed) return [];
+    const events = record.generationNormalizer.normalize(source);
+    for (const event of events) {
+      record.activeGeneration = reduceActiveGeneration(record.activeGeneration, event);
+      this.publishTransient(record, event);
+    }
+    return events;
+  }
+
+  currentGenerationResume(record) {
+    if (!record?.activeGeneration || TERMINAL_GENERATION_STATUSES.has(record.activeGeneration.status)) return null;
+    return generationResumeEvent(record.activeGeneration);
+  }
+
   send(id, value) {
     const record = this.processes.get(id);
     if (!record || !["starting", "running"].includes(record.status)) throw new Error("Pi session process is not running");
@@ -642,6 +693,7 @@ export class PiManager extends EventEmitter {
     }
     const generationId = `g${++record.generationSequence}`;
     const previousGeneration = record.generation;
+    const structured = this.beginActiveGeneration(record, generationId, Boolean(continuationBase));
     record.generation = { id: generationId, closed: false, settled: false, continuationBase };
     record.activity = "working";
     try {
@@ -652,9 +704,10 @@ export class PiManager extends EventEmitter {
       this.send(id, payload);
     } catch (error) {
       record.generation = previousGeneration;
+      this.restoreActiveGeneration(record, structured.previous);
       throw error;
     }
-    this.publish(record, { type: "generation_started", generationId, continuation: Boolean(continuationBase) });
+    this.publish(record, structured.started);
     this.publishState(record);
     return generationId;
   }
@@ -666,6 +719,7 @@ export class PiManager extends EventEmitter {
     if (streamingBehavior !== "steer" && streamingBehavior !== "followUp") this.assertCanStartGeneration(record);
     const generationId = `g${++record.generationSequence}`;
     const previousGeneration = record.generation;
+    const structured = this.beginActiveGeneration(record, generationId, Boolean(continuationBase));
     record.generation = { id: generationId, closed: false, settled: false, continuationBase };
     record.activity = "working";
     const payload = { type: "prompt", message };
@@ -674,11 +728,12 @@ export class PiManager extends EventEmitter {
       await this.request(id, payload);
     } catch (error) {
       record.generation = previousGeneration;
+      this.restoreActiveGeneration(record, structured.previous);
       record.activity = deriveCoarseActivity(record);
       this.publishState(record);
       throw error;
     }
-    this.publish(record, { type: "generation_started", generationId, continuation: Boolean(continuationBase) });
+    this.publish(record, structured.started);
     this.publishState(record);
     return generationId;
   }
@@ -697,6 +752,7 @@ export class PiManager extends EventEmitter {
     record.activity = "stopping";
     generation.partial = record.stream?.chunks.join("") || generation.partial || "";
     record.stream = null;
+    this.ingestGenerationEvent(record, { type: "generation_stopping" }, { allowClosed: true });
     this.publishState(record);
     let processTerminated = false;
     try {
@@ -710,7 +766,11 @@ export class PiManager extends EventEmitter {
     }
     record.stopping = false;
     record.activity = processTerminated || record.status === "stopped" ? "idle" : deriveCoarseActivity(record);
-    this.publish(record, { type: "generation_stopped", generationId: generation.id, status: "stopped", processTerminated });
+    this.ingestGenerationEvent(record, {
+      type: "generation_stopped",
+      status: "stopped",
+      processTerminated,
+    }, { allowClosed: true });
     this.publishState(record);
     return { generationId: generation.id, processTerminated };
   }
@@ -754,12 +814,22 @@ export class PiManager extends EventEmitter {
       this.emit("process_changed", { record, reason: "client_detach" });
     });
     this.emit("process_changed", { record, reason: "client_attach" });
+    return this.currentGenerationResume(record);
   }
 
   publish(record, event) {
     this.touchActivity(record);
     record.events.push(event);
     if (record.events.length > 500) record.events.splice(0, record.events.length - 500);
+    this.deliver(record, event);
+  }
+
+  publishTransient(record, event) {
+    this.touchActivity(record);
+    this.deliver(record, event);
+  }
+
+  deliver(record, event) {
     const payload = JSON.stringify(event);
     for (const socket of record.clients) {
       if (socket.readyState === socket.OPEN) socket.send(payload);
@@ -802,7 +872,8 @@ export class PiManager extends EventEmitter {
 
   view(record) {
     const {
-      child, clients, stdoutBuffer, events, stream, pendingRequests, generation, statsTimer,
+      child, clients, stdoutBuffer, events, stream, activeGeneration, generationNormalizer,
+      pendingRequests, generation, statsTimer,
       cwd, sessionDir, createdAtMs, lastActivityAt, lastClientAt, ...safe
     } = record;
     return {

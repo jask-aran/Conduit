@@ -306,6 +306,96 @@ test("forwards each text delta immediately and preserves chunk ordering", () => 
   ]);
 });
 
+test("PiManager reduces structured generation state while retaining compatibility events", () => {
+  const { manager, child, record } = rpcFixture();
+  const published = [];
+  manager.on("event", ({ event }) => published.push(event));
+  const generationId = manager.prompt(record.id, "Hello");
+  const partial = {
+    role: "assistant",
+    content: [{ type: "text", text: "Hello" }],
+    stopReason: "stop",
+  };
+  child.stdout.write(`${JSON.stringify({ type: "agent_start" })}\n`);
+  child.stdout.write(`${JSON.stringify({ type: "message_start", message: { role: "assistant", content: [] } })}\n`);
+  child.stdout.write(`${JSON.stringify({
+    type: "message_update",
+    assistantMessageEvent: { type: "text_start", contentIndex: 0, partial: { ...partial, content: [{ type: "text", text: "" }] } },
+  })}\n`);
+  child.stdout.write(`${JSON.stringify({
+    type: "message_update",
+    assistantMessageEvent: { type: "text_delta", contentIndex: 0, delta: "Hello", partial },
+  })}\n`);
+  child.stdout.write(`${JSON.stringify({
+    type: "message_end",
+    message: { ...partial, usage: { input: 1, output: 1 } },
+  })}\n`);
+
+  assert.equal(record.activeGeneration.id, generationId);
+  assert.equal(record.activeGeneration.status, "running");
+  assert.deepEqual(record.activeGeneration.assistantMessages[0], {
+    id: "m1",
+    status: "complete",
+    stopReason: "stop",
+    errorMessage: null,
+    blocks: [{
+      type: "text",
+      contentIndex: 0,
+      text: "Hello",
+      status: "complete",
+      identity: `${generationId}:m1:0`,
+    }],
+  });
+  assert.ok(published.some((event) => event.type === "content_block_delta" && event.delta === "Hello"));
+  assert.equal(record.events.some((event) => event.type === "content_block_delta"), false);
+  assert.ok(record.events.some((event) => event.type === "assistant_stream_delta" && event.delta === "Hello"));
+  assert.ok(record.events.some((event) => event.type === "assistant_stream_final" && event.content === "Hello"));
+  assert.equal("activeGeneration" in manager.view(record), false);
+  assert.equal(manager.currentGenerationResume(record).generation.assistantMessages[0].blocks[0].text, "Hello");
+
+  child.stdout.write(`${JSON.stringify({ type: "agent_settled" })}\n`);
+  assert.equal(record.activeGeneration.status, "complete");
+  assert.equal(manager.currentGenerationResume(record), null);
+});
+
+test("attach returns complete reduced Resume State independent of the capped event ring", () => {
+  const { manager, child, record } = rpcFixture();
+  const generationId = manager.prompt(record.id, "Long answer");
+  child.stdout.write(`${JSON.stringify({ type: "agent_start" })}\n`);
+  child.stdout.write(`${JSON.stringify({ type: "message_start", message: { role: "assistant", content: [] } })}\n`);
+  child.stdout.write(`${JSON.stringify({
+    type: "message_update",
+    assistantMessageEvent: {
+      type: "text_start",
+      contentIndex: 0,
+      partial: { role: "assistant", content: [{ type: "text", text: "" }] },
+    },
+  })}\n`);
+  for (let index = 0; index < 520; index += 1) {
+    child.stdout.write(`${JSON.stringify({
+      type: "message_update",
+      assistantMessageEvent: {
+        type: "text_delta",
+        contentIndex: 0,
+        delta: "x",
+        partial: { role: "assistant", content: [{ type: "text", text: "x".repeat(index + 1) }] },
+      },
+    })}\n`);
+  }
+  const socket = new EventEmitter();
+  socket.OPEN = 1;
+  socket.readyState = 1;
+  socket.send = () => {};
+
+  const resume = manager.attach(record.id, socket);
+
+  assert.equal(record.events.length, 500);
+  assert.equal(resume.type, "generation_resume");
+  assert.equal(resume.generationId, generationId);
+  assert.equal(resume.seq, record.activeGeneration.lastSeq);
+  assert.equal(resume.generation.assistantMessages[0].blocks[0].text.length, 520);
+});
+
 function rpcFixture(onCommand) {
   const child = new EventEmitter();
   child.stdout = new PassThrough();
@@ -358,7 +448,8 @@ test("normal abort closes the generation before late deltas can be published", a
 
   assert.equal(result.processTerminated, false);
   assert.equal(record.events.some((event) => event.type === "message_start"), false);
-  assert.ok(record.events.some((event) => event.type === "generation_stopped"));
+  assert.equal(record.activeGeneration.status, "stopped");
+  assert.equal(record.activeGeneration.assistantMessages.length, 0);
   assert.equal(record.generation.closed, true);
 });
 
