@@ -267,6 +267,15 @@ directions. This is the v0 event vocabulary: Pi JSONL remains the authoritative
 record, the rendered transcript is a projection of it, and changes to this
 vocabulary are additive and must update this section in the same change.
 
+The rendering migration's unwired protocol foundation lives in
+`src/pi-event-normalizer.js` and `src/active-generation.js`. It assigns
+generation-local assistant-message identities, preserves native
+`contentIndex`/block order and `toolCallId`, reduces sequenced events into a
+serializable Active Generation, and derives Interim Text classification solely
+from tool structure and `stopReason`. The live WebSocket still uses the v0
+compatibility vocabulary below until the server and client migration slices
+adopt this reducer.
+
 Client commands:
 
 | Command | Fields | Effect |

@@ -19,6 +19,23 @@ The priorities are preserving Pi's structure, bounding streaming-render work, an
 
 Note that preserving Pi's structure is what makes the settled interim-text UX *cheap*: with ordered blocks and `stopReason` in domain state, "which text is interim" is a deterministic function of the block tree. The current implementation reaches the same visual outcome through timestamp attachment, a "nearest preceding user message" search, and freezing streamed strings into messages at `tool_execution_start` (`active-chat.ts:388-418`) — heuristics this redesign deletes, not preserves.
 
+## Migration status
+
+- [x] **Slice 1 — normalized protocol and pure reducer fixtures.** Approved
+  after compatibility-path regression testing. `pi-event-normalizer.js` assigns
+  generation-local message identity and preserves block structure;
+  `active-generation.js` supplies the sequenced pure reducer, Resume State
+  replacement semantics, persisted-message reconstruction, and structural
+  Interim Text classification. Raw Pi fixtures cover ordinary answers,
+  thinking, sequential/parallel tools, narration before tools, multiple
+  blocks, retry, stop, provider error, and reconnect prefixes. Nothing is
+  connected to the live server/client path yet.
+- [ ] **Slice 2 — server Active Generation and Resume State.**
+- [ ] **Slice 3 — client Active Generation and existing visual projection.**
+- [ ] **Slice 4 — reconnect, batching, and backpressure.**
+- [ ] **Slice 5 — bounded Markdown rendering.**
+- [ ] **Slice 6 — compatibility-path removal.**
+
 ## Settled product terminology
 
 Use these names consistently in product copy, components, types, tests, and future design discussion.
@@ -388,7 +405,10 @@ Every mechanical claim in this document was checked against the `c8257ad` checko
 
 ## Source notes
 
-- Conduit target: `conduit-web/src/pi-manager.js`, `server.js`, `client/api/live-events.ts`, `client/state/active-chat.ts`, `client/state/live-stream.ts`, `client/state/timeline-store.ts`, `client/turn-rows.ts`, `client/chat/transcript.tsx`, `client/chat/turn-trace.tsx`, `client/chat/markdown.tsx`
+- Structured protocol foundation: `conduit-web/src/pi-event-normalizer.js`,
+  `conduit-web/src/active-generation.js`, and
+  `conduit-web/test/fixtures/pi-rpc-generations.js`
+- Conduit integration target: `conduit-web/src/pi-manager.js`, `server.js`, `client/api/live-events.ts`, `client/state/active-chat.ts`, `client/state/live-stream.ts`, `client/state/timeline-store.ts`, `client/turn-rows.ts`, `client/chat/transcript.tsx`, `client/chat/turn-trace.tsx`, `client/chat/markdown.tsx`
 - Pi upstream: <https://github.com/earendil-works/pi> (repository renamed from `badlogic/pi-mono`; use the new name for research)
 - Pi streaming content-block contract: <https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/custom-provider.md>
 - Installed types (authoritative over upstream `main` and generated docs): `node_modules/@earendil-works/pi-ai/dist/types.d.ts`, `node_modules/@earendil-works/pi-coding-agent/dist/core/extensions/types.d.ts`
