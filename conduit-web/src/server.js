@@ -8,7 +8,7 @@ import { WebSocketServer } from "ws";
 import { loadConfig, resolveTemplate } from "./config.js";
 import { PiModelCatalog } from "./pi-model-catalog.js";
 import { ProjectStore } from "./project-store.js";
-import { duplicateSession, messagesFromEntries, readAnnouncedAttachmentIds, readSessionMetadata, readSessionPage, removeProjectSessions, removeSession, renameSession, settingsFromEntries, toolsFromEntries, transcriptFromEntries, validateSessionFile, validateSessionHeader } from "./session-store.js";
+import { duplicateSession, messagesFromEntries, readAnnouncedAttachmentIds, readSessionMetadata, readSessionPage, removeProjectSessions, removeSession, removeSessionFamily, renameSession, sessionFamilyFiles, settingsFromEntries, toolsFromEntries, transcriptFromEntries, validateSessionFile, validateSessionHeader } from "./session-store.js";
 import { PiManager } from "./pi-manager.js";
 import { ChatStore, chatView, isChatId } from "./chat-store.js";
 import { AttachmentStore } from "./attachment-store.js";
@@ -529,6 +529,13 @@ async function stopSessionProcesses(session) {
   const chatId = session.chatId || session.id;
   const sessionFile = session.piSessionFile || session.file;
   const matching = manager.list().filter((item) => item.chatId === chatId || (sessionFile && item.sessionFile === sessionFile));
+  await Promise.all(matching.map((item) => manager.stopAndWait(item.id)));
+}
+
+async function stopSessionFamilyProcesses(chat, files) {
+  const sessionFiles = new Set(files.map((file) => path.resolve(file)));
+  const matching = manager.list().filter((item) => item.chatId === chat.id
+    || (item.sessionFile && sessionFiles.has(path.resolve(item.sessionFile))));
   await Promise.all(matching.map((item) => manager.stopAndWait(item.id)));
 }
 
@@ -1086,9 +1093,14 @@ app.delete("/v0/sessions/:id", async (request, response, next) => {
     const context = await findChatContext(request.params.id);
     if (!context) return response.status(404).json({ error: "chat_not_found" });
     const session = await findDeletableSession(await projects.list(), context.chat);
-    await stopSessionProcesses(context.chat);
-    if (session) await removeSession(session);
-    await registry.remove(context.chat.id, context.project);
+    const family = session ? await sessionFamilyFiles(session.file, context.project) : [];
+    await stopSessionFamilyProcesses(context.chat, family);
+    if (session) await removeSessionFamily(session.file, context.project);
+    const familyFiles = new Set(family.map((file) => path.resolve(file)));
+    const relatedChats = registry.listProject(context.project.id, { includeHidden: true })
+      .filter((chat) => chat.id === context.chat.id
+        || (chat.piSessionFile && familyFiles.has(path.resolve(chat.piSessionFile))));
+    await Promise.all(relatedChats.map((chat) => registry.remove(chat.id, context.project)));
     response.status(204).end();
   } catch (error) { next(error); }
 });

@@ -372,7 +372,55 @@ export async function findSession(projects, id) {
 }
 
 export async function removeSession(session) {
+  sessionIndexes.delete(path.resolve(session.file));
   await fs.rm(session.file, { force: true });
+}
+
+/**
+ * Returns every regular JSONL in this workspace's on-disk Pi fork family.
+ * Parent paths outside the workspace session directory are deliberately not
+ * followed: Conduit may only remove transcripts it owns for this project.
+ */
+export async function sessionFamilyFiles(file, project) {
+  const target = path.resolve(file);
+  let entries;
+  try { entries = await fs.readdir(project.sessionsDir, { withFileTypes: true }); }
+  catch (error) {
+    if (error.code === "ENOENT") return [];
+    throw error;
+  }
+  const files = new Set(entries
+    .filter((entry) => entry.isFile() && entry.name.endsWith(".jsonl"))
+    .map((entry) => path.resolve(project.sessionsDir, entry.name)));
+  if (!files.has(target)) return [];
+
+  const links = new Map([...files].map((candidate) => [candidate, new Set()]));
+  await Promise.all([...files].map(async (candidate) => {
+    try {
+      const parent = await readSessionParentSession(candidate, project);
+      if (!parent || !files.has(parent)) return;
+      links.get(candidate).add(parent);
+      links.get(parent).add(candidate);
+    } catch {}
+  }));
+
+  const family = [];
+  const pending = [target];
+  const seen = new Set();
+  while (pending.length) {
+    const candidate = pending.pop();
+    if (seen.has(candidate)) continue;
+    seen.add(candidate);
+    family.push(candidate);
+    for (const linked of links.get(candidate) || []) pending.push(linked);
+  }
+  return family;
+}
+
+export async function removeSessionFamily(file, project) {
+  const files = await sessionFamilyFiles(file, project);
+  await Promise.all(files.map((familyFile) => removeSession({ file: familyFile })));
+  return files;
 }
 
 export async function renameSession(session, project, name) {
