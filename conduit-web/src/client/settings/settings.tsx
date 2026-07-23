@@ -19,6 +19,29 @@ interface RuntimeSettings {
   generatingCount?: number;
 }
 
+interface PiAuthProvider {
+  id: string;
+  label: string;
+  oauth: boolean;
+  usesCallbackServer: boolean;
+  auth: { configured: boolean; source: "stored" | "environment" | null };
+}
+
+interface PiAuthAttempt {
+  id: string;
+  providerId: string;
+  providerLabel: string;
+  state: string;
+  message: string;
+  authUrl: string | null;
+  instructions: string | null;
+  deviceCode: { userCode: string; verificationUri: string; expiresInSeconds: number | null } | null;
+  prompt: { type: "text" | "manual_code" | "select"; message: string; placeholder?: string; options?: { id: string; label: string }[] } | null;
+  error: string | null;
+  active: boolean;
+  owned: boolean;
+}
+
 const sameScope = (left: string[], right: string[]) => [...left].sort().join("\n") === [...right].sort().join("\n");
 const sameRuntime = (left: RuntimeSettings | null, right: RuntimeSettings | null) => Boolean(left && right
   && left.maxLiveProcesses === right.maxLiveProcesses
@@ -50,6 +73,13 @@ export function Settings(props: {
   const [runtimeSaving, setRuntimeSaving] = createSignal(false);
   const [detecting, setDetecting] = createSignal(false);
   const [workspaceId, setWorkspaceId] = createSignal<string | null>(null);
+  const [authProviders, setAuthProviders] = createSignal<PiAuthProvider[]>([]);
+  const [authAttempt, setAuthAttempt] = createSignal<PiAuthAttempt | null>(null);
+  const [authProviderId, setAuthProviderId] = createSignal("");
+  const [apiKey, setApiKey] = createSignal("");
+  const [authResponse, setAuthResponse] = createSignal("");
+  const [authLoading, setAuthLoading] = createSignal(false);
+  const [authError, setAuthError] = createSignal("");
   let runtimeRequest = 0;
   let search!: HTMLInputElement;
   let returnFocus: HTMLElement | null = null;
@@ -100,6 +130,80 @@ export function Settings(props: {
     }
   };
   createEffect(() => { if (props.open && section() === "runtime") void loadRuntime(); });
+
+  const loadPiAuth = async () => {
+    setAuthLoading(true);
+    try {
+      const [status, attempt] = await Promise.all([
+        api<{ providers: PiAuthProvider[] }>("/v0/pi-auth"),
+        api<{ attempt: PiAuthAttempt | null }>("/v0/pi-auth/attempt"),
+      ]);
+      setAuthProviders(status.providers);
+      setAuthAttempt(attempt.attempt);
+      if (!authProviderId()) setAuthProviderId(status.providers[0]?.id || "");
+      setAuthError("");
+    } catch (error) { setAuthError((error as Error).message); }
+    finally { setAuthLoading(false); }
+  };
+  createEffect(() => {
+    if (!props.open || section() !== "auth") return;
+    void loadPiAuth();
+  });
+  createEffect(() => {
+    if (!props.open || section() !== "auth" || !authAttempt()?.active) return;
+    const timer = window.setInterval(() => {
+      api<{ attempt: PiAuthAttempt | null }>("/v0/pi-auth/attempt")
+        .then((result) => {
+          setAuthAttempt(result.attempt);
+          if (!result.attempt?.active) return api<{ providers: PiAuthProvider[] }>("/v0/pi-auth")
+            .then((status) => setAuthProviders(status.providers));
+        })
+        .catch((error) => setAuthError((error as Error).message));
+    }, 1000);
+    onCleanup(() => window.clearInterval(timer));
+  });
+
+  const startOAuth = async () => {
+    if (!authProviderId()) return;
+    setAuthLoading(true);
+    setAuthError("");
+    try {
+      const result = await api<{ attempt: PiAuthAttempt }>("/v0/pi-auth/oauth", { method: "POST", body: JSON.stringify({ providerId: authProviderId() }) });
+      setAuthAttempt(result.attempt);
+    } catch (error) { setAuthError((error as Error).message); }
+    finally { setAuthLoading(false); }
+  };
+  const answerAuthPrompt = async (value: string) => {
+    setAuthLoading(true);
+    setAuthError("");
+    try {
+      const result = await api<{ attempt: PiAuthAttempt }>("/v0/pi-auth/attempt/respond", { method: "POST", body: JSON.stringify({ value }) });
+      setAuthAttempt(result.attempt);
+      setAuthResponse("");
+    } catch (error) { setAuthError((error as Error).message); }
+    finally { setAuthLoading(false); }
+  };
+  const cancelOAuth = async () => {
+    try { await api("/v0/pi-auth/attempt/cancel", { method: "POST" }); await loadPiAuth(); }
+    catch (error) { setAuthError((error as Error).message); }
+  };
+  const saveApiKey = async () => {
+    if (!authProviderId() || !apiKey()) return;
+    setAuthLoading(true);
+    setAuthError("");
+    try {
+      await api("/v0/pi-auth/api-key", { method: "PUT", body: JSON.stringify({ providerId: authProviderId(), key: apiKey() }) });
+      setApiKey("");
+      await loadPiAuth();
+    } catch (error) { setAuthError((error as Error).message); }
+    finally { setAuthLoading(false); }
+  };
+  const removePiAuth = async (providerId: string) => {
+    setAuthLoading(true);
+    try { await api(`/v0/pi-auth/${encodeURIComponent(providerId)}`, { method: "DELETE" }); await loadPiAuth(); }
+    catch (error) { setAuthError((error as Error).message); }
+    finally { setAuthLoading(false); }
+  };
 
   const selectedModels = createMemo(() => props.models.allModels().filter((model) => scope().includes(model.spec)));
   const scopeDirty = createMemo(() => scopeEdited() && !sameScope(scope(), props.models.enabledModels()));
@@ -224,7 +328,31 @@ export function Settings(props: {
               </div>
             </Show>
           </Show>
-          <Show when={section() === "auth"}><p>Authentication is managed by the Conduit server.</p></Show>
+          <Show when={section() === "auth"}>
+            <div class="pi-auth-panel">
+              <p>Credentials are stored only in the isolated Pi runtime. Host Pi accounts and environment credentials are never exposed or changed here.</p>
+              <Show when={authError()}><p role="alert" class="settings-inline-error">{authError()}</p></Show>
+              <Show when={authLoading() && !authProviders().length} fallback={<>
+                <FieldGroup>
+                  <Field><FieldLabel for="pi-auth-provider">Provider</FieldLabel><select id="pi-auth-provider" aria-label="Pi authentication provider" value={authProviderId()} onChange={(event) => setAuthProviderId(event.currentTarget.value)}><For each={authProviders()}>{(provider) => <option value={provider.id}>{provider.label}</option>}</For></select></Field>
+                  <Show when={authProviders().find((provider) => provider.id === authProviderId())?.oauth}><Button disabled={authLoading() || Boolean(authAttempt()?.active)} onClick={() => void startOAuth()}>{authLoading() ? <Spinner /> : null}Sign in with browser</Button></Show>
+                  <Field><FieldLabel for="pi-api-key">API key</FieldLabel><Input id="pi-api-key" type="password" autocomplete="off" value={apiKey()} onInput={(event) => setApiKey(event.currentTarget.value)} placeholder="Stored in isolated Pi only" /></Field>
+                  <Button variant="outline" disabled={authLoading() || !apiKey()} onClick={() => void saveApiKey()}>{authLoading() ? <Spinner /> : null}Save API key</Button>
+                </FieldGroup>
+                <Show when={authAttempt()?.owned}>
+                  <article class="pi-auth-attempt"><h3>{authAttempt()!.providerLabel}</h3><p>{authAttempt()!.message}</p>
+                    <Show when={authAttempt()!.authUrl}><a href={authAttempt()!.authUrl!} target="_blank" rel="noreferrer">Open provider sign-in</a><p>{authAttempt()!.instructions}</p></Show>
+                    <Show when={authAttempt()!.deviceCode}><p>Code: <code>{authAttempt()!.deviceCode!.userCode}</code></p><a href={authAttempt()!.deviceCode!.verificationUri} target="_blank" rel="noreferrer">Open verification page</a></Show>
+                    <Show when={authAttempt()!.prompt?.type === "select"}><p>{authAttempt()!.prompt!.message}</p><div class="pi-auth-options"><For each={authAttempt()!.prompt!.options || []}>{(option) => <Button variant="outline" disabled={authLoading()} onClick={() => void answerAuthPrompt(option.id)}>{option.label}</Button>}</For></div></Show>
+                    <Show when={authAttempt()!.prompt && authAttempt()!.prompt!.type !== "select"}><Field><FieldLabel for="pi-auth-response">{authAttempt()!.prompt!.message}</FieldLabel><div class="pi-auth-response"><Input id="pi-auth-response" type="text" autocomplete="off" value={authResponse()} onInput={(event) => setAuthResponse(event.currentTarget.value)} placeholder={authAttempt()!.prompt!.placeholder || ""} onKeyDown={(event) => { if (event.key === "Enter") void answerAuthPrompt(authResponse()); }} /><Button disabled={authLoading()} onClick={() => void answerAuthPrompt(authResponse())}>Continue</Button></div></Field></Show>
+                    <Show when={authAttempt()!.error}><p role="alert" class="settings-inline-error">{authAttempt()!.error}</p></Show>
+                    <Show when={authAttempt()!.active}><Button variant="ghost" onClick={() => void cancelOAuth()}>Cancel sign-in</Button></Show>
+                  </article>
+                </Show>
+                <div class="settings-cards"><For each={authProviders().filter((provider) => provider.auth.configured || provider.auth.source === "environment")}>{(provider) => <article><h3>{provider.label}</h3><p>{provider.auth.configured ? "Credential stored in isolated Pi" : "Credential available from the server environment"}</p><Show when={provider.auth.configured}><Button variant="outline" size="sm" disabled={authLoading()} onClick={() => void removePiAuth(provider.id)}>Remove credential</Button></Show></article>}</For></div>
+              </>}><div class="settings-loading"><Spinner /><span>Loading Pi authentication…</span></div></Show>
+            </div>
+          </Show>
         </main>
       </div>
     </KDialog.Content></KDialog.Portal>
