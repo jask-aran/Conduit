@@ -134,6 +134,12 @@ equivalent private edge access. Non-loopback binds otherwise refuse to start
 unconfigured (`CONDUIT_ALLOW_INSECURE=1` remains development-only). Full
 contract in `conduit-web/README.md`.
 
+**Headless Pi login.** Once the Conduit password is set, Settings → Auth can
+authenticate the pinned Isolated Pi runtime without a terminal. It uses Pi's
+own OAuth/device-code flows and accepts a pasted localhost callback URL where
+needed; credentials remain in `data/pi/auth.json`. Host Pi stays deliberately
+outside this browser-managed boundary.
+
 ## Interface
 
 SolidJS + strict TypeScript + Tailwind v4 + Lucide + Geist, with Kobalte used
