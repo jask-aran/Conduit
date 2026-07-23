@@ -218,7 +218,7 @@ so timing reveals nothing.
   terminal and web saves use the same isolated settings file.
 - `GET|PATCH /v0/chats/:id/models` resolves the selected installation's scoped
   models and changes the draft/live chat model through the server-owned runtime.
-- `GET|PATCH|DELETE /v0/sessions/:id`
+- `GET|PATCH|DELETE /v0/sessions/:id` (`DELETE` removes the session's complete in-project Pi fork family)
 - `GET /v0/sessions/:id?before=<entry-index>` returns a ten-turn transcript page
 - `GET /v0/sessions/:id/transcript`
 - `GET /v0/sessions/:id/tools/:tool-id` fetches deferred large tool output
