@@ -10,15 +10,11 @@ export type TimelineRow = TurnRow;
 export function createTimelineStore(
   messages: Accessor<Message[]>,
   tools: Accessor<ToolItem[]>,
-  streaming: Accessor<boolean>,
-  reasoning: Accessor<{ content: string; active: boolean; redacted: boolean }>,
   activeGeneration: Accessor<ActiveGenerationView | null>,
 ) {
   const [rows, setRows] = createStore<TimelineRow[]>([]);
   createEffect(() => {
     const projected = buildTurnRows(messages(), tools(), {
-      streaming: streaming(),
-      reasoning: reasoning(),
       activeGeneration: activeGeneration(),
     });
     // No merge: rows keep identity by key, but values are replaced wholesale —

@@ -278,9 +278,9 @@ generation-local assistant-message identities, preserves native
 `contentIndex`/block order and `toolCallId`, reduces sequenced events into a
 serializable Active Generation, and derives Interim Text classification solely
 from tool structure and `stopReason`. `PiManager` maintains this state alongside
-the v0 compatibility stream. The client reduces structured events into its
-Live Response projection; compatibility events remain temporarily for older
-paths and persistence confirmation.
+the bounded diagnostic event ring. The client reduces structured events into
+its Live Response projection; persistence confirmation does not reconstruct
+the live response.
 
 Client commands:
 
@@ -300,12 +300,9 @@ produces `client_error` with `code` and `message`.
 
 Server events. When a generation is open, connect first sends one
 `generation_resume` containing the complete current reduced generation and its
-last applied sequence. It then sends the existing `runtime_snapshot` containing
-the session view, the accumulated `stream` content for any open generation
-(`{ generationId, content }` or `null`), the current turn's replayable events,
-plus `hostUiRequests`, `queue`, and `contextUsage` when known; individual
-`assistant_stream_delta` events are never replayed. Structured events are
-reduced independently of the capped compatibility/diagnostic event ring.
+last applied sequence. It then sends `runtime_state` containing the session
+view plus `hostUiRequests`, `queue`, and `contextUsage` when known. Structured
+events are independent of the capped diagnostic event ring.
 Delivery coalesces same-block deltas briefly per socket and flushes before
 message, tool, stop, error, and settlement boundaries. A socket above the
 256 KiB high-water mark stops receiving superseded deltas; when its buffer
@@ -317,7 +314,7 @@ Conduit-origin events thereafter:
 |---|---|---|
 | `generation_resume` | `generationId`, `seq`, `generation` | Complete current Active Generation sent on attachment; later structured events with `seq <= generation.lastSeq` are duplicates |
 | `runtime_state` | `session` | Process/session status changed |
-| `generation_started` | `generationId`, `seq`, `continuation` | A response began; structured and compatibility events follow |
+| `generation_started` | `generationId`, `seq`, `continuation`, `continuationBase` | A response began; continuation text remains part of the structured projection |
 | `generation_running` / `generation_stopping` / `generation_settled` | `generationId`, `seq` | Structured generation lifecycle transition |
 | `assistant_message_started` | `generationId`, `seq`, `messageId` | Server assigned a stable identity to a native assistant message |
 | `content_block_started` / `content_block_completed` | `generationId`, `seq`, `messageId`, `block` | Native thinking, text, or tool-call block boundary preserving `contentIndex` |
@@ -326,9 +323,7 @@ Conduit-origin events thereafter:
 | `tool_execution_started` / `tool_execution_updated` / `tool_execution_completed` | `generationId`, `seq`, `toolCallId`, tool fields | Structured execution state joined to its native tool-call block |
 | `generation_retry_started` / `generation_retry_ended` / `generation_turn_ended` | `generationId`, `seq`, retry fields | Retry-aware lifecycle that does not settle the generation during a retry gap |
 | `generation_failed` | `generationId`, `seq`, `error` | Terminal structured runtime failure |
-| `assistant_stream_delta` | `generationId`, `delta` | Raw assistant text delta, relayed unthrottled |
-| `assistant_stream_final` | `generationId`, `message`, `content`, optional `usage` | Canonical completed message text |
-| `generation_stopped` | `generationId`, `seq`, `status`, `processTerminated` | Stop completed in both protocols; late output was gated |
+| `generation_stopped` | `generationId`, `seq`, `status`, `processTerminated` | Stop completed; late output was gated |
 | `context_usage` | `contextUsage` | Synthesized context window usage (nullable tokens/percent) |
 | `extension_ui_resolved` | `requestId` | A host-UI request was answered |
 | `session_checkpoint` | `chat` | Registry row checkpointed after a completed response |

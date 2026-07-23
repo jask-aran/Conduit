@@ -28,7 +28,7 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
   let previousLoaded: string | null = null;
   let historyLoad: Promise<void> | null = null;
   const [following, setFollowing] = createSignal(true);
-  const timeline = createTimelineStore(props.chat.messages, props.chat.tools, props.chat.streaming, props.chat.reasoning, props.chat.activeGeneration);
+  const timeline = createTimelineStore(props.chat.messages, props.chat.tools, props.chat.activeGeneration);
   const empty = createMemo(() => !timeline.length && !props.chat.activity()?.label);
 
   const scrollBottom = () => requestAnimationFrame(() => {
@@ -51,7 +51,6 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
     const loaded = props.chat.loadedId();
     props.chat.messages().length;
     props.chat.activeGeneration();
-    props.chat.liveStream.content();
     props.chat.tools();
     if (loaded !== previousLoaded) { previousLoaded = loaded; setFollowing(true); scrollBottom(); }
     else if (following()) scrollBottom();
@@ -89,7 +88,7 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
                 <Show when={message().timestamp}><time>{new Date(message().timestamp!).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</time></Show>
                 <div data-slot="bubble" data-align={user() ? "end" : "start"} data-editing={props.chat.editingEntryId() === message().id ? "true" : "false"} class={user() ? "bubble bubble-user" : "bubble bubble-assistant"}>
                   <div data-slot="bubble-content">
-                    <Show when={user()} fallback={<Suspense fallback={<div class="markdown-skeleton" />}><ChatMarkdown streaming={live()} streamVersion={item.streamVersion ?? props.chat.liveStream.version()}>{`${message().content || ""}${live() ? "" : props.chat.liveStream.content()}`}</ChatMarkdown></Suspense>}><span class="user-message-text">{message().content || ""}</span></Show>
+                    <Show when={user()} fallback={<Suspense fallback={<div class="markdown-skeleton" />}><ChatMarkdown streaming={live()} streamVersion={item.streamVersion}>{message().content || ""}</ChatMarkdown></Suspense>}><span class="user-message-text">{message().content || ""}</span></Show>
                   </div>
                 </div>
                 <Show when={user() && message().pending}><div class="marker">{message().queueMode === "steer" ? "Queued · steer (after tools)" : "Queued · follow-up (after turn)"}</div></Show>

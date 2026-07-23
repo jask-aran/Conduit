@@ -323,6 +323,7 @@ svg { stroke-width: 1.5; }
   background: linear-gradient(150deg, oklch(1 0 0 / 56%), oklch(0.72 0.045 246 / 26%) 38%, oklch(1 0 0 / 5%) 70%, oklch(1 0 0 / 26%));
 }
 .composer textarea { display: block; width: 100%; min-height: 44px; max-height: 192px; resize: none; overflow-y: auto; border: 0; outline: 0; background: transparent; padding: 11px 12px 2px; color: inherit; line-height: 1.45; }
+.composer textarea:placeholder-shown { height: 44px !important; }
 .composer-actions { display: flex; min-height: 36px; align-items: center; justify-content: space-between; gap: 12px; padding: 2px 7px 7px 8px; }
 /* Composer chrome sits inside the 24px-radius glass bubble; compact squircles
    echo that geometry without competing with the outer silhouette. */

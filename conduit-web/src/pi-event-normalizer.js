@@ -40,7 +40,11 @@ export function createPiEventNormalizer(generationId, { startingSequence = 0 } =
 
     switch (source.type) {
       case "generation_started":
-        return [emit({ type: "generation_started", continuation: Boolean(source.continuation) })];
+        return [emit({
+          type: "generation_started",
+          continuation: Boolean(source.continuation),
+          continuationBase: source.continuationBase ? String(source.continuationBase) : "",
+        })];
       case "agent_start":
         return [emit({ type: "generation_running" })];
       case "message_start":
