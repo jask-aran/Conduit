@@ -5,7 +5,7 @@ import path from "node:path";
 import test from "node:test";
 import { serializeAttachmentEnvelope } from "../src/attachment-envelope.js";
 import { CONTINUE_PROMPT } from "../src/continuation.js";
-import { discoverSessions, duplicateSession, findSession, messagesFromEntries, moveSession, moveSessions, pageSessionEntries, removeSession, renameSession, sessionDirectoryFor, sessionIdFor, settingsFromEntries, toolsFromEntries, transcriptFromEntries } from "../src/session-store.js";
+import { discoverSessions, duplicateSession, findSession, messagesFromEntries, moveSession, moveSessions, pageSessionEntries, readSessionPage, removeSession, renameSession, sessionDirectoryFor, sessionIdFor, settingsFromEntries, toolsFromEntries, transcriptFromEntries, validateSessionHeader } from "../src/session-store.js";
 
 test("session IDs prefer Pi's native ID and otherwise remain stable", () => {
   assert.equal(sessionIdFor("/tmp/a.jsonl", "native-123"), "native-123");
@@ -100,6 +100,51 @@ test("pages complete recent turns with a character soft limit", () => {
   ], { turnLimit: 1 });
   assert.equal(continued.start, 0);
   assert.equal(continued.entries.length, 4);
+});
+
+test("indexed session pages remain bounded and converge across append and replacement", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-indexed-session-test-"));
+  const projectPath = path.join(root, "project");
+  const file = path.join(root, "session.jsonl");
+  const project = { id: "project_indexed", slug: "indexed", path: projectPath };
+  const entries = [
+    { type: "session", id: "session-indexed", timestamp: "2026-01-01T00:00:00Z", cwd: projectPath },
+    { type: "model_change", provider: "anthropic", modelId: "haiku" },
+    { type: "thinking_level_change", thinkingLevel: "high" },
+    ...Array.from({ length: 12 }, (_, index) => ([
+      { type: "message", id: `user-${index}`, message: { role: "user", content: `Question ${index}` } },
+      { type: "message", id: `assistant-${index}`, message: { role: "assistant", content: `Answer ${index}` } },
+    ])).flat(),
+  ];
+  await fs.writeFile(file, `${entries.map((entry) => JSON.stringify(entry)).join("\n")}\n`);
+
+  const header = await validateSessionHeader(file, project);
+  assert.equal(header.id, "session-indexed");
+  const latest = await readSessionPage(file, project);
+  assert.equal(latest.entries.filter((entry) => entry.type === "message").length, 20);
+  assert.equal(latest.model, "anthropic/haiku");
+  assert.equal(latest.thinkingLevel, "high");
+  assert.ok(latest.page.before);
+  const older = await readSessionPage(file, project, { before: latest.page.before });
+  assert.equal(older.entries.filter((entry) => entry.type === "message").length, 4);
+  assert.equal(older.page.before, null);
+
+  await fs.appendFile(file, "{\"type\":\"message\",\"id\":\"pending\"");
+  const duringPartialAppend = await readSessionPage(file, project, { turnLimit: 1 });
+  assert.equal(duringPartialAppend.entries.some((entry) => entry.id === "pending"), false);
+  await fs.appendFile(file, ",\"message\":{\"role\":\"assistant\",\"content\":\"Complete\"}}\n");
+  const afterAppend = await readSessionPage(file, project, { turnLimit: 1 });
+  assert.equal(afterAppend.entries.some((entry) => entry.id === "pending"), true);
+
+  const replacement = [
+    { type: "session", id: "session-replaced", timestamp: "2026-02-01T00:00:00Z", cwd: projectPath },
+    { type: "message", id: "replacement-user", message: { role: "user", content: "Replacement" } },
+  ];
+  await fs.writeFile(file, `${replacement.map((entry) => JSON.stringify(entry)).join("\n")}\n`);
+  const replaced = await readSessionPage(file, project);
+  assert.equal(replaced.id, "session-replaced");
+  assert.deepEqual(replaced.entries.map((entry) => entry.id).filter(Boolean), ["replacement-user"]);
+  await fs.rm(root, { recursive: true, force: true });
 });
 
 test("discovers cwd-matched sessions in Pi's native agent-home layout", async () => {

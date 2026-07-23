@@ -89,7 +89,9 @@ ordinary files and Conduit attachments are unaffected.
 
 JSONL remains authoritative for persisted messages, tool calls, model changes,
 and thinking-level changes. Opening a chat reconstructs that state from its
-entries. Selecting a model updates the active process and Pi's shared
+entries through an append-aware index: ordinary transcript requests read only
+the requested turn window, incomplete final writes are ignored, and file
+replacement or truncation invalidates cached offsets. Selecting a model updates the active process and Pi's shared
 `defaultModel`; a new chat starts with that saved model while an existing chat
 retains its recorded model.
 
@@ -106,6 +108,9 @@ and Workspaces. Draft chats stay out of navigation until their first message
 creates a session. Kobalte provides accessible menu and context-menu behavior;
 the surrounding sidebar, composer, transcript, command palette, and Settings
 surfaces are direct Solid components rather than a copied component catalogue.
+Transcript history loads automatically as the reader approaches the top and
+preserves the visible scroll anchor; server cursors and history windows are not
+exposed as pagination controls.
 Settings → Workspaces stores global-profile inheritance, an explicit ordinary
 profile, or Host Pi. If Host Pi becomes unavailable, Conduit clears that
 override and retries with the inherited profile.
