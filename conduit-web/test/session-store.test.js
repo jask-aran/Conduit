@@ -5,7 +5,7 @@ import path from "node:path";
 import test from "node:test";
 import { serializeAttachmentEnvelope } from "../src/attachment-envelope.js";
 import { CONTINUE_PROMPT } from "../src/continuation.js";
-import { discoverSessions, duplicateSession, findSession, messagesFromEntries, moveSession, moveSessions, pageSessionEntries, readSessionPage, removeSession, renameSession, sessionDirectoryFor, sessionIdFor, settingsFromEntries, toolsFromEntries, transcriptFromEntries, validateSessionHeader } from "../src/session-store.js";
+import { discoverSessions, duplicateSession, findSession, messagesFromEntries, moveSession, moveSessions, pageSessionEntries, readSessionPage, removeSession, removeSessionFamily, renameSession, sessionDirectoryFor, sessionFamilyFiles, sessionIdFor, settingsFromEntries, toolsFromEntries, transcriptFromEntries, validateSessionHeader } from "../src/session-store.js";
 
 test("session IDs prefer Pi's native ID and otherwise remain stable", () => {
   assert.equal(sessionIdFor("/tmp/a.jsonl", "native-123"), "native-123");
@@ -189,6 +189,33 @@ test("deletes a discovered native session file", async () => {
   await fs.writeFile(file, "{}\n");
   await removeSession({ file });
   await assert.rejects(fs.access(file), { code: "ENOENT" });
+  await fs.rm(root, { recursive: true, force: true });
+});
+
+test("deletes a Pi fork family without touching unrelated session trees", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-session-family-delete-test-"));
+  const projectPath = path.join(root, "project");
+  const sessionsDir = sessionDirectoryFor(projectPath, path.join(root, "pi"));
+  const project = { id: "project_family", slug: "family", path: projectPath, sessionsDir };
+  await fs.mkdir(sessionsDir, { recursive: true });
+  const original = path.join(sessionsDir, "original.jsonl");
+  const branch = path.join(sessionsDir, "branch.jsonl");
+  const sibling = path.join(sessionsDir, "sibling.jsonl");
+  const unrelated = path.join(sessionsDir, "unrelated.jsonl");
+  const writeHeader = (file, id, parentSession = null) => fs.writeFile(file, `${JSON.stringify({
+    type: "session", id, timestamp: "2026-01-01T00:00:00Z", cwd: projectPath, ...(parentSession ? { parentSession } : {}),
+  })}\n`);
+  await Promise.all([
+    writeHeader(original, "original"),
+    writeHeader(branch, "branch", original),
+    writeHeader(sibling, "sibling", original),
+    writeHeader(unrelated, "unrelated"),
+  ]);
+
+  assert.deepEqual(new Set(await sessionFamilyFiles(branch, project)), new Set([original, branch, sibling]));
+  await removeSessionFamily(branch, project);
+  await Promise.all([original, branch, sibling].map((file) => assert.rejects(fs.access(file), { code: "ENOENT" })));
+  await fs.access(unrelated);
   await fs.rm(root, { recursive: true, force: true });
 });
 

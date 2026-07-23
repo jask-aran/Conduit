@@ -105,9 +105,10 @@ diagnostic event ring and sends that Resume State before the compatibility
 WebSocket snapshot; the client projects the structured state directly and
 retains compatibility events only during the rendering migration. Edit/regenerate use Pi's public `fork`
 RPC; moves fork across directories and delete the source JSONL only after the
-destination exists; deletion (always interface-confirmed) stops the live
-process and removes JSONL plus chat folder. Never let two Pi processes write
-one JSONL.
+destination exists; deletion (always interface-confirmed) stops every live
+process in the Pi fork family, removes that family's in-project JSONLs, and
+removes the associated chat folders. Never let two Pi processes write one
+JSONL.
 
 **Attachments.** Raw request bodies stream to `.partial/<id>.part` and
 publish by atomic rename; the filesystem is the registry, with no MIME or
