@@ -24,6 +24,7 @@ import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import { resolvePiLaunch } from "./pi-launch.js";
 import { AuthStore } from "./auth-store.js";
+import { PiAuthBroker } from "./pi-auth-broker.js";
 import {
   authStartupViolation,
   clearSessionCookie,
@@ -91,6 +92,12 @@ const manager = new PiManager({
   maxGeneratingProcesses: runtimeSettings.get().maxGeneratingProcesses,
   idleProcessTtlMs: runtimeSettings.get().idleProcessTtlMs,
 });
+async function restartIdleIsolatedPiProcesses() {
+  const candidates = manager.list().filter((record) => record.runtime?.kind === "conduit_profile"
+    && !record.active && !record.stopping && record.clientCount === 0);
+  await Promise.all(candidates.map((record) => manager.stopAndWait(record.id)));
+  return { restartedIdleProcesses: candidates.length };
+}
 const runtimeHub = new RuntimeHub({ listViews: () => manager.list() });
 manager.on("process_changed", ({ record, reason }) => {
   runtimeHub.publishProcess(manager.view(record), reason || "update");
@@ -99,6 +106,11 @@ manager.on("process_removed", ({ id, chatId }) => {
   runtimeHub.publishProcessRemoved(id, chatId);
 });
 const modelCatalog = new PiModelCatalog({ agentDir: config.piAgentDir, modelPatterns: config.piTemplate.models });
+const piAuth = new PiAuthBroker({
+  authStorage: modelCatalog.authStorage,
+  modelRegistry: modelCatalog.modelRegistry,
+  onCredentialsChanged: restartIdleIsolatedPiProcesses,
+});
 const modelCatalogs = new Map();
 const launchingChats = new Set();
 const app = express();
@@ -513,6 +525,53 @@ app.post("/v0/pi-installations/host/detect", async (_request, response, next) =>
     if (!detected.available) await clearHostPiDefaults();
     response.json((await installationViews()).find((item) => item.id === "host-pi"));
   } catch (error) { next(error); }
+});
+
+function piAuthOwner(request) {
+  return request.conduitAuth?.session?.tokenHash || "loopback-local";
+}
+
+app.get("/v0/pi-auth", (_request, response, next) => {
+  try { response.json({ installationId: "conduit-pinned", providers: piAuth.providers() }); }
+  catch (error) { next(error); }
+});
+
+app.get("/v0/pi-auth/attempt", (request, response) => {
+  response.set("Cache-Control", "no-store");
+  response.json({ attempt: piAuth.activeFor(piAuthOwner(request)) });
+});
+
+app.post("/v0/pi-auth/oauth", (request, response, next) => {
+  try {
+    const attempt = piAuth.start(piAuthOwner(request), String(request.body?.providerId || ""));
+    response.set("Cache-Control", "no-store");
+    response.status(202).json({ attempt });
+  } catch (error) { next(error); }
+});
+
+app.post("/v0/pi-auth/attempt/respond", (request, response, next) => {
+  try {
+    const attempt = piAuth.respond(piAuthOwner(request), request.body?.value);
+    response.set("Cache-Control", "no-store");
+    response.json({ attempt });
+  } catch (error) { next(error); }
+});
+
+app.post("/v0/pi-auth/attempt/cancel", (request, response) => {
+  response.set("Cache-Control", "no-store");
+  response.json({ cancelled: piAuth.cancel(piAuthOwner(request)) });
+});
+
+app.put("/v0/pi-auth/api-key", async (request, response, next) => {
+  try {
+    await piAuth.setApiKey(String(request.body?.providerId || ""), request.body?.key);
+    response.status(204).end();
+  } catch (error) { next(error); }
+});
+
+app.delete("/v0/pi-auth/:providerId", async (request, response, next) => {
+  try { response.json({ removed: await piAuth.remove(request.params.providerId) }); }
+  catch (error) { next(error); }
 });
 
 app.get("/v0/workspaces/:id/native-preflight", async (request, response, next) => {
