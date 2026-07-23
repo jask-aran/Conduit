@@ -178,6 +178,30 @@ so timing reveals nothing.
 - `POST /v0/auth/reset-sessions` — keeps the caller's token, signs out everyone
   else
 
+### Pi authentication
+
+Settings → Auth manages only the bundled, isolated Pi installation. It never
+reads, imports, exports, or changes Host Pi credentials. The browser starts
+Pi's own OAuth implementation through a server-owned broker: it displays the
+provider URL or device code, accepts a pasted `localhost` callback URL when a
+provider needs one, and writes Pi's resulting token to `data/pi/auth.json`.
+OAuth attempts are in-memory, bound to the Conduit browser session that started
+them, expire after ten minutes, and expose URLs/codes to no other session.
+
+API keys entered there are stored as literal Pi credentials (never returned by
+the API or logged). Stored credentials can be removed. Environment credentials
+may be reported as available but remain server-managed and cannot be revealed
+or removed by Conduit. After any credential change Conduit terminates only idle,
+unattached Isolated Pi processes so a later chat starts with the new auth;
+active or browser-attached processes are never interrupted.
+
+- `GET /v0/pi-auth` — redacted isolated-Pi provider/auth status
+- `GET /v0/pi-auth/attempt` — current caller-owned OAuth attempt state
+- `POST /v0/pi-auth/oauth`, `/v0/pi-auth/attempt/respond`,
+  `/v0/pi-auth/attempt/cancel` — OAuth/device-code broker actions
+- `PUT /v0/pi-auth/api-key`, `DELETE /v0/pi-auth/:providerId` — manage an
+  isolated Pi credential
+
 ### Application routes
 
 - `GET /healthz`
