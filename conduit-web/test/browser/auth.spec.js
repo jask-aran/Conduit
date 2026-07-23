@@ -31,7 +31,7 @@ process.exit(0);
   return { conduitPi, nativePi };
 }
 
-async function spawnAuthServer({ password }) {
+async function spawnAuthServer({ password, host = "127.0.0.1" }) {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-browser-auth-"));
   const port = await availablePort();
   const origin = `http://127.0.0.1:${port}`;
@@ -47,7 +47,7 @@ async function spawnAuthServer({ password }) {
     env: {
       ...process.env,
       HOME: root,
-      CONDUIT_HOST: "127.0.0.1",
+      CONDUIT_HOST: host,
       CONDUIT_PORT: String(port),
       CONDUIT_FILES_ROOT: path.join(root, "files"),
       CONDUIT_CATALOG_FILE: path.join(root, "conduit.json"),
@@ -117,6 +117,20 @@ test("unauthenticated visit lands on /login; wrong password surfaces an error", 
   await page.getByLabel("Password").fill("fixture-wrong");
   await page.getByRole("button", { name: "Sign in" }).click();
   await expect(page.getByRole("alert")).toContainText(/Incorrect password/);
+});
+
+test("first-run browser setup warns clearly, claims the submitted password, and closes the app", async ({ page }) => {
+  const server = await spawnAuthServer({ password: undefined, host: "0.0.0.0" });
+  try {
+    await page.goto(server.origin, { waitUntil: "domcontentloaded" });
+    await expect(page).toHaveURL(/\/login$/);
+    await expect(page.getByRole("alert")).toContainText(/first person able to submit this page can claim the instance/i);
+    await page.getByLabel("Password").fill("first-run-password");
+    await page.getByRole("button", { name: "Set password & sign in" }).click();
+    await expect(page).toHaveURL(new RegExp(`^${server.origin}/chat/[0-9a-f-]+$`));
+  } finally {
+    await stop(server);
+  }
 });
 
 test("correct password reaches the app, reload stays authenticated, logout returns to /login", async ({ page, server, isMobile }) => {

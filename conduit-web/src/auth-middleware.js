@@ -9,24 +9,6 @@ const RATE_LIMIT_CAP_MS = 5 * 60 * 1000;
 const UNAUTHENTICATED_API_PREFIXES = ["/v0/"];
 const UNAUTHENTICATED_EXACT = new Set(["/login", "/healthz"]);
 
-function isLoopback(host) {
-  return ["127.0.0.1", "::1", "localhost", "0:0:0:0:0:0:0:1", "localhost.localdomain"].includes(host);
-}
-
-export function authStartupViolation(config, authStore) {
-  const loopback = isLoopback(config.host);
-  if (loopback) return null;
-  if (config.allowInsecure) return null;
-  if (!authStore.hasPassword()) {
-    return new Error(
-      "Refusing to bind a non-loopback address without a configured password. "
-      + "Run `node scripts/conduit-auth.mjs set-password` from the repo root, "
-      + "or export CONDUIT_ALLOW_INSECURE=1 for development only.",
-    );
-  }
-  return null;
-}
-
 export function cookieName() {
   return COOKIE_NAME;
 }
@@ -120,10 +102,39 @@ export function clearSessionCookie(response, { secure }) {
   });
 }
 
-function isSecureRequest(request) {
+export function isSecureRequest(request) {
   if (request.protocol === "https") return true;
   const forwarded = String(request.headers["x-forwarded-proto"] || "").toLowerCase();
   return forwarded.includes("https");
+}
+
+function publicRequestOrigin(request) {
+  // Reverse proxies (including port-forwarding services) retain the browser's
+  // public authority here while replacing Host with their upstream address.
+  // Without this, a legitimate first-run form is rejected after forwarding.
+  const forwardedHost = String(request.headers?.["x-forwarded-host"] || "").split(",")[0].trim();
+  const host = forwardedHost || String(request.headers?.host || "").trim();
+  if (!host) return null;
+  try {
+    return new URL(`${isSecureRequest(request) ? "https" : "http"}://${host}`).origin;
+  } catch {
+    return null;
+  }
+}
+
+// A browser's form POST has an Origin header. Require it during first-run
+// setup so another site cannot silently claim a reachable, unconfigured
+// Conduit instance in a visitor's browser. The forwarded public origin is
+// used when a tunnel or Codespaces-style proxy terminates the connection.
+export function isSameOriginRequest(request) {
+  const origin = String(request.headers?.origin || "");
+  if (!origin) return false;
+  try {
+    const requestOrigin = publicRequestOrigin(request);
+    return requestOrigin !== null && new URL(origin).origin === requestOrigin;
+  } catch {
+    return false;
+  }
 }
 
 const NO_PASSWORD_NEGATIVE_CACHE_MS = 5_000;
@@ -138,7 +149,12 @@ export function prepareAuthMiddleware(authStore) {
         await authStore.reloadFromFile();
         noPasswordCheckedAt = now;
       }
-      if (!authStore.hasPassword()) return next();
+      if (!authStore.hasPassword()) {
+        if (isBrowserNavigation(request) && !UNAUTHENTICATED_API_PREFIXES.some((prefix) => request.path.startsWith(prefix))) {
+          return response.redirect(302, "/login");
+        }
+        return response.status(401).json({ error: "setup_required" });
+      }
     }
     const context = await validateSession(authStore, request);
     if (context) {
@@ -156,4 +172,4 @@ export function prepareAuthMiddleware(authStore) {
   };
 }
 
-export { COOKIE_NAME, isSecureRequest };
+export { COOKIE_NAME };

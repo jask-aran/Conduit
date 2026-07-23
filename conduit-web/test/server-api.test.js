@@ -6,6 +6,7 @@ import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
+import { AuthStore } from "../src/auth-store.js";
 
 async function availablePort() {
   return new Promise((resolve, reject) => {
@@ -58,6 +59,13 @@ input.on("line", (line) => {
   await fs.chmod(nativePi, 0o755);
   const workspace = path.join(root, "workspace");
   await fs.mkdir(workspace);
+  const authStore = new AuthStore(path.join(root, "auth.json"));
+  await authStore.setPassword("fixture-pw");
+  const { token } = await authStore.createSession();
+  const request = (url, init = {}) => fetch(url, {
+    ...init,
+    headers: { ...init.headers, cookie: `conduit_session=${token}` },
+  });
   const child = spawn(process.execPath, ["src/server.js"], {
     cwd: path.resolve(import.meta.dirname, ".."),
     stdio: ["ignore", "pipe", "pipe"],
@@ -81,7 +89,7 @@ input.on("line", (line) => {
 
   try {
     await waitForServer(origin, child);
-    const templatesResponse = await fetch(`${origin}/v0/templates`);
+    const templatesResponse = await request(`${origin}/v0/templates`);
     assert.equal(templatesResponse.status, 200);
     const templateCatalog = await templatesResponse.json();
     assert.ok(templateCatalog.templates.some((item) => item.id === "chat"));
@@ -90,7 +98,7 @@ input.on("line", (line) => {
     assert.equal(templateCatalog.defaultTemplateId, "chat");
     assert.equal(templateCatalog.templates.find((item) => item.id === "runtime").defaultable, false);
 
-    const installations = await (await fetch(`${origin}/v0/pi-installations`)).json();
+    const installations = await (await request(`${origin}/v0/pi-installations`)).json();
     const isolatedInstallation = installations.installations.find((item) => item.id === "conduit-pinned");
     const hostInstallation = installations.installations.find((item) => item.id === "host-pi");
     assert.equal(isolatedInstallation.version, "0.80.6");
@@ -103,7 +111,7 @@ input.on("line", (line) => {
     assert.equal("command" in installations.installations[0], false);
     assert.equal("environment" in installations.installations[1], false);
 
-    const linkedResponse = await fetch(`${origin}/v0/projects`, {
+    const linkedResponse = await request(`${origin}/v0/projects`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ mode: "linked", path: workspace }),
@@ -112,14 +120,14 @@ input.on("line", (line) => {
     const linked = await linkedResponse.json();
     assert.equal(linked.defaultTemplateId, null);
     await fs.mkdir(path.join(workspace, ".pi", "themes"), { recursive: true });
-    const preflight = await (await fetch(`${origin}/v0/workspaces/${linked.id}/native-preflight`)).json();
+    const preflight = await (await request(`${origin}/v0/workspaces/${linked.id}/native-preflight`)).json();
     assert.equal(preflight.available, true);
     assert.equal(preflight.version, "0.80.10");
     assert.equal(preflight.savedTrust, null);
     assert.equal(preflight.trustRequired, false);
     assert.ok(preflight.resources.includes("themes"));
 
-    const nativeChatResponse = await fetch(`${origin}/v0/chats`, {
+    const nativeChatResponse = await request(`${origin}/v0/chats`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ projectId: linked.id, runtimeKind: "native_pi" }),
@@ -129,7 +137,7 @@ input.on("line", (line) => {
     assert.equal(nativeChat.runtime.kind, "native_pi");
     assert.equal(nativeChat.runtime.installationId, "host-pi");
 
-    const automaticTrustLaunch = await fetch(`${origin}/v0/live-sessions`, {
+    const automaticTrustLaunch = await request(`${origin}/v0/live-sessions`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
@@ -140,11 +148,11 @@ input.on("line", (line) => {
     });
     assert.equal(automaticTrustLaunch.status, 400);
     assert.equal((await automaticTrustLaunch.json()).error, "invalid_model");
-    const savedPreflight = await (await fetch(`${origin}/v0/workspaces/${linked.id}/native-preflight`)).json();
+    const savedPreflight = await (await request(`${origin}/v0/workspaces/${linked.id}/native-preflight`)).json();
     assert.equal(savedPreflight.savedTrust, true);
     assert.equal(savedPreflight.trustRequired, false);
 
-    const nativeMove = await fetch(`${origin}/v0/sessions/${nativeChat.id}/move`, {
+    const nativeMove = await request(`${origin}/v0/sessions/${nativeChat.id}/move`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ projectId: "project_chat" }),
@@ -152,7 +160,7 @@ input.on("line", (line) => {
     assert.equal(nativeMove.status, 409);
     assert.equal((await nativeMove.json()).error, "chat_move_not_supported");
 
-    const isolatedSwitch = await fetch(`${origin}/v0/chats/${nativeChat.id}`, {
+    const isolatedSwitch = await request(`${origin}/v0/chats/${nativeChat.id}`, {
       method: "PATCH",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ templateId: "chat", runtimeKind: "conduit_profile" }),
@@ -163,7 +171,7 @@ input.on("line", (line) => {
     assert.equal(isolatedChat.runtime.kind, "conduit_profile");
     assert.equal(isolatedChat.runtime.profileId, "chat");
 
-    const invalidNative = await fetch(`${origin}/v0/chats`, {
+    const invalidNative = await request(`${origin}/v0/chats`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ projectId: "project_chat", runtimeKind: "native_pi" }),
@@ -174,11 +182,11 @@ input.on("line", (line) => {
     const externalAgents = path.join(root, "external-agents");
     await fs.mkdir(path.join(externalAgents, "skills"), { recursive: true });
     await fs.symlink(externalAgents, path.join(workspace, ".agents"));
-    const symlinkedPreflight = await fetch(`${origin}/v0/workspaces/${linked.id}/native-preflight`);
+    const symlinkedPreflight = await request(`${origin}/v0/workspaces/${linked.id}/native-preflight`);
     assert.equal(symlinkedPreflight.status, 400);
     assert.equal((await symlinkedPreflight.json()).error, "native_resource_symlink");
 
-    const runtimeDefault = await fetch(`${origin}/v0/preferences`, {
+    const runtimeDefault = await request(`${origin}/v0/preferences`, {
       method: "PATCH",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ defaultTemplateId: "runtime" }),
@@ -186,7 +194,7 @@ input.on("line", (line) => {
     assert.equal(runtimeDefault.status, 400);
     assert.equal((await runtimeDefault.json()).error, "special_template");
 
-    const prefsPatch = await fetch(`${origin}/v0/preferences`, {
+    const prefsPatch = await request(`${origin}/v0/preferences`, {
       method: "PATCH",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ defaultTemplateId: "workspace" }),
@@ -194,37 +202,37 @@ input.on("line", (line) => {
     assert.equal(prefsPatch.status, 200);
     assert.equal((await prefsPatch.json()).defaultTemplateId, "workspace");
 
-    const inheritedWorkspaceChat = await fetch(`${origin}/v0/chats`, {
+    const inheritedWorkspaceChat = await request(`${origin}/v0/chats`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ projectId: linked.id }),
     });
     assert.equal((await inheritedWorkspaceChat.json()).templateId, "workspace");
-    const workspaceOverride = await fetch(`${origin}/v0/projects/${linked.id}`, {
+    const workspaceOverride = await request(`${origin}/v0/projects/${linked.id}`, {
       method: "PATCH",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ defaultTemplateId: "chat" }),
     });
     assert.equal((await workspaceOverride.json()).defaultTemplateId, "chat");
-    const overriddenWorkspaceChat = await fetch(`${origin}/v0/chats`, {
+    const overriddenWorkspaceChat = await request(`${origin}/v0/chats`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ projectId: linked.id }),
     });
     assert.equal((await overriddenWorkspaceChat.json()).templateId, "chat");
-    const clearedOverride = await fetch(`${origin}/v0/projects/${linked.id}`, {
+    const clearedOverride = await request(`${origin}/v0/projects/${linked.id}`, {
       method: "PATCH",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ defaultTemplateId: null }),
     });
     assert.equal((await clearedOverride.json()).defaultTemplateId, null);
-    const hostOverride = await fetch(`${origin}/v0/projects/${linked.id}`, {
+    const hostOverride = await request(`${origin}/v0/projects/${linked.id}`, {
       method: "PATCH",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ defaultTemplateId: "host-pi" }),
     });
     assert.equal((await hostOverride.json()).defaultTemplateId, "host-pi");
-    const hostDefaultChat = await fetch(`${origin}/v0/chats`, {
+    const hostDefaultChat = await request(`${origin}/v0/chats`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ projectId: linked.id }),
@@ -232,13 +240,13 @@ input.on("line", (line) => {
     const hostDefaultChatBody = await hostDefaultChat.json();
     assert.equal(hostDefaultChatBody.runtime.kind, "native_pi");
     assert.equal(hostDefaultChatBody.templateId, "workspace");
-    await fetch(`${origin}/v0/projects/${linked.id}`, {
+    await request(`${origin}/v0/projects/${linked.id}`, {
       method: "PATCH",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ defaultTemplateId: null }),
     });
 
-    const createdResponse = await fetch(`${origin}/v0/chats`, {
+    const createdResponse = await request(`${origin}/v0/chats`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ projectId: "project_chat" }),
@@ -249,11 +257,11 @@ input.on("line", (line) => {
     assert.equal(chat.templateId, "workspace");
     assert.equal("piSessionId" in chat, false);
 
-    const chatModels = await (await fetch(`${origin}/v0/chats/${chat.id}/models`)).json();
+    const chatModels = await (await request(`${origin}/v0/chats/${chat.id}/models`)).json();
     assert.equal(chatModels.installationId, "conduit-pinned");
     assert.equal(chatModels.runtimeKind, "conduit_profile");
     assert.equal(chatModels.source, "runtime_default");
-    const invalidModel = await fetch(`${origin}/v0/chats/${chat.id}/models`, {
+    const invalidModel = await request(`${origin}/v0/chats/${chat.id}/models`, {
       method: "PATCH",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ model: "missing/model" }),
@@ -261,7 +269,7 @@ input.on("line", (line) => {
     assert.equal(invalidModel.status, 400);
     assert.equal((await invalidModel.json()).error, "invalid_model");
 
-    const switched = await fetch(`${origin}/v0/chats/${chat.id}`, {
+    const switched = await request(`${origin}/v0/chats/${chat.id}`, {
       method: "PATCH",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ templateId: "chat" }),
@@ -269,7 +277,7 @@ input.on("line", (line) => {
     assert.equal(switched.status, 200);
     assert.equal((await switched.json()).templateId, "chat");
 
-    const ordinaryRuntime = await fetch(`${origin}/v0/chats`, {
+    const ordinaryRuntime = await request(`${origin}/v0/chats`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ projectId: "project_chat", templateId: "runtime" }),
@@ -277,7 +285,7 @@ input.on("line", (line) => {
     assert.equal(ordinaryRuntime.status, 400);
     assert.equal((await ordinaryRuntime.json()).error, "special_template");
 
-    const runtimeChat = await fetch(`${origin}/v0/runtime/chats`, {
+    const runtimeChat = await request(`${origin}/v0/runtime/chats`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: "{}",
@@ -286,7 +294,7 @@ input.on("line", (line) => {
     const runtimeChatBody = await runtimeChat.json();
     assert.equal(runtimeChatBody.templateId, "runtime");
 
-    const runtimeSwitch = await fetch(`${origin}/v0/chats/${runtimeChatBody.id}`, {
+    const runtimeSwitch = await request(`${origin}/v0/chats/${runtimeChatBody.id}`, {
       method: "PATCH",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ templateId: "workspace" }),
@@ -294,7 +302,7 @@ input.on("line", (line) => {
     assert.equal(runtimeSwitch.status, 409);
     assert.equal((await runtimeSwitch.json()).error, "special_chat_locked");
 
-    const freshLive = await fetch(`${origin}/v0/live-sessions`, {
+    const freshLive = await request(`${origin}/v0/live-sessions`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ chatId: chat.id, projectId: "project_chat" }),
@@ -309,7 +317,7 @@ input.on("line", (line) => {
 
     const attachmentId = crypto.randomUUID();
     const body = Buffer.from('{"raw":true}\n');
-    const uploaded = await fetch(`${origin}/v0/chats/${chat.id}/attachments/${attachmentId}?name=payload.json`, {
+    const uploaded = await request(`${origin}/v0/chats/${chat.id}/attachments/${attachmentId}?name=payload.json`, {
       method: "PUT",
       headers: { "content-type": "application/json" },
       body,
@@ -318,25 +326,25 @@ input.on("line", (line) => {
     assert.deepEqual(await fs.readdir(path.join(directory, ".partial")), []);
     assert.equal(await fs.readFile(path.join(directory, "attachments", `${attachmentId}--payload.json`), "utf8"), body.toString());
 
-    const download = await fetch(`${origin}/v0/chats/${chat.id}/attachments/${attachmentId}`);
+    const download = await request(`${origin}/v0/chats/${chat.id}/attachments/${attachmentId}`);
     assert.equal(download.headers.get("x-content-type-options"), "nosniff");
     assert.match(download.headers.get("content-disposition"), /^attachment;/);
     assert.equal(Buffer.from(await download.arrayBuffer()).toString(), body.toString());
 
     const imageId = crypto.randomUUID();
     const imageBody = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
-    const imageUpload = await fetch(`${origin}/v0/chats/${chat.id}/attachments/${imageId}?name=preview.png`, {
+    const imageUpload = await request(`${origin}/v0/chats/${chat.id}/attachments/${imageId}?name=preview.png`, {
       method: "PUT",
       headers: { "content-type": "image/png" },
       body: imageBody,
     });
     assert.equal(imageUpload.status, 201);
-    const preview = await fetch(`${origin}/v0/chats/${chat.id}/attachments/${imageId}?preview=1`);
+    const preview = await request(`${origin}/v0/chats/${chat.id}/attachments/${imageId}?preview=1`);
     assert.equal(preview.headers.get("content-type"), "image/png");
     assert.match(preview.headers.get("content-disposition"), /^inline;/);
     assert.deepEqual(Buffer.from(await preview.arrayBuffer()), imageBody);
 
-    const malformed = await fetch(`${origin}/v0/chats/${chat.id}/attachments/not-a-uuid?name=nope`, {
+    const malformed = await request(`${origin}/v0/chats/${chat.id}/attachments/not-a-uuid?name=nope`, {
       method: "PUT", body: "nope",
     });
     assert.equal(malformed.status, 400);
@@ -346,7 +354,7 @@ input.on("line", (line) => {
     await new Promise((resolve) => {
       const request = http.request(`${origin}/v0/chats/${chat.id}/attachments/${abortedId}?name=aborted.bin`, {
         method: "PUT",
-        headers: { "content-length": 1024 * 1024 },
+        headers: { "content-length": 1024 * 1024, cookie: `conduit_session=${token}` },
       });
       request.once("error", resolve);
       request.once("socket", (socket) => socket.once("connect", () => {
@@ -361,11 +369,11 @@ input.on("line", (line) => {
     assert.deepEqual(await fs.readdir(path.join(directory, ".partial")), []);
     assert.equal((await fs.readdir(path.join(directory, "attachments"))).some((name) => name.startsWith(abortedId)), false);
 
-    const deleted = await fetch(`${origin}/v0/chats/${chat.id}/attachments/${attachmentId}`, { method: "DELETE" });
+    const deleted = await request(`${origin}/v0/chats/${chat.id}/attachments/${attachmentId}`, { method: "DELETE" });
     assert.equal(deleted.status, 204);
-    const imageDeleted = await fetch(`${origin}/v0/chats/${chat.id}/attachments/${imageId}`, { method: "DELETE" });
+    const imageDeleted = await request(`${origin}/v0/chats/${chat.id}/attachments/${imageId}`, { method: "DELETE" });
     assert.equal(imageDeleted.status, 204);
-    const listed = await fetch(`${origin}/v0/chats/${chat.id}/attachments`).then((response) => response.json());
+    const listed = await request(`${origin}/v0/chats/${chat.id}/attachments`).then((response) => response.json());
     assert.deepEqual(listed.attachments, []);
   } finally {
     if (child.exitCode == null) {

@@ -25,7 +25,15 @@ function timingSafeEqualString(a, b) {
 
 function normalizeAuthFile(raw) {
   if (!raw || typeof raw !== "object") return null;
-  if (typeof raw.password !== "object" || raw.password === null) return null;
+  if (!("password" in raw)) return null;
+  if (raw.password === null) {
+    return {
+      version: Number(raw.version) || 1,
+      password: null,
+      sessions: [],
+    };
+  }
+  if (typeof raw.password !== "object") return null;
   const password = raw.password;
   if (password.algo !== "scrypt") return null;
   if (typeof password.salt !== "string" || typeof password.hash !== "string") return null;
@@ -52,6 +60,9 @@ function normalizeAuthFile(raw) {
 }
 
 export async function hashPassword(password, options = {}) {
+  if (typeof password !== "string" || password.length === 0) {
+    throw Object.assign(new Error("Password cannot be empty."), { code: "invalid_password" });
+  }
   const salt = crypto.randomBytes(16);
   const N = options.N || SCRYPT_N;
   const r = options.r || SCRYPT_R;
@@ -105,14 +116,19 @@ export class AuthStore {
     this.filePath = filePath;
     this.data = null;
     this.lastReadMs = 0;
+    this.initialPasswordClaim = Promise.resolve();
   }
 
   async load({ force = false } = {}) {
     if (!force && this.data) return this.data;
     try {
       const raw = JSON.parse(await fs.readFile(this.filePath, "utf8"));
-      this.data = normalizeAuthFile(raw) || { version: 1, password: null, sessions: [] };
-      if (!this.data.password) this.data.password = null;
+      this.data = normalizeAuthFile(raw);
+      if (!this.data) {
+        throw Object.assign(new Error(`Authentication file is malformed: ${this.filePath}`), {
+          code: "auth_file_invalid",
+        });
+      }
     } catch (error) {
       if (error.code === "ENOENT") this.data = { version: 1, password: null, sessions: [] };
       else throw error;
@@ -150,6 +166,30 @@ export class AuthStore {
     this.data.password = hashed;
     this.data.sessions = [];
     await this._flush();
+  }
+
+  // The browser bootstrap path is deliberately first-writer-wins. Serialising
+  // claims inside the server stops two simultaneous setup requests from both
+  // observing an unconfigured store and overwriting one another.
+  async claimInitialPassword(password) {
+    const previous = this.initialPasswordClaim;
+    let release;
+    this.initialPasswordClaim = new Promise((resolve) => { release = resolve; });
+    await previous;
+    try {
+      await this.load({ force: true });
+      if (this.data.password) return false;
+      const hashed = await hashPassword(password);
+      // A CLI may have provisioned the password while scrypt was running.
+      await this.load({ force: true });
+      if (this.data.password) return false;
+      this.data.password = hashed;
+      this.data.sessions = [];
+      await this._flush();
+      return true;
+    } finally {
+      release();
+    }
   }
 
   async resetSessions() {

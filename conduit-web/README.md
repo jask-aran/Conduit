@@ -6,22 +6,26 @@ processes, and a strict TypeScript SolidJS/Vite client.
 ## Run
 
 ```bash
-npm ci
-npm test
-npm run build
-cd ..
-bash .devcontainer/start-conduit.sh restart
+bash ../.devcontainer/start-conduit.sh deploy
 ```
 
-Open <http://127.0.0.1:4310>. Authenticate the isolated Pi runtime from the
-repository root with `./scripts/conduit-pi.mjs`, then enter `/login`.
+Open <http://127.0.0.1:4310>. Set the first Conduit password if prompted, then
+authenticate the isolated Pi runtime from **Settings → Auth**. `deploy` runs
+`npm ci`, builds `dist`, and starts the managed production server. The usual
+day-to-day command is `bash ../.devcontainer/start-conduit.sh restart`; use
+`stop`, `status`, or `logs -f` through the same script as needed.
 
-For client development, keep the managed server running and start Vite from
-this directory:
+For client hot-reload development, use the same launcher:
 
 ```bash
-npm run dev
+bash ../.devcontainer/start-conduit.sh dev
 ```
+
+It manages the API/Pi server with a source watcher on port 4310 and Vite on
+port 5173. Open the forwarded Vite port while editing the client; it proxies
+HTTP and WebSocket requests to the server. `stop`, `restart`, `status`, and
+`logs vite -f` manage or inspect both processes. This mode is for development
+only and is never used for deployment.
 
 ## Runtime model
 
@@ -135,7 +139,8 @@ that could replace it.
 
 Every route below — plus the SPA bundle, every static asset, every upload, and
 every WebSocket upgrade — requires an authenticated session except the login flow.
-Provision one user, one password from the CLI:
+On first run, the browser login page claims the password. The CLI remains a
+server-side recovery and administration tool:
 
 ```bash
 node scripts/conduit-auth.mjs set-password     # hidden prompt, twice
@@ -152,9 +157,13 @@ cookie (`HttpOnly`, `SameSite=Lax`, `Secure` over HTTPS/X-Forwarded-Proto),
 Enforcement is a single `requireAuth` middleware mounted before every other
 route and static handler, plus the WebSocket upgrade validator. The allowlist
 is just `GET /login`, `POST /v0/auth/login`, and `GET /healthz`. Logout
-(`POST /v0/auth/logout`) requires a valid session like any other route. Loopback
-binding without a configured password stays open for local dev; non-loopback
-binding refuses to start without a password or `CONDUIT_ALLOW_INSECURE=1`.
+(`POST /v0/auth/logout`) requires a valid session like any other route. On
+every first run—loopback, devcontainer, or public deployment—Conduit serves
+only the login/setup page and health check until the first same-origin browser
+password submission atomically claims the instance. This password is persisted
+in `data/auth.json` and survives ordinary server restarts. The page warns that
+whoever can reach it first can set the password, so do not expose an unclaimed
+instance more broadly than necessary.
 Per-IP rate limiting is meaningless behind a tunnel, so `POST /v0/auth/login`
 applies a global cap: after five failures the next attempt is rejected with
 exponential backoff (5 s → 5 min); scrypt compare runs even on throttled paths
@@ -165,11 +174,37 @@ so timing reveals nothing.
   `application/x-www-form-urlencoded` (plain form POST); on success issues the
   cookie and returns `303 → after` (form) or `{ ok, redirect }` (JSON). Wrong
   password re-renders the page with an inline error (form) or returns `401`
-  JSON (fetch).
+  JSON (fetch). While no password exists, the first same-origin form submission
+  is the setup action; an empty password and originless setup request are
+  rejected.
 - `POST /v0/auth/logout` — clears the current session row and cookie
 - `GET /v0/auth/status` — `{ hasPassword, authenticated, sessionCount }`
 - `POST /v0/auth/reset-sessions` — keeps the caller's token, signs out everyone
   else
+
+### Pi authentication
+
+Settings → Auth manages only the bundled, isolated Pi installation. It never
+reads, imports, exports, or changes Host Pi credentials. The browser starts
+Pi's own OAuth implementation through a server-owned broker: it displays the
+provider URL or device code, accepts a pasted `localhost` callback URL when a
+provider needs one, and writes Pi's resulting token to `data/pi/auth.json`.
+OAuth attempts are in-memory, bound to the Conduit browser session that started
+them, expire after ten minutes, and expose URLs/codes to no other session.
+
+API keys entered there are stored as literal Pi credentials (never returned by
+the API or logged). Stored credentials can be removed. Environment credentials
+may be reported as available but remain server-managed and cannot be revealed
+or removed by Conduit. After any credential change Conduit terminates only idle,
+unattached Isolated Pi processes so a later chat starts with the new auth;
+active or browser-attached processes are never interrupted.
+
+- `GET /v0/pi-auth` — redacted isolated-Pi provider/auth status
+- `GET /v0/pi-auth/attempt` — current caller-owned OAuth attempt state
+- `POST /v0/pi-auth/oauth`, `/v0/pi-auth/attempt/respond`,
+  `/v0/pi-auth/attempt/cancel` — OAuth/device-code broker actions
+- `PUT /v0/pi-auth/api-key`, `DELETE /v0/pi-auth/:providerId` — manage an
+  isolated Pi credential
 
 ### Application routes
 

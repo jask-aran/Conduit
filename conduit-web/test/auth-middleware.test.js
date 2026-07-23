@@ -1,14 +1,6 @@
 import assert from "node:assert/strict";
-import fs from "node:fs/promises";
-import os from "node:os";
-import path from "node:path";
 import test from "node:test";
-import { authStartupViolation, createRateLimiter, isAllowlistedPath, readCookie, safeRedirectTarget } from "../src/auth-middleware.js";
-import { AuthStore } from "../src/auth-store.js";
-
-function mockConfig(host, allowInsecure = false) {
-  return { host, allowInsecure };
-}
+import { createRateLimiter, isAllowlistedPath, isSameOriginRequest, readCookie, safeRedirectTarget } from "../src/auth-middleware.js";
 
 test("isAllowlistedPath allows the login and healthz routes only", () => {
   assert.equal(isAllowlistedPath("GET", "/login"), true);
@@ -25,17 +17,28 @@ test("readCookie extracts the conduit_session value among cookies", () => {
   assert.equal(readCookie({ headers: {} }), null);
 });
 
-test("authStartupViolation rejects non-loopback + no password unless override is set", async () => {
-  const root = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-startup-"));
-  const file = path.join(root, "auth.json");
-  const store = new AuthStore(file);
-  await store.load();
-  assert.equal(authStartupViolation(mockConfig("127.0.0.1"), store), null);
-  assert.ok(authStartupViolation(mockConfig("0.0.0.0", false), store) instanceof Error);
-  assert.equal(authStartupViolation(mockConfig("0.0.0.0", true), store), null);
-  await store.setPassword("fixture-pw");
-  assert.equal(authStartupViolation(mockConfig("0.0.0.0", false), store), null);
-  await fs.rm(root, { recursive: true, force: true });
+test("bootstrap setup only accepts a same-origin browser POST", () => {
+  const request = {
+    protocol: "http",
+    headers: { host: "conduit.example.test", origin: "http://conduit.example.test" },
+  };
+  assert.equal(isSameOriginRequest(request), true);
+  assert.equal(isSameOriginRequest({ ...request, headers: { ...request.headers, origin: "https://evil.example" } }), false);
+  assert.equal(isSameOriginRequest({ ...request, headers: { host: "conduit.example.test" } }), false);
+});
+
+test("bootstrap setup accepts the public forwarded origin", () => {
+  const request = {
+    protocol: "http",
+    headers: {
+      host: "127.0.0.1:4310",
+      origin: "https://quiet-disco-123.app.github.dev",
+      "x-forwarded-host": "quiet-disco-123.app.github.dev",
+      "x-forwarded-proto": "https",
+    },
+  };
+  assert.equal(isSameOriginRequest(request), true);
+  assert.equal(isSameOriginRequest({ ...request, headers: { ...request.headers, origin: "https://evil.example" } }), false);
 });
 
 test("rate limiter caps the backoff and resets on success", () => {

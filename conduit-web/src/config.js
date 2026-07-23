@@ -52,7 +52,6 @@ export function loadConfig(env = process.env) {
     bridgeSkill: path.join(templatesRoot, "conduit-workspace", "SKILL.md"),
     runtimeSettingsFile: absolute(env.CONDUIT_RUNTIME_SETTINGS_FILE || path.join(dataRoot, "runtime.json")),
     authFile: absolute(env.CONDUIT_AUTH_FILE || path.join(repositoryRoot, "data/auth.json")),
-    allowInsecure: env.CONDUIT_ALLOW_INSECURE === "1",
     templatesRoot,
     workspaceAllowlist,
     piTemplates: discovered,

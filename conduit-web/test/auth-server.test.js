@@ -201,47 +201,77 @@ test("login flow issues a cookie; logout clears it; rate limiting kicks in", asy
   }
 });
 
-test("a non-loopback bind with no password and no override rejects startup", async () => {
-  const root = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-auth-startup-"));
-  const port = await availablePort();
-  const { conduitPi, nativePi } = await fakePi(root);
-  const child = spawn(process.execPath, ["src/server.js"], {
-    cwd: path.resolve(import.meta.dirname, ".."),
-    stdio: ["ignore", "pipe", "pipe"],
-    env: {
-      ...process.env,
-      HOME: root,
-      CONDUIT_HOST: "0.0.0.0",
-      CONDUIT_PORT: String(port),
-      CONDUIT_FILES_ROOT: path.join(root, "files"),
-      CONDUIT_CATALOG_FILE: path.join(root, "conduit.json"),
-      CONDUIT_SESSION_REGISTRY_FILE: path.join(root, "sessions.json"),
-      CONDUIT_PREFERENCES_FILE: path.join(root, "preferences.json"),
-      CONDUIT_PI_AGENT_DIR: path.join(root, "pi"),
-      CONDUIT_AUTH_FILE: path.join(root, "auth.json"),
-      CONDUIT_PI_COMMAND: conduitPi,
-      CONDUIT_NATIVE_PI_COMMAND: nativePi,
-      CONDUIT_NATIVE_PI_AGENT_DIR: path.join(root, "native-agent"),
-      CONDUIT_WORKSPACE_ALLOWLIST: root,
-    },
-  });
-  const chunks = [];
-  child.stderr.on("data", (chunk) => chunks.push(chunk.toString()));
-  child.stdout.on("data", () => {});
-  const exitCode = await new Promise((resolve) => child.once("exit", resolve));
-  assert.equal(exitCode, 1);
-  assert.ok(Buffer.concat(chunks.map((chunk) => Buffer.from(chunk))).toString().includes("Refusing to bind"));
-  await fs.rm(root, { recursive: true, force: true });
+test("every first run locks the app until the first browser password claim", async () => {
+  const server = await spawnServer({ CONDUIT_HOST: "0.0.0.0" });
+  try {
+    const page = await fetch(`${server.origin}/`, { headers: { accept: "text/html" }, redirect: "manual" });
+    assert.equal(page.status, 302);
+    assert.equal(page.headers.get("location"), "/login");
+    assert.equal((await fetch(`${server.origin}/v0/projects`)).status, 401);
+
+    const noOrigin = await fetch(`${server.origin}/v0/auth/login`, {
+      method: "POST",
+      headers: { "content-type": "application/json", accept: "application/json" },
+      body: JSON.stringify({ password: "initial-password" }),
+    });
+    assert.equal(noOrigin.status, 403);
+
+    const setup = await fetch(`${server.origin}/v0/auth/login`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        accept: "application/json",
+        origin: server.origin,
+      },
+      body: JSON.stringify({ password: "initial-password" }),
+    });
+    assert.equal(setup.status, 200);
+    const body = await setup.json();
+    assert.equal(body.bootstrap, true);
+    const cookie = (setup.headers.get("set-cookie") || "").split(";")[0];
+    assert.equal((await fetch(`${server.origin}/v0/projects`, { headers: { cookie } })).status, 200);
+
+    const second = await fetch(`${server.origin}/v0/auth/login`, {
+      method: "POST",
+      headers: { "content-type": "application/json", accept: "application/json", origin: server.origin },
+      body: JSON.stringify({ password: "different-password" }),
+    });
+    assert.equal(second.status, 401);
+  } finally {
+    await stop(server);
+  }
 });
 
-test("loopback bind without a password starts open and serves the SPA", async () => {
+test("first run accepts the browser origin forwarded by a port-forwarding proxy", async () => {
+  const server = await spawnServer();
+  const publicOrigin = "https://quiet-disco-123.app.github.dev";
+  try {
+    const setup = await fetch(`${server.origin}/v0/auth/login`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        accept: "application/json",
+        origin: publicOrigin,
+        "x-forwarded-host": "quiet-disco-123.app.github.dev",
+        "x-forwarded-proto": "https",
+      },
+      body: JSON.stringify({ password: "initial-password" }),
+    });
+    assert.equal(setup.status, 200);
+    assert.equal((await setup.json()).bootstrap, true);
+  } finally {
+    await stop(server);
+  }
+});
+
+test("loopback first run also requires the initial password", async () => {
   const server = await spawnServer();
   try {
-    await waitForServer(server.origin, server.child);
-    const root = await fetch(`${server.origin}/`, { headers: { accept: "text/html" } });
-    assert.equal(root.status, 200);
+    const root = await fetch(`${server.origin}/`, { headers: { accept: "text/html" }, redirect: "manual" });
+    assert.equal(root.status, 302);
+    assert.equal(root.headers.get("location"), "/login");
     const projects = await fetch(`${server.origin}/v0/projects`);
-    assert.equal(projects.status, 200);
+    assert.equal(projects.status, 401);
   } finally {
     await stop(server);
   }

@@ -1,14 +1,14 @@
 # Spec: Edge auth (single-user password login)
 
-Status: draft · Priority: 1 (blocks any non-loopback exposure) · Vision: S5/D2
+Status: implemented · Priority: 1 (blocks any non-loopback exposure) · Vision: S5/D2
 
 ## Goal
 
 Every HTTP route, static asset, upload, and WebSocket upgrade served by Conduit
 requires an authenticated session, except a minimal login flow. One user, one
-password, provisioned once from the CLI. The perimeter model is: Tailscale (or
-a Cloudflare tunnel) keeps the address quiet; this password is the lock on the
-door. Deliberately boring — no OAuth, no accounts, no email.
+password, claimed in the browser on first run or later replaced from the CLI.
+The perimeter model is: a private edge keeps the address quiet; this password
+is the lock on the door. Deliberately boring — no OAuth, no accounts, no email.
 
 ## Non-goals
 
@@ -38,13 +38,14 @@ password recovery flows (recovery = SSH to the box and re-run the CLI).
   raw, stored server-side only as SHA-256. Cap stored sessions at 20, evicting
   oldest by `lastSeenAt`.
 
-### CLI provisioning
+### CLI recovery and administration
 
 `scripts/conduit-auth.mjs` (invoked from repo root, mirroring
 `conduit-pi.mjs`):
 
 - `set-password` — hidden interactive prompt (twice), or `--stdin` for
-  scripting. Writes `data/auth.json`, invalidates all sessions.
+  scripting. Replaces the browser-claimed password in `data/auth.json` and
+  invalidates all sessions.
 - `reset-sessions` — clears the sessions array (logs every device out).
 - `status` — reports whether a password is set and active session count.
 
@@ -76,19 +77,21 @@ only other enforcement point.
 Session cookie: `conduit_session`, `HttpOnly`, `SameSite=Lax`, `Path=/`,
 `Secure` when the request is HTTPS or `X-Forwarded-Proto: https` (funnel and
 tunnels always are), 30-day rolling expiry (`lastSeenAt` refresh, throttled to
-once per minute). CSRF posture: `SameSite=Lax` plus JSON-body content types on
-all state-changing API routes; no token machinery.
+once per minute). `SameSite=Lax` is the default CSRF posture for authenticated
+mutations; the unauthenticated first-run claim additionally requires a
+same-origin browser POST, since it establishes the password itself.
 
-### Fail-closed startup
+### Mandatory first run
 
-If the listen host is non-loopback and no password is configured, the server
-refuses to start with a clear message naming the CLI command.
-`CONDUIT_ALLOW_INSECURE=1` overrides for development only (documented in
-`.env.example`). Loopback binding without a password remains open (local dev
-unchanged). `.devcontainer/start-conduit.sh` binds `0.0.0.0` and therefore
-requires a password or the override. The dev container and CI must therefore
-export `CONDUIT_ALLOW_INSECURE=1` (setup script and workflow env) in the same
-PR, or first-run and browser tests break.
+If no password is configured, every listen host starts in the same guarded
+first-run state. Every application route, static asset, and WebSocket remains
+closed; only health and the server-rendered setup form are reachable. The first
+non-empty same-origin browser form submission atomically sets the password,
+creates its session, and closes setup. The UI warns that the first person able
+to submit wins. An originless or cross-origin first submission is rejected to
+prevent web-based setup CSRF. The password is retained across ordinary server
+restarts; setup returns only when the durable backend state is deleted, reset,
+or corrupted.
 
 ### Rate limiting
 
@@ -103,6 +106,8 @@ Server-rendered static HTML + inline CSS, no JS framework, no SPA code —
 Open-WebUI-minimal: centered card, product name, one password field, one
 button, error line on failure. Dark, matching the app's neutral tokens
 (hex-copied, not imported). Plain form POST; on success, redirect to `/`.
+In first-run mode the same field becomes the password; the page gives a clear
+claim warning rather than asking for a terminal-only setup step.
 
 ## Interface touchpoints
 
@@ -120,5 +125,6 @@ button, error line on failure. Dark, matching the app's neutral tokens
   rate-limit backoff; fail-closed startup matrix (host × password × override).
 - Browser test: unauthenticated visit lands on `/login`; wrong password shows
   the error; correct password reaches the app; reload stays authenticated;
-  logout returns to `/login`.
+  logout returns to `/login`; first-run setup warns, claims the submitted
+  password, and closes the app surface.
 - `npm test`, `npm run test:browser`, `npm run build` per `AGENTS.md`.

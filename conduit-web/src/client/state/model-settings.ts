@@ -27,7 +27,7 @@ export function createModelSettings(onError: ErrorHandler) {
     setAllModels(nextAll);
     setEnabledModels(enabled);
     setSettingsDefaultModel(fallback);
-    if (catalog) setNotice(catalog.requiresAuthentication ? "Authenticate with conduit-pi, then run /login." : "");
+    if (catalog) setNotice(catalog.requiresAuthentication ? "Authenticate the Isolated Pi runtime in Settings → Auth." : "");
   };
 
   const reload = async (projectId = activeProjectId) => {

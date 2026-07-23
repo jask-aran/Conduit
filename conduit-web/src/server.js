@@ -24,11 +24,12 @@ import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import { resolvePiLaunch } from "./pi-launch.js";
 import { AuthStore } from "./auth-store.js";
+import { PiAuthBroker } from "./pi-auth-broker.js";
 import {
-  authStartupViolation,
   clearSessionCookie,
   createRateLimiter,
   issueSessionCookie,
+  isSameOriginRequest,
   isSecureRequest,
   prepareAuthMiddleware,
   readCookie,
@@ -77,11 +78,6 @@ const authStore = new AuthStore(config.authFile);
 await authStore.load();
 await authStore.pruneExpired();
 const loginRateLimiter = createRateLimiter();
-const startupViolation = authStartupViolation(config, authStore);
-if (startupViolation) {
-  console.error(startupViolation.message);
-  process.exit(1);
-}
 const manager = new PiManager({
   command: config.piCommand,
   agentDir: config.piAgentDir,
@@ -90,6 +86,12 @@ const manager = new PiManager({
   maxGeneratingProcesses: runtimeSettings.get().maxGeneratingProcesses,
   idleProcessTtlMs: runtimeSettings.get().idleProcessTtlMs,
 });
+async function restartIdleIsolatedPiProcesses() {
+  const candidates = manager.list().filter((record) => record.runtime?.kind === "conduit_profile"
+    && !record.active && !record.stopping && record.clientCount === 0);
+  await Promise.all(candidates.map((record) => manager.stopAndWait(record.id)));
+  return { restartedIdleProcesses: candidates.length };
+}
 const runtimeHub = new RuntimeHub({ listViews: () => manager.list() });
 manager.on("process_changed", ({ record, reason }) => {
   runtimeHub.publishProcess(manager.view(record), reason || "update");
@@ -98,6 +100,11 @@ manager.on("process_removed", ({ id, chatId }) => {
   runtimeHub.publishProcessRemoved(id, chatId);
 });
 const modelCatalog = new PiModelCatalog({ agentDir: config.piAgentDir, modelPatterns: config.piTemplate.models });
+const piAuth = new PiAuthBroker({
+  authStorage: modelCatalog.authStorage,
+  modelRegistry: modelCatalog.modelRegistry,
+  onCredentialsChanged: restartIdleIsolatedPiProcesses,
+});
 const modelCatalogs = new Map();
 const launchingChats = new Set();
 const app = express();
@@ -392,7 +399,8 @@ app.use(express.urlencoded({ extended: false, limit: "32kb" }));
 
 app.get("/login", (request, response) => {
   const after = safeRedirectTarget(request.query.after);
-  response.type("text/html").send(renderLoginPage({ after }));
+  response.set("Cache-Control", "no-store");
+  response.type("text/html").send(renderLoginPage({ after, bootstrap: !authStore.hasPassword() }));
 });
 
 app.post("/v0/auth/login", async (request, response) => {
@@ -400,23 +408,44 @@ app.post("/v0/auth/login", async (request, response) => {
   const after = safeRedirectTarget(request.body?.after);
   const acceptsJson = String(request.headers["accept"] || "").includes("application/json")
     || String(request.headers["content-type"] || "").includes("application/json");
-  if (loginRateLimiter.isThrottled()) {
-    await authStore.verifyPassword(password).catch(() => false);
-    if (acceptsJson) return response.status(429).json({ error: "rate_limited", message: "Too many failed attempts. Try again shortly." });
-    return response.type("text/html").status(429).send(renderLoginPage({ error: "Too many failed attempts. Try again shortly.", after }));
+  const sendError = (status, error, message, bootstrap = false) => {
+    if (acceptsJson) return response.status(status).json({ error, message });
+    response.set("Cache-Control", "no-store");
+    return response.type("text/html").status(status).send(renderLoginPage({ error: message, after, bootstrap }));
+  };
+
+  await authStore.reloadFromFile();
+  const needsSetup = !authStore.hasPassword();
+  let claimedInitialPassword = false;
+  let ok = false;
+  if (needsSetup) {
+    if (!isSameOriginRequest(request)) {
+      return sendError(403, "setup_origin_required", "Open this page directly in the Conduit browser before setting the first password.", true);
+    }
+    try {
+      claimedInitialPassword = await authStore.claimInitialPassword(password);
+    } catch (error) {
+      if (error.code === "invalid_password") return sendError(400, "invalid_password", error.message, true);
+      throw error;
+    }
+    ok = claimedInitialPassword || await authStore.verifyPassword(password).catch(() => false);
+  } else {
+    if (loginRateLimiter.isThrottled()) {
+      await authStore.verifyPassword(password).catch(() => false);
+      return sendError(429, "rate_limited", "Too many failed attempts. Try again shortly.");
+    }
+    ok = await authStore.verifyPassword(password).catch(() => false);
   }
-  const ok = await authStore.verifyPassword(password).catch(() => false);
   if (!ok) {
     loginRateLimiter.noteFailure();
-    if (acceptsJson) return response.status(401).json({ error: "invalid_credentials", message: "Incorrect password." });
-    return response.type("text/html").status(401).send(renderLoginPage({ error: "Incorrect password.", after }));
+    return sendError(401, "invalid_credentials", "Incorrect password.");
   }
   loginRateLimiter.noteSuccess();
   const { token } = await authStore.createSession({
     userAgent: String(request.headers["user-agent"] || "").slice(0, 256) || null,
   });
   issueSessionCookie(response, token, { secure: isSecureRequest(request) });
-  if (acceptsJson) return response.json({ ok: true, redirect: after });
+  if (acceptsJson) return response.json({ ok: true, redirect: after, bootstrap: claimedInitialPassword });
   response.redirect(303, after);
 });
 
@@ -490,6 +519,53 @@ app.post("/v0/pi-installations/host/detect", async (_request, response, next) =>
     if (!detected.available) await clearHostPiDefaults();
     response.json((await installationViews()).find((item) => item.id === "host-pi"));
   } catch (error) { next(error); }
+});
+
+function piAuthOwner(request) {
+  return request.conduitAuth?.session?.tokenHash || "loopback-local";
+}
+
+app.get("/v0/pi-auth", (_request, response, next) => {
+  try { response.json({ installationId: "conduit-pinned", providers: piAuth.providers() }); }
+  catch (error) { next(error); }
+});
+
+app.get("/v0/pi-auth/attempt", (request, response) => {
+  response.set("Cache-Control", "no-store");
+  response.json({ attempt: piAuth.activeFor(piAuthOwner(request)) });
+});
+
+app.post("/v0/pi-auth/oauth", (request, response, next) => {
+  try {
+    const attempt = piAuth.start(piAuthOwner(request), String(request.body?.providerId || ""));
+    response.set("Cache-Control", "no-store");
+    response.status(202).json({ attempt });
+  } catch (error) { next(error); }
+});
+
+app.post("/v0/pi-auth/attempt/respond", (request, response, next) => {
+  try {
+    const attempt = piAuth.respond(piAuthOwner(request), request.body?.value);
+    response.set("Cache-Control", "no-store");
+    response.json({ attempt });
+  } catch (error) { next(error); }
+});
+
+app.post("/v0/pi-auth/attempt/cancel", (request, response) => {
+  response.set("Cache-Control", "no-store");
+  response.json({ cancelled: piAuth.cancel(piAuthOwner(request)) });
+});
+
+app.put("/v0/pi-auth/api-key", async (request, response, next) => {
+  try {
+    await piAuth.setApiKey(String(request.body?.providerId || ""), request.body?.key);
+    response.status(204).end();
+  } catch (error) { next(error); }
+});
+
+app.delete("/v0/pi-auth/:providerId", async (request, response, next) => {
+  try { response.json({ removed: await piAuth.remove(request.params.providerId) }); }
+  catch (error) { next(error); }
 });
 
 app.get("/v0/workspaces/:id/native-preflight", async (request, response, next) => {
@@ -1319,6 +1395,7 @@ app.use((error, _request, response, _next) => {
 
 const server = http.createServer(app);
 const wss = new WebSocketServer({ noServer: true });
+let shuttingDown = false;
 
 async function promptForChat(record, command, message) {
   const context = await findChatContext(record.chatId);
@@ -1399,17 +1476,15 @@ async function handleClientCommand(record, command) {
 }
 
 server.on("upgrade", async (request, socket, head) => {
+  if (shuttingDown) return socket.destroy();
   const match = new URL(request.url, "http://localhost").pathname.match(/^\/v0\/live-sessions\/([a-f0-9]{24})\/stream$/);
   if (!match || !manager.get(match[1])) return socket.destroy();
   try {
-    // Mirror the HTTP auth middleware: with no password configured, Conduit runs
-    // fully open (local mode), so the live-session upgrade must not demand a
-    // session cookie the open app never issues. Upgrades bypass Express, so this
-    // bypass has to be repeated here or every generation stream is destroyed.
-    if (authStore.hasPassword()) {
-      const context = await validateSession(authStore, request);
-      if (!context) return socket.destroy();
-    }
+    // No app surface exists before the first browser password claim, including
+    // on loopback development servers.
+    if (!authStore.hasPassword()) return socket.destroy();
+    const context = await validateSession(authStore, request);
+    if (!context) return socket.destroy();
   } catch (error) {
     console.error("WebSocket session validation failed", error);
     return socket.destroy();
@@ -1448,3 +1523,39 @@ server.on("upgrade", async (request, socket, head) => {
 });
 
 server.listen(config.port, config.host, () => console.log(`Conduit listening on http://${config.host}:${config.port}`));
+
+function closeHttpServer() {
+  return new Promise((resolve) => server.close(() => resolve()));
+}
+
+function closeWebSockets() {
+  for (const client of wss.clients) client.close(1012, "Conduit is restarting");
+  return new Promise((resolve) => wss.close(() => resolve()));
+}
+
+async function shutdown(signal) {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  console.log(`Received ${signal}; stopping Conduit and resident Pi processes.`);
+  const forceExit = setTimeout(() => {
+    console.error("Timed out while stopping Conduit; exiting.");
+    process.exit(1);
+  }, 10_000);
+  forceExit.unref();
+  try {
+    await Promise.all([
+      closeHttpServer(),
+      closeWebSockets(),
+      Promise.all(manager.list().map((record) => manager.stopAndWait(record.id))),
+    ]);
+    console.log("Conduit stopped.");
+    process.exit(0);
+  } catch (error) {
+    console.error("Conduit shutdown failed", error);
+    process.exit(1);
+  } finally {
+    clearTimeout(forceExit);
+  }
+}
+
+for (const signal of ["SIGINT", "SIGTERM"]) process.once(signal, () => { void shutdown(signal); });
