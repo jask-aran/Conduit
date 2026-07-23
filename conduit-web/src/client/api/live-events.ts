@@ -21,6 +21,31 @@ export interface SessionSnapshot {
 }
 
 interface EventBase { generationId: string | null }
+export type StructuredGenerationType =
+  | "generation_resume"
+  | "generation_started"
+  | "generation_running"
+  | "generation_stopping"
+  | "assistant_message_started"
+  | "content_block_started"
+  | "content_block_delta"
+  | "content_block_completed"
+  | "assistant_message_completed"
+  | "tool_execution_started"
+  | "tool_execution_updated"
+  | "tool_execution_completed"
+  | "generation_retry_started"
+  | "generation_retry_ended"
+  | "generation_turn_ended"
+  | "generation_settled"
+  | "generation_stopped"
+  | "generation_failed";
+
+export interface StructuredGenerationEvent extends EventBase {
+  type: StructuredGenerationType;
+  seq: number;
+  [key: string]: unknown;
+}
 export interface RuntimeSnapshotEvent extends EventBase {
   type: "runtime_snapshot";
   session: SessionSnapshot;
@@ -64,6 +89,7 @@ export type LiveEvent = EventBase & (
   | { type: "message_update"; update: AssistantMessageUpdate }
   | { type: "assistant_stream_delta"; delta: string }
   | { type: "assistant_stream_final"; content: string }
+  | StructuredGenerationEvent
   | ToolLifecycleEvent
   | { type: "runtime_error" | "client_error"; code: string; message: string }
   | { type: "unknown"; sourceType: string }
@@ -74,6 +100,18 @@ const text = (value: unknown) => value == null ? "" : String(value);
 const optionalText = (value: unknown) => value == null || value === "" ? null : String(value);
 const list = (value: unknown) => Array.isArray(value) ? value : [];
 const number = (value: unknown) => Number.isFinite(Number(value)) ? Number(value) : undefined;
+const STRUCTURED_GENERATION_TYPES = new Set<StructuredGenerationType>([
+  "generation_resume", "generation_started", "generation_running", "generation_stopping",
+  "assistant_message_started", "content_block_started", "content_block_delta", "content_block_completed",
+  "assistant_message_completed", "tool_execution_started", "tool_execution_updated", "tool_execution_completed",
+  "generation_retry_started", "generation_retry_ended", "generation_turn_ended", "generation_settled",
+  "generation_stopped", "generation_failed",
+]);
+
+export function isStructuredGenerationEvent(event: LiveEvent): event is StructuredGenerationEvent {
+  return STRUCTURED_GENERATION_TYPES.has(event.type as StructuredGenerationType)
+    && typeof (event as Partial<StructuredGenerationEvent>).seq === "number";
+}
 const contextUsage = (value: unknown): ContextUsage | null => Object.keys(record(value)).length ? record(value) as ContextUsage : null;
 const queue = (value: unknown): QueueState | null => {
   const source = record(value);
@@ -179,6 +217,10 @@ export function normalizeLiveEvent(value: unknown): LiveEvent {
   const source = record(value);
   const sourceType = text(source.type);
   const generationId = optionalText(source.generationId);
+  const seq = number(source.seq);
+  if (STRUCTURED_GENERATION_TYPES.has(sourceType as StructuredGenerationType) && seq !== undefined) {
+    return { ...source, type: sourceType as StructuredGenerationType, generationId, seq } as StructuredGenerationEvent;
+  }
   switch (sourceType) {
     case "runtime_snapshot": {
       const stream = record(source.stream);

@@ -216,6 +216,64 @@ test("waits for a newly reported fork file before checkpointing it", async () =>
   await fs.rm(root, { recursive: true, force: true });
 });
 
+test("startup keeps regenerated branches attached to their durable Conduit chat", async () => {
+  const { root, project, registryFile } = await fixture();
+  const chatId = "550e8400-e29b-41d4-a716-446655440099";
+  const originalFile = path.join(project.sessionsDir, "original.jsonl");
+  const firstForkFile = path.join(project.sessionsDir, "first-fork.jsonl");
+  const currentForkFile = path.join(project.sessionsDir, "current-fork.jsonl");
+  await fs.writeFile(originalFile, [
+    JSON.stringify({ type: "session", id: "session-original", cwd: project.path, timestamp: "2026-07-23T12:00:00Z" }),
+    JSON.stringify({ type: "message", message: { role: "user", content: "Tell me about this repo" } }),
+  ].join("\n"));
+  await fs.writeFile(firstForkFile, [
+    JSON.stringify({
+      type: "session",
+      id: "session-first-fork",
+      cwd: project.path,
+      timestamp: "2026-07-23T12:01:00Z",
+      parentSession: originalFile,
+    }),
+  ].join("\n"));
+  await fs.writeFile(currentForkFile, [
+    JSON.stringify({
+      type: "session",
+      id: "session-current-fork",
+      cwd: project.path,
+      timestamp: "2026-07-23T12:02:00Z",
+      parentSession: originalFile,
+    }),
+  ].join("\n"));
+  await fs.writeFile(registryFile, `${JSON.stringify({ version: 3, chats: [{
+    id: chatId,
+    projectId: project.id,
+    status: "active",
+    title: "Tell me about this repo",
+    piSessionId: "session-current-fork",
+    piSessionFile: currentForkFile,
+    createdAt: "2026-07-23T12:00:00Z",
+    updatedAt: "2026-07-23T12:02:00Z",
+  }, {
+    id: "session-first-fork",
+    projectId: project.id,
+    status: "active",
+    title: "Tell me about this repo",
+    piSessionId: "session-first-fork",
+    piSessionFile: firstForkFile,
+    createdAt: "2026-07-23T12:01:00Z",
+    updatedAt: "2026-07-23T12:01:00Z",
+  }] })}\n`);
+
+  const store = new ChatStore(registryFile);
+  await store.initialize([project]);
+  assert.deepEqual(store.listProject(project.id).map((chat) => chat.id), [chatId]);
+  assert.equal(store.metadata(chatId).piSessionFile, currentForkFile);
+  await fs.access(originalFile);
+  await fs.access(firstForkFile);
+  await fs.access(currentForkFile);
+  await fs.rm(root, { recursive: true, force: true });
+});
+
 test("startup removes stale empty drafts and orphan partial files only", async () => {
   const { root, project, registryFile } = await fixture();
   const old = "550e8400-e29b-41d4-a716-446655440000";
@@ -243,5 +301,27 @@ test("startup removes stale empty drafts and orphan partial files only", async (
   assert.ok(store.metadata(kept));
   await assert.rejects(fs.access(path.join(chatDirectory(project, kept), ".partial", "orphan.part")), { code: "ENOENT" });
   await fs.access(path.join(chatDirectory(project, kept), "attachments"));
+  await fs.rm(root, { recursive: true, force: true });
+});
+
+test("persists thinking levels per model on the stable chat record", async () => {
+  const { root, project, registryFile } = await fixture();
+  const store = new ChatStore(registryFile);
+  await store.initialize([project]);
+  const chat = await store.create(project);
+  await store.update(chat.id, {
+    modelThinkingLevels: {
+      "deepseek/v4-flash": "max",
+      "luna/default": "minimal",
+      ignored: "",
+    },
+  });
+
+  const reopened = new ChatStore(registryFile);
+  await reopened.initialize([project]);
+  assert.deepEqual(reopened.metadata(chat.id).modelThinkingLevels, {
+    "deepseek/v4-flash": "max",
+    "luna/default": "minimal",
+  });
   await fs.rm(root, { recursive: true, force: true });
 });

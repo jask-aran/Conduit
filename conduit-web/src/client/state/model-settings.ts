@@ -11,6 +11,7 @@ export function createModelSettings(onError: ErrorHandler) {
   const [settingsDefaultModel, setSettingsDefaultModel] = createSignal("");
   const [model, setModel] = createSignal("");
   const [effort, setEffort] = createSignal("");
+  const [modelThinkingLevels, setModelThinkingLevels] = createSignal<Record<string, string>>({});
   const [notice, setNotice] = createSignal("");
   const [settingsError, setSettingsError] = createSignal("");
   const [settingsLoading, setSettingsLoading] = createSignal(true);
@@ -61,7 +62,10 @@ export function createModelSettings(onError: ErrorHandler) {
       const nextModels = asList<ModelOption>(catalog.models);
       const selected = nextModels.find((item) => item.spec === catalog.model);
       const levels = asList<string>(selected?.thinkingLevels);
+      const rememberedLevels = catalog.modelThinkingLevels && typeof catalog.modelThinkingLevels === "object"
+        ? catalog.modelThinkingLevels : {};
       setModels(nextModels);
+      setModelThinkingLevels(rememberedLevels);
       setModel(catalog.model || nextModels[0]?.spec || "");
       setEffort(levels.includes(catalog.thinkingLevel) ? catalog.thinkingLevel
         : levels.includes(catalog.defaultThinkingLevel || "") ? catalog.defaultThinkingLevel!
@@ -86,6 +90,7 @@ export function createModelSettings(onError: ErrorHandler) {
     const changedChat = activeChatId !== chatId;
     activeProjectId = projectId;
     activeChatId = chatId;
+    if (changedChat) setModelThinkingLevels({});
     applyChatSelection(selection);
     if (changedProject) void reload(projectId);
     if (changedChat && shouldReloadChat) void reloadChat(chatId);
@@ -120,21 +125,27 @@ export function createModelSettings(onError: ErrorHandler) {
     if (!activeChatId || !models().some((item) => item.spec === spec)) return false;
     const previousModel = model();
     const previousEffort = effort();
+    const previousLevels = modelThinkingLevels();
     setModel(spec);
     try {
       const selected = models().find((item) => item.spec === spec);
       const levels = asList<string>(selected?.thinkingLevels);
-      const nextEffort = levels.includes(previousEffort) ? previousEffort : levels.includes("medium") ? "medium" : levels[0] || "off";
+      const remembered = previousLevels[spec];
+      const nextEffort = remembered && levels.includes(remembered) ? remembered
+        : levels.includes("medium") ? "medium" : levels[0] || "off";
+      setEffort(nextEffort);
       const payload = await api<ModelState>(`/v0/chats/${encodeURIComponent(activeChatId)}/models`, {
         method: "PATCH",
         body: JSON.stringify({ model: spec, thinkingLevel: nextEffort }),
       });
       setModel(payload.model || spec);
       setEffort(payload.thinkingLevel || nextEffort);
+      setModelThinkingLevels(payload.modelThinkingLevels || { ...previousLevels, [spec]: payload.thinkingLevel || nextEffort });
       return true;
     } catch (error) {
       setModel(previousModel);
       setEffort(previousEffort);
+      setModelThinkingLevels(previousLevels);
       onError((error as Error).message);
       return false;
     }
@@ -143,23 +154,27 @@ export function createModelSettings(onError: ErrorHandler) {
   const chooseEffort = async (level: string) => {
     if (!activeChatId || !model()) return false;
     const previous = effort();
+    const previousLevels = modelThinkingLevels();
     setEffort(level);
+    setModelThinkingLevels({ ...previousLevels, [model()]: level });
     try {
       const payload = await api<ModelState>(`/v0/chats/${encodeURIComponent(activeChatId)}/models`, {
         method: "PATCH",
         body: JSON.stringify({ model: model(), thinkingLevel: level }),
       });
       setEffort(payload.thinkingLevel || level);
+      setModelThinkingLevels(payload.modelThinkingLevels || { ...previousLevels, [model()]: payload.thinkingLevel || level });
       return true;
     } catch (error) {
       setEffort(previous);
+      setModelThinkingLevels(previousLevels);
       onError((error as Error).message);
       return false;
     }
   };
 
   return {
-    allModels, enabledModels, models, settingsDefaultModel, model, effort, notice, settingsError, settingsLoading, chatLoading, saving,
+    allModels, enabledModels, models, settingsDefaultModel, model, effort, modelThinkingLevels, notice, settingsError, settingsLoading, chatLoading, saving,
     select, reload, reloadChat, saveScope, chooseModel, chooseEffort,
   };
 }

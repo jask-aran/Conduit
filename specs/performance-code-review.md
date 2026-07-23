@@ -254,9 +254,13 @@ does not inherit simultaneous persistence and transport churn.
 After the narrow performance work:
 
 1. [x] Normalized protocol and pure reducer fixtures. Approved after
-   compatibility-path regression testing; live transport remains unchanged.
-2. Server Active Generation and Resume State.
-3. Client Active Generation with the existing visual projection.
+   compatibility-path regression testing as the isolated migration foundation.
+2. [x] Server Active Generation and Resume State. Approved after live
+   reconnect testing; it runs alongside the compatibility stream.
+3. [x] Client Active Generation with the existing visual projection. Approved
+   after live streaming, stop, regenerate, edit, reload, and navigation
+   testing; it includes provider-overlap and resumed-trace regressions plus
+   chat-local per-model thinking preferences.
 4. Reconnect, batching, and backpressure.
 5. Bounded Markdown rendering.
 6. Compatibility-path removal.

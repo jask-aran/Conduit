@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { normalizeLiveEvent } from "../src/client/api/live-events.ts";
+import { isStructuredGenerationEvent, normalizeLiveEvent } from "../src/client/api/live-events.ts";
 
 test("normalizes host UI events into the client discriminated union", () => {
   assert.deepEqual(normalizeLiveEvent({
@@ -43,4 +43,21 @@ test("unknown wire events cannot masquerade as lifecycle events", () => {
     sourceType: "future_protocol_event",
     generationId: "g2",
   });
+});
+
+test("preserves reduced-generation events and their sequence at the client boundary", () => {
+  const event = normalizeLiveEvent({
+    type: "content_block_delta",
+    generationId: "g1",
+    seq: 7,
+    messageId: "m1",
+    blockType: "text",
+    contentIndex: 2,
+    delta: "hello",
+  });
+  assert.equal(isStructuredGenerationEvent(event), true);
+  if (!isStructuredGenerationEvent(event)) return;
+  assert.equal(event.seq, 7);
+  assert.equal(event.messageId, "m1");
+  assert.equal(event.delta, "hello");
 });

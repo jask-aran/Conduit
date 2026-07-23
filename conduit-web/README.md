@@ -34,6 +34,9 @@ project root and native JSONL remains outside the working tree. Ignored
 chats exist before Pi; the first message attaches a private Pi mapping and makes
 the same public chat ID active. Active mappings are checkpointed after completed
 responses and explicit mutations and reconciled with native files at startup.
+Pi records each fork's `parentSession`; startup uses that family to keep
+superseded regeneration branches attached to one sidebar chat while preserving
+their JSONL files.
 
 Raw attachment bodies stream to exclusive `.part` files and publish by atomic
 rename. The filesystem is the durable attachment registry. Prompt envelopes
@@ -95,7 +98,9 @@ entries through an append-aware index: ordinary transcript requests read only
 the requested turn window, incomplete final writes are ignored, and file
 replacement or truncation invalidates cached offsets. Selecting a model updates the active process and Pi's shared
 `defaultModel`; a new chat starts with that saved model while an existing chat
-retains its recorded model. The selected transcript response seeds the
+retains its recorded model. Pi has one active thinking level, so Conduit stores
+the last valid level for each model on the stable chat record and reapplies it
+when that model is selected. The selected transcript response seeds the
 composer's model and thinking level immediately; one runtime-aware chat-model
 request supplies its catalogue and reconciles resident process state without a
 second post-WebSocket reload.
@@ -267,14 +272,15 @@ directions. This is the v0 event vocabulary: Pi JSONL remains the authoritative
 record, the rendered transcript is a projection of it, and changes to this
 vocabulary are additive and must update this section in the same change.
 
-The rendering migration's unwired protocol foundation lives in
+The rendering migration's structured protocol lives in
 `src/pi-event-normalizer.js` and `src/active-generation.js`. It assigns
 generation-local assistant-message identities, preserves native
 `contentIndex`/block order and `toolCallId`, reduces sequenced events into a
 serializable Active Generation, and derives Interim Text classification solely
-from tool structure and `stopReason`. The live WebSocket still uses the v0
-compatibility vocabulary below until the server and client migration slices
-adopt this reducer.
+from tool structure and `stopReason`. `PiManager` maintains this state alongside
+the v0 compatibility stream. The client reduces structured events into its
+Live Response projection; compatibility events remain temporarily for older
+paths and persistence confirmation.
 
 Client commands:
 
@@ -283,8 +289,8 @@ Client commands:
 | `prompt` | `message`, `attachmentIds[]`, optional `streamingBehavior` (`steer` \| `followUp`) | Send a user prompt in the strict attachment envelope after Pi accepts it |
 | `follow_up` / `steer` | `message`, `attachmentIds[]` | Queue mid-run follow-up or steering input |
 | `stop_generation` / `abort` | `generationId` | Close the generation gate, then ask Pi to abort |
-| `fork_and_prompt` | `entryId`, `message`, `attachmentIds[]` | Fork history at an entry, then prompt |
-| `regenerate` | `entryId` | Fork at an entry and resend its recorded prompt |
+| `fork_and_prompt` | `entryId`, `message`, `attachmentIds[]`, optional `model`, `thinkingLevel` | Fork history at an entry, apply the composer selection, then prompt |
+| `regenerate` | `entryId`, optional `model`, `thinkingLevel` | Fork at an entry, apply the composer selection, then resend its recorded prompt |
 | `continue` | — | Experimental hidden-prompt continuation of a stopped response |
 | `extension_ui_response` / `host_ui_response` | `id`, `confirmed` \| `value` \| `cancelled` | Answer a blocking extension UI request |
 | `refresh_context` | — | Request a context-usage refresh via Pi session stats |
@@ -292,20 +298,32 @@ Client commands:
 Any other object is forwarded verbatim to Pi's RPC stdin. A failed command
 produces `client_error` with `code` and `message`.
 
-Server events. On connect the server sends one `runtime_snapshot` containing
+Server events. When a generation is open, connect first sends one
+`generation_resume` containing the complete current reduced generation and its
+last applied sequence. It then sends the existing `runtime_snapshot` containing
 the session view, the accumulated `stream` content for any open generation
 (`{ generationId, content }` or `null`), the current turn's replayable events,
 plus `hostUiRequests`, `queue`, and `contextUsage` when known; individual
-`assistant_stream_delta` events are never replayed.
+`assistant_stream_delta` events are never replayed. Structured events are
+reduced independently of the capped compatibility/diagnostic event ring.
 Conduit-origin events thereafter:
 
 | Event | Fields | Meaning |
 |---|---|---|
+| `generation_resume` | `generationId`, `seq`, `generation` | Complete current Active Generation sent on attachment; later structured events with `seq <= generation.lastSeq` are duplicates |
 | `runtime_state` | `session` | Process/session status changed |
-| `generation_started` | `generationId`, `continuation` | A response began; deltas follow |
+| `generation_started` | `generationId`, `seq`, `continuation` | A response began; structured and compatibility events follow |
+| `generation_running` / `generation_stopping` / `generation_settled` | `generationId`, `seq` | Structured generation lifecycle transition |
+| `assistant_message_started` | `generationId`, `seq`, `messageId` | Server assigned a stable identity to a native assistant message |
+| `content_block_started` / `content_block_completed` | `generationId`, `seq`, `messageId`, `block` | Native thinking, text, or tool-call block boundary preserving `contentIndex` |
+| `content_block_delta` | `generationId`, `seq`, `messageId`, `blockType`, `contentIndex`, `delta` | Native block delta addressed by stable message/block identity |
+| `assistant_message_completed` | `generationId`, `seq`, `messageId`, `blocks`, `stopReason`, optional `errorMessage`, `usage` | Complete native assistant boundary without flattened text |
+| `tool_execution_started` / `tool_execution_updated` / `tool_execution_completed` | `generationId`, `seq`, `toolCallId`, tool fields | Structured execution state joined to its native tool-call block |
+| `generation_retry_started` / `generation_retry_ended` / `generation_turn_ended` | `generationId`, `seq`, retry fields | Retry-aware lifecycle that does not settle the generation during a retry gap |
+| `generation_failed` | `generationId`, `seq`, `error` | Terminal structured runtime failure |
 | `assistant_stream_delta` | `generationId`, `delta` | Raw assistant text delta, relayed unthrottled |
 | `assistant_stream_final` | `generationId`, `message`, `content`, optional `usage` | Canonical completed message text |
-| `generation_stopped` | `generationId`, `status`, `processTerminated` | Stop completed; late output was gated |
+| `generation_stopped` | `generationId`, `seq`, `status`, `processTerminated` | Stop completed in both protocols; late output was gated |
 | `context_usage` | `contextUsage` | Synthesized context window usage (nullable tokens/percent) |
 | `extension_ui_resolved` | `requestId` | A host-UI request was answered |
 | `session_checkpoint` | `chat` | Registry row checkpointed after a completed response |
