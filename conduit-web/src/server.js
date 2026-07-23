@@ -20,9 +20,9 @@ import { PreferencesStore } from "./preferences-store.js";
 import { templatePublicView } from "../../scripts/pi-runtime.mjs";
 import { isPathInside, listDirectorySuggestions } from "./workspace-paths.js";
 import { hasTrustRequiringProjectResources, ProjectTrustStore } from "@earendil-works/pi-coding-agent";
-import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import { resolvePiLaunch } from "./pi-launch.js";
+import { validateNativeProjectResources } from "./native-resource-validation.js";
 import { AuthStore } from "./auth-store.js";
 import {
   authStartupViolation,
@@ -264,60 +264,6 @@ async function nativeResourceClasses(cwd) {
   return found;
 }
 
-async function nativeResourceFingerprint(cwd) {
-  const roots = [path.join(cwd, ".pi")];
-  let current = path.resolve(cwd);
-  while (true) {
-    const agentsSkills = path.join(current, ".agents", "skills");
-    if (agentsSkills !== path.join(os.homedir(), ".agents", "skills")) roots.push(agentsSkills);
-    const parent = path.dirname(current);
-    if (parent === current) break;
-    current = parent;
-  }
-  const entries = [];
-  let totalBytes = 0;
-  const assertRealDirectory = async (target) => {
-    let stat;
-    try { stat = await fs.lstat(target); }
-    catch (error) { if (error.code === "ENOENT") return false; throw error; }
-    if (stat.isSymbolicLink()) {
-      throw Object.assign(new Error("Symlinked project resources cannot be trusted through Conduit"), {
-        code: "native_resource_symlink",
-        path: target,
-      });
-    }
-    return stat.isDirectory();
-  };
-  for (const root of roots.filter((item) => item.endsWith(`${path.sep}.agents${path.sep}skills`))) {
-    const agentsRoot = path.dirname(root);
-    if (await assertRealDirectory(agentsRoot)) await assertRealDirectory(root);
-  }
-  const visit = async (target) => {
-    if (entries.length >= 10_000) {
-      throw Object.assign(new Error("Too many project resources to preflight safely"), { code: "native_resource_limit" });
-    }
-    let stat;
-    try { stat = await fs.lstat(target); }
-    catch (error) { if (error.code === "ENOENT") return; throw error; }
-    if (stat.isSymbolicLink()) {
-      throw Object.assign(new Error("Symlinked project resources cannot be trusted through Conduit"), { code: "native_resource_symlink" });
-    }
-    let content = null;
-    if (stat.isFile()) {
-      totalBytes += stat.size;
-      if (totalBytes > 100 * 1024 * 1024) {
-        throw Object.assign(new Error("Project resources are too large to preflight safely"), { code: "native_resource_limit" });
-      }
-      content = crypto.createHash("sha256").update(await fs.readFile(target)).digest("hex");
-    }
-    entries.push([path.relative(cwd, target), stat.mode, stat.size, content]);
-    if (!stat.isDirectory() || stat.isSymbolicLink()) return;
-    for (const child of (await fs.readdir(target)).sort()) await visit(path.join(target, child));
-  };
-  for (const root of roots) await visit(root);
-  return crypto.createHash("sha256").update(JSON.stringify(entries)).digest("hex");
-}
-
 async function nativePreflight(project) {
   const installation = config.installations.get("host-pi");
   if (!installation.available) {
@@ -327,7 +273,7 @@ async function nativePreflight(project) {
   const decision = trustStore.get(project.path);
   const requiresResources = hasTrustRequiringProjectResources(project.path);
   const resources = requiresResources ? await nativeResourceClasses(project.path) : [];
-  if (requiresResources) await nativeResourceFingerprint(project.path);
+  if (requiresResources) await validateNativeProjectResources(project.path);
   if (requiresResources && resources.length === 0) resources.push("inherited project resources");
   return {
     available: true,

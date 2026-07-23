@@ -112,7 +112,9 @@ user's login shell, plus a minimal attachment bridge. The choice is mutable
 until the first prompt, then immutable. Both runtimes share one process
 manager, capacity limits, and the Workspace as canonical `cwd`. Host Pi
 project-resource trust is persisted automatically for registered Workspaces;
-its model scope and settings are read-only diagnostics in Conduit.
+launch preflight rejects symlinks and resource trees over 10,000 entries or
+100 MiB using filesystem metadata without reading file contents. Its model
+scope and settings are read-only diagnostics in Conduit.
 
 **Profiles (templates).** `templates/*/template.json` manifests select system
 prompt, tools, fallback models, extensions, and skills, translated into

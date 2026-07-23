@@ -63,29 +63,19 @@ Be careful about JSONL read-backwards semantics. Newline boundaries may cross re
 - Index invalidation is covered for truncation/replacement, external append, and normal Pi append.
 - Tests measure bytes/lines parsed and number of file scans; wall-clock-only assertions are too noisy.
 
-### [P2] 2. Host-Pi preflight hashes the entire resource tree without using the result
+### [P2 — implemented 2026-07-23] 2. Host-Pi preflight uses a metadata-only safety traversal
 
-`nativeResourceFingerprint()` (server.js:268) recursively visits and SHA-256 hashes file contents up to the configured 10,000-file/100 MiB boundary. `nativePreflight()` then discards the fingerprint — verified at server.js:331, the return value is awaited and dropped. Every Host-Pi launch repeats the traversal (server.js:1173).
+Host-Pi preflight now performs a metadata-only safety traversal. It retains
+symlink refusal and the 10,000-entry/100 MiB limits, but derives aggregate size
+from `lstat` and never opens or hashes resource files. The unused fingerprint
+and its implied change-detection semantics were removed rather than cached.
 
-This is not merely a one-time installation cost. It places potentially large filesystem reads and hashing in the launch path while producing no retained change-detection value. A workspace or native resource tree with many small files can make the repeated traversal expensive even below the byte ceiling.
+#### Maintained guarantees
 
-One caution when fixing: the traversal is not *pure* waste — it currently enforces the symlink-refusal, file-count, and aggregate-size protections as a side effect (server.js:280-317). Any fix must keep those checks.
-
-#### Required direction
-
-First make the preflight's purpose explicit:
-
-- If it exists only to enforce traversal safety, symlink policy, file-count limits, and aggregate byte limits, use directory entries and `stat`/`lstat` metadata. Do not read file contents.
-- If content change detection is required, retain and consume the fingerprint. Cache it against resource-root identity and directory/file metadata, reuse it while valid, and perform unavoidable hashing outside the primary request/event-loop hot path.
-- If the copied/validated resource set is immutable for the lifetime of an installation record, validate once at detection/install time and carry a versioned result into launch.
-
-Do not preserve content hashing simply because the function is named "fingerprint"; no caller currently receives the value's benefit.
-
-#### Acceptance criteria
-
-- A normal repeated Host-Pi launch performs no full content-tree read when resources have not changed.
+- Repeated Host-Pi launch performs no resource content-tree reads.
 - Symlink escape, file-count, and aggregate-size protections remain enforced.
-- Tests distinguish metadata traversal from bytes read, and cover mutation/invalidation if caching is retained.
+- Tests distinguish metadata traversal from bytes read; no cache or invalidation
+  path exists because no change-detection result is consumed.
 
 ### [P2 — implemented 2026-07-23] 3. Optional startup work delays selected-chat initialization
 
@@ -277,9 +267,9 @@ Owner-approved order for the current fast, manually tested development cycle:
    chat/catalogue requests run concurrently; optional capabilities, templates,
    and installation data do not gate the transcript; workspace suggestions are
    lazy.
-4. [ ] **Host-Pi preflight simplification.** Next implementation slice: remove
-   unused content hashing while preserving symlink refusal, file-count limits,
-   and aggregate-size limits.
+4. [x] **Host-Pi preflight simplification.** Resource validation now traverses
+   metadata only while preserving symlink refusal, file-count limits, and
+   aggregate-size limits.
 
 Keep API response shapes stable through these changes so the rendering migration
 does not inherit simultaneous persistence and transport churn.
@@ -307,7 +297,9 @@ manual checks. Do not run Playwright unless the owner specifically requests it.
 
 - Transcript access: `conduit-web/src/session-store.js`, `conduit-web/src/chat-store.js` (`registry.find`), and the session/model/live-session routes in `conduit-web/src/server.js`
 - Startup orchestration: `conduit-web/src/client/main.tsx`
-- Host-Pi resource validation: `conduit-web/src/server.js` (`nativeResourceFingerprint`, `nativePreflight`)
+- Host-Pi resource validation: `conduit-web/src/native-resource-validation.js`
+  (`validateNativeProjectResources`) and `conduit-web/src/server.js`
+  (`nativePreflight`)
 - Workspace inspection: `conduit-web/src/workspace-inspector.js` and `conduit-web/src/client/workspace/workspace-panel.tsx`
 - Workspace clone lifecycle: `conduit-web/src/project-store.js`
 - Authentication persistence: `conduit-web/src/auth-store.js` and `conduit-web/src/auth-middleware.js`
