@@ -306,6 +306,11 @@ the session view, the accumulated `stream` content for any open generation
 plus `hostUiRequests`, `queue`, and `contextUsage` when known; individual
 `assistant_stream_delta` events are never replayed. Structured events are
 reduced independently of the capped compatibility/diagnostic event ring.
+Delivery coalesces same-block deltas briefly per socket and flushes before
+message, tool, stop, error, and settlement boundaries. A socket above the
+256 KiB high-water mark stops receiving superseded deltas; when its buffer
+drains, Conduit sends current `generation_resume` before any queued boundaries
+and continues delivery.
 Conduit-origin events thereafter:
 
 | Event | Fields | Meaning |
