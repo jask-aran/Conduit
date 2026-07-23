@@ -396,6 +396,68 @@ test("attach returns complete reduced Resume State independent of the capped eve
   assert.equal(resume.generation.assistantMessages[0].blocks[0].text.length, 520);
 });
 
+test("coalesces adjacent block deltas for each connected client", async () => {
+  const { manager, record } = rpcFixture();
+  const socket = deliverySocket();
+  manager.attach(record.id, socket);
+
+  manager.deliver(record, { type: "content_block_delta", generationId: "g1", seq: 3, messageId: "m1", blockType: "text", contentIndex: 0, delta: "Hel" });
+  manager.deliver(record, { type: "content_block_delta", generationId: "g1", seq: 4, messageId: "m1", blockType: "text", contentIndex: 0, delta: "lo" });
+  assert.equal(socket.events.length, 0);
+  await wait(30);
+  assert.deepEqual(socket.events, [{ type: "content_block_delta", generationId: "g1", seq: 4, messageId: "m1", blockType: "text", contentIndex: 0, delta: "Hello" }]);
+});
+
+test("slow clients discard superseded deltas and recover from Resume State", async () => {
+  const { manager, child, record } = rpcFixture();
+  manager.socketHighWaterMark = 1_024;
+  manager.socketLowWaterMark = 512;
+  const socket = deliverySocket({ bufferedAmount: 2_048 });
+  manager.attach(record.id, socket);
+  const generationId = manager.prompt(record.id, "Long answer");
+  child.stdout.write(`${JSON.stringify({ type: "agent_start" })}\n`);
+  child.stdout.write(`${JSON.stringify({ type: "message_start", message: { role: "assistant", content: [] } })}\n`);
+  child.stdout.write(`${JSON.stringify({
+    type: "message_update",
+    assistantMessageEvent: {
+      type: "text_start",
+      contentIndex: 0,
+      partial: { role: "assistant", content: [{ type: "text", text: "" }] },
+    },
+  })}\n`);
+  child.stdout.write(`${JSON.stringify({
+    type: "message_update",
+    assistantMessageEvent: {
+      type: "text_delta",
+      contentIndex: 0,
+      delta: "Complete state",
+      partial: { role: "assistant", content: [{ type: "text", text: "Complete state" }] },
+    },
+  })}\n`);
+
+  assert.equal(socket.events.length, 0);
+  socket.bufferedAmount = 0;
+  await wait(70);
+  assert.equal(socket.events[0].type, "generation_resume");
+  assert.equal(socket.events[0].generationId, generationId);
+  assert.equal(socket.events[0].generation.assistantMessages[0].blocks[0].text, "Complete state");
+  assert.equal(socket.events.some((event) => event.type === "content_block_delta"), false);
+});
+
+function deliverySocket({ bufferedAmount = 0 } = {}) {
+  const socket = new EventEmitter();
+  socket.OPEN = 1;
+  socket.readyState = 1;
+  socket.bufferedAmount = bufferedAmount;
+  socket.events = [];
+  socket.send = (payload) => socket.events.push(JSON.parse(payload));
+  return socket;
+}
+
+function wait(milliseconds) {
+  return new Promise((resolve) => setTimeout(resolve, milliseconds));
+}
+
 function rpcFixture(onCommand) {
   const child = new EventEmitter();
   child.stdout = new PassThrough();

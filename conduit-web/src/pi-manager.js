@@ -44,6 +44,40 @@ function emptyContextUsage() {
 
 const TERMINAL_GENERATION_STATUSES = new Set(["stopped", "complete", "failed"]);
 
+function socketIsOpen(socket) {
+  return socket?.readyState === socket?.OPEN;
+}
+
+function socketBufferedAmount(socket) {
+  const amount = Number(socket?.bufferedAmount);
+  return Number.isFinite(amount) && amount > 0 ? amount : 0;
+}
+
+function deliveryDeltaKey(event) {
+  if (event.type === "content_block_delta") {
+    return `structured:${event.generationId}:${event.messageId}:${event.blockType}:${event.contentIndex}`;
+  }
+  if (event.type === "assistant_stream_delta") return `compat:text:${event.generationId}`;
+  if (event.type === "message_update" && event.update?.type === "thinking_delta") return `compat:thinking:${event.generationId}`;
+  return null;
+}
+
+function mergeDeliveryDelta(previous, next) {
+  if (next.type === "content_block_delta") {
+    return { ...next, delta: `${previous.delta || ""}${next.delta || ""}` };
+  }
+  if (next.type === "assistant_stream_delta") {
+    return { ...next, delta: `${previous.delta || ""}${next.delta || ""}` };
+  }
+  return {
+    ...next,
+    update: {
+      ...next.update,
+      delta: `${previous.update?.delta || ""}${next.update?.delta || ""}`,
+    },
+  };
+}
+
 export class PiManager extends EventEmitter {
   constructor({
     command = "pi",
@@ -54,6 +88,9 @@ export class PiManager extends EventEmitter {
     maxGeneratingProcesses = 2,
     idleProcessTtlMs = 120_000,
     reaperIntervalMs = 15_000,
+    socketHighWaterMark = 256 * 1024,
+    deliveryFlushMs = 16,
+    socketRecoveryPollMs = 50,
     now = () => Date.now(),
   } = {}) {
     super();
@@ -69,6 +106,10 @@ export class PiManager extends EventEmitter {
     this.maxLiveProcesses = Math.max(1, Math.trunc(Number(maxLiveProcesses) || 12));
     this.maxGeneratingProcesses = Math.max(1, Math.trunc(Number(maxGeneratingProcesses) || 2));
     this.idleProcessTtlMs = Math.max(30_000, Math.trunc(Number(idleProcessTtlMs) || 120_000));
+    this.socketHighWaterMark = Math.max(1024, Math.trunc(Number(socketHighWaterMark) || 256 * 1024));
+    this.socketLowWaterMark = Math.floor(this.socketHighWaterMark / 2);
+    this.deliveryFlushMs = Math.max(0, Math.trunc(Number(deliveryFlushMs) || 16));
+    this.socketRecoveryPollMs = Math.max(10, Math.trunc(Number(socketRecoveryPollMs) || 50));
     this.capacityQueue = Promise.resolve();
     this.reaperTimer = null;
     if (reaperIntervalMs > 0) {
@@ -303,6 +344,7 @@ export class PiManager extends EventEmitter {
       queue: emptyQueue(),
       contextUsage: emptyContextUsage(),
       clients: new Set(),
+      delivery: new Map(),
       events: [],
       createdAt: new Date(createdAtMs).toISOString(),
       createdAtMs,
@@ -806,10 +848,12 @@ export class PiManager extends EventEmitter {
     const record = this.processes.get(id);
     if (!record) throw new Error("Unknown live session");
     record.clients.add(socket);
+    record.delivery.set(socket, { pending: new Map(), pendingOrder: [], structural: [], flushTimer: null, recoveryTimer: null, paused: false });
     record.lastClientAt = this.now();
     this.touchActivity(record);
     socket.once("close", () => {
       record.clients.delete(socket);
+      this.clearDelivery(record, socket);
       record.lastClientAt = this.now();
       this.emit("process_changed", { record, reason: "client_detach" });
     });
@@ -830,11 +874,108 @@ export class PiManager extends EventEmitter {
   }
 
   deliver(record, event) {
-    const payload = JSON.stringify(event);
     for (const socket of record.clients) {
-      if (socket.readyState === socket.OPEN) socket.send(payload);
+      this.deliverToClient(record, socket, event);
     }
     this.emit("event", { record, event });
+  }
+
+  clearDelivery(record, socket) {
+    const state = record.delivery.get(socket);
+    if (!state) return;
+    if (state.flushTimer) clearTimeout(state.flushTimer);
+    if (state.recoveryTimer) clearTimeout(state.recoveryTimer);
+    record.delivery.delete(socket);
+  }
+
+  sendClientEvent(socket, event) {
+    if (!socketIsOpen(socket)) return false;
+    socket.send(JSON.stringify(event));
+    return true;
+  }
+
+  pauseDelivery(record, socket, state) {
+    state.paused = true;
+    state.pending.clear();
+    state.pendingOrder = [];
+    if (state.flushTimer) clearTimeout(state.flushTimer);
+    state.flushTimer = null;
+    this.scheduleDeliveryRecovery(record, socket, state);
+  }
+
+  scheduleDeliveryRecovery(record, socket, state) {
+    if (state.recoveryTimer) return;
+    const recover = () => {
+      state.recoveryTimer = null;
+      if (!record.clients.has(socket) || !socketIsOpen(socket)) return this.clearDelivery(record, socket);
+      if (socketBufferedAmount(socket) > this.socketLowWaterMark) {
+        state.recoveryTimer = setTimeout(recover, this.socketRecoveryPollMs);
+        state.recoveryTimer.unref?.();
+        return;
+      }
+      state.paused = false;
+      const resume = this.currentGenerationResume(record);
+      if (resume && !this.sendClientEvent(socket, resume)) return;
+      this.flushDelivery(record, socket, state);
+    };
+    state.recoveryTimer = setTimeout(recover, this.socketRecoveryPollMs);
+    state.recoveryTimer.unref?.();
+  }
+
+  flushDelivery(record, socket, state = record.delivery.get(socket)) {
+    if (!state || state.paused || !socketIsOpen(socket)) return;
+    if (state.flushTimer) clearTimeout(state.flushTimer);
+    state.flushTimer = null;
+    if (socketBufferedAmount(socket) > this.socketHighWaterMark) return this.pauseDelivery(record, socket, state);
+    const pending = state.pendingOrder.map((key) => state.pending.get(key)).filter(Boolean);
+    state.pending.clear();
+    state.pendingOrder = [];
+    const queued = [...state.structural, ...pending];
+    state.structural = [];
+    for (let index = 0; index < queued.length; index += 1) {
+      if (socketBufferedAmount(socket) > this.socketHighWaterMark) {
+        state.structural.push(...queued.slice(index).filter((event) => !deliveryDeltaKey(event)));
+        return this.pauseDelivery(record, socket, state);
+      }
+      if (!this.sendClientEvent(socket, queued[index])) return this.clearDelivery(record, socket);
+    }
+  }
+
+  scheduleDeliveryFlush(record, socket, state) {
+    if (state.flushTimer || state.paused) return;
+    state.flushTimer = setTimeout(() => this.flushDelivery(record, socket, state), this.deliveryFlushMs);
+    state.flushTimer.unref?.();
+  }
+
+  deliverToClient(record, socket, event) {
+    const state = record.delivery.get(socket);
+    if (!state || !socketIsOpen(socket)) return;
+    const key = deliveryDeltaKey(event);
+    if (state.paused) {
+      if (!key) state.structural.push(event);
+      return;
+    }
+    if (socketBufferedAmount(socket) > this.socketHighWaterMark) {
+      if (!key) state.structural.push(event);
+      this.pauseDelivery(record, socket, state);
+      return;
+    }
+    if (key) {
+      const previous = state.pending.get(key);
+      if (previous) state.pending.set(key, mergeDeliveryDelta(previous, event));
+      else {
+        state.pending.set(key, event);
+        state.pendingOrder.push(key);
+      }
+      this.scheduleDeliveryFlush(record, socket, state);
+      return;
+    }
+    this.flushDelivery(record, socket, state);
+    if (socketBufferedAmount(socket) > this.socketHighWaterMark) {
+      state.structural.push(event);
+      return this.pauseDelivery(record, socket, state);
+    }
+    this.sendClientEvent(socket, event);
   }
 
   publishGeneration(record, event, generation = record.generation) {

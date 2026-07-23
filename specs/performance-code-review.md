@@ -261,7 +261,9 @@ After the narrow performance work:
    after live streaming, stop, regenerate, edit, reload, and navigation
    testing; it includes provider-overlap and resumed-trace regressions plus
    chat-local per-model thinking preferences.
-4. Reconnect, batching, and backpressure.
+4. [x] Reconnect, batching, and backpressure. Approved after long-stream,
+   multi-tab, and reconnect testing; same-block server batching and bounded
+   slow-socket Resume State recovery are in place.
 5. Bounded Markdown rendering.
 6. Compatibility-path removal.
 
