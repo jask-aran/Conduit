@@ -87,7 +87,15 @@ Do not preserve content hashing simply because the function is named "fingerprin
 - Symlink escape, file-count, and aggregate-size protections remain enforced.
 - Tests distinguish metadata traversal from bytes read, and cover mutation/invalidation if caching is retained.
 
-### [P2] 3. Optional startup work delays selected-chat initialization
+### [P2 — implemented 2026-07-23] 3. Optional startup work delays selected-chat initialization
+
+Direct chat routes now request catalogue context, chat metadata, and transcript
+concurrently. Capabilities, templates, and Pi installation status settle
+independently without gating chat initialization or live attachment; Settings
+shows explicit loading states if opened before templates or installations
+arrive. Workspace suggestions use a single-flight request started only when the
+workspace-creation surface opens. Root-route draft creation still awaits the
+template catalogue because the configured default profile is required input.
 
 `App.onMount()` (main.tsx:287-319) awaits a `Promise.all` of projects, capabilities, templates, workspace suggestions, and Pi installation data before starting route-specific chat loading — the chat detail fetch sits inside the `.then`, so it cannot begin until the slowest of the five settles. Some of that work can enumerate the filesystem or load host model/auth configuration. None of it is required to render the transcript of an already-selected chat.
 
@@ -252,6 +260,48 @@ These findings are independently implementable, but coordinate interfaces with t
 7. Run the companion rendering/state sequence for Pi protocol preservation, Active Generation, Resume State, fine-grained rendering, and transport bounds.
 
 Avoid combining these into one new global state subsystem. They solve different boundaries: bounded durable reads, route dependency scheduling, native-resource validation, and live-generation presentation.
+
+## Active implementation order
+
+Owner-approved order for the current fast, manually tested development cycle:
+
+### Performance work before the rendering migration
+
+1. [x] **Bounded transcript/session access.** Implemented in `6f4a6d3`;
+   transcript history now loads automatically near the top without exposing
+   pagination controls.
+2. [ ] **Remove duplicate selected-chat model derivation.** Indexed
+   model/thinking metadata is shared, but the remaining client model reload
+   duplication still needs removal before the rendering migration.
+3. [x] **Progressive startup.** Implemented in the current follow-up: selected
+   chat/catalogue requests run concurrently; optional capabilities, templates,
+   and installation data do not gate the transcript; workspace suggestions are
+   lazy.
+4. [ ] **Host-Pi preflight simplification.** Next implementation slice: remove
+   unused content hashing while preserving symlink refusal, file-count limits,
+   and aggregate-size limits.
+
+Keep API response shapes stable through these changes so the rendering migration
+does not inherit simultaneous persistence and transport churn.
+
+### Rendering/state migration
+
+After the narrow performance work:
+
+1. Normalized protocol and pure reducer fixtures.
+2. Server Active Generation and Resume State.
+3. Client Active Generation with the existing visual projection.
+4. Reconnect, batching, and backpressure.
+5. Bounded Markdown rendering.
+6. Compatibility-path removal.
+
+Defer workspace inspection, clone lifecycle, auth serialization, and the
+build-coupled test fixture until after the rendering migration; they are
+independent and would interrupt its visual feedback loop.
+
+For each slice, run focused automated tests plus typecheck/build as warranted,
+restart with `bash .devcontainer/start-conduit.sh restart`, and provide concrete
+manual checks. Do not run Playwright unless the owner specifically requests it.
 
 ## Source notes
 

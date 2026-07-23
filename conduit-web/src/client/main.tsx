@@ -41,7 +41,9 @@ function ChatHeader(props: { project?: Project; title: string; profile?: Templat
 
 function App() {
   const [templates, setTemplates] = createSignal<Template[]>([]);
+  const [templatesLoading, setTemplatesLoading] = createSignal(true);
   const [installations, setInstallations] = createSignal<Installation[]>([]);
+  const [installationsLoading, setInstallationsLoading] = createSignal(true);
   const [workspaceSuggestions, setWorkspaceSuggestions] = createSignal<WorkspaceSuggestion[]>([]);
   const [defaultTemplateId, setDefaultTemplateId] = createSignal("chat");
   const [partialContinue, setPartialContinue] = createSignal(true);
@@ -56,6 +58,7 @@ function App() {
   const [panelOpen, setPanelOpen] = createSignal(false);
   let dragDepth = 0;
   let attachFileInput: HTMLInputElement | undefined;
+  let workspaceSuggestionsRequest: Promise<void> | null = null;
 
   const showError = (message: string) => toast.error(message);
   const catalogue = createCatalogueStore();
@@ -213,6 +216,13 @@ function App() {
     setPanelOpen((open) => { const next = !open; if (id) localStorage.setItem(`conduit:workspace-panel:${id}:open`, String(next)); return next; });
   };
   const runSidebar = (type: string) => setSidebarCommand({ type, nonce: Date.now() });
+  const loadWorkspaceSuggestions = () => {
+    if (workspaceSuggestionsRequest) return workspaceSuggestionsRequest;
+    workspaceSuggestionsRequest = api<{ folders: WorkspaceSuggestion[] }>("/v0/workspaces/suggestions")
+      .then((payload) => { setWorkspaceSuggestions(asList<WorkspaceSuggestion>(payload.folders)); })
+      .catch(() => { setWorkspaceSuggestions([]); });
+    return workspaceSuggestionsRequest;
+  };
 
   const lastAssistant = createMemo(() => {
     const list = chat.messages();
@@ -286,36 +296,50 @@ function App() {
 
   onMount(() => {
     window.addEventListener("keydown", keydown);
-    void Promise.all([
-      api<{ projects: Project[] }>("/v0/projects"),
-      api<{ partialContinue?: boolean }>("/v0/capabilities").catch(() => ({ partialContinue: true })),
-      api<{ templates: Template[]; defaultTemplateId?: string }>("/v0/templates").catch(() => ({ templates: [], defaultTemplateId: "chat" })),
-      api<{ folders: string[] }>("/v0/workspaces/suggestions").catch(() => ({ folders: [] })),
-      api<{ installations: Installation[] }>("/v0/pi-installations").catch(() => ({ installations: [] })),
-    ]).then(async ([cataloguePayload, capabilities, templatePayload, workspacePayload, installationPayload]) => {
+    const templateRequest = api<{ templates: Template[]; defaultTemplateId?: string }>("/v0/templates")
+      .catch(() => ({ templates: [], defaultTemplateId: "chat" }))
+      .then((payload) => {
+        setTemplates(asList<Template>(payload.templates));
+        setDefaultTemplateId(payload.defaultTemplateId || "chat");
+        setTemplatesLoading(false);
+        return payload;
+      });
+    void api<{ partialContinue?: boolean }>("/v0/capabilities")
+      .then((payload) => setPartialContinue(payload.partialContinue !== false))
+      .catch(() => setPartialContinue(true));
+    void api<{ installations: Installation[] }>("/v0/pi-installations")
+      .then((payload) => setInstallations(asList<Installation>(payload.installations)))
+      .catch(() => setInstallations([]))
+      .finally(() => setInstallationsLoading(false));
+
+    const routeId = pathChatId();
+    const catalogueRequest = api<{ projects: Project[] }>("/v0/projects");
+    const selectedChatRequest = routeId ? Promise.all([
+      api<ChatSummary>(`/v0/chats/${encodeURIComponent(routeId)}`),
+      api<TranscriptDetail>(`/v0/sessions/${encodeURIComponent(routeId)}`),
+    ]) : null;
+    void (async () => {
+      const [cataloguePayload, selectedChat] = await Promise.all([
+        catalogueRequest,
+        selectedChatRequest || Promise.resolve(null),
+      ]);
       const projects = asList<Project>(cataloguePayload.projects).map((project) => ({ ...project, sessions: asList<ChatSummary>(project.sessions) }));
       catalogue.setProjects(projects);
-      setPartialContinue(capabilities.partialContinue !== false);
-      setTemplates(asList<Template>(templatePayload.templates));
-      setWorkspaceSuggestions(asList<WorkspaceSuggestion>(workspacePayload.folders));
-      setInstallations(asList<Installation>(installationPayload.installations));
-      setDefaultTemplateId(templatePayload.defaultTemplateId || "chat");
-      const routeId = pathChatId();
-      if (routeId) {
-        const target = await api<ChatSummary>(`/v0/chats/${encodeURIComponent(routeId)}`);
+      if (selectedChat) {
+        const [target, detail] = selectedChat;
         const project = projects.find((item) => item.id === target.projectId) || projects[0];
         if (!project) throw new Error("Conduit has no chat project");
-        const detail = await api<TranscriptDetail>(`/v0/sessions/${encodeURIComponent(target.id)}`);
         chat.initialize(target, project, detail);
         if (target.status === "active") await chat.openLive(target.id, project.id);
       } else {
+        const templatePayload = await templateRequest;
         const project = projects.find((item) => item.slug === "chat") || projects[0];
         if (!project) throw new Error("Conduit has no chat project");
         const created = await api<ChatSummary>("/v0/chats", { method: "POST", body: JSON.stringify({ projectId: project.id, templateId: templatePayload.defaultTemplateId || "chat" }) });
         history.replaceState({}, "", `/chat/${created.id}`);
         chat.initialize(created, project);
       }
-    }).catch((error) => showError((error as Error).message));
+    })().catch((error) => showError((error as Error).message));
   });
   onCleanup(() => window.removeEventListener("keydown", keydown));
 
@@ -331,6 +355,7 @@ function App() {
     <input ref={attachFileInput} type="file" multiple hidden aria-hidden="true" onChange={(event) => { if (event.currentTarget.files) attachments.addFiles(event.currentTarget.files); event.currentTarget.value = ""; }} />
     <Sidebar projects={catalogue.projects()} projectId={catalogue.projectId()} selectedId={catalogue.selectedId()} runtime={runtime}
       connectivity={runtime.connectivity()} workspaceSuggestions={workspaceSuggestions()} command={sidebarCommand()}
+      onWorkspaceSuggestionsNeeded={() => void loadWorkspaceSuggestions()}
       onNewChat={createChat} onOpenChat={openChat} onAddProject={addProject} onRenameChat={renameChat} onRenameProject={renameProject}
       onMoveChat={moveChat} onMoveProjectChats={moveProjectChats} onCopyTranscript={copyTranscript} onDeleteChat={deleteChat} onDeleteProject={deleteProject}
       onOpenSettings={openSettings} onOpenPalette={() => setPaletteOpen(true)} />
@@ -346,7 +371,7 @@ function App() {
     <Show when={panelOpen() && selectedProject() && catalogue.selectedId()}><WorkspacePanel projectId={selectedProject()!.id} chatId={catalogue.selectedId()!} onClose={togglePanel} /></Show>
     <CommandMenu open={paletteOpen()} onOpenChange={setPaletteOpen} initialPage={palettePage()} launchNonce={paletteNonce()}
       context={paletteContext()} actions={paletteActions} models={models.models()} currentModel={models.model()} onChooseModel={(spec) => void models.chooseModel(spec)} />
-    <Settings open={settingsOpen()} initialSection={settingsSection()} initialWorkspaceId={settingsWorkspaceId()} onOpenChange={setSettingsOpen} models={models} templates={templates()} defaultTemplateId={defaultTemplateId()} projects={catalogue.projects()} installations={installations()} onInstallationsChange={setInstallations} onDefaultTemplateChange={saveDefaultTemplate} onWorkspaceDefaultChange={saveWorkspaceDefault} />
+    <Settings open={settingsOpen()} initialSection={settingsSection()} initialWorkspaceId={settingsWorkspaceId()} onOpenChange={setSettingsOpen} models={models} templates={templates()} templatesLoading={templatesLoading()} defaultTemplateId={defaultTemplateId()} projects={catalogue.projects()} installations={installations()} installationsLoading={installationsLoading()} onInstallationsChange={setInstallations} onDefaultTemplateChange={saveDefaultTemplate} onWorkspaceDefaultChange={saveWorkspaceDefault} />
   </>;
 }
 
