@@ -79,6 +79,8 @@ additive Conduit attachment bridge. They never receive `PI_CODING_AGENT_DIR`, a
 tracked profile, Conduit model scope, or tool allow-list. Conduit validates Host
 Pi project-resource paths, automatically persists trust for each registered
 Workspace at launch, and reports the active process posture in the chat header.
+Validation rejects symlinks and resource trees over 10,000 entries or 100 MiB;
+it traverses filesystem metadata without reading or hashing file contents.
 One `PiManager` owns both launch forms and enforces shared writer and process
 limits. Workspace creation immediately opens a draft using the app default or
 that Workspace's explicit override; the
