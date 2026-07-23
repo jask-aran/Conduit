@@ -3,7 +3,6 @@ import { spawn } from "node:child_process";
 import crypto from "node:crypto";
 import path from "node:path";
 import { buildPiEnvironment, buildPiResourceArgs } from "../../scripts/pi-runtime.mjs";
-import { mergeContinuation } from "./continuation.js";
 import {
   applyActivityEvent,
   deriveCoarseActivity,
@@ -57,8 +56,6 @@ function deliveryDeltaKey(event) {
   if (event.type === "content_block_delta") {
     return `structured:${event.generationId}:${event.messageId}:${event.blockType}:${event.contentIndex}`;
   }
-  if (event.type === "assistant_stream_delta") return `compat:text:${event.generationId}`;
-  if (event.type === "message_update" && event.update?.type === "thinking_delta") return `compat:thinking:${event.generationId}`;
   return null;
 }
 
@@ -66,16 +63,7 @@ function mergeDeliveryDelta(previous, next) {
   if (next.type === "content_block_delta") {
     return { ...next, delta: `${previous.delta || ""}${next.delta || ""}` };
   }
-  if (next.type === "assistant_stream_delta") {
-    return { ...next, delta: `${previous.delta || ""}${next.delta || ""}` };
-  }
-  return {
-    ...next,
-    update: {
-      ...next.update,
-      delta: `${previous.update?.delta || ""}${next.update?.delta || ""}`,
-    },
-  };
+  return next;
 }
 
 export class PiManager extends EventEmitter {
@@ -352,7 +340,6 @@ export class PiManager extends EventEmitter {
       lastActivityAt: createdAtMs,
       lastClientAt: createdAtMs,
       stdoutBuffer: "",
-      stream: null,
       activeGeneration: null,
       generationNormalizer: null,
       generationSequence: 0,
@@ -452,25 +439,24 @@ export class PiManager extends EventEmitter {
         }
 
         if (event.type === "message_start" && event.message?.role === "assistant") {
-          if (record.generation?.closed) continue;
-          record.stream = { chunks: [], generationId: record.generation?.id || null };
           applyActivityEvent(record, event);
-          this.publishGeneration(record, event);
           continue;
         }
-        const delta = event.assistantMessageEvent;
-        if (event.type === "message_update" && delta?.type === "text_delta" && record.stream) {
-          this.handleTextDelta(record, delta.delta || "");
-          continue;
-        }
+        if (event.type === "message_update" && event.assistantMessageEvent) continue;
         if (event.type === "message_end" && event.message?.role === "assistant") {
           this.captureLastRequestUsage(record, event.message);
-          this.finishAssistantMessage(record, event);
+          continue;
+        }
+        if (["tool_execution_start", "tool_execution_update", "tool_execution_end"].includes(event.type)) {
+          applyActivityEvent(record, event);
+          this.publishState(record);
           continue;
         }
 
         const activityChanged = applyActivityEvent(record, event);
-        this.publishGeneration(record, event);
+        if (["agent_start", "agent_end", "agent_settled", "runtime_exit"].includes(event.type)) {
+          this.publishInternal(record, event);
+        } else this.publishGeneration(record, event);
         if (activityChanged || ["agent_start", "agent_end", "queue_update", "compaction_start", "compaction_end", "auto_retry_start", "auto_retry_end"].includes(event.type)) {
           record.activity = deriveCoarseActivity(record);
           this.publishState(record);
@@ -589,34 +575,7 @@ export class PiManager extends EventEmitter {
     }
   }
 
-  handleTextDelta(record, delta) {
-    const stream = record.stream;
-    const generation = record.generation;
-    stream.chunks.push(delta);
-    this.publishGeneration(record, { type: "assistant_stream_delta", delta }, generation);
-  }
-
-  finishAssistantMessage(record, event) {
-    const stream = record.stream;
-    const generation = record.generation;
-    const streamedContent = stream?.chunks.join("") || "";
-    const content = Array.isArray(event.message.content)
-      ? event.message.content.filter((block) => block.type === "text").map((block) => block.text).join("\n")
-      : String(event.message.content || streamedContent);
-    const responseContent = content || streamedContent;
-    const finalContent = generation?.continuationBase
-      ? mergeContinuation(generation.continuationBase, responseContent)
-      : responseContent;
-    this.publishGeneration(record, {
-      type: "assistant_stream_final",
-      message: event.message,
-      content: finalContent,
-      usage: event.message?.usage || null,
-    }, generation);
-    record.stream = null;
-  }
-
-  beginActiveGeneration(record, generationId, continuation) {
+  beginActiveGeneration(record, generationId, continuationBase) {
     const previous = {
       activeGeneration: record.activeGeneration,
       generationNormalizer: record.generationNormalizer,
@@ -624,7 +583,8 @@ export class PiManager extends EventEmitter {
     record.generationNormalizer = createPiEventNormalizer(generationId);
     const [started] = record.generationNormalizer.normalize({
       type: "generation_started",
-      continuation,
+      continuation: Boolean(continuationBase),
+      continuationBase,
     });
     record.activeGeneration = reduceActiveGeneration(null, started);
     return { previous, started };
@@ -735,7 +695,7 @@ export class PiManager extends EventEmitter {
     }
     const generationId = `g${++record.generationSequence}`;
     const previousGeneration = record.generation;
-    const structured = this.beginActiveGeneration(record, generationId, Boolean(continuationBase));
+    const structured = this.beginActiveGeneration(record, generationId, continuationBase);
     record.generation = { id: generationId, closed: false, settled: false, continuationBase };
     record.activity = "working";
     try {
@@ -749,7 +709,7 @@ export class PiManager extends EventEmitter {
       this.restoreActiveGeneration(record, structured.previous);
       throw error;
     }
-    this.publish(record, structured.started);
+    this.publishTransient(record, structured.started);
     this.publishState(record);
     return generationId;
   }
@@ -761,7 +721,7 @@ export class PiManager extends EventEmitter {
     if (streamingBehavior !== "steer" && streamingBehavior !== "followUp") this.assertCanStartGeneration(record);
     const generationId = `g${++record.generationSequence}`;
     const previousGeneration = record.generation;
-    const structured = this.beginActiveGeneration(record, generationId, Boolean(continuationBase));
+    const structured = this.beginActiveGeneration(record, generationId, continuationBase);
     record.generation = { id: generationId, closed: false, settled: false, continuationBase };
     record.activity = "working";
     const payload = { type: "prompt", message };
@@ -775,7 +735,7 @@ export class PiManager extends EventEmitter {
       this.publishState(record);
       throw error;
     }
-    this.publish(record, structured.started);
+    this.publishTransient(record, structured.started);
     this.publishState(record);
     return generationId;
   }
@@ -792,8 +752,6 @@ export class PiManager extends EventEmitter {
     generation.closed = true;
     record.stopping = true;
     record.activity = "stopping";
-    generation.partial = record.stream?.chunks.join("") || generation.partial || "";
-    record.stream = null;
     this.ingestGenerationEvent(record, { type: "generation_stopping" }, { allowClosed: true });
     this.publishState(record);
     let processTerminated = false;
@@ -862,22 +820,27 @@ export class PiManager extends EventEmitter {
   }
 
   publish(record, event) {
+    this.publishInternal(record, event);
+    this.deliver(record, event);
+  }
+
+  publishInternal(record, event) {
     this.touchActivity(record);
     record.events.push(event);
     if (record.events.length > 500) record.events.splice(0, record.events.length - 500);
-    this.deliver(record, event);
+    this.emit("event", { record, event });
   }
 
   publishTransient(record, event) {
     this.touchActivity(record);
     this.deliver(record, event);
+    this.emit("event", { record, event });
   }
 
   deliver(record, event) {
     for (const socket of record.clients) {
       this.deliverToClient(record, socket, event);
     }
-    this.emit("event", { record, event });
   }
 
   clearDelivery(record, socket) {

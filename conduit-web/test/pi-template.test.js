@@ -285,28 +285,7 @@ test("an existing writer cannot be reused through a different runtime", () => {
   }), { code: "session_writer_conflict" });
 });
 
-test("forwards each text delta immediately and preserves chunk ordering", () => {
-  const manager = new PiManager({
-    agentDir: "/tmp/conduit-pi-stream-test",
-  });
-  const record = {
-    stream: { chunks: [], generationId: "g1" },
-    generation: { id: "g1", closed: false },
-    events: [],
-    clients: new Set(),
-    updatedAt: "",
-  };
-
-  manager.handleTextDelta(record, "Block\n");
-  manager.handleTextDelta(record, "\nTail");
-  assert.deepEqual(record.stream.chunks, ["Block\n", "\nTail"]);
-  assert.deepEqual(record.events.map(({ type, delta }) => ({ type, delta })), [
-    { type: "assistant_stream_delta", delta: "Block\n" },
-    { type: "assistant_stream_delta", delta: "\nTail" },
-  ]);
-});
-
-test("PiManager reduces structured generation state while retaining compatibility events", () => {
+test("PiManager publishes structured generation state without flattened stream events", () => {
   const { manager, child, record } = rpcFixture();
   const published = [];
   manager.on("event", ({ event }) => published.push(event));
@@ -348,8 +327,8 @@ test("PiManager reduces structured generation state while retaining compatibilit
   });
   assert.ok(published.some((event) => event.type === "content_block_delta" && event.delta === "Hello"));
   assert.equal(record.events.some((event) => event.type === "content_block_delta"), false);
-  assert.ok(record.events.some((event) => event.type === "assistant_stream_delta" && event.delta === "Hello"));
-  assert.ok(record.events.some((event) => event.type === "assistant_stream_final" && event.content === "Hello"));
+  assert.equal(record.events.some((event) => event.type === "assistant_stream_delta"), false);
+  assert.equal(record.events.some((event) => event.type === "assistant_stream_final"), false);
   assert.equal("activeGeneration" in manager.view(record), false);
   assert.equal(manager.currentGenerationResume(record).generation.assistantMessages[0].blocks[0].text, "Hello");
 
@@ -389,7 +368,7 @@ test("attach returns complete reduced Resume State independent of the capped eve
 
   const resume = manager.attach(record.id, socket);
 
-  assert.equal(record.events.length, 500);
+  assert.equal(record.events.some((event) => event.type === "content_block_delta"), false);
   assert.equal(resume.type, "generation_resume");
   assert.equal(resume.generationId, generationId);
   assert.equal(resume.seq, record.activeGeneration.lastSeq);

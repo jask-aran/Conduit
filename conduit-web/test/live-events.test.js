@@ -23,18 +23,26 @@ test("normalizes host UI events into the client discriminated union", () => {
   });
 });
 
-test("normalizes snapshots and nested events once at the socket boundary", () => {
+test("normalizes runtime state without a legacy event replay", () => {
   const event = normalizeLiveEvent({
-    type: "runtime_snapshot",
+    type: "runtime_state",
     session: { active: true, generation: { id: "g1", closed: false }, queue: { steering: ["now"] } },
-    events: [{ type: "assistant_stream_delta", generationId: "g1", delta: 12 }],
-    stream: { generationId: "g1", content: "hello" },
   });
-  assert.equal(event.type, "runtime_snapshot");
+  assert.equal(event.type, "runtime_state");
   assert.equal(event.session.generation.id, "g1");
   assert.deepEqual(event.session.queue, { steering: ["now"], followUp: [] });
-  assert.deepEqual(event.events[0], { type: "assistant_stream_delta", generationId: "g1", delta: "12" });
-  assert.deepEqual(event.stream, { generationId: "g1", content: "hello" });
+});
+
+test("preserves a checkpoint's durable chat title", () => {
+  assert.deepEqual(normalizeLiveEvent({
+    type: "session_checkpoint",
+    chat: { id: "chat_1", title: "Tell me a long story" },
+  }), {
+    type: "session_checkpoint",
+    generationId: null,
+    chatId: "chat_1",
+    title: "Tell me a long story",
+  });
 });
 
 test("unknown wire events cannot masquerade as lifecycle events", () => {

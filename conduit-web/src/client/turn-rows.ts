@@ -1,4 +1,5 @@
 import { textBlockClassifications } from "../active-generation.js";
+import { mergeContinuation } from "../continuation.js";
 import type { Message, ToolItem } from "./api/contracts";
 
 type LiveBlock = {
@@ -16,6 +17,8 @@ export interface ActiveGenerationView {
   id: string;
   status: string;
   lastSeq: number;
+  continuation?: boolean;
+  continuationBase?: string;
   assistantMessages: Array<{ id: string; stopReason?: string | null; blocks: LiveBlock[] }>;
   toolExecutions: Record<string, {
     toolCallId?: string;
@@ -88,6 +91,9 @@ function liveRows(generation: ActiveGenerationView, owner: Message | null, index
       }
     }
     if (answer) {
+      const content = generation.continuation && answers.length === 0
+        ? mergeContinuation(generation.continuationBase || "", answer)
+        : answer;
       answers.push({
         key: `message:live:${generation.id}:${assistant.id}`,
         type: "message",
@@ -98,7 +104,7 @@ function liveRows(generation: ActiveGenerationView, owner: Message | null, index
           id: `live:${generation.id}:${assistant.id}`,
           key: `live:${generation.id}:${assistant.id}`,
           role: "assistant",
-          content: answer,
+          content,
           stopped: generation.status === "stopped",
           status: generation.status === "stopped" ? "stopped" : null,
         },
@@ -112,16 +118,13 @@ function liveRows(generation: ActiveGenerationView, owner: Message | null, index
 }
 
 /**
- * Persisted history retains the legacy turn projection while a live Generation
- * projects directly from its normalized Pi blocks. This deliberately keeps
- * timestamp attachment out of the live path.
+ * Persisted history retains its transcript projection while a live Generation
+ * projects directly from normalized Pi blocks.
  */
 export function buildTurnRows(
   messages: Message[],
   tools: ToolItem[],
   opts: {
-    streaming?: boolean;
-    reasoning?: { content: string; active: boolean };
     activeGeneration?: ActiveGenerationView | null;
   } = {},
 ): TurnRow[] {
@@ -159,7 +162,6 @@ export function buildTurnRows(
   const rows: TurnRow[] = [];
   let renderedLive = false;
   turns.forEach((turn, turnIndex) => {
-    const legacyLive = !opts.activeGeneration && turnIndex === turns.length - 1 && Boolean(opts.streaming);
     const directLive = Boolean(opts.activeGeneration && turn.userMessage === liveOwner);
     if (turn.userMessage) {
       rows.push({ key: `message:${messageKey(turn.userMessage)}`, type: "message", value: turn.userMessage, index: messages.indexOf(turn.userMessage) });
@@ -183,15 +185,9 @@ export function buildTurnRows(
       for (const tool of turn.leftoverTools) {
         if (!claimed.has(tool.id)) { claimed.add(tool.id); segments.push({ kind: "tool", id: `tool:${tool.id}`, tool }); }
       }
-      if (legacyLive) {
-        const thinking = (opts.reasoning?.content || "").trim();
-        const currentAssistant = turn.assistants.at(-1);
-        const persistedThinking = currentAssistant ? thinkingOf(currentAssistant) : "";
-        if (thinking && thinking !== persistedThinking) segments.push({ kind: "thinking", id: `thinking:${currentAssistant?.id || "live"}`, text: thinking, live: true });
-      }
-      if (segments.length > 0) rows.push({ key: `trace:${turn.userMessage ? messageKey(turn.userMessage) : messageKey(turn.assistants[0]!)}`, type: "trace", value: { active: legacyLive, segments } });
+      if (segments.length > 0) rows.push({ key: `trace:${turn.userMessage ? messageKey(turn.userMessage) : messageKey(turn.assistants[0]!)}`, type: "trace", value: { active: false, segments } });
       const text = String(bubble?.content || "").trim();
-      if (bubble && (text || legacyLive)) rows.push({ key: `message:${messageKey(bubble)}`, type: "message", value: bubble, index: messages.indexOf(bubble) });
+      if (bubble && text) rows.push({ key: `message:${messageKey(bubble)}`, type: "message", value: bubble, index: messages.indexOf(bubble) });
     }
     if (opts.activeGeneration && turn.userMessage === liveOwner) {
       rows.push(...liveRows(opts.activeGeneration, liveOwner, messages.indexOf(turn.userMessage!)));

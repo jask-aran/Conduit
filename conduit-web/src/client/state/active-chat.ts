@@ -3,7 +3,7 @@ import { deriveFineActivity } from "../../activity.js";
 import { reduceActiveGeneration } from "../../active-generation.js";
 import { api, asList } from "../api/client";
 import { isStructuredGenerationEvent, normalizeLiveEvent } from "../api/live-events";
-import type { LiveEvent, RuntimeSnapshotEvent, RuntimeStateEvent, StructuredGenerationEvent } from "../api/live-events";
+import type { LiveEvent, RuntimeStateEvent, StructuredGenerationEvent } from "../api/live-events";
 import type {
   ChatStatus,
   ChatSummary,
@@ -19,11 +19,10 @@ import type {
   ToolItem,
   TranscriptDetail,
 } from "../api/contracts";
-import { assignToolSeq, maxToolSeq, mergeToolEvent, promotePendingUser } from "../timeline-order";
+import { assignToolSeq, promotePendingUser } from "../timeline-order";
 import { reconcileMessages } from "../reconcile-messages";
 import type { AttachmentsStore, UploadAttachment } from "./attachments";
 import type { CatalogueStore } from "./catalogue";
-import { createLiveStream } from "./live-stream";
 import type { ActiveGenerationView } from "../turn-rows";
 import type { ModelSettings } from "./model-settings";
 import type { RuntimeStore } from "./runtime";
@@ -39,11 +38,6 @@ interface ActiveChatOptions {
   onError: ErrorHandler;
   defaultTemplateId: () => string;
   saveWorkspaceDefault: (workspaceId: string, templateId: string | null) => Promise<unknown>;
-}
-
-function lastIndex<T>(items: T[], predicate: (item: T) => boolean) {
-  for (let index = items.length - 1; index >= 0; index -= 1) if (predicate(items[index]!)) return index;
-  return -1;
 }
 
 export function createActiveChat(options: ActiveChatOptions) {
@@ -69,23 +63,14 @@ export function createActiveChat(options: ActiveChatOptions) {
   const [responding, setResponding] = createSignal(false);
   const [activeToolName, setActiveToolName] = createSignal<string | null>(null);
   const [retry, setRetry] = createSignal<RetryState | null>(null);
-  const [reasoning, setReasoning] = createSignal({ content: "", active: false, redacted: false });
   const [activeGeneration, setActiveGeneration] = createSignal<ActiveGenerationView | null>(null);
   const [connectingId, setConnectingId] = createSignal<string | null>(null);
-  const liveStream = createLiveStream();
   let socket: WebSocket | null = null;
   let currentGeneration: string | null = null;
-  let currentLiveAssistantId: string | null = null;
-  let fallbackLiveAssistant = false;
-  let liveAssistantSequence = 0;
   let stopPending = false;
-  let continuation = false;
   let openToken = 0;
   let selectionToken = 0;
   let navigationToken = 0;
-  let toolSeq = 0;
-  const closedGenerations = new Set<string>();
-  const structuredGenerations = new Set<string>();
 
   const selectedId = catalogue.selectedId;
   const projectId = catalogue.projectId;
@@ -98,7 +83,6 @@ export function createActiveChat(options: ActiveChatOptions) {
     setActiveToolName(null);
     setRetry(null);
     setCompacting(false);
-    setReasoning({ content: "", active: false, redacted: false });
   };
 
   const reset = () => {
@@ -118,24 +102,16 @@ export function createActiveChat(options: ActiveChatOptions) {
     setQueue({ steering: [], followUp: [] });
     resetLiveFlags();
     setActiveGeneration(null);
-    liveStream.clear();
     currentGeneration = null;
-    currentLiveAssistantId = null;
-    fallbackLiveAssistant = false;
-    liveAssistantSequence = 0;
     stopPending = false;
-    continuation = false;
-    toolSeq = 0;
-    structuredGenerations.clear();
   };
 
   const applyStructuredGeneration = (event: StructuredGenerationEvent) => {
-    if (event.generationId) structuredGenerations.add(event.generationId);
+    if (!live() || live()!.chatId !== selectedId()) return;
     const next = reduceActiveGeneration(activeGeneration(), event) as ActiveGenerationView | null;
     if (!next) return;
     setActiveGeneration(next);
     currentGeneration = next.id;
-    continuation = Boolean((next as { continuation?: boolean }).continuation);
     const blocks = next.assistantMessages.flatMap((message) => message.blocks);
     const latest = blocks.at(-1);
     setThinking(latest?.type === "thinking" && latest.status === "streaming");
@@ -145,14 +121,22 @@ export function createActiveChat(options: ActiveChatOptions) {
     setRetry((next as { retry?: RetryState | null }).retry || null);
     if (next.status === "stopping") setGeneration("stopping");
     else if (next.status === "failed") setGeneration("failed");
-    else if (["stopped", "complete"].includes(next.status)) setGeneration("idle");
-    else setGeneration("active");
+    else if (["stopped", "complete"].includes(next.status)) {
+      stopPending = false;
+      setGeneration("idle");
+      if (event.type === "generation_stopped" && Boolean(event.processTerminated)) {
+        setLive(null);
+        socket?.close();
+      }
+    } else {
+      stopPending = false;
+      setGeneration("active");
+    }
   };
 
   const applyDetail = (detail: TranscriptDetail, reconcile = false) => {
     const incoming = asList<Message>(detail.messages);
     const nextTools = assignToolSeq(asList<ToolItem>(detail.tools)) as ToolItem[];
-    toolSeq = maxToolSeq(nextTools) + 1;
     batch(() => {
       setLoadedId(detail.id);
       setMessages((current) => reconcile ? reconcileMessages(current, incoming) as Message[] : incoming);
@@ -171,7 +155,7 @@ export function createActiveChat(options: ActiveChatOptions) {
     return detail;
   };
 
-  const applySnapshot = (event: RuntimeSnapshotEvent | RuntimeStateEvent) => {
+  const applySnapshot = (event: RuntimeStateEvent) => {
     const { session } = event;
     if (event.contextUsage || session.contextUsage) setContextUsage(event.contextUsage || session.contextUsage);
     if (event.queue || session.queue) setQueue(event.queue || session.queue!);
@@ -184,21 +168,6 @@ export function createActiveChat(options: ActiveChatOptions) {
     else setGeneration((current) => current === "stopping" ? current : "idle");
   };
 
-  const appendLiveAssistant = (generationId: string | null, fallback = false) => {
-    if (continuation) return;
-    const id = `live_${generationId || "generation"}_${++liveAssistantSequence}`;
-    currentLiveAssistantId = id;
-    fallbackLiveAssistant = fallback;
-    setMessages((current) => [...current, { id, role: "assistant", content: "", timestamp: new Date().toISOString() }]);
-    setReasoning({ content: "", active: false, redacted: false });
-  };
-
-  const ensureLiveAssistant = (generationId: string | null) => {
-    if (continuation) return;
-    if (currentLiveAssistantId && messages().some((message) => message.id === currentLiveAssistantId)) return;
-    appendLiveAssistant(generationId, true);
-  };
-
   const connect = (record: LiveRecord, chatId: string, selection: number) => {
     socket?.close();
     const next = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}${record.streamUrl || `/v0/live-sessions/${record.id}/stream`}`);
@@ -207,16 +176,7 @@ export function createActiveChat(options: ActiveChatOptions) {
       if (socket !== next || selection !== selectionToken || selectedId() !== chatId) return;
       try {
         const event = normalizeLiveEvent(JSON.parse(String(data)));
-        if (event.type === "runtime_snapshot") {
-          const { session } = event;
-          const turn = session.generation;
-          if (turn?.id && !turn.closed) currentGeneration = turn.id;
-          applySnapshot(event);
-          if ((turn && !turn.closed && !turn.settled) || session.active) {
-            event.events.forEach(consume);
-          }
-          if (event.stream && !turn?.closed) liveStream.setSnapshot(event.stream.generationId, event.stream.content);
-        } else consume(event);
+        consume(event);
       } catch (error) { onError((error as Error).message); }
     };
     next.addEventListener("close", () => { if (socket === next) socket = null; });
@@ -253,6 +213,10 @@ export function createActiveChat(options: ActiveChatOptions) {
       });
       if (token !== openToken || selection !== selectionToken || selectedId() !== chatId) return null;
       await models.reloadChat(chatId);
+      const refreshedProjects = await catalogue.refresh();
+      if (token !== openToken || selection !== selectionToken || selectedId() !== chatId) return null;
+      const refreshed = refreshedProjects.flatMap((project) => project.sessions).find((chat) => chat.id === chatId);
+      if (refreshed) setTitle(refreshed.title);
       return record;
     } catch (error) {
       if (token !== openToken || selection !== selectionToken || selectedId() !== chatId) return null;
@@ -292,60 +256,10 @@ export function createActiveChat(options: ActiveChatOptions) {
       applyStructuredGeneration(event);
       return;
     }
-    const eventGeneration = event.generationId;
-    const structured = Boolean(eventGeneration && structuredGenerations.has(eventGeneration));
-    if (structured && [
-      "agent_start", "agent_end", "agent_settled", "runtime_exit", "message_start", "message_update",
-      "assistant_stream_delta", "assistant_stream_final", "tool_execution_start", "tool_execution_update",
-      "tool_execution_end", "runtime_error",
-    ].includes(event.type)) return;
-    if (structured && event.type === "message_end" && event.message.role === "assistant") return;
-    if (eventGeneration && closedGenerations.has(eventGeneration) && !["generation_stopped", "generation_started"].includes(event.type)) return;
-    if (stopPending && ["message_start", "assistant_stream_delta", "assistant_stream_final"].includes(event.type)) return;
 
     switch (event.type) {
-      case "runtime_snapshot":
-        applySnapshot(event);
-        event.events.forEach(consume);
-        if (event.stream && !event.session.generation?.closed) liveStream.setSnapshot(event.stream.generationId, event.stream.content);
-        break;
       case "runtime_state":
         applySnapshot(event);
-        break;
-      case "generation_started":
-        currentGeneration = eventGeneration;
-        currentLiveAssistantId = null;
-        fallbackLiveAssistant = false;
-        liveAssistantSequence = 0;
-        if (eventGeneration) closedGenerations.delete(eventGeneration);
-        stopPending = false;
-        setGeneration("active");
-        resetLiveFlags();
-        if (eventGeneration) liveStream.start(eventGeneration);
-        if (event.continuation) {
-          continuation = true;
-          setMessages((current) => {
-            const copy = [...current];
-            const index = lastIndex(copy, (message) => message.role === "assistant" && Boolean(message.stopped));
-            if (index >= 0) copy[index] = { ...copy[index]!, stopped: false, status: null, continuing: true };
-            return copy;
-          });
-        }
-        break;
-      case "agent_start":
-        setGeneration((current) => current === "stopping" ? current : "active");
-        break;
-      case "agent_end":
-      case "agent_settled":
-        if (!event.willRetry && !stopPending) {
-          setGeneration((current) => current === "stopping" ? current : "idle");
-          resetLiveFlags();
-        }
-        break;
-      case "runtime_exit":
-        setGeneration("idle");
-        resetLiveFlags();
-        setLive(null);
         break;
       case "context_usage":
         if (event.contextUsage) setContextUsage(event.contextUsage);
@@ -372,21 +286,11 @@ export function createActiveChat(options: ActiveChatOptions) {
       case "extension_ui_resolved":
         setHostUiRequests((current) => current.filter((item) => item.id !== event.requestId));
         break;
-      case "generation_stopped":
-        stopPending = false;
-        currentLiveAssistantId = null;
-        fallbackLiveAssistant = false;
-        setGeneration("idle");
-        resetLiveFlags();
-        setMessages((current) => {
-          const copy = [...current];
-          const index = lastIndex(copy, (message) => message.role === "assistant");
-          if (index >= 0) copy[index] = { ...copy[index]!, stopped: true, status: "stopped" };
-          return copy;
-        });
-        if (event.processTerminated) { setLive(null); socket?.close(); }
-        break;
       case "session_checkpoint":
+        if (event.title) {
+          catalogue.patchChat(event.chatId, { title: event.title });
+          if (event.chatId === selectedId()) setTitle(event.title);
+        }
         void catalogue.refresh();
         if (event.chatId === selectedId()) {
           const current = activeGeneration();
@@ -399,118 +303,14 @@ export function createActiveChat(options: ActiveChatOptions) {
                 setActiveGeneration(null);
               });
             }).catch((error) => onError((error as Error).message));
-          } else {
-            void loadDetail(event.chatId, true).then(() => {
-              if (event.chatId === selectedId() && streaming()) ensureLiveAssistant(currentGeneration);
-            }).catch((error) => onError((error as Error).message));
-          }
+          } else void loadDetail(event.chatId, true).catch((error) => onError((error as Error).message));
         }
-        break;
-      case "message_start":
-        if (event.message.role === "assistant" && !continuation) {
-          if (fallbackLiveAssistant && currentLiveAssistantId
-            && messages().some((message) => message.id === currentLiveAssistantId)) fallbackLiveAssistant = false;
-          else appendLiveAssistant(eventGeneration);
-        }
-        break;
-      case "message_update":
-        switch (event.update.type) {
-          case "thinking_start": setThinking(true); setResponding(false); setReasoning((current) => ({ ...current, active: true })); break;
-          case "thinking_delta": { const delta = event.update.delta; setThinking(true); setReasoning((current) => ({ ...current, active: true, content: current.content + delta })); break; }
-          case "thinking_end": { const content = event.update.content; setThinking(false); setReasoning((current) => ({ ...current, active: false, content: content || current.content })); break; }
-          case "text_start":
-          case "text_delta": setResponding(true); setThinking(false); break;
-          case "text_end": setResponding(false); break;
-          case "unknown": break;
-        }
-        break;
-      case "assistant_stream_delta":
-        if (eventGeneration) {
-          ensureLiveAssistant(eventGeneration);
-          setResponding(true);
-          liveStream.append(eventGeneration, event.delta);
-        }
-        break;
-      case "assistant_stream_final":
-        batch(() => {
-          continuation = false;
-          setResponding(false);
-          setThinking(false);
-          setMessages((current) => {
-            const copy = [...current];
-            const index = lastIndex(copy, (message) => message.role === "assistant");
-            const final: Partial<Message> = { content: event.content, stopped: false, continuing: false };
-            if (index >= 0) copy[index] = { ...copy[index]!, ...final };
-            else copy.push({ id: `end_${Date.now()}`, role: "assistant", ...final });
-            return copy;
-          });
-          liveStream.clear();
-          currentLiveAssistantId = null;
-          fallbackLiveAssistant = false;
-        });
         break;
       case "message_end":
         if (event.message.role === "user") {
           void catalogue.refresh();
           setMessages((current) => promotePendingUser(current, event.message));
         }
-        if (event.message.role === "assistant") {
-          // Persist the segment's content blocks (thinking + toolCall refs) so the
-          // turn trace keeps them after the live reasoning signal resets.
-          const blocks = (Array.isArray(event.message.content) ? event.message.content : []) as Message["blocks"];
-          const text = (blocks || []).filter((block) => block.type === "text").map((block) => block.text || "").join("\n").trim();
-          setMessages((current) => {
-            const copy = [...current];
-            const index = lastIndex(copy, (message) => message.role === "assistant");
-            if (index < 0) return current;
-            copy[index] = { ...copy[index]!, blocks, ...(text ? { content: text } : {}), ...(event.message.stopReason ? { stopReason: event.message.stopReason } : {}) };
-            return copy;
-          });
-          if (event.message.stopReason === "toolUse") {
-            currentLiveAssistantId = null;
-            fallbackLiveAssistant = false;
-          }
-        }
-        break;
-      case "tool_execution_start": {
-        const toolId = event.toolCallId || event.id;
-        const streamedText = liveStream.content().trim();
-        const streamedThinking = reasoning().content.trim();
-        // Pi's bridge does not consistently emit assistant message_end for
-        // tool-use segments. The first tool start is nevertheless a durable
-        // boundary: freeze the live reasoning/text into the current assistant
-        // message and attach every tool id in this batch to that message. This
-        // produces the same trace ordering immediately that the later JSONL
-        // checkpoint would otherwise reveal all at once.
-        setMessages((current) => {
-          const copy = [...current];
-          const index = lastIndex(copy, (message) => message.role === "assistant");
-          if (index < 0) return current;
-          const message = copy[index]!;
-          const blocks = [...(message.blocks || [])];
-          if (!blocks.some((block) => block.type === "thinking") && streamedThinking) {
-            blocks.push({ type: "thinking", thinking: streamedThinking });
-          }
-          if (toolId && !blocks.some((block) => block.type === "toolCall" && block.id === toolId)) {
-            blocks.push({ type: "toolCall", id: toolId, name: event.toolName || event.name, arguments: event.args });
-          }
-          copy[index] = { ...message, blocks, stopReason: "toolUse", content: message.content || streamedText };
-          return copy;
-        });
-        if (streamedText) liveStream.clear();
-        currentLiveAssistantId = null;
-        fallbackLiveAssistant = false;
-        setResponding(false);
-        setActiveToolName(event.toolName || "tool");
-        setTools((current) => mergeToolEvent(current, event, { nextSeq: () => toolSeq++ }).tools);
-        break;
-      }
-      case "tool_execution_update":
-        setTools((current) => mergeToolEvent(current, event).tools);
-        break;
-      case "tool_execution_end":
-        setActiveToolName(null);
-        setTools((current) => mergeToolEvent(current, { ...event, done: true }).tools);
         break;
       case "runtime_error":
       case "client_error":
@@ -620,22 +420,8 @@ export function createActiveChat(options: ActiveChatOptions) {
 
   const stop = () => {
     if (!streaming()) return;
-    if (currentGeneration) closedGenerations.add(currentGeneration);
-    if (activeGeneration()) {
-      stopPending = true;
-      setGeneration("stopping");
-      socket?.send(JSON.stringify({ type: "stop_generation", generationId: currentGeneration }));
-      return;
-    }
-    liveStream.flush();
     stopPending = true;
     setGeneration("stopping");
-    setMessages((current) => {
-      const copy = [...current];
-      const index = lastIndex(copy, (message) => message.role === "assistant");
-      if (index >= 0) copy[index] = { ...copy[index]!, content: `${copy[index]!.content || ""}${liveStream.content()}`, stopped: true, status: "stopping" };
-      return copy;
-    });
     socket?.send(JSON.stringify({ type: "stop_generation", generationId: currentGeneration }));
   };
 
@@ -714,8 +500,8 @@ export function createActiveChat(options: ActiveChatOptions) {
   return {
     status, setStatus, title, setTitle, templateId, setTemplateId, runtimeIdentity, setRuntimeIdentity,
     live, messages, setMessages, tools, loadedId, pageBefore, loadingOlder, draft, setDraft,
-    generation, editingEntryId, contextUsage, compacting, hostUiRequests, queue, reasoning, activeGeneration,
-    connectingId, streaming, stopping, liveStream, activity,
+    generation, editingEntryId, contextUsage, compacting, hostUiRequests, queue, activeGeneration,
+    connectingId, streaming, stopping, activity,
     initialize, select, loadDetail, openLive, ensureLive, reset, send, stop, regenerate,
     continueResponse, loadOlder, edit, respondHostUi, clearQueue,
   };

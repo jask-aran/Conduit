@@ -1,4 +1,4 @@
-import { createMemo, createSignal, For, onMount, Show } from "solid-js";
+import { createEffect, createMemo, createSignal, For, onMount, Show } from "solid-js";
 import { ArrowUpIcon, ChevronDownIcon, PaperclipIcon, SquareIcon, WaypointsIcon } from "lucide-solid";
 import {
   Button,
@@ -79,7 +79,12 @@ export function Composer(props: {
     }
   };
 
-  onMount(resize);
+  onMount(() => {
+    createEffect(() => {
+      props.chat.draft();
+      queueMicrotask(resize);
+    });
+  });
 
   return <div class="composer-wrap">
     <AttachmentCards items={props.attachments.items()} chatId={props.chat.loadedId()} label="Attachments" removable onRemove={(item) => void props.attachments.remove(item)} />

@@ -66,3 +66,26 @@ test("does not project persisted partials beside their resumed active generation
   const trace = rows[1];
   assert.equal(trace?.type === "trace" && trace.value.segments[0]?.kind === "thinking" && trace.value.segments[0].text, "Current plan");
 });
+
+test("projects partial continuation through Active Generation without a flattened stream", () => {
+  const rows = buildTurnRows([
+    { id: "u1", role: "user", content: "Write a long answer" },
+    { id: "partial", role: "assistant", content: "The answer continues", stopped: true },
+  ], [], {
+    activeGeneration: {
+      id: "g_continue",
+      status: "running",
+      lastSeq: 3,
+      continuation: true,
+      continuationBase: "The answer continues",
+      toolExecutions: {},
+      assistantMessages: [{
+        id: "m1",
+        blocks: [{ type: "text", identity: "g_continue:m1:0", contentIndex: 0, text: " continues here.", status: "streaming" }],
+      }],
+    },
+  });
+
+  assert.deepEqual(rows.map((row) => row.key), ["message:u1", "message:live:g_continue:m1"]);
+  assert.equal(rows[1]?.type === "message" && rows[1].value.content, "The answer continues here.");
+});
