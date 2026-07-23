@@ -96,9 +96,11 @@ bash .devcontainer/start-conduit.sh restart
 ```
 
 It rebuilds when needed and owns the PID/log on port 4310. Do not launch
-`node src/server.js` or `npm run start`/`dev:server` directly. From
-`conduit-web/`: `npm run dev` (Vite client), `npm test` (node:test suites),
-`npm run test:browser` (Playwright, mocked API, desktop + mobile),
+`node src/server.js`, `npm run start`, `dev:server`, or Vite directly. For
+client hot reload, use `bash .devcontainer/start-conduit.sh dev`; it owns the
+server watcher on port 4310 and Vite on port 5173. From `conduit-web/`: `npm
+test` (node:test suites), `npm run test:browser` (Playwright, mocked API,
+desktop + mobile),
 `npm run build` (bundle budgets enforced — treat budget increases as reviewed
 architectural changes).
 

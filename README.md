@@ -124,15 +124,15 @@ Runtime (special admin chat for `pi install`, never a default). Isolated Pi's
 `data/pi/settings.json` is the shared model-scope authority for web and
 terminal; template model lists are only the fallback.
 
-**Auth.** Single-user password: `node scripts/conduit-auth.mjs set-password`,
-scrypt-hashed in `data/auth.json`, deny-by-default middleware over every
-route, asset, and WebSocket upgrade, minimal server-rendered login page.
-If `data/auth.json` is absent, Conduit always serves only the setup page until
-the first same-origin browser password submission claims the instance. That
-password is then persisted for ordinary local, devcontainer, and headless
-deployments alike; no bootstrap flag or terminal provisioning is required.
-The initial page warns that the first person able to reach it can set the
-password. Full contract in `conduit-web/README.md`.
+**Auth.** Single-user password, scrypt-hashed in `data/auth.json`,
+deny-by-default middleware over every route, asset, and WebSocket upgrade, and
+a minimal server-rendered login page. If `data/auth.json` is absent, Conduit
+always serves only the setup page until the first same-origin browser password
+submission claims the instance. That password is then persisted for ordinary
+local, devcontainer, and headless deployments alike; no bootstrap flag or
+terminal provisioning is required. The initial page warns that the first
+person able to reach it can set the password. The CLI can replace a forgotten
+password or clear sessions. Full contract in `conduit-web/README.md`.
 
 **Headless Pi login.** Once the Conduit password is set, Settings → Auth can
 authenticate the pinned Isolated Pi runtime without a terminal. It uses Pi's
@@ -159,26 +159,36 @@ and rendering-stability constraints live in `AGENTS.md`.
 
 ## Setup and development
 
-Requirements: Node.js 22+, npm, Pi Coding Agent 0.80.6 as `pi`. The dev
-container does everything via `.devcontainer/setup.sh`; locally:
+Requirements: Node.js 22+ and npm. The pinned Isolated Pi runtime is an npm
+dependency; `npm ci` installs it alongside Conduit's server. The dev container
+does everything via `.devcontainer/setup.sh`; locally:
 
 ```bash
-sudo npm install -g --ignore-scripts @earendil-works/pi-coding-agent@0.80.6
-cd conduit-web
-npm ci
-npx playwright install --with-deps chromium   # omit --with-deps off Linux
+bash .devcontainer/start-conduit.sh deploy    # npm ci, production build, start
 ```
 
-Authenticate the isolated Pi runtime once with `./scripts/conduit-pi.mjs`
-(enter `/login`); it uses the current directory as Pi's working directory, so
-run it from a project folder to share that project's native history.
+Open Conduit on port 4310, choose the first Conduit password if prompted, then
+use **Settings → Auth** to authenticate the Isolated Pi runtime. A separately
+installed `pi` binary is optional and is discovered only for Host Pi
+Workspaces; Conduit does not install one globally.
 
-Run the server and client:
+For ordinary use and after source changes:
 
 ```bash
-bash .devcontainer/start-conduit.sh restart   # managed server on port 4310
-cd conduit-web && npm run dev                 # Vite client with proxying
+bash .devcontainer/start-conduit.sh restart   # rebuilds if needed; managed server on 4310
 ```
+
+`start`, `stop`, `status`, `logs`, and `deploy` are available through the same
+script. For hot-reload client work, use the managed development mode instead of
+launching Vite manually:
+
+```bash
+bash .devcontainer/start-conduit.sh dev  # server watcher on 4310; Vite on 5173
+```
+
+Open port 5173 while using this mode. It proxies HTTP and WebSocket traffic to
+the managed Conduit server; `stop`, `restart`, `status`, and `logs vite -f`
+remain the same launcher surface. It is not used for deployment.
 
 ## Verification
 

@@ -6,22 +6,26 @@ processes, and a strict TypeScript SolidJS/Vite client.
 ## Run
 
 ```bash
-npm ci
-npm test
-npm run build
-cd ..
-bash .devcontainer/start-conduit.sh restart
+bash ../.devcontainer/start-conduit.sh deploy
 ```
 
-Open <http://127.0.0.1:4310>. Authenticate the isolated Pi runtime from the
-repository root with `./scripts/conduit-pi.mjs`, then enter `/login`.
+Open <http://127.0.0.1:4310>. Set the first Conduit password if prompted, then
+authenticate the isolated Pi runtime from **Settings → Auth**. `deploy` runs
+`npm ci`, builds `dist`, and starts the managed production server. The usual
+day-to-day command is `bash ../.devcontainer/start-conduit.sh restart`; use
+`stop`, `status`, or `logs -f` through the same script as needed.
 
-For client development, keep the managed server running and start Vite from
-this directory:
+For client hot-reload development, use the same launcher:
 
 ```bash
-npm run dev
+bash ../.devcontainer/start-conduit.sh dev
 ```
+
+It manages the API/Pi server with a source watcher on port 4310 and Vite on
+port 5173. Open the forwarded Vite port while editing the client; it proxies
+HTTP and WebSocket requests to the server. `stop`, `restart`, `status`, and
+`logs vite -f` manage or inspect both processes. This mode is for development
+only and is never used for deployment.
 
 ## Runtime model
 
@@ -135,7 +139,8 @@ that could replace it.
 
 Every route below — plus the SPA bundle, every static asset, every upload, and
 every WebSocket upgrade — requires an authenticated session except the login flow.
-Provision one user, one password from the CLI:
+On first run, the browser login page claims the password. The CLI remains a
+server-side recovery and administration tool:
 
 ```bash
 node scripts/conduit-auth.mjs set-password     # hidden prompt, twice

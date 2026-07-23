@@ -6,7 +6,7 @@ Status: implemented · Priority: 1 (blocks any non-loopback exposure) · Vision:
 
 Every HTTP route, static asset, upload, and WebSocket upgrade served by Conduit
 requires an authenticated session, except a minimal login flow. One user, one
-password, claimed in the browser on first run or later changed from the CLI.
+password, claimed in the browser on first run or later replaced from the CLI.
 The perimeter model is: a private edge keeps the address quiet; this password
 is the lock on the door. Deliberately boring — no OAuth, no accounts, no email.
 
@@ -38,13 +38,14 @@ password recovery flows (recovery = SSH to the box and re-run the CLI).
   raw, stored server-side only as SHA-256. Cap stored sessions at 20, evicting
   oldest by `lastSeenAt`.
 
-### CLI provisioning
+### CLI recovery and administration
 
 `scripts/conduit-auth.mjs` (invoked from repo root, mirroring
 `conduit-pi.mjs`):
 
 - `set-password` — hidden interactive prompt (twice), or `--stdin` for
-  scripting. Writes `data/auth.json`, invalidates all sessions.
+  scripting. Replaces the browser-claimed password in `data/auth.json` and
+  invalidates all sessions.
 - `reset-sessions` — clears the sessions array (logs every device out).
 - `status` — reports whether a password is set and active session count.
 

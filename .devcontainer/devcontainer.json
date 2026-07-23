@@ -8,11 +8,16 @@
       "upgradePackages": false
     }
   },
-  "forwardPorts": [4310],
+  "forwardPorts": [4310, 5173],
   "portsAttributes": {
     "4310": {
       "label": "Conduit",
       "onAutoForward": "openBrowser",
+      "protocol": "http"
+    },
+    "5173": {
+      "label": "Conduit (hot reload)",
+      "onAutoForward": "silent",
       "protocol": "http"
     }
   },

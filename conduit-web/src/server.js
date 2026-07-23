@@ -1395,6 +1395,7 @@ app.use((error, _request, response, _next) => {
 
 const server = http.createServer(app);
 const wss = new WebSocketServer({ noServer: true });
+let shuttingDown = false;
 
 async function promptForChat(record, command, message) {
   const context = await findChatContext(record.chatId);
@@ -1475,6 +1476,7 @@ async function handleClientCommand(record, command) {
 }
 
 server.on("upgrade", async (request, socket, head) => {
+  if (shuttingDown) return socket.destroy();
   const match = new URL(request.url, "http://localhost").pathname.match(/^\/v0\/live-sessions\/([a-f0-9]{24})\/stream$/);
   if (!match || !manager.get(match[1])) return socket.destroy();
   try {
@@ -1521,3 +1523,39 @@ server.on("upgrade", async (request, socket, head) => {
 });
 
 server.listen(config.port, config.host, () => console.log(`Conduit listening on http://${config.host}:${config.port}`));
+
+function closeHttpServer() {
+  return new Promise((resolve) => server.close(() => resolve()));
+}
+
+function closeWebSockets() {
+  for (const client of wss.clients) client.close(1012, "Conduit is restarting");
+  return new Promise((resolve) => wss.close(() => resolve()));
+}
+
+async function shutdown(signal) {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  console.log(`Received ${signal}; stopping Conduit and resident Pi processes.`);
+  const forceExit = setTimeout(() => {
+    console.error("Timed out while stopping Conduit; exiting.");
+    process.exit(1);
+  }, 10_000);
+  forceExit.unref();
+  try {
+    await Promise.all([
+      closeHttpServer(),
+      closeWebSockets(),
+      Promise.all(manager.list().map((record) => manager.stopAndWait(record.id))),
+    ]);
+    console.log("Conduit stopped.");
+    process.exit(0);
+  } catch (error) {
+    console.error("Conduit shutdown failed", error);
+    process.exit(1);
+  } finally {
+    clearTimeout(forceExit);
+  }
+}
+
+for (const signal of ["SIGINT", "SIGTERM"]) process.once(signal, () => { void shutdown(signal); });
