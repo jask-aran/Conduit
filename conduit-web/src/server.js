@@ -1421,24 +1421,12 @@ server.on("upgrade", async (request, socket, head) => {
     const record = manager.get(match[1]);
     const generationResume = manager.attach(match[1], ws);
     if (generationResume) ws.send(JSON.stringify(generationResume));
-    const turnStart = record.events.findLastIndex((event) => event.type === "agent_start");
-    const generationOpen = record.generation
-      && !record.generation.closed
-      && !record.generation.settled;
-    const pendingEvents = generationOpen && turnStart >= 0
-      ? record.events.slice(turnStart).filter((event) => event.type !== "assistant_stream_delta")
-      : [];
-    const stream = record.stream
-      ? { generationId: record.stream.generationId, content: record.stream.chunks.join("") }
-      : null;
     if (record.status === "running" && !record.contextUsage?.contextWindow) {
       manager.refreshContextUsage(record.id).catch(() => {});
     }
     ws.send(JSON.stringify({
-      type: "runtime_snapshot",
+      type: "runtime_state",
       session: manager.view(record),
-      stream,
-      events: pendingEvents,
       hostUiRequests: record.hostUiRequests || [],
       queue: record.queue || { steering: [], followUp: [] },
       contextUsage: record.contextUsage || null,

@@ -13,7 +13,7 @@ The central architectural decision is:
 
 > Preserve Pi's ordered assistant-message and content-block shapes at the Conduit server boundary. Treat the Thinking Summary and Answer Output as UI projections of that structure. Do not flatten Pi's stream into global strings and later infer its original structure from tool timing, transcript reloads, or component state.
 
-This does **not** require a new durable snapshot store. The browser should reconnect to the same Conduit WebSocket and immediately resume the live generation. Because WebSockets do not replay messages missed while disconnected, the server must send the current in-memory live response when the socket attaches. Conduit already does this under the name `runtime_snapshot`; the required change is to make that resume payload structured and complete rather than a capped event replay plus one flattened text string.
+This does **not** require a new durable snapshot store. The browser reconnects to the same Conduit WebSocket and immediately resumes the live generation. Because WebSockets do not replay messages missed while disconnected, the server sends the current in-memory Active Generation as `generation_resume` when the socket attaches, followed by ordinary `runtime_state`.
 
 The priorities are preserving Pi's structure, bounding streaming-render work, and bounding socket buffering. Component renaming or cleanup is useful only where it helps establish the new domain boundaries.
 
@@ -33,14 +33,12 @@ Note that preserving Pi's structure is what makes the settled interim-text UX *c
 - [x] **Slice 2 — server Active Generation and Resume State.** Approved after
   live reconnect testing. `PiManager` feeds normalized Pi events
   through the shared reducer, keeps structured state independent of the capped
-  compatibility ring, and returns `generation_resume` before the legacy
-  `runtime_snapshot` on WebSocket attachment. The existing client continues to
-  consume its compatibility events.
+  diagnostic ring, and returns `generation_resume` before ordinary
+  `runtime_state` on WebSocket attachment.
 - [x] **Slice 3 — client Active Generation and existing visual projection.**
   Approved after live streaming, stop, regenerate, edit, reload, and
   navigation testing. The client projects the structured generation directly,
-  suppresses persisted partials in its owner turn, and retains legacy events
-  only for compatibility/persistence confirmation. Follow-up fixes normalize
+  suppresses persisted partials in its owner turn. Follow-up fixes normalize
   overlapping provider start/delta text, prevent resumed Thinking Summary
   duplication, apply the composer model/thinking selection to retries, and
   retain a chat-local thinking-level preference for each model.
@@ -52,7 +50,12 @@ Note that preserving Pi's structure is what makes the settled interim-text UX *c
   line-placement regression, so server coalescing remains the sole delta
   batching boundary before the Markdown renderer.
 - [ ] **Slice 5 — bounded Markdown rendering.**
-- [ ] **Slice 6 — compatibility-path removal.**
+- [x] **Slice 6 — compatibility-path removal.** Approved after reconnect,
+  retry, stop, regeneration, and draft-navigation testing. Active Generation
+  is the sole live-response protocol; `generation_resume` plus `runtime_state`
+  replaces the flattened stream and replay payload. Checkpoints retain their
+  durable title, stale generations are rejected outside their owning chat, and
+  empty composers reset their height after route changes.
 
 **Pi session compatibility rule.** Use Pi's `fork`/tree contract wherever it
 is available in both the bundled and Host Pi versions. Conduit retains only

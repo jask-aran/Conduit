@@ -1,10 +1,11 @@
 const TERMINAL_STATUSES = new Set(["stopped", "complete", "failed"]);
 
-export function createActiveGeneration(id, { status = "submitting", continuation = false } = {}) {
+export function createActiveGeneration(id, { status = "submitting", continuation = false, continuationBase = "" } = {}) {
   return {
     id,
     status,
     continuation,
+    continuationBase,
     assistantMessages: [],
     toolExecutions: {},
     retry: null,
@@ -80,6 +81,7 @@ export function reduceActiveGeneration(current, event) {
     if (current?.id === event.generationId) return current;
     const started = createActiveGeneration(event.generationId, {
       continuation: Boolean(event.continuation),
+      continuationBase: String(event.continuationBase || ""),
     });
     started.lastSeq = event.seq;
     return started;

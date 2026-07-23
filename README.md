@@ -101,9 +101,8 @@ Selected-chat loading seeds
 the composer from indexed transcript model/thinking metadata and performs one
 runtime-aware model-catalogue reconciliation. During generation the server also
 maintains a sequenced, structured Active Generation independent of its bounded
-diagnostic event ring and sends that Resume State before the compatibility
-WebSocket snapshot; the client projects the structured state directly and
-retains compatibility events only during the rendering migration. Edit/regenerate use Pi's public `fork`
+diagnostic event ring and sends that Resume State before ordinary WebSocket
+runtime state; the client projects the structured state directly. Edit/regenerate use Pi's public `fork`
 RPC; moves fork across directories and delete the source JSONL only after the
 destination exists; deletion (always interface-confirmed) stops every live
 process in the Pi fork family, removes that family's in-project JSONLs, and
