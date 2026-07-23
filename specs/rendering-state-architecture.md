@@ -21,6 +21,12 @@ Note that preserving Pi's structure is what makes the settled interim-text UX *c
 
 ## Migration status
 
+The rendering-state migration is concluded: five implementation slices are
+accepted, and the bounded-Markdown experiment is explicitly rejected and
+deferred. The current renderer remains the eager canonical Marked + KaTeX +
+DOMPurify path; a replacement requires the focused evaluation tracked in
+[#24](https://github.com/jask-aran/Conduit/issues/24).
+
 - [x] **Slice 1 — normalized protocol and pure reducer fixtures.** Approved
   after compatibility-path regression testing. `pi-event-normalizer.js` assigns
   generation-local message identity and preserves block structure;
@@ -49,7 +55,13 @@ Note that preserving Pi's structure is what makes the settled interim-text UX *c
   converge it. The initial client-side second frame queue caused a transient
   line-placement regression, so server coalescing remains the sole delta
   batching boundary before the Markdown renderer.
-- [ ] **Slice 5 — bounded Markdown rendering.**
+- [x] **Slice 5 — bounded Markdown rendering (rejected and deferred).** A
+  Marked-only cadence with an escaped trailing suffix bounded aggregate parser
+  work but made its canonicalization visibly chunked, violating eager fully
+  styled output and the no-visible-churn contract. It is not part of this
+  migration. Evaluate an incremental renderer such as Incremark separately in
+  [#24](https://github.com/jask-aran/Conduit/issues/24), retaining Conduit's
+  security, Markdown, and DOM-identity guarantees.
 - [x] **Slice 6 — compatibility-path removal.** Approved after reconnect,
   retry, stop, regeneration, and draft-navigation testing. Active Generation
   is the sole live-response protocol; `generation_resume` plus `runtime_state`
