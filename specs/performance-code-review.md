@@ -253,7 +253,8 @@ does not inherit simultaneous persistence and transport churn.
 
 After the narrow performance work:
 
-1. Normalized protocol and pure reducer fixtures.
+1. [x] Normalized protocol and pure reducer fixtures. Approved after
+   compatibility-path regression testing; live transport remains unchanged.
 2. Server Active Generation and Resume State.
 3. Client Active Generation with the existing visual projection.
 4. Reconnect, batching, and backpressure.
