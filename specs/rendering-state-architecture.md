@@ -30,11 +30,29 @@ Note that preserving Pi's structure is what makes the settled interim-text UX *c
   thinking, sequential/parallel tools, narration before tools, multiple
   blocks, retry, stop, provider error, and reconnect prefixes. Nothing is
   connected to the live server/client path yet.
-- [ ] **Slice 2 — server Active Generation and Resume State.**
-- [ ] **Slice 3 — client Active Generation and existing visual projection.**
+- [x] **Slice 2 — server Active Generation and Resume State.** Approved after
+  live reconnect testing. `PiManager` feeds normalized Pi events
+  through the shared reducer, keeps structured state independent of the capped
+  compatibility ring, and returns `generation_resume` before the legacy
+  `runtime_snapshot` on WebSocket attachment. The existing client continues to
+  consume its compatibility events.
+- [x] **Slice 3 — client Active Generation and existing visual projection.**
+  Approved after live streaming, stop, regenerate, edit, reload, and
+  navigation testing. The client projects the structured generation directly,
+  suppresses persisted partials in its owner turn, and retains legacy events
+  only for compatibility/persistence confirmation. Follow-up fixes normalize
+  overlapping provider start/delta text, prevent resumed Thinking Summary
+  duplication, apply the composer model/thinking selection to retries, and
+  retain a chat-local thinking-level preference for each model.
 - [ ] **Slice 4 — reconnect, batching, and backpressure.**
 - [ ] **Slice 5 — bounded Markdown rendering.**
 - [ ] **Slice 6 — compatibility-path removal.**
+
+**Pi session compatibility rule.** Use Pi's `fork`/tree contract wherever it
+is available in both the bundled and Host Pi versions. Conduit retains only
+its stable chat identity and the Active Generation projection; it must not
+maintain a parallel session-tree model. Verify the shared RPC contract against
+the pinned packages before adding a Pi-dependent client behavior.
 
 ## Settled product terminology
 

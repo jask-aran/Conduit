@@ -171,6 +171,7 @@ async function chatModelView(context) {
     models,
     model,
     thinkingLevel,
+    modelThinkingLevels: context.chat.modelThinkingLevels || {},
     defaultModel: catalogView.defaultModel,
     defaultThinkingLevel: catalogView.defaultThinkingLevel,
     requiresAuthentication: catalogView.requiresAuthentication,
@@ -874,6 +875,17 @@ app.patch("/v0/chats/:chatId/models", async (request, response, next) => {
     if (spec && !current.models.some((item) => item.spec === spec)) {
       return response.status(400).json({ error: "invalid_model" });
     }
+    const targetModel = spec || current.model;
+    const target = current.models.find((item) => item.spec === targetModel);
+    if (thinkingLevel && target && !target.thinkingLevels.includes(thinkingLevel)) {
+      return response.status(400).json({ error: "invalid_thinking_level" });
+    }
+    const saveThinkingPreference = async () => {
+      if (!targetModel || !thinkingLevel) return context.chat;
+      return registry.update(context.chat.id, {
+        modelThinkingLevels: { ...(context.chat.modelThinkingLevels || {}), [targetModel]: thinkingLevel },
+      });
+    };
     const resident = manager.getByChatId(context.chat.id);
     if (resident) {
       if (spec && spec !== current.model) await manager.setModel(resident.id, spec);
@@ -885,10 +897,17 @@ app.patch("/v0/chats/:chatId/models", async (request, response, next) => {
       const template = templateForChat(context.chat, context.project);
       const runtime = context.chat.runtime || runtimeFor({ runtimeKind: "conduit_profile", template });
       if (runtime.kind === "native_pi") {
-        return response.json({ ...current, model: spec || current.model, thinkingLevel: thinkingLevel || current.thinkingLevel });
+        const chat = await saveThinkingPreference();
+        return response.json({
+          ...current,
+          model: spec || current.model,
+          thinkingLevel: thinkingLevel || current.thinkingLevel,
+          modelThinkingLevels: chat?.modelThinkingLevels || {},
+        });
       }
       if (spec) await catalogFor(runtime, template).updateDefault(context.project.path, spec, thinkingLevel);
     }
+    await saveThinkingPreference();
     response.json(await chatModelView(context));
   } catch (error) { next(error); }
 });
@@ -1296,6 +1315,20 @@ async function sendPrompt(record, prepared, options) {
   return generationId;
 }
 
+async function applyComposerModel(record, command) {
+  const model = String(command.model || "").trim();
+  const thinkingLevel = String(command.thinkingLevel || "").trim();
+  if (!model && !thinkingLevel) return;
+  const context = await findChatContext(record.chatId);
+  if (!context) throw new Error("Chat no longer exists");
+  const current = await chatModelView(context);
+  if (model && !current.models.some((item) => item.spec === model)) {
+    throw Object.assign(new Error("Selected model is unavailable for this chat"), { code: "invalid_model" });
+  }
+  if (model && model !== current.model) await manager.setModel(record.id, model);
+  if (thinkingLevel && thinkingLevel !== current.thinkingLevel) await manager.setThinkingLevel(record.id, thinkingLevel);
+}
+
 async function syncForkedChat(record) {
   const context = await findChatContext(record.chatId);
   if (!context) throw new Error("Chat no longer exists");
@@ -1326,12 +1359,14 @@ async function handleClientCommand(record, command) {
   if (command.type === "fork_and_prompt") {
     await manager.fork(record.id, command.entryId);
     await syncForkedChat(record);
+    await applyComposerModel(record, command);
     const prepared = await promptForChat(record, command, String(command.message || ""));
     return sendPrompt(record, prepared);
   }
   if (command.type === "regenerate") {
     const forked = await manager.fork(record.id, command.entryId);
     await syncForkedChat(record);
+    await applyComposerModel(record, command);
     return manager.promptAccepted(record.id, forked.text);
   }
   if (command.type === "continue") {
@@ -1372,7 +1407,8 @@ server.on("upgrade", async (request, socket, head) => {
   }
   wss.handleUpgrade(request, socket, head, (ws) => {
     const record = manager.get(match[1]);
-    manager.attach(match[1], ws);
+    const generationResume = manager.attach(match[1], ws);
+    if (generationResume) ws.send(JSON.stringify(generationResume));
     const turnStart = record.events.findLastIndex((event) => event.type === "agent_start");
     const generationOpen = record.generation
       && !record.generation.closed

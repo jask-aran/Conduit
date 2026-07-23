@@ -174,3 +174,17 @@ test("multiple native text and thinking blocks retain their separate positions",
     { type: "text", contentIndex: 3, text: "Second text" },
   ]);
 });
+
+test("does not duplicate a provider's first block token when start and delta overlap", () => {
+  const normalizer = createPiEventNormalizer("g_overlap");
+  const events = [
+    { type: "generation_started" },
+    { type: "message_start", message: { role: "assistant" } },
+    { type: "message_update", assistantMessageEvent: {
+      type: "thinking_start", contentIndex: 0, partial: { content: [{ type: "thinking", thinking: "Now" }] },
+    } },
+    { type: "message_update", assistantMessageEvent: { type: "thinking_delta", contentIndex: 0, delta: "Now" } },
+  ].flatMap((event) => normalizer.normalize(event));
+  const state = reduceGenerationEvents(events);
+  assert.equal(state.assistantMessages[0].blocks[0].text, "Now");
+});

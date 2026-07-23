@@ -121,6 +121,8 @@ export interface ModelState {
   models: ModelOption[];
   model: string;
   thinkingLevel: string;
+  /** Conduit-owned per-chat preference; Pi itself keeps only one active level. */
+  modelThinkingLevels?: Record<string, string>;
   defaultModel?: string;
   defaultThinkingLevel?: string;
   enabledModels?: string[];

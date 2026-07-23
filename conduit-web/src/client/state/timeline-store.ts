@@ -2,7 +2,7 @@ import type { Accessor } from "solid-js";
 import { createEffect } from "solid-js";
 import { createStore, reconcile } from "solid-js/store";
 import type { Message, ToolItem } from "../api/contracts";
-import type { TurnRow } from "../turn-rows";
+import type { ActiveGenerationView, TurnRow } from "../turn-rows";
 import { buildTurnRows } from "../turn-rows";
 
 export type TimelineRow = TurnRow;
@@ -12,10 +12,15 @@ export function createTimelineStore(
   tools: Accessor<ToolItem[]>,
   streaming: Accessor<boolean>,
   reasoning: Accessor<{ content: string; active: boolean; redacted: boolean }>,
+  activeGeneration: Accessor<ActiveGenerationView | null>,
 ) {
   const [rows, setRows] = createStore<TimelineRow[]>([]);
   createEffect(() => {
-    const projected = buildTurnRows(messages(), tools(), { streaming: streaming(), reasoning: reasoning() });
+    const projected = buildTurnRows(messages(), tools(), {
+      streaming: streaming(),
+      reasoning: reasoning(),
+      activeGeneration: activeGeneration(),
+    });
     // No merge: rows keep identity by key, but values are replaced wholesale —
     // deep-merging trace segments positionally can breed hybrid objects when a
     // slot changes kind between projections.

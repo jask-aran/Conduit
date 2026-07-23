@@ -173,6 +173,12 @@ export async function readSessionMetadata(file, project) {
   return sessionMetadata(resolved, project, stat, index);
 }
 
+export async function readSessionParentSession(file, project) {
+  const metadata = await readSessionMetadata(file, project);
+  const parent = (await sessionIndex(metadata.file)).header?.parentSession;
+  return typeof parent === "string" && parent.trim() ? path.resolve(parent) : null;
+}
+
 export async function readAnnouncedAttachmentIds(file, project) {
   const metadata = await readSessionMetadata(file, project);
   const index = await sessionIndex(metadata.file);

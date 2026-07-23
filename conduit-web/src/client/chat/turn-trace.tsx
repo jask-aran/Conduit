@@ -43,7 +43,7 @@ export function TurnTrace(props: { trace: TurnTraceData; sessionId: string | nul
         <Index each={props.trace.segments}>{(segment) => {
           const tool = () => { const value = segment(); return value.kind === "tool" ? value.tool : null; };
           const text = () => { const value = segment(); return value.kind === "tool" ? "" : value.text; };
-          const live = () => { const value = segment(); return value.kind === "thinking" && Boolean(value.live); };
+          const live = () => { const value = segment(); return value.kind !== "tool" && Boolean(value.live); };
           if (tool()) return <ToolCard tool={tool()!} sessionId={props.sessionId} />;
           return <div class="turn-trace-text" data-kind={segment().kind}>
             <Suspense fallback={<div class="markdown-skeleton" />}><ChatMarkdown streaming={live()}>{text()}</ChatMarkdown></Suspense>
