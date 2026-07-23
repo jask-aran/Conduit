@@ -100,6 +100,8 @@ export interface ToolItem {
 }
 
 export interface TranscriptDetail extends ChatSummary {
+  model?: string;
+  thinkingLevel?: string;
   messages: Message[];
   tools: ToolItem[];
   page?: { before?: string | null };

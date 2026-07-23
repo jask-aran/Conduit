@@ -222,6 +222,8 @@ test.beforeEach(async ({ page }) => {
       projectId: "project_chat",
       status: "active",
       title: "Existing chat",
+      model: model.spec,
+      thinkingLevel: "medium",
       messages: [
         { id: "message_existing", role: "user", content: "Previous question" },
         { id: "message_tool_only", role: "assistant", content: "", timestamp: "2026-07-15T06:49:27.768Z" },
@@ -338,6 +340,37 @@ test("reloading a durable new-chat URL does not create another chat", async ({ p
   await page.reload();
   await expect(page.getByRole("textbox", { name: "Message Pi" })).toBeVisible();
   expect(creates).toBe(1);
+});
+
+test("hydrates the durable model without reloading it after live attachment", async ({ page }) => {
+  let modelReads = 0;
+  let releaseFirstModelRead;
+  const liveLaunchStarted = new Promise((resolve) => { releaseFirstModelRead = resolve; });
+  await page.route("**/v0/chats/session_existing/models", async (route) => {
+    modelReads += 1;
+    await liveLaunchStarted;
+    await route.fulfill({ json: {
+      installationId: "conduit-pinned",
+      runtimeKind: "conduit_profile",
+      models: [model, plainModel],
+      model: model.spec,
+      thinkingLevel: "medium",
+      defaultModel: model.spec,
+      defaultThinkingLevel: "medium",
+      requiresAuthentication: false,
+      source: modelReads === 1 ? "jsonl" : "live",
+    } });
+  });
+  await page.route("**/v0/live-sessions", async (route) => {
+    releaseFirstModelRead();
+    await route.fulfill({ json: { id: "live_existing", streamUrl: "/v0/live-sessions/live_existing/stream" } });
+  });
+
+  await page.goto("/chat/session_existing");
+
+  await expect(page.getByRole("button", { name: "Reasoner medium" })).toBeVisible();
+  await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  expect(modelReads).toBe(1);
 });
 
 test("keeps the current chat connected when new-chat creation fails", async ({ page }, testInfo) => {

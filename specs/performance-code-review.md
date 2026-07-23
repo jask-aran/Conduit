@@ -26,36 +26,11 @@ an internal detail and automatically prepends history near the top while
 preserving the visible scroll anchor. Explicit full-transcript export and
 deferred single-tool-result retrieval may still scan the complete authoritative
 JSONL because those are user-requested whole-history lookups, not ordinary chat
-opening.
+opening. Selected-chat bootstrap applies the model and thinking level already
+returned with that transcript page, performs one runtime-aware model catalogue
+request, and does not repeat that request after WebSocket attachment.
 
-`conduit-web/src/session-store.js::parseSession()` (session-store.js:24) loads the complete session file, splits it into lines, and JSON-parses every entry into a retained `entries` array. Only after that unbounded scan does `pageSessionEntries()` (session-store.js:216) apply the ten-turn/50,000-character response window.
-
-Verified scope note: the per-request lookup is correctly bounded to *one* file — `registry.find` (chat-store.js:238) resolves chat metadata from memory and `validateSessionFile` parses only the target JSONL. The problem is that the whole target file is parsed, and that this repeats. Opening an ordinary persisted **active** chat causes four full parses of the same file:
-
-1. `/v0/sessions/:id` parses it for the visible transcript page (server.js:1016) — and its response already embeds `settingsFromEntries(session.entries)` (server.js:1028), which the client then ignores for model state.
-2. `models.select()` on chat selection fetches `/v0/chats/:id/models`, whose `chatModelView` (server.js:124-140) parses the same file again for `settingsFromEntries`.
-3. `POST /v0/live-sessions` validates the session file before launching Pi — another full parse.
-4. `openLive()` calls `models.reloadChat()` after connecting (active-chat.ts:208) — a second `/v0/chats/:id/models` round trip and fourth parse.
-
-The filesystem remains the correct durable authority, but the API is paginated only after doing full-file work. Large histories therefore impose repeated synchronous reads and JSON parsing on the single Express event loop before the browser can display a small tail. This directly defeats Conduit's intended bounded-work architecture.
-
-(Related but distinct: `session-store.js::findSession()` at session-store.js:111 resolves an id by calling `discoverSessions()`, which parses **every** JSONL in every project. Confirm its remaining call sites and route them through the bounded layer too.)
-
-#### Required direction
-
-Build one bounded JSONL access layer shared by session paging, validation, metadata recovery, and live-session launch:
-
-- Read and validate the session header independently of transcript entries.
-- Maintain append offsets, or an index keyed by stable file identity plus `mtime` and size.
-- Read recent entries backwards or from indexed offsets until the requested turn/character budget is satisfied.
-- Cache derived metadata such as latest model, thinking level, title, session identity, and useful page boundaries.
-- Update the index/cache when Conduit observes file appends or generation settlement; invalidate conservatively when file size, identity, or `mtime` changes unexpectedly.
-- Return model/thinking state with the selected-chat bootstrap or otherwise share the same metadata lookup — `/v0/sessions/:id` already computes it; the client should consume it there instead of issuing independent `/models` fetches.
-- Keep JSONL and the filesystem authoritative. A database is not required merely to add bounded indexing.
-
-Be careful about JSONL read-backwards semantics. Newline boundaries may cross read chunks, a final line may be incomplete while Pi is writing, and one logical conversational turn can span several records. The access layer should expose semantic page operations rather than leaking raw byte-offset logic to routes.
-
-#### Acceptance criteria
+#### Maintained guarantees
 
 - Serving the same ten-turn tail from a transcript 10× larger does not parse approximately 10× as many lines or bytes.
 - Selected-chat open does not independently derive model state twice.
@@ -260,9 +235,9 @@ Owner-approved order for the current fast, manually tested development cycle:
 1. [x] **Bounded transcript/session access.** Implemented in `6f4a6d3`;
    transcript history now loads automatically near the top without exposing
    pagination controls.
-2. [ ] **Remove duplicate selected-chat model derivation.** Indexed
-   model/thinking metadata is shared, but the remaining client model reload
-   duplication still needs removal before the rendering migration.
+2. [x] **Remove duplicate selected-chat model derivation.** Transcript detail
+   seeds model/thinking state and active-chat attachment no longer repeats the
+   runtime-aware model request.
 3. [x] **Progressive startup.** Implemented in the current follow-up: selected
    chat/catalogue requests run concurrently; optional capabilities, templates,
    and installation data do not gate the transcript; workspace suggestions are
