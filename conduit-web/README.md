@@ -95,7 +95,10 @@ entries through an append-aware index: ordinary transcript requests read only
 the requested turn window, incomplete final writes are ignored, and file
 replacement or truncation invalidates cached offsets. Selecting a model updates the active process and Pi's shared
 `defaultModel`; a new chat starts with that saved model while an existing chat
-retains its recorded model.
+retains its recorded model. The selected transcript response seeds the
+composer's model and thinking level immediately; one runtime-aware chat-model
+request supplies its catalogue and reconciles resident process state without a
+second post-WebSocket reload.
 
 ## Client composition
 

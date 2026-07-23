@@ -20,6 +20,11 @@ export function createModelSettings(onError: ErrorHandler) {
   let activeChatId = "";
   let requestSequence = 0;
 
+  const applyChatSelection = (selection?: { model?: string; thinkingLevel?: string }) => {
+    if (selection?.model) setModel(selection.model);
+    if (selection?.thinkingLevel) setEffort(selection.thinkingLevel);
+  };
+
   const applySettings = (settings: ModelState, catalog?: ModelState) => {
     const nextAll = asList<ModelOption>(settings.models);
     const enabled = asList<string>(settings.enabledModels);
@@ -71,13 +76,19 @@ export function createModelSettings(onError: ErrorHandler) {
     }
   };
 
-  const select = (projectId: string, chatId: string) => {
+  const select = (
+    projectId: string,
+    chatId: string,
+    selection?: { model?: string; thinkingLevel?: string },
+    { reloadChat: shouldReloadChat = true }: { reloadChat?: boolean } = {},
+  ) => {
     const changedProject = activeProjectId !== projectId;
     const changedChat = activeChatId !== chatId;
     activeProjectId = projectId;
     activeChatId = chatId;
+    applyChatSelection(selection);
     if (changedProject) void reload(projectId);
-    if (changedChat) void reloadChat(chatId);
+    if (changedChat && shouldReloadChat) void reloadChat(chatId);
   };
 
   const saveScope = async (nextEnabled: string[], defaultModel = settingsDefaultModel()) => {

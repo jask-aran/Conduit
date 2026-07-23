@@ -245,8 +245,6 @@ export function createActiveChat(options: ActiveChatOptions) {
         if (token !== openToken || selection !== selectionToken || selectedId() !== chatId) return null;
         setTemplateId(chat.templateId || fallback);
         setRuntimeIdentity(chat.runtime || null);
-        await models.reloadChat(chatId);
-        if (token !== openToken || selection !== selectionToken || selectedId() !== chatId) return null;
         return openLive(chatId, ownerProjectId, { intent, hostFallback: true, modelOverride: "", thinkingOverride: "" }, selection);
       }
       throw error;
@@ -493,7 +491,7 @@ export function createActiveChat(options: ActiveChatOptions) {
     const selection = selectionToken;
     catalogue.select(chat, project);
     history.replaceState({}, "", `/chat/${chat.id}`);
-    models.select(project.id, chat.id);
+    models.select(project.id, chat.id, detail, { reloadChat: detail.status !== "active" });
     void attachments.select(chat.id);
     applyDetail(detail);
     if (detail.status === "active") await openLive(chat.id, project.id, {}, selection);
@@ -509,7 +507,7 @@ export function createActiveChat(options: ActiveChatOptions) {
     setTitle(chat.title);
     setTemplateId(chat.templateId || options.defaultTemplateId() || "chat");
     setRuntimeIdentity(chat.runtime || null);
-    models.select(project.id, chat.id);
+    models.select(project.id, chat.id, detail, { reloadChat: (detail?.status || chat.status) !== "active" });
     void attachments.select(chat.id);
     if (detail) applyDetail(detail);
     else { setMessages([]); setTools([]); setPageBefore(null); setLoadedId(chat.id); }
