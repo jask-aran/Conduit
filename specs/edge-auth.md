@@ -6,10 +6,9 @@ Status: implemented · Priority: 1 (blocks any non-loopback exposure) · Vision:
 
 Every HTTP route, static asset, upload, and WebSocket upgrade served by Conduit
 requires an authenticated session, except a minimal login flow. One user, one
-password, provisioned once from the CLI or claimed during an explicitly enabled
-headless first run. The perimeter model is: Tailscale (or a Cloudflare tunnel)
-keeps the address quiet; this password is the lock on the door. Deliberately
-boring — no OAuth, no accounts, no email.
+password, claimed in the browser on first run or later changed from the CLI.
+The perimeter model is: a private edge keeps the address quiet; this password
+is the lock on the door. Deliberately boring — no OAuth, no accounts, no email.
 
 ## Non-goals
 
@@ -81,22 +80,17 @@ once per minute). `SameSite=Lax` is the default CSRF posture for authenticated
 mutations; the unauthenticated first-run claim additionally requires a
 same-origin browser POST, since it establishes the password itself.
 
-### Fail-closed startup and guarded first run
+### Mandatory first run
 
-If the listen host is non-loopback and no password is configured, the server
-refuses to start with a clear message naming the CLI command. An operator who
-cannot access a terminal may instead explicitly set `CONDUIT_ALLOW_BOOTSTRAP=1`.
-That mode is **not** open access: every application route, static asset, and
-WebSocket remains closed; only health and the server-rendered setup form are
-reachable. The first non-empty same-origin browser form submission atomically
-sets the password, creates its session, and closes setup. The UI warns that the
-first person able to submit wins. The operator must put this page behind a
-private edge (Tailscale, Cloudflare Access, or equivalent) before enabling it.
-An originless or cross-origin first submission is rejected to prevent web-based
-setup CSRF. `.devcontainer/start-conduit.sh` uses this guarded bootstrap mode
-by default. `CONDUIT_ALLOW_INSECURE=1` remains an explicitly open,
-development-only override. Loopback binding without a password remains open
-for local development.
+If no password is configured, every listen host starts in the same guarded
+first-run state. Every application route, static asset, and WebSocket remains
+closed; only health and the server-rendered setup form are reachable. The first
+non-empty same-origin browser form submission atomically sets the password,
+creates its session, and closes setup. The UI warns that the first person able
+to submit wins. An originless or cross-origin first submission is rejected to
+prevent web-based setup CSRF. The password is retained across ordinary server
+restarts; setup returns only when the durable backend state is deleted, reset,
+or corrupted.
 
 ### Rate limiting
 

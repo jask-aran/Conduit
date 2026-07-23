@@ -26,7 +26,6 @@ import { resolvePiLaunch } from "./pi-launch.js";
 import { AuthStore } from "./auth-store.js";
 import { PiAuthBroker } from "./pi-auth-broker.js";
 import {
-  authStartupViolation,
   clearSessionCookie,
   createRateLimiter,
   issueSessionCookie,
@@ -79,11 +78,6 @@ const authStore = new AuthStore(config.authFile);
 await authStore.load();
 await authStore.pruneExpired();
 const loginRateLimiter = createRateLimiter();
-const startupViolation = authStartupViolation(config, authStore);
-if (startupViolation) {
-  console.error(startupViolation.message);
-  process.exit(1);
-}
 const manager = new PiManager({
   command: config.piCommand,
   agentDir: config.piAgentDir,
@@ -364,7 +358,7 @@ async function ensureChatTemplate(chat, project = null) {
 
 app.use(compression());
 
-const requireAuth = prepareAuthMiddleware(authStore, { bootstrapLocked: config.allowBootstrap });
+const requireAuth = prepareAuthMiddleware(authStore);
 app.use(requireAuth);
 
 async function findRegisteredSession(id) {
@@ -1484,15 +1478,11 @@ server.on("upgrade", async (request, socket, head) => {
   const match = new URL(request.url, "http://localhost").pathname.match(/^\/v0\/live-sessions\/([a-f0-9]{24})\/stream$/);
   if (!match || !manager.get(match[1])) return socket.destroy();
   try {
-    // A browser bootstrap deployment exposes no application surface until the
-    // first password is claimed. Loopback development may remain deliberately
-    // open when no password and no bootstrap lock were configured.
-    if (authStore.hasPassword()) {
-      const context = await validateSession(authStore, request);
-      if (!context) return socket.destroy();
-    } else if (config.allowBootstrap) {
-      return socket.destroy();
-    }
+    // No app surface exists before the first browser password claim, including
+    // on loopback development servers.
+    if (!authStore.hasPassword()) return socket.destroy();
+    const context = await validateSession(authStore, request);
+    if (!context) return socket.destroy();
   } catch (error) {
     console.error("WebSocket session validation failed", error);
     return socket.destroy();

@@ -152,14 +152,13 @@ cookie (`HttpOnly`, `SameSite=Lax`, `Secure` over HTTPS/X-Forwarded-Proto),
 Enforcement is a single `requireAuth` middleware mounted before every other
 route and static handler, plus the WebSocket upgrade validator. The allowlist
 is just `GET /login`, `POST /v0/auth/login`, and `GET /healthz`. Logout
-(`POST /v0/auth/logout`) requires a valid session like any other route. Loopback
-binding without a configured password stays open for local dev. A headless
-non-loopback first run may set `CONDUIT_ALLOW_BOOTSTRAP=1`; it serves only the
-login/setup page and health check until the first same-origin browser password
-submission atomically claims the instance. The setup page warns that whoever
-can submit first wins, so it must be behind Tailscale, Cloudflare Access, or an
-equivalent private edge. Other non-loopback starts refuse to run without a
-password; `CONDUIT_ALLOW_INSECURE=1` remains development-only.
+(`POST /v0/auth/logout`) requires a valid session like any other route. On
+every first run—loopback, devcontainer, or public deployment—Conduit serves
+only the login/setup page and health check until the first same-origin browser
+password submission atomically claims the instance. This password is persisted
+in `data/auth.json` and survives ordinary server restarts. The page warns that
+whoever can reach it first can set the password, so do not expose an unclaimed
+instance more broadly than necessary.
 Per-IP rate limiting is meaningless behind a tunnel, so `POST /v0/auth/login`
 applies a global cap: after five failures the next attempt is rejected with
 exponential backoff (5 s → 5 min); scrypt compare runs even on throttled paths

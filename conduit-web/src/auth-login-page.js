@@ -17,7 +17,7 @@ export function renderLoginPage({ error = null, after = "/", bootstrap = false }
     ? `<p class="login-error" role="alert">${escapeHtml(error)}</p>`
     : "";
   const setupNotice = bootstrap
-    ? `<p class="login-warning" role="alert"><strong>First-run setup.</strong> No Conduit password exists yet. The password entered below will become the password and sign this browser in immediately. Only continue when this address is protected by your private network or edge access: the first person able to submit this page can claim the instance.</p>`
+    ? `<p class="login-warning" role="alert"><strong>First-run setup.</strong> No Conduit password exists yet. The password entered below becomes the permanent password and signs this browser in immediately. Until you submit it, anyone who can reach this page could claim the instance first.</p>`
     : "";
   return `<!doctype html>
 <html lang="en" class="dark">

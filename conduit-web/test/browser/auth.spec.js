@@ -31,7 +31,7 @@ process.exit(0);
   return { conduitPi, nativePi };
 }
 
-async function spawnAuthServer({ password, bootstrap = false }) {
+async function spawnAuthServer({ password, host = "127.0.0.1" }) {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-browser-auth-"));
   const port = await availablePort();
   const origin = `http://127.0.0.1:${port}`;
@@ -47,8 +47,7 @@ async function spawnAuthServer({ password, bootstrap = false }) {
     env: {
       ...process.env,
       HOME: root,
-      CONDUIT_HOST: bootstrap ? "0.0.0.0" : "127.0.0.1",
-      ...(bootstrap ? { CONDUIT_ALLOW_BOOTSTRAP: "1" } : {}),
+      CONDUIT_HOST: host,
       CONDUIT_PORT: String(port),
       CONDUIT_FILES_ROOT: path.join(root, "files"),
       CONDUIT_CATALOG_FILE: path.join(root, "conduit.json"),
@@ -121,7 +120,7 @@ test("unauthenticated visit lands on /login; wrong password surfaces an error", 
 });
 
 test("first-run browser setup warns clearly, claims the submitted password, and closes the app", async ({ page }) => {
-  const server = await spawnAuthServer({ password: undefined, bootstrap: true });
+  const server = await spawnAuthServer({ password: undefined, host: "0.0.0.0" });
   try {
     await page.goto(server.origin, { waitUntil: "domcontentloaded" });
     await expect(page).toHaveURL(/\/login$/);

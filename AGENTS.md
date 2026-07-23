@@ -53,11 +53,9 @@ that alters behavior they describe.
   `POST /v0/auth/login`, and `GET /healthz`. Never add a route before
   `requireAuth`, and never expose a static asset or upload handler without it.
   WebSocket upgrades validate the session cookie before `handleUpgrade` and
-  destroy the socket otherwise. Loopback binding without a configured password
-  stays open for local dev; a non-loopback bind refuses to start without a
-  password, unless `CONDUIT_ALLOW_BOOTSTRAP=1` enables its login-only first-run
-  setup or `CONDUIT_ALLOW_INSECURE=1` is explicitly used for development.
-  Bootstrap is first-writer-wins and must sit behind private edge access.
+  destroy the socket otherwise. If no password is configured, every bind serves
+  only the login-only first-run setup; it is first-writer-wins and must never
+  expose the application or a WebSocket before the password claim succeeds.
   Credentials live only in
   `data/auth.json` (mode `0600`, atomic writes); the running server reloads it
   on each login attempt and on session-validation cache miss, never on a timer.
@@ -143,8 +141,7 @@ data-format, dependency, template, or session-lifecycle effects.
 
 Never commit `.env*` (except sanitized examples), `data/`, credentials, logs,
 `dist/`, or `node_modules/`. Edge auth gates every route and upgrade behind a
-single-user password (see `specs/edge-auth.md`); a non-loopback bind refuses
-to start until `scripts/conduit-auth.mjs set-password` has run or
-`CONDUIT_ALLOW_INSECURE=1` is exported. Treat Pi extensions,
+single-user password (see `specs/edge-auth.md`); an unconfigured instance
+serves only first-run setup until its browser password claim succeeds. Treat Pi extensions,
 skills, and template tool lists as trusted executable configuration; review
 them before adding them to a template.
