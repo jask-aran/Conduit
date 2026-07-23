@@ -926,6 +926,48 @@ test("opens a viewport-filling thread pinned to the true bottom without an upwar
   expect(worstDistanceFromBottom).toBeLessThanOrEqual(32);
 });
 
+test("loads earlier history at the top without exposing pagination or moving the visible anchor", async ({ page }) => {
+  const recent = Array.from({ length: 10 }, (_, index) => ([
+    { id: `recent-user-${index}`, role: "user", content: `Recent question ${index} with enough text to occupy a stable transcript row across viewport sizes.` },
+    { id: `recent-assistant-${index}`, role: "assistant", content: `Recent answer ${index} with enough text to occupy a stable transcript row across viewport sizes.` },
+  ])).flat();
+  let historyRequests = 0;
+  await page.route("**/v0/sessions/session_existing?before=older-cursor", async (route) => {
+    historyRequests += 1;
+    await route.fulfill({ json: {
+      id: "session_existing", projectId: "project_chat", status: "active", title: "Existing chat",
+      messages: [
+        { id: "older-user", role: "user", content: "Oldest automatically loaded question" },
+        { id: "older-assistant", role: "assistant", content: "Oldest automatically loaded answer" },
+      ],
+      tools: [], page: { before: null },
+    } });
+  });
+  await page.route("**/v0/sessions/session_existing", async (route) => {
+    await route.fulfill({ json: {
+      id: "session_existing", projectId: "project_chat", status: "active", title: "Existing chat",
+      messages: recent, tools: [], page: { before: "older-cursor" },
+    } });
+  });
+
+  await page.goto("/chat/session_existing");
+  await expect(page.getByText("Recent answer 9", { exact: false })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Load earlier messages" })).toHaveCount(0);
+  const anchor = page.locator('[data-message-id="recent-user-0"]');
+  const viewport = page.locator('[data-slot="message-scroller-viewport"]');
+  const beforeY = await viewport.evaluate((element) => {
+    element.scrollTop = 0;
+    const anchorElement = document.querySelector('[data-message-id="recent-user-0"]');
+    const y = anchorElement.getBoundingClientRect().y;
+    element.dispatchEvent(new Event("scroll"));
+    return y;
+  });
+  await expect(page.getByText("Oldest automatically loaded question")).toBeAttached();
+  const after = await anchor.boundingBox();
+  expect(historyRequests).toBe(1);
+  expect(Math.abs(after.y - beforeY)).toBeLessThanOrEqual(2);
+});
+
 test("hides transient new chats and provides complete right-click menus", async ({ page }, testInfo) => {
   await page.addInitScript(() => {
     Object.defineProperty(navigator, "clipboard", {

@@ -1,4 +1,4 @@
-import { createEffect, createMemo, createSignal, For, lazy, onMount, Show, Suspense } from "solid-js";
+import { createEffect, createMemo, createSignal, For, lazy, onCleanup, onMount, Show, Suspense } from "solid-js";
 import { CopyIcon, PencilIcon, PlayIcon, RefreshCwIcon } from "lucide-solid";
 import { Button, Spinner } from "@/components/primitives";
 import type { Message, RuntimeActivity, ToolItem } from "../api/contracts";
@@ -26,28 +26,51 @@ function Actions(props: { message: Message; precedingUserId?: string; chat: Acti
 export function Transcript(props: { chat: ActiveChatStore; partialContinue: boolean }) {
   let viewport!: HTMLDivElement;
   let previousLoaded: string | null = null;
-  let following = true;
+  let historyLoad: Promise<void> | null = null;
+  const [following, setFollowing] = createSignal(true);
   const timeline = createTimelineStore(props.chat.messages, props.chat.tools, props.chat.streaming, props.chat.reasoning);
   const empty = createMemo(() => !timeline.length && !props.chat.activity()?.label);
 
-  const scrollBottom = () => requestAnimationFrame(() => { viewport.scrollTop = viewport.scrollHeight; });
+  const scrollBottom = () => requestAnimationFrame(() => {
+    viewport.scrollTop = viewport.scrollHeight;
+    if (viewport.scrollTop < 240) loadEarlier();
+  });
+  const loadEarlier = () => {
+    if (historyLoad || !props.chat.pageBefore() || props.chat.loadingOlder()) return;
+    const previousHeight = viewport.scrollHeight;
+    const previousTop = viewport.scrollTop;
+    historyLoad = props.chat.loadOlder().then((loaded) => {
+      if (!loaded) return;
+      return new Promise<void>((resolve) => requestAnimationFrame(() => {
+        viewport.scrollTop = previousTop + viewport.scrollHeight - previousHeight;
+        resolve();
+      }));
+    }).finally(() => { historyLoad = null; });
+  };
   createEffect(() => {
     const loaded = props.chat.loadedId();
     props.chat.messages().length;
     props.chat.liveStream.content();
     props.chat.reasoning().content;
     props.chat.tools();
-    if (loaded !== previousLoaded) { previousLoaded = loaded; following = true; scrollBottom(); }
-    else if (following) scrollBottom();
+    if (loaded !== previousLoaded) { previousLoaded = loaded; setFollowing(true); scrollBottom(); }
+    else if (following()) scrollBottom();
   });
 
-  onMount(() => viewport.addEventListener("scroll", () => { following = viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight < 80; }, { passive: true }));
+  onMount(() => {
+    const onScroll = () => {
+      setFollowing(viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight < 80);
+      if (viewport.scrollTop < 240) loadEarlier();
+    };
+    viewport.addEventListener("scroll", onScroll, { passive: true });
+    onCleanup(() => viewport.removeEventListener("scroll", onScroll));
+  });
 
   return <div class="transcript" data-slot="message-scroller">
     <div ref={viewport} class="message-scroller-viewport" data-slot="message-scroller-viewport">
       <div class="thread" data-slot="message-scroller-content">
-        <Show when={props.chat.pageBefore()}>
-          <div data-slot="message-scroller-item"><Button variant="ghost" class="mx-auto" onClick={() => void props.chat.loadOlder()} disabled={props.chat.loadingOlder()}><Show when={props.chat.loadingOlder()}><Spinner /></Show>{props.chat.loadingOlder() ? "Loading earlier messages…" : "Load earlier messages"}</Button></div>
+        <Show when={props.chat.loadingOlder()}>
+          <div data-slot="message-scroller-item" class="flex justify-center" role="status" aria-label="Loading earlier messages"><Spinner /></div>
         </Show>
         <Show when={empty()}><div class="empty-thread" data-slot="message-scroller-item"><div class="welcome"><h1>How can I help you today?</h1></div></div></Show>
         <For each={timeline}>{(item) => {
@@ -78,6 +101,6 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
         }}</For>
       </div>
     </div>
-    <Show when={!following}><Button class="message-scroller-button" aria-label="Scroll to latest" onClick={() => { following = true; scrollBottom(); }}>↓</Button></Show>
+    <Show when={!following()}><Button class="message-scroller-button" aria-label="Scroll to latest" onClick={() => { setFollowing(true); scrollBottom(); }}>↓</Button></Show>
   </div>;
 }

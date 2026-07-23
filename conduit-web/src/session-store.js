@@ -21,6 +21,254 @@ function textContent(content) {
   return content.filter((block) => block?.type === "text").map((block) => block.text || "").join("\n");
 }
 
+const sessionIndexes = new Map();
+
+function consumeIndexedEntry(index, entry, offset, end) {
+  const content = entry.type === "message" ? textContent(entry.message?.content) : "";
+  index.records.push({
+    offset,
+    end,
+    characters: content.length,
+    turnStart: entry.type === "message"
+      && entry.message?.role === "user"
+      && content.trim() !== CONTINUE_PROMPT,
+  });
+  if (entry.type === "session") index.header = entry;
+  if (entry.type === "session_info" && entry.name) index.name = entry.name;
+  if (!index.firstMessage && entry.type === "message" && entry.message?.role === "user") {
+    const prompt = content.trim();
+    if (prompt !== CONTINUE_PROMPT) index.firstMessage = parseAttachmentEnvelope(prompt).message.trim();
+  }
+  if (entry.type === "message" && entry.message?.role === "user") {
+    for (const attachment of parseAttachmentEnvelope(content).attachments) {
+      if (attachment.id) index.announcedAttachmentIds.add(attachment.id);
+    }
+  }
+  if (entry.type === "model_change" && entry.provider && entry.modelId) {
+    index.model = `${entry.provider}/${entry.modelId}`;
+  }
+  if (entry.type === "thinking_level_change") index.thinkingLevel = entry.thinkingLevel || "";
+  if (entry.type === "message" && entry.message?.role === "assistant"
+    && entry.message.provider && entry.message.model) {
+    index.model = `${entry.message.provider}/${entry.message.model}`;
+  }
+}
+
+function parseIndexedBuffer(index, buffer, baseOffset) {
+  let lineStart = 0;
+  for (let cursor = 0; cursor < buffer.length; cursor += 1) {
+    if (buffer[cursor] !== 0x0a) continue;
+    const line = buffer.subarray(lineStart, cursor);
+    if (line.length) {
+      try {
+        consumeIndexedEntry(index, JSON.parse(line.toString("utf8")), baseOffset + lineStart, baseOffset + cursor + 1);
+      } catch {}
+    }
+    lineStart = cursor + 1;
+  }
+  const finalLine = buffer.subarray(lineStart);
+  if (finalLine.length) {
+    try {
+      consumeIndexedEntry(index, JSON.parse(finalLine.toString("utf8")), baseOffset + lineStart, baseOffset + buffer.length);
+      lineStart = buffer.length;
+    } catch {}
+  }
+  return baseOffset + lineStart;
+}
+
+async function buildSessionIndex(file, stat) {
+  const buffer = await fs.readFile(file);
+  const index = {
+    dev: stat.dev,
+    ino: stat.ino,
+    size: stat.size,
+    mtimeMs: stat.mtimeMs,
+    indexedThrough: 0,
+    records: [],
+    header: null,
+    name: null,
+    firstMessage: "",
+    model: null,
+    thinkingLevel: "",
+    announcedAttachmentIds: new Set(),
+    prefixLength: Math.min(buffer.length, 4096),
+    prefixHash: crypto.createHash("sha256").update(buffer.subarray(0, 4096)).digest("hex"),
+  };
+  index.indexedThrough = parseIndexedBuffer(index, buffer, 0);
+  sessionIndexes.set(file, index);
+  return index;
+}
+
+async function sessionIndex(file) {
+  const resolved = path.resolve(file);
+  const stat = await fs.stat(resolved);
+  const current = sessionIndexes.get(resolved);
+  const sameFile = current && current.dev === stat.dev && current.ino === stat.ino;
+  if (!sameFile || stat.size < current.size || (stat.size === current.size && stat.mtimeMs !== current.mtimeMs)) {
+    return buildSessionIndex(resolved, stat);
+  }
+  if (stat.size > current.size) {
+    const handle = await fs.open(resolved, "r");
+    try {
+      const prefix = Buffer.alloc(current.prefixLength);
+      await handle.read(prefix, 0, prefix.length, 0);
+      const prefixHash = crypto.createHash("sha256").update(prefix).digest("hex");
+      if (prefixHash !== current.prefixHash) {
+        await handle.close();
+        return buildSessionIndex(resolved, stat);
+      }
+      const buffer = Buffer.alloc(stat.size - current.indexedThrough);
+      await handle.read(buffer, 0, buffer.length, current.indexedThrough);
+      current.indexedThrough = parseIndexedBuffer(current, buffer, current.indexedThrough);
+    } finally {
+      if (handle.fd >= 0) await handle.close();
+    }
+  }
+  current.size = stat.size;
+  current.mtimeMs = stat.mtimeMs;
+  return current;
+}
+
+function sessionMetadata(file, project, stat, index) {
+  return {
+    id: sessionIdFor(file, index.header?.id),
+    nativeId: index.header?.id || null,
+    projectId: project.id,
+    projectSlug: project.slug,
+    runtime: "pi-rpc",
+    status: "persisted",
+    title: index.name || index.firstMessage.slice(0, 72) || "New chat",
+    createdAt: index.header?.timestamp || stat.birthtime.toISOString(),
+    updatedAt: stat.mtime.toISOString(),
+    cwd: index.header?.cwd || project.path,
+    file,
+    model: index.model,
+    thinkingLevel: index.thinkingLevel,
+  };
+}
+
+async function assertSessionMapping(file, project, header) {
+  if (!header || typeof header.cwd !== "string" || !header.cwd.trim()) {
+    const error = new Error("Pi session JSONL has no valid session header");
+    error.code = "invalid_session_mapping";
+    throw error;
+  }
+  if (path.resolve(header.cwd) !== path.resolve(project.path)) {
+    const error = new Error("Pi session working directory does not match its Conduit workspace");
+    error.code = "session_cwd_mismatch";
+    throw error;
+  }
+}
+
+export async function readSessionMetadata(file, project) {
+  const resolved = path.resolve(file);
+  const stat = await fs.lstat(resolved);
+  if (!stat.isFile() || stat.isSymbolicLink() || path.extname(resolved) !== ".jsonl") {
+    const error = new Error("Pi session mapping is not a regular JSONL file");
+    error.code = "invalid_session_mapping";
+    throw error;
+  }
+  const index = await sessionIndex(resolved);
+  await assertSessionMapping(resolved, project, index.header);
+  return sessionMetadata(resolved, project, stat, index);
+}
+
+export async function readAnnouncedAttachmentIds(file, project) {
+  const metadata = await readSessionMetadata(file, project);
+  const index = await sessionIndex(metadata.file);
+  return new Set(index.announcedAttachmentIds);
+}
+
+export async function validateSessionHeader(file, project) {
+  const resolved = path.resolve(file);
+  const stat = await fs.lstat(resolved);
+  if (!stat.isFile() || stat.isSymbolicLink() || path.extname(resolved) !== ".jsonl") {
+    const error = new Error("Pi session mapping is not a regular JSONL file");
+    error.code = "invalid_session_mapping";
+    throw error;
+  }
+  const handle = await fs.open(resolved, "r");
+  try {
+    const buffer = Buffer.alloc(Math.min(stat.size, 256 * 1024));
+    const { bytesRead } = await handle.read(buffer, 0, buffer.length, 0);
+    const newline = buffer.subarray(0, bytesRead).indexOf(0x0a);
+    const line = buffer.subarray(0, newline >= 0 ? newline : bytesRead);
+    let header = null;
+    try { header = JSON.parse(line.toString("utf8")); } catch {}
+    await assertSessionMapping(resolved, project, header?.type === "session" ? header : null);
+    return {
+      ...sessionMetadata(resolved, project, stat, {
+        header,
+        name: null,
+        firstMessage: "",
+        model: null,
+        thinkingLevel: "",
+      }),
+    };
+  } finally {
+    await handle.close();
+  }
+}
+
+export async function readSessionPage(file, project, { before, turnLimit = 10, characterLimit = 50_000 } = {}) {
+  const metadata = await readSessionMetadata(file, project);
+  const index = await sessionIndex(metadata.file);
+  const requestedEnd = Number.parseInt(before, 10);
+  const endOffset = Number.isInteger(requestedEnd)
+    ? Math.max(0, Math.min(requestedEnd, index.indexedThrough))
+    : index.indexedThrough;
+  let end = index.records.findIndex((record) => record.offset >= endOffset);
+  if (end < 0) end = index.records.length;
+  const starts = [];
+  for (let recordIndex = 0; recordIndex < end; recordIndex += 1) {
+    if (index.records[recordIndex].turnStart) starts.push(recordIndex);
+  }
+  let start = 0;
+  if (starts.length) {
+    start = starts.at(-1);
+    let characters = 0;
+    let turns = 0;
+    for (let position = starts.length - 1; position >= 0; position -= 1) {
+      const turnStart = starts[position];
+      const turnEnd = position + 1 < starts.length ? starts[position + 1] : end;
+      const turnCharacters = index.records.slice(turnStart, turnEnd)
+        .reduce((total, record) => total + record.characters, 0);
+      if (turns > 0 && (turns >= turnLimit || characters + turnCharacters > characterLimit)) break;
+      start = turnStart;
+      characters += turnCharacters;
+      turns += 1;
+    }
+  }
+  const startOffset = index.records[start]?.offset ?? endOffset;
+  const length = Math.max(0, endOffset - startOffset);
+  const handle = await fs.open(metadata.file, "r");
+  let buffer;
+  try {
+    buffer = Buffer.alloc(length);
+    await handle.read(buffer, 0, length, startOffset);
+  } finally {
+    await handle.close();
+  }
+  const entries = [];
+  for (const record of index.records.slice(start, end)) {
+    const relativeStart = record.offset - startOffset;
+    const relativeEnd = Math.min(record.end - startOffset, buffer.length);
+    const line = buffer.subarray(relativeStart, relativeEnd).toString("utf8").trim();
+    if (!line) continue;
+    try {
+      const entry = JSON.parse(line);
+      if (entry.type === "message" && !entry.id) entry.id = `entry_${record.offset}`;
+      entries.push(entry);
+    } catch {}
+  }
+  const hasMore = starts.length > 0 && start > starts[0];
+  return {
+    ...metadata,
+    entries,
+    page: { before: hasMore ? String(startOffset) : null },
+  };
+}
+
 export async function parseSession(file, project) {
   const raw = await fs.readFile(file, "utf8");
   const entries = [];

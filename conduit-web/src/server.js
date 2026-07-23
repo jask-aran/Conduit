@@ -8,11 +8,11 @@ import { WebSocketServer } from "ws";
 import { loadConfig, resolveTemplate } from "./config.js";
 import { PiModelCatalog } from "./pi-model-catalog.js";
 import { ProjectStore } from "./project-store.js";
-import { duplicateSession, messagesFromEntries, pageSessionEntries, removeProjectSessions, removeSession, renameSession, settingsFromEntries, toolsFromEntries, transcriptFromEntries, validateSessionFile } from "./session-store.js";
+import { duplicateSession, messagesFromEntries, readAnnouncedAttachmentIds, readSessionMetadata, readSessionPage, removeProjectSessions, removeSession, renameSession, settingsFromEntries, toolsFromEntries, transcriptFromEntries, validateSessionFile, validateSessionHeader } from "./session-store.js";
 import { PiManager } from "./pi-manager.js";
 import { ChatStore, chatView, isChatId } from "./chat-store.js";
 import { AttachmentStore } from "./attachment-store.js";
-import { announcedAttachmentIds, serializeAttachmentEnvelope } from "./attachment-envelope.js";
+import { serializeAttachmentEnvelope } from "./attachment-envelope.js";
 import { CONTINUE_PROMPT } from "./continuation.js";
 import { RuntimeHub } from "./runtime-hub.js";
 import { defaultsFromEnv, RuntimeSettingsStore } from "./runtime-settings.js";
@@ -130,13 +130,12 @@ async function chatModelView(context) {
   let thinkingLevel = catalogView.defaultThinkingLevel;
   let source = "runtime_default";
   if (context.chat.piSessionFile) {
-    const session = await findDeletableSession(await projects.list(), context.chat);
-    if (session) {
-      const persisted = settingsFromEntries(session.entries);
+    try {
+      const persisted = await readSessionMetadata(context.chat.piSessionFile, context.project);
       model = persisted.model || model;
       thinkingLevel = persisted.thinkingLevel || thinkingLevel;
       source = "jsonl";
-    }
+    } catch (error) { if (error.code !== "ENOENT") throw error; }
   }
   const resident = manager.getByChatId(context.chat.id);
   let models = catalogView.models;
@@ -978,8 +977,11 @@ app.get("/v0/chats/:chatId/attachments", async (request, response, next) => {
   try {
     const context = await findChatContext(request.params.chatId);
     if (!context) return response.status(404).json({ error: "chat_not_found" });
-    const session = await registry.find(await projects.list(), context.chat.id);
-    const announced = session ? announcedAttachmentIds(session.entries) : new Set();
+    let announced = new Set();
+    if (context.chat.piSessionFile) {
+      try { announced = await readAnnouncedAttachmentIds(context.chat.piSessionFile, context.project); }
+      catch (error) { if (error.code !== "ENOENT") throw error; }
+    }
     response.json({ attachments: (await attachments.list(context.project, context.chat.id))
       .map((attachment) => ({ ...attachment, announced: announced.has(attachment.id) })) });
   } catch (error) { next(error); }
@@ -1017,18 +1019,26 @@ app.get("/v0/sessions/:id", async (request, response, next) => {
   try {
     const context = await findChatContext(request.params.id);
     if (!context) return response.status(404).json({ error: "chat_not_found" });
-    const session = await findDeletableSession(await projects.list(), context.chat);
-    if (!session) return response.json({
+    if (!context.chat.piSessionFile) return response.json({
       ...chatView(context.chat), messages: [], tools: [], attachments: [], page: { before: null },
     });
-    const page = pageSessionEntries(session.entries, { before: request.query.before });
-    const messages = messagesFromEntries(page.entries).filter((message) => ["user", "assistant"].includes(message.role));
+    let session;
+    try {
+      session = await readSessionPage(context.chat.piSessionFile, context.project, { before: request.query.before });
+    } catch (error) {
+      if (error.code === "ENOENT") return response.json({
+        ...chatView(context.chat), messages: [], tools: [], attachments: [], page: { before: null },
+      });
+      throw error;
+    }
+    const messages = messagesFromEntries(session.entries).filter((message) => ["user", "assistant"].includes(message.role));
     response.json({
       ...chatView(context.chat),
-      ...settingsFromEntries(session.entries),
+      model: session.model,
+      thinkingLevel: session.thinkingLevel,
       messages,
-      tools: toolsFromEntries(page.entries).map((tool) => ({ ...tool, result: tool.result?.length > 4000 ? null : tool.result, resultDeferred: tool.result?.length > 4000 })),
-      page: { before: page.hasMore ? String(page.start) : null },
+      tools: toolsFromEntries(session.entries).map((tool) => ({ ...tool, result: tool.result?.length > 4000 ? null : tool.result, resultDeferred: tool.result?.length > 4000 })),
+      page: session.page,
     });
   } catch (error) { next(error); }
 });
@@ -1159,7 +1169,7 @@ app.post("/v0/live-sessions", async (request, response, next) => {
       return response.status(409).json({ error: "runtime_unavailable", installationId: runtime.installationId });
     }
     if (context.chat.piSessionFile) {
-      try { await validateSessionFile(context.chat.piSessionFile, context.project); }
+      try { await validateSessionHeader(context.chat.piSessionFile, context.project); }
       catch (error) {
         // A mapping to a file that no longer exists is a stale reference (e.g. a
         // chat left over from a failed launch), not an integrity error. Drop it
