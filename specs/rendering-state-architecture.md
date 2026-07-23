@@ -3,7 +3,7 @@
 **Target:** `jask-aran/Conduit` `main` at `c8257ad0206a68fb0453bcd2af61d7e90fa21eed`, all findings re-verified against that checkout on 2026-07-23 (file/line references below resolve against it)  
 **Pi integration target:** Conduit packages `@earendil-works/pi-ai` and `@earendil-works/pi-coding-agent` 0.80.6 (pinned in `conduit-web/package.json`; event shapes verified against the installed package's `.d.ts`)  
 **Purpose:** Prescriptive implementation guidance for the Transcript and Live Response only. Broader application/server findings live in the companion `performance-code-review.md`.  
-**Status of the interim-text question:** resolved by the owner (2026-07-23). Interim text belongs chronologically inside the Thinking Summary; only the Generation's final text is the Answer. See "Settled interim-text contract" below — this **reverses** the earlier draft's "monotonic Answer Output" guardrail.
+**Goal (owner decision, 2026-07-23):** reproduce Conduit's *current* in-use Live Response behaviour exactly, reimplemented on the structured domain model below. Interim text stays chronologically inside the Thinking Summary (as it does today); only the Generation's trailing text is the Answer. The **only** user-facing configuration is whether the Thinking Summary defaults to expanded or collapsed — there is no toggle for *where* interim text goes. See "Settled interim-text contract" below. This supersedes the earlier draft's "monotonic Answer Output" guardrail; the earlier idea of a per-user interim-text-location toggle is dropped.
 
 ## Executive decision
 
@@ -43,7 +43,9 @@ Recommended component/type renames include `TurnTrace` → `ThinkingSummary`, it
 
 ## Settled interim-text contract
 
-The owner's requirement: interstitial text emitted before and after tool calls — but before the final answer — is displayed **chronologically within the thinking dropdown**, interleaved with Thinking Blocks and Tool Call Cards in Pi's native order. Whether interim texts get their own visual grouping or are simply ordered among the other segments is a styling choice, not a contract term.
+The owner's requirement: **reproduce current Conduit behaviour exactly, implemented cleanly.** Interstitial text emitted before/after tool calls but before the final answer is displayed **chronologically within the thinking dropdown**, interleaved with Thinking Blocks and Tool Call Cards in Pi's native order — which is what `main` already shows via its `narration` path. There is no user setting for interim-text placement; the only Live Response setting is the Thinking Summary's default expanded/collapsed state (see "User configuration" below). Whether interim texts get their own visual grouping or are simply ordered among the other segments is a styling choice, not a contract term.
+
+In practice this case is rare in the owner's usage: reasoning-on coding models keep planning in `thinking` blocks and emit a single trailing `text` block (the answer), producing the clean thinking → tool → thinking → tool → answer pattern. Interim text (a `text` block *followed by* a tool call in the same Generation) appears mainly with reasoning turned off, non-reasoning models, or prompts that ask the model to narrate steps. The contract must still handle it correctly, because the current heuristic's dormant path would otherwise misfire if such a model were used.
 
 This has a consequence the earlier draft got wrong: **live classification of a text block is genuinely ambiguous.** When `text_start` arrives, nobody — including Pi — knows yet whether this text is interim commentary or the final answer. That is only decidable retroactively. The resolution is not to pretend the ambiguity away (the earlier "everything is Answer Output forever" rule) and not to solve it with timestamps (the current implementation); it is to accept **exactly one deterministic, structure-triggered reclassification** per text block:
 
@@ -61,9 +63,11 @@ Everything else — in practice, the Generation's trailing run of text — is An
 - Thinking blocks do **not** trigger reclassification. If a Generation ends with text followed only by trailing thinking, the text stays Answer Output. Steering that produces a second non-toolUse Assistant Message appends its text to Answer Output in order.
 - Implementation should relocate the rendered segment by moving/reparenting its keyed node where feasible, so its content, code-block state, and measured layout survive the move; recreating it inside the trace is acceptable only if visually equivalent.
 
-**Collapsed preview.** Anchor the collapsed Thinking Summary preview to the latest non-empty *text-bearing* trace segment — Thinking Block or Interim Text — with the tool count adjacent. (This is a small refinement over "latest Thinking Block only": interim text is often the freshest signal of what the model is doing. If it proves noisy, restricting the preview to Thinking Blocks is a one-line change and does not affect the architecture.)
+**Collapsed preview — reproduce `turn-trace.tsx::previewOf` exactly.** The header shows the latest non-empty *text* segment (Thinking Block or Interim Text — never tool names), whitespace-collapsed, clipped to the trailing 120 characters with a leading ellipsis when clipped. Beside it, a tool counter: calls since that latest text, plus the turn total when they differ — `"3 tool calls (5 total)"`, or just `"1 tool call"` when they match. Before any text exists, the neutral label is `"Thinking…"` while active and `"Thinking process"` once idle. This is current behaviour; preserve it verbatim rather than "improving" it.
 
-Current `main` reaches approximately this UX through `buildTurnRows()`'s `narration` segments (`turn-rows.ts:84-96`) and the `tool_execution_start` freeze in `active-chat.ts:388-418`. The **presentation intent survives** this redesign; the **derivation does not**. Delete the heuristics, keep the outcome.
+**User configuration.** The single configurable aspect of the Live Response is whether the Thinking Summary mounts expanded or collapsed by default (default: collapsed, matching today). It is a display-state preference only — it changes neither classification, projection, nor any domain state. Nothing else about interim text, answer placement, or preview content is user-configurable.
+
+Current `main` reaches this UX through `buildTurnRows()`'s `narration` segments (`turn-rows.ts:84-96`) and the `tool_execution_start` freeze in `active-chat.ts:388-418`. The **presentation intent survives** this redesign; the **derivation does not**. Delete the heuristics, keep the outcome.
 
 ## Pi's native shapes and the limits of what can be known live
 
@@ -97,8 +101,8 @@ The rest of the desired UX:
 
 The restructuring is not permission to redesign the presentation. Preserve these observable behaviours:
 
-- The Thinking Summary is created once per Generation, collapsed by default, and does not repeatedly mount/unmount as event types alternate.
-- Its collapsed preview follows the preview rule in the settled contract. Tool activity updates the adjacent count without replacing the preview with tool names. Before any text exists, use a neutral "Thinking…" state.
+- The Thinking Summary is created once per Generation, mounts in the user's configured default state (collapsed unless the user set expanded), and does not repeatedly mount/unmount as event types alternate.
+- Its collapsed preview reproduces `previewOf` exactly (latest text segment, 120-char tail, tool counters, neutral fallback). Tool activity updates the adjacent count without replacing the preview with tool names.
 - When expanded, Thinking Blocks, Interim Text, and Tool Call Cards are displayed in chronological order. Tool Call Cards are themselves collapsed by default.
 - Answer Output streams eagerly through the same Markdown/KaTeX styling used after completion.
 - A text block relocates from Answer Output into the Thinking Summary **only** on the structural triggers, at most once, never in reverse, and never at settlement, reconnect, or transcript reconciliation. Classification after reload is identical to classification live.
@@ -328,8 +332,8 @@ For each raw fixture, assert:
 
 Assert:
 
-- Thinking Summary appears once and begins collapsed
-- preview text/counter behaviour matches the settled preview rule
+- Thinking Summary appears once and begins in the configured default state (collapsed unless the user set expanded)
+- preview text/counter behaviour matches `previewOf` verbatim (latest text segment, 120-char tail, `"N tool calls (M total)"` counters, neutral fallback)
 - expanded chronology matches raw Pi block/tool order, including Interim Text positions
 - Tool Call Cards retain DOM identity as execution state changes
 - Answer Output root and stable Markdown nodes retain identity through streaming and completion
@@ -357,7 +361,7 @@ Expected qualitative bounds:
 
 ## Explicit non-goals and guardrails
 
-- Do not change the visible layout or make Thinking Summary expanded by default.
+- Do not change the visible layout. The Thinking Summary defaults to collapsed; its default expanded/collapsed state is the *only* configurable aspect of the Live Response, and even that changes no domain state. Do not add any other interim-text or answer-placement setting.
 - Do not collapse Pi's multiple assistant messages into one destructive text concatenation in domain state, even if the UI presents one Generation-level disclosure.
 - Do not expose raw provider reasoning terminology in product copy where "Thinking" is already the settled UX language.
 - Do not treat `thinking_end` as proof that no later thinking will occur in the Generation.
