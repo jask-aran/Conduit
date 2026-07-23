@@ -31,6 +31,24 @@ long tail of interface parity gaps (tool-call legibility, thinking UX,
 | 5 | [broker-registry.md](broker-registry.md) | In-process control plane: one session registry across chats and PTYs, spawn/attach/stop/status verbs | remotes-pty (its sessions are the second registry client) |
 | 6 | [seed-tool.md](seed-tool.md) | v0 seed tool: chat escalates work into a Coding session on the local target, with lineage | broker-registry |
 
+Two code-review documents accompany the roadmap, verified against `main`
+(`c8257ad`) on 2026-07-23. They request changes and are written to hand to an
+implementation agent together:
+
+- [rendering-state-architecture.md](rendering-state-architecture.md) — the
+  Transcript/Live Response redesign: preserve Pi's content-block structure end
+  to end, one Active Generation reducer, structured reconnect Resume State,
+  bounded Markdown/streaming work, socket backpressure. Includes the settled
+  interim-text contract (interstitial text displays chronologically inside the
+  thinking dropdown, classified from Pi structure, not timestamps).
+- [performance-code-review.md](performance-code-review.md) — bounded-work and
+  lifecycle fixes outside the renderer: JSONL pagination, Host-Pi preflight,
+  progressive startup, workspace-inspector and clone process bounds,
+  auth-store mutation serialization.
+
+They overlap ui-parity.md's thinking-UX ground; where they conflict, the
+review documents are newer and win.
+
 Rationale for the order: auth is a precondition for everything reachable
 off-machine. The parity work (2–3) continues the flagship investment and is
 independent, so it can proceed in parallel PRs with disjoint file ownership.
