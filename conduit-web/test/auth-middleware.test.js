@@ -3,11 +3,11 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { authStartupViolation, createRateLimiter, isAllowlistedPath, readCookie, safeRedirectTarget } from "../src/auth-middleware.js";
+import { authStartupViolation, createRateLimiter, isAllowlistedPath, isSameOriginRequest, readCookie, safeRedirectTarget } from "../src/auth-middleware.js";
 import { AuthStore } from "../src/auth-store.js";
 
-function mockConfig(host, allowInsecure = false) {
-  return { host, allowInsecure };
+function mockConfig(host, allowInsecure = false, allowBootstrap = false) {
+  return { host, allowInsecure, allowBootstrap };
 }
 
 test("isAllowlistedPath allows the login and healthz routes only", () => {
@@ -33,9 +33,20 @@ test("authStartupViolation rejects non-loopback + no password unless override is
   assert.equal(authStartupViolation(mockConfig("127.0.0.1"), store), null);
   assert.ok(authStartupViolation(mockConfig("0.0.0.0", false), store) instanceof Error);
   assert.equal(authStartupViolation(mockConfig("0.0.0.0", true), store), null);
+  assert.equal(authStartupViolation(mockConfig("0.0.0.0", false, true), store), null);
   await store.setPassword("fixture-pw");
   assert.equal(authStartupViolation(mockConfig("0.0.0.0", false), store), null);
   await fs.rm(root, { recursive: true, force: true });
+});
+
+test("bootstrap setup only accepts a same-origin browser POST", () => {
+  const request = {
+    protocol: "http",
+    headers: { host: "conduit.example.test", origin: "http://conduit.example.test" },
+  };
+  assert.equal(isSameOriginRequest(request), true);
+  assert.equal(isSameOriginRequest({ ...request, headers: { ...request.headers, origin: "https://evil.example" } }), false);
+  assert.equal(isSameOriginRequest({ ...request, headers: { host: "conduit.example.test" } }), false);
 });
 
 test("rate limiter caps the backoff and resets on success", () => {

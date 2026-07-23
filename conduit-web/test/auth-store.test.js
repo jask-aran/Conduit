@@ -11,6 +11,20 @@ test("scrypt round-trip verifies the set password and rejects others", async () 
   assert.equal(await verifyPassword("fixture-wrong", hashed), false);
 });
 
+test("initial password claim is first-writer-wins and rejects an empty password", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-auth-claim-"));
+  const file = path.join(root, "auth.json");
+  const store = new AuthStore(file);
+  await assert.rejects(store.claimInitialPassword(""), /Password cannot be empty/);
+  const [first, second] = await Promise.all([
+    store.claimInitialPassword("first-password"),
+    store.claimInitialPassword("second-password"),
+  ]);
+  assert.deepEqual([first, second].sort(), [false, true]);
+  assert.equal(await store.verifyPassword("first-password") || await store.verifyPassword("second-password"), true);
+  await fs.rm(root, { recursive: true, force: true });
+});
+
 test("verifyPassword rejects a malformed stored hash without throwing", async () => {
   assert.equal(await verifyPassword("any", null), false);
   assert.equal(await verifyPassword("any", { algo: "argon2" }), false);

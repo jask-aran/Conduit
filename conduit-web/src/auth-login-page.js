@@ -12,9 +12,12 @@ const COLOR_TOKENS = {
   ring: "#8d8d96",
 };
 
-export function renderLoginPage({ error = null, after = "/" } = {}) {
+export function renderLoginPage({ error = null, after = "/", bootstrap = false } = {}) {
   const errorTag = error
     ? `<p class="login-error" role="alert">${escapeHtml(error)}</p>`
+    : "";
+  const setupNotice = bootstrap
+    ? `<p class="login-warning" role="alert"><strong>First-run setup.</strong> No Conduit password exists yet. The password entered below will become the password and sign this browser in immediately. Only continue when this address is protected by your private network or edge access: the first person able to submit this page can claim the instance.</p>`
     : "";
   return `<!doctype html>
 <html lang="en" class="dark">
@@ -104,6 +107,16 @@ export function renderLoginPage({ error = null, after = "/" } = {}) {
         border-radius: 10px;
         font-size: 13px;
       }
+      .login-warning {
+        margin: 0 0 18px;
+        padding: 10px 12px;
+        background: rgba(240, 192, 89, 0.10);
+        color: #f3d88d;
+        border: 1px solid rgba(240, 192, 89, 0.28);
+        border-radius: 10px;
+        font-size: 13px;
+        line-height: 1.45;
+      }
       .login-foot { margin-top: 18px; color: ${COLOR_TOKENS.mutedForeground}; font-size: 12px; }
       .login-foot code { color: ${COLOR_TOKENS.foreground}; }
       input[name="after"] { display: none; }
@@ -116,16 +129,17 @@ export function renderLoginPage({ error = null, after = "/" } = {}) {
   <body>
     <main class="login-card">
       <h1>Conduit</h1>
-      <p class="label">Sign in to continue.</p>
+      <p class="label">${bootstrap ? "Set the initial password to secure this instance." : "Sign in to continue."}</p>
+      ${setupNotice}
       <form action="/v0/auth/login" method="POST" autocomplete="on">
         <label>Password
-          <input name="password" type="password" autocomplete="current-password" autofocus required />
+          <input name="password" type="password" autocomplete="${bootstrap ? "new-password" : "current-password"}" autofocus required />
         </label>
         <input name="after" type="hidden" value="${escapeHtml(after)}" />
         ${errorTag}
-        <button type="submit">Sign in</button>
+        <button type="submit">${bootstrap ? "Set password & sign in" : "Sign in"}</button>
       </form>
-      <p class="login-foot">Change the password from the server with <code>node scripts/conduit-auth.mjs set-password</code>.</p>
+      <p class="login-foot">${bootstrap ? "After this first setup, change the password from the server with" : "Change the password from the server with"} <code>node scripts/conduit-auth.mjs set-password</code>.</p>
     </main>
   </body>
 </html>`;

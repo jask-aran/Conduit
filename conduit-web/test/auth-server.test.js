@@ -234,6 +234,47 @@ test("a non-loopback bind with no password and no override rejects startup", asy
   await fs.rm(root, { recursive: true, force: true });
 });
 
+test("explicit non-loopback bootstrap locks the app until the first browser password claim", async () => {
+  const server = await spawnServer({ CONDUIT_HOST: "0.0.0.0", CONDUIT_ALLOW_BOOTSTRAP: "1" });
+  try {
+    const page = await fetch(`${server.origin}/`, { headers: { accept: "text/html" }, redirect: "manual" });
+    assert.equal(page.status, 302);
+    assert.equal(page.headers.get("location"), "/login");
+    assert.equal((await fetch(`${server.origin}/v0/projects`)).status, 401);
+
+    const noOrigin = await fetch(`${server.origin}/v0/auth/login`, {
+      method: "POST",
+      headers: { "content-type": "application/json", accept: "application/json" },
+      body: JSON.stringify({ password: "initial-password" }),
+    });
+    assert.equal(noOrigin.status, 403);
+
+    const setup = await fetch(`${server.origin}/v0/auth/login`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        accept: "application/json",
+        origin: server.origin,
+      },
+      body: JSON.stringify({ password: "initial-password" }),
+    });
+    assert.equal(setup.status, 200);
+    const body = await setup.json();
+    assert.equal(body.bootstrap, true);
+    const cookie = (setup.headers.get("set-cookie") || "").split(";")[0];
+    assert.equal((await fetch(`${server.origin}/v0/projects`, { headers: { cookie } })).status, 200);
+
+    const second = await fetch(`${server.origin}/v0/auth/login`, {
+      method: "POST",
+      headers: { "content-type": "application/json", accept: "application/json", origin: server.origin },
+      body: JSON.stringify({ password: "different-password" }),
+    });
+    assert.equal(second.status, 401);
+  } finally {
+    await stop(server);
+  }
+});
+
 test("loopback bind without a password starts open and serves the SPA", async () => {
   const server = await spawnServer();
   try {

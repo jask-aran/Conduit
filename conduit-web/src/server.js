@@ -29,6 +29,7 @@ import {
   clearSessionCookie,
   createRateLimiter,
   issueSessionCookie,
+  isSameOriginRequest,
   isSecureRequest,
   prepareAuthMiddleware,
   readCookie,
@@ -351,7 +352,7 @@ async function ensureChatTemplate(chat, project = null) {
 
 app.use(compression());
 
-const requireAuth = prepareAuthMiddleware(authStore);
+const requireAuth = prepareAuthMiddleware(authStore, { bootstrapLocked: config.allowBootstrap });
 app.use(requireAuth);
 
 async function findRegisteredSession(id) {
@@ -392,7 +393,8 @@ app.use(express.urlencoded({ extended: false, limit: "32kb" }));
 
 app.get("/login", (request, response) => {
   const after = safeRedirectTarget(request.query.after);
-  response.type("text/html").send(renderLoginPage({ after }));
+  response.set("Cache-Control", "no-store");
+  response.type("text/html").send(renderLoginPage({ after, bootstrap: !authStore.hasPassword() }));
 });
 
 app.post("/v0/auth/login", async (request, response) => {
@@ -400,23 +402,44 @@ app.post("/v0/auth/login", async (request, response) => {
   const after = safeRedirectTarget(request.body?.after);
   const acceptsJson = String(request.headers["accept"] || "").includes("application/json")
     || String(request.headers["content-type"] || "").includes("application/json");
-  if (loginRateLimiter.isThrottled()) {
-    await authStore.verifyPassword(password).catch(() => false);
-    if (acceptsJson) return response.status(429).json({ error: "rate_limited", message: "Too many failed attempts. Try again shortly." });
-    return response.type("text/html").status(429).send(renderLoginPage({ error: "Too many failed attempts. Try again shortly.", after }));
+  const sendError = (status, error, message, bootstrap = false) => {
+    if (acceptsJson) return response.status(status).json({ error, message });
+    response.set("Cache-Control", "no-store");
+    return response.type("text/html").status(status).send(renderLoginPage({ error: message, after, bootstrap }));
+  };
+
+  await authStore.reloadFromFile();
+  const needsSetup = !authStore.hasPassword();
+  let claimedInitialPassword = false;
+  let ok = false;
+  if (needsSetup) {
+    if (!isSameOriginRequest(request)) {
+      return sendError(403, "setup_origin_required", "Open this page directly in the Conduit browser before setting the first password.", true);
+    }
+    try {
+      claimedInitialPassword = await authStore.claimInitialPassword(password);
+    } catch (error) {
+      if (error.code === "invalid_password") return sendError(400, "invalid_password", error.message, true);
+      throw error;
+    }
+    ok = claimedInitialPassword || await authStore.verifyPassword(password).catch(() => false);
+  } else {
+    if (loginRateLimiter.isThrottled()) {
+      await authStore.verifyPassword(password).catch(() => false);
+      return sendError(429, "rate_limited", "Too many failed attempts. Try again shortly.");
+    }
+    ok = await authStore.verifyPassword(password).catch(() => false);
   }
-  const ok = await authStore.verifyPassword(password).catch(() => false);
   if (!ok) {
     loginRateLimiter.noteFailure();
-    if (acceptsJson) return response.status(401).json({ error: "invalid_credentials", message: "Incorrect password." });
-    return response.type("text/html").status(401).send(renderLoginPage({ error: "Incorrect password.", after }));
+    return sendError(401, "invalid_credentials", "Incorrect password.");
   }
   loginRateLimiter.noteSuccess();
   const { token } = await authStore.createSession({
     userAgent: String(request.headers["user-agent"] || "").slice(0, 256) || null,
   });
   issueSessionCookie(response, token, { secure: isSecureRequest(request) });
-  if (acceptsJson) return response.json({ ok: true, redirect: after });
+  if (acceptsJson) return response.json({ ok: true, redirect: after, bootstrap: claimedInitialPassword });
   response.redirect(303, after);
 });
 
@@ -1402,13 +1425,14 @@ server.on("upgrade", async (request, socket, head) => {
   const match = new URL(request.url, "http://localhost").pathname.match(/^\/v0\/live-sessions\/([a-f0-9]{24})\/stream$/);
   if (!match || !manager.get(match[1])) return socket.destroy();
   try {
-    // Mirror the HTTP auth middleware: with no password configured, Conduit runs
-    // fully open (local mode), so the live-session upgrade must not demand a
-    // session cookie the open app never issues. Upgrades bypass Express, so this
-    // bypass has to be repeated here or every generation stream is destroyed.
+    // A browser bootstrap deployment exposes no application surface until the
+    // first password is claimed. Loopback development may remain deliberately
+    // open when no password and no bootstrap lock were configured.
     if (authStore.hasPassword()) {
       const context = await validateSession(authStore, request);
       if (!context) return socket.destroy();
+    } else if (config.allowBootstrap) {
+      return socket.destroy();
     }
   } catch (error) {
     console.error("WebSocket session validation failed", error);

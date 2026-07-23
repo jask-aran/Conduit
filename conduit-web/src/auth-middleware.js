@@ -17,10 +17,12 @@ export function authStartupViolation(config, authStore) {
   const loopback = isLoopback(config.host);
   if (loopback) return null;
   if (config.allowInsecure) return null;
+  if (config.allowBootstrap) return null;
   if (!authStore.hasPassword()) {
     return new Error(
       "Refusing to bind a non-loopback address without a configured password. "
       + "Run `node scripts/conduit-auth.mjs set-password` from the repo root, "
+      + "export CONDUIT_ALLOW_BOOTSTRAP=1 for guarded browser setup, "
       + "or export CONDUIT_ALLOW_INSECURE=1 for development only.",
     );
   }
@@ -120,15 +122,30 @@ export function clearSessionCookie(response, { secure }) {
   });
 }
 
-function isSecureRequest(request) {
+export function isSecureRequest(request) {
   if (request.protocol === "https") return true;
   const forwarded = String(request.headers["x-forwarded-proto"] || "").toLowerCase();
   return forwarded.includes("https");
 }
 
+// A browser's form POST has an Origin header. Require it during first-run
+// setup so another site cannot silently claim a reachable, unconfigured
+// Conduit instance in a visitor's browser. Direct requests do not gain any
+// access from this check: the setup endpoint remains deliberately narrow.
+export function isSameOriginRequest(request) {
+  const origin = String(request.headers?.origin || "");
+  const host = String(request.headers?.host || "");
+  if (!origin || !host) return false;
+  try {
+    return new URL(origin).origin === `${isSecureRequest(request) ? "https" : "http"}://${host}`;
+  } catch {
+    return false;
+  }
+}
+
 const NO_PASSWORD_NEGATIVE_CACHE_MS = 5_000;
 
-export function prepareAuthMiddleware(authStore) {
+export function prepareAuthMiddleware(authStore, { bootstrapLocked = false } = {}) {
   let noPasswordCheckedAt = 0;
   return async function requireAuth(request, response, next) {
     if (isAllowlistedPath(request.method, request.path)) return next();
@@ -138,7 +155,13 @@ export function prepareAuthMiddleware(authStore) {
         await authStore.reloadFromFile();
         noPasswordCheckedAt = now;
       }
-      if (!authStore.hasPassword()) return next();
+      if (!authStore.hasPassword()) {
+        if (!bootstrapLocked) return next();
+        if (isBrowserNavigation(request) && !UNAUTHENTICATED_API_PREFIXES.some((prefix) => request.path.startsWith(prefix))) {
+          return response.redirect(302, "/login");
+        }
+        return response.status(401).json({ error: "setup_required" });
+      }
     }
     const context = await validateSession(authStore, request);
     if (context) {
@@ -156,4 +179,4 @@ export function prepareAuthMiddleware(authStore) {
   };
 }
 
-export { COOKIE_NAME, isSecureRequest };
+export { COOKIE_NAME };

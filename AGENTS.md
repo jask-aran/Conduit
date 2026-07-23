@@ -55,7 +55,10 @@ that alters behavior they describe.
   WebSocket upgrades validate the session cookie before `handleUpgrade` and
   destroy the socket otherwise. Loopback binding without a configured password
   stays open for local dev; a non-loopback bind refuses to start without a
-  password or `CONDUIT_ALLOW_INSECURE=1`. Credentials live only in
+  password, unless `CONDUIT_ALLOW_BOOTSTRAP=1` enables its login-only first-run
+  setup or `CONDUIT_ALLOW_INSECURE=1` is explicitly used for development.
+  Bootstrap is first-writer-wins and must sit behind private edge access.
+  Credentials live only in
   `data/auth.json` (mode `0600`, atomic writes); the running server reloads it
   on each login attempt and on session-validation cache miss, never on a timer.
 

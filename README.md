@@ -127,8 +127,12 @@ terminal; template model lists are only the fallback.
 **Auth.** Single-user password: `node scripts/conduit-auth.mjs set-password`,
 scrypt-hashed in `data/auth.json`, deny-by-default middleware over every
 route, asset, and WebSocket upgrade, minimal server-rendered login page.
-Non-loopback binds refuse to start unconfigured (`CONDUIT_ALLOW_INSECURE=1`
-overrides for dev). Full contract in `conduit-web/README.md`.
+For a genuinely headless first run, set `CONDUIT_ALLOW_BOOTSTRAP=1`: Conduit
+serves only the setup page until the first browser password submission claims
+the instance. Keep that first page behind Tailscale, Cloudflare Access, or
+equivalent private edge access. Non-loopback binds otherwise refuse to start
+unconfigured (`CONDUIT_ALLOW_INSECURE=1` remains development-only). Full
+contract in `conduit-web/README.md`.
 
 ## Interface
 
