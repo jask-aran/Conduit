@@ -4,6 +4,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
 import { startConduitHarness, waitFor } from "./helpers/conduit-harness.js";
+import { sessionDirectoryFor } from "../src/session-store.js";
 
 async function pauseLaunch(harness, chat) {
   const after = (await harness.pi.commands()).length;
@@ -20,6 +21,34 @@ async function completeState(harness, request, chat) {
     sessionFile: path.join(harness.root, "pi", "sessions", `${chat.id}.jsonl`),
     sessionId: `session-${chat.id}`,
   });
+}
+
+async function createNativeChat(harness) {
+  const workspace = path.join(harness.root, "host-workspace");
+  await fs.mkdir(workspace);
+  const created = await harness.request("/v0/projects", {
+    method: "POST",
+    body: JSON.stringify({ mode: "linked", name: "Host workspace", path: workspace }),
+  });
+  assert.equal(created.status, 201);
+  const project = await created.json();
+  const chatResponse = await harness.request("/v0/chats", {
+    method: "POST",
+    body: JSON.stringify({ projectId: project.id, runtimeKind: "native_pi" }),
+  });
+  assert.equal(chatResponse.status, 201);
+  return { project, chat: await chatResponse.json() };
+}
+
+async function launchNativeChat(harness, chat, sessionFile) {
+  const after = (await harness.pi.commands()).length;
+  const launch = harness.request("/v0/live-sessions", {
+    method: "POST",
+    body: JSON.stringify({ chatId: chat.id, projectId: chat.projectId }),
+  });
+  const state = await harness.pi.waitForCommand("get_state", { after });
+  await harness.pi.reply(state, { sessionFile, sessionId: `native-${chat.id}` });
+  assert.equal((await launch).status, 201);
 }
 
 async function initGitRepo(directory) {
@@ -129,6 +158,48 @@ test("a replaced cloned root cannot be inspected, launched, or unregistered", as
     assert.equal((await harness.pi.commands()).length, 0);
     assert.equal((await harness.request(`/v0/projects/${project.id}`, { method: "DELETE" })).status, 409);
     assert.equal(await fs.readFile(path.join(outside, "keep.txt"), "utf8"), "outside");
+  } finally {
+    await harness.stop();
+  }
+});
+
+test("Host Pi chat deletion removes its runtime-owned transcript", async () => {
+  const harness = await startConduitHarness();
+  try {
+    const { project, chat } = await createNativeChat(harness);
+    const sessionsDir = sessionDirectoryFor(project.path, path.join(harness.root, "native-agent"));
+    const sessionFile = path.join(sessionsDir, "host-single.jsonl");
+    await fs.mkdir(sessionsDir, { recursive: true });
+    await fs.writeFile(sessionFile, `${JSON.stringify({ type: "session", id: "host-single", cwd: project.path })}\n`);
+    await launchNativeChat(harness, chat, sessionFile);
+    assert.equal((await harness.request(`/v0/sessions/${chat.id}`, { method: "DELETE" })).status, 204);
+    await assert.rejects(fs.access(sessionFile), { code: "ENOENT" });
+  } finally {
+    await harness.stop();
+  }
+});
+
+test("Host Pi chat deletion removes its fork family without touching siblings", async () => {
+  const harness = await startConduitHarness();
+  try {
+    const { project, chat } = await createNativeChat(harness);
+    const sessionsDir = sessionDirectoryFor(project.path, path.join(harness.root, "native-agent"));
+    const original = path.join(sessionsDir, "host-original.jsonl");
+    const branch = path.join(sessionsDir, "host-branch.jsonl");
+    const sibling = path.join(sessionsDir, "host-sibling.jsonl");
+    const unrelated = path.join(sessionsDir, "host-unrelated.jsonl");
+    const header = (id, parentSession = null) => `${JSON.stringify({ type: "session", id, cwd: project.path, ...(parentSession ? { parentSession } : {}) })}\n`;
+    await fs.mkdir(sessionsDir, { recursive: true });
+    await Promise.all([
+      fs.writeFile(original, header("host-original")),
+      fs.writeFile(branch, header("host-branch", original)),
+      fs.writeFile(sibling, header("host-sibling", original)),
+      fs.writeFile(unrelated, header("host-unrelated")),
+    ]);
+    await launchNativeChat(harness, chat, branch);
+    assert.equal((await harness.request(`/v0/sessions/${chat.id}`, { method: "DELETE" })).status, 204);
+    await Promise.all([original, branch, sibling].map((file) => assert.rejects(fs.access(file), { code: "ENOENT" })));
+    await fs.access(unrelated);
   } finally {
     await harness.stop();
   }
