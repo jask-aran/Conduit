@@ -171,7 +171,7 @@ test.beforeEach(async ({ page }) => {
     const file = new URL(route.request().url()).searchParams.get("path");
     await route.fulfill({ json: { path: file, size: 31, content: "export function startConduit() {}\n" } });
   });
-  await page.route("**/v0/projects/*/diff", async (route) => {
+  await page.route("**/v0/projects/*/diff*", async (route) => {
     await route.fulfill({ json: { repository: true, branch: "agent/rhs-panel-mvp", upstream: "origin/agent/rhs-panel-mvp", ahead: 2, behind: 0, commits: [{ graph: "*", hash: "1234567890abcdef", shortHash: "1234567", subject: "Add workspace panel", author: "Conduit", authoredAt: "2026-07-22T10:00:00Z" }], files: [{ status: " M", path: "src/main.ts" }], diff: "# Working tree\n@@ -1 +1 @@\n-old\n+new\n" } });
   });
   await page.route("**/v0/chats/*?ifEmpty=true", async (route) => {
@@ -238,6 +238,16 @@ test.beforeEach(async ({ page }) => {
       }],
     } });
   });
+  await page.route("**/v0/chats/session_existing", async (route) => {
+    await route.fulfill({ json: {
+      id: "session_existing",
+      projectId: "project_chat",
+      status: "active",
+      title: "Existing chat",
+      model: model.spec,
+      thinkingLevel: "medium",
+    } });
+  });
   await page.route("**/v0/sessions/session_existing/transcript", async (route) => {
     await route.fulfill({ contentType: "text/markdown", body: "## User\n\nPrevious question" });
   });
@@ -275,6 +285,7 @@ test("workspace panel previews files, shows diff, and persists per chat", async 
   await expect(panel.getByText("src/main.ts")).toBeVisible();
   await expect(panel.getByText("agent/rhs-panel-mvp", { exact: true })).toBeVisible();
   await expect(panel.getByText("Add workspace panel")).toBeVisible();
+  await panel.getByRole("button", { name: /Working tree patch/ }).click();
   const patchHandle = panel.getByRole("separator", { name: "Resize working tree patch" });
   await expect(patchHandle).toBeVisible();
   const originalPatchHeight = Number(await patchHandle.getAttribute("aria-valuenow"));
@@ -291,6 +302,97 @@ test("workspace panel previews files, shows diff, and persists per chat", async 
   await expect(page.getByRole("tab", { name: "Source Control" })).toHaveAttribute("aria-selected", "true");
   await page.keyboard.press(process.platform === "darwin" ? "Meta+." : "Control+.");
   await expect(page.getByRole("complementary", { name: "Workspace panel" })).toHaveCount(0);
+});
+
+test("reselecting the active chat does not reload its transcript or workspace", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: "Existing chat" }).click();
+  await expect(page.getByText("Previous question")).toBeVisible();
+  const activeChat = page.locator(".sidebar-chat[aria-current='page']");
+  await expect(activeChat).toHaveText("Existing chat");
+  const requests = [];
+  page.on("request", (request) => {
+    if (request.url().includes("/v0/sessions/session_existing")) requests.push(request.url());
+  });
+
+  await activeChat.click();
+  await page.waitForTimeout(150);
+
+  expect(requests).toEqual([]);
+  await expect(activeChat).toHaveAttribute("aria-current", "page");
+});
+
+test("keeps the workspace panel mounted and warm between chats in one project", async ({ page }) => {
+  const sibling = { id: "session_other", projectId: "project_chat", status: "draft", title: "Other chat" };
+  await page.unroute("**/v0/projects");
+  await page.route("**/v0/projects", async (route) => {
+    await route.fulfill({ json: { projects: [{ ...projects[0], sessions: [...projects[0].sessions, sibling] }, projects[1]] } });
+  });
+  await page.route("**/v0/sessions/session_other", async (route) => {
+    await route.fulfill({ json: { ...sibling, messages: [], tools: [] } });
+  });
+  let diffRequests = 0;
+  await page.route("**/v0/projects/*/diff*", async (route) => {
+    diffRequests += 1;
+    await route.fulfill({ json: { repository: true, branch: "agent/rhs-panel-mvp", files: [], commits: [], diff: "" } });
+  });
+
+  await page.goto("/");
+  await page.getByRole("button", { name: "Existing chat" }).click();
+  await page.getByRole("button", { name: "Toggle workspace panel" }).click();
+  const panel = page.getByRole("complementary", { name: "Workspace panel" });
+  await panel.getByRole("tab", { name: "Source Control" }).click();
+  await expect(panel.getByText("agent/rhs-panel-mvp", { exact: true })).toBeVisible();
+  const originalPanel = await panel.elementHandle();
+  await page.evaluate(() => {
+    localStorage.setItem("conduit:workspace-panel:session_other:open", "true");
+    localStorage.setItem("conduit:workspace-panel:session_other:tab", "diff");
+  });
+
+  await page.getByRole("button", { name: "Other chat" }).click();
+  await expect(page.getByRole("navigation", { name: "breadcrumb" })).toContainText("Other chat");
+  await page.waitForTimeout(150);
+
+  expect(diffRequests).toBe(1);
+  expect(await panel.evaluate((element, original) => element === original, originalPanel)).toBe(true);
+});
+
+test("restores cached Git status when returning to a workspace", async ({ page }) => {
+  const sibling = { id: "session_research", projectId: "project_research", status: "draft", title: "Research chat" };
+  await page.unroute("**/v0/projects");
+  await page.route("**/v0/projects", async (route) => {
+    await route.fulfill({ json: { projects: [projects[0], { ...projects[1], sessions: [sibling] }] } });
+  });
+  await page.route("**/v0/sessions/session_research", async (route) => {
+    await route.fulfill({ json: { ...sibling, messages: [], tools: [] } });
+  });
+  let diffRequests = 0;
+  await page.route("**/v0/projects/*/diff*", async (route) => {
+    diffRequests += 1;
+    const branch = route.request().url().includes("project_research") ? "main" : "master";
+    await route.fulfill({ json: { repository: true, branch, files: [], commits: [], diff: "" } });
+  });
+
+  await page.goto("/");
+  await page.getByRole("button", { name: "Existing chat" }).click();
+  await page.getByRole("button", { name: "Toggle workspace panel" }).click();
+  const panel = page.getByRole("complementary", { name: "Workspace panel" });
+  await panel.getByRole("tab", { name: "Source Control" }).click();
+  await expect(panel.getByText("master", { exact: true })).toBeVisible();
+  const originalPanel = await panel.elementHandle();
+  await page.evaluate(() => {
+    localStorage.setItem("conduit:workspace-panel:session_research:open", "true");
+    localStorage.setItem("conduit:workspace-panel:session_research:tab", "diff");
+  });
+
+  await page.getByRole("button", { name: "Research chat" }).click();
+  await expect(panel.getByText("main", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Existing chat" }).click();
+  await expect(panel.getByText("master", { exact: true })).toBeVisible();
+
+  expect(diffRequests).toBe(2);
+  expect(await panel.evaluate((element, original) => element === original, originalPanel)).toBe(true);
+  await expect(panel.locator(".workspace-panel-loading")).toHaveCount(0);
 });
 
 test.afterEach(async ({ page }) => {

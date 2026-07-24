@@ -680,12 +680,19 @@ app.get("/v0/projects/:id/file", async (request, response, next) => {
 });
 
 app.get("/v0/projects/:id/diff", async (request, response, next) => {
+  const controller = new AbortController();
+  const abort = () => controller.abort();
+  request.once("aborted", abort);
   try {
     const project = await projects.get(request.params.id);
     if (!project) return response.status(404).json({ error: "project_not_found" });
     await projects.validate(project);
-    response.json(await readWorkspaceDiff(project.path));
-  } catch (error) { next(error); }
+    response.json(await readWorkspaceDiff(project.path, { includePatch: request.query.patch === "1", reuse: request.query.reuse === "1", signal: controller.signal }));
+  } catch (error) {
+    if (!request.aborted && !response.destroyed) next(error);
+  } finally {
+    request.removeListener("aborted", abort);
+  }
 });
 
 app.post("/v0/projects/:id/move-sessions", async (request, response, next) => {
