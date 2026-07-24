@@ -407,17 +407,24 @@ export async function removeSession(session) {
  * Parent paths outside the workspace session directory are deliberately not
  * followed: Conduit may only remove transcripts it owns for this project.
  */
-export async function sessionFamilyFiles(file, project) {
+export async function sessionFamilyFiles(file, project, { sessionsDir = project.sessionsDir } = {}) {
   const target = path.resolve(file);
+  const directory = path.resolve(sessionsDir);
+  if (path.dirname(target) !== directory) {
+    const error = new Error("Pi session mapping is outside the runtime session directory");
+    error.code = "invalid_session_mapping";
+    throw error;
+  }
+  await validateSessionHeader(target, project);
   let entries;
-  try { entries = await fs.readdir(project.sessionsDir, { withFileTypes: true }); }
+  try { entries = await fs.readdir(directory, { withFileTypes: true }); }
   catch (error) {
     if (error.code === "ENOENT") return [];
     throw error;
   }
   const files = new Set(entries
     .filter((entry) => entry.isFile() && entry.name.endsWith(".jsonl"))
-    .map((entry) => path.resolve(project.sessionsDir, entry.name)));
+    .map((entry) => path.resolve(directory, entry.name)));
   if (!files.has(target)) return [];
 
   const links = new Map([...files].map((candidate) => [candidate, new Set()]));
@@ -443,8 +450,8 @@ export async function sessionFamilyFiles(file, project) {
   return family;
 }
 
-export async function removeSessionFamily(file, project) {
-  const files = await sessionFamilyFiles(file, project);
+export async function removeSessionFamily(file, project, options = {}) {
+  const files = await sessionFamilyFiles(file, project, options);
   await Promise.all(files.map((familyFile) => removeSession({ file: familyFile })));
   return files;
 }

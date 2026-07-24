@@ -68,7 +68,7 @@ flushEvents();
 `);
   await fs.chmod(conduitPi, 0o755);
   const nativePi = path.join(root, "native-pi");
-  await fs.writeFile(nativePi, "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then echo 0.80.10; exit 0; fi\nif [ \"$1\" = \"--help\" ]; then echo '--mode --session --append-system-prompt --skill --approve --no-approve'; exit 0; fi\nexit 1\n");
+  await fs.copyFile(conduitPi, nativePi);
   await fs.chmod(nativePi, 0o755);
   return { conduitPi, nativePi };
 }
