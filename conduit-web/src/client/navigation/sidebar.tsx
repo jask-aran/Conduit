@@ -49,7 +49,7 @@ function Modal(props: { open: boolean; title: string; description?: string; chil
   let wasOpen = false;
   createEffect(() => { if (props.open && !wasOpen) returnFocus = document.activeElement as HTMLElement | null; wasOpen = props.open; });
   return <KDialog.Root open={props.open} onOpenChange={(open) => { if (!open) props.onClose(); }}>
-    <KDialog.Portal><KDialog.Content data-state={props.open ? "open" : "closed"} class="conduit-modal" onCloseAutoFocus={(event) => { event.preventDefault(); if (returnFocus?.isConnected) returnFocus.focus(); returnFocus = null; }}>
+    <KDialog.Portal><KDialog.Content data-state={props.open ? "open" : "closed"} class="conduit-modal" onEscapeKeyDown={(event) => { event.preventDefault(); event.stopPropagation(); props.onClose(); }} onCloseAutoFocus={(event) => { event.preventDefault(); if (returnFocus?.isConnected) returnFocus.focus(); returnFocus = null; }}>
       <div class={`conduit-modal-card ${props.class || ""}`}>
         <KDialog.Title>{props.title}</KDialog.Title><Show when={props.description}><KDialog.Description class="text-muted-foreground">{props.description}</KDialog.Description></Show>
         {props.children as never}
@@ -63,7 +63,7 @@ function AlertModal(props: { open: boolean; title: string; description: string; 
   let wasOpen = false;
   createEffect(() => { if (props.open && !wasOpen) returnFocus = document.activeElement as HTMLElement | null; wasOpen = props.open; });
   return <KAlertDialog.Root open={props.open} onOpenChange={(open) => { if (!open) props.onClose(); }}>
-    <KAlertDialog.Portal><KAlertDialog.Content data-state={props.open ? "open" : "closed"} class="conduit-modal" onCloseAutoFocus={(event) => { event.preventDefault(); if (returnFocus?.isConnected) returnFocus.focus(); returnFocus = null; }}>
+    <KAlertDialog.Portal><KAlertDialog.Content data-state={props.open ? "open" : "closed"} class="conduit-modal" onEscapeKeyDown={(event) => { event.preventDefault(); event.stopPropagation(); props.onClose(); }} onCloseAutoFocus={(event) => { event.preventDefault(); if (returnFocus?.isConnected) returnFocus.focus(); returnFocus = null; }}>
       <div class="conduit-modal-card">
         <KAlertDialog.Title>{props.title}</KAlertDialog.Title>
         <KAlertDialog.Description>{props.description}</KAlertDialog.Description>
