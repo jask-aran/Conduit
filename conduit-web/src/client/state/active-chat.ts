@@ -294,16 +294,24 @@ export function createActiveChat(options: ActiveChatOptions) {
         void catalogue.refresh();
         if (event.chatId === selectedId()) {
           const current = activeGeneration();
-          if (current && ["stopped", "complete", "failed"].includes(current.status)) {
+          const terminal = current && ["stopped", "complete", "failed"].includes(current.status);
+          if (terminal && current.id === event.generationId
+            && (event.generationSeq == null || current.lastSeq >= event.generationSeq)) {
             const selection = selectionToken;
+            const checkpointGenerationId = event.generationId;
+            const checkpointGenerationSeq = event.generationSeq;
             void api<TranscriptDetail>(`/v0/sessions/${encodeURIComponent(event.chatId)}`).then((detail) => {
               if (selection !== selectionToken || event.chatId !== selectedId()) return;
+              const matching = activeGeneration();
+              if (!matching || matching.id !== checkpointGenerationId
+                || !["stopped", "complete", "failed"].includes(matching.status)
+                || (checkpointGenerationSeq != null && matching.lastSeq < checkpointGenerationSeq)) return;
               batch(() => {
                 applyDetail(detail, true);
                 setActiveGeneration(null);
               });
             }).catch((error) => onError((error as Error).message));
-          } else void loadDetail(event.chatId, true).catch((error) => onError((error as Error).message));
+          } else if (!current) void loadDetail(event.chatId, true).catch((error) => onError((error as Error).message));
         }
         break;
       case "message_end":
