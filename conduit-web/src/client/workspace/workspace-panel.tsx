@@ -35,19 +35,18 @@ function cacheWorkspace(projectId: string, patch: Partial<WorkspaceCacheEntry>) 
 }
 
 export default function WorkspacePanel(props: { projectId: Accessor<string>; chatId: Accessor<string>; onClose: () => void }) {
-  let diffVersion = 0;
-  let fileVersion = 0;
-  let activeDiffProject: string | null = null;
-  const directoryVersions = new Map<string, number>();
+  let projectGeneration = 0;
+  let requestVersion = 0;
+  let projectController = new AbortController();
+  const requests = new Map<string, WorkspaceRequest>();
+  const requestControllers = new Map<number, AbortController>();
+  const [pending, setPending] = createSignal(new Map<number, { foreground: boolean }>());
   const storageKey = () => `conduit:workspace-panel:${props.chatId()}:tab`;
   const [tab, setTab] = createSignal<PanelTab>((localStorage.getItem(storageKey()) as PanelTab) || "files");
   const [directories, setDirectories] = createSignal<Record<string, TreeEntry[]>>({});
   const [expanded, setExpanded] = createSignal<Set<string>>(new Set());
   const [preview, setPreview] = createSignal<FilePreview | null>(null);
   const [diff, setDiff] = createSignal<DiffPayload | null>(null);
-  const [diffLoading, setDiffLoading] = createSignal(false);
-  const [filesLoading, setFilesLoading] = createSignal(false);
-  const [loading, setLoading] = createSignal(false);
   const [error, setError] = createSignal("");
   const widthKey = () => `conduit:workspace-panel:${props.chatId()}:width`;
   const [width, setWidth] = createSignal(Math.max(320, Math.min(620, Number(localStorage.getItem(widthKey())) || 420)));
@@ -57,6 +56,45 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
   const detailOpenFor = (nextTab: PanelTab) => localStorage.getItem(`conduit:workspace-panel:${props.chatId()}:${nextTab}:detail-open`) ?? (nextTab === "diff" ? "false" : "true");
   const [detailOpen, setDetailOpen] = createSignal(detailOpenFor(tab()) === "true");
   const [detailHeight, setDetailHeight] = createSignal(Math.max(160, Number(localStorage.getItem(detailHeightKey())) || 360));
+  const hasPending = (operation?: string) => [...pending().keys()].some((version) => !operation || requests.get(operation)?.version === version);
+  const diffLoading = () => hasPending("diff");
+  const filesLoading = () => [...requests.keys()].some((operation) => operation.startsWith("directory:") && hasPending(operation));
+  const loading = () => [...pending().values()].some((entry) => entry.foreground);
+
+  const ownsRequest = (request: WorkspaceRequest) => ownsWorkspaceRequest({
+    projectId: props.projectId(),
+    generation: projectGeneration,
+    operation: request.operation,
+    version: requests.get(request.operation)?.version || -1,
+  }, request);
+  const finishRequest = (request: WorkspaceRequest) => {
+    if (requests.get(request.operation)?.version === request.version) requests.delete(request.operation);
+    requestControllers.delete(request.version);
+    setPending((current) => {
+      const next = new Map(current);
+      next.delete(request.version);
+      return next;
+    });
+  };
+  const startRequest = (operation: string, foreground: boolean) => {
+    requests.get(operation) && requestControllers.get(requests.get(operation)!.version)?.abort();
+    const controller = new AbortController();
+    projectController.signal.addEventListener("abort", () => controller.abort(), { once: true });
+    const request: WorkspaceRequest = { projectId: props.projectId(), generation: projectGeneration, operation, version: ++requestVersion };
+    requests.set(operation, request);
+    requestControllers.set(request.version, controller);
+    setPending((current) => new Map(current).set(request.version, { foreground }));
+    return { request, controller };
+  };
+  const resetRequestScope = () => {
+    projectController.abort();
+    projectController = new AbortController();
+    projectGeneration += 1;
+    requests.clear();
+    requestControllers.clear();
+    setPending(new Map());
+  };
+  const wasAborted = (cause: unknown) => (cause as { name?: string })?.name === "AbortError";
 
   const selectTab = (next: PanelTab) => {
     setDetailOpen(detailOpenFor(next) === "true");
@@ -70,7 +108,9 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
     localStorage.setItem(detailOpenKey(), String(next));
     if (next && tab() === "diff") void loadDiff(true, true);
   };
+  let stopDetailResize: (() => void) | undefined;
   const startDetailResize = (event: PointerEvent) => {
+    stopDetailResize?.();
     event.preventDefault();
     const startY = event.clientY;
     const startHeight = detailHeight();
@@ -79,7 +119,8 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
       setDetailHeight(next);
       localStorage.setItem(detailHeightKey(), String(next));
     };
-    const stop = () => { window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", stop); document.body.classList.remove("workspace-detail-resizing"); };
+    const stop = () => { window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", stop); document.body.classList.remove("workspace-detail-resizing"); stopDetailResize = undefined; };
+    stopDetailResize = stop;
     document.body.classList.add("workspace-detail-resizing");
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", stop, { once: true });
@@ -92,28 +133,20 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
     localStorage.setItem(detailHeightKey(), String(next));
   };
   const loadDirectory = async (directory = "", background = false) => {
-    const projectId = props.projectId();
-    const key = `${projectId}:${directory}`;
-    const version = (directoryVersions.get(key) || 0) + 1;
-    directoryVersions.set(key, version);
-    setFilesLoading(true);
-    if (!background) setLoading(true);
+    const { request, controller } = startRequest(`directory:${directory}`, !background);
     setError("");
     try {
-      const payload = await api<{ entries: TreeEntry[] }>(`/v0/projects/${encodeURIComponent(projectId)}/tree?path=${encodeURIComponent(directory)}`);
-      if (props.projectId() !== projectId || directoryVersions.get(key) !== version) return;
+      const payload = await api<{ entries: TreeEntry[] }>(`/v0/projects/${encodeURIComponent(request.projectId)}/tree?path=${encodeURIComponent(directory)}`, { signal: controller.signal });
+      if (!ownsRequest(request)) return;
       setDirectories((current) => {
         const next = { ...current, [directory]: asList<TreeEntry>(payload.entries) };
-        cacheWorkspace(projectId, { directories: next });
+        cacheWorkspace(request.projectId, { directories: next });
         return next;
       });
     } catch (cause) {
-      if (props.projectId() === projectId && directoryVersions.get(key) === version) setError((cause as Error).message);
+      if (ownsRequest(request) && !wasAborted(cause)) setError((cause as Error).message);
     } finally {
-      if (props.projectId() === projectId && directoryVersions.get(key) === version) {
-        setFilesLoading(false);
-        if (!background) setLoading(false);
-      }
+      finishRequest(request);
     }
   };
   const toggleDirectory = async (directory: string) => {
@@ -123,45 +156,36 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
     setExpanded(next);
   };
   const loadFile = async (file: string) => {
-    const projectId = props.projectId();
-    const version = ++fileVersion;
-    setLoading(true); setError("");
+    const { request, controller } = startRequest("file", true);
+    setError("");
     try {
-      const payload = await api<FilePreview>(`/v0/projects/${encodeURIComponent(projectId)}/file?path=${encodeURIComponent(file)}`);
-      if (props.projectId() === projectId && fileVersion === version) setPreview(payload);
+      const payload = await api<FilePreview>(`/v0/projects/${encodeURIComponent(request.projectId)}/file?path=${encodeURIComponent(file)}`, { signal: controller.signal });
+      if (ownsRequest(request)) setPreview(payload);
     } catch (cause) {
-      if (props.projectId() === projectId && fileVersion === version) { setPreview(null); setError((cause as Error).message); }
+      if (ownsRequest(request) && !wasAborted(cause)) { setPreview(null); setError((cause as Error).message); }
     } finally {
-      if (props.projectId() === projectId && fileVersion === version) setLoading(false);
+      finishRequest(request);
     }
   };
   const loadDiff = async (includePatch = false, reuse = false, background = false) => {
-    const projectId = props.projectId();
-    if (diffLoading() && activeDiffProject === projectId) return;
-    const request: WorkspaceRequest = { projectId, version: ++diffVersion };
-    activeDiffProject = request.projectId;
-    setDiffLoading(true);
-    if (!background) setLoading(true);
+    if (diffLoading()) return;
+    const { request, controller } = startRequest("diff", !background);
     setError("");
     try {
       const query = new URLSearchParams();
       if (includePatch) query.set("patch", "1");
       if (reuse) query.set("reuse", "1");
-      const payload = await api<DiffPayload>(`/v0/projects/${encodeURIComponent(request.projectId)}/diff${query.size ? `?${query}` : ""}`);
-      if (ownsWorkspaceRequest({ projectId: props.projectId(), version: diffVersion }, request)) {
+      const payload = await api<DiffPayload>(`/v0/projects/${encodeURIComponent(request.projectId)}/diff${query.size ? `?${query}` : ""}`, { signal: controller.signal });
+      if (ownsRequest(request)) {
         setDiff(payload);
-        cacheWorkspace(projectId, { diff: payload });
+        cacheWorkspace(request.projectId, { diff: payload });
       }
     }
     catch (cause) {
-      if (ownsWorkspaceRequest({ projectId: props.projectId(), version: diffVersion }, request)) setError((cause as Error).message);
+      if (ownsRequest(request) && !wasAborted(cause)) setError((cause as Error).message);
     }
     finally {
-      if (ownsWorkspaceRequest({ projectId: props.projectId(), version: diffVersion }, request)) {
-        activeDiffProject = null;
-        setDiffLoading(false);
-        if (!background) setLoading(false);
-      }
+      finishRequest(request);
     }
   };
   const copy = (value?: string) => { if (value) void navigator.clipboard.writeText(value); };
@@ -170,18 +194,21 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
     setWidth(value);
     localStorage.setItem(widthKey(), String(value));
   };
+  let stopResize: (() => void) | undefined;
   const startResize = (event: PointerEvent) => {
     if (matchMedia("(max-width: 760px)").matches) return;
+    stopResize?.();
     event.preventDefault();
     const startX = event.clientX;
     const startWidth = width();
     const move = (moveEvent: PointerEvent) => saveWidth(startWidth + startX - moveEvent.clientX);
-    const stop = () => { window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", stop); document.body.classList.remove("workspace-resizing"); };
+    const stop = () => { window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", stop); document.body.classList.remove("workspace-resizing"); stopResize = undefined; };
+    stopResize = stop;
     document.body.classList.add("workspace-resizing");
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", stop, { once: true });
   };
-  onCleanup(() => { document.body.classList.remove("workspace-resizing"); document.body.classList.remove("workspace-detail-resizing"); });
+  onCleanup(() => { resetRequestScope(); stopResize?.(); stopDetailResize?.(); document.body.classList.remove("workspace-resizing"); document.body.classList.remove("workspace-detail-resizing"); });
 
   let loadedProjectId = "";
   createEffect(on(() => props.chatId(), () => {
@@ -198,6 +225,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
     ([projectId, activeTab]) => {
       const projectChanged = loadedProjectId !== projectId;
       if (projectChanged) {
+        if (loadedProjectId) resetRequestScope();
         loadedProjectId = projectId;
         const cached = cachedWorkspace(projectId);
         batch(() => {
@@ -205,7 +233,6 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
           setExpanded(new Set<string>());
           setPreview(null);
           setDiff(cached?.diff || null);
-          setLoading(false);
           setError("");
         });
       }

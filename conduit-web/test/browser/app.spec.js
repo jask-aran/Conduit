@@ -395,6 +395,45 @@ test("restores cached Git status when returning to a workspace", async ({ page }
   await expect(panel.locator(".workspace-panel-loading")).toHaveCount(0);
 });
 
+test("does not commit a stale workspace response after project navigation", async ({ page }) => {
+  const sibling = { id: "session_research", projectId: "project_research", status: "draft", title: "Research chat" };
+  await page.unroute("**/v0/projects");
+  await page.route("**/v0/projects", async (route) => {
+    await route.fulfill({ json: { projects: [projects[0], { ...projects[1], sessions: [sibling] }] } });
+  });
+  await page.route("**/v0/sessions/session_research", async (route) => {
+    await route.fulfill({ json: { ...sibling, messages: [], tools: [] } });
+  });
+  await page.unroute("**/v0/projects/*/tree?*");
+  let releaseChatTree;
+  await page.route("**/v0/projects/*/tree?*", async (route) => {
+    const projectId = new URL(route.request().url()).pathname.split("/")[3];
+    if (projectId === "project_chat") {
+      await new Promise((resolve) => { releaseChatTree = resolve; });
+      await route.fulfill({ json: { entries: [{ name: "chat-only.md", path: "chat-only.md", type: "file" }] } }).catch(() => {});
+      return;
+    }
+    await route.fulfill({ json: { entries: [{ name: "research-only.md", path: "research-only.md", type: "file" }] } });
+  });
+
+  await page.goto("/");
+  await page.getByRole("button", { name: "Existing chat" }).click();
+  await page.getByRole("button", { name: "Toggle workspace panel" }).click();
+  const panel = page.getByRole("complementary", { name: "Workspace panel" });
+  await expect.poll(() => Boolean(releaseChatTree)).toBe(true);
+  await page.evaluate(() => {
+    localStorage.setItem("conduit:workspace-panel:session_research:open", "true");
+    localStorage.setItem("conduit:workspace-panel:session_research:tab", "files");
+  });
+
+  await page.getByRole("button", { name: "Research chat" }).click();
+  await expect(panel.getByRole("button", { name: "research-only.md" })).toBeVisible();
+  await releaseChatTree();
+  await page.waitForTimeout(100);
+  await expect(panel.getByText("chat-only.md")).toHaveCount(0);
+  await expect(panel.getByText("research-only.md")).toBeVisible();
+});
+
 test.afterEach(async ({ page }) => {
   expect(unhandledApiRequests.get(page) || [], "all browser API requests must use deterministic mocks").toEqual([]);
 });
