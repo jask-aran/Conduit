@@ -37,6 +37,7 @@ import {
 } from "./auth-middleware.js";
 import { renderLoginPage } from "./auth-login-page.js";
 import { listWorkspaceDirectory, readWorkspaceDiff, readWorkspaceFile } from "./workspace-inspector.js";
+import { currentMagicDnsOrigin } from "./tailscale-share.js";
 
 const config = loadConfig();
 const projects = new ProjectStore(config);
@@ -424,6 +425,13 @@ app.get("/v0/capabilities", (_request, response) => response.json({
   workspaceModes: ["managed", "linked", "cloned"],
   piRuntimes: ["conduit_profile", "native_pi"],
 }));
+app.get("/v0/share-origin", async (_request, response, next) => {
+  try {
+    response.json({ origin: await currentMagicDnsOrigin() });
+  } catch (error) {
+    next(Object.assign(new Error("Unable to determine this host's Tailscale address"), { cause: error }));
+  }
+});
 
 app.get("/v0/pi-installations", async (_request, response, next) => {
   try { response.json({ installations: await installationViews() }); }

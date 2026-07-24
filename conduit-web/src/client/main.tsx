@@ -23,7 +23,7 @@ import "./styles.css";
 type SettingsSection = "general" | "models" | "profiles" | "runtime" | "workspaces" | "auth";
 const WorkspacePanel = lazy(() => import("./workspace/workspace-panel"));
 
-function ChatHeader(props: { project?: Project; title: string; profile?: Template | null; runtime?: RuntimeIdentity | null; live?: Record<string, unknown> | null; panelOpen: boolean; onTogglePanel: () => void }) {
+function ChatHeader(props: { project?: Project; title: string; profile?: Template | null; runtime?: RuntimeIdentity | null; live?: Record<string, unknown> | null; panelOpen: boolean; onTogglePanel: () => void; onShare: () => void }) {
   const projectLabel = () => props.project?.slug === "chat" ? "Chats" : props.project?.slug || props.project?.name || "Chats";
   const runtimeLabel = () => props.runtime?.kind === "native_pi" ? "Host Pi" : "Isolated Pi";
   const profileLabel = () => props.runtime?.kind === "native_pi" ? null : props.profile?.label || props.profile?.id;
@@ -34,8 +34,8 @@ function ChatHeader(props: { project?: Project; title: string; profile?: Templat
   return <header class="chat-header">
     <nav aria-label="breadcrumb" class="chat-header-title"><span>{projectLabel()}</span><span class="breadcrumb-separator" aria-hidden="true" /><strong>{props.title}</strong></nav>
     <Show when={line()}><span class="chat-profile-posture" title={line()}>{line()}</span></Show>
+    <Button variant="ghost" size="icon-sm" aria-label="Copy Tailscale chat link" title="Copy Tailscale chat link" onClick={props.onShare}><ShareIcon /></Button>
     <Button variant="ghost" size="icon-sm" class={!line() ? "ml-auto" : ""} aria-label="Toggle workspace panel" aria-expanded={props.panelOpen} onClick={props.onTogglePanel}><PanelRightIcon /></Button>
-    <Button variant="ghost" size="icon-sm" aria-label="Share chat"><ShareIcon /></Button>
   </header>;
 }
 
@@ -219,6 +219,17 @@ function App() {
     const id = catalogue.selectedId();
     setPanelOpen((open) => { const next = !open; if (id) localStorage.setItem(`conduit:workspace-panel:${id}:open`, String(next)); return next; });
   };
+  const shareChat = async () => {
+    const chatId = catalogue.selectedId();
+    if (!chatId) return;
+    try {
+      const { origin } = await api<{ origin: string }>("/v0/share-origin");
+      await navigator.clipboard.writeText(`${origin}/chat/${encodeURIComponent(chatId)}`);
+      toast.success("Tailscale chat link copied");
+    } catch (error) {
+      showError((error as Error).message);
+    }
+  };
   const runSidebar = (type: string) => setSidebarCommand({ type, nonce: Date.now() });
   const loadWorkspaceSuggestions = () => {
     if (workspaceSuggestionsRequest) return workspaceSuggestionsRequest;
@@ -366,13 +377,13 @@ function App() {
     <main data-slot="sidebar-inset" class={`chat-main${emptyChat() ? " chat-main-empty" : ""}`} {...dropHandlers}>
       <Show when={dropActive()}><div class="chat-drop-overlay"><div>Drop files to attach</div></div></Show>
       <div class="chat-ambient" aria-hidden="true" />
-      <ChatHeader project={selectedProject()} title={chat.title()} profile={activeProfile()} runtime={chat.runtimeIdentity()} live={chat.live() as unknown as Record<string, unknown>} panelOpen={panelOpen()} onTogglePanel={togglePanel} />
+      <ChatHeader project={selectedProject()} title={chat.title()} profile={activeProfile()} runtime={chat.runtimeIdentity()} live={chat.live() as unknown as Record<string, unknown>} panelOpen={panelOpen()} onTogglePanel={togglePanel} onShare={() => void shareChat()} />
       <Show when={selectedProject()?.kind === "workspace" && [...runtime.processes().values()].some((process) => process.chatId !== catalogue.selectedId() && process.active)}><div class="workspace-warning"><TriangleAlertIcon /><div><strong>Another chat is working in this Workspace</strong><p>Both agents can edit the same files. Conduit does not lock the Workspace or create worktrees automatically.</p></div></div></Show>
       <Transcript chat={chat} partialContinue={partialContinue()} />
       <div class="composer-stack"><HostUiRequests requests={chat.hostUiRequests()} onRespond={chat.respondHostUi} />
         <Composer chat={chat} attachments={attachments} models={models} profiles={profiles()} activeProfile={activeProfile()} serverOnline={runtime.connectivity() === "online"} onChooseProfile={(id) => void switchProfile(id)} onOpenSettings={openSettings} onOpenAttachments={() => attachFileInput?.click()} /></div>
     </main>
-    <Show when={panelOpen() && Boolean(selectedProject()) && Boolean(catalogue.selectedId())}><WorkspacePanel projectId={() => selectedProject()!.id} chatId={() => catalogue.selectedId()!} onClose={togglePanel} /></Show>
+    <Show when={Boolean(selectedProject()) && Boolean(catalogue.selectedId())}><WorkspacePanel projectId={() => selectedProject()!.id} chatId={() => catalogue.selectedId()!} open={panelOpen} onClose={togglePanel} /></Show>
     <CommandMenu open={paletteOpen()} onOpenChange={setPaletteOpen} initialPage={palettePage()} launchNonce={paletteNonce()}
       context={paletteContext()} actions={paletteActions} models={models.models()} currentModel={models.model()} onChooseModel={(spec) => void models.chooseModel(spec)} />
     <Settings open={settingsOpen()} initialSection={settingsSection()} initialWorkspaceId={settingsWorkspaceId()} onOpenChange={setSettingsOpen} models={models} templates={templates()} templatesLoading={templatesLoading()} defaultTemplateId={defaultTemplateId()} projects={catalogue.projects()} installations={installations()} installationsLoading={installationsLoading()} onInstallationsChange={setInstallations} onDefaultTemplateChange={saveDefaultTemplate} onWorkspaceDefaultChange={saveWorkspaceDefault} />

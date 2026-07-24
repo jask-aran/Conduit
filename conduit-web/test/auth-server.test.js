@@ -97,10 +97,16 @@ test("unauthenticated routes redirect or return 401; only the allowlist is publi
     assert.equal((await fetch(`${origin}/healthz`)).status, 200);
     assert.equal((await fetch(`${origin}/login`)).status, 200);
 
-    // Unauthenticated SPA navigation to / redirects to /login.
+    // Unauthenticated SPA navigation preserves its original same-origin route
+    // so successful form login resumes exactly where the browser arrived.
     const navResponse = await fetch(`${origin}/`, { headers: { accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8" }, redirect: "manual" });
     assert.equal(navResponse.status, 302);
-    assert.equal(navResponse.headers.get("location"), "/login");
+    assert.equal(navResponse.headers.get("location"), "/login?after=%2F");
+    const chatNavigation = await fetch(`${origin}/chat/42a89c7d-4051-48b8-a5b1-5ac3e2083e56?view=tools`, {
+      headers: { accept: "text/html" },
+      redirect: "manual",
+    });
+    assert.equal(chatNavigation.headers.get("location"), "/login?after=%2Fchat%2F42a89c7d-4051-48b8-a5b1-5ac3e2083e56%3Fview%3Dtools");
 
     // Every protected API path returns 401 JSON without a cookie.
     const protectedRoutes = [

@@ -150,7 +150,7 @@ export function prepareAuthMiddleware(authStore) {
       return next();
     }
     if (isBrowserNavigation(request) && !UNAUTHENTICATED_API_PREFIXES.some((prefix) => request.path.startsWith(prefix))) {
-      return response.redirect(302, "/login");
+      return response.redirect(302, `/login?after=${encodeURIComponent(safeRedirectTarget(request.originalUrl))}`);
     }
     return response.status(401).json({ error: "unauthorized" });
   };
