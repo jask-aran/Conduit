@@ -273,6 +273,13 @@ test("workspace panel previews files, shows diff, and persists per chat", async 
   if (page.viewportSize().width > 760) {
     const [panelBox, widthHandleBox] = await Promise.all([panel.boundingBox(), panel.getByRole("separator", { name: "Resize workspace panel" }).boundingBox()]);
     expect(widthHandleBox.x).toBeLessThan(panelBox.x);
+    const widthHandle = panel.getByRole("separator", { name: "Resize workspace panel" });
+    const originalWidth = Number(await widthHandle.getAttribute("aria-valuenow"));
+    await page.mouse.move(widthHandleBox.x + (widthHandleBox.width / 2), widthHandleBox.y + 80);
+    await page.mouse.down();
+    await page.mouse.move(widthHandleBox.x - 60, widthHandleBox.y + 80);
+    await page.mouse.up();
+    await expect(widthHandle).toHaveAttribute("aria-valuenow", String(Math.min(Math.floor(page.viewportSize().width * 0.65), originalWidth + 72)));
   }
   await panel.getByRole("button", { name: "src" }).click();
   await panel.getByRole("button", { name: "main.ts" }).click();

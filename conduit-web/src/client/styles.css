@@ -124,9 +124,11 @@ svg { stroke-width: 1.5; }
 .chat-header [data-slot="button"] svg { width: 16px; height: 16px; }
 .mobile-sidebar-trigger { display: none; }
 
-.workspace-panel { position: relative; display: flex; width: 0; height: calc(100dvh - 16px); margin: 8px 0 8px 0; flex: none; flex-direction: column; overflow: hidden; border: 1px solid transparent; border-radius: 16px; background: var(--background); opacity: 0; pointer-events: none; transition: width var(--panel-motion-duration) var(--panel-motion-easing), margin-right var(--panel-motion-duration) var(--panel-motion-easing), opacity var(--panel-motion-duration) var(--panel-motion-easing), border-color var(--panel-motion-duration) var(--panel-motion-easing); }
-.workspace-panel.workspace-panel-open { width: var(--workspace-panel-width); margin-right: 10px; border-color: var(--border); box-shadow: 0 18px 44px -22px rgb(0 0 0 / 62%); opacity: 1; pointer-events: auto; }
-.workspace-panel > :not(.workspace-resize-handle) { max-width: 100%; }
+.workspace-panel { position: relative; display: flex; width: 0; height: calc(100dvh - 16px); margin: 8px 0 8px 0; flex: none; overflow: visible; pointer-events: none; transition: width var(--panel-motion-duration) var(--panel-motion-easing), margin-right var(--panel-motion-duration) var(--panel-motion-easing); }
+.workspace-panel.workspace-panel-open { width: var(--workspace-panel-width); margin-right: 10px; pointer-events: auto; }
+.workspace-panel-surface { position: relative; display: flex; width: 100%; min-width: 0; height: 100%; flex-direction: column; overflow: hidden; border: 1px solid transparent; border-radius: 16px; background: var(--background); opacity: 0; transition: opacity var(--panel-motion-duration) var(--panel-motion-easing), border-color var(--panel-motion-duration) var(--panel-motion-easing); }
+.workspace-panel-open .workspace-panel-surface { border-color: var(--border); box-shadow: 0 18px 44px -22px rgb(0 0 0 / 62%); opacity: 1; }
+.workspace-panel-surface > * { max-width: 100%; }
 .workspace-panel-header { display: flex; min-height: 40px; flex: none; align-items: center; justify-content: space-between; padding: 4px 8px 4px 14px; border-bottom: 1px solid var(--border); }
 .workspace-panel-header > div { display: flex; min-width: 0; align-items: baseline; gap: 8px; }
 .workspace-panel-header strong { font-size: 14px; }
@@ -180,6 +182,7 @@ svg { stroke-width: 1.5; }
 .workspace-resize-handle { position: absolute; inset-block: 0; left: -12px; z-index: 40; width: 24px; cursor: col-resize; touch-action: none; }
 .workspace-resize-handle::after { content: ""; position: absolute; inset-block: 8px; left: 11px; width: 1px; border-radius: 99px; background: transparent; transition: background 120ms; }
 .workspace-resize-handle:hover::after, .workspace-resize-handle:focus-visible::after, .workspace-resizing .workspace-resize-handle::after { background: var(--accent-cool); }
+.workspace-resizing .workspace-panel { transition: none; }
 .workspace-resizing { cursor: col-resize; user-select: none; }
 .workspace-detail-resizing { cursor: row-resize; user-select: none; }
 .workspace-artifacts { display: flex; min-height: 0; flex: 1; flex-direction: column; }
@@ -504,8 +507,9 @@ svg { stroke-width: 1.5; }
   .chat-profile-posture { display: none; }
   .settings-shell { width: calc(100vw - 24px); height: calc(100dvh - 24px); }
   .settings-rail { width: 132px; }
-  .workspace-panel { position: fixed; inset: 0; z-index: 70; width: 100vw !important; height: 100dvh; margin: 0; border: 0; border-radius: 0; transform: translateX(100%); transition: transform var(--panel-motion-duration) var(--panel-motion-easing); }
+  .workspace-panel { position: fixed; inset: 0; z-index: 70; width: 100vw !important; height: 100dvh; margin: 0; transform: translateX(100%); transition: transform var(--panel-motion-duration) var(--panel-motion-easing); }
   .workspace-panel.workspace-panel-open { margin: 0; transform: translateX(0); }
+  .workspace-panel-surface { border: 0; border-radius: 0; }
   .workspace-resize-handle { display: none; }
   .workspace-files { grid-template-rows: minmax(160px, 42%) 1fr; }
 }
