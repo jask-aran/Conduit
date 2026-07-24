@@ -541,6 +541,10 @@ export class ProjectStore {
       throw error;
     }
     const view = this.projectView(project);
+    // Linked and cloned workspaces are both externally rooted. Verify that the
+    // registered root is still the same real directory before touching its
+    // Conduit-owned metadata during unregister.
+    if (!skipWorkingTree) await this.validate(view);
     // Linked workspaces are unregistered only — never delete the external tree.
     if (!skipWorkingTree && (project.origin || "managed") === "managed") {
       await fs.rm(view.path, { recursive: true, force: true });
@@ -560,9 +564,25 @@ export class ProjectStore {
   }
 
   async validate(project) {
-    if (!project || project.origin !== "linked") return project;
-    const current = await resolveExistingDirectory(project.path, this.workspaceAllowlist, { dataRoot: this.dataRoot });
-    if (current !== path.resolve(project.externalPath)) {
+    if (!project?.externalPath) return project;
+    const expected = path.resolve(project.externalPath);
+    let stat;
+    try { stat = await fs.lstat(expected); }
+    catch (error) {
+      if (error.code === "ENOENT") {
+        const missing = new Error("Workspace path identity changed");
+        missing.code = "workspace_identity_changed";
+        throw missing;
+      }
+      throw error;
+    }
+    if (!stat.isDirectory() || stat.isSymbolicLink()) {
+      const error = new Error("Workspace path identity changed");
+      error.code = "workspace_identity_changed";
+      throw error;
+    }
+    const current = await resolveExistingDirectory(expected, this.workspaceAllowlist, { dataRoot: this.dataRoot });
+    if (current !== expected) {
       const error = new Error("Workspace path identity changed");
       error.code = "workspace_identity_changed";
       throw error;

@@ -244,6 +244,34 @@ test("clones a repository into a user-selected non-owning workspace path", async
   await fs.rm(root, { recursive: true, force: true });
 });
 
+test("cloned workspaces reject a symlink replacement before use or unregister", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-project-clone-identity-"));
+  const source = path.join(root, "source");
+  const target = path.join(root, "workspaces", "cloned-app");
+  const displaced = path.join(root, "displaced-clone");
+  const outside = path.join(root, "outside");
+  await initGitRepo(source);
+  await fs.mkdir(path.dirname(target));
+  await fs.mkdir(outside);
+  await fs.writeFile(path.join(outside, "keep.txt"), "outside");
+  const store = new ProjectStore({
+    filesRoot: path.join(root, "data/chat/files"),
+    catalogFile: path.join(root, "data/conduit.json"),
+    piAgentDir: path.join(root, "data/pi"),
+    workspaceAllowlist: [root],
+  });
+  await store.initialize();
+  const cloned = await store.create({ mode: "cloned", name: "Cloned App", cloneUrl: source, path: target });
+  await fs.rename(target, displaced);
+  await fs.symlink(outside, target);
+
+  await assert.rejects(store.validate(cloned), { code: "workspace_identity_changed" });
+  await assert.rejects(store.remove(cloned.id), { code: "workspace_identity_changed" });
+  assert.equal(await fs.readFile(path.join(outside, "keep.txt"), "utf8"), "outside");
+  assert.ok(await store.get(cloned.id));
+  await fs.rm(root, { recursive: true, force: true });
+});
+
 test("clones into a repository-named child of an allow-listed parent", async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-project-clone-parent-"));
   const source = path.join(root, "Hello-World");
