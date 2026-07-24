@@ -1518,7 +1518,7 @@ test("Host Pi default falls back to global when launch becomes unavailable", asy
   await expect(page.getByRole("textbox", { name: "Message Pi" })).toHaveValue("");
 });
 
-test("clone workspace requires a repository and absolute target location", async ({ page }, testInfo) => {
+test("clone workspace derives a repository folder inside the chosen parent", async ({ page }, testInfo) => {
   await page.unroute("**/v0/projects");
   await page.route("**/v0/projects", async (route) => {
     if (route.request().method() === "POST") {
@@ -1529,8 +1529,8 @@ test("clone workspace requires a repository and absolute target location", async
         name: body.name || "cloned-repo",
         kind: "workspace",
         origin: "cloned",
-        externalPath: body.path,
-        path: body.path,
+        externalPath: `${body.cloneParentPath}/${body.cloneDirectoryName || "repo"}`,
+        path: `${body.cloneParentPath}/${body.cloneDirectoryName || "repo"}`,
         defaultTemplateId: null,
         deletesFilesOnRemove: false,
         sessions: [],
@@ -1544,18 +1544,21 @@ test("clone workspace requires a repository and absolute target location", async
   await page.getByRole("button", { name: "New workspace" }).click();
   const dialog = page.getByRole("dialog", { name: "New workspace" });
   await dialog.locator("#folder-mode").selectOption("cloned");
-  await expect(dialog.getByLabel("Clone location")).toBeVisible();
+  await expect(dialog.getByLabel("Clone parent directory")).toBeVisible();
   await dialog.getByLabel("Git URL").fill("https://github.com/example/repo.git");
   await expect(dialog.getByRole("button", { name: "Clone workspace" })).toBeDisabled();
-  await dialog.getByLabel("Clone location").fill("/home/user/code/repo");
+  await dialog.getByLabel("Clone parent directory").fill("/home/user/code");
+  await dialog.getByLabel("Folder name (optional)").fill("checked-out-repo");
   const requestPromise = page.waitForRequest((request) => request.url().endsWith("/v0/projects") && request.method() === "POST");
   await dialog.getByRole("button", { name: "Clone workspace" }).click();
   const request = await requestPromise;
   expect(request.postDataJSON()).toMatchObject({
     mode: "cloned",
     cloneUrl: "https://github.com/example/repo.git",
-    path: "/home/user/code/repo",
+    cloneParentPath: "/home/user/code",
+    cloneDirectoryName: "checked-out-repo",
   });
+  await expect(dialog).toHaveCount(0);
 });
 
 test("the ambient layer fills the chat viewport", async ({ page }, testInfo) => {

@@ -87,75 +87,34 @@ This does not require making every request lazy. Small stable catalogue data may
 - Opening Settings after deferred startup still shows a coherent loading state and eventually the same data.
 - Request-count tests ensure progressive loading does not create duplicate fetches.
 
-### [P2] 4. Workspace Git inspection can stack expensive, unbounded child-process work
+### [P2 — implemented 2026-07-24] 4. Workspace Git inspection is bounded and patch detail is deferred
 
-`conduit-web/src/workspace-inspector.js::readWorkspaceDiff()` (workspace-inspector.js:72) starts five Git commands concurrently for every request — status, unstaged diff, staged diff, branch, log — then up to two more for upstream divergence. The output buffers are capped (`maxBuffer` 64 KiB–4 MiB), but the processes have no execution timeout, cancellation signal, or per-project single-flight boundary. `git status --untracked-files=all` and full staged/unstaged diffs can still traverse a very large working tree before producing or exceeding those buffers.
+Workspace inspection uses a four-process global Git cap, per-project
+single-flight, a 10-second deadline, process-group termination, and request
+cancellation. The panel retains a short project-scoped overview cache and
+requests working-tree patch text only when its disclosure opens.
 
-The client compounds this. `WorkspacePanel::loadDiff()` (workspace-panel.tsx:47) does not reject an invocation while one is already running, and the refresh button (workspace-panel.tsx:101) remains active under the loading overlay. Repeated clicks can therefore start several sets of Git processes against the same repository. Closing the panel or navigating away does not abort the server work.
+### [P2 — implemented 2026-07-24] 5. Workspace panel reads are scoped to the selected project
 
-The inspector is explicitly secondary UI. It should not be able to consume an open-ended number of child processes or keep expensive repository scans alive after there is no consumer.
+Directory, preview, and diff reads carry a project generation and abort scope.
+Only the current project and latest request for an operation may commit;
+closing the panel or switching project cancels outstanding work. Pending state
+is request-keyed, not a shared boolean, and resize listeners clean up on
+unmount. Cached workspace projection is retained only for the same canonical
+project.
 
-#### Required direction
+### [P2 — implemented 2026-07-24] 6. Clone network work runs outside catalogue mutation locks
 
-- Add a server-side per-project single-flight operation for Git inspection. Concurrent requests should share the in-flight result or receive a clear busy response, rather than start another scan.
-- Set explicit execution timeouts and terminate the complete child-process tree on timeout or request cancellation.
-- Thread request abort/disconnect through the route into `readWorkspaceDiff()`.
-- Avoid asking Git for the full patch until the user opens the patch disclosure, or split lightweight status/branch/log from the expensive diff body.
-- Keep output caps, but do not mistake `maxBuffer` for a computation bound.
-- Disable or coalesce refresh while a request is active. Cache a recently completed snapshot briefly if manual refresh and tab activation would otherwise duplicate it.
-
-#### Acceptance criteria
-
-- Repeated refresh clicks produce at most one active inspection per project.
-- Closing the panel or disconnecting the request terminates work that has no remaining consumer.
-- A deliberately slow Git command times out and leaves no child process behind.
-- The initial Diff tab can show status, branch, changed-file summary, and recent commits without calculating a multi-megabyte patch unless that patch is requested.
-
-### [P2] 5. Workspace-panel requests can commit stale project data after navigation
-
-`conduit-web/src/client/workspace/workspace-panel.tsx` resets local state when `props.projectId` changes (workspace-panel.tsx:72-77), then launches `loadDirectory()` or `loadDiff()`. Those requests carry no `AbortSignal` or request-generation token. File previews and expanded-directory requests have the same issue. A response for the previous project can arrive after the reset and write its directory listing, preview, diff, or error into the new project's panel.
-
-The single `loading` boolean (workspace-panel.tsx:20) is also not valid for overlapping operations: it is shared by `loadDirectory`, `loadFile`, and `loadDiff`, so whichever settles first clears `loading` even though another is still active. On unmount, the resize cleanup removes only the body class (workspace-panel.tsx:70); an in-progress resize leaves its `pointermove` listener attached until the next `pointerup` anywhere fires the once-registered stop handler.
-
-This is the same load-then-commit discipline that the main chat navigation now handles well (`active-chat.ts` navigation/selection tokens), but it has not been carried into the newly added inspector.
-
-#### Required direction
-
-- Give each project selection an abort scope or monotonically increasing request generation. A result may commit only if its project ID and generation are still current.
-- Abort outstanding directory, file, and diff requests when the panel closes or the project changes.
-- Model loading per operation, or use a reference-counted/request-keyed pending set; do not use one boolean for unrelated concurrent reads.
-- Remove both resize listeners during component cleanup, not only the CSS class.
-- Preserve already loaded entries while refreshing the same project, but never preserve data across project identity changes.
-
-#### Acceptance criteria
-
-- Delaying project A's responses, switching to project B, and then releasing A never displays A's paths, preview, diff, or error under B.
-- Concurrent directory and preview loads keep the appropriate busy state until both settle.
-- Unmount during pointer resize removes all window listeners.
-
-### [P2] 6. A network clone holds the global project-mutation lock indefinitely
-
-`ProjectStore::createCloned()` executes the entire `gh repo clone`/`git clone` operation inside `runExclusive()` (project-store.js:266-317). That queue also serializes workspace create, rename, update, and removal. A slow or stalled network clone therefore blocks every unrelated project mutation for as long as the child process remains alive.
-
-`runCommand()` (project-store.js:34) has no timeout or abort support and accumulates stdout/stderr into unbounded strings. If the HTTP client disconnects, the clone continues. The broad serialization avoids slug/catalog races, but it couples that necessary short critical section to an unbounded external process.
-
-#### Required direction
-
-Split clone creation into short serialized transitions around an external operation:
-
-1. Under the mutation queue, validate current catalogue state, reserve the slug/path with an operation identity, and persist or retain an explicit in-progress reservation.
-2. Release the queue while running the clone with a timeout, bounded diagnostic output, and abort handling.
-3. Re-enter the queue to commit the project row if the reservation still matches.
-4. On failure or cancellation, clean only the exact reserved target and release the reservation.
-
-If persistent reservations are considered excessive for this single-process application, an in-memory reservation is acceptable, but restart recovery must safely recognize and remove only Conduit-owned partial clone directories.
-
-#### Acceptance criteria
-
-- A stalled clone does not prevent renaming or creating an unrelated workspace.
-- Client disconnect or configured timeout terminates the child and cleans the exact partial target.
-- Concurrent clone/create requests cannot claim the same slug or target.
-- Child stdout/stderr retention is capped while preserving a useful terminal error excerpt.
+Clone creation reserves the slug and final target under the short catalogue
+lock, then clones into a persisted Conduit-owned sibling staging directory.
+The `git` fallback is required; `gh repo clone` is optional. The clone child
+has a two-minute configurable deadline, bounded diagnostics, and request
+disconnect cancellation. Success atomically renames staging into the requested
+destination and commits the catalogue row; failure, cancellation, or restart
+recovery removes only the recorded staging directory. The clone UI accepts an
+existing parent directory and derives a repository-named child unless the user
+supplies a folder name. Visible clone progress and explicit operation-ID
+cancellation remain tracked in GitHub issue #25.
 
 ### [P2] 7. Auth-store writes are atomic but not concurrency-safe
 

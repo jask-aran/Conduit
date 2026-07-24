@@ -3,7 +3,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { ProjectStore } from "../src/project-store.js";
+import { ProjectStore, runCommand } from "../src/project-store.js";
 import { sessionDirectoryFor } from "../src/session-store.js";
 
 test("stores project metadata centrally and keeps working directories clean", async () => {
@@ -244,6 +244,25 @@ test("clones a repository into a user-selected non-owning workspace path", async
   await fs.rm(root, { recursive: true, force: true });
 });
 
+test("clones into a repository-named child of an allow-listed parent", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-project-clone-parent-"));
+  const source = path.join(root, "Hello-World");
+  await initGitRepo(source);
+  const destinationParent = path.join(root, "destinations");
+  await fs.mkdir(destinationParent);
+  const store = new ProjectStore({
+    filesRoot: path.join(root, "data/chat/files"),
+    catalogFile: path.join(root, "data/conduit.json"),
+    piAgentDir: path.join(root, "data/pi"),
+    workspaceAllowlist: [root],
+  });
+  await store.initialize();
+  const cloned = await store.create({ mode: "cloned", cloneUrl: source, cloneParentPath: destinationParent });
+  assert.equal(cloned.path, path.join(destinationParent, "Hello-World"));
+  assert.equal(await fs.readFile(path.join(cloned.path, "app.js"), "utf8"), "console.log(1)\n");
+  await fs.rm(root, { recursive: true, force: true });
+});
+
 test("concurrent clones with the same name get distinct slugs and keep both trees", async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-project-clone-race-"));
   const source = path.join(root, "source");
@@ -269,6 +288,81 @@ test("concurrent clones with the same name get distinct slugs and keep both tree
   const listed = await store.list();
   assert.equal(listed.filter((item) => item.origin === "cloned").length, 2);
   await fs.rm(root, { recursive: true, force: true });
+});
+
+test("a clone reservation does not block unrelated mutations and protects its slug and target", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-project-clone-reservation-"));
+  const workspaceRoot = path.join(root, "workspaces");
+  const source = path.join(root, "source");
+  await fs.mkdir(workspaceRoot);
+  await fs.mkdir(source);
+  let started;
+  let release;
+  const store = new ProjectStore({
+    filesRoot: path.join(root, "data/chat/files"),
+    catalogFile: path.join(root, "data/conduit.json"),
+    piAgentDir: path.join(root, "data/pi"),
+    workspaceAllowlist: [root],
+    runCommand: async (_command, args) => {
+      const staging = args.at(-1);
+      await fs.mkdir(staging);
+      started();
+      await new Promise((resolve) => { release = resolve; });
+    },
+  });
+  await store.initialize();
+  const ready = new Promise((resolve) => { started = resolve; });
+  const target = path.join(workspaceRoot, "reserved");
+  const cloning = store.create({ mode: "cloned", name: "Reserved", cloneUrl: source, path: target });
+  await ready;
+
+  const managed = await store.create({ mode: "managed", name: "Reserved" });
+  assert.equal(managed.slug, "reserved-2");
+  await assert.rejects(store.create({ mode: "cloned", name: "Other", cloneUrl: source, path: target }), { code: "clone_target_reserved" });
+
+  release();
+  const cloned = await cloning;
+  assert.equal(cloned.slug, "reserved");
+  assert.ok(await fs.stat(cloned.path));
+  await fs.rm(root, { recursive: true, force: true });
+});
+
+test("clone cancellation cleans Conduit staging and releases its reservation", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-project-clone-abort-"));
+  const workspaceRoot = path.join(root, "workspaces");
+  const source = path.join(root, "source");
+  await fs.mkdir(workspaceRoot);
+  await fs.mkdir(source);
+  let started;
+  const store = new ProjectStore({
+    filesRoot: path.join(root, "data/chat/files"),
+    catalogFile: path.join(root, "data/conduit.json"),
+    piAgentDir: path.join(root, "data/pi"),
+    workspaceAllowlist: [root],
+    runCommand: async (_command, args, { signal }) => {
+      await fs.mkdir(args.at(-1));
+      started();
+      await new Promise((_, reject) => signal.addEventListener("abort", () => reject(Object.assign(new Error("cancelled"), { code: "clone_aborted" })), { once: true }));
+    },
+  });
+  await store.initialize();
+  const ready = new Promise((resolve) => { started = resolve; });
+  const controller = new AbortController();
+  const target = path.join(workspaceRoot, "cancelled");
+  const cloning = store.create({ mode: "cloned", name: "Cancelled", cloneUrl: source, path: target, signal: controller.signal });
+  await ready;
+  controller.abort();
+  await assert.rejects(cloning, { code: "clone_aborted" });
+  await assert.rejects(fs.access(target), { code: "ENOENT" });
+  assert.deepEqual((await fs.readdir(workspaceRoot)).filter((name) => name.startsWith(".conduit-clone-")), []);
+  assert.deepEqual(await store.list().then((items) => items.filter((item) => item.origin === "cloned")), []);
+  await fs.rm(root, { recursive: true, force: true });
+});
+
+test("clone commands time out and retain only bounded diagnostics", async () => {
+  await assert.rejects(runCommand(process.execPath, ["-e", "setInterval(() => {}, 1000)"], { timeoutMs: 25 }), { code: "clone_timeout" });
+  const result = await runCommand(process.execPath, ["-e", "process.stdout.write('x'.repeat(4096))"], { maxOutputBytes: 128 });
+  assert.ok(Buffer.byteLength(result.stdout) <= 128);
 });
 
 test("clone requires an absolute user-selected target and rejects git protocol", async () => {
