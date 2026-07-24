@@ -144,6 +144,12 @@ route, asset, and WebSocket upgrade, minimal server-rendered login page.
 Non-loopback binds refuse to start unconfigured (`CONDUIT_ALLOW_INSECURE=1`
 overrides for dev). Full contract in `conduit-web/README.md`.
 
+**Isolated Pi auth.** After signing in to Conduit, **Settings → Auth** manages
+only the bundled Isolated Pi runtime: OAuth/device-code flows and literal API
+keys persist in `data/pi/auth.json`. Host Pi credentials are never read or
+changed. OAuth attempts are session-owned and short-lived; changing credentials
+recycles only idle, unattached Isolated Pi processes.
+
 ## Interface
 
 SolidJS + strict TypeScript + Tailwind v4 + Lucide + Geist, with Kobalte used
@@ -163,26 +169,31 @@ and rendering-stability constraints live in `AGENTS.md`.
 
 ## Setup and development
 
-Requirements: Node.js 22+, npm, Pi Coding Agent 0.80.6 as `pi`. The dev
-container does everything via `.devcontainer/setup.sh`; locally:
+Requirements: Node.js 22+ and npm. The pinned Isolated Pi runtime is installed
+with Conduit's web dependencies; a separately installed `pi` remains optional
+for Host Pi Workspaces. The dev container does everything via
+`.devcontainer/setup.sh`; locally:
 
 ```bash
-sudo npm install -g --ignore-scripts @earendil-works/pi-coding-agent@0.80.6
-cd conduit-web
-npm ci
-npx playwright install --with-deps chromium   # omit --with-deps off Linux
+bash .devcontainer/start-conduit.sh setup
+node scripts/conduit-auth.mjs set-password
+bash .devcontainer/start-conduit.sh restart
 ```
 
-Authenticate the isolated Pi runtime once with `./scripts/conduit-pi.mjs`
-(enter `/login`); it uses the current directory as Pi's working directory, so
-run it from a project folder to share that project's native history.
+Sign in through **Settings → Auth** to authenticate the Isolated Pi runtime.
+`./scripts/conduit-pi.mjs` remains available as an optional terminal launcher;
+it uses the current directory as Pi's working directory.
 
 Run the server and client:
 
 ```bash
-bash .devcontainer/start-conduit.sh restart   # managed server on port 4310
-cd conduit-web && npm run dev                 # Vite client with proxying
+bash .devcontainer/start-conduit.sh restart   # production-like server on 4310
+bash .devcontainer/start-conduit.sh dev       # server watcher on 4310, Vite on 5173
 ```
+
+`setup`, `build`, `start`, `stop`, `status`, `logs`, and `deploy` use the same
+managed launcher. `dev` is only for local hot-reload work; open port 5173 in
+that mode.
 
 ## Verification
 
