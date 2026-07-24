@@ -120,6 +120,8 @@ test("unauthenticated routes redirect or return 401; only the allowlist is publi
       ["GET", "/v0/runtime"],
       ["GET", "/v0/runtime/settings"],
       ["GET", "/v0/pi-installations"],
+      ["GET", "/v0/pi-auth"],
+      ["GET", "/v0/pi-auth/attempt"],
       ["PATCH", "/v0/preferences"],
       ["GET", "/v0/models"],
     ];
@@ -192,6 +194,11 @@ test("login flow issues a cookie; logout clears it; rate limiting kicks in", asy
     const projects = await fetch(`${origin}/v0/projects`, { headers: { cookie: cookieHeader } });
     assert.equal(projects.status, 200);
 
+    const piAuth = await fetch(`${origin}/v0/pi-auth`, { headers: { cookie: cookieHeader } });
+    assert.equal(piAuth.status, 200);
+    assert.equal(piAuth.headers.get("cache-control"), "no-store");
+    assert.equal(Array.isArray((await piAuth.json()).providers), true);
+
     const status = await fetch(`${origin}/v0/auth/status`, { headers: { cookie: cookieHeader } });
     const statusBody = await status.json();
     assert.equal(statusBody.authenticated, true);
@@ -253,6 +260,9 @@ test("loopback bind without a password starts open and serves the SPA", async ()
     assert.match(await root.text(), /Conduit test SPA/);
     const projects = await fetch(`${server.origin}/v0/projects`);
     assert.equal(projects.status, 200);
+    const piAuth = await fetch(`${server.origin}/v0/pi-auth`);
+    assert.equal(piAuth.status, 403);
+    assert.equal((await piAuth.json()).error, "pi_auth_login_required");
   } finally {
     await stop(server);
   }
