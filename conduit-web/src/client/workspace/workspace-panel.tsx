@@ -114,16 +114,33 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
     event.preventDefault();
     const startY = event.clientY;
     const startHeight = detailHeight();
+    let pendingHeight = startHeight;
+    let frame = 0;
+    const clampHeight = (value: number) => Math.max(160, Math.min(window.innerHeight - 230, value));
+    const apply = () => {
+      frame = 0;
+      setDetailHeight(clampHeight(pendingHeight));
+    };
     const move = (moveEvent: PointerEvent) => {
-      const next = Math.max(160, Math.min(window.innerHeight - 230, startHeight + startY - moveEvent.clientY));
+      pendingHeight = startHeight + startY - moveEvent.clientY;
+      if (!frame) frame = requestAnimationFrame(apply);
+    };
+    const stop = () => {
+      if (frame) cancelAnimationFrame(frame);
+      const next = clampHeight(pendingHeight);
       setDetailHeight(next);
       localStorage.setItem(detailHeightKey(), String(next));
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", stop);
+      window.removeEventListener("pointercancel", stop);
+      document.body.classList.remove("workspace-detail-resizing");
+      stopDetailResize = undefined;
     };
-    const stop = () => { window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", stop); document.body.classList.remove("workspace-detail-resizing"); stopDetailResize = undefined; };
     stopDetailResize = stop;
     document.body.classList.add("workspace-detail-resizing");
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", stop, { once: true });
+    window.addEventListener("pointercancel", stop, { once: true });
   };
   const resizeDetailByKey = (event: KeyboardEvent) => {
     if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
@@ -189,8 +206,9 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
     }
   };
   const copy = (value?: string) => { if (value) void navigator.clipboard.writeText(value); };
+  const clampWidth = (next: number) => Math.max(300, Math.min(Math.floor(window.innerWidth * 0.65), next));
   const saveWidth = (next: number) => {
-    const value = Math.max(300, Math.min(Math.floor(window.innerWidth * 0.65), next));
+    const value = clampWidth(next);
     setWidth(value);
     localStorage.setItem(widthKey(), String(value));
   };
@@ -201,12 +219,30 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
     event.preventDefault();
     const startX = event.clientX;
     const startWidth = width();
-    const move = (moveEvent: PointerEvent) => saveWidth(startWidth + startX - moveEvent.clientX);
-    const stop = () => { window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", stop); document.body.classList.remove("workspace-resizing"); stopResize = undefined; };
+    let pendingWidth = startWidth;
+    let frame = 0;
+    const apply = () => {
+      frame = 0;
+      setWidth(clampWidth(pendingWidth));
+    };
+    const move = (moveEvent: PointerEvent) => {
+      pendingWidth = startWidth + startX - moveEvent.clientX;
+      if (!frame) frame = requestAnimationFrame(apply);
+    };
+    const stop = () => {
+      if (frame) cancelAnimationFrame(frame);
+      saveWidth(pendingWidth);
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", stop);
+      window.removeEventListener("pointercancel", stop);
+      document.body.classList.remove("workspace-resizing");
+      stopResize = undefined;
+    };
     stopResize = stop;
     document.body.classList.add("workspace-resizing");
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", stop, { once: true });
+    window.addEventListener("pointercancel", stop, { once: true });
   };
   onCleanup(() => { resetRequestScope(); stopResize?.(); stopDetailResize?.(); document.body.classList.remove("workspace-resizing"); document.body.classList.remove("workspace-detail-resizing"); });
 
@@ -254,6 +290,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
 
   return <aside class="workspace-panel" classList={{ "workspace-panel-open": props.open() }} aria-label="Workspace panel" aria-hidden={!props.open()} inert={!props.open()} style={{ "--workspace-panel-width": `${width()}px` }}>
     <div class="workspace-resize-handle" role="separator" aria-label="Resize workspace panel" aria-orientation="vertical" aria-valuemin="300" aria-valuemax={Math.floor(window.innerWidth * 0.65)} aria-valuenow={width()} tabIndex={0} onPointerDown={startResize} onKeyDown={(event) => { if (event.key === "ArrowLeft") saveWidth(width() + 20); if (event.key === "ArrowRight") saveWidth(width() - 20); }} />
+    <div class="workspace-panel-surface">
     <header class="workspace-panel-header"><div><strong>Workspace</strong><small>Read-only project context</small></div><Button variant="ghost" size="icon-sm" aria-label="Close workspace panel" onClick={props.onClose}><XIcon /></Button></header>
     <div class="workspace-panel-tabs" role="tablist" aria-label="Workspace views">
       <button role="tab" aria-selected={tab() === "files"} onClick={() => { selectTab("files"); if (!directories()[""]) void loadDirectory(); }}><FolderIcon />Files</button>
@@ -282,5 +319,6 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
       <div class="workspace-panel-empty"><div><BoxesIcon /><strong>{artifactMode() === "outputs" ? "No artifacts in the loaded transcript" : "Interactive artifacts are not enabled"}</strong><p>{artifactMode() === "outputs" ? "Code blocks and file outputs will appear here as transcript artifact projection lands." : "This boundary is reserved for sandboxed, explicitly trusted generated interfaces."}</p></div></div>
     </section></Show>
     <Show when={loading()}><div class="workspace-panel-loading"><Spinner /><span>Loading workspace</span></div></Show>
+    </div>
   </aside>;
 }
