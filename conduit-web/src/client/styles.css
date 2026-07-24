@@ -180,8 +180,6 @@ svg { stroke-width: 1.5; }
 .workspace-panel-error { padding: 9px 12px; border-bottom: 1px solid color-mix(in oklch, var(--destructive), transparent 45%); color: var(--destructive); font-size: 12px; }
 .workspace-panel-loading { position: absolute; inset: auto 12px 12px auto; display: flex; align-items: center; gap: 7px; padding: 6px 9px; border: 1px solid var(--border); border-radius: 999px; background: var(--popover); color: var(--muted-foreground); font-size: 11px; box-shadow: 0 8px 24px rgb(0 0 0 / 25%); }
 .workspace-resize-handle { position: absolute; inset-block: 0; left: -12px; z-index: 40; width: 24px; cursor: col-resize; touch-action: none; }
-.workspace-resize-handle::after { content: ""; position: absolute; inset-block: 8px; left: 11px; width: 1px; border-radius: 99px; background: transparent; transition: background 120ms; }
-.workspace-resize-handle:hover::after, .workspace-resize-handle:focus-visible::after, .workspace-resizing .workspace-resize-handle::after { background: var(--accent-cool); }
 .workspace-resizing .workspace-panel { transition: none; }
 .workspace-resizing { cursor: col-resize; user-select: none; }
 .workspace-detail-resizing { cursor: row-resize; user-select: none; }
@@ -377,6 +375,7 @@ svg { stroke-width: 1.5; }
 .chat-main-empty .thread, .chat-main-empty .empty-thread, .chat-main-empty .welcome { width: 100%; min-height: 100%; padding: 0; }
 .chat-main-empty .welcome { padding-bottom: 176px; }
 .chat-main-empty .composer-stack { position: absolute; inset-inline: 0; top: 50%; z-index: 2; width: min(704px, calc(100% - 48px)); margin-inline: auto; padding: 0; transform: translateY(54px); background: transparent; }
+.chat-bootstrap { display: grid; min-height: 100%; place-items: center; color: var(--muted-foreground); font-size: 14px; }
 
 .conduit-modal, .settings-dialog, .command-dialog, .external-link-dialog { position: fixed; inset: 0; z-index: 80; display: grid; place-items: center; padding: 16px; background: rgb(0 0 0 / 55%); opacity: 1; visibility: visible; transition: opacity 150ms ease, visibility 0s; }
 .conduit-modal[data-state="closed"], .settings-dialog[data-state="closed"], .command-dialog[data-state="closed"], .external-link-dialog[data-state="closed"] { opacity: 0; visibility: hidden; pointer-events: none; transition-delay: 0s, 220ms; }

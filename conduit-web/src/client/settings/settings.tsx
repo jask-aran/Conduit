@@ -57,6 +57,12 @@ export function Settings(props: {
   let returnFocus: HTMLElement | null = null;
   let wasOpen = false;
   const focusSearch = () => requestAnimationFrame(() => requestAnimationFrame(() => search?.focus()));
+  const dismissEscape = (event: KeyboardEvent) => {
+    if (event.key !== "Escape") return;
+    event.preventDefault();
+    event.stopPropagation();
+    props.onOpenChange(false);
+  };
 
   createEffect(on(() => props.open, (open) => {
     if (open && !wasOpen) returnFocus = document.activeElement as HTMLElement | null;
@@ -68,6 +74,12 @@ export function Settings(props: {
     setScopeEdited(false);
     if (initial === "models") focusSearch();
   }));
+
+  createEffect(() => {
+    if (!props.open) return;
+    document.addEventListener("keydown", dismissEscape, true);
+    onCleanup(() => document.removeEventListener("keydown", dismissEscape, true));
+  });
 
   // Remote model settings remain authoritative until the user actually edits.
   createEffect(() => {
@@ -159,7 +171,7 @@ export function Settings(props: {
   };
 
   return <KDialog.Root open={props.open} onOpenChange={props.onOpenChange}>
-    <KDialog.Portal><KDialog.Content data-state={props.open ? "open" : "closed"} class="settings-dialog" onCloseAutoFocus={(event) => { event.preventDefault(); if (returnFocus?.isConnected) returnFocus.focus(); returnFocus = null; }}>
+    <KDialog.Portal><KDialog.Content data-state={props.open ? "open" : "closed"} class="settings-dialog" onEscapeKeyDown={dismissEscape} onCloseAutoFocus={(event) => { event.preventDefault(); if (returnFocus?.isConnected) returnFocus.focus(); returnFocus = null; }}>
       <div class="settings-shell">
         <nav data-slot="tabs-list" role="tablist" aria-orientation="vertical" class="settings-rail">
           <KDialog.Title>Settings</KDialog.Title>
