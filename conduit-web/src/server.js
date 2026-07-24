@@ -102,7 +102,9 @@ const modelCatalog = new PiModelCatalog({ agentDir: config.piAgentDir, modelPatt
 const modelCatalogs = new Map();
 const launchingChats = new Set();
 const app = express();
-const dist = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../dist");
+const dist = process.env.CONDUIT_CLIENT_DIST
+  ? path.resolve(process.env.CONDUIT_CLIENT_DIST)
+  : path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../dist");
 
 function defaultTemplate() {
   const selected = resolveTemplate(config, preferences.get().defaultTemplateId);
