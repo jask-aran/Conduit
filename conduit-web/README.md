@@ -6,22 +6,25 @@ processes, and a strict TypeScript SolidJS/Vite client.
 ## Run
 
 ```bash
-npm ci
-npm test
-npm run build
 cd ..
+bash .devcontainer/start-conduit.sh setup
+node scripts/conduit-auth.mjs set-password
 bash .devcontainer/start-conduit.sh restart
 ```
 
-Open <http://127.0.0.1:4310>. Authenticate the isolated Pi runtime from the
-repository root with `./scripts/conduit-pi.mjs`, then enter `/login`.
+Open <http://127.0.0.1:4310>, sign in, then use **Settings → Auth** to
+authenticate the Isolated Pi runtime. `../scripts/conduit-pi.mjs` remains an
+optional terminal launcher.
 
-For client development, keep the managed server running and start Vite from
-this directory:
+For client development, use the managed watcher and Vite pair:
 
 ```bash
-npm run dev
+bash .devcontainer/start-conduit.sh dev
 ```
+
+This runs the server on 4310 and Vite with hot reload on 5173. `setup`,
+`build`, `start`, `stop`, `status`, `logs`, and `deploy` share the same managed
+launcher.
 
 ## Runtime model
 
@@ -190,6 +193,26 @@ so timing reveals nothing.
 - `GET /v0/auth/status` — `{ hasPassword, authenticated, sessionCount }`
 - `POST /v0/auth/reset-sessions` — keeps the caller's token, signs out everyone
   else
+
+### Isolated Pi authentication
+
+Settings → Auth manages credentials only in the bundled Isolated Pi runtime's
+`data/pi/auth.json`; Host Pi credentials and its environment are never read or
+changed. This surface requires an authenticated Conduit session, even when
+passwordless loopback development otherwise serves the app. OAuth attempts are
+in-memory, owned by their initiating session, expire after ten minutes, and do
+not reveal URLs, codes, or prompts to other sessions. API-key values are stored
+as literal Pi credentials and never returned by the API.
+
+Credential changes stop only idle, unattached Isolated Pi processes; active,
+starting, and browser-attached processes remain resident.
+
+- `GET /v0/pi-auth` — redacted Isolated Pi provider status
+- `GET /v0/pi-auth/attempt` — caller-owned OAuth attempt state
+- `POST /v0/pi-auth/oauth`, `/v0/pi-auth/attempt/respond`, and
+  `/v0/pi-auth/attempt/cancel` — OAuth/device-code actions
+- `PUT /v0/pi-auth/api-key`, `DELETE /v0/pi-auth/:providerId` — store or remove
+  an Isolated Pi credential
 
 ### Application routes
 

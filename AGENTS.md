@@ -67,6 +67,9 @@ that alters behavior they describe.
   password or `CONDUIT_ALLOW_INSECURE=1`. Credentials live only in
   `data/auth.json` (mode `0600`, atomic writes); the running server reloads it
   on each login attempt and on session-validation cache miss, never on a timer.
+  Browser-managed Pi credentials are a separate, authenticated surface: they
+  operate only on the bundled Isolated Pi `auth.json`, never Host Pi, and must
+  not expose OAuth URLs, device codes, or credentials across Conduit sessions.
 
 ## Interface
 
@@ -104,8 +107,9 @@ bash .devcontainer/start-conduit.sh restart
 ```
 
 It rebuilds when needed and owns the PID/log on port 4310. Do not launch
-`node src/server.js` or `npm run start`/`dev:server` directly. From
-`conduit-web/`: `npm run dev` (Vite client), `npm test` (node:test suites),
+`node src/server.js`, `npm run start`, `dev:server`, or Vite directly. Use
+`bash .devcontainer/start-conduit.sh dev` for the managed server watcher and
+Vite on port 5173. From `conduit-web/`: `npm test` (node:test suites),
 `npm run test:browser` (Playwright, mocked API, desktop + mobile),
 `npm run build` (bundle budgets enforced — treat budget increases as reviewed
 architectural changes).

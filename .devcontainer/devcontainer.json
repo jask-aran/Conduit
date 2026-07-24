@@ -8,17 +8,23 @@
       "upgradePackages": false
     }
   },
-  "forwardPorts": [4310],
+  "forwardPorts": [4310, 5173],
   "portsAttributes": {
     "4310": {
       "label": "Conduit",
       "onAutoForward": "openBrowser",
+      "protocol": "http"
+    },
+    "5173": {
+      "label": "Conduit (hot reload)",
+      "onAutoForward": "silent",
       "protocol": "http"
     }
   },
   "containerEnv": {
     "CONDUIT_HOST": "0.0.0.0",
     "CONDUIT_PORT": "4310",
+    "CONDUIT_ALLOW_INSECURE": "1",
     "CONDUIT_FILES_ROOT": "/workspaces/Conduit/data/chat/files",
     "CONDUIT_CATALOG_FILE": "/workspaces/Conduit/data/conduit.json",
     "CONDUIT_PI_AGENT_DIR": "/workspaces/Conduit/data/pi",
