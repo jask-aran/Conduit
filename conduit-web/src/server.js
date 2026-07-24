@@ -607,6 +607,10 @@ function resolveProjectDefaultTemplateId(requested, fallback = null, { allowHost
 }
 
 app.post("/v0/projects", async (request, response, next) => {
+  const controller = new AbortController();
+  const abort = () => controller.abort();
+  request.once("aborted", abort);
+  response.once("close", () => { if (!response.writableEnded) abort(); });
   try {
     const mode = String(request.body?.mode || request.body?.origin || "managed").trim().toLowerCase();
     const name = String(request.body?.name || "").trim();
@@ -617,18 +621,22 @@ app.post("/v0/projects", async (request, response, next) => {
         name: name || undefined,
         path: request.body.path,
         defaultTemplateId: resolveProjectDefaultTemplateId(request.body?.defaultTemplateId, null),
+        signal: controller.signal,
       });
       return response.status(201).json(created);
     }
     if (mode === "clone" || mode === "cloned") {
       if (!request.body?.cloneUrl) return response.status(400).json({ error: "clone_url_required" });
-      if (!request.body?.path) return response.status(400).json({ error: "workspace_path_required" });
+      if (!request.body?.path && !request.body?.cloneParentPath) return response.status(400).json({ error: "workspace_path_required" });
       const created = await projects.create({
         mode: "cloned",
         name: name || undefined,
         cloneUrl: request.body.cloneUrl,
         path: request.body.path,
+        cloneParentPath: request.body.cloneParentPath,
+        cloneDirectoryName: request.body.cloneDirectoryName,
         defaultTemplateId: resolveProjectDefaultTemplateId(request.body?.defaultTemplateId, null),
+        signal: controller.signal,
       });
       return response.status(201).json(created);
     }
@@ -638,7 +646,11 @@ app.post("/v0/projects", async (request, response, next) => {
       name,
       defaultTemplateId: resolveProjectDefaultTemplateId(request.body?.defaultTemplateId, null),
     }));
-  } catch (error) { next(error); }
+  } catch (error) {
+    if (!request.aborted && !response.destroyed) next(error);
+  } finally {
+    request.removeListener("aborted", abort);
+  }
 });
 
 app.patch("/v0/projects/:id", async (request, response, next) => {
@@ -1267,12 +1279,13 @@ app.get("*", (request, response, next) => {
 app.use((error, _request, response, _next) => {
   console.error(error);
   let status = error.status || 500;
-  if (error.code === "reserved_project" || error.code === "workspace_already_linked") status = 409;
+  if (["reserved_project", "workspace_already_linked", "clone_target_reserved", "clone_reservation_lost"].includes(error.code)) status = 409;
   if (error.code === "workspace_identity_changed") status = 409;
   if (["chat_move_not_supported", "live_session_starting", "runtime_locked", "session_writer_conflict"].includes(error.code)) status = 409;
   if (error.code === "live_process_limit" || error.code === "generation_limit") status = 429;
   if (error.code === "attachment_not_found" || error.code === "path_not_found") status = 404;
   if (error.code === "command_failed") status = 502;
+  if (error.code === "clone_timeout") status = 504;
   if (error.code === "invalid_attachment_id"
     || [
       "enabled_models_required",
