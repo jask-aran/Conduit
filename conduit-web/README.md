@@ -195,6 +195,9 @@ so timing reveals nothing.
 
 - `GET /healthz`
 - `GET /v0/capabilities`
+- `GET /v0/share-origin` resolves the current host's MagicDNS HTTPS origin from
+  the local Tailscale CLI; the client appends the selected chat path before
+  copying it.
 - `POST /v0/chats`
 - `GET|DELETE /v0/chats/:id` (draft cleanup requires `?ifEmpty=true`)
 - `PUT|GET /v0/chats/:id/attachments/:attachment-id` uploads raw bytes or downloads;
