@@ -96,6 +96,26 @@ test("create reuses the same chat and enforces max live processes", async () => 
   assert.equal(manager.list().length, 2);
 });
 
+test("an intentional stop absorbs a late Pi stdin error", () => {
+  const stdin = new EventEmitter();
+  stdin.write = () => true;
+  const child = new EventEmitter();
+  child.stdout = new PassThrough();
+  child.stderr = new PassThrough();
+  child.stdin = stdin;
+  child.kill = () => true;
+  const manager = new PiManager({
+    agentDir: "/tmp/conduit-stdin-error",
+    reaperIntervalMs: 0,
+    spawnImpl: () => child,
+    template: { id: "test", version: "1", models: [], tools: [], extensions: [], skills: [], promptTemplates: [] },
+  });
+  const record = manager.create({ project: project("stdin-error"), chatId: "chat-stdin-error" });
+  child.emit("spawn");
+  assert.equal(manager.stop(record.id), true);
+  assert.doesNotThrow(() => stdin.emit("error", Object.assign(new Error("broken pipe"), { code: "EPIPE" })));
+});
+
 test("starting processes are not reclaimable", async () => {
   const { manager, children } = makeManager({ maxLiveProcesses: 1 });
   const starting = manager.create({ project: project("boot"), chatId: "chat-boot" });
