@@ -34,7 +34,7 @@ function cacheWorkspace(projectId: string, patch: Partial<WorkspaceCacheEntry>) 
   while (workspaceCache.size > MAX_CACHED_WORKSPACES) workspaceCache.delete(workspaceCache.keys().next().value!);
 }
 
-export default function WorkspacePanel(props: { projectId: Accessor<string>; chatId: Accessor<string>; onClose: () => void }) {
+export default function WorkspacePanel(props: { projectId: Accessor<string>; chatId: Accessor<string>; open: Accessor<boolean>; onClose: () => void }) {
   let projectGeneration = 0;
   let requestVersion = 0;
   let projectController = new AbortController();
@@ -221,8 +221,9 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
     });
   }));
   createEffect(on(
-    () => [props.projectId(), tab()] as const,
-    ([projectId, activeTab]) => {
+    () => [props.projectId(), tab(), props.open()] as const,
+    ([projectId, activeTab, open]) => {
+      if (!open) return;
       const projectChanged = loadedProjectId !== projectId;
       if (projectChanged) {
         if (loadedProjectId) resetRequestScope();
@@ -251,7 +252,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
     <Show when={entry.type === "directory" && expanded().has(entry.path)}><Tree directory={entry.path} depth={(treeProps.depth || 0) + 1} /></Show>
   </div>}</For>;
 
-  return <aside class="workspace-panel" aria-label="Workspace panel" style={{ width: `${width()}px` }}>
+  return <aside class="workspace-panel" classList={{ "workspace-panel-open": props.open() }} aria-label="Workspace panel" aria-hidden={!props.open()} inert={!props.open()} style={{ "--workspace-panel-width": `${width()}px` }}>
     <div class="workspace-resize-handle" role="separator" aria-label="Resize workspace panel" aria-orientation="vertical" aria-valuemin="300" aria-valuemax={Math.floor(window.innerWidth * 0.65)} aria-valuenow={width()} tabIndex={0} onPointerDown={startResize} onKeyDown={(event) => { if (event.key === "ArrowLeft") saveWidth(width() + 20); if (event.key === "ArrowRight") saveWidth(width() - 20); }} />
     <header class="workspace-panel-header"><div><strong>Workspace</strong><small>Read-only project context</small></div><Button variant="ghost" size="icon-sm" aria-label="Close workspace panel" onClick={props.onClose}><XIcon /></Button></header>
     <div class="workspace-panel-tabs" role="tablist" aria-label="Workspace views">

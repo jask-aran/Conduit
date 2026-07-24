@@ -5,6 +5,7 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
+  --panel-motion-duration: 160ms; --panel-motion-easing: ease;
   --background: oklch(1 0 0); --foreground: oklch(0.145 0 0);
   --card: oklch(1 0 0); --card-foreground: oklch(0.145 0 0);
   --popover: oklch(1 0 0); --popover-foreground: oklch(0.145 0 0);
@@ -81,7 +82,7 @@ button, textarea, input, select { font: inherit; }
 svg { stroke-width: 1.5; }
 
 /* One concrete sidebar; no generic provider/component framework. */
-.conduit-sidebar { position: relative; z-index: 20; width: 244px; flex: none; transition: width 160ms ease; }
+.conduit-sidebar { position: relative; z-index: 20; width: 244px; flex: none; transition: width var(--panel-motion-duration) var(--panel-motion-easing); }
 .sidebar-container { display: flex; width: 100%; height: 100dvh; flex-direction: column; overflow: hidden; background: var(--sidebar); color: var(--sidebar-foreground); }
 .conduit-sidebar[data-state="collapsed"] { width: 52px; }
 .conduit-sidebar[data-state="collapsed"] .sidebar-container span,
@@ -123,7 +124,8 @@ svg { stroke-width: 1.5; }
 .chat-header [data-slot="button"] svg { width: 16px; height: 16px; }
 .mobile-sidebar-trigger { display: none; }
 
-.workspace-panel { position: relative; display: flex; width: clamp(320px, 31vw, 520px); height: calc(100dvh - 16px); margin: 8px 10px 8px 0; flex: none; flex-direction: column; overflow: visible; border: 1px solid var(--border); border-radius: 16px; background: var(--background); box-shadow: 0 18px 44px -22px rgb(0 0 0 / 62%); }
+.workspace-panel { position: relative; display: flex; width: 0; height: calc(100dvh - 16px); margin: 8px 0 8px 0; flex: none; flex-direction: column; overflow: hidden; border: 1px solid transparent; border-radius: 16px; background: var(--background); opacity: 0; pointer-events: none; transition: width var(--panel-motion-duration) var(--panel-motion-easing), margin-right var(--panel-motion-duration) var(--panel-motion-easing), opacity var(--panel-motion-duration) var(--panel-motion-easing), border-color var(--panel-motion-duration) var(--panel-motion-easing); }
+.workspace-panel.workspace-panel-open { width: var(--workspace-panel-width); margin-right: 10px; border-color: var(--border); box-shadow: 0 18px 44px -22px rgb(0 0 0 / 62%); opacity: 1; pointer-events: auto; }
 .workspace-panel > :not(.workspace-resize-handle) { max-width: 100%; }
 .workspace-panel-header { display: flex; min-height: 40px; flex: none; align-items: center; justify-content: space-between; padding: 4px 8px 4px 14px; border-bottom: 1px solid var(--border); }
 .workspace-panel-header > div { display: flex; min-width: 0; align-items: baseline; gap: 8px; }
@@ -482,7 +484,7 @@ svg { stroke-width: 1.5; }
   [data-slot="context-menu-sub-content"].sidebar-context-menu { width: 7rem; }
   .mobile-sidebar-trigger { position: fixed; top: 12px; left: 8px; z-index: 60; display: inline-flex; }
   .mobile-sidebar-trigger[data-mobile-open="true"] { right: 12px; left: auto; }
-  .conduit-sidebar { position: fixed; inset-block: 0; left: 0; z-index: 55; width: 100vw; background: var(--frame); transform: translateX(-102%); transition: transform 180ms ease; }
+  .conduit-sidebar { position: fixed; inset-block: 0; left: 0; z-index: 55; width: 100vw; background: var(--frame); transform: translateX(-102%); transition: transform var(--panel-motion-duration) var(--panel-motion-easing); }
   .conduit-sidebar[data-mobile-open="true"] { transform: translateX(0); }
   .conduit-sidebar[data-state="collapsed"] { width: 100vw; }
   .conduit-sidebar .sidebar-container { background: var(--frame); }
@@ -502,7 +504,8 @@ svg { stroke-width: 1.5; }
   .chat-profile-posture { display: none; }
   .settings-shell { width: calc(100vw - 24px); height: calc(100dvh - 24px); }
   .settings-rail { width: 132px; }
-  .workspace-panel { position: fixed; inset: 0; z-index: 70; width: 100vw !important; height: 100dvh; margin: 0; border: 0; border-radius: 0; }
+  .workspace-panel { position: fixed; inset: 0; z-index: 70; width: 100vw !important; height: 100dvh; margin: 0; border: 0; border-radius: 0; transform: translateX(100%); transition: transform var(--panel-motion-duration) var(--panel-motion-easing); }
+  .workspace-panel.workspace-panel-open { margin: 0; transform: translateX(0); }
   .workspace-resize-handle { display: none; }
   .workspace-files { grid-template-rows: minmax(160px, 42%) 1fr; }
 }
