@@ -100,21 +100,45 @@ function expiredSession(session, now = Date.now()) {
   return now - anchor > SESSION_TTL_MS;
 }
 
+function revisionFor(content) {
+  return crypto.createHash("sha256").update(content).digest("base64");
+}
+
+async function diskRevision(filePath) {
+  try {
+    return revisionFor(await fs.readFile(filePath, "utf8"));
+  } catch (error) {
+    if (error.code === "ENOENT") return null;
+    throw error;
+  }
+}
+
+function conflictError() {
+  return Object.assign(new Error("Authentication data changed on disk during an update"), { code: "auth_store_conflict" });
+}
+
 export class AuthStore {
   constructor(filePath) {
     this.filePath = filePath;
     this.data = null;
     this.lastReadMs = 0;
+    this.revision = null;
+    this.transition = Promise.resolve();
   }
 
   async load({ force = false } = {}) {
     if (!force && this.data) return this.data;
     try {
-      const raw = JSON.parse(await fs.readFile(this.filePath, "utf8"));
+      const content = await fs.readFile(this.filePath, "utf8");
+      const raw = JSON.parse(content);
       this.data = normalizeAuthFile(raw) || { version: 1, password: null, sessions: [] };
       if (!this.data.password) this.data.password = null;
+      this.revision = revisionFor(content);
     } catch (error) {
-      if (error.code === "ENOENT") this.data = { version: 1, password: null, sessions: [] };
+      if (error.code === "ENOENT") {
+        this.data = { version: 1, password: null, sessions: [] };
+        this.revision = null;
+      }
       else throw error;
     }
     this.lastReadMs = Date.now();
@@ -130,43 +154,78 @@ export class AuthStore {
   }
 
   async reloadFromFile() {
-    return this.load({ force: true });
+    return this._transition(() => this.load({ force: true }));
   }
 
-  async _flush() {
-    if (!this.data) return;
+  async _transition(operation) {
+    const previous = this.transition;
+    let release;
+    this.transition = new Promise((resolve) => { release = resolve; });
+    await previous;
+    try {
+      return await operation();
+    } finally {
+      release();
+    }
+  }
+
+  async _mutate(operation) {
+    return this._transition(async () => {
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        await this.load({ force: true });
+        const { changed, result } = await operation(this.data);
+        if (!changed) return result;
+        try {
+          await this._flush(this.data, this.revision);
+          return result;
+        } catch (error) {
+          if (error?.code !== "auth_store_conflict" || attempt) throw error;
+        }
+      }
+      throw conflictError();
+    });
+  }
+
+  async _flush(data = this.data, expectedRevision = this.revision) {
+    if (!data) return;
     await fs.mkdir(path.dirname(this.filePath), { recursive: true });
+    if (await diskRevision(this.filePath) !== expectedRevision) throw conflictError();
     const nonce = crypto.randomBytes(6).toString("hex");
     const temporary = `${this.filePath}.${process.pid}.${nonce}.tmp`;
-    await fs.writeFile(temporary, `${JSON.stringify(this.data, null, 2)}\n`, "utf8");
+    const content = `${JSON.stringify(data, null, 2)}\n`;
+    await fs.writeFile(temporary, content, "utf8");
     await fs.chmod(temporary, 0o600);
     await fs.rename(temporary, this.filePath);
+    this.revision = revisionFor(content);
     this.lastReadMs = Date.now();
   }
 
   async setPassword(password) {
-    await this.load();
     const hashed = await hashPassword(password);
-    this.data.password = hashed;
-    this.data.sessions = [];
-    await this._flush();
+    await this._mutate((data) => {
+      data.password = hashed;
+      data.sessions = [];
+      return { changed: true };
+    });
   }
 
   async resetSessions() {
-    await this.load();
-    this.data.sessions = [];
-    await this._flush();
+    return this._mutate((data) => {
+      if (!data.sessions.length) return { changed: false };
+      data.sessions = [];
+      return { changed: true };
+    });
   }
 
   async verifyPassword(password) {
-    await this.load({ force: true });
-    if (!this.data.password) return false;
-    return verifyPassword(password, this.data.password);
+    const stored = await this._transition(async () => {
+      await this.load({ force: true });
+      return this.data.password ? { ...this.data.password } : null;
+    });
+    return verifyPassword(password, stored);
   }
 
   async createSession({ userAgent = null, now = new Date() } = {}) {
-    await this.load({ force: true });
-    await this.pruneExpired();
     const token = newSessionToken();
     const session = {
       tokenHash: hashToken(token),
@@ -174,70 +233,85 @@ export class AuthStore {
       lastSeenAt: now.toISOString(),
       userAgent,
     };
-    this.data.sessions.push(session);
-    if (this.data.sessions.length > MAX_SESSIONS) {
-      this.data.sessions.sort((a, b) => new Date(a.lastSeenAt) - new Date(b.lastSeenAt));
-      this.data.sessions = this.data.sessions.slice(this.data.sessions.length - MAX_SESSIONS);
-    }
-    await this._flush();
-    return { token, session };
+    return this._mutate((data) => {
+      data.sessions = data.sessions.filter((item) => !expiredSession(item));
+      data.sessions.push(session);
+      if (data.sessions.length > MAX_SESSIONS) {
+        data.sessions.sort((a, b) => new Date(a.lastSeenAt) - new Date(b.lastSeenAt));
+        data.sessions = data.sessions.slice(data.sessions.length - MAX_SESSIONS);
+      }
+      return { changed: true, result: { token, session } };
+    });
   }
 
   async findSession(token) {
     if (!token) return null;
-    await this.load();
     const tokenHash = hashToken(token);
     const now = Date.now();
-    const lookup = () => this.data.sessions.find((session) => timingSafeEqualString(session.tokenHash, tokenHash)) || null;
-    let found = lookup();
-    if (!found) {
-      await this.load({ force: true });
-      found = lookup();
-    }
-    if (!found) return null;
-    if (expiredSession(found, now)) {
-      await this.removeSession(token);
-      return null;
-    }
-    return found;
+    return this._transition(async () => {
+      let force = false;
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        await this.load({ force });
+        const found = this.data.sessions.find((session) => timingSafeEqualString(session.tokenHash, tokenHash)) || null;
+        if (!found && !force) {
+          force = true;
+          continue;
+        }
+        if (!found) return null;
+        if (!expiredSession(found, now)) return { ...found };
+        this.data.sessions = this.data.sessions.filter((item) => !timingSafeEqualString(item.tokenHash, tokenHash));
+        try {
+          await this._flush(this.data, this.revision);
+          return null;
+        } catch (error) {
+          if (error?.code !== "auth_store_conflict" || attempt) throw error;
+          force = true;
+        }
+      }
+      throw conflictError();
+    });
   }
 
   async touchSession(session, now = new Date()) {
-    const previous = session.lastSeenAt ? new Date(session.lastSeenAt).getTime() : 0;
-    if (now.getTime() - previous < LAST_SEEN_REFRESH_MS) return false;
-    session.lastSeenAt = now.toISOString();
-    await this._flush();
-    return true;
+    if (!session?.tokenHash) return false;
+    return this._mutate((data) => {
+      const current = data.sessions.find((item) => timingSafeEqualString(item.tokenHash, session.tokenHash));
+      if (!current) return { changed: false, result: false };
+      const previous = current.lastSeenAt ? new Date(current.lastSeenAt).getTime() : 0;
+      if (now.getTime() - previous < LAST_SEEN_REFRESH_MS) return { changed: false, result: false };
+      current.lastSeenAt = now.toISOString();
+      return { changed: true, result: true };
+    });
   }
 
   async removeSession(token) {
     if (!token) return false;
-    await this.load();
     const tokenHash = hashToken(token);
-    const before = this.data.sessions.length;
-    this.data.sessions = this.data.sessions.filter((session) => !timingSafeEqualString(session.tokenHash, tokenHash));
-    if (this.data.sessions.length === before) return false;
-    await this._flush();
-    return true;
+    return this._mutate((data) => {
+      const before = data.sessions.length;
+      data.sessions = data.sessions.filter((session) => !timingSafeEqualString(session.tokenHash, tokenHash));
+      return { changed: data.sessions.length !== before, result: data.sessions.length !== before };
+    });
   }
 
   async removeOtherSessions(token) {
     if (!token) return 0;
-    await this.load();
     const tokenHash = hashToken(token);
-    const before = this.data.sessions.length;
-    this.data.sessions = this.data.sessions.filter((session) => timingSafeEqualString(session.tokenHash, tokenHash));
-    const removed = before - this.data.sessions.length;
-    if (removed > 0) await this._flush();
-    return removed;
+    return this._mutate((data) => {
+      const before = data.sessions.length;
+      data.sessions = data.sessions.filter((session) => timingSafeEqualString(session.tokenHash, tokenHash));
+      const removed = before - data.sessions.length;
+      return { changed: removed > 0, result: removed };
+    });
   }
 
   async pruneExpired(now = Date.now()) {
-    await this.load();
-    const before = this.data.sessions.length;
-    this.data.sessions = this.data.sessions.filter((session) => !expiredSession(session, now));
-    if (this.data.sessions.length !== before) await this._flush();
-    return before - this.data.sessions.length;
+    return this._mutate((data) => {
+      const before = data.sessions.length;
+      data.sessions = data.sessions.filter((session) => !expiredSession(session, now));
+      const removed = before - data.sessions.length;
+      return { changed: removed > 0, result: removed };
+    });
   }
 }
 

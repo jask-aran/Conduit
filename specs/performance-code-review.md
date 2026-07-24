@@ -116,27 +116,16 @@ existing parent directory and derives a repository-named child unless the user
 supplies a folder name. Visible clone progress and explicit operation-ID
 cancellation remain tracked in GitHub issue #25.
 
-### [P2] 7. Auth-store writes are atomic but not concurrency-safe
+### [P2 — implemented 2026-07-24] 7. Auth-store transitions are serialized
 
-`AuthStore::_flush()` (auth-store.js:136) correctly writes a unique temporary file and renames it atomically, but mutations are not serialized or guarded by a version. Several request paths can replace or mutate the shared `this.data` and then independently serialize it. Two concurrent logins, session touches, logout/reset operations, or a forced password-file reload can therefore write different snapshots; the older logical snapshot may rename last and discard a newer session change.
-
-Verified, and worse than the write race alone: `createSession()` and `verifyPassword()` both call `load({ force: true })` (auth-store.js:162, :168), which **replaces `this.data` wholesale from disk**. A concurrent mutation that has not yet flushed is discarded in memory at that moment — no rename race required. The login flow (verify → create) therefore already interleaves destructively with any concurrent touch/logout.
-
-This is easy to miss because each individual file write is crash-safe. Atomic replacement prevents a torn JSON file, but it does not provide ordering between concurrent read-modify-write operations, and forced reloads are themselves a mutation of shared state.
-
-#### Required direction
-
-- Put every auth read-modify-write transition behind one store-owned mutation queue, as distinct from read-only password verification.
-- Perform the final state derivation inside that queue; do not capture a stale object before waiting for it. Forced reloads count as transitions and belong in the queue.
-- If external CLI edits must coexist with the server, use file identity/mtime or an explicit revision to detect and merge/reject stale commits rather than silently overwriting them.
-- Keep password hashing (scrypt, deliberately slow) outside the short file-commit section where possible, while revalidating the revision before applying the result.
-
-#### Acceptance criteria
-
-- Parallel successful logins retain both sessions subject only to the documented `MAX_SESSIONS` policy.
-- Concurrent touch/logout/reset operations have deterministic ordering and cannot resurrect a removed session.
-- Tests deliberately delay temporary-file writes so the opposite completion order cannot lose the newer logical mutation.
-- A forced reload interleaved with an unflushed mutation loses neither.
+`AuthStore` now serializes every persistent password/session transition through
+one store-owned queue. Each transition derives its final state after a forced
+disk reload, writes through a unique temporary file and atomic rename, and
+checks the disk-content revision immediately before commit. A conflicting
+external CLI update is reloaded and the transition retried once rather than
+silently overwritten. Password verification snapshots the stored hash inside
+the queue, then runs slow scrypt outside it. The future browser-bootstrap
+password claim must use the same transition primitive.
 
 ### [P3] 8. One test couples the unit suite to a client build
 
@@ -226,9 +215,9 @@ After the narrow performance work:
 5. Bounded Markdown rendering.
 6. Compatibility-path removal.
 
-Defer workspace inspection, clone lifecycle, auth serialization, and the
-build-coupled test fixture until after the rendering migration; they are
-independent and would interrupt its visual feedback loop.
+Workspace inspection, clone lifecycle, and auth serialization are complete.
+The build-coupled test fixture remains deferred; it is independent of the
+rendering migration and its current browser fixtures.
 
 For each slice, run focused automated tests plus typecheck/build as warranted,
 restart with `bash .devcontainer/start-conduit.sh restart`, and provide concrete
