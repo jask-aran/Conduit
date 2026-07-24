@@ -56,6 +56,9 @@ async function spawnServer(env, { password } = {}) {
   }
   const workspace = path.join(root, "workspace");
   await fs.mkdir(workspace);
+  const clientDist = path.join(root, "client-dist");
+  await fs.mkdir(clientDist);
+  await fs.writeFile(path.join(clientDist, "index.html"), "<!doctype html><title>Conduit test SPA</title>");
   const child = spawn(process.execPath, ["src/server.js"], {
     cwd: path.resolve(import.meta.dirname, ".."),
     stdio: ["ignore", "pipe", "pipe"],
@@ -70,6 +73,7 @@ async function spawnServer(env, { password } = {}) {
       CONDUIT_PREFERENCES_FILE: path.join(root, "preferences.json"),
       CONDUIT_PI_AGENT_DIR: path.join(root, "pi"),
       CONDUIT_AUTH_FILE: path.join(root, "auth.json"),
+      CONDUIT_CLIENT_DIST: clientDist,
       CONDUIT_PI_COMMAND: conduitPi,
       CONDUIT_NATIVE_PI_COMMAND: nativePi,
       CONDUIT_NATIVE_PI_AGENT_DIR: path.join(root, "native-agent"),
@@ -246,6 +250,7 @@ test("loopback bind without a password starts open and serves the SPA", async ()
     await waitForServer(server.origin, server.child);
     const root = await fetch(`${server.origin}/`, { headers: { accept: "text/html" } });
     assert.equal(root.status, 200);
+    assert.match(await root.text(), /Conduit test SPA/);
     const projects = await fetch(`${server.origin}/v0/projects`);
     assert.equal(projects.status, 200);
   } finally {
