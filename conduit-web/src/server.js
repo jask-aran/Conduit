@@ -25,6 +25,7 @@ import { resolvePiLaunch } from "./pi-launch.js";
 import { validateNativeProjectResources } from "./native-resource-validation.js";
 import { AuthStore } from "./auth-store.js";
 import { PiAuthBroker } from "./pi-auth-broker.js";
+import { ChatLifecycle } from "./chat-lifecycle.js";
 import {
   authStartupViolation,
   clearSessionCookie,
@@ -116,7 +117,7 @@ const piAuth = new PiAuthBroker({
   onCredentialsChanged: recycleIdleIsolatedPiProcesses,
 });
 const modelCatalogs = new Map();
-const launchingChats = new Set();
+const lifecycle = new ChatLifecycle();
 const app = express();
 const dist = process.env.CONDUIT_CLIENT_DIST
   ? path.resolve(process.env.CONDUIT_CLIENT_DIST)
@@ -807,49 +808,68 @@ app.post("/v0/projects/:id/move-sessions", async (request, response, next) => {
     const source = await projects.get(request.params.id);
     const target = await projects.get(request.body?.projectId || "");
     if (!source || !target) return response.status(404).json({ error: "project_not_found" });
-    await projects.validate(source);
-    await projects.validate(target);
-    if (source.id === target.id) return response.status(409).json({ error: "project_target_unchanged" });
-    const projectList = await projects.list();
-    const chats = registry.listProject(source.id, { includeHidden: true });
-    if (chats.some((chat) => chat.runtime?.kind === "native_pi")) {
-      return response.status(409).json({ error: "chat_move_not_supported", message: "Host Pi chats cannot move between working roots." });
-    }
-    const moved = [];
-    for (const chat of chats) {
-      await stopSessionProcesses(chat);
-      const session = chat.piSessionFile ? await registry.find(projectList, chat.id) : null;
-      await moveRegisteredChat({ chat, source, target, session });
-      moved.push({ sourceId: chat.id, session: chatView(registry.metadata(chat.id)) });
-    }
-    response.json({ moved });
+    await lifecycle.withProjects([source.id, target.id], async () => {
+      await projects.validate(source);
+      await projects.validate(target);
+      if (source.id === target.id) throw Object.assign(new Error("Project target is unchanged"), { code: "project_target_unchanged", status: 409 });
+      const chats = registry.listProject(source.id, { includeHidden: true });
+      if (chats.some((chat) => chat.runtime?.kind === "native_pi")) {
+        throw Object.assign(new Error("Host Pi chats cannot move between working roots."), { code: "chat_move_not_supported", status: 409 });
+      }
+      const moved = [];
+      for (const { id } of chats) {
+        const item = await lifecycle.run(id, async () => {
+          const chat = registry.metadata(id);
+          if (!chat || chat.projectId !== source.id) return null;
+          const projectList = await projects.list();
+          const session = chat.piSessionFile ? await registry.find(projectList, chat.id) : null;
+          await stopSessionProcesses(chat);
+          lifecycle.assertAvailable(chat.id, source.id);
+          lifecycle.assertAvailable(chat.id, target.id);
+          await moveRegisteredChat({ chat, source, target, session });
+          return { sourceId: chat.id, session: chatView(registry.metadata(chat.id)) };
+        });
+        if (item) moved.push(item);
+      }
+      response.json({ moved });
+    });
   } catch (error) { next(error); }
 });
 
 app.delete("/v0/projects/:id", async (request, response, next) => {
+  let finishDeletion = null;
   try {
     const project = await projects.get(request.params.id);
     if (!project) return response.status(404).json({ error: "project_not_found" });
+    finishDeletion = await lifecycle.beginProjectDeletion(project.id);
     let skipWorkingTree = false;
     try { await projects.validate(project); }
     catch (error) {
       if (project.origin !== "linked") throw error;
       skipWorkingTree = true;
     }
+    const projectList = await projects.list();
+    const chats = registry.listProject(project.id, { includeHidden: true });
+    for (const { id } of chats) {
+      await lifecycle.run(id, async () => {
+        const chat = registry.metadata(id);
+        if (chat?.projectId === project.id) await stopSessionProcesses(chat);
+      });
+    }
     const matching = manager.list().filter((item) => item.projectId === project.id);
     await Promise.all(matching.map((item) => manager.stopAndWait(item.id)));
-    const projectList = await projects.list();
-    const sessions = (await Promise.all(registry.listProject(project.id, { includeHidden: true })
+    const sessions = (await Promise.all(chats
       .map((chat) => findDeletableSession(projectList, chat)))).filter(Boolean);
     await Promise.all(sessions.map(removeSession));
     await removeProjectSessions(project);
-    for (const chat of registry.listProject(project.id, { includeHidden: true })) {
+    for (const chat of chats) {
       await registry.remove(chat.id, skipWorkingTree ? null : project);
     }
     await registry.removeProject(project.id);
     await projects.remove(project.id, { skipWorkingTree });
     response.status(204).end();
   } catch (error) { next(error); }
+  finally { finishDeletion?.(); }
 });
 
 app.get("/v0/models", async (request, response, next) => {
@@ -887,36 +907,38 @@ app.post("/v0/chats", async (request, response, next) => {
   try {
     const project = await projects.get(request.body?.projectId || "chat");
     if (!project) return response.status(404).json({ error: "project_not_found" });
-    await projects.validate(project);
-    const hostDefault = project.defaultTemplateId === "host-pi" && request.body?.templateId == null && request.body?.runtimeKind == null;
-    const hostAvailable = config.installations.get("host-pi").available;
-    if (hostDefault && !hostAvailable) {
-      await projects.update(project.id, { defaultTemplateId: null });
-      project.defaultTemplateId = null;
-    }
-    const requestedTemplateId = request.body?.templateId || (project.defaultTemplateId === "host-pi" ? null : project.defaultTemplateId) || null;
-    const template = requestedTemplateId
-      ? resolveTemplate(config, requestedTemplateId)
-      : defaultTemplate();
-    if (!template) return response.status(400).json({ error: "unknown_template", templateId: requestedTemplateId });
-    if (template.defaultable === false) return response.status(400).json({ error: "special_template", templateId: template.id });
-    const runtimeKind = request.body?.runtimeKind || (hostDefault && hostAvailable ? "native_pi" : "conduit_profile");
-    if (!new Set(["conduit_profile", "native_pi"]).has(runtimeKind)) {
-      return response.status(400).json({ error: "unknown_runtime_kind" });
-    }
-    if (runtimeKind === "native_pi" && project.kind !== "workspace") {
-      return response.status(400).json({ error: "native_pi_requires_workspace" });
-    }
-    const runtime = runtimeFor({ runtimeKind, template });
-    if (runtimeKind === "native_pi" && !config.installations.get("host-pi").available) {
-      return response.status(409).json({ error: "native_pi_unavailable" });
-    }
-    const chat = await registry.create(project, {
-      templateId: template.id,
-      templateVersion: template.version,
-      runtime,
+    await lifecycle.withProjects([project.id], async () => {
+      await projects.validate(project);
+      const hostDefault = project.defaultTemplateId === "host-pi" && request.body?.templateId == null && request.body?.runtimeKind == null;
+      const hostAvailable = config.installations.get("host-pi").available;
+      if (hostDefault && !hostAvailable) {
+        await projects.update(project.id, { defaultTemplateId: null });
+        project.defaultTemplateId = null;
+      }
+      const requestedTemplateId = request.body?.templateId || (project.defaultTemplateId === "host-pi" ? null : project.defaultTemplateId) || null;
+      const template = requestedTemplateId
+        ? resolveTemplate(config, requestedTemplateId)
+        : defaultTemplate();
+      if (!template) return response.status(400).json({ error: "unknown_template", templateId: requestedTemplateId });
+      if (template.defaultable === false) return response.status(400).json({ error: "special_template", templateId: template.id });
+      const runtimeKind = request.body?.runtimeKind || (hostDefault && hostAvailable ? "native_pi" : "conduit_profile");
+      if (!new Set(["conduit_profile", "native_pi"]).has(runtimeKind)) {
+        return response.status(400).json({ error: "unknown_runtime_kind" });
+      }
+      if (runtimeKind === "native_pi" && project.kind !== "workspace") {
+        return response.status(400).json({ error: "native_pi_requires_workspace" });
+      }
+      const runtime = runtimeFor({ runtimeKind, template });
+      if (runtimeKind === "native_pi" && !config.installations.get("host-pi").available) {
+        return response.status(409).json({ error: "native_pi_unavailable" });
+      }
+      const chat = await registry.create(project, {
+        templateId: template.id,
+        templateVersion: template.version,
+        runtime,
+      });
+      response.status(201).json(chatView(chat));
     });
-    response.status(201).json(chatView(chat));
   } catch (error) { next(error); }
 });
 
@@ -932,7 +954,7 @@ app.patch("/v0/chats/:chatId", async (request, response, next) => {
   try {
     const context = await findChatContext(request.params.chatId);
     if (!context) return response.status(404).json({ error: "chat_not_found" });
-    if (launchingChats.has(context.chat.id) && (request.body?.templateId != null || request.body?.runtimeKind != null)) {
+    if (lifecycle.isBusy(context.chat.id) && (request.body?.templateId != null || request.body?.runtimeKind != null)) {
       return response.status(409).json({ error: "runtime_locked", message: "Pi is already starting for this chat." });
     }
     let selectedTemplate = templateForChat(context.chat, context.project);
@@ -1039,22 +1061,30 @@ app.post("/v0/runtime/chats", async (_request, response, next) => {
     if (!template) return response.status(404).json({ error: "runtime_template_not_found" });
     const project = await projects.get("chat");
     if (!project) return response.status(404).json({ error: "project_not_found" });
-    const chat = await registry.create(project, {
-      templateId: template.id,
-      templateVersion: template.version,
-      runtime: runtimeFor({ runtimeKind: "conduit_profile", template }),
+    await lifecycle.withProjects([project.id], async () => {
+      const chat = await registry.create(project, {
+        templateId: template.id,
+        templateVersion: template.version,
+        runtime: runtimeFor({ runtimeKind: "conduit_profile", template }),
+      });
+      response.status(201).json(chatView(chat));
     });
-    response.status(201).json(chatView(chat));
   } catch (error) { next(error); }
 });
 
 app.delete("/v0/chats/:chatId", async (request, response, next) => {
   try {
-    const context = await findChatContext(request.params.chatId);
-    if (!context) return response.status(404).json({ error: "chat_not_found" });
     if (request.query.ifEmpty !== "true") return response.status(409).json({ error: "use_chat_delete_route" });
-    await stopSessionProcesses(context.chat);
-    const removed = await registry.removeEmptyDraft(context.chat.id, context.project);
+    if (!isChatId(request.params.chatId)) return response.status(404).json({ error: "chat_not_found" });
+    const removed = await lifecycle.deleteChat(request.params.chatId, async () => {
+      const context = await findChatContext(request.params.chatId);
+      if (!context) return null;
+      return lifecycle.withProjects([context.project.id], async () => {
+        await stopSessionProcesses(context.chat);
+        return registry.removeEmptyDraft(context.chat.id, context.project);
+      });
+    });
+    if (removed == null) return response.status(404).json({ error: "chat_not_found" });
     response.status(removed ? 204 : 409).end();
   } catch (error) { next(error); }
 });
@@ -1185,36 +1215,53 @@ app.post("/v0/sessions/:id/duplicate", (_request, response) => {
 
 app.post("/v0/sessions/:id/move", async (request, response, next) => {
   try {
-    const projectList = await projects.list();
-    const context = await findChatContext(request.params.id);
-    if (!context) return response.status(404).json({ error: "chat_not_found" });
-    if (context.chat.runtime?.kind === "native_pi") {
-      return response.status(409).json({ error: "chat_move_not_supported", message: "Host Pi chats cannot move between working roots." });
-    }
-    const session = await registry.find(projectList, request.params.id);
-    const target = projectList.find((item) => item.id === request.body?.projectId || item.slug === request.body?.projectId);
-    if (!target) return response.status(404).json({ error: "project_not_found" });
-    await projects.validate(target);
-    if (context.chat.projectId === target.id) return response.status(409).json({ error: "session_project_unchanged" });
-    await stopSessionProcesses(context.chat);
-    await moveRegisteredChat({ chat: context.chat, source: context.project, target, session });
-    response.json(chatView(registry.metadata(context.chat.id)));
+    if (!isChatId(request.params.id)) return response.status(404).json({ error: "chat_not_found" });
+    const moved = await lifecycle.run(request.params.id, async () => {
+      const context = await findChatContext(request.params.id);
+      if (!context) return null;
+      const projectList = await projects.list();
+      const target = projectList.find((item) => item.id === request.body?.projectId || item.slug === request.body?.projectId);
+      if (!target) return { error: "project_not_found", status: 404 };
+      return lifecycle.withProjects([context.project.id, target.id], async () => {
+        const current = await findChatContext(request.params.id);
+        if (!current) return null;
+        if (current.chat.runtime?.kind === "native_pi") return { error: "chat_move_not_supported", status: 409, message: "Host Pi chats cannot move between working roots." };
+        if (current.chat.projectId === target.id) return { error: "session_project_unchanged", status: 409 };
+        await projects.validate(target);
+        const session = await registry.find(await projects.list(), current.chat.id);
+        await stopSessionProcesses(current.chat);
+        lifecycle.assertAvailable(current.chat.id, current.project.id);
+        lifecycle.assertAvailable(current.chat.id, target.id);
+        await moveRegisteredChat({ chat: current.chat, source: current.project, target, session });
+        return { chat: chatView(registry.metadata(current.chat.id)) };
+      });
+    });
+    if (!moved) return response.status(404).json({ error: "chat_not_found" });
+    if (moved.error) return response.status(moved.status).json({ error: moved.error, message: moved.message });
+    response.json(moved.chat);
   } catch (error) { next(error); }
 });
 
 app.delete("/v0/sessions/:id", async (request, response, next) => {
   try {
-    const context = await findChatContext(request.params.id);
-    if (!context) return response.status(404).json({ error: "chat_not_found" });
-    const session = await findDeletableSession(await projects.list(), context.chat);
-    const family = session ? await sessionFamilyFiles(session.file, context.project) : [];
-    await stopSessionFamilyProcesses(context.chat, family);
-    if (session) await removeSessionFamily(session.file, context.project);
-    const familyFiles = new Set(family.map((file) => path.resolve(file)));
-    const relatedChats = registry.listProject(context.project.id, { includeHidden: true })
-      .filter((chat) => chat.id === context.chat.id
-        || (chat.piSessionFile && familyFiles.has(path.resolve(chat.piSessionFile))));
-    await Promise.all(relatedChats.map((chat) => registry.remove(chat.id, context.project)));
+    if (!isChatId(request.params.id)) return response.status(404).json({ error: "chat_not_found" });
+    const deleted = await lifecycle.deleteChat(request.params.id, async () => {
+      const context = await findChatContext(request.params.id);
+      if (!context) return false;
+      return lifecycle.withProjects([context.project.id], async () => {
+        const session = await findDeletableSession(await projects.list(), context.chat);
+        const family = session ? await sessionFamilyFiles(session.file, context.project) : [];
+        await stopSessionFamilyProcesses(context.chat, family);
+        if (session) await removeSessionFamily(session.file, context.project);
+        const familyFiles = new Set(family.map((file) => path.resolve(file)));
+        const relatedChats = registry.listProject(context.project.id, { includeHidden: true })
+          .filter((chat) => chat.id === context.chat.id
+            || (chat.piSessionFile && familyFiles.has(path.resolve(chat.piSessionFile))));
+        await Promise.all(relatedChats.map((chat) => registry.remove(chat.id, context.project)));
+        return true;
+      });
+    });
+    if (!deleted) return response.status(404).json({ error: "chat_not_found" });
     response.status(204).end();
   } catch (error) { next(error); }
 });
@@ -1236,29 +1283,29 @@ app.patch("/v0/runtime/settings", async (request, response, next) => {
   } catch (error) { next(error); }
 });
 app.post("/v0/live-sessions", async (request, response, next) => {
-  let lockedChatId = null;
   let launchedRecord = null;
   try {
     const chatId = request.body?.chatId || request.body?.resumeSessionId;
-    const context = await findChatContext(chatId);
-    if (!context) return response.status(404).json({ error: "chat_not_found" });
-    if (launchingChats.has(context.chat.id)) return response.status(409).json({ error: "live_session_starting" });
-    launchingChats.add(context.chat.id);
-    lockedChatId = context.chat.id;
-    const requestedProject = request.body?.projectId;
-    if (requestedProject && ![context.project.id, context.project.slug].includes(requestedProject)) {
-      return response.status(409).json({ error: "session_project_mismatch" });
-    }
-    const resident = manager.getByChatId(context.chat.id);
-    if (resident) {
-      return response.status(201).json({ ...manager.view(resident), streamUrl: `/v0/live-sessions/${resident.id}/stream` });
-    }
-    const template = templateForChat(context.chat, context.project);
-    const runtime = context.chat.runtime || runtimeFor({ runtimeKind: "conduit_profile", template });
-    const installation = config.installations.get(runtime.installationId);
-    if (!installation) {
-      return response.status(409).json({ error: "runtime_unavailable", installationId: runtime.installationId });
-    }
+    if (!isChatId(chatId)) return response.status(404).json({ error: "chat_not_found" });
+    await lifecycle.runLaunch(chatId, async () => {
+      const context = await findChatContext(chatId);
+      if (!context) return response.status(404).json({ error: "chat_not_found" });
+      await lifecycle.withProjects([context.project.id], async () => {
+        lifecycle.assertAvailable(context.chat.id, context.project.id);
+        const requestedProject = request.body?.projectId;
+        if (requestedProject && ![context.project.id, context.project.slug].includes(requestedProject)) {
+          return response.status(409).json({ error: "session_project_mismatch" });
+        }
+        const resident = manager.getByChatId(context.chat.id);
+        if (resident) {
+          return response.status(201).json({ ...manager.view(resident), streamUrl: `/v0/live-sessions/${resident.id}/stream` });
+        }
+        const template = templateForChat(context.chat, context.project);
+        const runtime = context.chat.runtime || runtimeFor({ runtimeKind: "conduit_profile", template });
+        const installation = config.installations.get(runtime.installationId);
+        if (!installation) {
+          return response.status(409).json({ error: "runtime_unavailable", installationId: runtime.installationId });
+        }
     if (context.chat.piSessionFile) {
       try { await validateSessionHeader(context.chat.piSessionFile, context.project); }
       catch (error) {
@@ -1307,6 +1354,7 @@ app.post("/v0/live-sessions", async (request, response, next) => {
       sessionFile: launchSpec.sessionFile,
       trustPosture: launchSpec.trustPosture,
     });
+    lifecycle.assertAvailable(context.chat.id, context.project.id);
     const live = await manager.createWithCapacity({
       project: context.project,
       chatId: context.chat.id,
@@ -1318,6 +1366,7 @@ app.post("/v0/live-sessions", async (request, response, next) => {
     });
     launchedRecord = live;
     await manager.waitForSession(live.id);
+    lifecycle.assertAvailable(context.chat.id, context.project.id);
     if (runtime.kind === "native_pi" && seedModel) {
       await manager.setModel(live.id, seedModel);
       if (seedThinkingLevel) await manager.setThinkingLevel(live.id, seedThinkingLevel);
@@ -1336,13 +1385,13 @@ app.post("/v0/live-sessions", async (request, response, next) => {
     }
     await registry.update(context.chat.id, mapping);
     response.status(201).json({ ...manager.view(live), streamUrl: `/v0/live-sessions/${live.id}/stream` });
+      });
+    });
   } catch (error) {
     if (launchedRecord && ["starting", "running"].includes(launchedRecord.status)) {
       await manager.stopAndWait(launchedRecord.id).catch(() => {});
     }
     next(error);
-  } finally {
-    if (lockedChatId) launchingChats.delete(lockedChatId);
   }
 });
 
