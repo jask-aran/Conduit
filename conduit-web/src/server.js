@@ -420,15 +420,25 @@ app.post("/v0/auth/reset-sessions", async (request, response) => {
 const pendingCheckpoints = new Set();
 manager.on("event", ({ record, event }) => {
   const chat = record.chatId ? registry.metadata(record.chatId) : null;
-  if (!["agent_end", "generation_stopped"].includes(event.type)
-    || !chat || chat.status !== "active" || !record.sessionFile || pendingCheckpoints.has(record.id) || record.active) return;
-  pendingCheckpoints.add(record.id);
+  const terminal = event.type === "agent_settled"
+    || event.type === "generation_stopped"
+    || (event.type === "agent_end" && !event.willRetry);
+  const generation = record.activeGeneration;
+  const checkpointId = generation ? `${record.id}:${generation.id}` : null;
+  if (!terminal || !chat || chat.status !== "active" || !record.sessionFile || !checkpointId || pendingCheckpoints.has(checkpointId) || record.active) return;
+  const checkpoint = { id: generation.id, seq: generation.lastSeq };
+  pendingCheckpoints.add(checkpointId);
   setTimeout(() => {
     projects.get(record.projectId)
       .then((project) => project && registry.syncFile(record.chatId, record.sessionFile, project, { waitForFileMs: 2000 }))
-      .then((session) => session && manager.publish(record, { type: "session_checkpoint", chat: chatView(registry.metadata(record.chatId)) }))
+      .then((session) => session && manager.publish(record, {
+        type: "session_checkpoint",
+        generationId: checkpoint.id,
+        generationSeq: checkpoint.seq,
+        chat: chatView(registry.metadata(record.chatId)),
+      }))
       .catch((error) => console.error("Could not checkpoint the session registry", error))
-      .finally(() => pendingCheckpoints.delete(record.id));
+      .finally(() => pendingCheckpoints.delete(checkpointId));
   }, 50).unref();
 });
 app.get("/healthz", (_request, response) => response.json({ ok: true, filesRoot: config.filesRoot }));

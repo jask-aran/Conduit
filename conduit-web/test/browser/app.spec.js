@@ -2205,6 +2205,74 @@ test("keeps streaming visible when a user checkpoint replaces the live placehold
   await expect(page.getByText("Visible after checkpoint")).toBeVisible();
 });
 
+test("a delayed terminal checkpoint cannot clear the next generation", async ({ page }) => {
+  await page.addInitScript(() => {
+    class CheckpointRaceWebSocket extends EventTarget {
+      static OPEN = 1;
+      constructor() {
+        super(); this.readyState = 0; this.prompts = 0;
+        queueMicrotask(() => { this.readyState = CheckpointRaceWebSocket.OPEN; this.dispatchEvent(new Event("open")); });
+      }
+      close() { this.readyState = 3; }
+      emit(event) { this.onmessage?.({ data: JSON.stringify(event) }); }
+      send(data) {
+        if (JSON.parse(data).type !== "prompt") return;
+        this.prompts += 1;
+        if (this.prompts === 1) {
+          queueMicrotask(() => {
+            this.emit({ type: "generation_started", generationId: "g1", seq: 1 });
+            this.emit({ type: "assistant_message_started", generationId: "g1", seq: 2, messageId: "m1" });
+            this.emit({ type: "content_block_started", generationId: "g1", seq: 3, messageId: "m1", block: { type: "text", contentIndex: 0, text: "" } });
+            this.emit({ type: "content_block_delta", generationId: "g1", seq: 4, messageId: "m1", blockType: "text", contentIndex: 0, delta: "Generation A" });
+            this.emit({ type: "assistant_message_completed", generationId: "g1", seq: 5, messageId: "m1", stopReason: "stop", blocks: [{ type: "text", contentIndex: 0, text: "Generation A" }] });
+            this.emit({ type: "generation_settled", generationId: "g1", seq: 6 });
+            this.emit({ type: "session_checkpoint", generationId: "g1", generationSeq: 6, chat: { id: "550e8400-e29b-41d4-a716-446655440099" } });
+          });
+          return;
+        }
+        queueMicrotask(() => {
+          this.emit({ type: "generation_started", generationId: "g2", seq: 1 });
+          this.emit({ type: "assistant_message_started", generationId: "g2", seq: 2, messageId: "m2" });
+          this.emit({ type: "content_block_started", generationId: "g2", seq: 3, messageId: "m2", block: { type: "text", contentIndex: 0, text: "" } });
+          this.emit({ type: "content_block_delta", generationId: "g2", seq: 4, messageId: "m2", blockType: "text", contentIndex: 0, delta: "Generation B survives" });
+        });
+      }
+    }
+    Object.defineProperty(window, "WebSocket", { configurable: true, value: CheckpointRaceWebSocket });
+  });
+  let requests = 0;
+  let checkpointRequested;
+  const checkpointPending = new Promise((resolve) => { checkpointRequested = resolve; });
+  let releaseCheckpoint;
+  const checkpointResponse = new Promise((resolve) => { releaseCheckpoint = resolve; });
+  await page.route("**/v0/sessions/550e8400-e29b-41d4-a716-446655440099", async (route) => {
+    requests += 1;
+    if (requests === 1) {
+      await route.fulfill({ json: {
+        id: "550e8400-e29b-41d4-a716-446655440099", projectId: "project_chat", status: "active", title: "New chat",
+        messages: [], tools: [], page: { before: null },
+      } });
+      return;
+    }
+    checkpointRequested();
+    await checkpointResponse;
+    await route.fulfill({ json: {
+      id: "550e8400-e29b-41d4-a716-446655440099", projectId: "project_chat", status: "active", title: "New chat",
+      messages: [{ id: "durable-a", role: "assistant", content: "Generation A" }], tools: [], page: { before: null },
+    } });
+  });
+  await page.goto("/");
+  const composer = page.getByRole("textbox", { name: "Message Pi" });
+  await composer.fill("First");
+  await page.getByRole("button", { name: "Send message" }).click();
+  await checkpointPending;
+  await composer.fill("Second");
+  await page.getByRole("button", { name: "Send message" }).click();
+  await expect(page.getByText("Generation B survives")).toBeVisible();
+  releaseCheckpoint();
+  await expect(page.getByText("Generation B survives")).toBeVisible();
+});
+
 test("global commands and slash suggestions preserve their intended focus models", async ({ page }) => {
   await page.goto("/");
   const composer = page.getByRole("textbox", { name: "Message Pi" });

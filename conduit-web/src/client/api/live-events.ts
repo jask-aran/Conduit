@@ -62,7 +62,7 @@ export type LiveEvent = EventBase & (
   | { type: "queue_update"; queue: QueueState }
   | { type: "extension_ui_request"; request: HostUiRequest | null }
   | { type: "extension_ui_resolved"; requestId: string }
-  | { type: "session_checkpoint"; chatId: string; title: string | null }
+  | { type: "session_checkpoint"; chatId: string; title: string | null; generationSeq: number | null }
   | { type: "message_end"; message: ProtocolMessage }
   | StructuredGenerationEvent
   | { type: "runtime_error" | "client_error"; code: string; message: string }
@@ -178,7 +178,13 @@ export function normalizeLiveEvent(value: unknown): LiveEvent {
     case "extension_ui_resolved": return { type: "extension_ui_resolved", generationId, requestId: text(source.requestId || source.id) };
     case "session_checkpoint": {
       const chat = record(source.chat);
-      return { type: "session_checkpoint", generationId, chatId: text(chat.id), title: optionalText(chat.title) };
+      return {
+        type: "session_checkpoint",
+        generationId,
+        generationSeq: number(source.generationSeq) ?? null,
+        chatId: text(chat.id),
+        title: optionalText(chat.title),
+      };
     }
     case "message_end": return { type: "message_end", generationId, message: protocolMessage(source.message) };
     case "runtime_error": return { type: "runtime_error", generationId, code: text(source.code), message: text(source.message) };
