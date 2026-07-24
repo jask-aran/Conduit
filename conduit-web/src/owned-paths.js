@@ -18,7 +18,7 @@ async function ensureDirectory(directory) {
 
 export async function ensureChatTree(project, chatId) {
   const root = path.resolve(project.path);
-  if (project.origin === "linked") await ensureDirectory(root);
+  if (project.externalPath) await ensureDirectory(root);
   else await fs.mkdir(root, { recursive: true });
   await ensureDirectory(root);
   const conduitRoot = await ensureConduitRoot(project);
@@ -39,7 +39,7 @@ export async function ensureChatTree(project, chatId) {
 
 export async function ensureConduitRoot(project) {
   const root = path.resolve(project.path);
-  if (project.origin === "linked") await ensureDirectory(root);
+  if (project.externalPath) await ensureDirectory(root);
   else await fs.mkdir(root, { recursive: true });
   await ensureDirectory(root);
   const conduit = path.join(root, ".conduit");
