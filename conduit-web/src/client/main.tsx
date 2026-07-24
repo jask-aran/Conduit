@@ -167,7 +167,7 @@ function App() {
   };
 
   const refresh = () => catalogue.refresh();
-  const addProject = async (input: { mode: string; name?: string; path?: string; cloneUrl?: string }) => {
+  const addProject = async (input: { mode: string; name?: string; path?: string; cloneUrl?: string; cloneParentPath?: string; cloneDirectoryName?: string }) => {
     try {
       const created = await api<Project>("/v0/projects", { method: "POST", body: JSON.stringify(input) });
       await refresh();

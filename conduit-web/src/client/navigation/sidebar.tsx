@@ -42,7 +42,7 @@ import type { ChatSummary, Project, RuntimeProcess, WorkspaceSuggestion } from "
 import type { RuntimeStore } from "../state/runtime";
 import { ProjectActivityIndicator, RuntimeIndicator } from "./runtime-indicator";
 
-type ProjectInput = { mode: string; name?: string; path?: string; cloneUrl?: string };
+type ProjectInput = { mode: string; name?: string; path?: string; cloneUrl?: string; cloneParentPath?: string; cloneDirectoryName?: string };
 
 function Modal(props: { open: boolean; title: string; description?: string; children: unknown; onClose: () => void; class?: string }) {
   let returnFocus: HTMLElement | null = null;
@@ -102,6 +102,7 @@ export function Sidebar(props: {
   const [name, setName] = createSignal("");
   const [path, setPath] = createSignal("");
   const [cloneUrl, setCloneUrl] = createSignal("");
+  const [cloneDirectoryName, setCloneDirectoryName] = createSignal("");
   const [submitting, setSubmitting] = createSignal(false);
   const [rename, setRename] = createSignal<{ type: "chat"; chat: ChatSummary; project: Project } | { type: "project"; project: Project } | null>(null);
   const [renameValue, setRenameValue] = createSignal("");
@@ -167,6 +168,7 @@ export function Sidebar(props: {
     setName("");
     setPath("");
     setCloneUrl("");
+    setCloneDirectoryName("");
   };
 
   const requestRenameChat = (chat: ChatSummary, project: Project) => { setRename({ type: "chat", chat, project }); setRenameValue(chat.title); };
@@ -185,10 +187,12 @@ export function Sidebar(props: {
     if (submitting()) return;
     const input: ProjectInput = mode() === "managed" ? { mode: "managed", name: name().trim() }
       : mode() === "linked" ? { mode: "linked", name: name().trim() || undefined, path: path().trim() }
-        : { mode: "cloned", name: name().trim() || undefined, path: path().trim(), cloneUrl: cloneUrl().trim() };
+        : { mode: "cloned", name: name().trim() || undefined, cloneParentPath: path().trim(), cloneDirectoryName: cloneDirectoryName().trim() || undefined, cloneUrl: cloneUrl().trim() };
     setSubmitting(true);
-    try { if (await props.onAddProject(input)) closeNewDialog(); }
+    let created = false;
+    try { created = await props.onAddProject(input); }
     finally { setSubmitting(false); }
+    if (created) closeNewDialog();
   };
   const canCreate = () => !submitting() && (mode() === "managed" ? Boolean(name().trim())
     : mode() === "linked" ? Boolean(path().trim())
@@ -327,7 +331,8 @@ export function Sidebar(props: {
           <option value="linked">Link existing directory</option><option value="cloned">Clone git repository</option>
         </select></Field></Show>
         <Field><FieldLabel for="folder-name">{mode() === "managed" ? "Display name" : "Display name (optional)"}</FieldLabel><Input id="folder-name" value={name()} disabled={submitting()} placeholder={mode() === "managed" ? "Research" : "My project"} onInput={(event) => setName(event.currentTarget.value)} /></Field>
-        <Show when={mode() === "linked" || mode() === "cloned"}><Field><FieldLabel for="folder-path">{mode() === "cloned" ? "Clone location" : "Absolute path"}</FieldLabel><Input id="folder-path" value={path()} disabled={submitting()} list="workspace-path-suggestions" placeholder={mode() === "cloned" ? "~/code/new-repo" : "~/code/my-repo"} onInput={(event) => setPath(event.currentTarget.value)} /><datalist id="workspace-path-suggestions"><For each={props.workspaceSuggestions}>{(item) => <option value={item.displayPath || item.path} label={item.name} />}</For></datalist></Field></Show>
+        <Show when={mode() === "linked" || mode() === "cloned"}><Field><FieldLabel for="folder-path">{mode() === "cloned" ? "Clone parent directory" : "Absolute path"}</FieldLabel><Input id="folder-path" value={path()} disabled={submitting()} list="workspace-path-suggestions" placeholder={mode() === "cloned" ? "~/code" : "~/code/my-repo"} onInput={(event) => setPath(event.currentTarget.value)} /><datalist id="workspace-path-suggestions"><For each={props.workspaceSuggestions}>{(item) => <option value={item.displayPath || item.path} label={item.name} />}</For></datalist></Field></Show>
+        <Show when={mode() === "cloned"}><Field><FieldLabel for="clone-directory-name">Folder name (optional)</FieldLabel><Input id="clone-directory-name" value={cloneDirectoryName()} disabled={submitting()} placeholder="Defaults to the repository name" onInput={(event) => setCloneDirectoryName(event.currentTarget.value)} /></Field></Show>
         <Show when={mode() === "cloned"}><Field><FieldLabel for="folder-clone">Git URL</FieldLabel><Input id="folder-clone" value={cloneUrl()} disabled={submitting()} placeholder="https://github.com/org/repo.git" onInput={(event) => setCloneUrl(event.currentTarget.value)} /></Field></Show>
         <div class="flex justify-end gap-2"><Button type="button" variant="outline" disabled={submitting()} onClick={closeNewDialog}>Cancel</Button><Button type="submit" disabled={!canCreate()}>{submitting()
           ? (mode() === "cloned" ? "Cloning…" : "Creating…")

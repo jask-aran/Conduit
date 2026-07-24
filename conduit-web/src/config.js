@@ -11,6 +11,11 @@ function absolute(value) {
   return path.resolve(expandHome(value));
 }
 
+function boundedMilliseconds(value, fallback) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed >= 1_000 ? parsed : fallback;
+}
+
 export function loadConfig(env = process.env) {
   const templatesRoot = absolute(env.CONDUIT_TEMPLATES_ROOT || path.join(repositoryRoot, "templates"));
   const defaultTemplateFile = env.CONDUIT_PI_TEMPLATE
@@ -52,6 +57,7 @@ export function loadConfig(env = process.env) {
     bridgeSkill: path.join(templatesRoot, "conduit-workspace", "SKILL.md"),
     runtimeSettingsFile: absolute(env.CONDUIT_RUNTIME_SETTINGS_FILE || path.join(dataRoot, "runtime.json")),
     authFile: absolute(env.CONDUIT_AUTH_FILE || path.join(repositoryRoot, "data/auth.json")),
+    cloneTimeoutMs: boundedMilliseconds(env.CONDUIT_CLONE_TIMEOUT_MS, 120_000),
     allowInsecure: env.CONDUIT_ALLOW_INSECURE === "1",
     templatesRoot,
     workspaceAllowlist,

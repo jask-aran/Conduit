@@ -83,7 +83,10 @@ home and needs a separate backup.
 reserved unstructured `chat` project works in `data/chat/files`; named
 projects use `data/chat/files/<slug>`; Workspaces register (or `git`/`gh`
 clone) an allow-listed absolute host directory, and unlinking never deletes
-the working tree. Each working root contains a Conduit-owned
+the working tree. A clone chooses an existing parent and creates a
+repository-named child (or an explicitly named child). Clone network work runs outside the short catalogue lock,
+using a Conduit-owned sibling staging directory, cancellation, and a bounded
+deadline before its final catalogue commit. Each working root contains a Conduit-owned
 `.conduit/chats/<chat-id>/` tree for attachments; Pi runs at the root and
 reads attachments by relative path. Browser-supplied paths never become a Pi
 `cwd` until resolved against `CONDUIT_WORKSPACE_ALLOWLIST`.
