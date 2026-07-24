@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import fs from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
@@ -19,6 +20,20 @@ async function completeState(harness, request, chat) {
     sessionFile: path.join(harness.root, "pi", "sessions", `${chat.id}.jsonl`),
     sessionId: `session-${chat.id}`,
   });
+}
+
+async function initGitRepo(directory) {
+  await fs.mkdir(directory, { recursive: true });
+  const git = (args) => {
+    const result = spawnSync("git", args, { cwd: directory, encoding: "utf8" });
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+  };
+  git(["init"]);
+  git(["config", "user.email", "test@example.com"]);
+  git(["config", "user.name", "Test"]);
+  await fs.writeFile(path.join(directory, "app.js"), "console.log(1)\n");
+  git(["add", "."]);
+  git(["commit", "-m", "init"]);
 }
 
 test("launch cannot outlive a concurrent chat or project deletion", async () => {
@@ -77,6 +92,43 @@ test("the harness attaches a real client stream to a live Pi process", async () 
     const stream = harness.connectStream(live.id);
     await stream.opened;
     assert.equal((await stream.next((event) => event.type === "runtime_state")).session.chatId, chat.id);
+  } finally {
+    await harness.stop();
+  }
+});
+
+test("a replaced cloned root cannot be inspected, launched, or unregistered", async () => {
+  const harness = await startConduitHarness();
+  try {
+    const source = path.join(harness.root, "source");
+    const target = path.join(harness.root, "workspaces", "cloned");
+    const displaced = path.join(harness.root, "displaced");
+    const outside = path.join(harness.root, "outside");
+    await initGitRepo(source);
+    await fs.mkdir(path.dirname(target));
+    await fs.mkdir(outside);
+    await fs.writeFile(path.join(outside, "keep.txt"), "outside");
+    const created = await harness.request("/v0/projects", {
+      method: "POST",
+      body: JSON.stringify({ mode: "cloned", cloneUrl: source, path: target }),
+    });
+    assert.equal(created.status, 201);
+    const project = await created.json();
+    const chat = await harness.createChat(project.id);
+    await fs.rename(target, displaced);
+    await fs.symlink(outside, target);
+
+    const inspected = await harness.request(`/v0/projects/${project.id}/tree`);
+    assert.equal(inspected.status, 409);
+    assert.equal((await inspected.json()).error, "workspace_identity_changed");
+    const launch = await harness.request("/v0/live-sessions", {
+      method: "POST",
+      body: JSON.stringify({ chatId: chat.id, projectId: project.id }),
+    });
+    assert.equal(launch.status, 409);
+    assert.equal((await harness.pi.commands()).length, 0);
+    assert.equal((await harness.request(`/v0/projects/${project.id}`, { method: "DELETE" })).status, 409);
+    assert.equal(await fs.readFile(path.join(outside, "keep.txt"), "utf8"), "outside");
   } finally {
     await harness.stop();
   }

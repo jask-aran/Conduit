@@ -1062,6 +1062,7 @@ app.post("/v0/runtime/chats", async (_request, response, next) => {
     const project = await projects.get("chat");
     if (!project) return response.status(404).json({ error: "project_not_found" });
     await lifecycle.withProjects([project.id], async () => {
+      await projects.validate(project);
       const chat = await registry.create(project, {
         templateId: template.id,
         templateVersion: template.version,
