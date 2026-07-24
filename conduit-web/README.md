@@ -205,7 +205,7 @@ so timing reveals nothing.
 - `PATCH|DELETE /v0/projects/:id`
 - `GET /v0/projects/:id/tree?path=…` lists one validated directory level
 - `GET /v0/projects/:id/file?path=…` returns a size-capped text preview
-- `GET /v0/projects/:id/diff` returns Git status and staged/unstaged unified diff
+- `GET /v0/projects/:id/diff` returns bounded Git status; `?patch=1&reuse=1` reuses the short-lived status inspection and additionally returns staged/unstaged unified diff after the patch disclosure opens
 - `POST /v0/projects/:id/move-sessions`
 - `GET /v0/workspaces/policy` returns the server-owned linked-workspace roots
 - `GET /v0/workspaces/suggestions` returns visible direct folders under `~/`

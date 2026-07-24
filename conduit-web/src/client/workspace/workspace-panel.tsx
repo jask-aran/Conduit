@@ -1,7 +1,8 @@
-import { createEffect, createSignal, For, onCleanup, Show } from "solid-js";
+import { batch, createEffect, createSignal, For, on, onCleanup, Show, type Accessor } from "solid-js";
 import { BoxesIcon, ChevronDownIcon, ChevronRightIcon, CopyIcon, FileCode2Icon, FolderIcon, GitBranchIcon, GitCompareArrowsIcon, RefreshCwIcon, XIcon } from "lucide-solid";
 import { Button, Spinner } from "@/components/primitives";
 import { api, asList } from "../api/client";
+import { ownsWorkspaceRequest, type WorkspaceRequest } from "./request-ownership";
 
 interface TreeEntry { name: string; path: string; type: "directory" | "file" | "other"; }
 interface FilePreview { path: string; size: number; content: string; }
@@ -10,33 +11,64 @@ interface DiffPayload { repository: boolean; branch?: string; upstream?: string 
 type PanelTab = "files" | "diff" | "artifacts";
 type ArtifactMode = "outputs" | "interactive";
 
-export default function WorkspacePanel(props: { projectId: string; chatId: string; onClose: () => void }) {
-  const storageKey = () => `conduit:workspace-panel:${props.chatId}:tab`;
+interface WorkspaceCacheEntry {
+  directories: Record<string, TreeEntry[]>;
+  diff: DiffPayload | null;
+}
+
+const MAX_CACHED_WORKSPACES = 6;
+const workspaceCache = new Map<string, WorkspaceCacheEntry>();
+
+function cachedWorkspace(projectId: string) {
+  const cached = workspaceCache.get(projectId);
+  if (!cached) return null;
+  workspaceCache.delete(projectId);
+  workspaceCache.set(projectId, cached);
+  return cached;
+}
+
+function cacheWorkspace(projectId: string, patch: Partial<WorkspaceCacheEntry>) {
+  const current = workspaceCache.get(projectId) || { directories: {}, diff: null };
+  workspaceCache.delete(projectId);
+  workspaceCache.set(projectId, { ...current, ...patch });
+  while (workspaceCache.size > MAX_CACHED_WORKSPACES) workspaceCache.delete(workspaceCache.keys().next().value!);
+}
+
+export default function WorkspacePanel(props: { projectId: Accessor<string>; chatId: Accessor<string>; onClose: () => void }) {
+  let diffVersion = 0;
+  let fileVersion = 0;
+  let activeDiffProject: string | null = null;
+  const directoryVersions = new Map<string, number>();
+  const storageKey = () => `conduit:workspace-panel:${props.chatId()}:tab`;
   const [tab, setTab] = createSignal<PanelTab>((localStorage.getItem(storageKey()) as PanelTab) || "files");
   const [directories, setDirectories] = createSignal<Record<string, TreeEntry[]>>({});
   const [expanded, setExpanded] = createSignal<Set<string>>(new Set());
   const [preview, setPreview] = createSignal<FilePreview | null>(null);
   const [diff, setDiff] = createSignal<DiffPayload | null>(null);
+  const [diffLoading, setDiffLoading] = createSignal(false);
+  const [filesLoading, setFilesLoading] = createSignal(false);
   const [loading, setLoading] = createSignal(false);
   const [error, setError] = createSignal("");
-  const widthKey = () => `conduit:workspace-panel:${props.chatId}:width`;
+  const widthKey = () => `conduit:workspace-panel:${props.chatId()}:width`;
   const [width, setWidth] = createSignal(Math.max(320, Math.min(620, Number(localStorage.getItem(widthKey())) || 420)));
   const [artifactMode, setArtifactMode] = createSignal<ArtifactMode>("outputs");
-  const detailOpenKey = () => `conduit:workspace-panel:${props.chatId}:${tab()}:detail-open`;
-  const detailHeightKey = () => `conduit:workspace-panel:${props.chatId}:${tab()}:detail-height`;
-  const [detailOpen, setDetailOpen] = createSignal(localStorage.getItem(detailOpenKey()) !== "false");
+  const detailOpenKey = () => `conduit:workspace-panel:${props.chatId()}:${tab()}:detail-open`;
+  const detailHeightKey = () => `conduit:workspace-panel:${props.chatId()}:${tab()}:detail-height`;
+  const detailOpenFor = (nextTab: PanelTab) => localStorage.getItem(`conduit:workspace-panel:${props.chatId()}:${nextTab}:detail-open`) ?? (nextTab === "diff" ? "false" : "true");
+  const [detailOpen, setDetailOpen] = createSignal(detailOpenFor(tab()) === "true");
   const [detailHeight, setDetailHeight] = createSignal(Math.max(160, Number(localStorage.getItem(detailHeightKey())) || 360));
 
   const selectTab = (next: PanelTab) => {
+    setDetailOpen(detailOpenFor(next) === "true");
+    setDetailHeight(Math.max(160, Number(localStorage.getItem(`conduit:workspace-panel:${props.chatId()}:${next}:detail-height`)) || 360));
     setTab(next);
     localStorage.setItem(storageKey(), next);
-    setDetailOpen(localStorage.getItem(`conduit:workspace-panel:${props.chatId}:${next}:detail-open`) !== "false");
-    setDetailHeight(Math.max(160, Number(localStorage.getItem(`conduit:workspace-panel:${props.chatId}:${next}:detail-height`)) || 360));
   };
   const toggleDetail = () => {
     const next = !detailOpen();
     setDetailOpen(next);
     localStorage.setItem(detailOpenKey(), String(next));
+    if (next && tab() === "diff") void loadDiff(true, true);
   };
   const startDetailResize = (event: PointerEvent) => {
     event.preventDefault();
@@ -59,13 +91,30 @@ export default function WorkspacePanel(props: { projectId: string; chatId: strin
     setDetailHeight(next);
     localStorage.setItem(detailHeightKey(), String(next));
   };
-  const loadDirectory = async (directory = "") => {
-    setLoading(true); setError("");
+  const loadDirectory = async (directory = "", background = false) => {
+    const projectId = props.projectId();
+    const key = `${projectId}:${directory}`;
+    const version = (directoryVersions.get(key) || 0) + 1;
+    directoryVersions.set(key, version);
+    setFilesLoading(true);
+    if (!background) setLoading(true);
+    setError("");
     try {
-      const payload = await api<{ entries: TreeEntry[] }>(`/v0/projects/${encodeURIComponent(props.projectId)}/tree?path=${encodeURIComponent(directory)}`);
-      setDirectories((current) => ({ ...current, [directory]: asList<TreeEntry>(payload.entries) }));
-    } catch (cause) { setError((cause as Error).message); }
-    finally { setLoading(false); }
+      const payload = await api<{ entries: TreeEntry[] }>(`/v0/projects/${encodeURIComponent(projectId)}/tree?path=${encodeURIComponent(directory)}`);
+      if (props.projectId() !== projectId || directoryVersions.get(key) !== version) return;
+      setDirectories((current) => {
+        const next = { ...current, [directory]: asList<TreeEntry>(payload.entries) };
+        cacheWorkspace(projectId, { directories: next });
+        return next;
+      });
+    } catch (cause) {
+      if (props.projectId() === projectId && directoryVersions.get(key) === version) setError((cause as Error).message);
+    } finally {
+      if (props.projectId() === projectId && directoryVersions.get(key) === version) {
+        setFilesLoading(false);
+        if (!background) setLoading(false);
+      }
+    }
   };
   const toggleDirectory = async (directory: string) => {
     const next = new Set(expanded());
@@ -74,16 +123,46 @@ export default function WorkspacePanel(props: { projectId: string; chatId: strin
     setExpanded(next);
   };
   const loadFile = async (file: string) => {
+    const projectId = props.projectId();
+    const version = ++fileVersion;
     setLoading(true); setError("");
-    try { setPreview(await api<FilePreview>(`/v0/projects/${encodeURIComponent(props.projectId)}/file?path=${encodeURIComponent(file)}`)); }
-    catch (cause) { setPreview(null); setError((cause as Error).message); }
-    finally { setLoading(false); }
+    try {
+      const payload = await api<FilePreview>(`/v0/projects/${encodeURIComponent(projectId)}/file?path=${encodeURIComponent(file)}`);
+      if (props.projectId() === projectId && fileVersion === version) setPreview(payload);
+    } catch (cause) {
+      if (props.projectId() === projectId && fileVersion === version) { setPreview(null); setError((cause as Error).message); }
+    } finally {
+      if (props.projectId() === projectId && fileVersion === version) setLoading(false);
+    }
   };
-  const loadDiff = async () => {
-    setLoading(true); setError("");
-    try { setDiff(await api<DiffPayload>(`/v0/projects/${encodeURIComponent(props.projectId)}/diff`)); }
-    catch (cause) { setError((cause as Error).message); }
-    finally { setLoading(false); }
+  const loadDiff = async (includePatch = false, reuse = false, background = false) => {
+    const projectId = props.projectId();
+    if (diffLoading() && activeDiffProject === projectId) return;
+    const request: WorkspaceRequest = { projectId, version: ++diffVersion };
+    activeDiffProject = request.projectId;
+    setDiffLoading(true);
+    if (!background) setLoading(true);
+    setError("");
+    try {
+      const query = new URLSearchParams();
+      if (includePatch) query.set("patch", "1");
+      if (reuse) query.set("reuse", "1");
+      const payload = await api<DiffPayload>(`/v0/projects/${encodeURIComponent(request.projectId)}/diff${query.size ? `?${query}` : ""}`);
+      if (ownsWorkspaceRequest({ projectId: props.projectId(), version: diffVersion }, request)) {
+        setDiff(payload);
+        cacheWorkspace(projectId, { diff: payload });
+      }
+    }
+    catch (cause) {
+      if (ownsWorkspaceRequest({ projectId: props.projectId(), version: diffVersion }, request)) setError((cause as Error).message);
+    }
+    finally {
+      if (ownsWorkspaceRequest({ projectId: props.projectId(), version: diffVersion }, request)) {
+        activeDiffProject = null;
+        setDiffLoading(false);
+        if (!background) setLoading(false);
+      }
+    }
   };
   const copy = (value?: string) => { if (value) void navigator.clipboard.writeText(value); };
   const saveWidth = (next: number) => {
@@ -104,12 +183,39 @@ export default function WorkspacePanel(props: { projectId: string; chatId: strin
   };
   onCleanup(() => { document.body.classList.remove("workspace-resizing"); document.body.classList.remove("workspace-detail-resizing"); });
 
-  createEffect(() => {
-    void props.projectId;
-    setDirectories({}); setExpanded(new Set<string>()); setPreview(null); setDiff(null); setError("");
-    if (tab() === "files") void loadDirectory();
-    if (tab() === "diff") void loadDiff();
-  });
+  let loadedProjectId = "";
+  createEffect(on(() => props.chatId(), () => {
+    const nextTab = (localStorage.getItem(storageKey()) as PanelTab) || "files";
+    batch(() => {
+      setDetailOpen(detailOpenFor(nextTab) === "true");
+      setDetailHeight(Math.max(160, Number(localStorage.getItem(`conduit:workspace-panel:${props.chatId()}:${nextTab}:detail-height`)) || 360));
+      setWidth(Math.max(320, Math.min(620, Number(localStorage.getItem(widthKey())) || 420)));
+      setTab(nextTab);
+    });
+  }));
+  createEffect(on(
+    () => [props.projectId(), tab()] as const,
+    ([projectId, activeTab]) => {
+      const projectChanged = loadedProjectId !== projectId;
+      if (projectChanged) {
+        loadedProjectId = projectId;
+        const cached = cachedWorkspace(projectId);
+        batch(() => {
+          setDirectories(cached?.directories || {});
+          setExpanded(new Set<string>());
+          setPreview(null);
+          setDiff(cached?.diff || null);
+          setLoading(false);
+          setError("");
+        });
+      }
+      if (activeTab === "files" && !directories()[""] && !filesLoading()) void loadDirectory("", false);
+      if (activeTab === "diff") {
+        const includePatch = detailOpenFor("diff") === "true";
+        const current = diff();
+        if ((!current || (includePatch && !current.diff)) && !diffLoading()) void loadDiff(includePatch, false, Boolean(current));
+      }
+    }));
 
   const Tree = (treeProps: { directory: string; depth?: number }) => <For each={directories()[treeProps.directory] || []}>{(entry) => <div>
     <button class="workspace-tree-row" style={{ "padding-left": `${10 + (treeProps.depth || 0) * 14}px` }} data-selected={preview()?.path === entry.path} onClick={() => entry.type === "directory" ? void toggleDirectory(entry.path) : entry.type === "file" ? void loadFile(entry.path) : undefined}>
@@ -123,7 +229,7 @@ export default function WorkspacePanel(props: { projectId: string; chatId: strin
     <header class="workspace-panel-header"><div><strong>Workspace</strong><small>Read-only project context</small></div><Button variant="ghost" size="icon-sm" aria-label="Close workspace panel" onClick={props.onClose}><XIcon /></Button></header>
     <div class="workspace-panel-tabs" role="tablist" aria-label="Workspace views">
       <button role="tab" aria-selected={tab() === "files"} onClick={() => { selectTab("files"); if (!directories()[""]) void loadDirectory(); }}><FolderIcon />Files</button>
-      <button role="tab" aria-selected={tab() === "diff"} onClick={() => { selectTab("diff"); if (!diff()) void loadDiff(); }}><GitCompareArrowsIcon />Source Control</button>
+      <button role="tab" aria-selected={tab() === "diff"} onClick={() => selectTab("diff")}><GitCompareArrowsIcon />Source Control</button>
       <button role="tab" aria-selected={tab() === "artifacts"} onClick={() => selectTab("artifacts")}><BoxesIcon />Artifacts</button>
     </div>
     <Show when={error()}><div class="workspace-panel-error">{error()}</div></Show>
@@ -135,7 +241,7 @@ export default function WorkspacePanel(props: { projectId: string; chatId: strin
     </Show>
     <Show when={tab() === "diff"}><section class="workspace-diff">
       <div class="workspace-diff-overview">
-      <div class="workspace-status-strip"><div><GitBranchIcon /><strong>{diff()?.repository ? diff()?.branch : "Not a Git repository"}</strong><Show when={diff()?.upstream}><small>{diff()?.upstream}</small></Show><Show when={diff()?.ahead || diff()?.behind}><span>↑{diff()?.ahead || 0} ↓{diff()?.behind || 0}</span></Show></div><div><Button variant="ghost" size="icon-sm" aria-label="Copy branch name" disabled={!diff()?.branch} onClick={() => copy(diff()?.branch)}><CopyIcon /></Button><Button variant="ghost" size="icon-sm" aria-label="Refresh Git status" onClick={() => void loadDiff()}><RefreshCwIcon /></Button></div></div>
+      <div class="workspace-status-strip"><div><GitBranchIcon /><strong>{diff() ? diff()!.repository ? diff()!.branch : "Not a Git repository" : "Loading Git status…"}</strong><Show when={diff()?.upstream}><small>{diff()?.upstream}</small></Show><Show when={diff()?.ahead || diff()?.behind}><span>↑{diff()?.ahead || 0} ↓{diff()?.behind || 0}</span></Show></div><div><Button variant="ghost" size="icon-sm" aria-label="Copy branch name" disabled={!diff()?.branch} onClick={() => copy(diff()?.branch)}><CopyIcon /></Button><Button variant="ghost" size="icon-sm" aria-label="Refresh Git status" disabled={diffLoading()} onClick={() => void loadDiff(detailOpen())}><RefreshCwIcon /></Button></div></div>
       <Show when={diff()?.repository}><div class="workspace-git-summary"><span>{diff()?.files.length || 0} changed {(diff()?.files.length || 0) === 1 ? "file" : "files"}</span><span>{diff()?.commits?.length || 0} recent commits</span></div></Show>
       <Show when={diff()?.repository && diff()!.files.length}><div class="workspace-changes"><For each={diff()!.files}>{(file) => <div><code>{file.status}</code><span>{file.path}</span></div>}</For></div></Show>
       <Show when={diff()?.repository && diff()?.commits?.length}><div class="workspace-git-graph" aria-label="Recent commits"><For each={diff()!.commits}>{(commit) => <div class="workspace-commit"><code class="workspace-graph-rail">{commit.graph || "*"}</code><button title={`${commit.author} · ${new Date(commit.authoredAt).toLocaleString()}`} onClick={() => copy(commit.hash)}><span>{commit.subject}</span><code>{commit.shortHash}</code></button></div>}</For></div></Show>
