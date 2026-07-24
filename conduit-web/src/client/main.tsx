@@ -123,7 +123,10 @@ function App() {
 
       if (replacedDraftId && replacedDraftId !== created.id) {
         try { await discardDraft(replacedDraftId); }
-        catch (error) { showError(`The new chat was created, but the old empty draft could not be removed: ${(error as Error).message}`); }
+        catch (error) {
+          const detail = error as Error & { error?: string };
+          if (detail.error !== "chat_not_found") showError(`The new chat was created, but the old empty draft could not be removed: ${detail.message}`);
+        }
       }
     } catch (error) {
       showError((error as Error).message);
@@ -131,6 +134,7 @@ function App() {
   };
 
   const openChat = async (target: ChatSummary, project: Project) => {
+    if (target.id === catalogue.selectedId()) return;
     const abandonedDraftId = currentDraftId();
     try { await chat.select(target, project); }
     catch (error) { showError((error as Error).message); return; }
@@ -368,7 +372,7 @@ function App() {
       <div class="composer-stack"><HostUiRequests requests={chat.hostUiRequests()} onRespond={chat.respondHostUi} />
         <Composer chat={chat} attachments={attachments} models={models} profiles={profiles()} activeProfile={activeProfile()} serverOnline={runtime.connectivity() === "online"} onChooseProfile={(id) => void switchProfile(id)} onOpenSettings={openSettings} onOpenAttachments={() => attachFileInput?.click()} /></div>
     </main>
-    <Show when={panelOpen() && selectedProject() && catalogue.selectedId()}><WorkspacePanel projectId={selectedProject()!.id} chatId={catalogue.selectedId()!} onClose={togglePanel} /></Show>
+    <Show when={panelOpen() && Boolean(selectedProject()) && Boolean(catalogue.selectedId())}><WorkspacePanel projectId={() => selectedProject()!.id} chatId={() => catalogue.selectedId()!} onClose={togglePanel} /></Show>
     <CommandMenu open={paletteOpen()} onOpenChange={setPaletteOpen} initialPage={palettePage()} launchNonce={paletteNonce()}
       context={paletteContext()} actions={paletteActions} models={models.models()} currentModel={models.model()} onChooseModel={(spec) => void models.chooseModel(spec)} />
     <Settings open={settingsOpen()} initialSection={settingsSection()} initialWorkspaceId={settingsWorkspaceId()} onOpenChange={setSettingsOpen} models={models} templates={templates()} templatesLoading={templatesLoading()} defaultTemplateId={defaultTemplateId()} projects={catalogue.projects()} installations={installations()} installationsLoading={installationsLoading()} onInstallationsChange={setInstallations} onDefaultTemplateChange={saveDefaultTemplate} onWorkspaceDefaultChange={saveWorkspaceDefault} />
