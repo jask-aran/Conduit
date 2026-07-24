@@ -274,6 +274,7 @@ test("workspace panel previews files, shows diff, and persists per chat", async 
     const [panelBox, widthHandleBox] = await Promise.all([panel.boundingBox(), panel.getByRole("separator", { name: "Resize workspace panel" }).boundingBox()]);
     expect(widthHandleBox.x).toBeLessThan(panelBox.x);
     const widthHandle = panel.getByRole("separator", { name: "Resize workspace panel" });
+    expect(await widthHandle.evaluate((element) => getComputedStyle(element, "::after").content)).toBe("none");
     const originalWidth = Number(await widthHandle.getAttribute("aria-valuenow"));
     await page.mouse.move(widthHandleBox.x + (widthHandleBox.width / 2), widthHandleBox.y + 80);
     await page.mouse.down();
@@ -592,6 +593,70 @@ test("opens and dismisses the new folder dialog", async ({ page }, testInfo) => 
   await expect(dialog.getByRole("button", { name: "Create folder" })).toBeDisabled();
   await page.keyboard.press("Escape");
   await expect(dialog).toHaveCount(0);
+});
+
+test("keeps the workspace panel open while Escape dismisses sidebar dialogs and Settings", async ({ page }, testInfo) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: "Toggle workspace panel" }).click();
+  const panel = page.getByRole("complementary", { name: "Workspace panel" });
+  await expect(panel).toBeVisible();
+
+  await openSidebar(page, testInfo);
+  await page.getByRole("button", { name: "New folder" }).click();
+  await expect(page.getByRole("dialog", { name: "New folder" })).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("dialog", { name: "New folder" })).toHaveCount(0);
+  await expect(panel).toBeVisible();
+
+  await page.getByRole("button", { name: "New workspace" }).click();
+  await expect(page.getByRole("dialog", { name: "New workspace" })).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("dialog", { name: "New workspace" })).toHaveCount(0);
+  await expect(panel).toBeVisible();
+
+  await page.locator('[data-sidebar="footer"]').getByRole("button", { name: /Conduit/ }).click();
+  await page.getByRole("menuitem", { name: "Manage settings" }).click();
+  await expect(page.getByRole("dialog", { name: "Settings" })).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("dialog", { name: "Settings" })).toHaveCount(0);
+  await expect(panel).toBeVisible();
+});
+
+test("boots a deep-linked chat without projecting the default New chat state", async ({ page }) => {
+  let releaseProjects;
+  const projectsReady = new Promise((resolve) => { releaseProjects = resolve; });
+  await page.unroute("**/v0/projects");
+  await page.route("**/v0/projects", async (route) => {
+    await projectsReady;
+    await route.fulfill({ json: { projects } });
+  });
+
+  await page.goto("/chat/session_existing");
+  await expect(page.getByText("Loading chat…")).toBeVisible();
+  await expect(page.getByText("New chat", { exact: true })).toHaveCount(0);
+  releaseProjects();
+  await expect(page.getByRole("navigation", { name: "breadcrumb" })).toContainText("Existing chat");
+  await expect(page.getByText("Previous question")).toBeVisible();
+});
+
+test("keeps the initial draft route stable across reload", async ({ page }) => {
+  let creates = 0;
+  await page.unroute("**/v0/chats");
+  await page.route("**/v0/chats", async (route) => {
+    creates += 1;
+    await route.fulfill({ status: 201, json: {
+      id: "550e8400-e29b-41d4-a716-446655440099",
+      projectId: "project_chat",
+      status: "draft",
+      title: "New chat",
+    } });
+  });
+
+  await page.goto("/");
+  await expect(page).toHaveURL(/\/chat\/550e8400-e29b-41d4-a716-446655440099$/);
+  await page.reload();
+  await expect(page).toHaveURL(/\/chat\/550e8400-e29b-41d4-a716-446655440099$/);
+  expect(creates).toBe(1);
 });
 
 test("keeps the native textarea composer bounded in a thread", async ({ page }, testInfo) => {

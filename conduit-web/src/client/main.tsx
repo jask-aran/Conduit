@@ -56,6 +56,9 @@ function App() {
   const [sidebarCommand, setSidebarCommand] = createSignal<{ type: string; nonce: number } | null>(null);
   const [dropActive, setDropActive] = createSignal(false);
   const [panelOpen, setPanelOpen] = createSignal(false);
+  const initialRouteId = pathChatId();
+  const [routeBootstrap, setRouteBootstrap] = createSignal<"loading" | "ready" | "error">(initialRouteId ? "loading" : "ready");
+  const [routeBootstrapError, setRouteBootstrapError] = createSignal("");
   let dragDepth = 0;
   let attachFileInput: HTMLInputElement | undefined;
   let workspaceSuggestionsRequest: Promise<void> | null = null;
@@ -298,6 +301,7 @@ function App() {
   };
 
   const keydown = (event: KeyboardEvent) => {
+    if (event.defaultPrevented) return;
     if (event.key === "Escape" && panelOpen() && !paletteOpen() && !settingsOpen()) { event.preventDefault(); togglePanel(); return; }
     if (!(event.metaKey || event.ctrlKey) || event.altKey) return;
     const key = event.key.toLowerCase();
@@ -327,7 +331,7 @@ function App() {
       .catch(() => setInstallations([]))
       .finally(() => setInstallationsLoading(false));
 
-    const routeId = pathChatId();
+    const routeId = initialRouteId;
     const catalogueRequest = api<{ projects: Project[] }>("/v0/projects");
     const selectedChatRequest = routeId ? Promise.all([
       api<ChatSummary>(`/v0/chats/${encodeURIComponent(routeId)}`),
@@ -345,6 +349,7 @@ function App() {
         const project = projects.find((item) => item.id === target.projectId) || projects[0];
         if (!project) throw new Error("Conduit has no chat project");
         chat.initialize(target, project, detail);
+        setRouteBootstrap("ready");
         if (target.status === "active") await chat.openLive(target.id, project.id);
       } else {
         const templatePayload = await templateRequest;
@@ -354,7 +359,14 @@ function App() {
         history.replaceState({}, "", `/chat/${created.id}`);
         chat.initialize(created, project);
       }
-    })().catch((error) => showError((error as Error).message));
+    })().catch((error) => {
+      const message = (error as Error).message;
+      if (initialRouteId) {
+        setRouteBootstrapError(message);
+        setRouteBootstrap("error");
+      }
+      showError(message);
+    });
   });
   onCleanup(() => window.removeEventListener("keydown", keydown));
 
@@ -375,13 +387,15 @@ function App() {
       onMoveChat={moveChat} onMoveProjectChats={moveProjectChats} onCopyTranscript={copyTranscript} onDeleteChat={deleteChat} onDeleteProject={deleteProject}
       onOpenSettings={openSettings} onOpenPalette={() => setPaletteOpen(true)} />
     <main data-slot="sidebar-inset" class={`chat-main${emptyChat() ? " chat-main-empty" : ""}`} {...dropHandlers}>
-      <Show when={dropActive()}><div class="chat-drop-overlay"><div>Drop files to attach</div></div></Show>
-      <div class="chat-ambient" aria-hidden="true" />
-      <ChatHeader project={selectedProject()} title={chat.title()} profile={activeProfile()} runtime={chat.runtimeIdentity()} live={chat.live() as unknown as Record<string, unknown>} panelOpen={panelOpen()} onTogglePanel={togglePanel} onShare={() => void shareChat()} />
-      <Show when={selectedProject()?.kind === "workspace" && [...runtime.processes().values()].some((process) => process.chatId !== catalogue.selectedId() && process.active)}><div class="workspace-warning"><TriangleAlertIcon /><div><strong>Another chat is working in this Workspace</strong><p>Both agents can edit the same files. Conduit does not lock the Workspace or create worktrees automatically.</p></div></div></Show>
-      <Transcript chat={chat} partialContinue={partialContinue()} />
-      <div class="composer-stack"><HostUiRequests requests={chat.hostUiRequests()} onRespond={chat.respondHostUi} />
-        <Composer chat={chat} attachments={attachments} models={models} profiles={profiles()} activeProfile={activeProfile()} serverOnline={runtime.connectivity() === "online"} onChooseProfile={(id) => void switchProfile(id)} onOpenSettings={openSettings} onOpenAttachments={() => attachFileInput?.click()} /></div>
+      <Show when={routeBootstrap() === "ready"} fallback={<div class="chat-bootstrap" role={routeBootstrap() === "error" ? "alert" : "status"}>{routeBootstrap() === "error" ? routeBootstrapError() || "This chat could not be loaded." : "Loading chat…"}</div>}>
+        <Show when={dropActive()}><div class="chat-drop-overlay"><div>Drop files to attach</div></div></Show>
+        <div class="chat-ambient" aria-hidden="true" />
+        <ChatHeader project={selectedProject()} title={chat.title()} profile={activeProfile()} runtime={chat.runtimeIdentity()} live={chat.live() as unknown as Record<string, unknown>} panelOpen={panelOpen()} onTogglePanel={togglePanel} onShare={() => void shareChat()} />
+        <Show when={selectedProject()?.kind === "workspace" && [...runtime.processes().values()].some((process) => process.chatId !== catalogue.selectedId() && process.active)}><div class="workspace-warning"><TriangleAlertIcon /><div><strong>Another chat is working in this Workspace</strong><p>Both agents can edit the same files. Conduit does not lock the Workspace or create worktrees automatically.</p></div></div></Show>
+        <Transcript chat={chat} partialContinue={partialContinue()} />
+        <div class="composer-stack"><HostUiRequests requests={chat.hostUiRequests()} onRespond={chat.respondHostUi} />
+          <Composer chat={chat} attachments={attachments} models={models} profiles={profiles()} activeProfile={activeProfile()} serverOnline={runtime.connectivity() === "online"} onChooseProfile={(id) => void switchProfile(id)} onOpenSettings={openSettings} onOpenAttachments={() => attachFileInput?.click()} /></div>
+      </Show>
     </main>
     <Show when={Boolean(selectedProject()) && Boolean(catalogue.selectedId())}><WorkspacePanel projectId={() => selectedProject()!.id} chatId={() => catalogue.selectedId()!} open={panelOpen} onClose={togglePanel} /></Show>
     <CommandMenu open={paletteOpen()} onOpenChange={setPaletteOpen} initialPage={palettePage()} launchNonce={paletteNonce()}
