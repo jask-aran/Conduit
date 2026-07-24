@@ -355,6 +355,16 @@ export class PiManager extends EventEmitter {
     child.stdout.on("data", (chunk) => this.handleStdout(record, chunk));
     child.stderr.setEncoding("utf8");
     child.stderr.on("data", (chunk) => this.publish(record, { type: "runtime_stderr", message: String(chunk) }));
+    // A deliberate stop can race a best-effort RPC (for example, context stats
+    // requested when a WebSocket attaches). Child stdin reports that as EPIPE
+    // asynchronously; without a listener Node treats it as a process-fatal
+    // unhandled stream error.
+    child.stdin?.on?.("error", (error) => {
+      if (record.stopping || record.status === "stopped") return;
+      for (const pending of record.pendingRequests.values()) pending.reject(error);
+      record.pendingRequests.clear();
+      this.publish(record, { type: "runtime_error", message: error.message });
+    });
     child.once("spawn", () => {
       record.status = "running";
       record.activity = deriveCoarseActivity(record);
@@ -956,6 +966,7 @@ export class PiManager extends EventEmitter {
   stop(id) {
     const record = this.processes.get(id);
     if (!record || record.status === "stopped") return false;
+    record.stopping = true;
     record.child.kill("SIGTERM");
     return true;
   }
@@ -963,6 +974,7 @@ export class PiManager extends EventEmitter {
   async stopAndWait(id) {
     const record = this.processes.get(id);
     if (!record || !["starting", "running"].includes(record.status)) return false;
+    record.stopping = true;
     return new Promise((resolve) => {
       const timeout = setTimeout(() => record.child.kill("SIGKILL"), 3000);
       timeout.unref();
