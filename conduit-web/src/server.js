@@ -371,17 +371,16 @@ app.post("/v0/auth/login", async (request, response) => {
     if (acceptsJson) return response.status(429).json({ error: "rate_limited", message: "Too many failed attempts. Try again shortly." });
     return response.type("text/html").status(429).send(renderLoginPage({ error: "Too many failed attempts. Try again shortly.", after }));
   }
-  const ok = await authStore.verifyPassword(password).catch(() => false);
-  if (!ok) {
+  const login = await authStore.authenticateAndCreateSession(password, {
+    userAgent: String(request.headers["user-agent"] || "").slice(0, 256) || null,
+  }).catch(() => null);
+  if (!login) {
     loginRateLimiter.noteFailure();
     if (acceptsJson) return response.status(401).json({ error: "invalid_credentials", message: "Incorrect password." });
     return response.type("text/html").status(401).send(renderLoginPage({ error: "Incorrect password.", after }));
   }
   loginRateLimiter.noteSuccess();
-  const { token } = await authStore.createSession({
-    userAgent: String(request.headers["user-agent"] || "").slice(0, 256) || null,
-  });
-  issueSessionCookie(response, token, { secure: isSecureRequest(request) });
+  issueSessionCookie(response, login.token, { secure: isSecureRequest(request) });
   if (acceptsJson) return response.json({ ok: true, redirect: after });
   response.redirect(303, after);
 });

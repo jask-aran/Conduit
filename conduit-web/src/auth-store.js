@@ -11,6 +11,9 @@ const SCRYPT_MAX_MEM = 64 * 1024 * 1024;
 const TOKEN_BYTES = 32;
 const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 const LAST_SEEN_REFRESH_MS = 60 * 1000;
+const LOCK_POLL_MS = 20;
+const LOCK_TIMEOUT_MS = 15 * 1000;
+const LOCK_STALE_MS = 60 * 1000;
 
 function base64(buffer) {
   return buffer.toString("base64");
@@ -117,13 +120,116 @@ function conflictError() {
   return Object.assign(new Error("Authentication data changed on disk during an update"), { code: "auth_store_conflict" });
 }
 
+function lockError() {
+  return Object.assign(new Error("Timed out waiting for the authentication data lock"), { code: "auth_store_lock_timeout" });
+}
+
+function authLockPath(filePath) {
+  return `${filePath}.lock`;
+}
+
+function pause(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function lockOwner(lockPath) {
+  let stat;
+  try {
+    stat = await fs.stat(lockPath);
+  } catch (error) {
+    if (error.code === "ENOENT") return null;
+    throw error;
+  }
+  try {
+    const owner = JSON.parse(await fs.readFile(path.join(lockPath, "owner.json"), "utf8"));
+    return { ...owner, startedAt: Number(owner.startedAt) || stat.mtimeMs };
+  } catch (error) {
+    if (error.code === "ENOENT" || error instanceof SyntaxError) return { startedAt: stat.mtimeMs };
+    throw error;
+  }
+}
+
+function staleLock(owner, now = Date.now()) {
+  if (!owner || now - owner.startedAt <= LOCK_STALE_MS) return false;
+  if (!Number.isInteger(owner.pid) || owner.pid <= 0) return true;
+  try {
+    process.kill(owner.pid, 0);
+    return false;
+  } catch (error) {
+    return error.code === "ESRCH";
+  }
+}
+
+async function recoverStaleLock(lockPath) {
+  const retired = `${lockPath}.stale-${process.pid}-${crypto.randomBytes(6).toString("hex")}`;
+  try {
+    await fs.rename(lockPath, retired);
+  } catch (error) {
+    if (error.code === "ENOENT") return;
+    throw error;
+  }
+  await fs.rm(retired, { recursive: true, force: true });
+}
+
+async function acquireAuthLock(filePath) {
+  const lockPath = authLockPath(filePath);
+  const owner = {
+    pid: process.pid,
+    startedAt: Date.now(),
+    id: crypto.randomBytes(12).toString("hex"),
+  };
+  const deadline = Date.now() + LOCK_TIMEOUT_MS;
+  await fs.mkdir(path.dirname(filePath), { recursive: true });
+  for (;;) {
+    try {
+      await fs.mkdir(lockPath, { mode: 0o700 });
+      try {
+        const ownerFile = path.join(lockPath, "owner.json");
+        await fs.writeFile(ownerFile, `${JSON.stringify(owner)}\n`, { mode: 0o600 });
+        return async () => {
+          let current;
+          try {
+            current = await lockOwner(lockPath);
+          } catch (error) {
+            if (error.code === "ENOENT") return;
+            throw error;
+          }
+          if (current?.id === owner.id) await fs.rm(lockPath, { recursive: true, force: true });
+        };
+      } catch (error) {
+        await fs.rm(lockPath, { recursive: true, force: true });
+        throw error;
+      }
+    } catch (error) {
+      if (error.code !== "EEXIST") throw error;
+      const current = await lockOwner(lockPath);
+      if (staleLock(current)) {
+        await recoverStaleLock(lockPath);
+        continue;
+      }
+      if (Date.now() >= deadline) throw lockError();
+      await pause(LOCK_POLL_MS);
+    }
+  }
+}
+
+function appendSession(data, session) {
+  data.sessions = data.sessions.filter((item) => !expiredSession(item));
+  data.sessions.push(session);
+  if (data.sessions.length > MAX_SESSIONS) {
+    data.sessions.sort((a, b) => new Date(a.lastSeenAt) - new Date(b.lastSeenAt));
+    data.sessions = data.sessions.slice(data.sessions.length - MAX_SESSIONS);
+  }
+}
+
 export class AuthStore {
-  constructor(filePath) {
+  constructor(filePath, { afterRevisionCheck = null } = {}) {
     this.filePath = filePath;
     this.data = null;
     this.lastReadMs = 0;
     this.revision = null;
     this.transition = Promise.resolve();
+    this.afterRevisionCheck = afterRevisionCheck;
   }
 
   async load({ force = false } = {}) {
@@ -171,25 +277,38 @@ export class AuthStore {
 
   async _mutate(operation) {
     return this._transition(async () => {
-      for (let attempt = 0; attempt < 2; attempt += 1) {
-        await this.load({ force: true });
-        const { changed, result } = await operation(this.data);
-        if (!changed) return result;
-        try {
-          await this._flush(this.data, this.revision);
-          return result;
-        } catch (error) {
-          if (error?.code !== "auth_store_conflict" || attempt) throw error;
+      return this._withFileLock(async () => {
+        for (let attempt = 0; attempt < 2; attempt += 1) {
+          await this.load({ force: true });
+          const { changed, result } = await operation(this.data);
+          if (!changed) return result;
+          try {
+            await this._flush(this.data, this.revision, { lockHeld: true });
+            return result;
+          } catch (error) {
+            if (error?.code !== "auth_store_conflict" || attempt) throw error;
+          }
         }
-      }
-      throw conflictError();
+        throw conflictError();
+      });
     });
   }
 
-  async _flush(data = this.data, expectedRevision = this.revision) {
+  async _withFileLock(operation) {
+    const release = await acquireAuthLock(this.filePath);
+    try {
+      return await operation();
+    } finally {
+      await release();
+    }
+  }
+
+  async _flush(data = this.data, expectedRevision = this.revision, { lockHeld = false } = {}) {
+    if (!lockHeld) return this._withFileLock(() => this._flush(data, expectedRevision, { lockHeld: true }));
     if (!data) return;
     await fs.mkdir(path.dirname(this.filePath), { recursive: true });
     if (await diskRevision(this.filePath) !== expectedRevision) throw conflictError();
+    if (this.afterRevisionCheck) await this.afterRevisionCheck();
     const nonce = crypto.randomBytes(6).toString("hex");
     const temporary = `${this.filePath}.${process.pid}.${nonce}.tmp`;
     const content = `${JSON.stringify(data, null, 2)}\n`;
@@ -234,14 +353,26 @@ export class AuthStore {
       userAgent,
     };
     return this._mutate((data) => {
-      data.sessions = data.sessions.filter((item) => !expiredSession(item));
-      data.sessions.push(session);
-      if (data.sessions.length > MAX_SESSIONS) {
-        data.sessions.sort((a, b) => new Date(a.lastSeenAt) - new Date(b.lastSeenAt));
-        data.sessions = data.sessions.slice(data.sessions.length - MAX_SESSIONS);
-      }
+      appendSession(data, session);
       return { changed: true, result: { token, session } };
     });
+  }
+
+  async authenticateAndCreateSession(password, { userAgent = null, now = new Date() } = {}) {
+    const token = newSessionToken();
+    const session = {
+      tokenHash: hashToken(token),
+      createdAt: now.toISOString(),
+      lastSeenAt: now.toISOString(),
+      userAgent,
+    };
+    return this._transition(() => this._withFileLock(async () => {
+      await this.load({ force: true });
+      if (!await verifyPassword(password, this.data.password)) return null;
+      appendSession(this.data, session);
+      await this._flush(this.data, this.revision, { lockHeld: true });
+      return { token, session };
+    }));
   }
 
   async findSession(token) {
@@ -259,14 +390,14 @@ export class AuthStore {
         }
         if (!found) return null;
         if (!expiredSession(found, now)) return { ...found };
-        this.data.sessions = this.data.sessions.filter((item) => !timingSafeEqualString(item.tokenHash, tokenHash));
-        try {
-          await this._flush(this.data, this.revision);
+        return this._withFileLock(async () => {
+          await this.load({ force: true });
+          const current = this.data.sessions.find((session) => timingSafeEqualString(session.tokenHash, tokenHash));
+          if (!current || !expiredSession(current, now)) return current ? { ...current } : null;
+          this.data.sessions = this.data.sessions.filter((item) => !timingSafeEqualString(item.tokenHash, tokenHash));
+          await this._flush(this.data, this.revision, { lockHeld: true });
           return null;
-        } catch (error) {
-          if (error?.code !== "auth_store_conflict" || attempt) throw error;
-          force = true;
-        }
+        });
       }
       throw conflictError();
     });
