@@ -22,6 +22,7 @@ function textContent(content) {
 }
 
 const sessionIndexes = new Map();
+const sessionIndexRefreshes = new Map();
 
 function consumeIndexedEntry(index, entry, offset, end) {
   const content = entry.type === "message" ? textContent(entry.message?.content) : "";
@@ -99,8 +100,17 @@ async function buildSessionIndex(file, stat) {
   return index;
 }
 
-async function sessionIndex(file) {
-  const resolved = path.resolve(file);
+function appendSessionIndex(index, stat) {
+  return {
+    ...index,
+    size: stat.size,
+    mtimeMs: stat.mtimeMs,
+    records: [...index.records],
+    announcedAttachmentIds: new Set(index.announcedAttachmentIds),
+  };
+}
+
+async function refreshSessionIndex(resolved) {
   const stat = await fs.stat(resolved);
   const current = sessionIndexes.get(resolved);
   const sameFile = current && current.dev === stat.dev && current.ino === stat.ino;
@@ -119,7 +129,10 @@ async function sessionIndex(file) {
       }
       const buffer = Buffer.alloc(stat.size - current.indexedThrough);
       await handle.read(buffer, 0, buffer.length, current.indexedThrough);
-      current.indexedThrough = parseIndexedBuffer(current, buffer, current.indexedThrough);
+      const next = appendSessionIndex(current, stat);
+      next.indexedThrough = parseIndexedBuffer(next, buffer, next.indexedThrough);
+      sessionIndexes.set(resolved, next);
+      return next;
     } finally {
       if (handle.fd >= 0) await handle.close();
     }
@@ -127,6 +140,19 @@ async function sessionIndex(file) {
   current.size = stat.size;
   current.mtimeMs = stat.mtimeMs;
   return current;
+}
+
+async function sessionIndex(file) {
+  const resolved = path.resolve(file);
+  const active = sessionIndexRefreshes.get(resolved);
+  if (active) return active;
+  const refresh = refreshSessionIndex(resolved);
+  sessionIndexRefreshes.set(resolved, refresh);
+  try {
+    return await refresh;
+  } finally {
+    if (sessionIndexRefreshes.get(resolved) === refresh) sessionIndexRefreshes.delete(resolved);
+  }
 }
 
 function sessionMetadata(file, project, stat, index) {

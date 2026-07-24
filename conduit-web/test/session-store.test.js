@@ -147,6 +147,50 @@ test("indexed session pages remain bounded and converge across append and replac
   await fs.rm(root, { recursive: true, force: true });
 });
 
+test("concurrent index refreshes share one immutable successor across append and replacement", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-session-index-race-"));
+  const projectPath = path.join(root, "project");
+  const file = path.join(root, "session.jsonl");
+  const project = { id: "project_race", slug: "race", path: projectPath };
+  const header = { type: "session", id: "session-race", timestamp: "2026-01-01T00:00:00Z", cwd: projectPath };
+  const initial = { type: "message", id: "initial", message: { role: "user", content: "Initial" } };
+  await fs.writeFile(file, `${JSON.stringify(header)}\n${JSON.stringify(initial)}\n`);
+  await readSessionPage(file, project);
+
+  const appended = Array.from({ length: 40 }, (_, index) => ({
+    type: "message",
+    id: `append-${index}`,
+    message: { role: index % 2 ? "assistant" : "user", content: `Message ${index}: ${"x".repeat(2048)}` },
+  }));
+  await fs.appendFile(file, `${appended.map((entry) => JSON.stringify(entry)).join("\n")}\n`);
+  const pageOptions = { turnLimit: 50, characterLimit: 1_000_000 };
+  const concurrentAppend = await Promise.all(Array.from({ length: 24 }, () => readSessionPage(file, project, pageOptions)));
+  const expectedIds = ["initial", ...appended.map((entry) => entry.id)];
+  for (const page of concurrentAppend) {
+    assert.deepEqual(page.entries.map((entry) => entry.id).filter(Boolean), expectedIds);
+    assert.equal(page.page.before, null);
+  }
+
+  await fs.appendFile(file, '{"type":"message","id":"partial"');
+  const partial = await Promise.all(Array.from({ length: 12 }, () => readSessionPage(file, project, pageOptions)));
+  assert.ok(partial.every((page) => !page.entries.some((entry) => entry.id === "partial")));
+  await fs.appendFile(file, ',"message":{"role":"assistant","content":"finished"}}\n');
+  const completed = await Promise.all(Array.from({ length: 12 }, () => readSessionPage(file, project, pageOptions)));
+  assert.ok(completed.every((page) => page.entries.some((entry) => entry.id === "partial")));
+
+  const replacement = [
+    { type: "session", id: "session-replacement", timestamp: "2026-02-01T00:00:00Z", cwd: projectPath },
+    { type: "message", id: "replacement", message: { role: "user", content: "Replacement" } },
+  ];
+  await fs.writeFile(file, `${replacement.map((entry) => JSON.stringify(entry)).join("\n")}\n`);
+  const concurrentReplacement = await Promise.all(Array.from({ length: 16 }, () => readSessionPage(file, project, pageOptions)));
+  for (const page of concurrentReplacement) {
+    assert.equal(page.id, "session-replacement");
+    assert.deepEqual(page.entries.map((entry) => entry.id).filter(Boolean), ["replacement"]);
+  }
+  await fs.rm(root, { recursive: true, force: true });
+});
+
 test("discovers cwd-matched sessions in Pi's native agent-home layout", async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-session-test-"));
   const projectRoot = path.join(root, "data/chat/files/example");
