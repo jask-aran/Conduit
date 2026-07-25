@@ -92,7 +92,7 @@ function reconcileChildren(current: Node, next: Node) {
   while (current.childNodes.length > next.childNodes.length) current.lastChild?.remove();
 }
 
-export function ChatMarkdown(props: { children?: string; streaming?: boolean; streamVersion?: number; inline?: boolean }) {
+export function ChatMarkdown(props: { children?: string; streaming?: boolean; streamVersion?: number; inline?: boolean; onRendered?: () => void }) {
   let root!: HTMLDivElement;
   const [externalUrl, setExternalUrl] = createSignal<string | null>(null);
   let externalReturnFocus: HTMLElement | null = null;
@@ -119,7 +119,10 @@ export function ChatMarkdown(props: { children?: string; streaming?: boolean; st
     }
   };
 
-  onMount(() => root.addEventListener("click", click));
+  onMount(() => {
+    root.addEventListener("click", click);
+    props.onRendered?.();
+  });
   onCleanup(() => root.removeEventListener("click", click));
 
   return <>
