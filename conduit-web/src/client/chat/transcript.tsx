@@ -1,4 +1,4 @@
-import { createEffect, createMemo, createSignal, For, lazy, onCleanup, onMount, Show, Suspense } from "solid-js";
+import { createEffect, createMemo, createRenderEffect, createSignal, For, lazy, onCleanup, onMount, Show, Suspense } from "solid-js";
 import { CopyIcon, PencilIcon, PlayIcon, RefreshCwIcon } from "lucide-solid";
 import { Button, Spinner } from "@/components/primitives";
 import type { Message, RuntimeActivity, ToolItem } from "../api/contracts";
@@ -27,13 +27,26 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
   let viewport!: HTMLDivElement;
   let previousLoaded: string | null = null;
   let historyLoad: Promise<void> | null = null;
+  let layoutEpoch = 0;
+  let markdownSettledEpoch = -1;
   const [following, setFollowing] = createSignal(true);
   const timeline = createTimelineStore(props.chat.messages, props.chat.tools, props.chat.activeGeneration);
   const empty = createMemo(() => !timeline.length && !props.chat.activity()?.label);
 
-  const scrollBottom = () => requestAnimationFrame(() => {
+  const scrollBottomNow = () => {
     viewport.scrollTop = viewport.scrollHeight;
     if (viewport.scrollTop < 240) loadEarlier();
+  };
+  const scrollBottom = () => requestAnimationFrame(scrollBottomNow);
+  const settleInitialLayout = (epoch: number) => {
+    if (epoch !== layoutEpoch || !following()) return;
+    scrollBottomNow();
+  };
+  const settleAfterMarkdown = () => queueMicrotask(() => {
+    const epoch = layoutEpoch;
+    if (markdownSettledEpoch === epoch || !following()) return;
+    markdownSettledEpoch = epoch;
+    settleInitialLayout(epoch);
   });
   const loadEarlier = () => {
     if (historyLoad || !props.chat.pageBefore() || props.chat.loadingOlder()) return;
@@ -47,12 +60,22 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
       }));
     }).finally(() => { historyLoad = null; });
   };
+  createRenderEffect(() => {
+    props.chat.loadedId();
+    layoutEpoch += 1;
+  });
   createEffect(() => {
     const loaded = props.chat.loadedId();
     props.chat.messages().length;
     props.chat.activeGeneration();
     props.chat.tools();
-    if (loaded !== previousLoaded) { previousLoaded = loaded; setFollowing(true); scrollBottom(); }
+    if (loaded !== previousLoaded) {
+      previousLoaded = loaded;
+      const epoch = layoutEpoch;
+      setFollowing(true);
+      scrollBottom();
+      void document.fonts.ready.then(() => settleInitialLayout(epoch));
+    }
     else if (following()) scrollBottom();
   });
 
@@ -62,7 +85,10 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
       if (viewport.scrollTop < 240) loadEarlier();
     };
     viewport.addEventListener("scroll", onScroll, { passive: true });
-    onCleanup(() => viewport.removeEventListener("scroll", onScroll));
+    onCleanup(() => {
+      layoutEpoch += 1;
+      viewport.removeEventListener("scroll", onScroll);
+    });
   });
 
   return <div class="transcript" data-slot="message-scroller">
@@ -88,7 +114,7 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
                 <Show when={message().timestamp}><time>{new Date(message().timestamp!).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</time></Show>
                 <div data-slot="bubble" data-align={user() ? "end" : "start"} data-editing={props.chat.editingEntryId() === message().id ? "true" : "false"} class={user() ? "bubble bubble-user" : "bubble bubble-assistant"}>
                   <div data-slot="bubble-content">
-                    <Show when={user()} fallback={<Suspense fallback={<div class="markdown-skeleton" />}><ChatMarkdown streaming={live()} streamVersion={item.streamVersion}>{message().content || ""}</ChatMarkdown></Suspense>}><span class="user-message-text">{message().content || ""}</span></Show>
+                    <Show when={user()} fallback={<Suspense fallback={<div class="markdown-skeleton" />}><ChatMarkdown streaming={live()} streamVersion={item.streamVersion} onRendered={settleAfterMarkdown}>{message().content || ""}</ChatMarkdown></Suspense>}><span class="user-message-text">{message().content || ""}</span></Show>
                   </div>
                 </div>
                 <Show when={user() && message().pending}><div class="marker">{message().queueMode === "steer" ? "Queued · steer (after tools)" : "Queued · follow-up (after turn)"}</div></Show>
