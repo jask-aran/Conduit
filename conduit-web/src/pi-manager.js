@@ -64,6 +64,25 @@ function mergeDeliveryDelta(previous, next) {
   return next;
 }
 
+const RECONSTRUCTIBLE_DELIVERY_TYPES = new Set([
+  "agent_start", "agent_end", "agent_settled", "runtime_exit", "runtime_error",
+  "message_start", "message_update", "message_end",
+  "tool_execution_start", "tool_execution_update", "tool_execution_end",
+  "extension_ui_request", "extension_ui_resolved",
+  "queue_update", "compaction_start", "compaction_end", "auto_retry_start", "auto_retry_end",
+  "runtime_state", "context_usage", "session_checkpoint",
+]);
+
+function deliveryNotificationKey(event) {
+  if (deliveryDeltaKey(event) || event.seq != null || RECONSTRUCTIBLE_DELIVERY_TYPES.has(event.type)) return null;
+  if (["runtime_stdout", "runtime_stderr", "history_forked"].includes(event.type)) return event.type;
+  return `unknown:${event.type}`;
+}
+
+function deliveryEventBytes(event) {
+  return Buffer.byteLength(JSON.stringify(event));
+}
+
 export class PiManager extends EventEmitter {
   constructor({
     command = "pi",
@@ -77,6 +96,8 @@ export class PiManager extends EventEmitter {
     socketHighWaterMark = 256 * 1024,
     deliveryFlushMs = 16,
     socketRecoveryPollMs = 50,
+    deliveryMaxNotifications = 32,
+    deliveryMaxNotificationBytes = 64 * 1024,
     now = () => Date.now(),
   } = {}) {
     super();
@@ -96,6 +117,8 @@ export class PiManager extends EventEmitter {
     this.socketLowWaterMark = Math.floor(this.socketHighWaterMark / 2);
     this.deliveryFlushMs = Math.max(0, Math.trunc(Number(deliveryFlushMs) || 16));
     this.socketRecoveryPollMs = Math.max(10, Math.trunc(Number(socketRecoveryPollMs) || 50));
+    this.deliveryMaxNotifications = Math.max(1, Math.trunc(Number(deliveryMaxNotifications) || 32));
+    this.deliveryMaxNotificationBytes = Math.max(1024, Math.trunc(Number(deliveryMaxNotificationBytes) || 64 * 1024));
     this.capacityQueue = Promise.resolve();
     this.reaperTimer = null;
     if (reaperIntervalMs > 0) {
@@ -814,7 +837,10 @@ export class PiManager extends EventEmitter {
     const record = this.processes.get(id);
     if (!record) throw new Error("Unknown live session");
     record.clients.add(socket);
-    record.delivery.set(socket, { pending: new Map(), pendingOrder: [], structural: [], flushTimer: null, recoveryTimer: null, paused: false });
+    record.delivery.set(socket, {
+      pending: new Map(), pendingOrder: [], notifications: new Map(), notificationOrder: [], notificationBytes: 0,
+      flushTimer: null, recoveryTimer: null, paused: false,
+    });
     record.lastClientAt = this.now();
     this.touchActivity(record);
     socket.once("close", () => {
@@ -874,6 +900,31 @@ export class PiManager extends EventEmitter {
     this.scheduleDeliveryRecovery(record, socket, state);
   }
 
+  closeSlowClient(record, socket, state) {
+    state.notifications.clear();
+    state.notificationOrder = [];
+    state.notificationBytes = 0;
+    this.clearDelivery(record, socket);
+    socket.close?.(1013, "Slow client delivery backlog exceeded");
+  }
+
+  queueDeliveryNotification(record, socket, state, event) {
+    const key = deliveryNotificationKey(event);
+    if (!key) return true;
+    const bytes = deliveryEventBytes(event);
+    const previous = state.notifications.get(key);
+    const nextBytes = state.notificationBytes - (previous?.bytes || 0) + bytes;
+    const nextItems = state.notificationOrder.length + (previous ? 0 : 1);
+    if (nextItems > this.deliveryMaxNotifications || nextBytes > this.deliveryMaxNotificationBytes) {
+      this.closeSlowClient(record, socket, state);
+      return false;
+    }
+    if (!previous) state.notificationOrder.push(key);
+    state.notifications.set(key, { event, bytes });
+    state.notificationBytes = nextBytes;
+    return true;
+  }
+
   scheduleDeliveryRecovery(record, socket, state) {
     if (state.recoveryTimer) return;
     const recover = () => {
@@ -887,6 +938,8 @@ export class PiManager extends EventEmitter {
       state.paused = false;
       const resume = this.currentGenerationResume(record);
       if (resume && !this.sendClientEvent(socket, resume)) return;
+      if (!this.sendClientEvent(socket, { type: "runtime_state", session: this.view(record) })) return;
+      if (record.lastCheckpoint && !this.sendClientEvent(socket, record.lastCheckpoint)) return;
       this.flushDelivery(record, socket, state);
     };
     state.recoveryTimer = setTimeout(recover, this.socketRecoveryPollMs);
@@ -901,11 +954,16 @@ export class PiManager extends EventEmitter {
     const pending = state.pendingOrder.map((key) => state.pending.get(key)).filter(Boolean);
     state.pending.clear();
     state.pendingOrder = [];
-    const queued = [...state.structural, ...pending];
-    state.structural = [];
+    const notifications = state.notificationOrder.map((key) => state.notifications.get(key)?.event).filter(Boolean);
+    state.notifications.clear();
+    state.notificationOrder = [];
+    state.notificationBytes = 0;
+    const queued = [...notifications, ...pending];
     for (let index = 0; index < queued.length; index += 1) {
       if (socketBufferedAmount(socket) > this.socketHighWaterMark) {
-        state.structural.push(...queued.slice(index).filter((event) => !deliveryDeltaKey(event)));
+        for (const pendingEvent of queued.slice(index)) {
+          if (!this.queueDeliveryNotification(record, socket, state, pendingEvent)) return;
+        }
         return this.pauseDelivery(record, socket, state);
       }
       if (!this.sendClientEvent(socket, queued[index])) return this.clearDelivery(record, socket);
@@ -923,11 +981,11 @@ export class PiManager extends EventEmitter {
     if (!state || !socketIsOpen(socket)) return;
     const key = deliveryDeltaKey(event);
     if (state.paused) {
-      if (!key) state.structural.push(event);
+      this.queueDeliveryNotification(record, socket, state, event);
       return;
     }
     if (socketBufferedAmount(socket) > this.socketHighWaterMark) {
-      if (!key) state.structural.push(event);
+      if (!this.queueDeliveryNotification(record, socket, state, event)) return;
       this.pauseDelivery(record, socket, state);
       return;
     }
@@ -943,7 +1001,7 @@ export class PiManager extends EventEmitter {
     }
     this.flushDelivery(record, socket, state);
     if (socketBufferedAmount(socket) > this.socketHighWaterMark) {
-      state.structural.push(event);
+      if (!this.queueDeliveryNotification(record, socket, state, event)) return;
       return this.pauseDelivery(record, socket, state);
     }
     this.sendClientEvent(socket, event);
