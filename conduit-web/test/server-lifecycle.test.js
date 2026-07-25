@@ -126,6 +126,63 @@ test("the harness attaches a real client stream to a live Pi process", async () 
   }
 });
 
+test("reattachment receives a terminal generation and its durable checkpoint", async () => {
+  const harness = await startConduitHarness();
+  try {
+    const chat = await harness.createChat();
+    const projects = await (await harness.request("/v0/projects")).json();
+    const project = projects.projects.find((item) => item.id === chat.projectId);
+    assert.ok(project);
+    const sessionFile = path.join(harness.root, "pi", "sessions", `${chat.id}.jsonl`);
+    await fs.mkdir(path.dirname(sessionFile), { recursive: true });
+    await fs.writeFile(sessionFile, `${JSON.stringify({ type: "session", id: `session-${chat.id}`, cwd: project.path })}\n`);
+    const after = (await harness.pi.commands()).length;
+    const launch = harness.request("/v0/live-sessions", {
+      method: "POST",
+      body: JSON.stringify({ chatId: chat.id, projectId: chat.projectId }),
+    });
+    const stateRequest = await harness.pi.waitForCommand("get_state", { after });
+    await harness.pi.reply(stateRequest, { sessionFile, sessionId: `session-${chat.id}` });
+    const live = await (await launch).json();
+    const original = harness.connectStream(live.id);
+    await original.opened;
+    original.socket.send(JSON.stringify({ type: "prompt", message: "Reconnect after completion" }));
+    const prompt = await harness.pi.waitForCommand("prompt", { after: after + 1 });
+    await harness.pi.emit({ type: "agent_start" }, { pid: prompt.pid });
+    await harness.pi.emit({ type: "message_start", message: { role: "assistant", content: [] } }, { pid: prompt.pid });
+    await harness.pi.emit({
+      type: "message_update",
+      assistantMessageEvent: {
+        type: "text_start",
+        contentIndex: 0,
+        partial: { role: "assistant", content: [{ type: "text", text: "" }] },
+      },
+    }, { pid: prompt.pid });
+    await harness.pi.emit({
+      type: "message_update",
+      assistantMessageEvent: {
+        type: "text_delta",
+        contentIndex: 0,
+        delta: "Terminal state survives reconnect",
+        partial: { role: "assistant", content: [{ type: "text", text: "Terminal state survives reconnect" }] },
+      },
+    }, { pid: prompt.pid });
+    await harness.pi.emit({ type: "agent_settled" }, { pid: prompt.pid });
+    await original.next((event) => event.type === "generation_settled");
+    original.close();
+
+    const reattached = harness.connectStream(live.id);
+    await reattached.opened;
+    const resume = await reattached.next((event) => event.type === "generation_resume");
+    assert.equal(resume.generation.status, "complete");
+    assert.equal(resume.generation.assistantMessages[0].blocks[0].text, "Terminal state survives reconnect");
+    const checkpoint = await reattached.next((event) => event.type === "session_checkpoint", 5_000);
+    assert.equal(checkpoint.generationId, resume.generationId);
+  } finally {
+    await harness.stop();
+  }
+});
+
 test("a replaced cloned root cannot be inspected, launched, or unregistered", async () => {
   const harness = await startConduitHarness();
   try {

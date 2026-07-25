@@ -334,7 +334,7 @@ test("PiManager publishes structured generation state without flattened stream e
 
   child.stdout.write(`${JSON.stringify({ type: "agent_settled" })}\n`);
   assert.equal(record.activeGeneration.status, "complete");
-  assert.equal(manager.currentGenerationResume(record), null);
+  assert.equal(manager.currentGenerationResume(record).generation.status, "complete");
 });
 
 test("attach returns complete reduced Resume State independent of the capped event ring", () => {

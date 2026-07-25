@@ -71,6 +71,9 @@ export function createActiveChat(options: ActiveChatOptions) {
   let openToken = 0;
   let selectionToken = 0;
   let navigationToken = 0;
+  let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  let reconnectAttempts = 0;
+  let reconnectToken = 0;
 
   const selectedId = catalogue.selectedId;
   const projectId = catalogue.projectId;
@@ -85,10 +88,18 @@ export function createActiveChat(options: ActiveChatOptions) {
     setCompacting(false);
   };
 
+  const cancelReconnect = () => {
+    reconnectToken += 1;
+    reconnectAttempts = 0;
+    if (reconnectTimer) clearTimeout(reconnectTimer);
+    reconnectTimer = null;
+  };
+
   const reset = () => {
     navigationToken += 1;
     selectionToken += 1;
     openToken += 1;
+    cancelReconnect();
     setConnectingId(null);
     socket?.close();
     socket = null;
@@ -126,6 +137,7 @@ export function createActiveChat(options: ActiveChatOptions) {
       setGeneration("idle");
       if (event.type === "generation_stopped" && Boolean(event.processTerminated)) {
         setLive(null);
+        cancelReconnect();
         socket?.close();
       }
     } else {
@@ -168,7 +180,25 @@ export function createActiveChat(options: ActiveChatOptions) {
     else setGeneration((current) => current === "stopping" ? current : "idle");
   };
 
+  const scheduleReconnect = (record: LiveRecord, chatId: string, selection: number) => {
+    if (reconnectTimer || selection !== selectionToken || selectedId() !== chatId) return;
+    const token = reconnectToken;
+    const delay = Math.min(250 * 2 ** Math.min(reconnectAttempts, 5), 8_000);
+    reconnectAttempts += 1;
+    reconnectTimer = setTimeout(async () => {
+      reconnectTimer = null;
+      if (token !== reconnectToken || selection !== selectionToken || selectedId() !== chatId) return;
+      try {
+        await openLive(chatId, projectId(), { intent: "open" }, selection);
+        reconnectAttempts = 0;
+      } catch {
+        if (token === reconnectToken) scheduleReconnect(record, chatId, selection);
+      }
+    }, delay);
+  };
+
   const connect = (record: LiveRecord, chatId: string, selection: number) => {
+    cancelReconnect();
     socket?.close();
     const next = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}${record.streamUrl || `/v0/live-sessions/${record.id}/stream`}`);
     socket = next;
@@ -179,7 +209,11 @@ export function createActiveChat(options: ActiveChatOptions) {
         consume(event);
       } catch (error) { onError((error as Error).message); }
     };
-    next.addEventListener("close", () => { if (socket === next) socket = null; });
+    next.addEventListener("close", () => {
+      if (socket !== next) return;
+      socket = null;
+      scheduleReconnect(record, chatId, selection);
+    });
   };
 
   const openLive = async (chatId: string, ownerProjectId: string, launch: UnknownRecord = {}, selection = selectionToken): Promise<LiveRecord | null> => {
@@ -430,7 +464,9 @@ export function createActiveChat(options: ActiveChatOptions) {
     if (!streaming()) return;
     stopPending = true;
     setGeneration("stopping");
-    socket?.send(JSON.stringify({ type: "stop_generation", generationId: currentGeneration }));
+    const command = JSON.stringify({ type: "stop_generation", generationId: currentGeneration });
+    if (socket?.readyState === WebSocket.OPEN) socket.send(command);
+    else void ensureLive("open").then(() => socket?.send(command)).catch((error) => onError((error as Error).message));
   };
 
   const regenerate = async (entryId: string) => {
@@ -503,7 +539,7 @@ export function createActiveChat(options: ActiveChatOptions) {
     return derived.kind === "starting" ? { kind: "idle", label: null } : derived;
   });
 
-  onCleanup(() => socket?.close());
+  onCleanup(() => { cancelReconnect(); socket?.close(); });
 
   return {
     status, setStatus, title, setTitle, templateId, setTemplateId, runtimeIdentity, setRuntimeIdentity,
