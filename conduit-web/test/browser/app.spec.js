@@ -1105,25 +1105,26 @@ test("ignores queued events from the previous chat socket", async ({ page }, tes
   await expect(page.getByText("Second body")).toBeVisible();
 });
 
-test("opens a viewport-filling thread pinned to the true bottom without an upward flash", async ({ page }, testInfo) => {
+test("cold-loads a viewport-filling thread pinned to the true bottom after Markdown resolves", async ({ page }) => {
   const paragraph = (n) => `Paragraph ${n} carries enough words to wrap across more than one line of the transcript column so the assistant answer grows well beyond ten rem in height.`;
   const tallBody = Array.from({ length: 24 }, (_, index) => paragraph(index + 1)).join("\n\n");
+  let releaseMarkdown;
+  const markdownGate = new Promise((resolve) => { releaseMarkdown = resolve; });
+  await page.route("**/src/client/chat/markdown.tsx*", async (route) => {
+    await markdownGate;
+    await route.continue();
+  });
   await page.route("**/v0/projects", async (route) => {
     await route.fulfill({ json: { projects: [{
       id: "project_chat", slug: "chat", name: "Chats",
       sessions: [
-        { id: "session_small", projectId: "project_chat", status: "active", title: "Small chat" },
         { id: "session_tall", projectId: "project_chat", status: "active", title: "Tall chat" },
       ],
     }, projects[1]] } });
   });
-  await page.route("**/v0/sessions/session_small", async (route) => {
+  await page.route("**/v0/chats/session_tall", async (route) => {
     await route.fulfill({ json: {
-      id: "session_small", projectId: "project_chat", status: "active", title: "Small chat",
-      messages: [
-        { id: "small-user", role: "user", content: "Hi" },
-        { id: "small-assistant", role: "assistant", content: "**Hello there**" },
-      ], tools: [], page: { before: null },
+      id: "session_tall", projectId: "project_chat", status: "active", title: "Tall chat",
     } });
   });
   await page.route("**/v0/sessions/session_tall", async (route) => {
@@ -1137,18 +1138,12 @@ test("opens a viewport-filling thread pinned to the true bottom without an upwar
       ], tools: [], page: { before: null },
     } });
   });
-  await page.goto("/");
-  await openSidebar(page, testInfo);
-  // Open a small thread first so the lazy chat-markdown chunk is already resolved
-  // and the tall thread renders its real heights synchronously on mount.
-  await page.getByRole("button", { name: "Small chat" }).click();
-  await expect(page.getByText("Hello there")).toBeVisible();
-
-  await openSidebar(page, testInfo);
-  await page.getByRole("button", { name: "Tall chat" }).click();
-  // Sample the viewport every frame across the mount + settle window so a buggy
-  // pre-paint scroll (last message snapping down from its top) is captured as a
-  // frame far from the bottom. Bounded loop: no lingering background work.
+  await page.goto("/chat/session_tall", { waitUntil: "domcontentloaded" });
+  await expect(page.locator(".markdown-skeleton")).toHaveCount(2);
+  releaseMarkdown();
+  // Sample the viewport from the delayed Markdown resolution through its
+  // settlement. A one-shot pre-paint scroll would leave one of these frames far
+  // from the true bottom after the skeleton expands.
   const samples = await page.evaluate(async () => {
     const out = [];
     for (let frame = 0; frame < 45; frame += 1) {
