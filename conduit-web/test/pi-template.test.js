@@ -423,6 +423,48 @@ test("slow clients discard superseded deltas and recover from Resume State", asy
   assert.equal(socket.events.some((event) => event.type === "content_block_delta"), false);
 });
 
+test("slow clients retain no tool or runtime backlog while Resume State can reconstruct it", async () => {
+  const { manager, record } = rpcFixture();
+  manager.socketHighWaterMark = 1_024;
+  manager.socketLowWaterMark = 512;
+  const socket = deliverySocket({ bufferedAmount: 2_048 });
+  manager.attach(record.id, socket);
+  const state = record.delivery.get(socket);
+
+  for (let index = 0; index < 2_000; index += 1) {
+    manager.deliver(record, {
+      type: "tool_execution_updated", generationId: "g1", seq: index + 1, toolCallId: "tool-1",
+      partialResult: "x".repeat(8_192),
+    });
+    manager.deliver(record, { type: "runtime_state", session: { activity: "working", queue: { steering: [], followUp: [] } } });
+  }
+
+  assert.equal(state.notifications.size, 0);
+  assert.equal(state.notificationOrder.length, 0);
+  assert.equal(state.notificationBytes, 0);
+  socket.bufferedAmount = 0;
+  await wait(70);
+  assert.deepEqual(socket.events.map((event) => event.type), ["runtime_state"]);
+});
+
+test("slow clients close when an unreconstructible notification exceeds its byte budget", () => {
+  const { manager, record } = rpcFixture();
+  manager.socketHighWaterMark = 1_024;
+  manager.deliveryMaxNotificationBytes = 128;
+  const socket = deliverySocket({ bufferedAmount: 2_048 });
+  socket.close = (code, reason) => {
+    socket.closeArgs = { code, reason };
+    socket.readyState = 3;
+    socket.emit("close");
+  };
+  manager.attach(record.id, socket);
+
+  manager.deliver(record, { type: "runtime_stderr", message: "x".repeat(256) });
+
+  assert.deepEqual(socket.closeArgs, { code: 1013, reason: "Slow client delivery backlog exceeded" });
+  assert.equal(record.delivery.has(socket), false);
+});
+
 function deliverySocket({ bufferedAmount = 0 } = {}) {
   const socket = new EventEmitter();
   socket.OPEN = 1;

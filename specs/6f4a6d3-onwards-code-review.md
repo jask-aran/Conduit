@@ -94,6 +94,8 @@
 
 **Minimal remediation:** Coalesce reconstructible state by identity, discard sequenced structured events covered by the Resume State, retain only a bounded set of genuinely non-reconstructible notifications, and close the socket if that bound is exceeded. Test thousands of tool updates/runtime states and assert queue bytes/items, not merely absence of deltas. **Before PR.**
 
+**Completion:** Implemented and verified in the pending slow-client delivery slice.
+
 ### 9. Minor — Current specs simultaneously mark incomplete contracts complete and pending
 
 **Locations:** [rendering-state-architecture.md:22–69](/home/jask/Conduit/specs/rendering-state-architecture.md:22), [rendering-state-architecture.md:269–366](/home/jask/Conduit/specs/rendering-state-architecture.md:269), [performance-code-review.md:200–218](/home/jask/Conduit/specs/performance-code-review.md:200)

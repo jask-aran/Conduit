@@ -308,6 +308,13 @@ the bounded diagnostic event ring. The client reduces structured events into
 its Live Response projection; persistence confirmation does not reconstruct
 the live response.
 
+Slow WebSocket clients recover from fresh Resume State, the current runtime
+snapshot, and the latest checkpoint rather than a replay queue. While paused,
+generation, tool, runtime, queue, and host-UI updates are discarded as
+reconstructible; only non-reconstructible diagnostic/notification events are retained in a
+coalesced 32-item/64 KiB budget, after which Conduit closes the socket with
+code 1013.
+
 Client commands:
 
 | Command | Fields | Effect |
