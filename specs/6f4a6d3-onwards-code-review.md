@@ -108,7 +108,10 @@
 
 **Completion:** No current documents require rewrite. `b526b82` removed both superseded review documents; current rendering and live-session contracts are maintained in `README.md` and `conduit-web/README.md`. This preserves the repository’s stateless-documentation policy without recreating historical review instructions.
 
-## Follow-up issues worth filing
+## Post-review follow-ups
+
+GitHub issues are the task tracker for these items; this temporary review queue
+only preserves their review context.
 
 ### 10. Important — Clone publication is not crash-consistent
 
@@ -118,7 +121,9 @@
 
 **Why permitted:** The reservation marker records no transaction phase or project row, and catalogue writes truncate the live file rather than atomically replacing it.
 
-**Minimal remediation:** Atomically write the catalogue and marker, record phases such as `reserved`, `published`, and `catalogued`, and make recovery complete or report a published-but-unregistered target without deleting user data. **After the upcoming PR, provided the orphan case is documented rather than called atomic.**
+**Minimal remediation:** Atomically write the catalogue and marker, record phases such as `reserved`, `published`, and `catalogued`, and make recovery complete or report a published-but-unregistered target without deleting user data. **Post-review follow-up, provided the orphan case is documented rather than called atomic.**
+
+**Tracked:** [#32](https://github.com/jask-aran/Conduit/issues/32)
 
 ### 11. Important — Delta updates still rebuild the visible transcript and reparse all accumulated Markdown
 
@@ -128,7 +133,9 @@
 
 **Why permitted:** The normalized reducer is one immutable object signal rather than block-granular Solid state; DOM reconciliation preserves nodes but does not reduce parser or projection work.
 
-**Minimal remediation:** Move mutable block text behind per-block accessors/stores so timeline structure changes only on boundaries; separately evaluate the tracked incremental/cadenced renderer while preserving canonical final parsing and sanitization. **After the upcoming PR.**
+**Minimal remediation:** Move mutable block text behind per-block accessors/stores so timeline structure changes only on boundaries; separately evaluate the tracked incremental/cadenced renderer while preserving canonical final parsing and sanitization. **Post-review follow-up.**
+
+**Tracked:** [#34](https://github.com/jask-aran/Conduit/issues/34)
 
 ### 12. Minor — Closing the Workspace panel does not cancel its outstanding requests
 
@@ -138,7 +145,9 @@
 
 **Why permitted:** Cancellation is tied to unmount/project change, while visibility is only an inert CSS state.
 
-**Minimal remediation:** Abort the current request scope on open→closed while retaining completed cache; mirror the clone route’s response-close cancellation on the diff route. **After the upcoming PR.**
+**Minimal remediation:** Abort the current request scope on open→closed while retaining completed cache; mirror the clone route’s response-close cancellation on the diff route. **Post-review follow-up.**
+
+**Tracked:** [#33](https://github.com/jask-aran/Conduit/issues/33)
 
 ### 13. Minor — Session paging still performs CPU work proportional to all preceding records
 
@@ -148,7 +157,9 @@
 
 **Why permitted:** The index stores individual records but not turn boundaries or prefix character totals.
 
-**Minimal remediation:** Store turn-start record indices and cumulative character counts during indexing, then binary-search the cursor and walk only the selected turns. Add work-unit assertions independent of response size. **After the upcoming PR.**
+**Minimal remediation:** Store turn-start record indices and cumulative character counts during indexing, then binary-search the cursor and walk only the selected turns. Add work-unit assertions independent of response size. **Post-review follow-up.**
+
+**Tracked:** [#35](https://github.com/jask-aran/Conduit/issues/35)
 
 ### 14. Minor — The directory-entry cap is applied after reading the entire directory
 
@@ -158,7 +169,9 @@
 
 **Why permitted:** The API bounds returned rows rather than enumeration work.
 
-**Minimal remediation:** Iterate with `fs.opendir()`, stop after 501 accepted entries, and return a `truncated` flag. **After the upcoming PR.**
+**Minimal remediation:** Iterate with `fs.opendir()`, stop after 501 accepted entries, and return a `truncated` flag. **Post-review follow-up.**
+
+**Tracked:** [#36](https://github.com/jask-aran/Conduit/issues/36)
 
 ## Deliberate tradeoffs that look sound
 
