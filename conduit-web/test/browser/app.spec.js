@@ -2273,6 +2273,138 @@ test("a delayed terminal checkpoint cannot clear the next generation", async ({ 
   await expect(page.getByText("Generation B survives")).toBeVisible();
 });
 
+for (const phase of ["thinking", "tool", "answer", "settlement"]) {
+  test(`reconnects a live chat after socket loss during ${phase}`, async ({ page }) => {
+    await page.addInitScript((reconnectPhase) => {
+      const chatId = "550e8400-e29b-41d4-a716-446655440099";
+      const generationId = "reconnect-generation";
+      const messageId = "reconnect-assistant";
+      const blockType = reconnectPhase === "thinking" ? "thinking" : reconnectPhase === "tool" ? "toolCall" : "text";
+      const initialText = reconnectPhase === "thinking" ? "Thinking survives" : reconnectPhase === "answer" ? "Answer survives" : "Terminal live answer";
+      const block = {
+        type: blockType,
+        contentIndex: 0,
+        identity: `${generationId}:${messageId}:0`,
+        status: reconnectPhase === "settlement" ? "complete" : "streaming",
+        ...(blockType === "toolCall" ? { toolCallId: "reconnect-tool", name: "bash", arguments: { command: "pwd" } } : { text: initialText }),
+      };
+      const resume = {
+        id: generationId,
+        status: reconnectPhase === "settlement" ? "complete" : "running",
+        assistantMessages: [{
+          id: messageId,
+          status: reconnectPhase === "settlement" ? "complete" : "streaming",
+          stopReason: reconnectPhase === "settlement" ? "stop" : null,
+          errorMessage: null,
+          blocks: [block],
+        }],
+        toolExecutions: reconnectPhase === "tool" ? {
+          "reconnect-tool": {
+            toolCallId: "reconnect-tool",
+            name: "bash",
+            arguments: { command: "pwd" },
+            status: "running",
+            partialResult: "working",
+            result: null,
+            isError: false,
+          },
+        } : {},
+        retry: null,
+        error: null,
+        lastSeq: reconnectPhase === "settlement" ? 6 : 4,
+      };
+      const runtimeState = () => ({
+        type: "runtime_state",
+        session: {
+          generation: { id: generationId, closed: reconnectPhase === "settlement", settled: reconnectPhase === "settlement" },
+          stopping: false,
+          active: reconnectPhase !== "settlement",
+        },
+      });
+      class ReconnectingWebSocket extends EventTarget {
+        static OPEN = 1;
+        static instances = [];
+        constructor(url) {
+          super();
+          this.url = url;
+          this.readyState = 0;
+          ReconnectingWebSocket.instances.push(this);
+          queueMicrotask(() => {
+            this.readyState = ReconnectingWebSocket.OPEN;
+            this.dispatchEvent(new Event("open"));
+            if (ReconnectingWebSocket.instances.length !== 2) return;
+            this.emit({ type: "generation_resume", generationId, seq: resume.lastSeq, generation: resume });
+            this.emit(runtimeState());
+            if (reconnectPhase === "thinking") this.emit({ type: "content_block_delta", generationId, seq: 5, messageId, contentIndex: 0, blockType: "thinking", delta: " recovered" });
+            if (reconnectPhase === "tool") this.emit({ type: "tool_execution_completed", generationId, seq: 5, toolCallId: "reconnect-tool", name: "bash", result: "Done after reconnect", isError: false });
+            if (reconnectPhase === "answer") this.emit({ type: "content_block_delta", generationId, seq: 5, messageId, contentIndex: 0, blockType: "text", delta: " recovered" });
+            if (reconnectPhase === "settlement") this.emit({ type: "session_checkpoint", generationId, generationSeq: 6, chat: { id: chatId } });
+          });
+        }
+        emit(event) { this.onmessage?.({ data: JSON.stringify(event) }); }
+        close() {
+          if (this.readyState === 3) return;
+          this.readyState = 3;
+          this.dispatchEvent(new Event("close"));
+        }
+        send(payload) {
+          if (JSON.parse(payload).type !== "prompt" || ReconnectingWebSocket.instances.length !== 1) return;
+          queueMicrotask(() => {
+            this.emit({ type: "generation_started", generationId, seq: 1 });
+            this.emit({ type: "assistant_message_started", generationId, seq: 2, messageId });
+            this.emit({ type: "content_block_started", generationId, seq: 3, messageId, block });
+            if (reconnectPhase === "tool") this.emit({ type: "tool_execution_started", generationId, seq: 4, toolCallId: "reconnect-tool", name: "bash", arguments: { command: "pwd" } });
+            else if (reconnectPhase === "settlement") {
+              this.emit({ type: "assistant_message_completed", generationId, seq: 4, messageId, stopReason: "stop", blocks: [block] });
+              this.emit({ type: "generation_settled", generationId, seq: 6 });
+            } else this.emit({ type: "content_block_delta", generationId, seq: 4, messageId, contentIndex: 0, blockType, delta: initialText });
+            this.close();
+          });
+        }
+      }
+      Object.defineProperty(window, "WebSocket", { configurable: true, value: ReconnectingWebSocket });
+      Object.defineProperty(window, "__reconnectSockets", { configurable: true, get: () => ReconnectingWebSocket.instances });
+    }, phase);
+
+    let sessionReads = 0;
+    await page.route("**/v0/live-sessions", async (route) => {
+      const body = route.request().postDataJSON();
+      await route.fulfill({ status: 201, json: {
+        id: "live_reconnect",
+        chatId: body.chatId,
+        streamUrl: "/v0/live-sessions/live_reconnect/stream",
+      } });
+    });
+    await page.route("**/v0/sessions/550e8400-e29b-41d4-a716-446655440099", async (route) => {
+      sessionReads += 1;
+      await route.fulfill({ json: {
+        id: "550e8400-e29b-41d4-a716-446655440099",
+        projectId: "project_chat",
+        status: "active",
+        title: "New chat",
+        messages: phase === "settlement" && sessionReads >= 1
+          ? [{ id: "persisted-answer", role: "assistant", content: "Persisted after reconnect" }]
+          : [],
+        tools: [],
+        page: { before: null },
+      } });
+    });
+
+    await page.goto("/");
+    await page.getByRole("textbox", { name: "Message Pi" }).fill(`Reconnect during ${phase}`);
+    await page.getByRole("button", { name: "Send message" }).click();
+    await expect.poll(() => page.evaluate(() => window.__reconnectSockets.length)).toBe(2);
+
+    if (phase === "thinking") await expect(page.locator(".turn-trace-header")).toContainText("Thinking survives recovered");
+    if (phase === "tool") {
+      await page.locator(".turn-trace-header").click();
+      await expect(page.locator(".tool-card")).toHaveAttribute("data-status", "complete");
+    }
+    if (phase === "answer") await expect(page.locator(".bubble-assistant")).toContainText("Answer survives recovered");
+    if (phase === "settlement") await expect(page.locator(".bubble-assistant")).toContainText("Persisted after reconnect");
+  });
+}
+
 test("global commands and slash suggestions preserve their intended focus models", async ({ page }) => {
   await page.goto("/");
   const composer = page.getByRole("textbox", { name: "Message Pi" });

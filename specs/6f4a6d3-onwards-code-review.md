@@ -82,6 +82,8 @@
 
 **Minimal remediation:** Add selection-scoped backoff reconnect with explicit intentional-close cancellation. Reattach to the resident record, consume Resume State, and either retain/send the terminal generation until persistence acknowledgement or fetch the matching durable checkpoint when runtime state says it settled. Test disconnection during thinking, tool execution, answer, and the settlement/checkpoint gap. **Before PR.**
 
+**Completion:** Implemented and verified in the following reconnect slice.
+
 ### 8. Important — Slow-client delivery still has an unbounded server-side queue
 
 **Locations:** [pi-manager.js:805–942](/home/jask/Conduit/conduit-web/src/pi-manager.js:805), [pi-template.test.js:390–424](/home/jask/Conduit/conduit-web/test/pi-template.test.js:390), [conduit-web/README.md:304–313](/home/jask/Conduit/conduit-web/README.md:304)

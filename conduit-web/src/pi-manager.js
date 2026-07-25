@@ -41,8 +41,6 @@ function emptyContextUsage() {
   };
 }
 
-const TERMINAL_GENERATION_STATUSES = new Set(["stopped", "complete", "failed"]);
-
 function socketIsOpen(socket) {
   return socket?.readyState === socket?.OPEN;
 }
@@ -617,7 +615,7 @@ export class PiManager extends EventEmitter {
   }
 
   currentGenerationResume(record) {
-    if (!record?.activeGeneration || TERMINAL_GENERATION_STATUSES.has(record.activeGeneration.status)) return null;
+    if (!record?.activeGeneration) return null;
     return generationResumeEvent(record.activeGeneration);
   }
 
