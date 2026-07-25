@@ -106,6 +106,8 @@
 
 **Minimal remediation:** Rewrite these documents as current-state contracts: retain accepted invariants and explicitly tracked debt, remove or archive superseded implementation instructions, and correct the completion claims exposed above. **Before PR because repository policy requires stateless synchronized documentation.**
 
+**Completion:** No current documents require rewrite. `b526b82` removed both superseded review documents; current rendering and live-session contracts are maintained in `README.md` and `conduit-web/README.md`. This preserves the repository’s stateless-documentation policy without recreating historical review instructions.
+
 ## Follow-up issues worth filing
 
 ### 10. Important — Clone publication is not crash-consistent
