@@ -145,9 +145,24 @@ formatting changes unrelated to the task.
 
 Do not commit, push, branch, open PRs, or merge unless the user explicitly
 asks. Short, imperative, sentence-case commit subjects; one coherent change
-per commit. PRs explain user-visible behavior, list verification commands,
-include screenshots for interface changes, and call out configuration,
-data-format, dependency, template, or session-lifecycle effects.
+per commit. Every non-trivial commit also needs a body stating the failure
+mode or motivation, the key invariant or behavioural change, and verification
+performed; do not merely restate the diff. Current code and current-state
+documentation describe the app as it is now; commit bodies are the durable
+record of why a change was made.
+
+Sequential commits on `main` are the normal development flow. Close a related
+run with a natural final commit (for example deleting its temporary review
+queue) whose body records the included range, outcomes, verification, and
+intentional deferrals. When there is no natural final commit, use an annotated
+`sprint/` tag with that same summary instead of an empty summary commit or a
+permanent status register. Retrieve local history with `git log
+--format='%H%n%B%n---' <range>` (for example `-10`, `--since='2026-07-01'`,
+or `base..HEAD`) when reviewing recent work: it prints each commit hash,
+subject, and body. Use `gh api` only when the remote GitHub history is
+required; request `.commit.message` from the commits endpoint because it
+contains both subject and body. PRs are optional review bundles, not the
+canonical history.
 
 ## Security and ignored state
 
