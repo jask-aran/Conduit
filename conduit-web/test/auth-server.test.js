@@ -189,6 +189,7 @@ test("login flow issues a cookie; logout clears it; rate limiting kicks in", asy
     assert.equal(login.status, 200);
     const setCookie = login.headers.get("set-cookie") || "";
     assert.match(setCookie, /conduit_session=/);
+    assert.match(setCookie, /Max-Age=2592000/);
     const cookieHeader = setCookie.split(";")[0];
 
     const projects = await fetch(`${origin}/v0/projects`, { headers: { cookie: cookieHeader } });

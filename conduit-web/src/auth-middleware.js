@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 
 const COOKIE_NAME = "conduit_session";
-const COOKIE_TTL_SECONDS = 30 * 24 * 60 * 60;
+const COOKIE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 const RATE_LIMIT_THRESHOLD = 5;
 const RATE_LIMIT_BASE_MS = 5_000;
 const RATE_LIMIT_CAP_MS = 5 * 60 * 1000;
@@ -106,7 +106,7 @@ export function issueSessionCookie(response, token, { secure }) {
     httpOnly: true,
     sameSite: "lax",
     path: "/",
-    maxAge: COOKIE_TTL_SECONDS,
+    maxAge: COOKIE_TTL_MS,
     secure,
   });
 }
