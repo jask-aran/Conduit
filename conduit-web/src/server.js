@@ -425,18 +425,23 @@ manager.on("event", ({ record, event }) => {
     || (event.type === "agent_end" && !event.willRetry);
   const generation = record.activeGeneration;
   const checkpointId = generation ? `${record.id}:${generation.id}` : null;
-  if (!terminal || !chat || chat.status !== "active" || !record.sessionFile || !checkpointId || pendingCheckpoints.has(checkpointId) || record.active) return;
+  if (!terminal || !chat || !record.sessionFile || !checkpointId || pendingCheckpoints.has(checkpointId) || record.active) return;
   const checkpoint = { id: generation.id, seq: generation.lastSeq };
   pendingCheckpoints.add(checkpointId);
   setTimeout(() => {
     projects.get(record.projectId)
       .then((project) => project && registry.syncFile(record.chatId, record.sessionFile, project, { waitForFileMs: 2000 }))
-      .then((session) => session && manager.publish(record, {
-        type: "session_checkpoint",
-        generationId: checkpoint.id,
-        generationSeq: checkpoint.seq,
-        chat: chatView(registry.metadata(record.chatId)),
-      }))
+      .then((session) => {
+        if (!session) return null;
+        record.lastCheckpoint = {
+          type: "session_checkpoint",
+          generationId: checkpoint.id,
+          generationSeq: checkpoint.seq,
+          chat: chatView(registry.metadata(record.chatId)),
+        };
+        manager.publish(record, record.lastCheckpoint);
+        return session;
+      })
       .catch((error) => console.error("Could not checkpoint the session registry", error))
       .finally(() => pendingCheckpoints.delete(checkpointId));
   }, 50).unref();
@@ -1611,6 +1616,7 @@ server.on("upgrade", async (request, socket, head) => {
       queue: record.queue || { steering: [], followUp: [] },
       contextUsage: record.contextUsage || null,
     }));
+    if (record.lastCheckpoint) ws.send(JSON.stringify(record.lastCheckpoint));
     ws.on("message", (data) => {
       Promise.resolve()
         .then(() => handleClientCommand(record, JSON.parse(String(data))))
