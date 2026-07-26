@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <style>
+      body { margin: 0; background: #101114; }
+      #terminal { width: 1120px; height: 640px; }
+    </style>
+  </head>
+  <body>
+    <div id="terminal"></div>
+    <script type="module">
+      import { createTerminalRenderer } from "/src/client/remotes/terminal-renderer.ts";
+
+      const host = document.querySelector("#terminal");
+      const encoder = new TextEncoder();
+      let renderer;
+      let nextEcho;
+      let resolveEcho;
+
+      function nextFrames(count) {
+        return new Promise((resolve) => {
+          const step = () => count-- > 0 ? requestAnimationFrame(step) : resolve();
+          requestAnimationFrame(step);
+        });
+      }
+
+      function quantile(values, p) {
+        if (!values.length) return 0;
+        const sorted = [...values].sort((a, b) => a - b);
+        return sorted[Math.min(sorted.length - 1, Math.floor((sorted.length - 1) * p))];
+      }
+
+      function tuiFrame(index) {
+        const rows = [
+          `\x1b[38;5;45m╭─ Codex · workspace ──────────────────────────────────────────────────────────────────────────────────────╮\x1b[0m`,
+          `\x1b[38;5;244m│\x1b[0m  \x1b[1;38;5;81m${String(index).padStart(4, "0")}\x1b[0m  \x1b[38;5;114mThinking\x1b[0m  \x1b[38;5;244m•\x1b[0m  \x1b[38;5;222mtool: read\x1b[0m                                                    \x1b[38;5;244m│\x1b[0m`,
+          `\x1b[38;5;244m│\x1b[0m  \x1b[38;5;252mInspecting terminal renderer performance while preserving a coloured, animated TUI surface.\x1b[0m  \x1b[38;5;244m│\x1b[0m`,
+        ];
+        while (rows.length < 29) rows.push(`\x1b[38;5;244m│\x1b[0m  \x1b[38;5;${33 + (rows.length + index) % 180}m${"▌".repeat((rows.length * 7 + index) % 44)}\x1b[0m${" ".repeat(98 - ((rows.length * 7 + index) % 44))}\x1b[38;5;244m│\x1b[0m`);
+        rows.push(`\x1b[38;5;45m╰──────────────────────────────────────────────────────────────────────────────────────────────────────╯\x1b[0m`);
+        return `\x1b[H${rows.join("\r\n")}`;
+      }
+
+      window.__terminalPerf = {
+        async prepare(rendererId) {
+          renderer?.dispose();
+          host.replaceChildren();
+          renderer = await createTerminalRenderer(host, rendererId);
+          renderer.fit();
+          renderer.focus();
+          renderer.onData((data) => {
+            const startedAt = performance.now();
+            renderer.write(encoder.encode(`\b \b${data === "\x7f" ? "" : ""}`));
+            nextEcho = new Promise((resolve) => { resolveEcho = resolve; });
+            requestAnimationFrame(() => resolveEcho?.(performance.now() - startedAt));
+          });
+          renderer.write(encoder.encode(tuiFrame(0)));
+          await nextFrames(3);
+        },
+        async burst(batchSize = 1) {
+          const frameTimes = [];
+          const longTasks = [];
+          let previousFrame;
+          let running = true;
+          const observer = new PerformanceObserver((list) => longTasks.push(...list.getEntries().map((entry) => entry.duration)));
+          observer.observe({ type: "longtask" });
+          const observeFrame = (timestamp) => {
+            if (previousFrame != null) frameTimes.push(timestamp - previousFrame);
+            previousFrame = timestamp;
+            if (running) requestAnimationFrame(observeFrame);
+          };
+          requestAnimationFrame(observeFrame);
+          const startedAt = performance.now();
+          for (let index = 1; index <= 180; index += batchSize) {
+            const frames = [];
+            for (let offset = 0; offset < batchSize && index + offset <= 180; offset += 1) frames.push(tuiFrame(index + offset));
+            renderer.write(encoder.encode(frames.join("")));
+          }
+          const writeCallsMs = performance.now() - startedAt;
+          await nextFrames(12);
+          running = false;
+          observer.disconnect();
+          return {
+            writeCallsMs,
+            settleMs: performance.now() - startedAt,
+            maxFrameMs: Math.max(...frameTimes, 0),
+            p95FrameMs: quantile(frameTimes, 0.95),
+            longTasks: longTasks.length,
+            longestTaskMs: Math.max(...longTasks, 0),
+            writeCalls: Math.ceil(180 / batchSize),
+          };
+        },
+        async pacedUpdates() {
+          const frameTimes = [];
+          const longTasks = [];
+          let previousFrame;
+          let running = true;
+          const observer = new PerformanceObserver((list) => longTasks.push(...list.getEntries().map((entry) => entry.duration)));
+          observer.observe({ type: "longtask" });
+          const observeFrame = (timestamp) => {
+            if (previousFrame != null) frameTimes.push(timestamp - previousFrame);
+            previousFrame = timestamp;
+            if (running) requestAnimationFrame(observeFrame);
+          };
+          requestAnimationFrame(observeFrame);
+          const startedAt = performance.now();
+          for (let index = 1; index <= 90; index += 1) {
+            renderer.write(encoder.encode(tuiFrame(index)));
+            await nextFrames(1);
+          }
+          await nextFrames(3);
+          running = false;
+          observer.disconnect();
+          return {
+            elapsedMs: performance.now() - startedAt,
+            maxFrameMs: Math.max(...frameTimes, 0),
+            p95FrameMs: quantile(frameTimes, 0.95),
+            framesOver20Ms: frameTimes.filter((duration) => duration > 20).length,
+            longTasks: longTasks.length,
+            longestTaskMs: Math.max(...longTasks, 0),
+          };
+        },
+        takeEcho() {
+          return nextEcho;
+        },
+      };
+    </script>
+  </body>
+</html>
