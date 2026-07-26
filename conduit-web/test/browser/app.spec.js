@@ -562,6 +562,9 @@ test("the terminal renderer can use Ghostty over the same PTY transport", async 
   const canvas = page.locator(".terminal-canvas");
   await expect(canvas).toHaveAttribute("data-terminal-renderer", "ghostty");
   await expect(canvas.locator("canvas")).toBeVisible();
+  await page.getByRole("combobox", { name: "Terminal renderer" }).selectOption("xterm");
+  await expect(canvas).toHaveAttribute("data-terminal-renderer", "xterm");
+  await expect(canvas.locator(".xterm")).toBeVisible();
 });
 
 test("reloading a durable new-chat URL does not create another chat", async ({ page }) => {
