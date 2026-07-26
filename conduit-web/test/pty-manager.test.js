@@ -9,10 +9,10 @@ function fakePty() {
   const handles = [];
   return {
     handles,
-    spawn() {
+    spawn(command, args, options) {
       let data;
       let exit;
-      const handle = { onData: (fn) => { data = fn; }, onExit: (fn) => { exit = fn; }, kill: () => exit?.({ exitCode: 0, signal: "SIGTERM" }), emit: (value) => data?.(value), write: (value) => { handle.input = value; }, resize: (cols, rows) => { handle.size = { cols, rows }; } };
+      const handle = { command, args, options, onData: (fn) => { data = fn; }, onExit: (fn) => { exit = fn; }, kill: () => exit?.({ exitCode: 0, signal: "SIGTERM" }), emit: (value) => data?.(value), write: (value) => { handle.input = value; }, resize: (cols, rows) => { handle.size = { cols, rows }; } };
       handles.push(handle);
       return handle;
     },
@@ -28,6 +28,9 @@ test("PTY manager permits only linked Workspaces and persists bounded terminal m
   await manager.load();
   await assert.rejects(manager.create({ project: { id: "managed", origin: "managed", kind: "project", path: workspace } }), { code: "pty_workspace_required" });
   const record = await manager.create({ project: { id: "workspace", origin: "linked", kind: "workspace", path: workspace } });
+  assert.equal(pty.handles[0].options.env.TERM, "xterm-256color");
+  assert.equal(pty.handles[0].options.env.COLORTERM, "truecolor");
+  assert.equal(Object.hasOwn(pty.handles[0].options.env, "NO_COLOR"), false);
   pty.handles[0].emit("ab");
   pty.handles[0].emit("cdef");
   assert.equal(manager.output(record.id).toString(), "cdef");
