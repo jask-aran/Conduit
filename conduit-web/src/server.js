@@ -41,6 +41,7 @@ import { renderLoginPage } from "./auth-login-page.js";
 import { listWorkspaceDirectory, readWorkspaceDiff, readWorkspaceFile } from "./workspace-inspector.js";
 import { currentMagicDnsOrigin } from "./tailscale-share.js";
 import { PtyManager } from "./pty-manager.js";
+import { PtyOutputBatcher } from "./pty-output-batcher.js";
 
 const config = loadConfig();
 const projects = new ProjectStore(config);
@@ -1516,14 +1517,16 @@ app.use((error, _request, response, _next) => {
 const server = http.createServer(app);
 const wss = new WebSocketServer({ noServer: true });
 const terminalClients = new Map();
-terminals.on("output", ({ id, bytes }) => {
+const terminalOutput = new PtyOutputBatcher((id, bytes) => {
   for (const ws of terminalClients.get(id) || []) {
     if (ws.readyState !== ws.OPEN) continue;
     if (ws.bufferedAmount > 1024 * 1024) { ws.close(1013, "Terminal client is too slow"); continue; }
     ws.send(bytes, { binary: true });
   }
 });
+terminals.on("output", ({ id, bytes }) => terminalOutput.append(id, bytes));
 terminals.on("exit", (record) => {
+  terminalOutput.flush(record.id);
   for (const ws of terminalClients.get(record.id) || []) if (ws.readyState === ws.OPEN) ws.send(JSON.stringify({ type: "status", exitCode: record.exitCode, signal: record.signal }));
 });
 
@@ -1641,6 +1644,7 @@ server.on("upgrade", async (request, socket, head) => {
   }
   if (ptyMatch) return wss.handleUpgrade(request, socket, head, (ws) => {
     const id = ptyMatch[1];
+    terminalOutput.flush(id);
     const clients = terminalClients.get(id) || new Set();
     clients.add(ws);
     terminalClients.set(id, clients);
@@ -1650,7 +1654,10 @@ server.on("upgrade", async (request, socket, head) => {
     ws.send(JSON.stringify({ type: "status", exitCode: record.exitCode, signal: record.signal }));
     ws.on("message", (data, isBinary) => {
       try {
-        if (isBinary) terminals.input(id, data);
+        if (isBinary) {
+          terminalOutput.flush(id);
+          terminals.input(id, data);
+        }
         else {
           const command = JSON.parse(String(data));
           if (command.type === "resize") terminals.resize(id, command.cols, command.rows);
