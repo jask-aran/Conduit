@@ -49,6 +49,7 @@ export interface PaletteActions {
   attach: () => void;
   toggleSidebar: () => void;
   toggleWorkspacePanel: () => void;
+  toggleTerminalPane: () => void;
   copyTranscript: () => void;
   rename: () => void;
   move: () => void;
@@ -153,6 +154,7 @@ export const PALETTE_PAGES: Record<string, PalettePage> = {
 
 const hasChat = (context: PaletteContext) => Boolean(context.chatId);
 const isNamedFolder = (context: PaletteContext) => Boolean(context.project && context.project.slug !== "chat");
+const hasLinkedWorkspace = (context: PaletteContext) => context.project?.origin === "linked";
 
 /** Static palette actions. Prefer this list for one-shot app operations. */
 export const paletteCommands: PaletteCommand[] = [{
@@ -230,6 +232,15 @@ export const paletteCommands: PaletteCommand[] = [{
   shortcut: "⌘.",
   isAvailable: hasChat,
   run: (actions) => actions.toggleWorkspacePanel(),
+}, {
+  id: "toggle-terminal-pane",
+  group: "commands",
+  label: "Toggle terminal pane",
+  description: "Open a terminal beside this Workspace conversation",
+  icon: "terminal",
+  keywords: ["shell", "split", "workspace", "console"],
+  isAvailable: hasLinkedWorkspace,
+  run: (actions) => actions.toggleTerminalPane(),
 }, {
   id: "copy-transcript",
   group: "commands",

@@ -476,6 +476,44 @@ test("creates a durable chat route and renders the primary surface", async ({ pa
   await expect(sendButton).toHaveAttribute("data-variant", "default");
 });
 
+test("linked Workspace chats open a resizable terminal-ready split from the palette and context menu", async ({ page }) => {
+  const workspace = {
+    id: "project_conduit",
+    slug: "conduit",
+    name: "Conduit",
+    kind: "workspace",
+    origin: "linked",
+    sessions: [{ id: "session_conduit", projectId: "project_conduit", status: "active", title: "Conduit work" }],
+  };
+  await page.unroute("**/v0/projects");
+  await page.route("**/v0/projects", async (route) => route.fulfill({ json: { projects: [...projects, workspace] } }));
+  await page.route("**/v0/chats/session_conduit", async (route) => route.fulfill({ json: workspace.sessions[0] }));
+  await page.route("**/v0/sessions/session_conduit", async (route) => route.fulfill({ json: { ...workspace.sessions[0], messages: [], tools: [] } }));
+
+  await page.goto("/chat/session_conduit");
+  await expect(page.getByRole("region", { name: "Terminal pane" })).toHaveCount(0);
+  await page.keyboard.press(process.platform === "darwin" ? "Meta+K" : "Control+K");
+  await page.getByRole("option", { name: /Toggle terminal pane/ }).click();
+  const terminal = page.getByRole("region", { name: "Terminal pane" });
+  await expect(terminal).toBeVisible();
+  await expect(terminal).toContainText("Terminal is ready for this Workspace");
+  const divider = page.getByRole("separator", { name: "Resize terminal pane" });
+  if ((page.viewportSize()?.width || 0) > 760) {
+    const box = await divider.boundingBox();
+    const originalWidth = (await terminal.boundingBox()).width;
+    await page.mouse.move(box.x + 4, box.y + 80);
+    await page.mouse.down();
+    await page.mouse.move(box.x - 60, box.y + 80);
+    await page.mouse.up();
+    expect((await terminal.boundingBox()).width).toBeGreaterThan(originalWidth + 50);
+  }
+  await page.getByRole("button", { name: "Close terminal pane" }).click();
+  await expect(terminal).toHaveCount(0);
+  await page.getByRole("button", { name: "Conduit work" }).click({ button: "right" });
+  await page.getByRole("menuitem", { name: "Open terminal pane" }).click();
+  await expect(terminal).toBeVisible();
+});
+
 test("reloading a durable new-chat URL does not create another chat", async ({ page }) => {
   let creates = 0;
   await page.route("**/v0/chats", async (route) => {

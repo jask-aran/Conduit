@@ -13,6 +13,7 @@ import {
   PencilIcon,
   PlusIcon,
   Settings2Icon,
+  TerminalIcon,
   Trash2Icon,
 } from "lucide-solid";
 import {
@@ -92,6 +93,7 @@ export function Sidebar(props: {
   onCopyTranscript: (chat: ChatSummary) => Promise<void>;
   onDeleteChat: (chat: ChatSummary, project: Project) => Promise<void>;
   onDeleteProject: (project: Project) => Promise<void>;
+  onOpenTerminal: (chat: ChatSummary, project: Project) => void;
   onOpenSettings: (section?: string, workspaceId?: string | null) => void;
   onOpenPalette: () => void;
   mobileOpen: boolean;
@@ -279,6 +281,7 @@ export function Sidebar(props: {
           </ContextMenuSubContent>
         </ContextMenuSub>
         <ContextMenuItem onSelect={() => void props.onCopyTranscript(menuProps.chat)}><ClipboardCopyIcon />Copy transcript</ContextMenuItem>
+        <Show when={menuProps.project.origin === "linked"}><ContextMenuItem onSelect={() => props.onOpenTerminal(menuProps.chat, menuProps.project)}><TerminalIcon />Open terminal pane</ContextMenuItem></Show>
       </ContextMenuGroup>
       <ContextMenuSeparator />
       <ContextMenuGroup>
