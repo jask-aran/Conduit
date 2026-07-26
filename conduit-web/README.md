@@ -398,7 +398,12 @@ shell only; API and live-session calls fail on the network as usual.
 
 `scripts/check-bundle.mjs` fails the build if the manifest, root service
 worker, or icons are missing, or if generated worker code appears to
-runtime-cache `/v0`.
+runtime-cache `/v0`. After a build, `npm test` also runs
+`test/pwa-artifacts.test.js` against `dist/` (skipped when `dist/` is absent).
+
+Phone chrome (full-bleed drawers, header palette entry, long-press menus) is
+covered by `test/browser/pwa-mobile.spec.js` on the Playwright
+`mobile-chromium` and `desktop-chromium` projects.
 
 ## Verification
 
@@ -406,6 +411,14 @@ runtime-cache `/v0`.
 npm test
 npm run test:browser
 npm run build
+```
+
+Focused PWA/mobile acceptance:
+
+```bash
+npm run build
+npm test -- test/pwa-artifacts.test.js
+npx playwright test test/browser/pwa-mobile.spec.js
 ```
 
 Browser tests mock the API for deterministic desktop and mobile coverage and
