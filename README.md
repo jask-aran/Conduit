@@ -214,4 +214,6 @@ npm run build
 Browser tests mock the API for deterministic desktop and mobile coverage;
 failures write traces under `test-results/` with a printed `show-trace`
 command. Single suites: `node --test test/<name>.test.js` or
-`npx playwright test test/browser/app.spec.js -g "<name>"`.
+`npx playwright test test/browser/app.spec.js -g "<name>"`. PWA/mobile
+acceptance: `npx playwright test test/browser/pwa-mobile.spec.js` and, after
+`npm run build`, `node --test test/pwa-artifacts.test.js`.
