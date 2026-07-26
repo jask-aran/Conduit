@@ -1,6 +1,6 @@
 import { batch, createEffect, createMemo, createSignal, ErrorBoundary, lazy, onCleanup, onMount, Show } from "solid-js";
 import { render } from "solid-js/web";
-import { PanelLeftIcon, PanelRightIcon, SearchIcon, ShareIcon, TerminalIcon, TriangleAlertIcon, XIcon } from "lucide-solid";
+import { PanelLeftIcon, PanelRightIcon, SearchIcon, ShareIcon, TriangleAlertIcon } from "lucide-solid";
 import { Toaster, toast } from "solid-sonner";
 import "solid-sonner/styles.css";
 import { Button, Spinner } from "@/components/primitives";
@@ -14,6 +14,7 @@ import type { PaletteActions, PaletteContext } from "./palette/command-registry"
 import { bindVisualViewportShell, isMobileLayout, MOBILE_LAYOUT_QUERY, setMobileOverlayKind } from "./navigation/mobile-layout";
 import { Sidebar } from "./navigation/sidebar";
 import { Settings } from "./settings/settings";
+import { TerminalPane } from "./remotes/terminal-pane";
 import { createActiveChat } from "./state/active-chat";
 import { createAttachments } from "./state/attachments";
 import { createCatalogueStore } from "./state/catalogue";
@@ -552,7 +553,7 @@ function App() {
           <Show when={dropActive()}><div class="chat-drop-overlay"><div>Drop files to attach</div></div></Show>
           <ChatHeader project={selectedProject()} title={chat.title()} profile={activeProfile()} runtime={chat.runtimeIdentity()} live={chat.live() as unknown as Record<string, unknown>} panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onOpenPalette={() => openPalette(null)} onTogglePanel={togglePanel} onShare={() => void shareChat()} />
           <Show when={selectedProject()?.kind === "workspace" && [...runtime.processes().values()].some((process) => process.chatId !== catalogue.selectedId() && process.active)}><div class="workspace-warning"><TriangleAlertIcon /><div><strong>Another chat is working in this Workspace</strong><p>Both agents can edit the same files. Conduit does not lock the Workspace or create worktrees automatically.</p></div></div></Show>
-          <div class="work-area" data-terminal-open={terminalOpen() ? "true" : "false"} style={terminalOpen() ? { "--terminal-pane-width": `${terminalWidth()}px` } : undefined}>
+          <div ref={workArea} class="work-area" data-terminal-open={terminalOpen() ? "true" : "false"} style={terminalOpen() ? { "--terminal-pane-width": `${terminalWidth()}px` } : undefined}>
             <section class="work-area-conversation" aria-label="Conversation">
               <Transcript chat={chat} partialContinue={partialContinue()} />
               <div class="composer-stack"><HostUiRequests requests={chat.hostUiRequests()} onRespond={chat.respondHostUi} />
@@ -560,10 +561,7 @@ function App() {
             </section>
             <Show when={terminalOpen()}>
               <div class="terminal-pane-divider" role="separator" aria-label="Resize terminal pane" aria-orientation="vertical" tabIndex={0} onPointerDown={startTerminalResize} />
-              <section class="terminal-pane" aria-label="Terminal pane">
-                <header class="terminal-pane-header"><div><TerminalIcon /><strong>Terminal</strong><span>Workspace</span></div><Button variant="ghost" size="icon-sm" aria-label="Close terminal pane" onClick={() => setTerminalOpenForChat(false)}><XIcon /></Button></header>
-                <div class="terminal-pane-empty"><TerminalIcon /><strong>Terminal is ready for this Workspace</strong><p>PTY sessions will appear here. This pane already keeps its size and position for the current chat.</p></div>
-              </section>
+              <TerminalPane projectId={selectedProject()!.id} onClose={() => setTerminalOpenForChat(false)} />
             </Show>
           </div>
         </>}>
