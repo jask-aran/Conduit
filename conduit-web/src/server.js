@@ -41,10 +41,13 @@ import { renderLoginPage } from "./auth-login-page.js";
 import { listWorkspaceDirectory, readWorkspaceDiff, readWorkspaceFile } from "./workspace-inspector.js";
 import { currentMagicDnsOrigin } from "./tailscale-share.js";
 import { buildProjectDashboard } from "./project-dashboard.js";
+import { PtyManager } from "./pty-manager.js";
 
 const config = loadConfig();
 const projects = new ProjectStore(config);
 await projects.initialize();
+const terminals = new PtyManager({ filePath: config.remotesFile, workspaceAllowlist: config.workspaceAllowlist });
+await terminals.load();
 async function clearHostPiDefaults() {
   const changed = [];
   for (const project of await projects.list()) {

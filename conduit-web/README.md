@@ -258,6 +258,9 @@ starting, and browser-attached processes remain resident.
 - `GET /v0/live-sessions/:id/snapshot`
 - `DELETE /v0/live-sessions/:id/process`
 - `WS /v0/live-sessions/:id/stream`
+- `GET|POST /v0/ptys` lists or creates a shell only for a linked Workspace
+- `POST /v0/ptys/:id/rename` and `DELETE /v0/ptys/:id` rename or stop/remove it
+- `WS /v0/ptys/:id/attach` attaches a terminal renderer
 - `GET /v0/runtime` returns the current global live-process snapshot
 - `GET /v0/runtime/stream` (SSE) pushes snapshot-first global process updates
 - `GET /v0/runtime/settings` and `PATCH /v0/runtime/settings` read/update max warm processes, max concurrent generations, and idle reclaim TTL (`data/runtime.json`, env defaults)
@@ -334,6 +337,22 @@ Client commands:
 
 Any other object is forwarded verbatim to Pi's RPC stdin. A failed command
 produces `client_error` with `code` and `message`.
+
+## Workspace terminal protocol
+
+Terminal processes are server-owned `node-pty` shells and can start only in a
+validated linked Workspace. Their lightweight records persist in
+`data/remotes.json`; the shell itself does not survive a server restart. The
+browser may detach without stopping it, and the server retains a 256 KiB output
+tail for a later attachment.
+
+`WS /v0/ptys/:id/attach` is authenticated like every other upgrade. PTY output
+is sent as raw binary frames and binary client frames are stdin bytes; the only
+JSON frames are `{ "type": "resize", "cols", "rows" }` from client to server
+and `{ "type": "status", "exitCode", "signal" }` (or `client_error`) from
+server to client. The browser owns VT parsing and rendering, while Conduit only
+brokers process I/O and applies the same slow-client protection as other live
+connections.
 
 Server events. When a generation is open, connect first sends one
 `generation_resume` containing the complete current reduced generation and its
