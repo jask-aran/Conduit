@@ -245,8 +245,25 @@ export function Sidebar(props: {
     return { title: "Delete this folder?", description: `This permanently deletes ${target.project.name}, its working files, and all of its chats.` };
   };
 
-  const ChatMenu = (menuProps: { chat: ChatSummary; project: Project }) => <ContextMenu>
-    <ContextMenuTrigger as="button" class="sidebar-row sidebar-chat" aria-current={props.selectedId === menuProps.chat.id ? "page" : undefined} onClick={() => { closeMobile(); void props.onOpenChat(menuProps.chat, menuProps.project); }}>
+  /** Long-press opens the menu then synthesizes a click; swallow that click. */
+  const menuOpenGuards = new WeakMap<object, { suppressClick: boolean }>();
+  const guardFor = (key: object) => {
+    let guard = menuOpenGuards.get(key);
+    if (!guard) {
+      guard = { suppressClick: false };
+      menuOpenGuards.set(key, guard);
+    }
+    return guard;
+  };
+
+  const ChatMenu = (menuProps: { chat: ChatSummary; project: Project }) => {
+    const guard = guardFor(menuProps.chat);
+    return <ContextMenu onOpenChange={(open) => { if (open) guard.suppressClick = true; }}>
+    <ContextMenuTrigger as="button" class="sidebar-row sidebar-chat" aria-current={props.selectedId === menuProps.chat.id ? "page" : undefined} onClick={() => {
+      if (guard.suppressClick) { guard.suppressClick = false; return; }
+      closeMobile();
+      void props.onOpenChat(menuProps.chat, menuProps.project);
+    }}>
       <RuntimeIndicator process={processFor(menuProps.chat)} stale={props.runtime.stale()} />
       <span>{menuProps.chat.title || "New chat"}</span>
     </ContextMenuTrigger>
@@ -269,16 +286,21 @@ export function Sidebar(props: {
       </ContextMenuGroup>
     </ContextMenuContent>
   </ContextMenu>;
+  };
 
   const ProjectBlock = (blockProps: { project: Project; workspace?: boolean }) => {
     const [open, setOpen] = createSignal(true);
+    const guard = guardFor(blockProps.project);
     const isWorkspace = () => blockProps.project.origin === "linked" || blockProps.project.origin === "cloned" || blockProps.project.kind === "workspace";
     const deleteLabel = () => blockProps.project.deletesFilesOnRemove === false ? "Unlink workspace"
       : isWorkspace() ? "Delete workspace"
         : `Delete ${blockProps.workspace ? "workspace" : "folder"}`;
     return <div class="sidebar-project-block">
-      <ContextMenu>
-        <ContextMenuTrigger as="button" class="sidebar-row sidebar-project" data-open={open()} onClick={() => setOpen((value) => !value)}>
+      <ContextMenu onOpenChange={(openMenu) => { if (openMenu) guard.suppressClick = true; }}>
+        <ContextMenuTrigger as="button" class="sidebar-row sidebar-project" data-open={open()} onClick={() => {
+          if (guard.suppressClick) { guard.suppressClick = false; return; }
+          setOpen((value) => !value);
+        }}>
           <FolderIcon />
           <ProjectActivityIndicator sessions={blockProps.project.sessions} processFor={processFor} stale={props.runtime.stale()} />
           <span>{blockProps.project.name}</span>

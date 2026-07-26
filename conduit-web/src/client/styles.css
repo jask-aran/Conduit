@@ -500,8 +500,11 @@ svg { stroke-width: 1.5; }
 @media (max-width: 760px) {
   /* Keep sidebar menus + submenus narrow enough to flip beside each other on a
      phone instead of overlapping and swallowing the pointer path. */
-  .sidebar-context-menu { width: 11rem; }
+  .sidebar-context-menu { width: 11rem; max-height: min(70dvh, calc(var(--app-height, 100dvh) - 24px)); }
   [data-slot="context-menu-sub-content"].sidebar-context-menu { width: 7rem; }
+  .sidebar-row { min-height: 44px; }
+  .sidebar-context-menu [role="menuitem"],
+  .sidebar-context-menu [role="menuitemradio"] { min-height: 44px; }
   /* Open control sits in the chat header flow (not a fixed overlay). */
   .mobile-sidebar-trigger { display: inline-flex; flex: none; }
   /* Full-bleed phone drawers — dismiss via header controls / Escape, not a peek strip. */
