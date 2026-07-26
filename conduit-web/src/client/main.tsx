@@ -1,6 +1,6 @@
 import { createEffect, createMemo, createSignal, ErrorBoundary, lazy, onCleanup, onMount, Show } from "solid-js";
 import { render } from "solid-js/web";
-import { PanelRightIcon, ShareIcon, TriangleAlertIcon } from "lucide-solid";
+import { PanelLeftIcon, PanelRightIcon, ShareIcon, TriangleAlertIcon } from "lucide-solid";
 import { Toaster, toast } from "solid-sonner";
 import "solid-sonner/styles.css";
 import { Button, Spinner } from "@/components/primitives";
@@ -11,6 +11,7 @@ import { HostUiRequests } from "./chat/host-ui-card";
 import { Transcript } from "./chat/transcript";
 import { CommandMenu } from "./navigation/command-menu";
 import type { PaletteActions, PaletteContext } from "./palette/command-registry";
+import { bindVisualViewportShell, isMobileLayout, MOBILE_LAYOUT_QUERY, setMobileOverlayKind } from "./navigation/mobile-layout";
 import { Sidebar } from "./navigation/sidebar";
 import { Settings } from "./settings/settings";
 import { createActiveChat } from "./state/active-chat";
@@ -23,7 +24,18 @@ import "./styles.css";
 type SettingsSection = "general" | "models" | "profiles" | "runtime" | "workspaces" | "auth";
 const WorkspacePanel = lazy(() => import("./workspace/workspace-panel"));
 
-function ChatHeader(props: { project?: Project; title: string; profile?: Template | null; runtime?: RuntimeIdentity | null; live?: Record<string, unknown> | null; panelOpen: boolean; onTogglePanel: () => void; onShare: () => void }) {
+function ChatHeader(props: {
+  project?: Project;
+  title: string;
+  profile?: Template | null;
+  runtime?: RuntimeIdentity | null;
+  live?: Record<string, unknown> | null;
+  panelOpen: boolean;
+  mobileSidebarOpen: boolean;
+  onToggleMobileSidebar: () => void;
+  onTogglePanel: () => void;
+  onShare: () => void;
+}) {
   const projectLabel = () => props.project?.slug === "chat" ? "Chats" : props.project?.slug || props.project?.name || "Chats";
   const runtimeLabel = () => props.runtime?.kind === "native_pi" ? "Host Pi" : "Isolated Pi";
   const profileLabel = () => props.runtime?.kind === "native_pi" ? null : props.profile?.label || props.profile?.id;
@@ -32,10 +44,17 @@ function ChatHeader(props: { project?: Project; title: string; profile?: Templat
     : props.profile?.posture || props.profile?.tools?.join(" / ");
   const line = () => [runtimeLabel(), props.live?.binaryVersion || props.runtime?.binaryVersion ? `Pi ${props.live?.binaryVersion || props.runtime?.binaryVersion}` : null, profileLabel(), projectLabel() !== "Chats" ? projectLabel() : null, posture()].filter(Boolean).join(" · ");
   return <header class="chat-header">
+    <Show when={!props.mobileSidebarOpen}>
+      <Button variant="ghost" size="icon-sm" class="mobile-sidebar-trigger" data-mobile-open="false" aria-label="Toggle Sidebar" aria-expanded={false} onClick={props.onToggleMobileSidebar}><PanelLeftIcon /></Button>
+    </Show>
     <nav aria-label="breadcrumb" class="chat-header-title"><span>{projectLabel()}</span><span class="breadcrumb-separator" aria-hidden="true" /><strong>{props.title}</strong></nav>
     <Show when={line()}><span class="chat-profile-posture" title={line()}>{line()}</span></Show>
-    <Button variant="ghost" size="icon-sm" aria-label="Copy Tailscale chat link" title="Copy Tailscale chat link" onClick={props.onShare}><ShareIcon /></Button>
-    <Button variant="ghost" size="icon-sm" class={!line() ? "ml-auto" : ""} aria-label="Toggle workspace panel" aria-expanded={props.panelOpen} onClick={props.onTogglePanel}><PanelRightIcon /></Button>
+    <div class="chat-header-actions">
+      <Button variant="ghost" size="icon-sm" aria-label="Copy Tailscale chat link" title="Copy Tailscale chat link" onClick={props.onShare}><ShareIcon /></Button>
+      <Show when={!props.panelOpen}>
+        <Button variant="ghost" size="icon-sm" aria-label="Toggle workspace panel" aria-expanded={false} onClick={props.onTogglePanel}><PanelRightIcon /></Button>
+      </Show>
+    </div>
   </header>;
 }
 
@@ -56,6 +75,7 @@ function App() {
   const [sidebarCommand, setSidebarCommand] = createSignal<{ type: string; nonce: number } | null>(null);
   const [dropActive, setDropActive] = createSignal(false);
   const [panelOpen, setPanelOpen] = createSignal(false);
+  const [mobileSidebarOpen, setMobileSidebarOpen] = createSignal(false);
   const initialRouteId = pathChatId();
   const [routeBootstrap, setRouteBootstrap] = createSignal<"loading" | "ready" | "error">(initialRouteId ? "loading" : "ready");
   const [routeBootstrapError, setRouteBootstrapError] = createSignal("");
@@ -94,6 +114,28 @@ function App() {
     const id = catalogue.selectedId();
     if (id) setPanelOpen(localStorage.getItem(`conduit:workspace-panel:${id}:open`) === "true");
   });
+
+  createEffect(() => {
+    if (!isMobileLayout()) {
+      setMobileOverlayKind(null);
+      return;
+    }
+    if (panelOpen()) setMobileOverlayKind("workspace");
+    else if (mobileSidebarOpen()) setMobileOverlayKind("sidebar");
+    else setMobileOverlayKind(null);
+  });
+
+  const setPanelOpenForChat = (next: boolean) => {
+    const id = catalogue.selectedId();
+    setPanelOpen(next);
+    if (id) localStorage.setItem(`conduit:workspace-panel:${id}:open`, String(next));
+  };
+
+  /** Phone overlays are exclusive: opening one closes the other. */
+  const setMobileSidebar = (open: boolean) => {
+    if (open && panelOpen() && isMobileLayout()) setPanelOpenForChat(false);
+    setMobileSidebarOpen(open);
+  };
 
   const currentDraftId = () => chat.status() === "draft" ? catalogue.selectedId() : null;
 
@@ -219,8 +261,9 @@ function App() {
   };
   const openPalette = (page: string | null = null) => { setPalettePage(page); setPaletteNonce((value) => value + 1); setPaletteOpen(true); };
   const togglePanel = () => {
-    const id = catalogue.selectedId();
-    setPanelOpen((open) => { const next = !open; if (id) localStorage.setItem(`conduit:workspace-panel:${id}:open`, String(next)); return next; });
+    const next = !panelOpen();
+    if (next && isMobileLayout()) setMobileSidebarOpen(false);
+    setPanelOpenForChat(next);
   };
   const shareChat = async () => {
     const chatId = catalogue.selectedId();
@@ -294,7 +337,7 @@ function App() {
     deleteFolder: () => runSidebar("delete-project"),
     settings: (section) => openSettings(section),
     workspaceSettings: (id) => openSettings("workspaces", id),
-    openChat: (session, project) => void openChat(session, project),
+    openChat: (session, project) => { setMobileSidebarOpen(false); void openChat(session, project); },
     chooseModel: (spec) => void models.chooseModel(spec),
     chooseEffort: (level) => void models.chooseEffort(level),
     setChatProfile: (id) => void switchProfile(id),
@@ -302,12 +345,15 @@ function App() {
 
   const keydown = (event: KeyboardEvent) => {
     if (event.defaultPrevented) return;
-    if (event.key === "Escape" && panelOpen() && !paletteOpen() && !settingsOpen()) { event.preventDefault(); togglePanel(); return; }
+    if (event.key === "Escape" && !paletteOpen() && !settingsOpen()) {
+      if (panelOpen()) { event.preventDefault(); togglePanel(); return; }
+      if (mobileSidebarOpen()) { event.preventDefault(); setMobileSidebarOpen(false); return; }
+    }
     if (!(event.metaKey || event.ctrlKey) || event.altKey) return;
     const key = event.key.toLowerCase();
     if (key === "k" && !event.shiftKey) { event.preventDefault(); if (paletteOpen()) setPaletteOpen(false); else openPalette(null); }
     if (key === "o" && event.shiftKey) { event.preventDefault(); openPalette("goto"); }
-    if (key === "c" && event.shiftKey) { event.preventDefault(); void createChat(); }
+    if (key === "c" && event.shiftKey) { event.preventDefault(); setMobileSidebarOpen(false); void createChat(); }
     if (key === "b" && !event.shiftKey) { event.preventDefault(); runSidebar("toggle-sidebar"); }
     if (key === "." && !event.shiftKey) { event.preventDefault(); togglePanel(); }
     if (key === ",") { event.preventDefault(); openSettings("general"); }
@@ -315,6 +361,17 @@ function App() {
 
   onMount(() => {
     window.addEventListener("keydown", keydown);
+    onCleanup(bindVisualViewportShell());
+    const media = typeof matchMedia === "function" ? matchMedia(MOBILE_LAYOUT_QUERY) : null;
+    const onViewportChange = () => {
+      if (!media?.matches) {
+        setMobileSidebarOpen(false);
+        setMobileOverlayKind(null);
+      } else if (panelOpen()) setMobileOverlayKind("workspace");
+      else if (mobileSidebarOpen()) setMobileOverlayKind("sidebar");
+    };
+    media?.addEventListener("change", onViewportChange);
+    onCleanup(() => media?.removeEventListener("change", onViewportChange));
     const templateRequest = api<{ templates: Template[]; defaultTemplateId?: string }>("/v0/templates")
       .catch(() => ({ templates: [], defaultTemplateId: "chat" }))
       .then((payload) => {
@@ -382,6 +439,7 @@ function App() {
     <input ref={attachFileInput} type="file" multiple hidden aria-hidden="true" onChange={(event) => { if (event.currentTarget.files) attachments.addFiles(event.currentTarget.files); event.currentTarget.value = ""; }} />
     <Sidebar projects={catalogue.projects()} projectId={catalogue.projectId()} selectedId={catalogue.selectedId()} runtime={runtime}
       connectivity={runtime.connectivity()} workspaceSuggestions={workspaceSuggestions()} command={sidebarCommand()}
+      mobileOpen={mobileSidebarOpen()} onMobileOpenChange={setMobileSidebar}
       onWorkspaceSuggestionsNeeded={() => void loadWorkspaceSuggestions()}
       onNewChat={createChat} onOpenChat={openChat} onAddProject={addProject} onRenameChat={renameChat} onRenameProject={renameProject}
       onMoveChat={moveChat} onMoveProjectChats={moveProjectChats} onCopyTranscript={copyTranscript} onDeleteChat={deleteChat} onDeleteProject={deleteProject}
@@ -390,7 +448,7 @@ function App() {
       <Show when={routeBootstrap() === "ready"} fallback={<div class="chat-bootstrap" role={routeBootstrap() === "error" ? "alert" : "status"}>{routeBootstrap() === "error" ? routeBootstrapError() || "This chat could not be loaded." : "Loading chat…"}</div>}>
         <Show when={dropActive()}><div class="chat-drop-overlay"><div>Drop files to attach</div></div></Show>
         <div class="chat-ambient" aria-hidden="true" />
-        <ChatHeader project={selectedProject()} title={chat.title()} profile={activeProfile()} runtime={chat.runtimeIdentity()} live={chat.live() as unknown as Record<string, unknown>} panelOpen={panelOpen()} onTogglePanel={togglePanel} onShare={() => void shareChat()} />
+        <ChatHeader project={selectedProject()} title={chat.title()} profile={activeProfile()} runtime={chat.runtimeIdentity()} live={chat.live() as unknown as Record<string, unknown>} panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onTogglePanel={togglePanel} onShare={() => void shareChat()} />
         <Show when={selectedProject()?.kind === "workspace" && [...runtime.processes().values()].some((process) => process.chatId !== catalogue.selectedId() && process.active)}><div class="workspace-warning"><TriangleAlertIcon /><div><strong>Another chat is working in this Workspace</strong><p>Both agents can edit the same files. Conduit does not lock the Workspace or create worktrees automatically.</p></div></div></Show>
         <Transcript chat={chat} partialContinue={partialContinue()} />
         <div class="composer-stack"><HostUiRequests requests={chat.hostUiRequests()} onRespond={chat.respondHostUi} />
