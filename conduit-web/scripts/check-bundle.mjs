@@ -34,3 +34,45 @@ if (failures.length) {
   for (const [label, actual, budget] of failures) console.error(`${label} is ${actual} B gzip; budget is ${budget} B.`);
   process.exitCode = 1;
 }
+
+// PWA shell: production builds must emit installability artifacts and must not
+// teach Workbox to runtime-cache authenticated /v0 surfaces.
+const distEntries = fs.readdirSync(dist);
+const manifestName = distEntries.find((name) => name.endsWith(".webmanifest"));
+const serviceWorkerName = distEntries.find((name) => /^(sw|service-worker)\.js$/.test(name));
+const workboxName = distEntries.find((name) => /^workbox-.*\.js$/.test(name));
+const pwaFailures = [];
+if (!manifestName) pwaFailures.push("missing web manifest (*.webmanifest)");
+if (!serviceWorkerName) pwaFailures.push("missing root service worker (sw.js)");
+if (!html.includes("manifest")) pwaFailures.push("index.html does not reference a web manifest");
+{
+  const allJs = assets.map((asset) => fs.readFileSync(path.join(dist, asset.file), "utf8")).join("\n");
+  if (!/serviceWorker|navigator\.serviceWorker|workbox|registerSW/i.test(`${html}\n${allJs}`)) {
+    pwaFailures.push("no service worker registration found in the production bundle");
+  }
+}
+if (serviceWorkerName) {
+  const swText = fs.readFileSync(path.join(dist, serviceWorkerName), "utf8");
+  // /v0 must stay on the NavigationRoute denylist so API paths never receive
+  // the SPA shell. Strip denylist arrays before rejecting any other /v0 mention
+  // (those would be positive runtime cache routes).
+  if (!/denylist:\[[^\]]*\\\/v0/.test(swText) && !/denylist:\[[^\]]*\/v0/.test(swText)) {
+    pwaFailures.push(`${serviceWorkerName} NavigationRoute denylist does not exclude /v0`);
+  }
+  const withoutDenylist = swText.replace(/denylist:\[[^\]]*\]/g, "denylist:[]");
+  if (/\/v0\b/.test(withoutDenylist)) {
+    pwaFailures.push(`${serviceWorkerName} mentions /v0 outside the navigation denylist`);
+  }
+  if (/runtimeCaching/i.test(swText)) {
+    pwaFailures.push(`${serviceWorkerName} enables Workbox runtimeCaching`);
+  }
+}
+for (const icon of ["pwa-192x192.png", "pwa-512x512.png", "favicon.svg"]) {
+  if (!fs.existsSync(path.join(dist, icon))) pwaFailures.push(`missing ${icon} in dist/`);
+}
+if (pwaFailures.length) {
+  for (const failure of pwaFailures) console.error(`PWA: ${failure}`);
+  process.exitCode = 1;
+} else {
+  console.log(`PWA: manifest ${manifestName}, service worker ${serviceWorkerName}, icons present, no /v0 runtime cache.`);
+}

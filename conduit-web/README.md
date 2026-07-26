@@ -374,6 +374,32 @@ are relayed as-is; during a generation every relayed event is stamped with the
 active `generationId`, and events for a closed generation are suppressed at
 the source.
 
+## Progressive web app
+
+Production builds (`npm run build` via `vite-plugin-pwa`) emit:
+
+- `dist/manifest.webmanifest` — `display: standalone`, Conduit icons/theme
+- a root-scoped `dist/sw.js` (Workbox) plus its workbox runtime helper
+- PNG icons copied from `public/pwa-192x192.png` and `public/pwa-512x512.png`
+
+`index.html` carries apple-mobile web-app meta and an apple-touch-icon for iOS
+Add to Home Screen. The plugin injects manifest link and service-worker
+registration into the production HTML only; Vite dev does not register a
+worker, so installability is a production property.
+
+The service worker precaches static shell assets (`js`/`css`/`html`/`svg`/
+`png`/`ico`/`woff2`). It does **not** add runtime caching for `/v0`,
+`/healthz`, or `/login`. Express already serves non-asset `dist/` files
+(including `sw.js` and the manifest) with `Cache-Control: no-cache`, which is
+required so updates activate without clearing site data. Do not add a blanket
+`NetworkFirst` (or any) Workbox route for `/v0`: those endpoints are
+authenticated and mutable. Offline after a successful online load serves the
+shell only; API and live-session calls fail on the network as usual.
+
+`scripts/check-bundle.mjs` fails the build if the manifest, root service
+worker, or icons are missing, or if generated worker code appears to
+runtime-cache `/v0`.
+
 ## Verification
 
 ```bash

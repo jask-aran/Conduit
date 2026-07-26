@@ -164,8 +164,11 @@ panel with a resizable lazy file tree, Git history/working-tree context, and an
 Artifacts boundary for transcript outputs and future interactive UI; Settings is a centered
 tabbed dialog; response controls cover copy, fork/edit, regenerate, stop, and
 experimental partial continue (`ENABLE_PARTIAL_CONTINUE`). Production builds
-enforce gzip bundle budgets (`dist/bundle-report.json`). Composition rules
-and rendering-stability constraints live in `AGENTS.md`.
+enforce gzip bundle budgets (`dist/bundle-report.json`) and emit a web app
+manifest plus root-scoped service worker so Chrome/Edge can install Conduit as
+a standalone PWA. The worker precaches only the static app shell; authenticated
+`/v0` API traffic is never runtime-cached. Composition rules and
+rendering-stability constraints live in `AGENTS.md`.
 
 ## Setup and development
 
