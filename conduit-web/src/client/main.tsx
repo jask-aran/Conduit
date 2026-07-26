@@ -1,6 +1,6 @@
 import { createEffect, createMemo, createSignal, ErrorBoundary, lazy, onCleanup, onMount, Show } from "solid-js";
 import { render } from "solid-js/web";
-import { PanelLeftIcon, PanelRightIcon, ShareIcon, TriangleAlertIcon } from "lucide-solid";
+import { PanelLeftIcon, PanelRightIcon, SearchIcon, ShareIcon, TriangleAlertIcon } from "lucide-solid";
 import { Toaster, toast } from "solid-sonner";
 import "solid-sonner/styles.css";
 import { Button, Spinner } from "@/components/primitives";
@@ -33,6 +33,7 @@ function ChatHeader(props: {
   panelOpen: boolean;
   mobileSidebarOpen: boolean;
   onToggleMobileSidebar: () => void;
+  onOpenPalette: () => void;
   onTogglePanel: () => void;
   onShare: () => void;
 }) {
@@ -50,6 +51,7 @@ function ChatHeader(props: {
     <nav aria-label="breadcrumb" class="chat-header-title"><span>{projectLabel()}</span><span class="breadcrumb-separator" aria-hidden="true" /><strong>{props.title}</strong></nav>
     <Show when={line()}><span class="chat-profile-posture" title={line()}>{line()}</span></Show>
     <div class="chat-header-actions">
+      <Button variant="ghost" size="icon-sm" class="palette-trigger" aria-label="Open command palette" title="Command palette" onClick={props.onOpenPalette}><SearchIcon /></Button>
       <Button variant="ghost" size="icon-sm" aria-label="Copy Tailscale chat link" title="Copy Tailscale chat link" onClick={props.onShare}><ShareIcon /></Button>
       <Show when={!props.panelOpen}>
         <Button variant="ghost" size="icon-sm" aria-label="Toggle workspace panel" aria-expanded={false} onClick={props.onTogglePanel}><PanelRightIcon /></Button>
@@ -443,12 +445,12 @@ function App() {
       onWorkspaceSuggestionsNeeded={() => void loadWorkspaceSuggestions()}
       onNewChat={createChat} onOpenChat={openChat} onAddProject={addProject} onRenameChat={renameChat} onRenameProject={renameProject}
       onMoveChat={moveChat} onMoveProjectChats={moveProjectChats} onCopyTranscript={copyTranscript} onDeleteChat={deleteChat} onDeleteProject={deleteProject}
-      onOpenSettings={openSettings} onOpenPalette={() => setPaletteOpen(true)} />
+      onOpenSettings={openSettings} onOpenPalette={() => openPalette(null)} />
     <main data-slot="sidebar-inset" class={`chat-main${emptyChat() ? " chat-main-empty" : ""}`} {...dropHandlers}>
       <Show when={routeBootstrap() === "ready"} fallback={<div class="chat-bootstrap" role={routeBootstrap() === "error" ? "alert" : "status"}>{routeBootstrap() === "error" ? routeBootstrapError() || "This chat could not be loaded." : "Loading chat…"}</div>}>
         <Show when={dropActive()}><div class="chat-drop-overlay"><div>Drop files to attach</div></div></Show>
         <div class="chat-ambient" aria-hidden="true" />
-        <ChatHeader project={selectedProject()} title={chat.title()} profile={activeProfile()} runtime={chat.runtimeIdentity()} live={chat.live() as unknown as Record<string, unknown>} panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onTogglePanel={togglePanel} onShare={() => void shareChat()} />
+        <ChatHeader project={selectedProject()} title={chat.title()} profile={activeProfile()} runtime={chat.runtimeIdentity()} live={chat.live() as unknown as Record<string, unknown>} panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onOpenPalette={() => openPalette(null)} onTogglePanel={togglePanel} onShare={() => void shareChat()} />
         <Show when={selectedProject()?.kind === "workspace" && [...runtime.processes().values()].some((process) => process.chatId !== catalogue.selectedId() && process.active)}><div class="workspace-warning"><TriangleAlertIcon /><div><strong>Another chat is working in this Workspace</strong><p>Both agents can edit the same files. Conduit does not lock the Workspace or create worktrees automatically.</p></div></div></Show>
         <Transcript chat={chat} partialContinue={partialContinue()} />
         <div class="composer-stack"><HostUiRequests requests={chat.hostUiRequests()} onRespond={chat.respondHostUi} />
