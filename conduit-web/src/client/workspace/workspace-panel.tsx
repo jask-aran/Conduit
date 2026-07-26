@@ -2,6 +2,7 @@ import { batch, createEffect, createSignal, For, on, onCleanup, Show, type Acces
 import { BoxesIcon, ChevronDownIcon, ChevronRightIcon, CopyIcon, FileCode2Icon, FolderIcon, GitBranchIcon, GitCompareArrowsIcon, RefreshCwIcon, XIcon } from "lucide-solid";
 import { Button, Spinner } from "@/components/primitives";
 import { api, asList } from "../api/client";
+import { focusFirst, isMobileLayout, restoreFocus } from "../navigation/mobile-layout";
 import { ownsWorkspaceRequest, type WorkspaceRequest } from "./request-ownership";
 
 interface TreeEntry { name: string; path: string; type: "directory" | "file" | "other"; }
@@ -40,6 +41,9 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
   let projectController = new AbortController();
   const requests = new Map<string, WorkspaceRequest>();
   const requestControllers = new Map<number, AbortController>();
+  let panelRoot: HTMLElement | undefined;
+  let mobileReturnFocus: HTMLElement | null = null;
+  let mobileWasOpen = false;
   const [pending, setPending] = createSignal(new Map<number, { foreground: boolean }>());
   const storageKey = () => `conduit:workspace-panel:${props.chatId()}:tab`;
   const [tab, setTab] = createSignal<PanelTab>((localStorage.getItem(storageKey()) as PanelTab) || "files");
@@ -213,8 +217,20 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
     localStorage.setItem(widthKey(), String(value));
   };
   let stopResize: (() => void) | undefined;
+  createEffect(() => {
+    const open = props.open() && isMobileLayout();
+    if (open && !mobileWasOpen) {
+      mobileReturnFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+      queueMicrotask(() => focusFirst(panelRoot));
+    } else if (!open && mobileWasOpen) {
+      const previous = mobileReturnFocus;
+      mobileReturnFocus = null;
+      queueMicrotask(() => restoreFocus(previous, [".composer textarea", 'button[aria-label="Toggle workspace panel"]', ".mobile-sidebar-trigger"]));
+    }
+    mobileWasOpen = open;
+  });
   const startResize = (event: PointerEvent) => {
-    if (matchMedia("(max-width: 760px)").matches) return;
+    if (isMobileLayout()) return;
     stopResize?.();
     event.preventDefault();
     const startX = event.clientX;
@@ -288,7 +304,11 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
     <Show when={entry.type === "directory" && expanded().has(entry.path)}><Tree directory={entry.path} depth={(treeProps.depth || 0) + 1} /></Show>
   </div>}</For>;
 
-  return <aside class="workspace-panel" classList={{ "workspace-panel-open": props.open() }} aria-label="Workspace panel" aria-hidden={!props.open()} inert={!props.open()} style={{ "--workspace-panel-width": `${width()}px` }}>
+  return <>
+    <Show when={props.open()}>
+      <button type="button" class="mobile-panel-backdrop" data-mobile-backdrop="workspace" data-for="workspace" aria-label="Dismiss workspace panel" onClick={props.onClose} />
+    </Show>
+    <aside ref={panelRoot} class="workspace-panel" classList={{ "workspace-panel-open": props.open() }} aria-label="Workspace panel" aria-hidden={!props.open()} inert={!props.open()} style={{ "--workspace-panel-width": `${width()}px` }}>
     <div class="workspace-resize-handle" role="separator" aria-label="Resize workspace panel" aria-orientation="vertical" aria-valuemin="300" aria-valuemax={Math.floor(window.innerWidth * 0.65)} aria-valuenow={width()} tabIndex={0} onPointerDown={startResize} onKeyDown={(event) => { if (event.key === "ArrowLeft") saveWidth(width() + 20); if (event.key === "ArrowRight") saveWidth(width() - 20); }} />
     <div class="workspace-panel-surface">
     <header class="workspace-panel-header"><div><strong>Workspace</strong><small>Read-only project context</small></div><Button variant="ghost" size="icon-sm" aria-label="Close workspace panel" onClick={props.onClose}><XIcon /></Button></header>
@@ -320,5 +340,6 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
     </section></Show>
     <Show when={loading()}><div class="workspace-panel-loading"><Spinner /><span>Loading workspace</span></div></Show>
     </div>
-  </aside>;
+  </aside>
+  </>;
 }

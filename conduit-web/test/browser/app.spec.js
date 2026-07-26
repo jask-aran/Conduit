@@ -46,7 +46,7 @@ const unhandledApiRequests = new WeakMap();
 
 async function openSidebar(page, testInfo) {
   if (testInfo.project.name === "mobile-chromium") {
-    await page.getByRole("button", { name: "Toggle Sidebar" }).click();
+    await page.locator(".mobile-sidebar-trigger").click();
   }
 }
 
@@ -601,25 +601,75 @@ test("keeps the workspace panel open while Escape dismisses sidebar dialogs and 
   const panel = page.getByRole("complementary", { name: "Workspace panel" });
   await expect(panel).toBeVisible();
 
+  // Phone overlays are exclusive (sidebar XOR workspace). Dialog Escape coverage
+  // on mobile opens the sidebar alone; desktop keeps the docked workspace open.
+  if (testInfo.project.name === "mobile-chromium") {
+    await page.getByRole("button", { name: "Close workspace panel" }).click();
+    await expect(panel).toBeHidden();
+  }
+
   await openSidebar(page, testInfo);
   await page.getByRole("button", { name: "New folder" }).click();
   await expect(page.getByRole("dialog", { name: "New folder" })).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(page.getByRole("dialog", { name: "New folder" })).toHaveCount(0);
-  await expect(panel).toBeVisible();
+  if (testInfo.project.name !== "mobile-chromium") await expect(panel).toBeVisible();
 
   await page.getByRole("button", { name: "New workspace" }).click();
   await expect(page.getByRole("dialog", { name: "New workspace" })).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(page.getByRole("dialog", { name: "New workspace" })).toHaveCount(0);
-  await expect(panel).toBeVisible();
+  if (testInfo.project.name !== "mobile-chromium") await expect(panel).toBeVisible();
 
   await page.locator('[data-sidebar="footer"]').getByRole("button", { name: /Conduit/ }).click();
   await page.getByRole("menuitem", { name: "Manage settings" }).click();
   await expect(page.getByRole("dialog", { name: "Settings" })).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(page.getByRole("dialog", { name: "Settings" })).toHaveCount(0);
+  if (testInfo.project.name !== "mobile-chromium") await expect(panel).toBeVisible();
+});
+
+test("mobile sidebar and workspace overlays are full-bleed and exclusive", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "mobile-chromium", "phone overlay chrome only");
+  await page.goto("/");
+
+  const openSidebar = page.locator(".mobile-sidebar-trigger");
+  await openSidebar.click();
+  const sidebar = page.locator(".conduit-sidebar");
+  await expect(sidebar).toHaveAttribute("data-mobile-open", "true");
+  await expect(page.locator("html")).toHaveAttribute("data-mobile-overlay", "sidebar");
+  const sidebarBox = await sidebar.boundingBox();
+  expect(Math.abs(sidebarBox.width - page.viewportSize().width)).toBeLessThanOrEqual(2);
+  // Open control leaves the chat header while the drawer owns dismiss.
+  await expect(openSidebar).toHaveCount(0);
+  await sidebar.locator('[data-sidebar="trigger"]').click();
+  await expect(sidebar).toHaveAttribute("data-mobile-open", "false");
+  await expect(page.locator("html")).not.toHaveAttribute("data-mobile-overlay", "sidebar");
+  await expect(page.locator(".mobile-sidebar-trigger")).toBeVisible();
+
+  await page.getByRole("button", { name: "Toggle workspace panel" }).click();
+  const panel = page.getByRole("complementary", { name: "Workspace panel" });
   await expect(panel).toBeVisible();
+  await expect(page.locator("html")).toHaveAttribute("data-mobile-overlay", "workspace");
+  const panelBox = await panel.boundingBox();
+  expect(Math.abs(panelBox.width - page.viewportSize().width)).toBeLessThanOrEqual(2);
+  // Workspace open control hides; close is the panel X only.
+  await expect(page.getByRole("button", { name: "Toggle workspace panel" })).toHaveCount(0);
+  await page.getByRole("button", { name: "Close workspace panel" }).click();
+  await expect(panel).toBeHidden();
+  await expect(page.getByRole("button", { name: "Toggle workspace panel" })).toBeVisible();
+
+  await page.getByRole("button", { name: "Toggle workspace panel" }).click();
+  await expect(panel).toBeVisible();
+  // Full-bleed workspace covers the chat header — close it, then open sidebar.
+  await page.getByRole("button", { name: "Close workspace panel" }).click();
+  await page.locator(".mobile-sidebar-trigger").click();
+  await expect(sidebar).toHaveAttribute("data-mobile-open", "true");
+  await expect(page.locator("html")).toHaveAttribute("data-mobile-overlay", "sidebar");
+
+  await page.keyboard.press("Escape");
+  await expect(sidebar).toHaveAttribute("data-mobile-open", "false");
+  await expect(page.locator("html")).not.toHaveAttribute("data-mobile-overlay");
 });
 
 test("boots a deep-linked chat without projecting the default New chat state", async ({ page }) => {
@@ -1332,7 +1382,8 @@ test("uses compact sidebar groups and preserves collapse without a brand icon", 
   await expect(page.locator('[data-sidebar="group-label"]').first()).toHaveCSS("font-weight", "700");
   await expect(page.getByRole("button", { name: "Existing chat" })).toHaveCSS("font-size", "13px");
   await expect(page.locator('[data-sidebar="header"] span', { hasText: "Conduit" })).toHaveCSS("font-size", "32px");
-  await expect(page.locator('[data-sidebar="header"] svg')).toHaveCount(0);
+  await expect(page.locator('[data-sidebar="brand"] svg')).toHaveCount(0);
+  await expect(page.locator('[data-sidebar="trigger"] svg')).toHaveCount(1);
   await expect(page.locator(".server-status-indicator")).toHaveCSS("width", "16px");
   await expect(page.locator(".server-status-indicator .runtime-indicator-dot")).toHaveCSS("width", "8px");
 
@@ -1343,7 +1394,10 @@ test("uses compact sidebar groups and preserves collapse without a brand icon", 
     page.locator('[data-slot="sidebar-container"]').boundingBox(),
     page.locator('[data-sidebar="trigger"]:visible').boundingBox(),
   ]);
-  expect(expandedTriggerBox.x).toBeGreaterThanOrEqual(expandedSidebarBox.x + expandedSidebarBox.width);
+  // Trigger stays inside the sidebar chrome on the trailing edge (brand left).
+  expect(expandedTriggerBox.x).toBeGreaterThanOrEqual(expandedSidebarBox.x);
+  expect(expandedTriggerBox.x + expandedTriggerBox.width).toBeLessThanOrEqual(expandedSidebarBox.x + expandedSidebarBox.width + 1);
+  expect(expandedTriggerBox.x).toBeGreaterThan(expandedSidebarBox.x + expandedSidebarBox.width / 2);
 
   await page.locator('[data-sidebar="trigger"]:visible').click();
   await expect(sidebar).toHaveAttribute("data-state", "collapsed");
@@ -1355,7 +1409,8 @@ test("uses compact sidebar groups and preserves collapse without a brand icon", 
     page.locator('[data-slot="sidebar-container"]').boundingBox(),
     page.locator('[data-sidebar="trigger"]:visible').boundingBox(),
   ]);
-  expect(collapsedTriggerBox.x).toBeGreaterThanOrEqual(collapsedSidebarBox.x + collapsedSidebarBox.width);
+  expect(collapsedTriggerBox.x).toBeGreaterThanOrEqual(collapsedSidebarBox.x);
+  expect(collapsedTriggerBox.x + collapsedTriggerBox.width).toBeLessThanOrEqual(collapsedSidebarBox.x + collapsedSidebarBox.width + 1);
 
   await page.locator('[data-sidebar="trigger"]:visible').click();
   await expect(sidebar).toHaveAttribute("data-state", "expanded");
@@ -1381,13 +1436,16 @@ test("keeps linked workspaces in their own sidebar group", async ({ page }, test
   if (testInfo.project.name === "mobile-chromium") {
     const drawer = page.locator(".conduit-sidebar");
     await expect(drawer).toHaveCSS("position", "fixed");
-    await expect(drawer).toHaveCSS("width", `${await page.evaluate(() => innerWidth)}px`);
+    const drawerBox = await drawer.boundingBox();
+    expect(Math.abs(drawerBox.width - page.viewportSize().width)).toBeLessThanOrEqual(2);
     await expect(drawer).not.toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
     await expect(drawer.locator(".sidebar-container")).not.toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
-    const [drawerBox, firstLabelBox] = await Promise.all([drawer.boundingBox(), drawer.locator('[data-sidebar="group-label"]').first().boundingBox()]);
+    const firstLabelBox = await drawer.locator('[data-sidebar="group-label"]').first().boundingBox();
     expect(firstLabelBox.x).toBeGreaterThanOrEqual(drawerBox.x);
-    await expect(page.locator(".mobile-sidebar-trigger")).toHaveAttribute("data-mobile-open", "true");
-    await expect(drawer.locator('[data-sidebar="header"] button')).toHaveCSS("justify-content", "flex-start");
+    await expect(drawer).toHaveAttribute("data-mobile-open", "true");
+    await expect(page.locator(".mobile-sidebar-trigger")).toHaveCount(0);
+    await expect(drawer.locator('[data-sidebar="trigger"]')).toBeVisible();
+    await expect(drawer.locator('[data-sidebar="brand"]')).toHaveCSS("justify-content", "flex-start");
   }
   await expect(page.locator('[data-sidebar="group-label"]')).toHaveText(["Chats", "Projects", "Workspaces"]);
   await expect(page.getByRole("button", { name: "JaskFish" })).toBeVisible();
