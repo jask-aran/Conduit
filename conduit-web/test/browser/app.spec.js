@@ -629,6 +629,24 @@ test("keeps the workspace panel open while Escape dismisses sidebar dialogs and 
   if (testInfo.project.name !== "mobile-chromium") await expect(panel).toBeVisible();
 });
 
+test("header search opens the command palette and the close control dismisses it", async ({ page }, testInfo) => {
+  await page.goto("/");
+  await expect(page.locator(".palette-trigger")).toBeVisible();
+  await page.locator(".palette-trigger").click();
+  const palette = page.getByRole("dialog", { name: "Command Palette" });
+  await expect(palette).toBeVisible();
+  if (testInfo.project.name === "mobile-chromium" || (page.viewportSize()?.width || 0) <= 480) {
+    const [shellBox, viewport] = await Promise.all([
+      palette.locator(".command-shell").boundingBox(),
+      page.evaluate(() => ({ width: innerWidth, height: innerHeight })),
+    ]);
+    expect(Math.abs(shellBox.width - viewport.width)).toBeLessThanOrEqual(2);
+    expect(Math.abs(shellBox.height - viewport.height)).toBeLessThanOrEqual(2);
+  }
+  await palette.getByRole("button", { name: "Close command palette" }).click();
+  await expect(palette).toHaveCount(0);
+});
+
 test("mobile sidebar and workspace overlays are full-bleed and exclusive", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "mobile-chromium", "phone overlay chrome only");
   await page.goto("/");
