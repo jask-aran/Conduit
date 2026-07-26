@@ -42,6 +42,7 @@ import { listWorkspaceDirectory, readWorkspaceDiff, readWorkspaceFile } from "./
 import { currentMagicDnsOrigin } from "./tailscale-share.js";
 import { buildProjectDashboard } from "./project-dashboard.js";
 import { PtyManager } from "./pty-manager.js";
+import { PtyOutputBatcher } from "./pty-output-batcher.js";
 
 const config = loadConfig();
 const projects = new ProjectStore(config);
@@ -685,6 +686,27 @@ async function moveRegisteredChat({ chat, source, target, session }) {
     throw error;
   }
 }
+
+async function terminalWorkspace(id) {
+  const project = await projects.get(id);
+  if (!project || project.origin !== "linked" || project.kind !== "workspace") throw Object.assign(new Error("Terminals require a linked Workspace"), { code: "pty_workspace_required" });
+  await projects.validate(project);
+  return project;
+}
+
+app.get("/v0/ptys", (_request, response) => response.json({ ptys: terminals.list() }));
+app.post("/v0/ptys", async (request, response, next) => {
+  try { response.status(201).json(await terminals.create({ project: await terminalWorkspace(String(request.body?.projectId || "")), templateId: String(request.body?.templateId || "shell"), cols: request.body?.cols, rows: request.body?.rows })); }
+  catch (error) { next(error); }
+});
+app.post("/v0/ptys/:id/rename", async (request, response, next) => {
+  try { const record = await terminals.rename(request.params.id, request.body?.title); if (!record) return response.status(404).json({ error: "pty_not_found" }); response.json(record); }
+  catch (error) { next(error); }
+});
+app.delete("/v0/ptys/:id", async (request, response, next) => {
+  try { const removed = await terminals.remove(request.params.id); if (!removed) return response.status(404).json({ error: "pty_not_found" }); response.status(204).end(); }
+  catch (error) { next(error); }
+});
 
 app.get("/v0/projects", async (_request, response, next) => {
   try {
@@ -1519,6 +1541,19 @@ app.use((error, _request, response, _next) => {
 
 const server = http.createServer(app);
 const wss = new WebSocketServer({ noServer: true });
+const terminalClients = new Map();
+const terminalOutput = new PtyOutputBatcher((id, bytes) => {
+  for (const ws of terminalClients.get(id) || []) {
+    if (ws.readyState !== ws.OPEN) continue;
+    if (ws.bufferedAmount > 1024 * 1024) { ws.close(1013, "Terminal client is too slow"); continue; }
+    ws.send(bytes, { binary: true });
+  }
+});
+terminals.on("output", ({ id, bytes }) => terminalOutput.append(id, bytes));
+terminals.on("exit", (record) => {
+  terminalOutput.flush(record.id);
+  for (const ws of terminalClients.get(record.id) || []) if (ws.readyState === ws.OPEN) ws.send(JSON.stringify({ type: "status", exitCode: record.exitCode, signal: record.signal }));
+});
 
 async function promptForChat(record, command, message) {
   const context = await findChatContext(record.chatId);
@@ -1615,8 +1650,10 @@ async function handleClientCommand(record, command) {
 }
 
 server.on("upgrade", async (request, socket, head) => {
-  const match = new URL(request.url, "http://localhost").pathname.match(/^\/v0\/live-sessions\/([a-f0-9]{24})\/stream$/);
-  if (!match || !manager.get(match[1])) return socket.destroy();
+  const pathname = new URL(request.url, "http://localhost").pathname;
+  const match = pathname.match(/^\/v0\/live-sessions\/([a-f0-9]{24})\/stream$/);
+  const ptyMatch = pathname.match(/^\/v0\/ptys\/([a-f0-9-]{36})\/attach$/);
+  if ((!match || !manager.get(match[1])) && (!ptyMatch || !terminals.get(ptyMatch[1]))) return socket.destroy();
   try {
     // Mirror the HTTP auth middleware: with no password configured, Conduit runs
     // fully open (local mode), so the live-session upgrade must not demand a
@@ -1630,6 +1667,31 @@ server.on("upgrade", async (request, socket, head) => {
     console.error("WebSocket session validation failed", error);
     return socket.destroy();
   }
+  if (ptyMatch) return wss.handleUpgrade(request, socket, head, (ws) => {
+    const id = ptyMatch[1];
+    terminalOutput.flush(id);
+    const clients = terminalClients.get(id) || new Set();
+    clients.add(ws);
+    terminalClients.set(id, clients);
+    const record = terminals.get(id);
+    const output = terminals.output(id);
+    if (output.length) ws.send(output, { binary: true });
+    ws.send(JSON.stringify({ type: "status", exitCode: record.exitCode, signal: record.signal }));
+    ws.on("message", (data, isBinary) => {
+      try {
+        if (isBinary) {
+          terminalOutput.flush(id);
+          terminals.input(id, data);
+        }
+        else {
+          const command = JSON.parse(String(data));
+          if (command.type === "resize") terminals.resize(id, command.cols, command.rows);
+          else throw Object.assign(new Error("Unknown terminal control frame"), { code: "pty_control_invalid" });
+        }
+      } catch (error) { ws.send(JSON.stringify({ type: "client_error", code: error.code, message: error.message })); }
+    });
+    ws.on("close", () => { clients.delete(ws); if (!clients.size) terminalClients.delete(id); });
+  });
   wss.handleUpgrade(request, socket, head, (ws) => {
     const record = manager.get(match[1]);
     const generationResume = manager.attach(match[1], ws);
