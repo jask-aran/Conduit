@@ -103,7 +103,9 @@ export class PtyManager extends EventEmitter {
     const id = crypto.randomUUID();
     const now = new Date().toISOString();
     const record = { id, projectId: project.id, templateId, title: template.title, status: "running", createdAt: now, updatedAt: now, exitCode: null, signal: null };
-    const handle = this.pty.spawn(template.command, template.args, { name: "xterm-256color", cols: Math.max(1, Math.trunc(cols)), rows: Math.max(1, Math.trunc(rows)), cwd, env: { ...process.env, TERM: "xterm-256color" } });
+    const env = { ...process.env, TERM: "xterm-256color", COLORTERM: "truecolor" };
+    delete env.NO_COLOR;
+    const handle = this.pty.spawn(template.command, template.args, { name: "xterm-256color", cols: Math.max(1, Math.trunc(cols)), rows: Math.max(1, Math.trunc(rows)), cwd, env });
     this.records.set(id, record);
     this.handles.set(id, handle);
     this.scrollback.set(id, new ScrollbackBuffer(this.scrollbackBytes));
