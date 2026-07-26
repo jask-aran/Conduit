@@ -86,7 +86,11 @@ clone) an allow-listed absolute host directory, and unlinking never deletes
 the working tree. A clone chooses an existing parent and creates a
 repository-named child (or an explicitly named child). Clone network work runs outside the short catalogue lock,
 using a Conduit-owned sibling staging directory, cancellation, and a bounded
-deadline before its final catalogue commit. Each working root contains a Conduit-owned
+deadline before its final catalogue commit. The catalogue is atomically replaced;
+clone markers record reservation and publication phases so startup registers a
+published Workspace after an interrupted final commit. A missing target discards
+only Conduit's staging directory; an unsafe or conflicting published target is
+left untouched and reported with its recovery marker path. Each working root contains a Conduit-owned
 `.conduit/chats/<chat-id>/` tree for attachments; Pi runs at the root and
 reads attachments by relative path. Browser-supplied paths never become a Pi
 `cwd` until resolved against `CONDUIT_WORKSPACE_ALLOWLIST`.

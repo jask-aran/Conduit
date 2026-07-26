@@ -28,9 +28,27 @@ async function readJson(file, fallback = null) {
   }
 }
 
-async function writeJson(file, value) {
+export async function writeJsonAtomically(file, value) {
   await fs.mkdir(path.dirname(file), { recursive: true });
-  await fs.writeFile(file, `${JSON.stringify(value, null, 2)}\n`, "utf8");
+  const serialized = `${JSON.stringify(value, null, 2)}\n`;
+  const temporary = path.join(path.dirname(file), `.${path.basename(file)}.${crypto.randomUUID()}.part`);
+  let handle;
+  try {
+    handle = await fs.open(temporary, "wx", 0o600);
+    await handle.writeFile(serialized, "utf8");
+    await handle.sync();
+    await handle.close();
+    handle = null;
+    await fs.rename(temporary, file);
+  } catch (error) {
+    await handle?.close().catch(() => {});
+    await fs.rm(temporary, { force: true }).catch(() => {});
+    throw error;
+  }
+}
+
+async function writeJson(file, value) {
+  await writeJsonAtomically(file, value);
 }
 
 function cloneError(code, message) {
@@ -126,7 +144,7 @@ export function runCommand(command, args, { cwd, signal, timeoutMs = CLONE_COMMA
 }
 
 export class ProjectStore {
-  constructor({ filesRoot, catalogFile, piAgentDir, workspaceAllowlist = [], dataRoot = null, cloneTimeoutMs = CLONE_COMMAND_TIMEOUT_MS, runCommand: commandRunner = runCommand }) {
+  constructor({ filesRoot, catalogFile, piAgentDir, workspaceAllowlist = [], dataRoot = null, cloneTimeoutMs = CLONE_COMMAND_TIMEOUT_MS, runCommand: commandRunner = runCommand, writeCatalog = writeJson, logger = console }) {
     this.filesRoot = path.resolve(filesRoot);
     this.catalogFile = catalogFile;
     this.piAgentDir = piAgentDir;
@@ -134,6 +152,8 @@ export class ProjectStore {
     this.dataRoot = dataRoot ? path.resolve(dataRoot) : null;
     this.cloneTimeoutMs = cloneTimeoutMs;
     this.runCommand = commandRunner;
+    this.writeCatalog = writeCatalog;
+    this.logger = logger;
     this.cloneReservationRoot = path.join(path.dirname(this.catalogFile), "clone-reservations");
     this.cloneReservations = new Map();
     this.reservedSlugs = new Set();
@@ -159,7 +179,7 @@ export class ProjectStore {
         }
       }
       catalog.version = 2;
-      await writeJson(this.catalogFile, catalog);
+      await this.writeCatalog(this.catalogFile, catalog);
     }
     await this.recoverCloneReservations();
     await this.ensure({ slug: "chat", name: "Chats", kind: "unstructured", origin: "managed" });
@@ -221,7 +241,7 @@ export class ProjectStore {
         createdAt: new Date().toISOString(),
       };
       catalog.projects.push(project);
-      await writeJson(this.catalogFile, catalog);
+      await this.writeCatalog(this.catalogFile, catalog);
     }
     if ((project.origin || "managed") !== "linked") {
       await fs.mkdir(this.managedPath(slug), { recursive: true });
@@ -262,7 +282,7 @@ export class ProjectStore {
       catalog.projects.push(project);
       const target = this.managedPath(slug);
       await fs.mkdir(target, { recursive: false });
-      try { await writeJson(this.catalogFile, catalog); }
+      try { await this.writeCatalog(this.catalogFile, catalog); }
       catch (error) {
         await fs.rmdir(target).catch(() => {});
         throw error;
@@ -295,7 +315,7 @@ export class ProjectStore {
       };
       catalog.projects.push(project);
       await ensureConduitRoot({ path: externalPath, origin: "linked" });
-      await writeJson(this.catalogFile, catalog);
+      await this.writeCatalog(this.catalogFile, catalog);
       return this.projectView(project);
     });
   }
@@ -306,27 +326,78 @@ export class ProjectStore {
 
   async recoverCloneReservations() {
     const entries = await fs.readdir(this.cloneReservationRoot, { withFileTypes: true }).catch((error) => error.code === "ENOENT" ? [] : Promise.reject(error));
-    await Promise.all(entries.filter((entry) => entry.isFile() && entry.name.endsWith(".json")).map(async (entry) => {
+    for (const entry of entries.filter((item) => item.isFile() && item.name.endsWith(".json"))) {
       const marker = path.join(this.cloneReservationRoot, entry.name);
-      try {
-        const reservation = await readJson(marker);
-        const id = String(reservation?.id || "");
-        const target = path.resolve(String(reservation?.target || ""));
-        const staging = path.resolve(String(reservation?.staging || ""));
-        const expectedName = `.conduit-clone-${id}.part`;
-        const allowed = this.workspaceAllowlist.some((root) => isPathInside(target, root) && isPathInside(staging, root));
-        if (id && path.basename(staging) === expectedName && path.dirname(staging) === path.dirname(target) && allowed) {
-          await fs.rm(staging, { recursive: true, force: true });
-        }
-      } finally {
-        await fs.rm(marker, { force: true });
+      let markerData;
+      try { markerData = await readJson(marker); }
+      catch (error) {
+        this.logger.error(`Clone recovery marker cannot be read and was retained: ${marker}`, error);
+        continue;
       }
-    }));
+      const reservation = this.cloneReservationFromMarker(markerData);
+      if (!reservation) {
+        this.logger.error(`Clone recovery marker is invalid and was retained: ${marker}`);
+        continue;
+      }
+      if (reservation.phase === "reserved") {
+        await fs.rm(reservation.staging, { recursive: true, force: true });
+        await fs.rm(marker, { force: true });
+        continue;
+      }
+      let targetStat;
+      try { targetStat = await fs.lstat(reservation.target); }
+      catch (error) {
+        if (error.code !== "ENOENT") throw error;
+        await fs.rm(reservation.staging, { recursive: true, force: true });
+        await fs.rm(marker, { force: true });
+        continue;
+      }
+      if (!targetStat.isDirectory() || targetStat.isSymbolicLink()) {
+        this.logger.error(`Published clone needs manual recovery; target is unsafe: ${reservation.target} (marker: ${marker})`);
+        continue;
+      }
+      try {
+        const resolved = await resolveExistingDirectory(reservation.target, this.workspaceAllowlist, { dataRoot: this.dataRoot });
+        if (resolved !== reservation.target) throw cloneError("workspace_identity_changed", "Published clone path identity changed");
+        const catalog = await this.readCatalog();
+        const registered = catalog.projects.find((project) => project.id === reservation.project.id || path.resolve(this.resolvePath(project)) === reservation.target);
+        if (registered) {
+          await fs.rm(marker, { force: true });
+          continue;
+        }
+        if (catalog.projects.some((project) => project.slug === reservation.project.slug)) {
+          this.logger.error(`Published clone needs manual recovery; project slug conflicts: ${reservation.target} (marker: ${marker})`);
+          continue;
+        }
+        catalog.projects.push(reservation.project);
+        await this.writeCatalog(this.catalogFile, catalog);
+        await fs.rm(marker, { force: true });
+      } catch (error) {
+        this.logger.error(`Published clone needs manual recovery: ${reservation.target} (marker: ${marker})`, error);
+      }
+    }
+  }
+
+  cloneReservationFromMarker(marker) {
+    const id = String(marker?.id || "");
+    const phase = String(marker?.phase || "");
+    const target = path.resolve(String(marker?.target || ""));
+    const staging = path.resolve(String(marker?.staging || ""));
+    const project = marker?.project;
+    const expectedName = `.conduit-clone-${id}.part`;
+    const allowed = this.workspaceAllowlist.some((root) => isPathInside(target, root) && isPathInside(staging, root));
+    if (!id || !["reserved", "publishing", "published"].includes(phase) || path.basename(staging) !== expectedName || path.dirname(staging) !== path.dirname(target) || !allowed) return null;
+    if (!project || !String(project.id || "").startsWith("project_") || !SLUG.test(project.slug) || project.origin !== "cloned" || path.resolve(String(project.externalPath || "")) !== target) return null;
+    return { id, phase, target, staging, project };
   }
 
   async reserveClone({ name, url, target, defaultTemplateId }) {
     return this.runExclusive(async () => {
       if (this.cloneReservations.has(target)) throw cloneError("clone_target_reserved", "Clone target is already being prepared");
+      const catalog = await this.readCatalog();
+      if (catalog.projects.some((item) => path.resolve(this.resolvePath(item)) === target)) {
+        throw cloneError("workspace_already_linked", "That directory is already registered");
+      }
       try {
         await fs.access(target);
         throw cloneError("clone_target_exists", "clone target already exists");
@@ -334,15 +405,12 @@ export class ProjectStore {
         if (error.code === "clone_target_exists") throw error;
         if (error.code !== "ENOENT") throw error;
       }
-      const catalog = await this.readCatalog();
-      if (catalog.projects.some((item) => path.resolve(this.resolvePath(item)) === target)) {
-        throw cloneError("workspace_already_linked", "That directory is already registered");
-      }
       const slugBase = name || url.replace(/\.git$/i, "").split("/").filter(Boolean).pop() || "repo";
       const slug = await this.uniqueSlug(slugBase);
       const id = crypto.randomUUID();
       const reservation = {
         id,
+        phase: "reserved",
         target,
         staging: path.join(path.dirname(target), `.conduit-clone-${id}.part`),
         project: {
@@ -357,8 +425,7 @@ export class ProjectStore {
           createdAt: new Date().toISOString(),
         },
       };
-      await fs.mkdir(this.cloneReservationRoot, { recursive: true });
-      await writeJson(this.reservationFile(id), { id, target: reservation.target, staging: reservation.staging, createdAt: reservation.project.createdAt });
+      await this.persistCloneReservation(reservation);
       this.cloneReservations.set(target, reservation);
       this.reservedSlugs.add(slug);
       return reservation;
@@ -369,6 +436,25 @@ export class ProjectStore {
     this.cloneReservations.delete(reservation.target);
     this.reservedSlugs.delete(reservation.project.slug);
     await fs.rm(this.reservationFile(reservation.id), { force: true });
+  }
+
+  async persistCloneReservation(reservation) {
+    await fs.mkdir(this.cloneReservationRoot, { recursive: true });
+    await writeJson(this.reservationFile(reservation.id), {
+      version: 1,
+      id: reservation.id,
+      phase: reservation.phase,
+      target: reservation.target,
+      staging: reservation.staging,
+      project: reservation.project,
+      createdAt: reservation.project.createdAt,
+    });
+  }
+
+  async forgetCloneReservation(reservation, { keepMarker = false } = {}) {
+    this.cloneReservations.delete(reservation.target);
+    this.reservedSlugs.delete(reservation.project.slug);
+    if (!keepMarker) await fs.rm(this.reservationFile(reservation.id), { force: true });
   }
 
   async createCloned({ name, cloneUrl, path: inputPath, cloneParentPath, cloneDirectoryName: requestedDirectoryName, defaultTemplateId = null, signal }) {
@@ -448,20 +534,19 @@ export class ProjectStore {
         if (catalog.projects.some((item) => item.slug === reservation.project.slug || path.resolve(this.resolvePath(item)) === target)) {
           throw cloneError("clone_reservation_lost", "Clone reservation conflicts with the current catalogue");
         }
+        reservation.phase = "publishing";
+        await this.persistCloneReservation(reservation);
         await fs.rename(reservation.staging, target);
-        try {
-          catalog.projects.push(reservation.project);
-          await writeJson(this.catalogFile, catalog);
-        } catch (error) {
-          await fs.rename(target, reservation.staging).catch(() => {});
-          throw error;
-        }
+        reservation.phase = "published";
+        await this.persistCloneReservation(reservation);
+        catalog.projects.push(reservation.project);
+        await this.writeCatalog(this.catalogFile, catalog);
         await this.releaseCloneReservation(reservation);
         return this.projectView(reservation.project);
       });
     } catch (error) {
       await fs.rm(reservation.staging, { recursive: true, force: true }).catch(() => {});
-      await this.runExclusive(() => this.releaseCloneReservation(reservation));
+      await this.runExclusive(() => this.forgetCloneReservation(reservation, { keepMarker: reservation.phase !== "reserved" }));
       throw error;
     }
   }
@@ -506,7 +591,7 @@ export class ProjectStore {
         project.name = name;
       }
       if (Object.hasOwn(changes, "defaultTemplateId")) project.defaultTemplateId = changes.defaultTemplateId || null;
-      await writeJson(this.catalogFile, catalog);
+      await this.writeCatalog(this.catalogFile, catalog);
       return this.projectView(project);
     });
   }
@@ -523,7 +608,7 @@ export class ProjectStore {
       throw error;
     }
     project.name = nextName;
-    await writeJson(this.catalogFile, catalog);
+    await this.writeCatalog(this.catalogFile, catalog);
     return this.projectView(project);
   }
 
@@ -559,7 +644,7 @@ export class ProjectStore {
       });
     }
     catalog.projects = catalog.projects.filter((item) => item.id !== project.id);
-    await writeJson(this.catalogFile, catalog);
+    await this.writeCatalog(this.catalogFile, catalog);
     return view;
   }
 
