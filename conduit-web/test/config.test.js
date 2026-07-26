@@ -26,6 +26,7 @@ test("default runtime paths are owned by the repository root", () => {
   assert.equal(config.catalogFile.endsWith(path.join("data", "conduit.json")), true);
   assert.equal(config.sessionRegistryFile.endsWith(path.join("data", "sessions.json")), true);
   assert.equal(config.preferencesFile.endsWith(path.join("data", "preferences.json")), true);
+  assert.equal(config.remotesFile.endsWith(path.join("data", "remotes.json")), true);
   assert.equal(config.piAgentDir.endsWith(path.join("data", "pi")), true);
   assert.equal(config.installations.get("conduit-pinned").version, "0.80.6");
   assert.equal(path.isAbsolute(config.installations.get("conduit-pinned").command), true);
