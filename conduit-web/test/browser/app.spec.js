@@ -2458,7 +2458,7 @@ for (const phase of ["thinking", "tool", "answer", "settlement"]) {
   });
 }
 
-test("global commands and slash suggestions preserve their intended focus models", async ({ page }) => {
+test("global commands and slash suggestions preserve their intended focus models", async ({ page }, testInfo) => {
   await page.goto("/");
   const composer = page.getByRole("textbox", { name: "Message Pi" });
   await composer.fill("/");
@@ -2488,10 +2488,17 @@ test("global commands and slash suggestions preserve their intended focus models
   const palette = page.getByRole("dialog", { name: "Command Palette" });
   await expect(palette).toBeVisible();
   const [paletteBox, viewport] = await Promise.all([palette.locator(".command-shell").boundingBox(), page.evaluate(() => ({ width: innerWidth, height: innerHeight }))]);
-  // Mobile Chromium reserves a fractional scrollbar gutter, producing at most
-  // a two-device-pixel rounding difference from the visual viewport center.
-  expect(Math.abs(paletteBox.x + paletteBox.width / 2 - viewport.width / 2)).toBeLessThanOrEqual(2);
-  expect(Math.abs(paletteBox.y + paletteBox.height / 2 - viewport.height / 2)).toBeLessThanOrEqual(2);
+  // ≤480px: full-bleed shell. Wider viewports: centered card (2px epsilon for
+  // Mobile Chromium's fractional scrollbar gutter).
+  if (viewport.width <= 480 || testInfo.project.name === "mobile-chromium") {
+    expect(paletteBox.x).toBeLessThanOrEqual(2);
+    expect(paletteBox.y).toBeLessThanOrEqual(2);
+    expect(Math.abs(paletteBox.width - viewport.width)).toBeLessThanOrEqual(2);
+    expect(Math.abs(paletteBox.height - viewport.height)).toBeLessThanOrEqual(2);
+  } else {
+    expect(Math.abs(paletteBox.x + paletteBox.width / 2 - viewport.width / 2)).toBeLessThanOrEqual(2);
+    expect(Math.abs(paletteBox.y + paletteBox.height / 2 - viewport.height / 2)).toBeLessThanOrEqual(2);
+  }
   const [statusBox, composerBox] = await Promise.all([page.locator(".composer-status").boundingBox(), page.locator(".composer").boundingBox()]);
   expect(statusBox.width).toBe(composerBox.width);
   await expect(page.locator(".composer-status")).toContainText(/Ready|Responding|Thinking/);
