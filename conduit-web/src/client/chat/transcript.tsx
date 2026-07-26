@@ -79,21 +79,70 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
     else if (following()) scrollBottom();
   });
 
+  const [pullDistance, setPullDistance] = createSignal(0);
+  const [pullArmed, setPullArmed] = createSignal(false);
+  let pullStartY = 0;
+  let pulling = false;
+
   onMount(() => {
     const onScroll = () => {
       setFollowing(viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight < 80);
       if (viewport.scrollTop < 240) loadEarlier();
     };
+    // Empty-state pull-to-refresh: hard reload so a stuck PWA shell or live
+    // socket can recover without hunting browser menus.
+    const onTouchStart = (event: TouchEvent) => {
+      if (!empty() || event.touches.length !== 1) return;
+      pullStartY = event.touches[0]!.clientY;
+      pulling = true;
+      setPullArmed(false);
+      setPullDistance(0);
+    };
+    const onTouchMove = (event: TouchEvent) => {
+      if (!pulling || !empty() || event.touches.length !== 1) return;
+      const delta = event.touches[0]!.clientY - pullStartY;
+      if (delta <= 0) {
+        setPullDistance(0);
+        setPullArmed(false);
+        return;
+      }
+      // Resist the drag so the welcome card barely moves.
+      const resisted = Math.min(96, delta * 0.35);
+      setPullDistance(resisted);
+      setPullArmed(resisted >= 56);
+      if (delta > 8) event.preventDefault();
+    };
+    const onTouchEnd = () => {
+      if (!pulling) return;
+      pulling = false;
+      const shouldReload = pullArmed();
+      setPullDistance(0);
+      setPullArmed(false);
+      if (shouldReload) location.reload();
+    };
     viewport.addEventListener("scroll", onScroll, { passive: true });
+    viewport.addEventListener("touchstart", onTouchStart, { passive: true });
+    viewport.addEventListener("touchmove", onTouchMove, { passive: false });
+    viewport.addEventListener("touchend", onTouchEnd);
+    viewport.addEventListener("touchcancel", onTouchEnd);
     onCleanup(() => {
       layoutEpoch += 1;
       viewport.removeEventListener("scroll", onScroll);
+      viewport.removeEventListener("touchstart", onTouchStart);
+      viewport.removeEventListener("touchmove", onTouchMove);
+      viewport.removeEventListener("touchend", onTouchEnd);
+      viewport.removeEventListener("touchcancel", onTouchEnd);
     });
   });
 
   return <div class="transcript" data-slot="message-scroller">
+    <Show when={empty() && pullDistance() > 8}>
+      <div class="empty-pull-hint" data-visible="true" data-armed={pullArmed() ? "true" : "false"} aria-hidden="true">
+        {pullArmed() ? "Release to refresh" : "Pull to refresh"}
+      </div>
+    </Show>
     <div ref={viewport} class="message-scroller-viewport" data-slot="message-scroller-viewport">
-      <div class="thread" data-slot="message-scroller-content">
+      <div class="thread" data-slot="message-scroller-content" style={empty() && pullDistance() > 0 ? { transform: `translateY(${pullDistance()}px)` } : undefined}>
         <Show when={props.chat.loadingOlder()}>
           <div data-slot="message-scroller-item" class="flex justify-center" role="status" aria-label="Loading earlier messages"><Spinner /></div>
         </Show>

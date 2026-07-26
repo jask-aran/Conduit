@@ -1,4 +1,4 @@
-import { createEffect, createSignal, For, Show } from "solid-js";
+import { createEffect, createSignal, For, onCleanup, onMount, Show } from "solid-js";
 import * as KAlertDialog from "@kobalte/core/alert-dialog";
 import * as KDialog from "@kobalte/core/dialog";
 import {
@@ -40,6 +40,7 @@ import {
 } from "@/components/primitives";
 import type { ChatSummary, Project, RuntimeProcess, WorkspaceSuggestion } from "../api/contracts";
 import type { RuntimeStore } from "../state/runtime";
+import { focusFirst, isMobileLayout, MOBILE_LAYOUT_QUERY, restoreFocus } from "./mobile-layout";
 import { ProjectActivityIndicator, RuntimeIndicator } from "./runtime-indicator";
 
 type ProjectInput = { mode: string; name?: string; path?: string; cloneUrl?: string; cloneParentPath?: string; cloneDirectoryName?: string };
@@ -93,11 +94,24 @@ export function Sidebar(props: {
   onDeleteProject: (project: Project) => Promise<void>;
   onOpenSettings: (section?: string, workspaceId?: string | null) => void;
   onOpenPalette: () => void;
+  mobileOpen: boolean;
+  onMobileOpenChange: (open: boolean) => void;
   command?: { type: string; nonce: number } | null;
 }) {
   const [collapsed, setCollapsed] = createSignal(localStorage.getItem("conduit.sidebar") === "collapsed");
-  const [mobileOpen, setMobileOpen] = createSignal(false);
   const [newKind, setNewKind] = createSignal<"folder" | "workspace" | null>(null);
+  let sidebarRoot: HTMLElement | undefined;
+  let mobileReturnFocus: HTMLElement | null = null;
+  let mobileWasOpen = false;
+  const [phoneLayout, setPhoneLayout] = createSignal(isMobileLayout());
+  onMount(() => {
+    const media = typeof matchMedia === "function" ? matchMedia(MOBILE_LAYOUT_QUERY) : null;
+    if (!media) return;
+    const sync = () => setPhoneLayout(media.matches);
+    sync();
+    media.addEventListener("change", sync);
+    onCleanup(() => media.removeEventListener("change", sync));
+  });
   const [mode, setMode] = createSignal("managed");
   const [name, setName] = createSignal("");
   const [path, setPath] = createSignal("");
@@ -142,10 +156,27 @@ export function Sidebar(props: {
   });
 
   createEffect(() => localStorage.setItem("conduit.sidebar", collapsed() ? "collapsed" : "expanded"));
+  createEffect(() => {
+    const open = props.mobileOpen;
+    if (open && !mobileWasOpen) {
+      mobileReturnFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+      queueMicrotask(() => focusFirst(sidebarRoot));
+    } else if (!open && mobileWasOpen) {
+      const previous = mobileReturnFocus;
+      mobileReturnFocus = null;
+      queueMicrotask(() => restoreFocus(previous, [".composer textarea", ".mobile-sidebar-trigger"]));
+    }
+    mobileWasOpen = open;
+  });
   const chats = () => props.projects.find((project) => project.slug === "chat") || props.projects[0];
   const folders = () => props.projects.filter((project) => project.slug !== "chat" && project.origin !== "linked" && project.origin !== "cloned" && project.kind !== "workspace");
   const workspaces = () => props.projects.filter((project) => project.origin === "linked" || project.origin === "cloned" || project.kind === "workspace");
-  const closeMobile = () => setMobileOpen(false);
+  const closeMobile = () => props.onMobileOpenChange(false);
+  const startNewChat = (project?: Project) => {
+    closeMobile();
+    const target = project || chats();
+    if (target) void props.onNewChat(target);
+  };
 
   /** Live process map wins while SSE is online; fall back to the catalogue's live snapshot when offline. */
   const processFor = (chat: ChatSummary): RuntimeProcess | null => props.runtime.getProcess(chat.id)
@@ -255,7 +286,7 @@ export function Sidebar(props: {
         </ContextMenuTrigger>
         <ContextMenuContent class="w-60 sidebar-context-menu">
           <ContextMenuGroup>
-            <ContextMenuItem onSelect={() => { closeMobile(); void props.onNewChat(blockProps.project); }}><MessageSquarePlusIcon />New chat</ContextMenuItem>
+            <ContextMenuItem onSelect={() => startNewChat(blockProps.project)}><MessageSquarePlusIcon />New chat</ContextMenuItem>
             <ContextMenuItem onSelect={() => requestRenameProject(blockProps.project)}><PencilIcon />Rename {blockProps.workspace ? "workspace" : "folder"}</ContextMenuItem>
             <Show when={blockProps.workspace}><ContextMenuItem onSelect={() => props.onOpenSettings("workspaces", blockProps.project.id)}><Settings2Icon />Workspace settings</ContextMenuItem></Show>
             <ContextMenuSub>
@@ -301,13 +332,23 @@ export function Sidebar(props: {
   const connectionLabel = () => props.connectivity === "online" ? "Server connected" : props.connectivity === "offline" ? "Server unavailable" : props.connectivity === "reconnecting" ? "Reconnecting" : "Connecting";
   const connectionTone = () => props.connectivity === "online" ? "success" : props.connectivity === "offline" ? "danger" : props.connectivity === "reconnecting" ? "warn" : "muted";
 
+  const onSidebarTrigger = () => {
+    if (isMobileLayout()) closeMobile();
+    else setCollapsed((value) => !value);
+  };
+
   return <>
-    <Button variant="ghost" size="icon" class="mobile-sidebar-trigger" data-mobile-open={mobileOpen() ? "true" : "false"} aria-label="Toggle Sidebar" onClick={() => setMobileOpen((value) => !value)}><PanelLeftIcon /></Button>
-    <aside data-slot="sidebar" data-state={collapsed() ? "collapsed" : "expanded"} data-mobile-open={mobileOpen()} class="conduit-sidebar">
+    <Show when={props.mobileOpen}>
+      <button type="button" class="mobile-panel-backdrop" data-mobile-backdrop="sidebar" data-for="sidebar" aria-label="Dismiss sidebar" onClick={closeMobile} />
+    </Show>
+    <aside ref={sidebarRoot} data-slot="sidebar" data-state={collapsed() ? "collapsed" : "expanded"} data-mobile-open={props.mobileOpen} class="conduit-sidebar" aria-hidden={phoneLayout() && !props.mobileOpen ? true : undefined} inert={phoneLayout() && !props.mobileOpen ? true : undefined}>
       <div data-slot="sidebar-container" class="sidebar-container">
-        <div data-sidebar="header"><button aria-label="Conduit" onClick={() => chats() && void props.onNewChat(chats()!)}><span>Conduit</span></button></div>
+        <div data-sidebar="header">
+          <Button variant="ghost" size="icon-sm" data-sidebar="trigger" aria-label="Toggle Sidebar" aria-expanded={isMobileLayout() ? props.mobileOpen : !collapsed()} onClick={onSidebarTrigger}><PanelLeftIcon /></Button>
+          <button data-sidebar="brand" aria-label="Conduit" onClick={() => startNewChat()}><span>Conduit</span></button>
+        </div>
         <div data-sidebar="content" class="sidebar-content">
-          <Group label="Chats" projects={[]} chatRoot={chats()} addLabel="New chat" onAdd={() => chats() && void props.onNewChat(chats()!)} />
+          <Group label="Chats" projects={[]} chatRoot={chats()} addLabel="New chat" onAdd={() => startNewChat()} />
           <Group label="Projects" projects={folders()} emptyLabel="No projects" addLabel="New folder" onAdd={() => openNewDialog("folder")} />
           <Group label="Workspaces" projects={workspaces()} workspace emptyLabel="No workspaces" addLabel="New workspace" onAdd={() => openNewDialog("workspace")} />
         </div>
@@ -318,7 +359,6 @@ export function Sidebar(props: {
         </MenuContent></Menu></div>
         <button data-sidebar="rail" aria-hidden="true" tabIndex={-1} onClick={() => setCollapsed((value) => !value)} />
       </div>
-      <Button variant="ghost" size="icon-sm" data-sidebar="trigger" aria-label="Toggle Sidebar" onClick={() => setCollapsed((value) => !value)}><PanelLeftIcon /></Button>
     </aside>
 
     <Modal open={Boolean(newKind())} title={newKind() === "workspace" ? "New workspace" : "New folder"}
