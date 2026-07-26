@@ -496,7 +496,7 @@ test("linked Workspace chats open a resizable terminal-ready split from the pale
   await page.getByRole("option", { name: /Toggle terminal pane/ }).click();
   const terminal = page.getByRole("region", { name: "Terminal pane" });
   await expect(terminal).toBeVisible();
-  await expect(terminal).toContainText("Terminal is ready for this Workspace");
+  await expect(terminal).toContainText("Start a Workspace terminal");
   const divider = page.getByRole("separator", { name: "Resize terminal pane" });
   if ((page.viewportSize()?.width || 0) > 760) {
     const box = await divider.boundingBox();
@@ -512,6 +512,56 @@ test("linked Workspace chats open a resizable terminal-ready split from the pale
   await page.getByRole("button", { name: "Conduit work" }).click({ button: "right" });
   await page.getByRole("menuitem", { name: "Open terminal pane" }).click();
   await expect(terminal).toBeVisible();
+});
+
+test("the terminal renderer can use the xterm baseline over the same PTY transport", async ({ page }) => {
+  const workspace = {
+    id: "project_terminal",
+    slug: "terminal",
+    name: "Terminal",
+    kind: "workspace",
+    origin: "linked",
+    sessions: [{ id: "session_terminal", projectId: "project_terminal", status: "active", title: "Terminal work" }],
+  };
+  await page.addInitScript(() => localStorage.setItem("conduit:terminal-renderer", "xterm"));
+  await page.unroute("**/v0/projects");
+  await page.route("**/v0/projects", (route) => route.fulfill({ json: { projects: [...projects, workspace] } }));
+  await page.route("**/v0/chats/session_terminal", (route) => route.fulfill({ json: workspace.sessions[0] }));
+  await page.route("**/v0/sessions/session_terminal", (route) => route.fulfill({ json: { ...workspace.sessions[0], messages: [], tools: [] } }));
+  await page.route("**/v0/ptys", (route) => route.fulfill({ status: 201, json: { id: "550e8400-e29b-41d4-a716-446655440055", status: "running" } }));
+
+  await page.goto("/chat/session_terminal");
+  await page.keyboard.press(process.platform === "darwin" ? "Meta+K" : "Control+K");
+  await page.getByRole("option", { name: /Toggle terminal pane/ }).click();
+  await page.getByRole("button", { name: "Start terminal" }).click();
+  const canvas = page.locator(".terminal-canvas");
+  await expect(canvas).toHaveAttribute("data-terminal-renderer", "xterm");
+  await expect(canvas.locator(".xterm")).toBeVisible();
+});
+
+test("the terminal renderer can use Ghostty over the same PTY transport", async ({ page }) => {
+  const workspace = {
+    id: "project_ghostty",
+    slug: "ghostty",
+    name: "Ghostty",
+    kind: "workspace",
+    origin: "linked",
+    sessions: [{ id: "session_ghostty", projectId: "project_ghostty", status: "active", title: "Ghostty work" }],
+  };
+  await page.addInitScript(() => localStorage.removeItem("conduit:terminal-renderer"));
+  await page.unroute("**/v0/projects");
+  await page.route("**/v0/projects", (route) => route.fulfill({ json: { projects: [...projects, workspace] } }));
+  await page.route("**/v0/chats/session_ghostty", (route) => route.fulfill({ json: workspace.sessions[0] }));
+  await page.route("**/v0/sessions/session_ghostty", (route) => route.fulfill({ json: { ...workspace.sessions[0], messages: [], tools: [] } }));
+  await page.route("**/v0/ptys", (route) => route.fulfill({ status: 201, json: { id: "550e8400-e29b-41d4-a716-446655440056", status: "running" } }));
+
+  await page.goto("/chat/session_ghostty");
+  await page.keyboard.press(process.platform === "darwin" ? "Meta+K" : "Control+K");
+  await page.getByRole("option", { name: /Toggle terminal pane/ }).click();
+  await page.getByRole("button", { name: "Start terminal" }).click();
+  const canvas = page.locator(".terminal-canvas");
+  await expect(canvas).toHaveAttribute("data-terminal-renderer", "ghostty");
+  await expect(canvas.locator("canvas")).toBeVisible();
 });
 
 test("reloading a durable new-chat URL does not create another chat", async ({ page }) => {
@@ -1966,31 +2016,38 @@ test("previews the latest trace activity while a turn runs and keeps it after co
         const request = JSON.parse(data);
         if (request.type !== "prompt") return;
         const emit = (payload, delay) => setTimeout(() => this.onmessage?.({ data: JSON.stringify(payload) }), delay);
-        emit({ type: "generation_started", generationId: "g1" }, 0);
-        emit({ type: "message_start", generationId: "g1", message: { role: "assistant" } }, 10);
-        emit({ type: "message_update", generationId: "g1", assistantMessageEvent: { type: "thinking_start" } }, 20);
-        emit({ type: "message_update", generationId: "g1", assistantMessageEvent: { type: "thinking_delta", delta: "Let me explore the workspace " } }, 30);
-        emit({ type: "message_update", generationId: "g1", assistantMessageEvent: { type: "thinking_delta", delta: "before answering." } }, 40);
-        // Real bridge shape: tool execution begins without an assistant
-        // message_end carrying the completed content blocks.
-        emit({ type: "tool_execution_start", generationId: "g1", toolCallId: "call_1", toolName: "bash", args: { command: "ls" } }, 1000);
-        emit({ type: "tool_execution_start", generationId: "g1", toolCallId: "call_2", toolName: "read", args: { path: "README.md" } }, 1050);
-        emit({ type: "tool_execution_end", generationId: "g1", toolCallId: "call_1", toolName: "bash", isError: false }, 1400);
-        emit({ type: "tool_execution_end", generationId: "g1", toolCallId: "call_2", toolName: "read", isError: false }, 1450);
-        emit({ type: "message_start", generationId: "g1", message: { role: "assistant" } }, 1500);
-        emit({ type: "message_update", generationId: "g1", assistantMessageEvent: { type: "thinking_delta", delta: "Let me get more details about the project." } }, 1520);
-        emit({ type: "tool_execution_start", generationId: "g1", toolCallId: "call_3", toolName: "read", args: { path: "config.json" } }, 2000);
-        emit({ type: "tool_execution_end", generationId: "g1", toolCallId: "call_3", toolName: "read", isError: false }, 2300);
-        emit({ type: "message_start", generationId: "g1", message: { role: "assistant" } }, 2400);
-        emit({ type: "assistant_stream_delta", generationId: "g1", delta: "Here is what I found." }, 2420);
-        emit({ type: "assistant_stream_final", generationId: "g1", content: "Here is what I found." }, 3200);
+        emit({ type: "generation_started", generationId: "g1", seq: 1 }, 0);
+        emit({ type: "assistant_message_started", generationId: "g1", seq: 2, messageId: "m1" }, 10);
+        emit({ type: "content_block_started", generationId: "g1", seq: 3, messageId: "m1", block: { type: "thinking", contentIndex: 0, text: "" } }, 20);
+        emit({ type: "content_block_delta", generationId: "g1", seq: 4, messageId: "m1", blockType: "thinking", contentIndex: 0, delta: "Let me explore the workspace " }, 30);
+        emit({ type: "content_block_delta", generationId: "g1", seq: 5, messageId: "m1", blockType: "thinking", contentIndex: 0, delta: "before answering." }, 40);
+        emit({ type: "content_block_started", generationId: "g1", seq: 6, messageId: "m1", block: { type: "toolCall", contentIndex: 1, toolCallId: "call_1", name: "bash", arguments: { command: "ls" } } }, 990);
+        emit({ type: "tool_execution_started", generationId: "g1", seq: 7, toolCallId: "call_1", name: "bash", arguments: { command: "ls" } }, 1000);
+        emit({ type: "content_block_started", generationId: "g1", seq: 8, messageId: "m1", block: { type: "toolCall", contentIndex: 2, toolCallId: "call_2", name: "read", arguments: { path: "README.md" } } }, 1040);
+        emit({ type: "tool_execution_started", generationId: "g1", seq: 9, toolCallId: "call_2", name: "read", arguments: { path: "README.md" } }, 1050);
+        emit({ type: "tool_execution_completed", generationId: "g1", seq: 10, toolCallId: "call_1", name: "bash", isError: false }, 1400);
+        emit({ type: "tool_execution_completed", generationId: "g1", seq: 11, toolCallId: "call_2", name: "read", isError: false }, 1450);
+        emit({ type: "assistant_message_started", generationId: "g1", seq: 12, messageId: "m2" }, 1500);
+        emit({ type: "content_block_started", generationId: "g1", seq: 13, messageId: "m2", block: { type: "thinking", contentIndex: 0, text: "" } }, 1510);
+        emit({ type: "content_block_delta", generationId: "g1", seq: 14, messageId: "m2", blockType: "thinking", contentIndex: 0, delta: "Let me get more details about the project." }, 1520);
+        emit({ type: "content_block_started", generationId: "g1", seq: 15, messageId: "m2", block: { type: "toolCall", contentIndex: 1, toolCallId: "call_3", name: "read", arguments: { path: "config.json" } } }, 1990);
+        emit({ type: "tool_execution_started", generationId: "g1", seq: 16, toolCallId: "call_3", name: "read", arguments: { path: "config.json" } }, 2000);
+        emit({ type: "tool_execution_completed", generationId: "g1", seq: 17, toolCallId: "call_3", name: "read", isError: false }, 2300);
+        emit({ type: "assistant_message_started", generationId: "g1", seq: 18, messageId: "m3" }, 2400);
+        emit({ type: "content_block_started", generationId: "g1", seq: 19, messageId: "m3", block: { type: "text", contentIndex: 0, text: "" } }, 2410);
+        emit({ type: "content_block_delta", generationId: "g1", seq: 20, messageId: "m3", blockType: "text", contentIndex: 0, delta: "Here is what I found." }, 2420);
+        emit({ type: "assistant_message_completed", generationId: "g1", seq: 21, messageId: "m3", stopReason: "stop", blocks: [{ type: "text", contentIndex: 0, text: "Here is what I found." }] }, 3200);
         setTimeout(() => {
           window.__agentEnded = true;
-          this.onmessage?.({ data: JSON.stringify({ type: "agent_end", generationId: "g1", willRetry: false }) });
+          this.onmessage?.({ data: JSON.stringify({ type: "generation_settled", generationId: "g1", seq: 22 }) });
         }, 5000);
       }
     }
     Object.defineProperty(window, "WebSocket", { configurable: true, value: MockWebSocket });
+  });
+  await page.route("**/v0/live-sessions", async (route) => {
+    const body = route.request().postDataJSON();
+    await route.fulfill({ status: 201, json: { id: "live_trace", chatId: body.chatId, streamUrl: "/v0/live-sessions/live_trace/stream" } });
   });
 
   await page.goto("/");
