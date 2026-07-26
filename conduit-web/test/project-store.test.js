@@ -1,10 +1,24 @@
 import assert from "node:assert/strict";
+import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { ProjectStore, runCommand } from "../src/project-store.js";
+import { ProjectStore, runCommand, writeJsonAtomically } from "../src/project-store.js";
 import { sessionDirectoryFor } from "../src/session-store.js";
+
+test("atomic catalogue replacement preserves the prior catalogue when serialization fails", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-project-atomic-catalogue-"));
+  const catalogFile = path.join(root, "data", "conduit.json");
+  const previous = { version: 2, projects: [{ id: "project_chat", slug: "chat" }] };
+  await writeJsonAtomically(catalogFile, previous);
+
+  await assert.rejects(writeJsonAtomically(catalogFile, { version: 2, invalid: BigInt(1) }), TypeError);
+
+  assert.deepEqual(JSON.parse(await fs.readFile(catalogFile, "utf8")), previous);
+  assert.deepEqual(await fs.readdir(path.dirname(catalogFile)), ["conduit.json"]);
+  await fs.rm(root, { recursive: true, force: true });
+});
 
 test("stores project metadata centrally and keeps working directories clean", async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-project-test-"));
@@ -384,6 +398,231 @@ test("clone cancellation cleans Conduit staging and releases its reservation", a
   await assert.rejects(fs.access(target), { code: "ENOENT" });
   assert.deepEqual((await fs.readdir(workspaceRoot)).filter((name) => name.startsWith(".conduit-clone-")), []);
   assert.deepEqual(await store.list().then((items) => items.filter((item) => item.origin === "cloned")), []);
+  await fs.rm(root, { recursive: true, force: true });
+});
+
+test("a published clone retains its durable recovery marker when catalogue publication fails", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-project-clone-published-marker-"));
+  const workspaceRoot = path.join(root, "workspaces");
+  const source = path.join(root, "source");
+  await fs.mkdir(workspaceRoot);
+  await fs.mkdir(source);
+  const catalogFile = path.join(root, "data", "conduit.json");
+  const store = new ProjectStore({
+    filesRoot: path.join(root, "data/chat/files"),
+    catalogFile,
+    piAgentDir: path.join(root, "data/pi"),
+    workspaceAllowlist: [root],
+    runCommand: async (_command, args) => { await fs.mkdir(args.at(-1)); },
+  });
+  await store.initialize();
+  store.writeCatalog = async () => { throw new Error("simulated catalogue write failure"); };
+  const target = path.join(workspaceRoot, "published");
+
+  await assert.rejects(store.create({ mode: "cloned", name: "Published", cloneUrl: source, path: target }), /simulated catalogue write failure/);
+
+  assert.ok(await fs.stat(target));
+  assert.deepEqual((await store.list()).filter((project) => project.path === target), []);
+  const markers = await fs.readdir(path.join(root, "data", "clone-reservations"));
+  assert.equal(markers.length, 1);
+  const marker = JSON.parse(await fs.readFile(path.join(root, "data", "clone-reservations", markers[0]), "utf8"));
+  assert.equal(marker.phase, "published");
+  assert.equal(marker.target, target);
+  assert.equal(marker.project.externalPath, target);
+  await fs.rm(root, { recursive: true, force: true });
+});
+
+test("startup registers a published clone from its recovery marker exactly once", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-project-clone-recover-"));
+  const workspaceRoot = path.join(root, "workspaces");
+  const target = path.join(workspaceRoot, "published");
+  const id = crypto.randomUUID();
+  const project = {
+    id: "project_recovered",
+    slug: "recovered",
+    name: "Recovered",
+    kind: "workspace",
+    origin: "cloned",
+    externalPath: target,
+    cloneUrl: "https://github.com/example/recovered.git",
+    defaultTemplateId: null,
+    createdAt: "2026-07-26T00:00:00.000Z",
+  };
+  const markerRoot = path.join(root, "data", "clone-reservations");
+  await fs.mkdir(target, { recursive: true });
+  await fs.mkdir(markerRoot, { recursive: true });
+  await fs.writeFile(path.join(markerRoot, `${id}.json`), `${JSON.stringify({
+    version: 1,
+    id,
+    phase: "published",
+    target,
+    staging: path.join(workspaceRoot, `.conduit-clone-${id}.part`),
+    project,
+  })}\n`);
+
+  const store = new ProjectStore({
+    filesRoot: path.join(root, "data/chat/files"),
+    catalogFile: path.join(root, "data/conduit.json"),
+    piAgentDir: path.join(root, "data/pi"),
+    workspaceAllowlist: [root],
+  });
+  await store.initialize();
+  await store.initialize();
+
+  assert.equal((await store.get(project.id))?.path, target);
+  assert.deepEqual(await fs.readdir(markerRoot), []);
+  assert.equal((await store.list()).filter((item) => item.id === project.id).length, 1);
+  await fs.rm(root, { recursive: true, force: true });
+});
+
+test("startup clears a published clone marker after catalogue publication already succeeded", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-project-clone-catalogued-recover-"));
+  const workspaceRoot = path.join(root, "workspaces");
+  const target = path.join(workspaceRoot, "catalogued");
+  const id = crypto.randomUUID();
+  const project = {
+    id: "project_catalogued",
+    slug: "catalogued",
+    name: "Catalogued",
+    kind: "workspace",
+    origin: "cloned",
+    externalPath: target,
+    cloneUrl: "https://github.com/example/catalogued.git",
+    defaultTemplateId: null,
+    createdAt: "2026-07-26T00:00:00.000Z",
+  };
+  const markerRoot = path.join(root, "data", "clone-reservations");
+  await fs.mkdir(target, { recursive: true });
+  await fs.mkdir(markerRoot, { recursive: true });
+  await fs.writeFile(path.join(root, "data", "conduit.json"), `${JSON.stringify({ version: 2, projects: [project] })}\n`);
+  await fs.writeFile(path.join(markerRoot, `${id}.json`), `${JSON.stringify({
+    version: 1,
+    id,
+    phase: "published",
+    target,
+    staging: path.join(workspaceRoot, `.conduit-clone-${id}.part`),
+    project,
+  })}\n`);
+  const store = new ProjectStore({
+    filesRoot: path.join(root, "data/chat/files"),
+    catalogFile: path.join(root, "data/conduit.json"),
+    piAgentDir: path.join(root, "data/pi"),
+    workspaceAllowlist: [root],
+  });
+
+  await store.initialize();
+
+  assert.equal((await store.list()).filter((item) => item.id === project.id).length, 1);
+  assert.deepEqual(await fs.readdir(markerRoot), []);
+  assert.ok(await fs.stat(target));
+  await fs.rm(root, { recursive: true, force: true });
+});
+
+test("startup discards only an unpublished clone's staging directory", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-project-clone-reserved-recover-"));
+  const workspaceRoot = path.join(root, "workspaces");
+  const target = path.join(workspaceRoot, "reserved");
+  const id = crypto.randomUUID();
+  const staging = path.join(workspaceRoot, `.conduit-clone-${id}.part`);
+  const markerRoot = path.join(root, "data", "clone-reservations");
+  await fs.mkdir(staging, { recursive: true });
+  await fs.mkdir(markerRoot, { recursive: true });
+  await fs.writeFile(path.join(markerRoot, `${id}.json`), `${JSON.stringify({
+    version: 1,
+    id,
+    phase: "reserved",
+    target,
+    staging,
+    project: {
+      id: "project_reserved",
+      slug: "reserved",
+      name: "Reserved",
+      kind: "workspace",
+      origin: "cloned",
+      externalPath: target,
+      cloneUrl: "https://github.com/example/reserved.git",
+      defaultTemplateId: null,
+      createdAt: "2026-07-26T00:00:00.000Z",
+    },
+  })}\n`);
+  const store = new ProjectStore({
+    filesRoot: path.join(root, "data/chat/files"),
+    catalogFile: path.join(root, "data/conduit.json"),
+    piAgentDir: path.join(root, "data/pi"),
+    workspaceAllowlist: [root],
+  });
+
+  await store.initialize();
+
+  await assert.rejects(fs.access(staging), { code: "ENOENT" });
+  await assert.rejects(fs.access(target), { code: "ENOENT" });
+  assert.deepEqual(await fs.readdir(markerRoot), []);
+  await fs.rm(root, { recursive: true, force: true });
+});
+
+test("startup retains an unsafe published target and its recovery marker", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-project-clone-unsafe-recover-"));
+  const workspaceRoot = path.join(root, "workspaces");
+  const outside = path.join(root, "outside");
+  const target = path.join(workspaceRoot, "unsafe");
+  const id = crypto.randomUUID();
+  const markerRoot = path.join(root, "data", "clone-reservations");
+  await fs.mkdir(workspaceRoot, { recursive: true });
+  await fs.mkdir(outside);
+  await fs.mkdir(markerRoot, { recursive: true });
+  await fs.symlink(outside, target);
+  await fs.writeFile(path.join(markerRoot, `${id}.json`), `${JSON.stringify({
+    version: 1,
+    id,
+    phase: "published",
+    target,
+    staging: path.join(workspaceRoot, `.conduit-clone-${id}.part`),
+    project: {
+      id: "project_unsafe",
+      slug: "unsafe",
+      name: "Unsafe",
+      kind: "workspace",
+      origin: "cloned",
+      externalPath: target,
+      cloneUrl: "https://github.com/example/unsafe.git",
+      defaultTemplateId: null,
+      createdAt: "2026-07-26T00:00:00.000Z",
+    },
+  })}\n`);
+  const store = new ProjectStore({
+    filesRoot: path.join(root, "data/chat/files"),
+    catalogFile: path.join(root, "data/conduit.json"),
+    piAgentDir: path.join(root, "data/pi"),
+    workspaceAllowlist: [root],
+    logger: { error() {} },
+  });
+
+  await store.initialize();
+
+  assert.equal((await fs.lstat(target)).isSymbolicLink(), true);
+  assert.equal((await fs.readdir(markerRoot)).length, 1);
+  assert.equal(await store.get("project_unsafe"), null);
+  await fs.rm(root, { recursive: true, force: true });
+});
+
+test("startup retains an unreadable clone recovery marker without blocking the catalogue", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-project-clone-corrupt-recover-"));
+  const markerRoot = path.join(root, "data", "clone-reservations");
+  const marker = path.join(markerRoot, "corrupt.json");
+  await fs.mkdir(markerRoot, { recursive: true });
+  await fs.writeFile(marker, "not json\n");
+  const store = new ProjectStore({
+    filesRoot: path.join(root, "data/chat/files"),
+    catalogFile: path.join(root, "data/conduit.json"),
+    piAgentDir: path.join(root, "data/pi"),
+    workspaceAllowlist: [root],
+    logger: { error() {} },
+  });
+
+  await store.initialize();
+
+  assert.equal((await store.get("chat"))?.name, "Chats");
+  assert.equal(await fs.readFile(marker, "utf8"), "not json\n");
   await fs.rm(root, { recursive: true, force: true });
 });
 
