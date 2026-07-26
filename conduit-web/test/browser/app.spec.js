@@ -629,6 +629,34 @@ test("keeps the workspace panel open while Escape dismisses sidebar dialogs and 
   if (testInfo.project.name !== "mobile-chromium") await expect(panel).toBeVisible();
 });
 
+test("long-press opens a sidebar context menu without navigating the chat", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "mobile-chromium", "touch long-press coverage");
+  await page.goto("/");
+  await openSidebar(page, testInfo);
+  const chat = page.getByRole("button", { name: "Existing chat" });
+  await expect(chat).toBeVisible();
+  const beforeUrl = page.url();
+  const box = await chat.boundingBox();
+  const x = box.x + box.width / 2;
+  const y = box.y + box.height / 2;
+  await chat.dispatchEvent("pointerdown", { pointerType: "touch", bubbles: true, cancelable: true, clientX: x, clientY: y, pointerId: 1 });
+  await page.waitForTimeout(800);
+  await chat.dispatchEvent("pointerup", { pointerType: "touch", bubbles: true, cancelable: true, clientX: x, clientY: y, pointerId: 1 });
+  await chat.dispatchEvent("click", { bubbles: true, cancelable: true, clientX: x, clientY: y });
+  const menu = page.locator('[data-slot="context-menu-content"]');
+  await expect(menu).toBeVisible();
+  await expect(menu.getByRole("menuitem", { name: "Rename" })).toBeVisible();
+  const menuBox = await menu.boundingBox();
+  const viewport = page.viewportSize();
+  expect(menuBox.x).toBeGreaterThanOrEqual(-2);
+  expect(menuBox.y).toBeGreaterThanOrEqual(-2);
+  expect(menuBox.x + menuBox.width).toBeLessThanOrEqual(viewport.width + 2);
+  expect(menuBox.y + menuBox.height).toBeLessThanOrEqual(viewport.height + 2);
+  await expect(page).toHaveURL(beforeUrl);
+  await page.keyboard.press("Escape");
+  await expect(menu).toHaveCount(0);
+});
+
 test("header search opens the command palette and the close control dismisses it", async ({ page }, testInfo) => {
   await page.goto("/");
   await expect(page.locator(".palette-trigger")).toBeVisible();

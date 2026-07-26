@@ -103,7 +103,9 @@ export function MenuSeparator() { return <KMenu.Separator class="-mx-1 my-1 h-px
 export function MenuSubTrigger(props: ParentProps<{ class?: string; disabled?: boolean }>) { return <KMenu.SubTrigger disabled={props.disabled} class={cn(menuItemClass, "data-[expanded]:bg-accent", props.class)}>{props.children}<ChevronRightIcon class="menu-chevron" /></KMenu.SubTrigger>; }
 export function MenuSubContent(props: ParentProps<{ class?: string }>) { return <KMenu.Portal><KMenu.SubContent data-slot="menu-content" class={cn(menuSubContentClass, props.class)}>{props.children}</KMenu.SubContent></KMenu.Portal>; }
 
-export function ContextMenu(props: ParentProps) { return <KContextMenu modal={false}>{props.children}</KContextMenu>; }
+export function ContextMenu(props: ParentProps<{ onOpenChange?: (open: boolean) => void }>) {
+  return <KContextMenu modal={false} fitViewport overflowPadding={8} onOpenChange={props.onOpenChange}>{props.children}</KContextMenu>;
+}
 export const ContextMenuTrigger = KContextMenu.Trigger;
 export const ContextMenuGroup = KContextMenu.Group;
 export function ContextMenuContent(props: ParentProps<{ class?: string }>) { return <KContextMenu.Portal><KContextMenu.Content data-slot="context-menu-content" class={cn(menuContentClass, props.class)}>{props.children}</KContextMenu.Content></KContextMenu.Portal>; }

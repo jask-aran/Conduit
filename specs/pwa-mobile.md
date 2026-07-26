@@ -238,4 +238,5 @@ Begin **slice 1** unless you prefer visible mobile UX first (**slice 2**). They 
 - **Slice 1 — done.** `vite-plugin-pwa` production build emits `manifest.webmanifest`, root `sw.js`, icons; NavigationRoute denylists `/v0`, `/healthz`, `/login`; no runtimeCaching; `check-bundle.mjs` enforces artifacts; docs in root and `conduit-web` READMEs. Installability is prod-only (dev SW disabled).
 - **Slice 2 — done.** Mobile sidebar/workspace exclusive overlays; full-bleed drawers; keyboard-anchored composer via visualViewport; empty-chat pull-to-refresh; new-chat closes drawer; sidebar trigger trailing when open.
 - **Slice 3 — done.** Command palette full-bleed at ≤480px with larger touch targets; mid-width phones keep a taller card; Playwright geometry branches for mobile vs desktop.
-- Slices 4–5 not started.
+- **Slice 4 — done (uncommitted).** Long-press opens context menus; click-after-open suppressed; fitViewport + max-height; 44px mobile row/menu targets; Playwright long-press coverage.
+- Slice 5 not started.
