@@ -5,8 +5,9 @@ import {
   ArrowLeftIcon, BrainIcon, ChevronRightIcon, CopyIcon, FileInputIcon, FilePlus2Icon,
   FolderInputIcon, FolderPlusIcon, LayersIcon, LogOutIcon, MessageSquareIcon,
   MessageSquarePlusIcon, PanelLeftIcon, PanelRightIcon, PencilIcon, PlayIcon, RefreshCwIcon, SettingsIcon,
-  SlashIcon, SlidersHorizontalIcon, SquareIcon, TerminalIcon, Trash2Icon,
+  SlashIcon, SlidersHorizontalIcon, SquareIcon, TerminalIcon, Trash2Icon, XIcon,
 } from "lucide-solid";
+import { Button } from "@/components/primitives";
 import type { ModelOption } from "../api/contracts";
 import {
   groupPaletteCommands, PALETTE_PAGES, resolvePaletteCommands,
@@ -230,7 +231,11 @@ export function CommandMenu(props: {
 
   return <KDialog.Root open={props.open} onOpenChange={changeOpen}>
     <KDialog.Portal>
-      <KDialog.Content class="command-dialog" onCloseAutoFocus={(event) => { event.preventDefault(); if (returnFocus?.isConnected) returnFocus.focus(); returnFocus = null; }}>
+      <KDialog.Content
+        class="command-dialog"
+        onCloseAutoFocus={(event) => { event.preventDefault(); if (returnFocus?.isConnected) returnFocus.focus(); returnFocus = null; }}
+        onPointerDown={(event) => { if (event.target === event.currentTarget) close(); }}
+      >
         <div class="command-shell">
           <KDialog.Title class="sr-only">Command Palette</KDialog.Title>
           <KDialog.Description class="sr-only">Search commands, chats, settings, and models.</KDialog.Description>
@@ -250,6 +255,18 @@ export function CommandMenu(props: {
               onInput={(event) => setQuery(event.currentTarget.value)}
               onKeyDown={keydown}
             />
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              class="command-close"
+              aria-label="Close command palette"
+              title="Close"
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => close()}
+            >
+              <XIcon />
+            </Button>
           </div>
           <div id="command-listbox" role="listbox" aria-label="Commands" class="command-list">
             <Show when={!selectable().length}><p class="command-empty">No matching commands.</p></Show>
