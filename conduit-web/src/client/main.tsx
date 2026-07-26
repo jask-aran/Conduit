@@ -1,6 +1,6 @@
 import { createEffect, createMemo, createSignal, ErrorBoundary, lazy, onCleanup, onMount, Show } from "solid-js";
 import { render } from "solid-js/web";
-import { PanelLeftIcon, PanelRightIcon, SearchIcon, ShareIcon, TriangleAlertIcon } from "lucide-solid";
+import { PanelLeftIcon, PanelRightIcon, SearchIcon, ShareIcon, TerminalIcon, TriangleAlertIcon, XIcon } from "lucide-solid";
 import { Toaster, toast } from "solid-sonner";
 import "solid-sonner/styles.css";
 import { Button, Spinner } from "@/components/primitives";
@@ -77,6 +77,8 @@ function App() {
   const [sidebarCommand, setSidebarCommand] = createSignal<{ type: string; nonce: number } | null>(null);
   const [dropActive, setDropActive] = createSignal(false);
   const [panelOpen, setPanelOpen] = createSignal(false);
+  const [terminalOpen, setTerminalOpen] = createSignal(false);
+  const [terminalWidth, setTerminalWidth] = createSignal(480);
   const [mobileSidebarOpen, setMobileSidebarOpen] = createSignal(false);
   const initialRouteId = pathChatId();
   const [routeBootstrap, setRouteBootstrap] = createSignal<"loading" | "ready" | "error">(initialRouteId ? "loading" : "ready");
@@ -114,7 +116,11 @@ function App() {
 
   createEffect(() => {
     const id = catalogue.selectedId();
-    if (id) setPanelOpen(localStorage.getItem(`conduit:workspace-panel:${id}:open`) === "true");
+    const project = selectedProject();
+    if (!id) return;
+    setPanelOpen(localStorage.getItem(`conduit:workspace-panel:${id}:open`) === "true");
+    setTerminalOpen(project?.origin === "linked" && localStorage.getItem(`conduit:terminal-pane:${id}:open`) === "true");
+    setTerminalWidth(Number(localStorage.getItem(`conduit:terminal-pane:${id}:width`)) || 480);
   });
 
   createEffect(() => {
@@ -131,6 +137,27 @@ function App() {
     const id = catalogue.selectedId();
     setPanelOpen(next);
     if (id) localStorage.setItem(`conduit:workspace-panel:${id}:open`, String(next));
+  };
+  const linkedWorkspace = () => selectedProject()?.origin === "linked";
+  const setTerminalOpenForChat = (next: boolean, chatId = catalogue.selectedId()) => {
+    if (!chatId || !linkedWorkspace()) return;
+    setTerminalOpen(next);
+    localStorage.setItem(`conduit:terminal-pane:${chatId}:open`, String(next));
+  };
+  const setTerminalWidthForChat = (next: number) => {
+    const width = Math.round(Math.max(320, Math.min(760, next)));
+    setTerminalWidth(width);
+    const id = catalogue.selectedId();
+    if (id) localStorage.setItem(`conduit:terminal-pane:${id}:width`, String(width));
+  };
+  const startTerminalResize = (event: PointerEvent) => {
+    event.preventDefault();
+    const startX = event.clientX;
+    const startWidth = terminalWidth();
+    const onMove = (move: PointerEvent) => setTerminalWidthForChat(startWidth - (move.clientX - startX));
+    const onEnd = () => { window.removeEventListener("pointermove", onMove); window.removeEventListener("pointerup", onEnd); };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onEnd, { once: true });
   };
 
   /** Phone overlays are exclusive: opening one closes the other. */
@@ -267,6 +294,7 @@ function App() {
     if (next && isMobileLayout()) setMobileSidebarOpen(false);
     setPanelOpenForChat(next);
   };
+  const toggleTerminalPane = () => setTerminalOpenForChat(!terminalOpen());
   const shareChat = async () => {
     const chatId = catalogue.selectedId();
     if (!chatId) return;
@@ -325,6 +353,7 @@ function App() {
     attach: () => attachFileInput?.click(),
     toggleSidebar: () => runSidebar("toggle-sidebar"),
     toggleWorkspacePanel: togglePanel,
+    toggleTerminalPane,
     copyTranscript: () => { const id = catalogue.selectedId(); if (id) void copyTranscript({ id } as ChatSummary); },
     rename: () => runSidebar("rename-chat"),
     move: () => runSidebar("move-chat"),
@@ -445,6 +474,7 @@ function App() {
       onWorkspaceSuggestionsNeeded={() => void loadWorkspaceSuggestions()}
       onNewChat={createChat} onOpenChat={openChat} onAddProject={addProject} onRenameChat={renameChat} onRenameProject={renameProject}
       onMoveChat={moveChat} onMoveProjectChats={moveProjectChats} onCopyTranscript={copyTranscript} onDeleteChat={deleteChat} onDeleteProject={deleteProject}
+      onOpenTerminal={(target, project) => { void openChat(target, project).then(() => setTerminalOpenForChat(true, target.id)); }}
       onOpenSettings={openSettings} onOpenPalette={() => openPalette(null)} />
     <main data-slot="sidebar-inset" class={`chat-main${emptyChat() ? " chat-main-empty" : ""}`} {...dropHandlers}>
       <Show when={routeBootstrap() === "ready"} fallback={<div class="chat-bootstrap" role={routeBootstrap() === "error" ? "alert" : "status"}>{routeBootstrap() === "error" ? routeBootstrapError() || "This chat could not be loaded." : "Loading chat…"}</div>}>
@@ -452,9 +482,20 @@ function App() {
         <div class="chat-ambient" aria-hidden="true" />
         <ChatHeader project={selectedProject()} title={chat.title()} profile={activeProfile()} runtime={chat.runtimeIdentity()} live={chat.live() as unknown as Record<string, unknown>} panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onOpenPalette={() => openPalette(null)} onTogglePanel={togglePanel} onShare={() => void shareChat()} />
         <Show when={selectedProject()?.kind === "workspace" && [...runtime.processes().values()].some((process) => process.chatId !== catalogue.selectedId() && process.active)}><div class="workspace-warning"><TriangleAlertIcon /><div><strong>Another chat is working in this Workspace</strong><p>Both agents can edit the same files. Conduit does not lock the Workspace or create worktrees automatically.</p></div></div></Show>
-        <Transcript chat={chat} partialContinue={partialContinue()} />
-        <div class="composer-stack"><HostUiRequests requests={chat.hostUiRequests()} onRespond={chat.respondHostUi} />
-          <Composer chat={chat} attachments={attachments} models={models} profiles={profiles()} activeProfile={activeProfile()} serverOnline={runtime.connectivity() === "online"} onChooseProfile={(id) => void switchProfile(id)} onOpenSettings={openSettings} onOpenAttachments={() => attachFileInput?.click()} /></div>
+        <div class="work-area" data-terminal-open={terminalOpen() ? "true" : "false"} style={terminalOpen() ? { "--terminal-pane-width": `${terminalWidth()}px` } : undefined}>
+          <section class="work-area-conversation" aria-label="Conversation">
+            <Transcript chat={chat} partialContinue={partialContinue()} />
+            <div class="composer-stack"><HostUiRequests requests={chat.hostUiRequests()} onRespond={chat.respondHostUi} />
+              <Composer chat={chat} attachments={attachments} models={models} profiles={profiles()} activeProfile={activeProfile()} serverOnline={runtime.connectivity() === "online"} onChooseProfile={(id) => void switchProfile(id)} onOpenSettings={openSettings} onOpenAttachments={() => attachFileInput?.click()} /></div>
+          </section>
+          <Show when={terminalOpen()}>
+            <div class="terminal-pane-divider" role="separator" aria-label="Resize terminal pane" aria-orientation="vertical" tabIndex={0} onPointerDown={startTerminalResize} />
+            <section class="terminal-pane" aria-label="Terminal pane">
+              <header class="terminal-pane-header"><div><TerminalIcon /><strong>Terminal</strong><span>Workspace</span></div><Button variant="ghost" size="icon-sm" aria-label="Close terminal pane" onClick={() => setTerminalOpenForChat(false)}><XIcon /></Button></header>
+              <div class="terminal-pane-empty"><TerminalIcon /><strong>Terminal is ready for this Workspace</strong><p>PTY sessions will appear here. This pane already keeps its size and position for the current chat.</p></div>
+            </section>
+          </Show>
+        </div>
       </Show>
     </main>
     <Show when={Boolean(selectedProject()) && Boolean(catalogue.selectedId())}><WorkspacePanel projectId={() => selectedProject()!.id} chatId={() => catalogue.selectedId()!} open={panelOpen} onClose={togglePanel} /></Show>
