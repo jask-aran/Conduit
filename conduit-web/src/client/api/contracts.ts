@@ -33,9 +33,35 @@ export interface Project {
   kind?: "project" | "workspace";
   path?: string;
   externalPath?: string;
+  createdAt?: string;
   defaultTemplateId?: string | null;
   deletesFilesOnRemove?: boolean;
   sessions: ChatSummary[];
+}
+
+export interface DashboardChat extends ChatSummary {
+  lastMessageAt?: string | null;
+  lastMessagePreview?: string;
+}
+
+export interface ProjectDashboardPayload {
+  identity: Omit<Project, "sessions">;
+  stats: {
+    totalChats: number;
+    activeChats: number;
+    liveChats: number;
+    lastActivityAt?: string | null;
+  };
+  git: {
+    branch: string;
+    upstream?: string | null;
+    ahead: number;
+    behind: number;
+    lastCommitAt?: string | null;
+    hasUnstaged: boolean;
+    changedFiles: number;
+  } | null;
+  recentChats: DashboardChat[];
 }
 
 export interface WorkspaceSuggestion {
@@ -186,6 +212,7 @@ export interface HostUiRequest {
 
 export interface RuntimeProcess {
   chatId: string;
+  projectId?: string;
   status?: string;
   process?: ProcessState;
   generation?: GenerationState | Record<string, unknown>;

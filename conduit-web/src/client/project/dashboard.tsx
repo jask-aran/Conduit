@@ -1,0 +1,321 @@
+import { createEffect, createMemo, createSignal, For, onCleanup, Show } from "solid-js";
+import {
+  ArrowRightIcon,
+  CalendarDaysIcon,
+  ChevronDownIcon,
+  Clock3Icon,
+  CopyIcon,
+  FolderGit2Icon,
+  GitBranchIcon,
+  MessageSquarePlusIcon,
+  PencilIcon,
+  Settings2Icon,
+  Trash2Icon,
+} from "lucide-solid";
+import {
+  Badge,
+  Button,
+  Menu,
+  MenuContent,
+  MenuGroup,
+  MenuItem,
+  MenuLabel,
+  MenuRadioGroup,
+  MenuRadioItem,
+  MenuSeparator,
+  MenuTrigger,
+  Spinner,
+} from "@/components/primitives";
+import { api } from "../api/client";
+import type { DashboardChat, Project, ProjectDashboardPayload, Template } from "../api/contracts";
+import type { RuntimeStore } from "../state/runtime";
+import { RuntimeIndicator } from "../navigation/runtime-indicator";
+
+function workspaceProject(project: Project) {
+  return project.kind === "workspace" || ["linked", "cloned"].includes(project.origin || "");
+}
+
+function kindLabel(project: Project) {
+  if (project.origin === "cloned") return "Cloned workspace";
+  if (workspaceProject(project)) return "Linked workspace";
+  return "Managed folder";
+}
+
+function formatDate(value?: string | null, includeTime = false) {
+  if (!value) return "No activity yet";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Unknown";
+  return new Intl.DateTimeFormat(undefined, includeTime
+    ? { dateStyle: "medium", timeStyle: "short" }
+    : { dateStyle: "medium" }).format(date);
+}
+
+function relativeDate(value?: string | null) {
+  if (!value) return "No messages";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Unknown";
+  const delta = date.getTime() - Date.now();
+  const units = [
+    ["day", 86_400_000],
+    ["hour", 3_600_000],
+    ["minute", 60_000],
+  ] as const;
+  const formatter = new Intl.RelativeTimeFormat(undefined, { numeric: "auto" });
+  for (const [unit, size] of units) {
+    if (Math.abs(delta) >= size || unit === "minute") return formatter.format(Math.round(delta / size), unit);
+  }
+  return "now";
+}
+
+export function ProjectDashboard(props: {
+  project: Project;
+  templates: Template[];
+  runtime: RuntimeStore;
+  onNewChat: (project: Project) => Promise<void>;
+  onOpenChat: (chat: DashboardChat, project: Project) => Promise<void>;
+  onRename: () => void;
+  onDelete: () => void;
+  onOpenSettings: (section: string, workspaceId?: string | null) => void;
+  onSaveDefault: (projectId: string, templateId: string | null) => Promise<Project>;
+  onError: (message: string) => void;
+}) {
+  const [payload, setPayload] = createSignal<ProjectDashboardPayload | null>(null);
+  const [error, setError] = createSignal("");
+  const [showAll, setShowAll] = createSignal(false);
+  const [savingProfile, setSavingProfile] = createSignal(false);
+  const [savedDefault, setSavedDefault] = createSignal<{ projectId: string; value: string | null } | null>(null);
+  const [copied, setCopied] = createSignal(false);
+  const projectId = createMemo(() => props.project.id);
+
+  createEffect(() => {
+    const id = projectId();
+    const controller = new AbortController();
+    setPayload(null);
+    setError("");
+    setShowAll(false);
+    setSavedDefault(null);
+    void api<ProjectDashboardPayload>(`/v0/projects/${encodeURIComponent(id)}/dashboard`, { signal: controller.signal })
+      .then((next) => { if (!controller.signal.aborted) setPayload(next); })
+      .catch((requestError) => {
+        if (!controller.signal.aborted) setError((requestError as Error).message);
+      });
+    onCleanup(() => controller.abort());
+  });
+
+  const activeDefault = createMemo(() => {
+    const saved = savedDefault();
+    if (saved?.projectId === projectId()) return saved.value;
+    return payload()?.identity.defaultTemplateId ?? props.project.defaultTemplateId ?? null;
+  });
+  const defaultLabel = createMemo(() => {
+    if (activeDefault() === "host-pi") return "Host Pi";
+    if (!activeDefault()) return "Use app default";
+    return props.templates.find((item) => item.id === activeDefault())?.label || activeDefault();
+  });
+  const recentById = createMemo(() => new Map((payload()?.recentChats || []).map((chat) => [chat.id, chat])));
+  const visibleChats = createMemo<DashboardChat[]>(() => {
+    if (!showAll()) return payload()?.recentChats || [];
+    return [...props.project.sessions]
+      .filter((chat) => chat.status === "active")
+      .sort((left, right) => String(right.updatedAt || "").localeCompare(String(left.updatedAt || "")))
+      .map((chat) => ({ ...chat, ...recentById().get(chat.id) }));
+  });
+  const liveCount = createMemo(() => {
+    const current = props.project.sessions.filter((chat) => Boolean(props.runtime.getProcess(chat.id))).length;
+    return props.runtime.connectivity() === "online" ? current : payload()?.stats.liveChats || 0;
+  });
+
+  const chooseDefault = async (value: string) => {
+    if (savingProfile()) return;
+    const next = value === "__inherit" ? null : value;
+    if (next === activeDefault()) return;
+    setSavingProfile(true);
+    try {
+      const saved = await props.onSaveDefault(props.project.id, next);
+      setSavedDefault({ projectId: props.project.id, value: saved.defaultTemplateId || null });
+      setPayload((current) => current ? {
+        ...current,
+        identity: { ...current.identity, defaultTemplateId: saved.defaultTemplateId || null },
+      } : current);
+    } catch (saveError) {
+      props.onError((saveError as Error).message);
+    } finally {
+      setSavingProfile(false);
+    }
+  };
+
+  const copyPath = async () => {
+    const projectPath = payload()?.identity.path || props.project.path;
+    if (!projectPath) return;
+    try {
+      await navigator.clipboard.writeText(projectPath);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1200);
+    } catch (copyError) {
+      props.onError((copyError as Error).message);
+    }
+  };
+
+  return <section class="project-dashboard" aria-label={`${props.project.name} dashboard`}>
+    <div class="project-dashboard-content">
+      <header class="project-identity">
+        <div class="project-identity-title">
+          <div class="project-kind-icon"><FolderGit2Icon /></div>
+          <div>
+            <div class="project-title-line">
+              <h1>{props.project.name}</h1>
+              <Badge variant="secondary">{kindLabel(props.project)}</Badge>
+            </div>
+            <button class="project-path" title="Copy working path" onClick={() => void copyPath()}>
+              <code>{payload()?.identity.path || props.project.path || "Working path unavailable"}</code>
+              <CopyIcon />
+              <Show when={copied()}><span>Copied</span></Show>
+            </button>
+          </div>
+        </div>
+        <div class="project-identity-actions">
+          <Button variant="outline" onClick={props.onRename}><PencilIcon />Rename</Button>
+          <Button onClick={() => void props.onNewChat(props.project)}><MessageSquarePlusIcon />New chat</Button>
+        </div>
+      </header>
+
+      <Show when={error()}>
+        <div class="project-dashboard-error" role="alert">
+          <strong>Dashboard details could not be loaded</strong>
+          <span>{error()}</span>
+        </div>
+      </Show>
+
+      <div class="project-stats" aria-label="Project summary">
+        <article>
+          <span>Chats</span>
+          <strong>{payload()?.stats.totalChats ?? props.project.sessions.length}</strong>
+          <small>{payload()
+            ? `${payload()!.stats.activeChats} active · ${payload()!.stats.totalChats - payload()!.stats.activeChats} drafts`
+            : "Loading registry…"}</small>
+        </article>
+        <article>
+          <span>Live now</span>
+          <strong>{liveCount()}</strong>
+          <small>{liveCount() === 1 ? "running process" : "running processes"}</small>
+        </article>
+        <article>
+          <span>Last activity</span>
+          <strong class="project-stat-date">{relativeDate(payload()?.stats.lastActivityAt)}</strong>
+          <small>{formatDate(payload()?.stats.lastActivityAt, true)}</small>
+        </article>
+        <Show when={workspaceProject(props.project)}>
+          <article>
+            <span>Repository</span>
+            <strong class="project-stat-branch">{payload()?.git?.branch || (payload() ? "Not a Git repo" : "Loading…")}</strong>
+            <small><Show when={payload()?.git} fallback="No repository detected">
+              {payload()!.git!.ahead} ahead · {payload()!.git!.behind} behind · {payload()!.git!.changedFiles} changed
+            </Show></small>
+          </article>
+        </Show>
+      </div>
+
+      <section class="project-dashboard-section">
+        <div class="project-section-heading">
+          <div><h2>Recent chats</h2><p>Active conversations in this {workspaceProject(props.project) ? "Workspace" : "Project"}.</p></div>
+          <Show when={(payload()?.stats.activeChats || 0) > (payload()?.recentChats.length || 0)}>
+            <Button variant="ghost" size="sm" onClick={() => setShowAll((value) => !value)}>
+              {showAll() ? "Show recent" : "View all chats"}<ChevronDownIcon class={showAll() ? "rotate-180" : ""} />
+            </Button>
+          </Show>
+        </div>
+        <Show when={payload()} fallback={<div class="project-list-loading"><Spinner />Loading recent chats…</div>}>
+          <Show when={visibleChats().length} fallback={<div class="project-empty">
+            <MessageSquarePlusIcon />
+            <strong>No chats yet</strong>
+            <p>Start one to begin working in this {workspaceProject(props.project) ? "Workspace" : "Project"}.</p>
+            <Button onClick={() => void props.onNewChat(props.project)}>Start a chat</Button>
+          </div>}>
+            <div class="project-chat-list">
+              <For each={visibleChats()}>{(item) => {
+                const process = () => props.runtime.getProcess(item.id);
+                return <button class="project-chat-row" onClick={() => void props.onOpenChat(item, props.project)}>
+                  <span class="project-chat-runtime"><RuntimeIndicator process={process()} stale={props.runtime.stale()} /></span>
+                  <span class="project-chat-copy">
+                    <strong>{item.title || "New chat"}</strong>
+                    <small>{item.lastMessagePreview || "Open chat to continue the conversation"}</small>
+                  </span>
+                  <time dateTime={item.lastMessageAt || item.updatedAt}>{relativeDate(item.lastMessageAt || item.updatedAt)}</time>
+                  <ArrowRightIcon />
+                </button>;
+              }}</For>
+            </div>
+          </Show>
+        </Show>
+      </section>
+
+      <details class="project-config" open>
+        <summary><span><Settings2Icon /><strong>Environment & config</strong></span><ChevronDownIcon /></summary>
+        <div class="project-config-grid">
+          <div>
+            <span>Default profile</span>
+            <p>Used when a new chat starts in this scope.</p>
+          </div>
+          <Menu>
+            <MenuTrigger class="project-profile-trigger" disabled={savingProfile()}>
+              <span>{savingProfile() ? "Saving…" : defaultLabel()}</span><ChevronDownIcon />
+            </MenuTrigger>
+            <MenuContent class="w-72">
+              <MenuGroup><MenuLabel>Default profile</MenuLabel>
+                <MenuRadioGroup value={activeDefault() || "__inherit"} onChange={(value) => void chooseDefault(value)}>
+                  <MenuRadioItem value="__inherit">Use app default</MenuRadioItem>
+                  <For each={props.templates.filter((item) => item.defaultable !== false)}>
+                    {(item) => <MenuRadioItem value={item.id}>{item.label}</MenuRadioItem>}
+                  </For>
+                  <Show when={activeDefault() === "host-pi"}><MenuRadioItem value="host-pi" disabled>Host Pi · change in Workspace settings</MenuRadioItem></Show>
+                </MenuRadioGroup>
+              </MenuGroup>
+              <MenuSeparator />
+              <MenuItem onSelect={() => props.onOpenSettings("profiles")}>Manage profiles…</MenuItem>
+            </MenuContent>
+          </Menu>
+
+          <div>
+            <span>Working path</span>
+            <p class="project-config-path">{payload()?.identity.path || props.project.path}</p>
+          </div>
+          <Button variant="outline" size="sm" onClick={() => void copyPath()}><CopyIcon />Copy path</Button>
+
+          <Show when={workspaceProject(props.project)}>
+            <div>
+              <span>Workspace runtime</span>
+              <p>{activeDefault() === "host-pi" ? "Host Pi is the current default." : "New chats use an Isolated Pi profile."}</p>
+            </div>
+            <Button variant="outline" size="sm" onClick={() => props.onOpenSettings("workspaces", props.project.id)}>Workspace settings</Button>
+          </Show>
+
+          <div>
+            <span>Model catalogue</span>
+            <p>Models remain managed centrally rather than copied into this Project.</p>
+          </div>
+          <Button variant="outline" size="sm" onClick={() => props.onOpenSettings("models")}>Manage models</Button>
+        </div>
+      </details>
+
+      <details class="project-danger">
+        <summary><span><Trash2Icon /><strong>Danger zone</strong></span><ChevronDownIcon /></summary>
+        <div>
+          <p>{props.project.deletesFilesOnRemove === false || workspaceProject(props.project)
+            ? "Unlink this Workspace and remove its Conduit chats. The working directory remains on disk."
+            : "Delete this Project, its working files, and all of its chats."}</p>
+          <Button variant="destructive" onClick={props.onDelete}>
+            <Trash2Icon />{props.project.deletesFilesOnRemove === false || workspaceProject(props.project) ? "Unlink workspace" : "Delete project"}
+          </Button>
+        </div>
+      </details>
+
+      <footer class="project-dashboard-meta">
+        <span><CalendarDaysIcon />Created {formatDate(payload()?.identity.createdAt || props.project.createdAt)}</span>
+        <Show when={payload()?.git?.lastCommitAt}><span><Clock3Icon />Last commit {formatDate(payload()!.git!.lastCommitAt, true)}</span></Show>
+        <Show when={payload()?.git}><span><GitBranchIcon />{payload()!.git!.upstream || "No upstream"}</span></Show>
+      </footer>
+    </div>
+  </section>;
+}
+
+export default ProjectDashboard;
