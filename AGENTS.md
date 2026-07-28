@@ -106,6 +106,24 @@ It rebuilds when needed and owns the PID/log on port 4310. Never launch
 `bash .devcontainer/start-conduit.sh dev` for the managed server watcher plus
 Vite on port 5173.
 
+### WSL candidate validation
+
+For a candidate worktree under `/tmp` that must be opened from Windows, start
+it from that worktree with its own runtime state and the existing protected
+auth file:
+
+```bash
+CONDUIT_HOST=0.0.0.0 \
+CONDUIT_STATE_DIR=/tmp/conduit-candidate-state \
+CONDUIT_AUTH_FILE=/home/jask/Conduit/data/auth.json \
+bash .devcontainer/start-conduit.sh restart
+```
+
+Windows reaches this through `http://localhost:4310`. `CONDUIT_HOST=0.0.0.0`
+is needed for WSL-to-Windows forwarding; it does not relax the password
+requirement. Confirm the listener and process path before testing so a main
+checkout server is not being mistaken for the candidate.
+
 Before committing, run the complete suite from `conduit-web/`: `npm run
 typecheck`, `npm test`, `npm run build`, and `npm run test:browser`. CI does not
 repeat the test suites, so an unrun suite is an unverified change. Treat bundle

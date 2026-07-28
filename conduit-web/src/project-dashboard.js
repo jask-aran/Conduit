@@ -55,6 +55,7 @@ export async function buildProjectDashboard({
   project,
   registry,
   processes,
+  terminals = [],
   readPage,
   inspectWorkspace,
   signal,
@@ -98,6 +99,7 @@ export async function buildProjectDashboard({
     .filter(Boolean)
     .sort()
     .at(-1) || null;
+  const liveTerminals = terminals.filter((terminal) => terminal.projectId === project.id && terminal.status === "running");
 
   return {
     identity: {
@@ -116,6 +118,7 @@ export async function buildProjectDashboard({
       totalChats: chats.length,
       activeChats: activeChats.length,
       liveChats: processByChat.size,
+      liveTerminals: liveTerminals.length,
       lastActivityAt,
     },
     git,

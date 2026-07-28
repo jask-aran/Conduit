@@ -3006,7 +3006,7 @@ test("workspace dashboard is a direct routable operator surface", async ({ page 
     await dashboardGate;
     await route.fulfill({ json: {
       identity: { ...workspace, sessions: undefined },
-      stats: { totalChats: 1, activeChats: 1, liveChats: 0, lastActivityAt: "2026-07-28T01:00:00.000Z" },
+      stats: { totalChats: 1, activeChats: 1, liveChats: 0, liveTerminals: 1, lastActivityAt: "2026-07-28T01:00:00.000Z" },
       git: {
         branch: "agent/issue-40-project-dashboard",
         upstream: "origin/main",
@@ -3049,6 +3049,11 @@ test("workspace dashboard is a direct routable operator surface", async ({ page 
   await expect(page.getByText("agent/issue-40-project-dashboard")).toBeVisible();
   await expect(page.locator(".project-chat-row")).toContainText("The route and dashboard payload are wired.");
   await expect(page.getByRole("button", { name: "General", exact: true })).toBeVisible();
+  await expect(page.getByText("resident PTY")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Open command palette" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Copy Tailscale workspace link" })).toBeVisible();
+  await page.getByRole("button", { name: "Toggle workspace panel" }).click();
+  await expect(page.getByRole("complementary", { name: "Workspace panel" })).toBeVisible();
 });
 
 test("dashboard history preserves a new draft for browser forward navigation", async ({ page }) => {

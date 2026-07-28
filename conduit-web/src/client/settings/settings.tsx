@@ -242,16 +242,15 @@ export function Settings(props: {
     }
   };
 
-  const selectedWorkspace = createMemo(() => props.projects.find((project) => project.id === workspaceId()) || null);
-  const workspaceDefaultLabel = createMemo(() => {
-    const id = selectedWorkspace()?.defaultTemplateId;
+  const workspaceProjects = createMemo(() => props.projects
+    .filter((project) => project.kind === "workspace" || ["linked", "cloned"].includes(project.origin || ""))
+    .sort((left, right) => (left.id === workspaceId() ? -1 : right.id === workspaceId() ? 1 : left.name.localeCompare(right.name))));
+  const workspaceDefaultLabel = (workspace: Project) => {
+    const id = workspace.defaultTemplateId;
     if (id === "host-pi") return "Host Pi";
     return props.templates.find((item) => item.id === id)?.label || `Inherit global (${props.templates.find((item) => item.id === props.defaultTemplateId)?.label || "General"})`;
-  });
-  const saveWorkspace = async (templateId: string | null) => {
-    const workspace = selectedWorkspace();
-    if (workspace) await props.onWorkspaceDefaultChange(workspace.id, templateId);
   };
+  const saveWorkspace = async (workspace: Project, templateId: string | null) => props.onWorkspaceDefaultChange(workspace.id, templateId);
 
   const redetect = async () => {
     setDetecting(true);
@@ -338,15 +337,13 @@ export function Settings(props: {
             <Show when={!props.installationsLoading} fallback={<div class="settings-loading"><Spinner /><span>Loading Pi installations…</span></div>}><div class="installations"><For each={props.installations}>{(item) => <article><h3>{item.label}</h3><p>{item.available ? item.version ? `Pi ${item.version}` : "Available" : item.reason || (item as Installation & { error?: string }).error || "Unavailable"}</p></article>}</For><Button variant="outline" disabled={detecting()} onClick={() => void redetect()}>{detecting() ? <Spinner /> : null}Re-detect Host Pi</Button></div></Show>
           </Show>
           <Show when={section() === "workspaces"}>
-            <Show when={!props.templatesLoading && !props.installationsLoading} fallback={<div class="settings-loading"><Spinner /><span>Loading workspace settings…</span></div>}><Show when={selectedWorkspace()} fallback={<p>No workspaces registered.</p>}>
-              <div class="workspace-settings-card"><h3>{selectedWorkspace()!.name}</h3><p>{selectedWorkspace()!.path || selectedWorkspace()!.externalPath}</p><p>Override: {workspaceDefaultLabel().startsWith("Inherit") ? "None" : workspaceDefaultLabel()}</p>
-                <Field><FieldLabel for="workspace-default-profile">Default profile</FieldLabel><select id="workspace-default-profile" aria-label="Default profile" value={selectedWorkspace()!.defaultTemplateId || ""} onChange={(event) => void saveWorkspace(event.currentTarget.value || null)}>
-                  <option value="">Inherit global ({props.templates.find((item) => item.id === props.defaultTemplateId)?.label || "General"})</option>
-                  <For each={props.templates.filter((item) => item.defaultable !== false)}>{(item) => <option value={item.id}>{item.label}</option>}</For>
-                  <option value="host-pi" disabled={!props.installations.find((item) => item.id === "host-pi")?.available}>Host Pi</option>
-                </select></Field>
-              </div>
-            </Show></Show>
+            <Show when={!props.templatesLoading && !props.installationsLoading} fallback={<div class="settings-loading"><Spinner /><span>Loading workspace settings…</span></div>}><Show when={workspaceProjects().length} fallback={<p>No workspaces registered.</p>}><For each={workspaceProjects()}>{(workspace) => <div class="workspace-settings-card" data-current={workspace.id === workspaceId()}><h3>{workspace.name}</h3><p>{workspace.path || workspace.externalPath}</p><p>Override: {workspaceDefaultLabel(workspace).startsWith("Inherit") ? "None" : workspaceDefaultLabel(workspace)}</p>
+              <Field><FieldLabel for={`workspace-default-profile-${workspace.id}`}>Default profile</FieldLabel><select id={`workspace-default-profile-${workspace.id}`} aria-label={`${workspace.name} default profile`} value={workspace.defaultTemplateId || ""} onChange={(event) => void saveWorkspace(workspace, event.currentTarget.value || null)}>
+                <option value="">Inherit global ({props.templates.find((item) => item.id === props.defaultTemplateId)?.label || "General"})</option>
+                <For each={props.templates.filter((item) => item.defaultable !== false)}>{(item) => <option value={item.id}>{item.label}</option>}</For>
+                <option value="host-pi" disabled={!props.installations.find((item) => item.id === "host-pi")?.available}>Host Pi</option>
+              </select></Field>
+            </div>}</For></Show></Show>
           </Show>
           <Show when={section() === "auth"}>
             <div class="pi-auth-panel">

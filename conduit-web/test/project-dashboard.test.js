@@ -60,6 +60,7 @@ test("project dashboard stays registry-bounded and enriches only recent active c
       activity: "working",
       active: true,
     }],
+    terminals: [{ id: "pty_running", projectId: project.id, status: "running" }, { id: "pty_exited", projectId: project.id, status: "exited" }],
     readPage: async (file, _project, options) => {
       pageReads.push({ file, options });
       return { entries: [
@@ -83,6 +84,7 @@ test("project dashboard stays registry-bounded and enriches only recent active c
     totalChats: 3,
     activeChats: 2,
     liveChats: 1,
+    liveTerminals: 1,
     lastActivityAt: "2026-07-28T01:00:00.000Z",
   });
   assert.deepEqual(dashboard.recentChats.map((chat) => chat.id), ["chat_recent", "chat_older"]);
