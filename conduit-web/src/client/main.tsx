@@ -1,11 +1,11 @@
-import { createEffect, createMemo, createSignal, ErrorBoundary, lazy, onCleanup, onMount, Show } from "solid-js";
+import { batch, createEffect, createMemo, createSignal, ErrorBoundary, lazy, onCleanup, onMount, Show } from "solid-js";
 import { render } from "solid-js/web";
 import { PanelLeftIcon, PanelRightIcon, SearchIcon, ShareIcon, TerminalIcon, TriangleAlertIcon, XIcon } from "lucide-solid";
 import { Toaster, toast } from "solid-sonner";
 import "solid-sonner/styles.css";
 import { Button, Spinner } from "@/components/primitives";
-import { api, asList, pathChatId } from "./api/client";
-import type { ChatSummary, Installation, Project, RuntimeIdentity, Template, TranscriptDetail, WorkspaceSuggestion } from "./api/contracts";
+import { api, asList, pathChatId, pathProjectId, projectPath } from "./api/client";
+import type { ChatSummary, DashboardChat, Installation, Project, RuntimeIdentity, Template, TranscriptDetail, WorkspaceSuggestion } from "./api/contracts";
 import { Composer } from "./chat/composer";
 import { HostUiRequests } from "./chat/host-ui-card";
 import { Transcript } from "./chat/transcript";
@@ -23,6 +23,7 @@ import "./styles.css";
 
 type SettingsSection = "general" | "models" | "profiles" | "runtime" | "workspaces" | "auth";
 const WorkspacePanel = lazy(() => import("./workspace/workspace-panel"));
+const ProjectDashboard = lazy(() => import("./project/dashboard"));
 
 function ChatHeader(props: {
   project?: Project;
@@ -81,7 +82,9 @@ function App() {
   const [terminalWidth, setTerminalWidth] = createSignal(480);
   const [mobileSidebarOpen, setMobileSidebarOpen] = createSignal(false);
   const initialRouteId = pathChatId();
-  const [routeBootstrap, setRouteBootstrap] = createSignal<"loading" | "ready" | "error">(initialRouteId ? "loading" : "ready");
+  const initialProjectRouteId = pathProjectId();
+  const [routeKind, setRouteKind] = createSignal<"chat" | "project">(initialProjectRouteId ? "project" : "chat");
+  const [routeBootstrap, setRouteBootstrap] = createSignal<"loading" | "ready" | "error">(initialRouteId || initialProjectRouteId ? "loading" : "ready");
   const [routeBootstrapError, setRouteBootstrapError] = createSignal("");
   let dragDepth = 0;
   let attachFileInput: HTMLInputElement | undefined;
@@ -176,6 +179,7 @@ function App() {
     const project = target || selectedProject() || catalogue.projects().find((item) => item.slug === "chat") || catalogue.projects()[0];
     if (!project) return;
     const replacedDraftId = currentDraftId();
+    const fromDashboard = routeKind() === "project";
     try {
       const hostDefault = project.defaultTemplateId === "host-pi" && !launch.templateId && !launch.runtimeKind;
       const profileId = launch.templateId || (project.defaultTemplateId === "host-pi" ? null : project.defaultTemplateId) || defaultTemplateId() || "chat";
@@ -187,8 +191,12 @@ function App() {
       // Commit the visible transition only after the durable replacement exists.
       // initialize() first: it resets the previous chat's live socket, and the
       // URL must not advertise the new chat while a send could still target the old one.
-      chat.initialize({ ...created, templateId: created.templateId || profileId || undefined }, project);
-      history.replaceState({}, "", `/chat/${created.id}`);
+      batch(() => {
+        chat.initialize({ ...created, templateId: created.templateId || profileId || undefined }, project);
+        if (fromDashboard) history.pushState({}, "", `/chat/${created.id}`);
+        else history.replaceState({}, "", `/chat/${created.id}`);
+        setRouteKind("chat");
+      });
       // Show the new chat in the sidebar immediately instead of waiting for the
       // first server checkpoint refresh; drop the empty draft it replaced.
       catalogue.setProjects((current) => current.map((item) => item.id === project.id
@@ -208,9 +216,14 @@ function App() {
   };
 
   const openChat = async (target: ChatSummary, project: Project) => {
-    if (target.id === catalogue.selectedId()) return;
+    if (target.id === catalogue.selectedId() && routeKind() === "chat") return;
     const abandonedDraftId = currentDraftId();
-    try { await chat.select(target, project); }
+    try {
+      await chat.select(target, project, {
+        history: "push",
+        onCommit: () => setRouteKind("chat"),
+      });
+    }
     catch (error) { showError((error as Error).message); return; }
     if (!abandonedDraftId || abandonedDraftId === target.id) return;
     try {
@@ -223,6 +236,31 @@ function App() {
         // rolling back a successful target navigation.
         catalogue.setProjects((current) => current.map((item) => ({ ...item, sessions: item.sessions.filter((session) => session.id !== abandonedDraftId) })));
       } else showError(`Opened ${target.title || "chat"}, but the abandoned draft could not be removed: ${detail.message}`);
+    }
+  };
+
+  const openProject = async (target: Project, historyMode: "push" | "replace" | "none" = "push") => {
+    if (routeKind() === "project" && catalogue.projectId() === target.id) return;
+    const abandonedDraftId = currentDraftId();
+    chat.reset();
+    catalogue.selectProject(target);
+    setRouteKind("project");
+    setPanelOpen(false);
+    setTerminalOpen(false);
+    if (historyMode === "push") history.pushState({}, "", projectPath(target));
+    else if (historyMode === "replace") history.replaceState({}, "", projectPath(target));
+    // A history traversal may return to this draft with Forward. Keep it in
+    // the catalogue and on disk until an explicit navigation abandons it.
+    if (!abandonedDraftId || historyMode === "none") return;
+    try {
+      await discardDraft(abandonedDraftId);
+      catalogue.setProjects((current) => current.map((project) => ({
+        ...project,
+        sessions: project.sessions.filter((session) => session.id !== abandonedDraftId),
+      })));
+    } catch (error) {
+      const detail = error as Error & { error?: string };
+      if (detail.error !== "chat_not_found") showError(`Opened ${target.name}, but the abandoned draft could not be removed: ${detail.message}`);
     }
   };
 
@@ -403,6 +441,27 @@ function App() {
     };
     media?.addEventListener("change", onViewportChange);
     onCleanup(() => media?.removeEventListener("change", onViewportChange));
+    const onPopState = () => {
+      void (async () => {
+        const projectRouteId = pathProjectId();
+        if (projectRouteId) {
+          let project = catalogue.projects().find((item) => item.id === projectRouteId);
+          if (!project) project = (await catalogue.refresh()).find((item) => item.id === projectRouteId);
+          if (!project) throw new Error("Project not found");
+          await openProject(project, "none");
+          return;
+        }
+        const chatId = pathChatId();
+        if (!chatId) return;
+        let owner = catalogue.projects().find((project) => project.sessions.some((item) => item.id === chatId));
+        if (!owner) owner = (await catalogue.refresh()).find((project) => project.sessions.some((item) => item.id === chatId));
+        const target = owner?.sessions.find((item) => item.id === chatId);
+        if (!owner || !target) throw new Error("Chat not found");
+        await chat.select(target, owner, { history: "none", onCommit: () => setRouteKind("chat") });
+      })().catch((error) => showError((error as Error).message));
+    };
+    window.addEventListener("popstate", onPopState);
+    onCleanup(() => window.removeEventListener("popstate", onPopState));
     const templateRequest = api<{ templates: Template[]; defaultTemplateId?: string }>("/v0/templates")
       .catch(() => ({ templates: [], defaultTemplateId: "chat" }))
       .then((payload) => {
@@ -437,8 +496,15 @@ function App() {
         const project = projects.find((item) => item.id === target.projectId) || projects[0];
         if (!project) throw new Error("Conduit has no chat project");
         chat.initialize(target, project, detail);
+        setRouteKind("chat");
         setRouteBootstrap("ready");
         if (target.status === "active") await chat.openLive(target.id, project.id);
+      } else if (initialProjectRouteId) {
+        const project = projects.find((item) => item.id === initialProjectRouteId);
+        if (!project) throw new Error("Project not found");
+        catalogue.selectProject(project);
+        setRouteKind("project");
+        setRouteBootstrap("ready");
       } else {
         const templatePayload = await templateRequest;
         const project = projects.find((item) => item.slug === "chat") || projects[0];
@@ -446,10 +512,11 @@ function App() {
         const created = await api<ChatSummary>("/v0/chats", { method: "POST", body: JSON.stringify({ projectId: project.id, templateId: templatePayload.defaultTemplateId || "chat" }) });
         history.replaceState({}, "", `/chat/${created.id}`);
         chat.initialize(created, project);
+        setRouteKind("chat");
       }
     })().catch((error) => {
       const message = (error as Error).message;
-      if (initialRouteId) {
+      if (initialRouteId || initialProjectRouteId) {
         setRouteBootstrapError(message);
         setRouteBootstrap("error");
       }
@@ -472,30 +539,40 @@ function App() {
       connectivity={runtime.connectivity()} workspaceSuggestions={workspaceSuggestions()} command={sidebarCommand()}
       mobileOpen={mobileSidebarOpen()} onMobileOpenChange={setMobileSidebar}
       onWorkspaceSuggestionsNeeded={() => void loadWorkspaceSuggestions()}
-      onNewChat={createChat} onOpenChat={openChat} onAddProject={addProject} onRenameChat={renameChat} onRenameProject={renameProject}
+      onNewChat={createChat} onOpenChat={openChat} onOpenProject={openProject} onAddProject={addProject} onRenameChat={renameChat} onRenameProject={renameProject}
       onMoveChat={moveChat} onMoveProjectChats={moveProjectChats} onCopyTranscript={copyTranscript} onDeleteChat={deleteChat} onDeleteProject={deleteProject}
       onOpenTerminal={(target, project) => { void openChat(target, project).then(() => setTerminalOpenForChat(true, target.id)); }}
       onOpenSettings={openSettings} onOpenPalette={() => openPalette(null)} />
-    <main data-slot="sidebar-inset" class={`chat-main${emptyChat() ? " chat-main-empty" : ""}`} {...dropHandlers}>
-      <Show when={routeBootstrap() === "ready"} fallback={<div class="chat-bootstrap" role={routeBootstrap() === "error" ? "alert" : "status"}>{routeBootstrap() === "error" ? routeBootstrapError() || "This chat could not be loaded." : "Loading chat…"}</div>}>
-        <Show when={dropActive()}><div class="chat-drop-overlay"><div>Drop files to attach</div></div></Show>
+    <main data-slot="sidebar-inset" class={`chat-main${routeKind() === "chat" && emptyChat() ? " chat-main-empty" : ""}`} {...(routeKind() === "chat" ? dropHandlers : {})}>
+      <Show when={routeBootstrap() === "ready"} fallback={<div class="chat-bootstrap" role={routeBootstrap() === "error" ? "alert" : "status"}>{routeBootstrap() === "error"
+        ? routeBootstrapError() || (routeKind() === "project" ? "This project could not be loaded." : "This chat could not be loaded.")
+        : routeKind() === "project" ? "Loading project…" : "Loading chat…"}</div>}>
         <div class="chat-ambient" aria-hidden="true" />
-        <ChatHeader project={selectedProject()} title={chat.title()} profile={activeProfile()} runtime={chat.runtimeIdentity()} live={chat.live() as unknown as Record<string, unknown>} panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onOpenPalette={() => openPalette(null)} onTogglePanel={togglePanel} onShare={() => void shareChat()} />
-        <Show when={selectedProject()?.kind === "workspace" && [...runtime.processes().values()].some((process) => process.chatId !== catalogue.selectedId() && process.active)}><div class="workspace-warning"><TriangleAlertIcon /><div><strong>Another chat is working in this Workspace</strong><p>Both agents can edit the same files. Conduit does not lock the Workspace or create worktrees automatically.</p></div></div></Show>
-        <div class="work-area" data-terminal-open={terminalOpen() ? "true" : "false"} style={terminalOpen() ? { "--terminal-pane-width": `${terminalWidth()}px` } : undefined}>
-          <section class="work-area-conversation" aria-label="Conversation">
-            <Transcript chat={chat} partialContinue={partialContinue()} />
-            <div class="composer-stack"><HostUiRequests requests={chat.hostUiRequests()} onRespond={chat.respondHostUi} />
-              <Composer chat={chat} attachments={attachments} models={models} profiles={profiles()} activeProfile={activeProfile()} serverOnline={runtime.connectivity() === "online"} onChooseProfile={(id) => void switchProfile(id)} onOpenSettings={openSettings} onOpenAttachments={() => attachFileInput?.click()} /></div>
-          </section>
-          <Show when={terminalOpen()}>
-            <div class="terminal-pane-divider" role="separator" aria-label="Resize terminal pane" aria-orientation="vertical" tabIndex={0} onPointerDown={startTerminalResize} />
-            <section class="terminal-pane" aria-label="Terminal pane">
-              <header class="terminal-pane-header"><div><TerminalIcon /><strong>Terminal</strong><span>Workspace</span></div><Button variant="ghost" size="icon-sm" aria-label="Close terminal pane" onClick={() => setTerminalOpenForChat(false)}><XIcon /></Button></header>
-              <div class="terminal-pane-empty"><TerminalIcon /><strong>Terminal is ready for this Workspace</strong><p>PTY sessions will appear here. This pane already keeps its size and position for the current chat.</p></div>
+        <Show when={routeKind() === "project" && selectedProject()} fallback={<>
+          <Show when={dropActive()}><div class="chat-drop-overlay"><div>Drop files to attach</div></div></Show>
+          <ChatHeader project={selectedProject()} title={chat.title()} profile={activeProfile()} runtime={chat.runtimeIdentity()} live={chat.live() as unknown as Record<string, unknown>} panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onOpenPalette={() => openPalette(null)} onTogglePanel={togglePanel} onShare={() => void shareChat()} />
+          <Show when={selectedProject()?.kind === "workspace" && [...runtime.processes().values()].some((process) => process.chatId !== catalogue.selectedId() && process.active)}><div class="workspace-warning"><TriangleAlertIcon /><div><strong>Another chat is working in this Workspace</strong><p>Both agents can edit the same files. Conduit does not lock the Workspace or create worktrees automatically.</p></div></div></Show>
+          <div class="work-area" data-terminal-open={terminalOpen() ? "true" : "false"} style={terminalOpen() ? { "--terminal-pane-width": `${terminalWidth()}px` } : undefined}>
+            <section class="work-area-conversation" aria-label="Conversation">
+              <Transcript chat={chat} partialContinue={partialContinue()} />
+              <div class="composer-stack"><HostUiRequests requests={chat.hostUiRequests()} onRespond={chat.respondHostUi} />
+                <Composer chat={chat} attachments={attachments} models={models} profiles={profiles()} activeProfile={activeProfile()} serverOnline={runtime.connectivity() === "online"} onChooseProfile={(id) => void switchProfile(id)} onOpenSettings={openSettings} onOpenAttachments={() => attachFileInput?.click()} /></div>
             </section>
-          </Show>
-        </div>
+            <Show when={terminalOpen()}>
+              <div class="terminal-pane-divider" role="separator" aria-label="Resize terminal pane" aria-orientation="vertical" tabIndex={0} onPointerDown={startTerminalResize} />
+              <section class="terminal-pane" aria-label="Terminal pane">
+                <header class="terminal-pane-header"><div><TerminalIcon /><strong>Terminal</strong><span>Workspace</span></div><Button variant="ghost" size="icon-sm" aria-label="Close terminal pane" onClick={() => setTerminalOpenForChat(false)}><XIcon /></Button></header>
+                <div class="terminal-pane-empty"><TerminalIcon /><strong>Terminal is ready for this Workspace</strong><p>PTY sessions will appear here. This pane already keeps its size and position for the current chat.</p></div>
+              </section>
+            </Show>
+          </div>
+        </>}>
+          <Button variant="ghost" size="icon-sm" class="dashboard-mobile-sidebar-trigger mobile-sidebar-trigger" aria-label="Toggle Sidebar" aria-expanded={mobileSidebarOpen()} onClick={() => setMobileSidebar(!mobileSidebarOpen())}><PanelLeftIcon /></Button>
+          <ProjectDashboard project={selectedProject()!} templates={templates()} runtime={runtime}
+            onNewChat={createChat} onOpenChat={(target: DashboardChat, project) => openChat(target, project)}
+            onRename={() => runSidebar("rename-folder")} onDelete={() => runSidebar("delete-project")}
+            onOpenSettings={openSettings} onSaveDefault={saveWorkspaceDefault} onError={showError} />
+        </Show>
       </Show>
     </main>
     <Show when={Boolean(selectedProject()) && Boolean(catalogue.selectedId())}><WorkspacePanel projectId={() => selectedProject()!.id} chatId={() => catalogue.selectedId()!} open={panelOpen} onClose={togglePanel} /></Show>

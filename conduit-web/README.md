@@ -229,6 +229,10 @@ starting, and browser-attached processes remain resident.
 - `DELETE /v0/chats/:id/attachments/:attachment-id`
 - `GET|POST /v0/projects`
 - `PATCH|DELETE /v0/projects/:id`
+- `GET /v0/projects/:id/dashboard` returns project identity, lightweight chat
+  and live-process stats, up to ten recent active chats, and bounded Git
+  overview data for Workspaces. It does not walk the working tree for disk
+  usage or read every transcript.
 - `GET /v0/projects/:id/tree?path=…` lists one validated directory level
 - `GET /v0/projects/:id/file?path=…` returns a size-capped text preview
 - `GET /v0/projects/:id/diff` returns bounded Git status; `?patch=1&reuse=1` reuses the short-lived status inspection and additionally returns staged/unstaged unified diff after the patch disclosure opens

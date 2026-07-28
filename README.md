@@ -95,6 +95,12 @@ left untouched and reported with its recovery marker path. Each working root con
 reads attachments by relative path. Browser-supplied paths never become a Pi
 `cwd` until resolved against `CONDUIT_WORKSPACE_ALLOWLIST`.
 
+Each named Project and Workspace also has a routable operator dashboard. It
+reads identity and chat counts from the catalogue and lightweight registry,
+live state from the global process map, and Git summary through the same
+bounded inspector as the Workspace panel. Dashboard requests do not
+recursively walk working trees or parse every transcript.
+
 **Chats and sessions.** A chat is a stable UUID row in `data/sessions.json`,
 created as a durable `draft`; Pi starts on the first message, which records
 the private native-session mapping and marks the row `active`. Browser routes

@@ -2866,3 +2866,172 @@ test("host Pi re-detection immediately updates the Workspace profile menu", asyn
   await page.getByRole("button", { name: "Profile Coding" }).click();
   await expect(page.getByRole("menuitemradio", { name: /Host Pi/ })).toBeEnabled();
 });
+
+test("workspace dashboard is a direct routable operator surface", async ({ page }) => {
+  const workspace = {
+    id: "project_workspace",
+    slug: "conduit",
+    name: "Conduit",
+    kind: "workspace",
+    origin: "linked",
+    path: "/home/conduit",
+    externalPath: "/home/conduit",
+    createdAt: "2026-07-20T10:00:00.000Z",
+    defaultTemplateId: "workspace",
+    deletesFilesOnRemove: false,
+    sessions: [{
+      id: "session_workspace",
+      projectId: "project_workspace",
+      status: "active",
+      title: "Build dashboard",
+      updatedAt: "2026-07-28T01:00:00.000Z",
+    }],
+  };
+  let releaseDashboard;
+  const dashboardGate = new Promise((resolve) => { releaseDashboard = resolve; });
+  await page.unroute("**/v0/projects");
+  await page.route("**/v0/projects", (route) => route.fulfill({ json: { projects: [...projects, workspace] } }));
+  await page.route("**/v0/projects/project_workspace/dashboard", async (route) => {
+    await dashboardGate;
+    await route.fulfill({ json: {
+      identity: { ...workspace, sessions: undefined },
+      stats: { totalChats: 1, activeChats: 1, liveChats: 0, lastActivityAt: "2026-07-28T01:00:00.000Z" },
+      git: {
+        branch: "agent/issue-40-project-dashboard",
+        upstream: "origin/main",
+        ahead: 2,
+        behind: 0,
+        lastCommitAt: "2026-07-28T00:30:00.000Z",
+        hasUnstaged: true,
+        changedFiles: 4,
+      },
+      recentChats: [{
+        ...workspace.sessions[0],
+        lastMessageAt: "2026-07-28T01:00:00.000Z",
+        lastMessagePreview: "The route and dashboard payload are wired.",
+      }],
+    } });
+  });
+  const profilePatch = page.waitForRequest((request) =>
+    request.url().endsWith("/v0/projects/project_workspace") && request.method() === "PATCH");
+  await page.route("**/v0/projects/project_workspace", async (route) => {
+    const body = route.request().postDataJSON();
+    await route.fulfill({ json: { ...workspace, defaultTemplateId: body.defaultTemplateId } });
+  });
+
+  await page.goto("/workspace/project_workspace");
+
+  await expect(page).toHaveURL(/\/workspace\/project_workspace$/);
+  await expect(page.getByRole("heading", { name: "Conduit", level: 1 })).toBeVisible();
+  await expect(page.getByText("Linked workspace")).toBeVisible();
+  await expect(page.getByRole("button", { name: "/home/conduit" })).toBeVisible();
+  await expect(page.locator(".composer")).toHaveCount(0);
+
+  await page.getByRole("button", { name: "Coding", exact: true }).click();
+  await page.getByRole("menuitemradio", { name: "General" }).click();
+  expect((await profilePatch).postDataJSON()).toEqual({ defaultTemplateId: "chat" });
+  await expect(page.getByRole("button", { name: "General", exact: true })).toBeVisible();
+
+  // A slower initial dashboard response must not overwrite the confirmed
+  // profile choice with its stale identity snapshot.
+  releaseDashboard();
+  await expect(page.getByText("agent/issue-40-project-dashboard")).toBeVisible();
+  await expect(page.locator(".project-chat-row")).toContainText("The route and dashboard payload are wired.");
+  await expect(page.getByRole("button", { name: "General", exact: true })).toBeVisible();
+});
+
+test("dashboard history preserves a new draft for browser forward navigation", async ({ page }) => {
+  const workspace = {
+    id: "project_workspace",
+    slug: "conduit",
+    name: "Conduit",
+    kind: "workspace",
+    origin: "linked",
+    path: "/home/conduit",
+    defaultTemplateId: "workspace",
+    deletesFilesOnRemove: false,
+    sessions: [],
+  };
+  const draft = {
+    id: "session_workspace_draft",
+    projectId: workspace.id,
+    status: "draft",
+    title: "New chat",
+    templateId: "workspace",
+  };
+  let draftDeletes = 0;
+  await page.unroute("**/v0/projects");
+  await page.route("**/v0/projects", (route) => route.fulfill({ json: { projects: [...projects, workspace] } }));
+  await page.route("**/v0/projects/project_workspace/dashboard", (route) => route.fulfill({ json: {
+    identity: workspace,
+    stats: { totalChats: 0, activeChats: 0, liveChats: 0, lastActivityAt: null },
+    git: null,
+    recentChats: [],
+  } }));
+  await page.unroute("**/v0/chats");
+  await page.route("**/v0/chats", (route) => route.fulfill({ status: 201, json: draft }));
+  await page.route("**/v0/sessions/session_workspace_draft", (route) => route.fulfill({ json: {
+    ...draft,
+    messages: [],
+    tools: [],
+    page: { before: null },
+  } }));
+  await page.route("**/v0/chats/session_workspace_draft?ifEmpty=true", (route) => {
+    draftDeletes += 1;
+    return route.fulfill({ status: 204, body: "" });
+  });
+
+  await page.goto("/workspace/project_workspace");
+  await page.locator(".project-identity-actions").getByRole("button", { name: "New chat" }).click();
+  await expect(page).toHaveURL(/\/chat\/session_workspace_draft$/);
+
+  await page.goBack();
+  await expect(page).toHaveURL(/\/workspace\/project_workspace$/);
+  await expect(page.getByRole("heading", { name: "Conduit", level: 1 })).toBeVisible();
+  expect(draftDeletes).toBe(0);
+
+  await page.goForward();
+  await expect(page).toHaveURL(/\/chat\/session_workspace_draft$/);
+  await expect(page.locator(".composer")).toBeVisible();
+  expect(draftDeletes).toBe(0);
+});
+
+test("project chevron expands independently and project name navigates", async ({ page }, testInfo) => {
+  const research = {
+    ...projects[1],
+    path: "/data/chat/files/research",
+    createdAt: "2026-07-21T10:00:00.000Z",
+    sessions: [{
+      id: "session_research",
+      projectId: "project_research",
+      status: "active",
+      title: "Research chat",
+      updatedAt: "2026-07-27T01:00:00.000Z",
+    }],
+  };
+  await page.unroute("**/v0/projects");
+  await page.route("**/v0/projects", (route) => route.fulfill({ json: { projects: [projects[0], research] } }));
+  await page.route("**/v0/projects/project_research/dashboard", (route) => route.fulfill({ json: {
+    identity: { ...research, sessions: undefined },
+    stats: { totalChats: 1, activeChats: 1, liveChats: 0, lastActivityAt: research.sessions[0].updatedAt },
+    git: null,
+    recentChats: [{ ...research.sessions[0], lastMessagePreview: "A recent research result." }],
+  } }));
+
+  await page.goto("/chat/session_existing");
+  await openSidebar(page, testInfo);
+  const block = page.locator(".sidebar-project-block").filter({ hasText: "Research" });
+  await expect(block.getByRole("button", { name: "Research", exact: true })).toBeVisible();
+  await expect(block.getByRole("button", { name: "Research chat" })).toBeVisible();
+
+  await block.getByRole("button", { name: "Collapse chat list" }).click();
+  await expect(block.getByRole("button", { name: "Research chat" })).toHaveCount(0);
+  await expect(page).toHaveURL(/\/chat\/session_existing$/);
+
+  await block.getByRole("button", { name: "Research", exact: true }).click();
+  await expect(page).toHaveURL(/\/project\/project_research$/);
+  await expect(page.getByRole("heading", { name: "Research", level: 1 })).toBeVisible();
+  if (testInfo.project.name === "mobile-chromium") {
+    await expect(page.locator(".conduit-sidebar")).toHaveAttribute("data-mobile-open", "false");
+  }
+});
