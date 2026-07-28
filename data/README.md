@@ -1,6 +1,8 @@
 # Conduit runtime data
 
-This directory contains ignored mutable data:
+This directory is the development default for ignored mutable data. Production
+sets `CONDUIT_DATA_ROOT=/data` and mounts the host's durable directory there;
+the shape is identical:
 
 ```text
 chat/files/       working files visible to chat sessions

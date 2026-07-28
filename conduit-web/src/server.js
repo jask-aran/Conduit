@@ -423,6 +423,7 @@ app.post("/v0/auth/reset-sessions", async (request, response) => {
 });
 
 const pendingCheckpoints = new Set();
+let shuttingDown = false;
 manager.on("event", ({ record, event }) => {
   const chat = record.chatId ? registry.metadata(record.chatId) : null;
   const terminal = event.type === "agent_settled"
@@ -451,7 +452,11 @@ manager.on("event", ({ record, event }) => {
       .finally(() => pendingCheckpoints.delete(checkpointId));
   }, 50).unref();
 });
-app.get("/healthz", (_request, response) => response.json({ ok: true, filesRoot: config.filesRoot }));
+app.get("/healthz", (_request, response) => response.status(shuttingDown ? 503 : 200).json({
+  ok: !shuttingDown,
+  status: shuttingDown ? "stopping" : "ready",
+  release: config.release,
+}));
 app.get("/v0/capabilities", (_request, response) => response.json({
   runtime: "pi-rpc", create: true, resume: true, projects: true,
   sessionManagement: true, chatIdentity: "conduit", attachments: "raw-http",
@@ -573,13 +578,13 @@ app.get("/v0/workspaces/policy", (_request, response) => {
 
 app.get("/v0/workspaces/suggestions", async (_request, response, next) => {
   try {
-    const home = path.resolve(os.homedir());
-    if (!config.workspaceAllowlist.some((root) => isPathInside(home, root))) {
-      return response.json({ root: "~", folders: [] });
+    const suggestionRoot = config.workspaceSuggestionRoot;
+    if (!config.workspaceAllowlist.some((root) => isPathInside(suggestionRoot, root))) {
+      return response.json({ root: suggestionRoot, folders: [] });
     }
-    const folders = await listDirectorySuggestions(home);
+    const folders = await listDirectorySuggestions(suggestionRoot);
     response.json({
-      root: "~",
+      root: suggestionRoot,
       folders: folders.map((folder) => ({
         name: folder.name,
         path: folder.path,
@@ -1773,4 +1778,29 @@ server.on("upgrade", async (request, socket, head) => {
   });
 });
 
-server.listen(config.port, config.host, () => console.log(`Conduit listening on http://${config.host}:${config.port}`));
+async function shutdown(signal) {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  console.log(`Conduit received ${signal}; stopping`);
+  runtimeHub.close();
+  for (const socket of wss.clients) socket.close(1012, "Conduit is restarting");
+  const closed = new Promise((resolve) => server.close(resolve));
+  const stoppedProcesses = await manager.shutdown();
+  server.closeIdleConnections?.();
+  await closed;
+  console.log(`Conduit stopped ${stoppedProcesses} Pi process${stoppedProcesses === 1 ? "" : "es"}`);
+}
+
+for (const signal of ["SIGTERM", "SIGINT"]) {
+  process.once(signal, () => {
+    shutdown(signal).catch((error) => {
+      console.error("Conduit shutdown failed", error);
+      process.exitCode = 1;
+      server.closeAllConnections?.();
+    });
+  });
+}
+
+server.listen(config.port, config.host, () => console.log(
+  `Conduit ${config.release} listening on http://${config.host}:${config.port}`,
+));

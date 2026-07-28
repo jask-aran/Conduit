@@ -1,0 +1,137 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ENV_FILE="$ROOT/.env"
+COMMAND="${1:-up}"
+
+usage() {
+  printf '%s\n' \
+    "Usage: ./scripts/deploy.sh [up|restart|auth|down|status|logs|config]" \
+    "" \
+    "up        Prepare directories, build the exact release, provision auth when" \
+    "          absent, and start Conduit (default)." \
+    "restart   Rebuild and replace the running container without changing data." \
+    "auth      Set or replace the Conduit login password." \
+    "down      Stop and remove the application container." \
+    "status    Show the container and health state." \
+    "logs      Follow application logs." \
+    "config    Render the resolved Compose configuration."
+}
+
+require_docker() {
+  if ! command -v docker >/dev/null 2>&1 || ! docker compose version >/dev/null 2>&1; then
+    echo "Docker Engine with the Compose plugin is required." >&2
+    exit 1
+  fi
+}
+
+release_id() {
+  if [[ -f "$ROOT/.conduit-release" ]]; then
+    sed -n 's/^commit=//p' "$ROOT/.conduit-release" | head -n 1
+  elif git -C "$ROOT" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    local sha
+    sha="$(git -C "$ROOT" rev-parse HEAD)"
+    if [[ -n "$(git -C "$ROOT" status --porcelain)" ]]; then
+      printf 'development-%s\n' "${sha:0:12}"
+    else
+      printf '%s\n' "$sha"
+    fi
+  else
+    printf '%s\n' "development"
+  fi
+}
+
+prepare_env() {
+  if [[ ! -f "$ENV_FILE" ]]; then
+    cp "$ROOT/.env.example" "$ENV_FILE"
+    sed -i \
+      -e "s/^CONDUIT_UID=.*/CONDUIT_UID=$(id -u)/" \
+      -e "s/^CONDUIT_GID=.*/CONDUIT_GID=$(id -g)/" \
+      "$ENV_FILE"
+    echo "Created $ENV_FILE."
+  fi
+  sed -i "s/^CONDUIT_RELEASE=.*/CONDUIT_RELEASE=$(release_id)/" "$ENV_FILE"
+}
+
+load_env() {
+  set -a
+  # .env is deployment configuration owned by the operator.
+  # shellcheck disable=SC1090
+  source "$ENV_FILE"
+  set +a
+}
+
+host_path() {
+  if [[ "$1" = /* ]]; then printf '%s\n' "$1"
+  else realpath -m "$ROOT/$1"
+  fi
+}
+
+prepare_directories() {
+  load_env
+  local data_dir workspaces_dir
+  data_dir="$(host_path "${CONDUIT_DATA_DIR:-./data}")"
+  workspaces_dir="$(host_path "${CONDUIT_WORKSPACES_DIR:-../workspaces}")"
+  mkdir -p "$data_dir" "$workspaces_dir"
+  if [[ ! -w "$data_dir" || ! -w "$workspaces_dir" ]]; then
+    echo "Deployment directories must be writable by UID ${CONDUIT_UID:-$(id -u)}." >&2
+    exit 1
+  fi
+}
+
+compose() {
+  (cd "$ROOT" && docker compose --env-file "$ENV_FILE" -f compose.yaml "$@")
+}
+
+build() {
+  compose build --pull
+}
+
+set_password() {
+  compose run --rm --no-deps conduit node scripts/conduit-auth.mjs set-password
+}
+
+if [[ "$COMMAND" == "help" || "$COMMAND" == "-h" || "$COMMAND" == "--help" ]]; then
+  usage
+  exit 0
+fi
+
+require_docker
+prepare_env
+
+case "$COMMAND" in
+  up)
+    prepare_directories
+    build
+    load_env
+    auth_file="$(host_path "${CONDUIT_DATA_DIR:-./data}")/auth.json"
+    if [[ ! -s "$auth_file" ]]; then
+      echo "Conduit needs its single-user login password."
+      set_password
+    fi
+    compose up -d --remove-orphans
+    compose ps
+    ;;
+  restart)
+    prepare_directories
+    build
+    compose up -d --force-recreate --remove-orphans
+    compose ps
+    ;;
+  auth)
+    prepare_directories
+    build
+    set_password
+    compose up -d --force-recreate
+    ;;
+  down) compose down ;;
+  status) compose ps ;;
+  logs) compose logs --follow conduit ;;
+  config) compose config ;;
+  *)
+    echo "Unknown command: $COMMAND" >&2
+    usage >&2
+    exit 2
+    ;;
+esac

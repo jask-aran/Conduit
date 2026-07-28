@@ -28,12 +28,13 @@ export function loadConfig(env = process.env) {
     discovered.push(piTemplate);
     discovered.sort((a, b) => a.id.localeCompare(b.id));
   }
-  const dataRoot = path.join(repositoryRoot, "data");
-  const filesRoot = absolute(env.CONDUIT_FILES_ROOT || path.join(repositoryRoot, "data/chat/files"));
+  const dataRoot = absolute(env.CONDUIT_DATA_ROOT || path.join(repositoryRoot, "data"));
+  const filesRoot = absolute(env.CONDUIT_FILES_ROOT || path.join(dataRoot, "chat/files"));
   const workspaceAllowlist = parseAllowlist(env.CONDUIT_WORKSPACE_ALLOWLIST, {
     fallback: [os.homedir(), repositoryRoot, filesRoot],
   });
-  const piAgentDir = absolute(env.CONDUIT_PI_AGENT_DIR || path.join(repositoryRoot, "data/pi"));
+  const workspaceSuggestionRoot = absolute(env.CONDUIT_WORKSPACE_SUGGESTION_ROOT || os.homedir());
+  const piAgentDir = absolute(env.CONDUIT_PI_AGENT_DIR || path.join(dataRoot, "pi"));
   const installations = new PiInstallationRegistry({
     conduitAgentDir: piAgentDir,
     conduitCommand: env.CONDUIT_PI_COMMAND || "",
@@ -43,12 +44,13 @@ export function loadConfig(env = process.env) {
   return {
     host: env.CONDUIT_HOST || env.HOST || "127.0.0.1",
     port: Number(env.CONDUIT_PORT || env.PORT || 4310),
+    release: String(env.CONDUIT_RELEASE || "development"),
     piCommand: installations.get("conduit-pinned").command,
     repositoryRoot,
     dataRoot,
     filesRoot,
-    catalogFile: absolute(env.CONDUIT_CATALOG_FILE || path.join(repositoryRoot, "data/conduit.json")),
-    sessionRegistryFile: absolute(env.CONDUIT_SESSION_REGISTRY_FILE || path.join(repositoryRoot, "data/sessions.json")),
+    catalogFile: absolute(env.CONDUIT_CATALOG_FILE || path.join(dataRoot, "conduit.json")),
+    sessionRegistryFile: absolute(env.CONDUIT_SESSION_REGISTRY_FILE || path.join(dataRoot, "sessions.json")),
     preferencesFile: absolute(env.CONDUIT_PREFERENCES_FILE || path.join(dataRoot, "preferences.json")),
     piAgentDir,
     installations,
@@ -57,11 +59,12 @@ export function loadConfig(env = process.env) {
     bridgeSkill: path.join(templatesRoot, "conduit-workspace", "SKILL.md"),
     runtimeSettingsFile: absolute(env.CONDUIT_RUNTIME_SETTINGS_FILE || path.join(dataRoot, "runtime.json")),
     remotesFile: absolute(env.CONDUIT_REMOTES_FILE || path.join(dataRoot, "remotes.json")),
-    authFile: absolute(env.CONDUIT_AUTH_FILE || path.join(repositoryRoot, "data/auth.json")),
+    authFile: absolute(env.CONDUIT_AUTH_FILE || path.join(dataRoot, "auth.json")),
     cloneTimeoutMs: boundedMilliseconds(env.CONDUIT_CLONE_TIMEOUT_MS, 120_000),
     allowInsecure: env.CONDUIT_ALLOW_INSECURE === "1",
     templatesRoot,
     workspaceAllowlist,
+    workspaceSuggestionRoot,
     piTemplates: discovered,
     piTemplateById: byId,
     piTemplate,

@@ -16,12 +16,12 @@ repeat reference documentation:
 
 Architecture in one breath: one Express server (`conduit-web/src/server.js`)
 owns a pool of `pi --mode rpc` child processes — one per live chat, across two
-installations (bundled Isolated Pi and the user's native Host Pi) — and relays
-their events to a strict TypeScript SolidJS/Vite client over per-chat
+installations (bundled Isolated Pi and the user's native Host Pi) — and
+relays their events to a strict TypeScript SolidJS/Vite client over per-chat
 WebSockets plus a global SSE runtime channel. Pi's JSONL files are the
-authoritative transcripts; Conduit's stores (`data/*.json`) hold identity,
-registry, and preferences only, and the browser is a reconnectable client of
-server-owned state.
+authoritative transcripts; Conduit's stores (`$CONDUIT_DATA_ROOT/*.json`,
+repository `data/` by default) hold identity, registry, and preferences only,
+and the browser is a reconnectable client of server-owned state.
 
 Documentation is stateless: describe the current system only. Replace obsolete
 statements rather than appending history; history lives in Git and PRs. Keep
