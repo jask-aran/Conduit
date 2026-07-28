@@ -1,15 +1,16 @@
 import { batch, createEffect, createSignal, For, on, onCleanup, Show, type Accessor } from "solid-js";
-import { BoxesIcon, ChevronDownIcon, ChevronRightIcon, CopyIcon, FileCode2Icon, FolderIcon, GitBranchIcon, GitCompareArrowsIcon, RefreshCwIcon, XIcon } from "lucide-solid";
+import { BoxesIcon, ChevronDownIcon, ChevronRightIcon, CopyIcon, FileCode2Icon, FolderIcon, GitBranchIcon, GitCompareArrowsIcon, RefreshCwIcon, TerminalIcon, XIcon } from "lucide-solid";
 import { Button, Spinner } from "@/components/primitives";
 import { api, asList } from "../api/client";
 import { focusFirst, isMobileLayout, restoreFocus } from "../navigation/mobile-layout";
 import { ownsWorkspaceRequest, type WorkspaceRequest } from "./request-ownership";
+import { TerminalPane } from "../remotes/terminal-pane";
 
 interface TreeEntry { name: string; path: string; type: "directory" | "file" | "other"; }
 interface FilePreview { path: string; size: number; content: string; }
 interface GitCommit { graph: string; hash: string; shortHash: string; subject: string; author: string; authoredAt: string; }
 interface DiffPayload { repository: boolean; branch?: string; upstream?: string | null; ahead?: number; behind?: number; commits?: GitCommit[]; files: { status: string; path: string }[]; diff: string; }
-type PanelTab = "files" | "diff" | "artifacts";
+type PanelTab = "files" | "diff" | "artifacts" | "terminal";
 type ArtifactMode = "outputs" | "interactive";
 
 interface WorkspaceCacheEntry {
@@ -35,7 +36,7 @@ function cacheWorkspace(projectId: string, patch: Partial<WorkspaceCacheEntry>) 
   while (workspaceCache.size > MAX_CACHED_WORKSPACES) workspaceCache.delete(workspaceCache.keys().next().value!);
 }
 
-export default function WorkspacePanel(props: { projectId: Accessor<string>; chatId: Accessor<string>; open: Accessor<boolean>; onClose: () => void }) {
+export default function WorkspacePanel(props: { projectId: Accessor<string>; chatId: Accessor<string>; open: Accessor<boolean>; requestedTab?: Accessor<{ tab: PanelTab; nonce: number } | null>; onClose: () => void }) {
   let projectGeneration = 0;
   let requestVersion = 0;
   let projectController = new AbortController();
@@ -272,6 +273,9 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
       setTab(nextTab);
     });
   }));
+  createEffect(on(() => props.requestedTab?.(), (next) => {
+    if (next) selectTab(next.tab);
+  }));
   createEffect(on(
     () => [props.projectId(), tab(), props.open()] as const,
     ([projectId, activeTab, open]) => {
@@ -311,11 +315,12 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
     <aside ref={panelRoot} class="workspace-panel" classList={{ "workspace-panel-open": props.open() }} aria-label="Workspace panel" aria-hidden={!props.open()} inert={!props.open()} style={{ "--workspace-panel-width": `${width()}px` }}>
     <div class="workspace-resize-handle" role="separator" aria-label="Resize workspace panel" aria-orientation="vertical" aria-valuemin="300" aria-valuemax={Math.floor(window.innerWidth * 0.65)} aria-valuenow={width()} tabIndex={0} onPointerDown={startResize} onKeyDown={(event) => { if (event.key === "ArrowLeft") saveWidth(width() + 20); if (event.key === "ArrowRight") saveWidth(width() - 20); }} />
     <div class="workspace-panel-surface">
-    <header class="workspace-panel-header"><div><strong>Workspace</strong><small>Read-only project context</small></div><Button variant="ghost" size="icon-sm" aria-label="Close workspace panel" onClick={props.onClose}><XIcon /></Button></header>
+    <header class="workspace-panel-header"><div><strong>Workspace</strong><small>Project context and tools</small></div><Button variant="ghost" size="icon-sm" aria-label="Close workspace panel" onClick={props.onClose}><XIcon /></Button></header>
     <div class="workspace-panel-tabs" role="tablist" aria-label="Workspace views">
       <button role="tab" aria-selected={tab() === "files"} onClick={() => { selectTab("files"); if (!directories()[""]) void loadDirectory(); }}><FolderIcon />Files</button>
       <button role="tab" aria-selected={tab() === "diff"} onClick={() => selectTab("diff")}><GitCompareArrowsIcon />Source Control</button>
       <button role="tab" aria-selected={tab() === "artifacts"} onClick={() => selectTab("artifacts")}><BoxesIcon />Artifacts</button>
+      <button role="tab" aria-selected={tab() === "terminal"} onClick={() => selectTab("terminal")}><TerminalIcon />Terminal</button>
     </div>
     <Show when={error()}><div class="workspace-panel-error">{error()}</div></Show>
     <Show when={tab() === "files"}>
@@ -338,6 +343,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
       <div class="workspace-artifact-modes" role="radiogroup" aria-label="Artifact modality"><button role="radio" aria-checked={artifactMode() === "outputs"} onClick={() => setArtifactMode("outputs")}>Outputs</button><button role="radio" aria-checked={artifactMode() === "interactive"} onClick={() => setArtifactMode("interactive")}>Interactive UI</button></div>
       <div class="workspace-panel-empty"><div><BoxesIcon /><strong>{artifactMode() === "outputs" ? "No artifacts in the loaded transcript" : "Interactive artifacts are not enabled"}</strong><p>{artifactMode() === "outputs" ? "Code blocks and file outputs will appear here as transcript artifact projection lands." : "This boundary is reserved for sandboxed, explicitly trusted generated interfaces."}</p></div></div>
     </section></Show>
+    <Show when={tab() === "terminal"}><TerminalPane projectId={props.projectId()} /></Show>
     <Show when={loading()}><div class="workspace-panel-loading"><Spinner /><span>Loading workspace</span></div></Show>
     </div>
   </aside>

@@ -1,35 +1,27 @@
 # Repository Guidelines
 
-## Pi research
-
-For Pi design or API questions, use DeepWiki against `earendil-works/pi` —
-not `earendil-works/pi-coding-agent`. If a DeepWiki request fails because the
-repository or query is wrong, correct it and retry rather than abandoning the
-lookup. Before changing Conduit, verify the result against the locally pinned
-Pi package version; Isolated and Host Pi must remain compatible at their
-shared RPC contract.
-
 This file is the working contract for contributors and coding agents: hard
-invariants, verification, and steering. It deliberately does not repeat
-reference documentation:
+invariants, verification constraints, and steering. It deliberately does not
+repeat reference documentation:
 
-- `README.md` — product, architecture, data model, setup, and interface
-  reference. Read the section covering the area you touch before changing it.
-- `conduit-web/README.md` — runtime model, HTTP API, process residency and
-  caps, and the live-session WebSocket protocol (a contract: keep changes
-  additive and update that section in the same change).
-- `personal-agent-platform-design.md` — long-range vision. `specs/` — near-term
-  roadmap and per-feature implementation specs (upcoming behavior; this file
-  governs code as it exists).
+- `README.md` — product, architecture, data model, interface reference, setup,
+  and the verification procedure (single-suite invocations, trace inspection).
+  Read the section covering the area you touch before changing it.
+- `conduit-web/README.md` — runtime model, HTTP API, auth mechanism, process
+  residency and caps, and the live-session WebSocket protocol (a contract: keep
+  changes additive and update that section in the same change).
+- `personal-agent-platform-design.md` — long-range vision. `specs/` — transient
+  working documents such as open review queues; shipped specs are deleted, not
+  archived.
 
 Architecture in one breath: one Express server (`conduit-web/src/server.js`)
 owns a pool of `pi --mode rpc` child processes — one per live chat, across two
-installations (bundled Isolated Pi and the user's native Host Pi) — and
-relays their events to a strict TypeScript SolidJS/Vite client over per-chat WebSockets plus a
-global SSE runtime channel. Pi's JSONL files are the authoritative
-transcripts; Conduit's stores (`data/*.json`) hold identity, registry, and
-preferences only, and the browser is a reconnectable client of server-owned
-state.
+installations (bundled Isolated Pi and the user's native Host Pi) — and relays
+their events to a strict TypeScript SolidJS/Vite client over per-chat
+WebSockets plus a global SSE runtime channel. Pi's JSONL files are the
+authoritative transcripts; Conduit's stores (`data/*.json`) hold identity,
+registry, and preferences only, and the browser is a reconnectable client of
+server-owned state.
 
 Documentation is stateless: describe the current system only. Replace obsolete
 statements rather than appending history; history lives in Git and PRs. Keep
@@ -38,13 +30,15 @@ that alters behavior they describe.
 
 ## Hard invariants
 
+- Do not commit, push, branch, open PRs, or merge unless the user explicitly
+  asks.
 - Pi JSONL is the authoritative transcript; `data/sessions.json` is a
   lightweight registry and `data/conduit.json` the project catalog. Never
   duplicate ownership across them, and never let two Pi processes write the
   same JSONL simultaneously.
 - The server owns live Pi processes. Browser disconnect never terminates a
-  process; never auto-stop a process that is generating, compacting,
-  retrying, waiting on host UI, or has clients attached.
+  process; never auto-stop a process that is generating, compacting, retrying,
+  waiting on host UI, or has clients attached.
 - Never parse every transcript to serve an ordinary sidebar request.
 - Browser-supplied paths never become a Pi `cwd` or file target until the
   server resolves them against its allowlists; fail closed on symlinks and
@@ -54,36 +48,37 @@ that alters behavior they describe.
   canonical `cwd` in each JSONL header, never the lossy encoded directory name.
 - Keep Isolated Pi and Host Pi scopes separate: runtime-aware model APIs must
   never expose one installation's models or settings to the other's chats.
+- Isolated and Host Pi must stay compatible at their shared RPC contract.
+  Verify protocol changes against the locally pinned
+  `@earendil-works/pi-coding-agent` version, not against upstream docs.
 - Destructive operations (chat/project delete, process stop before delete)
   require interface confirmation and must stop matching live processes first.
-- Auth is one choke point plus the WS upgrade. The `requireAuth` middleware
-  (`conduit-web/src/auth-middleware.js`) is mounted before every other route and
-  static handler in `server.js`; the only allowlisted paths are `GET /login`,
-  `POST /v0/auth/login`, and `GET /healthz`. Never add a route before
-  `requireAuth`, and never expose a static asset or upload handler without it.
-  WebSocket upgrades validate the session cookie before `handleUpgrade` and
-  destroy the socket otherwise. Loopback binding without a configured password
-  stays open for local dev; a non-loopback bind refuses to start without a
-  password or `CONDUIT_ALLOW_INSECURE=1`. Credentials live only in
-  `data/auth.json` (mode `0600`, atomic writes); the running server reloads it
-  on each login attempt and on session-validation cache miss, never on a timer.
-  Browser-managed Pi credentials are a separate, authenticated surface: they
+- Auth is one choke point plus the WS upgrade
+  (`conduit-web/src/auth-middleware.js`; mechanism in `conduit-web/README.md`).
+  Never add a route, static asset, or upload handler before or outside
+  `requireAuth`. Never extend the unauthenticated allowlist beyond `GET /login`,
+  `POST /v0/auth/login`, and `GET /healthz`. WebSocket upgrades validate the
+  session cookie before `handleUpgrade` and destroy the socket otherwise. Never
+  relax the non-loopback password requirement or reach for
+  `CONDUIT_ALLOW_INSECURE=1` to make a bind succeed.
+- Browser-managed Pi credentials are a separate authenticated surface: they
   operate only on the bundled Isolated Pi `auth.json`, never Host Pi, and must
   not expose OAuth URLs, device codes, or credentials across Conduit sessions.
+- Never commit `.env*` (except sanitized examples), `data/`, credentials, logs,
+  `dist/`, or `node_modules/`. Treat Pi extensions, skills, and template tool
+  lists as trusted executable configuration; review them before adding them to
+  a template.
 
 ## Interface
 
-Build concrete Solid components for concrete Conduit surfaces. Use Kobalte
-selectively when accessible behavior (menus, context menus, focus management)
-earns the dependency; keep the local primitive boundary small and do not copy a
-generic component catalogue. New surface features should be reachable from the
-typed Cmd/Ctrl+K palette when that improves keyboard access. Do not introduce
-parallel command or tool registries: tool names are data and generic tool cards
-must remain useful for unknown tools.
-
 Assistant Markdown renders only through `src/client/chat/markdown.tsx` using
 Marked, DOMPurify, and the KaTeX extension; user prompts remain literal text.
-Do not introduce a parallel Markdown parser.
+Do not introduce a parallel Markdown parser, and do not introduce parallel
+command or tool registries: tool names are data, and generic tool cards must
+remain useful for unknown tools. `@kobalte/core` is the only
+accessibility-primitive dependency — do not add a component library. New
+surface features should be reachable from the typed Cmd/Ctrl+K palette when
+that improves keyboard access.
 
 Rendering stability (hard-won — do not regress):
 
@@ -106,27 +101,19 @@ Always start or restart the local server from the repository root with:
 bash .devcontainer/start-conduit.sh restart
 ```
 
-It rebuilds when needed and owns the PID/log on port 4310. Do not launch
-`node src/server.js`, `npm run start`, `dev:server`, or Vite directly. Use
-`bash .devcontainer/start-conduit.sh dev` for the managed server watcher and
-Vite on port 5173. From `conduit-web/`: `npm test` (node:test suites),
-`npm run test:browser` (Playwright, mocked API, desktop + mobile),
-`npm run build` (bundle budgets enforced — treat budget increases as reviewed
-architectural changes).
+It rebuilds when needed and owns the PID/log on port 4310. Never launch
+`node src/server.js`, `npm run start`, `dev:server`, or Vite directly; use
+`bash .devcontainer/start-conduit.sh dev` for the managed server watcher plus
+Vite on port 5173.
 
-Before committing, run the complete local verification suite: `npm run
-typecheck`, `npm test`, `npm run build`, and `npm run test:browser`. GitHub
-Actions intentionally does not repeat the test suites; its manual static check
-only verifies a clean install, strict TypeScript, and the production bundle
-budgets. GitGuardian remains the automatic repository security check.
-
-Run a single server suite with `node --test test/<name>.test.js`; run a
-single browser spec with `npx playwright test test/browser/app.spec.js
--g "<test name>"`. Server tests are `test/*.test.js` with `node:test`;
+Before committing, run the complete suite from `conduit-web/`: `npm run
+typecheck`, `npm test`, `npm run build`, and `npm run test:browser`. CI does not
+repeat the test suites, so an unrun suite is an unverified change. Treat bundle
+budget increases as reviewed architectural changes. Every behavior change
+requires focused coverage: server tests are `test/*.test.js` under `node:test`,
 browser specs live in `test/browser/` and mock the API unless the server
-boundary itself is under test. Every behavior change requires focused coverage. Failed browser tests
-write traces under `test-results/`; inspect with the printed
-`show-trace` command.
+boundary itself is under test. `README.md` § Verification has the single-suite
+and trace-inspection commands.
 
 Before returning to the user for manual testing, run the restart command above
 so the running server reflects your change. Every user-facing change must end
@@ -138,38 +125,30 @@ and URLs the user should walk through to validate the change themselves.
 ES modules, two-space indent, semicolons, double quotes; `camelCase`
 functions, `PascalCase` components, kebab-case filenames. Client code is strict
 TypeScript and must not add React production dependencies. Configuration lives
-in env vars documented by `.env.example`. No repo-wide formatter: avoid
-formatting changes unrelated to the task.
+in env vars documented by `conduit-web/.env.example`. No repo-wide formatter:
+avoid formatting changes unrelated to the task.
 
 ## Commits and pull requests
 
-Do not commit, push, branch, open PRs, or merge unless the user explicitly
-asks. Short, imperative, sentence-case commit subjects; one coherent change
-per commit. Every non-trivial commit also needs a body stating the failure
-mode or motivation, the key invariant or behavioural change, and verification
+Short, imperative, sentence-case subjects; one coherent change per commit.
+Every non-trivial commit also needs a body stating the failure mode or
+motivation, the key invariant or behavioural change, and verification
 performed; do not merely restate the diff. Current code and current-state
 documentation describe the app as it is now; commit bodies are the durable
-record of why a change was made.
+record of why a change was made — retrieve them with `git log
+--format='%H%n%B%n---' <range>`, since `--oneline` drops exactly that record.
 
 Sequential commits on `main` are the normal development flow. Close a related
 run with a natural final commit (for example deleting its temporary review
 queue) whose body records the included range, outcomes, verification, and
-intentional deferrals. When there is no natural final commit, use an annotated
-`sprint/` tag with that same summary instead of an empty summary commit or a
-permanent status register. Retrieve local history with `git log
---format='%H%n%B%n---' <range>` (for example `-10`, `--since='2026-07-01'`,
-or `base..HEAD`) when reviewing recent work: it prints each commit hash,
-subject, and body. Use `gh api` only when the remote GitHub history is
-required; request `.commit.message` from the commits endpoint because it
-contains both subject and body. PRs are optional review bundles, not the
-canonical history.
+intentional deferrals; when there is no natural final commit, use an annotated
+`sprint/` tag carrying that summary instead. PRs are optional review bundles,
+not the canonical history.
 
-## Security and ignored state
+## Pi research
 
-Never commit `.env*` (except sanitized examples), `data/`, credentials, logs,
-`dist/`, or `node_modules/`. Edge auth gates every route and upgrade behind a
-single-user password (see `specs/edge-auth.md`); a non-loopback bind refuses
-to start until `scripts/conduit-auth.mjs set-password` has run or
-`CONDUIT_ALLOW_INSECURE=1` is exported. Treat Pi extensions,
-skills, and template tool lists as trusted executable configuration; review
-them before adding them to a template.
+For Pi design or API questions, use DeepWiki against `earendil-works/pi` — not
+`earendil-works/pi-coding-agent`. If a request fails because the repository or
+query is wrong, correct it and retry rather than abandoning the lookup. DeepWiki
+describes upstream HEAD: verify anything it tells you against the locally pinned
+`0.80.6` packages before acting on it.
