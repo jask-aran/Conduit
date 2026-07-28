@@ -38,6 +38,12 @@ export async function createTerminalRenderer(host: HTMLElement, id = selectedTer
   return createGhosttyRenderer(host);
 }
 
+function settleFit(fit: { fit: () => void }) {
+  fit.fit();
+  const frame = requestAnimationFrame(() => fit.fit());
+  return () => cancelAnimationFrame(frame);
+}
+
 export async function preloadTerminalRenderer(id = selectedTerminalRenderer()) {
   await loadTerminalFont();
   if (id === "xterm") {
@@ -51,21 +57,23 @@ export async function preloadTerminalRenderer(id = selectedTerminalRenderer()) {
 async function createGhosttyRenderer(host: HTMLElement): Promise<TerminalRenderer> {
   const { init, Terminal, FitAddon } = await import("ghostty-web");
   await init();
-  const terminal = new Terminal({ fontSize: 13, fontFamily: '"Conduit Terminal Font", monospace' });
+  const terminal = new Terminal({ fontSize: 13, fontFamily: '"Conduit Terminal Font", monospace', cursorBlink: false });
   terminal.open(host);
   const fit = new FitAddon();
   terminal.loadAddon(fit);
   fit.observeResize();
+  terminal.reset();
+  const cancelInitialFit = settleFit(fit);
   return {
     id: "ghostty",
     cols: () => terminal.cols,
     rows: () => terminal.rows,
-    write: (bytes) => terminal.write(bytes),
+    write: (bytes) => terminal.write(bytes, () => { terminal.options.cursorBlink = false; }),
     focus: () => terminal.focus(),
     fit: () => fit.fit(),
     onData: (listener) => { const subscription = terminal.onData(listener); return () => subscription.dispose(); },
     onResize: (listener) => { const subscription = terminal.onResize(listener); return () => subscription.dispose(); },
-    dispose: () => { fit.dispose(); terminal.dispose(); },
+    dispose: () => { cancelInitialFit(); fit.dispose(); terminal.dispose(); },
   };
 }
 
@@ -75,21 +83,22 @@ async function createXtermRenderer(host: HTMLElement): Promise<TerminalRenderer>
     import("@xterm/addon-fit"),
     import("@xterm/xterm/css/xterm.css"),
   ]);
-  const terminal = new Terminal({ fontSize: 13, fontFamily: '"Conduit Terminal Font", monospace' });
+  const terminal = new Terminal({ fontSize: 13, fontFamily: '"Conduit Terminal Font", monospace', cursorBlink: false });
   const fit = new FitAddon();
   terminal.loadAddon(fit);
   terminal.open(host);
   const observer = new ResizeObserver(() => fit.fit());
   observer.observe(host);
+  const cancelInitialFit = settleFit(fit);
   return {
     id: "xterm",
     cols: () => terminal.cols,
     rows: () => terminal.rows,
-    write: (bytes) => terminal.write(bytes),
+    write: (bytes) => terminal.write(bytes, () => { terminal.options.cursorBlink = false; }),
     focus: () => terminal.focus(),
     fit: () => fit.fit(),
     onData: (listener) => { const subscription = terminal.onData(listener); return () => subscription.dispose(); },
     onResize: (listener) => { const subscription = terminal.onResize(listener); return () => subscription.dispose(); },
-    dispose: () => { observer.disconnect(); fit.dispose(); terminal.dispose(); },
+    dispose: () => { cancelInitialFit(); observer.disconnect(); fit.dispose(); terminal.dispose(); },
   };
 }
