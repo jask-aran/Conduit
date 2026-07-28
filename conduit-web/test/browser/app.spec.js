@@ -124,6 +124,10 @@ test.beforeEach(async ({ page }) => {
   await page.route("**/v0/capabilities", async (route) => {
     await route.fulfill({ json: { partialContinue: true, globalRuntime: "sse" } });
   });
+  await page.route("**/v0/ptys", async (route) => {
+    if (route.request().method() === "GET") return route.fulfill({ json: { ptys: [] } });
+    await route.fulfill({ status: 501, json: { error: "unhandled_browser_test_api" } });
+  });
   await page.route("**/v0/runtime", async (route) => {
     await route.fulfill({ json: { type: "runtime_global_snapshot", processes: [], at: new Date().toISOString() } });
   });
@@ -476,7 +480,7 @@ test("creates a durable chat route and renders the primary surface", async ({ pa
   await expect(sendButton).toHaveAttribute("data-variant", "default");
 });
 
-test("linked Workspace chats open a resizable terminal-ready split from the palette and context menu", async ({ page }) => {
+test("Workspace views use the nested palette page and terminal lives in the Workspace panel", async ({ page }) => {
   const workspace = {
     id: "project_conduit",
     slug: "conduit",
@@ -493,24 +497,28 @@ test("linked Workspace chats open a resizable terminal-ready split from the pale
   await page.goto("/chat/session_conduit");
   await expect(page.getByRole("region", { name: "Terminal pane" })).toHaveCount(0);
   await page.keyboard.press(process.platform === "darwin" ? "Meta+K" : "Control+K");
-  await page.getByRole("option", { name: /Toggle terminal pane/ }).click();
+  await page.getByRole("option", { name: "Workspace views…" }).click();
+  await expect(page.getByText("Workspace ›")).toBeVisible();
+  await page.getByRole("option", { name: "Terminal" }).click();
   const terminal = page.getByRole("region", { name: "Terminal pane" });
   await expect(terminal).toBeVisible();
-  await expect(terminal).toContainText("Start a Workspace terminal");
-  const divider = page.getByRole("separator", { name: "Resize terminal pane" });
+  await expect(terminal).toContainText("Start a terminal");
+  await expect(page.getByRole("tab", { name: "Terminal" })).toHaveAttribute("aria-selected", "true");
+  const divider = page.getByRole("separator", { name: "Resize workspace panel" });
   if ((page.viewportSize()?.width || 0) > 760) {
     const box = await divider.boundingBox();
-    const originalWidth = (await terminal.boundingBox()).width;
+    const panel = page.getByRole("complementary", { name: "Workspace panel" });
+    const originalWidth = (await panel.boundingBox()).width;
     await page.mouse.move(box.x + 4, box.y + 80);
     await page.mouse.down();
     await page.mouse.move(box.x - 60, box.y + 80);
     await page.mouse.up();
-    expect((await terminal.boundingBox()).width).toBeGreaterThan(originalWidth + 50);
+    expect((await panel.boundingBox()).width).toBeGreaterThan(originalWidth + 50);
   }
-  await page.getByRole("button", { name: "Close terminal pane" }).click();
+  await page.getByRole("tab", { name: "Files" }).click();
   await expect(terminal).toHaveCount(0);
   await page.getByRole("button", { name: "Conduit work" }).click({ button: "right" });
-  await page.getByRole("menuitem", { name: "Open terminal pane" }).click();
+  await page.getByRole("menuitem", { name: "Open terminal" }).click();
   await expect(terminal).toBeVisible();
 });
 
@@ -528,11 +536,14 @@ test("the terminal renderer can use the xterm baseline over the same PTY transpo
   await page.route("**/v0/projects", (route) => route.fulfill({ json: { projects: [...projects, workspace] } }));
   await page.route("**/v0/chats/session_terminal", (route) => route.fulfill({ json: workspace.sessions[0] }));
   await page.route("**/v0/sessions/session_terminal", (route) => route.fulfill({ json: { ...workspace.sessions[0], messages: [], tools: [] } }));
-  await page.route("**/v0/ptys", (route) => route.fulfill({ status: 201, json: { id: "550e8400-e29b-41d4-a716-446655440055", status: "running" } }));
+  await page.route("**/v0/ptys", (route) => route.fulfill(route.request().method() === "GET"
+    ? { json: { ptys: [] } }
+    : { status: 201, json: { id: "550e8400-e29b-41d4-a716-446655440055", projectId: workspace.id, status: "running" } }));
 
   await page.goto("/chat/session_terminal");
   await page.keyboard.press(process.platform === "darwin" ? "Meta+K" : "Control+K");
-  await page.getByRole("option", { name: /Toggle terminal pane/ }).click();
+  await page.getByRole("option", { name: "Workspace views…" }).click();
+  await page.getByRole("option", { name: "Terminal" }).click();
   await page.getByRole("button", { name: "Start terminal" }).click();
   const canvas = page.locator(".terminal-canvas");
   await expect(canvas).toHaveAttribute("data-terminal-renderer", "xterm");
@@ -553,11 +564,14 @@ test("the terminal renderer can use Ghostty over the same PTY transport", async 
   await page.route("**/v0/projects", (route) => route.fulfill({ json: { projects: [...projects, workspace] } }));
   await page.route("**/v0/chats/session_ghostty", (route) => route.fulfill({ json: workspace.sessions[0] }));
   await page.route("**/v0/sessions/session_ghostty", (route) => route.fulfill({ json: { ...workspace.sessions[0], messages: [], tools: [] } }));
-  await page.route("**/v0/ptys", (route) => route.fulfill({ status: 201, json: { id: "550e8400-e29b-41d4-a716-446655440056", status: "running" } }));
+  await page.route("**/v0/ptys", (route) => route.fulfill(route.request().method() === "GET"
+    ? { json: { ptys: [] } }
+    : { status: 201, json: { id: "550e8400-e29b-41d4-a716-446655440056", projectId: workspace.id, status: "running" } }));
 
   await page.goto("/chat/session_ghostty");
   await page.keyboard.press(process.platform === "darwin" ? "Meta+K" : "Control+K");
-  await page.getByRole("option", { name: /Toggle terminal pane/ }).click();
+  await page.getByRole("option", { name: "Workspace views…" }).click();
+  await page.getByRole("option", { name: "Terminal" }).click();
   await page.getByRole("button", { name: "Start terminal" }).click();
   const canvas = page.locator(".terminal-canvas");
   await expect(canvas).toHaveAttribute("data-terminal-renderer", "ghostty");
@@ -565,6 +579,43 @@ test("the terminal renderer can use Ghostty over the same PTY transport", async 
   await page.getByRole("combobox", { name: "Terminal renderer" }).selectOption("xterm");
   await expect(canvas).toHaveAttribute("data-terminal-renderer", "xterm");
   await expect(canvas.locator(".xterm")).toBeVisible();
+});
+
+test("reopening a Workspace terminal reattaches its resident PTY instead of starting another shell", async ({ page }) => {
+  const workspace = {
+    id: "project_resident_terminal",
+    slug: "resident-terminal",
+    name: "Resident terminal",
+    kind: "workspace",
+    origin: "linked",
+    sessions: [{ id: "session_resident_terminal", projectId: "project_resident_terminal", status: "active", title: "Resident terminal work" }],
+  };
+  const pty = { id: "550e8400-e29b-41d4-a716-446655440057", projectId: workspace.id, status: "running" };
+  let creates = 0;
+  let lists = 0;
+  await page.addInitScript(() => localStorage.setItem("conduit:terminal-renderer", "xterm"));
+  await page.unroute("**/v0/projects");
+  await page.route("**/v0/projects", (route) => route.fulfill({ json: { projects: [...projects, workspace] } }));
+  await page.route("**/v0/chats/session_resident_terminal", (route) => route.fulfill({ json: workspace.sessions[0] }));
+  await page.route("**/v0/sessions/session_resident_terminal", (route) => route.fulfill({ json: { ...workspace.sessions[0], messages: [], tools: [] } }));
+  await page.route("**/v0/ptys", (route) => {
+    if (route.request().method() === "GET") { lists += 1; return route.fulfill({ json: { ptys: [pty] } }); }
+    creates += 1;
+    return route.fulfill({ status: 201, json: pty });
+  });
+
+  await page.goto("/chat/session_resident_terminal");
+  await page.keyboard.press(process.platform === "darwin" ? "Meta+K" : "Control+K");
+  await page.getByRole("option", { name: "Workspace views…" }).click();
+  await page.getByRole("option", { name: "Terminal" }).click();
+  await expect(page.locator(".terminal-canvas .xterm")).toBeVisible();
+  await page.getByRole("tab", { name: "Files" }).click();
+  await page.keyboard.press(process.platform === "darwin" ? "Meta+K" : "Control+K");
+  await page.getByRole("option", { name: "Workspace views…" }).click();
+  await page.getByRole("option", { name: "Terminal" }).click();
+  await expect(page.locator(".terminal-canvas .xterm")).toBeVisible();
+  expect(lists).toBe(2);
+  expect(creates).toBe(0);
 });
 
 test("reloading a durable new-chat URL does not create another chat", async ({ page }) => {
