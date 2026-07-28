@@ -220,7 +220,6 @@ svg { stroke-width: 1.5; }
 /* Project dashboard: a lightweight operator page, not a widget framework. */
 .project-dashboard { position: relative; z-index: 1; min-height: 0; flex: 1; overflow-y: auto; scrollbar-width: thin; }
 .project-dashboard-content { width: min(1040px, calc(100% - 64px)); margin-inline: auto; padding: 54px 0 72px; }
-.dashboard-mobile-sidebar-trigger { position: absolute; top: 12px; left: 10px; z-index: 4; }
 .project-identity { display: flex; align-items: flex-start; justify-content: space-between; gap: 28px; padding-bottom: 28px; border-bottom: 1px solid var(--border); }
 .project-identity-title { display: flex; min-width: 0; align-items: flex-start; gap: 14px; }
 .project-kind-icon { display: grid; width: 42px; height: 42px; flex: none; place-items: center; border: 1px solid var(--border); border-radius: 12px; background: var(--card); color: var(--accent-cool); }
@@ -298,8 +297,10 @@ svg { stroke-width: 1.5; }
 .terminal-pane-empty > svg { width: 28px; height: 28px; color: var(--accent-cool); opacity: .8; }
 .terminal-pane-empty strong { color: var(--foreground); font-size: 14px; font-weight: 550; }
 .terminal-pane-empty p { max-width: 290px; margin: 0; font-size: 12px; line-height: 1.55; }
-.terminal-canvas { min-width: 0; min-height: 0; flex: 1; overflow: hidden; padding: 8px; }
-.terminal-canvas > div, .terminal-canvas > canvas { width: 100%; height: 100%; }
+.terminal-canvas { position: relative; min-width: 0; min-height: 0; flex: 1; overflow: hidden; background: #000; padding: 8px; }
+.terminal-canvas > div { width: 100%; height: 100%; }
+.terminal-canvas[data-terminal-ready="false"] > canvas { opacity: 0; }
+.terminal-canvas > canvas { display: block; max-width: 100%; max-height: 100%; transition: opacity 80ms linear; }
 
 .transcript { position: relative; z-index: 1; min-height: 0; flex: 1; }
 .message-scroller-viewport { width: 100%; height: 100%; overflow-y: auto; scrollbar-width: none; }
@@ -579,6 +580,7 @@ svg { stroke-width: 1.5; }
   background: var(--card);
   border-color: var(--border);
 }
+.workspace-settings-card[data-current="true"] { border-color: color-mix(in oklch, var(--accent-cool), var(--border) 52%); box-shadow: inset 3px 0 0 var(--accent-cool); }
 /* The primary action reads as a bright glass key: top specular line + lift. */
 [data-slot="button"][data-variant="default"] {
   box-shadow: inset 0 1px 0 0 oklch(1 0 0 / 45%), 0 8px 20px -10px rgb(0 0 0 / 55%);
@@ -663,17 +665,22 @@ svg { stroke-width: 1.5; }
     height: calc(var(--app-height, 100dvh) - 16px);
     max-height: calc(var(--app-height, 100dvh) - 16px);
   }
-  .project-dashboard-content { width: calc(100% - 28px); padding: 56px 0 calc(32px + env(safe-area-inset-bottom, 0px)); }
-  .project-identity { flex-direction: column; gap: 18px; }
-  .project-identity-actions { width: 100%; }
-  .project-identity-actions [data-slot="button"] { flex: 1; }
-  .project-title-line { flex-wrap: wrap; }
-  .project-title-line h1 { width: 100%; white-space: normal; }
-  .project-path { max-width: calc(100vw - 88px); }
+  .project-dashboard-content { width: calc(100% - 24px); padding: 24px 0 calc(32px + env(safe-area-inset-bottom, 0px)); }
+  .project-identity { flex-direction: column; gap: 16px; padding-bottom: 20px; }
+  .project-identity-title { gap: 12px; }
+  .project-kind-icon { width: 40px; height: 40px; border-radius: 11px; }
+  .project-title-line { gap: 7px; }
+  .project-title-line h1 { font-size: 29px; line-height: 1.05; }
+  .project-path { max-width: calc(100vw - 84px); margin-top: 7px; }
+  .project-identity-actions { display: grid; width: 100%; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .project-identity-actions [data-slot="button"] { min-width: 0; min-height: 40px; justify-content: center; padding-inline: 10px; white-space: nowrap; }
   .project-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .project-stats article { min-height: 100px; padding: 16px 18px; }
   .project-stats article + article { border-left: 0; }
   .project-stats article:nth-child(even) { border-left: 1px solid var(--border); }
   .project-stats article:nth-child(n+3) { border-top: 1px solid var(--border); }
+  .project-stats article:last-child { grid-column: 1 / -1; border-left: 0; }
+  .project-dashboard-section { margin-top: 30px; }
   .project-chat-row { min-height: 72px; grid-template-columns: 18px minmax(0, 1fr) 14px; }
   .project-chat-row time { display: none; }
   .project-config-grid { grid-template-columns: 1fr; gap: 10px; }
