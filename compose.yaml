@@ -1,0 +1,48 @@
+name: conduit
+
+services:
+  conduit:
+    image: "${CONDUIT_IMAGE:-conduit}:${CONDUIT_RELEASE:-development}"
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        CONDUIT_RELEASE: "${CONDUIT_RELEASE:-development}"
+    init: true
+    user: "${CONDUIT_UID:-1000}:${CONDUIT_GID:-1000}"
+    read_only: true
+    restart: unless-stopped
+    stop_grace_period: 15s
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp:size=256m,mode=1777
+    environment:
+      CONDUIT_HOST: 0.0.0.0
+      CONDUIT_PORT: 4310
+      CONDUIT_DATA_ROOT: /data
+      CONDUIT_CLIENT_DIST: /app/conduit-web/dist
+      CONDUIT_TEMPLATES_ROOT: /app/templates
+      CONDUIT_WORKSPACE_ALLOWLIST: /workspaces
+      CONDUIT_WORKSPACE_SUGGESTION_ROOT: /workspaces
+      CONDUIT_RELEASE: "${CONDUIT_RELEASE:-development}"
+      ENABLE_PARTIAL_CONTINUE: "${ENABLE_PARTIAL_CONTINUE:-true}"
+    ports:
+      - "${CONDUIT_BIND_ADDRESS:-127.0.0.1}:${CONDUIT_PORT:-4310}:4310"
+    volumes:
+      - type: bind
+        source: "${CONDUIT_DATA_DIR:-./data}"
+        target: /data
+      - type: bind
+        source: "${CONDUIT_WORKSPACES_DIR:-../workspaces}"
+        target: /workspaces
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:4310/healthz').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"
+      interval: 15s
+      timeout: 3s
+      start_period: 20s
+      retries: 3

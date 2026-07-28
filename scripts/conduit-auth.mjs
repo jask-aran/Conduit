@@ -6,7 +6,8 @@ import { fileURLToPath } from "node:url";
 import { AuthStore, statusSummary } from "../conduit-web/src/auth-store.js";
 
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const authFile = path.resolve(process.env.CONDUIT_AUTH_FILE || path.join(repositoryRoot, "data/auth.json"));
+const dataRoot = path.resolve(process.env.CONDUIT_DATA_ROOT || path.join(repositoryRoot, "data"));
+const authFile = path.resolve(process.env.CONDUIT_AUTH_FILE || path.join(dataRoot, "auth.json"));
 
 function printHelp() {
   console.log(`Usage:
@@ -21,7 +22,8 @@ function printHelp() {
                                           active session count.
 
 Environment:
-  CONDUIT_AUTH_FILE    Override the auth.json path (default: data/auth.json).`);
+  CONDUIT_DATA_ROOT    Override the durable data root (default: data).
+  CONDUIT_AUTH_FILE    Override auth.json within that root.`);
 }
 
 async function readHidden(promptText) {

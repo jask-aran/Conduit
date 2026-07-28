@@ -1,0 +1,15 @@
+.git
+.github
+.devcontainer
+.env*
+node_modules
+**/node_modules
+data
+release
+screenshots
+**/screenshots
+conduit-web/dist
+conduit-web/playwright-report
+conduit-web/test
+conduit-web/test-results
+*.log

@@ -48,6 +48,18 @@ export class RuntimeHub {
     });
   }
 
+  close() {
+    for (const client of this.clients) {
+      try {
+        if (client.kind === "sse") client.response.end();
+        else client.socket.close?.(1012, "Conduit is restarting");
+      } catch {
+        // The transport already closed.
+      }
+    }
+    this.clients.clear();
+  }
+
   send(client, value) {
     this.write(client, typeof value === "string" ? value : JSON.stringify(value));
   }
