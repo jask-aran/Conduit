@@ -19,15 +19,15 @@ function fakePty() {
   };
 }
 
-test("PTY manager permits only linked Workspaces and persists bounded terminal metadata", async () => {
+test("PTY manager starts a terminal only with a server-resolved absolute working directory", async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-pty-manager-"));
   const workspace = path.join(root, "workspace");
   await fs.mkdir(workspace);
   const pty = fakePty();
-  const manager = new PtyManager({ filePath: path.join(root, "remotes.json"), workspaceAllowlist: [root], scrollbackBytes: 4, pty });
+  const manager = new PtyManager({ filePath: path.join(root, "remotes.json"), scrollbackBytes: 4, pty });
   await manager.load();
-  await assert.rejects(manager.create({ project: { id: "managed", origin: "managed", kind: "project", path: workspace } }), { code: "pty_workspace_required" });
-  const record = await manager.create({ project: { id: "workspace", origin: "linked", kind: "workspace", path: workspace } });
+  await assert.rejects(manager.create({ project: { id: "managed" } }), { code: "pty_cwd_required" });
+  const record = await manager.create({ project: { id: "workspace" }, cwd: workspace });
   assert.equal(pty.handles[0].options.env.TERM, "xterm-256color");
   assert.equal(pty.handles[0].options.env.COLORTERM, "truecolor");
   assert.equal(Object.hasOwn(pty.handles[0].options.env, "NO_COLOR"), false);

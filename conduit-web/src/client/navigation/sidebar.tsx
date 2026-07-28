@@ -282,7 +282,7 @@ export function Sidebar(props: {
           </ContextMenuSubContent>
         </ContextMenuSub>
         <ContextMenuItem onSelect={() => void props.onCopyTranscript(menuProps.chat)}><ClipboardCopyIcon />Copy transcript</ContextMenuItem>
-        <Show when={menuProps.project.origin === "linked"}><ContextMenuItem onSelect={() => props.onOpenTerminal(menuProps.chat, menuProps.project)}><TerminalIcon />Open terminal pane</ContextMenuItem></Show>
+        <ContextMenuItem onSelect={() => props.onOpenTerminal(menuProps.chat, menuProps.project)}><TerminalIcon />Open terminal</ContextMenuItem>
       </ContextMenuGroup>
       <ContextMenuSeparator />
       <ContextMenuGroup>

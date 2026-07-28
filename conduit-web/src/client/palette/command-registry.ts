@@ -49,7 +49,7 @@ export interface PaletteActions {
   attach: () => void;
   toggleSidebar: () => void;
   toggleWorkspacePanel: () => void;
-  toggleTerminalPane: () => void;
+  openWorkspaceView: (view: "files" | "diff" | "artifacts" | "terminal") => void;
   copyTranscript: () => void;
   rename: () => void;
   move: () => void;
@@ -150,11 +150,22 @@ export const PALETTE_PAGES: Record<string, PalettePage> = {
     placeholder: "Search chats and folders…",
     heading: "Go to",
   },
+  workspace: {
+    id: "workspace",
+    label: "Workspace views…",
+    description: "Open files, source control, artifacts, or a terminal",
+    icon: "workspace-panel",
+    shortcut: "",
+    keywords: ["workspace", "files", "source control", "artifacts", "terminal", "shell"],
+    group: "commands",
+    prefix: "Workspace ›",
+    placeholder: "Search workspace views…",
+    heading: "Workspace views",
+  },
 };
 
 const hasChat = (context: PaletteContext) => Boolean(context.chatId);
 const isNamedFolder = (context: PaletteContext) => Boolean(context.project && context.project.slug !== "chat");
-const hasLinkedWorkspace = (context: PaletteContext) => context.project?.origin === "linked";
 
 /** Static palette actions. Prefer this list for one-shot app operations. */
 export const paletteCommands: PaletteCommand[] = [{
@@ -232,15 +243,6 @@ export const paletteCommands: PaletteCommand[] = [{
   shortcut: "⌘.",
   isAvailable: hasChat,
   run: (actions) => actions.toggleWorkspacePanel(),
-}, {
-  id: "toggle-terminal-pane",
-  group: "commands",
-  label: "Toggle terminal pane",
-  description: "Open a terminal beside this Workspace conversation",
-  icon: "terminal",
-  keywords: ["shell", "split", "workspace", "console"],
-  isAvailable: hasLinkedWorkspace,
-  run: (actions) => actions.toggleTerminalPane(),
 }, {
   id: "copy-transcript",
   group: "commands",
@@ -372,6 +374,28 @@ function settingsSectionCommands(context: PaletteContext): PaletteCommand[] {
   }));
 }
 
+const WORKSPACE_VIEWS = [
+  { id: "files", label: "Files", description: "Browse the project files", icon: "workspace-panel", keywords: ["tree", "folder", "project"] },
+  { id: "diff", label: "Source Control", description: "Inspect working-tree changes", icon: "workspace-panel", keywords: ["git", "diff", "changes"] },
+  { id: "artifacts", label: "Artifacts", description: "Browse outputs and interactive artifacts", icon: "workspace-panel", keywords: ["outputs", "preview"] },
+  { id: "terminal", label: "Terminal", description: "Open a server-owned shell for this session", icon: "terminal", keywords: ["shell", "console", "pty"] },
+] as const;
+
+function workspaceViewCommands(): PaletteCommand[] {
+  return WORKSPACE_VIEWS.map((view) => ({
+    id: `workspace:${view.id}`,
+    group: "navigation",
+    page: "workspace",
+    label: view.label,
+    description: view.description,
+    icon: view.icon,
+    keywords: ["workspace", view.label, ...view.keywords],
+    searchValue: `workspace ${view.label} ${view.keywords.join(" ")}`,
+    isAvailable: hasChat,
+    run: (actions) => actions.openWorkspaceView(view.id),
+  }));
+}
+
 function chatCommands(context: PaletteContext): PaletteCommand[] {
   const projects = Array.isArray(context.projects) ? context.projects : [];
   const rows: { project: Project; session: ChatSummary }[] = [];
@@ -427,6 +451,10 @@ export const paletteSources: PaletteSource[] = [{
   id: "settings-sections",
   page: "settings",
   commands: settingsSectionCommands,
+}, {
+  id: "workspace-views",
+  page: "workspace",
+  commands: workspaceViewCommands,
 }, {
   id: "profiles",
   page: null,

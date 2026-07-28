@@ -52,21 +52,21 @@ textarea until send, then renders the same cards beneath their user message.
 Persisted image cards use the attachment preview route, including when restored
 for edit. The compact composer model menu remains separate from Settings'
 searchable multi-model picker. Cmd/Ctrl+K opens the typed application command
-palette. Root lists concrete app actions and models; Settings… and Go to… are
-drill-down pages with search prefixes
-(`Settings ›`, `Go to ›`) so sections and chats do not flood the root list.
+palette. Root lists concrete app actions and models; Settings…, Go to…, and
+Workspace views… are drill-down pages with search prefixes
+(`Settings ›`, `Go to ›`, `Workspace ›`) so sections, chats, and panel tabs do
+not flood the root list.
 Cmd/Ctrl+Shift+O opens Go to mode directly; Cmd/Ctrl+Shift+C starts a new chat.
 The composer slash Popover contains only `/attach`. A project-aware breadcrumb
 identifies where each chat belongs.
 
-The chat header, Cmd/Ctrl+., and the command palette open a per-chat read-only
-Workspace panel. Its lazy directory API hides `.conduit`, rejects symlinks and
-traversal, and caps text previews at 1 MiB. Files combines a file tree with an
-optional resizable preview. Source Control reports Git porcelain status,
-branch/upstream divergence, a compact recent-commit graph, and staged and
-unstaged unified diffs in the same optional detail bay; non-Git projects remain
-usable with an explicit empty state. Git controls are read-only: refresh and
-copy branch/commit IDs.
+The chat header, Cmd/Ctrl+., and Workspace views… open a per-chat Workspace
+panel. Files and Source Control are read-only: the lazy directory API hides
+`.conduit`, rejects symlinks and traversal, and caps text previews at 1 MiB;
+Git controls only refresh and copy branch/commit IDs. Terminal is available for
+every chat, starts at the validated Workspace root for Workspace chats and the
+server home directory otherwise, and remains server-owned after the browser
+leaves its tab.
 
 Every Isolated Pi profile process receives:
 
@@ -258,7 +258,7 @@ starting, and browser-attached processes remain resident.
 - `GET /v0/live-sessions/:id/snapshot`
 - `DELETE /v0/live-sessions/:id/process`
 - `WS /v0/live-sessions/:id/stream`
-- `GET|POST /v0/ptys` lists or creates a shell only for a linked Workspace
+- `GET|POST /v0/ptys` lists or creates a shell for a chat project
 - `POST /v0/ptys/:id/rename` and `DELETE /v0/ptys/:id` rename or stop/remove it
 - `WS /v0/ptys/:id/attach` attaches a terminal renderer
 - `GET /v0/runtime` returns the current global live-process snapshot
@@ -340,8 +340,10 @@ produces `client_error` with `code` and `message`.
 
 ## Workspace terminal protocol
 
-Terminal processes are server-owned `node-pty` shells and can start only in a
-validated linked Workspace. Their lightweight records persist in
+Terminal processes are server-owned `node-pty` shells. The server derives their
+cwd: a validated Workspace root for Workspace chats, otherwise Conduit's home
+directory. The browser supplies only a project id and cannot select a path.
+Their lightweight records persist in
 `data/remotes.json`; the shell itself does not survive a server restart. The
 browser may detach without stopping it, and the server retains a 256 KiB output
 tail for a later attachment.

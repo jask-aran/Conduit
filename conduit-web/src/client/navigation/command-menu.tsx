@@ -32,6 +32,7 @@ const icons: Record<string, (props: { class?: string }) => JSX.Element> = {
   delete: Trash2Icon,
   sidebar: PanelLeftIcon,
   "workspace-panel": PanelRightIcon,
+  terminal: TerminalIcon,
   chat: MessageSquareIcon,
   thinking: BrainIcon,
   retry: RefreshCwIcon,

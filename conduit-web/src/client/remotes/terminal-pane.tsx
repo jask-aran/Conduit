@@ -4,9 +4,9 @@ import { Button, Spinner } from "@/components/primitives";
 import { api } from "../api/client";
 import { createTerminalRenderer, preloadTerminalRenderer, selectedTerminalRenderer, type TerminalRendererId } from "./terminal-renderer";
 
-type Pty = { id: string; status: string };
+type Pty = { id: string; projectId: string; status: string };
 
-export function TerminalPane(props: { projectId: string; onClose: () => void }) {
+export function TerminalPane(props: { projectId: string }) {
   const [pty, setPty] = createSignal<Pty | null>(null);
   const [error, setError] = createSignal("");
   const [starting, setStarting] = createSignal(false);
@@ -58,11 +58,25 @@ export function TerminalPane(props: { projectId: string; onClose: () => void }) 
     try { await connect(record, next); }
     catch (cause) { setError((cause as Error).message); }
   };
-  onMount(() => { void preloadTerminalRenderer().catch((cause) => setError((cause as Error).message)); });
+  const attachExisting = async () => {
+    setStarting(true); setError("");
+    try {
+      const { ptys } = await api<{ ptys: Pty[] }>("/v0/ptys");
+      const record = ptys.find((item) => item.projectId === props.projectId && item.status === "running");
+      if (!record) return;
+      setPty(record);
+      await connect(record);
+    } catch (cause) { setError((cause as Error).message); }
+    finally { setStarting(false); }
+  };
+  onMount(() => {
+    void preloadTerminalRenderer().catch((cause) => setError((cause as Error).message));
+    void attachExisting();
+  });
   onCleanup(() => dispose?.());
   return <section class="terminal-pane" aria-label="Terminal pane">
-    <header class="terminal-pane-header"><div><TerminalIcon /><strong>Terminal</strong><span>Workspace</span></div><div class="terminal-pane-actions"><select aria-label="Terminal renderer" value={rendererId()} onChange={(event) => void switchRenderer(event.currentTarget.value as TerminalRendererId)}><option value="ghostty">Ghostty</option><option value="xterm">xterm</option></select><Button variant="ghost" size="icon-sm" aria-label="Close terminal pane" onClick={props.onClose}>×</Button></div></header>
-    <Show when={pty()} fallback={<div class="terminal-pane-empty"><TerminalIcon /><strong>Start a Workspace terminal</strong><p>Runs a server-owned shell in this linked Workspace.</p><Button disabled={starting()} onClick={() => void start()}>{starting() ? <Spinner /> : "Start terminal"}</Button><Show when={error()}><p role="alert">{error()}</p></Show></div>}>
+    <header class="terminal-pane-header"><div><TerminalIcon /><strong>Terminal</strong></div><div class="terminal-pane-actions"><select aria-label="Terminal renderer" value={rendererId()} onChange={(event) => void switchRenderer(event.currentTarget.value as TerminalRendererId)}><option value="ghostty">Ghostty</option><option value="xterm">xterm</option></select></div></header>
+    <Show when={pty()} fallback={<div class="terminal-pane-empty"><TerminalIcon /><strong>Start a terminal</strong><p>Runs a server-owned shell in this Workspace or Conduit home directory.</p><Button disabled={starting()} onClick={() => void start()}>{starting() ? <Spinner /> : "Start terminal"}</Button><Show when={error()}><p role="alert">{error()}</p></Show></div>}>
       <div ref={host} class="terminal-canvas" data-renderer={rendererId()} />
     </Show>
   </section>;

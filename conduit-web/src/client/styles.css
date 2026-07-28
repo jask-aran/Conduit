@@ -145,7 +145,7 @@ svg { stroke-width: 1.5; }
 .workspace-panel-header > div { display: flex; min-width: 0; align-items: baseline; gap: 8px; }
 .workspace-panel-header strong { font-size: 14px; }
 .workspace-panel-header small { color: var(--muted-foreground); font-size: 11px; }
-.workspace-panel-tabs { display: grid; grid-template-columns: repeat(3, 1fr); padding: 3px 6px; border-bottom: 1px solid var(--border); }
+.workspace-panel-tabs { display: grid; grid-template-columns: repeat(4, 1fr); padding: 3px 6px; border-bottom: 1px solid var(--border); }
 .workspace-panel-tabs button { display: flex; min-height: 28px; align-items: center; justify-content: center; gap: 6px; border: 0; border-radius: 6px; background: transparent; color: var(--muted-foreground); font-size: 11px; }
 .workspace-panel-tabs button[aria-selected="true"] { background: var(--accent); color: var(--foreground); }
 .workspace-panel-tabs svg, .workspace-panel-header svg, .workspace-status-strip svg { width: 15px; height: 15px; }
@@ -286,10 +286,7 @@ svg { stroke-width: 1.5; }
 
 .work-area { position: relative; z-index: 1; display: flex; min-height: 0; flex: 1; }
 .work-area-conversation { display: flex; min-width: 0; flex: 1; flex-direction: column; }
-.terminal-pane-divider { position: relative; z-index: 3; width: 9px; flex: none; cursor: col-resize; touch-action: none; }
-.terminal-pane-divider::after { content: ""; position: absolute; inset-block: 0; left: 4px; border-left: 1px solid var(--border); transition: border-color 120ms ease; }
-.terminal-pane-divider:hover::after, .terminal-pane-divider:focus-visible::after { border-color: var(--accent-cool); }
-.terminal-pane { display: flex; width: var(--terminal-pane-width); min-width: 320px; flex: none; flex-direction: column; overflow: hidden; background: color-mix(in oklch, var(--background), black 9%); }
+.terminal-pane { display: flex; min-width: 0; min-height: 0; flex: 1; flex-direction: column; overflow: hidden; background: color-mix(in oklch, var(--background), black 9%); }
 .terminal-pane-header { display: flex; min-height: 48px; align-items: center; justify-content: space-between; padding: 6px 8px 6px 14px; border-bottom: 1px solid var(--border); }
 .terminal-pane-header > div { display: flex; min-width: 0; align-items: center; gap: 8px; }
 .terminal-pane-actions { display: flex; flex: none; align-items: center; gap: 6px; }
@@ -477,11 +474,6 @@ svg { stroke-width: 1.5; }
 .chat-main-empty .thread, .chat-main-empty .empty-thread, .chat-main-empty .welcome { width: 100%; min-height: 100%; padding: 0; }
 .chat-main-empty .welcome { padding-bottom: 176px; }
 .chat-main-empty .composer-stack { position: absolute; inset-inline: 0; top: 50%; z-index: 2; width: min(704px, calc(100% - 48px)); margin-inline: auto; padding: 0; transform: translateY(54px); background: transparent; }
-/* Empty-chat positioning is relative to .chat-main until a terminal splits the
-   work area. In a split, constrain it to the conversation half so its composer
-   cannot cover terminal controls. */
-.chat-main-empty .work-area[data-terminal-open="true"] .work-area-conversation { position: relative; }
-.chat-main-empty .work-area[data-terminal-open="true"] .transcript { inset: 0; }
 .chat-bootstrap { display: grid; min-height: 100%; place-items: center; color: var(--muted-foreground); font-size: 14px; }
 
 .conduit-modal, .settings-dialog, .command-dialog, .external-link-dialog { position: fixed; inset: 0; z-index: 80; display: grid; place-items: center; padding: 16px; background: rgb(0 0 0 / 55%); opacity: 1; visibility: visible; transition: opacity 150ms ease, visibility 0s; }
@@ -689,9 +681,6 @@ svg { stroke-width: 1.5; }
   .project-config-grid > div:not(:first-child) { margin-top: 8px; }
   .project-danger > div { align-items: stretch; flex-direction: column; }
   .project-dashboard-error { align-items: flex-start; flex-direction: column; gap: 3px; }
-  .work-area[data-terminal-open="true"] .work-area-conversation { display: none; }
-  .work-area[data-terminal-open="true"] .terminal-pane { width: 100%; min-width: 0; }
-  .work-area[data-terminal-open="true"] .terminal-pane-divider { display: none; }
   .thread { width: 100%; padding: 40px 16px 20px; }
   .composer-stack {
     flex: none;
