@@ -40,13 +40,14 @@ import {
 import { renderLoginPage } from "./auth-login-page.js";
 import { listWorkspaceDirectory, readWorkspaceDiff, readWorkspaceFile } from "./workspace-inspector.js";
 import { currentMagicDnsOrigin } from "./tailscale-share.js";
+import { buildProjectDashboard } from "./project-dashboard.js";
 import { PtyManager } from "./pty-manager.js";
 import { PtyOutputBatcher } from "./pty-output-batcher.js";
 
 const config = loadConfig();
 const projects = new ProjectStore(config);
 await projects.initialize();
-const terminals = new PtyManager({ filePath: config.remotesFile, workspaceAllowlist: config.workspaceAllowlist });
+const terminals = new PtyManager({ filePath: config.remotesFile });
 await terminals.load();
 async function clearHostPiDefaults() {
   const changed = [];
@@ -686,16 +687,24 @@ async function moveRegisteredChat({ chat, source, target, session }) {
   }
 }
 
-async function terminalWorkspace(id) {
+async function terminalContext(id) {
   const project = await projects.get(id);
-  if (!project || project.origin !== "linked" || project.kind !== "workspace") throw Object.assign(new Error("Terminals require a linked Workspace"), { code: "pty_workspace_required" });
-  await projects.validate(project);
-  return project;
+  if (!project) throw Object.assign(new Error("Terminal project was not found"), { code: "pty_project_not_found" });
+  if (project.kind === "workspace") {
+    await projects.validate(project);
+    return { project, cwd: project.path };
+  }
+  const cwd = await fs.realpath(os.homedir());
+  if (!(await fs.stat(cwd)).isDirectory()) throw Object.assign(new Error("Terminal home directory is unavailable"), { code: "pty_home_unavailable" });
+  return { project, cwd };
 }
 
 app.get("/v0/ptys", (_request, response) => response.json({ ptys: terminals.list() }));
 app.post("/v0/ptys", async (request, response, next) => {
-  try { response.status(201).json(await terminals.create({ project: await terminalWorkspace(String(request.body?.projectId || "")), templateId: String(request.body?.templateId || "shell"), cols: request.body?.cols, rows: request.body?.rows })); }
+  try {
+    const { project, cwd } = await terminalContext(String(request.body?.projectId || ""));
+    response.status(201).json(await terminals.create({ project, cwd, templateId: String(request.body?.templateId || "shell"), cols: request.body?.cols, rows: request.body?.rows }));
+  }
   catch (error) { next(error); }
 });
 app.post("/v0/ptys/:id/rename", async (request, response, next) => {
@@ -725,6 +734,31 @@ app.get("/v0/projects", async (_request, response, next) => {
       }),
     }))), live });
   } catch (error) { next(error); }
+});
+
+app.get("/v0/projects/:id/dashboard", async (request, response, next) => {
+  const controller = new AbortController();
+  const abort = () => controller.abort();
+  request.once("aborted", abort);
+  response.once("close", () => { if (!response.writableEnded) abort(); });
+  try {
+    const project = await projects.get(request.params.id);
+    if (!project) return response.status(404).json({ error: "project_not_found" });
+    await projects.validate(project);
+    response.json(await buildProjectDashboard({
+      project,
+      registry,
+      processes: manager.list(),
+      terminals: terminals.list(),
+      readPage: readSessionPage,
+      inspectWorkspace: (root, options) => readWorkspaceDiff(root, { ...options, includePatch: false }),
+      signal: controller.signal,
+    }));
+  } catch (error) {
+    if (!request.aborted && !response.destroyed) next(error);
+  } finally {
+    request.removeListener("aborted", abort);
+  }
 });
 
 function resolveProjectDefaultTemplateId(requested, fallback = null, { allowHostPi = false } = {}) {

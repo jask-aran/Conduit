@@ -29,13 +29,17 @@ export function createCatalogueStore() {
     setProjectId(project.id);
   };
 
+  const selectProject = (project: Project) => {
+    setSelectedId(null);
+    setProjectId(project.id);
+  };
+
   const patchChat = (chatId: string, patch: Partial<ChatSummary>) => setProjects((current) => current.map((project) => ({
     ...project,
     sessions: project.sessions.map((chat) => chat.id === chatId ? { ...chat, ...patch } : chat),
   })));
 
-  return { projects, setProjects, selectedId, setSelectedId, projectId, setProjectId, selected, refresh, select, patchChat };
+  return { projects, setProjects, selectedId, setSelectedId, projectId, setProjectId, selected, refresh, select, selectProject, patchChat };
 }
 
 export type CatalogueStore = ReturnType<typeof createCatalogueStore>;
-
