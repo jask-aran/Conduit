@@ -97,6 +97,8 @@ export class PtyManager extends EventEmitter {
     if (!template) throw failure("pty_template_not_allowed", "That terminal template is not available");
     if (!project?.id) throw failure("pty_project_required", "A terminal must belong to a project");
     if (!cwd || !path.isAbsolute(cwd)) throw failure("pty_cwd_required", "Terminal working directory is unavailable");
+    const resident = [...this.records.values()].find((item) => item.projectId === project.id && item.status === "running");
+    if (resident) return view(resident);
     if (this.handles.size >= this.maxSessions) throw failure("pty_capacity_reached", "The terminal session limit has been reached");
     const id = crypto.randomUUID();
     const now = new Date().toISOString();

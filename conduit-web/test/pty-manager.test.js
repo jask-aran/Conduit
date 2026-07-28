@@ -28,6 +28,9 @@ test("PTY manager starts a terminal only with a server-resolved absolute working
   await manager.load();
   await assert.rejects(manager.create({ project: { id: "managed" } }), { code: "pty_cwd_required" });
   const record = await manager.create({ project: { id: "workspace" }, cwd: workspace });
+  const duplicate = await manager.create({ project: { id: "workspace" }, cwd: workspace });
+  assert.equal(duplicate.id, record.id);
+  assert.equal(pty.handles.length, 1);
   assert.equal(pty.handles[0].options.env.TERM, "xterm-256color");
   assert.equal(pty.handles[0].options.env.COLORTERM, "truecolor");
   assert.equal(Object.hasOwn(pty.handles[0].options.env, "NO_COLOR"), false);

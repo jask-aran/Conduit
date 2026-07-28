@@ -50,6 +50,7 @@ export interface ProjectDashboardPayload {
     totalChats: number;
     activeChats: number;
     liveChats: number;
+    liveTerminals: number;
     lastActivityAt?: string | null;
   };
   git: {

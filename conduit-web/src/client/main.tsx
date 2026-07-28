@@ -38,6 +38,7 @@ function ChatHeader(props: {
   onOpenPalette: () => void;
   onTogglePanel: () => void;
   onShare: () => void;
+  dashboard?: boolean;
 }) {
   const projectLabel = () => props.project?.slug === "chat" ? "Chats" : props.project?.slug || props.project?.name || "Chats";
   const runtimeLabel = () => props.runtime?.kind === "native_pi" ? "Host Pi" : "Isolated Pi";
@@ -45,7 +46,7 @@ function ChatHeader(props: {
   const posture = () => props.runtime?.kind === "native_pi"
     ? props.live?.trustPosture === "native_saved_trust" ? "project resources trusted" : "project trust pending"
     : props.profile?.posture || props.profile?.tools?.join(" / ");
-  const line = () => [runtimeLabel(), props.live?.binaryVersion || props.runtime?.binaryVersion ? `Pi ${props.live?.binaryVersion || props.runtime?.binaryVersion}` : null, profileLabel(), projectLabel() !== "Chats" ? projectLabel() : null, posture()].filter(Boolean).join(" · ");
+  const line = () => props.dashboard ? "" : [runtimeLabel(), props.live?.binaryVersion || props.runtime?.binaryVersion ? `Pi ${props.live?.binaryVersion || props.runtime?.binaryVersion}` : null, profileLabel(), projectLabel() !== "Chats" ? projectLabel() : null, posture()].filter(Boolean).join(" · ");
   return <header class="chat-header">
     <Show when={!props.mobileSidebarOpen}>
       <Button variant="ghost" size="icon-sm" class="mobile-sidebar-trigger" data-mobile-open="false" aria-label="Toggle Sidebar" aria-expanded={false} onClick={props.onToggleMobileSidebar}><PanelLeftIcon /></Button>
@@ -54,7 +55,7 @@ function ChatHeader(props: {
     <Show when={line()}><span class="chat-profile-posture" title={line()}>{line()}</span></Show>
     <div class="chat-header-actions">
       <Button variant="ghost" size="icon-sm" class="palette-trigger" aria-label="Open command palette" title="Command palette" onClick={props.onOpenPalette}><SearchIcon /></Button>
-      <Button variant="ghost" size="icon-sm" aria-label="Copy Tailscale chat link" title="Copy Tailscale chat link" onClick={props.onShare}><ShareIcon /></Button>
+      <Button variant="ghost" size="icon-sm" aria-label={props.dashboard ? "Copy Tailscale workspace link" : "Copy Tailscale chat link"} title={props.dashboard ? "Copy Tailscale workspace link" : "Copy Tailscale chat link"} onClick={props.onShare}><ShareIcon /></Button>
       <Show when={!props.panelOpen}>
         <Button variant="ghost" size="icon-sm" aria-label="Toggle workspace panel" aria-expanded={false} onClick={props.onTogglePanel}><PanelRightIcon /></Button>
       </Show>
@@ -116,9 +117,10 @@ function App() {
     ? profiles().find((item) => item.id === "host-pi")
     : profiles().find((item) => item.id === chat.templateId()) || templates().find((item) => item.id === defaultTemplateId()) || null);
   const emptyChat = createMemo(() => chat.loadedId() === catalogue.selectedId() && !chat.messages().length && !chat.tools().length && !chat.activity()?.label);
+  const workspacePanelScope = createMemo(() => catalogue.selectedId() || (routeKind() === "project" && catalogue.projectId() ? `project:${catalogue.projectId()}` : null));
 
   createEffect(() => {
-    const id = catalogue.selectedId();
+    const id = workspacePanelScope();
     if (!id) return;
     setPanelOpen(localStorage.getItem(`conduit:workspace-panel:${id}:open`) === "true");
   });
@@ -134,7 +136,7 @@ function App() {
   });
 
   const setPanelOpenForChat = (next: boolean) => {
-    const id = catalogue.selectedId();
+    const id = workspacePanelScope();
     setPanelOpen(next);
     if (id) localStorage.setItem(`conduit:workspace-panel:${id}:open`, String(next));
   };
@@ -258,7 +260,8 @@ function App() {
     try {
       const created = await api<Project>("/v0/projects", { method: "POST", body: JSON.stringify(input) });
       await refresh();
-      await createChat(created, { templateId: created.defaultTemplateId || defaultTemplateId() || "chat" });
+      if (["link", "linked", "clone", "cloned"].includes(input.mode)) await openProject(created);
+      else await createChat(created, { templateId: created.defaultTemplateId || defaultTemplateId() || "chat" });
       return true;
     } catch (error) { showError((error as Error).message); return false; }
   };
@@ -308,7 +311,7 @@ function App() {
     setPanelOpenForChat(next);
   };
   const openWorkspaceView = (view: WorkspaceView) => {
-    if (!catalogue.selectedId()) return;
+    if (!workspacePanelScope()) return;
     setWorkspaceViewRequest({ tab: view, nonce: Date.now() });
     if (isMobileLayout()) setMobileSidebarOpen(false);
     setPanelOpenForChat(true);
@@ -323,6 +326,15 @@ function App() {
     } catch (error) {
       showError((error as Error).message);
     }
+  };
+  const shareProject = async () => {
+    const project = selectedProject();
+    if (!project) return;
+    try {
+      const { origin } = await api<{ origin: string }>("/v0/share-origin");
+      await navigator.clipboard.writeText(`${origin}${projectPath(project)}`);
+      toast.success("Tailscale workspace link copied");
+    } catch (error) { showError((error as Error).message); }
   };
   const runSidebar = (type: string) => setSidebarCommand({ type, nonce: Date.now() });
   const loadWorkspaceSuggestions = () => {
@@ -540,7 +552,7 @@ function App() {
             </section>
           </div>
         </>}>
-          <Button variant="ghost" size="icon-sm" class="dashboard-mobile-sidebar-trigger mobile-sidebar-trigger" aria-label="Toggle Sidebar" aria-expanded={mobileSidebarOpen()} onClick={() => setMobileSidebar(!mobileSidebarOpen())}><PanelLeftIcon /></Button>
+          <ChatHeader project={selectedProject()} title="Dashboard" panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onOpenPalette={() => openPalette(null)} onTogglePanel={togglePanel} onShare={() => void shareProject()} dashboard />
           <ProjectDashboard project={selectedProject()!} templates={templates()} runtime={runtime}
             onNewChat={createChat} onOpenChat={(target: DashboardChat, project) => openChat(target, project)}
             onRename={() => runSidebar("rename-folder")} onDelete={() => runSidebar("delete-project")}
@@ -548,7 +560,7 @@ function App() {
         </Show>
       </Show>
     </main>
-    <Show when={Boolean(selectedProject()) && Boolean(catalogue.selectedId())}><WorkspacePanel projectId={() => selectedProject()!.id} chatId={() => catalogue.selectedId()!} open={panelOpen} requestedTab={workspaceViewRequest} onClose={togglePanel} /></Show>
+    <Show when={Boolean(selectedProject()) && Boolean(workspacePanelScope())}><WorkspacePanel projectId={() => selectedProject()!.id} chatId={() => workspacePanelScope()!} open={panelOpen} requestedTab={workspaceViewRequest} onClose={togglePanel} /></Show>
     <CommandMenu open={paletteOpen()} onOpenChange={setPaletteOpen} initialPage={palettePage()} launchNonce={paletteNonce()}
       context={paletteContext()} actions={paletteActions} models={models.models()} currentModel={models.model()} onChooseModel={(spec) => void models.chooseModel(spec)} />
     <Settings open={settingsOpen()} initialSection={settingsSection()} initialWorkspaceId={settingsWorkspaceId()} onOpenChange={setSettingsOpen} models={models} templates={templates()} templatesLoading={templatesLoading()} defaultTemplateId={defaultTemplateId()} projects={catalogue.projects()} installations={installations()} installationsLoading={installationsLoading()} onInstallationsChange={setInstallations} onDefaultTemplateChange={saveDefaultTemplate} onWorkspaceDefaultChange={saveWorkspaceDefault} />

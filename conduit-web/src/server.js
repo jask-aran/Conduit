@@ -749,6 +749,7 @@ app.get("/v0/projects/:id/dashboard", async (request, response, next) => {
       project,
       registry,
       processes: manager.list(),
+      terminals: terminals.list(),
       readPage: readSessionPage,
       inspectWorkspace: (root, options) => readWorkspaceDiff(root, { ...options, includePatch: false }),
       signal: controller.signal,

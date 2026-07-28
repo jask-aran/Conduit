@@ -1,4 +1,4 @@
-import { createEffect, createMemo, createSignal, For, onCleanup, Show } from "solid-js";
+import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show } from "solid-js";
 import {
   ArrowRightIcon,
   CalendarDaysIcon,
@@ -85,10 +85,18 @@ export function ProjectDashboard(props: {
   const [savingProfile, setSavingProfile] = createSignal(false);
   const [savedDefault, setSavedDefault] = createSignal<{ projectId: string; value: string | null } | null>(null);
   const [copied, setCopied] = createSignal(false);
+  const [refreshVersion, setRefreshVersion] = createSignal(0);
   const projectId = createMemo(() => props.project.id);
+
+  onMount(() => {
+    const refresh = () => setRefreshVersion((version) => version + 1);
+    window.addEventListener("conduit:ptys-changed", refresh);
+    onCleanup(() => window.removeEventListener("conduit:ptys-changed", refresh));
+  });
 
   createEffect(() => {
     const id = projectId();
+    refreshVersion();
     const controller = new AbortController();
     setPayload(null);
     setError("");
@@ -199,6 +207,13 @@ export function ProjectDashboard(props: {
           <strong>{liveCount()}</strong>
           <small>{liveCount() === 1 ? "running process" : "running processes"}</small>
         </article>
+        <Show when={workspaceProject(props.project)}>
+          <article>
+            <span>Terminals</span>
+            <strong>{payload()?.stats.liveTerminals ?? 0}</strong>
+            <small>{(payload()?.stats.liveTerminals || 0) === 1 ? "resident PTY" : "resident PTYs"}</small>
+          </article>
+        </Show>
         <article>
           <span>Last activity</span>
           <strong class="project-stat-date">{relativeDate(payload()?.stats.lastActivityAt)}</strong>
