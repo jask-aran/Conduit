@@ -63,7 +63,7 @@ scripts/
 
 specs/                 near-term roadmap and implementation specs
 
-data/                  ignored mutable application data
+data/                  default ignored mutable application data
   chat/files/          working files visible to chats
   pi/                  isolated Pi home (credentials, settings, JSONL sessions)
   auth.json            password hash and session tokens (0600)
@@ -73,9 +73,10 @@ data/                  ignored mutable application data
   runtime.json         warm-pool and generation policy
 ```
 
-`data/` is one backup/mount boundary for working files, project metadata, and
-Isolated Pi credentials and history. Host Pi history lives in the host Pi
-home and needs a separate backup.
+`CONDUIT_DATA_ROOT` (repository `data/` by default, `/data` in Docker) is one
+backup/mount boundary for working files, project metadata, and Isolated Pi
+credentials and history. Host Pi history lives in the host Pi home and needs a
+separate backup.
 
 ## Data model
 
@@ -215,6 +216,25 @@ bash .devcontainer/start-conduit.sh dev       # server watcher on 4310, Vite on 
 `setup`, `build`, `start`, `stop`, `status`, `logs`, and `deploy` use the same
 managed launcher. `dev` is only for local hot-reload work; open port 5173 in
 that mode.
+
+## Production deployment
+
+The Docker-native deployment builds the server, client, templates, and pinned
+Isolated Pi into an unprivileged read-only image. Durable state and Workspaces
+remain in explicit host mounts:
+
+```bash
+git clone https://github.com/jask-aran/Conduit.git conduit
+cd conduit
+./scripts/deploy.sh up
+```
+
+The first run prompts for the Conduit login password and then binds the app to
+`127.0.0.1:4310` for a reverse proxy or Tailscale Serve. Exact commits can be
+turned into checksummed deployment archives with
+`./scripts/package-release.sh <commit-or-tag>`. The persistence, ownership,
+backup/restore, migration, graceful-shutdown, and deferred Host Pi contracts
+are documented in [`DEPLOYMENT.md`](DEPLOYMENT.md).
 
 ## Verification
 

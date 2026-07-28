@@ -26,6 +26,11 @@ This runs the server on 4310 and Vite with hot reload on 5173. `setup`,
 `build`, `start`, `stop`, `status`, `logs`, and `deploy` share the same managed
 launcher.
 
+The production container sets `CONDUIT_DATA_ROOT=/data`, serves the compiled
+client from its read-only image, and mounts durable data and the portable
+`/workspaces` namespace from the host. See [`../DEPLOYMENT.md`](../DEPLOYMENT.md)
+for the Compose, release, ownership, backup, and Native Pi boundary contracts.
+
 ## Runtime model
 
 The reserved `chat` project uses `data/chat/files` as its working directory.
@@ -70,13 +75,13 @@ leaves its tab.
 
 Every Isolated Pi profile process receives:
 
-- `PI_CODING_AGENT_DIR=data/pi`;
+- `PI_CODING_AGENT_DIR=$CONDUIT_DATA_ROOT/pi`;
 - the selected project directory as `cwd`;
 - resources from the chat's sticky profile (`templates/<id>/template.json`) as
   explicit CLI arguments.
 
 No session-directory override is supplied. Pi writes native JSONL sessions to
-`data/pi/sessions/<encoded-cwd>/`, and Conduit verifies each JSONL header's `cwd`
+`$CONDUIT_DATA_ROOT/pi/sessions/<encoded-cwd>/`, and Conduit verifies each JSONL header's `cwd`
 when associating sessions with projects.
 
 Host Pi Workspace processes instead use the detected absolute host executable,

@@ -269,12 +269,25 @@ export async function startConduitHarness({ env = {} } = {}) {
       })().catch(() => {});
       return stream;
     },
-    async stop() {
+    async terminate(signal = "SIGTERM") {
       for (const stream of streams) stream.close();
       if (child.exitCode == null) {
-        child.kill("SIGTERM");
-        await new Promise((resolve) => child.once("exit", resolve));
+        child.kill(signal);
+        await new Promise((resolve, reject) => {
+          const timeout = setTimeout(
+            () => reject(new Error(`Conduit did not exit after ${signal}: ${output}`)),
+            8_000,
+          );
+          child.once("exit", () => {
+            clearTimeout(timeout);
+            resolve();
+          });
+        });
       }
+      return { exitCode: child.exitCode, output };
+    },
+    async stop() {
+      await this.terminate();
       await fs.rm(root, { recursive: true, force: true });
     },
   };
