@@ -372,7 +372,11 @@ export function createActiveChat(options: ActiveChatOptions) {
     }
   }
 
-  const select = async (chat: ChatSummary, project: Project) => {
+  const select = async (
+    chat: ChatSummary,
+    project: Project,
+    navigationOptions: { history?: "push" | "replace" | "none"; onCommit?: () => void } = {},
+  ) => {
     // Load first, commit once: failed or superseded navigation leaves the
     // current chat, URL, socket, and selection intact.
     const navigation = ++navigationToken;
@@ -380,8 +384,13 @@ export function createActiveChat(options: ActiveChatOptions) {
     if (navigation !== navigationToken) return;
     reset();
     const selection = selectionToken;
-    catalogue.select(chat, project);
-    history.replaceState({}, "", `/chat/${chat.id}`);
+    const historyMode = navigationOptions.history || "replace";
+    batch(() => {
+      catalogue.select(chat, project);
+      if (historyMode === "push") history.pushState({}, "", `/chat/${chat.id}`);
+      else if (historyMode === "replace") history.replaceState({}, "", `/chat/${chat.id}`);
+      navigationOptions.onCommit?.();
+    });
     models.select(project.id, chat.id, detail, { reloadChat: detail.status !== "active" });
     void attachments.select(chat.id);
     applyDetail(detail);

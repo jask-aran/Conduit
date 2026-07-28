@@ -3,7 +3,6 @@ import { EventEmitter } from "node:events";
 import fs from "node:fs/promises";
 import path from "node:path";
 import nodePty from "node-pty";
-import { resolveExistingDirectory } from "./workspace-paths.js";
 
 export const PTY_MAX_SESSIONS = 8;
 export const PTY_SCROLLBACK_BYTES = 256 * 1024;
@@ -65,10 +64,9 @@ class ScrollbackBuffer {
 }
 
 export class PtyManager extends EventEmitter {
-  constructor({ filePath, workspaceAllowlist, maxSessions = PTY_MAX_SESSIONS, scrollbackBytes = PTY_SCROLLBACK_BYTES, pty = nodePty }) {
+  constructor({ filePath, maxSessions = PTY_MAX_SESSIONS, scrollbackBytes = PTY_SCROLLBACK_BYTES, pty = nodePty }) {
     super();
     this.filePath = filePath;
-    this.workspaceAllowlist = workspaceAllowlist;
     this.maxSessions = maxSessions;
     this.scrollbackBytes = scrollbackBytes;
     this.pty = pty;
@@ -94,12 +92,14 @@ export class PtyManager extends EventEmitter {
   get(id) { const record = this.records.get(id); return record ? view(record) : null; }
   output(id) { return this.scrollback.get(id)?.snapshot() || Buffer.alloc(0); }
 
-  async create({ project, templateId = "shell", cols = 80, rows = 24 }) {
+  async create({ project, cwd, templateId = "shell", cols = 80, rows = 24 }) {
     const template = TEMPLATES[templateId];
     if (!template) throw failure("pty_template_not_allowed", "That terminal template is not available");
-    if (!project || project.origin !== "linked" || project.kind !== "workspace") throw failure("pty_workspace_required", "Terminals require a linked Workspace");
+    if (!project?.id) throw failure("pty_project_required", "A terminal must belong to a project");
+    if (!cwd || !path.isAbsolute(cwd)) throw failure("pty_cwd_required", "Terminal working directory is unavailable");
+    const resident = [...this.records.values()].find((item) => item.projectId === project.id && item.status === "running");
+    if (resident) return view(resident);
     if (this.handles.size >= this.maxSessions) throw failure("pty_capacity_reached", "The terminal session limit has been reached");
-    const cwd = await resolveExistingDirectory(project.path || project.externalPath, this.workspaceAllowlist);
     const id = crypto.randomUUID();
     const now = new Date().toISOString();
     const record = { id, projectId: project.id, templateId, title: template.title, status: "running", createdAt: now, updatedAt: now, exitCode: null, signal: null };

@@ -85,6 +85,7 @@ export function Sidebar(props: {
   onWorkspaceSuggestionsNeeded: () => void;
   onNewChat: (project: Project) => Promise<void>;
   onOpenChat: (chat: ChatSummary, project: Project) => Promise<void>;
+  onOpenProject: (project: Project) => Promise<void>;
   onAddProject: (input: ProjectInput) => Promise<boolean>;
   onRenameChat: (chat: ChatSummary, project: Project, name: string) => Promise<boolean>;
   onRenameProject: (project: Project, name: string) => Promise<boolean>;
@@ -281,7 +282,7 @@ export function Sidebar(props: {
           </ContextMenuSubContent>
         </ContextMenuSub>
         <ContextMenuItem onSelect={() => void props.onCopyTranscript(menuProps.chat)}><ClipboardCopyIcon />Copy transcript</ContextMenuItem>
-        <Show when={menuProps.project.origin === "linked"}><ContextMenuItem onSelect={() => props.onOpenTerminal(menuProps.chat, menuProps.project)}><TerminalIcon />Open terminal pane</ContextMenuItem></Show>
+        <ContextMenuItem onSelect={() => props.onOpenTerminal(menuProps.chat, menuProps.project)}><TerminalIcon />Open terminal</ContextMenuItem>
       </ContextMenuGroup>
       <ContextMenuSeparator />
       <ContextMenuGroup>
@@ -300,14 +301,22 @@ export function Sidebar(props: {
         : `Delete ${blockProps.workspace ? "workspace" : "folder"}`;
     return <div class="sidebar-project-block">
       <ContextMenu onOpenChange={(openMenu) => { if (openMenu) guard.suppressClick = true; }}>
-        <ContextMenuTrigger as="button" class="sidebar-row sidebar-project" data-open={open()} onClick={() => {
-          if (guard.suppressClick) { guard.suppressClick = false; return; }
-          setOpen((value) => !value);
-        }}>
-          <FolderIcon />
-          <ProjectActivityIndicator sessions={blockProps.project.sessions} processFor={processFor} stale={props.runtime.stale()} />
-          <span>{blockProps.project.name}</span>
-          <ChevronRightIcon class="sidebar-chevron" />
+        <ContextMenuTrigger as="div" class="sidebar-row sidebar-project" data-open={open()} aria-current={props.selectedId == null && props.projectId === blockProps.project.id ? "page" : undefined}>
+          <button class="sidebar-project-link" onClick={() => {
+            if (guard.suppressClick) { guard.suppressClick = false; return; }
+            closeMobile();
+            void props.onOpenProject(blockProps.project);
+          }}>
+            <FolderIcon />
+            <ProjectActivityIndicator sessions={blockProps.project.sessions} processFor={processFor} stale={props.runtime.stale()} />
+            <span>{blockProps.project.name}</span>
+          </button>
+          <button class="sidebar-project-toggle" aria-label={`${open() ? "Collapse" : "Expand"} chat list`} title={`${open() ? "Collapse" : "Expand"} ${blockProps.project.name}`} aria-expanded={open()} onClick={(event) => {
+            event.stopPropagation();
+            setOpen((value) => !value);
+          }}>
+            <ChevronRightIcon class="sidebar-chevron" />
+          </button>
         </ContextMenuTrigger>
         <ContextMenuContent class="w-60 sidebar-context-menu">
           <ContextMenuGroup>
