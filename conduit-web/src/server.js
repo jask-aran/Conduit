@@ -40,6 +40,7 @@ import {
 import { renderLoginPage } from "./auth-login-page.js";
 import { listWorkspaceDirectory, readWorkspaceDiff, readWorkspaceFile } from "./workspace-inspector.js";
 import { currentMagicDnsOrigin } from "./tailscale-share.js";
+import { buildProjectDashboard } from "./project-dashboard.js";
 
 const config = loadConfig();
 const projects = new ProjectStore(config);
@@ -700,6 +701,30 @@ app.get("/v0/projects", async (_request, response, next) => {
       }),
     }))), live });
   } catch (error) { next(error); }
+});
+
+app.get("/v0/projects/:id/dashboard", async (request, response, next) => {
+  const controller = new AbortController();
+  const abort = () => controller.abort();
+  request.once("aborted", abort);
+  response.once("close", () => { if (!response.writableEnded) abort(); });
+  try {
+    const project = await projects.get(request.params.id);
+    if (!project) return response.status(404).json({ error: "project_not_found" });
+    await projects.validate(project);
+    response.json(await buildProjectDashboard({
+      project,
+      registry,
+      processes: manager.list(),
+      readPage: readSessionPage,
+      inspectWorkspace: (root, options) => readWorkspaceDiff(root, { ...options, includePatch: false }),
+      signal: controller.signal,
+    }));
+  } catch (error) {
+    if (!request.aborted && !response.destroyed) next(error);
+  } finally {
+    request.removeListener("aborted", abort);
+  }
 });
 
 function resolveProjectDefaultTemplateId(requested, fallback = null, { allowHostPi = false } = {}) {
