@@ -15,6 +15,7 @@ import {
   Settings2Icon,
   TerminalIcon,
   Trash2Icon,
+  LoaderCircleIcon,
 } from "lucide-solid";
 import {
   Button,
@@ -334,6 +335,7 @@ export function Sidebar(props: {
     const [open, setOpen] = createSignal(true);
     const guard = guardFor(blockProps.project);
     const isWorkspace = () => blockProps.project.origin === "linked" || blockProps.project.origin === "created" || blockProps.project.origin === "cloned" || blockProps.project.kind === "workspace";
+    const cloning = () => blockProps.project.state === "cloning";
     const deleteLabel = () => blockProps.project.deletesFilesOnRemove === false ? "Unlink workspace"
       : isWorkspace() ? "Delete workspace"
         : `Delete ${blockProps.workspace ? "workspace" : "folder"}`;
@@ -348,6 +350,7 @@ export function Sidebar(props: {
             <FolderIcon />
             <ProjectActivityIndicator sessions={blockProps.project.sessions} processFor={processFor} stale={props.runtime.stale()} />
             <span>{blockProps.project.name}</span>
+            <Show when={cloning()}><span class="workspace-cloning-badge"><LoaderCircleIcon />Cloning</span></Show>
           </button>
           <button class="sidebar-project-toggle" aria-label={`${open() ? "Collapse" : "Expand"} chat list`} title={`${open() ? "Collapse" : "Expand"} ${blockProps.project.name}`} aria-expanded={open()} onClick={(event) => {
             event.stopPropagation();
@@ -357,23 +360,27 @@ export function Sidebar(props: {
           </button>
         </ContextMenuTrigger>
         <ContextMenuContent class="w-60 sidebar-context-menu">
-          <ContextMenuGroup>
-            <ContextMenuItem onSelect={() => startNewChat(blockProps.project)}><MessageSquarePlusIcon />New chat</ContextMenuItem>
-            <ContextMenuItem onSelect={() => requestRenameProject(blockProps.project)}><PencilIcon />Rename {blockProps.workspace ? "workspace" : "folder"}</ContextMenuItem>
-            <Show when={blockProps.workspace}><ContextMenuItem onSelect={() => props.onOpenSettings("workspaces", blockProps.project.id)}><Settings2Icon />Workspace settings</ContextMenuItem></Show>
-            <ContextMenuSub>
-              <ContextMenuSubTrigger disabled={!blockProps.project.sessions.length}><FolderInputIcon />Move chats to…</ContextMenuSubTrigger>
-              <ContextMenuSubContent class="w-48 sidebar-context-menu">
-                <For each={props.projects.filter((item) => item.id !== blockProps.project.id)}>
-                  {(target) => <ContextMenuItem onSelect={() => void props.onMoveProjectChats(blockProps.project, target)}>{target.name}</ContextMenuItem>}
-                </For>
-              </ContextMenuSubContent>
-            </ContextMenuSub>
-          </ContextMenuGroup>
-          <ContextMenuSeparator />
-          <ContextMenuGroup>
-            <ContextMenuItem variant="destructive" onSelect={() => setDeleting({ type: "project", project: blockProps.project })}><Trash2Icon />{deleteLabel()}</ContextMenuItem>
-          </ContextMenuGroup>
+          <Show when={cloning()} fallback={<>
+            <ContextMenuGroup>
+              <ContextMenuItem onSelect={() => startNewChat(blockProps.project)}><MessageSquarePlusIcon />New chat</ContextMenuItem>
+              <ContextMenuItem onSelect={() => requestRenameProject(blockProps.project)}><PencilIcon />Rename {blockProps.workspace ? "workspace" : "folder"}</ContextMenuItem>
+              <Show when={blockProps.workspace}><ContextMenuItem onSelect={() => props.onOpenSettings("workspaces", blockProps.project.id)}><Settings2Icon />Workspace settings</ContextMenuItem></Show>
+              <ContextMenuSub>
+                <ContextMenuSubTrigger disabled={!blockProps.project.sessions.length}><FolderInputIcon />Move chats to…</ContextMenuSubTrigger>
+                <ContextMenuSubContent class="w-48 sidebar-context-menu">
+                  <For each={props.projects.filter((item) => item.id !== blockProps.project.id)}>
+                    {(target) => <ContextMenuItem onSelect={() => void props.onMoveProjectChats(blockProps.project, target)}>{target.name}</ContextMenuItem>}
+                  </For>
+                </ContextMenuSubContent>
+              </ContextMenuSub>
+            </ContextMenuGroup>
+            <ContextMenuSeparator />
+            <ContextMenuGroup>
+              <ContextMenuItem variant="destructive" onSelect={() => setDeleting({ type: "project", project: blockProps.project })}><Trash2Icon />{deleteLabel()}</ContextMenuItem>
+            </ContextMenuGroup>
+          </>}>
+            <ContextMenuGroup><ContextMenuItem disabled><LoaderCircleIcon />Clone in progress</ContextMenuItem></ContextMenuGroup>
+          </Show>
         </ContextMenuContent>
       </ContextMenu>
       <Show when={open()}>

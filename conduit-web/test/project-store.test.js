@@ -418,8 +418,9 @@ test("clone cancellation cleans Conduit staging and releases its reservation", a
     catalogFile: path.join(root, "data/conduit.json"),
     piAgentDir: path.join(root, "data/pi"),
     workspaceAllowlist: [root],
-    runCommand: async (_command, args, { signal }) => {
+    runCommand: async (_command, args, { signal, onOutput }) => {
       await fs.mkdir(args.at(-1));
+      onOutput({ stream: "stderr", chunk: "Receiving objects: 42%\r" });
       started();
       await new Promise((_, reject) => signal.addEventListener("abort", () => reject(Object.assign(new Error("cancelled"), { code: "clone_aborted" })), { once: true }));
     },
@@ -435,6 +436,7 @@ test("clone cancellation cleans Conduit staging and releases its reservation", a
     projectId: cloning.project.id,
     state: "cloning",
     error: null,
+    diagnostic: "Preparing clone…\nReceiving objects: 42%\r",
   });
   await assert.rejects(store.validate(cloning.project), { code: "workspace_cloning" });
   assert.deepEqual(await store.cancelCloneOperation(cloning.operation.id), { id: cloning.operation.id, state: "cancelled" });

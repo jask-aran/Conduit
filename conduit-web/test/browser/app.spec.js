@@ -1879,6 +1879,32 @@ test("clone workspace derives a repository folder inside the chosen parent", asy
   await expect(dialog).toHaveCount(0);
 });
 
+test("shows a cloning Workspace with bounded output and cancellation", async ({ page }) => {
+  const cloningWorkspace = {
+    id: "project_clone_progress",
+    slug: "react",
+    name: "React",
+    kind: "workspace",
+    origin: "cloned",
+    state: "cloning",
+    cloneOperationId: "operation_clone_progress",
+    path: "/home/user/react",
+    sessions: [],
+  };
+  await page.unroute("**/v0/projects");
+  await page.route("**/v0/projects", (route) => route.fulfill({ json: { projects: [projects[0], cloningWorkspace] } }));
+  await page.route("**/v0/workspace-operations/operation_clone_progress", (route) => route.fulfill(route.request().method() === "DELETE"
+    ? { json: { id: "operation_clone_progress", state: "cancelled" } }
+    : { json: { id: "operation_clone_progress", projectId: cloningWorkspace.id, state: "cloning", diagnostic: "Receiving objects: 42%" } }));
+
+  await page.goto(`/workspace/${cloningWorkspace.id}`);
+  await expect(page.getByText("Cloning Workspace")).toBeVisible();
+  await expect(page.getByLabel("Clone output preview")).toContainText("Receiving objects: 42%");
+  const cancellation = page.waitForRequest((request) => request.url().endsWith("/v0/workspace-operations/operation_clone_progress") && request.method() === "DELETE");
+  await page.getByRole("button", { name: "Cancel clone" }).click();
+  await cancellation;
+});
+
 test("creates an explicit external Workspace only after the server resolves its target", async ({ page }, testInfo) => {
   await page.unroute("**/v0/projects");
   await page.route("**/v0/workspaces/preview", async (route) => {
