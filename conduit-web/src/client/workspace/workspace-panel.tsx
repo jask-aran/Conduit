@@ -101,6 +101,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
     setPending(new Map());
   };
   const wasAborted = (cause: unknown) => (cause as { name?: string })?.name === "AbortError";
+  let panelWasOpen = props.open();
 
   const selectTab = (next: PanelTab) => {
     setDetailOpen(detailOpenFor(next) === "true");
@@ -219,6 +220,11 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
     localStorage.setItem(widthKey(), String(value));
   };
   let stopResize: (() => void) | undefined;
+  createEffect(() => {
+    const open = props.open();
+    if (!open && panelWasOpen) resetRequestScope();
+    panelWasOpen = open;
+  });
   createEffect(() => {
     const open = props.open() && isMobileLayout();
     if (open && !mobileWasOpen) {

@@ -907,6 +907,8 @@ app.get("/v0/projects/:id/diff", async (request, response, next) => {
   const controller = new AbortController();
   const abort = () => controller.abort();
   request.once("aborted", abort);
+  const close = () => { if (!response.writableEnded) abort(); };
+  response.once("close", close);
   try {
     const project = await projects.get(request.params.id);
     if (!project) return response.status(404).json({ error: "project_not_found" });
@@ -916,6 +918,7 @@ app.get("/v0/projects/:id/diff", async (request, response, next) => {
     if (!request.aborted && !response.destroyed) next(error);
   } finally {
     request.removeListener("aborted", abort);
+    response.removeListener("close", close);
   }
 });
 
