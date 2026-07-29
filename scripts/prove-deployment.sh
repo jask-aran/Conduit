@@ -45,6 +45,26 @@ deploy() {
   (cd "$release_directory" && CONDUIT_COMPOSE_PROJECT_NAME="$project" ./scripts/deploy.sh "$@")
 }
 
+wait_for_health() {
+  local release_directory="$1"
+  local project="$2"
+  local attempt
+  for attempt in $(seq 1 60); do
+    if compose "$release_directory" "$project" exec -T conduit node -e '
+fetch("http://127.0.0.1:4310/healthz")
+  .then((response) => response.ok ? response.json() : Promise.reject(new Error(String(response.status))))
+  .then((health) => { if (health.status !== "ready") throw new Error(health.status); })
+  .catch(() => process.exit(1));
+' >/dev/null 2>&1; then
+      return
+    fi
+    sleep 1
+  done
+  compose "$release_directory" "$project" logs conduit >&2 || true
+  echo "Conduit did not become ready within 60 seconds." >&2
+  exit 1
+}
+
 write_proof_env() {
   local release_directory="$1"
   local port="$2"
@@ -140,6 +160,7 @@ tar -xzf "$PACKAGE_ARCHIVE" -C "$TEMP_ROOT/source"
 SOURCE_RELEASE="$(find "$TEMP_ROOT/source" -mindepth 1 -maxdepth 1 -type d -print -quit)"
 write_proof_env "$SOURCE_RELEASE" "$SOURCE_PORT"
 printf '%s\n' "$PASSWORD" | deploy "$SOURCE_RELEASE" "$SOURCE_PROJECT" up | tee "$EVIDENCE_DIRECTORY/source-start.txt"
+wait_for_health "$SOURCE_RELEASE" "$SOURCE_PROJECT"
 create_fixtures "$SOURCE_RELEASE" "$SOURCE_PROJECT" | tee "$EVIDENCE_DIRECTORY/source-fixture.json"
 printf 'workspace fixture\n' >"$SOURCE_RELEASE/../workspaces/proof-workspace/proof.txt"
 deploy "$SOURCE_RELEASE" "$SOURCE_PROJECT" restart | tee "$EVIDENCE_DIRECTORY/source-restart.txt"
@@ -158,6 +179,7 @@ TARGET_RELEASE="$(find "$TEMP_ROOT/target" -mindepth 1 -maxdepth 1 -type d -prin
 CONDUIT_COMPOSE_PROJECT_NAME="$TARGET_PROJECT" "$TARGET_RELEASE/scripts/restore.sh" "$TEMP_ROOT/target/backup.tar.gz" | tee "$EVIDENCE_DIRECTORY/restore.txt"
 sed -i "s/^CONDUIT_PORT=.*/CONDUIT_PORT=$TARGET_PORT/" "$TARGET_RELEASE/.env"
 deploy "$TARGET_RELEASE" "$TARGET_PROJECT" up | tee "$EVIDENCE_DIRECTORY/target-start.txt"
+wait_for_health "$TARGET_RELEASE" "$TARGET_PROJECT"
 verify_fixtures "$TARGET_RELEASE" "$TARGET_PROJECT" "$EVIDENCE_DIRECTORY/source-fixture.json" | tee "$EVIDENCE_DIRECTORY/target-restore.json"
 
 {
