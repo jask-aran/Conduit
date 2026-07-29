@@ -100,10 +100,10 @@ function cloneDirectoryName(value, url) {
 }
 
 /** Run an external clone command with cancellation, a hard deadline, and bounded diagnostics. */
-export function runCommand(command, args, { cwd, signal, timeoutMs = CLONE_COMMAND_TIMEOUT_MS, maxOutputBytes = CLONE_COMMAND_MAX_OUTPUT_BYTES, onOutput } = {}) {
+export function runCommand(command, args, { cwd, signal, timeoutMs = CLONE_COMMAND_TIMEOUT_MS, maxOutputBytes = CLONE_COMMAND_MAX_OUTPUT_BYTES, onOutput, env } = {}) {
   return new Promise((resolve, reject) => {
     if (signal?.aborted) return reject(cloneError("clone_aborted", "Clone was cancelled"));
-    const child = spawn(command, args, { cwd, detached: process.platform !== "win32", stdio: ["ignore", "pipe", "pipe"] });
+    const child = spawn(command, args, { cwd, detached: process.platform !== "win32", stdio: ["ignore", "pipe", "pipe"], env: env ? { ...process.env, ...env } : undefined });
     let stdout = "";
     let stderr = "";
     let terminalError = null;
@@ -555,6 +555,7 @@ export class ProjectStore {
       error.code = "clone_url_required";
       throw error;
     }
+    const githubShorthand = /^[a-z0-9][a-z0-9.-]*\/[a-z0-9][a-z0-9._-]*$/i.test(url);
     if (path.isAbsolute(url)) await resolveExistingDirectory(url, this.workspaceAllowlist, { dataRoot: this.dataRoot });
     else if (/^file:/i.test(url)) {
       const localPath = decodeURIComponent(new URL(url).pathname);
@@ -571,7 +572,7 @@ export class ProjectStore {
         error.code = "clone_url_credentials";
         throw error;
       }
-    } else if (!/^[\w.-]+@[\w.-]+:.+/.test(url)) {
+    } else if (!githubShorthand && !/^[\w.-]+@[\w.-]+:.+/.test(url)) {
       const error = new Error("Clone source must be an allow-listed local path or a supported Git URL");
       error.code = "clone_url_not_allowed";
       throw error;
@@ -650,21 +651,29 @@ export class ProjectStore {
       const options = {
         signal: operation.controller.signal,
         timeoutMs: this.cloneTimeoutMs,
+        env: { GIT_PROGRESS_DELAY: "0" },
         onOutput: ({ chunk }) => this.appendCloneDiagnostic(operation, chunk),
       };
       const url = reservation.project.cloneUrl;
-      const githubSource = /^(?:https:\/\/github\.com\/|ssh:\/\/[^/]*github\.com\/|git@github\.com:)/i.test(url);
+      const githubShorthand = /^[a-z0-9][a-z0-9.-]*\/[a-z0-9][a-z0-9._-]*$/i.test(url);
+      const githubSource = githubShorthand || /^(?:https:\/\/github\.com\/|ssh:\/\/[^/]*github\.com\/|git@github\.com:)/i.test(url);
+      const gitSource = githubShorthand ? `https://github.com/${url.replace(/\.git$/i, "")}.git` : url;
       let cloned = false;
       if (githubSource) {
         try {
-          await this.runCommand("gh", ["repo", "clone", url, reservation.staging, "--"], options);
+          this.appendCloneDiagnostic(operation, `Running gh repo clone ${url}…\n`);
+          await this.runCommand("gh", ["repo", "clone", url, reservation.staging, "--", "--progress"], options);
           cloned = true;
         } catch (error) {
           if (["clone_aborted", "clone_timeout"].includes(error.code)) throw error;
+          this.appendCloneDiagnostic(operation, "GitHub CLI did not complete; falling back to git clone --progress.\n");
           await fs.rm(reservation.staging, { recursive: true, force: true }).catch(() => {});
         }
       }
-      if (!cloned) await this.runCommand("git", ["clone", "--", url, reservation.staging], options);
+      if (!cloned) {
+        this.appendCloneDiagnostic(operation, `Running git clone --progress ${gitSource}…\n`);
+        await this.runCommand("git", ["clone", "--progress", "--", gitSource, reservation.staging], options);
+      }
       await ensureConduitRoot({ path: reservation.staging, origin: "linked" });
       await this.runExclusive(async () => {
         if (this.cloneReservations.get(reservation.target)?.id !== reservation.id) throw cloneError("clone_reservation_lost", "Clone reservation was lost");
@@ -709,7 +718,7 @@ export class ProjectStore {
   }
 
   appendCloneDiagnostic(operation, chunk) {
-    operation.diagnostic = appendTail(operation.diagnostic || "", chunk, 8 * 1024);
+    operation.diagnostic = appendTail(operation.diagnostic || "", String(chunk || "").replace(/\r/g, "\n"), 8 * 1024);
   }
 
   async create(input = {}) {

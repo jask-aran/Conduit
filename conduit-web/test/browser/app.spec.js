@@ -1865,9 +1865,10 @@ test("clone workspace derives a repository folder inside the chosen parent", asy
   await page.getByRole("button", { name: "New workspace" }).click();
   const dialog = page.getByRole("dialog", { name: "Add workspace" });
   await dialog.getByRole("radio", { name: /Clone repository/ }).click();
+  await expect(dialog.getByLabel("GitHub repository or Git URL")).toBeVisible();
   await expect(dialog.getByLabel("Parent directory")).toBeVisible();
-  await dialog.getByLabel("Git URL").fill("https://github.com/example/repo.git");
-  await expect(dialog.getByRole("button", { name: "Clone workspace" })).toBeDisabled();
+  await expect(dialog.getByLabel("Parent directory")).toHaveValue("~");
+  await dialog.getByLabel("GitHub repository or Git URL").fill("react/react");
   await dialog.getByLabel("Parent directory").fill("/home/user/code");
   await dialog.getByLabel("Folder name (optional)").fill("checked-out-repo");
   const requestPromise = page.waitForRequest((request) => request.url().endsWith("/v0/projects") && request.method() === "POST");
@@ -1875,7 +1876,7 @@ test("clone workspace derives a repository folder inside the chosen parent", asy
   const request = await requestPromise;
   expect(request.postDataJSON()).toMatchObject({
     mode: "cloned",
-    cloneUrl: "https://github.com/example/repo.git",
+    cloneUrl: "react/react",
     cloneParentPath: "/home/user/code",
     cloneDirectoryName: "checked-out-repo",
   });
@@ -1937,6 +1938,7 @@ test("creates an explicit external Workspace only after the server resolves its 
   await page.getByRole("button", { name: "New workspace" }).click();
   const dialog = page.getByRole("dialog", { name: "Add workspace" });
   await dialog.getByRole("radio", { name: /Create folder/ }).click();
+  await expect(dialog.getByLabel("Parent directory")).toHaveValue("~");
   await dialog.getByLabel("Parent directory").fill("/home/user/code");
   await dialog.getByLabel("New folder name").fill("new-app");
   await expect(dialog.getByText("/home/user/code/new-app")).toBeVisible();
