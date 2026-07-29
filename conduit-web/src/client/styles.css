@@ -233,6 +233,7 @@ svg { stroke-width: 1.5; }
 .project-path svg { width: 13px; height: 13px; flex: none; }
 .project-path span { color: var(--accent-cool); font-size: 11px; }
 .project-identity-actions { display: flex; flex: none; gap: 8px; }
+.project-identity-actions [data-slot="button"] { font-size: 12px; }
 .project-identity-actions svg, .project-config-grid [data-slot="button"] svg, .project-danger [data-slot="button"] svg { width: 15px; height: 15px; }
 .project-dashboard-error { display: flex; align-items: baseline; gap: 10px; margin-top: 18px; padding: 10px 12px; border: 1px solid color-mix(in oklch, var(--destructive), transparent 45%); border-radius: 9px; color: var(--destructive); font-size: 12px; }
 .project-dashboard-error span { color: var(--muted-foreground); }
@@ -284,19 +285,22 @@ svg { stroke-width: 1.5; }
 .project-config[open] summary > svg, .project-danger[open] summary > svg { transform: rotate(180deg); }
 .project-config summary strong, .project-danger summary strong { font-size: 13px; font-weight: 600; }
 .project-config-grid { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 18px 24px; padding: 18px; border-top: 1px solid var(--border); }
+.project-config-grid [data-slot="button"] { font-size: 12px; }
 .project-config-grid > div > span { font-size: 12px; font-weight: 590; }
 .project-config-grid p { margin: 3px 0 0; color: var(--muted-foreground); font-size: 11px; line-height: 1.45; }
 .project-config-grid .project-config-path { overflow: hidden; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; text-overflow: ellipsis; white-space: nowrap; }
 .project-profile-trigger { display: flex; min-width: 180px; height: 34px; align-items: center; justify-content: space-between; gap: 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--background); padding: 0 10px; color: inherit; font-size: 12px; }
 .project-profile-trigger svg { width: 14px; height: 14px; color: var(--muted-foreground); }
 .project-danger { background: transparent; }
-.project-danger > div { display: flex; align-items: center; justify-content: space-between; gap: 24px; padding: 16px 18px; border-top: 1px solid var(--border); }
-.project-danger p { margin: 0; color: var(--muted-foreground); font-size: 12px; line-height: 1.5; }
-.project-danger-destructive { display: flex; align-items: center; justify-content: space-between; gap: 24px; padding: 16px 18px; border-top: 1px solid color-mix(in oklch, var(--destructive), var(--border) 84%); background: color-mix(in oklch, var(--destructive), transparent 96%); }
-.project-danger-destructive strong { font-size: 13px; }
-.project-danger-destructive p { margin-top: 4px; }
-.project-danger-destructive [data-slot="button"] { flex: none; }
+.project-danger-row, .project-danger-destructive { display: flex; align-items: center; justify-content: space-between; gap: 24px; padding: 14px 18px; border-top: 1px solid var(--border); }
+.project-danger p { margin: 0; color: var(--muted-foreground); font-size: 11px; line-height: 1.5; }
+.project-danger-destructive { border-top-color: color-mix(in oklch, var(--destructive), var(--border) 88%); background: color-mix(in oklch, var(--destructive), transparent 98%); }
+.project-danger-destructive > div { display: grid; gap: 3px; }
+.project-danger-destructive strong { font-size: 12px; font-weight: 600; }
+.project-danger [data-slot="button"] { flex: none; font-size: 12px; }
 .workspace-destroy-dialog [data-slot="field"] { margin-top: 18px; }
+.workspace-destroy-dialog .conduit-modal-actions [data-slot="button"] { font-size: 12px; }
+.workspace-destroy-confirm { white-space: nowrap; }
 .project-dashboard-meta { display: flex; flex-wrap: wrap; gap: 16px; margin-top: 24px; color: var(--muted-foreground); font-size: 10px; }
 .project-dashboard-meta span { display: flex; align-items: center; gap: 5px; }
 .project-dashboard-meta svg { width: 12px; height: 12px; }
