@@ -10,6 +10,7 @@ import {
   listDirectorySuggestions,
   parseAllowlist,
   resolveExistingDirectory,
+  resolveNewWorkspaceDirectory,
 } from "../src/workspace-paths.js";
 
 test("parseAllowlist expands home and de-duplicates", () => {
@@ -71,6 +72,23 @@ test("resolveExistingDirectory rejects intermediate symlink escapes", async () =
   await assert.rejects(resolveExistingDirectory(leaf, [root]), { code: "path_not_allowed" });
   await fs.rm(root, { recursive: true, force: true });
   await fs.rm(outside, { recursive: true, force: true });
+});
+
+test("resolveNewWorkspaceDirectory accepts one safe missing child and rejects unsafe targets", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-ws-create-"));
+  const parent = path.join(root, "workspaces");
+  await fs.mkdir(parent);
+  assert.equal(await resolveNewWorkspaceDirectory(root, "from-home", [root], { home: root }), path.join(root, "from-home"));
+  assert.equal(await resolveNewWorkspaceDirectory(parent, "new-app", [root]), path.join(parent, "new-app"));
+  await assert.rejects(resolveNewWorkspaceDirectory(parent, "nested/app", [root]), { code: "workspace_directory_invalid" });
+  await assert.rejects(resolveNewWorkspaceDirectory(parent, ".conduit", [root]), { code: "workspace_directory_invalid" });
+  await fs.mkdir(path.join(parent, "existing"));
+  await assert.rejects(resolveNewWorkspaceDirectory(parent, "existing", [root]), { code: "workspace_path_exists" });
+  await fs.symlink(path.join(root, "outside"), path.join(parent, "linked"));
+  await assert.rejects(resolveNewWorkspaceDirectory(parent, "linked", [root]), { code: "workspace_path_symlink" });
+  await fs.mkdir(path.join(root, "data"));
+  await assert.rejects(resolveNewWorkspaceDirectory(path.join(root, "data"), "blocked", [root], { dataRoot: path.join(root, "data") }), { code: "dangerous_workspace_root" });
+  await fs.rm(root, { recursive: true, force: true });
 });
 
 test("listDirectorySuggestions returns only visible direct directories", async () => {

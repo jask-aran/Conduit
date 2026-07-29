@@ -101,7 +101,7 @@ export function Settings(props: {
     if (!open) return;
     const initial = props.initialSection || "models";
     setSection(initial);
-    setWorkspaceId(props.initialWorkspaceId || props.projects.find((project) => project.kind === "workspace" || project.origin === "linked" || project.origin === "cloned")?.id || null);
+    setWorkspaceId(props.initialWorkspaceId || props.projects.find((project) => project.kind === "workspace" || ["linked", "created", "cloned"].includes(project.origin || ""))?.id || null);
     setScopeEdited(false);
     if (!open) {
       setApiKey("");
@@ -243,7 +243,7 @@ export function Settings(props: {
   };
 
   const workspaceProjects = createMemo(() => props.projects
-    .filter((project) => project.kind === "workspace" || ["linked", "cloned"].includes(project.origin || ""))
+    .filter((project) => project.kind === "workspace" || ["linked", "created", "cloned"].includes(project.origin || ""))
     .sort((left, right) => (left.id === workspaceId() ? -1 : right.id === workspaceId() ? 1 : left.name.localeCompare(right.name))));
   const workspaceDefaultLabel = (workspace: Project) => {
     const id = workspace.defaultTemplateId;

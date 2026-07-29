@@ -81,9 +81,10 @@ home and needs a separate backup.
 
 **Projects and Workspaces.** `data/conduit.json` is the project catalog. The
 reserved unstructured `chat` project works in `data/chat/files`; named
-projects use `data/chat/files/<slug>`; Workspaces register (or `git`/`gh`
-clone) an allow-listed absolute host directory, and unlinking never deletes
-the working tree. A clone chooses an existing parent and creates a
+projects use `data/chat/files/<slug>`; Workspaces explicitly link an existing
+allow-listed directory, create one empty child below an existing allow-listed
+parent, or `git`/`gh` clone into one. Every Workspace is externally owned after
+registration: unlinking never deletes its working tree. A clone chooses an existing parent and creates a
 repository-named child (or an explicitly named child). Clone network work runs outside the short catalogue lock,
 using a Conduit-owned sibling staging directory, cancellation, and a bounded
 deadline before its final catalogue commit. The catalogue is atomically replaced;

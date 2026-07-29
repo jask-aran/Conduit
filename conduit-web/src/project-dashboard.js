@@ -4,7 +4,7 @@ const RECENT_CHAT_LIMIT = 10;
 const PREVIEW_LENGTH = 180;
 
 function isWorkspace(project) {
-  return project.kind === "workspace" || ["linked", "cloned"].includes(project.origin);
+  return project.kind === "workspace" || ["linked", "created", "cloned"].includes(project.origin);
 }
 
 function previewText(entries) {

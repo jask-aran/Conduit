@@ -780,6 +780,20 @@ function resolveProjectDefaultTemplateId(requested, fallback = null, { allowHost
   return requested;
 }
 
+app.post("/v0/workspaces/preview", async (request, response, next) => {
+  try {
+    const mode = String(request.body?.mode || "").trim().toLowerCase();
+    if (!["link", "linked", "create", "created"].includes(mode)) {
+      return response.status(400).json({ error: "workspace_preview_mode_invalid", message: "Preview supports linking or creating a folder" });
+    }
+    response.json(await projects.previewWorkspace({
+      mode,
+      path: request.body?.path,
+      directoryName: request.body?.directoryName,
+    }));
+  } catch (error) { next(error); }
+});
+
 app.post("/v0/projects", async (request, response, next) => {
   const controller = new AbortController();
   const abort = () => controller.abort();
@@ -796,6 +810,17 @@ app.post("/v0/projects", async (request, response, next) => {
         path: request.body.path,
         defaultTemplateId: resolveProjectDefaultTemplateId(request.body?.defaultTemplateId, null),
         signal: controller.signal,
+      });
+      return response.status(201).json(created);
+    }
+    if (mode === "create" || mode === "created") {
+      if (!request.body?.path || !request.body?.directoryName) return response.status(400).json({ error: "workspace_path_required" });
+      const created = await projects.create({
+        mode: "created",
+        name: name || undefined,
+        path: request.body.path,
+        directoryName: request.body.directoryName,
+        defaultTemplateId: resolveProjectDefaultTemplateId(request.body?.defaultTemplateId, null),
       });
       return response.status(201).json(created);
     }
@@ -1518,6 +1543,9 @@ app.use((error, _request, response, _next) => {
       "path_not_allowed",
       "path_not_absolute",
       "path_not_directory",
+      "workspace_path_exists",
+      "workspace_directory_invalid",
+      "workspace_preview_mode_invalid",
       "dangerous_workspace_root",
       "unsafe_conduit_path",
       "native_resource_limit",

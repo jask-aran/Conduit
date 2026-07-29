@@ -480,6 +480,15 @@ svg { stroke-width: 1.5; }
 .conduit-modal-card h2, .external-link-dialog-card h2 { margin: 0 0 5px; font-size: 19px; }
 .external-link-url { display: block; max-height: 8rem; margin: 12px 0; overflow: auto; border-radius: 6px; background: var(--muted); padding: 10px; overflow-wrap: anywhere; }
 .conduit-modal select, .settings-content select, .workspace-settings-card [role="combobox"] { width: 100%; min-height: 36px; border: 1px solid var(--border); border-radius: 7px; background: var(--background); padding: 7px 9px; color: inherit; text-align: left; }
+.workspace-mode-picker { display: grid; gap: 7px; }
+.workspace-mode-picker button { display: grid; gap: 2px; width: 100%; border: 1px solid var(--border); border-radius: 9px; background: var(--background); padding: 10px 11px; color: inherit; text-align: left; transition: border-color 120ms ease, background 120ms ease, transform 120ms ease; }
+.workspace-mode-picker button:hover:not(:disabled) { background: var(--accent); }
+.workspace-mode-picker button[data-selected="true"] { border-color: color-mix(in oklch, var(--primary), var(--border) 52%); background: color-mix(in oklch, var(--primary), var(--background) 94%); box-shadow: inset 3px 0 0 var(--primary); }
+.workspace-mode-picker strong { font-size: 13px; font-weight: 650; }
+.workspace-mode-picker small, .workspace-path-preview small { color: var(--muted-foreground); font-size: 12px; line-height: 1.35; }
+.workspace-path-preview { display: grid; gap: 4px; border-left: 2px solid var(--primary); background: var(--muted); padding: 9px 10px; }
+.workspace-path-preview strong { overflow-wrap: anywhere; font: 12px/1.35 ui-monospace, monospace; }
+.workspace-preview-error { margin: 0; color: var(--destructive); font-size: 13px; }
 
 .settings-shell { display: flex; width: min(900px, calc(100vw - 32px)); height: min(720px, calc(100dvh - 32px)); overflow: hidden; border: 1px solid var(--border); border-radius: 13px; background: var(--background); box-shadow: 0 24px 80px rgb(0 0 0 / 40%); }
 .settings-rail { display: flex; width: 184px; flex: none; flex-direction: column; gap: 3px; padding: 16px 8px; border-right: 1px solid var(--border); }
