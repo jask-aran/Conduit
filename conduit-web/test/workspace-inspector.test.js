@@ -15,11 +15,32 @@ test("workspace tree and text preview hide internals and fail closed on unsafe p
   await fs.mkdir(path.join(root, ".conduit"));
   await fs.writeFile(path.join(root, "src", "main.js"), "export const answer = 42;\n");
   await fs.symlink("/etc/passwd", path.join(root, "escape"));
-  assert.deepEqual((await listWorkspaceDirectory(root)).map((entry) => entry.name), ["src"]);
+  const listing = await listWorkspaceDirectory(root);
+  assert.deepEqual(listing.entries.map((entry) => entry.name), ["src"]);
+  assert.equal(listing.truncated, false);
   assert.equal((await readWorkspaceFile(root, "src/main.js")).content, "export const answer = 42;\n");
   await assert.rejects(readWorkspaceFile(root, "../secret"), { code: "invalid_workspace_path" });
   await assert.rejects(readWorkspaceFile(root, ".conduit/private"), { code: "hidden_workspace_path" });
   await assert.rejects(readWorkspaceFile(root, "escape"), { code: "workspace_path_symlink" });
+});
+
+test("workspace tree bounds accepted entries after filtering hidden and symlinked names", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-inspector-bound-"));
+  await fs.mkdir(path.join(root, "00-directory"));
+  await fs.mkdir(path.join(root, ".conduit"));
+  for (let index = 0; index < 500; index += 1) {
+    await fs.writeFile(path.join(root, `file-${String(index).padStart(3, "0")}`), "content\n");
+  }
+  await fs.writeFile(path.join(root, "zzz-late"), "content\n");
+  await fs.symlink(path.join(root, "file-000"), path.join(root, "symlinked"));
+
+  const listing = await listWorkspaceDirectory(root);
+  assert.equal(listing.truncated, true);
+  assert.equal(listing.entries.length, 500);
+  assert.equal(listing.entries[0].name, "00-directory");
+  assert.deepEqual([...listing.entries].sort((left, right) => left.type === right.type ? left.name.localeCompare(right.name) : left.type === "directory" ? -1 : 1), listing.entries);
+  assert.equal(listing.entries.some((entry) => entry.name === ".conduit"), false);
+  assert.equal(listing.entries.some((entry) => entry.name === "symlinked"), false);
 });
 
 test("workspace diff reports clean, dirty, staged, and non-git roots", async () => {

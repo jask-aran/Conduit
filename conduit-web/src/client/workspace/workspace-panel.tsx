@@ -7,6 +7,7 @@ import { ownsWorkspaceRequest, type WorkspaceRequest } from "./request-ownership
 import { TerminalPane } from "../remotes/terminal-pane";
 
 interface TreeEntry { name: string; path: string; type: "directory" | "file" | "other"; }
+interface DirectoryListing { entries: TreeEntry[]; truncated: boolean; }
 interface FilePreview { path: string; size: number; content: string; }
 interface GitCommit { graph: string; hash: string; shortHash: string; subject: string; author: string; authoredAt: string; }
 interface DiffPayload { repository: boolean; branch?: string; upstream?: string | null; ahead?: number; behind?: number; commits?: GitCommit[]; files: { status: string; path: string }[]; diff: string; }
@@ -14,7 +15,7 @@ type PanelTab = "files" | "diff" | "artifacts" | "terminal";
 type ArtifactMode = "outputs" | "interactive";
 
 interface WorkspaceCacheEntry {
-  directories: Record<string, TreeEntry[]>;
+  directories: Record<string, DirectoryListing>;
   diff: DiffPayload | null;
 }
 
@@ -48,7 +49,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
   const [pending, setPending] = createSignal(new Map<number, { foreground: boolean }>());
   const storageKey = () => `conduit:workspace-panel:${props.chatId()}:tab`;
   const [tab, setTab] = createSignal<PanelTab>((localStorage.getItem(storageKey()) as PanelTab) || "files");
-  const [directories, setDirectories] = createSignal<Record<string, TreeEntry[]>>({});
+  const [directories, setDirectories] = createSignal<Record<string, DirectoryListing>>({});
   const [expanded, setExpanded] = createSignal<Set<string>>(new Set());
   const [preview, setPreview] = createSignal<FilePreview | null>(null);
   const [diff, setDiff] = createSignal<DiffPayload | null>(null);
@@ -158,10 +159,10 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
     const { request, controller } = startRequest(`directory:${directory}`, !background);
     setError("");
     try {
-      const payload = await api<{ entries: TreeEntry[] }>(`/v0/projects/${encodeURIComponent(request.projectId)}/tree?path=${encodeURIComponent(directory)}`, { signal: controller.signal });
+      const payload = await api<{ entries?: unknown; truncated?: boolean }>(`/v0/projects/${encodeURIComponent(request.projectId)}/tree?path=${encodeURIComponent(directory)}`, { signal: controller.signal });
       if (!ownsRequest(request)) return;
       setDirectories((current) => {
-        const next = { ...current, [directory]: asList<TreeEntry>(payload.entries) };
+        const next = { ...current, [directory]: { entries: asList<TreeEntry>(payload.entries), truncated: payload.truncated === true } };
         cacheWorkspace(request.projectId, { directories: next });
         return next;
       });
@@ -301,12 +302,15 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
       }
     }));
 
-  const Tree = (treeProps: { directory: string; depth?: number }) => <For each={directories()[treeProps.directory] || []}>{(entry) => <div>
+  const Tree = (treeProps: { directory: string; depth?: number }) => <>
+    <For each={directories()[treeProps.directory]?.entries || []}>{(entry) => <div>
     <button class="workspace-tree-row" style={{ "padding-left": `${10 + (treeProps.depth || 0) * 14}px` }} data-selected={preview()?.path === entry.path} onClick={() => entry.type === "directory" ? void toggleDirectory(entry.path) : entry.type === "file" ? void loadFile(entry.path) : undefined}>
       <Show when={entry.type === "directory"} fallback={<FileCode2Icon />}><ChevronRightIcon class="workspace-tree-chevron" data-open={expanded().has(entry.path)} /><FolderIcon /></Show><span>{entry.name}</span>
     </button>
     <Show when={entry.type === "directory" && expanded().has(entry.path)}><Tree directory={entry.path} depth={(treeProps.depth || 0) + 1} /></Show>
-  </div>}</For>;
+  </div>}</For>
+    <Show when={directories()[treeProps.directory]?.truncated}><div class="workspace-tree-notice">Showing the first 500 items in this directory.</div></Show>
+  </>;
 
   return <>
     <Show when={props.open()}>
