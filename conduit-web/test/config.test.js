@@ -48,6 +48,7 @@ test("one data root relocates every durable Conduit path", () => {
   assert.equal(config.sessionRegistryFile, path.join(dataRoot, "sessions.json"));
   assert.equal(config.preferencesFile, path.join(dataRoot, "preferences.json"));
   assert.equal(config.runtimeSettingsFile, path.join(dataRoot, "runtime.json"));
+  assert.equal(config.remotesFile, path.join(dataRoot, "remotes.json"));
   assert.equal(config.authFile, path.join(dataRoot, "auth.json"));
   assert.equal(config.piAgentDir, path.join(dataRoot, "pi"));
   assert.equal(config.release, "0123456789abcdef");

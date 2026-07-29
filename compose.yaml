@@ -15,6 +15,8 @@ services:
     stop_grace_period: 15s
     security_opt:
       - no-new-privileges:true
+    cap_drop:
+      - ALL
     tmpfs:
       - /tmp:size=256m,mode=1777
     environment:
