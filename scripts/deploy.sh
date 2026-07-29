@@ -81,7 +81,7 @@ prepare_directories() {
 }
 
 compose() {
-  (cd "$ROOT" && docker compose --env-file "$ENV_FILE" -f compose.yaml "$@")
+  (cd "$ROOT" && docker compose --project-name "${CONDUIT_COMPOSE_PROJECT_NAME:-conduit}" --env-file "$ENV_FILE" -f compose.yaml "$@")
 }
 
 build() {
@@ -89,7 +89,19 @@ build() {
 }
 
 set_password() {
-  compose run --rm --no-deps conduit node scripts/conduit-auth.mjs set-password
+  local password confirmation
+  if [[ -t 0 ]]; then
+    read -r -s -p "New password: " password
+    printf '\n'
+    [[ -n "$password" ]] || { echo "Password cannot be empty." >&2; exit 1; }
+    read -r -s -p "Confirm password: " confirmation
+    printf '\n'
+    [[ "$password" == "$confirmation" ]] || { echo "Passwords do not match." >&2; exit 1; }
+  else
+    IFS= read -r password || true
+    [[ -n "$password" ]] || { echo "Password cannot be empty." >&2; exit 1; }
+  fi
+  printf '%s' "$password" | compose run --rm --no-deps -T conduit node scripts/conduit-auth.mjs set-password --stdin
 }
 
 if [[ "$COMMAND" == "help" || "$COMMAND" == "-h" || "$COMMAND" == "--help" ]]; then
