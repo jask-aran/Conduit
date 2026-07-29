@@ -46,9 +46,9 @@ cd conduit
 ```
 
 The script creates `.env` and the two host directories, builds the image, and
-prompts for the single-user login password before starting the non-loopback
-container. It binds port 4310 to host loopback by default; put a TLS reverse
-proxy or Tailscale Serve in front of `127.0.0.1:4310`.
+prompts for the single-user login password before starting the container. It
+binds port 4310 to host loopback by default; put a TLS reverse proxy or
+Tailscale Serve in front of `127.0.0.1:4310`.
 The release directory must be owned by the account running Docker. Placing that
 directory at `/srv/conduit` yields the layout above, but it is not required.
 
@@ -68,10 +68,11 @@ Useful operations:
 ./scripts/deploy.sh down
 ```
 
-Compose runs the image read-only, without extra capabilities or the Docker
-socket, and with `no-new-privileges`. Its health check calls the unauthenticated
-`/healthz` readiness endpoint. SIGTERM first makes readiness fail, closes
-browser streams, stops resident Pi children, and then closes the HTTP server.
+Compose runs the image read-only, drops every Linux capability, has no Docker
+socket, and uses `no-new-privileges`; only `/data`, `/workspaces`, and tmpfs
+`/tmp` are writable. Its health check calls the unauthenticated `/healthz`
+readiness endpoint. SIGTERM first makes readiness fail, closes browser streams,
+stops resident Pi children, and then closes the HTTP server.
 
 ## Exact-commit releases
 
@@ -104,21 +105,65 @@ shape at load time and write atomically.
 
 ## Backup, restore, and migration
 
-For a consistent cold backup, stop Conduit and archive both durable roots:
+`backup.sh` makes a cold archive only. It refuses to run while the current
+Compose project has a running container, then archives `.env`, `/data`, and
+`/workspaces` as portable `data/` and `workspaces/` archive roots.
 
 ```bash
 cd /srv/conduit
 ./scripts/deploy.sh down
-tar --acls --xattrs -C /srv -czf conduit-backup.tgz conduit/data workspaces
+./scripts/backup.sh /srv/conduit-backups
+```
+
+Each `*.tar.gz` has a sibling `*.tar.gz.manifest`. The manifest records the
+release SHA, archive SHA-256, mode/UID/GID of each durable root, and SHA-256
+checksums for every archived regular file. Keep the two files together. The
+script needs only Bash, GNU tar, gzip, and standard coreutils in addition to
+Docker Compose.
+
+`restore.sh` has no overwrite mode. Unpack the exact release on the target,
+leave its `data/` and adjacent `workspaces/` absent or empty, and restore the
+archive before starting Conduit:
+
+```bash
+tar -xzf conduit-<version>-<short-sha>.tar.gz -C /srv
+cd /srv/conduit-<version>-<short-sha>
+./scripts/restore.sh /transfer/conduit-backup-<sha>-<time>.tar.gz
 ./scripts/deploy.sh up
 ```
 
-Restore that archive at the same host layout, unpack any Conduit release, and
-run `./scripts/deploy.sh up`. Preserve numeric ownership or set
-`CONDUIT_UID`/`CONDUIT_GID` in `.env` to the restored owner. For large live
-migrations, do an initial `rsync`, stop the source, perform a final `rsync
---delete`, then start the target. The source and target must never write the
-same restored data concurrently.
+Restore first verifies the archive SHA-256, archive layout, and every manifest
+file checksum. It then refuses a running Compose project or non-empty target
+`data/` or `workspaces/` roots. With no target `.env`, it restores the archived
+one; an existing target `.env` is preserved so an operator can choose
+independent target mount roots without overwriting configuration. The archive
+retains numeric ownership, modes, ACLs, and xattrs; run it as the intended
+owner, or as root when restoring original numeric owners. A failure after
+publication is not automatically rolled back, so inspect the empty-target
+preconditions and keep the original backup until the target has been verified.
+Source and target must never write the same restored data concurrently.
+
+## Local deployment proof
+
+Run this from a clean, committed checkout with Docker Engine available:
+
+```bash
+./scripts/prove-deployment.sh
+```
+
+The harness owns its release directories, Compose project names, loopback
+ports, test password, bind mounts, and cleanup. It packages the exact HEAD
+release, starts isolated source host A, creates an authenticated session, draft
+chat, attachment, Workspace and file, verifies the pinned Isolated Pi version,
+rebuilds A with `deploy.sh restart`, cold-backs it up, restores it into
+independent target host B mounts, and verifies the same identities and bytes.
+It also asserts that Host Pi remains unavailable. Evidence is retained under
+ignored `.deployment-evidence/`; temporary containers and mounts are removed
+on success or failure.
+
+This is a one-engine simulated-host proof, not a replacement for the required
+source and target run on two real Linux VMs. Keep draft PR #43 draft and issue
+#42 open until that acceptance run records both hosts' evidence.
 
 ## Runtime boundary
 
