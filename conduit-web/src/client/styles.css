@@ -784,5 +784,5 @@ svg { stroke-width: 1.5; }
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; }
   /* The meteor field is an explicitly requested ambient effect; retain its
      supplied timeline without re-enabling motion elsewhere in Conduit. */
-  .chat-meteors .meteor { animation-duration: var(--meteor-duration) !important; }
+  .chat-meteors .solid-meteor { animation-duration: var(--meteor-duration) !important; }
 }
