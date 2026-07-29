@@ -1,4 +1,5 @@
 import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show } from "solid-js";
+import * as KAlertDialog from "@kobalte/core/alert-dialog";
 import {
   ArrowRightIcon,
   CalendarDaysIcon,
@@ -16,6 +17,9 @@ import {
 import {
   Badge,
   Button,
+  Field,
+  FieldLabel,
+  Input,
   Menu,
   MenuContent,
   MenuGroup,
@@ -81,6 +85,7 @@ export function ProjectDashboard(props: {
   onSaveDefault: (projectId: string, templateId: string | null) => Promise<Project>;
   onRefresh: () => Promise<unknown>;
   onCancelClone: (operationId: string) => Promise<void>;
+  onDestroyWorkspace: (confirmation: string) => Promise<boolean>;
   onError: (message: string) => void;
 }) {
   const [payload, setPayload] = createSignal<ProjectDashboardPayload | null>(null);
@@ -92,6 +97,9 @@ export function ProjectDashboard(props: {
   const [refreshVersion, setRefreshVersion] = createSignal(0);
   const [operation, setOperation] = createSignal<WorkspaceOperation | null>(null);
   const [cancellingClone, setCancellingClone] = createSignal(false);
+  const [destroyOpen, setDestroyOpen] = createSignal(false);
+  const [destroyConfirmation, setDestroyConfirmation] = createSignal("");
+  const [destroying, setDestroying] = createSignal(false);
   const projectId = createMemo(() => props.project.id);
   const cloning = createMemo(() => props.project.state === "cloning" && Boolean(props.project.cloneOperationId));
 
@@ -210,6 +218,19 @@ export function ProjectDashboard(props: {
       props.onError((cancelError as Error).message);
     } finally {
       setCancellingClone(false);
+    }
+  };
+
+  const destroyWorkspace = async () => {
+    if (destroying() || destroyConfirmation() !== props.project.name) return;
+    setDestroying(true);
+    try {
+      if (await props.onDestroyWorkspace(destroyConfirmation())) {
+        setDestroyOpen(false);
+        setDestroyConfirmation("");
+      }
+    } finally {
+      setDestroying(false);
     }
   };
 
@@ -371,7 +392,7 @@ export function ProjectDashboard(props: {
         </div>
       </details></Show>
 
-      <details class="project-danger">
+      <Show when={!cloning()}><details class="project-danger">
         <summary><span><Trash2Icon /><strong>Danger zone</strong></span><ChevronDownIcon /></summary>
         <div>
           <p>{props.project.deletesFilesOnRemove === false || workspaceProject(props.project)
@@ -381,13 +402,36 @@ export function ProjectDashboard(props: {
             <Trash2Icon />{props.project.deletesFilesOnRemove === false || workspaceProject(props.project) ? "Unlink workspace" : "Delete project"}
           </Button>
         </div>
-      </details>
+        <Show when={workspaceProject(props.project)}>
+          <div class="project-danger-destructive">
+            <div><strong>Delete Workspace and files</strong><p>Permanently removes this Workspace’s registered folder and every file below it. Use this for an orphaned Workspace or when you mean to erase the working tree.</p></div>
+            <Button variant="destructive" onClick={() => setDestroyOpen(true)}><Trash2Icon />Delete Workspace and files</Button>
+          </div>
+        </Show>
+      </details></Show>
 
-      <footer class="project-dashboard-meta">
+      <KAlertDialog.Root open={destroyOpen()} onOpenChange={(open) => { if (!destroying()) setDestroyOpen(open); }}>
+        <KAlertDialog.Portal><KAlertDialog.Content class="conduit-modal" onEscapeKeyDown={(event) => { if (destroying()) event.preventDefault(); }}>
+          <div class="conduit-modal-card workspace-destroy-dialog">
+            <KAlertDialog.Title>Delete Workspace and files?</KAlertDialog.Title>
+            <KAlertDialog.Description>This permanently deletes <strong>{props.project.name}</strong> and its working directory. Type the Workspace name to continue.</KAlertDialog.Description>
+            <Field>
+              <FieldLabel for="workspace-destroy-confirmation">Workspace name</FieldLabel>
+              <Input id="workspace-destroy-confirmation" value={destroyConfirmation()} onInput={(event) => setDestroyConfirmation(event.currentTarget.value)} autocomplete="off" />
+            </Field>
+            <div class="conduit-modal-actions">
+              <Button variant="outline" disabled={destroying()} onClick={() => setDestroyOpen(false)}>Cancel</Button>
+              <Button variant="destructive" disabled={destroying() || destroyConfirmation() !== props.project.name} onClick={() => void destroyWorkspace()}><Trash2Icon />{destroying() ? "Deleting…" : "Delete Workspace and files"}</Button>
+            </div>
+          </div>
+        </KAlertDialog.Content></KAlertDialog.Portal>
+      </KAlertDialog.Root>
+
+      <Show when={!cloning()}><footer class="project-dashboard-meta">
         <span><CalendarDaysIcon />Created {formatDate(payload()?.identity.createdAt || props.project.createdAt)}</span>
         <Show when={payload()?.git?.lastCommitAt}><span><Clock3Icon />Last commit {formatDate(payload()!.git!.lastCommitAt, true)}</span></Show>
         <Show when={payload()?.git}><span><GitBranchIcon />{payload()!.git!.upstream || "No upstream"}</span></Show>
-      </footer>
+      </footer></Show>
     </div>
   </section>;
 }

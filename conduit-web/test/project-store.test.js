@@ -114,6 +114,32 @@ test("links allow-listed directories without deleting them on unregister", async
   await fs.rm(root, { recursive: true, force: true });
 });
 
+test("destructive Workspace removal deletes a validated folder and can forget an orphan", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-project-destroy-workspace-"));
+  const external = path.join(root, "external-repo");
+  await fs.mkdir(external);
+  await fs.writeFile(path.join(external, "README.md"), "delete me");
+  const store = new ProjectStore({
+    filesRoot: path.join(root, "data/chat/files"),
+    catalogFile: path.join(root, "data/conduit.json"),
+    piAgentDir: path.join(root, "data/pi"),
+    workspaceAllowlist: [root],
+  });
+  await store.initialize();
+  const linked = await store.create({ mode: "linked", path: external });
+  await store.remove(linked.id, { deleteWorkspaceFiles: true });
+  await assert.rejects(fs.access(external), { code: "ENOENT" });
+  assert.equal(await store.get(linked.id), null);
+
+  const orphanPath = path.join(root, "orphan");
+  await fs.mkdir(orphanPath);
+  const orphan = await store.create({ mode: "linked", path: orphanPath });
+  await fs.rm(orphanPath, { recursive: true });
+  await store.remove(orphan.id, { skipWorkingTree: true, deleteWorkspaceFiles: true });
+  assert.equal(await store.get(orphan.id), null);
+  await fs.rm(root, { recursive: true, force: true });
+});
+
 test("creates an external Workspace and preserves its directory when unlinked", async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-project-create-"));
   const parent = path.join(root, "workspaces");

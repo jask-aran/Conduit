@@ -3128,6 +3128,7 @@ test("workspace dashboard is a direct routable operator surface", async ({ page 
   const profilePatch = page.waitForRequest((request) =>
     request.url().endsWith("/v0/projects/project_workspace") && request.method() === "PATCH");
   await page.route("**/v0/projects/project_workspace", async (route) => {
+    if (route.request().method() === "DELETE") return route.fulfill({ status: 204, body: "" });
     const body = route.request().postDataJSON();
     await route.fulfill({ json: { ...workspace, defaultTemplateId: body.defaultTemplateId } });
   });
@@ -3154,6 +3155,14 @@ test("workspace dashboard is a direct routable operator surface", async ({ page 
   await expect(page.getByText("resident PTY")).toBeVisible();
   await expect(page.getByRole("button", { name: "Open command palette" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Copy Tailscale workspace link" })).toBeVisible();
+  await page.getByText("Danger zone").click();
+  await page.getByRole("button", { name: "Delete Workspace and files" }).click();
+  const destructiveDialog = page.getByRole("alertdialog");
+  await expect(destructiveDialog.getByRole("button", { name: "Delete Workspace and files" })).toBeDisabled();
+  await destructiveDialog.getByLabel("Workspace name").fill("Conduit");
+  const destructiveRequest = page.waitForRequest((request) => request.url().endsWith("/v0/projects/project_workspace") && request.method() === "DELETE");
+  await destructiveDialog.getByRole("button", { name: "Delete Workspace and files" }).click();
+  expect((await destructiveRequest).postDataJSON()).toEqual({ mode: "destroy_workspace", confirmation: "Conduit" });
   await page.getByRole("button", { name: "Toggle workspace panel" }).click();
   await expect(page.getByRole("complementary", { name: "Workspace panel" })).toBeVisible();
 });

@@ -129,6 +129,19 @@ input.on("line", (line) => {
     const createdWorkspace = await createdWorkspaceResponse.json();
     assert.equal(createdWorkspace.origin, "created");
     assert.equal(createdWorkspace.deletesFilesOnRemove, false);
+    const rejectedDelete = await fetch(`${origin}/v0/projects/${createdWorkspace.id}`, {
+      method: "DELETE",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ mode: "destroy_workspace", confirmation: "wrong name" }),
+    });
+    assert.equal(rejectedDelete.status, 400);
+    const destructiveDelete = await fetch(`${origin}/v0/projects/${createdWorkspace.id}`, {
+      method: "DELETE",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ mode: "destroy_workspace", confirmation: createdWorkspace.name }),
+    });
+    assert.equal(destructiveDelete.status, 204);
+    await assert.rejects(fs.access(createdWorkspace.path), { code: "ENOENT" });
     await fs.mkdir(path.join(workspace, ".pi", "themes"), { recursive: true });
     const preflight = await (await fetch(`${origin}/v0/workspaces/${linked.id}/native-preflight`)).json();
     assert.equal(preflight.available, true);
