@@ -919,7 +919,7 @@ test("keeps the native textarea composer bounded in a thread", async ({ page }, 
   expect(inputBox.height).toBeLessThanOrEqual(192);
   expect(sendBox.y).toBeGreaterThan(inputBox.y);
   await expect(composerWrap).toHaveCSS("position", "static");
-  await expect(page.locator(".chat-ambient")).toBeVisible();
+  await expect(page.locator(".chat-meteors")).toBeVisible();
 });
 
 test("renders persisted assistant Markdown with safe interactive controls", async ({ page }, testInfo) => {
@@ -1874,22 +1874,51 @@ test("clone workspace derives a repository folder inside the chosen parent", asy
   await expect(dialog).toHaveCount(0);
 });
 
-test("the ambient layer fills the chat viewport", async ({ page }, testInfo) => {
+test("the meteor field fills the chat main surface without intercepting input", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "desktop-chromium");
   await page.goto("/");
 
   const main = page.locator('[data-slot="sidebar-inset"]');
-  const ambient = page.locator(".chat-ambient");
-  await expect(ambient).toBeVisible();
+  const meteors = page.locator(".chat-meteors");
+  await expect(main).toHaveCSS("isolation", "isolate");
+  await expect(meteors).toBeVisible();
+  await expect(meteors.locator(".meteor").first()).toBeAttached();
+  await expect(meteors).toHaveCSS("pointer-events", "none");
+  await expect(meteors).toHaveCSS("overflow", "hidden");
+  await expect.poll(() => meteors.locator(".meteor").evaluateAll((nodes) =>
+    nodes.some((node) => Number.parseFloat(node.style.animationDelay) < 0),
+  )).toBe(true);
+  await expect.poll(() => meteors.locator(".meteor").evaluateAll((nodes) => {
+    const field = document.querySelector(".chat-meteors")?.getBoundingClientRect();
+    if (!field) return 0;
+    return nodes.filter((node) => {
+      const box = node.getBoundingClientRect();
+      return Number(getComputedStyle(node).opacity) > 0
+        && box.right > field.left && box.left < field.right
+        && box.bottom > field.top && box.top < field.bottom;
+    }).length;
+  })).toBeGreaterThan(0);
 
-  const [initialMain, initialField] = await Promise.all([main.boundingBox(), ambient.boundingBox()]);
+  const [initialMain, initialField] = await Promise.all([main.boundingBox(), meteors.boundingBox()]);
   expect(initialField).toEqual(initialMain);
 
   await page.setViewportSize({ width: 1600, height: 900 });
-  const [resizedMain, resizedField] = await Promise.all([main.boundingBox(), ambient.boundingBox()]);
+  const [resizedMain, resizedField] = await Promise.all([main.boundingBox(), meteors.boundingBox()]);
   expect(resizedField).toEqual(resizedMain);
   expect(resizedField.width).toBeGreaterThan(initialField.width);
   expect(resizedField.height).toBeGreaterThan(initialField.height);
+
+  await page.getByRole("textbox", { name: "Message Pi" }).click();
+  await expect(page.getByRole("textbox", { name: "Message Pi" })).toBeFocused();
+});
+
+test("the meteor field remains animated when reduced motion is enabled", async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.goto("/");
+
+  const meteor = page.locator(".chat-meteors .meteor").first();
+  await expect(meteor).toBeAttached();
+  await expect(meteor).not.toHaveCSS("animation-duration", "0.01s");
 });
 
 test("composer model picker exposes model and thinking selectors", async ({ page }) => {
