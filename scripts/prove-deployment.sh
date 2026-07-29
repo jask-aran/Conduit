@@ -25,7 +25,7 @@ cleanup() {
     [[ -n "$release_directory" && -d "$release_directory" ]] || continue
     local project="$SOURCE_PROJECT"
     [[ "$release_directory" == "${TARGET_RELEASE:-}" ]] && project="$TARGET_PROJECT"
-    (cd "$release_directory" && CONDUIT_COMPOSE_PROJECT_NAME="$project" docker compose --env-file .env -f compose.yaml down --volumes --remove-orphans >/dev/null 2>&1) || true
+    (cd "$release_directory" && docker compose --project-name "$project" --env-file .env -f compose.yaml down --volumes --remove-orphans >/dev/null 2>&1) || true
   done
   rm -rf "$TEMP_ROOT"
 }
