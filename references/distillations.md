@@ -10,6 +10,12 @@ Add an entry only through an explicit `$conduit-tacit-knowledge` invocation and 
 - **Scope:** Code path or condition where it applies.
 - **Evidence:** Focused test, trace, or failure mode that established it.
 
+### Preserve authored timelines when animations self-clean
+
+- **Rule:** When an animation removes its own DOM on `animationend`, do not let a global reduced-motion duration clamp collapse it; preserve its authored duration for the explicitly enabled effect, or provide a static fallback.
+- **Scope:** `MeteorShower` and any future timeline-driven decorative component with animation-end cleanup.
+- **Evidence:** Browsers reporting `prefers-reduced-motion: reduce` changed every meteor to `0.01ms`, immediately removing it. `test/browser/app.spec.js` now verifies that the supplied meteor duration survives under that preference.
+
 ### Classify visual flicker with paired, narrow captures
 
 - **Rule:** Before adding a cache or changing lifecycle code, capture one interaction with a scoped DOM mutation observer and a Network filter for the implicated API. Use the DOM record to distinguish removal/remount from a state update, then correlate only the matching requests.
