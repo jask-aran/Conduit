@@ -315,7 +315,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
     </button>
     <Show when={entry.type === "directory" && expanded().has(entry.path)}><Tree directory={entry.path} depth={(treeProps.depth || 0) + 1} /></Show>
   </div>}</For>
-    <Show when={directories()[treeProps.directory]?.truncated}><div class="workspace-tree-notice">Showing the first 500 items in this directory.</div></Show>
+    <Show when={directories()[treeProps.directory]?.truncated}><div class="workspace-tree-notice">Showing a bounded selection of 500 items from this directory.</div></Show>
   </>;
 
   return <>
