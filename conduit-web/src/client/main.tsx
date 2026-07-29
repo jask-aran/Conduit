@@ -3,6 +3,8 @@ import { render } from "solid-js/web";
 import { PanelLeftIcon, PanelRightIcon, SearchIcon, ShareIcon, TriangleAlertIcon } from "lucide-solid";
 import { Toaster, toast } from "solid-sonner";
 import "solid-sonner/styles.css";
+import { DefaultMeteorShower } from "@jask-aran/solid-components/meteor-shower";
+import "@jask-aran/solid-components/meteor-shower.css";
 import { Button, Spinner } from "@/components/primitives";
 import { api, asList, pathChatId, pathProjectId, projectPath } from "./api/client";
 import type { ChatSummary, DashboardChat, Installation, Project, RuntimeIdentity, Template, TranscriptDetail, WorkspaceSuggestion } from "./api/contracts";
@@ -539,7 +541,11 @@ function App() {
       <Show when={routeBootstrap() === "ready"} fallback={<div class="chat-bootstrap" role={routeBootstrap() === "error" ? "alert" : "status"}>{routeBootstrap() === "error"
         ? routeBootstrapError() || (routeKind() === "project" ? "This project could not be loaded." : "This chat could not be loaded.")
         : routeKind() === "project" ? "Loading project…" : "Loading chat…"}</div>}>
-        <div class="chat-ambient" aria-hidden="true" />
+        <Show when={routeKind() === "chat"}>
+          <div class="chat-meteors" aria-hidden="true">
+            <DefaultMeteorShower />
+          </div>
+        </Show>
         <Show when={routeKind() === "project" && selectedProject()} fallback={<>
           <Show when={dropActive()}><div class="chat-drop-overlay"><div>Drop files to attach</div></div></Show>
           <ChatHeader project={selectedProject()} title={chat.title()} profile={activeProfile()} runtime={chat.runtimeIdentity()} live={chat.live() as unknown as Record<string, unknown>} panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onOpenPalette={() => openPalette(null)} onTogglePanel={togglePanel} onShare={() => void shareChat()} />
