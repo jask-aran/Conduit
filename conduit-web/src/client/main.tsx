@@ -3,7 +3,8 @@ import { render } from "solid-js/web";
 import { PanelLeftIcon, PanelRightIcon, SearchIcon, ShareIcon, TriangleAlertIcon } from "lucide-solid";
 import { Toaster, toast } from "solid-sonner";
 import "solid-sonner/styles.css";
-import { DEFAULT_SEED, DEFAULT_SETTINGS, MeteorShower, simulateMeteors } from "@/components/meteor-shower";
+import { DefaultMeteorShower } from "@jask-aran/solid-components/meteor-shower";
+import "@jask-aran/solid-components/meteor-shower.css";
 import { Button, Spinner } from "@/components/primitives";
 import { api, asList, pathChatId, pathProjectId, projectPath } from "./api/client";
 import type { ChatSummary, DashboardChat, Installation, Project, RuntimeIdentity, Template, TranscriptDetail, WorkspaceSuggestion } from "./api/contracts";
@@ -24,8 +25,6 @@ import "./styles.css";
 
 type SettingsSection = "general" | "models" | "profiles" | "runtime" | "workspaces" | "auth";
 type WorkspaceView = "files" | "diff" | "artifacts" | "terminal";
-const METEOR_TIMELINE_SECONDS = 600;
-const METEOR_INITIAL_ELAPSED_SECONDS = 12;
 const WorkspacePanel = lazy(() => import("./workspace/workspace-panel"));
 const ProjectDashboard = lazy(() => import("./project/dashboard"));
 
@@ -85,16 +84,6 @@ function App() {
   const [panelOpen, setPanelOpen] = createSignal(false);
   const [workspaceViewRequest, setWorkspaceViewRequest] = createSignal<{ tab: WorkspaceView; nonce: number } | null>(null);
   const [mobileSidebarOpen, setMobileSidebarOpen] = createSignal(false);
-  const [meteorCycle, setMeteorCycle] = createSignal(0);
-  const meteorEvents = createMemo(() => {
-    meteorCycle();
-    return simulateMeteors({
-      settings: DEFAULT_SETTINGS,
-      viewport: { width: window.innerWidth, height: window.innerHeight },
-      durationSeconds: METEOR_TIMELINE_SECONDS,
-      seed: DEFAULT_SEED,
-    });
-  });
   const initialRouteId = pathChatId();
   const initialProjectRouteId = pathProjectId();
   const [routeKind, setRouteKind] = createSignal<"chat" | "project">(initialProjectRouteId ? "project" : "chat");
@@ -103,11 +92,6 @@ function App() {
   let dragDepth = 0;
   let attachFileInput: HTMLInputElement | undefined;
   let workspaceSuggestionsRequest: Promise<void> | null = null;
-
-  onMount(() => {
-    const id = window.setInterval(() => setMeteorCycle((cycle) => cycle + 1), METEOR_TIMELINE_SECONDS * 1_000);
-    onCleanup(() => window.clearInterval(id));
-  });
 
   const showError = (message: string) => toast.error(message);
   const catalogue = createCatalogueStore();
@@ -559,7 +543,7 @@ function App() {
         : routeKind() === "project" ? "Loading project…" : "Loading chat…"}</div>}>
         <Show when={routeKind() === "chat"}>
           <div class="chat-meteors" aria-hidden="true">
-            <MeteorShower events={meteorEvents()} entryOffset={DEFAULT_SETTINGS.entryOffset} elapsedSeconds={METEOR_INITIAL_ELAPSED_SECONDS} />
+            <DefaultMeteorShower />
           </div>
         </Show>
         <Show when={routeKind() === "project" && selectedProject()} fallback={<>
