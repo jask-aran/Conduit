@@ -236,7 +236,10 @@ starting, and browser-attached processes remain resident.
 - `GET /v0/chats/:id/attachments`
 - `DELETE /v0/chats/:id/attachments/:attachment-id`
 - `GET|POST /v0/projects`
-- `PATCH|DELETE /v0/projects/:id`
+- `PATCH|DELETE /v0/projects/:id`; `DELETE` with
+  `{ mode: "destroy_workspace", confirmation: "<exact Workspace name>" }`
+  permanently removes a Workspace's validated folder, while ordinary delete
+  remains unlink-only for external Workspaces
 - `GET /v0/projects/:id/dashboard` returns project identity, lightweight chat
   and live-process stats, up to ten recent active chats, and bounded Git
   overview data for Workspaces. It does not walk the working tree for disk

@@ -951,12 +951,26 @@ app.delete("/v0/projects/:id", async (request, response, next) => {
   try {
     const project = await projects.get(request.params.id);
     if (!project) return response.status(404).json({ error: "project_not_found" });
+    const deleteWorkspaceFiles = request.body?.mode === "destroy_workspace";
+    if (deleteWorkspaceFiles) {
+      if (project.kind !== "workspace") return response.status(400).json({ error: "workspace_delete_not_supported" });
+      if (String(request.body?.confirmation || "") !== project.name) {
+        return response.status(400).json({ error: "workspace_delete_confirmation_required", message: "Type the Workspace name exactly to delete it" });
+      }
+    }
     finishDeletion = await lifecycle.beginProjectDeletion(project.id);
     let skipWorkingTree = false;
     try { await projects.validate(project); }
     catch (error) {
-      if (project.origin !== "linked") throw error;
-      skipWorkingTree = true;
+      if (deleteWorkspaceFiles) {
+        try { await fs.lstat(project.path); }
+        catch (statError) {
+          if (statError.code !== "ENOENT") throw statError;
+          skipWorkingTree = true;
+        }
+        if (!skipWorkingTree) throw error;
+      } else if (project.kind === "workspace" && project.externalPath) skipWorkingTree = true;
+      else throw error;
     }
     const projectList = await projects.list();
     const chats = registry.listProject(project.id, { includeHidden: true });
@@ -976,7 +990,7 @@ app.delete("/v0/projects/:id", async (request, response, next) => {
       await registry.remove(chat.id, skipWorkingTree ? null : project);
     }
     await registry.removeProject(project.id);
-    await projects.remove(project.id, { skipWorkingTree });
+    await projects.remove(project.id, { skipWorkingTree, deleteWorkspaceFiles });
     response.status(204).end();
   } catch (error) { next(error); }
   finally { finishDeletion?.(); }

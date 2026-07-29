@@ -782,7 +782,7 @@ export class ProjectStore {
     return this.runExclusive(() => this.removeUnlocked(idOrSlug, options));
   }
 
-  async removeUnlocked(idOrSlug, { skipWorkingTree = false } = {}) {
+  async removeUnlocked(idOrSlug, { skipWorkingTree = false, deleteWorkspaceFiles = false } = {}) {
     const catalog = await this.readCatalog();
     const project = catalog.projects.find((item) => item.id === idOrSlug || item.slug === idOrSlug);
     if (!project) return null;
@@ -792,12 +792,17 @@ export class ProjectStore {
       throw error;
     }
     const view = this.projectView(project);
+    if (deleteWorkspaceFiles && project.kind !== "workspace") {
+      const error = new Error("Only Workspaces can delete an external working directory");
+      error.code = "workspace_delete_not_supported";
+      throw error;
+    }
     // Linked and cloned workspaces are both externally rooted. Verify that the
-    // registered root is still the same real directory before touching its
-    // Conduit-owned metadata during unregister.
+    // registered root is still the same real directory before touching it.
     if (!skipWorkingTree) await this.validate(view);
-    // Linked workspaces are unregistered only — never delete the external tree.
-    if (!skipWorkingTree && (project.origin || "managed") === "managed") {
+    if (!skipWorkingTree && deleteWorkspaceFiles) {
+      await fs.rm(view.path, { recursive: true, force: true });
+    } else if (!skipWorkingTree && (project.origin || "managed") === "managed") {
       await fs.rm(view.path, { recursive: true, force: true });
     } else if (!skipWorkingTree) {
       // Chat deletion removes Conduit's owned trees. Unregister only prunes empty
