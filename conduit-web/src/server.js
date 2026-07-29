@@ -888,7 +888,8 @@ app.get("/v0/projects/:id/tree", async (request, response, next) => {
     const project = await projects.get(request.params.id);
     if (!project) return response.status(404).json({ error: "project_not_found" });
     await projects.validate(project);
-    response.json({ path: String(request.query.path || ""), entries: await listWorkspaceDirectory(project.path, request.query.path) });
+    const listing = await listWorkspaceDirectory(project.path, request.query.path);
+    response.json({ path: String(request.query.path || ""), ...listing });
   } catch (error) { next(error); }
 });
 

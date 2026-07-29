@@ -250,7 +250,10 @@ starting, and browser-attached processes remain resident.
   and live-process stats, up to ten recent active chats, and bounded Git
   overview data for Workspaces. It does not walk the working tree for disk
   usage or read every transcript.
-- `GET /v0/projects/:id/tree?path=…` lists one validated directory level
+- `GET /v0/projects/:id/tree?path=…` lists one validated directory level,
+  returning at most the first 500 visible entries in directory-first/name order
+  plus `truncated: true` when additional visible entries exist; `.conduit` and
+  symlinks are excluded before applying the bound
 - `GET /v0/projects/:id/file?path=…` returns a size-capped text preview
 - `GET /v0/projects/:id/diff` returns bounded Git status; `?patch=1&reuse=1` reuses the short-lived status inspection and additionally returns staged/unstaged unified diff after the patch disclosure opens
 - `POST /v0/projects/:id/move-sessions`

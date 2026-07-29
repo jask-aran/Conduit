@@ -155,12 +155,23 @@ export async function resolveInspectorPath(root, relativePath = "", { kind = nul
 
 export async function listWorkspaceDirectory(root, relativePath = "") {
   const resolved = await resolveInspectorPath(root, relativePath, { kind: "directory" });
-  const entries = await fs.readdir(resolved.path, { withFileTypes: true });
-  return entries.filter((entry) => entry.name !== ".conduit" && !entry.isSymbolicLink()).slice(0, MAX_DIRECTORY_ENTRIES).map((entry) => ({
+  const directory = await fs.opendir(resolved.path);
+  const accepted = [];
+  let truncated = false;
+  for await (const entry of directory) {
+    if (entry.name === ".conduit" || entry.isSymbolicLink()) continue;
+    accepted.push(entry);
+    if (accepted.length > MAX_DIRECTORY_ENTRIES) {
+      truncated = true;
+      break;
+    }
+  }
+  const entries = accepted.slice(0, MAX_DIRECTORY_ENTRIES).map((entry) => ({
     name: entry.name,
     path: resolved.relativePath ? `${resolved.relativePath}/${entry.name}` : entry.name,
     type: entry.isDirectory() ? "directory" : entry.isFile() ? "file" : "other",
   })).sort((left, right) => left.type === right.type ? left.name.localeCompare(right.name) : left.type === "directory" ? -1 : 1);
+  return { entries, truncated };
 }
 
 export async function readWorkspaceFile(root, relativePath) {
