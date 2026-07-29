@@ -134,7 +134,7 @@ const projects = await (await request("/v0/projects")).json();
 const workspace = projects.projects.find((project) => project.id === fixture.workspaceId);
 if (workspace.id !== fixture.workspaceId || workspace.path !== "/workspaces/proof-workspace") throw new Error("Workspace registration did not survive");
 const fs = await import("node:fs/promises");
-if (await fs.readFile("/workspaces/proof-workspace/proof.txt", "utf8") !== "workspace fixture\\n") throw new Error("Workspace file did not survive");
+if (await fs.readFile("/workspaces/proof-workspace/proof.txt", "utf8") !== "workspace fixture\n") throw new Error("Workspace file did not survive");
 const installations = await (await request("/v0/pi-installations")).json();
 const isolated = installations.installations.find((item) => item.id === "conduit-pinned");
 const host = installations.installations.find((item) => item.id === "host-pi");
