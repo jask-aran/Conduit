@@ -1,0 +1,9 @@
+:root { color-scheme: dark; }
+
+* { box-sizing: border-box; }
+
+body { margin: 0; overflow: hidden; }
+
+#root, .meteor-prerender { width: 100%; height: 100dvh; }
+
+.meteor-prerender { position: relative; overflow: hidden; background: #111113; }
