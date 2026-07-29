@@ -2,6 +2,7 @@ node_modules/
 .env
 .env.local
 release/
+.deployment-evidence/
 coverage/
 *.log
 data/chat/files/
