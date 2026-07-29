@@ -9,6 +9,8 @@ test("production image is pinned, unprivileged, read-only compatible, and self-c
   const dockerfile = await fs.readFile(path.join(root, "Dockerfile"), "utf8");
   assert.match(dockerfile, /^FROM node:24\.14\.0-bookworm-slim@sha256:[a-f0-9]{64}/m);
   assert.match(dockerfile, /AS client-build/);
+  assert.match(dockerfile, /AS dependency-build-base/);
+  assert.match(dockerfile, /g\+\+ make python3/);
   assert.match(dockerfile, /npm ci --omit=dev/);
   assert.match(dockerfile, /^USER node$/m);
   assert.match(dockerfile, /^STOPSIGNAL SIGTERM$/m);
