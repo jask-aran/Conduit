@@ -98,6 +98,54 @@ export async function resolveExistingDirectory(candidate, allowlist, policy = {}
   return resolved;
 }
 
+export async function resolveNewWorkspaceDirectory(parentCandidate, directoryName, allowlist, policy = {}) {
+  const name = String(directoryName || "").trim();
+  if (!name || name === "." || name === ".." || name === ".conduit" || /[\\/]/.test(name)) {
+    const error = new Error("Folder name must be a single directory name");
+    error.code = "workspace_directory_invalid";
+    throw error;
+  }
+  const textualParent = assertAllowedPath(parentCandidate, allowlist, "workspace parent directory");
+  let realParent;
+  try {
+    realParent = await fs.realpath(textualParent);
+  } catch (error) {
+    if (error.code === "ENOENT") {
+      const missing = new Error("workspace parent directory does not exist");
+      missing.code = "path_not_found";
+      missing.path = textualParent;
+      throw missing;
+    }
+    throw error;
+  }
+  const parent = assertAllowedPath(realParent, allowlist, "workspace parent directory");
+  if (policy.dataRoot && isPathInside(parent, path.resolve(policy.dataRoot))) {
+    const error = new Error("That directory is too broad or owned by Conduit application data");
+    error.code = "dangerous_workspace_root";
+    error.reason = "conduit_data";
+    error.path = parent;
+    throw error;
+  }
+  const parentStat = await fs.stat(parent);
+  if (!parentStat.isDirectory()) {
+    const error = new Error("workspace parent directory must be a directory");
+    error.code = "path_not_directory";
+    throw error;
+  }
+  const target = path.join(parent, name);
+  assertSafeWorkspaceRoot(target, policy);
+  try {
+    const stat = await fs.lstat(target);
+    const error = new Error(stat.isSymbolicLink() ? "Workspace folder cannot be a symlink" : "Workspace folder already exists");
+    error.code = stat.isSymbolicLink() ? "workspace_path_symlink" : "workspace_path_exists";
+    error.path = target;
+    throw error;
+  } catch (error) {
+    if (error.code !== "ENOENT") throw error;
+  }
+  return target;
+}
+
 export async function listDirectorySuggestions(root) {
   const resolvedRoot = await fs.realpath(path.resolve(root));
   const entries = await fs.readdir(resolvedRoot, { withFileTypes: true });

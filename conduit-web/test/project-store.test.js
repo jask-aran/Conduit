@@ -105,6 +105,30 @@ test("links allow-listed directories without deleting them on unregister", async
   await fs.rm(root, { recursive: true, force: true });
 });
 
+test("creates an external Workspace and preserves its directory when unlinked", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-project-create-"));
+  const parent = path.join(root, "workspaces");
+  await fs.mkdir(parent);
+  const store = new ProjectStore({
+    filesRoot: path.join(root, "data/chat/files"),
+    catalogFile: path.join(root, "data/conduit.json"),
+    piAgentDir: path.join(root, "data/pi"),
+    workspaceAllowlist: [root],
+  });
+  await store.initialize();
+  const preview = await store.previewWorkspace({ mode: "created", path: parent, directoryName: "new-app" });
+  assert.equal(preview.path, path.join(parent, "new-app"));
+  const created = await store.create({ mode: "created", name: "New App", path: parent, directoryName: "new-app" });
+  assert.equal(created.origin, "created");
+  assert.equal(created.path, path.join(parent, "new-app"));
+  assert.equal(created.deletesFilesOnRemove, false);
+  await fs.writeFile(path.join(created.path, "README.md"), "keep");
+  await store.remove(created.id);
+  assert.equal(await fs.readFile(path.join(parent, "new-app", "README.md"), "utf8"), "keep");
+  await assert.rejects(store.create({ mode: "created", path: parent, directoryName: "new-app" }), { code: "workspace_path_exists" });
+  await fs.rm(root, { recursive: true, force: true });
+});
+
 test("migrates implicit Workspace profile defaults to global inheritance", async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-project-default-migration-"));
   const external = path.join(root, "external");

@@ -57,7 +57,9 @@ input.on("line", (line) => {
   await fs.writeFile(nativePi, "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then echo 0.80.10; exit 0; fi\nif [ \"$1\" = \"--help\" ]; then echo '--mode --session --append-system-prompt --skill --approve --no-approve'; exit 0; fi\nexit 1\n");
   await fs.chmod(nativePi, 0o755);
   const workspace = path.join(root, "workspace");
+  const workspaceParent = path.join(root, "workspace-parent");
   await fs.mkdir(workspace);
+  await fs.mkdir(workspaceParent);
   const child = spawn(process.execPath, ["src/server.js"], {
     cwd: path.resolve(import.meta.dirname, ".."),
     stdio: ["ignore", "pipe", "pipe"],
@@ -111,6 +113,22 @@ input.on("line", (line) => {
     assert.equal(linkedResponse.status, 201);
     const linked = await linkedResponse.json();
     assert.equal(linked.defaultTemplateId, null);
+    const previewResponse = await fetch(`${origin}/v0/workspaces/preview`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ mode: "created", path: workspaceParent, directoryName: "new-workspace" }),
+    });
+    assert.equal(previewResponse.status, 200);
+    assert.equal((await previewResponse.json()).path, path.join(workspaceParent, "new-workspace"));
+    const createdWorkspaceResponse = await fetch(`${origin}/v0/projects`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ mode: "created", path: workspaceParent, directoryName: "new-workspace" }),
+    });
+    assert.equal(createdWorkspaceResponse.status, 201);
+    const createdWorkspace = await createdWorkspaceResponse.json();
+    assert.equal(createdWorkspace.origin, "created");
+    assert.equal(createdWorkspace.deletesFilesOnRemove, false);
     await fs.mkdir(path.join(workspace, ".pi", "themes"), { recursive: true });
     const preflight = await (await fetch(`${origin}/v0/workspaces/${linked.id}/native-preflight`)).json();
     assert.equal(preflight.available, true);

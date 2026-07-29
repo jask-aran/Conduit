@@ -3,11 +3,11 @@ import { spawn } from "node:child_process";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { sessionDirectoryFor } from "./session-store.js";
-import { assertAllowedPath, assertSafeWorkspaceRoot, isPathInside, resolveExistingDirectory } from "./workspace-paths.js";
+import { assertAllowedPath, assertSafeWorkspaceRoot, isPathInside, resolveExistingDirectory, resolveNewWorkspaceDirectory } from "./workspace-paths.js";
 import { ensureConduitRoot } from "./owned-paths.js";
 
 const SLUG = /^[a-z0-9](?:[a-z0-9-]{0,46}[a-z0-9])?$/;
-const ORIGINS = new Set(["managed", "linked", "cloned"]);
+const ORIGINS = new Set(["managed", "linked", "created", "cloned"]);
 export const CLONE_COMMAND_TIMEOUT_MS = 120_000;
 export const CLONE_COMMAND_MAX_OUTPUT_BYTES = 64 * 1024;
 
@@ -320,6 +320,65 @@ export class ProjectStore {
     });
   }
 
+  async previewWorkspace({ mode, path: inputPath, directoryName } = {}) {
+    const normalizedMode = String(mode || "").trim().toLowerCase();
+    const created = normalizedMode === "create" || normalizedMode === "created";
+    const externalPath = created
+      ? await resolveNewWorkspaceDirectory(inputPath, directoryName, this.workspaceAllowlist, { dataRoot: this.dataRoot })
+      : await resolveExistingDirectory(inputPath, this.workspaceAllowlist, { dataRoot: this.dataRoot });
+    const catalog = await this.readCatalog();
+    if (catalog.projects.some((item) => path.resolve(this.resolvePath(item)) === externalPath)) {
+      const error = new Error("That directory is already registered");
+      error.code = "workspace_already_linked";
+      throw error;
+    }
+    return {
+      path: externalPath,
+      ownership: created
+        ? "Conduit will create this folder. Unlinking it later keeps the folder and its files."
+        : "Conduit will register this existing folder. Unlinking it later keeps the folder and its files.",
+    };
+  }
+
+  async createCreated({ name, path: parentPath, directoryName, defaultTemplateId = null }) {
+    await resolveNewWorkspaceDirectory(parentPath, directoryName, this.workspaceAllowlist, { dataRoot: this.dataRoot });
+    return this.runExclusive(async () => {
+      const target = await resolveNewWorkspaceDirectory(parentPath, directoryName, this.workspaceAllowlist, { dataRoot: this.dataRoot });
+      const slug = await this.uniqueSlug(name || directoryName);
+      const catalog = await this.readCatalog();
+      if (catalog.projects.some((item) => path.resolve(this.resolvePath(item)) === target)) {
+        const error = new Error("That directory is already registered");
+        error.code = "workspace_already_linked";
+        throw error;
+      }
+      const project = {
+        id: `project_${crypto.randomUUID()}`,
+        slug,
+        name: String(name || directoryName).trim(),
+        kind: "workspace",
+        origin: "created",
+        externalPath: target,
+        cloneUrl: null,
+        defaultTemplateId: defaultTemplateId || null,
+        createdAt: new Date().toISOString(),
+      };
+      await fs.mkdir(target);
+      try {
+        await ensureConduitRoot({ path: target, externalPath: target, origin: "created" });
+        catalog.projects.push(project);
+        await this.writeCatalog(this.catalogFile, catalog);
+      } catch (error) {
+        const entries = await fs.readdir(target).catch(() => []);
+        if (entries.every((entry) => entry === ".conduit")) {
+          await fs.rm(path.join(target, ".conduit"), { recursive: true, force: true }).catch(() => {});
+          await fs.rmdir(target).catch(() => {});
+        }
+        throw error;
+      }
+      return this.projectView(project);
+    });
+  }
+
   reservationFile(id) {
     return path.join(this.cloneReservationRoot, `${id}.json`);
   }
@@ -555,6 +614,9 @@ export class ProjectStore {
     const mode = String(input.mode || input.origin || "managed").trim().toLowerCase();
     if (mode === "link" || mode === "linked") {
       return this.createLinked(input);
+    }
+    if (mode === "create" || mode === "created") {
+      return this.createCreated(input);
     }
     if (mode === "clone" || mode === "cloned") {
       return this.createCloned(input);

@@ -40,11 +40,14 @@ import {
   Spinner,
 } from "@/components/primitives";
 import type { ChatSummary, Project, RuntimeProcess, WorkspaceSuggestion } from "../api/contracts";
+import { api } from "../api/client";
 import type { RuntimeStore } from "../state/runtime";
 import { focusFirst, isMobileLayout, MOBILE_LAYOUT_QUERY, restoreFocus } from "./mobile-layout";
 import { ProjectActivityIndicator, RuntimeIndicator } from "./runtime-indicator";
 
-type ProjectInput = { mode: string; name?: string; path?: string; cloneUrl?: string; cloneParentPath?: string; cloneDirectoryName?: string };
+type WorkspaceMode = "linked" | "created" | "cloned";
+type ProjectInput = { mode: string; name?: string; path?: string; directoryName?: string; cloneUrl?: string; cloneParentPath?: string; cloneDirectoryName?: string };
+type WorkspacePreview = { key: string; path: string; ownership: string };
 
 function Modal(props: { open: boolean; title: string; description?: string; children: unknown; onClose: () => void; class?: string }) {
   let returnFocus: HTMLElement | null = null;
@@ -115,11 +118,14 @@ export function Sidebar(props: {
     media.addEventListener("change", sync);
     onCleanup(() => media.removeEventListener("change", sync));
   });
-  const [mode, setMode] = createSignal("managed");
+  const [mode, setMode] = createSignal<"managed" | WorkspaceMode>("managed");
   const [name, setName] = createSignal("");
   const [path, setPath] = createSignal("");
   const [cloneUrl, setCloneUrl] = createSignal("");
   const [cloneDirectoryName, setCloneDirectoryName] = createSignal("");
+  const [directoryName, setDirectoryName] = createSignal("");
+  const [workspacePreview, setWorkspacePreview] = createSignal<WorkspacePreview | null>(null);
+  const [previewError, setPreviewError] = createSignal("");
   const [submitting, setSubmitting] = createSignal(false);
   const [rename, setRename] = createSignal<{ type: "chat"; chat: ChatSummary; project: Project } | { type: "project"; project: Project } | null>(null);
   const [renameValue, setRenameValue] = createSignal("");
@@ -172,8 +178,8 @@ export function Sidebar(props: {
     mobileWasOpen = open;
   });
   const chats = () => props.projects.find((project) => project.slug === "chat") || props.projects[0];
-  const folders = () => props.projects.filter((project) => project.slug !== "chat" && project.origin !== "linked" && project.origin !== "cloned" && project.kind !== "workspace");
-  const workspaces = () => props.projects.filter((project) => project.origin === "linked" || project.origin === "cloned" || project.kind === "workspace");
+  const folders = () => props.projects.filter((project) => project.slug !== "chat" && project.origin !== "linked" && project.origin !== "created" && project.origin !== "cloned" && project.kind !== "workspace");
+  const workspaces = () => props.projects.filter((project) => project.origin === "linked" || project.origin === "created" || project.origin === "cloned" || project.kind === "workspace");
   const closeMobile = () => props.onMobileOpenChange(false);
   const startNewChat = (project?: Project) => {
     closeMobile();
@@ -201,9 +207,38 @@ export function Sidebar(props: {
     setMode("managed");
     setName("");
     setPath("");
+    setDirectoryName("");
     setCloneUrl("");
     setCloneDirectoryName("");
+    setWorkspacePreview(null);
+    setPreviewError("");
   };
+
+  const previewKey = () => `${mode()}\0${path().trim()}\0${directoryName().trim()}`;
+  createEffect(() => {
+    const currentMode = mode();
+    const currentPath = path().trim();
+    const currentDirectory = directoryName().trim();
+    const key = `${currentMode}\0${currentPath}\0${currentDirectory}`;
+    const previewable = newKind() === "workspace"
+      && ((currentMode === "linked" && currentPath) || (currentMode === "created" && currentPath && currentDirectory));
+    setWorkspacePreview(null);
+    setPreviewError("");
+    if (!previewable) return;
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => {
+      void api<{ path: string; ownership: string }>("/v0/workspaces/preview", {
+        method: "POST",
+        signal: controller.signal,
+        body: JSON.stringify({ mode: currentMode, path: currentPath, directoryName: currentDirectory || undefined }),
+      }).then((result) => {
+        if (!controller.signal.aborted) setWorkspacePreview({ key, ...result });
+      }).catch((error) => {
+        if (!controller.signal.aborted) setPreviewError((error as Error).message);
+      });
+    }, 180);
+    onCleanup(() => { window.clearTimeout(timer); controller.abort(); });
+  });
 
   const requestRenameChat = (chat: ChatSummary, project: Project) => { setRename({ type: "chat", chat, project }); setRenameValue(chat.title); };
   const requestRenameProject = (project: Project) => { setRename({ type: "project", project }); setRenameValue(project.name); };
@@ -221,6 +256,7 @@ export function Sidebar(props: {
     if (submitting()) return;
     const input: ProjectInput = mode() === "managed" ? { mode: "managed", name: name().trim() }
       : mode() === "linked" ? { mode: "linked", name: name().trim() || undefined, path: path().trim() }
+        : mode() === "created" ? { mode: "created", name: name().trim() || undefined, path: path().trim(), directoryName: directoryName().trim() }
         : { mode: "cloned", name: name().trim() || undefined, cloneParentPath: path().trim(), cloneDirectoryName: cloneDirectoryName().trim() || undefined, cloneUrl: cloneUrl().trim() };
     setSubmitting(true);
     let created = false;
@@ -228,8 +264,9 @@ export function Sidebar(props: {
     finally { setSubmitting(false); }
     if (created) closeNewDialog();
   };
+  const previewReady = () => workspacePreview()?.key === previewKey();
   const canCreate = () => !submitting() && (mode() === "managed" ? Boolean(name().trim())
-    : mode() === "linked" ? Boolean(path().trim())
+    : mode() === "linked" || mode() === "created" ? previewReady()
       : Boolean(cloneUrl().trim() && path().trim()));
 
   const confirmDelete = async () => {
@@ -244,6 +281,7 @@ export function Sidebar(props: {
     const target = deleting();
     if (target?.type !== "project") return { title: "Delete this chat?", description: "This permanently deletes the Pi session transcript and this chat's attached files." };
     if (target.project.origin === "linked") return { title: "Unlink this workspace?", description: `This unregisters ${target.project.name} and deletes its Conduit chats. The linked directory on disk is kept.` };
+    if (target.project.origin === "created") return { title: "Unlink this workspace?", description: `This unregisters ${target.project.name} and deletes its Conduit chats. The created directory on disk is kept.` };
     if (target.project.origin === "cloned") return { title: "Unlink this workspace?", description: `This unregisters ${target.project.name} and deletes its Conduit chats. The cloned directory on disk is kept.` };
     return { title: "Delete this folder?", description: `This permanently deletes ${target.project.name}, its working files, and all of its chats.` };
   };
@@ -295,7 +333,7 @@ export function Sidebar(props: {
   const ProjectBlock = (blockProps: { project: Project; workspace?: boolean }) => {
     const [open, setOpen] = createSignal(true);
     const guard = guardFor(blockProps.project);
-    const isWorkspace = () => blockProps.project.origin === "linked" || blockProps.project.origin === "cloned" || blockProps.project.kind === "workspace";
+    const isWorkspace = () => blockProps.project.origin === "linked" || blockProps.project.origin === "created" || blockProps.project.origin === "cloned" || blockProps.project.kind === "workspace";
     const deleteLabel = () => blockProps.project.deletesFilesOnRemove === false ? "Unlink workspace"
       : isWorkspace() ? "Delete workspace"
         : `Delete ${blockProps.workspace ? "workspace" : "folder"}`;
@@ -395,22 +433,27 @@ export function Sidebar(props: {
       </div>
     </aside>
 
-    <Modal open={Boolean(newKind())} title={newKind() === "workspace" ? "New workspace" : "New folder"}
+    <Modal open={Boolean(newKind())} title={newKind() === "workspace" ? "Add workspace" : "New folder"}
       description={newKind() === "workspace"
-        ? "Link an existing allow-listed directory or clone a repository into a chosen host directory."
+        ? "Choose exactly how Conduit should use a folder. The path and ownership stay visible before anything changes."
         : "Create a separate managed working directory and chat scope."}
       onClose={closeNewDialog}>
       <form onSubmit={submitNew}><FieldGroup>
-        <Show when={newKind() === "workspace"}><Field><FieldLabel for="folder-mode">Type</FieldLabel><select id="folder-mode" value={mode()} disabled={submitting()} onChange={(event) => setMode(event.currentTarget.value)}>
-          <option value="linked">Link existing directory</option><option value="cloned">Clone git repository</option>
-        </select></Field></Show>
+        <Show when={newKind() === "workspace"}><div class="workspace-mode-picker" role="radiogroup" aria-label="Workspace action">
+          <button type="button" role="radio" aria-checked={mode() === "linked"} data-selected={mode() === "linked"} disabled={submitting()} onClick={() => setMode("linked")}><strong>Link existing</strong><small>Use a folder already on this machine. Unlinking keeps it.</small></button>
+          <button type="button" role="radio" aria-checked={mode() === "created"} data-selected={mode() === "created"} disabled={submitting()} onClick={() => setMode("created")}><strong>Create folder</strong><small>Make an empty folder in an allowed location. It remains yours.</small></button>
+          <button type="button" role="radio" aria-checked={mode() === "cloned"} data-selected={mode() === "cloned"} disabled={submitting()} onClick={() => setMode("cloned")}><strong>Clone repository</strong><small>Check out a repository into a chosen parent folder.</small></button>
+        </div></Show>
         <Field><FieldLabel for="folder-name">{mode() === "managed" ? "Display name" : "Display name (optional)"}</FieldLabel><Input id="folder-name" value={name()} disabled={submitting()} placeholder={mode() === "managed" ? "Research" : "My project"} onInput={(event) => setName(event.currentTarget.value)} /></Field>
-        <Show when={mode() === "linked" || mode() === "cloned"}><Field><FieldLabel for="folder-path">{mode() === "cloned" ? "Clone parent directory" : "Absolute path"}</FieldLabel><Input id="folder-path" value={path()} disabled={submitting()} list="workspace-path-suggestions" placeholder={mode() === "cloned" ? "~/code" : "~/code/my-repo"} onInput={(event) => setPath(event.currentTarget.value)} /><datalist id="workspace-path-suggestions"><For each={props.workspaceSuggestions}>{(item) => <option value={item.displayPath || item.path} label={item.name} />}</For></datalist></Field></Show>
+        <Show when={mode() === "linked" || mode() === "created" || mode() === "cloned"}><Field><FieldLabel for="folder-path">{mode() === "cloned" || mode() === "created" ? "Parent directory" : "Existing folder"}</FieldLabel><Input id="folder-path" value={path()} disabled={submitting()} list="workspace-path-suggestions" placeholder={mode() === "linked" ? "~/code/my-repo" : "~/code"} onInput={(event) => setPath(event.currentTarget.value)} /><datalist id="workspace-path-suggestions"><For each={props.workspaceSuggestions}>{(item) => <option value={item.displayPath || item.path} label={item.name} />}</For></datalist></Field></Show>
+        <Show when={mode() === "created"}><Field><FieldLabel for="workspace-directory-name">New folder name</FieldLabel><Input id="workspace-directory-name" value={directoryName()} disabled={submitting()} placeholder="my-project" onInput={(event) => setDirectoryName(event.currentTarget.value)} /></Field></Show>
         <Show when={mode() === "cloned"}><Field><FieldLabel for="clone-directory-name">Folder name (optional)</FieldLabel><Input id="clone-directory-name" value={cloneDirectoryName()} disabled={submitting()} placeholder="Defaults to the repository name" onInput={(event) => setCloneDirectoryName(event.currentTarget.value)} /></Field></Show>
         <Show when={mode() === "cloned"}><Field><FieldLabel for="folder-clone">Git URL</FieldLabel><Input id="folder-clone" value={cloneUrl()} disabled={submitting()} placeholder="https://github.com/org/repo.git" onInput={(event) => setCloneUrl(event.currentTarget.value)} /></Field></Show>
+        <Show when={workspacePreview()}>{(preview) => <div class="workspace-path-preview"><strong>{preview().path}</strong><small>{preview().ownership}</small></div>}</Show>
+        <Show when={previewError()}><p class="workspace-preview-error" role="alert">{previewError()}</p></Show>
         <div class="flex justify-end gap-2"><Button type="button" variant="outline" disabled={submitting()} onClick={closeNewDialog}>Cancel</Button><Button type="submit" disabled={!canCreate()}>{submitting()
           ? (mode() === "cloned" ? "Cloning…" : "Creating…")
-          : mode() === "cloned" ? "Clone workspace" : mode() === "linked" ? "Link workspace" : "Create folder"}</Button></div>
+          : mode() === "cloned" ? "Clone workspace" : mode() === "linked" ? "Link workspace" : mode() === "created" ? "Create workspace" : "Create folder"}</Button></div>
       </FieldGroup></form>
     </Modal>
 

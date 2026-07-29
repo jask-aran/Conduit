@@ -32,11 +32,12 @@ import type { RuntimeStore } from "../state/runtime";
 import { RuntimeIndicator } from "../navigation/runtime-indicator";
 
 function workspaceProject(project: Project) {
-  return project.kind === "workspace" || ["linked", "cloned"].includes(project.origin || "");
+  return project.kind === "workspace" || ["linked", "created", "cloned"].includes(project.origin || "");
 }
 
 function kindLabel(project: Project) {
   if (project.origin === "cloned") return "Cloned workspace";
+  if (project.origin === "created") return "Created workspace";
   if (workspaceProject(project)) return "Linked workspace";
   return "Managed folder";
 }
