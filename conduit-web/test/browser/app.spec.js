@@ -1882,13 +1882,13 @@ test("the meteor field fills the chat main surface without intercepting input", 
   const meteors = page.locator(".chat-meteors");
   await expect(main).toHaveCSS("isolation", "isolate");
   await expect(meteors).toBeVisible();
-  await expect(meteors.locator(".meteor").first()).toBeAttached();
+  await expect(meteors.locator(".solid-meteor").first()).toBeAttached();
   await expect(meteors).toHaveCSS("pointer-events", "none");
   await expect(meteors).toHaveCSS("overflow", "hidden");
-  await expect.poll(() => meteors.locator(".meteor").evaluateAll((nodes) =>
+  await expect.poll(() => meteors.locator(".solid-meteor").evaluateAll((nodes) =>
     nodes.some((node) => Number.parseFloat(node.style.animationDelay) < 0),
   )).toBe(true);
-  await expect.poll(() => meteors.locator(".meteor").evaluateAll((nodes) => {
+  await expect.poll(() => meteors.locator(".solid-meteor").evaluateAll((nodes) => {
     const field = document.querySelector(".chat-meteors")?.getBoundingClientRect();
     if (!field) return 0;
     return nodes.filter((node) => {
@@ -1916,7 +1916,7 @@ test("the meteor field remains animated when reduced motion is enabled", async (
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.goto("/");
 
-  const meteor = page.locator(".chat-meteors .meteor").first();
+  const meteor = page.locator(".chat-meteors .solid-meteor").first();
   await expect(meteor).toBeAttached();
   await expect(meteor).not.toHaveCSS("animation-duration", "0.01s");
 });
