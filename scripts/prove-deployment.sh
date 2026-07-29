@@ -178,7 +178,7 @@ cp "$BACKUP_ARCHIVE.manifest" "$TEMP_ROOT/target/backup.tar.gz.manifest"
 
 tar -xzf "$PACKAGE_ARCHIVE" -C "$TEMP_ROOT/target"
 TARGET_RELEASE="$(find "$TEMP_ROOT/target" -mindepth 1 -maxdepth 1 -type d -print -quit)"
-CONDUIT_COMPOSE_PROJECT_NAME="$TARGET_PROJECT" "$TARGET_RELEASE/scripts/restore.sh" "$TEMP_ROOT/target/backup.tar.gz" | tee "$EVIDENCE_DIRECTORY/restore.txt"
+CONDUIT_COMPOSE_PROJECT_NAME="$TARGET_PROJECT" "$TARGET_RELEASE/scripts/restore.sh" "$TEMP_ROOT/target/backup.tar.gz" 2>&1 | tee "$EVIDENCE_DIRECTORY/restore.txt"
 sed -i "s/^CONDUIT_PORT=.*/CONDUIT_PORT=$TARGET_PORT/" "$TARGET_RELEASE/.env"
 deploy "$TARGET_RELEASE" "$TARGET_PROJECT" up | tee "$EVIDENCE_DIRECTORY/target-start.txt"
 wait_for_health "$TARGET_RELEASE" "$TARGET_PROJECT"
