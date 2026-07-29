@@ -41,6 +41,14 @@ export interface Project {
   sessions: ChatSummary[];
 }
 
+export interface WorkspaceOperation {
+  id: string;
+  projectId: string;
+  state: "cloning" | "cancelling" | "ready" | "cancelled" | "failed" | "complete";
+  error?: string | null;
+  diagnostic?: string;
+}
+
 export interface DashboardChat extends ChatSummary {
   lastMessageAt?: string | null;
   lastMessagePreview?: string;

@@ -11,6 +11,7 @@ import {
   PencilIcon,
   Settings2Icon,
   Trash2Icon,
+  XIcon,
 } from "lucide-solid";
 import {
   Badge,
@@ -27,7 +28,7 @@ import {
   Spinner,
 } from "@/components/primitives";
 import { api } from "../api/client";
-import type { DashboardChat, Project, ProjectDashboardPayload, Template } from "../api/contracts";
+import type { DashboardChat, Project, ProjectDashboardPayload, Template, WorkspaceOperation } from "../api/contracts";
 import type { RuntimeStore } from "../state/runtime";
 import { RuntimeIndicator } from "../navigation/runtime-indicator";
 
@@ -78,6 +79,8 @@ export function ProjectDashboard(props: {
   onDelete: () => void;
   onOpenSettings: (section: string, workspaceId?: string | null) => void;
   onSaveDefault: (projectId: string, templateId: string | null) => Promise<Project>;
+  onRefresh: () => Promise<unknown>;
+  onCancelClone: (operationId: string) => Promise<void>;
   onError: (message: string) => void;
 }) {
   const [payload, setPayload] = createSignal<ProjectDashboardPayload | null>(null);
@@ -87,7 +90,10 @@ export function ProjectDashboard(props: {
   const [savedDefault, setSavedDefault] = createSignal<{ projectId: string; value: string | null } | null>(null);
   const [copied, setCopied] = createSignal(false);
   const [refreshVersion, setRefreshVersion] = createSignal(0);
+  const [operation, setOperation] = createSignal<WorkspaceOperation | null>(null);
+  const [cancellingClone, setCancellingClone] = createSignal(false);
   const projectId = createMemo(() => props.project.id);
+  const cloning = createMemo(() => props.project.state === "cloning" && Boolean(props.project.cloneOperationId));
 
   onMount(() => {
     const refresh = () => setRefreshVersion((version) => version + 1);
@@ -98,6 +104,7 @@ export function ProjectDashboard(props: {
   createEffect(() => {
     const id = projectId();
     refreshVersion();
+    if (cloning()) return;
     const controller = new AbortController();
     setPayload(null);
     setError("");
@@ -109,6 +116,33 @@ export function ProjectDashboard(props: {
         if (!controller.signal.aborted) setError((requestError as Error).message);
       });
     onCleanup(() => controller.abort());
+  });
+
+  createEffect(() => {
+    const operationId = props.project.cloneOperationId;
+    if (!cloning() || !operationId) {
+      setOperation(null);
+      return;
+    }
+    let disposed = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const refresh = async () => {
+      try {
+        const next = await api<WorkspaceOperation>(`/v0/workspace-operations/${encodeURIComponent(operationId)}`);
+        if (disposed) return;
+        setOperation(next);
+        if (["ready", "cancelled", "failed", "complete"].includes(next.state)) {
+          await props.onRefresh();
+          return;
+        }
+      } catch {
+        if (!disposed) await props.onRefresh();
+        return;
+      }
+      if (!disposed) timer = setTimeout(() => { void refresh(); }, 500);
+    };
+    void refresh();
+    onCleanup(() => { disposed = true; if (timer) clearTimeout(timer); });
   });
 
   const activeDefault = createMemo(() => {
@@ -165,6 +199,20 @@ export function ProjectDashboard(props: {
     }
   };
 
+  const cancelClone = async () => {
+    const operationId = props.project.cloneOperationId;
+    if (!operationId || cancellingClone()) return;
+    setCancellingClone(true);
+    try {
+      await props.onCancelClone(operationId);
+      await props.onRefresh();
+    } catch (cancelError) {
+      props.onError((cancelError as Error).message);
+    } finally {
+      setCancellingClone(false);
+    }
+  };
+
   return <section class="project-dashboard" aria-label={`${props.project.name} dashboard`}>
     <div class="project-dashboard-content">
       <header class="project-identity">
@@ -184,18 +232,28 @@ export function ProjectDashboard(props: {
         </div>
         <div class="project-identity-actions">
           <Button variant="outline" onClick={props.onRename}><PencilIcon />Rename</Button>
-          <Button onClick={() => void props.onNewChat(props.project)}><MessageSquarePlusIcon />New chat</Button>
+          <Show when={cloning()} fallback={<Button onClick={() => void props.onNewChat(props.project)}><MessageSquarePlusIcon />New chat</Button>}>
+            <Button variant="destructive" disabled={cancellingClone()} onClick={() => void cancelClone()}><XIcon />{cancellingClone() ? "Cancelling…" : "Cancel clone"}</Button>
+          </Show>
         </div>
       </header>
 
-      <Show when={error()}>
+      <Show when={cloning()}>
+        <section class="clone-progress" aria-live="polite">
+          <div class="clone-progress-heading"><Spinner /><div><strong>{operation()?.state === "cancelling" ? "Cancelling clone" : "Cloning Workspace"}</strong><p>Conduit owns this operation; closing this tab does not stop it.</p></div></div>
+          <div class="clone-progress-path"><span>Destination</span><code>{props.project.path || props.project.externalPath}</code></div>
+          <pre aria-label="Clone output preview">{operation()?.diagnostic || "Preparing clone…"}</pre>
+        </section>
+      </Show>
+
+      <Show when={error() && !cloning()}>
         <div class="project-dashboard-error" role="alert">
           <strong>Dashboard details could not be loaded</strong>
           <span>{error()}</span>
         </div>
       </Show>
 
-      <div class="project-stats" aria-label="Project summary">
+      <Show when={!cloning()}><div class="project-stats" aria-label="Project summary">
         <article>
           <span>Chats</span>
           <strong>{payload()?.stats.totalChats ?? props.project.sessions.length}</strong>
@@ -229,9 +287,9 @@ export function ProjectDashboard(props: {
             </Show></small>
           </article>
         </Show>
-      </div>
+      </div></Show>
 
-      <section class="project-dashboard-section">
+      <Show when={!cloning()}><section class="project-dashboard-section">
         <div class="project-section-heading">
           <div><h2>Recent chats</h2><p>Active conversations in this {workspaceProject(props.project) ? "Workspace" : "Project"}.</p></div>
           <Show when={(payload()?.stats.activeChats || 0) > (payload()?.recentChats.length || 0)}>
@@ -263,9 +321,9 @@ export function ProjectDashboard(props: {
             </div>
           </Show>
         </Show>
-      </section>
+      </section></Show>
 
-      <details class="project-config" open>
+      <Show when={!cloning()}><details class="project-config" open>
         <summary><span><Settings2Icon /><strong>Environment & config</strong></span><ChevronDownIcon /></summary>
         <div class="project-config-grid">
           <div>
@@ -311,7 +369,7 @@ export function ProjectDashboard(props: {
           </div>
           <Button variant="outline" size="sm" onClick={() => props.onOpenSettings("models")}>Manage models</Button>
         </div>
-      </details>
+      </details></Show>
 
       <details class="project-danger">
         <summary><span><Trash2Icon /><strong>Danger zone</strong></span><ChevronDownIcon /></summary>

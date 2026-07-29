@@ -91,7 +91,9 @@ directory publishes the target and atomically transitions it to `ready`.
 Cancellation and a bounded deadline apply to that server-owned operation; clone
 markers record reservation and publication phases so startup either removes an
 unpublished provisional row or completes a published Workspace after an
-interrupted final commit. A missing target discards
+interrupted final commit. The sidebar and Workspace dashboard expose the
+cloning state, destination, bounded command-output preview, and cancellation;
+closing a browser tab does not stop it. A missing target discards
 only Conduit's staging directory; an unsafe or conflicting published target is
 left untouched and reported with its recovery marker path. Each working root contains a Conduit-owned
 `.conduit/chats/<chat-id>/` tree for attachments; Pi runs at the root and
