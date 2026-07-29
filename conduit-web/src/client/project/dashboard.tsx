@@ -252,9 +252,9 @@ export function ProjectDashboard(props: {
           </div>
         </div>
         <div class="project-identity-actions">
-          <Button variant="outline" onClick={props.onRename}><PencilIcon />Rename</Button>
-          <Show when={cloning()} fallback={<Button onClick={() => void props.onNewChat(props.project)}><MessageSquarePlusIcon />New chat</Button>}>
-            <Button variant="destructive" disabled={cancellingClone()} onClick={() => void cancelClone()}><XIcon />{cancellingClone() ? "Cancelling…" : "Cancel clone"}</Button>
+          <Button variant="outline" size="sm" onClick={props.onRename}><PencilIcon />Rename</Button>
+          <Show when={cloning()} fallback={<Button size="sm" onClick={() => void props.onNewChat(props.project)}><MessageSquarePlusIcon />New chat</Button>}>
+            <Button variant="destructive" size="sm" disabled={cancellingClone()} onClick={() => void cancelClone()}><XIcon />{cancellingClone() ? "Cancelling…" : "Cancel clone"}</Button>
           </Show>
         </div>
       </header>
@@ -394,18 +394,18 @@ export function ProjectDashboard(props: {
 
       <Show when={!cloning()}><details class="project-danger">
         <summary><span><Trash2Icon /><strong>Danger zone</strong></span><ChevronDownIcon /></summary>
-        <div>
+        <div class="project-danger-row">
           <p>{props.project.deletesFilesOnRemove === false || workspaceProject(props.project)
-            ? "Unlink this Workspace and remove its Conduit chats. The working directory remains on disk."
+            ? "Remove this Workspace from Conduit. Its folder and files stay on disk."
             : "Delete this Project, its working files, and all of its chats."}</p>
-          <Button variant="destructive" onClick={props.onDelete}>
+          <Button variant="destructive" size="sm" onClick={props.onDelete}>
             <Trash2Icon />{props.project.deletesFilesOnRemove === false || workspaceProject(props.project) ? "Unlink workspace" : "Delete project"}
           </Button>
         </div>
         <Show when={workspaceProject(props.project)}>
           <div class="project-danger-destructive">
-            <div><strong>Delete Workspace and files</strong><p>Permanently removes this Workspace’s registered folder and every file below it. Use this for an orphaned Workspace or when you mean to erase the working tree.</p></div>
-            <Button variant="destructive" onClick={() => setDestroyOpen(true)}><Trash2Icon />Delete Workspace and files</Button>
+            <div><strong>Delete Workspace and files</strong><p>Permanently erase the working directory. This cannot be undone.</p></div>
+            <Button variant="destructive" size="sm" onClick={() => setDestroyOpen(true)}><Trash2Icon />Delete Workspace and files</Button>
           </div>
         </Show>
       </details></Show>
@@ -414,14 +414,14 @@ export function ProjectDashboard(props: {
         <KAlertDialog.Portal><KAlertDialog.Content class="conduit-modal" onEscapeKeyDown={(event) => { if (destroying()) event.preventDefault(); }}>
           <div class="conduit-modal-card workspace-destroy-dialog">
             <KAlertDialog.Title>Delete Workspace and files?</KAlertDialog.Title>
-            <KAlertDialog.Description>This permanently deletes <strong>{props.project.name}</strong> and its working directory. Type the Workspace name to continue.</KAlertDialog.Description>
+            <KAlertDialog.Description>This removes <strong>{props.project.name}</strong> from Conduit and permanently erases its working directory. Type the exact Workspace name to continue.</KAlertDialog.Description>
             <Field>
               <FieldLabel for="workspace-destroy-confirmation">Workspace name</FieldLabel>
               <Input id="workspace-destroy-confirmation" value={destroyConfirmation()} onInput={(event) => setDestroyConfirmation(event.currentTarget.value)} autocomplete="off" />
             </Field>
             <div class="conduit-modal-actions">
-              <Button variant="outline" disabled={destroying()} onClick={() => setDestroyOpen(false)}>Cancel</Button>
-              <Button variant="destructive" disabled={destroying() || destroyConfirmation() !== props.project.name} onClick={() => void destroyWorkspace()}><Trash2Icon />{destroying() ? "Deleting…" : "Delete Workspace and files"}</Button>
+              <Button variant="outline" size="sm" disabled={destroying()} onClick={() => setDestroyOpen(false)}>Cancel</Button>
+              <Button class="workspace-destroy-confirm" variant="destructive" size="sm" disabled={destroying() || destroyConfirmation() !== props.project.name} onClick={() => void destroyWorkspace()}><Trash2Icon />{destroying() ? "Deleting…" : "Delete Workspace and files"}</Button>
             </div>
           </div>
         </KAlertDialog.Content></KAlertDialog.Portal>
