@@ -161,10 +161,10 @@ SOURCE_RELEASE="$(find "$TEMP_ROOT/source" -mindepth 1 -maxdepth 1 -type d -prin
 write_proof_env "$SOURCE_RELEASE" "$SOURCE_PORT"
 printf '%s\n' "$PASSWORD" | deploy "$SOURCE_RELEASE" "$SOURCE_PROJECT" up | tee "$EVIDENCE_DIRECTORY/source-start.txt"
 wait_for_health "$SOURCE_RELEASE" "$SOURCE_PROJECT"
-create_fixtures "$SOURCE_RELEASE" "$SOURCE_PROJECT" | tee "$EVIDENCE_DIRECTORY/source-fixture.json"
+create_fixtures "$SOURCE_RELEASE" "$SOURCE_PROJECT" 2>&1 | tee "$EVIDENCE_DIRECTORY/source-fixture.json"
 printf 'workspace fixture\n' >"$SOURCE_RELEASE/../workspaces/proof-workspace/proof.txt"
 deploy "$SOURCE_RELEASE" "$SOURCE_PROJECT" restart | tee "$EVIDENCE_DIRECTORY/source-restart.txt"
-verify_fixtures "$SOURCE_RELEASE" "$SOURCE_PROJECT" "$EVIDENCE_DIRECTORY/source-fixture.json" | tee "$EVIDENCE_DIRECTORY/source-rebuild.json"
+verify_fixtures "$SOURCE_RELEASE" "$SOURCE_PROJECT" "$EVIDENCE_DIRECTORY/source-fixture.json" 2>&1 | tee "$EVIDENCE_DIRECTORY/source-rebuild.json"
 SOURCE_CONTAINER="$(compose "$SOURCE_RELEASE" "$SOURCE_PROJECT" ps -q conduit)"
 docker inspect "$SOURCE_CONTAINER" >"$EVIDENCE_DIRECTORY/source-security-inspect.json"
 
@@ -180,7 +180,7 @@ CONDUIT_COMPOSE_PROJECT_NAME="$TARGET_PROJECT" "$TARGET_RELEASE/scripts/restore.
 sed -i "s/^CONDUIT_PORT=.*/CONDUIT_PORT=$TARGET_PORT/" "$TARGET_RELEASE/.env"
 deploy "$TARGET_RELEASE" "$TARGET_PROJECT" up | tee "$EVIDENCE_DIRECTORY/target-start.txt"
 wait_for_health "$TARGET_RELEASE" "$TARGET_PROJECT"
-verify_fixtures "$TARGET_RELEASE" "$TARGET_PROJECT" "$EVIDENCE_DIRECTORY/source-fixture.json" | tee "$EVIDENCE_DIRECTORY/target-restore.json"
+verify_fixtures "$TARGET_RELEASE" "$TARGET_PROJECT" "$EVIDENCE_DIRECTORY/source-fixture.json" 2>&1 | tee "$EVIDENCE_DIRECTORY/target-restore.json"
 
 {
   printf 'release=%s\n' "$RELEASE"
