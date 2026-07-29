@@ -297,6 +297,9 @@ function App() {
     try { await api(`/v0/projects/${target.id}`, { method: "DELETE" }); if (catalogue.projectId() === target.id) await createChat(catalogue.projects().find((item) => item.slug === "chat")); await refresh(); }
     catch (error) { showError((error as Error).message); }
   };
+  const cancelClone = async (operationId: string) => {
+    await api(`/v0/workspace-operations/${encodeURIComponent(operationId)}`, { method: "DELETE" });
+  };
 
   const openSettings = (section: string = "models", workspaceId: string | null = null) => {
     setSettingsSection(section as SettingsSection);
@@ -564,7 +567,7 @@ function App() {
           <ProjectDashboard project={selectedProject()!} templates={templates()} runtime={runtime}
             onNewChat={createChat} onOpenChat={(target: DashboardChat, project) => openChat(target, project)}
             onRename={() => runSidebar("rename-folder")} onDelete={() => runSidebar("delete-project")}
-            onOpenSettings={openSettings} onSaveDefault={saveWorkspaceDefault} onError={showError} />
+            onOpenSettings={openSettings} onSaveDefault={saveWorkspaceDefault} onRefresh={refresh} onCancelClone={cancelClone} onError={showError} />
         </Show>
       </Show>
     </main>

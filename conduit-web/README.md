@@ -275,9 +275,9 @@ starting, and browser-attached processes remain resident.
   modes; created Workspaces take an existing parent `path` plus a single
   `directoryName` and are never deleted on unlink; clone returns `202` with a
   durable provisional `cloning` Workspace plus an operation id
-- `GET|DELETE /v0/workspace-operations/:id` reads or explicitly cancels a live
-  clone operation; cancellation removes only Conduit staging and the
-  unpublished provisional row
+- `GET|DELETE /v0/workspace-operations/:id` reads a bounded clone diagnostic
+  or explicitly cancels a live clone operation; cancellation removes only
+  Conduit staging and the unpublished provisional row
 - `GET /v0/runtime` returns the current global live-process snapshot
 - `GET /v0/runtime/stream` (SSE) pushes snapshot-first global process updates
 - `GET /v0/runtime/settings` and `PATCH /v0/runtime/settings` read/update max warm processes, max concurrent generations, and idle reclaim TTL (`data/runtime.json`, env defaults)

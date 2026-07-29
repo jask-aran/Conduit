@@ -100,7 +100,7 @@ function cloneDirectoryName(value, url) {
 }
 
 /** Run an external clone command with cancellation, a hard deadline, and bounded diagnostics. */
-export function runCommand(command, args, { cwd, signal, timeoutMs = CLONE_COMMAND_TIMEOUT_MS, maxOutputBytes = CLONE_COMMAND_MAX_OUTPUT_BYTES } = {}) {
+export function runCommand(command, args, { cwd, signal, timeoutMs = CLONE_COMMAND_TIMEOUT_MS, maxOutputBytes = CLONE_COMMAND_MAX_OUTPUT_BYTES, onOutput } = {}) {
   return new Promise((resolve, reject) => {
     if (signal?.aborted) return reject(cloneError("clone_aborted", "Clone was cancelled"));
     const child = spawn(command, args, { cwd, detached: process.platform !== "win32", stdio: ["ignore", "pipe", "pipe"] });
@@ -125,8 +125,14 @@ export function runCommand(command, args, { cwd, signal, timeoutMs = CLONE_COMMA
     const timer = setTimeout(() => fail(cloneError("clone_timeout", "Clone timed out")), timeoutMs);
     child.stdout.setEncoding("utf8");
     child.stderr.setEncoding("utf8");
-    child.stdout.on("data", (chunk) => { stdout = appendTail(stdout, chunk, maxOutputBytes); });
-    child.stderr.on("data", (chunk) => { stderr = appendTail(stderr, chunk, maxOutputBytes); });
+    child.stdout.on("data", (chunk) => {
+      stdout = appendTail(stdout, chunk, maxOutputBytes);
+      onOutput?.({ stream: "stdout", chunk: chunk.toString("utf8") });
+    });
+    child.stderr.on("data", (chunk) => {
+      stderr = appendTail(stderr, chunk, maxOutputBytes);
+      onOutput?.({ stream: "stderr", chunk: chunk.toString("utf8") });
+    });
     child.on("error", (error) => finish(terminalError || error));
     child.on("exit", () => { if (terminalError) finish(terminalError); });
     child.on("close", (code) => {
@@ -598,6 +604,7 @@ export class ProjectStore {
       state: "cloning",
       controller,
       error: null,
+      diagnostic: "Preparing clone…\n",
       promise: null,
     };
     this.cloneOperations.set(operation.id, operation);
@@ -615,6 +622,7 @@ export class ProjectStore {
       projectId: operation.projectId,
       state: operation.state,
       error: operation.error || null,
+      diagnostic: operation.diagnostic || "",
     };
   }
 
@@ -639,7 +647,11 @@ export class ProjectStore {
 
   async executeClone(reservation, operation) {
     try {
-      const options = { signal: operation.controller.signal, timeoutMs: this.cloneTimeoutMs };
+      const options = {
+        signal: operation.controller.signal,
+        timeoutMs: this.cloneTimeoutMs,
+        onOutput: ({ chunk }) => this.appendCloneDiagnostic(operation, chunk),
+      };
       const url = reservation.project.cloneUrl;
       const githubSource = /^(?:https:\/\/github\.com\/|ssh:\/\/[^/]*github\.com\/|git@github\.com:)/i.test(url);
       let cloned = false;
@@ -694,6 +706,10 @@ export class ProjectStore {
       this.completedCloneOperationIds.add(operation.id);
       if (this.completedCloneOperationIds.size > 100) this.completedCloneOperationIds.delete(this.completedCloneOperationIds.values().next().value);
     }
+  }
+
+  appendCloneDiagnostic(operation, chunk) {
+    operation.diagnostic = appendTail(operation.diagnostic || "", chunk, 8 * 1024);
   }
 
   async create(input = {}) {
