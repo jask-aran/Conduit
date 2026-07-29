@@ -1,4 +1,10 @@
-FROM node:24.14.0-bookworm-slim@sha256:b506e7321f176aae77317f99d67a24b272c1f09f1d10f1761f2773447d8da26c AS development-dependencies
+FROM node:24.14.0-bookworm-slim@sha256:b506e7321f176aae77317f99d67a24b272c1f09f1d10f1761f2773447d8da26c AS dependency-build-base
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends g++ make python3 \
+    && rm -rf /var/lib/apt/lists/*
+
+FROM dependency-build-base AS development-dependencies
 
 WORKDIR /build/conduit-web
 COPY conduit-web/package.json conduit-web/package-lock.json ./
@@ -12,7 +18,7 @@ COPY conduit-web/scripts ./scripts
 COPY conduit-web/src ./src
 RUN npm run build
 
-FROM node:24.14.0-bookworm-slim@sha256:b506e7321f176aae77317f99d67a24b272c1f09f1d10f1761f2773447d8da26c AS production-dependencies
+FROM dependency-build-base AS production-dependencies
 
 WORKDIR /build/conduit-web
 COPY conduit-web/package.json conduit-web/package-lock.json ./
