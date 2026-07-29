@@ -20,6 +20,7 @@ test("Compose mounts the complete durable contract without host privileges", asy
   const compose = await fs.readFile(path.join(root, "compose.yaml"), "utf8");
   assert.match(compose, /read_only: true/);
   assert.match(compose, /no-new-privileges:true/);
+  assert.match(compose, /cap_drop:\n\s+- ALL/);
   assert.match(compose, /target: \/data/);
   assert.match(compose, /target: \/workspaces/);
   assert.match(compose, /CONDUIT_DATA_ROOT: \/data/);
@@ -29,7 +30,7 @@ test("Compose mounts the complete durable contract without host privileges", asy
 });
 
 test("deployment and exact-commit packaging scripts remain executable", async () => {
-  for (const relative of ["scripts/deploy.sh", "scripts/package-release.sh"]) {
+  for (const relative of ["scripts/deploy.sh", "scripts/package-release.sh", "scripts/backup.sh", "scripts/restore.sh", "scripts/prove-deployment.sh"]) {
     const stats = await fs.stat(path.join(root, relative));
     assert.ok(stats.mode & 0o111, `${relative} must be executable`);
   }
