@@ -10,9 +10,9 @@ repeat reference documentation:
 - `conduit-web/README.md` — runtime model, HTTP API, auth mechanism, process
   residency and caps, and the live-session WebSocket protocol (a contract: keep
   changes additive and update that section in the same change).
-- `personal-agent-platform-design.md` — long-range vision. `specs/` — transient
-  working documents such as open review queues; shipped specs are deleted, not
-  archived.
+- `docs/architecture/personal-agent-platform-design.md` — long-range vision.
+  `docs/` is current-state documentation; `specs/` holds transient working
+  documents and shipped specs are deleted rather than archived.
 
 Architecture in one breath: one Express server (`conduit-web/src/server.js`)
 owns a pool of `pi --mode rpc` child processes — one per live chat, across two

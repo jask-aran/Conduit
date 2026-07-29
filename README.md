@@ -23,22 +23,19 @@ server restarts.
 
 Documentation map: this file (product, data model, setup) ·
 `conduit-web/README.md` (runtime model, HTTP API, auth, WS protocol) ·
-`AGENTS.md` (contributor/agent contract) ·
-`personal-agent-platform-design.md` (long-range vision) · `specs/` (roadmap
-and feature specs).
+`AGENTS.md` (contributor/agent contract) · [docs/README.md](docs/README.md)
+(current architecture, operations, and engineering documentation). `specs/`
+is temporary implementation material, deleted when shipped.
 
-## Build order
+## Open work
 
-1. `specs/edge-auth.md` — password login gating every route and socket
-2. `specs/ui-parity.md` — tool-call legibility, thinking UX, native tool
-   components, /commands, settings overhaul
-3. `specs/rhs-panel.md` — right-hand file navigator, diff viewer, artifact
-   viewer
-4. `specs/remotes-pty.md` — Remotes v0: server-owned PTY terminal panes
-5. `specs/broker-registry.md` — unified session registry and
-   spawn/attach/stop/status verbs
-6. `specs/seed-tool.md` — chat escalates work into a Coding session with
-   lineage
+- [#26](https://github.com/jask-aran/Conduit/issues/26) — unify Settings and Command Palette design systems
+- [#29](https://github.com/jask-aran/Conduit/issues/29) — unified session registry control plane
+- [#31](https://github.com/jask-aran/Conduit/issues/31) — dispatch a Coding Workspace session from chat
+- [#37](https://github.com/jask-aran/Conduit/issues/37) — native Tailscale Serve with Funnel fallback
+- [#38](https://github.com/jask-aran/Conduit/issues/38) — complete the Wterm capability bridge
+- [#41](https://github.com/jask-aran/Conduit/issues/41) — ACP-backed Workspace sessions
+- [#42](https://github.com/jask-aran/Conduit/issues/42) — portable Docker deployment
 
 ## Repository structure
 
@@ -234,7 +231,7 @@ The first run prompts for the Conduit login password and then binds the app to
 turned into checksummed deployment archives with
 `./scripts/package-release.sh <commit-or-tag>`. The persistence, ownership,
 backup/restore, migration, graceful-shutdown, and deferred Host Pi contracts
-are documented in [`DEPLOYMENT.md`](DEPLOYMENT.md).
+are documented in [deployment operations](docs/operations/deployment.md).
 
 ## Verification
 

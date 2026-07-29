@@ -28,7 +28,8 @@ launcher.
 
 The production container sets `CONDUIT_DATA_ROOT=/data`, serves the compiled
 client from its read-only image, and mounts durable data and the portable
-`/workspaces` namespace from the host. See [`../DEPLOYMENT.md`](../DEPLOYMENT.md)
+`/workspaces` namespace from the host. See
+[`../docs/operations/deployment.md`](../docs/operations/deployment.md)
 for the Compose, release, ownership, backup, and Native Pi boundary contracts.
 
 ## Runtime model
