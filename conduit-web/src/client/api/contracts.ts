@@ -29,7 +29,7 @@ export interface Project {
   id: string;
   slug: string;
   name: string;
-  origin?: "managed" | "linked" | "cloned";
+  origin?: "managed" | "linked" | "created" | "cloned";
   kind?: "project" | "workspace";
   path?: string;
   externalPath?: string;

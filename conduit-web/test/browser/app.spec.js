@@ -1855,12 +1855,12 @@ test("clone workspace derives a repository folder inside the chosen parent", asy
   await page.goto("/");
   await openSidebar(page, testInfo);
   await page.getByRole("button", { name: "New workspace" }).click();
-  const dialog = page.getByRole("dialog", { name: "New workspace" });
-  await dialog.locator("#folder-mode").selectOption("cloned");
-  await expect(dialog.getByLabel("Clone parent directory")).toBeVisible();
+  const dialog = page.getByRole("dialog", { name: "Add workspace" });
+  await dialog.getByRole("radio", { name: /Clone repository/ }).click();
+  await expect(dialog.getByLabel("Parent directory")).toBeVisible();
   await dialog.getByLabel("Git URL").fill("https://github.com/example/repo.git");
   await expect(dialog.getByRole("button", { name: "Clone workspace" })).toBeDisabled();
-  await dialog.getByLabel("Clone parent directory").fill("/home/user/code");
+  await dialog.getByLabel("Parent directory").fill("/home/user/code");
   await dialog.getByLabel("Folder name (optional)").fill("checked-out-repo");
   const requestPromise = page.waitForRequest((request) => request.url().endsWith("/v0/projects") && request.method() === "POST");
   await dialog.getByRole("button", { name: "Clone workspace" }).click();
@@ -1871,6 +1871,44 @@ test("clone workspace derives a repository folder inside the chosen parent", asy
     cloneParentPath: "/home/user/code",
     cloneDirectoryName: "checked-out-repo",
   });
+  await expect(dialog).toHaveCount(0);
+});
+
+test("creates an explicit external Workspace only after the server resolves its target", async ({ page }, testInfo) => {
+  await page.unroute("**/v0/projects");
+  await page.route("**/v0/workspaces/preview", async (route) => {
+    expect(route.request().postDataJSON()).toEqual({ mode: "created", path: "/home/user/code", directoryName: "new-app" });
+    await route.fulfill({ json: {
+      path: "/home/user/code/new-app",
+      ownership: "Conduit will create this folder. Unlinking it later keeps the folder and its files.",
+    } });
+  });
+  await page.route("**/v0/projects/project_created/dashboard", async (route) => {
+    await route.fulfill({ json: { identity: { id: "project_created", defaultTemplateId: null }, stats: { totalChats: 0, activeChats: 0, liveChats: 0, liveTerminals: 0 }, git: null, recentChats: [] } });
+  });
+  await page.route("**/v0/projects", async (route) => {
+    if (route.request().method() === "POST") {
+      const body = route.request().postDataJSON();
+      await route.fulfill({ status: 201, json: {
+        id: "project_created", slug: "new-app", name: body.name || "new-app", kind: "workspace", origin: "created",
+        externalPath: "/home/user/code/new-app", path: "/home/user/code/new-app", defaultTemplateId: null, deletesFilesOnRemove: false, sessions: [],
+      } });
+      return;
+    }
+    await route.fulfill({ json: { projects } });
+  });
+  await page.goto("/");
+  await openSidebar(page, testInfo);
+  await page.getByRole("button", { name: "New workspace" }).click();
+  const dialog = page.getByRole("dialog", { name: "Add workspace" });
+  await dialog.getByRole("radio", { name: /Create folder/ }).click();
+  await dialog.getByLabel("Parent directory").fill("/home/user/code");
+  await dialog.getByLabel("New folder name").fill("new-app");
+  await expect(dialog.getByText("/home/user/code/new-app")).toBeVisible();
+  await expect(dialog.getByText(/Unlinking it later keeps the folder/)).toBeVisible();
+  const requestPromise = page.waitForRequest((request) => request.url().endsWith("/v0/projects") && request.method() === "POST");
+  await dialog.getByRole("button", { name: "Create workspace" }).click();
+  expect((await requestPromise).postDataJSON()).toMatchObject({ mode: "created", path: "/home/user/code", directoryName: "new-app" });
   await expect(dialog).toHaveCount(0);
 });
 

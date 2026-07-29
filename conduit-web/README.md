@@ -268,6 +268,11 @@ starting, and browser-attached processes remain resident.
 - `GET|POST /v0/ptys` lists or creates a shell for a chat project
 - `POST /v0/ptys/:id/rename` and `DELETE /v0/ptys/:id` rename or stop/remove it
 - `WS /v0/ptys/:id/attach` attaches a terminal renderer
+- `POST /v0/workspaces/preview` validates and resolves a link or create-folder
+  target without mutating the filesystem
+- `POST /v0/projects` accepts `linked`, `created`, and `cloned` Workspace
+  modes; created Workspaces take an existing parent `path` plus a single
+  `directoryName` and are never deleted on unlink
 - `GET /v0/runtime` returns the current global live-process snapshot
 - `GET /v0/runtime/stream` (SSE) pushes snapshot-first global process updates
 - `GET /v0/runtime/settings` and `PATCH /v0/runtime/settings` read/update max warm processes, max concurrent generations, and idle reclaim TTL (`data/runtime.json`, env defaults)

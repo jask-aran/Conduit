@@ -110,7 +110,7 @@ function App() {
   const hostInstallation = createMemo(() => installations().find((item) => item.id === "host-pi"));
   const profiles = createMemo<Template[]>(() => {
     const ordinary = templates().filter((item) => item.defaultable !== false);
-    if (selectedProject()?.kind === "workspace" || ["linked", "cloned"].includes(selectedProject()?.origin || "")) {
+    if (selectedProject()?.kind === "workspace" || ["linked", "created", "cloned"].includes(selectedProject()?.origin || "")) {
       return [...ordinary, { id: "host-pi", label: "Host Pi", description: "Use the host Pi installation and native resources", disabled: !hostInstallation()?.available }];
     }
     return ordinary;
@@ -250,7 +250,7 @@ function App() {
     const host = id === "host-pi";
     const payload = await api<ChatSummary>(`/v0/chats/${encodeURIComponent(selectedId)}`, {
       method: "PATCH",
-      body: JSON.stringify({ templateId: host ? chat.templateId() : id, ...((project?.kind === "workspace" || ["linked", "cloned"].includes(project?.origin || "")) ? { runtimeKind: host ? "native_pi" : "conduit_profile" } : {}) }),
+      body: JSON.stringify({ templateId: host ? chat.templateId() : id, ...((project?.kind === "workspace" || ["linked", "created", "cloned"].includes(project?.origin || "")) ? { runtimeKind: host ? "native_pi" : "conduit_profile" } : {}) }),
     });
     chat.setTemplateId(payload.templateId || (host ? chat.templateId() : id));
     chat.setRuntimeIdentity(payload.runtime || null);
@@ -258,11 +258,11 @@ function App() {
   };
 
   const refresh = () => catalogue.refresh();
-  const addProject = async (input: { mode: string; name?: string; path?: string; cloneUrl?: string; cloneParentPath?: string; cloneDirectoryName?: string }) => {
+  const addProject = async (input: { mode: string; name?: string; path?: string; directoryName?: string; cloneUrl?: string; cloneParentPath?: string; cloneDirectoryName?: string }) => {
     try {
       const created = await api<Project>("/v0/projects", { method: "POST", body: JSON.stringify(input) });
       await refresh();
-      if (["link", "linked", "clone", "cloned"].includes(input.mode)) await openProject(created);
+      if (["link", "linked", "create", "created", "clone", "cloned"].includes(input.mode)) await openProject(created);
       else await createChat(created, { templateId: created.defaultTemplateId || defaultTemplateId() || "chat" });
       return true;
     } catch (error) { showError((error as Error).message); return false; }

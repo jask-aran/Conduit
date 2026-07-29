@@ -30,6 +30,6 @@ export function pathProjectId(pathname = location.pathname): string | null {
 }
 
 export function projectPath(project: { id: string; kind?: string; origin?: string }): string {
-  const workspace = project.kind === "workspace" || ["linked", "cloned"].includes(project.origin || "");
+  const workspace = project.kind === "workspace" || ["linked", "created", "cloned"].includes(project.origin || "");
   return `/${workspace ? "workspace" : "project"}/${encodeURIComponent(project.id)}`;
 }
