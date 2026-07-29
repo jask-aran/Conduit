@@ -85,11 +85,13 @@ projects use `data/chat/files/<slug>`; Workspaces explicitly link an existing
 allow-listed directory, create one empty child below an existing allow-listed
 parent, or `git`/`gh` clone into one. Every Workspace is externally owned after
 registration: unlinking never deletes its working tree. A clone chooses an existing parent and creates a
-repository-named child (or an explicitly named child). Clone network work runs outside the short catalogue lock,
-using a Conduit-owned sibling staging directory, cancellation, and a bounded
-deadline before its final catalogue commit. The catalogue is atomically replaced;
-clone markers record reservation and publication phases so startup registers a
-published Workspace after an interrupted final commit. A missing target discards
+repository-named child (or an explicitly named child). Its durable provisional
+catalogue row is `cloning` until network work in a Conduit-owned sibling staging
+directory publishes the target and atomically transitions it to `ready`.
+Cancellation and a bounded deadline apply to that server-owned operation; clone
+markers record reservation and publication phases so startup either removes an
+unpublished provisional row or completes a published Workspace after an
+interrupted final commit. A missing target discards
 only Conduit's staging directory; an unsafe or conflicting published target is
 left untouched and reported with its recovery marker path. Each working root contains a Conduit-owned
 `.conduit/chats/<chat-id>/` tree for attachments; Pi runs at the root and

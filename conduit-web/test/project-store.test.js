@@ -7,6 +7,15 @@ import test from "node:test";
 import { ProjectStore, runCommand, writeJsonAtomically } from "../src/project-store.js";
 import { sessionDirectoryFor } from "../src/session-store.js";
 
+async function waitForReady(store, id) {
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    const project = await store.get(id);
+    if (project?.state === "ready") return project;
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  throw new Error(`Clone ${id} did not become ready`);
+}
+
 test("atomic catalogue replacement preserves the prior catalogue when serialization fails", async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-project-atomic-catalogue-"));
   const catalogFile = path.join(root, "data", "conduit.json");
@@ -272,7 +281,8 @@ test("clones a repository into a user-selected non-owning workspace path", async
   await store.initialize();
   const target = path.join(root, "workspaces", "cloned-app");
   await fs.mkdir(path.dirname(target));
-  const cloned = await store.create({ mode: "cloned", name: "Cloned App", cloneUrl: source, path: target });
+  const started = await store.create({ mode: "cloned", name: "Cloned App", cloneUrl: source, path: target });
+  const cloned = await waitForReady(store, started.project.id);
   assert.equal(cloned.origin, "cloned");
   assert.equal(cloned.path, target);
   assert.equal(cloned.deletesFilesOnRemove, false);
@@ -299,7 +309,8 @@ test("cloned workspaces reject a symlink replacement before use or unregister", 
     workspaceAllowlist: [root],
   });
   await store.initialize();
-  const cloned = await store.create({ mode: "cloned", name: "Cloned App", cloneUrl: source, path: target });
+  const started = await store.create({ mode: "cloned", name: "Cloned App", cloneUrl: source, path: target });
+  const cloned = await waitForReady(store, started.project.id);
   await fs.rename(target, displaced);
   await fs.symlink(outside, target);
 
@@ -323,7 +334,8 @@ test("clones into a repository-named child of an allow-listed parent", async () 
     workspaceAllowlist: [root],
   });
   await store.initialize();
-  const cloned = await store.create({ mode: "cloned", cloneUrl: source, cloneParentPath: destinationParent });
+  const started = await store.create({ mode: "cloned", cloneUrl: source, cloneParentPath: destinationParent });
+  const cloned = await waitForReady(store, started.project.id);
   assert.equal(cloned.path, path.join(destinationParent, "Hello-World"));
   assert.equal(await fs.readFile(path.join(cloned.path, "app.js"), "utf8"), "console.log(1)\n");
   await fs.rm(root, { recursive: true, force: true });
@@ -344,10 +356,11 @@ test("concurrent clones with the same name get distinct slugs and keep both tree
   const firstTarget = path.join(root, "workspace-one");
   const secondTarget = path.join(root, "workspace-two");
 
-  const [first, second] = await Promise.all([
+  const [firstStarted, secondStarted] = await Promise.all([
     store.create({ mode: "cloned", name: "Race", cloneUrl: source, path: firstTarget }),
     store.create({ mode: "cloned", name: "Race", cloneUrl: source, path: secondTarget }),
   ]);
+  const [first, second] = await Promise.all([waitForReady(store, firstStarted.project.id), waitForReady(store, secondStarted.project.id)]);
   assert.notEqual(first.slug, second.slug);
   assert.equal(await fs.readFile(path.join(first.path, "app.js"), "utf8"), "console.log(1)\n");
   assert.equal(await fs.readFile(path.join(second.path, "app.js"), "utf8"), "console.log(1)\n");
@@ -379,7 +392,7 @@ test("a clone reservation does not block unrelated mutations and protects its sl
   await store.initialize();
   const ready = new Promise((resolve) => { started = resolve; });
   const target = path.join(workspaceRoot, "reserved");
-  const cloning = store.create({ mode: "cloned", name: "Reserved", cloneUrl: source, path: target });
+  const cloning = await store.create({ mode: "cloned", name: "Reserved", cloneUrl: source, path: target });
   await ready;
 
   const managed = await store.create({ mode: "managed", name: "Reserved" });
@@ -387,7 +400,7 @@ test("a clone reservation does not block unrelated mutations and protects its sl
   await assert.rejects(store.create({ mode: "cloned", name: "Other", cloneUrl: source, path: target }), { code: "clone_target_reserved" });
 
   release();
-  const cloned = await cloning;
+  const cloned = await waitForReady(store, cloning.project.id);
   assert.equal(cloned.slug, "reserved");
   assert.ok(await fs.stat(cloned.path));
   await fs.rm(root, { recursive: true, force: true });
@@ -413,12 +426,18 @@ test("clone cancellation cleans Conduit staging and releases its reservation", a
   });
   await store.initialize();
   const ready = new Promise((resolve) => { started = resolve; });
-  const controller = new AbortController();
   const target = path.join(workspaceRoot, "cancelled");
-  const cloning = store.create({ mode: "cloned", name: "Cancelled", cloneUrl: source, path: target, signal: controller.signal });
+  const cloning = await store.create({ mode: "cloned", name: "Cancelled", cloneUrl: source, path: target });
   await ready;
-  controller.abort();
-  await assert.rejects(cloning, { code: "clone_aborted" });
+  assert.equal((await store.get(cloning.project.id))?.state, "cloning");
+  assert.deepEqual(store.getCloneOperation(cloning.operation.id), {
+    id: cloning.operation.id,
+    projectId: cloning.project.id,
+    state: "cloning",
+    error: null,
+  });
+  await assert.rejects(store.validate(cloning.project), { code: "workspace_cloning" });
+  assert.deepEqual(await store.cancelCloneOperation(cloning.operation.id), { id: cloning.operation.id, state: "cancelled" });
   await assert.rejects(fs.access(target), { code: "ENOENT" });
   assert.deepEqual((await fs.readdir(workspaceRoot)).filter((name) => name.startsWith(".conduit-clone-")), []);
   assert.deepEqual(await store.list().then((items) => items.filter((item) => item.origin === "cloned")), []);
@@ -440,13 +459,20 @@ test("a published clone retains its durable recovery marker when catalogue publi
     runCommand: async (_command, args) => { await fs.mkdir(args.at(-1)); },
   });
   await store.initialize();
-  store.writeCatalog = async () => { throw new Error("simulated catalogue write failure"); };
+  const writeCatalog = store.writeCatalog;
+  let writes = 0;
+  store.writeCatalog = async (...args) => {
+    writes += 1;
+    if (writes > 1) throw new Error("simulated catalogue write failure");
+    return writeCatalog(...args);
+  };
   const target = path.join(workspaceRoot, "published");
 
-  await assert.rejects(store.create({ mode: "cloned", name: "Published", cloneUrl: source, path: target }), /simulated catalogue write failure/);
+  const started = await store.create({ mode: "cloned", name: "Published", cloneUrl: source, path: target });
+  for (let attempt = 0; attempt < 100 && store.getCloneOperation(started.operation.id); attempt += 1) await new Promise((resolve) => setTimeout(resolve, 10));
 
   assert.ok(await fs.stat(target));
-  assert.deepEqual((await store.list()).filter((project) => project.path === target), []);
+  assert.equal((await store.get(started.project.id))?.state, "cloning");
   const markers = await fs.readdir(path.join(root, "data", "clone-reservations"));
   assert.equal(markers.length, 1);
   const marker = JSON.parse(await fs.readFile(path.join(root, "data", "clone-reservations", markers[0]), "utf8"));

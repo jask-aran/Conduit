@@ -33,6 +33,8 @@ export interface Project {
   kind?: "project" | "workspace";
   path?: string;
   externalPath?: string;
+  state?: "ready" | "cloning";
+  cloneOperationId?: string | null;
   createdAt?: string;
   defaultTemplateId?: string | null;
   deletesFilesOnRemove?: boolean;

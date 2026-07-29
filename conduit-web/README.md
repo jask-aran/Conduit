@@ -88,8 +88,9 @@ Workspace at launch, and reports the active process posture in the chat header.
 Validation rejects symlinks and resource trees over 10,000 entries or 100 MiB;
 it traverses filesystem metadata without reading or hashing file contents.
 One `PiManager` owns both launch forms and enforces shared writer and process
-limits. Workspace creation immediately opens a draft using the app default or
-that Workspace's explicit override; the
+limits. Ready Workspace creation immediately opens a draft using the app
+default or that Workspace's explicit override; a cloning Workspace cannot
+create chats, terminals, inspections, or runtime changes until it is ready. The
 composer exposes ordinary profiles and a synthetic Host Pi choice. Host project
 trust is persisted on first launch, and the launch form becomes immutable when Pi
 first starts. Host trust covers Pi project resources such as `.pi` and `.agents`;
@@ -272,7 +273,11 @@ starting, and browser-attached processes remain resident.
   target without mutating the filesystem
 - `POST /v0/projects` accepts `linked`, `created`, and `cloned` Workspace
   modes; created Workspaces take an existing parent `path` plus a single
-  `directoryName` and are never deleted on unlink
+  `directoryName` and are never deleted on unlink; clone returns `202` with a
+  durable provisional `cloning` Workspace plus an operation id
+- `GET|DELETE /v0/workspace-operations/:id` reads or explicitly cancels a live
+  clone operation; cancellation removes only Conduit staging and the
+  unpublished provisional row
 - `GET /v0/runtime` returns the current global live-process snapshot
 - `GET /v0/runtime/stream` (SSE) pushes snapshot-first global process updates
 - `GET /v0/runtime/settings` and `PATCH /v0/runtime/settings` read/update max warm processes, max concurrent generations, and idle reclaim TTL (`data/runtime.json`, env defaults)

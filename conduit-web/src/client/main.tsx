@@ -260,9 +260,11 @@ function App() {
   const refresh = () => catalogue.refresh();
   const addProject = async (input: { mode: string; name?: string; path?: string; directoryName?: string; cloneUrl?: string; cloneParentPath?: string; cloneDirectoryName?: string }) => {
     try {
-      const created = await api<Project>("/v0/projects", { method: "POST", body: JSON.stringify(input) });
+      const result = await api<Project | { project: Project; operation: { id: string; state: string } }>("/v0/projects", { method: "POST", body: JSON.stringify(input) });
+      const created = "project" in result ? result.project : result;
       await refresh();
-      if (["link", "linked", "create", "created", "clone", "cloned"].includes(input.mode)) await openProject(created);
+      if (["clone", "cloned"].includes(input.mode)) return true;
+      if (["link", "linked", "create", "created"].includes(input.mode)) await openProject(created);
       else await createChat(created, { templateId: created.defaultTemplateId || defaultTemplateId() || "chat" });
       return true;
     } catch (error) { showError((error as Error).message); return false; }

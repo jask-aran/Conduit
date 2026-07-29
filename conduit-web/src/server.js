@@ -460,7 +460,7 @@ app.get("/v0/capabilities", (_request, response) => response.json({
   globalRuntime: "sse",
   templates: true,
   workspaces: true,
-  workspaceModes: ["managed", "linked", "cloned"],
+  workspaceModes: ["managed", "linked", "created", "cloned"],
   piRuntimes: ["conduit_profile", "native_pi"],
 }));
 app.get("/v0/share-origin", async (_request, response, next) => {
@@ -567,7 +567,7 @@ app.get("/v0/workspaces/policy", (_request, response) => {
     allowlist: config.workspaceAllowlist,
     filesRoot: config.filesRoot,
     templatesRoot: config.templatesRoot,
-    modes: ["managed", "linked", "cloned"],
+    modes: ["managed", "linked", "created", "cloned"],
   });
 });
 
@@ -794,11 +794,21 @@ app.post("/v0/workspaces/preview", async (request, response, next) => {
   } catch (error) { next(error); }
 });
 
+app.get("/v0/workspace-operations/:id", (request, response) => {
+  const operation = projects.getCloneOperation(request.params.id);
+  if (!operation) return response.status(404).json({ error: "workspace_operation_not_found" });
+  response.json(operation);
+});
+
+app.delete("/v0/workspace-operations/:id", async (request, response, next) => {
+  try {
+    const operation = await projects.cancelCloneOperation(request.params.id);
+    if (!operation) return response.status(404).json({ error: "workspace_operation_not_found" });
+    response.json(operation);
+  } catch (error) { next(error); }
+});
+
 app.post("/v0/projects", async (request, response, next) => {
-  const controller = new AbortController();
-  const abort = () => controller.abort();
-  request.once("aborted", abort);
-  response.once("close", () => { if (!response.writableEnded) abort(); });
   try {
     const mode = String(request.body?.mode || request.body?.origin || "managed").trim().toLowerCase();
     const name = String(request.body?.name || "").trim();
@@ -809,7 +819,6 @@ app.post("/v0/projects", async (request, response, next) => {
         name: name || undefined,
         path: request.body.path,
         defaultTemplateId: resolveProjectDefaultTemplateId(request.body?.defaultTemplateId, null),
-        signal: controller.signal,
       });
       return response.status(201).json(created);
     }
@@ -835,9 +844,8 @@ app.post("/v0/projects", async (request, response, next) => {
         cloneParentPath: request.body.cloneParentPath,
         cloneDirectoryName: request.body.cloneDirectoryName,
         defaultTemplateId: resolveProjectDefaultTemplateId(request.body?.defaultTemplateId, null),
-        signal: controller.signal,
       });
-      return response.status(201).json(created);
+      return response.status(202).json(created);
     }
     if (!name) return response.status(400).json({ error: "project_name_required" });
     response.status(201).json(await projects.create({
@@ -848,7 +856,6 @@ app.post("/v0/projects", async (request, response, next) => {
   } catch (error) {
     if (!request.aborted && !response.destroyed) next(error);
   } finally {
-    request.removeListener("aborted", abort);
   }
 });
 
@@ -1528,7 +1535,7 @@ app.get("*", (request, response, next) => {
 app.use((error, _request, response, _next) => {
   console.error(error);
   let status = error.status || 500;
-  if (["reserved_project", "workspace_already_linked", "clone_target_reserved", "clone_reservation_lost"].includes(error.code)) status = 409;
+  if (["reserved_project", "workspace_already_linked", "clone_target_reserved", "clone_reservation_lost", "workspace_cloning"].includes(error.code)) status = 409;
   if (error.code === "workspace_identity_changed") status = 409;
   if (["chat_move_not_supported", "live_session_starting", "runtime_locked", "session_writer_conflict"].includes(error.code)) status = 409;
   if (error.code === "live_process_limit" || error.code === "generation_limit") status = 429;
