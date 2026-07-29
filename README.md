@@ -1,197 +1,39 @@
 # Conduit
 
-[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/jask-aran/Conduit?quickstart=1)
+Conduit is a self-hosted, single-user web interface for Pi coding-agent work.
+It keeps chats, working files, Workspaces, attachments, and live agent
+processes behind one authenticated address, while Pi's native JSONL remains the
+source of truth for conversation history.
 
-[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/jask-aran/Conduit)
+It is built for a person who wants a durable place to work with an agent, not a
+hosted multi-tenant chat product. The current product is chat-first: create a
+chat, choose a project or Workspace, attach files, inspect the working tree,
+and keep using the same session as the browser reconnects or the server
+restarts.
 
-![architecture](interface_first_platform_architecture.svg)
+## What exists today
 
-Conduit is an interface-first personal agent platform: one self-hosted web
-address for conversational and execution-heavy agent work. The surface that
-exists today is Chat — a web interface over the Pi coding agent with projects,
-Workspaces, attachments, history forking, response controls, and model
-management, gated behind single-user password auth. Remotes, Assistant, and
-Dashboard are future surfaces.
+- Authenticated chat over the bundled, pinned **Isolated Pi** runtime.
+- Named projects and Workspaces: link an allow-listed folder, create a managed
+  folder, or clone a Git repository. Workspace creation and cloning are
+  durable server operations, so closing the browser does not abandon them.
+- Per-chat attachments, chat forking and regeneration, model/thinking controls,
+  transcript history, command palette, Markdown, artifacts, and PWA support.
+- A read-only Workspace panel with a lazy file tree, bounded previews, Git
+  status/history/diff, and a server-owned terminal.
+- Optional **Host Pi** for non-container Workspace sessions, kept strictly
+  separate from the bundled runtime's credentials and settings.
+- A Docker deployment with explicit durable data and Workspace mounts,
+  release archives, backup, restore, and a simulated-host persistence proof.
 
-One Express server owns a pool of `pi --mode rpc` child processes — one per
-live chat, across two installations (bundled Isolated Pi and the user's
-native Host Pi) — and relays their events to a strict TypeScript SolidJS/Vite client over
-per-chat WebSockets plus a global SSE runtime channel. Pi's JSONL files are
-the authoritative transcripts; Conduit's `data/*.json` stores hold identity,
-registry, and preferences only. Sessions outlive browser connections and
-server restarts.
+The broader direction — remote targets, a unified session control plane,
+Assistant, and ACP-backed sessions — is described as direction rather than
+current capability in [the platform design](docs/architecture/personal-agent-platform-design.md).
 
-Documentation map: this file (product, data model, setup) ·
-`conduit-web/README.md` (runtime model, HTTP API, auth, WS protocol) ·
-`AGENTS.md` (contributor/agent contract) · [docs/README.md](docs/README.md)
-(current architecture, operations, and engineering documentation). `specs/`
-is temporary implementation material, deleted when shipped.
+## Start locally
 
-## Open work
-
-- [#26](https://github.com/jask-aran/Conduit/issues/26) — unify Settings and Command Palette design systems
-- [#29](https://github.com/jask-aran/Conduit/issues/29) — unified session registry control plane
-- [#31](https://github.com/jask-aran/Conduit/issues/31) — dispatch a Coding Workspace session from chat
-- [#37](https://github.com/jask-aran/Conduit/issues/37) — native Tailscale Serve with Funnel fallback
-- [#38](https://github.com/jask-aran/Conduit/issues/38) — complete the Wterm capability bridge
-- [#41](https://github.com/jask-aran/Conduit/issues/41) — ACP-backed Workspace sessions
-- [#42](https://github.com/jask-aran/Conduit/issues/42) — portable Docker deployment
-
-## Repository structure
-
-```text
-conduit-web/
-  src/                 Express server and Pi RPC lifecycle
-  src/client/          SolidJS client, typed API boundary, and state stores
-  src/components/      Small Kobalte-backed primitive boundary
-  test/                Node test suites
-  test/browser/        Playwright browser tests
-
-templates/
-  chat/                General profile (restrained tools)
-  workspace/           Coding profile (full tools + skills)
-  runtime/             special one-off admin profile
-  conduit-workspace/   Host Pi attachment bridge (internal, not a profile)
-
-scripts/
-  conduit-pi.mjs       template-aware terminal launcher
-  conduit-auth.mjs     auth provisioning CLI (set-password, status, …)
-  pi-runtime.mjs       template loading and Pi argument construction
-
-specs/                 near-term roadmap and implementation specs
-
-data/                  default ignored mutable application data
-  chat/files/          working files visible to chats
-  pi/                  isolated Pi home (credentials, settings, JSONL sessions)
-  auth.json            password hash and session tokens (0600)
-  conduit.json         project catalog
-  sessions.json        atomic lightweight chat registry
-  preferences.json     app preferences (default profile)
-  runtime.json         warm-pool and generation policy
-```
-
-`CONDUIT_DATA_ROOT` (repository `data/` by default, `/data` in Docker) is one
-backup/mount boundary for working files, project metadata, and Isolated Pi
-credentials and history. Host Pi history lives in the host Pi home and needs a
-separate backup.
-
-## Data model
-
-**Projects and Workspaces.** `data/conduit.json` is the project catalog. The
-reserved unstructured `chat` project works in `data/chat/files`; named
-projects use `data/chat/files/<slug>`; Workspaces explicitly link an existing
-allow-listed directory, create one empty child below an existing allow-listed
-parent, or `git`/`gh` clone into one. Every Workspace is externally owned after
-registration: ordinary unlinking never deletes its working tree. The Workspace
-dashboard also offers a separate destructive delete that requires typing the
-Workspace name and then removes its registered folder. A clone chooses an existing parent and creates a
-repository-named child (or an explicitly named child). GitHub repositories may
-be entered as `owner/repository` or a standard Git URL. Its durable provisional
-catalogue row is `cloning` until network work in a Conduit-owned sibling staging
-directory publishes the target and atomically transitions it to `ready`.
-Cancellation and a bounded deadline apply to that server-owned operation; clone
-markers record reservation and publication phases so startup either removes an
-unpublished provisional row or completes a published Workspace after an
-interrupted final commit. The sidebar and Workspace dashboard expose the
-cloning state, destination, bounded command-output preview, and cancellation;
-closing a browser tab does not stop it. A missing target discards
-only Conduit's staging directory; an unsafe or conflicting published target is
-left untouched and reported with its recovery marker path. Each working root contains a Conduit-owned
-`.conduit/chats/<chat-id>/` tree for attachments; Pi runs at the root and
-reads attachments by relative path. Browser-supplied paths never become a Pi
-`cwd` until resolved against `CONDUIT_WORKSPACE_ALLOWLIST`.
-
-Each named Project and Workspace also has a routable operator dashboard. It
-reads identity and chat counts from the catalogue and lightweight registry,
-live state from the global process map, and Git summary through the same
-bounded inspector as the Workspace panel. Dashboard requests do not
-recursively walk working trees or parse every transcript.
-
-**Chats and sessions.** A chat is a stable UUID row in `data/sessions.json`,
-created as a durable `draft`; Pi starts on the first message, which records
-the private native-session mapping and marks the row `active`. Browser routes
-stay `/chat/<conduit-chat-id>` across Pi restarts and forks. Pi JSONL is the
-authoritative transcript — the registry only lets the sidebar list chats
-without parsing transcripts, and is reconciled at startup and checkpointed
-after completed responses and explicit mutations. Pi records each fork's
-`parentSession`; startup follows that family to retain superseded branch files
-without importing them as additional sidebar chats.
-Selected-chat loading seeds
-the composer from indexed transcript model/thinking metadata and performs one
-runtime-aware model-catalogue reconciliation. During generation the server also
-maintains a sequenced, structured Active Generation independent of its bounded
-diagnostic event ring and sends that Resume State before ordinary WebSocket
-runtime state; the client projects the structured state directly. Edit/regenerate use Pi's public `fork`
-RPC; moves fork across directories and delete the source JSONL only after the
-destination exists; deletion (always interface-confirmed) stops every live
-process in the Pi fork family, removes that family's in-project JSONLs, and
-removes the associated chat folders. Never let two Pi processes write one
-JSONL.
-
-**Attachments.** Raw request bodies stream to `.partial/<id>.part` and
-publish by atomic rename; the filesystem is the registry, with no MIME or
-size policy of Conduit's own. Attachment bytes never enter model context —
-prompts carry validated relative paths in a hidden envelope.
-
-**Runtimes.** Ordinary profiles run the bundled, pinned Isolated Pi with
-`PI_CODING_AGENT_DIR=data/pi`; Workspaces may instead select **Host Pi**: the
-executable, home, credentials, and resources discovered from the server
-user's login shell, plus a minimal attachment bridge. The choice is mutable
-until the first prompt, then immutable. Both runtimes share one process
-manager, capacity limits, and the Workspace as canonical `cwd`. Host Pi
-project-resource trust is persisted automatically for registered Workspaces;
-launch preflight rejects symlinks and resource trees over 10,000 entries or
-100 MiB using filesystem metadata without reading file contents. Its model
-scope and settings are read-only diagnostics in Conduit.
-
-**Profiles (templates).** `templates/*/template.json` manifests select system
-prompt, tools, fallback models, extensions, and skills, translated into
-explicit Pi arguments. New chats take the app default from
-`data/preferences.json`; each chat stores a sticky `templateId` and reloads
-it on resume; Workspaces may override per-Workspace (including `host-pi`).
-Shipped profiles: General (restrained), Coding (full tools + skills), and
-Runtime (special admin chat for `pi install`, never a default). Isolated Pi's
-`data/pi/settings.json` is the shared model-scope authority for web and
-terminal; template model lists are only the fallback.
-
-**Auth.** Single-user password: `node scripts/conduit-auth.mjs set-password`,
-scrypt-hashed in `data/auth.json`, deny-by-default middleware over every
-route, asset, and WebSocket upgrade, minimal server-rendered login page.
-Non-loopback binds refuse to start unconfigured (`CONDUIT_ALLOW_INSECURE=1`
-overrides for dev). Full contract in `conduit-web/README.md`.
-
-**Isolated Pi auth.** After signing in to Conduit, **Settings → Auth** manages
-only the bundled Isolated Pi runtime: OAuth/device-code flows and literal API
-keys persist in `data/pi/auth.json`. Host Pi credentials are never read or
-changed. OAuth attempts are session-owned and short-lived; changing credentials
-recycles only idle, unattached Isolated Pi processes.
-
-## Interface
-
-SolidJS + strict TypeScript + Tailwind v4 + Lucide + Geist, with Kobalte used
-selectively for accessible menus and context menus. Concrete app components
-replace the former generic component catalogue. Transcripts render assistant
-Markdown client-side through Marked, DOMPurify, and KaTeX; fenced code uses
-bounded Artifact cards. Streaming relays raw deltas coalesced per animation
-frame, parses and sanitizes the canonical document, and reconciles it into the
-existing DOM so semantic nodes remain stable as unfinished syntax takes shape.
-Cmd/Ctrl+K opens the command palette; Cmd/Ctrl+. opens a read-only Workspace
-panel with a resizable lazy file tree, Git history/working-tree context, and an
-Artifacts boundary for transcript outputs and future interactive UI; Settings is a centered
-tabbed dialog; response controls cover copy, fork/edit, regenerate, stop, and
-experimental partial continue (`ENABLE_PARTIAL_CONTINUE`). Production builds
-enforce gzip bundle budgets (`dist/bundle-report.json`) and emit a web app
-manifest plus root-scoped service worker so Chrome/Edge can install Conduit as
-a standalone PWA. The worker precaches only the static app shell; authenticated
-`/v0` API traffic is never runtime-cached. Composition rules and
-rendering-stability constraints live in `AGENTS.md`.
-
-## Setup and development
-
-Requirements: Node.js 22+ and npm. The pinned Isolated Pi runtime is installed
-with Conduit's web dependencies; a separately installed `pi` remains optional
-for Host Pi Workspaces. The dev container does everything via
-`.devcontainer/setup.sh`; locally:
+Requirements: Node.js 22+ and npm. A separately installed `pi` is optional and
+needed only for Host Pi Workspaces.
 
 ```bash
 bash .devcontainer/start-conduit.sh setup
@@ -199,26 +41,22 @@ node scripts/conduit-auth.mjs set-password
 bash .devcontainer/start-conduit.sh restart
 ```
 
-Sign in through **Settings → Auth** to authenticate the Isolated Pi runtime.
-`./scripts/conduit-pi.mjs` remains available as an optional terminal launcher;
-it uses the current directory as Pi's working directory.
-
-Run the server and client:
+Open <http://127.0.0.1:4310>, sign in, then open **Settings → Auth** to connect
+the bundled Pi runtime to a model provider. For client hot reload, use:
 
 ```bash
-bash .devcontainer/start-conduit.sh restart   # production-like server on 4310
-bash .devcontainer/start-conduit.sh dev       # server watcher on 4310, Vite on 5173
+bash .devcontainer/start-conduit.sh dev
 ```
 
-`setup`, `build`, `start`, `stop`, `status`, `logs`, and `deploy` use the same
-managed launcher. `dev` is only for local hot-reload work; open port 5173 in
-that mode.
+The managed server runs on port 4310; Vite runs on port 5173 in development
+mode. `setup`, `build`, `start`, `stop`, `status`, `logs`, and `deploy` are all
+available through the same launcher.
 
-## Production deployment
+## Deploy
 
-The Docker-native deployment builds the server, client, templates, and pinned
-Isolated Pi into an unprivileged read-only image. Durable state and Workspaces
-remain in explicit host mounts:
+Conduit has a Docker-native deployment for Linux hosts with Docker Engine and
+the Compose plugin. It runs as an unprivileged, read-only application image;
+only the durable application data and Workspace roots are writable.
 
 ```bash
 git clone https://github.com/jask-aran/Conduit.git conduit
@@ -226,25 +64,60 @@ cd conduit
 ./scripts/deploy.sh up
 ```
 
-The first run prompts for the Conduit login password and then binds the app to
-`127.0.0.1:4310` for a reverse proxy or Tailscale Serve. Exact commits can be
-turned into checksummed deployment archives with
-`./scripts/package-release.sh <commit-or-tag>`. The persistence, ownership,
-backup/restore, migration, graceful-shutdown, and deferred Host Pi contracts
-are documented in [deployment operations](docs/operations/deployment.md).
+The first run creates local configuration, prompts for the Conduit password,
+and binds to `127.0.0.1:4310`. Put a TLS reverse proxy or Tailscale Serve in
+front of that loopback address. Read [deployment operations](docs/operations/deployment.md)
+before a real deployment: it defines the mount layout, upgrades, exact-release
+archives, backup/restore, and the intentionally unsupported Host Pi boundary.
 
-## Verification
+## How it is built
+
+One Express server owns live `pi --mode rpc` and terminal child processes. A
+strict TypeScript SolidJS/Vite client reconnects over per-chat WebSockets and a
+global runtime SSE stream. The server owns process lifetime; browser disconnect
+does not terminate work. `data/sessions.json` is a lightweight navigation and
+runtime registry, while Pi JSONL is authoritative for transcripts and native
+session state.
+
+Runtime state lives under `CONDUIT_DATA_ROOT` (`data/` by default, `/data` in
+Docker). It includes the project catalogue, chat registry, preferences,
+Isolated Pi settings/credentials/history, chat files, and attachments. Managed
+Workspace roots are separate and explicitly allow-listed. The durable-state
+contract is documented in [runtime data](docs/operations/runtime-data.md).
+
+## Repository map
+
+```text
+conduit-web/  Express server, Solid client, API contract, Node and Playwright tests
+templates/    Pi profiles and trusted tool/skill configuration
+scripts/      managed launcher, auth provisioning, deployment, backup and release tools
+docs/         current architecture and operations documentation
+specs/        temporary implementation material; shipped specs are removed
+```
+
+Detailed references:
+
+- [Web runtime and API](conduit-web/README.md) — auth, HTTP routes, WebSocket
+  protocol, terminals, and runtime behavior.
+- [Operations](docs/operations/deployment.md) — production layout, release,
+  backup, restore, and deployment proof.
+- [Runtime data](docs/operations/runtime-data.md) — ownership and persistence
+  boundaries.
+- [Contributor contract](AGENTS.md) — invariants, development workflow, and
+  verification requirements.
+- [Engineering distillations](docs/engineering/distillations.md) — retained
+  implementation decisions.
+
+## Verify
 
 ```bash
 cd conduit-web
+npm run typecheck
 npm test
-npm run test:browser
 npm run build
+npm run test:browser
 ```
 
-Browser tests mock the API for deterministic desktop and mobile coverage;
-failures write traces under `test-results/` with a printed `show-trace`
-command. Single suites: `node --test test/<name>.test.js` or
-`npx playwright test test/browser/app.spec.js -g "<name>"`. PWA/mobile
-acceptance: `npx playwright test test/browser/pwa-mobile.spec.js` and, after
-`npm run build`, `node --test test/pwa-artifacts.test.js`.
+Browser tests mock the API for deterministic desktop and mobile coverage.
+Failures leave Playwright traces under `test-results/`; `README.md` in
+`conduit-web/` documents focused-suite and trace commands.
