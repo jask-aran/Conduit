@@ -1,0 +1,55 @@
+# Conduit project workflow: these commands are routine repository operations.
+prefix_rule(
+    pattern=["npm", "view"],
+    decision="allow",
+    justification="Read package metadata for Conduit dependency compatibility",
+    match=[
+        "npm view node-pty version engines os cpu dist.tarball --json",
+        "npm view @earendil-works/pi-coding-agent repository homepage version --json",
+    ],
+)
+prefix_rule(
+    pattern=["npm", "install"],
+    decision="allow",
+    justification="Install or update Conduit dependencies",
+)
+prefix_rule(
+    pattern=["npm", "ci"],
+    decision="allow",
+    justification="Reproduce the locked Conduit dependency tree",
+)
+prefix_rule(
+    pattern=["npm", "ls"],
+    decision="allow",
+    justification="Inspect installed Conduit dependencies",
+)
+prefix_rule(
+    pattern=["npm", "test"],
+    decision="allow",
+    justification="Run Conduit node:test suites",
+)
+prefix_rule(
+    pattern=["npm", "run", "typecheck"],
+    decision="allow",
+    justification="Run the required Conduit TypeScript check",
+)
+prefix_rule(
+    pattern=["npm", "run", "build"],
+    decision="allow",
+    justification="Build the Conduit production bundle",
+)
+prefix_rule(
+    pattern=["npm", "run", "test:browser"],
+    decision="allow",
+    justification="Run Conduit browser regression tests",
+)
+prefix_rule(
+    pattern=["npx", "playwright", "test", "test/browser/app.spec.js"],
+    decision="allow",
+    justification="Run Conduit's browser entry-point regression suite with any focused project, grep, worker, or reporter options",
+)
+prefix_rule(
+    pattern=["bash", ".devcontainer/start-conduit.sh"],
+    decision="allow",
+    justification="Use Conduit's managed build and server lifecycle",
+)
