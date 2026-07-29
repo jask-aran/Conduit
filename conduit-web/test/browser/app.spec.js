@@ -446,6 +446,68 @@ test("does not commit a stale workspace response after project navigation", asyn
   await expect(panel.getByText("research-only.md")).toBeVisible();
 });
 
+test("closing the workspace panel cancels hidden tree, file, and diff work", async ({ page }) => {
+  await page.unroute("**/v0/projects/*/tree?*");
+  const treeGates = [];
+  let treeRequests = 0;
+  await page.route("**/v0/projects/*/tree?*", async (route) => {
+    const requestNumber = ++treeRequests;
+    await new Promise((resolve) => { treeGates.push(resolve); });
+    await route.fulfill({ json: { entries: [{ name: requestNumber === 1 ? "cancelled.md" : "cached.md", path: requestNumber === 1 ? "cancelled.md" : "cached.md", type: "file" }], truncated: false } }).catch(() => {});
+  });
+  await page.unroute("**/v0/projects/*/file?*");
+  const fileGates = [];
+  let fileRequests = 0;
+  await page.route("**/v0/projects/*/file?*", async (route) => {
+    const requestNumber = ++fileRequests;
+    await new Promise((resolve) => { fileGates.push(resolve); });
+    await route.fulfill({ json: { path: "cached.md", size: 5, content: requestNumber === 1 ? "stale" : "fresh" } }).catch(() => {});
+  });
+  await page.unroute("**/v0/projects/*/diff*");
+  const diffGates = [];
+  let diffRequests = 0;
+  await page.route("**/v0/projects/*/diff*", async (route) => {
+    const requestNumber = ++diffRequests;
+    await new Promise((resolve) => { diffGates.push(resolve); });
+    await route.fulfill({ json: { repository: true, branch: requestNumber === 1 ? "cancelled-branch" : "fresh-branch", files: [], commits: [], diff: "" } }).catch(() => {});
+  });
+
+  await page.goto("/");
+  await page.getByRole("button", { name: "Existing chat" }).click();
+  await page.getByRole("button", { name: "Toggle workspace panel" }).click();
+  const panel = page.getByRole("complementary", { name: "Workspace panel" });
+  await expect.poll(() => treeGates.length).toBe(1);
+  await panel.getByRole("button", { name: "Close workspace panel" }).click();
+  treeGates[0]();
+
+  await page.getByRole("button", { name: "Toggle workspace panel" }).click();
+  await expect.poll(() => treeGates.length).toBe(2);
+  await expect(panel.getByText("cancelled.md")).toHaveCount(0);
+  treeGates[1]();
+  await expect(panel.getByRole("button", { name: "cached.md" })).toBeVisible();
+  await panel.getByRole("button", { name: "cached.md" }).click();
+  await expect.poll(() => fileGates.length).toBe(1);
+  await panel.getByRole("button", { name: "Close workspace panel" }).click();
+  fileGates[0]();
+
+  await page.getByRole("button", { name: "Toggle workspace panel" }).click();
+  await expect(panel.getByText("stale")).toHaveCount(0);
+  await panel.getByRole("button", { name: "cached.md" }).click();
+  await expect.poll(() => fileGates.length).toBe(2);
+  fileGates[1]();
+  await expect(panel.getByText("fresh")).toBeVisible();
+  await panel.getByRole("tab", { name: "Source Control" }).click();
+  await expect.poll(() => diffGates.length).toBe(1);
+  await panel.getByRole("button", { name: "Close workspace panel" }).click();
+  diffGates[0]();
+
+  await page.getByRole("button", { name: "Toggle workspace panel" }).click();
+  await expect.poll(() => diffGates.length).toBe(2);
+  await expect(panel.getByText("cancelled-branch")).toHaveCount(0);
+  diffGates[1]();
+  await expect(panel.getByText("fresh-branch")).toBeVisible();
+});
+
 test.afterEach(async ({ page }) => {
   expect(unhandledApiRequests.get(page) || [], "all browser API requests must use deterministic mocks").toEqual([]);
 });

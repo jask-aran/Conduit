@@ -56,6 +56,19 @@ input.on("line", (line) => {
   const nativePi = path.join(root, "native-pi");
   await fs.writeFile(nativePi, "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then echo 0.80.10; exit 0; fi\nif [ \"$1\" = \"--help\" ]; then echo '--mode --session --append-system-prompt --skill --approve --no-approve'; exit 0; fi\nexit 1\n");
   await fs.chmod(nativePi, 0o755);
+  const fakeGitDirectory = path.join(root, "fake-bin");
+  const fakeGit = path.join(fakeGitDirectory, "git");
+  const fakeGitMarker = path.join(root, "fake-git.pid");
+  await fs.mkdir(fakeGitDirectory);
+  await fs.writeFile(fakeGit, `#!/bin/sh
+if [ "$1" = "rev-parse" ] && [ "$2" = "--is-inside-work-tree" ]; then echo true; exit 0; fi
+if [ "$1" = "status" ]; then echo $$ > "$FAKE_GIT_MARKER"; sleep 30; exit 0; fi
+if [ "$1" = "branch" ]; then echo main; exit 0; fi
+if [ "$1" = "log" ]; then exit 0; fi
+if [ "$1" = "rev-parse" ]; then exit 1; fi
+exit 0
+`);
+  await fs.chmod(fakeGit, 0o755);
   const workspace = path.join(root, "workspace");
   const workspaceParent = path.join(root, "workspace-parent");
   await fs.mkdir(workspace);
@@ -78,6 +91,8 @@ input.on("line", (line) => {
       CONDUIT_NATIVE_PI_COMMAND: nativePi,
       CONDUIT_NATIVE_PI_AGENT_DIR: path.join(root, "native-agent"),
       CONDUIT_WORKSPACE_ALLOWLIST: root,
+      PATH: `${fakeGitDirectory}:${process.env.PATH}`,
+      FAKE_GIT_MARKER: fakeGitMarker,
     },
   });
 
@@ -113,6 +128,46 @@ input.on("line", (line) => {
     assert.equal(linkedResponse.status, 201);
     const linked = await linkedResponse.json();
     assert.equal(linked.defaultTemplateId, null);
+    await fs.mkdir(path.join(workspace, "00-directory"));
+    for (let index = 0; index < 500; index += 1) {
+      await fs.writeFile(path.join(workspace, `file-${String(index).padStart(3, "0")}`), "content\n");
+    }
+    await fs.writeFile(path.join(workspace, "zzz-late"), "content\n");
+    await fs.mkdir(path.join(workspace, ".conduit"), { recursive: true });
+    await fs.symlink(path.join(workspace, "file-000"), path.join(workspace, "symlinked"));
+    const treeResponse = await fetch(`${origin}/v0/projects/${linked.id}/tree`);
+    assert.equal(treeResponse.status, 200);
+    const tree = await treeResponse.json();
+    assert.equal(tree.path, "");
+    assert.equal(tree.entries.length, 500);
+    assert.equal(tree.truncated, true);
+    assert.equal(tree.entries[0].name, "00-directory");
+    assert.deepEqual([...tree.entries].sort((left, right) => left.type === right.type ? left.name.localeCompare(right.name) : left.type === "directory" ? -1 : 1), tree.entries);
+    assert.equal(tree.entries.some((entry) => [".conduit", "symlinked"].includes(entry.name)), false);
+    const diffRequest = http.get(`${origin}/v0/projects/${linked.id}/diff`);
+    for (let attempt = 0; attempt < 80; attempt += 1) {
+      try {
+        await fs.access(fakeGitMarker);
+        break;
+      } catch {
+        await new Promise((resolve) => setTimeout(resolve, 25));
+      }
+    }
+    const gitPid = Number(await fs.readFile(fakeGitMarker, "utf8"));
+    await new Promise((resolve) => {
+      diffRequest.once("error", resolve);
+      diffRequest.destroy();
+    });
+    for (let attempt = 0; attempt < 80; attempt += 1) {
+      try {
+        process.kill(gitPid, 0);
+        await new Promise((resolve) => setTimeout(resolve, 25));
+      } catch {
+        break;
+      }
+    }
+    assert.throws(() => process.kill(gitPid, 0));
+    assert.equal((await fetch(`${origin}/healthz`)).status, 200);
     const previewResponse = await fetch(`${origin}/v0/workspaces/preview`, {
       method: "POST",
       headers: { "content-type": "application/json" },
