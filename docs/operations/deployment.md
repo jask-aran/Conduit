@@ -94,14 +94,22 @@ Deploying a packaged release is the same two-step flow:
 ```bash
 tar -xzf conduit-<version>-<short-sha>.tar.gz -C /srv
 cd /srv/conduit-<version>-<short-sha>
+cp .env.example .env
+# Choose paths outside this versioned release directory before first start.
+# CONDUIT_DATA_DIR=/srv/conduit-data
+# CONDUIT_WORKSPACES_DIR=/srv/conduit-workspaces
 ./scripts/deploy.sh up
 ```
 
-An upgrade builds another exact release against the same external data and
-workspace directories, then replaces the application container. Schema changes
-must remain forward-compatible or add an idempotent startup migration before
-they are released; the current JSON stores already normalize their versioned
-shape at load time and write atomically.
+Set `CONDUIT_DATA_DIR` and `CONDUIT_WORKSPACES_DIR` to fixed absolute paths
+outside the versioned release directory before the first packaged deployment;
+the defaults are appropriate only for a stable checkout directory. Copy that
+same `.env` configuration into each later release directory before
+`./scripts/deploy.sh restart` or `up`. An upgrade then builds another exact
+release against the same durable directories and replaces only the application
+container. Schema changes must remain forward-compatible or add an idempotent
+startup migration before they are released; the current JSON stores already
+normalize their versioned shape at load time and write atomically.
 
 ## Backup, restore, and migration
 
