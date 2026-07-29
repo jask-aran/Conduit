@@ -140,6 +140,31 @@ test("destructive Workspace removal deletes a validated folder and can forget an
   await fs.rm(root, { recursive: true, force: true });
 });
 
+test("GitHub shorthand uses gh with progress and falls back to a canonical Git URL", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-project-github-shorthand-"));
+  const calls = [];
+  const store = new ProjectStore({
+    filesRoot: path.join(root, "data/chat/files"),
+    catalogFile: path.join(root, "data/conduit.json"),
+    piAgentDir: path.join(root, "data/pi"),
+    workspaceAllowlist: [root],
+    runCommand: async (command, args, options) => {
+      calls.push({ command, args, options });
+      if (command === "gh") throw Object.assign(new Error("gh unavailable"), { code: "command_failed" });
+      await fs.mkdir(args.at(-1));
+      options.onOutput({ stream: "stderr", chunk: "Receiving objects: 100%\r" });
+    },
+  });
+  await store.initialize();
+  const started = await store.create({ mode: "cloned", cloneUrl: "react/react", path: path.join(root, "react") });
+  const cloned = await waitForReady(store, started.project.id);
+  assert.equal(cloned.path, path.join(root, "react"));
+  assert.deepEqual(calls[0].args, ["repo", "clone", "react/react", path.join(root, ".conduit-clone-" + started.operation.id + ".part"), "--", "--progress"]);
+  assert.deepEqual(calls[1].args, ["clone", "--progress", "--", "https://github.com/react/react.git", path.join(root, ".conduit-clone-" + started.operation.id + ".part")]);
+  assert.equal(calls[1].options.env.GIT_PROGRESS_DELAY, "0");
+  await fs.rm(root, { recursive: true, force: true });
+});
+
 test("creates an external Workspace and preserves its directory when unlinked", async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-project-create-"));
   const parent = path.join(root, "workspaces");
@@ -462,7 +487,7 @@ test("clone cancellation cleans Conduit staging and releases its reservation", a
     projectId: cloning.project.id,
     state: "cloning",
     error: null,
-    diagnostic: "Preparing clone…\nReceiving objects: 42%\r",
+    diagnostic: `Preparing clone…\nRunning git clone --progress ${source}…\nReceiving objects: 42%\n`,
   });
   await assert.rejects(store.validate(cloning.project), { code: "workspace_cloning" });
   assert.deepEqual(await store.cancelCloneOperation(cloning.operation.id), { id: cloning.operation.id, state: "cancelled" });

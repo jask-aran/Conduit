@@ -202,6 +202,10 @@ export function Sidebar(props: {
     setMode(kind === "workspace" ? "linked" : "managed");
     setNewKind(kind);
   };
+  const selectWorkspaceMode = (next: WorkspaceMode) => {
+    setMode(next);
+    if ((next === "created" || next === "cloned") && !path().trim()) setPath("~");
+  };
   const closeNewDialog = () => {
     if (submitting()) return;
     setNewKind(null);
@@ -447,15 +451,15 @@ export function Sidebar(props: {
       onClose={closeNewDialog}>
       <form onSubmit={submitNew}><FieldGroup>
         <Show when={newKind() === "workspace"}><div class="workspace-mode-picker" role="radiogroup" aria-label="Workspace action">
-          <button type="button" role="radio" aria-checked={mode() === "linked"} data-selected={mode() === "linked"} disabled={submitting()} onClick={() => setMode("linked")}><strong>Link existing</strong><small>Use a folder already on this machine. Unlinking keeps it.</small></button>
-          <button type="button" role="radio" aria-checked={mode() === "created"} data-selected={mode() === "created"} disabled={submitting()} onClick={() => setMode("created")}><strong>Create folder</strong><small>Make an empty folder in an allowed location. It remains yours.</small></button>
-          <button type="button" role="radio" aria-checked={mode() === "cloned"} data-selected={mode() === "cloned"} disabled={submitting()} onClick={() => setMode("cloned")}><strong>Clone repository</strong><small>Check out a repository into a chosen parent folder.</small></button>
+          <button type="button" role="radio" aria-checked={mode() === "linked"} data-selected={mode() === "linked"} disabled={submitting()} onClick={() => selectWorkspaceMode("linked")}><strong>Link existing</strong><small>Use a folder already on this machine. Unlinking keeps it.</small></button>
+          <button type="button" role="radio" aria-checked={mode() === "created"} data-selected={mode() === "created"} disabled={submitting()} onClick={() => selectWorkspaceMode("created")}><strong>Create folder</strong><small>Make an empty folder in an allowed location. It remains yours.</small></button>
+          <button type="button" role="radio" aria-checked={mode() === "cloned"} data-selected={mode() === "cloned"} disabled={submitting()} onClick={() => selectWorkspaceMode("cloned")}><strong>Clone repository</strong><small>Check out a repository into a chosen parent folder.</small></button>
         </div></Show>
+        <Show when={mode() === "cloned"}><Field><FieldLabel for="folder-clone">GitHub repository or Git URL</FieldLabel><Input id="folder-clone" value={cloneUrl()} disabled={submitting()} placeholder="react/react or https://github.com/org/repo.git" onInput={(event) => setCloneUrl(event.currentTarget.value)} /></Field></Show>
         <Field><FieldLabel for="folder-name">{mode() === "managed" ? "Display name" : "Display name (optional)"}</FieldLabel><Input id="folder-name" value={name()} disabled={submitting()} placeholder={mode() === "managed" ? "Research" : "My project"} onInput={(event) => setName(event.currentTarget.value)} /></Field>
         <Show when={mode() === "linked" || mode() === "created" || mode() === "cloned"}><Field><FieldLabel for="folder-path">{mode() === "cloned" || mode() === "created" ? "Parent directory" : "Existing folder"}</FieldLabel><Input id="folder-path" value={path()} disabled={submitting()} list="workspace-path-suggestions" placeholder={mode() === "linked" ? "~/code/my-repo" : "~/code"} onInput={(event) => setPath(event.currentTarget.value)} /><datalist id="workspace-path-suggestions"><For each={props.workspaceSuggestions}>{(item) => <option value={item.displayPath || item.path} label={item.name} />}</For></datalist></Field></Show>
         <Show when={mode() === "created"}><Field><FieldLabel for="workspace-directory-name">New folder name</FieldLabel><Input id="workspace-directory-name" value={directoryName()} disabled={submitting()} placeholder="my-project" onInput={(event) => setDirectoryName(event.currentTarget.value)} /></Field></Show>
         <Show when={mode() === "cloned"}><Field><FieldLabel for="clone-directory-name">Folder name (optional)</FieldLabel><Input id="clone-directory-name" value={cloneDirectoryName()} disabled={submitting()} placeholder="Defaults to the repository name" onInput={(event) => setCloneDirectoryName(event.currentTarget.value)} /></Field></Show>
-        <Show when={mode() === "cloned"}><Field><FieldLabel for="folder-clone">Git URL</FieldLabel><Input id="folder-clone" value={cloneUrl()} disabled={submitting()} placeholder="https://github.com/org/repo.git" onInput={(event) => setCloneUrl(event.currentTarget.value)} /></Field></Show>
         <Show when={workspacePreview()}>{(preview) => <div class="workspace-path-preview"><strong>{preview().path}</strong><small>{preview().ownership}</small></div>}</Show>
         <Show when={previewError()}><p class="workspace-preview-error" role="alert">{previewError()}</p></Show>
         <div class="flex justify-end gap-2"><Button type="button" variant="outline" disabled={submitting()} onClick={closeNewDialog}>Cancel</Button><Button type="submit" disabled={!canCreate()}>{submitting()

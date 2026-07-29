@@ -277,7 +277,9 @@ starting, and browser-attached processes remain resident.
 - `POST /v0/projects` accepts `linked`, `created`, and `cloned` Workspace
   modes; created Workspaces take an existing parent `path` plus a single
   `directoryName` and are never deleted on unlink; clone returns `202` with a
-  durable provisional `cloning` Workspace plus an operation id
+  durable provisional `cloning` Workspace plus an operation id. GitHub clone
+  sources accept `owner/repository` shorthand as well as standard Git URLs;
+  `gh` is preferred and Git falls back with real transfer progress enabled.
 - `GET|DELETE /v0/workspace-operations/:id` reads a bounded clone diagnostic
   or explicitly cancels a live clone operation; cancellation removes only
   Conduit staging and the unpublished provisional row

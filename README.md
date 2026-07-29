@@ -87,7 +87,8 @@ parent, or `git`/`gh` clone into one. Every Workspace is externally owned after
 registration: ordinary unlinking never deletes its working tree. The Workspace
 dashboard also offers a separate destructive delete that requires typing the
 Workspace name and then removes its registered folder. A clone chooses an existing parent and creates a
-repository-named child (or an explicitly named child). Its durable provisional
+repository-named child (or an explicitly named child). GitHub repositories may
+be entered as `owner/repository` or a standard Git URL. Its durable provisional
 catalogue row is `cloning` until network work in a Conduit-owned sibling staging
 directory publishes the target and atomically transitions it to `ready`.
 Cancellation and a bounded deadline apply to that server-owned operation; clone
