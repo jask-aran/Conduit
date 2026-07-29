@@ -116,6 +116,13 @@ store owns one transcript, WebSocket, generation state, queue, and host UI.
 Model settings and attachments are narrow helpers. Components consume those
 stores directly; there is no compatibility layer or parallel client runtime.
 
+The ambient chat meteor field is `DefaultMeteorShower` from the public
+[`@jask-aran/solid-components`](https://www.npmjs.com/package/@jask-aran/solid-components)
+package. Its source of truth is
+[`jask-aran/solid-components`](https://github.com/jask-aran/solid-components):
+version tags there are released to npm, and Conduit consumes the versioned npm
+artifact rather than a copied renderer.
+
 The concrete icon-collapsible sidebar separates first-class Chats, Projects,
 and Workspaces. Draft chats stay out of navigation until their first message
 creates a session. Kobalte provides accessible menu and context-menu behavior;

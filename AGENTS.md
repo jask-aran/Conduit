@@ -30,8 +30,8 @@ that alters behavior they describe.
 
 ## Hard invariants
 
-- Do not commit, push, branch, open PRs, or merge unless the user explicitly
-  asks.
+- Keep Git history operations scoped and intentional: stage only relevant files,
+  record verification in non-trivial commits, and do not publish unrelated work.
 - Pi JSONL is the authoritative transcript; `data/sessions.json` is a
   lightweight registry and `data/conduit.json` the project catalog. Never
   duplicate ownership across them, and never let two Pi processes write the
