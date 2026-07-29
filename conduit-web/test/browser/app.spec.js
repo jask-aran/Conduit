@@ -1857,6 +1857,9 @@ test("clone workspace derives a repository folder inside the chosen parent", asy
     }
     await route.fulfill({ json: { projects } });
   });
+  await page.route("**/v0/workspace-operations/operation_clone", (route) => route.fulfill({
+    json: { id: "operation_clone", projectId: "project_clone", state: "cloning", diagnostic: "Receiving objects: 42%" },
+  }));
   await page.goto("/");
   await openSidebar(page, testInfo);
   await page.getByRole("button", { name: "New workspace" }).click();
@@ -1877,6 +1880,7 @@ test("clone workspace derives a repository folder inside the chosen parent", asy
     cloneDirectoryName: "checked-out-repo",
   });
   await expect(dialog).toHaveCount(0);
+  await expect(page.getByText("Cloning Workspace")).toBeVisible();
 });
 
 test("shows a cloning Workspace with bounded output and cancellation", async ({ page }) => {

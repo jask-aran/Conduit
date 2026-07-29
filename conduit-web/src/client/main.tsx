@@ -262,8 +262,13 @@ function App() {
     try {
       const result = await api<Project | { project: Project; operation: { id: string; state: string } }>("/v0/projects", { method: "POST", body: JSON.stringify(input) });
       const created = "project" in result ? result.project : result;
+      if (["clone", "cloned"].includes(input.mode)) {
+        const provisional = { ...created, sessions: [] };
+        catalogue.setProjects((current) => [...current.filter((project) => project.id !== provisional.id), provisional]);
+        await openProject(provisional);
+        return true;
+      }
       await refresh();
-      if (["clone", "cloned"].includes(input.mode)) return true;
       if (["link", "linked", "create", "created"].includes(input.mode)) await openProject(created);
       else await createChat(created, { templateId: created.defaultTemplateId || defaultTemplateId() || "chat" });
       return true;
