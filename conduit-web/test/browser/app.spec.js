@@ -1836,17 +1836,22 @@ test("clone workspace derives a repository folder inside the chosen parent", asy
   await page.route("**/v0/projects", async (route) => {
     if (route.request().method() === "POST") {
       const body = route.request().postDataJSON();
-      await route.fulfill({ status: 201, json: {
-        id: "project_clone",
-        slug: "cloned-repo",
-        name: body.name || "cloned-repo",
-        kind: "workspace",
-        origin: "cloned",
-        externalPath: `${body.cloneParentPath}/${body.cloneDirectoryName || "repo"}`,
-        path: `${body.cloneParentPath}/${body.cloneDirectoryName || "repo"}`,
-        defaultTemplateId: null,
-        deletesFilesOnRemove: false,
-        sessions: [],
+      await route.fulfill({ status: 202, json: {
+        project: {
+          id: "project_clone",
+          slug: "cloned-repo",
+          name: body.name || "cloned-repo",
+          kind: "workspace",
+          origin: "cloned",
+          state: "cloning",
+          cloneOperationId: "operation_clone",
+          externalPath: `${body.cloneParentPath}/${body.cloneDirectoryName || "repo"}`,
+          path: `${body.cloneParentPath}/${body.cloneDirectoryName || "repo"}`,
+          defaultTemplateId: null,
+          deletesFilesOnRemove: false,
+          sessions: [],
+        },
+        operation: { id: "operation_clone", state: "cloning" },
       } });
       return;
     }

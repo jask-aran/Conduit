@@ -156,6 +156,8 @@ export class ProjectStore {
     this.logger = logger;
     this.cloneReservationRoot = path.join(path.dirname(this.catalogFile), "clone-reservations");
     this.cloneReservations = new Map();
+    this.cloneOperations = new Map();
+    this.completedCloneOperationIds = new Set();
     this.reservedSlugs = new Set();
     // Serialize only catalogue transitions; clone network work executes between
     // its reservation and commit transitions.
@@ -215,6 +217,8 @@ export class ProjectStore {
       origin: project.origin || (project.externalPath ? "linked" : "managed"),
       externalPath: project.externalPath || null,
       cloneUrl: project.cloneUrl || null,
+      state: project.state === "cloning" ? "cloning" : "ready",
+      cloneOperationId: project.cloneOperationId || null,
       defaultTemplateId: project.defaultTemplateId || null,
       createdAt: project.createdAt,
       path: projectPath,
@@ -400,6 +404,7 @@ export class ProjectStore {
       }
       if (reservation.phase === "reserved") {
         await fs.rm(reservation.staging, { recursive: true, force: true });
+        await this.removeProvisionalClone(reservation);
         await fs.rm(marker, { force: true });
         continue;
       }
@@ -408,6 +413,7 @@ export class ProjectStore {
       catch (error) {
         if (error.code !== "ENOENT") throw error;
         await fs.rm(reservation.staging, { recursive: true, force: true });
+        await this.removeProvisionalClone(reservation);
         await fs.rm(marker, { force: true });
         continue;
       }
@@ -421,6 +427,13 @@ export class ProjectStore {
         const catalog = await this.readCatalog();
         const registered = catalog.projects.find((project) => project.id === reservation.project.id || path.resolve(this.resolvePath(project)) === reservation.target);
         if (registered) {
+          if (registered.id !== reservation.project.id) {
+            this.logger.error(`Published clone needs manual recovery; project identity conflicts: ${reservation.target} (marker: ${marker})`);
+            continue;
+          }
+          registered.state = "ready";
+          delete registered.cloneOperationId;
+          await this.writeCatalog(this.catalogFile, catalog);
           await fs.rm(marker, { force: true });
           continue;
         }
@@ -428,12 +441,21 @@ export class ProjectStore {
           this.logger.error(`Published clone needs manual recovery; project slug conflicts: ${reservation.target} (marker: ${marker})`);
           continue;
         }
-        catalog.projects.push(reservation.project);
+        catalog.projects.push({ ...reservation.project, state: "ready" });
         await this.writeCatalog(this.catalogFile, catalog);
         await fs.rm(marker, { force: true });
       } catch (error) {
         this.logger.error(`Published clone needs manual recovery: ${reservation.target} (marker: ${marker})`, error);
       }
+    }
+  }
+
+  async removeProvisionalClone(reservation) {
+    const catalog = await this.readCatalog();
+    const next = catalog.projects.filter((project) => project.id !== reservation.project.id);
+    if (next.length !== catalog.projects.length) {
+      catalog.projects = next;
+      await this.writeCatalog(this.catalogFile, catalog);
     }
   }
 
@@ -480,11 +502,15 @@ export class ProjectStore {
           origin: "cloned",
           externalPath: target,
           cloneUrl: url,
+          state: "cloning",
+          cloneOperationId: id,
           defaultTemplateId: defaultTemplateId || null,
           createdAt: new Date().toISOString(),
         },
       };
       await this.persistCloneReservation(reservation);
+      catalog.projects.push(reservation.project);
+      await this.writeCatalog(this.catalogFile, catalog);
       this.cloneReservations.set(target, reservation);
       this.reservedSlugs.add(slug);
       return reservation;
@@ -516,7 +542,7 @@ export class ProjectStore {
     if (!keepMarker) await fs.rm(this.reservationFile(reservation.id), { force: true });
   }
 
-  async createCloned({ name, cloneUrl, path: inputPath, cloneParentPath, cloneDirectoryName: requestedDirectoryName, defaultTemplateId = null, signal }) {
+  async createCloned({ name, cloneUrl, path: inputPath, cloneParentPath, cloneDirectoryName: requestedDirectoryName, defaultTemplateId = null }) {
     const url = String(cloneUrl || "").trim();
     if (!url) {
       const error = new Error("cloneUrl is required");
@@ -565,8 +591,56 @@ export class ProjectStore {
       }
     }
     const reservation = await this.reserveClone({ name, url, target, defaultTemplateId });
+    const controller = new AbortController();
+    const operation = {
+      id: reservation.id,
+      projectId: reservation.project.id,
+      state: "cloning",
+      controller,
+      error: null,
+      promise: null,
+    };
+    this.cloneOperations.set(operation.id, operation);
+    operation.promise = this.executeClone(reservation, operation);
+    operation.promise.catch(() => {});
+    return {
+      project: this.projectView(reservation.project),
+      operation: this.cloneOperationView(operation),
+    };
+  }
+
+  cloneOperationView(operation) {
+    return {
+      id: operation.id,
+      projectId: operation.projectId,
+      state: operation.state,
+      error: operation.error || null,
+    };
+  }
+
+  getCloneOperation(id) {
+    const operation = this.cloneOperations.get(id);
+    return operation ? this.cloneOperationView(operation) : null;
+  }
+
+  async cancelCloneOperation(id) {
+    const operation = this.cloneOperations.get(id);
+    if (!operation) {
+      if (this.completedCloneOperationIds.has(id)) return { id, state: "complete" };
+      return null;
+    }
+    if (operation.state === "cloning") {
+      operation.state = "cancelling";
+      operation.controller.abort();
+    }
+    await operation.promise;
+    return { id, state: operation.state };
+  }
+
+  async executeClone(reservation, operation) {
     try {
-      const options = { signal, timeoutMs: this.cloneTimeoutMs };
+      const options = { signal: operation.controller.signal, timeoutMs: this.cloneTimeoutMs };
+      const url = reservation.project.cloneUrl;
       const githubSource = /^(?:https:\/\/github\.com\/|ssh:\/\/[^/]*github\.com\/|git@github\.com:)/i.test(url);
       let cloned = false;
       if (githubSource) {
@@ -580,33 +654,45 @@ export class ProjectStore {
       }
       if (!cloned) await this.runCommand("git", ["clone", "--", url, reservation.staging], options);
       await ensureConduitRoot({ path: reservation.staging, origin: "linked" });
-      return await this.runExclusive(async () => {
-        if (this.cloneReservations.get(target)?.id !== reservation.id) throw cloneError("clone_reservation_lost", "Clone reservation was lost");
+      await this.runExclusive(async () => {
+        if (this.cloneReservations.get(reservation.target)?.id !== reservation.id) throw cloneError("clone_reservation_lost", "Clone reservation was lost");
         try {
-          await fs.access(target);
+          await fs.access(reservation.target);
           throw cloneError("clone_target_exists", "clone target already exists");
         } catch (error) {
           if (error.code === "clone_target_exists") throw error;
           if (error.code !== "ENOENT") throw error;
         }
         const catalog = await this.readCatalog();
-        if (catalog.projects.some((item) => item.slug === reservation.project.slug || path.resolve(this.resolvePath(item)) === target)) {
+        const project = catalog.projects.find((item) => item.id === reservation.project.id);
+        if (!project || catalog.projects.some((item) => item.id !== reservation.project.id && (item.slug === reservation.project.slug || path.resolve(this.resolvePath(item)) === reservation.target))) {
           throw cloneError("clone_reservation_lost", "Clone reservation conflicts with the current catalogue");
         }
         reservation.phase = "publishing";
         await this.persistCloneReservation(reservation);
-        await fs.rename(reservation.staging, target);
+        await fs.rename(reservation.staging, reservation.target);
         reservation.phase = "published";
         await this.persistCloneReservation(reservation);
-        catalog.projects.push(reservation.project);
+        project.state = "ready";
+        delete project.cloneOperationId;
         await this.writeCatalog(this.catalogFile, catalog);
         await this.releaseCloneReservation(reservation);
-        return this.projectView(reservation.project);
+        operation.state = "ready";
       });
     } catch (error) {
       await fs.rm(reservation.staging, { recursive: true, force: true }).catch(() => {});
-      await this.runExclusive(() => this.forgetCloneReservation(reservation, { keepMarker: reservation.phase !== "reserved" }));
-      throw error;
+      await this.runExclusive(async () => {
+        const published = reservation.phase === "published";
+        if (!published) await this.removeProvisionalClone(reservation);
+        await this.forgetCloneReservation(reservation, { keepMarker: published });
+      });
+      operation.error = error.code === "clone_aborted" ? "Clone cancelled" : String(error.message || "Clone failed").slice(0, 512);
+      operation.state = error.code === "clone_aborted" ? "cancelled" : "failed";
+      if (reservation.phase === "published") this.logger.error(`Clone published but could not be finalized: ${reservation.target}`, error);
+    } finally {
+      this.cloneOperations.delete(operation.id);
+      this.completedCloneOperationIds.add(operation.id);
+      if (this.completedCloneOperationIds.size > 100) this.completedCloneOperationIds.delete(this.completedCloneOperationIds.values().next().value);
     }
   }
 
@@ -646,6 +732,7 @@ export class ProjectStore {
       const catalog = await this.readCatalog();
       const project = catalog.projects.find((item) => item.id === idOrSlug || item.slug === idOrSlug);
       if (!project) return null;
+      if (project.state === "cloning") throw cloneError("workspace_cloning", "This Workspace is still cloning");
       if (Object.hasOwn(changes, "name")) {
         const name = String(changes.name || "").trim();
         if (!name) throw new Error("Project names must contain letters or numbers");
@@ -664,6 +751,7 @@ export class ProjectStore {
     const catalog = await this.readCatalog();
     const project = catalog.projects.find((item) => item.id === idOrSlug || item.slug === idOrSlug);
     if (!project) return null;
+    if (project.state === "cloning") throw cloneError("workspace_cloning", "This Workspace is still cloning");
     if (project.slug === "chat") {
       const error = new Error("The unstructured Chats project cannot be renamed");
       error.code = "reserved_project";
@@ -711,6 +799,9 @@ export class ProjectStore {
   }
 
   async validate(project) {
+    if (project?.state === "cloning") {
+      throw cloneError("workspace_cloning", "This Workspace is still cloning");
+    }
     if (!project?.externalPath) return project;
     const expected = path.resolve(project.externalPath);
     let stat;
