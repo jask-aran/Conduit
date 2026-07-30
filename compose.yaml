@@ -2,12 +2,7 @@ name: conduit
 
 services:
   conduit:
-    image: "${CONDUIT_IMAGE:-conduit}:${CONDUIT_RELEASE:-development}"
-    build:
-      context: .
-      dockerfile: Dockerfile
-      args:
-        CONDUIT_RELEASE: "${CONDUIT_RELEASE:-development}"
+    image: "${CONDUIT_IMAGE:-ghcr.io/jask-aran/conduit}:${CONDUIT_RELEASE:-latest}"
     init: true
     user: "${CONDUIT_UID:-1000}:${CONDUIT_GID:-1000}"
     read_only: true
@@ -27,7 +22,7 @@ services:
       CONDUIT_TEMPLATES_ROOT: /app/templates
       CONDUIT_WORKSPACE_ALLOWLIST: /workspaces
       CONDUIT_WORKSPACE_SUGGESTION_ROOT: /workspaces
-      CONDUIT_RELEASE: "${CONDUIT_RELEASE:-development}"
+      CONDUIT_RELEASE: "${CONDUIT_RELEASE:-latest}"
       ENABLE_PARTIAL_CONTINUE: "${ENABLE_PARTIAL_CONTINUE:-true}"
     ports:
       - "${CONDUIT_BIND_ADDRESS:-0.0.0.0}:${CONDUIT_PORT:-80}:4310"
