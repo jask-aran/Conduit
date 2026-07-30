@@ -104,6 +104,23 @@ set_password() {
   printf '%s' "$password" | compose run --rm --no-deps -T conduit node scripts/conduit-auth.mjs set-password --stdin
 }
 
+show_access_url() {
+  load_env
+  local bind_address="${CONDUIT_BIND_ADDRESS:-0.0.0.0}"
+  local port="${CONDUIT_PORT:-80}"
+  if [[ "$bind_address" == "0.0.0.0" ]]; then
+    if [[ "$port" == "80" ]]; then
+      echo "Open Conduit at http://<server-public-ip>"
+    else
+      echo "Open Conduit at http://<server-public-ip>:$port"
+    fi
+  elif [[ "$port" == "80" ]]; then
+    echo "Conduit is listening at http://$bind_address"
+  else
+    echo "Conduit is listening at http://$bind_address:$port"
+  fi
+}
+
 if [[ "$COMMAND" == "help" || "$COMMAND" == "-h" || "$COMMAND" == "--help" ]]; then
   usage
   exit 0
@@ -124,18 +141,21 @@ case "$COMMAND" in
     fi
     compose up -d --remove-orphans
     compose ps
+    show_access_url
     ;;
   restart)
     prepare_directories
     build
     compose up -d --force-recreate --remove-orphans
     compose ps
+    show_access_url
     ;;
   auth)
     prepare_directories
     build
     set_password
     compose up -d --force-recreate
+    show_access_url
     ;;
   down) compose down ;;
   status) compose ps ;;
