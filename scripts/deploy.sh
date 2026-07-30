@@ -9,9 +9,9 @@ usage() {
   printf '%s\n' \
     "Usage: ./scripts/deploy.sh [up|restart|auth|down|status|logs|config]" \
     "" \
-    "up        Prepare directories, build the exact release, provision auth when" \
+    "up        Prepare directories, pull the selected image, provision auth when" \
     "          absent, and start Conduit (default)." \
-    "restart   Rebuild and replace the running container without changing data." \
+    "restart   Pull and replace the running container without changing data." \
     "auth      Set or replace the Conduit login password." \
     "down      Stop and remove the application container." \
     "status    Show the container and health state." \
@@ -51,7 +51,6 @@ prepare_env() {
       "$ENV_FILE"
     echo "Created $ENV_FILE."
   fi
-  sed -i "s/^CONDUIT_RELEASE=.*/CONDUIT_RELEASE=$(release_id)/" "$ENV_FILE"
 }
 
 load_env() {
@@ -81,11 +80,33 @@ prepare_directories() {
 }
 
 compose() {
-  (cd "$ROOT" && docker compose --project-name "${CONDUIT_COMPOSE_PROJECT_NAME:-conduit}" --env-file "$ENV_FILE" -f compose.yaml "$@")
+  local files=(-f compose.yaml)
+  if [[ "${CONDUIT_DEPLOY_MODE:-image}" == "build" ]]; then
+    files+=(-f compose.build.yaml)
+  fi
+  (cd "$ROOT" && docker compose --project-name "${CONDUIT_COMPOSE_PROJECT_NAME:-conduit}" --env-file "$ENV_FILE" "${files[@]}" "$@")
 }
 
-build() {
-  compose build --pull
+prepare_release() {
+  load_env
+  case "${CONDUIT_DEPLOY_MODE:-image}" in
+    image)
+      compose pull conduit
+      ;;
+    build)
+      [[ -f "$ROOT/compose.build.yaml" && -f "$ROOT/Dockerfile" ]] || {
+        echo "Source-build mode requires a full Conduit checkout." >&2
+        exit 1
+      }
+      sed -i "s/^CONDUIT_RELEASE=.*/CONDUIT_RELEASE=$(release_id)/" "$ENV_FILE"
+      load_env
+      compose build --pull conduit
+      ;;
+    *)
+      echo "CONDUIT_DEPLOY_MODE must be 'image' or 'build'." >&2
+      exit 1
+      ;;
+  esac
 }
 
 set_password() {
@@ -128,12 +149,12 @@ fi
 
 require_docker
 prepare_env
+load_env
 
 case "$COMMAND" in
   up)
     prepare_directories
-    build
-    load_env
+    prepare_release
     auth_file="$(host_path "${CONDUIT_DATA_DIR:-./data}")/auth.json"
     if [[ ! -s "$auth_file" ]]; then
       echo "Conduit needs its single-user login password."
@@ -145,14 +166,14 @@ case "$COMMAND" in
     ;;
   restart)
     prepare_directories
-    build
+    prepare_release
     compose up -d --force-recreate --remove-orphans
     compose ps
     show_access_url
     ;;
   auth)
     prepare_directories
-    build
+    prepare_release
     set_password
     compose up -d --force-recreate
     show_access_url
