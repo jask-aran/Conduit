@@ -8,6 +8,7 @@ PID_FILE="$STATE_DIR/conduit.pid"
 LOG_FILE="$STATE_DIR/conduit.log"
 VITE_PID_FILE="$STATE_DIR/conduit-vite.pid"
 VITE_LOG_FILE="$STATE_DIR/conduit-vite.log"
+SOLID_COMPONENTS_STATE_FILE="$STATE_DIR/solid-components-workbench.json"
 COMMAND="${1:-restart}"
 if [[ $# -gt 0 ]]; then shift; fi
 
@@ -48,6 +49,15 @@ prepare_dirs() {
     echo "Conduit cannot create its state directories. Set CONDUIT_STATE_DIR to a writable directory." >&2
     return 1
   }
+}
+
+guard_component_mode() {
+  if [[ -f "$SOLID_COMPONENTS_STATE_FILE" && "${CONDUIT_SOLID_COMPONENTS_MANAGED:-}" != "1" ]]; then
+    echo "A local solid-components mode is active." >&2
+    echo "Use: bash .devcontainer/solid-components.sh status" >&2
+    echo "Return to npm with: bash .devcontainer/solid-components.sh registry" >&2
+    exit 1
+  fi
 }
 
 is_healthy() {
@@ -159,8 +169,10 @@ start_vite() {
     echo "Vite is already managed as PID $pid on port ${CONDUIT_VITE_PORT}."
     return
   fi
+  pushd "$WEB_DIR" >/dev/null
   nohup setsid "$WEB_DIR/node_modules/.bin/vite" --host "$CONDUIT_VITE_HOST" --port "$CONDUIT_VITE_PORT" >"$VITE_LOG_FILE" 2>&1 </dev/null &
   pid=$!
+  popd >/dev/null
   printf '%s\n' "$pid" >"$VITE_PID_FILE"
   for _ in {1..30}; do
     if curl --silent --fail --max-time 2 "http://127.0.0.1:${CONDUIT_VITE_PORT}/" >/dev/null; then
@@ -232,16 +244,18 @@ logs() {
 }
 
 case "$COMMAND" in
-  setup) setup ;;
-  build) build ;;
-  start) start_server false ;;
+  setup) guard_component_mode; setup ;;
+  build) guard_component_mode; build ;;
+  start) guard_component_mode; start_server false ;;
   dev)
+    guard_component_mode
     stop || true
     start_server true
     if ! start_vite; then stop || true; exit 1; fi
     ;;
   stop) stop ;;
   restart)
+    guard_component_mode
     stop || true
     build_if_needed
     start_server false
@@ -249,6 +263,7 @@ case "$COMMAND" in
   status) status ;;
   logs) logs "$@" ;;
   deploy)
+    guard_component_mode
     setup
     build
     stop || true

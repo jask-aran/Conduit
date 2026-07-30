@@ -138,6 +138,32 @@ so the running server reflects your change. Every user-facing change must end
 with a manual smoketest checklist in your report: the concrete steps, clicks,
 and URLs the user should walk through to validate the change themselves.
 
+### Shared component workflow
+
+Conduit is the integration and visual-development host for the sibling
+`solid-components` repository. For component work:
+
+- Run `bash .devcontainer/solid-components.sh dev` to edit package source with
+  Conduit HMR at port 5173. Never copy package implementation into Conduit,
+  edit `node_modules`, or change the locked dependency during iteration.
+- Before returning a source monkey patch for manual interaction testing, run
+  `bash .devcontainer/solid-components.sh serve` so the production client and
+  backend are both served from Conduit's standard port 4310.
+- Diagnose with the smallest deterministic package or consumer check. Let the
+  user perform subjective interaction testing or provide a performance trace;
+  do not initiate broad exploratory Playwright or performance runs unless
+  requested.
+- Combine related component changes into one clean committed package candidate,
+  then run `bash .devcontainer/solid-components.sh preview` to serve its packed
+  artifact at port 4310. User approval seals that commit and payload.
+- After approval, make no implementation edits. Run
+  `bash .devcontainer/solid-components.sh promote <patch|minor|major>` to
+  publish and adopt the exact approved payload. Leave Conduit's manifest and
+  lockfile changes uncommitted until the complete Conduit suite passes.
+- Local component modes are managed state. Inspect them with `status`, leave
+  them with `registry`, and never run setup, build, restart, or deploy around
+  the workbench command.
+
 ## Style
 
 ES modules, two-space indent, semicolons, double quotes; `camelCase`

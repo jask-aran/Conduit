@@ -52,6 +52,35 @@ The managed server runs on port 4310; Vite runs on port 5173 in development
 mode. `setup`, `build`, `start`, `stop`, `status`, `logs`, and `deploy` are all
 available through the same launcher.
 
+### Develop solid-components in Conduit
+
+Use the sibling `solid-components` checkout as a live source dependency without
+changing Conduit's package manifest or lockfile:
+
+```bash
+bash .devcontainer/solid-components.sh dev
+```
+
+This HMR surface runs on port 5173. To rebuild the current package source into
+Conduit's normal production client and manually validate it on port 4310, run:
+
+```bash
+bash .devcontainer/solid-components.sh serve
+```
+
+When a clean committed candidate is ready, build and run its exact packed
+artifact at port 4310 for approval:
+
+```bash
+bash .devcontainer/solid-components.sh preview
+```
+
+After approval, `promote patch` verifies the sealed commit and payload,
+publishes it, installs the exact npm version in Conduit, and restarts port 4310.
+Use `status` to inspect the active mode and `registry` to discard a local mode.
+The checkout defaults to `../solid-components`; set
+`CONDUIT_SOLID_COMPONENTS_DIR` when it lives elsewhere.
+
 ## Deploy
 
 Conduit publishes a prebuilt Linux image to GHCR from every `main` commit. A
@@ -117,7 +146,7 @@ Detailed references:
   boundaries.
 - [Contributor contract](AGENTS.md) — invariants, development workflow, and
   verification requirements.
-- [Engineering distillations](docs/engineering/distillations.md) — retained
+- [Engineering distillations](references/distillations.md) — retained
   implementation decisions.
 
 ## Verify
