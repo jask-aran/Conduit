@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
   packages: write
 
 concurrency:
@@ -62,3 +62,17 @@ jobs:
             ${{ steps.image.outputs.name }}:latest
           provenance: mode=max
           sbom: true
+
+      - name: Create GitHub Release
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "$GITHUB_REF_NAME" --json name > /dev/null 2>&1; then
+            echo "Release $GITHUB_REF_NAME already exists — skipping creation"
+          else
+            gh release create "$GITHUB_REF_NAME" \
+              --generate-notes \
+              --verify-tag \
+              --latest
+          fi
