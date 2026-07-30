@@ -5,6 +5,7 @@ release/
 .deployment-evidence/
 coverage/
 *.log
+data/
 data/chat/files/
 data/pi/
 data/conduit.json
