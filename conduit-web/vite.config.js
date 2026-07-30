@@ -3,10 +3,16 @@ import solid from "vite-plugin-solid";
 import tailwindcss from "@tailwindcss/vite";
 import { VitePWA } from "vite-plugin-pwa";
 import path from "node:path";
+import { solidComponentsViteOptions } from "./scripts/solid-components-mode.mjs";
 
 export default defineConfig(() => {
   const serverPort = process.env.CONDUIT_PORT || "4310";
   const serverTarget = `http://127.0.0.1:${serverPort}`;
+  const solidComponents = solidComponentsViteOptions();
+  const aliases = [
+    ...(solidComponents?.aliases ?? []),
+    { find: "@", replacement: path.resolve(import.meta.dirname, "src") },
+  ];
   return {
     plugins: [
       solid(),
@@ -41,9 +47,18 @@ export default defineConfig(() => {
         devOptions: { enabled: false },
       }),
     ],
-    resolve: { alias: { "@": path.resolve(import.meta.dirname, "src") } },
+    resolve: {
+      alias: aliases,
+      dedupe: ["solid-js"],
+    },
+    optimizeDeps: solidComponents
+      ? { exclude: ["@jask-aran/solid-components"] }
+      : undefined,
     build: { outDir: "dist", emptyOutDir: true },
     server: {
+      fs: solidComponents
+        ? { allow: [import.meta.dirname, solidComponents.root] }
+        : undefined,
       proxy: {
         "/v0": { target: serverTarget, ws: true },
         "/healthz": serverTarget,

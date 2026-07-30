@@ -16,6 +16,12 @@ Add an entry only through an explicit `$conduit-tacit-knowledge` invocation and 
 - **Scope:** `MeteorShower` and any future timeline-driven decorative component with animation-end cleanup.
 - **Evidence:** Browsers reporting `prefers-reduced-motion: reduce` changed every meteor to `0.01ms`, immediately removing it. `test/browser/app.spec.js` now verifies that the supplied meteor duration survives under that preference.
 
+### Render long schedules as bounded live windows
+
+- **Rule:** Preserve a deterministic long-horizon schedule in the clock and data model, but render only the active events plus the next scheduled event. Record transient resize geometry without regenerating the live window; adopt it at a natural cycle boundary.
+- **Scope:** Timeline-driven visual components inside resizable Conduit surfaces, beginning with `DefaultMeteorShower`.
+- **Evidence:** Pre-rendering the ten-minute meteor forecast created 533 meteors and 533 tails; docked panel transitions then resized that entire animated scene, and a debounced forecast replacement produced a second blink and horizontal jump after the transition. The bounded `maxActive + 1` renderer with cycle-boundary geometry adoption passed deterministic package tests and manual 144 Hz validation with Conduit's original docked panels.
+
 ### Classify visual flicker with paired, narrow captures
 
 - **Rule:** Before adding a cache or changing lifecycle code, capture one interaction with a scoped DOM mutation observer and a Network filter for the implicated API. Use the DOM record to distinguish removal/remount from a state update, then correlate only the matching requests.
@@ -51,3 +57,15 @@ Add an entry only through an explicit `$conduit-tacit-knowledge` invocation and 
 - **Rule:** Never transition a CSS property while pointer input directly changes it. Put open/close animation on an inner presentation surface, keep the resize shell immediate and overflow-visible for its gutter, schedule pointer updates with `requestAnimationFrame`, and persist only when the gesture ends.
 - **Scope:** Resizable Solid surfaces, beginning with `WorkspacePanel` and its detail splitter. A visible panel surface may clip its contents; its edge-spanning resize target must not be clipped with them.
 - **Evidence:** The shared 160ms width transition was continuously retargeted during drag, causing cursor-to-panel lag; `overflow: hidden` cut the `left: -12px; width: 24px` workspace gutter in half. The focused browser workspace-panel test now rapidly drags the gutter and asserts the final width.
+
+### Treat local package overlays as volatile build inputs
+
+- **Rule:** When testing a local `solid-components` build in Conduit, use one dedicated overlay command that copies or aliases the exact candidate artifact, invalidates Vite/PWA output, and forces the managed rebuild/restart. Never run `npm ci`, setup, or deploy while the overlay is active; they restore the registry package.
+- **Scope:** Conduit's Vite resolution, managed server lifecycle, and local shared-component validation.
+- **Evidence:** Vite continued serving the 516-node 0.1.0 prebundle after replacing `dist`; `deploy` then ran `npm ci` and removed the working candidate.
+
+### Release only the approved consumer build
+
+- **Rule:** Keep a candidate untagged and unpublished until Conduit runs the exact locally built package and the user approves the interaction. After approval, release the same source commit and distributable payload without reimplementation.
+- **Scope:** Stable `solid-components` releases originating from Conduit integration work.
+- **Evidence:** Package tests alone did not establish consumer behavior, and stale caches initially kept Conduit on the previous renderer; approval became meaningful only after the packed candidate was verified at port 4310.
