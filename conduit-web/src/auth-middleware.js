@@ -7,7 +7,19 @@ const RATE_LIMIT_BASE_MS = 5_000;
 const RATE_LIMIT_CAP_MS = 5 * 60 * 1000;
 
 const UNAUTHENTICATED_API_PREFIXES = ["/v0/"];
-const UNAUTHENTICATED_EXACT = new Set(["/login", "/healthz"]);
+const UNAUTHENTICATED_EXACT = new Set([
+  "/login",
+  "/healthz",
+  "/favicon.svg",
+  "/pwa-192x192.png",
+  "/pwa-512x512.png",
+]);
+const UNAUTHENTICATED_PWA_PATTERNS = [
+  /^\/[^/]+\.webmanifest$/,
+  /^\/(?:sw|service-worker)\.js$/,
+  /^\/workbox-[^/]+\.js$/,
+  /^\/registerSW\.js$/,
+];
 
 function isLoopback(host) {
   return ["127.0.0.1", "::1", "localhost", "0:0:0:0:0:0:0:1", "localhost.localdomain"].includes(host);
@@ -65,9 +77,9 @@ function isBrowserNavigation(request) {
 }
 
 export function isAllowlistedPath(method, pathname) {
-  if (UNAUTHENTICATED_EXACT.has(pathname) && method === "GET") return true;
-  if (method === "POST" && pathname === "/v0/auth/login") return true;
-  return false;
+  if (method !== "GET") return method === "POST" && pathname === "/v0/auth/login";
+  if (UNAUTHENTICATED_EXACT.has(pathname)) return true;
+  return UNAUTHENTICATED_PWA_PATTERNS.some((pattern) => pattern.test(pathname));
 }
 
 // Login "after" targets are same-origin paths only: a leading slash covers
