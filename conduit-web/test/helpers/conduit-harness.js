@@ -200,11 +200,13 @@ export async function startConduitHarness({ env = {} } = {}) {
     },
     connectStream(liveId) {
       const messages = [];
+      const frames = [];
       const events = { listeners: new Set(), find: (predicate) => messages.find(predicate) };
       const socket = new WebSocket(`${origin.replace("http", "ws")}/v0/live-sessions/${liveId}/stream`);
       socket.on("message", (data) => {
         const event = JSON.parse(String(data));
         messages.push(event);
+        frames.push({ event, receivedAt: performance.now() });
         for (const listener of events.listeners) listener(event);
       });
       const opened = new Promise((resolve, reject) => {
@@ -214,6 +216,7 @@ export async function startConduitHarness({ env = {} } = {}) {
       const stream = {
         socket,
         messages,
+        frames,
         opened,
         next: (predicate = () => true, timeoutMs = 2_000) => deferredEvent(events, predicate, timeoutMs),
         close: () => socket.close(),

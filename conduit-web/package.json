@@ -12,6 +12,8 @@
     "dev:server": "node --watch src/server.js",
     "start": "node src/server.js",
     "test": "node --test test/*.test.js",
+    "test:harness": "node scripts/run-harness.mjs",
+    "test:harness:browser": "node scripts/run-browser-harness.mjs",
     "test:browser": "playwright test",
     "test:terminal-performance": "PERF=1 playwright test test/browser/terminal-performance.spec.js --project=desktop-chromium --workers=1",
     "test:terminal-performance:throttled": "PERF=1 PERF_CPU_RATE=4 playwright test test/browser/terminal-performance.spec.js --project=desktop-chromium --workers=1",

@@ -479,3 +479,41 @@ npx playwright test test/browser/pwa-mobile.spec.js
 
 Browser tests mock the API for deterministic desktop and mobile coverage and
 write screenshots and traces under `test-results/` only when a test fails.
+
+### Programmable transport harness
+
+The deterministic transport harness runs the production server against the
+controllable fake Pi, sends a prompt through the public live-session WebSocket,
+and emits a versioned JSON report. It does not use provider credentials or a
+production-only endpoint.
+
+```bash
+npm run test:harness -- \
+  --scenario streaming-baseline \
+  --profile steady \
+  --text "A deterministic streamed response"
+```
+
+Profiles are `steady`, `burst`, and seeded `jitter`. Use `--help` for cadence
+controls. Reports include scripted and delivered delta counts, prompt-to-first
+delta and completion latency, throughput, inter-frame percentiles, burst/stall
+counts, and final-content verification. The focused contract tests are:
+
+```bash
+node --test test/harness-scenarios.test.js
+```
+
+The deterministic browser layer drives the production Solid client through its
+public HTTP and WebSocket contracts and emits a second compact JSON report:
+
+```bash
+npm run test:harness:browser -- \
+  --scenario browser-streaming-baseline \
+  --profile burst \
+  --text "A browser-rendered deterministic response"
+```
+
+Its prompt-scoped measurements include WebSocket and visible-text cadence, DOM
+mutation count, animation-frame gap thresholds, Long Task observations, and
+final semantic text. Playwright startup output is separate from the JSON
+report; a non-zero exit means the report or its browser contract failed.
