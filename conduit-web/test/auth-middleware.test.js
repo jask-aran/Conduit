@@ -10,10 +10,21 @@ function mockConfig(host, allowInsecure = false) {
   return { host, allowInsecure };
 }
 
-test("isAllowlistedPath allows the login and healthz routes only", () => {
+test("isAllowlistedPath allows login, health and PWA bootstrap assets only", () => {
   assert.equal(isAllowlistedPath("GET", "/login"), true);
   assert.equal(isAllowlistedPath("POST", "/v0/auth/login"), true);
   assert.equal(isAllowlistedPath("GET", "/healthz"), true);
+  assert.equal(isAllowlistedPath("GET", "/manifest.webmanifest"), true);
+  assert.equal(isAllowlistedPath("GET", "/manifest-abc123.webmanifest"), true);
+  assert.equal(isAllowlistedPath("GET", "/sw.js"), true);
+  assert.equal(isAllowlistedPath("GET", "/service-worker.js"), true);
+  assert.equal(isAllowlistedPath("GET", "/workbox-abc123.js"), true);
+  assert.equal(isAllowlistedPath("GET", "/registerSW.js"), true);
+  assert.equal(isAllowlistedPath("GET", "/pwa-192x192.png"), true);
+  assert.equal(isAllowlistedPath("GET", "/pwa-512x512.png"), true);
+  assert.equal(isAllowlistedPath("GET", "/favicon.svg"), true);
+  assert.equal(isAllowlistedPath("POST", "/sw.js"), false);
+  assert.equal(isAllowlistedPath("GET", "/assets/app.js"), false);
   assert.equal(isAllowlistedPath("POST", "/v0/auth/logout"), false);
   assert.equal(isAllowlistedPath("GET", "/"), false);
   assert.equal(isAllowlistedPath("GET", "/v0/projects"), false);
