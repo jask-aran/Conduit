@@ -1,9 +1,13 @@
 import { expect, test } from "@playwright/test";
 import { createCadence } from "../helpers/streaming-scenario.js";
-import { runBrowserStreamingScenario } from "./helpers/streaming-performance.js";
+import {
+  runBrowserReconnectScenario,
+  runBrowserStreamingScenario,
+} from "./helpers/streaming-performance.js";
 
 test("a deterministic stream reports browser delivery and visible rendering cadence", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "desktop-chromium", "Performance baseline uses one controlled desktop browser.");
+  test.skip(process.env.HARNESS_FLOW === "reconnect", "Reconnect CLI selected the recovery contract.");
 
   const name = process.env.HARNESS_SCENARIO || "browser-steady-text";
   const text = process.env.HARNESS_TEXT || "One two three";
@@ -41,5 +45,32 @@ test("a deterministic stream reports browser delivery and visible rendering cade
   expect(report.browser.domMutationCount).toBeGreaterThan(0);
   expect(report.browser.frameGapMs.count).toBeGreaterThan(0);
   expect(report.browser.firstVisibleMs).toBeGreaterThanOrEqual(0);
+  expect(report.errors).toEqual([]);
+});
+
+test("a dropped stream reports reconnect recovery without duplicated output", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop-chromium", "Recovery baseline uses one controlled desktop browser.");
+  test.skip(Boolean(process.env.HARNESS_FLOW) && process.env.HARNESS_FLOW !== "reconnect", "Stream CLI selected the cadence contract.");
+
+  const initialText = process.env.HARNESS_INITIAL_TEXT || "Answer survives";
+  const recoveredDelta = process.env.HARNESS_RECOVERED_DELTA || " reconnect";
+  const report = await runBrowserReconnectScenario(page, {
+    name: process.env.HARNESS_SCENARIO || "browser-reconnect-answer",
+    initialText,
+    recoveredDelta,
+  });
+  await testInfo.attach("harness-report", {
+    body: Buffer.from(JSON.stringify(report, null, 2)),
+    contentType: "application/json",
+  });
+
+  expect(report.schemaVersion).toBe(1);
+  expect(report.mode).toBe("deterministic-browser-reconnect");
+  expect(report.browser.socketCount).toBe(2);
+  expect(report.browser.resumeCount).toBe(1);
+  expect(report.browser.recoveryMs).toBeGreaterThanOrEqual(0);
+  expect(report.browser.finalText).toBe(initialText + recoveredDelta);
+  expect(report.browser.duplicateCharacters).toBe(0);
+  expect(report.outcome).toBe("passed");
   expect(report.errors).toEqual([]);
 });

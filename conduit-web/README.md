@@ -517,3 +517,15 @@ Its prompt-scoped measurements include WebSocket and visible-text cadence, DOM
 mutation count, animation-frame gap thresholds, Long Task observations, and
 final semantic text. Playwright startup output is separate from the JSON
 report; a non-zero exit means the report or its browser contract failed.
+
+The same client harness can force a mid-answer socket loss, wait for the real
+reconnect path, provide a `generation_resume`, and verify recovery latency and
+that visible output converges without duplicated characters:
+
+```bash
+npm run test:harness:browser -- \
+  --flow reconnect \
+  --scenario browser-reconnect-answer \
+  --initial-text "Answer survives" \
+  --recovered-delta " reconnect"
+```

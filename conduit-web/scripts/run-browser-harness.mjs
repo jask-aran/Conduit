@@ -7,6 +7,7 @@ const HELP = `Usage: node scripts/run-browser-harness.mjs [options]
 Drive the production client with a deterministic stream and emit versioned JSON.
 
 Options:
+  --flow <stream|reconnect>         Browser flow to exercise (default: stream)
   --scenario <name>                 Reported scenario name (default: browser-streaming-baseline)
   --profile <steady|burst|jitter>   Source cadence profile (default: steady)
   --text <value>                    Scripted assistant output
@@ -17,6 +18,8 @@ Options:
   --min-delay-ms <number>           Minimum seeded jitter delay (default: 5)
   --max-delay-ms <number>           Maximum seeded jitter delay (default: 80)
   --seed <number>                   Reproducible jitter seed (default: 1)
+  --initial-text <value>            Text visible before a reconnect
+  --recovered-delta <value>         Delta delivered after generation resume
   --help                            Show this help
 `;
 
@@ -35,6 +38,7 @@ if (args.includes("--help")) {
 
 const environment = {
   ...process.env,
+  HARNESS_FLOW: valueAfter(args, "--flow", "stream"),
   HARNESS_SCENARIO: valueAfter(args, "--scenario", "browser-streaming-baseline"),
   HARNESS_PROFILE: valueAfter(args, "--profile", "steady"),
   HARNESS_TEXT: valueAfter(
@@ -49,6 +53,8 @@ const environment = {
   HARNESS_MIN_DELAY_MS: valueAfter(args, "--min-delay-ms", "5"),
   HARNESS_MAX_DELAY_MS: valueAfter(args, "--max-delay-ms", "80"),
   HARNESS_SEED: valueAfter(args, "--seed", "1"),
+  HARNESS_INITIAL_TEXT: valueAfter(args, "--initial-text", "Answer survives"),
+  HARNESS_RECOVERED_DELTA: valueAfter(args, "--recovered-delta", " reconnect"),
 };
 
 const cli = path.resolve("node_modules/@playwright/test/cli.js");
