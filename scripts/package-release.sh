@@ -27,7 +27,10 @@ trap cleanup EXIT
 
 mkdir -p "$BUNDLE" "$OUTPUT_DIR"
 git -C "$ROOT" archive --format=tar "$SHA" | tar -xf - -C "$BUNDLE"
-sed -i "s/^CONDUIT_RELEASE=.*/CONDUIT_RELEASE=$SHA/" "$BUNDLE/.env.example"
+sed -i \
+  -e "s/^CONDUIT_RELEASE=.*/CONDUIT_RELEASE=$SHA/" \
+  -e "s/^CONDUIT_DEPLOY_MODE=.*/CONDUIT_DEPLOY_MODE=build/" \
+  "$BUNDLE/.env.example"
 printf 'commit=%s\nversion=%s\n' "$SHA" "$VERSION" >"$BUNDLE/.conduit-release"
 
 tar --sort=name \
