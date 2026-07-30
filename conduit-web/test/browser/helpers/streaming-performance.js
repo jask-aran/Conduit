@@ -30,7 +30,7 @@ const project = {
 };
 
 async function installBrowserProtocol(page, scenario) {
-  await page.addInitScript(({ cadence }) => {
+  await page.addInitScript(({ cadence, reconnect }) => {
     const telemetry = {
       promptAt: null,
       completedAt: null,
@@ -40,6 +40,10 @@ async function installBrowserProtocol(page, scenario) {
       frames: [],
       longTasks: [],
       finalText: "",
+      socketCount: 0,
+      resumeCount: 0,
+      disconnectedAt: null,
+      resumedAt: null,
     };
     Object.defineProperty(window, "__conduitHarness", { configurable: true, value: telemetry });
 
@@ -87,20 +91,112 @@ async function installBrowserProtocol(page, scenario) {
       constructor() {
         super();
         this.readyState = 0;
+        telemetry.socketCount += 1;
+        this.instanceNumber = telemetry.socketCount;
         queueMicrotask(() => {
           this.readyState = HarnessWebSocket.OPEN;
           this.dispatchEvent(new Event("open"));
+          if (reconnect && telemetry.socketCount === 2) {
+            const generation = {
+              id: "g1",
+              status: "running",
+              assistantMessages: [{
+                id: "m1",
+                status: "streaming",
+                stopReason: null,
+                errorMessage: null,
+                blocks: [{
+                  type: "text",
+                  contentIndex: 0,
+                  identity: "g1:m1:0",
+                  status: "streaming",
+                  text: reconnect.initialText,
+                }],
+              }],
+              toolExecutions: {},
+              retry: null,
+              error: null,
+              lastSeq: 4,
+            };
+            telemetry.resumeCount += 1;
+            telemetry.resumedAt = performance.now();
+            this.emit({ type: "generation_resume", generationId: "g1", seq: 4, generation });
+            setTimeout(() => {
+              this.emit({
+                type: "content_block_delta",
+                generationId: "g1",
+                seq: 5,
+                messageId: "m1",
+                blockType: "text",
+                contentIndex: 0,
+                delta: reconnect.recoveredDelta,
+              });
+              const finalText = reconnect.initialText + reconnect.recoveredDelta;
+              this.emit({
+                type: "content_block_completed",
+                generationId: "g1",
+                seq: 6,
+                messageId: "m1",
+                block: { type: "text", contentIndex: 0, text: finalText },
+              });
+              this.emit({
+                type: "assistant_message_completed",
+                generationId: "g1",
+                seq: 7,
+                messageId: "m1",
+                blocks: [{ type: "text", contentIndex: 0, text: finalText }],
+                stopReason: "stop",
+                errorMessage: null,
+                usage: null,
+              });
+              this.emit({ type: "generation_settled", generationId: "g1", seq: 8 });
+              telemetry.completedAt = performance.now();
+              requestAnimationFrame(() => requestAnimationFrame(() => { observing = false; }));
+            }, reconnect.recoveredDelayMs);
+          }
         });
       }
 
+      emit(event) {
+        this.onmessage?.({ data: JSON.stringify(event) });
+      }
+
       close() {
+        if (this.readyState === 3) return;
         this.readyState = 3;
+        this.dispatchEvent(new Event("close"));
       }
 
       send(raw) {
         const command = JSON.parse(String(raw));
         if (command.type !== "prompt") return;
         telemetry.promptAt = performance.now();
+        if (reconnect && this.instanceNumber === 1) {
+          queueMicrotask(() => {
+            this.emit({ type: "generation_started", generationId: "g1", seq: 1 });
+            this.emit({ type: "assistant_message_started", generationId: "g1", seq: 2, messageId: "m1" });
+            this.emit({
+              type: "content_block_started",
+              generationId: "g1",
+              seq: 3,
+              messageId: "m1",
+              block: { type: "text", contentIndex: 0 },
+            });
+            this.emit({
+              type: "content_block_delta",
+              generationId: "g1",
+              seq: 4,
+              messageId: "m1",
+              blockType: "text",
+              contentIndex: 0,
+              delta: reconnect.initialText,
+            });
+            telemetry.disconnectedAt = performance.now();
+            this.close();
+          });
+          return;
+        }
+        if (reconnect) return;
         let sequence = 0;
         const emit = (event) => this.onmessage?.({
           data: JSON.stringify({ ...event, generationId: "g1", seq: ++sequence }),
@@ -171,7 +267,10 @@ async function installBrowserProtocol(page, scenario) {
       }
     }
     Object.defineProperty(window, "EventSource", { configurable: true, value: HarnessEventSource });
-  }, { cadence: scenario.cadence });
+  }, {
+    cadence: scenario.cadence || { delaysMs: [], deltas: [] },
+    reconnect: scenario.reconnect || null,
+  });
 
   await page.route("**/v0/**", async (route) => {
     const request = route.request();
@@ -315,6 +414,56 @@ export async function runBrowserStreamingScenario(page, scenario) {
       longTaskCount: scopedLongTasks.length,
       longestTaskMs: Math.max(0, ...scopedLongTasks.map((entry) => entry.duration)),
       finalText: raw.finalText,
+    },
+    errors,
+    artifacts: [],
+  };
+}
+
+export async function runBrowserReconnectScenario(page, scenario) {
+  const startedAt = new Date().toISOString();
+  const browserErrors = [];
+  page.on("pageerror", (error) => browserErrors.push(error.message));
+  page.on("console", (message) => {
+    if (message.type() === "error" && !message.text().startsWith("Failed to load resource:")) browserErrors.push(message.text());
+  });
+  await installBrowserProtocol(page, {
+    reconnect: {
+      initialText: scenario.initialText,
+      recoveredDelta: scenario.recoveredDelta,
+      recoveredDelayMs: scenario.recoveredDelayMs ?? 20,
+    },
+  });
+  await page.goto("/");
+  await page.getByRole("textbox", { name: "Message Pi" }).fill(scenario.prompt || `Run ${scenario.name}`);
+  await page.getByRole("button", { name: "Send message" }).click();
+  const expectedText = scenario.initialText + scenario.recoveredDelta;
+  await page.waitForFunction(() => window.__conduitHarness?.socketCount === 2);
+  await page.waitForFunction((text) => window.__conduitHarness?.finalText === text, expectedText, {
+    timeout: 5_000,
+  });
+
+  const raw = await page.evaluate(() => window.__conduitHarness);
+  const renderedCharacters = raw.visibleIncrements
+    .reduce((total, increment) => total + increment.characters, 0);
+  const errors = [...browserErrors];
+  if (raw.finalText !== expectedText) errors.push("Visible assistant text did not converge after reconnect");
+  if (raw.socketCount !== 2) errors.push(`Expected two sockets, observed ${raw.socketCount}`);
+  if (raw.resumeCount !== 1) errors.push(`Expected one generation resume, observed ${raw.resumeCount}`);
+
+  return {
+    schemaVersion: 1,
+    scenario: scenario.name,
+    mode: "deterministic-browser-reconnect",
+    target: "playwright-production-client",
+    startedAt,
+    outcome: errors.length ? "failed" : "passed",
+    browser: {
+      socketCount: raw.socketCount,
+      resumeCount: raw.resumeCount,
+      recoveryMs: raw.resumedAt - raw.disconnectedAt,
+      finalText: raw.finalText,
+      duplicateCharacters: Math.max(0, renderedCharacters - expectedText.length),
     },
     errors,
     artifacts: [],
