@@ -54,21 +54,33 @@ available through the same launcher.
 
 ## Deploy
 
-Conduit has a Docker-native deployment for Linux hosts with Docker Engine and
-the Compose plugin. It runs as an unprivileged, read-only application image;
-only the durable application data and Workspace roots are writable.
+Conduit publishes a prebuilt Linux image to GHCR from every `main` commit. A
+VPS needs Docker Engine with the Compose plugin, but does not need Git, Node.js,
+npm, Pi, the repository checkout, or enough resources to compile Conduit.
+
+Run the clone-free installer from an ordinary VPS user account:
 
 ```bash
-git clone https://github.com/jask-aran/Conduit.git conduit
-cd conduit
-./scripts/deploy.sh up
+curl -fsSLo /tmp/conduit-install.sh \
+  https://raw.githubusercontent.com/jask-aran/Conduit/main/scripts/install.sh
+bash /tmp/conduit-install.sh
 ```
 
-The first run creates local configuration, prompts for the Conduit password,
-and binds to `127.0.0.1:4310`. Put a TLS reverse proxy or Tailscale Serve in
-front of that loopback address. Read [deployment operations](docs/operations/deployment.md)
-before a real deployment: it defines the mount layout, upgrades, exact-release
-archives, backup/restore, and the intentionally unsupported Host Pi boundary.
+The installer downloads only the deployment files into `~/conduit`. The first
+run creates persistent data and Workspace directories, pulls
+`ghcr.io/jask-aran/conduit:latest`, prompts for the Conduit password, and starts
+the container at `http://PUBLIC_IP` on host port 80.
+
+Subsequent upgrades are:
+
+```bash
+~/conduit/scripts/deploy.sh restart
+```
+
+Set `CONDUIT_DEPLOY_MODE=build` in `.env` only when working from a complete
+source checkout and deliberately building locally. Read [deployment operations](docs/operations/deployment.md)
+for the mount layout, release pinning, backup/restore, and the intentionally
+unsupported Host Pi boundary.
 
 ## How it is built
 
