@@ -1,0 +1,8 @@
+services:
+  conduit:
+    image: "conduit:${CONDUIT_RELEASE:-development}"
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        CONDUIT_RELEASE: "${CONDUIT_RELEASE:-development}"
