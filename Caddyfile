@@ -1,0 +1,4 @@
+{$CONDUIT_DOMAIN} {
+	encode zstd gzip
+	reverse_proxy conduit:4310
+}

@@ -13,15 +13,39 @@ require() {
   }
 }
 
-require curl
+install_docker() {
+  if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then
+    return
+  fi
 
-if ! command -v docker >/dev/null 2>&1 || ! docker compose version >/dev/null 2>&1; then
-  cat >&2 <<'EOF'
-Docker Engine with the Compose plugin is required.
-Install Docker using your VPS image or provider instructions, then rerun this command.
+  if [[ "${EUID:-$(id -u)}" -ne 0 ]]; then
+    cat >&2 <<'EOF'
+Docker is not installed or is not usable by this account.
+Run this installer from the VPS provider's root console, or install Docker first.
 EOF
-  exit 1
-fi
+    exit 1
+  fi
+
+  command -v apt-get >/dev/null 2>&1 || {
+    echo "Automatic Docker installation currently supports Debian and Ubuntu hosts." >&2
+    exit 1
+  }
+
+  echo "Installing Docker Engine and Compose..."
+  apt-get update
+  if ! DEBIAN_FRONTEND=noninteractive apt-get install -y docker.io docker-compose-v2 ca-certificates curl; then
+    DEBIAN_FRONTEND=noninteractive apt-get install -y docker.io docker-compose-plugin ca-certificates curl
+  fi
+  systemctl enable --now docker 2>/dev/null || service docker start
+
+  docker compose version >/dev/null 2>&1 || {
+    echo "Docker installed, but the Compose plugin is unavailable." >&2
+    exit 1
+  }
+}
+
+require curl
+install_docker
 
 mkdir -p "$INSTALL_DIR/scripts"
 
@@ -33,6 +57,7 @@ fetch() {
 }
 
 fetch compose.yaml
+fetch Caddyfile
 fetch .env.example
 fetch scripts/deploy.sh
 fetch scripts/backup.sh
