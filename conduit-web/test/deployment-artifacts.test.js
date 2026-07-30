@@ -27,7 +27,8 @@ test("Compose mounts the complete durable contract without host privileges", asy
   assert.match(compose, /target: \/workspaces/);
   assert.match(compose, /CONDUIT_DATA_ROOT: \/data/);
   assert.match(compose, /CONDUIT_WORKSPACE_ALLOWLIST: \/workspaces/);
-  assert.match(compose, /\$\{CONDUIT_BIND_ADDRESS:-127\.0\.0\.1\}/);
+  assert.match(compose, /\$\{CONDUIT_BIND_ADDRESS:-0\.0\.0\.0\}/);
+  assert.match(compose, /\$\{CONDUIT_PORT:-80\}:4310/);
   assert.doesNotMatch(compose, /docker\.sock|privileged:/);
 });
 
