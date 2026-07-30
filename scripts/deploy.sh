@@ -9,13 +9,13 @@ usage() {
   printf '%s\n' \
     "Usage: ./scripts/deploy.sh [up|restart|auth|down|status|logs|config]" \
     "" \
-    "up        Prepare directories, pull the selected image, provision auth when" \
-    "          absent, and start Conduit (default)." \
-    "restart   Pull and replace the running container without changing data." \
+    "up        Prepare directories, configure the hostname, provision auth when" \
+    "          absent, pull images, and start Conduit with automatic HTTPS." \
+    "restart   Pull and replace the running containers without changing data." \
     "auth      Set or replace the Conduit login password." \
-    "down      Stop and remove the application container." \
-    "status    Show the container and health state." \
-    "logs      Follow application logs." \
+    "down      Stop and remove the deployment containers." \
+    "status    Show container and health state." \
+    "logs      Follow deployment logs." \
     "config    Render the resolved Compose configuration."
 }
 
@@ -55,10 +55,45 @@ prepare_env() {
 
 load_env() {
   set -a
-  # .env is deployment configuration owned by the operator.
   # shellcheck disable=SC1090
   source "$ENV_FILE"
   set +a
+}
+
+set_env_value() {
+  local key="$1" value="$2"
+  if grep -q "^${key}=" "$ENV_FILE"; then
+    sed -i "s|^${key}=.*|${key}=${value}|" "$ENV_FILE"
+  else
+    printf '\n%s=%s\n' "$key" "$value" >> "$ENV_FILE"
+  fi
+}
+
+read_tty() {
+  local prompt="$1" value
+  if [[ -r /dev/tty ]]; then
+    read -r -p "$prompt" value </dev/tty
+  else
+    read -r -p "$prompt" value
+  fi
+  printf '%s' "$value"
+}
+
+prepare_domain() {
+  load_env
+  local domain="${CONDUIT_DOMAIN:-}"
+  if [[ -z "$domain" || "$domain" == "conduit.example.com" ]]; then
+    domain="$(read_tty 'Public hostname (for example conduit.example.com): ')"
+  fi
+  domain="${domain#http://}"
+  domain="${domain#https://}"
+  domain="${domain%%/*}"
+  if [[ ! "$domain" =~ ^([A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?\.)+[A-Za-z]{2,}$ ]]; then
+    echo "Enter a valid public hostname whose DNS already points to this server." >&2
+    exit 1
+  fi
+  set_env_value CONDUIT_DOMAIN "${domain,,}"
+  load_env
 }
 
 host_path() {
@@ -91,7 +126,7 @@ prepare_release() {
   load_env
   case "${CONDUIT_DEPLOY_MODE:-image}" in
     image)
-      compose pull conduit
+      compose pull
       ;;
     build)
       [[ -f "$ROOT/compose.build.yaml" && -f "$ROOT/Dockerfile" ]] || {
@@ -101,6 +136,7 @@ prepare_release() {
       sed -i "s/^CONDUIT_RELEASE=.*/CONDUIT_RELEASE=$(release_id)/" "$ENV_FILE"
       load_env
       compose build --pull conduit
+      compose pull caddy
       ;;
     *)
       echo "CONDUIT_DEPLOY_MODE must be 'image' or 'build'." >&2
@@ -111,12 +147,12 @@ prepare_release() {
 
 set_password() {
   local password confirmation
-  if [[ -t 0 ]]; then
-    read -r -s -p "New password: " password
-    printf '\n'
+  if [[ -r /dev/tty ]]; then
+    read -r -s -p "New password: " password </dev/tty
+    printf '\n' >/dev/tty
     [[ -n "$password" ]] || { echo "Password cannot be empty." >&2; exit 1; }
-    read -r -s -p "Confirm password: " confirmation
-    printf '\n'
+    read -r -s -p "Confirm password: " confirmation </dev/tty
+    printf '\n' >/dev/tty
     [[ "$password" == "$confirmation" ]] || { echo "Passwords do not match." >&2; exit 1; }
   else
     IFS= read -r password || true
@@ -127,19 +163,7 @@ set_password() {
 
 show_access_url() {
   load_env
-  local bind_address="${CONDUIT_BIND_ADDRESS:-0.0.0.0}"
-  local port="${CONDUIT_PORT:-80}"
-  if [[ "$bind_address" == "0.0.0.0" ]]; then
-    if [[ "$port" == "80" ]]; then
-      echo "Open Conduit at http://<server-public-ip>"
-    else
-      echo "Open Conduit at http://<server-public-ip>:$port"
-    fi
-  elif [[ "$port" == "80" ]]; then
-    echo "Conduit is listening at http://$bind_address"
-  else
-    echo "Conduit is listening at http://$bind_address:$port"
-  fi
+  echo "Open Conduit at https://${CONDUIT_DOMAIN}"
 }
 
 if [[ "$COMMAND" == "help" || "$COMMAND" == "-h" || "$COMMAND" == "--help" ]]; then
@@ -149,7 +173,7 @@ fi
 
 require_docker
 prepare_env
-load_env
+prepare_domain
 
 case "$COMMAND" in
   up)
@@ -157,7 +181,7 @@ case "$COMMAND" in
     prepare_release
     auth_file="$(host_path "${CONDUIT_DATA_DIR:-./data}")/auth.json"
     if [[ ! -s "$auth_file" ]]; then
-      echo "Conduit needs its single-user login password."
+      echo "Set the single-user Conduit login password."
       set_password
     fi
     compose up -d --remove-orphans
@@ -180,7 +204,7 @@ case "$COMMAND" in
     ;;
   down) compose down ;;
   status) compose ps ;;
-  logs) compose logs --follow conduit ;;
+  logs) compose logs --follow ;;
   config) compose config ;;
   *)
     echo "Unknown command: $COMMAND" >&2
