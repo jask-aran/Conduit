@@ -2,8 +2,8 @@ name: Publish container image
 
 on:
   push:
-    branches:
-      - main
+    tags:
+      - "v*"
   workflow_dispatch:
 
 permissions:
@@ -11,7 +11,7 @@ permissions:
   packages: write
 
 concurrency:
-  group: publish-container-main
+  group: publish-container-${{ github.ref }}
   cancel-in-progress: false
 
 env:
@@ -23,9 +23,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set image name
+      - name: Set image metadata
         id: image
-        run: echo "name=${REGISTRY}/${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+        shell: bash
+        run: |
+          echo "name=${REGISTRY}/${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+          if [[ "$GITHUB_REF_TYPE" == "tag" ]]; then
+            echo "release=$GITHUB_REF_NAME" >> "$GITHUB_OUTPUT"
+          else
+            echo "release=manual-${GITHUB_SHA::12}" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -44,10 +51,13 @@ jobs:
           push: true
           platforms: linux/amd64
           build-args: |
-            CONDUIT_RELEASE=${{ github.sha }}
+            CONDUIT_RELEASE=${{ steps.image.outputs.release }}
           labels: |
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.version=${{ steps.image.outputs.release }}
+            org.opencontainers.image.revision=${{ github.sha }}
           tags: |
+            ${{ steps.image.outputs.name }}:${{ steps.image.outputs.release }}
             ${{ steps.image.outputs.name }}:sha-${{ github.sha }}
             ${{ steps.image.outputs.name }}:latest
           provenance: mode=max
