@@ -18,8 +18,10 @@ test("production image is pinned, unprivileged, read-only compatible, and self-c
   assert.doesNotMatch(dockerfile, /:latest/);
 });
 
-test("Compose mounts the complete durable contract without host privileges", async () => {
+test("Compose pulls GHCR by default and mounts the complete durable contract", async () => {
   const compose = await fs.readFile(path.join(root, "compose.yaml"), "utf8");
+  assert.match(compose, /ghcr\.io\/jask-aran\/conduit/);
+  assert.doesNotMatch(compose, /^\s+build:/m);
   assert.match(compose, /read_only: true/);
   assert.match(compose, /no-new-privileges:true/);
   assert.match(compose, /cap_drop:\n\s+- ALL/);
@@ -30,6 +32,20 @@ test("Compose mounts the complete durable contract without host privileges", asy
   assert.match(compose, /\$\{CONDUIT_BIND_ADDRESS:-0\.0\.0\.0\}/);
   assert.match(compose, /\$\{CONDUIT_PORT:-80\}:4310/);
   assert.doesNotMatch(compose, /docker\.sock|privileged:/);
+});
+
+test("source builds are an explicit Compose override", async () => {
+  const override = await fs.readFile(path.join(root, "compose.build.yaml"), "utf8");
+  assert.match(override, /^\s+build:/m);
+  assert.match(override, /dockerfile: Dockerfile/);
+});
+
+test("clone-free installer downloads only deployment artifacts", async () => {
+  const installer = await fs.readFile(path.join(root, "scripts/install.sh"), "utf8");
+  assert.match(installer, /raw\.githubusercontent\.com/);
+  assert.match(installer, /fetch compose\.yaml/);
+  assert.match(installer, /exec \.\/scripts\/deploy\.sh up/);
+  assert.doesNotMatch(installer, /git clone/);
 });
 
 test("deployment and exact-commit packaging scripts remain executable", async () => {
