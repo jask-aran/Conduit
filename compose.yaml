@@ -30,7 +30,7 @@ services:
       CONDUIT_RELEASE: "${CONDUIT_RELEASE:-development}"
       ENABLE_PARTIAL_CONTINUE: "${ENABLE_PARTIAL_CONTINUE:-true}"
     ports:
-      - "${CONDUIT_BIND_ADDRESS:-127.0.0.1}:${CONDUIT_PORT:-4310}:4310"
+      - "${CONDUIT_BIND_ADDRESS:-0.0.0.0}:${CONDUIT_PORT:-80}:4310"
     volumes:
       - type: bind
         source: "${CONDUIT_DATA_DIR:-./data}"
