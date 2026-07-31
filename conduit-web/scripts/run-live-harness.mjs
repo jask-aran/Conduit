@@ -132,7 +132,7 @@ async function runLiveMeasurement(configuration, prompt) {
     throw new Error("Target health check failed with HTTP " + health.response.status);
   }
   const release = String(health.body.release || "");
-  if (!/^[0-9a-f]{7,40}$/i.test(release)) {
+  if (!/^[0-9a-f]{40}$/i.test(release)) {
     throw new Error("Target health response did not identify an immutable release");
   }
 
