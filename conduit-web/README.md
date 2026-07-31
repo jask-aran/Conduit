@@ -533,3 +533,43 @@ npm run test:harness:browser -- \
   --initial-text "Answer survives" \
   --recovered-delta " reconnect"
 ```
+
+### Live transport measurements
+
+`npm run perf:live` is the explicit cost-bearing runner. It targets one
+dedicated performance chat through the normal password login, live-session HTTP
+route, and authenticated WebSocket; it never adds a production test endpoint.
+The target must expose a full commit SHA as `GET /healthz` `release`, and the
+report records that release, target, runtime/model settings, prompt-to-first
+delta, completion, delivery gaps, output hashes, and persisted-content parity.
+Prompts and passwords stay in environment variables or an ignored prompt file;
+they are never written to report JSON.
+
+Validate configuration without network access or provider cost:
+
+```bash
+npm run perf:live -- \
+  --dry-run \
+  --target vps-edge \
+  --origin https://conduit.example.com \
+  --chat-id <dedicated-performance-chat-id>
+```
+
+After creating or selecting a dedicated `Performance Tests` chat and deciding
+the exact release/model/settings to measure, load secrets outside shell history
+and run one sample explicitly:
+
+```bash
+export CONDUIT_PERF_PASSWORD='loaded-from-a-protected-secret'
+export CONDUIT_PERF_PROMPT='Use the standard streaming baseline prompt.'
+npm run perf:live -- \
+  --target vps-edge \
+  --origin https://conduit.example.com \
+  --chat-id <dedicated-performance-chat-id>
+unset CONDUIT_PERF_PASSWORD CONDUIT_PERF_PROMPT
+```
+
+The runner bounds each generation to 60 seconds and 200,000 streamed
+characters by default. It refuses an active generation, a missing immutable
+release, or a missing authentication secret; it leaves the chat and process in
+their normal server-owned state for inspection and does not delete live data.
