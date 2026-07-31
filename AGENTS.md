@@ -1,12 +1,14 @@
 # Repository Guidelines
 
 This file is the working contract for contributors and coding agents: hard
-invariants, verification constraints, and steering. It deliberately does not
+invariants, operational constraints, and steering. It deliberately does not
 repeat reference documentation:
 
-- `README.md` — product, architecture, data model, interface reference, setup,
-  and the verification procedure (single-suite invocations, trace inspection).
+- `README.md` — product, architecture, data model, interface reference and
+  setup.
   Read the section covering the area you touch before changing it.
+- `docs/operations/testing.md` — test selection, commands, seams, local/VPS
+  boundaries and evidence requirements for every testing approach.
 - `conduit-web/README.md` — runtime model, HTTP API, auth mechanism, process
   residency and caps, and the live-session WebSocket protocol (a contract: keep
   changes additive and update that section in the same change).
@@ -31,7 +33,7 @@ that alters behavior they describe.
 ## Hard invariants
 
 - Keep Git history operations scoped and intentional: stage only relevant files,
-  record verification in non-trivial commits, and do not publish unrelated work.
+  record checks in non-trivial commits, and do not publish unrelated work.
 - Pi JSONL is the authoritative transcript; `data/sessions.json` is a
   lightweight registry and `data/conduit.json` the project catalog. Never
   duplicate ownership across them, and never let two Pi processes write the
@@ -48,8 +50,8 @@ that alters behavior they describe.
   canonical `cwd` in each JSONL header, never the lossy encoded directory name.
 - Keep Isolated Pi and Host Pi scopes separate: runtime-aware model APIs must
   never expose one installation's models or settings to the other's chats.
-- Isolated and Host Pi must stay compatible at their shared RPC contract.
-  Verify protocol changes against the locally pinned
+- Isolated and Host Pi must stay compatible at their shared RPC contract. Check
+  protocol changes against the locally pinned
   `@earendil-works/pi-coding-agent` version, not against upstream docs.
 - Destructive operations (chat/project delete, process stop before delete)
   require interface confirmation and must stop matching live processes first.
@@ -93,50 +95,12 @@ Rendering stability (hard-won — do not regress):
 - No `content-visibility` or intrinsic-size placeholders on elements in
   initial scroll math.
 
-## Build, test, and verify
+## Testing guidance
 
-Always start or restart the local server from the repository root with:
-
-```bash
-bash .devcontainer/start-conduit.sh restart
-```
-
-It rebuilds when needed and owns the PID/log on port 4310. Never launch
-`node src/server.js`, `npm run start`, `dev:server`, or Vite directly; use
-`bash .devcontainer/start-conduit.sh dev` for the managed server watcher plus
-Vite on port 5173.
-
-### WSL candidate validation
-
-For a candidate worktree under `/tmp` that must be opened from Windows, start
-it from that worktree with its own runtime state and the existing protected
-auth file:
-
-```bash
-CONDUIT_HOST=0.0.0.0 \
-CONDUIT_STATE_DIR=/tmp/conduit-candidate-state \
-CONDUIT_AUTH_FILE=/home/jask/Conduit/data/auth.json \
-bash .devcontainer/start-conduit.sh restart
-```
-
-Windows reaches this through `http://localhost:4310`. `CONDUIT_HOST=0.0.0.0`
-is needed for WSL-to-Windows forwarding; it does not relax the password
-requirement. Confirm the listener and process path before testing so a main
-checkout server is not being mistaken for the candidate.
-
-Before committing, run the complete suite from `conduit-web/`: `npm run
-typecheck`, `npm test`, `npm run build`, and `npm run test:browser`. CI does not
-repeat the test suites, so an unrun suite is an unverified change. Treat bundle
-budget increases as reviewed architectural changes. Every behavior change
-requires focused coverage: server tests are `test/*.test.js` under `node:test`,
-browser specs live in `test/browser/` and mock the API unless the server
-boundary itself is under test. `README.md` § Verification has the single-suite
-and trace-inspection commands.
-
-Before returning to the user for manual testing, run the restart command above
-so the running server reflects your change. Every user-facing change must end
-with a manual smoketest checklist in your report: the concrete steps, clicks,
-and URLs the user should walk through to validate the change themselves.
+Before testing or reviewing the server, web UI, local server, candidate build,
+release artifact or VPS deployment, read `docs/operations/testing.md`. It is
+the single reference for approach selection, commands, safety boundaries and
+evidence.
 
 ### Shared component workflow
 
@@ -146,11 +110,11 @@ Conduit is the integration and visual-development host for the sibling
 - Run `bash .devcontainer/solid-components.sh dev` to edit package source with
   Conduit HMR at port 5173. Never copy package implementation into Conduit,
   edit `node_modules`, or change the locked dependency during iteration.
-- Before returning a source monkey patch for manual interaction testing, run
+- Before returning a source monkey patch for manual interaction, run
   `bash .devcontainer/solid-components.sh serve` so the production client and
   backend are both served from Conduit's standard port 4310.
 - Diagnose with the smallest deterministic package or consumer check. Let the
-  user perform subjective interaction testing or provide a performance trace;
+  user perform subjective interaction or provide a performance trace;
   do not initiate broad exploratory Playwright or performance runs unless
   requested.
 - Combine related component changes into one clean committed package candidate,
