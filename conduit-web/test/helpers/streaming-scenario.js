@@ -44,6 +44,9 @@ export function createCadence(profile, options = {}) {
       deltas,
     };
   }
+  if (profile === "high-tps") {
+    return { delaysMs: deltas.map(() => 0), deltas };
+  }
   if (profile === "jitter") {
     const minDelayMs = Math.max(0, Number(options.minDelayMs) || 5);
     const maxDelayMs = Math.max(minDelayMs, Number(options.maxDelayMs) || 80);
@@ -123,7 +126,10 @@ export async function runDeterministicStreamingScenario(scenario) {
     const launchResponse = await launchRequest;
     if (!launchResponse.ok) throw new Error(`Could not launch deterministic scenario: ${launchResponse.status}`);
     const live = await launchResponse.json();
-    const stream = harness.connectStream(live.id);
+    const stream = harness.connectStream(live.id, {
+      pauseAfterDelta: scenario.clientPauseAfterDelta,
+      pauseMs: scenario.clientPauseMs,
+    });
     await stream.opened;
     await stream.next((event) => event.type === "runtime_state");
 
@@ -210,6 +216,8 @@ export async function runDeterministicStreamingScenario(scenario) {
         sourceStallCount: scenario.cadence.delaysMs.slice(1).filter((delay) => delay > 100).length,
         sourceStallMs: Math.max(0, ...scenario.cadence.delaysMs.slice(1).filter((delay) => delay > 100)),
         sourceGapsOver100Ms: scenario.cadence.delaysMs.slice(1).filter((delay) => delay > 100).length,
+        clientPauseMs: stream.clientPauseMs,
+        clientPauseRecovered: stream.clientPauseRecovered,
         deliveredDeltaCount: deltaFrames.length,
         deliveredCharacters: deliveredText.length,
         charactersPerSecond: completionMs > 0 ? sourceCharacters / (completionMs / 1_000) : null,

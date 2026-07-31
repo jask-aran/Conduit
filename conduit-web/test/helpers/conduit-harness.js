@@ -198,15 +198,31 @@ export async function startConduitHarness({ env = {} } = {}) {
     async runtime() {
       return (await (await request("/v0/runtime")).json()).sessions;
     },
-    connectStream(liveId) {
+    connectStream(liveId, { pauseAfterDelta = null, pauseMs = 0 } = {}) {
       const messages = [];
       const frames = [];
       const events = { listeners: new Set(), find: (predicate) => messages.find(predicate) };
       const socket = new WebSocket(`${origin.replace("http", "ws")}/v0/live-sessions/${liveId}/stream`);
+      let deltaCount = 0;
+      let pauseStartedAt = null;
+      let clientPauseMs = null;
+      let clientPauseRecovered = false;
       socket.on("message", (data) => {
         const event = JSON.parse(String(data));
         messages.push(event);
         frames.push({ event, receivedAt: performance.now() });
+        if (event.type === "content_block_delta") {
+          deltaCount += 1;
+          if (pauseAfterDelta != null && deltaCount === pauseAfterDelta && pauseMs > 0 && socket._socket) {
+            pauseStartedAt = performance.now();
+            socket._socket.pause();
+            setTimeout(() => {
+              socket._socket.resume();
+              clientPauseMs = performance.now() - pauseStartedAt;
+              clientPauseRecovered = true;
+            }, pauseMs);
+          }
+        }
         for (const listener of events.listeners) listener(event);
       });
       const opened = new Promise((resolve, reject) => {
@@ -217,6 +233,8 @@ export async function startConduitHarness({ env = {} } = {}) {
         socket,
         messages,
         frames,
+        get clientPauseMs() { return clientPauseMs; },
+        get clientPauseRecovered() { return clientPauseRecovered; },
         opened,
         next: (predicate = () => true, timeoutMs = 2_000) => deferredEvent(events, predicate, timeoutMs),
         close: () => socket.close(),
