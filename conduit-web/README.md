@@ -494,10 +494,12 @@ npm run test:harness -- \
   --text "A deterministic streamed response"
 ```
 
-Transport profiles are `steady`, `burst`, `stall`, and seeded `jitter`; `stall`
+Transport profiles are `steady`, `burst`, `stall`, `high-tps`, and seeded `jitter`; `stall`
 inserts one intentional 300 ms source gap by default and accepts
-`--stall-after` and `--stall-ms`. Use `--help` for cadence controls. Reports
-include scripted and delivered delta counts, prompt-to-first
+`--stall-after` and `--stall-ms`. `high-tps` emits zero-delay deltas and can be
+combined with `--client-pause-after` and `--client-pause-ms` to pause the
+WebSocket reader while the server continues sending. Use `--help` for cadence
+controls. Reports include scripted and delivered delta counts, prompt-to-first
 delta and completion latency, throughput, inter-frame percentiles, burst/stall
 counts, and final-content verification. The focused contract tests are:
 

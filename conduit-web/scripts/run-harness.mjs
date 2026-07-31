@@ -7,7 +7,7 @@ Run one deterministic Conduit transport scenario and emit versioned JSON.
 
 Options:
   --scenario <name>                 Reported scenario name (default: streaming-baseline)
-  --profile <steady|burst|stall|jitter> Source cadence profile (default: steady)
+  --profile <steady|burst|stall|high-tps|jitter> Source cadence profile (default: steady)
   --text <value>                    Scripted assistant output
   --chunk-size <number>             Characters per source delta (default: 3)
   --interval-ms <number>            Steady inter-delta delay (default: 16)
@@ -15,6 +15,8 @@ Options:
   --burst-interval-ms <number>      Delay between bursts (default: 128)
   --stall-after <number>            Deltas before the intentional stall (default: 4)
   --stall-ms <number>               Intentional stall duration (default: 300)
+  --client-pause-after <number>     Pause the WebSocket reader after this delta
+  --client-pause-ms <number>        Pause duration for the slow-reader probe
   --min-delay-ms <number>           Minimum seeded jitter delay (default: 5)
   --max-delay-ms <number>           Maximum seeded jitter delay (default: 80)
   --seed <number>                   Reproducible jitter seed (default: 1)
@@ -58,6 +60,10 @@ try {
     burstIntervalMs: numeric(args, "--burst-interval-ms", 128),
     stallAfter: numeric(args, "--stall-after", 4),
     stallMs: numeric(args, "--stall-ms", 300),
+    clientPauseAfterDelta: args.includes("--client-pause-after")
+      ? numeric(args, "--client-pause-after", 1)
+      : null,
+    clientPauseMs: numeric(args, "--client-pause-ms", 0),
     minDelayMs: numeric(args, "--min-delay-ms", 5),
     maxDelayMs: numeric(args, "--max-delay-ms", 80),
   });

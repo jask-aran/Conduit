@@ -10,7 +10,7 @@ test("the harness CLI documents named scenario execution", () => {
   });
   assert.equal(result.status, 0, result.stderr);
   assert.match(result.stdout, /--scenario <name>/);
-  assert.match(result.stdout, /--profile <steady\|burst\|stall\|jitter>/);
+  assert.match(result.stdout, /--profile <steady\|burst\|stall\|high-tps\|jitter>/);
   assert.match(result.stdout, /versioned JSON/);
 });
 
@@ -67,6 +67,23 @@ test("a stalled deterministic scenario reports the intentional source gap", asyn
   assert.equal(report.transport.sourceStallMs, 300);
   assert.equal(report.transport.sourceGapsOver100Ms, 1);
   assert.equal(report.transport.finalText, "abcdef");
+});
+
+test("a high-throughput stream recovers after a paused WebSocket reader", async () => {
+  const text = "0123456789".repeat(8);
+  const cadence = createCadence("high-tps", { text, chunkSize: 1 });
+  const report = await runDeterministicStreamingScenario({
+    name: "high-tps-paused-reader",
+    cadence,
+    clientPauseAfterDelta: 1,
+    clientPauseMs: 60,
+  });
+
+  assert.equal(report.outcome, "passed");
+  assert.equal(report.transport.sourceDeltaCount, text.length);
+  assert.equal(report.transport.finalText, text);
+  assert.equal(report.transport.clientPauseRecovered, true);
+  assert.ok(report.transport.clientPauseMs >= 60);
 });
 
 test("a named deterministic streaming scenario emits a versioned transport report", async () => {
