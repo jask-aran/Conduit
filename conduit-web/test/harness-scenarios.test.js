@@ -10,7 +10,7 @@ test("the harness CLI documents named scenario execution", () => {
   });
   assert.equal(result.status, 0, result.stderr);
   assert.match(result.stdout, /--scenario <name>/);
-  assert.match(result.stdout, /--profile <steady\|burst\|jitter>/);
+  assert.match(result.stdout, /--profile <steady\|burst\|stall\|jitter>/);
   assert.match(result.stdout, /versioned JSON/);
 });
 
@@ -35,11 +35,38 @@ test("built-in cadence profiles are declarative and seeded jitter is reproducibl
     deltas: ["a", "b", "c", "d", "e", "f"],
   });
 
+  const stall = createCadence("stall", {
+    text: "abcdef",
+    chunkSize: 1,
+    stallAfter: 3,
+    stallMs: 300,
+  });
+  assert.deepEqual(stall, {
+    delaysMs: [0, 0, 0, 300, 0, 0],
+    deltas: ["a", "b", "c", "d", "e", "f"],
+  });
+
   const first = createCadence("jitter", { text: "abcdef", chunkSize: 1, minDelayMs: 5, maxDelayMs: 20, seed: 42 });
   const second = createCadence("jitter", { text: "abcdef", chunkSize: 1, minDelayMs: 5, maxDelayMs: 20, seed: 42 });
   assert.deepEqual(first, second);
   assert.equal(first.delaysMs[0], 0);
   assert.ok(first.delaysMs.slice(1).every((delay) => delay >= 5 && delay <= 20));
+});
+
+test("a stalled deterministic scenario reports the intentional source gap", async () => {
+  const cadence = createCadence("stall", {
+    text: "abcdef",
+    chunkSize: 1,
+    stallAfter: 3,
+    stallMs: 300,
+  });
+  const report = await runDeterministicStreamingScenario({ name: "stalled-text", cadence });
+
+  assert.equal(report.outcome, "passed");
+  assert.equal(report.transport.sourceStallCount, 1);
+  assert.equal(report.transport.sourceStallMs, 300);
+  assert.equal(report.transport.sourceGapsOver100Ms, 1);
+  assert.equal(report.transport.finalText, "abcdef");
 });
 
 test("a named deterministic streaming scenario emits a versioned transport report", async () => {

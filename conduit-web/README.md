@@ -494,8 +494,10 @@ npm run test:harness -- \
   --text "A deterministic streamed response"
 ```
 
-Profiles are `steady`, `burst`, and seeded `jitter`. Use `--help` for cadence
-controls. Reports include scripted and delivered delta counts, prompt-to-first
+Transport profiles are `steady`, `burst`, `stall`, and seeded `jitter`; `stall`
+inserts one intentional 300 ms source gap by default and accepts
+`--stall-after` and `--stall-ms`. Use `--help` for cadence controls. Reports
+include scripted and delivered delta counts, prompt-to-first
 delta and completion latency, throughput, inter-frame percentiles, burst/stall
 counts, and final-content verification. The focused contract tests are:
 
