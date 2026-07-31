@@ -10,8 +10,7 @@ reference documentation:
 - `docs/operations/testing.md` — test selection, commands, seams, local/VPS
   boundaries and evidence requirements for every testing approach.
 - `conduit-web/README.md` — runtime model, HTTP API, auth mechanism, process
-  residency and caps, and the live-session WebSocket protocol (a contract: keep
-  changes additive and update that section in the same change).
+  residency and caps, and the live-session WebSocket protocol.
 - `docs/architecture/personal-agent-platform-design.md` — long-range vision.
 
 - `references/distillations.md` — concise project-specific invariants and

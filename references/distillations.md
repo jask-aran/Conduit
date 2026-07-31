@@ -86,7 +86,7 @@ Add an entry through `$tacit-knowledge` after explicit approval or validated rep
 ### Keep repository state and documentation current
 
 - **Type:** Invariant.
-- **Rule:** Never commit `.env*` except sanitized examples, `data/`, credentials, logs, `dist/`, or `node_modules/`; describe current behavior in documentation, replace obsolete text, keep `README.md` and `AGENTS.md` synchronized with behavior, keep `docs/` current-state and `specs/` transient, and keep history in Git rather than in the docs.
+- **Rule:** Never commit `.env*` except sanitized examples, `data/`, credentials, logs, `dist/`, or `node_modules/`; describe current behavior in documentation, replace obsolete text, keep `README.md`, `AGENTS.md`, and the `conduit-web/README.md` API/protocol contract synchronized with behavior, keep runtime/API changes additive, keep `docs/` current-state and `specs/` transient, and keep history in Git rather than in the docs.
 - **Scope:** Every change and every maintained repository document.
 - **Evidence:** Deployment/documentation consolidation and release-artifact hygiene work.
 
