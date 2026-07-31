@@ -83,7 +83,7 @@ The checkout defaults to `../solid-components`; set
 
 ## Deploy
 
-Conduit publishes a prebuilt Linux image to GHCR from every `main` commit. A
+Conduit publishes a prebuilt Linux image to GHCR from each tagged release. A
 VPS needs Docker Engine with the Compose plugin, but does not need Git, Node.js,
 npm, Pi, the repository checkout, or enough resources to compile Conduit.
 
