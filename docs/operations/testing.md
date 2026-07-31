@@ -1,0 +1,202 @@
+# Testing Conduit
+
+Use the narrowest approach that proves the behavior. Run commands from
+`conduit-web/` unless a command starts with `./scripts` or
+`.devcontainer/start-conduit.sh`; never add a production-only test endpoint.
+
+## Choose one approach
+
+| Behavior | Approach | Entry point | Evidence |
+| --- | --- | --- | --- |
+| Types, bundle, PWA artifacts, pure stores and helpers | Static/unit | `npm run typecheck`; `npm run build`; `npm test -- test/<name>.test.js` | exit status and test output |
+| Express, HTTP, WebSocket, SSE, Pi lifecycle | Server contract | `node --test test/<name>.test.js`; use `startConduitHarness()` | public-contract assertions; fake Pi logs/events |
+| Token cadence, coalescing, stalls, high TPS, slow readers | Deterministic transport | `npm run test:harness -- ...` | versioned JSON; no credentials/provider |
+| Solid rendering, DOM mutation, frames, reconnect | Deterministic browser | `npm run test:harness:browser -- ...` | versioned JSON; Playwright failure trace |
+| Authenticated UI workflows and site functionality | Focused browser spec | `npx playwright test test/browser/<name>.spec.js --project=desktop-chromium --workers=1` | assertions, screenshots/traces on failure |
+| Terminal rendering under load | Terminal browser performance | `npm run test:terminal-performance` or `npm run test:terminal-performance:throttled` | Playwright assertions and performance report |
+| Real provider, release, TLS, reverse proxy, Internet path | Live transport | `npm run perf:live -- ...` | redacted JSON; release and content parity |
+| Image/package/persistence deployment contract | Deployment proof | `./scripts/package-release.sh <commit>`; `./scripts/prove-deployment.sh` | package checksum and retained evidence |
+
+Do not substitute one row for another: deterministic tests explain behavior;
+live tests measure a deployed system; browser functionality tests prove UI
+contracts; deployment proof proves packaging and state boundaries.
+
+## Common rules
+
+- Local server commands are managed: from the repository root run
+  `bash .devcontainer/start-conduit.sh restart`; use `dev` only for Vite HMR.
+  Do not launch `node src/server.js`, `npm run start`, or Vite directly.
+- Browser specs mock the API unless the server boundary is the behavior under
+  test. Keep state in a temporary fixture; never use repository `data/` for a
+  test that can mutate it.
+- Focused checks are the iteration default. The release gate is
+  `npm run typecheck`, `npm test`, `npm run build`, and `npm run test:browser`;
+  if a broad suite is stale, slow, or blocked, record the exact command and
+  result and run the narrowest relevant replacement.
+- Redact passwords, prompts, cookies, transcript contents and credentials from
+  logs and reports. Store temporary JSON under `/tmp`; do not commit reports,
+  `test-results/`, `dist/`, `data/`, or `node_modules/`.
+- Every report must identify its scenario, target and release. Compare live
+  runs only when prompt, model, thinking level, output bounds and release are
+  controlled; otherwise compare cadence only and state the confounder.
+
+## Server and API contracts
+
+`conduit-web/test/*.test.js` uses Node's test runner. Prefer pure unit tests for
+stores, reducers and normalisers. For an Express/WS/SSE seam, use the black-box
+`startConduitHarness()` fixture: it starts the production server on an ephemeral
+loopback port, replaces only Pi with a controllable RPC peer, and exposes the
+ordinary public contracts. Assert HTTP responses, WebSocket events, persisted
+JSONL and child-process commands; do not mock the server function under test.
+
+Run one file with:
+
+```bash
+node --test test/server-api.test.js
+npm test -- test/live-harness.test.js
+```
+
+## Deterministic transport
+
+The runner drives the production live-session WebSocket with scripted Pi
+events. It has no provider cost and is the baseline for server delivery:
+
+```bash
+npm run test:harness -- \
+  --scenario local-high-tps \
+  --profile high-tps \
+  --text "A deterministic streamed response" \
+  --client-pause-after 20 --client-pause-ms 250
+```
+
+Profiles: `steady`, `burst`, `stall`, `high-tps`, `jitter`. Controls include
+chunk size, intervals, seeded jitter, intentional source stalls and a paused
+WebSocket reader. JSON reports include source/delivered counts and characters,
+prompt acceptance, first delta, completion, throughput, p50/p95/p99/max gaps,
+stall and burst counts, coalescing ratio and final-text parity.
+
+## Deterministic browser and UI functionality
+
+The browser harness drives the production Solid client through its public
+HTTP/WS contracts with a deterministic stream. Use it only for rendering and
+reconnect performance:
+
+```bash
+npm run test:harness:browser -- \
+  --scenario browser-burst \
+  --profile burst \
+  --text "A browser-rendered response"
+npm run test:harness:browser -- \
+  --flow reconnect \
+  --initial-text "Answer survives" \
+  --recovered-delta " reconnects"
+```
+
+Reports include WebSocket and visible-text cadence, DOM mutation count,
+animation-frame gaps, long tasks and final semantic text; reconnect reports
+include socket count, resume count, recovery time and duplicate characters.
+
+For non-streaming functionality—login, navigation, chat/project creation,
+attachments, Workspace operations, model settings, PWA/mobile behavior and
+terminal controls—write or run a focused Playwright spec under
+`conduit-web/test/browser/` with mocked API fixtures. Use
+`npm run test:browser:headed` only for manual diagnosis. Failed Playwright
+tests leave traces/screenshots under `test-results/`; a passing harness report
+is stdout JSON, not a trace.
+
+Focused examples:
+
+```bash
+npx playwright test test/browser/pwa-mobile.spec.js --project=desktop-chromium --workers=1
+npm test -- test/pwa-artifacts.test.js
+```
+
+## Local managed server
+
+For manual UI checks or a local live run, restart from the repository root:
+
+```bash
+bash .devcontainer/start-conduit.sh restart
+curl -fsS http://127.0.0.1:4310/healthz
+```
+
+The health response may say `development` for ordinary local work. The live
+runner requires a full 40-character release SHA, so pin a committed build:
+
+```bash
+CONDUIT_RELEASE="$(git rev-parse HEAD)" \
+  bash .devcontainer/start-conduit.sh restart
+```
+
+For a candidate worktree exposed to Windows/WSL, use isolated state and the
+protected auth file:
+
+```bash
+CONDUIT_HOST=0.0.0.0 \
+CONDUIT_STATE_DIR=/tmp/conduit-candidate-state \
+CONDUIT_AUTH_FILE=/home/jask/Conduit/data/auth.json \
+bash .devcontainer/start-conduit.sh restart
+```
+
+Confirm the port, PID and health response before testing so a main-checkout
+server is not mistaken for the candidate.
+
+## Live local or VPS transport
+
+`perf:live` performs one bounded, cost-bearing run through normal login,
+`/v0/live-sessions` and the authenticated WebSocket. It refuses an unhealthy
+target, a missing full release SHA, an active generation or missing secrets;
+it does not delete the chat or stop the server-owned process. Use a fresh,
+ordinary chat reserved for benchmarks so history and concurrent work do not
+confound the sample:
+
+```bash
+export CONDUIT_PERF_PASSWORD='loaded outside shell history'
+export CONDUIT_PERF_PROMPT='Use the standard streaming baseline prompt.'
+npm run perf:live -- \
+  --target local \
+  --origin http://127.0.0.1:4310 \
+  --chat-id <dedicated-chat-id>
+unset CONDUIT_PERF_PASSWORD CONDUIT_PERF_PROMPT
+```
+
+Replace `--origin` with `https://conduit.jask-aran.com` and set a target such
+as `vps-edge` for Internet testing. Default bounds are 60 seconds and 200,000
+streamed characters; override with `--timeout-ms` and `--max-chars` only when
+the reason is recorded. Save stdout for comparison:
+
+```bash
+npm run perf:live -- ... > /tmp/conduit-live-<target>.json
+```
+
+The report records target, origin, full release, runtime/model/thinking level,
+prompt acceptance, first visible delta, completion, visible-text deltas,
+gap percentiles, gaps over 100 ms, output hashes and persisted-content parity.
+It does not measure DOM frames; pair it with the deterministic browser layer
+for client rendering.
+
+## Release and deployment checks
+
+`npm run build` includes the bundle/PWA budget and artifact checks. For an exact
+commit package, run `./scripts/package-release.sh <commit>`; it embeds the full
+SHA in the archive, image metadata and health response. `./scripts/prove-deployment.sh`
+is a one-engine simulated two-host persistence proof, not a
+substitute for a real VPS measurement.
+
+After a tagged image release, verify the public deployment before `perf:live`:
+
+```bash
+curl -fsS https://conduit.jask-aran.com/healthz
+```
+
+Require `status: "ready"` and the expected 40-character SHA. If the release
+is `latest`, a tag, `development`, or an older SHA, stop and fix deployment
+provenance before measuring.
+
+## Evidence checklist
+
+Record the commit/release, target/origin, scenario, prompt identity (not its
+contents), model, thinking level, bounds, command, exit status and report path.
+For failures retain the focused test output and Playwright trace; for live
+runs retain the redacted JSON and the public health response. A measurement is
+not a regression claim until the same scenario has a comparable baseline.
