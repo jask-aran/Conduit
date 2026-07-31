@@ -1,6 +1,6 @@
 # Conduit distillations
 
-Add an entry only through an explicit `$conduit-tacit-knowledge` invocation and user approval.
+Add an entry through `$tacit-knowledge` after explicit approval or validated repeated feedback.
 
 ## Entry template
 
