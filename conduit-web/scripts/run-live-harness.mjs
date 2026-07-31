@@ -185,7 +185,9 @@ async function runLiveMeasurement(configuration, prompt) {
     const receivedAt = performance.now();
     frames.push({ event, receivedAt });
     if (event.type === "generation_started") generationId = event.generationId || generationId;
-    if (event.type === "content_block_delta" && (!generationId || event.generationId === generationId)) {
+    if (event.type === "content_block_delta"
+      && event.blockType === "text"
+      && (!generationId || event.generationId === generationId)) {
       if (firstDeltaAt == null) firstDeltaAt = receivedAt;
       const delta = String(event.delta || "");
       streamedText += delta;
