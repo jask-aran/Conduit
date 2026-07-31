@@ -33,6 +33,17 @@ export function createCadence(profile, options = {}) {
       deltas,
     };
   }
+  if (profile === "stall") {
+    const stallAfter = Math.min(
+      Math.max(1, Math.trunc(Number(options.stallAfter) || 4)),
+      deltas.length - 1,
+    );
+    const stallMs = Math.max(0, Number(options.stallMs) || 300);
+    return {
+      delaysMs: deltas.map((_, index) => index === 0 ? 0 : index === stallAfter ? stallMs : 0),
+      deltas,
+    };
+  }
   if (profile === "jitter") {
     const minDelayMs = Math.max(0, Number(options.minDelayMs) || 5);
     const maxDelayMs = Math.max(minDelayMs, Number(options.maxDelayMs) || 80);
@@ -196,6 +207,9 @@ export async function runDeterministicStreamingScenario(scenario) {
         sourceDeltaCount: scenario.cadence.deltas.length,
         sourceCharacters,
         sourceGapMs: numberSummary(scenario.cadence.delaysMs.slice(1)),
+        sourceStallCount: scenario.cadence.delaysMs.slice(1).filter((delay) => delay > 100).length,
+        sourceStallMs: Math.max(0, ...scenario.cadence.delaysMs.slice(1).filter((delay) => delay > 100)),
+        sourceGapsOver100Ms: scenario.cadence.delaysMs.slice(1).filter((delay) => delay > 100).length,
         deliveredDeltaCount: deltaFrames.length,
         deliveredCharacters: deliveredText.length,
         charactersPerSecond: completionMs > 0 ? sourceCharacters / (completionMs / 1_000) : null,
