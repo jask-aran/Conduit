@@ -34,6 +34,13 @@ test("Compose pulls GHCR by default and mounts the complete durable contract", a
   assert.doesNotMatch(compose, /docker\.sock|privileged:/);
 });
 
+test("published image health identity remains the full source commit", async () => {
+  const compose = await fs.readFile(path.join(root, "compose.yaml"), "utf8");
+  const workflow = await fs.readFile(path.join(root, ".github/workflows/publish-container.yml"), "utf8");
+  assert.doesNotMatch(compose, /^\s+CONDUIT_RELEASE:/m);
+  assert.match(workflow, /echo "release=\$GITHUB_SHA"/);
+});
+
 test("source builds are an explicit Compose override", async () => {
   const override = await fs.readFile(path.join(root, "compose.build.yaml"), "utf8");
   assert.match(override, /^\s+build:/m);

@@ -22,7 +22,6 @@ services:
       CONDUIT_TEMPLATES_ROOT: /app/templates
       CONDUIT_WORKSPACE_ALLOWLIST: /workspaces
       CONDUIT_WORKSPACE_SUGGESTION_ROOT: /workspaces
-      CONDUIT_RELEASE: "${CONDUIT_RELEASE:-latest}"
       ENABLE_PARTIAL_CONTINUE: "${ENABLE_PARTIAL_CONTINUE:-true}"
     expose:
       - "4310"
