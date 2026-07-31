@@ -220,6 +220,10 @@ export async function runDeterministicStreamingScenario(scenario) {
         clientPauseRecovered: stream.clientPauseRecovered,
         deliveredDeltaCount: deltaFrames.length,
         deliveredCharacters: deliveredText.length,
+        coalescedDeltaCount: Math.max(0, scenario.cadence.deltas.length - deltaFrames.length),
+        deliveryCompressionRatio: deltaFrames.length > 0
+          ? scenario.cadence.deltas.length / deltaFrames.length
+          : null,
         charactersPerSecond: completionMs > 0 ? sourceCharacters / (completionMs / 1_000) : null,
         gapMs: gapSummary(deltaFrames),
         burstFramesUnder5Ms: deltaFrames.slice(1).filter((frame, index) => frame.receivedAt - deltaFrames[index].receivedAt < 5).length,
