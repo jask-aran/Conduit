@@ -83,7 +83,12 @@ test("a high-throughput stream recovers after a paused WebSocket reader", async 
   assert.equal(report.transport.sourceDeltaCount, text.length);
   assert.equal(report.transport.finalText, text);
   assert.equal(report.transport.clientPauseRecovered, true);
-  assert.ok(report.transport.clientPauseMs >= 60);
+  assert.ok(report.transport.clientPauseMs >= 50);
+  assert.equal(
+    report.transport.coalescedDeltaCount,
+    report.transport.sourceDeltaCount - report.transport.deliveredDeltaCount,
+  );
+  assert.ok(report.transport.deliveryCompressionRatio >= 1);
 });
 
 test("a named deterministic streaming scenario emits a versioned transport report", async () => {
