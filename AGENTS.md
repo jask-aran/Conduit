@@ -5,17 +5,15 @@ operational constraints and steering. It deliberately does not repeat
 reference documentation:
 
 - `README.md` — product, architecture, data model, interface reference and
-  setup.
-  Read the section covering the area you touch before changing it.
+  setup. Read the section covering the area you touch before changing it.
 - `docs/operations/testing.md` — test selection, commands, seams, local/VPS
   boundaries and evidence requirements for every testing approach.
 - `conduit-web/README.md` — runtime model, HTTP API, auth mechanism, process
   residency and caps, and the live-session WebSocket protocol.
 - `docs/architecture/personal-agent-platform-design.md` — long-range vision.
-
 - `references/distillations.md` — concise project-specific invariants and
-  heuristics. Read it once before starting a sprint or series of planned
-  commits/work, and reread it when repeatedly stuck on an issue; update it
+  heuristics. ALWAYS read it once before starting a sprint or series of planned
+  commits/ work, and reread it when repeatedly stuck on an issue; update it
   only through `$tacit-knowledge` after approval or validated repeated
   feedback.
 

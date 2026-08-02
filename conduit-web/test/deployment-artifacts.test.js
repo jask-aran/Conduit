@@ -29,8 +29,10 @@ test("Compose pulls GHCR by default and mounts the complete durable contract", a
   assert.match(compose, /target: \/workspaces/);
   assert.match(compose, /CONDUIT_DATA_ROOT: \/data/);
   assert.match(compose, /CONDUIT_WORKSPACE_ALLOWLIST: \/workspaces/);
-  assert.match(compose, /\$\{CONDUIT_BIND_ADDRESS:-0\.0\.0\.0\}/);
-  assert.match(compose, /\$\{CONDUIT_PORT:-80\}:4310/);
+  assert.match(compose, /expose:\n\s+- "4310"/);
+  assert.match(compose, /caddy:/);
+  assert.match(compose, /"80:80"/);
+  assert.match(compose, /"443:443"/);
   assert.doesNotMatch(compose, /docker\.sock|privileged:/);
 });
 

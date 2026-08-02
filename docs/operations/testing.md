@@ -29,10 +29,10 @@ contracts; deployment proof proves packaging and state boundaries.
 - Browser specs mock the API unless the server boundary is the behavior under
   test. Keep state in a temporary fixture; never use repository `data/` for a
   test that can mutate it.
-- Focused checks are the iteration default. The release gate is
-  `npm run typecheck`, `npm test`, `npm run build`, and `npm run test:browser`;
-  if a broad suite is stale, slow, or blocked, record the exact command and
-  result and run the narrowest relevant replacement.
+- Focused checks are the iteration default. The full Playwright suite is a
+  local opt-in check, not an automatic release gate. Record the exact command
+  and result when a broad suite is stale, slow, or blocked, then run the
+  narrowest relevant replacement.
 - Redact passwords, prompts, cookies, transcript contents and credentials from
   logs and reports. Store temporary JSON under `/tmp`; do not commit reports,
   `test-results/`, `dist/`, `data/`, or `node_modules/`.
@@ -103,6 +103,50 @@ terminal controls—write or run a focused Playwright spec under
 `npm run test:browser:headed` only for manual diagnosis. Failed Playwright
 tests leave traces/screenshots under `test-results/`; a passing harness report
 is stdout JSON, not a trace.
+
+## Development browser investigation
+
+Use `agent-browser` for local exploratory QA and bug hunts. It is a
+development and investigation tool, not CI regression proof. Start with the
+restored session and load the core skills:
+
+```bash
+agent-browser skills get core
+```
+
+For exploratory QA or bug hunts, also load:
+
+```bash
+agent-browser skills get dogfood
+```
+
+Use this loop:
+
+- Use a restored session.
+- Prefer `snapshot -i -c`.
+- Use semantic `find` commands.
+- Use `batch` for short flows.
+- Refresh snapshots after page changes.
+- Use filtered network requests, screenshots, and `a11y` when they add
+  evidence.
+- Close the session after use.
+
+Do not use `agent-browser` output as CI regression proof.
+
+## CI browser policy
+
+CI has three levels:
+
+- Fast checks run automatically on pull requests and pushes to `main`.
+- Playwright set-pieces run manually or for `v*` release tags. They cover
+  authentication, the command palette, the primary chat route, live-stream
+  reconnect, Workspace and terminal access, and desktop and mobile/PWA layout.
+- The full Playwright suite runs locally by opt-in only with
+  `npm run test:browser`.
+
+Deterministic browser performance tests remain separate from UI regression
+tests. The performance harness may use Playwright internally, but it is not a
+replacement for focused UI specs.
 
 Focused examples:
 

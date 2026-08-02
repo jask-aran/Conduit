@@ -1,11 +1,15 @@
-name: Static checks
+name: Fast checks
 
 on:
-  workflow_dispatch:
-  # Validate policy edits once; ordinary pull requests do not run Actions.
   pull_request:
-    paths:
-      - .github/workflows/ci.yml
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: fast-checks-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   static:
@@ -23,3 +27,8 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       - run: npm run build
+      - run: npm test
+      - run: npm run test:harness -- \
+          --scenario ci-steady \
+          --profile steady \
+          --text "CI deterministic stream"
