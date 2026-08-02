@@ -463,6 +463,18 @@ covered by `test/browser/pwa-mobile.spec.js` on the Playwright
 
 ## Verification
 
+Browser development and pre-commit QA uses agent-browser against the managed
+server. From the repository root, restart Conduit first, then run:
+
+```bash
+bash .devcontainer/start-conduit.sh restart
+cd conduit-web
+agent-browser skills get core
+SESSION="$(agent-browser session id --scope worktree --prefix conduit-qa)"
+AGENT_BROWSER_SESSION="$SESSION" npm run qa:agent-browser
+agent-browser --session "$SESSION" close
+```
+
 Fast checks run automatically on pull requests and pushes to `main`:
 
 ```bash
@@ -475,30 +487,21 @@ npm run test:harness -- \
   --text "CI deterministic stream"
 ```
 
-Playwright set-pieces run manually or for `v*` release tags:
+Playwright release canaries run manually or for `v*` release tags:
 
 ```bash
 npm run test:browser:setpieces
 ```
 
-The full Playwright suite is local opt-in only:
+The full Playwright suite is local maintenance only:
 
 ```bash
 npm run test:browser
 ```
 
-Focused PWA/mobile acceptance:
-
-```bash
-npm run build
-npm test -- test/pwa-artifacts.test.js
-npx playwright test test/browser/pwa-mobile.spec.js
-```
-
-Browser tests mock the API for deterministic desktop and mobile coverage and
-write screenshots and traces under `test-results/` only when a test fails.
-See `../docs/operations/testing.md` for the agent-browser workflow and the
-complete testing policy.
+Use agent-browser for ordinary UI validation. The Playwright canaries mock the
+API and write screenshots and traces under `test-results/` only when a test
+fails. See `../docs/operations/testing.md` for the complete testing policy.
 
 ### Programmable transport harness
 
