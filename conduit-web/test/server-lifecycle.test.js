@@ -183,7 +183,7 @@ test("reattachment receives a terminal generation and its durable checkpoint", a
   }
 });
 
-test("a replaced cloned root cannot be inspected, launched, or unregistered", async () => {
+test("a replaced cloned root cannot be inspected or launched, and unlink does not touch its replacement", async () => {
   const harness = await startConduitHarness();
   try {
     const source = path.join(harness.root, "source");
@@ -198,8 +198,14 @@ test("a replaced cloned root cannot be inspected, launched, or unregistered", as
       method: "POST",
       body: JSON.stringify({ mode: "cloned", cloneUrl: source, path: target }),
     });
-    assert.equal(created.status, 201);
-    const project = await created.json();
+    assert.equal(created.status, 202);
+    const started = await created.json();
+    const project = started.project;
+    await waitFor(async () => {
+      const response = await harness.request("/v0/projects");
+      const listing = await response.json();
+      return listing.projects.some((item) => item.id === project.id && item.state === "ready");
+    }, "cloned Workspace did not become ready");
     const chat = await harness.createChat(project.id);
     await fs.rename(target, displaced);
     await fs.symlink(outside, target);
@@ -213,7 +219,7 @@ test("a replaced cloned root cannot be inspected, launched, or unregistered", as
     });
     assert.equal(launch.status, 409);
     assert.equal((await harness.pi.commands()).length, 0);
-    assert.equal((await harness.request(`/v0/projects/${project.id}`, { method: "DELETE" })).status, 409);
+    assert.equal((await harness.request(`/v0/projects/${project.id}`, { method: "DELETE" })).status, 204);
     assert.equal(await fs.readFile(path.join(outside, "keep.txt"), "utf8"), "outside");
   } finally {
     await harness.stop();

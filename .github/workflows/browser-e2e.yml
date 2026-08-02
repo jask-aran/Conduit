@@ -1,18 +1,17 @@
-name: Fast checks
+name: Browser set-pieces
 
 on:
-  pull_request:
-  push:
-    branches:
-      - main
   workflow_dispatch:
+  push:
+    tags:
+      - "v*"
 
 concurrency:
-  group: fast-checks-${{ github.workflow }}-${{ github.ref }}
+  group: browser-setpieces-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  static:
+  browser:
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -25,10 +24,5 @@ jobs:
           cache: npm
           cache-dependency-path: conduit-web/package-lock.json
       - run: npm ci
-      - run: npm run typecheck
-      - run: npm run build
-      - run: npm test
-      - run: npm run test:harness -- \
-          --scenario ci-steady \
-          --profile steady \
-          --text "CI deterministic stream"
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:browser:setpieces

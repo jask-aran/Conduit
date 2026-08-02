@@ -463,10 +463,28 @@ covered by `test/browser/pwa-mobile.spec.js` on the Playwright
 
 ## Verification
 
+Fast checks run automatically on pull requests and pushes to `main`:
+
 ```bash
-npm test
-npm run test:browser
+npm run typecheck
 npm run build
+npm test
+npm run test:harness -- \
+  --scenario ci-steady \
+  --profile steady \
+  --text "CI deterministic stream"
+```
+
+Playwright set-pieces run manually or for `v*` release tags:
+
+```bash
+npm run test:browser:setpieces
+```
+
+The full Playwright suite is local opt-in only:
+
+```bash
+npm run test:browser
 ```
 
 Focused PWA/mobile acceptance:
@@ -479,6 +497,8 @@ npx playwright test test/browser/pwa-mobile.spec.js
 
 Browser tests mock the API for deterministic desktop and mobile coverage and
 write screenshots and traces under `test-results/` only when a test fails.
+See `../docs/operations/testing.md` for the agent-browser workflow and the
+complete testing policy.
 
 ### Programmable transport harness
 

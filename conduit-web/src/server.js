@@ -1790,6 +1790,7 @@ async function shutdown(signal) {
   for (const socket of wss.clients) socket.close(1012, "Conduit is restarting");
   const closed = new Promise((resolve) => server.close(resolve));
   const stoppedProcesses = await manager.shutdown();
+  await terminals.stopAll();
   server.closeIdleConnections?.();
   await closed;
   console.log(`Conduit stopped ${stoppedProcesses} Pi process${stoppedProcesses === 1 ? "" : "es"}`);

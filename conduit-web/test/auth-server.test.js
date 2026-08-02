@@ -145,9 +145,10 @@ test("unauthenticated routes redirect or return 401; only the allowlist is publi
     });
     assert.equal(closed, true);
 
-    // Static SPA assets are never served without authentication.
+    // PWA bootstrap assets remain public so an authenticated install can start
+    // before the application session is available.
     const assetRequest = await fetch(`${origin}/favicon.svg`);
-    assert.equal(assetRequest.status, 401);
+    assert.equal(assetRequest.status, 200);
   } finally {
     await stop(server);
   }

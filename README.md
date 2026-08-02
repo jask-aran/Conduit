@@ -151,14 +151,27 @@ Detailed references:
 
 ## Verify
 
+Fast checks:
+
 ```bash
 cd conduit-web
 npm run typecheck
-npm test
 npm run build
+npm test
+npm run test:harness -- \
+  --scenario ci-steady \
+  --profile steady \
+  --text "CI deterministic stream"
+```
+
+These checks run automatically on pull requests and pushes to `main`. Browser
+set-pieces run manually or for `v*` release tags. The full Playwright suite is
+local opt-in only:
+
+```bash
 npm run test:browser
 ```
 
 Browser tests mock the API for deterministic desktop and mobile coverage.
-Failures leave Playwright traces under `test-results/`; `README.md` in
-`conduit-web/` documents focused-suite and trace commands.
+Failures leave Playwright traces under `test-results/`; see
+`docs/operations/testing.md` for the complete policy and focused commands.
