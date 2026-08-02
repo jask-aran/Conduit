@@ -12,8 +12,8 @@ Use the narrowest approach that proves the behavior. Run commands from
 | Express, HTTP, WebSocket, SSE, Pi lifecycle | Server contract | `node --test test/<name>.test.js`; use `startConduitHarness()` | public-contract assertions; fake Pi logs/events |
 | Token cadence, coalescing, stalls, high TPS, slow readers | Deterministic transport | `npm run test:harness -- ...` | versioned JSON; no credentials/provider |
 | Solid rendering, DOM mutation, frames, reconnect | Deterministic browser | `npm run test:harness:browser -- ...` | versioned JSON; Playwright failure trace |
-| Authenticated UI workflows and site functionality | Focused browser spec | `npx playwright test test/browser/<name>.spec.js --project=desktop-chromium --workers=1` | assertions, screenshots/traces on failure |
-| Terminal rendering under load | Terminal browser performance | `npm run test:terminal-performance` or `npm run test:terminal-performance:throttled` | Playwright assertions and performance report |
+| Authenticated UI workflows and site functionality | Agent-browser development QA | `npm run qa:agent-browser` | restored-session snapshots, semantic checks, screenshots, network and accessibility evidence |
+| Release browser set-pieces and terminal performance | Playwright release canary | `npm run test:browser:setpieces`; selected terminal checks when promoted | repeatable assertions, screenshots/traces on failure, performance report |
 | Real provider, release, TLS, reverse proxy, Internet path | Live transport | `npm run perf:live -- ...` | redacted JSON; release and content parity |
 | Image/package/persistence deployment contract | Deployment proof | `./scripts/package-release.sh <commit>`; `./scripts/prove-deployment.sh` | package checksum and retained evidence |
 
@@ -29,10 +29,16 @@ contracts; deployment proof proves packaging and state boundaries.
 - Browser specs mock the API unless the server boundary is the behavior under
   test. Keep state in a temporary fixture; never use repository `data/` for a
   test that can mutate it.
-- Focused checks are the iteration default. The full Playwright suite is a
-  local opt-in check, not an automatic release gate. Record the exact command
-  and result when a broad suite is stale, slow, or blocked, then run the
-  narrowest relevant replacement.
+- Agent-browser is the default browser surface for development and pre-commit
+  validation. Use a restored session and test the changed user flow manually
+  with semantic assertions and evidence.
+- Playwright is reserved for named release set-pieces and their CI canaries.
+  Do not add or run a focused Playwright spec as the normal development loop.
+  Promote a stable, release-critical flow into `test:browser:setpieces` when it
+  needs repeatable CI proof.
+- The full Playwright suite is a local maintenance check, not a pre-commit or
+  automatic release gate. Record the exact command and result when a broad
+  suite is stale, slow, or blocked.
 - Redact passwords, prompts, cookies, transcript contents and credentials from
   logs and reports. Store temporary JSON under `/tmp`; do not commit reports,
   `test-results/`, `dist/`, `data/`, or `node_modules/`.
@@ -98,61 +104,72 @@ include socket count, resume count, recovery time and duplicate characters.
 
 For non-streaming functionality—login, navigation, chat/project creation,
 attachments, Workspace operations, model settings, PWA/mobile behavior and
-terminal controls—write or run a focused Playwright spec under
-`conduit-web/test/browser/` with mocked API fixtures. Use
-`npm run test:browser:headed` only for manual diagnosis. Failed Playwright
-tests leave traces/screenshots under `test-results/`; a passing harness report
-is stdout JSON, not a trace.
+terminal controls—use agent-browser against the managed server. Use
+`npm run test:browser:setpieces` only for a promoted release canary. Failed
+Playwright tests leave traces/screenshots under `test-results/`; a passing
+harness report is stdout JSON, not a trace.
 
-## Development browser investigation
+## Development and pre-commit browser QA
 
-Use `agent-browser` for local exploratory QA and bug hunts. It is a
-development and investigation tool, not CI regression proof. Start with the
-restored session and load the core skills:
+Use `agent-browser` for all browser validation during development and before a
+commit. It is the primary UI testing surface. It is not CI regression proof.
+The entry point starts or restores a named session, opens the managed local
+server, waits for network idle, and prints a compact interactive snapshot:
 
 ```bash
+bash .devcontainer/start-conduit.sh restart
+cd conduit-web
 agent-browser skills get core
-```
-
-For exploratory QA or bug hunts, also load:
-
-```bash
 agent-browser skills get dogfood
+SESSION="$(agent-browser session id --scope worktree --prefix conduit-qa)"
+AGENT_BROWSER_SESSION="$SESSION" npm run qa:agent-browser
 ```
 
-Use this loop:
+Use the restored session for the changed flow:
 
-- Use a restored session.
-- Prefer `snapshot -i -c`.
-- Use semantic `find` commands.
-- Use `batch` for short flows.
-- Refresh snapshots after page changes.
+- Prefer `snapshot -i -c` and semantic `find` commands.
+- Use `batch` for short flows and refresh snapshots after page changes.
 - Use filtered network requests, screenshots, and `a11y` when they add
   evidence.
-- Close the session after use.
+- Store temporary evidence under `/tmp`; do not record credentials, cookies,
+  prompts, or transcript contents.
+- Close the session after use:
 
-Do not use `agent-browser` output as CI regression proof.
+```bash
+agent-browser --session "$SESSION" close
+```
+
+The normal pre-commit ladder is the fast code checks, the deterministic
+transport harness when streaming code changed, and this agent-browser flow for
+the affected UI. Do not run `npm run test:browser` as a pre-commit substitute.
+Use the auth vault or an already restored session for login; never put a
+password in a command or commit hook.
+
+CI does not run agent-browser because it depends on a restored interactive
+session. Capture its evidence in the change record, then promote only stable
+release-critical behavior to the Playwright canary.
 
 ## CI browser policy
 
-CI has three levels:
+CI has two browser levels plus the fast code checks:
 
 - Fast checks run automatically on pull requests and pushes to `main`.
-- Playwright set-pieces run manually or for `v*` release tags. They cover
-  authentication, the command palette, the primary chat route, live-stream
-  reconnect, Workspace and terminal access, and desktop and mobile/PWA layout.
+- Playwright set-pieces run manually or for `v*` release tags through
+  `npm run test:browser:setpieces`. The current canaries cover authentication,
+  the command palette, the primary chat route, live-stream reconnect, the
+  Workspace terminal route, and desktop/mobile PWA layout.
 - The full Playwright suite runs locally by opt-in only with
-  `npm run test:browser`.
+  `npm run test:browser`; use it to maintain or promote canaries, not for
+  ordinary development.
 
 Deterministic browser performance tests remain separate from UI regression
 tests. The performance harness may use Playwright internally, but it is not a
 replacement for focused UI specs.
 
-Focused examples:
+The release canary entry point is:
 
 ```bash
-npx playwright test test/browser/pwa-mobile.spec.js --project=desktop-chromium --workers=1
-npm test -- test/pwa-artifacts.test.js
+npm run test:browser:setpieces
 ```
 
 ## Local managed server

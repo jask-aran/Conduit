@@ -151,6 +151,18 @@ Detailed references:
 
 ## Verify
 
+Browser development and pre-commit QA uses the restored agent-browser session:
+
+```bash
+bash .devcontainer/start-conduit.sh restart
+cd conduit-web
+agent-browser skills get core
+SESSION="$(agent-browser session id --scope worktree --prefix conduit-qa)"
+AGENT_BROWSER_SESSION="$SESSION" npm run qa:agent-browser
+# Continue with the affected flow, then close the session.
+agent-browser --session "$SESSION" close
+```
+
 Fast checks:
 
 ```bash
@@ -164,14 +176,19 @@ npm run test:harness -- \
   --text "CI deterministic stream"
 ```
 
-These checks run automatically on pull requests and pushes to `main`. Browser
-set-pieces run manually or for `v*` release tags. The full Playwright suite is
-local opt-in only:
+These checks run automatically on pull requests and pushes to `main`. The
+Playwright release canaries run manually or for `v*` release tags:
+
+```bash
+npm run test:browser:setpieces
+```
+
+The full Playwright suite is local maintenance only:
 
 ```bash
 npm run test:browser
 ```
 
-Browser tests mock the API for deterministic desktop and mobile coverage.
-Failures leave Playwright traces under `test-results/`; see
-`docs/operations/testing.md` for the complete policy and focused commands.
+Use agent-browser for ordinary UI development. Browser tests mock the API for
+the deterministic Playwright canaries; failures leave traces under
+`test-results/`. See `docs/operations/testing.md` for the complete policy.
