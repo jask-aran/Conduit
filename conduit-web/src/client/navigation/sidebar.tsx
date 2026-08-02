@@ -304,7 +304,7 @@ export function Sidebar(props: {
 
   const ChatMenu = (menuProps: { chat: ChatSummary; project: Project }) => {
     const guard = guardFor(menuProps.chat);
-    return <ContextMenu onOpenChange={(open) => { if (open) guard.suppressClick = true; }}>
+    return <ContextMenu placement={phoneLayout() ? "bottom-start" : "right-start"} onOpenChange={(open) => { if (open) guard.suppressClick = true; }}>
     <ContextMenuTrigger as="button" class="sidebar-row sidebar-chat" aria-current={props.selectedId === menuProps.chat.id ? "page" : undefined} onClick={() => {
       if (guard.suppressClick) { guard.suppressClick = false; return; }
       closeMobile();
@@ -344,7 +344,7 @@ export function Sidebar(props: {
       : isWorkspace() ? "Delete workspace"
         : `Delete ${blockProps.workspace ? "workspace" : "folder"}`;
     return <div class="sidebar-project-block">
-      <ContextMenu onOpenChange={(openMenu) => { if (openMenu) guard.suppressClick = true; }}>
+      <ContextMenu placement={phoneLayout() ? "bottom-start" : "right-start"} onOpenChange={(openMenu) => { if (openMenu) guard.suppressClick = true; }}>
         <ContextMenuTrigger as="div" class="sidebar-row sidebar-project" data-open={open()} aria-current={props.selectedId == null && props.projectId === blockProps.project.id ? "page" : undefined}>
           <button class="sidebar-project-link" onClick={() => {
             if (guard.suppressClick) { guard.suppressClick = false; return; }
