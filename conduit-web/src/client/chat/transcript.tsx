@@ -30,7 +30,12 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
   let layoutEpoch = 0;
   let markdownSettledEpoch = -1;
   const [following, setFollowing] = createSignal(true);
-  const timeline = createTimelineStore(props.chat.messages, props.chat.tools, props.chat.activeGeneration);
+  const timeline = createTimelineStore(
+    props.chat.messages,
+    props.chat.tools,
+    props.chat.activeGeneration,
+    props.chat.activeGenerationChange,
+  );
   const empty = createMemo(() => !timeline.length && !props.chat.activity()?.label);
 
   const scrollBottomNow = () => {

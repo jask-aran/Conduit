@@ -23,13 +23,37 @@ import { reconcileMessages } from "../reconcile-messages";
 import { getHarnessRecorder, recordHarnessMetric } from "../harness-metrics";
 import type { AttachmentsStore, UploadAttachment } from "./attachments";
 import type { CatalogueStore } from "./catalogue";
-import type { ActiveGenerationView } from "../turn-rows";
+import type { ActiveGenerationView, LiveGenerationChange } from "../turn-rows";
 import type { ModelSettings } from "./model-settings";
 import type { RuntimeStore } from "./runtime";
 import { createClientActiveGenerationStore } from "./active-generation-store.js";
 
 type UnknownRecord = Record<string, unknown>;
 type ErrorHandler = (message: string) => void;
+
+function generationChangeFor(event: StructuredGenerationEvent): LiveGenerationChange {
+  const block = event.block && typeof event.block === "object" ? event.block as UnknownRecord : null;
+  const contentIndex = Number.isInteger(event.contentIndex)
+    ? Number(event.contentIndex)
+    : Number.isInteger(block?.contentIndex) ? Number(block?.contentIndex) : undefined;
+  const messageId = typeof event.messageId === "string" ? event.messageId : undefined;
+  const toolCallId = typeof event.toolCallId === "string" ? event.toolCallId : undefined;
+  const scope = event.type === "tool_execution_started"
+    || event.type === "tool_execution_updated"
+    || event.type === "tool_execution_completed"
+    ? "tool"
+    : event.type === "content_block_delta" || event.type === "content_block_completed"
+      ? "block"
+      : "structural";
+  return {
+    generationId: String(event.generationId || ""),
+    eventType: event.type,
+    scope,
+    ...(messageId ? { messageId } : {}),
+    ...(contentIndex !== undefined ? { contentIndex } : {}),
+    ...(toolCallId ? { toolCallId } : {}),
+  };
+}
 
 interface ActiveChatOptions {
   catalogue: CatalogueStore;
@@ -66,6 +90,7 @@ export function createActiveChat(options: ActiveChatOptions) {
   const [retry, setRetry] = createSignal<RetryState | null>(null);
   const [activeGenerationRoot, setActiveGenerationRoot] = createSignal<ActiveGenerationView | null>(null);
   const [activeGenerationRevision, setActiveGenerationRevision] = createSignal(0);
+  const [activeGenerationChange, setActiveGenerationChange] = createSignal<LiveGenerationChange | null>(null);
   const activeGeneration = () => {
     activeGenerationRevision();
     return activeGenerationRoot();
@@ -124,6 +149,7 @@ export function createActiveChat(options: ActiveChatOptions) {
     setQueue({ steering: [], followUp: [] });
     resetLiveFlags();
     generationStore.clear();
+    setActiveGenerationChange(null);
     setActiveGeneration(null);
     currentGeneration = null;
     stopPending = false;
@@ -137,7 +163,10 @@ export function createActiveChat(options: ActiveChatOptions) {
     let result: ReturnType<typeof generationStore.apply> | undefined;
     batch(() => {
       result = generationStore.apply(event);
-      if (result.changed && result.state) setActiveGeneration(result.state as ActiveGenerationView);
+      if (result.changed && result.state) {
+        setActiveGeneration(result.state as ActiveGenerationView);
+        setActiveGenerationChange(generationChangeFor(event));
+      }
     });
     if (!result) return;
     const next = result.state as ActiveGenerationView | null;
@@ -416,6 +445,7 @@ export function createActiveChat(options: ActiveChatOptions) {
               batch(() => {
                 applyDetail(detail, true);
                 generationStore.clear();
+                setActiveGenerationChange(null);
                 setActiveGeneration(null);
               });
             }).catch((error) => onError((error as Error).message));
@@ -627,7 +657,7 @@ export function createActiveChat(options: ActiveChatOptions) {
   return {
     status, setStatus, title, setTitle, templateId, setTemplateId, runtimeIdentity, setRuntimeIdentity,
     live, messages, setMessages, tools, loadedId, pageBefore, loadingOlder, draft, setDraft,
-    generation, editingEntryId, contextUsage, compacting, hostUiRequests, queue, activeGeneration,
+    generation, editingEntryId, contextUsage, compacting, hostUiRequests, queue, activeGeneration, activeGenerationChange,
     connectingId, streaming, stopping, activity,
     initialize, select, loadDetail, openLive, ensureLive, reset, send, stop, regenerate,
     continueResponse, loadOlder, edit, respondHostUi, clearQueue,
