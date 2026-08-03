@@ -1,8 +1,9 @@
 # Issues #24 and #34 implementation
 
 Status: Slice 1 complete at `024ce4c`. Slice 2 committed at `6a713f2`.
-Slice 3 committed at `288db80`. Slice 6 committed at `0e4d366`. Slice 4
-boundary and recovery verification is recorded below; Issue #24 remains open.
+Slice 3 committed at `288db80`. Slice 4 committed at `296d822`. Slice 5
+Marked baseline is recorded below. Slice 6 committed at `0e4d366`; Issue #24
+remains open.
 
 Issues:
 
@@ -778,6 +779,89 @@ interaction. Do not use subjective smoothness as a gate.
 
 Commit: `test: establish Markdown renderer performance baseline`.
 
+### Slice 5 result — 4 August 2026
+
+The current Marked renderer passed the complete nine-fixture browser matrix:
+`rich-markdown`, `incomplete-syntax`, `incomplete-reference`, `katex`,
+`security`, `code-copy`, `external-confirmation`, `scroll`, and `reconnect`.
+Every run reported `outcome: passed`, structural parity, persistent outer
+Markdown identity, and no browser errors. The stream fixtures used the same
+cumulative source and delta sequence for the measurement below; reconnect was
+run through its separate two-socket recovery path.
+
+Representative baseline measurements on Chromium 149:
+
+- Rich Markdown: 91 source characters, 31 deltas, 33 Markdown renders, 47 DOM
+  mutations, parse p95 2.6 ms, sanitisation p95 1.2 ms, reconciliation p95
+  0.2 ms, 2 frame gaps over 32 ms, 1 over 50 ms, and 0 Long Tasks.
+- Long scroll: 630 source characters, 210 deltas, 212 Markdown renders, 218
+  DOM mutations, parse p95 0.2 ms, sanitisation p95 0.4 ms, reconciliation p95
+  0.1 ms, 0 frame gaps over 32 ms, and 0 Long Tasks. The final distance from
+  the bottom was 0.
+- KaTeX: 43 source characters, 15 deltas, 16 Markdown renders, parse p95 9.8
+  ms, sanitisation p95 2.2 ms, reconciliation p95 0.2 ms, 1 frame gap over 32
+  ms, and 0 Long Tasks.
+- Security: 99 source characters, 33 deltas, 35 Markdown renders, 52 DOM
+  mutations, parse p95 2.0 ms, sanitisation p95 1.6 ms, reconciliation p95
+  0.1 ms, 4 frame gaps over 32 ms, 0 over 50 ms, and 0 Long Tasks. Unsafe
+  elements, unsafe protocols, and images remained absent.
+
+The code-copy and external-confirmation fixtures passed their interaction
+assertions. The reconnect fixture used 2 sockets and 1 Resume State, retained
+the outer node, recovered 26 characters, and reported 0 duplicate characters.
+The baseline is a measurement record, not a performance gain: Marked still
+performed cumulative Markdown work for the live source, while Slice 2 and
+Slice 3 counters separately recorded reducer and projection work.
+
+The same run used the existing current-renderer metrics. For rich Markdown,
+the client recorded 38 reducer and projection samples, 7 full projections, 31
+narrow projections, 33 Markdown renders, and 33 reconciliations. For the long
+scroll fixture, it recorded 217 reducer and projection samples, 7 full
+projections, 210 narrow projections, 212 Markdown renders, and 212
+reconciliations. These figures are the Marked comparison inputs for the Slice 7
+decision; they do not compare against the failed high-level Incremark wrapper.
+
+The build and managed-server evidence remains the Slice 4 record: the build
+passed with the documented temporary budget override, the source server bound
+to `0.0.0.0:4310`, and the managed health response was ready. Agent-browser
+manual checks with Marked found one code-copy control, one external-link
+control, eight headings, and one table. The external-link control opened
+`Open external link?`; Cancel closed it. No page or console errors occurred.
+
+Verdict: Slice 5 establishes a repeatable current-renderer baseline with
+separate parser, sanitisation, reconciliation, DOM, cadence, identity,
+security, and recovery evidence. It shows no renderer performance improvement;
+the Slice 6 candidate gate remains rejected pending the Slice 7 decision.
+
+### Manual validation checklist — Slice 5
+
+Run `bash .devcontainer/start-conduit.sh restart`, open
+`http://127.0.0.1:4310` from Windows, and use an authenticated disposable chat.
+Keep the renderer set to `Marked`. Record each item as pass or fail.
+
+- Stream short and long responses. Check first visible text, visible cadence,
+  incomplete Markdown, headings, lists, tables, fenced code, and KaTeX. Look
+  for missing text, duplicated text, blank output, or layout jumps.
+- Use an unsafe HTML element, an unsafe URL protocol, and an image in a test
+  response. Confirm none renders or executes. Use an external link and confirm
+  `Open external link?` appears; Cancel must not open a tab.
+- Use `Copy code` on a fenced block. Confirm the clipboard contains the code and
+  the control remains usable after another response.
+- During thinking, tool execution, and final answer phases, expand the trace.
+  Confirm tool cards, thinking text, interim text, and answer Markdown retain
+  order and identity.
+- Scroll away during a long response. Confirm live output does not force the
+  viewport to the bottom. Return to the latest position and confirm zero
+  distance from the bottom.
+- Refresh or reconnect during a response and after completion. Confirm one
+  final semantic answer with no duplicate or missing content.
+- Check the browser console. Confirm a normal build does not expose
+  `window.__conduitHarness`.
+
+Expected result: Marked remains semantically and behaviorally stable. This
+checklist validates the baseline contract; it does not use subjective
+smoothness as a gate.
+
 ### Slice 6 — Incremark compatibility spike and local switch (#24)
 
 Use a temporary fixture outside the production dependency graph to test
@@ -1046,6 +1130,6 @@ The Slice 1 review passed on 3 August 2026:
    disabled.
 
 The Slice 6 candidate gate was not promising. Slice 4 boundary and recovery
-verification is now complete. Slice 5 is next to establish the current Marked
-renderer baseline before the Slice 7 decision gate. Any renderer adoption still
-requires a separate owner approval after the Incremark spike.
+verification is complete, and Slice 5 now records the current Marked renderer
+baseline. Slice 7 is next for the renderer decision gate. Any renderer
+adoption still requires a separate owner approval after the Incremark spike.
