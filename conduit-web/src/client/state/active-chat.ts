@@ -1,6 +1,5 @@
 import { batch, createMemo, createSignal, onCleanup } from "solid-js";
 import { deriveFineActivity } from "../../activity.js";
-import { reduceActiveGeneration } from "../../active-generation.js";
 import { api, asList } from "../api/client";
 import { isStructuredGenerationEvent, normalizeLiveEvent } from "../api/live-events";
 import type { LiveEvent, RuntimeStateEvent, StructuredGenerationEvent } from "../api/live-events";
@@ -27,6 +26,7 @@ import type { CatalogueStore } from "./catalogue";
 import type { ActiveGenerationView } from "../turn-rows";
 import type { ModelSettings } from "./model-settings";
 import type { RuntimeStore } from "./runtime";
+import { createClientActiveGenerationStore } from "./active-generation-store.js";
 
 type UnknownRecord = Record<string, unknown>;
 type ErrorHandler = (message: string) => void;
@@ -64,7 +64,17 @@ export function createActiveChat(options: ActiveChatOptions) {
   const [responding, setResponding] = createSignal(false);
   const [activeToolName, setActiveToolName] = createSignal<string | null>(null);
   const [retry, setRetry] = createSignal<RetryState | null>(null);
-  const [activeGeneration, setActiveGeneration] = createSignal<ActiveGenerationView | null>(null);
+  const [activeGenerationRoot, setActiveGenerationRoot] = createSignal<ActiveGenerationView | null>(null);
+  const [activeGenerationRevision, setActiveGenerationRevision] = createSignal(0);
+  const activeGeneration = () => {
+    activeGenerationRevision();
+    return activeGenerationRoot();
+  };
+  const setActiveGeneration = (next: ActiveGenerationView | null) => {
+    setActiveGenerationRoot(next);
+    setActiveGenerationRevision((revision) => revision + 1);
+  };
+  const generationStore = createClientActiveGenerationStore();
   const [connectingId, setConnectingId] = createSignal<string | null>(null);
   let socket: WebSocket | null = null;
   let currentGeneration: string | null = null;
@@ -113,6 +123,7 @@ export function createActiveChat(options: ActiveChatOptions) {
     setHostUiRequests([]);
     setQueue({ steering: [], followUp: [] });
     resetLiveFlags();
+    generationStore.clear();
     setActiveGeneration(null);
     currentGeneration = null;
     stopPending = false;
@@ -123,7 +134,13 @@ export function createActiveChat(options: ActiveChatOptions) {
     const previous = activeGeneration();
     const recorder = getHarnessRecorder();
     const reduceStartedAt = recorder ? performance.now() : 0;
-    const next = reduceActiveGeneration(previous, event) as ActiveGenerationView | null;
+    let result: ReturnType<typeof generationStore.apply> | undefined;
+    batch(() => {
+      result = generationStore.apply(event);
+      if (result.changed && result.state) setActiveGeneration(result.state as ActiveGenerationView);
+    });
+    if (!result) return;
+    const next = result.state as ActiveGenerationView | null;
     if (!next) return;
     if (recorder) {
       const eventRecord = event as Record<string, unknown>;
@@ -178,7 +195,6 @@ export function createActiveChat(options: ActiveChatOptions) {
         toolExecutionsIdentityChanged: previous?.toolExecutions !== next.toolExecutions,
       });
     }
-    setActiveGeneration(next);
     currentGeneration = next.id;
     const blocks = next.assistantMessages.flatMap((message) => message.blocks);
     const latest = blocks.at(-1);
@@ -399,6 +415,7 @@ export function createActiveChat(options: ActiveChatOptions) {
                 || (checkpointGenerationSeq != null && matching.lastSeq < checkpointGenerationSeq)) return;
               batch(() => {
                 applyDetail(detail, true);
+                generationStore.clear();
                 setActiveGeneration(null);
               });
             }).catch((error) => onError((error as Error).message));
