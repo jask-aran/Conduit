@@ -1,4 +1,4 @@
-import { createEffect, createSignal, onCleanup, onMount } from "solid-js";
+import { createEffect, createSignal, lazy, onCleanup, onMount, Show, Suspense } from "solid-js";
 import DOMPurify from "dompurify";
 import { marked } from "marked";
 import markedKatex from "marked-katex-extension";
@@ -9,6 +9,18 @@ import { Button } from "@/components/primitives";
 import { getHarnessRecorder, recordHarnessMetric } from "../harness-metrics";
 
 const allowedProtocols = new Set(["http:", "https:", "mailto:"]);
+
+export type MarkdownRendererId = "marked" | "incremark";
+
+export function selectedMarkdownRenderer(): MarkdownRendererId {
+  const value = new URLSearchParams(location.search).get("markdownRenderer") || localStorage.getItem("conduit:markdown-renderer");
+  return value === "incremark" ? "incremark" : "marked";
+}
+
+export function markdownRendererSwitchEnabled() {
+  return import.meta.env.DEV || ["127.0.0.1", "localhost", "::1"].includes(location.hostname)
+    || new URLSearchParams(location.search).has("markdownRenderer");
+}
 
 const escapeHtml = (value: string) => value
   .replaceAll("&", "&amp;")
@@ -146,7 +158,16 @@ function reconcileChildren(current: Node, next: Node) {
   while (current.childNodes.length > next.childNodes.length) current.lastChild?.remove();
 }
 
-export function ChatMarkdown(props: { children?: string; streaming?: boolean; streamVersion?: number; inline?: boolean; onRendered?: () => void }) {
+export type ChatMarkdownProps = {
+  children?: string;
+  streaming?: boolean;
+  streamVersion?: number;
+  inline?: boolean;
+  onRendered?: () => void;
+  renderer?: MarkdownRendererId;
+};
+
+function MarkedMarkdown(props: ChatMarkdownProps) {
   let root!: HTMLDivElement;
   const [externalUrl, setExternalUrl] = createSignal<string | null>(null);
   let externalReturnFocus: HTMLElement | null = null;
@@ -206,4 +227,15 @@ export function ChatMarkdown(props: { children?: string; streaming?: boolean; st
       </KAlertDialog.Content></KAlertDialog.Portal>
     </KAlertDialog.Root>
   </>;
+}
+
+const IncremarkMarkdown = lazy(() => import("./incremark-markdown").then((module) => ({ default: module.IncremarkMarkdown })));
+
+export function ChatMarkdown(props: ChatMarkdownProps) {
+  const renderer = () => props.renderer || selectedMarkdownRenderer();
+  return <Show when={renderer() === "incremark"} fallback={<MarkedMarkdown {...props} />}>
+    <Suspense fallback={<div class="markdown-skeleton" />}>
+      <IncremarkMarkdown {...props} />
+    </Suspense>
+  </Show>;
 }
