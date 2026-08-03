@@ -1,7 +1,8 @@
 # Issues #24 and #34 implementation
 
 Status: Slice 1 complete at `024ce4c`. Slice 2 committed at `6a713f2`.
-Slice 3 committed at `288db80`. Issue #24 remains open.
+Slice 3 committed at `288db80`. Slice 6 local switch and compatibility spike
+are implemented in the working tree; Issue #24 remains open.
 
 Issues:
 
@@ -41,8 +42,8 @@ The `slice3-timeline-projection-benchmark` covered persisted row counts
 `[1, 4, 16]`, and active tool counts `[0, 8, 32]`. Every one of the 12 cases
 changed one narrow row. Full projection row count grew from 5 to 67 when
 persisted rows grew from 1 to 32. This benchmark measures projection scaling;
-it is not a claim of end-to-end latency improvement. No Incremark benchmark
-has run yet.
+it is not a claim of end-to-end latency improvement. Slice 6 now records the
+Incremark parser, compatibility, and bundle measurements below.
 
 Verification after the final fix: `npm run typecheck`, `npm test` (266 passed),
 `npm run build`, the rich, scroll, reconnect, code-copy, and
@@ -56,18 +57,22 @@ error. Slice 3 is committed at `288db80`; Slice 6 is next for owner review.
 
 ## Revised execution order after Slice 3
 
-Slice 6 now moves ahead of the remaining renderer and boundary work. Run the
-isolated Incremark compatibility spike next. It must use a temporary fixture,
-the same deterministic Markdown inputs, and the current renderer as its
-comparison. Do not edit production imports, `package.json`, or the lockfile.
+Slice 6 now moves ahead of the remaining renderer and boundary work. It has two
+bounded parts: an isolated Incremark compatibility spike and an opt-in local
+renderer switch on the managed `4310` server. The spike uses a temporary
+fixture, the same deterministic Markdown inputs, and the current renderer as
+its comparison. The local switch uses the pinned `@incremark/core` parser in a
+lazy Solid adapter. Marked remains the default. `@incremark/solid` remains
+temporary-only because its published wrapper fails in this repository's Solid
+runtime.
 
 If the Slice 6 evidence is promising, run the work defined by Slice 4 and
 Slice 5 before Slice 7: verify live boundary and recovery behavior, then run
 the renderer-specific Marked baseline and the equivalent candidate comparison.
 Only then hold the Slice 7 decision gate. If the spike is not promising, run
 the required Slice 4 and current-renderer Slice 5 checks needed to document
-the rejection, then close the decision at Slice 7. Slice 8 remains blocked on
-an explicit owner approval.
+the rejection; do not treat the local switch as adoption evidence. Slice 8
+remains blocked on explicit owner approval.
 
 The slice headings below define scope and acceptance criteria. This section
 defines the execution order.
@@ -121,8 +126,10 @@ sanitisation, DOM stability, compatibility, and bundle cost. Evidence for
 one issue cannot close the other.
 
 Do not replace the current renderer without a focused compatibility spike,
-measured evidence, and owner approval. Do not add an Incremark dependency or
-change the lockfile during the spike.
+measured evidence, and owner approval. The local switch is an investigation
+surface only. The exact `@incremark/core` dependency and lockfile entries are
+permitted for that surface; the high-level `@incremark/solid` package stays out
+of the production dependency graph.
 
 ## Worker execution contract
 
@@ -280,12 +287,18 @@ Agent-browser supplies one authenticated regression check at a slice boundary;
 it is not the performance runner. Do not repeat broad UI exploration after the
 required controls pass.
 
-Start the managed application on loopback from the repository root:
+Start the managed application with the standard WSL-accessible bind from the
+repository root:
 
 ```bash
-CONDUIT_HOST=127.0.0.1 bash .devcontainer/start-conduit.sh restart
+bash .devcontainer/start-conduit.sh restart
 curl -fsS http://127.0.0.1:4310/healthz
 ```
+
+The launcher intentionally keeps `CONDUIT_HOST=0.0.0.0` by default. Windows
+must reach the server through WSL, so this verification must use the same bind
+surface as normal local use. `127.0.0.1:4310` is only the client and health-check
+URL from the WSL side; it is not a request to bind the server to loopback.
 
 Load the installed browser instructions, derive the worktree session, and open
 the managed application:
@@ -680,18 +693,28 @@ interaction. Do not use subjective smoothness as a gate.
 
 Commit: `test: establish Markdown renderer performance baseline`.
 
-### Slice 6 — Isolated Incremark compatibility spike (#24)
+### Slice 6 — Incremark compatibility spike and local switch (#24)
 
-Use a temporary fixture outside the production dependency graph. Test the
-candidate package version and both its high-level content/stream API and its
-lower-level append/finalize API. Do not edit `package.json`, the lockfile, or
-production imports. Record package metadata, dependency size, and generated
-chunk estimates in a redacted report.
+Use a temporary fixture outside the production dependency graph to test
+`@incremark/solid@1.0.2` through its high-level content/stream API and to test
+`@incremark/core@1.0.2` through its lower-level append/finalize API. Use the
+same deterministic fixtures as Slice 5. Record package metadata, dependency
+size, and generated chunk estimates in the report output. The report is
+temporary; this file is the durable progress record.
 
-Worker boundary: an isolated temporary fixture and its report only. Do not edit
-production imports, `package.json`, the repository lockfile, or Conduit
-renderer behavior. Pin the tested package versions in the report. Record
-package provenance, license, release date, and transitive dependency sizes.
+The managed application also has a local-only renderer selector. It follows
+the terminal renderer pattern: the default is Marked,
+`?markdownRenderer=incremark` selects the candidate for a local route, and the
+selector stores the local choice in `localStorage`. It is visible only on local
+development hosts or when the query parameter is present. The candidate is a
+Conduit adapter around `@incremark/core`; it is not the published
+`@incremark/solid` component.
+
+Worker boundary: the temporary fixture, its harness, the local candidate
+adapter, the local selector, and this evidence record. Do not replace the
+default renderer or change server/protocol behavior. Pin the tested package
+versions in the report. Record package provenance, license, release date, and
+transitive dependency sizes.
 
 Acceptance:
 
@@ -705,12 +728,101 @@ Acceptance:
   retain their controls.
 - Renderer work and bundle impact improve enough to justify further work, or
   the failed gate is recorded with evidence.
+- The managed `4310` route can switch between Marked and the candidate, and the
+  default remains Marked after a fresh session.
 
 Verification: same deterministic fixture inputs as Slice 5, semantic DOM
 comparison, security assertions, identity assertions, frame/Long Task reports,
-manual agent-browser interaction, and no production build changes.
+manual agent-browser interaction, `npm run typecheck`, a production build with
+the documented bundle budget, and a managed-server restart. The local switch
+must be checked from `127.0.0.1:4310`; the server must bind to `0.0.0.0`.
 
 Commit: `test: spike Incremark compatibility for streaming Markdown`.
+
+### Slice 6 benchmark and implementation notes — 3 August 2026
+
+The temporary harness ran 9 fixtures in content and stream modes, for 18
+browser runs, plus 9 lower-level parser runs. The current-renderer baseline
+passed all 18 contract checks. The published `@incremark/solid@1.0.2` candidate
+raised a runtime error in all 18 runs. The first error was:
+
+```text
+TypeError: Cannot read properties of undefined (reading 'url')
+```
+
+It came from the package's reference-image branch while rendering a fixture
+that had no reference definition. The code fixture also exposed a separate
+highlighter error. The candidate therefore has zero of 9 stream parity runs,
+zero runtime-error-free runs, and the gate is not promising.
+
+The lower-level core parser preserved the complete source buffer in all 9
+fixtures. It accepted 31 chunks for the rich fixture and 210 chunks for the
+scroll fixture. The maximum update contained 2 blocks for rich Markdown and 1
+block for the long scroll fixture. This shows incremental parser boundaries;
+it does not prove lower end-to-end rendering cost.
+
+Package evidence for the pinned 13 March 2026 release:
+
+- `@incremark/core@1.0.2`: MIT, 197,789-byte tarball, 882,904-byte unpacked
+  payload, 22 direct dependencies.
+- `@incremark/solid@1.0.2`: MIT, 72,168-byte tarball, 304,493-byte unpacked
+  payload, 8 direct dependencies.
+- The isolated graph contained 127 packages and 31,492,361 installed bytes.
+  The largest payload was `@shikijs/langs` at 8,041,828 bytes.
+- The isolated high-level candidate bundle was 1,945,949 bytes gzip versus
+  101,870 bytes gzip for the baseline fixture: +1,844,079 bytes gzip. This is
+  a package-cost measurement, not a production bundle claim, because the
+  high-level candidate failed at runtime.
+
+The working-tree local adapter imports only `@incremark/core` and lazy-loads
+as `incremark-markdown-*.js`: 84.31 kB raw and 24.62 kB gzip in the
+production build. The default Marked path stays in the existing application
+chunk. This is a measurable lazy-load cost, not a measured performance gain.
+The default `npm run build` also reports the existing initial-JS budget failure:
+`initial JS is 232322 B gzip; budget is 180000 B.` The source build completes;
+the budget check exits non-zero. No threshold was changed.
+
+Managed-server verification passed after `bash .devcontainer/start-conduit.sh
+restart`: `/healthz` returned `{"ok":true,"status":"ready","release":"development"}`
+and `ss` showed `0.0.0.0:4310`. Authenticated agent-browser verification selected
+Incremark, showed the existing heading/table/code content, switched back to
+Marked with the same structure, and loaded the candidate from
+`?markdownRenderer=incremark`.
+
+The final managed-server smoke sent one disposable `Reply exactly OK.` prompt
+with Incremark selected. The candidate assistant root streamed and settled to
+`OK`; the renderer attribute remained `incremark`, no generation-stop control
+remained, and no alert error was present. The browser session was then closed.
+
+### Manual validation checklist — Slice 6
+
+Run `bash .devcontainer/start-conduit.sh restart`, open
+`http://127.0.0.1:4310`, and use an authenticated disposable chat. Record each
+item as pass or fail.
+
+- In a fresh browser session, confirm the selector says `Marked`. Confirm the
+  normal response layout has not changed.
+- Select `Incremark`. Check headings, paragraphs, lists, tables, fenced code,
+  KaTeX, incomplete Markdown, and long responses. Look for missing text,
+  duplicated blocks, unstyled output, layout jumps, or a blank answer.
+- During a live response, check thinking text, tool cards, trace expansion,
+  answer growth, follow-scroll, and scroll-away behavior. The candidate must
+  not leave the trace stuck on `Thinking…`.
+- Use a code block. `Copy code` must copy the block contents. Use an external
+  link. The existing confirmation dialog must open, and Cancel must not open a
+  new tab. Unsafe HTML, unsafe URL protocols, and images must not render.
+- Refresh or reconnect during streaming and after completion. Confirm one
+  final answer with no duplicate or missing text.
+- Select `Marked` again. Confirm the same response remains visible, the
+  existing external-link and copy controls work, and no console-visible error
+  or blank renderer remains.
+- Load `http://127.0.0.1:4310/?markdownRenderer=incremark` in a new tab. Confirm
+  the selector and `data-markdown-renderer` use `incremark`; then select
+  `Marked` and confirm the local choice persists.
+
+Expected result: the switch is reversible and local, Marked remains the safe
+default, candidate output is usable for the spike, and no protocol, persistence,
+tool-row, scroll, security, or interaction regression is visible.
 
 ### Slice 7 — #24 decision gate and focused tests
 
@@ -822,8 +934,9 @@ lifecycle.
 
 - Do not work on #37.
 - Do not replace the renderer.
-- Do not add Incremark to production dependencies.
-- Do not regenerate or edit the lockfile during the spike.
+- Do not add `@incremark/solid` to production dependencies.
+- Keep the exact `@incremark/core` dependency and lockfile entries scoped to the
+  local investigation adapter until the decision gate passes.
 - Do not redesign the server protocol or Pi/provider path.
 - Do not persist renderer state.
 - Do not perform a broad UI rewrite.

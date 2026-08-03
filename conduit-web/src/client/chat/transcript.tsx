@@ -6,6 +6,7 @@ import type { ActiveChatStore } from "../state/active-chat";
 import { AttachmentCards } from "./attachments";
 import { TurnTrace } from "./turn-trace";
 import { createTimelineStore } from "../state/timeline-store";
+import { markdownRendererSwitchEnabled, selectedMarkdownRenderer, type MarkdownRendererId } from "./markdown";
 
 const ChatMarkdown = lazy(() => import("./markdown").then((module) => ({ default: module.ChatMarkdown })));
 function Actions(props: { message: Message; precedingUserId?: string; chat: ActiveChatStore; partialContinue: boolean }) {
@@ -30,6 +31,8 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
   let layoutEpoch = 0;
   let markdownSettledEpoch = -1;
   const [following, setFollowing] = createSignal(true);
+  const [markdownRenderer, setMarkdownRenderer] = createSignal<MarkdownRendererId>(selectedMarkdownRenderer());
+  const showMarkdownRendererSwitch = markdownRendererSwitchEnabled();
   const timeline = createTimelineStore(
     props.chat.messages,
     props.chat.tools,
@@ -64,6 +67,10 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
         resolve();
       }));
     }).finally(() => { historyLoad = null; });
+  };
+  const switchMarkdownRenderer = (next: MarkdownRendererId) => {
+    setMarkdownRenderer(next);
+    localStorage.setItem("conduit:markdown-renderer", next);
   };
   createRenderEffect(() => {
     props.chat.loadedId();
@@ -140,7 +147,15 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
     });
   });
 
-  return <div class="transcript" data-slot="message-scroller">
+  return <div class="transcript" data-slot="message-scroller" data-markdown-renderer={markdownRenderer()}>
+    <Show when={showMarkdownRendererSwitch}>
+      <div class="transcript-renderer-switch">
+        <label>Markdown renderer<select aria-label="Markdown renderer" value={markdownRenderer()} onChange={(event) => switchMarkdownRenderer(event.currentTarget.value as MarkdownRendererId)}>
+          <option value="marked">Marked</option>
+          <option value="incremark">Incremark</option>
+        </select></label>
+      </div>
+    </Show>
     <Show when={empty() && pullDistance() > 8}>
       <div class="empty-pull-hint" data-visible="true" data-armed={pullArmed() ? "true" : "false"} aria-hidden="true">
         {pullArmed() ? "Release to refresh" : "Pull to refresh"}
@@ -153,7 +168,7 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
         </Show>
         <Show when={empty()}><div class="empty-thread" data-slot="message-scroller-item"><div class="welcome"><h1>How can I help you today?</h1></div></div></Show>
         <For each={timeline}>{(item) => {
-          if (item.type === "trace") return <div data-slot="message-scroller-item"><TurnTrace trace={item.value} sessionId={props.chat.loadedId()} /></div>;
+          if (item.type === "trace") return <div data-slot="message-scroller-item"><TurnTrace trace={item.value} sessionId={props.chat.loadedId()} renderer={markdownRenderer()} /></div>;
           const message = createMemo(() => item.value);
           const user = createMemo(() => message().role === "user");
           const live = createMemo(() => {
@@ -168,7 +183,7 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
                 <Show when={message().timestamp}><time>{new Date(message().timestamp!).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</time></Show>
                 <div data-slot="bubble" data-align={user() ? "end" : "start"} data-editing={props.chat.editingEntryId() === message().id ? "true" : "false"} class={user() ? "bubble bubble-user" : "bubble bubble-assistant"}>
                   <div data-slot="bubble-content">
-                    <Show when={user()} fallback={<Suspense fallback={<div class="markdown-skeleton" />}><ChatMarkdown streaming={live()} streamVersion={item.streamVersion} onRendered={settleAfterMarkdown}>{message().content || ""}</ChatMarkdown></Suspense>}><span class="user-message-text">{message().content || ""}</span></Show>
+                    <Show when={user()} fallback={<Suspense fallback={<div class="markdown-skeleton" />}><ChatMarkdown renderer={markdownRenderer()} streaming={live()} streamVersion={item.streamVersion} onRendered={settleAfterMarkdown}>{message().content || ""}</ChatMarkdown></Suspense>}><span class="user-message-text">{message().content || ""}</span></Show>
                   </div>
                 </div>
                 <Show when={user() && message().pending}><div class="marker">{message().queueMode === "steer" ? "Queued · steer (after tools)" : "Queued · follow-up (after turn)"}</div></Show>

@@ -2,6 +2,7 @@ import { createSignal, Index, lazy, Show, Suspense } from "solid-js";
 import { BrainIcon, ChevronDownIcon } from "lucide-solid";
 import type { TurnTraceData } from "../turn-rows";
 import { ToolCard } from "./tool-card";
+import type { MarkdownRendererId } from "./markdown";
 
 const ChatMarkdown = lazy(() => import("./markdown").then((module) => ({ default: module.ChatMarkdown })));
 
@@ -27,13 +28,13 @@ function previewOf(trace: TurnTraceData): { text: string; counters: string } {
   return { text: clipped, counters };
 }
 
-export function TurnTrace(props: { trace: TurnTraceData; sessionId: string | null }) {
+export function TurnTrace(props: { trace: TurnTraceData; sessionId: string | null; renderer?: MarkdownRendererId }) {
   const [open, setOpen] = createSignal(false);
   return <div class="turn-trace" data-active={props.trace.active ? "true" : "false"}>
     <button type="button" class="turn-trace-header" aria-expanded={open()} onClick={() => setOpen(!open())}>
       <BrainIcon />
       <div class="turn-trace-preview">
-        <Suspense fallback={<span>{previewOf(props.trace).text}</span>}><ChatMarkdown inline>{previewOf(props.trace).text}</ChatMarkdown></Suspense>
+        <Suspense fallback={<span>{previewOf(props.trace).text}</span>}><ChatMarkdown inline renderer={props.renderer}>{previewOf(props.trace).text}</ChatMarkdown></Suspense>
         <Show when={previewOf(props.trace).counters}><span class="turn-trace-counter"> · {previewOf(props.trace).counters}</span></Show>
       </div>
       <ChevronDownIcon class="turn-trace-chevron" data-open={open() ? "true" : "false"} />
@@ -46,7 +47,7 @@ export function TurnTrace(props: { trace: TurnTraceData; sessionId: string | nul
           const live = () => { const value = segment(); return value.kind !== "tool" && Boolean(value.live); };
           if (tool()) return <ToolCard tool={tool()!} sessionId={props.sessionId} />;
           return <div class="turn-trace-text" data-kind={segment().kind}>
-            <Suspense fallback={<div class="markdown-skeleton" />}><ChatMarkdown streaming={live()}>{text()}</ChatMarkdown></Suspense>
+            <Suspense fallback={<div class="markdown-skeleton" />}><ChatMarkdown streaming={live()} renderer={props.renderer}>{text()}</ChatMarkdown></Suspense>
           </div>;
         }}</Index>
       </div>
