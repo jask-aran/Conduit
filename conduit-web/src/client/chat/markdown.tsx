@@ -2,9 +2,11 @@ import { createEffect, createSignal, onCleanup, onMount } from "solid-js";
 import DOMPurify from "dompurify";
 import { marked } from "marked";
 import markedKatex from "marked-katex-extension";
+import katex from "katex";
 import * as KAlertDialog from "@kobalte/core/alert-dialog";
 import "katex/dist/katex.min.css";
 import { Button } from "@/components/primitives";
+import { getHarnessRecorder, recordHarnessMetric } from "../harness-metrics";
 
 const allowedProtocols = new Set(["http:", "https:", "mailto:"]);
 
@@ -42,13 +44,65 @@ marked.use({
 });
 
 function renderMarkdown(source: string, inline = false) {
-  const html = (inline ? marked.parseInline(source, { async: false }) : marked.parse(source, { async: false })) as string;
-  return DOMPurify.sanitize(html, {
+  const recorder = getHarnessRecorder();
+  const parseStartedAt = recorder ? performance.now() : 0;
+  let katexMs = 0;
+  let katexCalls = 0;
+  let katexTimingAvailable = false;
+  let katexTimingBlocker: string | null = null;
+  let restoreKatex: (() => void) | null = null;
+  if (recorder) {
+    const katexApi = katex as typeof katex & { renderToString: (...args: any[]) => string };
+    const originalRenderToString = katexApi.renderToString;
+    if (typeof originalRenderToString !== "function") {
+      katexTimingBlocker = "katex.renderToString is unavailable";
+    } else {
+      try {
+        katexApi.renderToString = function measuredRenderToString(...args: any[]) {
+          const startedAt = performance.now();
+          try {
+            return originalRenderToString.apply(this, args);
+          } finally {
+            katexCalls += 1;
+            katexMs += performance.now() - startedAt;
+          }
+        };
+        katexTimingAvailable = true;
+        restoreKatex = () => { katexApi.renderToString = originalRenderToString; };
+      } catch {
+        katexTimingBlocker = "katex.renderToString cannot be wrapped without changing the module export";
+      }
+    }
+  }
+  let html: string;
+  try {
+    html = (inline ? marked.parseInline(source, { async: false }) : marked.parse(source, { async: false })) as string;
+  } finally {
+    restoreKatex?.();
+  }
+  const parsedAt = recorder ? performance.now() : 0;
+  const fragment = DOMPurify.sanitize(html, {
     USE_PROFILES: { html: true },
     ADD_ATTR: ["aria-label", "data-copy-code", "data-external-url", "data-language", "data-markdown", "class"],
     FORBID_TAGS: ["img", "script", "style", "iframe", "object", "embed", ...(inline ? ["a", "button"] : [])],
     RETURN_DOM_FRAGMENT: true,
   }) as DocumentFragment;
+  if (recorder) {
+    const sanitisedAt = performance.now();
+    recordHarnessMetric(recorder, {
+      stage: "markdown-render",
+      sourceCharacters: source.length,
+      inline,
+      parseMs: parsedAt - parseStartedAt,
+      sanitiseMs: sanitisedAt - parsedAt,
+      katexCandidate: /\$(?:\$?)[^\n]+\$(?:\$?)/.test(source),
+      katexMs: katexCalls > 0 ? katexMs : null,
+      katexCallCount: katexCalls,
+      katexTimingAvailable,
+      katexTimingBlocker,
+    });
+  }
+  return fragment;
 }
 
 const sameKind = (current: Node, next: Node) => current.nodeType === next.nodeType
@@ -103,7 +157,18 @@ export function ChatMarkdown(props: { children?: string; streaming?: boolean; st
     const source = String(props.children || "");
     const version = Number(props.streamVersion || 0);
     if (source === renderedSource && version === renderedVersion) return;
-    reconcileChildren(root, renderMarkdown(source, props.inline));
+    const fragment = renderMarkdown(source, props.inline);
+    const recorder = getHarnessRecorder();
+    const reconcileStartedAt = recorder ? performance.now() : 0;
+    reconcileChildren(root, fragment);
+    if (recorder) {
+      recordHarnessMetric(recorder, {
+        stage: "markdown-reconcile",
+        sourceCharacters: source.length,
+        inline: Boolean(props.inline),
+        reconcileMs: performance.now() - reconcileStartedAt,
+      });
+    }
     renderedSource = source;
     renderedVersion = version;
   });
