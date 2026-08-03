@@ -32,6 +32,10 @@ function redactChangedKeys(keys = []) {
 function summarizeHarnessMetrics(metrics = []) {
   const byStage = {};
   const timingMs = {};
+  const rendererByStage = {};
+  const rendererTimingMs = {};
+  const rendererCounters = {};
+  const rendererParserModes = {};
   const changedBlocks = new Set();
   const changedBlockLengths = new Set();
   const projectionModes = {};
@@ -43,6 +47,20 @@ function summarizeHarnessMetrics(metrics = []) {
   const changedRowKeySet = new Set(changedRowKeys);
   for (const metric of metrics) {
     byStage[metric.stage] = (byStage[metric.stage] || 0) + 1;
+    const renderer = typeof metric.renderer === "string" ? metric.renderer : null;
+    if (renderer) {
+      rendererByStage[renderer] ||= {};
+      rendererByStage[renderer][metric.stage] = (rendererByStage[renderer][metric.stage] || 0) + 1;
+      for (const key of ["pendingBlockCount", "completedBlockCount", "updatedBlockCount", "katexCallCount"]) {
+        if (typeof metric[key] !== "number") continue;
+        rendererCounters[`${renderer}.${key}`] ||= [];
+        rendererCounters[`${renderer}.${key}`].push(metric[key]);
+      }
+      if (typeof metric.parserMode === "string") {
+        rendererParserModes[renderer] ||= {};
+        rendererParserModes[renderer][metric.parserMode] = (rendererParserModes[renderer][metric.parserMode] || 0) + 1;
+      }
+    }
     if (metric.stage === "timeline-projection" && typeof metric.projectionMode === "string") {
       projectionModes[metric.projectionMode] = (projectionModes[metric.projectionMode] || 0) + 1;
     }
@@ -50,6 +68,10 @@ function summarizeHarnessMetrics(metrics = []) {
       if (!key.endsWith("Ms") || typeof value !== "number") continue;
       timingMs[`${metric.stage}.${key}`] ||= [];
       timingMs[`${metric.stage}.${key}`].push(value);
+      if (renderer) {
+        rendererTimingMs[`${renderer}.${metric.stage}.${key}`] ||= [];
+        rendererTimingMs[`${renderer}.${metric.stage}.${key}`].push(value);
+      }
     }
     if (typeof metric.changedBlock === "string") {
       changedBlockEventCount += 1;
@@ -65,8 +87,12 @@ function summarizeHarnessMetrics(metrics = []) {
   return {
     count: metrics.length,
     byStage,
+    rendererByStage,
+    rendererCounters: Object.fromEntries(Object.entries(rendererCounters).map(([key, values]) => [key, summary(values)])),
+    rendererParserModes,
     projectionModeCounts: projectionModes,
     timingMs: Object.fromEntries(Object.entries(timingMs).map(([key, values]) => [key, summary(values)])),
+    rendererTimingMs: Object.fromEntries(Object.entries(rendererTimingMs).map(([key, values]) => [key, summary(values)])),
     changedBlockEventCount,
     uniqueChangedBlockCount: changedBlocks.size,
     changedBlockLengthEvidence: [...changedBlockLengths].sort((left, right) => left - right),
@@ -77,6 +103,10 @@ function summarizeHarnessMetrics(metrics = []) {
     uniqueChangedRowKeyCount: changedRowKeySet.size,
     changedRowKeyLengthEvidence: redactChangedKeys(changedRowKeys),
   };
+}
+
+function rendererPath(renderer) {
+  return renderer === "incremark" ? "/?markdownRenderer=incremark" : "/?markdownRenderer=marked";
 }
 
 function summarizeNumbers(values) {
@@ -883,6 +913,7 @@ function expectedInteractionErrors(expected, interactions, inputFeatures) {
 
 export async function runBrowserStreamingScenario(page, scenario) {
   const startedAt = new Date().toISOString();
+  const renderer = scenario.renderer || "marked";
   const browserErrors = [];
   page.on("pageerror", (error) => browserErrors.push(error.message));
   page.on("console", (message) => {
@@ -894,7 +925,7 @@ export async function runBrowserStreamingScenario(page, scenario) {
     browserErrors.push(`${response.status()} ${request.method()} ${new URL(response.url()).pathname}`);
   });
   await installBrowserProtocol(page, scenario);
-  await page.goto("/");
+  await page.goto(rendererPath(renderer));
   await page.getByRole("textbox", { name: "Message Pi" }).fill(scenario.prompt || `Run ${scenario.name}`);
   await page.getByRole("button", { name: "Send message" }).click();
   const sourceText = scenario.cadence.deltas.join("");
@@ -947,12 +978,14 @@ export async function runBrowserStreamingScenario(page, scenario) {
     metadata: {
       commit: process.env.CONDUIT_RELEASE || "working-tree",
       profile: scenario.profile || "fixed",
+      renderer,
       runtime,
       command: "npm run test:harness:browser",
     },
     seed: scenario.seed ?? null,
     outcome: errors.length ? "failed" : "passed",
     browser: {
+      renderer,
       sourceCharacters: sourceText.length,
       sourceDeltaCount: scenario.cadence.deltas.length,
       sourceEvidence: { length: sourceText.length, digest: raw.sourceDigest || null },
@@ -992,7 +1025,7 @@ export async function runBrowserStreamingScenario(page, scenario) {
         correctnessRead: raw.instrumentationEnabled ? null : "one final DOM text read after completion; read cost excluded from timing",
       },
       limitations: {
-        katexTiming: "Measured by wrapping marked-katex-extension's katex.renderToString; clientWork reports katexCallCount and markdown-render.katexMs. A zero call count means the fixture did not invoke the extension.",
+        katexTiming: "Marked timing wraps marked-katex-extension's katex.renderToString; Incremark timing records adapter MathNode calls. clientWork reports renderer-specific KaTeX timing. A zero call count means the fixture did not invoke math rendering.",
       },
       clientWork: summarizeHarnessMetrics(scopedMetrics),
     },
@@ -1003,6 +1036,7 @@ export async function runBrowserStreamingScenario(page, scenario) {
 
 export async function runBrowserReconnectScenario(page, scenario) {
   const startedAt = new Date().toISOString();
+  const renderer = scenario.renderer || "marked";
   const browserErrors = [];
   page.on("pageerror", (error) => browserErrors.push(error.message));
   page.on("console", (message) => {
@@ -1017,7 +1051,7 @@ export async function runBrowserReconnectScenario(page, scenario) {
     },
     instrumentation: scenario.instrumentation !== false,
   });
-  await page.goto("/");
+  await page.goto(rendererPath(renderer));
   await page.getByRole("textbox", { name: "Message Pi" }).fill(scenario.prompt || `Run ${scenario.name}`);
   await page.getByRole("button", { name: "Send message" }).click();
   const expectedText = scenario.initialText + scenario.recoveredDelta;
@@ -1057,11 +1091,13 @@ export async function runBrowserReconnectScenario(page, scenario) {
     metadata: {
       commit: process.env.CONDUIT_RELEASE || "working-tree",
       profile: "reconnect",
+      renderer,
       runtime,
       command: "npm run test:harness:browser",
     },
     outcome: errors.length ? "failed" : "passed",
     browser: {
+      renderer,
       sourceCharacters: expectedText.length,
       sourceDeltaCount: 2,
       sourceEvidence: { length: expectedText.length, digest: raw.sourceDigest || null },

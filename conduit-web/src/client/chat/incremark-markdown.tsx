@@ -3,6 +3,7 @@ import { createIncremarkParser } from "@incremark/core";
 import katex from "katex";
 import * as KAlertDialog from "@kobalte/core/alert-dialog";
 import { Button } from "@/components/primitives";
+import { getHarnessRecorder, recordHarnessMetric } from "@/client/harness-metrics";
 import type { ChatMarkdownProps } from "./markdown";
 
 type MarkdownNode = any;
@@ -62,6 +63,8 @@ function LinkNode(props: { node: MarkdownNode; context: RendererContext; referen
 
 function MathNode(props: { node: MarkdownNode }) {
   let html = "";
+  const recorder = getHarnessRecorder();
+  const startedAt = recorder ? performance.now() : 0;
   try {
     html = katex.renderToString(String(props.node.value || ""), {
       displayMode: props.node.type === "math",
@@ -69,6 +72,14 @@ function MathNode(props: { node: MarkdownNode }) {
     });
   } catch {
     html = "";
+  }
+  if (recorder) {
+    recordHarnessMetric(recorder, {
+      stage: "markdown-katex",
+      renderer: "incremark",
+      katexMs: performance.now() - startedAt,
+      katexCallCount: 1,
+    });
   }
   return <span class={props.node.type === "math" ? "incremark-math-block" : "incremark-math-inline"} innerHTML={html} />;
 }
@@ -156,18 +167,56 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
 
   createEffect(() => {
     const source = String(props.children || "");
+    const recorder = getHarnessRecorder();
+    const parseStartedAt = recorder ? performance.now() : 0;
+    let parserMode = "none";
+    let update: ReturnType<typeof parser.append> | undefined;
     if (source !== previousSource) {
-      if (source.startsWith(previousSource)) parser.append(source.slice(previousSource.length));
-      else parser.render(source);
+      if (source.startsWith(previousSource)) {
+        parserMode = "append";
+        update = parser.append(source.slice(previousSource.length));
+      } else {
+        parserMode = "render";
+        update = parser.render(source);
+      }
       previousSource = source;
       finalised = false;
     }
     if (!props.streaming && !finalised) {
-      parser.finalize();
+      parserMode = parserMode === "none" ? "finalize" : `${parserMode}+finalize`;
+      update = parser.finalize();
       finalised = true;
     }
+    const parsedAt = recorder ? performance.now() : 0;
     setDefinitions({ ...parser.getDefinitionMap() });
     setAst({ ...parser.getAst() });
+    const reconciledAt = recorder ? performance.now() : 0;
+    if (recorder) {
+      recordHarnessMetric(recorder, {
+        stage: "markdown-render",
+        renderer: "incremark",
+        sourceCharacters: source.length,
+        inline: Boolean(props.inline),
+        parseMs: parsedAt - parseStartedAt,
+        sanitiseMs: null,
+        katexCandidate: /\$(?:\$?)[^\n]+\$(?:\$?)/.test(source),
+        katexMs: null,
+        katexCallCount: 0,
+        katexTimingAvailable: false,
+        katexTimingBlocker: "Incremark adapter KaTeX calls are not instrumented",
+        parserMode,
+        pendingBlockCount: update?.pending?.length ?? null,
+        completedBlockCount: update?.completed?.length ?? null,
+        updatedBlockCount: update?.updated?.length ?? null,
+      });
+      recordHarnessMetric(recorder, {
+        stage: "markdown-reconcile",
+        renderer: "incremark",
+        sourceCharacters: source.length,
+        inline: Boolean(props.inline),
+        reconcileMs: reconciledAt - parsedAt,
+      });
+    }
     queueMicrotask(() => props.onRendered?.());
   });
 
@@ -178,7 +227,7 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
   });
 
   return <>
-    <div class="chat-markdown incremark-markdown" data-renderer="incremark" data-streaming={props.streaming || undefined}>
+    <div class="chat-markdown" data-renderer="incremark" data-streaming={props.streaming || undefined}>
       <div class="incremark" data-incremark-core="true">
         <Show when={props.inline} fallback={<AstNode node={ast()} context={context()} />}>
           <InlineNodes nodes={ast().children?.flatMap((child: MarkdownNode) => child.children || [child]) || []} context={context()} />
