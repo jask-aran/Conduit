@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildTurnRows } from "../src/client/turn-rows.ts";
+import {
+  buildLiveAnswerRow,
+  buildLiveProjectionIndex,
+  buildTurnRows,
+} from "../src/client/turn-rows.ts";
 
 test("projects a live generation directly from ordered Pi blocks", () => {
   const rows = buildTurnRows([
@@ -88,4 +92,40 @@ test("projects partial continuation through Active Generation without a flattene
 
   assert.deepEqual(rows.map((row) => row.key), ["message:u1", "message:live:g_continue:m1"]);
   assert.equal(rows[1]?.type === "message" && rows[1].value.content, "The answer continues here.");
+});
+
+test("indexes live blocks to one trace or answer row", () => {
+  const generation = {
+    id: "g_index",
+    status: "running",
+    lastSeq: 4,
+    toolExecutions: {
+      call_1: { toolCallId: "call_1", name: "read", status: "running" },
+    },
+    assistantMessages: [{
+      id: "m1",
+      blocks: [
+        { type: "thinking", identity: "g_index:m1:0", contentIndex: 0, text: "Plan", status: "complete" },
+        { type: "text", identity: "g_index:m1:1", contentIndex: 1, text: "Narration", status: "complete" },
+        { type: "toolCall", identity: "g_index:m1:2", contentIndex: 2, toolCallId: "call_1", name: "read", status: "streaming" },
+      ],
+    }, {
+      id: "m2",
+      blocks: [{ type: "text", identity: "g_index:m2:0", contentIndex: 0, text: "Answer", status: "streaming" }],
+    }],
+  };
+  const messages = [{ id: "u1", role: "user", content: "Inspect this" }];
+  const index = buildLiveProjectionIndex(generation, messages);
+
+  assert.deepEqual(index.blockLocations.get("g_index:m1:0"), { kind: "trace", rowKey: "trace:u1", segmentIndex: 0 });
+  assert.deepEqual(index.blockLocations.get("g_index:m1:1"), { kind: "trace", rowKey: "trace:u1", segmentIndex: 1 });
+  assert.deepEqual(index.blockLocations.get("g_index:m1:2"), { kind: "trace", rowKey: "trace:u1", segmentIndex: 2 });
+  assert.deepEqual(index.blockLocations.get("g_index:m2:0"), { kind: "answer", rowKey: "message:live:g_index:m2", assistantId: "m2" });
+  assert.deepEqual(index.toolLocations.get("call_1"), { rowKey: "trace:u1", segmentIndex: 2 });
+
+  generation.assistantMessages[1].blocks[0].text = "Answer updated";
+  generation.lastSeq = 5;
+  const row = buildLiveAnswerRow(generation, "m2", index, index.messageIndex);
+  assert.equal(row?.value.content, "Answer updated");
+  assert.equal(row?.key, "message:live:g_index:m2");
 });

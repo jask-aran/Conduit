@@ -34,6 +34,7 @@ function summarizeHarnessMetrics(metrics = []) {
   const timingMs = {};
   const changedBlocks = new Set();
   const changedBlockLengths = new Set();
+  const projectionModes = {};
   let changedBlockEventCount = 0;
   const boundaryTypes = {};
   let katexCallCount = 0;
@@ -42,6 +43,9 @@ function summarizeHarnessMetrics(metrics = []) {
   const changedRowKeySet = new Set(changedRowKeys);
   for (const metric of metrics) {
     byStage[metric.stage] = (byStage[metric.stage] || 0) + 1;
+    if (metric.stage === "timeline-projection" && typeof metric.projectionMode === "string") {
+      projectionModes[metric.projectionMode] = (projectionModes[metric.projectionMode] || 0) + 1;
+    }
     for (const [key, value] of Object.entries(metric)) {
       if (!key.endsWith("Ms") || typeof value !== "number") continue;
       timingMs[`${metric.stage}.${key}`] ||= [];
@@ -61,6 +65,7 @@ function summarizeHarnessMetrics(metrics = []) {
   return {
     count: metrics.length,
     byStage,
+    projectionModeCounts: projectionModes,
     timingMs: Object.fromEntries(Object.entries(timingMs).map(([key, values]) => [key, summary(values)])),
     changedBlockEventCount,
     uniqueChangedBlockCount: changedBlocks.size,

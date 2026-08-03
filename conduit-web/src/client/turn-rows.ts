@@ -31,6 +31,17 @@ export interface ActiveGenerationView {
   }>;
 }
 
+export type LiveGenerationChangeScope = "block" | "tool" | "structural";
+
+export interface LiveGenerationChange {
+  generationId: string;
+  eventType: string;
+  scope: LiveGenerationChangeScope;
+  messageId?: string;
+  contentIndex?: number;
+  toolCallId?: string;
+}
+
 export type TraceSegment =
   | { kind: "thinking"; id: string; text: string; live?: boolean }
   | { kind: "narration"; id: string; text: string; live?: boolean }
@@ -57,6 +68,133 @@ const toolCallIdsOf = (message: Message): string[] => (message.blocks || [])
 
 const messageKey = (message: Message) => message.key || message.id;
 const active = (generation: ActiveGenerationView) => !["stopped", "complete", "failed"].includes(generation.status);
+
+export type LiveBlockLocation =
+  | { kind: "trace"; rowKey: string; segmentIndex: number }
+  | { kind: "answer"; rowKey: string; assistantId: string };
+
+export interface LiveProjectionIndex {
+  generationId: string;
+  messageIndex: number;
+  traceRowKey: string | null;
+  blockLocations: Map<string, LiveBlockLocation>;
+  toolLocations: Map<string, { rowKey: string; segmentIndex: number }>;
+  answerBlockIdentities: Map<string, Set<string>>;
+  answerRowKeys: Map<string, string>;
+  firstAnswerAssistantId: string | null;
+  activeBlockCount: number;
+}
+
+const liveOwner = (messages: Message[], generation: ActiveGenerationView) =>
+  [...messages].reverse().find((message) => message.role === "user" && !message.pending) || null;
+
+export function buildLiveProjectionIndex(
+  generation: ActiveGenerationView,
+  messages: Message[],
+): LiveProjectionIndex {
+  const classifications = textBlockClassifications(generation) as Record<string, "interim" | "answer">;
+  const owner = liveOwner(messages, generation);
+  const messageIndex = owner ? messages.indexOf(owner) : messages.length;
+  const traceRowKey = `trace:${owner ? messageKey(owner) : `live:${generation.id}`}`;
+  const blockLocations = new Map<string, LiveBlockLocation>();
+  const toolLocations = new Map<string, { rowKey: string; segmentIndex: number }>();
+  const answerBlockIdentities = new Map<string, Set<string>>();
+  const answerRowKeys = new Map<string, string>();
+  let firstAnswerAssistantId: string | null = null;
+  let segmentIndex = 0;
+  let activeBlockCount = 0;
+
+  for (const assistant of generation.assistantMessages) {
+    const answerBlocks = new Set<string>();
+    for (const block of assistant.blocks) {
+      activeBlockCount += 1;
+      if (block.type === "thinking" || (block.type === "text" && classifications[block.identity] === "interim")) {
+        blockLocations.set(block.identity, { kind: "trace", rowKey: traceRowKey, segmentIndex });
+        segmentIndex += 1;
+      } else if (block.type === "toolCall") {
+        blockLocations.set(block.identity, { kind: "trace", rowKey: traceRowKey, segmentIndex });
+        const toolCallId = block.toolCallId || block.identity;
+        toolLocations.set(toolCallId, { rowKey: traceRowKey, segmentIndex });
+        segmentIndex += 1;
+      } else if (block.type === "text") {
+        answerBlocks.add(block.identity);
+      }
+    }
+    if (answerBlocks.size) {
+      const rowKey = `message:live:${generation.id}:${assistant.id}`;
+      answerRowKeys.set(assistant.id, rowKey);
+      if (!firstAnswerAssistantId) firstAnswerAssistantId = assistant.id;
+      for (const identity of answerBlocks) blockLocations.set(identity, { kind: "answer", rowKey, assistantId: assistant.id });
+      answerBlockIdentities.set(assistant.id, answerBlocks);
+    }
+  }
+  return {
+    generationId: generation.id,
+    messageIndex,
+    traceRowKey: segmentIndex ? traceRowKey : null,
+    blockLocations,
+    toolLocations,
+    answerBlockIdentities,
+    answerRowKeys,
+    firstAnswerAssistantId,
+    activeBlockCount,
+  };
+}
+
+export function buildLiveAnswerRow(
+  generation: ActiveGenerationView,
+  assistantId: string,
+  index: LiveProjectionIndex,
+  messageIndex: number,
+): Extract<TurnRow, { type: "message" }> | null {
+  const assistant = generation.assistantMessages.find((message) => message.id === assistantId);
+  const answerIdentities = index.answerBlockIdentities.get(assistantId);
+  if (!assistant || !answerIdentities) return null;
+  const answer = assistant.blocks
+    .filter((block) => block.type === "text" && answerIdentities.has(block.identity))
+    .map((block) => block.text || "")
+    .join("\n");
+  if (!answer) return null;
+  const content = generation.continuation && index.firstAnswerAssistantId === assistantId
+    ? mergeContinuation(generation.continuationBase || "", answer)
+    : answer;
+  return {
+    key: index.answerRowKeys.get(assistantId) || `message:live:${generation.id}:${assistantId}`,
+    type: "message",
+    index: messageIndex,
+    live: active(generation),
+    streamVersion: generation.lastSeq,
+    value: {
+      id: `live:${generation.id}:${assistantId}`,
+      key: `live:${generation.id}:${assistantId}`,
+      role: "assistant",
+      content,
+      stopped: generation.status === "stopped",
+      status: generation.status === "stopped" ? "stopped" : null,
+    },
+  };
+}
+
+export function buildLiveToolSegment(
+  generation: ActiveGenerationView,
+  block: LiveBlock,
+): Extract<TraceSegment, { kind: "tool" }> {
+  const execution = generation.toolExecutions[block.toolCallId || ""] || {};
+  const toolCallId = block.toolCallId || block.identity;
+  return {
+    kind: "tool",
+    id: `tool:${toolCallId}`,
+    tool: {
+      id: toolCallId,
+      name: execution.name || block.name || "tool",
+      args: execution.arguments ?? block.arguments,
+      partialResult: execution.partialResult,
+      result: execution.result,
+      done: execution.status === "complete" || execution.status === "error",
+      error: Boolean(execution.isError || execution.status === "error"),
+    },
+  };
+}
 
 function liveRows(generation: ActiveGenerationView, owner: Message | null, index: number): TurnRow[] {
   const classifications = textBlockClassifications(generation) as Record<string, "interim" | "answer">;
