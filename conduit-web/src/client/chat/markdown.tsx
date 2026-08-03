@@ -103,6 +103,7 @@ function renderMarkdown(source: string, inline = false) {
     const sanitisedAt = performance.now();
     recordHarnessMetric(recorder, {
       stage: "markdown-render",
+      renderer: "marked",
       sourceCharacters: source.length,
       inline,
       parseMs: parsedAt - parseStartedAt,
@@ -185,6 +186,7 @@ function MarkedMarkdown(props: ChatMarkdownProps) {
     if (recorder) {
       recordHarnessMetric(recorder, {
         stage: "markdown-reconcile",
+        renderer: "marked",
         sourceCharacters: source.length,
         inline: Boolean(props.inline),
         reconcileMs: performance.now() - reconcileStartedAt,

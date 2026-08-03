@@ -993,6 +993,129 @@ Expected result: the switch is reversible and local, Marked remains the safe
 default, candidate output is usable for the spike, and no protocol, persistence,
 tool-row, scroll, security, or interaction regression is visible.
 
+### Slice 6a — Renderer A/B performance benchmark (#24)
+
+Compare the current Marked renderer with the local Incremark-core adapter before
+implementing Slice 6b. Use the same browser, fixture, cumulative source, delta
+sequence, cadence, and instrumentation settings for both renderers. Run the
+representative rich, scroll, KaTeX, security, code-copy, external-link,
+incomplete-syntax, incomplete-reference, and reconnect fixtures. Repeat the
+representative rich, scroll, and KaTeX cases to expose timing noise.
+
+Worker boundary: renderer selection in the deterministic browser harness,
+Incremark adapter telemetry, the A/B runner, and this evidence record. Do not
+change Markdown semantics, state ownership, protocol, scroll behavior, or
+incomplete-construct presentation.
+
+Acceptance:
+
+- Both renderers complete the same fixture contracts, or each incompatibility
+  is reported with the exact fixture and error.
+- Parse/render work, DOM mutation count, outer and semantic node identity,
+  first-visible time, completion time, visible increments, frame gaps, Long
+  Tasks, scroll distance, and final semantic parity are reported per renderer.
+- The result uses repeated comparable runs and reports medians or distributions;
+  one noisy run cannot establish a performance claim.
+- Bundle cost and parser-only measurements remain separate from browser render
+  measurements.
+
+Verification: run the A/B harness before agent-browser. Use the managed server
+only for a short manual parity check after the deterministic comparison. Record
+the exact command, renderer, fixture, run count, browser/runtime, and result.
+
+Commit: `test: benchmark Marked and Incremark renderers`.
+
+### Slice 6a result — 4 August 2026
+
+Command executed:
+
+```text
+node scripts/run-renderer-benchmark.mjs --runs 2
+```
+
+The runner used the same Chromium `149.0.7827.55`, Node `v24.18.0`, steady
+16 ms cadence, 3-character deltas, seed `1`, and nine named fixtures for both
+renderers. It performed 36 sequential browser runs: 18 Marked and 18
+Incremark. The A/B report was generated in memory and is not a durable result
+file; these numbers are the durable record.
+
+The result is **not a measured Incremark performance improvement**:
+
+| Fixture | Completion p50 Marked → Incremark | First-visible p50 Marked → Incremark | DOM mutations Marked → Incremark | Incremark contract |
+| --- | ---: | ---: | ---: | --- |
+| `rich-markdown` | 529.0 → 536.5 ms (+1.4%) | 19.6 → 73.2 ms (+273.5%) | 47 → 86 (+83.0%) | 2/2 passed |
+| `katex` | 270.0 → 285.4 ms (+5.7%) | 30.4 → 81.2 ms (+167.1%) | 25 → 32 (+28.0%) | 2/2 passed |
+| `security` | 547.8 → 568.2 ms (+3.7%) | 34.6 → 181.3 ms (+424.0%) | 51 → 58 (+13.7%) | 2/2 passed |
+| `scroll` | 3493.9 → 3507.8 ms (+0.4%) | 41.1 → 84.8 ms (+106.3%) | 217 → 423 (+94.9%) | 2/2 passed |
+| `external-confirmation` | 228.2 → 226.9 ms (-0.6%) | 36.1 → 73.9 ms (+104.7%) | 36 → 31 (-13.9%) | 2/2 passed |
+
+The first-visible penalty includes the Incremark adapter's lazy chunk load. It
+is an actual cold-path cost of the current switch, not a parser-only result.
+The completion result is near parity because the 16 ms source cadence and
+browser delivery dominate these short fixtures. DOM work is worse for the
+rich and scroll cases even when completion time is close. Incremark produced
+two frame gaps over 32 ms on `scroll` versus zero for Marked; both renderers
+reported zero Long Tasks and zero frame gaps over 50 ms in these runs.
+
+Renderer timings do not show a general parser win. Incremark parse p95 was
+57.1% slower on `rich-markdown`, 16.9% slower on `katex`, 350% slower on
+`security`, and 50.0% slower on `scroll`. The measurements are not identical
+work: Marked `parseMs` includes Marked plus DOMPurify, while Incremark `parseMs`
+includes core append/render/finalize plus the AST snapshot. Browser completion,
+DOM mutation, frame, Long Task, scroll, and contract results are the primary
+cross-renderer evidence. Incremark's isolated KaTeX call p95 was 2.2 ms versus
+Marked's 2.6 ms on `katex` (-15.4%), but the full fixture still completed 5.7%
+slower and had one frame gap over 32 ms.
+
+Both paths preserved the outer Markdown node in every passing run. Security
+assertions, code-copy, external-link confirmation, final scroll distance, and
+reconnect recovery passed for both paths. Structural counts passed for all
+other fixtures. Incremark failed `incomplete-reference` in both runs with the
+exact harness error `Rendered structural fingerprint did not match the
+expected fixture`; its final semantic text length was still 34 characters.
+The structural contract does not prove byte-for-byte textContent parity:
+`rich-markdown` ended at 62 characters for Marked and 47 for Incremark, while
+`katex` ended at 29 and 49. The adapters therefore remain behaviorally
+different even where the count-based fixture contract passes.
+
+Verdict: **do not claim an Incremark performance benefit and do not adopt it**.
+Slice 6b may proceed as a presentation experiment on both maintained paths,
+but it must not be justified as an Incremark speed improvement. The
+`incomplete-reference` incompatibility and exact textContent differences remain
+open risks for Slice 7.
+
+### Manual validation checklist — Slice 6a
+
+Run `bash .devcontainer/start-conduit.sh restart`, confirm the managed listener
+is `0.0.0.0:4310`, and open `http://127.0.0.1:4310` from Windows. Use an
+authenticated disposable chat. Record each item as pass or fail.
+
+- Open the default route with no renderer query. Confirm the Markdown renderer
+  remains Marked after a fresh load.
+- Open `?markdownRenderer=marked`. Stream a rich answer containing a heading,
+  list, table, fenced code, inline math, and a block equation. Confirm the
+  answer completes once, the code copy button copies only code, math renders,
+  and no console or page error appears.
+- Open `?markdownRenderer=incremark` and repeat the same answer. Confirm the
+  answer completes once, the code copy button and external-link confirmation
+  still work, math renders, and no console or page error appears.
+- With each renderer, stream the long scroll case. Scroll away before output
+  arrives, then return to the bottom. Confirm the renderer does not jump to the
+  wrong position and the final distance from the bottom is zero when following
+  output.
+- With each renderer, interrupt and reconnect a live answer. Confirm two
+  visible segments do not duplicate characters and the answer ends with the
+  same text.
+- Inspect the incomplete reference case. Record the exact visible structure;
+  Incremark is expected to differ here until the compatibility issue is fixed.
+- Use the renderer switch control if present, then reload. Confirm the switch
+  is reversible and the default still returns to Marked.
+
+This checklist validates live parity and regressions. It cannot establish a
+performance gain; use `node scripts/run-renderer-benchmark.mjs --runs 2` for
+that claim.
+
+
 ### Slice 7 — #24 decision gate and focused tests
 
 Choose one outcome: reject Incremark, augment the current renderer for a

@@ -11,6 +11,7 @@ Options:
   --flow <stream|reconnect>         Browser flow to exercise (default: stream)
   --scenario <name>                 Reported scenario name (default: browser-streaming-baseline)
   --profile <steady|burst|jitter>   Source cadence profile (default: steady)
+  --renderer <marked|incremark>     Markdown renderer (default: marked)
   --text <value>                    Scripted assistant output
   --fixture <name>                  Named deterministic fixture (use --list-fixtures)
   --list-fixtures                   List named fixtures and exit
@@ -58,6 +59,8 @@ const expectedAssertions = valueAfter(args, "--expected-assertions", null);
 const expectedInteractions = valueAfter(args, "--expected-interactions", null);
 const instrumentation = valueAfter(args, "--instrumentation", "on");
 if (!["on", "off"].includes(instrumentation)) throw new Error("--instrumentation must be on or off");
+const renderer = valueAfter(args, "--renderer", "marked");
+if (!["marked", "incremark"].includes(renderer)) throw new Error("--renderer must be marked or incremark");
 
 const environment = {
   ...process.env,
@@ -66,6 +69,7 @@ const environment = {
   HARNESS_SCENARIO: valueAfter(args, "--scenario", fixture?.id || "browser-streaming-baseline"),
   ...(fixture ? { HARNESS_FIXTURE: fixture.id } : {}),
   HARNESS_PROFILE: valueAfter(args, "--profile", "steady"),
+  HARNESS_RENDERER: renderer,
   HARNESS_TEXT: valueAfter(
     args,
     "--text",

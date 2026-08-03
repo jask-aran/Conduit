@@ -34,6 +34,7 @@ test("a deterministic stream reports browser delivery and visible rendering cade
   const expectedSemanticFingerprint = jsonEnv("HARNESS_EXPECTED_SEMANTIC_FINGERPRINT") ?? fixture?.expectedSemanticFingerprint ?? null;
   const expectedAssertions = jsonEnv("HARNESS_EXPECTED_ASSERTIONS") ?? fixture?.expectedAssertions ?? {};
   const expectedInteractions = jsonEnv("HARNESS_EXPECTED_INTERACTIONS") ?? fixture?.expectedInteractions ?? {};
+  const renderer = process.env.HARNESS_RENDERER || "marked";
   const seed = Number(process.env.HARNESS_SEED || 1);
   const cadence = process.env.HARNESS_PROFILE
     ? createCadence(process.env.HARNESS_PROFILE, {
@@ -60,6 +61,7 @@ test("a deterministic stream reports browser delivery and visible rendering cade
     scrollProbe: fixture?.scrollProbe || false,
     instrumentation: process.env.HARNESS_INSTRUMENTATION !== "off",
     seed,
+    renderer,
   };
   let report = await runBrowserStreamingScenario(page, scenario);
   if (process.env.HARNESS_PAIRED_INSTRUMENTATION === "1") {
@@ -111,6 +113,7 @@ test("a deterministic stream reports browser delivery and visible rendering cade
   expect(report.scenario).toBe(name);
   expect(report.mode).toBe("deterministic-browser");
   expect(report.target).toBe("playwright-production-client");
+  expect(report.browser.renderer).toBe(renderer);
   if (expectedSemanticText != null) expect(report.browser.finalSemanticTextEvidence).toMatchObject(hashRedactedText(expectedSemanticText));
   expect(report.outcome).toBe("passed");
   expect(report.browser.webSocketDeltaCount).toBe(cadence.deltas.length);
@@ -133,6 +136,7 @@ test("a dropped stream reports reconnect recovery without duplicated output", as
   const expectedSemanticFingerprint = jsonEnv("HARNESS_EXPECTED_SEMANTIC_FINGERPRINT") ?? fixture?.expectedSemanticFingerprint ?? null;
   const expectedAssertions = jsonEnv("HARNESS_EXPECTED_ASSERTIONS") ?? fixture?.expectedAssertions ?? {};
   const expectedInteractions = jsonEnv("HARNESS_EXPECTED_INTERACTIONS") ?? fixture?.expectedInteractions ?? {};
+  const renderer = process.env.HARNESS_RENDERER || "marked";
   const report = await runBrowserReconnectScenario(page, {
     name: process.env.HARNESS_SCENARIO || "browser-reconnect-answer",
     initialText,
@@ -143,6 +147,7 @@ test("a dropped stream reports reconnect recovery without duplicated output", as
     fixture: fixture?.id || null,
     requiresStructuralContract: fixture?.requiresStructuralContract || false,
     instrumentation: process.env.HARNESS_INSTRUMENTATION !== "off",
+    renderer,
   });
   await testInfo.attach("harness-report", {
     body: Buffer.from(JSON.stringify(report, null, 2)),
@@ -151,6 +156,7 @@ test("a dropped stream reports reconnect recovery without duplicated output", as
 
   expect(report.schemaVersion).toBe(1);
   expect(report.mode).toBe("deterministic-browser-reconnect");
+  expect(report.browser.renderer).toBe(renderer);
   expect(report.browser.socketCount).toBe(2);
   expect(report.browser.resumeCount).toBe(1);
   expect(report.browser.recoveryMs).toBeGreaterThanOrEqual(0);
