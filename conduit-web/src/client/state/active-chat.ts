@@ -21,6 +21,7 @@ import type {
 } from "../api/contracts";
 import { assignToolSeq, promotePendingUser } from "../timeline-order";
 import { reconcileMessages } from "../reconcile-messages";
+import { getHarnessRecorder, recordHarnessMetric } from "../harness-metrics";
 import type { AttachmentsStore, UploadAttachment } from "./attachments";
 import type { CatalogueStore } from "./catalogue";
 import type { ActiveGenerationView } from "../turn-rows";
@@ -119,8 +120,64 @@ export function createActiveChat(options: ActiveChatOptions) {
 
   const applyStructuredGeneration = (event: StructuredGenerationEvent) => {
     if (!live() || live()!.chatId !== selectedId()) return;
-    const next = reduceActiveGeneration(activeGeneration(), event) as ActiveGenerationView | null;
+    const previous = activeGeneration();
+    const recorder = getHarnessRecorder();
+    const reduceStartedAt = recorder ? performance.now() : 0;
+    const next = reduceActiveGeneration(previous, event) as ActiveGenerationView | null;
     if (!next) return;
+    if (recorder) {
+      const eventRecord = event as Record<string, unknown>;
+      const nestedBlock = eventRecord.block && typeof eventRecord.block === "object"
+        ? eventRecord.block as Record<string, unknown>
+        : null;
+      const nestedBlocks = Array.isArray(eventRecord.blocks)
+        ? eventRecord.blocks.filter((block): block is Record<string, unknown> => Boolean(block && typeof block === "object"))
+        : [];
+      const messageId = typeof eventRecord.messageId === "string" ? eventRecord.messageId : null;
+      const directContentIndex = Number.isInteger(eventRecord.contentIndex) ? Number(eventRecord.contentIndex) : null;
+      const nestedIndexValue = nestedBlock?.contentIndex;
+      const nestedContentIndex = Number.isInteger(nestedIndexValue) ? Number(nestedIndexValue) : null;
+      const contentIndex = directContentIndex ?? nestedContentIndex;
+      const previousMessage = messageId == null
+        ? null
+        : previous?.assistantMessages.find((message) => message.id === messageId) || null;
+      const nextMessage = messageId == null
+        ? null
+        : next.assistantMessages.find((message) => message.id === messageId) || null;
+      const previousBlock = previousMessage && contentIndex != null
+        ? previousMessage.blocks.find((block) => block.contentIndex === contentIndex) || null
+        : null;
+      const nextBlock = nextMessage && contentIndex != null
+        ? nextMessage.blocks.find((block) => block.contentIndex === contentIndex) || null
+        : null;
+      const selectedIndexValue = nestedBlocks[0]?.contentIndex;
+      const selectedBlock = nestedBlocks.length === 1 && Number.isInteger(selectedIndexValue)
+        ? Number(selectedIndexValue)
+        : null;
+      recordHarnessMetric(recorder, {
+        stage: "client-reduce",
+        eventType: event.type,
+        seq: event.seq,
+        messageId,
+        contentIndex,
+        changedBlock: messageId != null && contentIndex != null
+          ? `${messageId}:${contentIndex}`
+          : messageId != null && selectedBlock != null
+            ? `${messageId}:${selectedBlock}`
+            : null,
+        changeScope: messageId != null && (contentIndex != null || selectedBlock != null)
+          ? "block"
+          : "structural-boundary",
+        boundaryType: messageId != null && (contentIndex != null || selectedBlock != null) ? null : event.type,
+        reduceMs: performance.now() - reduceStartedAt,
+        generationIdentityChanged: previous !== next,
+        assistantMessagesIdentityChanged: previous?.assistantMessages !== next.assistantMessages,
+        messageIdentityChanged: previousMessage !== nextMessage,
+        blockArrayIdentityChanged: previousMessage?.blocks !== nextMessage?.blocks,
+        blockIdentityChanged: previousBlock !== nextBlock,
+        toolExecutionsIdentityChanged: previous?.toolExecutions !== next.toolExecutions,
+      });
+    }
     setActiveGeneration(next);
     currentGeneration = next.id;
     const blocks = next.assistantMessages.flatMap((message) => message.blocks);

@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { spawn } from "node:child_process";
 import path from "node:path";
+import { getBrowserFixture, listBrowserFixtures } from "../test/browser/helpers/streaming-fixtures.js";
 
 const HELP = `Usage: node scripts/run-browser-harness.mjs [options]
 
@@ -11,6 +12,14 @@ Options:
   --scenario <name>                 Reported scenario name (default: browser-streaming-baseline)
   --profile <steady|burst|jitter>   Source cadence profile (default: steady)
   --text <value>                    Scripted assistant output
+  --fixture <name>                  Named deterministic fixture (use --list-fixtures)
+  --list-fixtures                   List named fixtures and exit
+  --expected-semantic-text <value>  Expected rendered semantic text (default: source text)
+  --expected-semantic-fingerprint <json>  Expected structural fingerprint JSON
+  --expected-assertions <json>       Required security assertions JSON
+  --expected-interactions <json>     Required interaction assertions JSON
+  --instrumentation <on|off>        Opt-in client metric instrumentation (default: on)
+  --paired-instrumentation          Run instrumented and uninstrumented browser probes
   --chunk-size <number>             Characters per source delta (default: 3)
   --interval-ms <number>            Steady inter-delta delay (default: 16)
   --burst-size <number>             Deltas per burst (default: 8)
@@ -36,16 +45,39 @@ if (args.includes("--help")) {
   process.exit(0);
 }
 
+if (args.includes("--list-fixtures")) {
+  process.stdout.write(`${listBrowserFixtures().join("\n")}\n`);
+  process.exit(0);
+}
+
+const fixtureId = valueAfter(args, "--fixture", null);
+const fixture = fixtureId ? getBrowserFixture(fixtureId) : null;
+const expectedSemanticText = valueAfter(args, "--expected-semantic-text", null);
+const expectedSemanticFingerprint = valueAfter(args, "--expected-semantic-fingerprint", null);
+const expectedAssertions = valueAfter(args, "--expected-assertions", null);
+const expectedInteractions = valueAfter(args, "--expected-interactions", null);
+const instrumentation = valueAfter(args, "--instrumentation", "on");
+if (!["on", "off"].includes(instrumentation)) throw new Error("--instrumentation must be on or off");
+
 const environment = {
   ...process.env,
-  HARNESS_FLOW: valueAfter(args, "--flow", "stream"),
-  HARNESS_SCENARIO: valueAfter(args, "--scenario", "browser-streaming-baseline"),
+  VITE_CONDUIT_HARNESS: "1",
+  HARNESS_FLOW: valueAfter(args, "--flow", fixture?.initialText ? "reconnect" : "stream"),
+  HARNESS_SCENARIO: valueAfter(args, "--scenario", fixture?.id || "browser-streaming-baseline"),
+  ...(fixture ? { HARNESS_FIXTURE: fixture.id } : {}),
   HARNESS_PROFILE: valueAfter(args, "--profile", "steady"),
   HARNESS_TEXT: valueAfter(
     args,
     "--text",
-    "Conduit measures WebSocket delivery, visible text, DOM mutations, long tasks, and animation frames.",
+    fixture?.text || "Conduit measures WebSocket delivery, visible text, DOM mutations, long tasks, and animation frames.",
   ),
+  ...((expectedSemanticText ?? fixture?.expectedSemanticText) == null ? {} : { HARNESS_EXPECTED_SEMANTIC_TEXT: expectedSemanticText ?? fixture.expectedSemanticText }),
+  ...((expectedSemanticFingerprint ?? fixture?.expectedSemanticFingerprint) == null ? {} : { HARNESS_EXPECTED_SEMANTIC_FINGERPRINT: JSON.stringify(expectedSemanticFingerprint ? JSON.parse(expectedSemanticFingerprint) : fixture.expectedSemanticFingerprint) }),
+  ...((expectedAssertions ?? fixture?.expectedAssertions) == null ? {} : { HARNESS_EXPECTED_ASSERTIONS: JSON.stringify(expectedAssertions ? JSON.parse(expectedAssertions) : fixture.expectedAssertions) }),
+  ...((expectedInteractions ?? fixture?.expectedInteractions) == null ? {} : { HARNESS_EXPECTED_INTERACTIONS: JSON.stringify(expectedInteractions ? JSON.parse(expectedInteractions) : fixture.expectedInteractions) }),
+  ...(fixture?.scrollProbe ? { HARNESS_SCROLL_PROBE: "1" } : {}),
+  HARNESS_INSTRUMENTATION: instrumentation,
+  ...(args.includes("--paired-instrumentation") ? { HARNESS_PAIRED_INSTRUMENTATION: "1" } : {}),
   HARNESS_CHUNK_SIZE: valueAfter(args, "--chunk-size", "3"),
   HARNESS_INTERVAL_MS: valueAfter(args, "--interval-ms", "16"),
   HARNESS_BURST_SIZE: valueAfter(args, "--burst-size", "8"),
@@ -53,8 +85,8 @@ const environment = {
   HARNESS_MIN_DELAY_MS: valueAfter(args, "--min-delay-ms", "5"),
   HARNESS_MAX_DELAY_MS: valueAfter(args, "--max-delay-ms", "80"),
   HARNESS_SEED: valueAfter(args, "--seed", "1"),
-  HARNESS_INITIAL_TEXT: valueAfter(args, "--initial-text", "Answer survives"),
-  HARNESS_RECOVERED_DELTA: valueAfter(args, "--recovered-delta", " reconnect"),
+  HARNESS_INITIAL_TEXT: valueAfter(args, "--initial-text", fixture?.initialText || "Answer survives"),
+  HARNESS_RECOVERED_DELTA: valueAfter(args, "--recovered-delta", fixture?.recoveredDelta || " reconnect"),
 };
 
 const cli = path.resolve("node_modules/@playwright/test/cli.js");
