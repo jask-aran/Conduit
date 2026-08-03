@@ -1,7 +1,7 @@
 # Issues #24 and #34 implementation
 
-Status: Slice 1 complete at `024ce4c`. Slice 2 awaits owner review. No
-production architecture is approved by this document.
+Status: Slice 1 complete at `024ce4c`. Slice 2 committed at `6a713f2`.
+Slice 3 committed at `288db80`. Issue #24 remains open.
 
 Issues:
 
@@ -16,6 +16,90 @@ and `docs/operations/testing.md`. Record slice decisions, measurements, and
 verification here. Temporary command output may use `/tmp`, but it is not the
 progress record. Remove this file after both issues close; Git retains its
 history.
+
+## Slice 3 handoff
+
+Slice 3 keeps the existing event protocol, active-generation reducer,
+Markdown renderer, DOM contracts, and scroll behavior. `active-chat.ts` now
+publishes the changed block or tool identity. `timeline-store.ts` caches the
+live projection index and patches one answer row, trace segment, or tool
+segment for ordinary deltas. Structural boundaries still use the full
+projection path. `turn-rows.test.js` covers the block-to-row index and
+`timeline-projection.test.js` benchmarks persisted rows and active dimensions.
+
+The rich-Markdown browser harness measured 38 timeline projection passes: 7
+full projections and 31 narrow patches. The prior baseline performed 38 full
+projections, so Slice 3 avoided 31 of 38 full rebuilds (81.6%). Markdown work
+remains separate and unchanged in scope. The final rich run delivered 31 of
+31 deltas, matched the structural fingerprint, ended at zero scroll distance,
+recorded 43 DOM mutations, recorded zero Long Tasks, and reported no errors.
+The 210-delta scroll run used 7 full projections and 210 narrow patches,
+retained zero distance from the bottom, and reported no errors.
+
+The `slice3-timeline-projection-benchmark` covered persisted row counts
+`[1, 8, 32]`, active message counts `[1, 4, 16]`, active block counts
+`[1, 4, 16]`, and active tool counts `[0, 8, 32]`. Every one of the 12 cases
+changed one narrow row. Full projection row count grew from 5 to 67 when
+persisted rows grew from 1 to 32. This benchmark measures projection scaling;
+it is not a claim of end-to-end latency improvement. No Incremark benchmark
+has run yet.
+
+Verification after the final fix: `npm run typecheck`, `npm test` (266 passed),
+`npm run build`, the rich, scroll, reconnect, code-copy, and
+external-confirmation browser harness fixtures, the 12-case
+`slice3-timeline-projection-benchmark`, and six focused Playwright
+trace/reconnect tests passed. The managed server was rebuilt and restarted
+with `bash .devcontainer/start-conduit.sh restart`; health returned ready and
+the listener was `0.0.0.0:4310`. Authenticated agent-browser smoke testing
+loaded the managed route and completed one live prompt without a visible
+error. Slice 3 is committed at `288db80`; Slice 6 is next for owner review.
+
+## Revised execution order after Slice 3
+
+Slice 6 now moves ahead of the remaining renderer and boundary work. Run the
+isolated Incremark compatibility spike next. It must use a temporary fixture,
+the same deterministic Markdown inputs, and the current renderer as its
+comparison. Do not edit production imports, `package.json`, or the lockfile.
+
+If the Slice 6 evidence is promising, run the work defined by Slice 4 and
+Slice 5 before Slice 7: verify live boundary and recovery behavior, then run
+the renderer-specific Marked baseline and the equivalent candidate comparison.
+Only then hold the Slice 7 decision gate. If the spike is not promising, run
+the required Slice 4 and current-renderer Slice 5 checks needed to document
+the rejection, then close the decision at Slice 7. Slice 8 remains blocked on
+an explicit owner approval.
+
+The slice headings below define scope and acceptance criteria. This section
+defines the execution order.
+
+## Manual validation checklist — Slice 3
+
+Run the managed server with `bash .devcontainer/start-conduit.sh restart` and
+open `http://127.0.0.1:4310` from Windows. Use an existing authenticated chat
+or create a disposable chat. Record each item as pass or fail.
+
+- Stream a response with thinking, at least one tool call, and a final answer.
+  The answer must grow without missing or duplicated text. The trace header,
+  thinking text, tool card, tool status, and final answer must remain visible.
+- Expand the trace while the response is complete. Segment order must remain
+  thinking, narration or interim text, tool, then answer as supplied by the
+  response. Tool completion must not replace the trace row or move the answer.
+- During a long Markdown response, check headings, lists, tables, fenced code,
+  links, and incomplete syntax. The live answer must not remain stuck on
+  `Thinking…` after text arrives.
+- Scroll away from the bottom during streaming. New tokens must not force the
+  viewport to the bottom. Return to the latest position and confirm follow
+  mode resumes.
+- Refresh or reconnect during thinking, a tool call, and the answer. Confirm
+  there is one final response with no duplicate or missing text.
+- Use code-copy and an external link. Code copy must succeed; the external
+  link must show the existing confirmation control. Check the browser console
+  for errors and confirm the normal build does not expose
+  `window.__conduitHarness`.
+
+Expected result: no protocol or visible behavior change, no stuck trace
+header, no row or content duplication, preserved scroll-away behavior, and
+the existing security and interaction controls.
 
 ## Decision boundary
 
@@ -763,6 +847,8 @@ The Slice 1 review passed on 3 August 2026:
 5. The paired run produced the same structural result with instrumentation
    disabled.
 
-The next review point is after Slice 2. Do not start Slice 3 until the client
-snapshot and reference-identity checks pass. Any renderer adoption still
-requires a separate owner approval after the Incremark spike.
+The next review point is after Slice 3 and the isolated Slice 6 spike. Start
+Slice 6 next. If it is promising, run Slice 4 and Slice 5 before Slice 7; if
+not, record the rejection and run only the checks needed to close the gate.
+Any renderer adoption still requires a separate owner approval after the
+Incremark spike.
