@@ -1,8 +1,8 @@
 # Issues #24 and #34 implementation
 
 Status: Slice 1 complete at `024ce4c`. Slice 2 committed at `6a713f2`.
-Slice 3 committed at `288db80`. Slice 6 local switch and compatibility spike
-are implemented in the working tree; Issue #24 remains open.
+Slice 3 committed at `288db80`. Slice 6 committed at `0e4d366`. Slice 4
+boundary and recovery verification is recorded below; Issue #24 remains open.
 
 Issues:
 
@@ -668,6 +668,91 @@ canaries only if the release path requires them.
 
 Commit: `test: verify block-granular live transcript boundaries`.
 
+### Slice 4 result — 4 August 2026
+
+The existing Pi RPC fixtures and browser canaries already covered the Slice 4
+boundaries, so no production or harness code change was required. The focused
+state and projection run passed 26 tests. It covered thinking-to-answer
+classification, tool and parallel-tool ordering, multiple native text blocks,
+retry, stop, duplicate suppression, resume during thinking and answer,
+checkpoint races, and direct row projection. The client state snapshot stayed
+equivalent to the shared reducer after every event in every fixture.
+
+The full unit command did not complete cleanly. It reported 266 passing tests
+and one failing test. The verbatim failure was:
+
+```text
+Error: Test "PTY manager starts a terminal only with a server-resolved absolute working directory" at test/pty-manager.test.js:22:1 generated asynchronous activity after the test ended. This activity created the error "Error: ENOENT: no such file or directory, rename '/tmp/conduit-pty-manager-q8YcYG/remotes.json.63889.660bc616-8db3-4bb7-ada9-d118491fac59.tmp' -> '/tmp/conduit-pty-manager-q8YcYG/remotes.json'" and would have caused the test to fail, but instead triggered an unhandledRejection event.
+✖ test/pty-manager.test.js
+```
+
+The failure is outside the Slice 4 event and transcript path. The focused
+command `node --test test/active-generation.test.js test/timeline-projection.test.js test/turn-rows.test.js test/live-events.test.js` passed all 26 tests. `npm run typecheck` passed.
+
+The deterministic transport checks passed with final-text parity:
+
+- `slice4-boundary-steady`: 16 source deltas, 9 delivered frames, 7 coalesced
+  deltas, 0 source stalls, and 0 delivery gaps over 100 ms.
+- `slice4-boundary-burst`: 29 source deltas, 6 delivered frames, 23 coalesced
+  deltas, 5 intentional 128 ms source stalls, and 57 final characters.
+
+The deterministic browser checks passed on Chromium 149. The rich fixture
+delivered 31/31 deltas, kept one outer Markdown node, recorded 7 full and 31
+narrow projections, 0 frame gaps over 32 ms, and 0 Long Tasks. The reconnect
+fixture used 2 sockets and 1 Resume State, recovered 26 characters, and
+reported 0 duplicate characters. The 630-character scroll fixture ended at
+distance 0 from the bottom with 0 Long Tasks; its burst input recorded 2 frame
+gaps over 32 ms and none over 50 ms.
+
+`CONDUIT_BUDGET_INITIAL_JS_GZIP=300000 npm run build` passed. It measured
+232,322 bytes gzip for initial JavaScript, 27,736 bytes gzip for CSS, and
+185,187 bytes gzip for the largest lazy JavaScript chunk. The normal 180,000
+byte initial-JavaScript budget remains the known Slice 6 failure; this check did
+not change that threshold.
+
+The managed server was restarted with
+`bash .devcontainer/start-conduit.sh restart`. `/healthz` returned ready and
+the listener was `0.0.0.0:4310`. Agent-browser manual checks used the retained
+Marked renderer. An existing chat expanded to seven completed tool cards and
+retained headings, a table, and fenced-code controls. Scrolling away measured
+2,831 px from the bottom; `Scroll to latest` returned the distance to 0. A
+disposable live prompt settled to `OK` with Marked selected. The browser
+reported no page errors or console errors.
+
+Verdict: Slice 4 passes its boundary, recovery, identity, persistence, and
+scroll acceptance based on the existing fixture coverage. The unrelated PTY
+cleanup failure remains open and is not fixed in this slice.
+
+### Manual validation checklist — Slice 4
+
+Run `bash .devcontainer/start-conduit.sh restart`, open
+`http://127.0.0.1:4310` from Windows, and use an authenticated disposable chat.
+Keep the Markdown renderer set to `Marked`. Record each item as pass or fail.
+
+- Send a prompt that causes thinking, at least one tool call, and a final
+  answer. Confirm the trace, tool card, tool status, and answer remain in the
+  supplied order. Text must not duplicate or disappear.
+- Expand and collapse the completed trace. Confirm all thinking, interim text,
+  tool cards, and the final answer remain present. Tool completion must not
+  replace the trace row or move the answer.
+- During a response, check the transition from thinking to answer and any
+  second assistant text block. The answer must not remain on `Thinking…`.
+- Stop a partial response. Confirm late text does not appear after the stop.
+  Retry a transient failure if the runtime exposes the retry control; confirm
+  the recovered answer is one response.
+- Refresh or let the WebSocket reconnect during thinking, a tool call, and the
+  answer. Confirm one final transcript with no duplicate or missing content.
+- Scroll away during a long response. Confirm new output does not force the
+  viewport to the bottom. Use `Scroll to latest` and confirm distance from the
+  bottom returns to zero.
+- Check code-copy, external-link confirmation, and the browser console. The
+  normal build must not expose `window.__conduitHarness`.
+
+Expected result: structural boundaries update the affected trace, tool, or
+answer rows; ordinary text keeps the narrow update path; reconnect and
+checkpoint recovery preserve one final answer; and user scroll-away behavior
+remains unchanged.
+
 ### Slice 5 — Renderer-specific Marked baseline (#24)
 
 Use the instrumented harness to isolate Marked, KaTeX, DOMPurify, and DOM
@@ -960,8 +1045,7 @@ The Slice 1 review passed on 3 August 2026:
 5. The paired run produced the same structural result with instrumentation
    disabled.
 
-The next review point is after Slice 3 and the isolated Slice 6 spike. Start
-Slice 6 next. If it is promising, run Slice 4 and Slice 5 before Slice 7; if
-not, record the rejection and run only the checks needed to close the gate.
-Any renderer adoption still requires a separate owner approval after the
-Incremark spike.
+The Slice 6 candidate gate was not promising. Slice 4 boundary and recovery
+verification is now complete. Slice 5 is next to establish the current Marked
+renderer baseline before the Slice 7 decision gate. Any renderer adoption still
+requires a separate owner approval after the Incremark spike.
