@@ -2,8 +2,11 @@
 
 Status: Slice 1 complete at `024ce4c`. Slice 2 committed at `6a713f2`.
 Slice 3 committed at `288db80`. Slice 4 committed at `296d822`. Slice 5
-Marked baseline is recorded below. Slice 6 committed at `0e4d366`; Issue #24
-remains open.
+Marked baseline is recorded below. Slice 6 committed at `0e4d366`. #24 path:
+renderer A/B (6a) → incomplete-construct streaming (6b) → decision (7) →
+optional adoption (8). **Slice 9** (desktop panel motion under heavy KaTeX) is
+queued as a separate shell-layout track; it does not block the #24 gate.
+Issue #24 remains open.
 
 Issues:
 
@@ -67,13 +70,18 @@ lazy Solid adapter. Marked remains the default. `@incremark/solid` remains
 temporary-only because its published wrapper fails in this repository's Solid
 runtime.
 
-If the Slice 6 evidence is promising, run the work defined by Slice 4 and
-Slice 5 before Slice 7: verify live boundary and recovery behavior, then run
-the renderer-specific Marked baseline and the equivalent candidate comparison.
-Only then hold the Slice 7 decision gate. If the spike is not promising, run
-the required Slice 4 and current-renderer Slice 5 checks needed to document
-the rejection; do not treat the local switch as adoption evidence. Slice 8
-remains blocked on explicit owner approval.
+Slices 4, 5, and 6 are recorded. **Next is the renderer A/B benchmark**, then
+Slice 6b (shared streaming incomplete-construct presentation on Marked and the
+Incremark adapter). Slice 6b is not adoption; it closes a measured streaming
+presentation gap both paths share and that the Slice 6 adapter left
+unhandled. Do not treat the local switch or Slice 6b as adoption evidence.
+Slice 8 remains blocked on explicit owner approval after Slice 7.
+
+**Slice 9** (desktop panel motion under heavy KaTeX / long transcripts) is a
+shell-layout investigation. It may run after Slice 6b measurements land, or in
+parallel with Slice 7 docs work, but must not change renderer semantics or
+steal the #24 decision. Implement a panel-motion fix only after Slice 9 picks
+a candidate with frame-time evidence.
 
 The slice headings below define scope and acceptance criteria. This section
 defines the execution order.
@@ -380,7 +388,7 @@ candidate. Give each fixture a stable ID.
 | Group | Fixtures |
 | --- | --- |
 | Cadence | `plain-short-steady`, `plain-long-steady`, `plain-long-high-tps`, `plain-long-burst`, `plain-jitter`, `plain-stall`, `plain-slow-reader` |
-| Markdown completion | `incomplete-heading`, `incomplete-emphasis`, `incomplete-link`, `incomplete-list`, `incomplete-table`, `incomplete-fence`, `incomplete-reference` |
+| Markdown completion | `incomplete-heading`, `incomplete-emphasis`, `incomplete-link`, `incomplete-list`, `incomplete-table`, `incomplete-fence`, `incomplete-reference`, `incomplete-math-block`, `incomplete-math-inline` |
 | Markdown features | `gfm-heading-list-emphasis`, `gfm-table`, `fenced-code-artifact`, `katex-inline-block`, `internal-link`, `external-link-confirmation`, `unsafe-protocol`, `image-removal`, `long-token-url` |
 | Live structure | `thinking-only`, `thinking-to-answer`, `tool-call-result`, `multi-text-block`, `multi-assistant-message`, `retry-stop`, `continuation-after-tool` |
 | Recovery | `reconnect-in-text-block`, `resume-with-multiple-blocks`, `completion-checkpoint`, `final-reference-definition` |
@@ -422,17 +430,51 @@ classification when a generation contains many blocks and tools.
 
 - The current renderer performs cumulative parse and sanitisation work on each
   live source update, even when DOM reconciliation preserves node identity.
-- Incomplete Markdown makes parser-safe chunking and escaped-tail strategies
-  visibly unstable, which is why the previous Marked approach was rejected.
+- Naive parser-safe chunking and delimiter-escaped tails on Marked were
+  previously rejected as visibly unstable. That rejection does not forbid a
+  **typed** streaming presentation layer: classify the unstable tail as
+  pending math, fence, or other construct, render the stable prefix normally,
+  and never paint raw open delimiters as prose. Slice 6b tests that narrower
+  claim.
 - Incremark may reduce cumulative parser work through block boundaries and
   stable block IDs, but its documented raw-HTML mode and built-in rendering
   options do not prove Conduit security or artifact compatibility.
 - An incremental renderer may improve parser cost while changing output timing,
   DOM identity, link controls, code rendering, KaTeX, or final reconciliation.
 
-Unknowns include exact package versions and dependency graph, output behavior
-for incomplete constructs, reference definitions, custom artifact controls,
-sanitisation boundaries, stable node identity, and production bundle impact.
+### #24 measured finding — incomplete math (pre-Slice 6b)
+
+Probed against pinned `@incremark/core@1.0.2` with `{ gfm: true, math: true }`:
+
+- Open fenced code (` ```js\n… ` without closer) becomes a **pending** block
+  whose node type is already `code` with fence markers stripped. The adapter
+  can render artifact chrome without showing backticks. Fences are largely
+  handled by the core.
+- Open block math (`$$\Delta x, \Delta p \ge` without closer) becomes a
+  **pending** block whose node type is still `paragraph` and whose text still
+  contains the raw `$$…` source. Only a *closed* `$$…$$` promotes to
+  `type: "math"`. Open inline `$…` likewise stays paragraph text.
+- `mathPlugin` in `@incremark/core` is a **typewriter** plugin
+  (`match` / `countChars` / `sliceNode` on already-parsed `math` /
+  `inlineMath` nodes). It is not incomplete-delimiter handling and is unused
+  by the Conduit adapter.
+- The Slice 6 adapter calls `parser.getAst()` and renders every node,
+  including pending paragraph text that still holds raw `$$`. That is an
+  **adapter presentation failure**, not a missing dual-renderer hook. Core
+  isolates the unstable tail as `pending`; it does not classify open math or
+  suppress delimiter glyphs. Expecting ChatGPT-like math streaming from
+  `getAst()` alone was wrong.
+
+Marked has the same user-visible failure for a different reason: batch
+`marked-katex-extension` only matches closed delimiters, so open `$$` falls
+through as text on every streaming reparse. The `streaming` prop is currently
+a data attribute only.
+
+Unknowns remaining after this finding: holdback rules that stay stable for
+currency `$`, nested fences, and finalized truncated math after stop; whether
+progressive KaTeX on pending interiors flickers; reference definitions,
+custom artifact controls, sanitisation boundaries, stable node identity, and
+production bundle impact.
 
 ## Plausible approaches
 
@@ -1115,6 +1157,145 @@ This checklist validates live parity and regressions. It cannot establish a
 performance gain; use `node scripts/run-renderer-benchmark.mjs --runs 2` for
 that claim.
 
+### Slice 6b — Streaming incomplete-construct presentation (Marked + Incremark) (#24)
+
+Close the raw-delimiter flash for live assistant Markdown on **both**
+renderers without choosing a default-renderer winner. This is presentation and
+fixture work on the existing dual path. It is not Slice 8 adoption.
+
+#### Why this slice exists
+
+Live answers currently show unclosed math and similar tails as source text
+(for example `$$\Delta x, \Delta p \ge` in the paragraph). Chat-style UIs keep
+delimiter syntax internal and show either nothing, pending chrome, or
+progressive typeset for that span.
+
+Slice 6 proved the Incremark adapter runs; it did not implement pending-tail
+presentation. Core already separates `completed` vs `pending` and types open
+fences as `code`, but open `$$` / `$` remain pending **paragraph text** with
+delimiters intact. Painting `getAst()` wholesale therefore reproduces the
+Marked failure mode for math. Marked needs an explicit streaming split because
+it has no pending-block API.
+
+#### Product contract (both renderers, `streaming === true`)
+
+1. **Stable prefix** — closed constructs render exactly as today (GFM, KaTeX,
+   artifacts, links, sanitisation).
+2. **Unstable tail** — never paint open construct delimiters as ordinary prose.
+   Minimum set:
+   - unclosed block math `$$…`
+   - unclosed inline math `$…$` when the opener is unambiguous under the same
+     rules as `marked-katex-extension` / Incremark math (currency false
+     positives must not eat whole paragraphs)
+   - unclosed fenced code (Marked path; Incremark already types pending `code`)
+   - keep existing incomplete emphasis/link/list/table behavior at least as
+     good as baseline; do not regress it to gain math
+3. **Pending presentation** — typed shell, not raw source:
+   - math: pending math region; try KaTeX on the interior when it parses;
+     otherwise empty or muted non-delimiter preview (no leading/trailing `$$`)
+   - code: existing artifact chrome with growing body (no bare ` ``` `)
+4. **Stream end / stop** — when `streaming` becomes false, run the full current
+   finalize path (Incremark `finalize()`, Marked full source). Truncated math
+   after stop may typeset best-effort or show a clean fallback; it must not
+   remain stuck in pending chrome.
+5. **Identity** — outer `.chat-markdown` node and already-completed semantic
+   children keep identity across ordinary deltas; only the pending tail may
+   replace itself.
+6. **Non-goals** — no default-renderer switch; no `@incremark/solid`; no
+   protocol, projection, or scroll ownership changes; no typewriter
+   `BlockTransformer` adoption unless a measured gate demands it.
+
+#### Implementation shape
+
+Prefer one shared helper used by both adapters, for example
+`splitStreamingMarkdown(source)` → `{ stable, pending }` with
+`pending: null | { kind: "math-block" | "math-inline" | "fence"; language?; body }`.
+
+| Path | Responsibility |
+| --- | --- |
+| Shared helper | Detect open fence / block math / inline math; identical classification rules; unit-tested without DOM |
+| `MarkedMarkdown` | When `props.streaming`, parse only `stable` (or stable + synthetic closed forms if needed for structure); append pending chrome for `pending`; full source when not streaming |
+| `IncremarkMarkdown` | Keep append/finalize. Render **completed** blocks as now. For **pending** blocks: if node is already `code`, existing artifact path; if `rawText` / paragraph text matches open math, pending math chrome instead of text; do not rely on `mathPlugin` (typewriter only). Still `finalize()` when `!streaming` |
+| CSS | Pending math/code shells under `.chat-markdown[data-streaming]`; no layout jump larger than ordinary line growth |
+
+Do not reintroduce untyped "escape the tail and hope" chunking. Classification
+must be kinded and covered by fixtures.
+
+#### Fixtures and harness
+
+Add deterministic fixtures (same IDs on Marked and Incremark):
+
+| ID | Source intent | Live assertion |
+| --- | --- | --- |
+| `incomplete-math-block` | Prose then `$$\Delta x, \Delta p \ge` without closer | No `$$` in visible textContent while streaming; zero or one pending-math node; after finalize with closer, one `.katex` block |
+| `incomplete-math-inline` | Prose then open `$E=mc` | No lone opener `$` flash as math source; closes to inline KaTeX |
+| `incomplete-fence` | Strengthen if needed | Artifact chrome while open; no bare fence markers in prose |
+| existing `katex` / `incomplete-syntax` / `incomplete-reference` | Regression | Unchanged semantic contract when complete or non-math incomplete |
+
+Harness must assert **during** streaming (mid-delta snapshot), not only on the
+final string. Final-only checks hide this bug.
+
+#### Worker boundary
+
+- In scope: shared split helper; `markdown.tsx` / `incremark-markdown.tsx`
+  streaming presentation; styles; fixtures; harness mid-stream assertions;
+  unit tests for the helper; this file's Slice 6b result notes.
+- Out of scope: default renderer change; Slice 7 decision text beyond linking
+  evidence; server/protocol; timeline projection; enabling `BlockTransformer`
+  typewriter by default.
+
+#### Acceptance
+
+- Mid-stream snapshots for `incomplete-math-block` and
+  `incomplete-math-inline` show no raw open math delimiters in visible text on
+  **both** Marked and Incremark.
+- Closed `katex-inline-block` / `katex` fixtures still render KaTeX on both.
+- Fenced-code copy, external-link confirmation, image removal, and unsafe
+  protocol rejection remain green on both.
+- Final content after stream end equals today's finalized semantics for the
+  same full source (structural fingerprint + KaTeX present when source is
+  closed).
+- Stop mid-math does not leave pending chrome after `streaming` clears.
+- No new Long Task or frame-gap regression beyond noise on the rich and scroll
+  fixtures; report numbers next to Slice 5/6 baselines.
+- Default remains Marked; Incremark stays opt-in local switch.
+
+#### Verification
+
+- Unit: shared split helper table (open/closed block math, inline math,
+  fence, currency `$5`, escaped and nested cases you can define without
+  guessing undocumented parser behavior).
+- Deterministic browser harness: new fixtures mid-stream + final; existing
+  rich/katex/code-copy/security/scroll/reconnect on both renderers.
+- `npm run typecheck`, focused unit tests, production build (record budget;
+  do not silently raise it).
+- Managed `4310` agent-browser: one live math-heavy prompt on Marked and on
+  Incremark; confirm no raw `$$` flash; switch renderer and recheck.
+
+Commit: `fix: hide incomplete math and fence tails while streaming`.
+
+### Manual validation checklist — Slice 6b
+
+Run `bash .devcontainer/start-conduit.sh restart`, open
+`http://127.0.0.1:4310`, authenticated disposable chat. Record pass/fail for
+**Marked** and again for **Incremark**.
+
+- Prompt for a multi-formula answer (classical mechanics / Maxwell / uncertainty).
+  While tokens arrive, confirm open formulas never appear as raw `$$…` or
+  `$…` source in the answer body. Completed formulas typeset.
+- Confirm fenced code still opens as an artifact (header + body) before the
+  closing fence arrives; Copy still works when complete.
+- Stop generation in the middle of a formula. Pending chrome clears; no stuck
+  raw delimiters; no duplicate answer row.
+- After completion, refresh. Final message still typesets closed math; no
+  pending chrome on the historical row (`streaming` false).
+- External link confirmation and absence of unsafe HTML still hold.
+- Switch renderer and repeat the math prompt. Default after fresh session
+  remains Marked.
+
+Expected result: both renderers meet the product contract above; only the
+pending tail differs from today's raw-text leak; finalized transcripts match
+baseline semantics.
 
 ### Slice 7 — #24 decision gate and focused tests
 
@@ -1122,19 +1303,28 @@ Choose one outcome: reject Incremark, augment the current renderer for a
 bounded live-only case, or propose adoption. Update #24 with the evidence and
 request owner approval before any production renderer change.
 
+Slice 7 **consumes Slice 6b**. Incomplete-construct streaming behavior is no
+longer an open unknown for either path; the decision must cite mid-stream
+fixture evidence, not final-only KaTeX checks. If Slice 6b lands shared
+presentation that makes Marked "good enough" on the visible cadence that
+motivated Incremark, say so explicitly—that is a valid reject-or-augment
+input, not a silent scope cut.
+
 Worker boundary: evidence synthesis, focused tests that preserve a decision,
 and the issue update only. Do not implement a renderer outcome in this slice.
 
 Acceptance:
 
 - The decision names compatibility, security, identity, visible cadence,
-  persistence, and bundle evidence.
+  persistence, bundle evidence, and **mid-stream incomplete math/fence**
+  behavior on both paths after Slice 6b.
 - Rejected capabilities and remaining gaps are explicit.
 - Focused tests cover every behavior that influenced the decision.
 - No renderer replacement occurs without owner approval.
 
 Verification: review the report and issue update; rerun the focused fixture
-set; run the full repository checks for any committed test changes.
+set including `incomplete-math-block` and `incomplete-math-inline`; run the
+full repository checks for any committed test changes.
 
 Commit: `docs: record issue 24 renderer decision`.
 
@@ -1152,6 +1342,170 @@ owner decision approves that removal.
 Acceptance and verification must use the approved Slice 7 gates, plus the
 production build, security tests, persistence tests, release canaries, bundle
 budget review, and agent-browser manual review.
+
+### Slice 9 — Desktop panel motion under heavy KaTeX / long transcripts
+
+Explore and pick a fix for choppy left-sidebar and right-workspace-panel open
+or close animation when the active chat transcript is KaTeX-dense. This is
+**shell layout**, not Markdown renderer work. It is orthogonal to #24 adoption.
+Do not fold it into Slice 7 or Slice 8.
+
+#### Measured finding (pre-slice, diagnosis only)
+
+Reproduced on managed `4310` with chat
+`207db426-97c1-44bf-b1fc-3cbd2172a608` (Pi session
+`019fc7fd-0538-79b4-acef-ea3059afc95d`): desktop sidebar and workspace panel
+open or close is choppy. A new empty chat and a long plain-text chat on the
+same build stay smooth.
+
+Source density for that session (assistant text): ~40k characters, **74**
+block `$$…$$`, **116** inline `$…$`, ~897 TeX commands — rough KaTeX DOM on
+the order of **10k–15k** nodes from math alone. A larger local session
+(~52KB jsonl) with **zero** `$$` did not show the same hitch, so length alone
+is a weak predictor; **typeset math node count × width-driven reflow** is the
+strong one.
+
+Mechanism in current CSS (`conduit-web/src/client/styles.css`):
+
+- Desktop `.conduit-sidebar` uses `transition: width` (`244px` ↔ `52px`).
+- Desktop `.workspace-panel` uses `transition: width` / `margin-right`
+  (`0` ↔ `--workspace-panel-width`).
+- `.chat-main` is `flex: 1` in the same row, so every animation frame changes
+  the conversation column width.
+- `Transcript` mounts the full timeline (`For` over rows); there is no message
+  virtualization. `.chat-markdown` uses `overflow-wrap: anywhere`.
+- Mobile already uses `transform: translateX(...)` for both panels — the
+  compositor-friendly path desktop lacks.
+
+Causal chain: width tween → flex reflows `.chat-main` every frame → layout
+walks the full mounted transcript including deep KaTeX trees → main thread
+misses frames over `--panel-motion-duration` (160ms). The sidebar edge is what
+the eye tracks; the bill is mostly transcript layout.
+
+Product pattern (ChatGPT / Linear / Notion class UIs): keep panel motion on
+`transform` / `opacity`, or push layout with an **empty spacer** while the
+panel chrome is fixed/absolute; and/or bound live transcript DOM
+(virtualization, `content-visibility`). They do not width-animate a flex
+neighbor of an unvirtualized math-heavy document.
+
+#### Goal of this slice
+
+1. Quantify the hitch with a repeatable probe (not subjective smoothness alone).
+2. Spike 2–3 candidates behind a local-only flag or temporary CSS branch.
+3. **Pick one** primary approach with evidence; record rejects.
+4. If the winner is small and shell-only, implement it in this slice. If it
+   requires transcript virtualization or a broad layout rewrite, stop at the
+   decision and open a follow-up implementation slice — do not expand scope
+   silently.
+
+#### Candidate set (evaluate in this order)
+
+| ID | Approach | Intent |
+| --- | --- | --- |
+| A | **Transform / overlay desktop panels** (align with mobile): panel slides with `translateX`; transcript width stable during the gesture; final open state may reserve space with a one-shot layout or remain overlay until idle | Kill per-frame main-column reflow |
+| B | **Notion/Linear hybrid:** empty flow **spacer** animates width; panel surface is `position: absolute` or `fixed` at full panel width and moves with `translateX` so panel *content* does not reflow; decide whether main content width updates every frame, at end only, or via spacer only | Keep push layout without width-tweening heavy chrome |
+| C | **Snap layout + short opacity/transform chrome:** commit end width in one frame; animate only shadow/opacity/edge | Cheapest; may feel less fluid |
+| D | **`content-visibility: auto`** (and stable intrinsic size) on offscreen message rows | Reduce layout of offscreen KaTeX without changing panel CSS |
+| E | **Transcript virtualization** | Structural bound on DOM; largest win for huge threads; highest risk to scroll/follow/stream contracts |
+
+Default preference if measurements are close: **A or B for the panel**, with
+**D as a cheap additive** if it helps scroll and secondary resizes. Treat **E**
+as a separate project unless A–D cannot meet the frame budget on the math
+fixture — virtualization touches follow-scroll, load-older anchoring, streaming
+tail, and tool/trace rows.
+
+#### Measurement contract
+
+Use the math-heavy chat above (or a deterministic fixture that injects the same
+assistant Markdown into a disposable session) and a long plain-text control of
+similar character count.
+
+For left sidebar toggle and right workspace-panel toggle, record per candidate:
+
+- Animation duration and whether main column width changes per frame
+- Frame gaps / Long Tasks during the 160ms window (Performance panel or
+  harness `requestAnimationFrame` probe)
+- Layout/reflow time attributable to the transcript subtree if observable
+- DOM counts: total nodes, `.katex` count, message-row count
+- Final layout correctness: no clipped composer, no persistent gap, panel hit
+  targets, focus, `localStorage` open state preserved
+- Scroll: follow mode and scroll-away distance unchanged after the gesture
+  settles
+- Mobile path unchanged (already transform-based)
+
+Do not use subjective smoothness as the only gate. One noisy run is
+insufficient; repeat the math fixture at least three times per candidate.
+
+#### Worker boundary
+
+In scope:
+
+- Diagnosis record (this section)
+- Local spike CSS/DOM structure for desktop sidebar and workspace panel
+- Optional `content-visibility` experiment on message shells
+- Measurement harness or agent-browser Performance probes
+- Decision writeup in this file
+- Implementation **only** if the chosen fix is shell-scoped (A/B/C and
+  optionally D) and passes acceptance
+
+Out of scope:
+
+- #24 renderer choice, Incremark adoption, Slice 6b incomplete-math semantics
+- Protocol, active-generation, timeline projection
+- Full transcript virtualization unless A–D fail and owner approves expanding
+  into a follow-up slice
+- Changing mobile panel behavior except to share primitives safely
+- Raising bundle budgets to hide cost
+
+#### Acceptance
+
+- Baseline hitch reproduced with numbers on the math chat; plain-text control
+  remains under the same budget.
+- At least two candidates measured; winner named with frame-gap / Long Task
+  comparison against baseline.
+- Winner keeps: desktop usable push or intentional overlay UX (document which),
+  keyboard shortcuts (`toggle-sidebar`, workspace panel), stored panel open
+  state, resize handle on workspace panel, no transcript scroll jump after
+  settle, no composer or header clipping.
+- Mobile behavior unchanged or strictly improved.
+- If implemented: production default uses the winner; spike flags removed; typecheck
+  and focused UI checks pass. If not implemented: follow-up slice title and
+  scope are written here; no half-landed CSS.
+
+#### Verification
+
+- Agent-browser on managed `4310`: math chat + plain chat, left and right
+  toggles, before/after or flag A/B.
+- Performance evidence attached or summarized in this file (frame gaps, Long
+  Tasks, katex node count).
+- `npm run typecheck` if code changes; no protocol test churn expected.
+- Manual: collapse/expand sidebar, open/close workspace panel, resize panel,
+  reload with panel open, mobile width if convenient.
+
+Commit (investigation only): `docs: record panel motion options under heavy KaTeX`.
+
+Commit (if shell fix lands in-slice): `fix: keep transcript width stable during desktop panel motion`
+(or the accurate one-line summary of the chosen approach).
+
+### Manual validation checklist — Slice 9
+
+Run `bash .devcontainer/start-conduit.sh restart`, open
+`http://127.0.0.1:4310`. Use the math-heavy chat and a long plain-text chat.
+
+- Toggle left sidebar open/closed several times on the math chat. Motion must
+  meet the measured budget; no multi-frame hitch visible on a normal desktop.
+- Toggle workspace panel open/closed the same way. Resize handle still works
+  when open.
+- Repeat on the plain-text chat (must stay smooth; no regression).
+- After toggles, scroll position and follow mode behave as before; composer
+  remains usable; no blank gap where the panel was.
+- Reload with workspace panel previously open; state restores without a stuck
+  width.
+- Optional: narrow the window to the mobile breakpoint; drawer still uses
+  transform and is not worse than today.
+
+Expected result: a named winner with evidence; either shipped shell fix or an
+explicit deferred virtualization/follow-up slice — not an open-ended spike.
 
 ## Measurable success criteria
 
@@ -1200,11 +1554,16 @@ shape is bounded per-delta work, not only a lower total time.
   controls, and row types through streaming and completion.
 - **Scroll:** preserve follow mode, user scroll-away, anchor preservation, and
   post-Markdown layout settling.
+- **Shell panel motion:** desktop sidebar and workspace panel must not
+  width-animate against an unbounded KaTeX transcript without a measured
+  budget; Slice 9 owns the fix choice. Mobile transform drawers stay the
+  reference for compositor-friendly motion.
 - **Security:** preserve DOMPurify restrictions, protocol checks, external-link
   confirmation, image removal, and artifact behavior. Incremark raw HTML is a
   hard review gate.
-- **Markdown compatibility:** cover incomplete syntax, GFM, KaTeX, fenced
-  code, reference definitions, links, long tokens, thinking, and tools.
+- **Markdown compatibility:** cover incomplete syntax (including open math and
+  open fences mid-stream), GFM, KaTeX, fenced code, reference definitions,
+  links, long tokens, thinking, and tools.
 - **Bundle:** measure initial and lazy gzip output; do not accept a dependency
   increase without an explicit owner decision.
 - **Accessibility and CSS:** preserve semantic elements, keyboard behavior,
@@ -1225,6 +1584,8 @@ lifecycle.
 ## Do not attempt yet
 
 - Do not work on #37.
+- Do not start full transcript virtualization outside Slice 9's decision
+  (candidate E only if A–D fail and owner expands scope).
 - Do not replace the renderer.
 - Do not add `@incremark/solid` to production dependencies.
 - Keep the exact `@incremark/core` dependency and lockfile entries scoped to the
@@ -1252,7 +1613,13 @@ The Slice 1 review passed on 3 August 2026:
 5. The paired run produced the same structural result with instrumentation
    disabled.
 
-The Slice 6 candidate gate was not promising. Slice 4 boundary and recovery
-verification is complete, and Slice 5 now records the current Marked renderer
-baseline. Slice 7 is next for the renderer decision gate. Any renderer
-adoption still requires a separate owner approval after the Incremark spike.
+The Slice 6 candidate gate was not promising on published
+`@incremark/solid`; the local `@incremark/core` adapter remains for
+comparison. Slice 4 boundary/recovery and Slice 5 Marked baseline are
+recorded. #24 path remains 6a → 6b → 7 → optional 8. Slice 6b is authorized
+dual-renderer presentation work; it is not adoption. Any default-renderer
+change still requires owner approval after Slice 7.
+
+**Slice 9** is queued for desktop panel motion under KaTeX-dense transcripts
+(width-tween reflow vs transform/spacer candidates). It is shell layout, not
+part of the renderer decision, and must not block Slice 7.

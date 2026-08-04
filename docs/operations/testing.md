@@ -26,6 +26,10 @@ contracts; deployment proof proves packaging and state boundaries.
 - Local server commands are managed: from the repository root run
   `bash .devcontainer/start-conduit.sh restart`; use `dev` only for Vite HMR.
   Do not launch `node src/server.js`, `npm run start`, or Vite directly.
+- The local launcher keeps its default `CONDUIT_HOST=0.0.0.0` bind so Windows
+  can reach a server running inside WSL. Do not replace it with
+  `CONDUIT_HOST=127.0.0.1` for ordinary local QA. Use `127.0.0.1:4310` as the
+  client or health-check URL; the URL does not change the server bind.
 - Browser specs mock the API unless the server boundary is the behavior under
   test. Keep state in a temporary fixture; never use repository `data/` for a
   test that can mutate it.
@@ -121,9 +125,12 @@ bash .devcontainer/start-conduit.sh restart
 cd conduit-web
 agent-browser skills get core
 agent-browser skills get dogfood
-SESSION="$(agent-browser session id --scope worktree --prefix conduit-qa)"
-AGENT_BROWSER_SESSION="$SESSION" npm run qa:agent-browser
+npm run qa:agent-browser
 ```
+
+Run the restart and QA commands as separate commands. The QA entry point creates
+or restores the named worktree session and prints its session ID. This keeps the
+managed-server rule and the QA rule separately matchable by Codex.
 
 Use the restored session for the changed flow:
 
@@ -136,7 +143,7 @@ Use the restored session for the changed flow:
 - Close the session after use:
 
 ```bash
-agent-browser --session "$SESSION" close
+agent-browser --session <session-id-printed-by-qa> close
 ```
 
 The normal pre-commit ladder is the fast code checks, the deterministic
@@ -181,7 +188,8 @@ bash .devcontainer/start-conduit.sh restart
 curl -fsS http://127.0.0.1:4310/healthz
 ```
 
-The health response may say `development` for ordinary local work. The live
+The launcher default remains `0.0.0.0` so the WSL server is reachable from
+Windows. The health response may say `development` for ordinary local work. The live
 runner requires a full 40-character release SHA, so pin a committed build:
 
 ```bash

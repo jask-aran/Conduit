@@ -51,5 +51,84 @@ prefix_rule(
 prefix_rule(
     pattern=["bash", ".devcontainer/start-conduit.sh"],
     decision="allow",
-    justification="Use Conduit's managed build and server lifecycle",
+    justification="Use Conduit's managed WSL-accessible server; the default 0.0.0.0 bind is intentional for Windows clients",
+)
+
+# Keep managed-server restart as a direct command. Shell wrappers with
+# assignments or substitutions are evaluated as one opaque command and do not
+# inherit this prefix match.
+prefix_rule(
+    pattern=["npm", "run", "qa:agent-browser"],
+    decision="allow",
+    justification="Run Conduit's authenticated local agent-browser QA entry point",
+)
+prefix_rule(
+    pattern=["npm", "run", "test:harness"],
+    decision="allow",
+    justification="Run Conduit's deterministic local transport harness",
+)
+prefix_rule(
+    pattern=["npm", "run", "test:harness:browser"],
+    decision="allow",
+    justification="Run Conduit's deterministic local browser harness",
+)
+prefix_rule(
+    pattern=["npm", "run", "test:browser:setpieces"],
+    decision="allow",
+    justification="Run Conduit's named local browser release canaries",
+)
+prefix_rule(
+    pattern=["node", "--test"],
+    decision="allow",
+    justification="Run Conduit node:test contract and harness suites",
+)
+prefix_rule(
+    pattern=["curl", "-fsS", "http://127.0.0.1:4310/healthz"],
+    decision="allow",
+    justification="Check the managed Conduit health endpoint over the local WSL surface",
+)
+
+# Accepted project workflow risk. These tools are trusted for this repository;
+# unrelated shell commands still use the normal sandbox and Auto-review path.
+prefix_rule(
+    pattern=["agent-browser"],
+    decision="allow",
+    justification="Run local Conduit browser inspection and interaction workflows",
+    match=[
+        "agent-browser --session conduit-local open http://127.0.0.1:4310",
+        "agent-browser --session conduit-local snapshot -i",
+        "agent-browser --session conduit-local eval document.title",
+    ],
+)
+prefix_rule(
+    pattern=["npx", "agent-browser"],
+    decision="allow",
+    justification="Run the project browser CLI through npx",
+)
+prefix_rule(
+    pattern=["agent-tui"],
+    decision="allow",
+    justification="Run local Conduit terminal UI workflows",
+)
+prefix_rule(
+    pattern=["git"],
+    decision="allow",
+    justification="Perform accepted Conduit repository and history operations",
+    match=[
+        "git status --short",
+        "git add -- conduit-web/src/client/state/active-chat.ts",
+        "git commit -m \"docs: update project rules\"",
+        "git push origin main",
+    ],
+)
+prefix_rule(
+    pattern=["gh"],
+    decision="allow",
+    justification="Run accepted GitHub CLI workflows for the Conduit repository",
+    match=[
+        "gh issue list --repo jask-aran/Conduit",
+        "gh pr view --repo jask-aran/Conduit",
+        "gh run view --repo jask-aran/Conduit",
+        "gh release view --repo jask-aran/Conduit",
+    ],
 )
