@@ -29,34 +29,20 @@ const escapeHtml = (value: string) => value
   .replaceAll(">", "&gt;")
   .replaceAll('"', "&quot;");
 
-function pendingMathPreview(body: string, displayMode: boolean) {
-  if (!body.trim()) return "";
-  try {
-    return katex.renderToString(body, { displayMode, throwOnError: true });
-  } catch {
-    return "";
-  }
-}
-
 function pendingMarkup(pending: StreamingPending, streaming: boolean) {
-  const state = streaming ? "pending" : "final";
   if (pending.kind === "fence") {
     const language = escapeHtml(pending.language || "text");
     return `<div class="artifact${streaming ? " streaming-pending streaming-pending-fence" : ""}" data-language="${language}"${streaming ? " data-streaming-pending=\"fence\"" : ""}><div class="artifact-header"><span>${language}</span><button type="button" aria-label="Copy code" data-copy-code>Copy</button></div><pre><code>${escapeHtml(pending.body)}</code></pre></div>`;
   }
-  const preview = pendingMathPreview(pending.body, pending.kind === "math-block");
-  const fallback = preview || `<span class="streaming-pending-placeholder">${state === "pending" ? "Math in progress" : escapeHtml(pending.body)}</span>`;
-  const className = streaming
-    ? `streaming-pending ${pending.kind === "math-block" ? "streaming-pending-math-block" : "streaming-pending-math-inline"}`
-    : "streaming-final-math";
+  const className = `streaming-pending ${pending.kind === "math-block" ? "streaming-pending-math-block" : "streaming-pending-math-inline"}`;
   const tag = pending.kind === "math-block" ? "div" : "span";
-  return `<${tag} class="${className}"${streaming ? ` data-streaming-pending="${pending.kind}"` : " data-streaming-final=\"math\" aria-label=\"Math formula\""}>${fallback}</${tag}>`;
+  return `<${tag} class="${className}"${streaming ? ` data-streaming-pending="${pending.kind}"` : ""} aria-hidden="true"></${tag}>`;
 }
 
 function appendPendingMarkup(fragment: DocumentFragment, pending: StreamingPending, streaming: boolean) {
   const pendingFragment = DOMPurify.sanitize(pendingMarkup(pending, streaming), {
     USE_PROFILES: { html: true },
-    ADD_ATTR: ["aria-label", "class", "data-copy-code", "data-language", "data-streaming-final", "data-streaming-pending"],
+    ADD_ATTR: ["aria-hidden", "aria-label", "class", "data-copy-code", "data-language", "data-streaming-final", "data-streaming-pending"],
     RETURN_DOM_FRAGMENT: true,
   }) as DocumentFragment;
   if (pending.kind === "math-inline") {
@@ -96,7 +82,7 @@ marked.use({
   },
 });
 
-function renderMarkdown(source: string, inline = false) {
+function renderMarkdown(source: string, inline = false, animateMath = false) {
   const recorder = getHarnessRecorder();
   const parseStartedAt = recorder ? performance.now() : 0;
   let katexMs = 0;
@@ -140,6 +126,10 @@ function renderMarkdown(source: string, inline = false) {
     FORBID_TAGS: ["img", "script", "style", "iframe", "object", "embed", ...(inline ? ["a", "button"] : [])],
     RETURN_DOM_FRAGMENT: true,
   }) as DocumentFragment;
+  if (animateMath) {
+    const mathSelector = inline ? ".katex" : ".katex-display, .katex";
+    for (const element of fragment.querySelectorAll(mathSelector)) element.classList.add("streaming-final-math");
+  }
   if (recorder) {
     const sanitisedAt = performance.now();
     recordHarnessMetric(recorder, {
@@ -221,7 +211,9 @@ function MarkedMarkdown(props: ChatMarkdownProps) {
     const version = Number(props.streamVersion || 0);
     if (source === renderedSource && version === renderedVersion) return;
     const split = splitStreamingMarkdown(source);
-    const fragment = renderMarkdown(split.pending ? split.stable : source, props.inline);
+    const previousPending = splitStreamingMarkdown(renderedSource).pending;
+    const animateMath = !split.pending && previousPending != null && previousPending.kind.startsWith("math");
+    const fragment = renderMarkdown(split.pending ? split.stable : source, props.inline, animateMath);
     if (split.pending) appendPendingMarkup(fragment, split.pending, Boolean(props.streaming));
     const recorder = getHarnessRecorder();
     const reconcileStartedAt = recorder ? performance.now() : 0;

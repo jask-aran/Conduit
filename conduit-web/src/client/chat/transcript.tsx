@@ -26,6 +26,7 @@ function Actions(props: { message: Message; precedingUserId?: string; chat: Acti
 
 export function Transcript(props: { chat: ActiveChatStore; partialContinue: boolean }) {
   let viewport!: HTMLDivElement;
+  let thread!: HTMLDivElement;
   let previousLoaded: string | null = null;
   let historyLoad: Promise<void> | null = null;
   let layoutEpoch = 0;
@@ -137,8 +138,13 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
     viewport.addEventListener("touchmove", onTouchMove, { passive: false });
     viewport.addEventListener("touchend", onTouchEnd);
     viewport.addEventListener("touchcancel", onTouchEnd);
+    const resizeObserver = new ResizeObserver(() => {
+      if (following()) scrollBottom();
+    });
+    resizeObserver.observe(thread);
     onCleanup(() => {
       layoutEpoch += 1;
+      resizeObserver.disconnect();
       viewport.removeEventListener("scroll", onScroll);
       viewport.removeEventListener("touchstart", onTouchStart);
       viewport.removeEventListener("touchmove", onTouchMove);
@@ -162,7 +168,7 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
       </div>
     </Show>
     <div ref={viewport} class="message-scroller-viewport" data-slot="message-scroller-viewport">
-      <div class="thread" data-slot="message-scroller-content" style={empty() && pullDistance() > 0 ? { transform: `translateY(${pullDistance()}px)` } : undefined}>
+      <div ref={thread} class="thread" data-slot="message-scroller-content" style={empty() && pullDistance() > 0 ? { transform: `translateY(${pullDistance()}px)` } : undefined}>
         <Show when={props.chat.loadingOlder()}>
           <div data-slot="message-scroller-item" class="flex justify-center" role="status" aria-label="Loading earlier messages"><Spinner /></div>
         </Show>
