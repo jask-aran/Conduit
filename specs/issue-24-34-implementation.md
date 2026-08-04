@@ -1230,6 +1230,7 @@ Add deterministic fixtures (same IDs on Marked and Incremark):
 | `incomplete-math-block` | Prose then `$$\Delta x, \Delta p \ge` without closer | No `$$` in visible textContent while streaming; zero or one pending-math node; after finalize with closer, one `.katex` block |
 | `incomplete-math-inline` | Prose then open `$E=mc` | No lone opener `$` flash as math source; closes to inline KaTeX |
 | `incomplete-fence` | Strengthen if needed | Artifact chrome while open; no bare fence markers in prose |
+| `stopped-incomplete-math` | Stream ends with an open `$$` construct | No raw delimiter or pending chrome remains after `streaming` clears |
 | existing `katex` / `incomplete-syntax` / `incomplete-reference` | Regression | Unchanged semantic contract when complete or non-math incomplete |
 
 Harness must assert **during** streaming (mid-delta snapshot), not only on the
@@ -1271,6 +1272,87 @@ final string. Final-only checks hide this bug.
   do not silently raise it).
 - Managed `4310` agent-browser: one live math-heavy prompt on Marked and on
   Incremark; confirm no raw `$$` flash; switch renderer and recheck.
+
+#### Slice 6b result — 4 August 2026
+
+Implemented `splitStreamingMarkdown(source)` in
+`conduit-web/src/client/chat/streaming-markdown.ts`. It classifies the first
+unstable tail as `math-block`, `math-inline`, or `fence`, and returns the
+stable source prefix plus the delimiter-free body. Currency `$5`, escaped
+dollars, code spans, closed fences, and closed math remain stable input.
+
+Both adapters use the same classifier. Marked parses the stable prefix and
+adds a sanitised pending shell. Incremark continues to use `append()` and
+`finalize()` for the full parser state, while a presentation AST omits the
+pending tail until it closes. Both paths try KaTeX on a pending interior and
+fall back to muted, delimiter-free text. An ended stream removes the pending
+attribute; an invalid truncated formula uses the final muted fallback. The
+outer `.chat-markdown` node remains stable. The Marked reconciler now treats
+the renderer-owned `data-streaming-pending` and `data-streaming-final`
+attributes as managed attributes, so a pending node cannot retain stale state.
+
+The deterministic browser harness records redacted mid-delta snapshots. The
+new `incomplete-math-block`, `incomplete-math-inline`, and `incomplete-fence`
+fixtures passed on both renderers. Each open-construct window had zero raw
+delimiter samples and one pending node; each closed fixture ended with its
+expected KaTeX or artifact structure. The
+`stopped-incomplete-math` fixture passed on both renderers with
+`finalPendingNodeCount: 0` and no raw delimiter samples after stream end.
+
+The focused commands were:
+
+```text
+node --test test/streaming-markdown.test.js
+npm run test:harness:browser -- --fixture <fixture> --renderer <marked|incremark> --profile steady --chunk-size 3 --seed 1
+```
+
+All new fixtures passed for both renderers. The regression set also passed for
+both renderers: `katex`, `incomplete-syntax`, `code-copy`,
+`external-confirmation`, `security`, `scroll`, and `reconnect`. The known
+Incremark `incomplete-reference` incompatibility remains unchanged: Marked
+passed, while Incremark failed with the exact error
+`Rendered structural fingerprint did not match the expected fixture`.
+
+The repeated rich and scroll A/B run used Chromium `149.0.7827.55`, Node
+`v24.18.0`, steady 16 ms cadence, 3-character deltas, seed `1`, and two runs
+per renderer and fixture:
+
+| Fixture | Completion p50 Marked → Incremark | First-visible p50 Marked → Incremark | DOM mutations Marked → Incremark | Frame gaps over 32 ms | Frame gaps over 50 ms | Long Tasks |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| `rich-markdown` | 535.0 → 538.0 ms (+0.6%) | 33.2 → 93.9 ms (+182.8%) | 46 → 86 (+87.0%) | 0 → 2 | 0 → 0 | 0 → 0 |
+| `scroll` | 3521.2 → 3520.9 ms (-0.01%) | 47.2 → 89.0 ms (+88.6%) | 217 → 419 (+93.1%) | 0 → 2 | 0 → 0 | 0 → 0 |
+
+The current Marked numbers remain within the Slice 5 baseline noise. The
+current Incremark result remains near completion parity but has a cold first
+paint penalty, more DOM mutations, and two frame gaps over 32 ms on both
+representative fixtures. No renderer reported a Long Task or a frame gap over
+50 ms in this repeat. Slice 6b therefore fixes the visible incomplete-tail
+contract on both paths but does not change the Slice 6a decision: it provides
+no evidence that Incremark is faster.
+
+Verification completed:
+
+- `node --test test/streaming-markdown.test.js`: 7 passed.
+- `npm test`: 273 passed.
+- `npm run typecheck`: passed.
+- `npm run build`: Vite completed, then the existing budget gate failed with
+  `initial JS is 233528 B gzip; budget is 180000 B.`
+- `CONDUIT_BUDGET_INITIAL_JS_GZIP=300000 npm run build`: passed. The report was
+  initial JS `233528 B gzip`, initial CSS `27848 B gzip`, and largest lazy JS
+  `185186 B gzip`. No budget was changed. The initial JS increase from the
+  recorded Slice 6a build is about `1206 B gzip`.
+- Managed restart: `bash .devcontainer/start-conduit.sh restart`; health was
+  `{"ok":true,"status":"ready","release":"development"}` and `ss`
+  reported `0.0.0.0:4310`.
+- Authenticated agent-browser on the managed server passed a live formula
+  prompt with Marked and again with Incremark. Each run reported one `.katex`
+  node, zero raw-delimiter samples, zero pending nodes after completion, and
+  no page or console error. The selector switched to Incremark and back; a
+  fresh session still selected Marked.
+
+Verdict: Slice 6b meets its presentation acceptance on both maintained paths.
+It is not renderer adoption evidence. Keep Marked as the default and carry the
+known Incremark reference-definition incompatibility into the Slice 7 decision.
 
 Commit: `fix: hide incomplete math and fence tails while streaming`.
 

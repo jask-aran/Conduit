@@ -7,6 +7,7 @@ import * as KAlertDialog from "@kobalte/core/alert-dialog";
 import "katex/dist/katex.min.css";
 import { Button } from "@/components/primitives";
 import { getHarnessRecorder, recordHarnessMetric } from "../harness-metrics";
+import { splitStreamingMarkdown, type StreamingPending } from "./streaming-markdown";
 
 const allowedProtocols = new Set(["http:", "https:", "mailto:"]);
 
@@ -27,6 +28,46 @@ const escapeHtml = (value: string) => value
   .replaceAll("<", "&lt;")
   .replaceAll(">", "&gt;")
   .replaceAll('"', "&quot;");
+
+function pendingMathPreview(body: string, displayMode: boolean) {
+  if (!body.trim()) return "";
+  try {
+    return katex.renderToString(body, { displayMode, throwOnError: true });
+  } catch {
+    return "";
+  }
+}
+
+function pendingMarkup(pending: StreamingPending, streaming: boolean) {
+  const state = streaming ? "pending" : "final";
+  if (pending.kind === "fence") {
+    const language = escapeHtml(pending.language || "text");
+    return `<div class="artifact${streaming ? " streaming-pending streaming-pending-fence" : ""}" data-language="${language}"${streaming ? " data-streaming-pending=\"fence\"" : ""}><div class="artifact-header"><span>${language}</span><button type="button" aria-label="Copy code" data-copy-code>Copy</button></div><pre><code>${escapeHtml(pending.body)}</code></pre></div>`;
+  }
+  const preview = pendingMathPreview(pending.body, pending.kind === "math-block");
+  const fallback = preview || `<span class="streaming-pending-placeholder">${state === "pending" ? "Math in progress" : escapeHtml(pending.body)}</span>`;
+  const className = streaming
+    ? `streaming-pending ${pending.kind === "math-block" ? "streaming-pending-math-block" : "streaming-pending-math-inline"}`
+    : "streaming-final-math";
+  const tag = pending.kind === "math-block" ? "div" : "span";
+  return `<${tag} class="${className}"${streaming ? ` data-streaming-pending="${pending.kind}"` : " data-streaming-final=\"math\" aria-label=\"Math formula\""}>${fallback}</${tag}>`;
+}
+
+function appendPendingMarkup(fragment: DocumentFragment, pending: StreamingPending, streaming: boolean) {
+  const pendingFragment = DOMPurify.sanitize(pendingMarkup(pending, streaming), {
+    USE_PROFILES: { html: true },
+    ADD_ATTR: ["aria-label", "class", "data-copy-code", "data-language", "data-streaming-final", "data-streaming-pending"],
+    RETURN_DOM_FRAGMENT: true,
+  }) as DocumentFragment;
+  if (pending.kind === "math-inline") {
+    const paragraph = [...fragment.children].reverse().find((child) => child.tagName === "P");
+    if (paragraph) {
+      paragraph.append(...[...pendingFragment.childNodes]);
+      return;
+    }
+  }
+  fragment.append(...[...pendingFragment.childNodes]);
+}
 
 marked.use(markedKatex({ nonStandard: true, throwOnError: false }));
 marked.use({
@@ -120,7 +161,7 @@ function renderMarkdown(source: string, inline = false) {
 
 const sameKind = (current: Node, next: Node) => current.nodeType === next.nodeType
   && (current.nodeType !== Node.ELEMENT_NODE || (current as Element).tagName === (next as Element).tagName);
-const managedAttributes = new Set(["class", "href", "title", "type", "aria-label", "data-copy-code", "data-external-url", "data-language", "data-markdown"]);
+const managedAttributes = new Set(["class", "href", "title", "type", "aria-label", "data-copy-code", "data-external-url", "data-language", "data-markdown", "data-streaming-final", "data-streaming-pending"]);
 
 /** Reconcile a freshly parsed canonical Markdown tree into the live tree.
  * Nodes whose semantic position and element type survive the next token keep
@@ -179,7 +220,9 @@ function MarkedMarkdown(props: ChatMarkdownProps) {
     const source = String(props.children || "");
     const version = Number(props.streamVersion || 0);
     if (source === renderedSource && version === renderedVersion) return;
-    const fragment = renderMarkdown(source, props.inline);
+    const split = splitStreamingMarkdown(source);
+    const fragment = renderMarkdown(split.pending ? split.stable : source, props.inline);
+    if (split.pending) appendPendingMarkup(fragment, split.pending, Boolean(props.streaming));
     const recorder = getHarnessRecorder();
     const reconcileStartedAt = recorder ? performance.now() : 0;
     reconcileChildren(root, fragment);

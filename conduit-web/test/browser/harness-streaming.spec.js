@@ -34,6 +34,7 @@ test("a deterministic stream reports browser delivery and visible rendering cade
   const expectedSemanticFingerprint = jsonEnv("HARNESS_EXPECTED_SEMANTIC_FINGERPRINT") ?? fixture?.expectedSemanticFingerprint ?? null;
   const expectedAssertions = jsonEnv("HARNESS_EXPECTED_ASSERTIONS") ?? fixture?.expectedAssertions ?? {};
   const expectedInteractions = jsonEnv("HARNESS_EXPECTED_INTERACTIONS") ?? fixture?.expectedInteractions ?? {};
+  const streamingAssertion = jsonEnv("HARNESS_EXPECTED_STREAMING") ?? fixture?.streamingAssertion ?? null;
   const renderer = process.env.HARNESS_RENDERER || "marked";
   const seed = Number(process.env.HARNESS_SEED || 1);
   const cadence = process.env.HARNESS_PROFILE
@@ -56,6 +57,7 @@ test("a deterministic stream reports browser delivery and visible rendering cade
     expectedSemanticFingerprint,
     expectedAssertions,
     expectedInteractions,
+    streamingAssertion,
     fixture: fixture?.id || null,
     requiresStructuralContract: fixture?.requiresStructuralContract || false,
     scrollProbe: fixture?.scrollProbe || false,

@@ -5,6 +5,8 @@ import * as KAlertDialog from "@kobalte/core/alert-dialog";
 import { Button } from "@/components/primitives";
 import { getHarnessRecorder, recordHarnessMetric } from "@/client/harness-metrics";
 import type { ChatMarkdownProps } from "./markdown";
+import type { StreamingPending } from "./streaming-markdown";
+import { splitStreamingMarkdown } from "./streaming-markdown";
 
 type MarkdownNode = any;
 type Definition = { url?: string; title?: string | null };
@@ -95,6 +97,51 @@ function CodeNode(props: { node: MarkdownNode }) {
   </div>;
 }
 
+function PendingConstruct(props: { pending: StreamingPending; streaming: boolean }) {
+  const pending = props.pending;
+  if (pending.kind === "fence") {
+    const language = String(pending.language || "text").split(/\s+/)[0]!.toLowerCase();
+    return <div
+      class={props.streaming ? "artifact streaming-pending streaming-pending-fence" : "artifact"}
+      data-language={language}
+      data-streaming-pending={props.streaming ? "fence" : undefined}
+    >
+      <div class="artifact-header"><span>{language}</span><button type="button" aria-label="Copy code" data-copy-code onClick={() => { if (navigator.clipboard) void navigator.clipboard.writeText(pending.body); }}>Copy</button></div>
+      <pre><code>{pending.body}</code></pre>
+    </div>;
+  }
+  const recorder = getHarnessRecorder();
+  const startedAt = recorder ? performance.now() : 0;
+  let html = "";
+  if (pending.body.trim()) {
+    try {
+      html = katex.renderToString(pending.body, {
+        displayMode: pending.kind === "math-block",
+        throwOnError: true,
+      });
+    } catch {
+      html = "";
+    }
+  }
+  if (recorder) {
+    recordHarnessMetric(recorder, {
+      stage: "markdown-katex-pending",
+      renderer: "incremark",
+      katexMs: performance.now() - startedAt,
+      katexCallCount: pending.body.trim() ? 1 : 0,
+      pendingKind: pending.kind,
+    });
+  }
+  const fallback = html || (props.streaming ? "Math in progress" : pending.body);
+  const className = props.streaming
+    ? `streaming-pending ${pending.kind === "math-block" ? "streaming-pending-math-block" : "streaming-pending-math-inline"}`
+    : "streaming-final-math";
+  const content = html ? <span innerHTML={html} /> : <span class="streaming-pending-placeholder">{fallback}</span>;
+  return pending.kind === "math-block"
+    ? <div class={className} data-streaming-pending={props.streaming ? pending.kind : undefined} data-streaming-final={props.streaming ? undefined : "math"} aria-label="Math formula">{content}</div>
+    : <span class={className} data-streaming-pending={props.streaming ? pending.kind : undefined} data-streaming-final={props.streaming ? undefined : "math"} aria-label="Math formula">{content}</span>;
+}
+
 function TableNode(props: { node: MarkdownNode; context: RendererContext }) {
   const [head, ...body] = props.node.children || [];
   return <table>
@@ -159,7 +206,8 @@ function AstNode(props: { node: MarkdownNode; context: RendererContext }) {
  */
 export function IncremarkMarkdown(props: ChatMarkdownProps) {
   const parser = createIncremarkParser({ gfm: true, math: true, htmlTree: true, containers: true });
-  const [ast, setAst] = createSignal<MarkdownNode>({ type: "root", children: [] });
+  const [displayAst, setDisplayAst] = createSignal<MarkdownNode>({ type: "root", children: [] });
+  const [pending, setPending] = createSignal<StreamingPending | null>(null);
   const [definitions, setDefinitions] = createSignal<Record<string, Definition>>({});
   const [externalUrl, setExternalUrl] = createSignal<string | null>(null);
   let previousSource = "";
@@ -167,6 +215,7 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
 
   createEffect(() => {
     const source = String(props.children || "");
+    const split = splitStreamingMarkdown(source);
     const recorder = getHarnessRecorder();
     const parseStartedAt = recorder ? performance.now() : 0;
     let parserMode = "none";
@@ -189,7 +238,16 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
     }
     const parsedAt = recorder ? performance.now() : 0;
     setDefinitions({ ...parser.getDefinitionMap() });
-    setAst({ ...parser.getAst() });
+    const nextAst = { ...parser.getAst() };
+    setPending(split.pending);
+    if (split.pending) {
+      const presentationParser = createIncremarkParser({ gfm: true, math: true, htmlTree: true, containers: true });
+      if (split.stable) presentationParser.render(split.stable);
+      if (!props.streaming) presentationParser.finalize();
+      setDisplayAst({ ...presentationParser.getAst() });
+    } else {
+      setDisplayAst(nextAst);
+    }
     const reconciledAt = recorder ? performance.now() : 0;
     if (recorder) {
       recordHarnessMetric(recorder, {
@@ -229,8 +287,12 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
   return <>
     <div class="chat-markdown" data-renderer="incremark" data-streaming={props.streaming || undefined}>
       <div class="incremark" data-incremark-core="true">
-        <Show when={props.inline} fallback={<AstNode node={ast()} context={context()} />}>
-          <InlineNodes nodes={ast().children?.flatMap((child: MarkdownNode) => child.children || [child]) || []} context={context()} />
+        <Show when={props.inline} fallback={<>
+          <AstNode node={displayAst()} context={context()} />
+          <Show when={pending()}>{(value) => <PendingConstruct pending={value()} streaming={Boolean(props.streaming)} />}</Show>
+        </>}>
+          <InlineNodes nodes={displayAst().children?.flatMap((child: MarkdownNode) => child.children || [child]) || []} context={context()} />
+          <Show when={pending()}>{(value) => <PendingConstruct pending={value()} streaming={Boolean(props.streaming)} />}</Show>
         </Show>
       </div>
     </div>
