@@ -46,7 +46,7 @@ export const BROWSER_FIXTURES = Object.freeze({
     expectedSemanticFingerprint: rootContract({ heading: 0, list: 0, table: 0, code: 0, math: 1, link: 0 }),
     expectedAssertions: { katexRendered: true },
     expectedInteractions: {},
-    streamingAssertion: { kind: "math-block", requireNoRawDelimiters: true, requirePendingNode: true },
+    streamingAssertion: { kind: "math-block", requireNoRawDelimiters: true, requirePendingNode: true, requireHiddenPending: true, requireStablePendingLayout: true },
     requiresStructuralContract: true,
   },
   "incomplete-math-inline": {
@@ -55,7 +55,7 @@ export const BROWSER_FIXTURES = Object.freeze({
     expectedSemanticFingerprint: rootContract({ heading: 0, list: 0, table: 0, code: 0, math: 1, link: 0 }),
     expectedAssertions: { katexRendered: true },
     expectedInteractions: {},
-    streamingAssertion: { kind: "math-inline", requireNoRawDelimiters: true, requirePendingNode: true },
+    streamingAssertion: { kind: "math-inline", requireNoRawDelimiters: true, requirePendingNode: true, requireHiddenPending: true, requireStablePendingLayout: true },
     requiresStructuralContract: true,
   },
   "stopped-incomplete-math": {
@@ -64,7 +64,7 @@ export const BROWSER_FIXTURES = Object.freeze({
     expectedSemanticFingerprint: rootContract({ heading: 0, list: 0, table: 0, code: 0, math: 0, link: 0 }),
     expectedAssertions: {},
     expectedInteractions: {},
-    streamingAssertion: { kind: "math-block", requireNoRawDelimiters: true, requirePendingNode: true },
+    streamingAssertion: { kind: "math-block", requireNoRawDelimiters: true, requirePendingNode: true, requireHiddenPending: true, requireStablePendingLayout: true },
     requiresStructuralContract: true,
   },
   "incomplete-fence": {

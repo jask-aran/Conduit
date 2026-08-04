@@ -1356,6 +1356,76 @@ known Incremark reference-definition incompatibility into the Slice 7 decision.
 
 Commit: `fix: hide incomplete math and fence tails while streaming`.
 
+#### Slice 6b presentation refinement — 4 August 2026
+
+The pending math shell now stays empty and invisible. It does not call KaTeX,
+show `Math in progress`, or expose partial TeX. Display math reserves a fixed
+`2.2em` block. Inline math reserves a zero-width, one-line slot. Completed
+KaTeX uses the same display-block minimum geometry and a 140 ms arrival
+animation. A `ResizeObserver` re-applies bottom anchoring when the transcript
+height changes while follow mode is active.
+
+The browser harness now records pending-math visibility, pending text length,
+pending-slot height delta, and Layout Shift API values. The six focused cases
+(`incomplete-math-block`, `incomplete-math-inline`, and
+`stopped-incomplete-math`, each on Marked and Incremark) passed. Every open
+window reported `pendingMathVisibleCount: 0`,
+`pendingMathTextLength: 0`, and `pendingMathHeightDelta: 0`; every final report
+reported `finalPendingNodeCount: 0`. The final focused repeat reported zero
+Layout Shift entries for all six cases.
+
+The final build evidence is:
+
+- `npm run typecheck`: passed.
+- `node --test test/streaming-markdown.test.js`: 7 passed.
+- Normal `npm run build`: Vite completed, then the existing gate failed with
+  the exact message `initial JS is 233518 B gzip; budget is 180000 B.`
+- `CONDUIT_BUDGET_INITIAL_JS_GZIP=300000 npm run build`: passed with initial JS
+  `233518 B gzip`, initial CSS `27919 B gzip`, and largest lazy JS
+  `185186 B gzip`.
+- `npm test`: 273 passed, 0 failed.
+- Managed restart: `bash .devcontainer/start-conduit.sh restart`. Health was
+  `{"ok":true,"status":"ready","release":"development"}` and the
+  listener was `0.0.0.0:4310`.
+- Authenticated managed-server QA passed on Marked and Incremark. Each live
+  formula ended with one `.katex`, zero pending nodes, and zero raw dollar
+  delimiters. After unregistering the cached service worker, the final built
+  CSS loaded as `index-CQ1hJ-_R.css`; both renderers kept the completed display
+  block at a 33 px minimum height.
+
+Verdict: the visible incomplete-math jump is removed. The remaining layout
+change is normal transcript growth from newly arrived prose or code. This
+change does not provide evidence for Incremark adoption.
+
+### Manual validation checklist — Slice 6b presentation refinement
+
+Run `bash .devcontainer/start-conduit.sh restart`, open
+`http://127.0.0.1:4310`, and test the same disposable chat with **Marked** and
+**Incremark**.
+
+- Stream a display equation over several seconds. Confirm no dashed box, no
+  `Math in progress`, no raw `$` delimiters, and no partial equation appears.
+- Stream an inline equation between two sentences. Confirm the sentence does
+  not reflow vertically while the equation is incomplete.
+- Complete the equation. Confirm it appears once, uses KaTeX, and fades in
+  without a visible shrink or jump in the transcript.
+- Stop generation inside `$$ ...` or `$ ...`. Confirm the incomplete formula
+  remains invisible and no raw TeX or stale pending shell remains.
+- Scroll away from the bottom before a formula completes. Confirm output does
+  not force the viewport back to the bottom. At the bottom, confirm follow mode
+  remains pinned while output grows.
+- Reload the chat after completion. Confirm the stored formula has the same
+  geometry and no arrival placeholder.
+- Stream a fenced code block. Confirm the existing artifact preview and Copy
+  control still work.
+- Enable reduced motion. Confirm the formula remains visible and the layout
+  stays stable even when the animation is suppressed.
+
+Expected result: incomplete math is invisible, completed math appears once,
+and the pending math slot does not change height during output.
+
+Commit: `fix: keep incomplete math invisible during streaming`.
+
 ### Manual validation checklist — Slice 6b
 
 Run `bash .devcontainer/start-conduit.sh restart`, open

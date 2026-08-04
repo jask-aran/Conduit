@@ -163,6 +163,8 @@ async function installBrowserProtocol(page, scenario) {
       mutationCategories: {},
       frames: [],
       longTasks: [],
+      layoutShifts: [],
+      layoutShiftSupported: false,
       metrics: [],
       scrollSamples: [],
       scrollEvents: 0,
@@ -319,6 +321,8 @@ async function installBrowserProtocol(page, scenario) {
       const root = markdownRoot();
       if (!root || telemetry.promptAt == null) return;
       const visibleText = String(root.textContent || "");
+      const pendingMathNodes = [...root.querySelectorAll('[data-streaming-pending="math-block"], [data-streaming-pending="math-inline"]')];
+      const pendingMathHeights = pendingMathNodes.map((element) => element.getBoundingClientRect().height);
       telemetry.streamingSnapshots.push({
         sourceCharacters: telemetry.streamedText.length,
         visibleTextLength: visibleText.length,
@@ -327,6 +331,12 @@ async function installBrowserProtocol(page, scenario) {
         pendingMathBlockCount: root.querySelectorAll('[data-streaming-pending="math-block"]').length,
         pendingMathInlineCount: root.querySelectorAll('[data-streaming-pending="math-inline"]').length,
         pendingFenceCount: root.querySelectorAll('[data-streaming-pending="fence"]').length,
+        pendingMathVisibleCount: pendingMathNodes.filter((element) => {
+          const style = getComputedStyle(element);
+          return style.visibility !== "hidden" && style.display !== "none" && style.opacity !== "0";
+        }).length,
+        pendingMathTextLength: pendingMathNodes.reduce((length, element) => length + String(element.textContent || "").length, 0),
+        pendingMathHeights,
       });
     };
     telemetry.captureStreamingSnapshot = captureStreamingSnapshot;
@@ -436,6 +446,17 @@ async function installBrowserProtocol(page, scenario) {
       }).observe({ type: "longtask", buffered: true });
     } catch {
       // Long Task API is optional; an empty collection remains valid evidence.
+    }
+    try {
+      if (!telemetry.instrumentationEnabled) throw new Error("measurement_disabled");
+      new PerformanceObserver((list) => {
+        for (const entry of list.getEntries()) {
+          if (!entry.hadRecentInput && inPromptWindow(entry.startTime)) telemetry.layoutShifts.push({ at: entry.startTime, value: entry.value });
+        }
+      }).observe({ type: "layout-shift", buffered: true });
+      telemetry.layoutShiftSupported = true;
+    } catch {
+      // Layout Shift API is optional; the geometry snapshots remain valid evidence.
     }
 
     addEventListener("DOMContentLoaded", () => {
@@ -963,6 +984,16 @@ function streamingPresentationEvidence(assertion, snapshots, sourceText) {
   if (assertion.requirePendingNode && !pendingCount.some((count) => count > 0)) {
     errors.push(`Open ${assertion.kind} did not produce a pending presentation node`);
   }
+  if (assertion.requireHiddenPending && candidates.some((snapshot) => snapshot.pendingMathVisibleCount !== 0 || snapshot.pendingMathTextLength !== 0)) {
+    errors.push(`Open ${assertion.kind} exposed visible or textual pending math`);
+  }
+  const pendingMathHeights = candidates.flatMap((snapshot) => snapshot.pendingMathHeights || []);
+  const pendingMathHeightDelta = pendingMathHeights.length
+    ? Math.max(...pendingMathHeights) - Math.min(...pendingMathHeights)
+    : 0;
+  if (assertion.requireStablePendingLayout && pendingMathHeightDelta > 0.5) {
+    errors.push(`Open ${assertion.kind} changed pending math height by ${pendingMathHeightDelta.toFixed(2)}px`);
+  }
   const finalSnapshot = snapshots.at(-1);
   const finalPendingCount = finalSnapshot
     ? assertion.kind === "math-block"
@@ -982,6 +1013,9 @@ function streamingPresentationEvidence(assertion, snapshots, sourceText) {
         min: pendingCount.length ? Math.min(...pendingCount) : 0,
         max: pendingCount.length ? Math.max(...pendingCount) : 0,
       },
+      pendingMathVisibleCount: candidates.length ? Math.max(...candidates.map((snapshot) => snapshot.pendingMathVisibleCount ?? 0)) : 0,
+      pendingMathTextLength: candidates.length ? Math.max(...candidates.map((snapshot) => snapshot.pendingMathTextLength ?? 0)) : 0,
+      pendingMathHeightDelta,
       finalPendingNodeCount: finalPendingCount,
     },
   };
@@ -1082,6 +1116,12 @@ export async function runBrowserStreamingScenario(page, scenario) {
       frameGapsOver100Ms: frameGaps.filter((gap) => gap > 100).length,
       longTaskCount: scopedLongTasks.length,
       longestTaskMs: Math.max(0, ...scopedLongTasks.map((entry) => entry.duration)),
+      layoutShift: {
+        supported: Boolean(raw.layoutShiftSupported),
+        count: raw.layoutShifts.length,
+        value: raw.layoutShifts.reduce((total, entry) => total + entry.value, 0),
+        max: Math.max(0, ...raw.layoutShifts.map((entry) => entry.value)),
+      },
       finalSemanticTextEvidence: { length: normalizeSemanticText(raw.finalSemanticText).length, digest: raw.finalSemanticTextDigest || null },
       finalSemanticTextLength: normalizeSemanticText(raw.finalSemanticText).length,
       structuralFingerprint,

@@ -13,6 +13,7 @@ type Definition = { url?: string; title?: string | null };
 type RendererContext = {
   definitions: () => Record<string, Definition>;
   inline: boolean;
+  animateMath: boolean;
   requestExternalLink: (url: string) => void;
 };
 
@@ -63,7 +64,7 @@ function LinkNode(props: { node: MarkdownNode; context: RendererContext; referen
   </Show>;
 }
 
-function MathNode(props: { node: MarkdownNode }) {
+function MathNode(props: { node: MarkdownNode; animate?: boolean }) {
   let html = "";
   const recorder = getHarnessRecorder();
   const startedAt = recorder ? performance.now() : 0;
@@ -83,7 +84,7 @@ function MathNode(props: { node: MarkdownNode }) {
       katexCallCount: 1,
     });
   }
-  return <span class={props.node.type === "math" ? "incremark-math-block" : "incremark-math-inline"} innerHTML={html} />;
+  return <span class={`${props.node.type === "math" ? "incremark-math-block" : "incremark-math-inline"}${props.animate ? " streaming-final-math" : ""}`} innerHTML={html} />;
 }
 
 function CodeNode(props: { node: MarkdownNode }) {
@@ -110,36 +111,10 @@ function PendingConstruct(props: { pending: StreamingPending; streaming: boolean
       <pre><code>{pending.body}</code></pre>
     </div>;
   }
-  const recorder = getHarnessRecorder();
-  const startedAt = recorder ? performance.now() : 0;
-  let html = "";
-  if (pending.body.trim()) {
-    try {
-      html = katex.renderToString(pending.body, {
-        displayMode: pending.kind === "math-block",
-        throwOnError: true,
-      });
-    } catch {
-      html = "";
-    }
-  }
-  if (recorder) {
-    recordHarnessMetric(recorder, {
-      stage: "markdown-katex-pending",
-      renderer: "incremark",
-      katexMs: performance.now() - startedAt,
-      katexCallCount: pending.body.trim() ? 1 : 0,
-      pendingKind: pending.kind,
-    });
-  }
-  const fallback = html || (props.streaming ? "Math in progress" : pending.body);
-  const className = props.streaming
-    ? `streaming-pending ${pending.kind === "math-block" ? "streaming-pending-math-block" : "streaming-pending-math-inline"}`
-    : "streaming-final-math";
-  const content = html ? <span innerHTML={html} /> : <span class="streaming-pending-placeholder">{fallback}</span>;
+  const className = `streaming-pending ${pending.kind === "math-block" ? "streaming-pending-math-block" : "streaming-pending-math-inline"}`;
   return pending.kind === "math-block"
-    ? <div class={className} data-streaming-pending={props.streaming ? pending.kind : undefined} data-streaming-final={props.streaming ? undefined : "math"} aria-label="Math formula">{content}</div>
-    : <span class={className} data-streaming-pending={props.streaming ? pending.kind : undefined} data-streaming-final={props.streaming ? undefined : "math"} aria-label="Math formula">{content}</span>;
+    ? <div class={className} data-streaming-pending={props.streaming ? pending.kind : undefined} aria-hidden="true" />
+    : <span class={className} data-streaming-pending={props.streaming ? pending.kind : undefined} aria-hidden="true" />;
 }
 
 function TableNode(props: { node: MarkdownNode; context: RendererContext }) {
@@ -166,7 +141,7 @@ function AstNode(props: { node: MarkdownNode; context: RendererContext }) {
     case "delete": return <del><InlineNodes nodes={props.node.children || []} context={props.context} /></del>;
     case "inlineCode": return <code>{props.node.value}</code>;
     case "inlineMath":
-    case "math": return <MathNode node={props.node} />;
+    case "math": return <MathNode node={props.node} animate={props.context.animateMath} />;
     case "break": return <br />;
     case "link": return <LinkNode node={props.node} context={props.context} />;
     case "linkReference": return <LinkNode node={props.node} context={props.context} reference={props.context.definitions()[props.node.identifier]} />;
@@ -208,6 +183,7 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
   const parser = createIncremarkParser({ gfm: true, math: true, htmlTree: true, containers: true });
   const [displayAst, setDisplayAst] = createSignal<MarkdownNode>({ type: "root", children: [] });
   const [pending, setPending] = createSignal<StreamingPending | null>(null);
+  const [animateMath, setAnimateMath] = createSignal(false);
   const [definitions, setDefinitions] = createSignal<Record<string, Definition>>({});
   const [externalUrl, setExternalUrl] = createSignal<string | null>(null);
   let previousSource = "";
@@ -216,6 +192,7 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
   createEffect(() => {
     const source = String(props.children || "");
     const split = splitStreamingMarkdown(source);
+    const previousPending = splitStreamingMarkdown(previousSource).pending;
     const recorder = getHarnessRecorder();
     const parseStartedAt = recorder ? performance.now() : 0;
     let parserMode = "none";
@@ -240,6 +217,7 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
     setDefinitions({ ...parser.getDefinitionMap() });
     const nextAst = { ...parser.getAst() };
     setPending(split.pending);
+    setAnimateMath(!split.pending && previousPending != null && previousPending.kind.startsWith("math"));
     if (split.pending) {
       const presentationParser = createIncremarkParser({ gfm: true, math: true, htmlTree: true, containers: true });
       if (split.stable) presentationParser.render(split.stable);
@@ -281,6 +259,7 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
   const context = (): RendererContext => ({
     definitions,
     inline: Boolean(props.inline),
+    animateMath: animateMath(),
     requestExternalLink: setExternalUrl,
   });
 
