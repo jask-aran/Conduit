@@ -145,7 +145,7 @@ async function installBrowserProtocol(page, scenario) {
       image: /!\[[^\]]*\]\([^)]*\)/.test(fixtureText),
       externalLink: /\[[^\]]+\]\(https?:\/\/[^)]+\)/i.test(fixtureText),
       fencedCode: /```/.test(fixtureText),
-      katex: /\$(?:\$?)[^\n]+\$(?:\$?)/.test(fixtureText),
+      katex: /\$\$|(?:^|[^\\$])\$(?!\$)/.test(fixtureText),
     };
     const runSalt = (() => {
       const bytes = new Uint32Array(2);
@@ -177,6 +177,8 @@ async function installBrowserProtocol(page, scenario) {
       inputFeatures,
       finalText: "",
       finalSemanticText: "",
+      streamedText: "",
+      streamingSnapshots: [],
       socketCount: 0,
       resumeCount: 0,
       disconnectedAt: null,
@@ -313,6 +315,21 @@ async function installBrowserProtocol(page, scenario) {
         artifactControlsPresent: artifacts.length > 0 && artifacts.every((artifact) => artifact.querySelector(".artifact-header")),
       };
     };
+    const captureStreamingSnapshot = () => {
+      const root = markdownRoot();
+      if (!root || telemetry.promptAt == null) return;
+      const visibleText = String(root.textContent || "");
+      telemetry.streamingSnapshots.push({
+        sourceCharacters: telemetry.streamedText.length,
+        visibleTextLength: visibleText.length,
+        rawDollarCount: (visibleText.match(/\$/g) || []).length,
+        rawBacktickCount: (visibleText.match(/`/g) || []).length,
+        pendingMathBlockCount: root.querySelectorAll('[data-streaming-pending="math-block"]').length,
+        pendingMathInlineCount: root.querySelectorAll('[data-streaming-pending="math-inline"]').length,
+        pendingFenceCount: root.querySelectorAll('[data-streaming-pending="fence"]').length,
+      });
+    };
+    telemetry.captureStreamingSnapshot = captureStreamingSnapshot;
     const captureDomState = () => {
       const root = markdownRoot();
       if (!root) return;
@@ -335,6 +352,7 @@ async function installBrowserProtocol(page, scenario) {
       telemetry.finalSemanticText = value;
       telemetry.finalSemanticTextDigest = digestText(value);
       captureDomState();
+      captureStreamingSnapshot();
     };
     const targetCategory = (target) => {
       const element = target.nodeType === Node.ELEMENT_NODE ? target : target.parentElement;
@@ -452,6 +470,7 @@ async function installBrowserProtocol(page, scenario) {
           }
           captureDomState();
           updateVisibleText();
+          captureStreamingSnapshot();
         });
         const attachObserver = () => {
           if (!observing) return;
@@ -596,13 +615,15 @@ async function installBrowserProtocol(page, scenario) {
           data: JSON.stringify({ ...event, generationId: "g1", seq: ++sequence }),
         });
         const emitDelta = (delta) => {
-          telemetry.webSocketDeltas.push({ at: performance.now(), characters: delta.length });
+          const text = String(delta);
+          telemetry.streamedText += text;
+          telemetry.webSocketDeltas.push({ at: performance.now(), characters: text.length });
           emit({
             type: "content_block_delta",
             messageId: "m1",
             blockType: "text",
             contentIndex: 0,
-            delta,
+            delta: text,
           });
         };
         setTimeout(async () => {
@@ -911,6 +932,61 @@ function expectedInteractionErrors(expected, interactions, inputFeatures) {
   return errors;
 }
 
+function prefixHasOpenConstruct(prefix, kind) {
+  if (kind === "fence") {
+    const opener = prefix.indexOf("```");
+    return opener >= 0 && prefix.indexOf("```", opener + 3) < 0;
+  }
+  if (kind === "math-block") {
+    const opener = prefix.indexOf("$$");
+    return opener >= 0 && prefix.indexOf("$$", opener + 2) < 0;
+  }
+  const opener = prefix.search(/\$(?!\$)(?=\S)/);
+  return opener >= 0 && prefix.indexOf("$", opener + 1) < 0;
+}
+
+function streamingPresentationEvidence(assertion, snapshots, sourceText) {
+  if (!assertion) return { errors: [], report: null };
+  const candidates = snapshots.filter((snapshot) => snapshot.sourceCharacters < sourceText.length
+    && prefixHasOpenConstruct(sourceText.slice(0, snapshot.sourceCharacters), assertion.kind));
+  const errors = [];
+  if (!candidates.length) {
+    errors.push(`No mid-stream snapshot captured for open ${assertion.kind}`);
+  }
+  const delimiterClean = candidates.filter((snapshot) => snapshot.rawDollarCount === 0 && snapshot.rawBacktickCount === 0);
+  if (assertion.requireNoRawDelimiters && delimiterClean.length !== candidates.length) {
+    errors.push(`Open ${assertion.kind} appeared with raw delimiters in visible text`);
+  }
+  const pendingCount = candidates.map((snapshot) => assertion.kind === "math-block"
+    ? snapshot.pendingMathBlockCount
+    : assertion.kind === "math-inline" ? snapshot.pendingMathInlineCount : snapshot.pendingFenceCount);
+  if (assertion.requirePendingNode && !pendingCount.some((count) => count > 0)) {
+    errors.push(`Open ${assertion.kind} did not produce a pending presentation node`);
+  }
+  const finalSnapshot = snapshots.at(-1);
+  const finalPendingCount = finalSnapshot
+    ? assertion.kind === "math-block"
+      ? finalSnapshot.pendingMathBlockCount
+      : assertion.kind === "math-inline" ? finalSnapshot.pendingMathInlineCount : finalSnapshot.pendingFenceCount
+    : 0;
+  if (finalPendingCount > 0) errors.push(`Pending ${assertion.kind} presentation remained after stream end`);
+  return {
+    errors,
+    report: {
+      kind: assertion.kind,
+      snapshotCount: snapshots.length,
+      finalSourceCharacters: finalSnapshot?.sourceCharacters ?? null,
+      candidateSnapshotCount: candidates.length,
+      delimiterCleanSnapshotCount: delimiterClean.length,
+      pendingNodeCount: {
+        min: pendingCount.length ? Math.min(...pendingCount) : 0,
+        max: pendingCount.length ? Math.max(...pendingCount) : 0,
+      },
+      finalPendingNodeCount: finalPendingCount,
+    },
+  };
+}
+
 export async function runBrowserStreamingScenario(page, scenario) {
   const startedAt = new Date().toISOString();
   const renderer = scenario.renderer || "marked";
@@ -940,6 +1016,7 @@ export async function runBrowserStreamingScenario(page, scenario) {
   }
   await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
   await page.evaluate(() => window.__conduitHarness?.captureDomState?.());
+  await page.evaluate(() => window.__conduitHarness?.captureStreamingSnapshot?.());
   const interactionAssertions = await runInteractionAssertions(page, scenario.expectedInteractions);
   const runtime = await page.evaluate(() => ({ userAgent: navigator.userAgent, platform: navigator.platform }));
 
@@ -968,6 +1045,8 @@ export async function runBrowserStreamingScenario(page, scenario) {
   const securityAssertions = raw.finalSecurity || {};
   errors.push(...expectedAssertionErrors(scenario.expectedAssertions, securityAssertions, interactionAssertions, raw.inputFeatures));
   errors.push(...expectedInteractionErrors(scenario.expectedInteractions, interactionAssertions, raw.inputFeatures));
+  const streamingPresentation = streamingPresentationEvidence(scenario.streamingAssertion, raw.streamingSnapshots, sourceText);
+  errors.push(...streamingPresentation.errors);
 
   return {
     schemaVersion: 1,
@@ -1011,6 +1090,7 @@ export async function runBrowserStreamingScenario(page, scenario) {
       inputFeatures: raw.inputFeatures,
       securityAssertions,
       interactionAssertions,
+      streamingPresentation: streamingPresentation.report,
       mutationCategories: raw.mutationCategories,
       identity: identityReport(raw.identity),
       scroll: {

@@ -371,6 +371,12 @@ svg { stroke-width: 1.5; }
 .artifact-header { display: flex; align-items: center; justify-content: space-between; padding: 7px 10px; border-bottom: 1px solid var(--border); color: var(--muted-foreground); font-size: 12px; }
 .artifact-header button { border: 0; background: transparent; color: inherit; }
 .artifact pre { margin: 0; overflow: auto; padding: 14px; font: 13px/1.55 ui-monospace, monospace; }
+.streaming-pending { color: var(--muted-foreground); }
+.streaming-pending-math-block { min-height: 1.66em; margin: 1em 0; padding: 8px 10px; border: 1px dashed var(--border); border-radius: 8px; }
+.streaming-pending-math-inline { display: inline-block; min-width: 1.5em; vertical-align: baseline; }
+.streaming-pending-placeholder { color: var(--muted-foreground); font-style: italic; }
+.streaming-pending-fence { opacity: 0.92; }
+.streaming-final-math { color: var(--muted-foreground); }
 
 .tool-card { margin-left: 42px; }
 /* Turn trace: one collapsed row per turn holding thinking segments, interim
