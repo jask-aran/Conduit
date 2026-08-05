@@ -108,9 +108,13 @@ they do not establish a repository-wide clean-tree requirement for future work.
 
 Keep Git history intentional and reviewable.
 
-- Use small, focused commits with scoped, imperative subjects. Conventional
-  Commit prefixes such as `feat:` or `docs:` are not required; use them only
-  when they make the subject clearer rather than as a taxonomy.
+- Organise commits around coherent conceptual changes, not individual file
+  mutations. A commit may span several related files when they jointly express
+  one change; do not split it merely because each file was edited separately.
+  Keep each commit narrow enough to explain and review independently, with a
+  scoped, imperative subject. Conventional Commit prefixes such as `feat:` or
+  `docs:` are not required; use them only when they make the subject clearer
+  rather than as a taxonomy.
 - For non-trivial changes, use the commit body to record the relevant failure
   mode or motivation, the important invariant or behaviour preserved, and the
   checks/evidence used to validate the change. Tiny self-explanatory commits do
