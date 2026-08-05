@@ -7,7 +7,7 @@ reference documentation:
 - `README.md` — product, architecture, data model, interface reference and
   setup. Read the section covering the area you touch before changing it.
 - `CONTRIBUTING.md` — GitHub issue taxonomy, readiness and lifecycle rules,
-  plus commit and history conventions.
+  plus commit/history and performance-observation conventions.
 - `docs/operations/testing.md` — test selection, commands, seams, local/VPS
   boundaries and evidence requirements for every testing approach.
 - `conduit-web/README.md` — runtime model, HTTP API, auth mechanism, process
@@ -23,7 +23,8 @@ reference documentation:
 
 Before creating, restructuring or closing GitHub issues, or committing project
 work, read `CONTRIBUTING.md`. It is the single reference for issue type,
-readiness, Roadmap/Feature decomposition, and commit/history conventions.
+readiness, Roadmap/Feature decomposition, and commit/history and
+performance-observation conventions.
 
 ## Testing guidance
 

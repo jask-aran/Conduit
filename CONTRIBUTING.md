@@ -120,3 +120,63 @@ Keep Git history intentional and reviewable.
   larger run.
 - Treat pull requests as optional review bundles, not as a second source of
   project history or planning truth.
+
+### Performance observations
+
+When checks already run for a change produce useful quantitative performance
+data, preserve relevant headline values in the commit body. This is a recording
+convention, not a testing requirement: do not run additional builds, harnesses,
+or benchmarks solely to populate commit metrics, and omit `Metrics:` entirely
+when the work produced no useful measurements.
+
+When `npm run build` has already been run, record its three standard bundle
+observations:
+
+- `bundle.initial_js_gzip_bytes`
+- `bundle.initial_css_gzip_bytes`
+- `bundle.largest_lazy_js_gzip_bytes`
+
+When a performance harness has already been run, record the scenario or flow
+that produced the measurement plus one to three headline observations relevant
+to the changed boundary. Prefer metrics that remain useful as project history:
+
+- transport work: first-delta latency, gap percentiles, coalescing ratio or
+  throughput;
+- rendering work: frame-gap percentiles, long-task count, DOM mutations or
+  visible-text cadence;
+- reconnect work: recovery time, socket count or duplicate characters;
+- live/deployed-path work: first-visible-delta latency, gap percentiles or large
+  gap counts, with target/model/scenario context;
+- terminal work: the relevant headline values emitted by the terminal
+  performance test when it was already run.
+
+When a harness also emits a correctness or parity observation that materially
+qualifies the performance result, retain it alongside the headline metrics—for
+example final-text parity or zero duplicate characters after reconnect.
+
+Use lowercase dotted names and explicit units where practical, for example
+`browser.frame_gap_p95_ms`, `transport.coalescing_ratio` or
+`reconnect.recovery_ms`. Record absolute observations rather than manually
+calculated percentage deltas; a later history tool can derive comparable deltas
+from Git. Do not treat a metric as evidence of a regression or improvement
+without a comparable scenario or baseline.
+
+A typical non-trivial commit body may therefore end with:
+
+```text
+Checks:
+- npm run typecheck
+- npm run build
+- npm run test:harness:browser -- --scenario browser-burst ...
+
+Metrics:
+- bundle.initial_js_gzip_bytes=143281
+- bundle.initial_css_gzip_bytes=38142
+- bundle.largest_lazy_js_gzip_bytes=247901
+- browser.scenario=browser-burst
+- browser.frame_gap_p95_ms=18.4
+- browser.long_tasks=0
+```
+
+Detailed reports remain testing evidence rather than Git-history payloads. The
+commit body should preserve only the observations worth comparing later.
