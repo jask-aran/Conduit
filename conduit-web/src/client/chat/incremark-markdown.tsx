@@ -6,7 +6,7 @@ import * as KAlertDialog from "@kobalte/core/alert-dialog";
 import { Button } from "@/components/primitives";
 import { getHarnessRecorder, recordHarnessMetric } from "@/client/harness-metrics";
 import type { ChatMarkdownProps } from "./markdown";
-import { repairSyntheticMathSource } from "./incremark-synthetic-math";
+import { createSyntheticMathPreviewNode, repairSyntheticMathSource } from "./incremark-synthetic-math";
 import { AdaptiveIncremarkTypewriter, visibleAstCharacters } from "./incremark-typewriter";
 import type { StreamingPending } from "./streaming-markdown";
 import { splitStreamingMarkdown } from "./streaming-markdown";
@@ -260,6 +260,8 @@ function MathNode(props: { node: MarkdownNode | NodeAccessor; defer?: () => bool
   let cancelJob: (() => void) | null = null;
   let busy = false;
   let renderVersion = 0;
+  let lastValidHtml = "";
+  let fallbackHtml = "";
   const setBusy = (next: boolean) => {
     if (next === busy) return;
     busy = next;
@@ -271,11 +273,13 @@ function MathNode(props: { node: MarkdownNode | NodeAccessor; defer?: () => bool
     const candidate = synthetic ? repairSyntheticMathSource(source) : source;
     const cached = getCachedMathHtml(current, candidate, synthetic);
     if (cached !== undefined) {
+      lastValidHtml = cached;
       setHtml(cached);
       setBusy(false);
       return;
     }
     let renderedHtml: string | null = null;
+    let valid = false;
     const recorder = getHarnessRecorder();
     const startedAt = recorder ? performance.now() : 0;
     try {
@@ -284,21 +288,25 @@ function MathNode(props: { node: MarkdownNode | NodeAccessor; defer?: () => bool
         throwOnError: synthetic,
       });
       if (synthetic && renderedHtml.includes("katex-error")) renderedHtml = null;
+      else valid = true;
     } catch {
       renderedHtml = null;
     }
     if (renderedHtml == null) {
-      if (!html()) {
+      if (lastValidHtml) {
+        renderedHtml = lastValidHtml;
+      } else if (!fallbackHtml) {
         try {
-          renderedHtml = katex.renderToString(current?.type === "math" ? "\\vphantom{\\displaystyle x}" : "\\vphantom{x}", {
+          fallbackHtml = katex.renderToString(current?.type === "math" ? "\\vphantom{\\displaystyle x}" : "\\vphantom{x}", {
             displayMode: current?.type === "math",
             throwOnError: true,
           });
         } catch {
-          renderedHtml = "";
+          fallbackHtml = "";
         }
+        renderedHtml = fallbackHtml;
       } else {
-        renderedHtml = html();
+        renderedHtml = fallbackHtml;
       }
     }
     if (recorder) {
@@ -311,8 +319,11 @@ function MathNode(props: { node: MarkdownNode | NodeAccessor; defer?: () => bool
         katexHtmlCharacters: renderedHtml.length,
       });
     }
-    cacheMathHtml(current, candidate, renderedHtml, synthetic);
-    setHtml(renderedHtml);
+    if (valid) {
+      lastValidHtml = renderedHtml;
+      cacheMathHtml(current, candidate, renderedHtml, synthetic);
+    }
+    if (renderedHtml !== html()) setHtml(renderedHtml);
     setBusy(false);
   };
   const initial = node();
@@ -333,11 +344,14 @@ function MathNode(props: { node: MarkdownNode | NodeAccessor; defer?: () => bool
     setBusy(false);
     if (!current || !source) {
       setHtml("");
+      lastValidHtml = "";
+      fallbackHtml = "";
       return;
     }
     const synthetic = Boolean(props.preview?.());
     const cached = getCachedMathHtml(current, synthetic ? repairSyntheticMathSource(source) : source, synthetic);
     if (cached !== undefined) {
+      lastValidHtml = cached;
       setHtml(cached);
       return;
     }
@@ -606,13 +620,27 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
       const currentBlock = [...pendingUpdateBlocks.values()].find((block) => blockContainsOffset(block, split.pending!.start));
       if (!currentBlock) return null;
       if (props.syntheticMath && (split.pending.kind === "math-inline" || split.pending.kind === "math-block")) {
-        const previewParser = createIncremarkParser(incremarkParserOptions);
-        previewParser.render(`${currentBlock.rawText}${syntheticMathClosingDelimiter(source, split.pending)}`);
-        const previewNode = previewParser.getAst().children?.[0];
-        if (previewNode && containsMath(previewNode)) {
+        const previewNode = createSyntheticMathPreviewNode(currentBlock.node, {
+          kind: split.pending.kind,
+          body: split.pending.body,
+          opening: split.pending.kind === "math-inline" && source.startsWith("\\(", split.pending.start) ? "\\(" : "$",
+        });
+        if (previewNode) {
           return {
             ...currentBlock,
             node: previewNode,
+            endOffset: currentBlock.endOffset,
+            rawText: currentBlock.rawText,
+          };
+        }
+
+        const previewParser = createIncremarkParser(incremarkParserOptions);
+        previewParser.render(`${currentBlock.rawText}${syntheticMathClosingDelimiter(source, split.pending)}`);
+        const reparsedNode = previewParser.getAst().children?.[0];
+        if (reparsedNode && containsMath(reparsedNode)) {
+          return {
+            ...currentBlock,
+            node: reparsedNode,
             endOffset: currentBlock.endOffset,
             rawText: currentBlock.rawText,
           };

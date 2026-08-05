@@ -1,6 +1,13 @@
 const ONE_ARGUMENT_COMMANDS = new Set(["sqrt", "colorbox", "fbox", "boxed", "cancel"]);
 const TWO_ARGUMENT_COMMANDS = new Set(["frac", "dfrac", "tfrac", "binom", "overset", "underset", "stackrel"]);
 
+type MarkdownNode = any;
+type SyntheticMathPending = {
+  kind: "math-inline" | "math-block";
+  body: string;
+  opening?: "$" | "\\(";
+};
+
 function isEscaped(source: string, index: number) {
   let slashCount = 0;
   for (let cursor = index - 1; cursor >= 0 && source[cursor] === "\\"; cursor -= 1) slashCount += 1;
@@ -66,4 +73,61 @@ export function repairSyntheticMathSource(source: string) {
   repaired = appendMissingCommandArguments(repaired);
   if (/(^|[^\\])(?:\^|_)\s*$/.test(repaired)) repaired += "{}";
   return repaired;
+}
+
+function replacePendingInlineMath(node: MarkdownNode, opening: string, body: string): [MarkdownNode, boolean] {
+  if (!node || typeof node !== "object") return [node, false];
+  if (!Array.isArray(node.children)) return [node, false];
+  const marker = opening === "\\(" ? "(" : opening;
+  for (let index = node.children.length - 1; index >= 0; index -= 1) {
+    const child = node.children[index];
+    if (child?.type === "text" && typeof child.value === "string") {
+      const openingIndex = child.value.lastIndexOf(marker);
+      if (openingIndex >= 0) {
+        let endIndex = index;
+        let candidate = child.value.slice(openingIndex + marker.length);
+        while (candidate.length < body.length && node.children[endIndex + 1]?.type === "text") {
+          endIndex += 1;
+          candidate += node.children[endIndex].value;
+        }
+        if (candidate.startsWith(body)) {
+          const replacement = [];
+          const prefix = child.value.slice(0, openingIndex);
+          const suffix = candidate.slice(body.length);
+          if (prefix) replacement.push({ type: "text", value: prefix });
+          replacement.push({ type: "inlineMath", value: body, __conduitMathSource: body });
+          if (suffix) replacement.push({ type: "text", value: suffix });
+          const children = [...node.children];
+          children.splice(index, endIndex - index + 1, ...replacement);
+          return [{ ...node, children }, true];
+        }
+      }
+    }
+    const [next, replaced] = replacePendingInlineMath(node.children[index], opening, body);
+    if (!replaced) continue;
+    const children = [...node.children];
+    children[index] = next;
+    return [{ ...node, children }, true];
+  }
+  return [node, false];
+}
+
+/**
+ * Add a display-only math node to the parser's existing pending AST.
+ * This keeps the surrounding paragraph or table structure from being
+ * reparsed for every preview character.
+ */
+export function createSyntheticMathPreviewNode(node: MarkdownNode, pending: SyntheticMathPending): MarkdownNode | null {
+  if (!node || typeof node !== "object") return null;
+  if (pending.kind === "math-block") {
+    return {
+      type: "math",
+      value: pending.body,
+      __conduitMathSource: pending.body,
+      position: node.position,
+    };
+  }
+  const opening = pending.opening || "$";
+  const [preview, replaced] = replacePendingInlineMath(node, opening, pending.body);
+  return replaced ? preview : null;
 }
