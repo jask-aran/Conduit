@@ -1,0 +1,27 @@
+name: Bug
+description: Something Conduit already intends to do is broken.
+title: ""
+labels:
+  - "type: bug"
+body:
+  - type: textarea
+    id: observed
+    attributes:
+      label: Observed behaviour
+      description: What is happening now?
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behaviour
+      description: What should happen instead?
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Reproduction or context
+      description: Steps, environment details, screenshots, logs, or other useful evidence.
+    validations:
+      required: false
