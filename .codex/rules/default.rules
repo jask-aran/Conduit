@@ -1,22 +1,15 @@
 # Conduit project workflow: these commands are routine repository operations.
+# Read-only package metadata checks are exact. Dependency installation remains
+# under review because it changes the tree and runs install hooks.
 prefix_rule(
-    pattern=["npm", "view"],
+    pattern=["npm", "view", "node-pty", "version", "engines", "os", "cpu", "dist.tarball", "--json"],
     decision="allow",
-    justification="Read package metadata for Conduit dependency compatibility",
-    match=[
-        "npm view node-pty version engines os cpu dist.tarball --json",
-        "npm view @earendil-works/pi-coding-agent repository homepage version --json",
-    ],
+    justification="Read node-pty metadata for Conduit dependency compatibility",
 )
 prefix_rule(
-    pattern=["npm", "install"],
+    pattern=["npm", "view", "@earendil-works/pi-coding-agent", "repository", "homepage", "version", "--json"],
     decision="allow",
-    justification="Install or update Conduit dependencies",
-)
-prefix_rule(
-    pattern=["npm", "ci"],
-    decision="allow",
-    justification="Reproduce the locked Conduit dependency tree",
+    justification="Read Pi coding agent metadata for Conduit dependency compatibility",
 )
 prefix_rule(
     pattern=["npm", "ls"],
@@ -49,9 +42,9 @@ prefix_rule(
     justification="Run Conduit's browser entry-point regression suite with any focused project, grep, worker, or reporter options",
 )
 prefix_rule(
-    pattern=["bash", ".devcontainer/start-conduit.sh"],
+    pattern=["bash", ".devcontainer/start-conduit.sh", "restart"],
     decision="allow",
-    justification="Use Conduit's managed WSL-accessible server; the default 0.0.0.0 bind is intentional for Windows clients",
+    justification="Restart Conduit's managed WSL-accessible server; other script actions remain under review",
 )
 
 # Keep managed-server restart as a direct command. Shell wrappers with
@@ -88,47 +81,67 @@ prefix_rule(
     justification="Check the managed Conduit health endpoint over the local WSL surface",
 )
 
-# Accepted project workflow risk. These tools are trusted for this repository;
-# unrelated shell commands still use the normal sandbox and Auto-review path.
+# Exact local browser inspection only. Observed in the post-update browser
+# review batch; external URLs, dynamic sessions, arbitrary evaluation, and
+# interaction commands remain under review.
 prefix_rule(
-    pattern=["agent-browser"],
+    pattern=["agent-browser", "--session", "conduit-local", "open", "http://127.0.0.1:4310"],
     decision="allow",
-    justification="Run local Conduit browser inspection and interaction workflows",
-    match=[
-        "agent-browser --session conduit-local open http://127.0.0.1:4310",
-        "agent-browser --session conduit-local snapshot -i",
-        "agent-browser --session conduit-local eval document.title",
-    ],
+    justification="Open the documented local Conduit browser session",
 )
 prefix_rule(
-    pattern=["npx", "agent-browser"],
+    pattern=["agent-browser", "--session", "conduit-local", "snapshot", "-i"],
     decision="allow",
-    justification="Run the project browser CLI through npx",
+    justification="Inspect the documented local Conduit browser session",
 )
 prefix_rule(
-    pattern=["agent-tui"],
+    pattern=["agent-browser", "--session", "conduit-local", "eval", "document.title"],
     decision="allow",
-    justification="Run local Conduit terminal UI workflows",
+    justification="Read the documented local Conduit page title",
+)
+
+# Repository inspection only. Observed during project review; staging,
+# commits, pushes, history changes, and compound shell forms remain under
+# review.
+prefix_rule(
+    pattern=["git", "status", "--short"],
+    decision="allow",
+    justification="Inspect the Conduit worktree before changes",
 )
 prefix_rule(
-    pattern=["git"],
+    pattern=["git", "diff", "--check"],
     decision="allow",
-    justification="Perform accepted Conduit repository and history operations",
-    match=[
-        "git status --short",
-        "git add -- conduit-web/src/client/state/active-chat.ts",
-        "git commit -m \"docs: update project rules\"",
-        "git push origin main",
-    ],
+    justification="Check Conduit patch whitespace",
 )
 prefix_rule(
-    pattern=["gh"],
+    pattern=["git", "diff", "--cached", "--check"],
     decision="allow",
-    justification="Run accepted GitHub CLI workflows for the Conduit repository",
-    match=[
-        "gh issue list --repo jask-aran/Conduit",
-        "gh pr view --repo jask-aran/Conduit",
-        "gh run view --repo jask-aran/Conduit",
-        "gh release view --repo jask-aran/Conduit",
-    ],
+    justification="Check staged Conduit patch whitespace",
+)
+prefix_rule(
+    pattern=["git", "diff", "--cached", "--name-status"],
+    decision="allow",
+    justification="Inspect staged Conduit paths",
+)
+
+# GitHub inspection only. Repository mutations remain under review.
+prefix_rule(
+    pattern=["gh", "issue", "list", "--repo", "jask-aran/Conduit"],
+    decision="allow",
+    justification="List Conduit issues",
+)
+prefix_rule(
+    pattern=["gh", "pr", "view", "--repo", "jask-aran/Conduit"],
+    decision="allow",
+    justification="Inspect a Conduit pull request",
+)
+prefix_rule(
+    pattern=["gh", "run", "view", "--repo", "jask-aran/Conduit"],
+    decision="allow",
+    justification="Inspect a Conduit workflow run",
+)
+prefix_rule(
+    pattern=["gh", "release", "view", "--repo", "jask-aran/Conduit"],
+    decision="allow",
+    justification="Inspect a Conduit release",
 )
