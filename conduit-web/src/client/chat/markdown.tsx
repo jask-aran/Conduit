@@ -588,7 +588,7 @@ const MarkedStableMarkdown = lazy(() => import("./marked-stable").then((module) 
 export function ChatMarkdown(props: ChatMarkdownProps) {
   const renderer = () => props.renderer || selectedMarkdownRenderer();
   const incremark = () => renderer() !== "marked";
-  const typewriter = () => renderer() === "incremark-typewriter";
+  const typewriter = () => renderer() === "incremark-typewriter" || renderer() === "incremark-synthetic";
   const syntheticMath = () => renderer() === "incremark-synthetic";
   return <Show when={renderer() === "marked-stable"} fallback={<Show when={incremark()} fallback={<MarkedMarkdown {...props} />}>
     <Suspense fallback={<div class="markdown-skeleton" />}>

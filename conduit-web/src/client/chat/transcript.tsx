@@ -36,6 +36,7 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
   const [markdownRenderer, setMarkdownRenderer] = createSignal<MarkdownRendererId>(initialRenderer);
   const displaySessions = new Map<string, { busy: boolean }>();
   const showMarkdownRendererSwitch = markdownRendererSwitchEnabled();
+  const rendererUsesTypewriter = () => markdownRenderer() === "incremark-typewriter" || markdownRenderer() === "incremark-synthetic";
   const timeline = createTimelineStore(
     props.chat.messages,
     props.chat.tools,
@@ -90,7 +91,7 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
   const switchMarkdownRenderer = (next: MarkdownRendererId) => {
     setMarkdownRenderer(next);
     localStorage.setItem(MARKDOWN_RENDERER_STORAGE_KEY, next);
-    localStorage.setItem(MARKDOWN_TYPEWRITER_STORAGE_KEY, next === "incremark-typewriter" ? "1" : "0");
+    localStorage.setItem(MARKDOWN_TYPEWRITER_STORAGE_KEY, next === "incremark-typewriter" || next === "incremark-synthetic" ? "1" : "0");
   };
   const displayBusy = (displayKey: string | undefined, busy: boolean) => {
     if (!displayKey) return;
@@ -112,7 +113,7 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
       scrollBottom();
       void document.fonts.ready.then(() => settleInitialLayout(epoch));
     }
-    else if (following() && markdownRenderer() !== "incremark-typewriter") scrollBottom();
+    else if (following() && !rendererUsesTypewriter()) scrollBottom();
   });
 
   const [pullDistance, setPullDistance] = createSignal(0);
@@ -178,7 +179,7 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
     });
   });
 
-  return <div class="transcript" data-slot="message-scroller" data-markdown-renderer={markdownRenderer()} data-markdown-typewriter={markdownRenderer() === "incremark-typewriter" ? "true" : undefined} data-markdown-synthetic-math={markdownRenderer() === "incremark-synthetic" ? "true" : undefined}>
+  return <div class="transcript" data-slot="message-scroller" data-markdown-renderer={markdownRenderer()} data-markdown-typewriter={rendererUsesTypewriter() ? "true" : undefined} data-markdown-synthetic-math={markdownRenderer() === "incremark-synthetic" ? "true" : undefined}>
     <Show when={showMarkdownRendererSwitch}>
       <div class="transcript-renderer-switch">
         <label>Markdown renderer<select aria-label="Markdown renderer" value={markdownRenderer()} onChange={(event) => switchMarkdownRenderer(event.currentTarget.value as MarkdownRendererId)}>
@@ -217,7 +218,7 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
                 <Show when={message().timestamp}><time>{new Date(message().timestamp!).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</time></Show>
                 <div data-slot="bubble" data-align={user() ? "end" : "start"} data-editing={props.chat.editingEntryId() === message().id ? "true" : "false"} class={user() ? "bubble bubble-user" : "bubble bubble-assistant"}>
                   <div data-slot="bubble-content">
-                    <Show when={user()} fallback={<Suspense fallback={<div class="markdown-skeleton" />}><ChatMarkdown renderer={markdownRenderer()} typewriter={markdownRenderer() === "incremark-typewriter"} syntheticMath={markdownRenderer() === "incremark-synthetic"} displayKey={item.displayKey} streaming={live()} streamVersion={item.streamVersion} onDisplayBusyChange={(busy) => displayBusy(item.displayKey, busy)} onRendered={settleAfterMarkdown}>{message().content || ""}</ChatMarkdown></Suspense>}><span class="user-message-text">{message().content || ""}</span></Show>
+                    <Show when={user()} fallback={<Suspense fallback={<div class="markdown-skeleton" />}><ChatMarkdown renderer={markdownRenderer()} typewriter={rendererUsesTypewriter()} syntheticMath={markdownRenderer() === "incremark-synthetic"} displayKey={item.displayKey} streaming={live()} streamVersion={item.streamVersion} onDisplayBusyChange={(busy) => displayBusy(item.displayKey, busy)} onRendered={settleAfterMarkdown}>{message().content || ""}</ChatMarkdown></Suspense>}><span class="user-message-text">{message().content || ""}</span></Show>
                   </div>
                 </div>
                 <Show when={user() && message().pending}><div class="marker">{message().queueMode === "steer" ? "Queued · steer (after tools)" : "Queued · follow-up (after turn)"}</div></Show>

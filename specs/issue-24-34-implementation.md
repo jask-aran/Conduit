@@ -3290,8 +3290,8 @@ hard geometry:
   `table-math.ts` projection for block content. The projection protects math
   pipes, converts `\[...\]` to parser-compatible display math, restores source
   text, and promotes complete table-cell display math to atomic nodes.
-- Synthetic-only eager previews remain in `Incremark Synthetic Math`; this
-  change does not make the experimental preview path the stable path.
+- Synthetic-only eager previews remain in `Incremark Synthetic Math`; the
+  experimental path now also uses the adaptive Typewriter queue.
 - The renderer selector now names the roles explicitly: `Marked (Experimental)`,
   `Immediate (Stable)`, `Typewriter (Stable)`, and `Synthetic (Experimental)`.
   The default remains `Typewriter (Stable)` (`incremark-typewriter`).
@@ -3299,7 +3299,8 @@ hard geometry:
   parser, table projection, math handling, and Solid reconciliation. Typewriter
   adds the adaptive native `BlockTransformer` display queue.
 - `Synthetic (Experimental)` adds eager paired-delimiter math previews to the
-  immediate Incremark path. It does not currently enable the Typewriter queue.
+  Typewriter Incremark path. It keeps the same adaptive display queue while
+  replacing only the incomplete-math presentation.
 - `Marked (Stable)` is the isolated reference adapter. It ports the old
   Marked-only `markdown.tsx` path from the tree at commit
   `e8564b50864cf6a55f3abbf0d92975e827c8aa1e` behind its own renderer ID. It
@@ -3359,3 +3360,81 @@ Verification completed after the implementation:
   `math-table-oscillation` probes passed for Incremark Stable.
 - Managed server restart passed. `GET /healthz` returned
   `{"ok":true,"status":"ready","release":"development"}`.
+
+### Synthetic Typewriter queue and renderer-switch audit — 6 August 2026
+
+The Synthetic renderer now builds on the same adaptive Incremark display queue
+as Typewriter. It enables the native queue, stores the Typewriter preference,
+uses the Typewriter scroll-follow behavior, and keeps Synthetic's eager math
+preview as the only renderer-specific difference. The queue remains disabled
+for Immediate and both Marked paths.
+
+Renderer-mode changes now invalidate the current Incremark projection when
+Synthetic math changes without a new source delta. This prevents a completed
+session or a paused stream from retaining a Synthetic preview after switching
+to Typewriter, or retaining the hidden pending-math projection after switching
+back. Switching Typewriter off still flushes the queue and shows the current
+content immediately. Switching from either Marked path mounts the Incremark
+adapter and seeds the current source once; it does not replay the existing
+answer.
+
+The complete-session browser check passed manually. On the dense math/table
+chat, selecting `Marked (Stable)` changed the selected value to
+`marked-stable` and produced four `data-renderer="marked-stable"` roots.
+Selecting `Synthetic (Experimental)` then changed the value to
+`incremark-synthetic` and produced four Synthetic roots immediately.
+
+The active-response browser check could not produce a valid model stream. The
+new local chat was created, but Pi stayed idle and no user or assistant message
+appeared after the send action. This is provider/session evidence, not a
+renderer result. The deterministic Synthetic stream was therefore used for
+queue evidence.
+
+The Synthetic Typewriter harness report had outcome `passed` and recorded:
+
+| Measure | Result |
+| --- | ---: |
+| Source / deltas | 365 chars / 46 |
+| Display completion delay | 85 ms |
+| DOM mutations | 44 |
+| Final KaTeX nodes | 6 |
+| Raw math delimiters | 0 |
+| Math cell overflow | 0 |
+| Layout-shift value | 0 |
+| Long tasks | 1, maximum 58 ms |
+| Frame interval p50 | 18.68 ms |
+| Backlog age p95 / max | 45.38 ms / 45.38 ms |
+| Maximum chars per tick | 20 |
+| Fallback mode | `normal` |
+
+The Playwright process still exited with the existing Typewriter assertion
+that reads the last queue metric before the final idle commit: source 163,
+displayed 129, backlog 34. The final DOM assertions passed, including semantic
+content, six math cells, zero overflow, zero raw delimiters, and zero layout
+shift. The same short-fixture metric timing issue also occurs with Typewriter
+without Synthetic math; it is not a Synthetic-only content loss. It remains a
+harness accounting defect to fix separately.
+
+Verification after the queue and switch changes:
+
+- `npm test`: 311 passed, 0 failed.
+- `npm run typecheck`: passed.
+- `npm run build`: passed. Bundle check passed; Vite emitted only the existing
+  large-chunk warning.
+- `git diff --check`: passed.
+- Managed server restarted. `GET /healthz` returned
+  `{"ok":true,"status":"ready","release":"development"}`.
+
+Manual switch checklist for the next live smoke test:
+
+- During a real response, switch Synthetic to Typewriter. Confirm the current
+  text remains and future blocks use the ordinary Typewriter path.
+- During a real response, switch Typewriter to Synthetic while an equation is
+  incomplete. Confirm the preview appears without waiting for another delta.
+- Switch either Typewriter mode to Immediate. Confirm the queue flushes once,
+  with no replay or duplicate text.
+- Switch either Marked mode to Synthetic during output. Confirm the existing
+  source seeds once and only future source deltas animate.
+- On a completed answer, switch through all five options. Confirm the selected
+  value, `data-renderer` roots, math delimiter policy, and table structure update
+  immediately.

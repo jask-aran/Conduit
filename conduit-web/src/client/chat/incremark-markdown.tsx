@@ -562,6 +562,7 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
   let previousTableMathSentinel = "";
   let finalised = false;
   let previousTypewriter: boolean | null = null;
+  let previousSyntheticMath: boolean | null = null;
   const typewriter = () => Boolean(props.typewriter && !props.inline);
   const rendererId = () => props.syntheticMath ? "incremark-synthetic" : typewriter() ? "incremark-typewriter" : "incremark";
   const displayBlocks = () => displayBlockStore.items;
@@ -625,8 +626,10 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
     let parserMode = "none";
     let update: ReturnType<typeof parser.append> | undefined;
     const updates: Array<ReturnType<typeof parser.append>> = [];
-    if (source !== previousSource || (tableMath && parserSource !== previousParserSource)) {
-      const canAppend = source.startsWith(previousSource)
+    const syntheticMathModeChanged = previousSyntheticMath !== null && previousSyntheticMath !== syntheticMath;
+    if (source !== previousSource || (tableMath && parserSource !== previousParserSource) || syntheticMathModeChanged) {
+      const canAppend = !syntheticMathModeChanged
+        && source.startsWith(previousSource)
         && parserSource.startsWith(previousParserSource)
         && (!projection || projection.sentinel === previousTableMathSentinel);
       if (canAppend) {
@@ -762,7 +765,7 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
       setDisplayBlocks([]);
     } else if (enabled && currentBlocks.length && (
       previousTypewriter === false
-      || (previousTypewriter === null && !props.streaming)
+      || previousTypewriter === null
       || (parserMode === "render" && previousTypewriter === true)
     )) {
       displayHistory.clear();
@@ -786,6 +789,7 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
       setDisplayBlocks(typewriterController.getDisplayBlocks());
     }
     previousTypewriter = enabled;
+    previousSyntheticMath = syntheticMath;
 
     if (props.inline) {
       const inlineParser = createIncremarkParser(incremarkParserOptions);

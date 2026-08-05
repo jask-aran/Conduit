@@ -1447,10 +1447,10 @@ export async function runBrowserStreamingScenario(page, scenario) {
     const typewriterRenderer = renderer === "incremark" ? "incremark-typewriter" : renderer;
     const typewriterSelector = `.chat-markdown[data-renderer="${typewriterRenderer}"]`;
     await page.waitForSelector(typewriterSelector, { state: "attached", timeout: 15_000 });
-    await page.waitForFunction(() => {
-      const roots = [...document.querySelectorAll('.chat-markdown[data-renderer="incremark-typewriter"]')];
+    await page.waitForFunction((selector) => {
+      const roots = [...document.querySelectorAll(selector)];
       return roots.length > 0 && roots.every((root) => root.getAttribute("data-display-busy") !== "true");
-    }, null, { timeout: 15_000 });
+    }, typewriterSelector, { timeout: 15_000 });
   }
   // onAllComplete clears data-display-busy before Solid commits the final
   // display nodes. Measure and read correctness after two paint boundaries.
@@ -1674,10 +1674,10 @@ export async function runBrowserReconnectScenario(page, scenario) {
   if (scenario.typewriter) {
     const typewriterRenderer = renderer === "incremark" ? "incremark-typewriter" : renderer;
     await page.waitForSelector(`.chat-markdown[data-renderer="${typewriterRenderer}"]`, { state: "attached", timeout: 15_000 });
-    await page.waitForFunction(() => {
-      const roots = [...document.querySelectorAll('.chat-markdown[data-renderer="incremark-typewriter"]')];
+    await page.waitForFunction((rendererId) => {
+      const roots = [...document.querySelectorAll(`.chat-markdown[data-renderer="${rendererId}"]`)];
       return roots.length > 0 && roots.every((root) => root.getAttribute("data-display-busy") !== "true");
-    }, null, { timeout: 15_000 });
+    }, typewriterRenderer, { timeout: 15_000 });
   }
   await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
   if (scenario.typewriter) displayCompletedAt = await page.evaluate(() => performance.now());

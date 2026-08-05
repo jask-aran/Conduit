@@ -27,7 +27,8 @@ export function markdownRendererSwitchEnabled() {
 export function selectedMarkdownTypewriter() {
   const renderer = new URLSearchParams(location.search).get("markdownRenderer") || localStorage.getItem(MARKDOWN_RENDERER_STORAGE_KEY);
   if (renderer === "incremark-typewriter") return true;
-  if (renderer === "marked" || renderer === "marked-stable" || renderer === "incremark-synthetic") return false;
+  if (renderer === "marked" || renderer === "marked-stable") return false;
+  if (renderer === "incremark-synthetic") return true;
   if (renderer === "incremark") return legacyTypewriterPreference();
   return true;
 }
