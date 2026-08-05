@@ -21,6 +21,7 @@ import type {
 import { assignToolSeq, promotePendingUser } from "../timeline-order";
 import { reconcileMessages } from "../reconcile-messages";
 import { getHarnessRecorder, recordHarnessMetric } from "../harness-metrics";
+import { canCoalesceTextDelta } from "./text-delta-batcher";
 import type { AttachmentsStore, UploadAttachment } from "./attachments";
 import type { CatalogueStore } from "./catalogue";
 import type { ActiveGenerationView, LiveGenerationChange } from "../turn-rows";
@@ -110,6 +111,11 @@ export function createActiveChat(options: ActiveChatOptions) {
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   let reconnectAttempts = 0;
   let reconnectToken = 0;
+  let pendingTextDelta: StructuredGenerationEvent | null = null;
+  let pendingTextDeltaTimer: ReturnType<typeof setTimeout> | null = null;
+  let overflowLiveEvents: LiveEvent[] = [];
+  let overflowLiveEventFrame: number | null = null;
+  let overflowMode = false;
 
   const selectedId = catalogue.selectedId;
   const projectId = catalogue.projectId;
@@ -131,6 +137,93 @@ export function createActiveChat(options: ActiveChatOptions) {
     reconnectTimer = null;
   };
 
+  const clearPendingLiveEvents = () => {
+    if (pendingTextDeltaTimer) clearTimeout(pendingTextDeltaTimer);
+    if (overflowLiveEventFrame != null) cancelAnimationFrame(overflowLiveEventFrame);
+    pendingTextDeltaTimer = null;
+    overflowLiveEventFrame = null;
+    pendingTextDelta = null;
+    overflowLiveEvents = [];
+    overflowMode = false;
+  };
+
+  const flushPendingTextDelta = () => {
+    const pending = pendingTextDelta;
+    pendingTextDelta = null;
+    if (pendingTextDeltaTimer) clearTimeout(pendingTextDeltaTimer);
+    pendingTextDeltaTimer = null;
+    if (pending) applyStructuredGeneration(pending);
+  };
+
+  const scheduleOverflowLiveEvents = () => {
+    if (overflowLiveEventFrame != null || !overflowLiveEvents.length) return;
+    overflowLiveEventFrame = requestAnimationFrame(() => {
+      overflowLiveEventFrame = null;
+      const pending = overflowLiveEvents.shift();
+      if (pending) applyLiveEvent(pending);
+      if (overflowLiveEvents.length) scheduleOverflowLiveEvents();
+      else overflowMode = false;
+    });
+  };
+
+  const queueTextDelta = (event: StructuredGenerationEvent) => {
+    if (overflowMode) {
+      const previous = overflowLiveEvents.at(-1);
+      if (previous && isStructuredGenerationEvent(previous)
+        && previous.type === "content_block_delta"
+        && canCoalesceTextDelta(previous, event)) {
+        overflowLiveEvents[overflowLiveEvents.length - 1] = {
+          ...previous,
+          seq: event.seq,
+          delta: `${String(previous.delta || "")}${String(event.delta || "")}`,
+        } as StructuredGenerationEvent;
+      } else {
+        overflowLiveEvents.push(event);
+      }
+      scheduleOverflowLiveEvents();
+      return;
+    }
+    if (canCoalesceTextDelta(pendingTextDelta, event)) {
+      pendingTextDelta = {
+        ...pendingTextDelta,
+        seq: event.seq,
+        delta: `${String(pendingTextDelta!.delta || "")}${String(event.delta || "")}`,
+      } as StructuredGenerationEvent;
+    } else if (pendingTextDelta
+      && pendingTextDelta.generationId === event.generationId
+      && pendingTextDelta.messageId === event.messageId
+      && pendingTextDelta.contentIndex === event.contentIndex
+      && pendingTextDelta.blockType === event.blockType) {
+      // The current same-block batch is full. Move it behind an animation
+      // frame so the renderer can commit before the next batch is reduced.
+      const previous = pendingTextDelta;
+      pendingTextDelta = null;
+      if (pendingTextDeltaTimer) clearTimeout(pendingTextDeltaTimer);
+      pendingTextDeltaTimer = null;
+      overflowMode = true;
+      overflowLiveEvents.push(previous, event);
+      scheduleOverflowLiveEvents();
+    } else {
+      flushPendingTextDelta();
+      pendingTextDelta = event;
+    }
+    if (pendingTextDelta && !pendingTextDeltaTimer) pendingTextDeltaTimer = setTimeout(flushPendingTextDelta, 0);
+  };
+
+  const queueLiveEvent = (event: LiveEvent) => {
+    if (event.type === "content_block_delta") {
+      queueTextDelta(event);
+      return;
+    }
+    if (overflowMode) {
+      overflowLiveEvents.push(event);
+      scheduleOverflowLiveEvents();
+      return;
+    }
+    flushPendingTextDelta();
+    applyLiveEvent(event);
+  };
+
   const reset = () => {
     navigationToken += 1;
     selectionToken += 1;
@@ -148,6 +241,7 @@ export function createActiveChat(options: ActiveChatOptions) {
     setHostUiRequests([]);
     setQueue({ steering: [], followUp: [] });
     resetLiveFlags();
+    clearPendingLiveEvents();
     generationStore.clear();
     setActiveGenerationChange(null);
     setActiveGeneration(null);
@@ -387,12 +481,11 @@ export function createActiveChat(options: ActiveChatOptions) {
     return record;
   };
 
-  function consume(event: LiveEvent) {
+  function applyLiveEvent(event: LiveEvent) {
     if (isStructuredGenerationEvent(event)) {
       applyStructuredGeneration(event);
       return;
     }
-
     switch (event.type) {
       case "runtime_state":
         applySnapshot(event);
@@ -474,6 +567,17 @@ export function createActiveChat(options: ActiveChatOptions) {
       case "unknown":
         break;
     }
+  }
+
+  function consume(event: LiveEvent) {
+    // Normal deltas retain the existing zero-delay coalescing path. Only an
+    // oversized same-block burst enters the RAF queue, which gives Solid and
+    // the browser a paint boundary between bounded batches.
+    if (overflowMode || pendingTextDelta || isStructuredGenerationEvent(event)) {
+      queueLiveEvent(event);
+      return;
+    }
+    applyLiveEvent(event);
   }
 
   const select = async (

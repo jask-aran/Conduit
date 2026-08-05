@@ -1,10 +1,11 @@
-import { createEffect, createSignal, For, Show } from "solid-js";
-import { createIncremarkParser } from "@incremark/core";
+import { createEffect, createSignal, For, Match, onCleanup, Show, Switch } from "solid-js";
+import { createIncremarkParser, type DisplayBlock, type ParsedBlock } from "@incremark/core";
 import katex from "katex";
 import * as KAlertDialog from "@kobalte/core/alert-dialog";
 import { Button } from "@/components/primitives";
 import { getHarnessRecorder, recordHarnessMetric } from "@/client/harness-metrics";
 import type { ChatMarkdownProps } from "./markdown";
+import { AdaptiveIncremarkTypewriter, visibleAstCharacters } from "./incremark-typewriter";
 import type { StreamingPending } from "./streaming-markdown";
 import { splitStreamingMarkdown } from "./streaming-markdown";
 
@@ -13,8 +14,9 @@ type Definition = { url?: string; title?: string | null };
 type RendererContext = {
   definitions: () => Record<string, Definition>;
   inline: boolean;
-  animateMath: boolean;
   requestExternalLink: (url: string) => void;
+  deferMath: () => boolean;
+  onMathBusyChange: (busy: boolean) => void;
 };
 
 const allowedProtocols = new Set(["http:", "https:", "mailto:"]);
@@ -36,27 +38,78 @@ function inlineText(nodes: MarkdownNode[]) {
   return nodes.map((node) => node.value || node.children?.map((child: MarkdownNode) => child.value || "").join("") || "").join("");
 }
 
-function InlineNodes(props: { nodes: MarkdownNode[]; context: RendererContext }) {
-  return <For each={props.nodes}>{(node) => <AstNode node={node} context={props.context} />}</For>;
+type NodeAccessor = () => MarkdownNode;
+type NodeList = MarkdownNode[] | (() => MarkdownNode[]);
+
+function readNode(value: MarkdownNode | NodeAccessor) {
+  return typeof value === "function" ? value() : value;
 }
 
-function BlockNodes(props: { nodes: MarkdownNode[]; context: RendererContext }) {
-  return <For each={props.nodes}>{(node) => <AstNode node={node} context={props.context} />}</For>;
+function readNodes(value: NodeList) {
+  return typeof value === "function" ? value() : value;
 }
 
-function LinkNode(props: { node: MarkdownNode; context: RendererContext; reference?: Definition }) {
-  const target = () => safeUrl(props.reference?.url || props.node.url);
-  const label = () => props.reference === undefined && props.node.type === "linkReference"
-    ? `[${inlineText(props.node.children || [])}][${props.node.identifier || props.node.label || ""}]`
-    : <InlineNodes nodes={props.node.children || []} context={props.context} />;
+function InlineNodes(props: { nodes: NodeList; context: RendererContext }) {
+  return <For each={readNodes(props.nodes)}>{(node) => <AstNode node={node} context={props.context} />}</For>;
+}
+
+function BlockNodes(props: { nodes: NodeList; context: RendererContext }) {
+  return <For each={readNodes(props.nodes)}>{(node) => <AstNode node={node} context={props.context} />}</For>;
+}
+
+function containsMathNode(node: MarkdownNode): boolean {
+  return Boolean(node && (node.type === "math" || node.type === "inlineMath" || node.children?.some(containsMathNode)));
+}
+
+function ParsedBlockNodes(props: { blocks: () => ParsedBlock[]; context: RendererContext }) {
+  return <For each={props.blocks().map((block) => block.id)}>{(id) => {
+    const block = () => props.blocks().find((entry) => entry.id === id);
+    return <Show when={block()}>{(value) => <AstNode node={() => value()?.node} context={props.context} />}</Show>;
+  }}</For>;
+}
+
+function DisplayBlockNodes(props: { blocks: () => DisplayBlock[]; context: RendererContext }) {
+  const structuralType = (block: DisplayBlock) => {
+    const sourceNode = block.node as MarkdownNode;
+    if (sourceNode?.type === "paragraph" && /^ {0,3}\|/.test(String((block as DisplayBlock & { rawText?: string }).rawText || ""))) return "table";
+    return sourceNode?.type;
+  };
+  const displayNode = (block: DisplayBlock) => {
+    const sourceNode = block.node as MarkdownNode;
+    const currentNode = block.displayNode as MarkdownNode;
+    const type = structuralType(block);
+    if (type && currentNode?.type !== type) {
+      return { ...currentNode, type };
+    }
+    return currentNode;
+  };
+  const displayShape = (block: DisplayBlock) => {
+    const node = displayNode(block) || {};
+    if (node.type === "heading") return `${node.type}:${node.depth}`;
+    if (node.type === "list") return `${node.type}:${node.ordered ? "ordered" : "unordered"}`;
+    return String(node.type || "unknown");
+  };
+  return <For each={props.blocks().map((block) => `${block.id}:${displayShape(block)}`)}>{(key) => {
+    const block = () => props.blocks().find((entry) => `${entry.id}:${displayShape(entry)}` === key);
+    return <Show when={block()}>{(value) => <AstNode node={() => value() ? displayNode(value()) : undefined} context={props.context} />}</Show>;
+  }}</For>;
+}
+
+function LinkNode(props: { node: MarkdownNode | NodeAccessor; context: RendererContext; reference?: () => Definition | undefined }) {
+  const node = () => readNode(props.node);
+  const reference = () => props.reference?.();
+  const target = () => safeUrl(reference()?.url || node()?.url);
+  const label = () => reference() === undefined && node()?.type === "linkReference"
+    ? `[${inlineText(node()?.children || [])}][${node()?.identifier || node()?.label || ""}]`
+    : <InlineNodes nodes={() => node()?.children || []} context={props.context} />;
   return <Show when={target()} fallback={label()}>
     {(resolved) => <Show when={!props.context.inline} fallback={label()}>
-      <Show when={resolved().external} fallback={<a href={resolved().href} title={props.reference?.title || props.node.title || undefined}>{label()}</a>}>
+      <Show when={resolved().external} fallback={<a href={resolved().href} title={reference()?.title || node()?.title || undefined}>{label()}</a>}>
         <button
           type="button"
           class="external-markdown-link"
           data-external-url={resolved().href}
-          aria-label={inlineText(props.node.children || []) || resolved().href}
+          aria-label={inlineText(node()?.children || []) || resolved().href}
           onClick={() => props.context.requestExternalLink(resolved().href)}
         >{label()}</button>
       </Show>
@@ -64,37 +117,122 @@ function LinkNode(props: { node: MarkdownNode; context: RendererContext; referen
   </Show>;
 }
 
-function MathNode(props: { node: MarkdownNode; animate?: boolean }) {
-  let html = "";
-  const recorder = getHarnessRecorder();
-  const startedAt = recorder ? performance.now() : 0;
-  try {
-    html = katex.renderToString(String(props.node.value || ""), {
-      displayMode: props.node.type === "math",
-      throwOnError: false,
-    });
-  } catch {
-    html = "";
-  }
-  if (recorder) {
-    recordHarnessMetric(recorder, {
-      stage: "markdown-katex",
-      renderer: "incremark",
-      katexMs: performance.now() - startedAt,
-      katexCallCount: 1,
-    });
-  }
-  return <span class={`${props.node.type === "math" ? "incremark-math-block" : "incremark-math-inline"}${props.animate ? " streaming-final-math" : ""}`} innerHTML={html} />;
+const mathHtmlCache = new WeakMap<object, { source: string; html: string }>();
+type MathRenderJob = { cancelled: boolean; run: () => void };
+const mathRenderQueue: MathRenderJob[] = [];
+let mathRenderFrame: number | null = null;
+
+function requestMathRenderFrame() {
+  if (mathRenderFrame != null || !mathRenderQueue.length) return;
+  mathRenderFrame = requestAnimationFrame(() => {
+    mathRenderFrame = null;
+    const startedAt = performance.now();
+    let processed = 0;
+    while (mathRenderQueue.length && processed < 1 && performance.now() - startedAt < 4) {
+      const next = mathRenderQueue.shift()!;
+      if (!next.cancelled) {
+        next.run();
+        processed += 1;
+      }
+    }
+    requestMathRenderFrame();
+  });
 }
 
-function CodeNode(props: { node: MarkdownNode }) {
-  const language = () => String(props.node.lang || "text").split(/\s+/)[0]!.toLowerCase();
+function scheduleMathRender(run: () => void) {
+  const job: MathRenderJob = { cancelled: false, run };
+  mathRenderQueue.push(job);
+  requestMathRenderFrame();
+  return () => { job.cancelled = true; };
+}
+
+function MathNode(props: { node: MarkdownNode | NodeAccessor; defer?: () => boolean; onBusyChange?: (busy: boolean) => void }) {
+  const node = () => readNode(props.node);
+  const [html, setHtml] = createSignal("");
+  const [type, setType] = createSignal<string | undefined>();
+  let cancelJob: (() => void) | null = null;
+  let busy = false;
+  let renderVersion = 0;
+  const setBusy = (next: boolean) => {
+    if (next === busy) return;
+    busy = next;
+    props.onBusyChange?.(next);
+  };
+  const renderCurrent = (current: MarkdownNode, source: string, version: number) => {
+    if (version !== renderVersion) return;
+    const cached = mathHtmlCache.get(current);
+    if (cached?.source === source) {
+      setHtml(cached.html);
+      setBusy(false);
+      return;
+    }
+    let renderedHtml = "";
+    const recorder = getHarnessRecorder();
+    const startedAt = recorder ? performance.now() : 0;
+    try {
+      renderedHtml = katex.renderToString(source, {
+        displayMode: current?.type === "math",
+        throwOnError: false,
+      });
+    } catch {
+      renderedHtml = "";
+    }
+    if (recorder) {
+      recordHarnessMetric(recorder, {
+        stage: "markdown-katex",
+        renderer: "incremark",
+        katexMs: performance.now() - startedAt,
+        katexCallCount: 1,
+        katexSourceCharacters: source.length,
+        katexHtmlCharacters: renderedHtml.length,
+      });
+    }
+    mathHtmlCache.set(current, { source, html: renderedHtml });
+    setHtml(renderedHtml);
+    setBusy(false);
+  };
+  createEffect(() => {
+    const current = node();
+    const source = String(current?.value || "");
+    setType(current?.type);
+    renderVersion += 1;
+    const version = renderVersion;
+    cancelJob?.();
+    cancelJob = null;
+    setBusy(false);
+    if (!current || !source) {
+      setHtml("");
+      return;
+    }
+    const cached = mathHtmlCache.get(current);
+    if (cached?.source === source) {
+      setHtml(cached.html);
+      return;
+    }
+    if (props.defer?.()) {
+      setHtml("");
+      setBusy(true);
+      cancelJob = scheduleMathRender(() => renderCurrent(current, source, version));
+      return;
+    }
+    renderCurrent(current, source, version);
+  });
+  onCleanup(() => {
+    cancelJob?.();
+    setBusy(false);
+  });
+  return <span class={type() === "math" ? "incremark-math-block" : "incremark-math-inline"} innerHTML={html()} />;
+}
+
+function CodeNode(props: { node: MarkdownNode | NodeAccessor }) {
+  const node = () => readNode(props.node);
+  const language = () => String(node()?.lang || "text").split(/\s+/)[0]!.toLowerCase();
   const copy = () => {
-    if (navigator.clipboard) void navigator.clipboard.writeText(String(props.node.value || ""));
+    if (navigator.clipboard) void navigator.clipboard.writeText(String(node()?.value || ""));
   };
   return <div class="artifact" data-language={language()}>
     <div class="artifact-header"><span>{language()}</span><button type="button" aria-label="Copy code" data-copy-code onClick={copy}>Copy</button></div>
-    <pre><code>{String(props.node.value || "")}</code></pre>
+    <pre><code>{String(node()?.value || "")}</code></pre>
   </div>;
 }
 
@@ -117,59 +255,83 @@ function PendingConstruct(props: { pending: StreamingPending; streaming: boolean
     : <span class={className} data-streaming-pending={props.streaming ? pending.kind : undefined} aria-hidden="true" />;
 }
 
-function TableNode(props: { node: MarkdownNode; context: RendererContext }) {
-  const [head, ...body] = props.node.children || [];
+function TableNode(props: { node: MarkdownNode | NodeAccessor; context: RendererContext }) {
+  const node = () => readNode(props.node);
+  const head = () => node()?.children?.[0];
+  const body = () => node()?.children?.slice(1) || [];
   return <table>
-    <Show when={head}><thead><TableRow node={head} context={props.context} header /></thead></Show>
-    <tbody><For each={body}>{(row) => <TableRow node={row} context={props.context} />}</For></tbody>
+    <Show when={head()}>{(value) => <thead><TableRow node={() => value()} context={props.context} header /></thead>}</Show>
+    <tbody><For each={body()}>{(row) => <TableRow node={row} context={props.context} />}</For></tbody>
   </table>;
 }
 
-function TableRow(props: { node: MarkdownNode; context: RendererContext; header?: boolean }) {
-  return <tr><For each={props.node.children || []}>{(cell) => props.header
+function TableRow(props: { node: MarkdownNode | NodeAccessor; context: RendererContext; header?: boolean }) {
+  const node = () => readNode(props.node);
+  return <tr><For each={node()?.children || []}>{(cell) => props.header
     ? <th>{<InlineNodes nodes={cell.children || []} context={props.context} />}</th>
     : <td>{<InlineNodes nodes={cell.children || []} context={props.context} />}</td>}
   </For></tr>;
 }
 
-function AstNode(props: { node: MarkdownNode; context: RendererContext }) {
-  const node = () => props.node;
-  switch (props.node.type) {
-    case "text": return props.node.value;
-    case "strong": return <strong data-markdown="strong"><InlineNodes nodes={props.node.children || []} context={props.context} /></strong>;
-    case "emphasis": return <em><InlineNodes nodes={props.node.children || []} context={props.context} /></em>;
-    case "delete": return <del><InlineNodes nodes={props.node.children || []} context={props.context} /></del>;
-    case "inlineCode": return <code>{props.node.value}</code>;
+function TextNode(props: { node: NodeAccessor }) {
+  return <>{props.node()?.value || ""}</>;
+}
+
+function AstNode(props: { node: MarkdownNode | NodeAccessor; context: RendererContext }) {
+  const node = () => readNode(props.node);
+  return <Switch fallback={null}>
+    <Match when={() => node()?.type === "text"}><AstNodeContent node={node} context={props.context} /></Match>
+    <Match when={() => node()?.type === "strong"}><AstNodeContent node={node} context={props.context} /></Match>
+    <Match when={() => node()?.type === "emphasis"}><AstNodeContent node={node} context={props.context} /></Match>
+    <Match when={() => node()?.type === "delete"}><AstNodeContent node={node} context={props.context} /></Match>
+    <Match when={() => node()?.type === "inlineCode"}><AstNodeContent node={node} context={props.context} /></Match>
+    <Match when={() => node()?.type === "inlineMath" || node()?.type === "math"}><AstNodeContent node={node} context={props.context} /></Match>
+    <Match when={() => node()?.type === "break"}><AstNodeContent node={node} context={props.context} /></Match>
+    <Match when={() => node()?.type === "link" || node()?.type === "linkReference"}><AstNodeContent node={node} context={props.context} /></Match>
+    <Match when={() => node()?.type === "image" || node()?.type === "imageReference"}><AstNodeContent node={node} context={props.context} /></Match>
+    <Match when={() => ["heading", "paragraph", "list", "listItem", "blockquote", "code", "table", "thematicBreak", "html", "htmlElement", "definition", "root"].includes(node()?.type)}><AstNodeContent node={node} context={props.context} /></Match>
+    <Match when={() => Boolean(node()?.children)}><AstNodeContent node={node} context={props.context} /></Match>
+  </Switch>;
+}
+
+function AstNodeContent(props: { node: NodeAccessor; context: RendererContext }) {
+  const node = props.node;
+  switch (node().type) {
+    case "text": return <TextNode node={node} />;
+    case "strong": return <strong data-markdown="strong"><InlineNodes nodes={() => node()?.children || []} context={props.context} /></strong>;
+    case "emphasis": return <em><InlineNodes nodes={() => node()?.children || []} context={props.context} /></em>;
+    case "delete": return <del><InlineNodes nodes={() => node()?.children || []} context={props.context} /></del>;
+    case "inlineCode": return <code>{node()?.value || ""}</code>;
     case "inlineMath":
-    case "math": return <MathNode node={props.node} animate={props.context.animateMath} />;
+    case "math": return <MathNode node={node} defer={props.context.deferMath} onBusyChange={props.context.onMathBusyChange} />;
     case "break": return <br />;
-    case "link": return <LinkNode node={props.node} context={props.context} />;
-    case "linkReference": return <LinkNode node={props.node} context={props.context} reference={props.context.definitions()[props.node.identifier]} />;
+    case "link": return <LinkNode node={node} context={props.context} />;
+    case "linkReference": return <LinkNode node={node} context={props.context} reference={() => props.context.definitions()[node()?.identifier]} />;
     case "image":
     case "imageReference": return null;
     case "heading": {
-      const children = <InlineNodes nodes={props.node.children || []} context={props.context} />;
-      if (props.node.depth === 1) return <h1>{children}</h1>;
-      if (props.node.depth === 2) return <h2>{children}</h2>;
-      if (props.node.depth === 3) return <h3>{children}</h3>;
-      if (props.node.depth === 4) return <h4>{children}</h4>;
-      if (props.node.depth === 5) return <h5>{children}</h5>;
+      const children = <InlineNodes nodes={() => node()?.children || []} context={props.context} />;
+      if (node()?.depth === 1) return <h1>{children}</h1>;
+      if (node()?.depth === 2) return <h2>{children}</h2>;
+      if (node()?.depth === 3) return <h3>{children}</h3>;
+      if (node()?.depth === 4) return <h4>{children}</h4>;
+      if (node()?.depth === 5) return <h5>{children}</h5>;
       return <h6>{children}</h6>;
     }
-    case "paragraph": return <p><InlineNodes nodes={props.node.children || []} context={props.context} /></p>;
+    case "paragraph": return <p><InlineNodes nodes={() => node()?.children || []} context={props.context} /></p>;
     case "list": {
-      const children = <For each={props.node.children || []}>{(item) => <AstNode node={item} context={props.context} />}</For>;
-      return props.node.ordered ? <ol start={props.node.start || undefined}>{children}</ol> : <ul>{children}</ul>;
+      const children = <For each={node()?.children || []}>{(item) => <AstNode node={item} context={props.context} />}</For>;
+      return node()?.ordered ? <ol start={node()?.start || undefined}>{children}</ol> : <ul>{children}</ul>;
     }
-    case "listItem": return <li>{props.node.checked !== null && <input type="checkbox" checked={Boolean(props.node.checked)} disabled />}{<BlockNodes nodes={props.node.children || []} context={props.context} />}</li>;
-    case "blockquote": return <blockquote><BlockNodes nodes={props.node.children || []} context={props.context} /></blockquote>;
-    case "code": return <CodeNode node={props.node} />;
-    case "table": return <TableNode node={props.node} context={props.context} />;
+    case "listItem": return <li>{node()?.checked !== null && <input type="checkbox" checked={Boolean(node()?.checked)} disabled />}{<BlockNodes nodes={() => node()?.children || []} context={props.context} />}</li>;
+    case "blockquote": return <blockquote><BlockNodes nodes={() => node()?.children || []} context={props.context} /></blockquote>;
+    case "code": return <CodeNode node={node} />;
+    case "table": return <TableNode node={node} context={props.context} />;
     case "thematicBreak": return <hr />;
     case "html":
     case "htmlElement":
     case "definition": return null;
-    case "root": return <BlockNodes nodes={props.node.children || []} context={props.context} />;
+    case "root": return <BlockNodes nodes={() => node()?.children || []} context={props.context} />;
     default: return node().children ? <BlockNodes nodes={node().children} context={props.context} /> : null;
   }
 }
@@ -181,50 +343,183 @@ function AstNode(props: { node: MarkdownNode; context: RendererContext }) {
  */
 export function IncremarkMarkdown(props: ChatMarkdownProps) {
   const parser = createIncremarkParser({ gfm: true, math: true, htmlTree: true, containers: true });
-  const [displayAst, setDisplayAst] = createSignal<MarkdownNode>({ type: "root", children: [] });
+  const [blocks, setBlocks] = createSignal<ParsedBlock[]>([]);
+  const [pendingBlocks, setPendingBlocks] = createSignal<ParsedBlock[]>([]);
+  const [seededBlocks, setSeededBlocks] = createSignal<ParsedBlock[]>([]);
+  const [displayBlocks, setDisplayBlocks] = createSignal<DisplayBlock[]>([]);
+  const [displayBusy, setDisplayBusy] = createSignal(false);
+  const [pendingMathRenders, setPendingMathRenders] = createSignal(0);
+  const [pendingAst, setPendingAst] = createSignal<MarkdownNode>({ type: "root", children: [] });
+  const [inlineAst, setInlineAst] = createSignal<MarkdownNode>({ type: "root", children: [] });
   const [pending, setPending] = createSignal<StreamingPending | null>(null);
-  const [animateMath, setAnimateMath] = createSignal(false);
+  const [mathPath, setMathPath] = createSignal(false);
   const [definitions, setDefinitions] = createSignal<Record<string, Definition>>({});
   const [externalUrl, setExternalUrl] = createSignal<string | null>(null);
+  const completedById = new Map<string, ParsedBlock>();
+  const seededById = new Map<string, ParsedBlock>();
+  let currentBlocks: ParsedBlock[] = [];
   let previousSource = "";
   let finalised = false;
+  let previousTypewriter: boolean | null = null;
+  const typewriter = () => Boolean(props.typewriter && !props.inline);
+  const typewriterController = new AdaptiveIncremarkTypewriter({
+    onChange: (next) => {
+      setDisplayBlocks(next);
+      queueMicrotask(() => props.onRendered?.());
+    },
+    onDisplayBusyChange: (busy) => {
+      setDisplayBusy(busy);
+      props.onDisplayBusyChange?.(busy);
+    },
+    onMetrics: (metrics) => {
+      const recorder = getHarnessRecorder();
+      if (!recorder) return;
+      recordHarnessMetric(recorder, {
+        stage: "markdown-typewriter",
+        renderer: "incremark",
+        typewriter: true,
+        sourceVisibleCharacters: metrics.sourceVisibleCharacters,
+        displayedVisibleCharacters: metrics.displayedVisibleCharacters,
+        backlogCharacters: metrics.backlogCharacters,
+        backlogAgeMs: metrics.backlogAgeMs,
+        observedRate: metrics.observedRate,
+        targetRate: metrics.targetRate,
+        controlRate: metrics.controlRate,
+        displayRate: metrics.displayRate,
+        relativeLag: metrics.relativeLag,
+        charsPerTick: metrics.charsPerTick,
+        frameIntervalMs: metrics.frameIntervalMs,
+        tickInterval: metrics.tickInterval,
+        frameWorkMs: metrics.frameWorkMs,
+        frameWorkEmaMs: metrics.frameWorkEmaMs,
+        fallbackMode: metrics.fallbackMode,
+        lagTargetMet: metrics.lagTargetMet,
+      });
+    },
+  });
+  onCleanup(() => typewriterController.destroy());
+
+  const emptyAst = () => ({ type: "root", children: [] });
+  const blockContainsOffset = (block: ParsedBlock, offset: number) => offset >= block.startOffset && offset <= block.endOffset;
 
   createEffect(() => {
     const source = String(props.children || "");
     const split = splitStreamingMarkdown(source);
-    const previousPending = splitStreamingMarkdown(previousSource).pending;
     const recorder = getHarnessRecorder();
     const parseStartedAt = recorder ? performance.now() : 0;
     let parserMode = "none";
     let update: ReturnType<typeof parser.append> | undefined;
+    const updates: Array<ReturnType<typeof parser.append>> = [];
     if (source !== previousSource) {
       if (source.startsWith(previousSource)) {
         parserMode = "append";
         update = parser.append(source.slice(previousSource.length));
       } else {
         parserMode = "render";
-        update = parser.render(source);
+        parser.reset();
+        update = parser.append(source);
+        completedById.clear();
+        seededById.clear();
+        setSeededBlocks([]);
+        typewriterController.reset();
       }
+      updates.push(update);
       previousSource = source;
       finalised = false;
     }
-    if (!props.streaming && !finalised) {
+    if (!props.streaming && !finalised && !split.pending) {
       parserMode = parserMode === "none" ? "finalize" : `${parserMode}+finalize`;
       update = parser.finalize();
+      updates.push(update);
       finalised = true;
     }
     const parsedAt = recorder ? performance.now() : 0;
+    const latestUpdate = updates.at(-1);
+    const pendingUpdateBlocks = new Map<string, ParsedBlock>();
+    let pendingOffset: number | null = null;
+    for (const entry of updates) {
+      for (const block of entry.pending) pendingUpdateBlocks.set(block.id, block);
+    }
+    if (!props.inline && (split.pending?.kind.startsWith("math") || updates.some((entry) =>
+      [...entry.completed, ...entry.updated, ...entry.pending].some((block) => containsMathNode(block.node))))) {
+      setMathPath(true);
+    }
     setDefinitions({ ...parser.getDefinitionMap() });
-    const nextAst = { ...parser.getAst() };
     setPending(split.pending);
-    setAnimateMath(!split.pending && previousPending != null && previousPending.kind.startsWith("math"));
-    if (split.pending) {
-      const presentationParser = createIncremarkParser({ gfm: true, math: true, htmlTree: true, containers: true });
-      if (split.stable) presentationParser.render(split.stable);
-      if (!props.streaming) presentationParser.finalize();
-      setDisplayAst({ ...presentationParser.getAst() });
+    if (updates.length) {
+      for (const entry of updates) {
+        for (const block of entry.updated) completedById.delete(block.id);
+        for (const block of entry.completed) {
+          completedById.set(block.id, block);
+        }
+      }
+      pendingOffset = !props.streaming ? split.pending?.start ?? null : null;
+      const nextBlocks = [...completedById.values()]
+        .filter((block) => pendingOffset == null || !blockContainsOffset(block, pendingOffset))
+        .sort((left, right) => left.startOffset - right.startOffset);
+      const completedIds = new Set(nextBlocks.map((block) => block.id));
+      const nextPendingBlocks = split.pending
+        ? []
+        : [...pendingUpdateBlocks.values()].filter((block) => !completedIds.has(block.id));
+      setBlocks(nextBlocks);
+      setPendingBlocks(nextPendingBlocks);
+      currentBlocks = nextBlocks
+        .concat(nextPendingBlocks)
+        .sort((left, right) => left.startOffset - right.startOffset);
+    }
+
+    const enabled = typewriter();
+    typewriterController.setEnabled(enabled);
+    if (previousTypewriter === true && !enabled) {
+      typewriterController.flush();
+      seededById.clear();
+      setSeededBlocks([]);
+      setDisplayBlocks([]);
+    } else if (enabled && currentBlocks.length && (
+      previousTypewriter === false
+      || (previousTypewriter === null && !props.streaming)
+      || (parserMode === "render" && previousTypewriter === true)
+    )) {
+      seededById.clear();
+      for (const block of currentBlocks) seededById.set(block.id, block);
+      setSeededBlocks([...currentBlocks]);
+      typewriterController.seed(currentBlocks);
+      setDisplayBlocks([]);
+    }
+    if (enabled) {
+      for (const block of currentBlocks) {
+        if (seededById.has(block.id)) seededById.set(block.id, block);
+      }
+      setSeededBlocks([...seededById.values()].sort((left, right) => left.startOffset - right.startOffset));
+      const seeded = [...seededById.values()];
+      const animated = currentBlocks.filter((block) => !seededById.has(block.id));
+      const seededRoot = { type: "root", children: seeded.map((block) => block.node) };
+      typewriterController.setBaselineCharacters(visibleAstCharacters(seededRoot));
+      typewriterController.observeSource(animated);
+      typewriterController.push(animated);
+      setDisplayBlocks(typewriterController.getDisplayBlocks());
+    }
+    previousTypewriter = enabled;
+
+    if (props.inline) {
+      const inlineParser = createIncremarkParser({ gfm: true, math: true, htmlTree: true, containers: true });
+      inlineParser.render(split.pending ? split.stable : source);
+      setInlineAst({ ...inlineParser.getAst() });
+    } else if (split.pending) {
+      const currentBlock = [...pendingUpdateBlocks.values()].find((block) => blockContainsOffset(block, split.pending!.start));
+      const prefixLength = currentBlock
+        ? Math.max(0, Math.min(currentBlock.rawText.length, split.pending.start - currentBlock.startOffset))
+        : 0;
+      const prefix = currentBlock?.rawText.slice(0, prefixLength) || "";
+      if (prefix.trim()) {
+        const tailParser = createIncremarkParser({ gfm: true, math: true, htmlTree: true, containers: true });
+        tailParser.render(prefix);
+        setPendingAst({ ...tailParser.getAst() });
+      } else {
+        setPendingAst(emptyAst());
+      }
     } else {
-      setDisplayAst(nextAst);
+      setPendingAst(emptyAst());
     }
     const reconciledAt = recorder ? performance.now() : 0;
     if (recorder) {
@@ -239,11 +534,11 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
         katexMs: null,
         katexCallCount: 0,
         katexTimingAvailable: false,
-        katexTimingBlocker: "Incremark adapter KaTeX calls are not instrumented",
+        katexTimingBlocker: "Incremark adapter KaTeX calls are measured per new AST node",
         parserMode,
-        pendingBlockCount: update?.pending?.length ?? null,
-        completedBlockCount: update?.completed?.length ?? null,
-        updatedBlockCount: update?.updated?.length ?? null,
+        pendingBlockCount: latestUpdate?.pending?.length ?? null,
+        completedBlockCount: latestUpdate?.completed?.length ?? null,
+        updatedBlockCount: latestUpdate?.updated?.length ?? null,
       });
       recordHarnessMetric(recorder, {
         stage: "markdown-reconcile",
@@ -253,24 +548,50 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
         reconcileMs: reconciledAt - parsedAt,
       });
     }
-    queueMicrotask(() => props.onRendered?.());
+    if (!enabled) queueMicrotask(() => props.onRendered?.());
   });
 
-  const context = (): RendererContext => ({
+  const context: RendererContext = {
     definitions,
     inline: Boolean(props.inline),
-    animateMath: animateMath(),
     requestExternalLink: setExternalUrl,
-  });
-
+    deferMath: () => typewriter(),
+    onMathBusyChange: (busy) => setPendingMathRenders((count) => Math.max(0, count + (busy ? 1 : -1))),
+  };
+  const displayedBlocks = () => {
+    const byId = new Map(blocks().map((block) => [block.id, block]));
+    for (const block of pendingBlocks()) if (!byId.has(block.id)) byId.set(block.id, block);
+    return [...byId.values()].sort((left, right) => left.startOffset - right.startOffset);
+  };
   return <>
-    <div class="chat-markdown" data-renderer="incremark" data-streaming={props.streaming || undefined}>
+    <div class="chat-markdown" data-renderer="incremark" data-streaming={props.streaming || undefined} data-display-busy={displayBusy() || pendingMathRenders() > 0 ? "true" : undefined} data-display-key={props.displayKey || undefined}>
       <div class="incremark" data-incremark-core="true">
         <Show when={props.inline} fallback={<>
-          <AstNode node={displayAst()} context={context()} />
-          <Show when={pending()}>{(value) => <PendingConstruct pending={value()} streaming={Boolean(props.streaming)} />}</Show>
+          <Show when={mathPath()} fallback={<>
+            <Show when={typewriter()} fallback={<ParsedBlockNodes blocks={blocks} context={context} />}>
+              <ParsedBlockNodes blocks={seededBlocks} context={context} />
+              <DisplayBlockNodes blocks={displayBlocks} context={context} />
+            </Show>
+            <Show when={pending()} fallback={<Show when={!typewriter()}><ParsedBlockNodes blocks={pendingBlocks} context={context} /></Show>}>
+              {(value) => <>
+                <AstNode node={pendingAst()} context={context} />
+                <PendingConstruct pending={value()} streaming={Boolean(props.streaming)} />
+              </>}
+            </Show>
+          </>}>
+            <Show when={typewriter()} fallback={<ParsedBlockNodes blocks={displayedBlocks} context={context} />}>
+              <ParsedBlockNodes blocks={seededBlocks} context={context} />
+              <DisplayBlockNodes blocks={displayBlocks} context={context} />
+            </Show>
+            <Show when={pending()}>
+              {(value) => <>
+                <AstNode node={pendingAst()} context={context} />
+                <PendingConstruct pending={value()} streaming={Boolean(props.streaming)} />
+              </>}
+            </Show>
+          </Show>
         </>}>
-          <InlineNodes nodes={displayAst().children?.flatMap((child: MarkdownNode) => child.children || [child]) || []} context={context()} />
+          <AstNode node={inlineAst()} context={context} />
           <Show when={pending()}>{(value) => <PendingConstruct pending={value()} streaming={Boolean(props.streaming)} />}</Show>
         </Show>
       </div>

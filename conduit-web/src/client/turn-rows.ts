@@ -53,7 +53,7 @@ export interface TurnTraceData {
 }
 
 export type TurnRow =
-  | { key: string; type: "message"; value: Message; index: number; live?: boolean; streamVersion?: number }
+  | { key: string; type: "message"; value: Message; index: number; live?: boolean; streamVersion?: number; displayKey?: string }
   | { key: string; type: "trace"; value: TurnTraceData };
 
 const thinkingOf = (message: Message): string => (message.blocks || [])
@@ -67,6 +67,8 @@ const toolCallIdsOf = (message: Message): string[] => (message.blocks || [])
   .map((block) => block.id as string);
 
 const messageKey = (message: Message) => message.key || message.id;
+const answerDisplayKey = (owner: Message | null, answerIndex: number, fallback: string) =>
+  `answer:${owner ? messageKey(owner) : fallback}:${answerIndex}`;
 const active = (generation: ActiveGenerationView) => !["stopped", "complete", "failed"].includes(generation.status);
 
 export type LiveBlockLocation =
@@ -101,6 +103,7 @@ export function buildLiveProjectionIndex(
   const answerBlockIdentities = new Map<string, Set<string>>();
   const answerRowKeys = new Map<string, string>();
   let firstAnswerAssistantId: string | null = null;
+  let answerIndex = 0;
   let segmentIndex = 0;
   let activeBlockCount = 0;
 
@@ -121,11 +124,12 @@ export function buildLiveProjectionIndex(
       }
     }
     if (answerBlocks.size) {
-      const rowKey = `message:live:${generation.id}:${assistant.id}`;
+      const rowKey = answerDisplayKey(owner, answerIndex, `live:${generation.id}`);
       answerRowKeys.set(assistant.id, rowKey);
       if (!firstAnswerAssistantId) firstAnswerAssistantId = assistant.id;
       for (const identity of answerBlocks) blockLocations.set(identity, { kind: "answer", rowKey, assistantId: assistant.id });
       answerBlockIdentities.set(assistant.id, answerBlocks);
+      answerIndex += 1;
     }
   }
   return {
@@ -160,6 +164,7 @@ export function buildLiveAnswerRow(
     : answer;
   return {
     key: index.answerRowKeys.get(assistantId) || `message:live:${generation.id}:${assistantId}`,
+    displayKey: index.answerRowKeys.get(assistantId),
     type: "message",
     index: messageIndex,
     live: active(generation),
@@ -200,6 +205,7 @@ function liveRows(generation: ActiveGenerationView, owner: Message | null, index
   const classifications = textBlockClassifications(generation) as Record<string, "interim" | "answer">;
   const segments: TraceSegment[] = [];
   const answers: TurnRow[] = [];
+  let answerIndex = 0;
   for (const assistant of generation.assistantMessages) {
     const answer = assistant.blocks
       .filter((block) => block.type === "text" && classifications[block.identity] === "answer")
@@ -233,7 +239,8 @@ function liveRows(generation: ActiveGenerationView, owner: Message | null, index
         ? mergeContinuation(generation.continuationBase || "", answer)
         : answer;
       answers.push({
-        key: `message:live:${generation.id}:${assistant.id}`,
+        key: answerDisplayKey(owner, answerIndex, `live:${generation.id}`),
+        displayKey: answerDisplayKey(owner, answerIndex, `live:${generation.id}`),
         type: "message",
         index,
         live: active(generation),
@@ -247,6 +254,7 @@ function liveRows(generation: ActiveGenerationView, owner: Message | null, index
           status: generation.status === "stopped" ? "stopped" : null,
         },
       });
+      answerIndex += 1;
     }
   }
   const rows: TurnRow[] = [];
@@ -309,6 +317,8 @@ export function buildTurnRows(
       const claimed = new Set<string>();
       const toolById = new Map(tools.map((tool) => [tool.id, tool]));
       const bubble = [...turn.assistants].reverse().find((assistant) => assistant.stopReason !== "toolUse");
+      const answerAssistants = turn.assistants.filter((assistant) => assistant.stopReason !== "toolUse");
+      const answerIndex = bubble ? Math.max(0, answerAssistants.indexOf(bubble)) : 0;
       for (const assistant of turn.assistants) {
         const thinking = thinkingOf(assistant);
         if (thinking) segments.push({ kind: "thinking", id: `thinking:${assistant.id}`, text: thinking });
@@ -325,7 +335,10 @@ export function buildTurnRows(
       }
       if (segments.length > 0) rows.push({ key: `trace:${turn.userMessage ? messageKey(turn.userMessage) : messageKey(turn.assistants[0]!)}`, type: "trace", value: { active: false, segments } });
       const text = String(bubble?.content || "").trim();
-      if (bubble && text) rows.push({ key: `message:${messageKey(bubble)}`, type: "message", value: bubble, index: messages.indexOf(bubble) });
+      if (bubble && text) {
+        const displayKey = answerDisplayKey(turn.userMessage, answerIndex, `message:${messageKey(bubble)}`);
+        rows.push({ key: displayKey, displayKey, type: "message", value: bubble, index: messages.indexOf(bubble) });
+      }
     }
     if (opts.activeGeneration && turn.userMessage === liveOwner) {
       rows.push(...liveRows(opts.activeGeneration, liveOwner, messages.indexOf(turn.userMessage!)));

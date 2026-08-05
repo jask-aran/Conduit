@@ -7,6 +7,17 @@ const rootContract = (requiredNodeCounts = {}) => ({
   requiredNodeCounts,
 });
 
+const mathStressText = [
+  "# Math stress",
+  ...Array.from({ length: 96 }, (_, index) => [
+    `Equation ${index + 1}`,
+    "",
+    "$$",
+    `\\frac{${index + 1}x^2 + ${index + 2}}{x + ${index + 3}} = \\sum_{n=0}^{${(index % 7) + 4}} \\frac{(-1)^n x^{n + 1}}{n + 1}`,
+    "$$",
+  ].join("\n")),
+].join("\n\n");
+
 export const BROWSER_FIXTURES = Object.freeze({
   "rich-markdown": {
     text: "# Rich answer\n\nA **bold** item with *emphasis*.\n\n- one\n- two\n\n| A | B |\n| - | - |\n| 1 | 2 |",
@@ -39,6 +50,19 @@ export const BROWSER_FIXTURES = Object.freeze({
     expectedAssertions: { katexRendered: true },
     expectedInteractions: {},
     requiresStructuralContract: true,
+  },
+  "math-stress": {
+    text: mathStressText,
+    expectedSemanticText: null,
+    expectedSemanticFingerprint: null,
+    expectedAssertions: { katexRendered: true },
+    expectedInteractions: {},
+    maxKaTeXCalls: 120,
+    maxLongestTaskMs: 250,
+    maxRemovedMathNodes: 0,
+    maxIncrementalResets: 0,
+    requiresStructuralContract: false,
+    skipStructuralFingerprint: true,
   },
   "incomplete-math-block": {
     text: "Before the formula.\n\n$$\n\\Delta x, \\Delta p \\ge 0\n$$\n\nAfter the formula.",

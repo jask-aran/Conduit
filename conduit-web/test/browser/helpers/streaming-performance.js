@@ -36,15 +36,22 @@ function summarizeHarnessMetrics(metrics = []) {
   const rendererTimingMs = {};
   const rendererCounters = {};
   const rendererParserModes = {};
+  const rendererIncrementalModes = {};
+  const typewriterSamples = [];
+  const typewriterSteadyStateSamples = [];
   const changedBlocks = new Set();
   const changedBlockLengths = new Set();
   const projectionModes = {};
   let changedBlockEventCount = 0;
   const boundaryTypes = {};
   let katexCallCount = 0;
+  const katexSourceLengths = [];
+  const katexHtmlLengths = [];
+  const katexTimes = [];
   const katexTimingBlockers = new Set();
   const changedRowKeys = metrics.flatMap((metric) => Array.isArray(metric.changedRowKeys) ? metric.changedRowKeys : []);
   const changedRowKeySet = new Set(changedRowKeys);
+  const incrementalResetEvidence = [];
   for (const metric of metrics) {
     byStage[metric.stage] = (byStage[metric.stage] || 0) + 1;
     const renderer = typeof metric.renderer === "string" ? metric.renderer : null;
@@ -59,6 +66,33 @@ function summarizeHarnessMetrics(metrics = []) {
       if (typeof metric.parserMode === "string") {
         rendererParserModes[renderer] ||= {};
         rendererParserModes[renderer][metric.parserMode] = (rendererParserModes[renderer][metric.parserMode] || 0) + 1;
+      }
+      if (typeof metric.incrementalMode === "string") {
+        rendererIncrementalModes[renderer] ||= {};
+        rendererIncrementalModes[renderer][metric.incrementalMode] = (rendererIncrementalModes[renderer][metric.incrementalMode] || 0) + 1;
+        if (metric.incrementalMode.startsWith("full-reset") && incrementalResetEvidence.length < 64) {
+          incrementalResetEvidence.push({
+            renderer,
+            mode: metric.incrementalMode,
+            sourceCharacters: metric.sourceCharacters,
+            markdownSourceCharacters: metric.markdownSourceCharacters,
+            previousRenderedMarkdownSourceCharacters: metric.previousRenderedMarkdownSourceCharacters,
+            renderedMarkdownSourceCharacters: metric.renderedMarkdownSourceCharacters,
+            stableTokenCount: metric.stableTokenCount,
+            previousStableTokenCount: metric.previousStableTokenCount,
+            tailTokenCount: metric.tailTokenCount,
+            previousTailTokenCount: metric.previousTailTokenCount,
+            sourceAppended: metric.sourceAppended,
+            firstSourceMismatchIndex: metric.firstSourceMismatchIndex,
+            stablePrefixUnchanged: metric.stablePrefixUnchanged,
+          });
+        }
+      }
+    }
+    if (metric.stage === "markdown-typewriter") {
+      typewriterSamples.push(metric);
+      if (metric.sourceVisibleCharacters >= 500 && metric.displayedVisibleCharacters > 0) {
+        typewriterSteadyStateSamples.push(metric);
       }
     }
     if (metric.stage === "timeline-projection" && typeof metric.projectionMode === "string") {
@@ -82,6 +116,9 @@ function summarizeHarnessMetrics(metrics = []) {
       boundaryTypes[metric.boundaryType] = (boundaryTypes[metric.boundaryType] || 0) + 1;
     }
     if (typeof metric.katexCallCount === "number") katexCallCount += metric.katexCallCount;
+    if (typeof metric.katexSourceCharacters === "number") katexSourceLengths.push(metric.katexSourceCharacters);
+    if (typeof metric.katexHtmlCharacters === "number") katexHtmlLengths.push(metric.katexHtmlCharacters);
+    if (metric.stage === "markdown-katex" && typeof metric.at === "number") katexTimes.push(metric.at);
     if (typeof metric.katexTimingBlocker === "string") katexTimingBlockers.add(metric.katexTimingBlocker);
   }
   return {
@@ -90,6 +127,8 @@ function summarizeHarnessMetrics(metrics = []) {
     rendererByStage,
     rendererCounters: Object.fromEntries(Object.entries(rendererCounters).map(([key, values]) => [key, summary(values)])),
     rendererParserModes,
+    rendererIncrementalModes,
+    incrementalResetEvidence,
     projectionModeCounts: projectionModes,
     timingMs: Object.fromEntries(Object.entries(timingMs).map(([key, values]) => [key, summary(values)])),
     rendererTimingMs: Object.fromEntries(Object.entries(rendererTimingMs).map(([key, values]) => [key, summary(values)])),
@@ -98,15 +137,48 @@ function summarizeHarnessMetrics(metrics = []) {
     changedBlockLengthEvidence: [...changedBlockLengths].sort((left, right) => left - right),
     structuralBoundaryTypes: boundaryTypes,
     katexCallCount,
+    katexSourceCharacters: summary(katexSourceLengths),
+    katexHtmlCharacters: summary(katexHtmlLengths),
+    katexRenderWindowMs: katexTimes.length ? Math.max(...katexTimes) - Math.min(...katexTimes) : null,
     katexTimingBlockers: [...katexTimingBlockers],
     changedRowKeyEventCount: changedRowKeys.length,
     uniqueChangedRowKeyCount: changedRowKeySet.size,
     changedRowKeyLengthEvidence: redactChangedKeys(changedRowKeys),
+    typewriter: {
+      sampleCount: typewriterSamples.length,
+      sourceVisibleCharacters: summarizeNumbers(typewriterSamples.map((metric) => metric.sourceVisibleCharacters).filter((value) => typeof value === "number")),
+      displayedVisibleCharacters: summarizeNumbers(typewriterSamples.map((metric) => metric.displayedVisibleCharacters).filter((value) => typeof value === "number")),
+      backlogCharacters: summarizeNumbers(typewriterSamples.map((metric) => metric.backlogCharacters).filter((value) => typeof value === "number")),
+      backlogAgeMs: summarizeNumbers(typewriterSamples.map((metric) => metric.backlogAgeMs).filter((value) => typeof value === "number")),
+      observedRate: summarizeNumbers(typewriterSamples.map((metric) => metric.observedRate).filter((value) => typeof value === "number")),
+      targetRate: summarizeNumbers(typewriterSamples.map((metric) => metric.targetRate).filter((value) => typeof value === "number")),
+      controlRate: summarizeNumbers(typewriterSamples.map((metric) => metric.controlRate).filter((value) => typeof value === "number")),
+      displayRate: summarizeNumbers(typewriterSamples.map((metric) => metric.displayRate).filter((value) => typeof value === "number")),
+      relativeLag: summarizeNumbers(typewriterSamples.map((metric) => metric.relativeLag).filter((value) => typeof value === "number")),
+      charsPerTick: summarizeNumbers(typewriterSamples.map((metric) => metric.charsPerTick).filter((value) => typeof value === "number")),
+      frameIntervalMs: summarizeNumbers(typewriterSamples.map((metric) => metric.frameIntervalMs).filter((value) => typeof value === "number")),
+      tickInterval: summarizeNumbers(typewriterSamples.map((metric) => metric.tickInterval).filter((value) => typeof value === "number")),
+      frameWorkMs: summarizeNumbers(typewriterSamples.map((metric) => metric.frameWorkMs).filter((value) => typeof value === "number")),
+      frameWorkEmaMs: summarizeNumbers(typewriterSamples.map((metric) => metric.frameWorkEmaMs).filter((value) => typeof value === "number")),
+      fallbackModes: Object.fromEntries(typewriterSamples.reduce((counts, metric) => {
+        if (typeof metric.fallbackMode === "string") counts.set(metric.fallbackMode, (counts.get(metric.fallbackMode) || 0) + 1);
+        return counts;
+      }, new Map())),
+      lagTargetMisses: typewriterSamples.filter((metric) => metric.lagTargetMet === false).length,
+      warmupSourceCharacterThreshold: 500,
+      steadyStateSampleCount: typewriterSteadyStateSamples.length,
+      steadyStateRelativeLag: summarizeNumbers(typewriterSteadyStateSamples.map((metric) => metric.relativeLag).filter((value) => typeof value === "number")),
+      steadyStateBacklogAgeMs: summarizeNumbers(typewriterSteadyStateSamples.map((metric) => metric.backlogAgeMs).filter((value) => typeof value === "number")),
+      steadyStateLagTargetMisses: typewriterSteadyStateSamples.filter((metric) => metric.lagTargetMet === false).length,
+      last: typewriterSamples.at(-1) || null,
+    },
   };
 }
 
-function rendererPath(renderer) {
-  return renderer === "incremark" ? "/?markdownRenderer=incremark" : "/?markdownRenderer=marked";
+function rendererPath(renderer, typewriter = false) {
+  const params = new URLSearchParams({ markdownRenderer: renderer });
+  if (typewriter) params.set("markdownTypewriter", "1");
+  return `/?${params.toString()}`;
 }
 
 function summarizeNumbers(values) {
@@ -161,6 +233,15 @@ async function installBrowserProtocol(page, scenario) {
       visibleIncrements: [],
       mutationCount: 0,
       mutationCategories: {},
+      mutationTargetCounts: {},
+      rootMutationEvidence: {
+        records: 0,
+        addedNodeCount: 0,
+        removedNodeCount: 0,
+        addedMathNodeCount: 0,
+        removedMathNodeCount: 0,
+        removedMathEvents: [],
+      },
       frames: [],
       longTasks: [],
       layoutShifts: [],
@@ -371,6 +452,15 @@ async function installBrowserProtocol(page, scenario) {
       if (element?.closest?.(".transcript")) return "transcript";
       return "other";
     };
+    const mutationTarget = (target) => {
+      if (!(target instanceof Element)) return String(target?.nodeName || "node").toLowerCase();
+      const classes = [...target.classList].slice(0, 3).join(".");
+      return `${target.tagName.toLowerCase()}${classes ? `.${classes}` : ""}`;
+    };
+    const mathNodeCount = (node) => {
+      if (!(node instanceof Element)) return 0;
+      return (node.matches(".katex") ? 1 : 0) + node.querySelectorAll(".katex").length;
+    };
     const inPromptWindow = (at = performance.now()) => telemetry.promptAt != null
       && (telemetry.completedAt == null || at <= telemetry.completedAt);
     const isTranscriptViewport = (node) => node instanceof Element
@@ -485,9 +575,29 @@ async function installBrowserProtocol(page, scenario) {
           for (const record of records) {
             const category = `${record.type}:${targetCategory(record.target)}`;
             telemetry.mutationCategories[category] = (telemetry.mutationCategories[category] || 0) + 1;
+            const targetKey = `${category}:${mutationTarget(record.target)}`;
+            telemetry.mutationTargetCounts[targetKey] = (telemetry.mutationTargetCounts[targetKey] || 0) + 1;
             telemetry.mutationCount += 1;
             telemetry.mutationCategories[`${category}:added`] = (telemetry.mutationCategories[`${category}:added`] || 0) + record.addedNodes.length;
             telemetry.mutationCategories[`${category}:removed`] = (telemetry.mutationCategories[`${category}:removed`] || 0) + record.removedNodes.length;
+            const rendererRoot = record.type === "childList"
+              && record.target instanceof Element
+              && (record.target.matches(".chat-markdown") || record.target.matches(".incremark"));
+            if (rendererRoot) {
+              const addedMathNodeCount = [...record.addedNodes].reduce((total, node) => total + mathNodeCount(node), 0);
+              const removedMathNodeCount = [...record.removedNodes].reduce((total, node) => total + mathNodeCount(node), 0);
+              telemetry.rootMutationEvidence.records += 1;
+              telemetry.rootMutationEvidence.addedNodeCount += record.addedNodes.length;
+              telemetry.rootMutationEvidence.removedNodeCount += record.removedNodes.length;
+              telemetry.rootMutationEvidence.addedMathNodeCount += addedMathNodeCount;
+              telemetry.rootMutationEvidence.removedMathNodeCount += removedMathNodeCount;
+              if (removedMathNodeCount > 0 && telemetry.rootMutationEvidence.removedMathEvents.length < 64) {
+                telemetry.rootMutationEvidence.removedMathEvents.push({
+                  sourceCharacters: telemetry.streamedText.length,
+                  count: removedMathNodeCount,
+                });
+              }
+            }
           }
           captureDomState();
           updateVisibleText();
@@ -1007,6 +1117,7 @@ function streamingPresentationEvidence(assertion, snapshots, sourceText) {
       kind: assertion.kind,
       snapshotCount: snapshots.length,
       finalSourceCharacters: finalSnapshot?.sourceCharacters ?? null,
+      sourceCharacterSamples: snapshots.map((snapshot) => snapshot.sourceCharacters),
       candidateSnapshotCount: candidates.length,
       delimiterCleanSnapshotCount: delimiterClean.length,
       pendingNodeCount: {
@@ -1035,7 +1146,7 @@ export async function runBrowserStreamingScenario(page, scenario) {
     browserErrors.push(`${response.status()} ${request.method()} ${new URL(response.url()).pathname}`);
   });
   await installBrowserProtocol(page, scenario);
-  await page.goto(rendererPath(renderer));
+  await page.goto(rendererPath(renderer, Boolean(scenario.typewriter)));
   await page.getByRole("textbox", { name: "Message Pi" }).fill(scenario.prompt || `Run ${scenario.name}`);
   await page.getByRole("button", { name: "Send message" }).click();
   const sourceText = scenario.cadence.deltas.join("");
@@ -1044,11 +1155,22 @@ export async function runBrowserStreamingScenario(page, scenario) {
     : normalizeSemanticText(scenario.expectedSemanticText);
   if (scenario.scrollProbe) await page.evaluate(() => window.__conduitHarness?.startScrollProbe?.());
   await page.waitForFunction(() => Boolean(window.__conduitHarness?.completedAt));
+  let displayCompletedAt = null;
+  if (scenario.typewriter) {
+    await page.waitForSelector('.chat-markdown[data-renderer="incremark"]', { state: "attached", timeout: 15_000 });
+    await page.waitForFunction(() => {
+      const roots = [...document.querySelectorAll('.chat-markdown[data-renderer="incremark"]')];
+      return roots.length > 0 && roots.every((root) => root.getAttribute("data-display-busy") !== "true");
+    }, null, { timeout: 15_000 });
+  }
+  // onAllComplete clears data-display-busy before Solid commits the final
+  // display nodes. Measure and read correctness after two paint boundaries.
+  await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  if (scenario.typewriter) displayCompletedAt = await page.evaluate(() => performance.now());
   await page.evaluate(() => window.__conduitHarness?.readCorrectness?.());
   if (expectedSemanticText != null) {
     await page.waitForFunction((text) => window.__conduitHarness?.finalSemanticText === text, expectedSemanticText, { timeout: 5_000 });
   }
-  await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
   await page.evaluate(() => window.__conduitHarness?.captureDomState?.());
   await page.evaluate(() => window.__conduitHarness?.captureStreamingSnapshot?.());
   const interactionAssertions = await runInteractionAssertions(page, scenario.expectedInteractions);
@@ -1060,10 +1182,11 @@ export async function runBrowserStreamingScenario(page, scenario) {
   const visibleGaps = raw.visibleIncrements.slice(1)
     .map((frame, index) => frame.at - raw.visibleIncrements[index].at);
   const frameGaps = raw.frames.slice(1).map((frame, index) => frame - raw.frames[index]);
+  const measurementCompletedAt = displayCompletedAt ?? raw.completedAt;
   const scopedLongTasks = raw.longTasks.filter((entry) =>
-    entry.startTime <= raw.completedAt && entry.startTime + entry.duration >= raw.promptAt);
+    entry.startTime <= measurementCompletedAt && entry.startTime + entry.duration >= raw.promptAt);
   const scopedMetrics = raw.metrics.filter((entry) =>
-    typeof entry.at === "number" && entry.at >= raw.promptAt && entry.at <= raw.completedAt);
+    typeof entry.at === "number" && entry.at >= raw.promptAt && entry.at <= measurementCompletedAt);
   const firstVisibleAt = raw.visibleIncrements[0]?.at;
   const expectedFingerprint = scenario.expectedSemanticFingerprint || null;
   const errors = [...browserErrors];
@@ -1071,7 +1194,7 @@ export async function runBrowserStreamingScenario(page, scenario) {
   if (scenario.fixture && scenario.requiresStructuralContract && scenario.expectedAssertions == null) errors.push("Named fixture is missing explicit security assertions");
   if (expectedSemanticText != null && raw.finalSemanticText !== expectedSemanticText) errors.push("Visible semantic text did not match the expected fixture text");
   const structuralFingerprint = redactFingerprint(raw.finalFingerprint);
-  if (fingerprintTruncated(structuralFingerprint)) errors.push("Structural fingerprint exceeded the redaction node budget");
+  if (!scenario.skipStructuralFingerprint && fingerprintTruncated(structuralFingerprint)) errors.push("Structural fingerprint exceeded the redaction node budget");
   const structuralMatch = expectedFingerprint == null
     ? null
     : fingerprintMatches(structuralFingerprint, expectedFingerprint, raw.finalSemanticShape);
@@ -1081,6 +1204,20 @@ export async function runBrowserStreamingScenario(page, scenario) {
   errors.push(...expectedInteractionErrors(scenario.expectedInteractions, interactionAssertions, raw.inputFeatures));
   const streamingPresentation = streamingPresentationEvidence(scenario.streamingAssertion, raw.streamingSnapshots, sourceText);
   errors.push(...streamingPresentation.errors);
+  const clientWork = summarizeHarnessMetrics(scopedMetrics);
+  if (scenario.maxKaTeXCalls != null && clientWork.katexCallCount > scenario.maxKaTeXCalls) {
+    errors.push(`KaTeX actual render count ${clientWork.katexCallCount} exceeded ${scenario.maxKaTeXCalls}`);
+  }
+  const longestTaskMs = Math.max(0, ...scopedLongTasks.map((entry) => entry.duration));
+  if (scenario.maxLongestTaskMs != null && longestTaskMs > scenario.maxLongestTaskMs) {
+    errors.push(`Longest task ${longestTaskMs.toFixed(1)} ms exceeded ${scenario.maxLongestTaskMs} ms`);
+  }
+  if (scenario.maxRemovedMathNodes != null && raw.rootMutationEvidence.removedMathNodeCount > scenario.maxRemovedMathNodes) {
+    errors.push(`Completed KaTeX nodes removed during streaming ${raw.rootMutationEvidence.removedMathNodeCount} exceeded ${scenario.maxRemovedMathNodes}`);
+  }
+  if (scenario.maxIncrementalResets != null && clientWork.incrementalResetEvidence.length > scenario.maxIncrementalResets) {
+    errors.push(`Incremental renderer resets ${clientWork.incrementalResetEvidence.length} exceeded ${scenario.maxIncrementalResets}`);
+  }
 
   return {
     schemaVersion: 1,
@@ -1092,6 +1229,7 @@ export async function runBrowserStreamingScenario(page, scenario) {
       commit: process.env.CONDUIT_RELEASE || "working-tree",
       profile: scenario.profile || "fixed",
       renderer,
+      typewriter: Boolean(scenario.typewriter),
       runtime,
       command: "npm run test:harness:browser",
     },
@@ -1099,11 +1237,13 @@ export async function runBrowserStreamingScenario(page, scenario) {
     outcome: errors.length ? "failed" : "passed",
     browser: {
       renderer,
+      typewriter: Boolean(scenario.typewriter),
       sourceCharacters: sourceText.length,
       sourceDeltaCount: scenario.cadence.deltas.length,
       sourceEvidence: { length: sourceText.length, digest: raw.sourceDigest || null },
       firstVisibleMs: firstVisibleAt == null ? null : firstVisibleAt - raw.promptAt,
       completionMs: raw.completedAt - raw.promptAt,
+      displayCompletionDelayMs: displayCompletedAt == null ? null : displayCompletedAt - raw.completedAt,
       webSocketDeltaCount: raw.webSocketDeltas.length,
       webSocketGapMs: summary(webSocketGaps),
       visibleIncrementCount: raw.visibleIncrements.length,
@@ -1115,6 +1255,11 @@ export async function runBrowserStreamingScenario(page, scenario) {
       frameGapsOver50Ms: frameGaps.filter((gap) => gap > 50).length,
       frameGapsOver100Ms: frameGaps.filter((gap) => gap > 100).length,
       longTaskCount: scopedLongTasks.length,
+      longTaskEvidence: scopedLongTasks.map((entry) => ({
+        startMs: entry.startTime - raw.promptAt,
+        durationMs: entry.duration,
+        endMs: entry.startTime + entry.duration - raw.promptAt,
+      })),
       longestTaskMs: Math.max(0, ...scopedLongTasks.map((entry) => entry.duration)),
       layoutShift: {
         supported: Boolean(raw.layoutShiftSupported),
@@ -1132,6 +1277,8 @@ export async function runBrowserStreamingScenario(page, scenario) {
       interactionAssertions,
       streamingPresentation: streamingPresentation.report,
       mutationCategories: raw.mutationCategories,
+      mutationTargetCounts: raw.mutationTargetCounts,
+      rootMutationEvidence: raw.rootMutationEvidence,
       identity: identityReport(raw.identity),
       scroll: {
         distanceFromBottom: summarizeNumbers(raw.scrollSamples.map((sample) => sample.distanceFromBottom)),
@@ -1147,7 +1294,7 @@ export async function runBrowserStreamingScenario(page, scenario) {
       limitations: {
         katexTiming: "Marked timing wraps marked-katex-extension's katex.renderToString; Incremark timing records adapter MathNode calls. clientWork reports renderer-specific KaTeX timing. A zero call count means the fixture did not invoke math rendering.",
       },
-      clientWork: summarizeHarnessMetrics(scopedMetrics),
+      clientWork,
     },
     errors,
     artifacts: [],
@@ -1171,12 +1318,22 @@ export async function runBrowserReconnectScenario(page, scenario) {
     },
     instrumentation: scenario.instrumentation !== false,
   });
-  await page.goto(rendererPath(renderer));
+  await page.goto(rendererPath(renderer, Boolean(scenario.typewriter)));
   await page.getByRole("textbox", { name: "Message Pi" }).fill(scenario.prompt || `Run ${scenario.name}`);
   await page.getByRole("button", { name: "Send message" }).click();
   const expectedText = scenario.initialText + scenario.recoveredDelta;
   await page.waitForFunction(() => window.__conduitHarness?.socketCount === 2);
   await page.waitForFunction(() => Boolean(window.__conduitHarness?.completedAt), { timeout: 5_000 });
+  let displayCompletedAt = null;
+  if (scenario.typewriter) {
+    await page.waitForSelector('.chat-markdown[data-renderer="incremark"]', { state: "attached", timeout: 15_000 });
+    await page.waitForFunction(() => {
+      const roots = [...document.querySelectorAll('.chat-markdown[data-renderer="incremark"]')];
+      return roots.length > 0 && roots.every((root) => root.getAttribute("data-display-busy") !== "true");
+    }, null, { timeout: 15_000 });
+  }
+  await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  if (scenario.typewriter) displayCompletedAt = await page.evaluate(() => performance.now());
   await page.evaluate(() => window.__conduitHarness?.readCorrectness?.());
   await page.evaluate(() => window.__conduitHarness?.captureDomState?.());
   const interactionAssertions = await runInteractionAssertions(page, scenario.expectedInteractions);
@@ -1185,7 +1342,8 @@ export async function runBrowserReconnectScenario(page, scenario) {
   const raw = await page.evaluate(() => window.__conduitHarness);
   const renderedCharacters = raw.visibleIncrements
     .reduce((total, increment) => total + increment.characters, 0);
-  const scopedMetrics = raw.metrics.filter((entry) => entry.at >= raw.promptAt && entry.at <= raw.completedAt);
+  const measurementCompletedAt = displayCompletedAt ?? raw.completedAt;
+  const scopedMetrics = raw.metrics.filter((entry) => entry.at >= raw.promptAt && entry.at <= measurementCompletedAt);
   const errors = [...browserErrors];
   if (scenario.fixture && scenario.requiresStructuralContract && !scenario.expectedSemanticFingerprint) errors.push("Named fixture is missing a structural fingerprint contract");
   if (scenario.fixture && scenario.requiresStructuralContract && scenario.expectedAssertions == null) errors.push("Named fixture is missing explicit security assertions");
@@ -1211,7 +1369,8 @@ export async function runBrowserReconnectScenario(page, scenario) {
     metadata: {
       commit: process.env.CONDUIT_RELEASE || "working-tree",
       profile: "reconnect",
-      renderer,
+        renderer,
+        typewriter: Boolean(scenario.typewriter),
       runtime,
       command: "npm run test:harness:browser",
     },
@@ -1224,6 +1383,8 @@ export async function runBrowserReconnectScenario(page, scenario) {
       socketCount: raw.socketCount,
       resumeCount: raw.resumeCount,
       recoveryMs: raw.resumedAt - raw.disconnectedAt,
+      displayCompletionDelayMs: displayCompletedAt == null ? null : displayCompletedAt - raw.completedAt,
+      typewriter: Boolean(scenario.typewriter),
       finalSemanticTextEvidence: { length: normalizeSemanticText(raw.finalSemanticText).length, digest: raw.finalSemanticTextDigest || null },
       finalSemanticTextLength: normalizeSemanticText(raw.finalSemanticText).length,
       structuralFingerprint,

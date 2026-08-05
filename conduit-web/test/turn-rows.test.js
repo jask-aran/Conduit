@@ -31,7 +31,7 @@ test("projects a live generation directly from ordered Pi blocks", () => {
     },
   });
 
-  assert.deepEqual(rows.map((row) => row.key), ["message:u1", "trace:u1", "message:live:g1:m2"]);
+  assert.deepEqual(rows.map((row) => row.key), ["message:u1", "trace:u1", "answer:u1:0"]);
   const trace = rows[1];
   assert.equal(trace?.type, "trace");
   if (trace?.type !== "trace") return;
@@ -90,8 +90,32 @@ test("projects partial continuation through Active Generation without a flattene
     },
   });
 
-  assert.deepEqual(rows.map((row) => row.key), ["message:u1", "message:live:g_continue:m1"]);
+  assert.deepEqual(rows.map((row) => row.key), ["message:u1", "answer:u1:0"]);
   assert.equal(rows[1]?.type === "message" && rows[1].value.content, "The answer continues here.");
+});
+
+test("keeps the answer display key across live and persisted projections", () => {
+  const user = { id: "u1", role: "user", content: "Write a long answer" };
+  const liveRows = buildTurnRows([user], [], {
+    activeGeneration: {
+      id: "g_live",
+      status: "running",
+      lastSeq: 2,
+      toolExecutions: {},
+      assistantMessages: [{
+        id: "m_live",
+        blocks: [{ type: "text", identity: "g_live:m_live:0", contentIndex: 0, text: "Partial answer", status: "streaming" }],
+      }],
+    },
+  });
+  const persistedRows = buildTurnRows([
+    user,
+    { id: "m_persisted", role: "assistant", content: "Partial answer", stopReason: "stop" },
+  ], []);
+  const liveAnswer = liveRows.find((row) => row.type === "message" && row.value.role === "assistant");
+  const persistedAnswer = persistedRows.find((row) => row.type === "message" && row.value.role === "assistant");
+  assert.equal(liveAnswer?.type === "message" && liveAnswer.displayKey, "answer:u1:0");
+  assert.equal(persistedAnswer?.type === "message" && persistedAnswer.displayKey, "answer:u1:0");
 });
 
 test("indexes live blocks to one trace or answer row", () => {
@@ -120,12 +144,12 @@ test("indexes live blocks to one trace or answer row", () => {
   assert.deepEqual(index.blockLocations.get("g_index:m1:0"), { kind: "trace", rowKey: "trace:u1", segmentIndex: 0 });
   assert.deepEqual(index.blockLocations.get("g_index:m1:1"), { kind: "trace", rowKey: "trace:u1", segmentIndex: 1 });
   assert.deepEqual(index.blockLocations.get("g_index:m1:2"), { kind: "trace", rowKey: "trace:u1", segmentIndex: 2 });
-  assert.deepEqual(index.blockLocations.get("g_index:m2:0"), { kind: "answer", rowKey: "message:live:g_index:m2", assistantId: "m2" });
+  assert.deepEqual(index.blockLocations.get("g_index:m2:0"), { kind: "answer", rowKey: "answer:u1:0", assistantId: "m2" });
   assert.deepEqual(index.toolLocations.get("call_1"), { rowKey: "trace:u1", segmentIndex: 2 });
 
   generation.assistantMessages[1].blocks[0].text = "Answer updated";
   generation.lastSeq = 5;
   const row = buildLiveAnswerRow(generation, "m2", index, index.messageIndex);
   assert.equal(row?.value.content, "Answer updated");
-  assert.equal(row?.key, "message:live:g_index:m2");
+  assert.equal(row?.key, "answer:u1:0");
 });
