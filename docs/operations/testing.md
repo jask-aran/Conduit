@@ -262,6 +262,28 @@ Require `status: "ready"` and the expected 40-character SHA. If the release
 is `latest`, a tag, `development`, or an older SHA, stop and fix deployment
 provenance before measuring.
 
+## Commit metric handoff
+
+Performance reports remain the detailed evidence source. When a build, check or
+harness already run for the change emits useful quantitative data, carry only
+the relevant headline observations into the commit body using the conventions
+in `CONTRIBUTING.md`. Do not run an otherwise unnecessary build or harness just
+to populate commit metrics, and do not copy the complete report into Git
+history.
+
+For an already-run `npm run build`, the standard bundle observations are:
+
+- `bundle.initial_js_gzip_bytes`
+- `bundle.initial_css_gzip_bytes`
+- `bundle.largest_lazy_js_gzip_bytes`
+
+For an already-run performance harness, preserve its scenario or flow and one
+to three observations that describe the boundary under test—for example
+transport cadence/coalescing, browser frame health, reconnect recovery, or live
+path latency. Include a correctness/parity observation when it materially
+qualifies the performance result. These headline values are historical
+observations; the structured harness report remains the richer evidence.
+
 ## Evidence checklist
 
 Record the commit/release, target/origin, scenario, prompt identity (not its
