@@ -65,6 +65,19 @@ const mathTableOscillationText = [
 
 export const TABLE_MATH_TEST_PROMPT = "output some inline math with $ quotes, and some block math with $$ a lot of it, the inline interspersed with texta nd the blocks inebetween, add soem tables with a lot of info int them as well";
 
+const syntheticMathText = [
+  "Synthetic previews should appear while formulas grow: $x^2 + \\frac{1}{2}$, then \\(y = mx + b\\).",
+  "",
+  "$$",
+  "\\frac{a^2 + b^2}{c^2} = 1",
+  "$$",
+  "",
+  "| Topic | Formula | Detail |",
+  "| --- | --- | --- |",
+  "| Inline | $\\sqrt{x^2 + y^2}$ | The cell remains visible while it fills. |",
+  "| Fraction | $\\frac{1}{n+1}$ | The second cell also receives a preview. |",
+].join("\n");
+
 export const BROWSER_FIXTURES = Object.freeze({
   "rich-markdown": {
     text: "# Rich answer\n\nA **bold** item with *emphasis*.\n\n- one\n- two\n\n| A | B |\n| - | - |\n| 1 | 2 |",
@@ -198,6 +211,17 @@ export const BROWSER_FIXTURES = Object.freeze({
     maxKaTeXCalls: 32,
     maxLayoutShiftCount: 0,
     maxRemovedMathNodes: 0,
+    skipStructuralFingerprint: true,
+    requiresStructuralContract: false,
+  },
+  "synthetic-math-preview": {
+    text: syntheticMathText,
+    expectedSemanticText: null,
+    expectedSemanticFingerprint: null,
+    expectedAssertions: { katexRendered: true, syntheticMathRendered: true, syntheticMathErrorsAbsent: true, tableMathRendered: true },
+    expectedInteractions: {},
+    streamingAssertion: { kind: "math-inline", requireNoRawDelimiters: true, requireSyntheticPreview: true, requireNoSyntheticErrors: true },
+    maxKaTeXCalls: 64,
     skipStructuralFingerprint: true,
     requiresStructuralContract: false,
   },
