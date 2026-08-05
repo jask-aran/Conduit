@@ -19,8 +19,9 @@ export function selectedMarkdownRenderer(): MarkdownRendererId {
 }
 
 export function markdownRendererSwitchEnabled() {
-  return import.meta.env.DEV || ["127.0.0.1", "localhost", "::1"].includes(location.hostname)
-    || new URLSearchParams(location.search).has("markdownRenderer");
+  // Keep development controls available through LAN, Tailscale, and Cloudflare
+  // origins while the managed application is still a development build.
+  return true;
 }
 
 export function selectedMarkdownTypewriter() {

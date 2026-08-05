@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { selectedMarkdownRenderer, selectedMarkdownTypewriter } from "../src/client/chat/markdown-settings.ts";
+import { markdownRendererSwitchEnabled, selectedMarkdownRenderer, selectedMarkdownTypewriter } from "../src/client/chat/markdown-settings.ts";
 
 function withBrowserSettings(search, stored, run) {
   const previousLocation = globalThis.location;
@@ -21,6 +21,12 @@ test("new users default to the Incremark Typewriter renderer", () => {
   withBrowserSettings("", {}, () => {
     assert.equal(selectedMarkdownRenderer(), "incremark-typewriter");
     assert.equal(selectedMarkdownTypewriter(), true);
+  });
+});
+
+test("development renderer controls stay available on tunneled origins", () => {
+  withBrowserSettings("", {}, () => {
+    assert.equal(markdownRendererSwitchEnabled(), true);
   });
 });
 

@@ -913,13 +913,13 @@ same deterministic fixtures as Slice 5. Record package metadata, dependency
 size, and generated chunk estimates in the report output. The report is
 temporary; this file is the durable progress record.
 
-The managed application also has a local-only renderer selector. It follows
+The managed application also has a development renderer selector. It follows
 the terminal renderer pattern: the default is Marked,
-`?markdownRenderer=incremark` selects the candidate for a local route, and the
-selector stores the local choice in `localStorage`. It is visible only on local
-development hosts or when the query parameter is present. The candidate is a
-Conduit adapter around `@incremark/core`; it is not the published
-`@incremark/solid` component.
+`?markdownRenderer=incremark` selects the candidate, and the selector stores
+the choice in `localStorage`. It remains visible on every development origin,
+including LAN, Tailscale, and Cloudflare Tunnel hosts; the query parameter is
+not required. The candidate is a Conduit adapter around `@incremark/core`; it
+is not the published `@incremark/solid` component.
 
 Worker boundary: the temporary fixture, its harness, the local candidate
 adapter, the local selector, and this evidence record. Do not replace the
@@ -2991,7 +2991,7 @@ Verification:
 - `standard-math-delimiters` harness: Marked and Typewriter passed; naked
   Incremark retained the Layout Shift result recorded above.
 - `synthetic-math-preview` harness: passed.
-- Local selector probe: all four options were present. Each mode set the
+- Renderer selector probe: all four options were present. Each mode set the
   expected `data-markdown-renderer` value; only Typewriter set
   `data-markdown-typewriter`, and only Synthetic Math set
   `data-markdown-synthetic-math`.
