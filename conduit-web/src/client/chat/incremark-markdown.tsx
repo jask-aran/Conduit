@@ -1,4 +1,4 @@
-import { createEffect, createSignal, For, Match, onCleanup, Show, Switch } from "solid-js";
+import { createEffect, createSignal, For, Index, Match, onCleanup, Show, Switch } from "solid-js";
 import { createIncremarkParser, type DisplayBlock, type ParsedBlock } from "@incremark/core";
 import katex from "katex";
 import * as KAlertDialog from "@kobalte/core/alert-dialog";
@@ -11,6 +11,7 @@ import { splitStreamingMarkdown } from "./streaming-markdown";
 
 type MarkdownNode = any;
 type Definition = { url?: string; title?: string | null };
+const incremarkParserOptions = { gfm: true, math: { tex: true }, htmlTree: true, containers: true };
 type RendererContext = {
   definitions: () => Record<string, Definition>;
   inline: boolean;
@@ -50,15 +51,11 @@ function readNodes(value: NodeList) {
 }
 
 function InlineNodes(props: { nodes: NodeList; context: RendererContext }) {
-  return <For each={readNodes(props.nodes)}>{(node) => <AstNode node={node} context={props.context} />}</For>;
+  return <Index each={readNodes(props.nodes)}>{(node) => <AstNode node={node} context={props.context} />}</Index>;
 }
 
 function BlockNodes(props: { nodes: NodeList; context: RendererContext }) {
-  return <For each={readNodes(props.nodes)}>{(node) => <AstNode node={node} context={props.context} />}</For>;
-}
-
-function containsMathNode(node: MarkdownNode): boolean {
-  return Boolean(node && (node.type === "math" || node.type === "inlineMath" || node.children?.some(containsMathNode)));
+  return <Index each={readNodes(props.nodes)}>{(node) => <AstNode node={node} context={props.context} />}</Index>;
 }
 
 function ParsedBlockNodes(props: { blocks: () => ParsedBlock[]; context: RendererContext }) {
@@ -117,10 +114,29 @@ function LinkNode(props: { node: MarkdownNode | NodeAccessor; context: RendererC
   </Show>;
 }
 
-const mathHtmlCache = new WeakMap<object, { source: string; html: string }>();
+const MATH_HTML_CACHE_LIMIT = 512;
+const mathHtmlCache = new Map<string, string>();
 type MathRenderJob = { cancelled: boolean; run: () => void };
 const mathRenderQueue: MathRenderJob[] = [];
 let mathRenderFrame: number | null = null;
+
+function mathCacheKey(node: MarkdownNode, source: string) {
+  return `${node?.type === "math" ? "display" : "inline"}\u0000${source}`;
+}
+
+function getCachedMathHtml(node: MarkdownNode, source: string) {
+  return mathHtmlCache.get(mathCacheKey(node, source));
+}
+
+function cacheMathHtml(node: MarkdownNode, source: string, html: string) {
+  const key = mathCacheKey(node, source);
+  if (!mathHtmlCache.has(key) && mathHtmlCache.size >= MATH_HTML_CACHE_LIMIT) {
+    const oldest = mathHtmlCache.keys().next().value;
+    if (oldest) mathHtmlCache.delete(oldest);
+  }
+  mathHtmlCache.delete(key);
+  mathHtmlCache.set(key, html);
+}
 
 function requestMathRenderFrame() {
   if (mathRenderFrame != null || !mathRenderQueue.length) return;
@@ -160,9 +176,9 @@ function MathNode(props: { node: MarkdownNode | NodeAccessor; defer?: () => bool
   };
   const renderCurrent = (current: MarkdownNode, source: string, version: number) => {
     if (version !== renderVersion) return;
-    const cached = mathHtmlCache.get(current);
-    if (cached?.source === source) {
-      setHtml(cached.html);
+    const cached = getCachedMathHtml(current, source);
+    if (cached !== undefined) {
+      setHtml(cached);
       setBusy(false);
       return;
     }
@@ -187,13 +203,20 @@ function MathNode(props: { node: MarkdownNode | NodeAccessor; defer?: () => bool
         katexHtmlCharacters: renderedHtml.length,
       });
     }
-    mathHtmlCache.set(current, { source, html: renderedHtml });
+    cacheMathHtml(current, source, renderedHtml);
     setHtml(renderedHtml);
     setBusy(false);
   };
+  const initial = node();
+  const initialSource = String(initial?.__conduitMathSource ?? initial?.value ?? "");
+  if (initial && initialSource && !(props.defer?.() && initial.type === "math")) {
+    renderVersion = 1;
+    setType(initial.type);
+    renderCurrent(initial, initialSource, renderVersion);
+  }
   createEffect(() => {
     const current = node();
-    const source = String(current?.value || "");
+    const source = String(current?.__conduitMathSource ?? current?.value ?? "");
     setType(current?.type);
     renderVersion += 1;
     const version = renderVersion;
@@ -204,12 +227,16 @@ function MathNode(props: { node: MarkdownNode | NodeAccessor; defer?: () => bool
       setHtml("");
       return;
     }
-    const cached = mathHtmlCache.get(current);
-    if (cached?.source === source) {
-      setHtml(cached.html);
+    const cached = getCachedMathHtml(current, source);
+    if (cached !== undefined) {
+      setHtml(cached);
       return;
     }
-    if (props.defer?.()) {
+    // Inline math changes line width. Render it in the same effect as the
+    // atomic display update so a later rAF cannot clear the span and reflow
+    // the transcript. Display equations remain queued to protect the frame
+    // budget when a response contains many large formulas.
+    if (props.defer?.() && current?.type === "math") {
       setHtml("");
       setBusy(true);
       cancelJob = scheduleMathRender(() => renderCurrent(current, source, version));
@@ -259,7 +286,15 @@ function TableNode(props: { node: MarkdownNode | NodeAccessor; context: Renderer
   const node = () => readNode(props.node);
   const head = () => node()?.children?.[0];
   const body = () => node()?.children?.slice(1) || [];
+  const columnWidths = () => {
+    const count = head()?.children?.length || body()?.[0]?.children?.length || 0;
+    if (count === 2) return ["30%", "70%"];
+    if (count === 3) return ["24%", "42%", "34%"];
+    if (count === 4) return ["14%", "36%", "20%", "30%"];
+    return Array.from({ length: count }, () => `${100 / Math.max(1, count)}%`);
+  };
   return <table>
+    <Show when={columnWidths().length}><colgroup><For each={columnWidths()}>{(width) => <col style={{ width }} />}</For></colgroup></Show>
     <Show when={head()}>{(value) => <thead><TableRow node={() => value()} context={props.context} header /></thead>}</Show>
     <tbody><For each={body()}>{(row) => <TableRow node={row} context={props.context} />}</For></tbody>
   </table>;
@@ -267,10 +302,10 @@ function TableNode(props: { node: MarkdownNode | NodeAccessor; context: Renderer
 
 function TableRow(props: { node: MarkdownNode | NodeAccessor; context: RendererContext; header?: boolean }) {
   const node = () => readNode(props.node);
-  return <tr><For each={node()?.children || []}>{(cell) => props.header
-    ? <th>{<InlineNodes nodes={cell.children || []} context={props.context} />}</th>
-    : <td>{<InlineNodes nodes={cell.children || []} context={props.context} />}</td>}
-  </For></tr>;
+  return <tr><Index each={node()?.children || []}>{(cell) => props.header
+    ? <th><InlineNodes nodes={() => cell()?.children || []} context={props.context} /></th>
+    : <td><InlineNodes nodes={() => cell()?.children || []} context={props.context} /></td>}
+  </Index></tr>;
 }
 
 function TextNode(props: { node: NodeAccessor }) {
@@ -320,7 +355,7 @@ function AstNodeContent(props: { node: NodeAccessor; context: RendererContext })
     }
     case "paragraph": return <p><InlineNodes nodes={() => node()?.children || []} context={props.context} /></p>;
     case "list": {
-      const children = <For each={node()?.children || []}>{(item) => <AstNode node={item} context={props.context} />}</For>;
+      const children = <Index each={node()?.children || []}>{(item) => <AstNode node={item} context={props.context} />}</Index>;
       return node()?.ordered ? <ol start={node()?.start || undefined}>{children}</ol> : <ul>{children}</ul>;
     }
     case "listItem": return <li>{node()?.checked !== null && <input type="checkbox" checked={Boolean(node()?.checked)} disabled />}{<BlockNodes nodes={() => node()?.children || []} context={props.context} />}</li>;
@@ -342,17 +377,15 @@ function AstNodeContent(props: { node: NodeAccessor; context: RendererContext })
  * and keeps Conduit's security and interaction boundary in this adapter.
  */
 export function IncremarkMarkdown(props: ChatMarkdownProps) {
-  const parser = createIncremarkParser({ gfm: true, math: true, htmlTree: true, containers: true });
+  const parser = createIncremarkParser(incremarkParserOptions);
   const [blocks, setBlocks] = createSignal<ParsedBlock[]>([]);
   const [pendingBlocks, setPendingBlocks] = createSignal<ParsedBlock[]>([]);
   const [seededBlocks, setSeededBlocks] = createSignal<ParsedBlock[]>([]);
   const [displayBlocks, setDisplayBlocks] = createSignal<DisplayBlock[]>([]);
   const [displayBusy, setDisplayBusy] = createSignal(false);
   const [pendingMathRenders, setPendingMathRenders] = createSignal(0);
-  const [pendingAst, setPendingAst] = createSignal<MarkdownNode>({ type: "root", children: [] });
   const [inlineAst, setInlineAst] = createSignal<MarkdownNode>({ type: "root", children: [] });
   const [pending, setPending] = createSignal<StreamingPending | null>(null);
-  const [mathPath, setMathPath] = createSignal(false);
   const [definitions, setDefinitions] = createSignal<Record<string, Definition>>({});
   const [externalUrl, setExternalUrl] = createSignal<string | null>(null);
   const completedById = new Map<string, ParsedBlock>();
@@ -399,7 +432,6 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
   });
   onCleanup(() => typewriterController.destroy());
 
-  const emptyAst = () => ({ type: "root", children: [] });
   const blockContainsOffset = (block: ParsedBlock, offset: number) => offset >= block.startOffset && offset <= block.endOffset;
 
   createEffect(() => {
@@ -440,10 +472,24 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
     for (const entry of updates) {
       for (const block of entry.pending) pendingUpdateBlocks.set(block.id, block);
     }
-    if (!props.inline && (split.pending?.kind.startsWith("math") || updates.some((entry) =>
-      [...entry.completed, ...entry.updated, ...entry.pending].some((block) => containsMathNode(block.node))))) {
-      setMathPath(true);
-    }
+    const pendingPrefixBlock = (() => {
+      if (!split.pending || props.inline) return null;
+      const currentBlock = [...pendingUpdateBlocks.values()].find((block) => blockContainsOffset(block, split.pending!.start));
+      if (!currentBlock) return null;
+      const prefixLength = Math.max(0, Math.min(currentBlock.rawText.length, split.pending.start - currentBlock.startOffset));
+      const prefix = currentBlock.rawText.slice(0, prefixLength);
+      if (!prefix.trim()) return null;
+      const prefixParser = createIncremarkParser(incremarkParserOptions);
+      prefixParser.render(prefix);
+      const prefixNode = prefixParser.getAst().children?.[0];
+      if (!prefixNode) return null;
+      return {
+        ...currentBlock,
+        node: prefixNode,
+        endOffset: currentBlock.startOffset + prefix.length,
+        rawText: prefix,
+      };
+    })();
     setDefinitions({ ...parser.getDefinitionMap() });
     setPending(split.pending);
     if (updates.length) {
@@ -459,7 +505,7 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
         .sort((left, right) => left.startOffset - right.startOffset);
       const completedIds = new Set(nextBlocks.map((block) => block.id));
       const nextPendingBlocks = split.pending
-        ? []
+        ? (pendingPrefixBlock ? [pendingPrefixBlock] : [])
         : [...pendingUpdateBlocks.values()].filter((block) => !completedIds.has(block.id));
       setBlocks(nextBlocks);
       setPendingBlocks(nextPendingBlocks);
@@ -502,24 +548,9 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
     previousTypewriter = enabled;
 
     if (props.inline) {
-      const inlineParser = createIncremarkParser({ gfm: true, math: true, htmlTree: true, containers: true });
+      const inlineParser = createIncremarkParser(incremarkParserOptions);
       inlineParser.render(split.pending ? split.stable : source);
       setInlineAst({ ...inlineParser.getAst() });
-    } else if (split.pending) {
-      const currentBlock = [...pendingUpdateBlocks.values()].find((block) => blockContainsOffset(block, split.pending!.start));
-      const prefixLength = currentBlock
-        ? Math.max(0, Math.min(currentBlock.rawText.length, split.pending.start - currentBlock.startOffset))
-        : 0;
-      const prefix = currentBlock?.rawText.slice(0, prefixLength) || "";
-      if (prefix.trim()) {
-        const tailParser = createIncremarkParser({ gfm: true, math: true, htmlTree: true, containers: true });
-        tailParser.render(prefix);
-        setPendingAst({ ...tailParser.getAst() });
-      } else {
-        setPendingAst(emptyAst());
-      }
-    } else {
-      setPendingAst(emptyAst());
     }
     const reconciledAt = recorder ? performance.now() : 0;
     if (recorder) {
@@ -530,7 +561,7 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
         inline: Boolean(props.inline),
         parseMs: parsedAt - parseStartedAt,
         sanitiseMs: null,
-        katexCandidate: /\$(?:\$?)[^\n]+\$(?:\$?)/.test(source),
+        katexCandidate: /(?:\$(?:\$?)[^\n]+\$(?:\$?)|\\\([^\n]+\\\)|\\\[[\s\S]+?\\\])/.test(source),
         katexMs: null,
         katexCallCount: 0,
         katexTimingAvailable: false,
@@ -567,28 +598,14 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
     <div class="chat-markdown" data-renderer="incremark" data-streaming={props.streaming || undefined} data-display-busy={displayBusy() || pendingMathRenders() > 0 ? "true" : undefined} data-display-key={props.displayKey || undefined}>
       <div class="incremark" data-incremark-core="true">
         <Show when={props.inline} fallback={<>
-          <Show when={mathPath()} fallback={<>
-            <Show when={typewriter()} fallback={<ParsedBlockNodes blocks={blocks} context={context} />}>
-              <ParsedBlockNodes blocks={seededBlocks} context={context} />
-              <DisplayBlockNodes blocks={displayBlocks} context={context} />
-            </Show>
-            <Show when={pending()} fallback={<Show when={!typewriter()}><ParsedBlockNodes blocks={pendingBlocks} context={context} /></Show>}>
-              {(value) => <>
-                <AstNode node={pendingAst()} context={context} />
-                <PendingConstruct pending={value()} streaming={Boolean(props.streaming)} />
-              </>}
-            </Show>
-          </>}>
-            <Show when={typewriter()} fallback={<ParsedBlockNodes blocks={displayedBlocks} context={context} />}>
-              <ParsedBlockNodes blocks={seededBlocks} context={context} />
-              <DisplayBlockNodes blocks={displayBlocks} context={context} />
-            </Show>
-            <Show when={pending()}>
-              {(value) => <>
-                <AstNode node={pendingAst()} context={context} />
-                <PendingConstruct pending={value()} streaming={Boolean(props.streaming)} />
-              </>}
-            </Show>
+          <Show when={typewriter()} fallback={<ParsedBlockNodes blocks={displayedBlocks} context={context} />}>
+            <ParsedBlockNodes blocks={seededBlocks} context={context} />
+            <DisplayBlockNodes blocks={displayBlocks} context={context} />
+          </Show>
+          <Show when={pending()}>
+            {(value) => <>
+              <PendingConstruct pending={value()} streaming={Boolean(props.streaming)} />
+            </>}
           </Show>
         </>}>
           <AstNode node={inlineAst()} context={context} />

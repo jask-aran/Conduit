@@ -210,7 +210,7 @@ svg { stroke-width: 1.5; }
 /* Inset panel: floats on the darker frame. The hairline is an inset ring, not a
    border, so the absolutely-positioned meteor field still fills the panel
    exactly rather than being pushed in by a border box. */
-.chat-main { position: relative; isolation: isolate; display: flex; min-width: 0; height: calc(100dvh - 16px); margin: 8px 10px 8px 2px; flex: 1; flex-direction: column; overflow: hidden; border-radius: 16px; background: var(--background); color: var(--foreground); box-shadow: inset 0 0 0 1px oklch(1 0 0 / 6%), inset 0 1px 0 0 oklch(1 0 0 / 7%); }
+.chat-main { position: relative; isolation: isolate; display: flex; min-width: 0; height: calc(100dvh - 16px); margin: 8px 10px 8px 2px; flex: 1; flex-direction: column; overflow: hidden; container-type: inline-size; container-name: chat-main; border-radius: 16px; background: var(--background); color: var(--foreground); box-shadow: inset 0 0 0 1px oklch(1 0 0 / 6%), inset 0 1px 0 0 oklch(1 0 0 / 7%); }
 .chat-header { position: relative; z-index: 2; display: flex; height: 56px; flex: none; align-items: center; gap: 8px; padding: 8px 14px; }
 .chat-header-title { display: flex; min-width: 0; align-items: center; gap: 7px; overflow: hidden; font-size: 14px; line-height: 20px; }
 .chat-header-title span, .chat-header-title strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -366,7 +366,15 @@ svg { stroke-width: 1.5; }
 .chat-markdown ul { list-style: disc; } .chat-markdown ol { list-style: decimal; }
 .chat-markdown blockquote { margin: 1em 0; padding-left: 1em; border-left: 3px solid var(--border); color: var(--muted-foreground); }
 .chat-markdown table { width: 100%; margin: 1em 0; border-collapse: collapse; }
+.chat-markdown[data-renderer="incremark"] table { table-layout: fixed; }
+@container chat-main (min-width: 760px) {
+  .chat-markdown[data-renderer="incremark"] table {
+    width: min(150%, 100cqw);
+    margin-left: calc((100% - min(150%, 100cqw)) / 2);
+  }
+}
 .chat-markdown th, .chat-markdown td { padding: 7px 9px; border: 1px solid var(--border); text-align: left; }
+.chat-markdown[data-renderer="incremark"] th, .chat-markdown[data-renderer="incremark"] td { vertical-align: top; }
 .chat-markdown :not(pre) > code { border-radius: 4px; background: var(--muted); padding: 0.12em 0.35em; font-family: ui-monospace, monospace; }
 .external-markdown-link { border: 0; background: none; padding: 0; color: oklch(0.7 0.16 250); text-decoration: underline; }
 .artifact { margin: 1em 0; overflow: hidden; border: 1px solid var(--border); border-radius: 10px; background: var(--card); }

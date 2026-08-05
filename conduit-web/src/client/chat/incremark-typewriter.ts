@@ -16,6 +16,7 @@ export const TYPEWRITER_MAX_FRAME_INTERVAL_MS = TYPEWRITER_RELAXED_TICK_INTERVAL
 export const TYPEWRITER_FRAME_INTERVAL_EMA_ALPHA = 0.25;
 export const TYPEWRITER_LAG_CORRECTION_WINDOW_MS = 100;
 export type TypewriterFallbackMode = "normal" | "safe-step" | "safe-block";
+const TYPEWRITER_MATH_SOURCE = "__conduitMathSource";
 
 export type TypewriterMetrics = {
   sourceVisibleCharacters: number;
@@ -156,6 +157,40 @@ export function visibleAstCharacters(node: any): number {
   return node.children.reduce((total: number, child: any) => total + visibleAstCharacters(child), 0);
 }
 
+/**
+ * The core math plugin handles a math block only when math is the block root.
+ * Markdown paragraphs and table cells are sliced by the generic AST path, so
+ * nested math would otherwise be exposed one source character at a time.
+ * Store its source outside `value`; the core then treats the node as a leaf.
+ */
+export function prepareTypewriterNode(node: any): any {
+  if (!node || typeof node !== "object") return node;
+  if (node.type === "math" || node.type === "inlineMath") {
+    if (Object.prototype.hasOwnProperty.call(node, TYPEWRITER_MATH_SOURCE)) return node;
+    const { value, ...rest } = node;
+    return { ...rest, [TYPEWRITER_MATH_SOURCE]: String(value || "") };
+  }
+  if (!Array.isArray(node.children)) return node;
+  let changed = false;
+  const children = node.children.map((child: any) => {
+    const prepared = prepareTypewriterNode(child);
+    changed ||= prepared !== child;
+    return prepared;
+  });
+  return changed ? { ...node, children } : node;
+}
+
+export function prepareTypewriterBlocks<T extends { node: any }>(blocks: T[]): T[] {
+  return blocks.map((block) => {
+    const node = prepareTypewriterNode(block.node);
+    return node === block.node ? block : { ...block, node };
+  });
+}
+
+function mathSource(node: any) {
+  return String(node?.[TYPEWRITER_MATH_SOURCE] ?? node?.value ?? "");
+}
+
 function visibleBlockCharacters(blocks: Array<{ node?: any; displayNode?: any }>, display = false) {
   return blocks.reduce((total, block) => total + visibleAstCharacters(display ? block.displayNode : block.node), 0);
 }
@@ -261,7 +296,7 @@ export class AdaptiveIncremarkTypewriter {
   }
 
   push(blocks: ParsedBlock[]) {
-    this.transformer.push(blocks);
+    this.transformer.push(prepareTypewriterBlocks(blocks));
     this.recalculate(performance.now());
   }
 

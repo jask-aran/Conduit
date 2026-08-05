@@ -60,6 +60,52 @@ function appendPendingMarkup(fragment: DocumentFragment, pending: StreamingPendi
 
 marked.use(markedKatex({ nonStandard: true, throwOnError: false }));
 marked.use({
+  extensions: [
+    {
+      name: "texInlineKatex",
+      level: "inline",
+      start(source: string) {
+        const index = source.indexOf("\\(");
+        return index >= 0 ? index : undefined;
+      },
+      tokenizer(source: string) {
+        const match = /^\\\(([\s\S]*?)\\\)/.exec(source);
+        if (!match) return undefined;
+        return {
+          type: "texInlineKatex",
+          raw: match[0],
+          text: match[1]!.trim(),
+          displayMode: false,
+        };
+      },
+      renderer(token: any) {
+        return katex.renderToString(token.text, { displayMode: false, throwOnError: false });
+      },
+    },
+    {
+      name: "texBlockKatex",
+      level: "block",
+      start(source: string) {
+        const match = /^ {0,3}\\\[/.exec(source);
+        return match ? match.index : undefined;
+      },
+      tokenizer(source: string) {
+        const match = /^ {0,3}\\\[([\s\S]*?)\\\] *(?:\n+|$)/.exec(source);
+        if (!match) return undefined;
+        return {
+          type: "texBlockKatex",
+          raw: match[0],
+          text: match[1]!.trim(),
+          displayMode: true,
+        };
+      },
+      renderer(token: any) {
+        return `${katex.renderToString(token.text, { displayMode: true, throwOnError: false })}\n`;
+      },
+    },
+  ],
+});
+marked.use({
   gfm: true,
   breaks: false,
   renderer: {
@@ -153,7 +199,7 @@ function renderMarkdownFragment(source: string, inline: boolean, render: () => s
       inline,
       parseMs: parsedAt - parseStartedAt,
       sanitiseMs: sanitisedAt - parsedAt,
-      katexCandidate: /\$(?:\$?)[^\n]+\$(?:\$?)/.test(source),
+      katexCandidate: /\$(?:\$?)[^\n]+\$(?:\$?)|\\\([\s\S]+?\\\)|\\\[[\s\S]+?\\\]/.test(source),
       katexMs: katexCalls > 0 ? katexMs : null,
       katexCallCount: katexCalls,
       katexTimingAvailable,
@@ -190,13 +236,13 @@ function tokenRaws(tokens: MarkedToken[]) {
 }
 
 function tokenContainsMath(token: MarkedToken): boolean {
-  if (token.type === "blockKatex" || token.type === "inlineKatex") return true;
+  if (token.type === "blockKatex" || token.type === "inlineKatex" || token.type === "texBlockKatex" || token.type === "texInlineKatex") return true;
   return Boolean(token.tokens?.some(tokenContainsMath));
 }
 
 function sourceContainsMath(source: string, pending: StreamingPending | null) {
   if (pending?.kind.startsWith("math")) return true;
-  if (!source.includes("$")) return false;
+  if (!/[\\$]/.test(source)) return false;
   return (marked.lexer(source) as MarkedToken[]).some(tokenContainsMath);
 }
 

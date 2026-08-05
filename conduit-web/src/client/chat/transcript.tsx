@@ -54,12 +54,17 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
     if (epoch !== layoutEpoch || !following()) return;
     scrollBottomNow();
   };
-  const settleAfterMarkdown = () => queueMicrotask(() => {
-    const epoch = layoutEpoch;
-    if (markdownSettledEpoch === epoch || !following()) return;
-    markdownSettledEpoch = epoch;
-    settleInitialLayout(epoch);
-  });
+  let displayScrollFrame: number | null = null;
+  const settleAfterMarkdown = () => {
+    if (!following() || displayScrollFrame != null) return;
+    displayScrollFrame = requestAnimationFrame(() => {
+      displayScrollFrame = null;
+      if (!following()) return;
+      const epoch = layoutEpoch;
+      markdownSettledEpoch = epoch;
+      settleInitialLayout(epoch);
+    });
+  };
   const loadEarlier = () => {
     if (historyLoad || !props.chat.pageBefore() || props.chat.loadingOlder()) return;
     const previousHeight = viewport.scrollHeight;
@@ -105,7 +110,7 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
       scrollBottom();
       void document.fonts.ready.then(() => settleInitialLayout(epoch));
     }
-    else if (following()) scrollBottom();
+    else if (following() && !(markdownRenderer() === "incremark" && markdownTypewriter())) scrollBottom();
   });
 
   const [pullDistance, setPullDistance] = createSignal(0);
@@ -166,6 +171,7 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
       viewport.removeEventListener("touchmove", onTouchMove);
       viewport.removeEventListener("touchend", onTouchEnd);
       viewport.removeEventListener("touchcancel", onTouchEnd);
+      if (displayScrollFrame != null) cancelAnimationFrame(displayScrollFrame);
     });
   });
 

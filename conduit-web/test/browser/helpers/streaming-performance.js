@@ -217,7 +217,7 @@ async function installBrowserProtocol(page, scenario) {
       image: /!\[[^\]]*\]\([^)]*\)/.test(fixtureText),
       externalLink: /\[[^\]]+\]\(https?:\/\/[^)]+\)/i.test(fixtureText),
       fencedCode: /```/.test(fixtureText),
-      katex: /\$\$|(?:^|[^\\$])\$(?!\$)/.test(fixtureText),
+      katex: /\$\$|(?:^|[^\\$])\$(?!\$)|\\\([\s\S]*?\\\)|\\\[[\s\S]*?\\\]/.test(fixtureText),
     };
     const runSalt = (() => {
       const bytes = new Uint32Array(2);
@@ -254,6 +254,16 @@ async function installBrowserProtocol(page, scenario) {
       finalFingerprint: null,
       finalSemanticShape: null,
       finalSecurity: null,
+      tableGeometry: [],
+      tableLayoutTransitions: [],
+      lastTableLayoutSignature: null,
+      mathGeometryTransitions: 0,
+      mathGeometryEvidence: [],
+      lastMathGeometry: null,
+      blockGeometryTransitions: 0,
+      blockHeightDirectionReversals: 0,
+      blockTopDirectionReversals: 0,
+      blockGeometryEvidence: [],
       sourceDigest: null,
       finalSemanticTextDigest: null,
       clipboardWrites: [],
@@ -270,6 +280,7 @@ async function installBrowserProtocol(page, scenario) {
         this.metrics.push(metric);
       },
     };
+    const blockGeometryState = new Map();
     Object.defineProperty(window, "__conduitHarness", { configurable: true, value: telemetry });
     try {
       const clipboard = navigator.clipboard;
@@ -408,6 +419,7 @@ async function installBrowserProtocol(page, scenario) {
         sourceCharacters: telemetry.streamedText.length,
         visibleTextLength: visibleText.length,
         rawDollarCount: (visibleText.match(/\$/g) || []).length,
+        rawTexDelimiterCount: (visibleText.match(/\\[()[\]]/g) || []).length,
         rawBacktickCount: (visibleText.match(/`/g) || []).length,
         pendingMathBlockCount: root.querySelectorAll('[data-streaming-pending="math-block"]').length,
         pendingMathInlineCount: root.querySelectorAll('[data-streaming-pending="math-inline"]').length,
@@ -424,6 +436,126 @@ async function installBrowserProtocol(page, scenario) {
     const captureDomState = () => {
       const root = markdownRoot();
       if (!root) return;
+      const rect = (element) => {
+        const value = element.getBoundingClientRect();
+        return {
+          x: Number(value.x.toFixed(2)),
+          y: Number(value.y.toFixed(2)),
+          width: Number(value.width.toFixed(2)),
+          height: Number(value.height.toFixed(2)),
+        };
+      };
+      const tableGeometry = [...root.querySelectorAll("table")].map((table) => ({
+        layout: getComputedStyle(table).tableLayout,
+        rect: rect(table),
+        columns: [...(table.rows[0]?.cells || [])].map((cell) => rect(cell)),
+      }));
+      const tableLayout = tableGeometry.map((table) => ({
+        layout: table.layout,
+        x: table.rect.x,
+        width: table.rect.width,
+        columns: table.columns.map((column) => ({ x: column.x, width: column.width })),
+      }));
+      const tableLayoutSignature = JSON.stringify(tableLayout);
+      if (telemetry.promptAt != null && tableLayoutSignature !== telemetry.lastTableLayoutSignature) {
+        if (telemetry.tableLayoutTransitions.length < 128) {
+          telemetry.tableLayoutTransitions.push({
+            at: performance.now(),
+            sourceCharacters: telemetry.streamedText.length,
+            tableLayout,
+          });
+        }
+        telemetry.lastTableLayoutSignature = tableLayoutSignature;
+      }
+      telemetry.tableGeometry = tableGeometry;
+      const mathGeometry = [...root.querySelectorAll(".incremark-math-inline")].map((wrapper) => {
+        const katex = wrapper.querySelector(".katex");
+        const wrapperRect = wrapper.getBoundingClientRect();
+        const katexRect = katex?.getBoundingClientRect();
+        return {
+          wrapper: {
+            width: Number(wrapperRect.width.toFixed(2)),
+            height: Number(wrapperRect.height.toFixed(2)),
+          },
+          katex: katexRect ? {
+            width: Number(katexRect.width.toFixed(2)),
+            height: Number(katexRect.height.toFixed(2)),
+          } : null,
+        };
+      });
+      if (telemetry.promptAt != null && telemetry.lastMathGeometry) {
+        const commonCount = Math.min(telemetry.lastMathGeometry.length, mathGeometry.length);
+        for (let index = 0; index < commonCount; index += 1) {
+          const previous = telemetry.lastMathGeometry[index];
+          const current = mathGeometry[index];
+          const changed = Math.abs(previous.wrapper.width - current.wrapper.width) > 0.5
+            || Math.abs(previous.wrapper.height - current.wrapper.height) > 0.5
+            || Math.abs((previous.katex?.width || 0) - (current.katex?.width || 0)) > 0.5
+            || Math.abs((previous.katex?.height || 0) - (current.katex?.height || 0)) > 0.5;
+          if (changed) {
+            telemetry.mathGeometryTransitions += 1;
+            if (telemetry.mathGeometryEvidence.length < 64) {
+              telemetry.mathGeometryEvidence.push({
+                at: performance.now(),
+                sourceCharacters: telemetry.streamedText.length,
+                index,
+                previous,
+                current,
+              });
+            }
+          }
+        }
+      }
+      telemetry.lastMathGeometry = mathGeometry;
+      telemetry.mathGeometry = mathGeometry;
+      const incremarkRoot = root.querySelector(".incremark");
+      if (incremarkRoot) {
+        for (const [index, block] of [...incremarkRoot.children].entries()) {
+          const value = block.getBoundingClientRect();
+          const current = {
+            x: Number(value.x.toFixed(2)),
+            y: Number(value.y.toFixed(2)),
+            width: Number(value.width.toFixed(2)),
+            height: Number(value.height.toFixed(2)),
+          };
+          const previous = blockGeometryState.get(block);
+          if (previous) {
+            const heightDelta = current.height - previous.rect.height;
+            const topDelta = current.y - previous.rect.y;
+            if (Math.abs(heightDelta) > 0.5 || Math.abs(topDelta) > 0.5) {
+              telemetry.blockGeometryTransitions += 1;
+              if (Math.abs(heightDelta) > 0.5) {
+                const direction = Math.sign(heightDelta);
+                if (previous.heightDirection && direction !== previous.heightDirection) {
+                  telemetry.blockHeightDirectionReversals += 1;
+                }
+                previous.heightDirection = direction;
+              }
+              if (Math.abs(topDelta) > 0.5) {
+                const direction = Math.sign(topDelta);
+                if (previous.topDirection && direction !== previous.topDirection) {
+                  telemetry.blockTopDirectionReversals += 1;
+                }
+                previous.topDirection = direction;
+              }
+              if (telemetry.blockGeometryEvidence.length < 64) {
+                telemetry.blockGeometryEvidence.push({
+                  at: performance.now(),
+                  sourceCharacters: telemetry.streamedText.length,
+                  index,
+                  previous: previous.rect,
+                  current,
+                });
+              }
+            }
+          }
+          blockGeometryState.set(block, {
+            rect: current,
+            heightDirection: previous?.heightDirection || 0,
+            topDirection: previous?.topDirection || 0,
+          });
+        }
+      }
       const semantic = {};
       for (const [category, selector] of Object.entries(semanticSelectors)) {
         semantic[category] = [...root.querySelectorAll(selector)].map((element) => identityOf(element));
@@ -541,7 +673,35 @@ async function installBrowserProtocol(page, scenario) {
       if (!telemetry.instrumentationEnabled) throw new Error("measurement_disabled");
       new PerformanceObserver((list) => {
         for (const entry of list.getEntries()) {
-          if (!entry.hadRecentInput && inPromptWindow(entry.startTime)) telemetry.layoutShifts.push({ at: entry.startTime, value: entry.value });
+          if (!entry.hadRecentInput && inPromptWindow(entry.startTime)) {
+            telemetry.layoutShifts.push({
+              at: entry.startTime,
+              value: entry.value,
+              sources: (entry.sources || []).slice(0, 8).map((source) => {
+                const node = source.node;
+                const describe = (rect) => rect ? {
+                  x: Number(rect.x.toFixed(2)),
+                  y: Number(rect.y.toFixed(2)),
+                  width: Number(rect.width.toFixed(2)),
+                  height: Number(rect.height.toFixed(2)),
+                } : null;
+                return {
+                  element: node instanceof Element
+                    ? `${node.tagName.toLowerCase()}${node.className && typeof node.className === "string" ? `.${node.className.trim().replace(/\s+/g, ".")}` : ""}`
+                    : null,
+                  ancestors: node instanceof Element
+                    ? [...Array.from({ length: 5 }, (_, index) => {
+                      let current = node;
+                      for (let step = 0; step < index; step += 1) current = current?.parentElement;
+                      return current;
+                    }).filter(Boolean)].map((current) => `${current.tagName.toLowerCase()}${current.className && typeof current.className === "string" ? `.${current.className.trim().replace(/\s+/g, ".")}` : ""}`)
+                    : [],
+                  previousRect: describe(source.previousRect),
+                  currentRect: describe(source.currentRect),
+                };
+              }),
+            });
+          }
         }
       }).observe({ type: "layout-shift", buffered: true });
       telemetry.layoutShiftSupported = true;
@@ -1069,11 +1229,19 @@ function prefixHasOpenConstruct(prefix, kind) {
     return opener >= 0 && prefix.indexOf("```", opener + 3) < 0;
   }
   if (kind === "math-block") {
-    const opener = prefix.indexOf("$$");
-    return opener >= 0 && prefix.indexOf("$$", opener + 2) < 0;
+    const dollarOpener = prefix.indexOf("$$");
+    const bracketOpener = prefix.indexOf("\\[");
+    const opener = dollarOpener < 0 ? bracketOpener : bracketOpener < 0 ? dollarOpener : Math.min(dollarOpener, bracketOpener);
+    if (opener < 0) return false;
+    const close = opener === bracketOpener && (dollarOpener < 0 || bracketOpener <= dollarOpener) ? "\\]" : "$$";
+    return prefix.indexOf(close, opener + close.length) < 0;
   }
-  const opener = prefix.search(/\$(?!\$)(?=\S)/);
-  return opener >= 0 && prefix.indexOf("$", opener + 1) < 0;
+  const dollarOpener = prefix.search(/\$(?!\$)(?=\S)/);
+  const texOpener = prefix.indexOf("\\(");
+  const opener = dollarOpener < 0 ? texOpener : texOpener < 0 ? dollarOpener : Math.min(dollarOpener, texOpener);
+  if (opener < 0) return false;
+  const close = opener === texOpener && (dollarOpener < 0 || texOpener <= dollarOpener) ? "\\)" : "$";
+  return prefix.indexOf(close, opener + close.length) < 0;
 }
 
 function streamingPresentationEvidence(assertion, snapshots, sourceText) {
@@ -1084,7 +1252,7 @@ function streamingPresentationEvidence(assertion, snapshots, sourceText) {
   if (!candidates.length) {
     errors.push(`No mid-stream snapshot captured for open ${assertion.kind}`);
   }
-  const delimiterClean = candidates.filter((snapshot) => snapshot.rawDollarCount === 0 && snapshot.rawBacktickCount === 0);
+  const delimiterClean = candidates.filter((snapshot) => snapshot.rawDollarCount === 0 && snapshot.rawTexDelimiterCount === 0 && snapshot.rawBacktickCount === 0);
   if (assertion.requireNoRawDelimiters && delimiterClean.length !== candidates.length) {
     errors.push(`Open ${assertion.kind} appeared with raw delimiters in visible text`);
   }
@@ -1208,6 +1376,13 @@ export async function runBrowserStreamingScenario(page, scenario) {
   if (scenario.maxKaTeXCalls != null && clientWork.katexCallCount > scenario.maxKaTeXCalls) {
     errors.push(`KaTeX actual render count ${clientWork.katexCallCount} exceeded ${scenario.maxKaTeXCalls}`);
   }
+  if (scenario.maxLayoutShiftCount != null && raw.layoutShifts.length > scenario.maxLayoutShiftCount) {
+    errors.push(`Layout Shift entry count ${raw.layoutShifts.length} exceeded ${scenario.maxLayoutShiftCount}`);
+  }
+  if (scenario.maxLayoutShiftValue != null && raw.layoutShifts.reduce((total, entry) => total + entry.value, 0) > scenario.maxLayoutShiftValue) {
+    const value = raw.layoutShifts.reduce((total, entry) => total + entry.value, 0);
+    errors.push(`Cumulative Layout Shift ${value.toFixed(6)} exceeded ${scenario.maxLayoutShiftValue}`);
+  }
   const longestTaskMs = Math.max(0, ...scopedLongTasks.map((entry) => entry.duration));
   if (scenario.maxLongestTaskMs != null && longestTaskMs > scenario.maxLongestTaskMs) {
     errors.push(`Longest task ${longestTaskMs.toFixed(1)} ms exceeded ${scenario.maxLongestTaskMs} ms`);
@@ -1217,6 +1392,30 @@ export async function runBrowserStreamingScenario(page, scenario) {
   }
   if (scenario.maxIncrementalResets != null && clientWork.incrementalResetEvidence.length > scenario.maxIncrementalResets) {
     errors.push(`Incremental renderer resets ${clientWork.incrementalResetEvidence.length} exceeded ${scenario.maxIncrementalResets}`);
+  }
+  if (scenario.expectedTableLayout != null) {
+    const finalTableLayouts = raw.tableGeometry.map((table) => table.layout);
+    const observedTableLayouts = raw.tableLayoutTransitions
+      .flatMap((entry) => entry.tableLayout.map((table) => table.layout));
+    if (finalTableLayouts.some((layout) => layout !== scenario.expectedTableLayout)
+      || observedTableLayouts.some((layout) => layout !== scenario.expectedTableLayout)) {
+      errors.push(`Table layout was not consistently ${scenario.expectedTableLayout}`);
+    }
+  }
+  if (scenario.maxTableLayoutTransitions != null && raw.tableLayoutTransitions.length > scenario.maxTableLayoutTransitions) {
+    errors.push(`Table layout transitions ${raw.tableLayoutTransitions.length} exceeded ${scenario.maxTableLayoutTransitions}`);
+  }
+  if (scenario.maxMathGeometryTransitions != null && raw.mathGeometryTransitions > scenario.maxMathGeometryTransitions) {
+    errors.push(`Math geometry transitions ${raw.mathGeometryTransitions} exceeded ${scenario.maxMathGeometryTransitions}`);
+  }
+  if (scenario.maxBlockGeometryTransitions != null && raw.blockGeometryTransitions > scenario.maxBlockGeometryTransitions) {
+    errors.push(`Rendered block geometry transitions ${raw.blockGeometryTransitions} exceeded ${scenario.maxBlockGeometryTransitions}`);
+  }
+  if (scenario.maxBlockHeightDirectionReversals != null && raw.blockHeightDirectionReversals > scenario.maxBlockHeightDirectionReversals) {
+    errors.push(`Rendered block height direction reversals ${raw.blockHeightDirectionReversals} exceeded ${scenario.maxBlockHeightDirectionReversals}`);
+  }
+  if (scenario.maxBlockTopDirectionReversals != null && raw.blockTopDirectionReversals > scenario.maxBlockTopDirectionReversals) {
+    errors.push(`Rendered block top direction reversals ${raw.blockTopDirectionReversals} exceeded ${scenario.maxBlockTopDirectionReversals}`);
   }
 
   return {
@@ -1267,6 +1466,15 @@ export async function runBrowserStreamingScenario(page, scenario) {
         value: raw.layoutShifts.reduce((total, entry) => total + entry.value, 0),
         max: Math.max(0, ...raw.layoutShifts.map((entry) => entry.value)),
       },
+      layoutShiftEvidence: raw.layoutShifts,
+      tableGeometry: raw.tableGeometry,
+      tableLayoutTransitions: raw.tableLayoutTransitions,
+      mathGeometryTransitions: raw.mathGeometryTransitions,
+      mathGeometryEvidence: raw.mathGeometryEvidence,
+      blockGeometryTransitions: raw.blockGeometryTransitions,
+      blockHeightDirectionReversals: raw.blockHeightDirectionReversals,
+      blockTopDirectionReversals: raw.blockTopDirectionReversals,
+      blockGeometryEvidence: raw.blockGeometryEvidence,
       finalSemanticTextEvidence: { length: normalizeSemanticText(raw.finalSemanticText).length, digest: raw.finalSemanticTextDigest || null },
       finalSemanticTextLength: normalizeSemanticText(raw.finalSemanticText).length,
       structuralFingerprint,

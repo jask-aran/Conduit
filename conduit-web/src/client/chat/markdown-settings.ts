@@ -12,7 +12,7 @@ function urlBoolean(name: string): boolean | null {
 
 export function selectedMarkdownRenderer(): MarkdownRendererId {
   const value = new URLSearchParams(location.search).get("markdownRenderer") || localStorage.getItem("conduit:markdown-renderer");
-  return value === "incremark" ? "incremark" : "marked";
+  return value === "marked" ? "marked" : "incremark";
 }
 
 export function markdownRendererSwitchEnabled() {
@@ -23,5 +23,6 @@ export function markdownRendererSwitchEnabled() {
 export function selectedMarkdownTypewriter() {
   const override = urlBoolean("markdownTypewriter");
   if (override != null) return override;
-  return ["1", "true"].includes(localStorage.getItem(MARKDOWN_TYPEWRITER_STORAGE_KEY) || "");
+  const stored = localStorage.getItem(MARKDOWN_TYPEWRITER_STORAGE_KEY);
+  return stored == null ? true : ["1", "true"].includes(stored);
 }

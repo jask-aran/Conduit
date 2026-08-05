@@ -76,25 +76,28 @@ function inRange(offset: number, ranges: SourceRange[]) {
 }
 
 function findOpenBlockMath(source: string, ranges: SourceRange[]) {
-  let open: { start: number; bodyStart: number } | null = null;
+  let open: { start: number; bodyStart: number; close: string } | null = null;
 
   for (const line of sourceLines(source)) {
     if (inRange(line.start, ranges)) continue;
-    const delimiter = line.text.indexOf("$$");
-    if (delimiter < 0 || !/^ {0,3}\$\$/.test(line.text)) continue;
-    const rest = line.text.slice(delimiter + 2);
-    const sameLineClose = rest.indexOf("$$");
     if (!open) {
-      if (sameLineClose >= 0) continue;
+      const match = /^ {0,3}(\$\$|\\\[)(.*)$/.exec(line.text);
+      if (!match) continue;
+      const delimiter = match[1]!;
+      const delimiterOffset = match[0].indexOf(delimiter);
+      const rest = match[2]!;
+      const close = delimiter === "$$" ? "$$" : "\\]";
+      if (findUnescapedDelimiter(rest, close, 0) >= 0) continue;
       open = {
-        start: line.start,
-        bodyStart: line.start + delimiter + 2,
+        start: line.start + delimiterOffset,
+        bodyStart: line.start + delimiterOffset + delimiter.length,
+        close,
       };
       continue;
     }
-    if (/^\s*$/.test(line.text.slice(delimiter + 2))) {
-      open = null;
-    }
+
+    const close = findUnescapedDelimiter(line.text, open.close, 0);
+    if (close >= 0 && /^\s*$/.test(line.text.slice(close + open.close.length))) open = null;
   }
 
   return open;
@@ -104,6 +107,13 @@ function isEscaped(source: string, offset: number) {
   let slashes = 0;
   for (let index = offset - 1; index >= 0 && source[index] === "\\"; index -= 1) slashes += 1;
   return slashes % 2 === 1;
+}
+
+function findUnescapedDelimiter(source: string, delimiter: string, start: number) {
+  for (let index = start; index <= source.length - delimiter.length; index += 1) {
+    if (source.startsWith(delimiter, index) && !isEscaped(source, index)) return index;
+  }
+  return -1;
 }
 
 function findInlineMath(source: string, ranges: SourceRange[], blockMathStart: number | null) {
@@ -119,7 +129,20 @@ function findInlineMath(source: string, ranges: SourceRange[], blockMathStart: n
       index = end - 1;
       continue;
     }
-    if (codeDelimiter || source[index] !== "$" || source[index + 1] === "$" || isEscaped(source, index)) continue;
+    if (codeDelimiter || isEscaped(source, index)) continue;
+
+    if (source.startsWith("\\(", index)) {
+      const close = findUnescapedDelimiter(source, "\\)", index + 2);
+      if (close >= 0) {
+        index = close + 1;
+        continue;
+      }
+      const body = source.slice(index + 2);
+      if (!/[\r\n]/.test(body)) return { start: index, bodyStart: index + 2 };
+      continue;
+    }
+
+    if (source[index] !== "$" || source[index + 1] === "$") continue;
     const next = source[index + 1];
     if (!next || /\s|\d/.test(next)) continue;
 
