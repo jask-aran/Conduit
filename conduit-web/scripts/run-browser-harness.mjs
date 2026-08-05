@@ -11,8 +11,8 @@ Options:
   --flow <stream|reconnect>         Browser flow to exercise (default: stream)
   --scenario <name>                 Reported scenario name (default: browser-streaming-baseline)
   --profile <steady|burst|jitter>   Source cadence profile (default: steady)
-  --renderer <marked|incremark>     Markdown renderer (default: marked)
-  --typewriter                     Enable Incremark adaptive typewriter mode
+  --renderer <marked|incremark|incremark-typewriter|incremark-synthetic>  Markdown renderer (default: marked)
+  --typewriter                     Legacy alias for --renderer incremark-typewriter
   --require-typewriter-metrics     Require scheduled typewriter metric samples
   --text <value>                    Scripted assistant output
   --fixture <name>                  Named deterministic fixture (use --list-fixtures)
@@ -62,8 +62,8 @@ const expectedInteractions = valueAfter(args, "--expected-interactions", null);
 const instrumentation = valueAfter(args, "--instrumentation", "on");
 if (!["on", "off"].includes(instrumentation)) throw new Error("--instrumentation must be on or off");
 const renderer = valueAfter(args, "--renderer", "marked");
-if (!["marked", "incremark"].includes(renderer)) throw new Error("--renderer must be marked or incremark");
-if (args.includes("--typewriter") && renderer !== "incremark") throw new Error("--typewriter requires --renderer incremark");
+if (!["marked", "incremark", "incremark-typewriter", "incremark-synthetic"].includes(renderer)) throw new Error("--renderer must be marked, incremark, incremark-typewriter, or incremark-synthetic");
+if (args.includes("--typewriter") && !["incremark", "incremark-typewriter"].includes(renderer)) throw new Error("--typewriter requires an Incremark renderer");
 
 const environment = {
   ...process.env,
@@ -73,7 +73,7 @@ const environment = {
   ...(fixture ? { HARNESS_FIXTURE: fixture.id } : {}),
   HARNESS_PROFILE: valueAfter(args, "--profile", "steady"),
   HARNESS_RENDERER: renderer,
-  ...(args.includes("--typewriter") ? { HARNESS_TYPEWRITER: "1" } : {}),
+  ...(args.includes("--typewriter") || renderer === "incremark-typewriter" ? { HARNESS_TYPEWRITER: "1" } : {}),
   ...(args.includes("--require-typewriter-metrics") ? { HARNESS_REQUIRE_TYPEWRITER_METRICS: "1" } : {}),
   HARNESS_TEXT: valueAfter(
     args,

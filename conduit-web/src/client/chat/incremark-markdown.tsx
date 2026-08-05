@@ -6,6 +6,7 @@ import * as KAlertDialog from "@kobalte/core/alert-dialog";
 import { Button } from "@/components/primitives";
 import { getHarnessRecorder, recordHarnessMetric } from "@/client/harness-metrics";
 import type { ChatMarkdownProps } from "./markdown";
+import { repairSyntheticMathSource } from "./incremark-synthetic-math";
 import { AdaptiveIncremarkTypewriter, visibleAstCharacters } from "./incremark-typewriter";
 import type { StreamingPending } from "./streaming-markdown";
 import { splitStreamingMarkdown } from "./streaming-markdown";
@@ -18,6 +19,8 @@ type RendererContext = {
   inline: boolean;
   requestExternalLink: (url: string) => void;
   deferMath: () => boolean;
+  syntheticMath: () => boolean;
+  rendererId: () => string;
   pendingInlineBlockId: () => string | null;
   onMathBusyChange: (busy: boolean) => void;
 };
@@ -153,6 +156,12 @@ function DisplayBlockNodes(props: { blocks: () => DisplayBlock[]; context: Rende
   const displayNode = (block: DisplayBlock) => {
     const sourceNode = block.node as MarkdownNode;
     let currentNode = block.displayNode as MarkdownNode;
+    if (sourceNode && currentNode && typeof sourceNode === "object" && typeof currentNode === "object") {
+      currentNode = { ...currentNode };
+      for (const [key, value] of Object.entries(sourceNode)) {
+        if (key !== "children" && currentNode[key] == null && value != null) currentNode[key] = value;
+      }
+    }
     const type = structuralType(block);
     if (type && currentNode?.type !== type) {
       currentNode = { ...currentNode, type };
@@ -202,16 +211,16 @@ type MathRenderJob = { cancelled: boolean; run: () => void };
 const mathRenderQueue: MathRenderJob[] = [];
 let mathRenderFrame: number | null = null;
 
-function mathCacheKey(node: MarkdownNode, source: string) {
-  return `${node?.type === "math" ? "display" : "inline"}\u0000${source}`;
+function mathCacheKey(node: MarkdownNode, source: string, synthetic: boolean) {
+  return `${node?.type === "math" ? "display" : "inline"}\u0000${synthetic ? `synthetic\u0000${source}` : source}`;
 }
 
-function getCachedMathHtml(node: MarkdownNode, source: string) {
-  return mathHtmlCache.get(mathCacheKey(node, source));
+function getCachedMathHtml(node: MarkdownNode, source: string, synthetic: boolean) {
+  return mathHtmlCache.get(mathCacheKey(node, source, synthetic));
 }
 
-function cacheMathHtml(node: MarkdownNode, source: string, html: string) {
-  const key = mathCacheKey(node, source);
+function cacheMathHtml(node: MarkdownNode, source: string, html: string, synthetic: boolean) {
+  const key = mathCacheKey(node, source, synthetic);
   if (!mathHtmlCache.has(key) && mathHtmlCache.size >= MATH_HTML_CACHE_LIMIT) {
     const oldest = mathHtmlCache.keys().next().value;
     if (oldest) mathHtmlCache.delete(oldest);
@@ -244,7 +253,7 @@ function scheduleMathRender(run: () => void) {
   return () => { job.cancelled = true; };
 }
 
-function MathNode(props: { node: MarkdownNode | NodeAccessor; defer?: () => boolean; onBusyChange?: (busy: boolean) => void }) {
+function MathNode(props: { node: MarkdownNode | NodeAccessor; defer?: () => boolean; preview?: () => boolean; renderer?: () => string; onBusyChange?: (busy: boolean) => void }) {
   const node = () => readNode(props.node);
   const [html, setHtml] = createSignal("");
   const [type, setType] = createSignal<string | undefined>();
@@ -258,34 +267,51 @@ function MathNode(props: { node: MarkdownNode | NodeAccessor; defer?: () => bool
   };
   const renderCurrent = (current: MarkdownNode, source: string, version: number) => {
     if (version !== renderVersion) return;
-    const cached = getCachedMathHtml(current, source);
+    const synthetic = Boolean(props.preview?.());
+    const candidate = synthetic ? repairSyntheticMathSource(source) : source;
+    const cached = getCachedMathHtml(current, candidate, synthetic);
     if (cached !== undefined) {
       setHtml(cached);
       setBusy(false);
       return;
     }
-    let renderedHtml = "";
+    let renderedHtml: string | null = null;
     const recorder = getHarnessRecorder();
     const startedAt = recorder ? performance.now() : 0;
     try {
-      renderedHtml = katex.renderToString(source, {
+      renderedHtml = katex.renderToString(candidate, {
         displayMode: current?.type === "math",
-        throwOnError: false,
+        throwOnError: synthetic,
       });
+      if (synthetic && renderedHtml.includes("katex-error")) renderedHtml = null;
     } catch {
-      renderedHtml = "";
+      renderedHtml = null;
+    }
+    if (renderedHtml == null) {
+      if (!html()) {
+        try {
+          renderedHtml = katex.renderToString(current?.type === "math" ? "\\vphantom{\\displaystyle x}" : "\\vphantom{x}", {
+            displayMode: current?.type === "math",
+            throwOnError: true,
+          });
+        } catch {
+          renderedHtml = "";
+        }
+      } else {
+        renderedHtml = html();
+      }
     }
     if (recorder) {
       recordHarnessMetric(recorder, {
         stage: "markdown-katex",
-        renderer: "incremark",
+        renderer: props.renderer?.() || "incremark",
         katexMs: performance.now() - startedAt,
         katexCallCount: 1,
-        katexSourceCharacters: source.length,
+        katexSourceCharacters: candidate.length,
         katexHtmlCharacters: renderedHtml.length,
       });
     }
-    cacheMathHtml(current, source, renderedHtml);
+    cacheMathHtml(current, candidate, renderedHtml, synthetic);
     setHtml(renderedHtml);
     setBusy(false);
   };
@@ -309,7 +335,8 @@ function MathNode(props: { node: MarkdownNode | NodeAccessor; defer?: () => bool
       setHtml("");
       return;
     }
-    const cached = getCachedMathHtml(current, source);
+    const synthetic = Boolean(props.preview?.());
+    const cached = getCachedMathHtml(current, synthetic ? repairSyntheticMathSource(source) : source, synthetic);
     if (cached !== undefined) {
       setHtml(cached);
       return;
@@ -330,7 +357,7 @@ function MathNode(props: { node: MarkdownNode | NodeAccessor; defer?: () => bool
     cancelJob?.();
     setBusy(false);
   });
-  return <span class={type() === "math" ? "incremark-math-block" : "incremark-math-inline"} innerHTML={html()} />;
+  return <span class={type() === "math" ? "incremark-math-block" : "incremark-math-inline"} data-synthetic-math-preview={props.preview?.() ? "true" : undefined} innerHTML={html()} />;
 }
 
 function CodeNode(props: { node: MarkdownNode | NodeAccessor }) {
@@ -400,6 +427,17 @@ function TableRow(props: { node: MarkdownNode | NodeAccessor; context: RendererC
   </Index></tr>;
 }
 
+function syntheticMathClosingDelimiter(source: string, pending: StreamingPending) {
+  if (pending.kind === "math-inline") return source.startsWith("\\(", pending.start) ? "\\)" : "$";
+  return source.startsWith("\\[", pending.start) ? "\n\\]" : "\n$$";
+}
+
+function containsMath(node: MarkdownNode): boolean {
+  if (!node || typeof node !== "object") return false;
+  if (node.type === "inlineMath" || node.type === "math") return true;
+  return Array.isArray(node.children) && node.children.some((child: MarkdownNode) => containsMath(child));
+}
+
 function TextNode(props: { node: NodeAccessor }) {
   return <>{props.node()?.value || ""}</>;
 }
@@ -420,7 +458,7 @@ function AstNodeContent(props: { node: NodeAccessor; context: RendererContext })
     case "delete": return <del><InlineNodes nodes={() => node()?.children || []} context={props.context} /></del>;
     case "inlineCode": return <code>{node()?.value || ""}</code>;
     case "inlineMath":
-    case "math": return <MathNode node={node} defer={props.context.deferMath} onBusyChange={props.context.onMathBusyChange} />;
+    case "math": return <MathNode node={node} defer={props.context.deferMath} preview={props.context.syntheticMath} renderer={props.context.rendererId} onBusyChange={props.context.onMathBusyChange} />;
     case PENDING_INLINE_MATH_NODE: return <PendingInlineMathPlaceholder />;
     case "break": return <br />;
     case "link": return <LinkNode node={node} context={props.context} />;
@@ -480,6 +518,7 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
   let finalised = false;
   let previousTypewriter: boolean | null = null;
   const typewriter = () => Boolean(props.typewriter && !props.inline);
+  const rendererId = () => props.syntheticMath ? "incremark-synthetic" : typewriter() ? "incremark-typewriter" : "incremark";
   const displayBlocks = () => displayBlockStore.items;
   const setDisplayBlocks = (next: DisplayBlock[]) => {
     setDisplayBlockStore("items", reconcile(next, { key: "id", merge: true }));
@@ -498,7 +537,7 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
       if (!recorder) return;
       recordHarnessMetric(recorder, {
         stage: "markdown-typewriter",
-        renderer: "incremark",
+        renderer: rendererId(),
         typewriter: true,
         sourceVisibleCharacters: metrics.sourceVisibleCharacters,
         displayedVisibleCharacters: metrics.displayedVisibleCharacters,
@@ -566,6 +605,19 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
       if (!split.pending || props.inline) return null;
       const currentBlock = [...pendingUpdateBlocks.values()].find((block) => blockContainsOffset(block, split.pending!.start));
       if (!currentBlock) return null;
+      if (props.syntheticMath && (split.pending.kind === "math-inline" || split.pending.kind === "math-block")) {
+        const previewParser = createIncremarkParser(incremarkParserOptions);
+        previewParser.render(`${currentBlock.rawText}${syntheticMathClosingDelimiter(source, split.pending)}`);
+        const previewNode = previewParser.getAst().children?.[0];
+        if (previewNode && containsMath(previewNode)) {
+          return {
+            ...currentBlock,
+            node: previewNode,
+            endOffset: currentBlock.endOffset,
+            rawText: currentBlock.rawText,
+          };
+        }
+      }
       const prefixLength = Math.max(0, Math.min(currentBlock.rawText.length, split.pending.start - currentBlock.startOffset));
       const prefix = currentBlock.rawText.slice(0, prefixLength);
       if (!prefix.trim()) return null;
@@ -582,7 +634,7 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
     })();
     setDefinitions({ ...parser.getDefinitionMap() });
     setPending(split.pending);
-    setPendingInlineBlockId(split.pending?.kind === "math-inline" ? pendingPrefixBlock?.id || null : null);
+    setPendingInlineBlockId(!props.syntheticMath && split.pending?.kind === "math-inline" ? pendingPrefixBlock?.id || null : null);
     if (updates.length) {
       for (const entry of updates) {
         for (const block of entry.updated) completedById.delete(block.id);
@@ -650,7 +702,7 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
       const tableAst = summarizeTableAst(currentBlocks);
       recordHarnessMetric(recorder, {
         stage: "markdown-render",
-        renderer: "incremark",
+        renderer: rendererId(),
         sourceCharacters: source.length,
         inline: Boolean(props.inline),
         parseMs: parsedAt - parseStartedAt,
@@ -668,7 +720,7 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
       });
       recordHarnessMetric(recorder, {
         stage: "markdown-reconcile",
-        renderer: "incremark",
+        renderer: rendererId(),
         sourceCharacters: source.length,
         inline: Boolean(props.inline),
         reconcileMs: reconciledAt - parsedAt,
@@ -682,6 +734,8 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
     inline: Boolean(props.inline),
     requestExternalLink: setExternalUrl,
     deferMath: () => typewriter(),
+    syntheticMath: () => Boolean(props.syntheticMath),
+    rendererId,
     pendingInlineBlockId,
     onMathBusyChange: (busy) => setPendingMathRenders((count) => Math.max(0, count + (busy ? 1 : -1))),
   };
@@ -691,7 +745,7 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
     return [...byId.values()].sort((left, right) => left.startOffset - right.startOffset);
   };
   return <>
-    <div class="chat-markdown" data-renderer="incremark" data-streaming={props.streaming || undefined} data-display-busy={displayBusy() || pendingMathRenders() > 0 ? "true" : undefined} data-display-key={props.displayKey || undefined}>
+    <div class="chat-markdown" data-renderer={rendererId()} data-synthetic-math={props.syntheticMath ? "true" : undefined} data-streaming={props.streaming || undefined} data-display-busy={displayBusy() || pendingMathRenders() > 0 ? "true" : undefined} data-display-key={props.displayKey || undefined}>
       <div class="incremark" data-incremark-core="true">
         <Show when={props.inline} fallback={<>
           <Show when={typewriter()} fallback={<ParsedBlockNodes blocks={displayedBlocks} context={context} />}>
@@ -699,13 +753,13 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
             <DisplayBlockNodes blocks={displayBlocks} context={context} history={displayHistory} />
           </Show>
           <Show when={pending()}>
-            {(value) => <Show when={value().kind !== "math-inline" || !pendingInlineBlockId()}>
+            {(value) => <Show when={value().kind === "fence" || (!props.syntheticMath && (value().kind !== "math-inline" || !pendingInlineBlockId()))}>
               <PendingConstruct pending={value()} streaming={Boolean(props.streaming)} />
             </Show>}
           </Show>
         </>}>
           <AstNode node={inlineAst()} context={context} />
-          <Show when={pending()}>{(value) => <Show when={value().kind !== "math-inline" || !pendingInlineBlockId()}><PendingConstruct pending={value()} streaming={Boolean(props.streaming)} /></Show>}</Show>
+          <Show when={pending()}>{(value) => <Show when={value().kind === "fence" || (!props.syntheticMath && (value().kind !== "math-inline" || !pendingInlineBlockId()))}><PendingConstruct pending={value()} streaming={Boolean(props.streaming)} /></Show>}</Show>
         </Show>
       </div>
     </div>

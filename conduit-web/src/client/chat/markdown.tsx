@@ -9,6 +9,7 @@ import { Button } from "@/components/primitives";
 import { getHarnessRecorder, recordHarnessMetric } from "../harness-metrics";
 import { splitStreamingMarkdown, type StreamingPending } from "./streaming-markdown";
 import {
+  MARKDOWN_RENDERER_STORAGE_KEY,
   MARKDOWN_TYPEWRITER_STORAGE_KEY,
   markdownRendererSwitchEnabled,
   selectedMarkdownRenderer,
@@ -17,6 +18,7 @@ import {
 } from "./markdown-settings";
 
 export {
+  MARKDOWN_RENDERER_STORAGE_KEY,
   MARKDOWN_TYPEWRITER_STORAGE_KEY,
   markdownRendererSwitchEnabled,
   selectedMarkdownRenderer,
@@ -331,6 +333,7 @@ export type ChatMarkdownProps = {
   onRendered?: () => void;
   onDisplayBusyChange?: (busy: boolean) => void;
   typewriter?: boolean;
+  syntheticMath?: boolean;
   displayKey?: string;
   renderer?: MarkdownRendererId;
 };
@@ -583,9 +586,12 @@ const IncremarkMarkdown = lazy(() => import("./incremark-markdown").then((module
 
 export function ChatMarkdown(props: ChatMarkdownProps) {
   const renderer = () => props.renderer || selectedMarkdownRenderer();
-  return <Show when={renderer() === "incremark"} fallback={<MarkedMarkdown {...props} />}>
+  const incremark = () => renderer() !== "marked";
+  const typewriter = () => renderer() === "incremark-typewriter";
+  const syntheticMath = () => renderer() === "incremark-synthetic";
+  return <Show when={incremark()} fallback={<MarkedMarkdown {...props} />}>
     <Suspense fallback={<div class="markdown-skeleton" />}>
-      <IncremarkMarkdown {...props} />
+      <IncremarkMarkdown {...props} typewriter={typewriter()} syntheticMath={syntheticMath()} />
     </Suspense>
   </Show>;
 }

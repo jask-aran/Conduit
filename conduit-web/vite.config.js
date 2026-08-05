@@ -42,7 +42,11 @@ export default defineConfig(() => {
           // authenticated and mutable (catalogue, chat, runtime, live session).
           globPatterns: ["**/*.{js,css,html,svg,png,ico,woff2}"],
           navigateFallback: "/index.html",
-          navigateFallbackDenylist: [/^\/v0(?:\/|$)/, /^\/healthz$/, /^\/login$/],
+          navigateFallbackDenylist: [
+            /^\/v0(?:\/|(?:\?.*)?$)/,
+            /^\/healthz(?:\?.*)?$/,
+            /^\/login(?:\?.*)?$/,
+          ],
         },
         devOptions: { enabled: false },
       }),

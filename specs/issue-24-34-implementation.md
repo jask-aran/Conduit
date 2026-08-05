@@ -2899,3 +2899,122 @@ Verification for this fix:
   disabled.
 - Test a valid `\(...\)` formula and a malformed unmatched delimiter. The
   valid formula must render; malformed source must remain literal or pending.
+
+### Four renderer modes and synthetic math previews — 5 August 2026
+
+The renderer selector now exposes four independent modes:
+
+| Mode | Ordinary Markdown | Typewriter | Incomplete math |
+| --- | --- | --- | --- |
+| Marked | Marked incremental tail | No | Existing Marked pending path |
+| Incremark | Immediate local adapter | No | Existing invisible pending path |
+| Incremark Typewriter | Adaptive `BlockTransformer` adapter | Yes | Existing invisible pending path |
+| Incremark Synthetic Math | Immediate local adapter | No | Display-only paired delimiter and strict KaTeX preview |
+
+The Typewriter mode is now a renderer choice, not a checkbox attached to the
+Incremark choice. The default for a new user is `incremark-typewriter`, so the
+current default presentation remains unchanged. Stored `incremark` plus the
+old `conduit:incremark-typewriter` key remains compatible. Selecting naked
+Incremark writes the exact `incremark` mode and disables Typewriter.
+
+Synthetic mode keeps the raw response authoritative. When the active stream
+has an incomplete `$`, `$$`, `\(`, or `\[` construct, the adapter reparses only
+that active block with a display-only closing delimiter. It does not feed the
+synthetic delimiter into the incremental parser or alter source offsets. The
+candidate AST stays inside the original paragraph, table, or display block.
+
+The math component keeps one stable Conduit wrapper while its KaTeX preview
+changes. It repairs unmatched braces and incomplete common commands with
+neutral arguments, renders with `throwOnError: true`, rejects any KaTeX error
+HTML, and keeps the last valid preview or a strict-valid invisible `\vphantom`
+fallback for a transiently invalid candidate. The actual closing delimiter
+then uses the normal parser node and the same stable wrapper. The synthetic
+candidate cache is separate from ordinary Incremark cache entries. The
+existing Incremark and Typewriter modes do not use this projection.
+
+The display adapter also preserves scalar AST metadata from the source block
+when the native Typewriter slice omits it. This keeps heading depth, list
+ordering, code language, and similar block properties stable while the
+displayed children are sliced.
+
+The new deterministic fixture is `synthetic-math-preview`. It streams 327
+characters one character at a time and covers dollar inline math, `\(...\)`,
+display math, and table cells. Its green result was:
+
+| Measure | Result |
+| --- | ---: |
+| Harness outcome | Passed |
+| Mid-stream snapshots | 231 |
+| Open-math candidate snapshots | 9; all had no raw delimiters |
+| Final KaTeX nodes | 5 |
+| Synthetic preview wrappers with KaTeX | 5 |
+| Table cells with KaTeX | 2 |
+| Synthetic KaTeX errors | 0 |
+| Long Tasks | 0 |
+| CLS | `0.000179` across 2 entries |
+
+The harness counted one replacement of an inner `.katex` subtree while a
+preview changed. This is expected for KaTeX HTML replacement; the Conduit math
+wrapper and transcript root remain mounted. The synthetic fixture does not use
+the old `maxRemovedMathNodes` gate because that gate counts the inner KaTeX
+replacement, not wrapper or transcript replacement.
+
+Renderer mode regression evidence:
+
+- Marked `standard-math-delimiters`: passed, 5 KaTeX nodes, zero Long Tasks,
+  zero CLS.
+- Incremark Typewriter `standard-math-delimiters`: passed, 279 typewriter
+  metric samples, 87.1 ms display completion delay, zero Long Tasks, zero CLS.
+- Naked Incremark `rich-markdown`: passed, zero Long Tasks and zero CLS.
+- Legacy `--renderer incremark --typewriter` alias on `rich-markdown`: passed.
+- Naked Incremark `standard-math-delimiters`: the existing math fixture still
+  reports one block-math Layout Shift entry, CLS `0.000562`, with zero Long
+  Tasks. This is separate from the new synthetic path and remains visible for
+  follow-up work.
+
+The managed server was restarted with
+`bash .devcontainer/start-conduit.sh restart`. Health returned
+`{"ok":true,"status":"ready","release":"development"}`. A real local
+GPT-5.6 Luna minimal smoke using the standard prompt created chat
+`a8e7c2d6-edbe-4784-9625-1b3b459e169e` in Synthetic Math mode. During the live
+DOM probe it showed 45 KaTeX nodes, 45 synthetic preview nodes, 2 tables, 24
+table cells with KaTeX, zero `.katex-error` nodes, and no raw dollar delimiter.
+
+Verification:
+
+- `npm test`: passed, 297 tests and 0 failures.
+- `npm run typecheck`: passed.
+- `npm run build`: passed. Initial JavaScript was `128.64 kB` gzip, initial
+  CSS was `19.44 kB` gzip, and the largest lazy JavaScript was `185.19 kB`
+  gzip. The Incremark lazy chunk was `117.82 kB` (`34.14 kB` gzip).
+- `git diff --check`: passed.
+- `standard-math-delimiters` harness: Marked and Typewriter passed; naked
+  Incremark retained the Layout Shift result recorded above.
+- `synthetic-math-preview` harness: passed.
+- Local selector probe: all four options were present. Each mode set the
+  expected `data-markdown-renderer` value; only Typewriter set
+  `data-markdown-typewriter`, and only Synthetic Math set
+  `data-markdown-synthetic-math`.
+
+#### Manual smoke checklist — renderer mode split
+
+- Open `http://127.0.0.1:4310` and confirm the selector lists Marked, Incremark,
+  Incremark Typewriter, and Incremark Synthetic Math.
+- Select each mode and confirm only its matching `data-markdown-renderer`
+  state is present.
+- Select Incremark Typewriter. Stream prose, headings, lists, code, math, and
+  tables. Check that the adaptive output stays smooth and does not replay.
+- Select Incremark. Confirm output is immediate and the Typewriter state is
+  not set.
+- Select Incremark Synthetic Math. Use the exact prompt from this document.
+  Confirm partial formulas appear as KaTeX while they grow, raw delimiters do
+  not appear, `.katex-error` does not appear, and table cells receive math.
+- Test both `$...$` and `\(...\)` inline delimiters, plus `$$...$$` and
+  `\[...\]` display delimiters.
+- Switch modes while a response is visible. Check for missing text, duplicate
+  text, transcript flashing, table replacement, or a blocked composer.
+- Reload after selecting each mode. Confirm the exact renderer preference
+  persists.
+- Confirm Marked remains unchanged and the old Typewriter checkbox is absent.
+- Test stop, reconnect, scroll-follow, manual scroll, hidden-tab resume,
+  malformed TeX, links, fenced code, and browser slowdown warnings.

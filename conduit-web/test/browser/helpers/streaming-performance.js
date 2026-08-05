@@ -425,6 +425,9 @@ async function installBrowserProtocol(page, scenario) {
         internalLinkCount: anchors.length,
         katexNodeCount: root.querySelectorAll(".katex").length,
         katexRendered: root.querySelectorAll(".katex").length > 0,
+        syntheticMathPreviewCount: root.querySelectorAll('[data-synthetic-math-preview="true"] .katex').length,
+        syntheticMathRendered: root.querySelectorAll('[data-synthetic-math-preview="true"] .katex').length > 0,
+        syntheticMathErrorsAbsent: root.querySelectorAll('[data-synthetic-math-preview="true"] .katex-error').length === 0,
         tableMathCellCount: [...root.querySelectorAll("td, th")].filter((cell) => cell.querySelector(".katex")).length,
         tableMathRendered: !telemetry.inputFeatures.tableMath
           || [...root.querySelectorAll("td, th")].some((cell) => cell.querySelector(".katex")),
@@ -454,6 +457,8 @@ async function installBrowserProtocol(page, scenario) {
           const style = getComputedStyle(element);
           return style.visibility !== "hidden" && style.display !== "none" && style.opacity !== "0";
         }).length,
+        syntheticMathPreviewCount: root.querySelectorAll('[data-synthetic-math-preview="true"] .katex').length,
+        syntheticMathErrorCount: root.querySelectorAll('[data-synthetic-math-preview="true"] .katex-error').length,
         pendingMathTextLength: pendingMathNodes.reduce((length, element) => length + String(element.textContent || "").length, 0),
         pendingMathHeights,
       });
@@ -1263,8 +1268,12 @@ function expectedAssertionErrors(expected, security, interactions, inputFeatures
       continue;
     }
     if (security?.[key] !== true && interactions?.[key] !== true) errors.push(`Expected browser assertion failed: ${key}`);
-    if (value === true && ["externalLinkConfirmation", "katexNodeCount", "katexRendered", "tableMathRendered", "fencedCodeCopyControls", "artifactControlsPresent"].includes(key)) {
-      const count = key.startsWith("katex") ? security?.katexNodeCount : key === "tableMathRendered" ? security?.tableMathCellCount : key === "externalLinkConfirmation" ? security?.externalLinkButtonCount : security?.fencedCodeCount;
+    if (value === true && ["externalLinkConfirmation", "katexNodeCount", "katexRendered", "syntheticMathRendered", "tableMathRendered", "fencedCodeCopyControls", "artifactControlsPresent"].includes(key)) {
+      const count = key.startsWith("katex") ? security?.katexNodeCount
+        : key === "syntheticMathRendered" ? security?.syntheticMathPreviewCount
+          : key === "tableMathRendered" ? security?.tableMathCellCount
+            : key === "externalLinkConfirmation" ? security?.externalLinkButtonCount
+              : security?.fencedCodeCount;
       if (!(Number(count) > 0)) errors.push(`Expected browser assertion produced no ${key} control or node`);
     }
   }
@@ -1335,6 +1344,12 @@ function streamingPresentationEvidence(assertion, snapshots, sourceText) {
   if (assertion.requireStablePendingLayout && pendingMathHeightDelta > 0.5) {
     errors.push(`Open ${assertion.kind} changed pending math height by ${pendingMathHeightDelta.toFixed(2)}px`);
   }
+  if (assertion.requireSyntheticPreview && !candidates.some((snapshot) => snapshot.syntheticMathPreviewCount > 0)) {
+    errors.push(`Open ${assertion.kind} did not produce an eager synthetic math preview`);
+  }
+  if (assertion.requireNoSyntheticErrors && candidates.some((snapshot) => snapshot.syntheticMathErrorCount > 0)) {
+    errors.push(`Open ${assertion.kind} produced a KaTeX error during synthetic preview`);
+  }
   const finalSnapshot = snapshots.at(-1);
   const finalPendingCount = finalSnapshot
     ? assertion.kind === "math-block"
@@ -1356,8 +1371,10 @@ function streamingPresentationEvidence(assertion, snapshots, sourceText) {
         max: pendingCount.length ? Math.max(...pendingCount) : 0,
       },
       pendingMathVisibleCount: candidates.length ? Math.max(...candidates.map((snapshot) => snapshot.pendingMathVisibleCount ?? 0)) : 0,
-      pendingMathTextLength: candidates.length ? Math.max(...candidates.map((snapshot) => snapshot.pendingMathTextLength ?? 0)) : 0,
-      pendingMathHeightDelta,
+    pendingMathTextLength: candidates.length ? Math.max(...candidates.map((snapshot) => snapshot.pendingMathTextLength ?? 0)) : 0,
+    pendingMathHeightDelta,
+      syntheticMathPreviewCount: candidates.length ? Math.max(...candidates.map((snapshot) => snapshot.syntheticMathPreviewCount ?? 0)) : 0,
+      syntheticMathErrorCount: candidates.length ? Math.max(...candidates.map((snapshot) => snapshot.syntheticMathErrorCount ?? 0)) : 0,
       finalPendingNodeCount: finalPendingCount,
     },
   };
@@ -1388,9 +1405,11 @@ export async function runBrowserStreamingScenario(page, scenario) {
   await page.waitForFunction(() => Boolean(window.__conduitHarness?.completedAt));
   let displayCompletedAt = null;
   if (scenario.typewriter) {
-    await page.waitForSelector('.chat-markdown[data-renderer="incremark"]', { state: "attached", timeout: 15_000 });
+    const typewriterRenderer = renderer === "incremark" ? "incremark-typewriter" : renderer;
+    const typewriterSelector = `.chat-markdown[data-renderer="${typewriterRenderer}"]`;
+    await page.waitForSelector(typewriterSelector, { state: "attached", timeout: 15_000 });
     await page.waitForFunction(() => {
-      const roots = [...document.querySelectorAll('.chat-markdown[data-renderer="incremark"]')];
+      const roots = [...document.querySelectorAll('.chat-markdown[data-renderer="incremark-typewriter"]')];
       return roots.length > 0 && roots.every((root) => root.getAttribute("data-display-busy") !== "true");
     }, null, { timeout: 15_000 });
   }
@@ -1602,9 +1621,10 @@ export async function runBrowserReconnectScenario(page, scenario) {
   await page.waitForFunction(() => Boolean(window.__conduitHarness?.completedAt), { timeout: 5_000 });
   let displayCompletedAt = null;
   if (scenario.typewriter) {
-    await page.waitForSelector('.chat-markdown[data-renderer="incremark"]', { state: "attached", timeout: 15_000 });
+    const typewriterRenderer = renderer === "incremark" ? "incremark-typewriter" : renderer;
+    await page.waitForSelector(`.chat-markdown[data-renderer="${typewriterRenderer}"]`, { state: "attached", timeout: 15_000 });
     await page.waitForFunction(() => {
-      const roots = [...document.querySelectorAll('.chat-markdown[data-renderer="incremark"]')];
+      const roots = [...document.querySelectorAll('.chat-markdown[data-renderer="incremark-typewriter"]')];
       return roots.length > 0 && roots.every((root) => root.getAttribute("data-display-busy") !== "true");
     }, null, { timeout: 15_000 });
   }

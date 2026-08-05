@@ -17,9 +17,28 @@ function withBrowserSettings(search, stored, run) {
   }
 }
 
-test("new users default to Incremark with Typewriter enabled", () => {
+test("new users default to the Incremark Typewriter renderer", () => {
   withBrowserSettings("", {}, () => {
+    assert.equal(selectedMarkdownRenderer(), "incremark-typewriter");
+    assert.equal(selectedMarkdownTypewriter(), true);
+  });
+});
+
+test("the four renderer preferences stay distinct", () => {
+  for (const renderer of ["marked", "incremark", "incremark-typewriter", "incremark-synthetic"]) {
+    withBrowserSettings("", { "conduit:markdown-renderer": renderer, "conduit:incremark-typewriter": renderer === "incremark" ? "0" : "1" }, () => {
+      assert.equal(selectedMarkdownRenderer(), renderer);
+    });
+  }
+});
+
+test("the legacy Incremark preference maps through the old Typewriter key", () => {
+  withBrowserSettings("", { "conduit:markdown-renderer": "incremark", "conduit:incremark-typewriter": "0" }, () => {
     assert.equal(selectedMarkdownRenderer(), "incremark");
+    assert.equal(selectedMarkdownTypewriter(), false);
+  });
+  withBrowserSettings("", { "conduit:markdown-renderer": "incremark", "conduit:incremark-typewriter": "1" }, () => {
+    assert.equal(selectedMarkdownRenderer(), "incremark-typewriter");
     assert.equal(selectedMarkdownTypewriter(), true);
   });
 });
