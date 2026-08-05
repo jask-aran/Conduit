@@ -52,6 +52,8 @@ function summarizeHarnessMetrics(metrics = []) {
   const changedRowKeys = metrics.flatMap((metric) => Array.isArray(metric.changedRowKeys) ? metric.changedRowKeys : []);
   const changedRowKeySet = new Set(changedRowKeys);
   const incrementalResetEvidence = [];
+  const tableAstTransitions = [];
+  let lastTableAstSignature = null;
   for (const metric of metrics) {
     byStage[metric.stage] = (byStage[metric.stage] || 0) + 1;
     const renderer = typeof metric.renderer === "string" ? metric.renderer : null;
@@ -93,6 +95,19 @@ function summarizeHarnessMetrics(metrics = []) {
       typewriterSamples.push(metric);
       if (metric.sourceVisibleCharacters >= 500 && metric.displayedVisibleCharacters > 0) {
         typewriterSteadyStateSamples.push(metric);
+      }
+    }
+    if (metric.renderer === "incremark" && metric.tableAst) {
+      const signature = JSON.stringify(metric.tableAst);
+      if (signature !== lastTableAstSignature) {
+        if (tableAstTransitions.length < 128) {
+          tableAstTransitions.push({
+            at: metric.at,
+            sourceCharacters: metric.sourceCharacters,
+            tableAst: metric.tableAst,
+          });
+        }
+        lastTableAstSignature = signature;
       }
     }
     if (metric.stage === "timeline-projection" && typeof metric.projectionMode === "string") {
@@ -144,6 +159,7 @@ function summarizeHarnessMetrics(metrics = []) {
     changedRowKeyEventCount: changedRowKeys.length,
     uniqueChangedRowKeyCount: changedRowKeySet.size,
     changedRowKeyLengthEvidence: redactChangedKeys(changedRowKeys),
+    tableAstTransitions,
     typewriter: {
       sampleCount: typewriterSamples.length,
       sourceVisibleCharacters: summarizeNumbers(typewriterSamples.map((metric) => metric.sourceVisibleCharacters).filter((value) => typeof value === "number")),
@@ -176,8 +192,10 @@ function summarizeHarnessMetrics(metrics = []) {
 }
 
 function rendererPath(renderer, typewriter = false) {
-  const params = new URLSearchParams({ markdownRenderer: renderer });
-  if (typewriter) params.set("markdownTypewriter", "1");
+  const params = new URLSearchParams({
+    markdownRenderer: renderer,
+    markdownTypewriter: typewriter ? "1" : "0",
+  });
   return `/?${params.toString()}`;
 }
 
@@ -218,6 +236,7 @@ async function installBrowserProtocol(page, scenario) {
       externalLink: /\[[^\]]+\]\(https?:\/\/[^)]+\)/i.test(fixtureText),
       fencedCode: /```/.test(fixtureText),
       katex: /\$\$|(?:^|[^\\$])\$(?!\$)|\\\([\s\S]*?\\\)|\\\[[\s\S]*?\\\]/.test(fixtureText),
+      tableMath: /\|[^\n]*\$(?!\$)[^\n]*\$(?!\$)[^\n]*\|/.test(fixtureText),
     };
     const runSalt = (() => {
       const bytes = new Uint32Array(2);
@@ -250,6 +269,7 @@ async function installBrowserProtocol(page, scenario) {
       scrollSamples: [],
       scrollEvents: 0,
       scrollWrites: 0,
+      scrollWriteEvidence: [],
       identity: { first: null, last: null },
       finalFingerprint: null,
       finalSemanticShape: null,
@@ -257,6 +277,9 @@ async function installBrowserProtocol(page, scenario) {
       tableGeometry: [],
       tableLayoutTransitions: [],
       lastTableLayoutSignature: null,
+      tableStructure: [],
+      tableStructureTransitions: [],
+      lastTableStructureSignature: null,
       mathGeometryTransitions: 0,
       mathGeometryEvidence: [],
       lastMathGeometry: null,
@@ -402,6 +425,9 @@ async function installBrowserProtocol(page, scenario) {
         internalLinkCount: anchors.length,
         katexNodeCount: root.querySelectorAll(".katex").length,
         katexRendered: root.querySelectorAll(".katex").length > 0,
+        tableMathCellCount: [...root.querySelectorAll("td, th")].filter((cell) => cell.querySelector(".katex")).length,
+        tableMathRendered: !telemetry.inputFeatures.tableMath
+          || [...root.querySelectorAll("td, th")].some((cell) => cell.querySelector(".katex")),
         katexInputPresent: telemetry.inputFeatures.katex,
         fencedCodeCount: artifacts.length,
         fencedCodeInputPresent: telemetry.inputFeatures.fencedCode,
@@ -450,6 +476,29 @@ async function installBrowserProtocol(page, scenario) {
         rect: rect(table),
         columns: [...(table.rows[0]?.cells || [])].map((cell) => rect(cell)),
       }));
+      const tableStructure = [...root.querySelectorAll("table")].map((table) => ({
+        tableId: identityOf(table),
+        rows: [...table.rows].map((row) => ({
+          rowId: identityOf(row),
+          rect: rect(row),
+          cells: [...row.cells].map((cell) => ({ cellId: identityOf(cell), rect: rect(cell) })),
+        })),
+      }));
+      const tableStructureSignature = JSON.stringify(tableStructure.map((table) => ({
+        tableId: table.tableId,
+        rows: table.rows.map((row) => ({ rowId: row.rowId, cells: row.cells.map((cell) => cell.cellId) })),
+      })));
+      if (telemetry.promptAt != null && tableStructureSignature !== telemetry.lastTableStructureSignature) {
+        if (telemetry.tableStructureTransitions.length < 128) {
+          telemetry.tableStructureTransitions.push({
+            at: performance.now(),
+            sourceCharacters: telemetry.streamedText.length,
+            tableStructure,
+          });
+        }
+        telemetry.lastTableStructureSignature = tableStructureSignature;
+      }
+      telemetry.tableStructure = tableStructure;
       const tableLayout = tableGeometry.map((table) => ({
         layout: table.layout,
         x: table.rect.x,
@@ -481,6 +530,14 @@ async function installBrowserProtocol(page, scenario) {
             width: Number(katexRect.width.toFixed(2)),
             height: Number(katexRect.height.toFixed(2)),
           } : null,
+          tableCell: (() => {
+            const cell = wrapper.closest("td,th");
+            const row = cell?.closest("tr");
+            const table = row?.closest("table");
+            return table && row && cell
+              ? { row: [...table.rows].indexOf(row), cell: [...row.cells].indexOf(cell) }
+              : null;
+          })(),
         };
       });
       if (telemetry.promptAt != null && telemetry.lastMathGeometry) {
@@ -635,7 +692,12 @@ async function installBrowserProtocol(page, scenario) {
             enumerable: scrollDescriptor.enumerable,
             get: scrollDescriptor.get,
             set(value) {
-              if (inPromptWindow() && isTranscriptViewport(this)) telemetry.scrollWrites += 1;
+              if (inPromptWindow() && isTranscriptViewport(this)) {
+                telemetry.scrollWrites += 1;
+                if (telemetry.scrollWriteEvidence.length < 128) {
+                  telemetry.scrollWriteEvidence.push({ at: performance.now(), value: Number(value) });
+                }
+              }
               scrollDescriptor.set.call(this, value);
             },
           });
@@ -1187,6 +1249,7 @@ function expectedAssertionErrors(expected, security, interactions, inputFeatures
     externalLinkConfirmation: "externalLink",
     katexNodeCount: "katex",
     katexRendered: "katex",
+    tableMathRendered: "tableMath",
     fencedCodeCopyControls: "fencedCode",
     artifactControlsPresent: "fencedCode",
     copyCode: "fencedCode",
@@ -1200,8 +1263,8 @@ function expectedAssertionErrors(expected, security, interactions, inputFeatures
       continue;
     }
     if (security?.[key] !== true && interactions?.[key] !== true) errors.push(`Expected browser assertion failed: ${key}`);
-    if (value === true && ["externalLinkConfirmation", "katexNodeCount", "katexRendered", "fencedCodeCopyControls", "artifactControlsPresent"].includes(key)) {
-      const count = key.startsWith("katex") ? security?.katexNodeCount : key === "externalLinkConfirmation" ? security?.externalLinkButtonCount : security?.fencedCodeCount;
+    if (value === true && ["externalLinkConfirmation", "katexNodeCount", "katexRendered", "tableMathRendered", "fencedCodeCopyControls", "artifactControlsPresent"].includes(key)) {
+      const count = key.startsWith("katex") ? security?.katexNodeCount : key === "tableMathRendered" ? security?.tableMathCellCount : key === "externalLinkConfirmation" ? security?.externalLinkButtonCount : security?.fencedCodeCount;
       if (!(Number(count) > 0)) errors.push(`Expected browser assertion produced no ${key} control or node`);
     }
   }
@@ -1469,6 +1532,10 @@ export async function runBrowserStreamingScenario(page, scenario) {
       layoutShiftEvidence: raw.layoutShifts,
       tableGeometry: raw.tableGeometry,
       tableLayoutTransitions: raw.tableLayoutTransitions,
+      tableStructure: raw.tableStructure,
+      tableStructureTransitions: raw.tableStructureTransitions,
+      scrollWriteEvidence: raw.scrollWriteEvidence,
+      tableAstTransitions: clientWork.tableAstTransitions,
       mathGeometryTransitions: raw.mathGeometryTransitions,
       mathGeometryEvidence: raw.mathGeometryEvidence,
       blockGeometryTransitions: raw.blockGeometryTransitions,
@@ -1493,6 +1560,7 @@ export async function runBrowserStreamingScenario(page, scenario) {
         finalDistanceFromBottom: raw.scrollSamples.at(-1)?.distanceFromBottom ?? null,
         scrollEventCount: raw.scrollEvents,
         programmaticWriteCount: raw.scrollWrites,
+        programmaticWriteEvidence: raw.scrollWriteEvidence,
       },
       instrumentation: {
         enabled: Boolean(raw.instrumentationEnabled),

@@ -1,4 +1,5 @@
-import { createEffect, createSignal, For, Index, Match, onCleanup, Show, Switch } from "solid-js";
+import { createEffect, createSignal, For, Index, onCleanup, Show } from "solid-js";
+import { createStore, reconcile } from "solid-js/store";
 import { createIncremarkParser, type DisplayBlock, type ParsedBlock } from "@incremark/core";
 import katex from "katex";
 import * as KAlertDialog from "@kobalte/core/alert-dialog";
@@ -17,6 +18,7 @@ type RendererContext = {
   inline: boolean;
   requestExternalLink: (url: string) => void;
   deferMath: () => boolean;
+  pendingInlineBlockId: () => string | null;
   onMathBusyChange: (busy: boolean) => void;
 };
 
@@ -39,6 +41,26 @@ function inlineText(nodes: MarkdownNode[]) {
   return nodes.map((node) => node.value || node.children?.map((child: MarkdownNode) => child.value || "").join("") || "").join("");
 }
 
+function summarizeTableAst(blocks: ParsedBlock[]) {
+  const tables: Array<{ blockId: string; rows: number; cells: number; rowCells: number[] }> = [];
+  const visit = (node: MarkdownNode, blockId: string) => {
+    if (!node || typeof node !== "object") return;
+    if (node.type === "table") {
+      const rows = Array.isArray(node.children) ? node.children : [];
+      const rowCells = rows.map((row: MarkdownNode) => Array.isArray(row?.children) ? row.children.length : 0);
+      tables.push({ blockId, rows: rows.length, cells: rowCells.reduce((total: number, count: number) => total + count, 0), rowCells });
+    }
+    if (Array.isArray(node.children)) for (const child of node.children) visit(child, blockId);
+  };
+  for (const block of blocks) visit(block.node, block.id);
+  return {
+    tableCount: tables.length,
+    rowCount: tables.reduce((total, table) => total + table.rows, 0),
+    cellCount: tables.reduce((total, table) => total + table.cells, 0),
+    tables,
+  };
+}
+
 type NodeAccessor = () => MarkdownNode;
 type NodeList = MarkdownNode[] | (() => MarkdownNode[]);
 
@@ -58,14 +80,71 @@ function BlockNodes(props: { nodes: NodeList; context: RendererContext }) {
   return <Index each={readNodes(props.nodes)}>{(node) => <AstNode node={node} context={props.context} />}</Index>;
 }
 
+const PENDING_INLINE_MATH_NODE = "conduitPendingInlineMath";
+const pendingInlineNodeCache = new WeakMap<object, MarkdownNode>();
+
+function appendPendingInlineMath(node: MarkdownNode): MarkdownNode {
+  if (!node || typeof node !== "object" || !Array.isArray(node.children)) return node;
+  if (["paragraph", "heading", "tableCell"].includes(node.type)) {
+    return {
+      ...node,
+      children: [...node.children, { type: PENDING_INLINE_MATH_NODE }],
+    };
+  }
+  for (let index = node.children.length - 1; index >= 0; index -= 1) {
+    const child = node.children[index];
+    const next = appendPendingInlineMath(child);
+    if (next !== child) {
+      const children = [...node.children];
+      children[index] = next;
+      return { ...node, children };
+    }
+  }
+  return node;
+}
+
+function renderBlockNode(blockId: string, node: MarkdownNode, context: RendererContext) {
+  if (blockId !== context.pendingInlineBlockId() || !node || typeof node !== "object") return node;
+  const cached = pendingInlineNodeCache.get(node);
+  if (cached) return cached;
+  const next = appendPendingInlineMath(node);
+  pendingInlineNodeCache.set(node, next);
+  return next;
+}
+
 function ParsedBlockNodes(props: { blocks: () => ParsedBlock[]; context: RendererContext }) {
   return <For each={props.blocks().map((block) => block.id)}>{(id) => {
     const block = () => props.blocks().find((entry) => entry.id === id);
-    return <Show when={block()}>{(value) => <AstNode node={() => value()?.node} context={props.context} />}</Show>;
+    return <Show when={block()}>{(value) => <AstNode node={() => {
+      const current = value();
+      return current ? renderBlockNode(current.id, current.node, props.context) : undefined;
+    }} context={props.context} />}</Show>;
   }}</For>;
 }
 
-function DisplayBlockNodes(props: { blocks: () => DisplayBlock[]; context: RendererContext }) {
+function preserveAppendOnlyNode(previous: MarkdownNode | undefined, current: MarkdownNode | undefined): MarkdownNode | undefined {
+  if (!previous) return current;
+  if (!current) return previous;
+  if (previous.type !== current.type) return current;
+  if (typeof previous.value === "string" && typeof current.value === "string") {
+    if (current.value.startsWith(previous.value) || previous.value.startsWith(current.value)) {
+      return current.value.length >= previous.value.length ? current : previous;
+    }
+    return current;
+  }
+  if (!Array.isArray(previous.children) || !Array.isArray(current.children)) return current;
+  const children = Array.from({ length: Math.max(previous.children.length, current.children.length) }, (_, index) =>
+    preserveAppendOnlyNode(previous.children[index], current.children[index]),
+  ).filter((child): child is MarkdownNode => Boolean(child));
+  return { ...current, children };
+}
+
+function preserveAppendOnlyTable(previous: MarkdownNode | undefined, current: MarkdownNode | undefined) {
+  if (!current || current.type !== "table" || previous?.type !== "table") return current;
+  return preserveAppendOnlyNode(previous, current);
+}
+
+function DisplayBlockNodes(props: { blocks: () => DisplayBlock[]; context: RendererContext; history: Map<string, MarkdownNode> }) {
   const structuralType = (block: DisplayBlock) => {
     const sourceNode = block.node as MarkdownNode;
     if (sourceNode?.type === "paragraph" && /^ {0,3}\|/.test(String((block as DisplayBlock & { rawText?: string }).rawText || ""))) return "table";
@@ -73,22 +152,25 @@ function DisplayBlockNodes(props: { blocks: () => DisplayBlock[]; context: Rende
   };
   const displayNode = (block: DisplayBlock) => {
     const sourceNode = block.node as MarkdownNode;
-    const currentNode = block.displayNode as MarkdownNode;
+    let currentNode = block.displayNode as MarkdownNode;
     const type = structuralType(block);
     if (type && currentNode?.type !== type) {
-      return { ...currentNode, type };
+      currentNode = { ...currentNode, type };
     }
-    return currentNode;
+    const previousNode = props.history.get(block.id);
+    const stableNode = type === "table" ? preserveAppendOnlyTable(previousNode, currentNode) : currentNode;
+    props.history.set(block.id, stableNode);
+    return stableNode;
   };
-  const displayShape = (block: DisplayBlock) => {
-    const node = displayNode(block) || {};
-    if (node.type === "heading") return `${node.type}:${node.depth}`;
-    if (node.type === "list") return `${node.type}:${node.ordered ? "ordered" : "unordered"}`;
-    return String(node.type || "unknown");
-  };
-  return <For each={props.blocks().map((block) => `${block.id}:${displayShape(block)}`)}>{(key) => {
-    const block = () => props.blocks().find((entry) => `${entry.id}:${displayShape(entry)}` === key);
-    return <Show when={block()}>{(value) => <AstNode node={() => value() ? displayNode(value()) : undefined} context={props.context} />}</Show>;
+  // Keep completed blocks and the one active transformer block in one keyed
+  // list. Moving the active block between separate Solid branches would
+  // remove and recreate its DOM when it completes.
+  return <For each={props.blocks().map((block) => block.id)}>{(id) => {
+    const block = () => props.blocks().find((entry) => entry.id === id);
+    return <Show when={block()}>{(value) => <AstNode node={() => {
+      const current = value();
+      return current ? renderBlockNode(current.id, displayNode(current), props.context) : undefined;
+    }} context={props.context} />}</Show>;
   }}</For>;
 }
 
@@ -282,6 +364,14 @@ function PendingConstruct(props: { pending: StreamingPending; streaming: boolean
     : <span class={className} data-streaming-pending={props.streaming ? pending.kind : undefined} aria-hidden="true" />;
 }
 
+function PendingInlineMathPlaceholder() {
+  return <span
+    class="streaming-pending streaming-pending-math-inline"
+    data-streaming-pending="math-inline"
+    aria-hidden="true"
+  />;
+}
+
 function TableNode(props: { node: MarkdownNode | NodeAccessor; context: RendererContext }) {
   const node = () => readNode(props.node);
   const head = () => node()?.children?.[0];
@@ -296,7 +386,9 @@ function TableNode(props: { node: MarkdownNode | NodeAccessor; context: Renderer
   return <table>
     <Show when={columnWidths().length}><colgroup><For each={columnWidths()}>{(width) => <col style={{ width }} />}</For></colgroup></Show>
     <Show when={head()}>{(value) => <thead><TableRow node={() => value()} context={props.context} header /></thead>}</Show>
-    <tbody><For each={body()}>{(row) => <TableRow node={row} context={props.context} />}</For></tbody>
+    {/* Streaming Markdown appends rows but replaces AST row objects on every update.
+        Index keeps each logical row and its cells mounted while the active row grows. */}
+    <tbody><Index each={body()}>{(row) => <TableRow node={row} context={props.context} />}</Index></tbody>
   </table>;
 }
 
@@ -314,19 +406,9 @@ function TextNode(props: { node: NodeAccessor }) {
 
 function AstNode(props: { node: MarkdownNode | NodeAccessor; context: RendererContext }) {
   const node = () => readNode(props.node);
-  return <Switch fallback={null}>
-    <Match when={() => node()?.type === "text"}><AstNodeContent node={node} context={props.context} /></Match>
-    <Match when={() => node()?.type === "strong"}><AstNodeContent node={node} context={props.context} /></Match>
-    <Match when={() => node()?.type === "emphasis"}><AstNodeContent node={node} context={props.context} /></Match>
-    <Match when={() => node()?.type === "delete"}><AstNodeContent node={node} context={props.context} /></Match>
-    <Match when={() => node()?.type === "inlineCode"}><AstNodeContent node={node} context={props.context} /></Match>
-    <Match when={() => node()?.type === "inlineMath" || node()?.type === "math"}><AstNodeContent node={node} context={props.context} /></Match>
-    <Match when={() => node()?.type === "break"}><AstNodeContent node={node} context={props.context} /></Match>
-    <Match when={() => node()?.type === "link" || node()?.type === "linkReference"}><AstNodeContent node={node} context={props.context} /></Match>
-    <Match when={() => node()?.type === "image" || node()?.type === "imageReference"}><AstNodeContent node={node} context={props.context} /></Match>
-    <Match when={() => ["heading", "paragraph", "list", "listItem", "blockquote", "code", "table", "thematicBreak", "html", "htmlElement", "definition", "root"].includes(node()?.type)}><AstNodeContent node={node} context={props.context} /></Match>
-    <Match when={() => Boolean(node()?.children)}><AstNodeContent node={node} context={props.context} /></Match>
-  </Switch>;
+  return <Show when={node()?.type} keyed fallback={null}>
+    {(_type) => <AstNodeContent node={node} context={props.context} />}
+  </Show>;
 }
 
 function AstNodeContent(props: { node: NodeAccessor; context: RendererContext }) {
@@ -339,6 +421,7 @@ function AstNodeContent(props: { node: NodeAccessor; context: RendererContext })
     case "inlineCode": return <code>{node()?.value || ""}</code>;
     case "inlineMath":
     case "math": return <MathNode node={node} defer={props.context.deferMath} onBusyChange={props.context.onMathBusyChange} />;
+    case PENDING_INLINE_MATH_NODE: return <PendingInlineMathPlaceholder />;
     case "break": return <br />;
     case "link": return <LinkNode node={node} context={props.context} />;
     case "linkReference": return <LinkNode node={node} context={props.context} reference={() => props.context.definitions()[node()?.identifier]} />;
@@ -381,13 +464,15 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
   const [blocks, setBlocks] = createSignal<ParsedBlock[]>([]);
   const [pendingBlocks, setPendingBlocks] = createSignal<ParsedBlock[]>([]);
   const [seededBlocks, setSeededBlocks] = createSignal<ParsedBlock[]>([]);
-  const [displayBlocks, setDisplayBlocks] = createSignal<DisplayBlock[]>([]);
+  const [displayBlockStore, setDisplayBlockStore] = createStore<{ items: DisplayBlock[] }>({ items: [] });
   const [displayBusy, setDisplayBusy] = createSignal(false);
   const [pendingMathRenders, setPendingMathRenders] = createSignal(0);
   const [inlineAst, setInlineAst] = createSignal<MarkdownNode>({ type: "root", children: [] });
   const [pending, setPending] = createSignal<StreamingPending | null>(null);
+  const [pendingInlineBlockId, setPendingInlineBlockId] = createSignal<string | null>(null);
   const [definitions, setDefinitions] = createSignal<Record<string, Definition>>({});
   const [externalUrl, setExternalUrl] = createSignal<string | null>(null);
+  const displayHistory = new Map<string, MarkdownNode>();
   const completedById = new Map<string, ParsedBlock>();
   const seededById = new Map<string, ParsedBlock>();
   let currentBlocks: ParsedBlock[] = [];
@@ -395,6 +480,10 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
   let finalised = false;
   let previousTypewriter: boolean | null = null;
   const typewriter = () => Boolean(props.typewriter && !props.inline);
+  const displayBlocks = () => displayBlockStore.items;
+  const setDisplayBlocks = (next: DisplayBlock[]) => {
+    setDisplayBlockStore("items", reconcile(next, { key: "id", merge: true }));
+  };
   const typewriterController = new AdaptiveIncremarkTypewriter({
     onChange: (next) => {
       setDisplayBlocks(next);
@@ -452,6 +541,7 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
         update = parser.append(source);
         completedById.clear();
         seededById.clear();
+        displayHistory.clear();
         setSeededBlocks([]);
         typewriterController.reset();
       }
@@ -492,6 +582,7 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
     })();
     setDefinitions({ ...parser.getDefinitionMap() });
     setPending(split.pending);
+    setPendingInlineBlockId(split.pending?.kind === "math-inline" ? pendingPrefixBlock?.id || null : null);
     if (updates.length) {
       for (const entry of updates) {
         for (const block of entry.updated) completedById.delete(block.id);
@@ -518,6 +609,7 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
     typewriterController.setEnabled(enabled);
     if (previousTypewriter === true && !enabled) {
       typewriterController.flush();
+      displayHistory.clear();
       seededById.clear();
       setSeededBlocks([]);
       setDisplayBlocks([]);
@@ -526,6 +618,7 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
       || (previousTypewriter === null && !props.streaming)
       || (parserMode === "render" && previousTypewriter === true)
     )) {
+      displayHistory.clear();
       seededById.clear();
       for (const block of currentBlocks) seededById.set(block.id, block);
       setSeededBlocks([...currentBlocks]);
@@ -554,6 +647,7 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
     }
     const reconciledAt = recorder ? performance.now() : 0;
     if (recorder) {
+      const tableAst = summarizeTableAst(currentBlocks);
       recordHarnessMetric(recorder, {
         stage: "markdown-render",
         renderer: "incremark",
@@ -570,6 +664,7 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
         pendingBlockCount: latestUpdate?.pending?.length ?? null,
         completedBlockCount: latestUpdate?.completed?.length ?? null,
         updatedBlockCount: latestUpdate?.updated?.length ?? null,
+        tableAst,
       });
       recordHarnessMetric(recorder, {
         stage: "markdown-reconcile",
@@ -587,6 +682,7 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
     inline: Boolean(props.inline),
     requestExternalLink: setExternalUrl,
     deferMath: () => typewriter(),
+    pendingInlineBlockId,
     onMathBusyChange: (busy) => setPendingMathRenders((count) => Math.max(0, count + (busy ? 1 : -1))),
   };
   const displayedBlocks = () => {
@@ -600,16 +696,16 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
         <Show when={props.inline} fallback={<>
           <Show when={typewriter()} fallback={<ParsedBlockNodes blocks={displayedBlocks} context={context} />}>
             <ParsedBlockNodes blocks={seededBlocks} context={context} />
-            <DisplayBlockNodes blocks={displayBlocks} context={context} />
+            <DisplayBlockNodes blocks={displayBlocks} context={context} history={displayHistory} />
           </Show>
           <Show when={pending()}>
-            {(value) => <>
+            {(value) => <Show when={value().kind !== "math-inline" || !pendingInlineBlockId()}>
               <PendingConstruct pending={value()} streaming={Boolean(props.streaming)} />
-            </>}
+            </Show>}
           </Show>
         </>}>
           <AstNode node={inlineAst()} context={context} />
-          <Show when={pending()}>{(value) => <PendingConstruct pending={value()} streaming={Boolean(props.streaming)} />}</Show>
+          <Show when={pending()}>{(value) => <Show when={value().kind !== "math-inline" || !pendingInlineBlockId()}><PendingConstruct pending={value()} streaming={Boolean(props.streaming)} /></Show>}</Show>
         </Show>
       </div>
     </div>
