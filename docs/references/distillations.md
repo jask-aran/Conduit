@@ -90,13 +90,6 @@ Add an entry through `$tacit-knowledge` after explicit approval or validated rep
 - **Scope:** Every change and every maintained repository document.
 - **Evidence:** Deployment/documentation consolidation and release-artifact hygiene work.
 
-### Make Git history intentional
-
-- **Type:** Preference.
-- **Rule:** Use scoped imperative commits with bodies that record failure mode, invariant, and checks; treat sequential `main` history as canonical, use a natural final commit or annotated `sprint/` tag for a run, and treat PRs as optional review bundles.
-- **Scope:** Multi-commit feature work, releases, and review handoff.
-- **Evidence:** The repository’s explicit commit-history convention and prior release workflow.
-
 ## UI and component heuristics
 
 ### Preserve authored timelines when animations self-clean
