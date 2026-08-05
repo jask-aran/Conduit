@@ -11,7 +11,7 @@ Options:
   --flow <stream|reconnect>         Browser flow to exercise (default: stream)
   --scenario <name>                 Reported scenario name (default: browser-streaming-baseline)
   --profile <steady|burst|jitter>   Source cadence profile (default: steady)
-  --renderer <marked|incremark|incremark-typewriter|incremark-synthetic>  Markdown renderer (default: marked)
+  --renderer <marked-stable|marked|incremark|incremark-typewriter|incremark-synthetic>  Markdown renderer (default: marked)
   --typewriter                     Legacy alias for --renderer incremark-typewriter
   --require-typewriter-metrics     Require scheduled typewriter metric samples
   --text <value>                    Scripted assistant output
@@ -62,7 +62,7 @@ const expectedInteractions = valueAfter(args, "--expected-interactions", null);
 const instrumentation = valueAfter(args, "--instrumentation", "on");
 if (!["on", "off"].includes(instrumentation)) throw new Error("--instrumentation must be on or off");
 const renderer = valueAfter(args, "--renderer", "marked");
-if (!["marked", "incremark", "incremark-typewriter", "incremark-synthetic"].includes(renderer)) throw new Error("--renderer must be marked, incremark, incremark-typewriter, or incremark-synthetic");
+if (!["marked-stable", "marked", "incremark", "incremark-typewriter", "incremark-synthetic"].includes(renderer)) throw new Error("--renderer must be marked-stable, marked, incremark, incremark-typewriter, or incremark-synthetic");
 if (args.includes("--typewriter") && !["incremark", "incremark-typewriter"].includes(renderer)) throw new Error("--typewriter requires an Incremark renderer");
 
 const environment = {

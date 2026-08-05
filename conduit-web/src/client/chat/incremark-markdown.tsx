@@ -8,6 +8,7 @@ import { getHarnessRecorder, recordHarnessMetric } from "@/client/harness-metric
 import type { ChatMarkdownProps } from "./markdown";
 import { createSyntheticMathPreviewNode, repairSyntheticMathSource } from "./incremark-synthetic-math";
 import { AdaptiveIncremarkTypewriter, visibleAstCharacters } from "./incremark-typewriter";
+import { projectTableMathSource, promoteTableCellDisplayMath, restoreTableMathAst, restoreTableMathSentinel } from "./table-math";
 import type { StreamingPending } from "./streaming-markdown";
 import { splitStreamingMarkdown } from "./streaming-markdown";
 
@@ -24,6 +25,25 @@ type RendererContext = {
   pendingInlineBlockId: () => string | null;
   onMathBusyChange: (busy: boolean) => void;
 };
+
+function restoreParsedBlock(block: ParsedBlock, sentinel: string, originalSource: string) {
+  const restoredNode = promoteTableCellDisplayMath(restoreTableMathAst(block.node, sentinel));
+  const parsedRawText = typeof (block as ParsedBlock & { rawText?: string }).rawText === "string"
+    ? restoreTableMathSentinel((block as ParsedBlock & { rawText?: string }).rawText!, sentinel)
+    : (block as ParsedBlock & { rawText?: string }).rawText;
+  const sourceRawText = originalSource.slice(block.startOffset, block.endOffset);
+  const restoredRawText = sourceRawText.length === parsedRawText?.length ? sourceRawText : parsedRawText;
+  const stableId = "conduit-block-" + block.startOffset;
+  if (restoredNode === block.node
+    && restoredRawText === (block as ParsedBlock & { rawText?: string }).rawText
+    && block.id === stableId) return block;
+  return {
+    ...block,
+    id: stableId,
+    node: restoredNode,
+    rawText: restoredRawText,
+  } as ParsedBlock;
+}
 
 const allowedProtocols = new Set(["http:", "https:", "mailto:"]);
 
@@ -257,6 +277,8 @@ function MathNode(props: { node: MarkdownNode | NodeAccessor; defer?: () => bool
   const node = () => readNode(props.node);
   const [html, setHtml] = createSignal("");
   const [type, setType] = createSignal<string | undefined>();
+  const [previewMinHeight, setPreviewMinHeight] = createSignal(0);
+  let wrapper: HTMLSpanElement | undefined;
   let cancelJob: (() => void) | null = null;
   let busy = false;
   let renderVersion = 0;
@@ -267,6 +289,13 @@ function MathNode(props: { node: MarkdownNode | NodeAccessor; defer?: () => bool
     busy = next;
     props.onBusyChange?.(next);
   };
+  const samplePreviewHeight = (synthetic: boolean, current: MarkdownNode) => {
+    if (!synthetic || current?.type !== "math") return;
+    queueMicrotask(() => {
+      const height = wrapper?.getBoundingClientRect().height || 0;
+      if (height > previewMinHeight()) setPreviewMinHeight(height);
+    });
+  };
   const renderCurrent = (current: MarkdownNode, source: string, version: number) => {
     if (version !== renderVersion) return;
     const synthetic = Boolean(props.preview?.());
@@ -276,6 +305,7 @@ function MathNode(props: { node: MarkdownNode | NodeAccessor; defer?: () => bool
       lastValidHtml = cached;
       setHtml(cached);
       setBusy(false);
+      samplePreviewHeight(synthetic, current);
       return;
     }
     let renderedHtml: string | null = null;
@@ -295,6 +325,11 @@ function MathNode(props: { node: MarkdownNode | NodeAccessor; defer?: () => bool
     if (renderedHtml == null) {
       if (lastValidHtml) {
         renderedHtml = lastValidHtml;
+      } else if (synthetic) {
+        // A first invalid partial must not reserve a larger fallback box than
+        // the valid preview that follows it. Keep the stable wrapper mounted,
+        // but let the cell grow when KaTeX first accepts the candidate.
+        renderedHtml = "";
       } else if (!fallbackHtml) {
         try {
           fallbackHtml = katex.renderToString(current?.type === "math" ? "\\vphantom{\\displaystyle x}" : "\\vphantom{x}", {
@@ -324,6 +359,7 @@ function MathNode(props: { node: MarkdownNode | NodeAccessor; defer?: () => bool
       cacheMathHtml(current, candidate, renderedHtml, synthetic);
     }
     if (renderedHtml !== html()) setHtml(renderedHtml);
+    samplePreviewHeight(synthetic, current);
     setBusy(false);
   };
   const initial = node();
@@ -346,6 +382,7 @@ function MathNode(props: { node: MarkdownNode | NodeAccessor; defer?: () => bool
       setHtml("");
       lastValidHtml = "";
       fallbackHtml = "";
+      setPreviewMinHeight(0);
       return;
     }
     const synthetic = Boolean(props.preview?.());
@@ -371,7 +408,7 @@ function MathNode(props: { node: MarkdownNode | NodeAccessor; defer?: () => bool
     cancelJob?.();
     setBusy(false);
   });
-  return <span class={type() === "math" ? "incremark-math-block" : "incremark-math-inline"} data-synthetic-math-preview={props.preview?.() ? "true" : undefined} innerHTML={html()} />;
+  return <span ref={wrapper} class={type() === "math" ? "incremark-math-block" : "incremark-math-inline"} data-synthetic-math-preview={props.preview?.() ? "true" : undefined} style={{ "min-height": props.preview?.() && type() === "math" && previewMinHeight() > 0 ? `${previewMinHeight()}px` : undefined }} innerHTML={html()} />;
 }
 
 function CodeNode(props: { node: MarkdownNode | NodeAccessor }) {
@@ -417,15 +454,7 @@ function TableNode(props: { node: MarkdownNode | NodeAccessor; context: Renderer
   const node = () => readNode(props.node);
   const head = () => node()?.children?.[0];
   const body = () => node()?.children?.slice(1) || [];
-  const columnWidths = () => {
-    const count = head()?.children?.length || body()?.[0]?.children?.length || 0;
-    if (count === 2) return ["30%", "70%"];
-    if (count === 3) return ["24%", "42%", "34%"];
-    if (count === 4) return ["14%", "36%", "20%", "30%"];
-    return Array.from({ length: count }, () => `${100 / Math.max(1, count)}%`);
-  };
   return <table>
-    <Show when={columnWidths().length}><colgroup><For each={columnWidths()}>{(width) => <col style={{ width }} />}</For></colgroup></Show>
     <Show when={head()}>{(value) => <thead><TableRow node={() => value()} context={props.context} header /></thead>}</Show>
     {/* Streaming Markdown appends rows but replaces AST row objects on every update.
         Index keeps each logical row and its cells mounted while the active row grows. */}
@@ -529,6 +558,8 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
   const seededById = new Map<string, ParsedBlock>();
   let currentBlocks: ParsedBlock[] = [];
   let previousSource = "";
+  let previousParserSource = "";
+  let previousTableMathSentinel = "";
   let finalised = false;
   let previousTypewriter: boolean | null = null;
   const typewriter = () => Boolean(props.typewriter && !props.inline);
@@ -578,20 +609,33 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
 
   createEffect(() => {
     const source = String(props.children || "");
-    const split = splitStreamingMarkdown(source);
+    const syntheticMath = Boolean(props.syntheticMath);
+    const tableMath = !props.inline;
+    const split = splitStreamingMarkdown(source, { tableMath });
+    const projection = tableMath
+      ? projectTableMathSource(source, {
+        convertTexDisplayDelimiters: true,
+        sentinel: previousTableMathSentinel || undefined,
+      })
+      : null;
+    const parserSource = projection?.source || source;
+    const normalizeBlock = (block: ParsedBlock) => projection ? restoreParsedBlock(block, projection.sentinel, source) : block;
     const recorder = getHarnessRecorder();
     const parseStartedAt = recorder ? performance.now() : 0;
     let parserMode = "none";
     let update: ReturnType<typeof parser.append> | undefined;
     const updates: Array<ReturnType<typeof parser.append>> = [];
-    if (source !== previousSource) {
-      if (source.startsWith(previousSource)) {
+    if (source !== previousSource || (tableMath && parserSource !== previousParserSource)) {
+      const canAppend = source.startsWith(previousSource)
+        && parserSource.startsWith(previousParserSource)
+        && (!projection || projection.sentinel === previousTableMathSentinel);
+      if (canAppend) {
         parserMode = "append";
-        update = parser.append(source.slice(previousSource.length));
+        update = parser.append(parserSource.slice(previousParserSource.length));
       } else {
         parserMode = "render";
         parser.reset();
-        update = parser.append(source);
+        update = parser.append(parserSource);
         completedById.clear();
         seededById.clear();
         displayHistory.clear();
@@ -600,6 +644,8 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
       }
       updates.push(update);
       previousSource = source;
+      previousParserSource = parserSource;
+      previousTableMathSentinel = projection?.sentinel || "";
       finalised = false;
     }
     if (!props.streaming && !finalised && !split.pending) {
@@ -613,7 +659,10 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
     const pendingUpdateBlocks = new Map<string, ParsedBlock>();
     let pendingOffset: number | null = null;
     for (const entry of updates) {
-      for (const block of entry.pending) pendingUpdateBlocks.set(block.id, block);
+      for (const block of entry.pending) {
+        const normalized = normalizeBlock(block);
+        pendingUpdateBlocks.set(normalized.id, normalized);
+      }
     }
     const pendingPrefixBlock = (() => {
       if (!split.pending || props.inline) return null;
@@ -623,7 +672,7 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
         const previewNode = createSyntheticMathPreviewNode(currentBlock.node, {
           kind: split.pending.kind,
           body: split.pending.body,
-          opening: split.pending.kind === "math-inline" && source.startsWith("\\(", split.pending.start) ? "\\(" : "$",
+          opening: split.pending.opening || (split.pending.kind === "math-inline" && source.startsWith("\\(", split.pending.start) ? "\\(" : "$"),
         });
         if (previewNode) {
           return {
@@ -635,8 +684,15 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
         }
 
         const previewParser = createIncremarkParser(incremarkParserOptions);
-        previewParser.render(`${currentBlock.rawText}${syntheticMathClosingDelimiter(source, split.pending)}`);
-        const reparsedNode = previewParser.getAst().children?.[0];
+        const previewSource = currentBlock.rawText + syntheticMathClosingDelimiter(source, split.pending);
+        const previewProjection = projectTableMathSource(previewSource, {
+          convertTexDisplayDelimiters: true,
+          sentinel: projection?.sentinel,
+        });
+        previewParser.render(previewProjection.source);
+        const reparsedNode = previewParser.getAst().children?.[0]
+          ? promoteTableCellDisplayMath(restoreTableMathAst(previewParser.getAst().children?.[0], previewProjection.sentinel))
+          : null;
         if (reparsedNode && containsMath(reparsedNode)) {
           return {
             ...currentBlock,
@@ -650,8 +706,18 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
       const prefix = currentBlock.rawText.slice(0, prefixLength);
       if (!prefix.trim()) return null;
       const prefixParser = createIncremarkParser(incremarkParserOptions);
-      prefixParser.render(prefix);
-      const prefixNode = prefixParser.getAst().children?.[0];
+      const prefixProjection = tableMath
+        ? projectTableMathSource(prefix, {
+          convertTexDisplayDelimiters: true,
+          sentinel: projection?.sentinel,
+        })
+        : null;
+      prefixParser.render(prefixProjection?.source || prefix);
+      const prefixNode = prefixParser.getAst().children?.[0]
+        ? prefixProjection
+          ? promoteTableCellDisplayMath(restoreTableMathAst(prefixParser.getAst().children?.[0], prefixProjection.sentinel))
+          : prefixParser.getAst().children?.[0]
+        : null;
       if (!prefixNode) return null;
       return {
         ...currentBlock,
@@ -665,9 +731,10 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
     setPendingInlineBlockId(!props.syntheticMath && split.pending?.kind === "math-inline" ? pendingPrefixBlock?.id || null : null);
     if (updates.length) {
       for (const entry of updates) {
-        for (const block of entry.updated) completedById.delete(block.id);
+        for (const block of entry.updated) completedById.delete(normalizeBlock(block).id);
         for (const block of entry.completed) {
-          completedById.set(block.id, block);
+          const normalized = normalizeBlock(block);
+          completedById.set(normalized.id, normalized);
         }
       }
       pendingOffset = !props.streaming ? split.pending?.start ?? null : null;

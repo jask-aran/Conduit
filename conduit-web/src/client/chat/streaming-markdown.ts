@@ -4,12 +4,17 @@ export type StreamingPending = {
   kind: StreamingPendingKind;
   start: number;
   body: string;
+  opening?: "$" | "$$" | "\\(" | "\\[";
   language?: string;
 };
 
 export type StreamingMarkdownSplit = {
   stable: string;
   pending: StreamingPending | null;
+};
+
+export type StreamingMarkdownOptions = {
+  tableMath?: boolean;
 };
 
 type SourceRange = { start: number; end: number };
@@ -103,6 +108,80 @@ function findOpenBlockMath(source: string, ranges: SourceRange[]) {
   return open;
 }
 
+function isTableDelimiterLine(line: string) {
+  const value = line.trim();
+  if (!value.includes("|")) return false;
+  const cells = value.replace(/^\|/, "").replace(/\|$/, "").split("|");
+  return cells.length >= 2 && cells.every((cell) => /^\s*:?-{1,}:?\s*$/.test(cell));
+}
+
+function tableRowMask(source: string) {
+  const lines = sourceLines(source);
+  const mask = lines.map(() => false);
+  for (let index = 0; index < lines.length; index += 1) {
+    if (!isTableDelimiterLine(lines[index]!.text)) continue;
+    let before = index - 1;
+    while (before >= 0 && lines[before]!.text.trim().includes("|")) before -= 1;
+    let after = index + 1;
+    while (after < lines.length && lines[after]!.text.trim().includes("|")) after += 1;
+    for (let cursor = before + 1; cursor < after; cursor += 1) {
+      if (cursor !== index) mask[cursor] = true;
+    }
+  }
+  return { lines, mask };
+}
+
+function findOpenTableCellMath(source: string, ranges: SourceRange[]) {
+  const table = tableRowMask(source);
+  for (let lineIndex = 0; lineIndex < table.lines.length; lineIndex += 1) {
+    const line = table.lines[lineIndex]!;
+    if (!table.mask[lineIndex] || inRange(line.start, ranges)) continue;
+    let codeDelimiter = 0;
+    for (let index = 0; index < line.text.length; index += 1) {
+      if (line.text[index] === "`" && !isEscaped(line.text, index)) {
+        let end = index;
+        while (line.text[end] === "`") end += 1;
+        const length = end - index;
+        if (!codeDelimiter) codeDelimiter = length;
+        else if (codeDelimiter === length) codeDelimiter = 0;
+        index = end - 1;
+        continue;
+      }
+      if (codeDelimiter || isEscaped(line.text, index)) continue;
+      if (line.text.startsWith("$$", index)) {
+        const close = findUnescapedDelimiter(line.text, "$$", index + 2);
+        if (close < 0) return { start: line.start + index, bodyStart: line.start + index + 2, opening: "$$" as const, kind: "math-block" as const };
+        index = close + 1;
+        continue;
+      }
+      if (line.text.startsWith("\\[", index)) {
+        const close = findUnescapedDelimiter(line.text, "\\]", index + 2);
+        if (close < 0) return { start: line.start + index, bodyStart: line.start + index + 2, opening: "\\[" as const, kind: "math-block" as const };
+        index = close + 1;
+        continue;
+      }
+      if (line.text.startsWith("\\(", index)) {
+        const close = findUnescapedDelimiter(line.text, "\\)", index + 2);
+        if (close < 0) return { start: line.start + index, bodyStart: line.start + index + 2, opening: "\\(" as const, kind: "math-inline" as const };
+        index = close + 1;
+        continue;
+      }
+      if (line.text[index] === "$" && line.text[index + 1] !== "$" && (!line.text[index + 1] || !/[\s\d]/.test(line.text[index + 1]!))) {
+        let close = -1;
+        for (let cursor = index + 1; cursor < line.text.length; cursor += 1) {
+          if (line.text[cursor] !== "$" || line.text[cursor + 1] === "$" || isEscaped(line.text, cursor)) continue;
+          if (/\s/.test(line.text[cursor - 1] || "")) continue;
+          close = cursor;
+          break;
+        }
+        if (close < 0) return { start: line.start + index, bodyStart: line.start + index + 1, opening: "$" as const, kind: "math-inline" as const };
+        index = close;
+      }
+    }
+  }
+  return null;
+}
+
 function isEscaped(source: string, offset: number) {
   let slashes = 0;
   for (let index = offset - 1; index >= 0 && source[index] === "\\"; index -= 1) slashes += 1;
@@ -116,7 +195,7 @@ function findUnescapedDelimiter(source: string, delimiter: string, start: number
   return -1;
 }
 
-function findInlineMath(source: string, ranges: SourceRange[], blockMathStart: number | null) {
+function findInlineMath(source: string, ranges: SourceRange[], blockMathStart: number | null, skipDoubleDollar = false) {
   let codeDelimiter = 0;
   for (let index = 0; index < source.length; index += 1) {
     if (inRange(index, ranges) || (blockMathStart != null && index >= blockMathStart)) continue;
@@ -143,6 +222,7 @@ function findInlineMath(source: string, ranges: SourceRange[], blockMathStart: n
     }
 
     if (source[index] !== "$" || source[index + 1] === "$") continue;
+    if (skipDoubleDollar && index > 0 && source[index - 1] === "$" && !isEscaped(source, index - 1)) continue;
     const next = source[index + 1];
     if (!next || /\s|\d/.test(next)) continue;
 
@@ -161,7 +241,7 @@ function findInlineMath(source: string, ranges: SourceRange[], blockMathStart: n
   return null;
 }
 
-export function splitStreamingMarkdown(source: string): StreamingMarkdownSplit {
+export function splitStreamingMarkdown(source: string, options: StreamingMarkdownOptions = {}): StreamingMarkdownSplit {
   const fences = scanFences(source);
   const candidates: StreamingPending[] = [];
   if (fences.open) {
@@ -182,7 +262,18 @@ export function splitStreamingMarkdown(source: string): StreamingMarkdownSplit {
     });
   }
 
-  const inlineMath = findInlineMath(source, fences.ranges, blockMath?.start ?? null);
+  const tableMath = options.tableMath ? findOpenTableCellMath(source, fences.ranges) : null;
+  if (tableMath) {
+    candidates.push({
+      kind: tableMath.kind,
+      start: tableMath.start,
+      body: source.slice(tableMath.bodyStart),
+      opening: tableMath.opening,
+    });
+  }
+
+  const blockMathStart = [blockMath?.start, tableMath?.start].filter((value): value is number => value != null).sort((left, right) => left - right)[0] ?? null;
+  const inlineMath = findInlineMath(source, fences.ranges, blockMathStart, Boolean(options.tableMath));
   if (inlineMath) {
     candidates.push({
       kind: "math-inline",

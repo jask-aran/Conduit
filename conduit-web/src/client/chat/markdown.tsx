@@ -583,15 +583,20 @@ function MarkedMarkdown(props: ChatMarkdownProps) {
 }
 
 const IncremarkMarkdown = lazy(() => import("./incremark-markdown").then((module) => ({ default: module.IncremarkMarkdown })));
+const MarkedStableMarkdown = lazy(() => import("./marked-stable").then((module) => ({ default: module.MarkedStableMarkdown })));
 
 export function ChatMarkdown(props: ChatMarkdownProps) {
   const renderer = () => props.renderer || selectedMarkdownRenderer();
   const incremark = () => renderer() !== "marked";
   const typewriter = () => renderer() === "incremark-typewriter";
   const syntheticMath = () => renderer() === "incremark-synthetic";
-  return <Show when={incremark()} fallback={<MarkedMarkdown {...props} />}>
+  return <Show when={renderer() === "marked-stable"} fallback={<Show when={incremark()} fallback={<MarkedMarkdown {...props} />}>
     <Suspense fallback={<div class="markdown-skeleton" />}>
       <IncremarkMarkdown {...props} typewriter={typewriter()} syntheticMath={syntheticMath()} />
+    </Suspense>
+  </Show>}>
+    <Suspense fallback={<div class="markdown-skeleton" />}>
+      <MarkedStableMarkdown {...props} />
     </Suspense>
   </Show>;
 }

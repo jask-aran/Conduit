@@ -58,6 +58,22 @@ test("supports TeX display delimiters", () => {
   assert.equal(splitStreamingMarkdown(`${source}\\]`).pending, null);
 });
 
+test("classifies an open dollar display formula inside a table cell", () => {
+  const source = "| Name | Formula |\n| --- | --- |\n| A | $$\\frac{1}{x}";
+  const result = splitStreamingMarkdown(source, { tableMath: true });
+  assert.equal(result.pending?.kind, "math-block");
+  assert.equal(result.pending?.opening, "$$");
+  assert.equal(result.pending?.body, "\\frac{1}{x}");
+});
+
+test("classifies an open TeX display formula inside a table cell", () => {
+  const source = "| Name | Formula |\n| --- | --- |\n| A | \\[x|y";
+  const result = splitStreamingMarkdown(source, { tableMath: true });
+  assert.equal(result.pending?.kind, "math-block");
+  assert.equal(result.pending?.opening, "\\[");
+  assert.equal(result.pending?.body, "x|y");
+});
+
 test("classifies an open fenced code tail and preserves its language", () => {
   const result = splitStreamingMarkdown("Before\n\n```javascript\nconst answer = 42;");
   assert.equal(result.stable, "Before\n\n");

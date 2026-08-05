@@ -32,11 +32,13 @@ test("a deterministic stream reports browser delivery and visible rendering cade
     ? (fixture ? fixture.expectedSemanticText : text)
     : process.env.HARNESS_EXPECTED_SEMANTIC_TEXT;
   const expectedSemanticFingerprint = jsonEnv("HARNESS_EXPECTED_SEMANTIC_FINGERPRINT") ?? fixture?.expectedSemanticFingerprint ?? null;
-  const expectedAssertions = jsonEnv("HARNESS_EXPECTED_ASSERTIONS") ?? fixture?.expectedAssertions ?? {};
-  const expectedInteractions = jsonEnv("HARNESS_EXPECTED_INTERACTIONS") ?? fixture?.expectedInteractions ?? {};
-  const streamingAssertion = jsonEnv("HARNESS_EXPECTED_STREAMING") ?? fixture?.streamingAssertion ?? null;
   const renderer = process.env.HARNESS_RENDERER || "marked";
   const typewriter = process.env.HARNESS_TYPEWRITER === "1";
+  const selectedRenderer = typewriter && renderer === "incremark" ? "incremark-typewriter" : renderer;
+  const rendererContract = fixture?.rendererContracts?.[selectedRenderer] || {};
+  const expectedAssertions = jsonEnv("HARNESS_EXPECTED_ASSERTIONS") ?? rendererContract.expectedAssertions ?? fixture?.expectedAssertions ?? {};
+  const expectedInteractions = jsonEnv("HARNESS_EXPECTED_INTERACTIONS") ?? fixture?.expectedInteractions ?? {};
+  const streamingAssertion = jsonEnv("HARNESS_EXPECTED_STREAMING") ?? rendererContract.streamingAssertion ?? fixture?.streamingAssertion ?? null;
   const seed = Number(process.env.HARNESS_SEED || 1);
   const cadence = process.env.HARNESS_PROFILE
     ? createCadence(process.env.HARNESS_PROFILE, {
@@ -65,7 +67,10 @@ test("a deterministic stream reports browser delivery and visible rendering cade
     maxLongestTaskMs: fixture?.maxLongestTaskMs ?? null,
     maxRemovedMathNodes: fixture?.maxRemovedMathNodes ?? null,
     maxIncrementalResets: fixture?.maxIncrementalResets ?? null,
-    expectedTableLayout: fixture?.expectedTableLayout ?? null,
+    expectedTableLayout: rendererContract.expectedTableLayout ?? fixture?.expectedTableLayout ?? null,
+    expectedTableMathCellCount: rendererContract.expectedTableMathCellCount ?? null,
+    requireNoRawMathDelimiters: rendererContract.requireNoRawMathDelimiters ?? false,
+    maxMathCellOverflowCount: rendererContract.maxMathCellOverflowCount ?? null,
     maxTableLayoutTransitions: fixture?.maxTableLayoutTransitions ?? null,
     maxMathGeometryTransitions: fixture?.maxMathGeometryTransitions ?? null,
     maxBlockGeometryTransitions: fixture?.maxBlockGeometryTransitions ?? null,

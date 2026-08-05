@@ -1,4 +1,4 @@
-export type MarkdownRendererId = "marked" | "incremark" | "incremark-typewriter" | "incremark-synthetic";
+export type MarkdownRendererId = "marked" | "marked-stable" | "incremark" | "incremark-typewriter" | "incremark-synthetic";
 
 export const MARKDOWN_RENDERER_STORAGE_KEY = "conduit:markdown-renderer";
 export const MARKDOWN_TYPEWRITER_STORAGE_KEY = "conduit:incremark-typewriter";
@@ -13,7 +13,7 @@ function urlBoolean(name: string): boolean | null {
 
 export function selectedMarkdownRenderer(): MarkdownRendererId {
   const value = new URLSearchParams(location.search).get("markdownRenderer") || localStorage.getItem(MARKDOWN_RENDERER_STORAGE_KEY);
-  if (value === "marked" || value === "incremark-typewriter" || value === "incremark-synthetic") return value;
+  if (value === "marked" || value === "marked-stable" || value === "incremark-typewriter" || value === "incremark-synthetic") return value;
   if (value === "incremark") return legacyTypewriterPreference() ? "incremark-typewriter" : "incremark";
   return "incremark-typewriter";
 }
@@ -27,7 +27,7 @@ export function markdownRendererSwitchEnabled() {
 export function selectedMarkdownTypewriter() {
   const renderer = new URLSearchParams(location.search).get("markdownRenderer") || localStorage.getItem(MARKDOWN_RENDERER_STORAGE_KEY);
   if (renderer === "incremark-typewriter") return true;
-  if (renderer === "marked" || renderer === "incremark-synthetic") return false;
+  if (renderer === "marked" || renderer === "marked-stable" || renderer === "incremark-synthetic") return false;
   if (renderer === "incremark") return legacyTypewriterPreference();
   return true;
 }

@@ -394,6 +394,14 @@ async function installBrowserProtocol(page, scenario) {
       rootType: root?.tagName?.toLowerCase() || null,
       semanticCounts: Object.fromEntries(Object.entries(semanticSelectors).map(([category, selector]) => [category, root?.querySelectorAll(selector).length || 0])),
     });
+    const tableMathOverflowCount = (root) => [...root.querySelectorAll("td, th")].reduce((count, cell) => {
+      const cellRect = cell.getBoundingClientRect();
+      const overflow = [...cell.querySelectorAll(".katex")].some((math) => {
+        const mathRect = math.getBoundingClientRect();
+        return mathRect.left < cellRect.left - 1 || mathRect.right > cellRect.right + 1;
+      });
+      return count + (overflow ? 1 : 0);
+    }, 0);
     const securityAssertions = (root) => {
       if (!root) return null;
       const unsafeElements = root.querySelectorAll("script, style, iframe, object, embed, img").length;
@@ -410,6 +418,9 @@ async function installBrowserProtocol(page, scenario) {
       const anchors = [...root.querySelectorAll("a[href]")];
       const artifacts = [...root.querySelectorAll(".artifact")];
       const codeCopyButtons = artifacts.filter((artifact) => artifact.querySelector("button[data-copy-code]"));
+      const visibleText = String(root.textContent || "");
+      const rawDollarDelimiterCount = (visibleText.match(/\$/g) || []).length;
+      const rawTexDelimiterCount = (visibleText.match(/\\[()[\]]/g) || []).length;
       return {
         unsafeElementsAbsent: unsafeElements === 0,
         unsafeElementCount: unsafeElements,
@@ -429,6 +440,10 @@ async function installBrowserProtocol(page, scenario) {
         syntheticMathRendered: root.querySelectorAll('[data-synthetic-math-preview="true"] .katex').length > 0,
         syntheticMathErrorsAbsent: root.querySelectorAll('[data-synthetic-math-preview="true"] .katex-error').length === 0,
         tableMathCellCount: [...root.querySelectorAll("td, th")].filter((cell) => cell.querySelector(".katex")).length,
+        mathCellOverflowCount: tableMathOverflowCount(root),
+        rawDollarDelimiterCount,
+        rawTexDelimiterCount,
+        rawMathDelimiterCount: rawDollarDelimiterCount + rawTexDelimiterCount,
         tableMathRendered: !telemetry.inputFeatures.tableMath
           || [...root.querySelectorAll("td, th")].some((cell) => cell.querySelector(".katex")),
         katexInputPresent: telemetry.inputFeatures.katex,
@@ -459,6 +474,7 @@ async function installBrowserProtocol(page, scenario) {
         }).length,
         syntheticMathPreviewCount: root.querySelectorAll('[data-synthetic-math-preview="true"] .katex').length,
         syntheticMathErrorCount: root.querySelectorAll('[data-synthetic-math-preview="true"] .katex-error').length,
+        tableMathOverflowCount: tableMathOverflowCount(root),
         pendingMathTextLength: pendingMathNodes.reduce((length, element) => length + String(element.textContent || "").length, 0),
         pendingMathHeights,
       });
@@ -1318,6 +1334,29 @@ function prefixHasOpenConstruct(prefix, kind) {
 
 function streamingPresentationEvidence(assertion, snapshots, sourceText) {
   if (!assertion) return { errors: [], report: null };
+  if (!assertion.kind) {
+    const candidates = snapshots.filter((snapshot) => snapshot.sourceCharacters > 0 && snapshot.sourceCharacters < sourceText.length);
+    const errors = [];
+    if (!candidates.length) errors.push("No mid-stream snapshots captured for the table/math contract");
+    const delimiterClean = candidates.filter((snapshot) => snapshot.rawDollarCount === 0 && snapshot.rawTexDelimiterCount === 0);
+    if (assertion.requireNoRawMathDelimiters && delimiterClean.length !== candidates.length) {
+      errors.push("Math appeared with raw delimiters in visible text during streaming");
+    }
+    if (assertion.requireNoMathCellOverflow && candidates.some((snapshot) => snapshot.tableMathOverflowCount > 0)) {
+      errors.push("Table math overflowed its cell during streaming");
+    }
+    return {
+      errors,
+      report: {
+        kind: "all-math",
+        snapshotCount: snapshots.length,
+        finalSourceCharacters: snapshots.at(-1)?.sourceCharacters ?? null,
+        sourceCharacterSamples: snapshots.map((snapshot) => snapshot.sourceCharacters),
+        candidateSnapshotCount: candidates.length,
+        delimiterCleanSnapshotCount: delimiterClean.length,
+      },
+    };
+  }
   const candidates = snapshots.filter((snapshot) => snapshot.sourceCharacters < sourceText.length
     && prefixHasOpenConstruct(sourceText.slice(0, snapshot.sourceCharacters), assertion.kind));
   const errors = [];
@@ -1452,6 +1491,15 @@ export async function runBrowserStreamingScenario(page, scenario) {
   const securityAssertions = raw.finalSecurity || {};
   errors.push(...expectedAssertionErrors(scenario.expectedAssertions, securityAssertions, interactionAssertions, raw.inputFeatures));
   errors.push(...expectedInteractionErrors(scenario.expectedInteractions, interactionAssertions, raw.inputFeatures));
+  if (scenario.expectedTableMathCellCount != null && securityAssertions.tableMathCellCount !== scenario.expectedTableMathCellCount) {
+    errors.push(`Table math cell count ${securityAssertions.tableMathCellCount} did not equal ${scenario.expectedTableMathCellCount}`);
+  }
+  if (scenario.requireNoRawMathDelimiters && securityAssertions.rawMathDelimiterCount !== 0) {
+    errors.push(`Final visible text contained ${securityAssertions.rawMathDelimiterCount} raw math delimiters`);
+  }
+  if (scenario.maxMathCellOverflowCount != null && securityAssertions.mathCellOverflowCount > scenario.maxMathCellOverflowCount) {
+    errors.push(`Table math cell overflow count ${securityAssertions.mathCellOverflowCount} exceeded ${scenario.maxMathCellOverflowCount}`);
+  }
   const streamingPresentation = streamingPresentationEvidence(scenario.streamingAssertion, raw.streamingSnapshots, sourceText);
   errors.push(...streamingPresentation.errors);
   const clientWork = summarizeHarnessMetrics(scopedMetrics);
@@ -1557,6 +1605,9 @@ export async function runBrowserStreamingScenario(page, scenario) {
       tableAstTransitions: clientWork.tableAstTransitions,
       mathGeometryTransitions: raw.mathGeometryTransitions,
       mathGeometryEvidence: raw.mathGeometryEvidence,
+      tableMathCellCount: securityAssertions.tableMathCellCount ?? null,
+      mathCellOverflowCount: securityAssertions.mathCellOverflowCount ?? null,
+      rawMathDelimiterCount: securityAssertions.rawMathDelimiterCount ?? null,
       blockGeometryTransitions: raw.blockGeometryTransitions,
       blockHeightDirectionReversals: raw.blockHeightDirectionReversals,
       blockTopDirectionReversals: raw.blockTopDirectionReversals,
