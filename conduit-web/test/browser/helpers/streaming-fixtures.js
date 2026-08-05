@@ -40,6 +40,13 @@ const multilineInlineMathTableText = [
   "| Continuous growth | When interest is compounded continuously, the balance grows according to the exponential model. The constant $e$ controls the continuous rate. | $A = Pe^{rt}$ | With $P = 1000$, $r = 0.05$, and $t = 4$, the result is $A = 1000e^{0.2} \approx 1221.40$. |",
 ].join("\n");
 
+const inlineMathCellTransitionText = [
+  "| Item | Formula | Notes |",
+  "| --- | --- | --- |",
+  "| A | $x + 1$ | first |",
+  "| B | $y + 2$ | second |",
+].join("\n");
+
 const mathTableOscillationText = [
   "Inline math outside a table: $E = mc^2$, $a^2 + b^2 = c^2$, $\\int_0^1 x^2\\,dx = \\frac{1}{3}$, and $x = \\frac{-b \\pm \\sqrt{b^2 - 4ac}}{2a}$.",
   "",
@@ -55,6 +62,8 @@ const mathTableOscillationText = [
   "",
   "After the table, inline math continues with $\\int u\\,dv = uv - \\int v\\,du$ and $\\det(A) \\ne 0$.",
 ].join("\n");
+
+export const TABLE_MATH_TEST_PROMPT = "output some inline math with $ quotes, and some block math with $$ a lot of it, the inline interspersed with texta nd the blocks inebetween, add soem tables with a lot of info int them as well";
 
 export const BROWSER_FIXTURES = Object.freeze({
   "rich-markdown": {
@@ -108,7 +117,7 @@ export const BROWSER_FIXTURES = Object.freeze({
     text: inlineMathTableText,
     expectedSemanticText: null,
     expectedSemanticFingerprint: null,
-    expectedAssertions: { katexRendered: true },
+    expectedAssertions: { katexRendered: true, tableMathRendered: true },
     expectedInteractions: {},
     maxKaTeXCalls: 96,
     maxLayoutShiftValue: 0.005,
@@ -123,7 +132,7 @@ export const BROWSER_FIXTURES = Object.freeze({
     text: multilineInlineMathTableText,
     expectedSemanticText: null,
     expectedSemanticFingerprint: null,
-    expectedAssertions: { katexRendered: true },
+    expectedAssertions: { katexRendered: true, tableMathRendered: true },
     expectedInteractions: {},
     maxKaTeXCalls: 32,
     maxLayoutShiftValue: 0.005,
@@ -136,11 +145,26 @@ export const BROWSER_FIXTURES = Object.freeze({
     skipStructuralFingerprint: true,
     requiresStructuralContract: false,
   },
+  "inline-math-cell-transition": {
+    text: inlineMathCellTransitionText,
+    expectedSemanticText: null,
+    expectedSemanticFingerprint: rootContract({ table: 1, math: 2 }),
+    expectedAssertions: { katexRendered: true, tableMathRendered: true },
+    expectedInteractions: {},
+    maxKaTeXCalls: 8,
+    maxLayoutShiftValue: 0.005,
+    maxRemovedMathNodes: 0,
+    expectedTableLayout: "fixed",
+    maxTableLayoutTransitions: 3,
+    skipStructuralFingerprint: true,
+    requiresStructuralContract: true,
+  },
   "math-table-oscillation": {
+    prompt: TABLE_MATH_TEST_PROMPT,
     text: mathTableOscillationText,
     expectedSemanticText: null,
     expectedSemanticFingerprint: null,
-    expectedAssertions: { katexRendered: true },
+    expectedAssertions: { katexRendered: true, tableMathRendered: true },
     expectedInteractions: {},
     maxKaTeXCalls: 64,
     maxLayoutShiftValue: 0.005,

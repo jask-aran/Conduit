@@ -1426,6 +1426,85 @@ and the pending math slot does not change height during output.
 
 Commit: `fix: keep incomplete math invisible during streaming`.
 
+### Stable-tail stability pass — Incremark, first three steps
+
+This pass combines the existing Incremark implementation with the stable-tail
+ownership pattern used by the Marked path. It does not integrate
+`@incremark/solid` and does not change Marked.
+
+The adapter now uses keyed Solid store reconciliation for display blocks. The
+native Incremark transformer still owns the completed-block queue and exposes
+one active tail. Completed blocks stay in one keyed `<For>` list with the
+active block; separating the active block into a second branch remounted it
+when the block completed. Incomplete inline math is represented by an
+invisible marker inside the active paragraph, heading, or table cell. The
+marker is added only at render time, so it cannot enter the parser or the
+typewriter queue. The root pending construct is suppressed for that inline
+case.
+
+This is the first three steps of the stability plan:
+
+1. Preserve completed block identity with keyed reconciliation.
+2. Keep one mutable active tail alongside immutable completed blocks.
+3. Keep incomplete inline math in its original parent with an invisible
+   placeholder.
+
+The deterministic results are split by construct. The focused inline-math
+fixture passed with `domMutations: 3966`, `layoutShiftCount: 1`, cumulative
+layout shift `0.0000066408`, zero rendered-block height reversals, zero
+rendered-block top reversals, zero Long Tasks, and exact final text equality.
+The rich-Markdown regression passed with `domMutations: 45`, zero layout
+shifts, zero reversals, and zero Long Tasks. The final Typewriter reports for
+these runs reached source/display `2104/2104` and `47/47`, with zero backlog.
+
+The table-and-math fixture still fails the geometry gate. It reported
+`domMutations: 1092`, cumulative layout shift `0.0108008`, four layout-shift
+entries, 26 rendered-block height reversals, 48 rendered-block top reversals,
+and zero Long Tasks. This confirms that keyed reconciliation and parent-local
+pending math reduce remount risk but do not freeze table geometry. Table
+structure and column geometry remain the next implementation step.
+
+Verification completed for this pass:
+
+- `npm run typecheck`: passed.
+- `npm test -- test/incremark-typewriter.test.js`: 293 passed, 0 failed.
+- `node --test test/markdown-settings.test.js`: 3 passed, 0 failed.
+- `npm run build`: passed; initial JavaScript `128662 B gzip`, initial CSS
+  `19472 B gzip`, largest lazy JavaScript `185186 B gzip`.
+- `npm run test:harness:browser -- --fixture inline-math-stream --renderer incremark --typewriter --require-typewriter-metrics`: passed.
+- `npm run test:harness:browser -- --fixture rich-markdown --renderer incremark --typewriter --require-typewriter-metrics`: passed.
+- The same command for `math-table-oscillation` remains red on the geometry
+  assertions above; its final source/display count was `444/444`.
+- `bash .devcontainer/start-conduit.sh restart`: passed. Health returned
+  `{"ok":true,"status":"ready","release":"development"}`.
+- Managed-server QA on chat
+  `ced1f475-6e71-4d91-9056-75f3f24e29ef` passed. Incremark with Typewriter
+  was selected, then Marked disabled the Typewriter control, and switching
+  back left the completed transcript intact without replay. Re-enabling
+  Typewriter reported zero display-busy nodes and zero pending nodes after
+  seeding.
+
+No default-renderer change is made. Marked remains available and unchanged.
+
+### Manual validation checklist — stable-tail pass
+
+Run `bash .devcontainer/start-conduit.sh restart`, open
+`http://127.0.0.1:4310`, and select Incremark with Typewriter enabled.
+
+- Stream prose with inline `$…$` math. Confirm the open formula stays
+  invisible inside the sentence and does not add a second pending row.
+- Complete the formula. Confirm it appears once as KaTeX without a paragraph
+  remount or visible transcript flash.
+- Stream several paragraphs, headings, lists, and code. Confirm completed
+  blocks do not flash or reset while the active tail changes.
+- Stream a table containing inline math. Watch the bottom of the transcript
+  and record any column-width changes, row-height reversals, or scroll jumps;
+  this remains the known open issue for the next step.
+- Switch to Marked and repeat the same content. Typewriter must be disabled,
+  and Marked output must remain unchanged.
+- Stop and reload after completion. Confirm no pending inline marker remains,
+  no raw TeX is visible, and the final answer does not replay unexpectedly.
+
 ### Manual validation checklist — Slice 6b
 
 Run `bash .devcontainer/start-conduit.sh restart`, open
@@ -2536,3 +2615,287 @@ Long Task and misses the relative-lag target while atomic equations drain.
 The managed server is live and correctly bound. The broad 90-test Chromium
 suite is not green because 7 adjacent app-suite tests fail; those failures are
 outside this inline-math slice.
+
+### Vertical oscillation diagnostic — 5 August 2026
+
+The previous focused fixture did not explain the vertical movement seen in a
+real response. This diagnostic keeps the exact requested prompt in
+`test/browser/helpers/streaming-fixtures.js`:
+
+`output some inline math with $ quotes, and some block math with $$ a lot of it, the inline interspersed with texta nd the blocks inebetween, add soem tables with a lot of info int them as well`
+
+The deterministic answer fixture is `math-table-oscillation`. It contains
+inline math before, inside, and after a five-column table. The run used
+Chromium `149.0.7827.55`, Node `v24.18.0`, seed `1`, a steady `16 ms`
+cadence, and three source characters per delta. The source answer length was
+`1,088` characters. The harness now records parser table shape, table row and
+cell identity, column geometry, math parent location, layout shifts, scroll
+writes, and root mutations.
+
+The harness also exposed and fixed a baseline error: the application default
+enables Incremark Typewriter when no local preference exists, so the immediate
+Incremark path was not immediate in the first comparison. The browser harness
+now passes `markdownTypewriter=0` explicitly for immediate runs. This changed
+test setup only; it did not change renderer behavior.
+
+| Run | DOM mutations | Layout shifts / CLS | Block height / top reversals | Table layout transitions | Table structure transitions | Math geometry transitions | Long tasks | Scroll writes |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Marked immediate | 324 | 30 / `0.113399` | 0 / 0 | 38 (`auto`) | 7 | 0 | 0 | 382 |
+| Incremark immediate | 9,173 | 1 / `0.0000097` | 1 / 0 | 1 | 1 | 2 | 1 (`144 ms`) | 588 |
+| Incremark Typewriter | 1,080 | 1 / `0.0000100` | 26 / 45 | 3 (`empty → table → columns`) | 37 | 4 | 0 | 203 |
+
+The Marked run is not a stability target. Its block geometry counters stay
+stable, but its `table-layout: auto` table changes layout 38 times and
+produces CLS `0.113399`. Copying that behavior would trade the current
+vertical problem for large horizontal shifts and column reflow.
+
+Incremark keeps the outer root stable and has far lower CLS, but the Typewriter
+run still has the vertical failure. The AST evidence is append-only:
+
+- At source characters `333`, the table has 1 row and 5 cells.
+- At `339`, it has 2 rows and 10 cells.
+- At `456`, `573`, `696`, and `822`, it grows to 3, 4, 5, and 6 rows.
+
+The DOM evidence is not append-only. The table header keeps one identity, but
+the body repeatedly replaces logical rows and cells. In the same run, the
+active body row changes from identities `17` to `23` to `29`, then later from
+`139` to `167` to `178`; each replacement also creates five new cell
+identities. The table structure changes 37 times while the parser reports only
+7 table-shape transitions. Row heights also move between `15`, `39.89`,
+`64.78`, and `67.56` pixels as the incomplete row grows. This is the direct
+cause now supported by evidence: a new AST row object causes the table's
+`<For>` body reconciliation to replace DOM rows, so the transcript reflows
+while the provider still appends to the same logical row.
+
+The math geometry evidence does not show repeated table-cell geometry changes
+in this run. It records four completed inline-math transitions, all with no
+`tableCell` parent in the captured transition entries. Math is still a trigger
+for the parser and row content, but the dominant measured mechanism is table
+row and cell remounting, not repeated KaTeX replacement. The Typewriter
+controller itself is within its pacing budget: backlog-age p95 was `75.1 ms`,
+maximum backlog age was `161 ms`, frame-work p95 was `0.3 ms`, maximum frame
+work was `0.8 ms`, no fallback mode activated, and no Long Task occurred. Its
+display drain completed `138.7 ms` after provider completion. The latest run
+recorded 206 transient lag-target misses, but its source-visible counter treats
+math nodes as atomic and never reached the `500`-character steady-state
+threshold; this is not evidence that ordinary prose pacing failed.
+
+#### Measured next plan
+
+1. Change only table subtree reconciliation. Preserve table, header, rows, and
+cells across parser updates when their logical position is unchanged. The
+current append-only evidence supports position-stable row and cell updates;
+`Index`-style reconciliation or an equivalent logical row/cell key map should
+update the active row in place and append only new rows. Do not freeze row
+heights or copy Marked's auto table layout.
+
+2. Rerun Marked immediate, Incremark immediate, and Incremark Typewriter on
+this exact fixture. The acceptance evidence is zero body-row remounts for
+unchanged logical rows, no block-top direction reversals, no repeated table
+column transition after the table is established, and final semantic equality.
+The active row may grow as content wraps; its height must not shrink and grow
+because its DOM subtree was recreated.
+
+3. If row identity becomes stable but the transcript still moves, add
+per-logical-cell geometry evidence and separate two cases: active-cell text
+growth versus KaTeX geometry changes. Only then adjust math placeholder or
+column behavior. Do not add a two-line high-water placeholder or freeze table
+geometry without a measured need.
+
+4. Keep the existing 150% wide-table rule and fixed column hints during this
+diagnostic. After row reconciliation is stable, test dynamic column sizing as
+a separate experiment. A width change must be measured against the current
+`0.000010` CLS baseline; it must not be mixed with row identity changes.
+
+#### Cleanup and evidence scope
+
+The ungrouped root project had 57 sessions: 38 visible chats and 19 empty
+drafts. I preserved the reference chat
+`ced1f475-6e71-4d91-9056-75f3f24e29ef` and deleted the other 37 active chats
+and 19 drafts. The 8 grouped/workspace session sets were not touched. The
+deleted sessions have no restore path in the application; the preserved
+reference remains available. No separate benchmark file was created.
+
+Verification for this diagnostic:
+
+- `npm run typecheck`: passed after the harness baseline fix.
+- `node --check test/browser/helpers/streaming-performance.js`: passed.
+- `node --check test/browser/helpers/streaming-fixtures.js`: passed.
+- `node --check test/browser/harness-streaming.spec.js`: passed.
+- `git diff --check`: passed.
+- Marked, immediate Incremark, and Incremark Typewriter runs all produced
+  reports with exact source delivery and no removed completed math roots. The
+  runs intentionally failed their old geometry gates: Marked failed the CLS
+  and table-layout gates; immediate Incremark failed one block-height reversal;
+  Typewriter failed the block-height and block-top reversal gates. These
+  failures are the measurement result, not unverified claims.
+
+No renderer fix was implemented in this diagnostic round. The next code
+change should target table row and cell identity preservation first.
+
+### Table tail reconciliation pass — 5 August 2026
+
+The first table fix changed `TableNode` body rows from object-identity `<For>`
+reconciliation to position-stable `<Index>` reconciliation. The exact fixture
+showed that this was necessary but not sufficient: the native transformer can
+return a shorter cached table slice after a source update, even when the
+provider has only appended text. That made already visible rows disappear from
+the current display node.
+
+The Incremark adapter now keeps the previous active table display node by block
+ID and merges it with the next table slice using append-only rules. Previously
+visible rows and cells remain in the active tail when the native slice is
+temporarily shorter. New rows and cells append at the end. Cell text also keeps
+the longer prefix when the native slice temporarily regresses. This does not
+freeze row heights, freeze column geometry, change math handling, or alter
+Marked.
+
+| Run | Before table-tail fix | After table-tail fix |
+| --- | ---: | ---: |
+| Exact Typewriter table-structure transitions | 33–37 | 9 |
+| Exact Typewriter block-top reversals | 45–60 | 0 |
+| Exact Typewriter block-height reversals | 26–31 | 2–7 |
+| Exact Typewriter CLS | `0.000010` | `0.000010` |
+| Exact Typewriter Long Tasks | 0 | 0 |
+
+The remaining height reversals are in the prose/math blocks before the table.
+The block evidence shows the table height only grows as rows and cell content
+arrive. The remaining math transitions are the known text → invisible pending
+math → completed KaTeX lifecycle. Synthetic closing delimiters remain a
+separate future experiment; this pass keeps incomplete math invisible.
+
+The screenshot-shaped `multiline-inline-math-table` fixture passed after the
+change: source `1,265` characters, zero block-height reversals, zero block-top
+reversals, CLS `0.001453`, zero Long Tasks, table structure transitions `8`,
+and display completion delay `78.8 ms`. Its backlog-age p95 was `79.0 ms` and
+maximum frame work was `0.9 ms`. The `rich-markdown` Typewriter regression
+also passed with zero Layout Shifts, zero block reversals, zero Long Tasks, and
+55 DOM mutations.
+
+The larger `inline-math-table-stream` fixture remains outside the acceptance
+gate: it recorded 76 block-height reversals and 128 block-top reversals, with
+one Layout Shift entry and CLS `0.000098`. It has 24 rows and many inline
+formulas. This confirms that the table fix removes the short-slice row loss in
+the focused case, but the larger case still needs the separate inline-math
+geometry work.
+
+#### Verification
+
+- `npm run typecheck`: passed.
+- `git diff --check`: passed.
+- `npm test`: passed, 293 tests and 0 failures.
+- `npm run build`: passed. Initial JavaScript was `128.66 kB` gzip, initial
+  CSS was `19.47 kB` gzip, and the largest lazy JavaScript was `185.19 kB`
+  gzip.
+- Exact `math-table-oscillation` Typewriter: table top reversals reached zero;
+  the harness still failed the old global height-reversal gate because of
+  inline math in earlier prose blocks.
+- Exact immediate Incremark: one global height reversal, zero top reversals,
+  zero Layout Shift entries, zero Long Tasks.
+- `rich-markdown` Typewriter: passed.
+- `multiline-inline-math-table` Typewriter: passed.
+- `inline-math-table-stream` Typewriter: failed its existing geometry gate as
+  recorded above. No threshold was weakened.
+
+#### Manual smoke checklist — table tail reconciliation
+
+Run `bash .devcontainer/start-conduit.sh restart` from the repository root,
+open `http://127.0.0.1:4310`, select Incremark, and enable Typewriter.
+
+- Use the exact table/math prompt from the diagnostic fixture with a live or
+  deterministic response.
+- Confirm rows already visible never disappear while the active row grows.
+- Confirm the table keeps its column boundaries while new rows arrive.
+- Confirm cell text does not reset, duplicate, or move to another row.
+- Confirm formulas inside cells still remain invisible until their closing
+  delimiter arrives, then appear once as complete KaTeX.
+- Scroll at the bottom during generation. Look for table-wide jumps, upward
+  jumps, flashing, or a browser slowdown warning.
+- Repeat with the four-column multiline table. Check that its final layout
+  matches its streaming layout.
+- Switch to Marked and run one table response. Marked must remain unchanged;
+  its Typewriter control must stay disabled.
+- Check raw TeX, missing text, duplicate text, blocked composer controls,
+  console errors, and final transcript equality.
+
+### Inline math cell type-transition fix — 5 August 2026
+
+The live probe found a separate failure from table geometry. With Incremark
+Typewriter enabled, formula-only table cells could remain empty until a reload
+or a Typewriter toggle. The parser produced the correct `inlineMath` nodes,
+but the Solid adapter mounted a leaf component once and evaluated its plain
+JavaScript `switch` only during creation. A text or pending leaf therefore did
+not become `MathNode` when its AST type changed. The old `Switch` also received
+function-valued `when` props, so it did not provide a reactive type boundary.
+
+The adapter now uses a keyed Solid `Show` at the `AstNode` leaf boundary. It
+remounts only when the AST node type changes and keeps same-type text updates
+in place. `DisplayBlockNodes` now keys only by Incremark's stable block ID,
+not by inferred shape. The table display normalizes Incremark's transient
+empty paragraph fallback to the known table shape and merges it with the
+append-only table history. This prevents a cache gap from remounting the
+table, rows, cells, and already-rendered KaTeX.
+
+The new deterministic fixture is `inline-math-cell-transition`. It requires
+one table and exactly two rendered math nodes. The red run before the fix had
+zero KaTeX calls, zero math cells, and failed the structural, KaTeX, and table
+math assertions. The green run passed with:
+
+| Measure | Result |
+| --- | ---: |
+| Final table math cells | 2 |
+| Final KaTeX nodes | 2 |
+| Removed completed math nodes | 0 |
+| Root replacement records | 1 addition, 0 removals |
+| Stable table identity | 1 table ID through all observed transitions |
+| Layout Shift | 0 entries, CLS `0` |
+| Long Tasks | 0 |
+| Harness errors | 0 |
+
+Related Typewriter fixtures also passed:
+
+- `inline-math-table-stream`: 72 table math cells, zero removed math nodes,
+  CLS `0.0000175`, zero Long Tasks.
+- `multiline-inline-math-table`: 12 table math cells, zero removed math
+  nodes, CLS `0.001453`, zero block-height or block-top reversals.
+- `standard-math-delimiters`: two table math cells, zero Layout Shift entries.
+
+The broader `math-table-oscillation` fixture still fails its existing global
+block-height guard: 4 reversals versus the limit of 0. It renders all 15
+table math cells, removes zero completed math nodes, records zero Long Tasks,
+and has zero block-top reversals. This remains a separate inline-math geometry
+risk; no threshold was weakened.
+
+Verification for this fix:
+
+- `npm test`: passed, 293 tests and 0 failures.
+- `npm run typecheck`: passed.
+- `npm run build`: passed. Initial JavaScript was `128.65 kB` gzip, initial
+  CSS was `19.47 kB` gzip, and the largest lazy JavaScript was `185.19 kB`
+  gzip.
+- `git diff --check`: passed.
+- Managed server restart passed. Health returned
+  `{"ok":true,"status":"ready","release":"development"}`.
+- Real local GPT-5.6 Luna minimal smoke with the exact table/math prompt,
+  chat `12fb0cae-815c-4aef-86b0-dc9fd9f36b60`: Incremark Typewriter was
+  checked; the completed DOM contained 3 tables, 44 table cells with KaTeX,
+  72 KaTeX nodes, zero pending nodes, and no display-busy state.
+
+#### Manual smoke checklist — inline math cells
+
+- Select Incremark and enable Typewriter.
+- Use the exact table/math prompt from this document with GPT-5.6 Luna
+  minimal.
+- During streaming, inspect formula-only cells. They must populate without a
+  reload or Typewriter toggle.
+- Confirm completed table rows and cells do not disappear or reset while the
+  next row grows.
+- Confirm formulas appear as complete KaTeX and raw TeX does not remain in
+  completed cells.
+- Scroll at the transcript bottom. Check for flashing, table replacement,
+  duplicate text, missing text, and browser slowdown warnings.
+- Stop and reload the chat. Confirm the final table and formulas remain equal.
+- Switch to Marked. Confirm Marked remains unchanged and Typewriter is off and
+  disabled.
+- Test a valid `\(...\)` formula and a malformed unmatched delimiter. The
+  valid formula must render; malformed source must remain literal or pending.

@@ -54,6 +54,7 @@ test("a deterministic stream reports browser delivery and visible rendering cade
     name,
     profile: process.env.HARNESS_PROFILE || "fixed",
     cadence,
+    prompt: fixture?.prompt || null,
     expectedSemanticText,
     expectedSemanticFingerprint,
     expectedAssertions,
