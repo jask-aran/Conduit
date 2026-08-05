@@ -2190,6 +2190,220 @@ characters, with zero Long Tasks and zero layout shifts. This run used 115
 ordinary-text characters, so it is cadence evidence rather than a replacement
 for the 1,200-character profiles below.
 
+#### Inline-math stability correction — 5 August 2026
+
+The long inline-math fixture reproduced the remaining visible regression. The
+Typewriter path deferred inline KaTeX into a later animation frame. As the
+parent paragraph changed, the adapter could clear and queue the same inline
+math span again. That changed line width and height after the ordinary text
+painted, which caused transcript jumping and repeated math DOM work.
+
+Completed inline math now renders synchronously with its atomic Typewriter
+display update. Only display equations remain on the bounded one-equation
+animation queue. A bounded 512-entry cache is keyed by math mode and source,
+so new AST object identities do not cause the same inline formula to render
+again. Incomplete math still uses the existing invisible pending path.
+
+The new `inline-math-stream` fixture contains 2,591 source characters and 36
+inline equations. Before the fix it measured 219 KaTeX calls, 49,942 DOM
+mutations, 58 Layout Shift entries, and a `0.0299` cumulative Layout Shift
+value. After the fix it measured 79 KaTeX calls, 50,466 DOM mutations, zero
+Layout Shift entries, zero removed math nodes, and a `0.1965 s` display
+completion delay. The DOM mutation count remains high because this is a
+2,591-character, 864-delta stream; the visible layout regression is removed.
+The fixture now gates cumulative Layout Shift below `0.001` and at most 96
+KaTeX calls. This ignores one browser rounding-level shift while still failing
+visible reflow.
+
+Following owner approval, the default for users without an existing local
+preference is now Incremark with Typewriter enabled. An explicit `marked`
+renderer preference, `markdownRenderer=marked`, `markdownTypewriter=0`, or a
+stored Typewriter-off preference still wins. Marked remains available through
+the local renderer switch and URL override.
+
+#### Pending-block reconciliation and standard TeX delimiters — 5 August 2026
+
+The remaining remount cause was not the KaTeX cache. While an inline delimiter
+was open, `IncremarkMarkdown` removed the entire pending paragraph from the
+native `BlockTransformer` queue. The next update re-added that paragraph when
+the delimiter closed. This removed and recreated the surrounding DOM even when
+the completed formula itself was unchanged.
+
+The adapter now parses the stable prefix before the open delimiter as a block
+with the original block ID and keeps it in the queue. The pending formula stays
+in the existing invisible presentation node. Stable `Index` reconciliation is
+used for inline children, lists, table rows, and table cells. Completed inline
+KaTeX mounts synchronously; display equations remain on the bounded deferred
+queue. Both renderers now support `$...$`, `$$...$$`, `\\(...\\)`, and
+`\\[...\\]`.
+
+The deterministic checks used Chromium `149.0.7827.55` and Node `v24.18.0`.
+Reports were written under `/tmp` and contain no transcript bodies.
+
+| Run | Outcome | DOM mutations | Layout shift | Root records / added / removed | Removed math roots | KaTeX calls | Long tasks |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Standard delimiters, Incremark Typewriter, 196 chars | passed | 333 | 0 | 13 / 8 / 5 | 0 | 7 | 0 |
+| Standard delimiters, Marked, 196 chars | passed | 78 | 0 | 16 / 14 / 6 | 0 | 5 | 0 |
+| Long inline stream, Incremark Typewriter, 2,591 chars | passed | 50,405 | 0.0000066 | 109 / 73 / 36 | 0 | 87 | 0 |
+| Exact stored response, Incremark Typewriter, 1,361 source chars | strict gate failed | 8,289 | 8 entries / 0.00436 | 81 / 47 / 34 | 0 | 45 | 0 |
+| Exact stored response, Incremark immediate, 1,361 source chars | strict gate failed | 8,173 | 10 entries / 0.00508 | 83 / 48 / 35 | 0 | 47 | 0 |
+| Exact stored response, Marked, 1,361 source chars | strict gate failed | 525 | 10 entries / 0.00550 | 65 / 55 / 23 | 3 | 33 | 0 |
+
+The table above records the pre-table-CSS comparison. The final correction and
+its replacement measurements are recorded in the next section.
+
+The exact-response comparison shows the change removed the former math-root
+remounts and reduced Layout Shift entries from 13 to 8 for Typewriter. The
+remaining `0.00436` cumulative shift is ordinary transcript reflow from the
+large mixed Markdown response, so it remains open against a zero-shift target.
+Marked still has fewer total DOM mutations, but it remounts completed math
+roots in this stream. The standard delimiter and long-stream fixtures pass;
+the exact-response run is evidence, not a green acceptance result.
+
+The incomplete inline fixture passed with one-character deltas so the open
+delimiter was observed before its close: no raw delimiter, no pending text,
+stable pending layout, one final KaTeX node, and zero removed math roots. The
+incomplete display-math fixture passed the same checks.
+
+Manual QA on the managed server passed the stored mixed-math chat route. The
+server returned `{"ok":true,"status":"ready","release":"development"}`
+and listened on `0.0.0.0:4310`. Incremark Typewriter showed 13 assistant KaTeX
+nodes, zero pending nodes, and zero raw TeX delimiters. Switching to Marked
+disabled Typewriter and preserved zero raw delimiters; switching back to
+Incremark left Typewriter off until re-enabled. URL overrides
+`markdownTypewriter=0` and `markdownTypewriter=1` produced the expected states.
+No browser console or page errors were reported. The screenshot is retained at
+`/tmp/issue24-chat-typewriter.png`.
+
+#### Final table reflow correction — 5 August 2026
+
+Layout-shift source geometry showed that the remaining math-related movement
+came from streamed tables, not from KaTeX remounts. Automatic table layout
+changed column widths as each inline formula arrived. Default table-cell
+centering then moved an inline formula vertically when a row gained a line.
+
+Incremark streamed tables now use fixed layout and top-aligned cells. These
+rules are scoped to Incremark; Marked keeps its previous table CSS. The
+diagnostic harness records the source element and ancestor chain for each
+Layout Shift, so a future regression can distinguish math, table, action-row,
+and full-root movement.
+
+| Probe | Outcome | Source chars | DOM mutations | Layout shift entries / CLS | Root records / added / removed | Removed math roots | KaTeX calls | Long tasks | Display delay |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Exact stored response, Incremark Typewriter | passed | 1,361 | 8,400 | 1 / 0.000719 | 81 / 47 / 34 | 0 | 48 | 0 | 139.8 ms |
+| Mixed inline-math table, Incremark Typewriter | passed | 2,546 | 5,155 | 0 / 0 | 102 / 52 / 50 | 0 | 36 | 0 | 124.0 ms |
+| Incomplete inline math, one-character deltas | passed | 54 | 88 | 1 / 0.000010 | — | 0 | 1 | 0 | 74.8 ms |
+| Incomplete display math, one-character deltas | passed | 71 | 77 | 1 / 0.000011 | — | 0 | 1 | 0 | 62.6 ms |
+
+The exact response now has one small Layout Shift from the shared
+`response-actions` row moving with ordinary message growth. Its sources do not
+include `.chat-markdown`, a table, or a KaTeX node. The outer Markdown root
+remained persistent, and no completed math root was removed. The mixed table
+probe has zero Layout Shift entries and a steady-state relative lag p95 of
+`0.36%` with backlog-age p95 of `18.5 ms`.
+
+The current adaptive stress checks also pass. A high-throughput table stream
+completed provider delivery in `9.3 ms`, drained in `2,685.7 ms`, reached a
+maximum `220`-character frame step, and produced zero Long Tasks or Layout
+Shifts. The stalled inline stream recorded a `300 ms` source stall, a maximum
+backlog of `1,875` characters, a maximum `648`-character frame step, a
+`1,315 ms` display drain, zero Long Tasks, and zero Layout Shifts. Neither
+profile produced an instant reveal.
+
+Manual QA after the final managed-server restart passed the reported mixed-math
+route. Incremark Typewriter showed 13 assistant KaTeX nodes, zero pending
+nodes, and zero raw TeX delimiters. Marked disabled Typewriter and showed zero
+raw delimiters. Switching back to Incremark left Typewriter off until enabled;
+enabling it did not replay the existing transcript. The server health response
+was `{"ok":true,"status":"ready","release":"development"}` and the
+listener was `0.0.0.0:4310`. No browser console or page errors were reported.
+
+#### Nested inline-math atomicity and pane-width tables — 5 August 2026
+
+The reference chat `ced1f475-6e71-4d91-9056-75f3f24e29ef` exposed one remaining
+Incremark regression. Inline formulas inside paragraphs and table cells were
+still sliced one source character at a time. The published core math plugin
+matches only when the math node is the current block root; it does not apply
+recursively while the generic paragraph or table-cell slicer walks child
+nodes. The result was temporary partial KaTeX, empty math spans, and vertical
+oscillation.
+
+The Typewriter adapter now prepares nested `math` and `inlineMath` nodes as
+atomic leaves before passing blocks to the native transformer. It keeps the
+formula source in a private adapter field instead of `value`, so the native
+AST slicer keeps the whole node while the adapter still renders the original
+formula. This keeps the native queue, frame scheduler, and cached slices in
+use. Marked is unchanged.
+
+Incremark tables now keep fixed layout after completion and use stable column
+hints. On wide chat panes, a table can use up to 150% of the assistant
+transcript width, capped and centred at the chat-pane width. This gives tables
+room for formulas without widening ordinary prose. The rule is scoped to
+Incremark; narrow panes keep the normal table width.
+
+The browser harness now records final table geometry, table-layout transitions,
+and changes to completed inline-math geometry. The new
+`math-table-oscillation` fixture contains inline formulas before, inside, and
+after a five-column table.
+
+| Probe | Before atomic nested math | After atomic nested math |
+| --- | ---: | ---: |
+| Source characters | 1,088 | 1,088 |
+| DOM mutations | 9,851 | 10,905 |
+| Inline-math geometry transitions | 34 | 4 |
+| KaTeX calls | 58 | 26 |
+| Removed math roots | 0 | 0 |
+| Layout Shift entries / CLS | 0 / 0 | 1 / 0.000010 |
+| Long tasks | 0 | 0 |
+
+The small increase in DOM mutations on this fixture comes from inserting
+complete math nodes instead of their partial text slices. The long
+`inline-math-stream` fixture measured 2,591 source characters, 46,110 DOM
+mutations, 1 inline-math geometry transition, 36 KaTeX calls, zero removed
+math roots, CLS `0.0000066`, and zero Long Tasks after the change. The
+oscillation-specific geometry work therefore fell by 88%, and KaTeX calls fell
+by 55% on the 1,088-character reproduction.
+
+The screenshot-shaped four-column fixture passed with a 960 px table in a
+1,024 px chat pane. Its columns measured 134 / 345 / 192 / 288 px, the table
+stayed `table-layout: fixed` through completion, and it recorded 1 tiny KaTeX
+rounding shift with CLS `0.0000158`. The existing 2,546-character mixed table
+fixture used the same 960 px geometry, recorded zero Layout Shift entries, and
+kept the final table layout fixed. Both fixtures recorded zero Long Tasks and
+zero removed math roots.
+
+The managed server was rebuilt and restarted with
+`bash .devcontainer/start-conduit.sh restart`. Health returned
+`{"ok":true,"status":"ready","release":"development"}` and the listener
+was `0.0.0.0:4310`. Agent-browser QA on the reference chat found 58 completed
+KaTeX nodes, zero pending nodes, three fixed-layout tables, and no page or
+console errors.
+
+#### Manual validation checklist — nested math and wide tables
+
+Run `bash .devcontainer/start-conduit.sh restart`, open the reference chat at
+`http://127.0.0.1:4310/chat/ced1f475-6e71-4d91-9056-75f3f24e29ef`, and keep
+Incremark with Typewriter enabled.
+
+- Confirm inline formulas appear as complete equations. They must not grow
+  one TeX character at a time.
+- Confirm the transcript does not flash, oscillate, or move up and down when
+  formulas appear in ordinary prose.
+- Confirm tables use the available pane width on desktop. The first column
+  must remain readable, and formulas must not force a final column reflow.
+- During a long table response, compare the table while streaming with the
+  final table. Column boundaries must stay in the same positions.
+- Confirm formulas inside table cells appear complete and do not change row
+  height after they appear.
+- Switch to Marked and repeat one table and one inline-math response. Marked
+  must remain selectable and its Typewriter control must stay disabled.
+- Check for raw TeX, missing text, duplicate text, console errors, browser
+  slowdown warnings, and blocked composer controls.
+
+Expected result: nested inline math appears atomically, wide tables use spare
+pane width without changing ordinary prose width, and no table-wide rerender
+occurs when the provider completes.
+
 #### Typewriter deterministic measurements
 
 Commands ran from `conduit-web` with Chromium `149.0.7827.55` and Node
@@ -2255,9 +2469,9 @@ stricter no-Long-Task/high-rate target for equation-heavy output.
   formulas, no fixed 180-character cap, source-update step growth, frame-work
   limiting, fallback selection, and atomic math counting. The batching tests
   cover the 256-character same-block limit and structural boundaries.
-- `npm test`: passed with 286 tests, 0 failures.
+- `npm test`: passed with 292 tests, 0 failures.
 - `npm run build`: passed. The bundle report recorded initial JavaScript
-  `128599 B gzip`, initial CSS `19377 B gzip`, and largest lazy JavaScript
+  `128621 B gzip`, initial CSS `19422 B gzip`, and largest lazy JavaScript
   `185186 B gzip`. Initial JavaScript is 45.4% smaller than the earlier
   `235258 B gzip` result and is below the `180000 B` budget.
 - The browser harness passed Typewriter steady, burst, jitter, stall,
@@ -2267,22 +2481,20 @@ stricter no-Long-Task/high-rate target for equation-heavy output.
   root to be attached, then waits for display-busy to clear; this matches the
   intentional empty math shell during deferred rendering.
 - `npm run test:browser -- --project=desktop-chromium --workers=1` ran 90
-  Chromium tests but finished red with 8 failures. The failures were in the
-  existing broad app suite: workspace sizing, workspace dialog naming, chat
-  menu contents, message-action payload shape, and legacy stream fixtures that
-  emit `message_start`/`assistant_stream_delta` instead of the current
-  structured generation events. The Typewriter-specific deterministic harness
-  and its renderer/math/security/reconnect contracts passed separately. I did
-  not change those adjacent app tests in this slice.
+  Chromium tests with 76 passed, 7 failed, and 7 skipped. The failures remain
+  in the broad app suite: workspace dialog visibility, legacy Markdown stream
+  fixtures, transient-chat menu contents, stop/checkpoint timing, a delayed
+  checkpoint timeout, and a message-action payload shape. The
+  Typewriter-specific deterministic harness and its renderer, math, security,
+  and reconnect contracts passed separately. I did not change those adjacent
+  app tests in this slice.
 - `bash .devcontainer/start-conduit.sh restart`: passed with the normal
   repository command. `curl -fsS http://127.0.0.1:4310/healthz` returned
   `{"ok":true,"status":"ready","release":"development"}`. The listener
   is `0.0.0.0:4310`, so Windows can use `127.0.0.1:4310`.
-- After the post-change restart, agent-browser reached
-  `http://127.0.0.1:4310/login`. `CONDUIT_PASSWORD`,
-  `CONDUIT_PERF_PASSWORD`, and `CONDUIT_AUTH_FILE` were unset. No credential
-  was guessed and no authenticated transcript was changed. Manual
-  authenticated checks remain pending for a credentialed Windows session.
+- After the final restart, authenticated agent-browser checks passed on the
+  reported mixed-math route. The temporary browser auth entry was deleted after
+  QA. No transcript data was changed.
 
 #### Manual checklist — typewriter mode
 
@@ -2313,13 +2525,14 @@ behavior.
   pause/resume. Check for blocked controls, raw TeX, pending nodes that remain
   after completion, duplicate output, long tasks, and browser slowdown warnings.
 
-Current conclusion: Typewriter mode is a useful parallel presentation path.
-The deterministic ordinary-text profiles meet the 10% relative-progress and
-250 ms backlog-age targets, exceed the old 180-character ceiling, preserve
-content, and show fewer root mutations. The final stall profile has zero Long
-Tasks. The separate 96-equation math stress profile passes the current 250 ms
-safety gate but still has one 100 ms math/layout Long Task and misses the
-relative-lag target while atomic equations drain. The managed server is live
-and bound correctly. The broad 90-test Chromium suite is red for 8 adjacent
-app-suite failures, so the repository-wide browser gate is not green. Manual
-authenticated checks remain open before Slice 7 can make an adoption decision.
+Current conclusion: the inline-math stability work meets its focused
+acceptance criteria. Completed inline math renders once, incomplete math stays
+invisible, standard `$…$`, `$$…$$`, `\(…\)`, and `\[…\]` delimiters work, the
+outer transcript root remains stable, and the exact response has no removed
+math roots or Long Tasks. Typewriter remains an adaptive Incremark path and
+Marked remains available and unchanged by the new table rules. The separate
+96-equation math-stress profile still has the known one `100 ms` math/layout
+Long Task and misses the relative-lag target while atomic equations drain.
+The managed server is live and correctly bound. The broad 90-test Chromium
+suite is not green because 7 adjacent app-suite tests fail; those failures are
+outside this inline-math slice.

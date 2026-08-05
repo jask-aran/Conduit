@@ -34,6 +34,30 @@ test("does not classify escaped or code-span dollars", () => {
   assert.equal(splitStreamingMarkdown("Escaped \\$E=mc and `$E=mc`.").pending, null);
 });
 
+test("supports TeX inline delimiters and keeps an open formula hidden", () => {
+  const source = "The answer is \\(E = mc^2";
+  const result = splitStreamingMarkdown(source);
+  assert.equal(result.stable, "The answer is ");
+  assert.deepEqual(result.pending, {
+    kind: "math-inline",
+    start: source.indexOf("\\("),
+    body: "E = mc^2",
+  });
+  assert.equal(splitStreamingMarkdown("The answer is \\(E = mc^2\\)").pending, null);
+});
+
+test("supports TeX display delimiters", () => {
+  const source = "Before\n\n\\[\nE = mc^2";
+  const result = splitStreamingMarkdown(source);
+  assert.equal(result.stable, "Before\n\n");
+  assert.deepEqual(result.pending, {
+    kind: "math-block",
+    start: 8,
+    body: "E = mc^2",
+  });
+  assert.equal(splitStreamingMarkdown(`${source}\\]`).pending, null);
+});
+
 test("classifies an open fenced code tail and preserves its language", () => {
   const result = splitStreamingMarkdown("Before\n\n```javascript\nconst answer = 42;");
   assert.equal(result.stable, "Before\n\n");

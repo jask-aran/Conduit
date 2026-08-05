@@ -8,6 +8,7 @@ import {
   chooseFallbackMode,
   chooseTickInterval,
   normalizeFrameInterval,
+  prepareTypewriterNode,
   updateFrameInterval,
   updateRateEma,
   visibleAstCharacters,
@@ -86,4 +87,15 @@ test("math is one visible atomic character while ordinary AST text is retained",
     { type: "inlineMath", value: "x^2 + y^2" },
     { type: "text", value: " after" },
   ] }), 14);
+});
+
+test("nested math is prepared as an atomic leaf for the native slicer", () => {
+  const node = prepareTypewriterNode({ type: "paragraph", children: [
+    { type: "text", value: "before " },
+    { type: "inlineMath", value: "\\frac{a}{b}" },
+    { type: "text", value: " after" },
+  ] });
+  assert.equal(node.children[1].value, undefined);
+  assert.equal(node.children[1].__conduitMathSource, "\\frac{a}{b}");
+  assert.equal(visibleAstCharacters(node), 14);
 });
