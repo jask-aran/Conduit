@@ -1,0 +1,50 @@
+name: Roadmap
+description: A durable product capability or direction expected to produce multiple Features.
+title: ""
+labels:
+  - "type: roadmap"
+body:
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Outcome
+      description: What product capability or direction should exist, and why does it matter?
+    validations:
+      required: true
+  - type: textarea
+    id: direction
+    attributes:
+      label: Direction and Constraints
+      description: Record the durable product, architecture, UX, compatibility, and scope boundaries that future Features should preserve.
+      value: |
+        <!-- Record the important durable decisions and constraints above the required subheadings below. -->
+
+        ### Non-goals
+
+        <!-- Required. State what this Roadmap deliberately does not solve or promise. -->
+
+        ### Acceptance criteria
+
+        <!-- Required. Define outcome-level completion criteria: what must be true for the capability to be considered delivered. Keep these at Roadmap level; low-level implementation checks and per-slice tests belong in the Feature issues that implement the Roadmap. Example: "At least one non-Pi harness can create, restore, stream and cancel a structured Workspace session while existing Pi-native chats remain unchanged." -->
+    validations:
+      required: true
+  - type: textarea
+    id: sketch
+    attributes:
+      label: Implementation Sketch
+      description: Optional. Record non-binding design and feasibility thinking: candidate architecture, data flow, UX, interfaces, phases, examples, or other detail that explains how the capability might work. Preserve useful specificity and uncertainty; later Feature issues become authoritative for the implementation they own.
+      placeholder: |
+        Describe the current implementation hypothesis if one is useful.
+
+        ### Possible implementation slices
+
+        Optional early decomposition. Identify likely independently landable Features, but refine them against the then-current codebase when implementation is scheduled.
+    validations:
+      required: false
+  - type: textarea
+    id: related
+    attributes:
+      label: Related
+      description: Optional. Link related Issues, Roadmaps, Features, prior work, or other context that helps navigation without implying a hard dependency.
+    validations:
+      required: false

@@ -1,0 +1,27 @@
+name: Feature
+description: A bounded implementation change that should land coherently.
+title: ""
+labels:
+  - "type: feature"
+body:
+  - type: textarea
+    id: goal
+    attributes:
+      label: Goal
+      description: What should change, and why?
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope
+      description: Important boundaries, constraints, or non-goals.
+    validations:
+      required: false
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance
+      description: What evidence or behaviour would make this complete?
+    validations:
+      required: false
