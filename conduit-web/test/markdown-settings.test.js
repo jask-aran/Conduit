@@ -59,6 +59,13 @@ test("explicit renderer and Typewriter preferences remain authoritative", () => 
   });
 });
 
+test("Synthetic uses the Typewriter display queue", () => {
+  withBrowserSettings("", { "conduit:markdown-renderer": "incremark-synthetic" }, () => {
+    assert.equal(selectedMarkdownRenderer(), "incremark-synthetic");
+    assert.equal(selectedMarkdownTypewriter(), true);
+  });
+});
+
 test("URL overrides take precedence over stored defaults", () => {
   withBrowserSettings("?markdownRenderer=marked&markdownTypewriter=0", {
     "conduit:markdown-renderer": "incremark",
