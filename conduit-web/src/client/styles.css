@@ -364,15 +364,15 @@ svg { stroke-width: 1.5; }
 .chat-markdown ul { list-style: disc; } .chat-markdown ol { list-style: decimal; }
 .chat-markdown blockquote { margin: 1em 0; padding-left: 1em; border-left: 3px solid var(--border); color: var(--muted-foreground); }
 .chat-markdown table { width: 100%; margin: 1em 0; border-collapse: collapse; }
-.chat-markdown[data-renderer="incremark"] table { table-layout: fixed; }
+.chat-markdown[data-renderer^="incremark"] table { table-layout: fixed; }
 @container chat-main (min-width: 760px) {
-  .chat-markdown[data-renderer="incremark"] table {
+  .chat-markdown[data-renderer^="incremark"] table {
     width: min(150%, 100cqw);
     margin-left: calc((100% - min(150%, 100cqw)) / 2);
   }
 }
 .chat-markdown th, .chat-markdown td { padding: 7px 9px; border: 1px solid var(--border); text-align: left; }
-.chat-markdown[data-renderer="incremark"] th, .chat-markdown[data-renderer="incremark"] td { vertical-align: top; }
+.chat-markdown[data-renderer^="incremark"] th, .chat-markdown[data-renderer^="incremark"] td { vertical-align: top; }
 .chat-markdown :not(pre) > code { border-radius: 4px; background: var(--muted); padding: 0.12em 0.35em; font-family: ui-monospace, monospace; }
 .external-markdown-link { border: 0; background: none; padding: 0; color: oklch(0.7 0.16 250); text-decoration: underline; }
 .artifact { margin: 1em 0; overflow: hidden; border: 1px solid var(--border); border-radius: 10px; background: var(--card); }

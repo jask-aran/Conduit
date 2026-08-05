@@ -44,11 +44,22 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
   );
   const empty = createMemo(() => !timeline.length && !props.chat.activity()?.label);
 
+  let scrollFrame: number | null = null;
   const scrollBottomNow = () => {
+    if (scrollFrame != null) {
+      cancelAnimationFrame(scrollFrame);
+      scrollFrame = null;
+    }
     viewport.scrollTop = viewport.scrollHeight;
     if (viewport.scrollTop < 240) loadEarlier();
   };
-  const scrollBottom = () => requestAnimationFrame(scrollBottomNow);
+  const scrollBottom = () => {
+    if (scrollFrame != null) return;
+    scrollFrame = requestAnimationFrame(() => {
+      scrollFrame = null;
+      if (following()) scrollBottomNow();
+    });
+  };
   const settleInitialLayout = (epoch: number) => {
     if (epoch !== layoutEpoch || !following()) return;
     scrollBottomNow();
@@ -163,6 +174,7 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
       viewport.removeEventListener("touchend", onTouchEnd);
       viewport.removeEventListener("touchcancel", onTouchEnd);
       if (displayScrollFrame != null) cancelAnimationFrame(displayScrollFrame);
+      if (scrollFrame != null) cancelAnimationFrame(scrollFrame);
     });
   });
 

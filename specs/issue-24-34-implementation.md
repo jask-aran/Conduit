@@ -2918,10 +2918,12 @@ old `conduit:incremark-typewriter` key remains compatible. Selecting naked
 Incremark writes the exact `incremark` mode and disables Typewriter.
 
 Synthetic mode keeps the raw response authoritative. When the active stream
-has an incomplete `$`, `$$`, `\(`, or `\[` construct, the adapter reparses only
-that active block with a display-only closing delimiter. It does not feed the
-synthetic delimiter into the incremental parser or alter source offsets. The
-candidate AST stays inside the original paragraph, table, or display block.
+has an incomplete `$`, `$$`, `\(`, or `\[` construct, the adapter first patches
+the existing pending AST. If that AST does not expose the pending token, it
+reparses only that active block with a display-only closing delimiter. It does
+not feed the synthetic delimiter into the incremental parser or alter source
+offsets. The candidate AST stays inside the original paragraph, table, or
+display block.
 
 The math component keeps one stable Conduit wrapper while its KaTeX preview
 changes. It repairs unmatched braces and incomplete common commands with
@@ -3018,3 +3020,92 @@ Verification:
 - Confirm Marked remains unchanged and the old Typewriter checkbox is absent.
 - Test stop, reconnect, scroll-follow, manual scroll, hidden-tab resume,
   malformed TeX, links, fenced code, and browser slowdown warnings.
+
+### Synthetic preview stability fix — 5 August 2026
+
+The first synthetic implementation exposed a real regression in the long
+table/math stream. It reparsed the complete active block for each preview
+character, replaced the KaTeX subtree for each new candidate, allowed invalid
+candidates to cache the invisible fallback, and did not receive the existing
+Incremark fixed-width table rules. The last issue made Synthetic and Typewriter
+tables use `auto` layout even though naked Incremark used the wider fixed
+layout.
+
+The adapter now patches the parser's existing pending paragraph, table cell, or
+display block with one synthetic math node when the AST shape allows it. It
+uses the previous full-block synthetic parse only as a fallback. The math
+component keeps the last valid KaTeX HTML separate from its invisible first
+paint fallback and caches only valid candidates. The table width, fixed layout,
+and top alignment rules now apply to every renderer whose data attribute starts
+with `incremark`. Transcript resize correction is coalesced to one animation
+frame, so several inner math mutations do not queue several identical
+`scrollTop` writes.
+
+Deterministic comparison on `math-table-oscillation` used the same 1,088
+character fixture and one-character, 16 ms deltas:
+
+| Measure | Before synthetic fix | After synthetic fix |
+| --- | ---: | ---: |
+| Table layout | `auto`, 628–640 px | `fixed`, 960 px |
+| Table layout transitions | 10 | 2 |
+| Math geometry transitions | 178 | 186 |
+| Block height reversals | 23 | 2 |
+| Block top reversals | 36 | 0 |
+| CLS | `0.010689` | `0` |
+| Long Tasks | 0 | 0 |
+| Programmatic scroll writes | 2,165 | 1,968 |
+| Direct inline-math wrapper mutations | 199 | 224 |
+| Final semantic text length | 1,320 | 1,320 |
+
+The higher math-geometry count is expected for this renderer: it deliberately
+shows partial KaTeX as the source grows. The remaining two small paragraph
+height reversals are the intrinsic inline KaTeX line-metric changes. The
+important table and transcript signals are now stable: fixed columns, zero top
+reversals, zero CLS, no root replacement, and no lost or duplicated text.
+
+The 8-character delta profile also improved from CLS `0.006687` and 3 height
+reversals to CLS `0.000380` and zero height or top reversals. The dedicated
+`synthetic-math-preview` fixture passed with 5 final KaTeX nodes, 5 synthetic
+preview wrappers, 2 table math cells, zero synthetic KaTeX errors, zero Long
+Tasks, zero block-height reversals, and zero block-top reversals. The harness's
+client KaTeX metric counter remains unavailable for these Incremark runs, so
+DOM wrapper mutations and geometry evidence are the authoritative measurements.
+
+Verification for this fix:
+
+- `npm test`: passed, 302 tests and 0 failures.
+- `npm run typecheck`: passed.
+- `npm run build`: passed. Initial JavaScript was `128.62 kB` gzip, initial
+  CSS was `19.44 kB` gzip, and the largest lazy JavaScript was `185.19 kB`
+  gzip. The Incremark lazy chunk was `119.16 kB` (`34.54 kB` gzip).
+- `git diff --check`: passed.
+- `math-table-oscillation`: naked Incremark and Incremark Typewriter passed;
+  Synthetic passed the layout, CLS, text, and root-identity checks but retained
+  the existing broad `maxMathGeometryTransitions` gate because partial KaTeX
+  updates are intentional.
+- `synthetic-math-preview`: Synthetic passed. The non-Synthetic runs were not
+  expected to satisfy the Synthetic-only assertion.
+- Managed server restart passed with
+  `bash .devcontainer/start-conduit.sh restart`. Host-side health returned
+  `{"ok":true,"status":"ready","release":"development"}`.
+
+#### Manual smoke checklist — synthetic preview stability
+
+- Restart with `bash .devcontainer/start-conduit.sh restart` and check
+  `http://127.0.0.1:4310/healthz`.
+- Select **Incremark Synthetic Math** and use the exact table/math prompt in
+  this document.
+- Confirm partial `$...$` and `\(...\)` formulas appear without raw delimiters
+  or `.katex-error` nodes.
+- Confirm `$$...$$` and `\[...\]` display previews appear without replacing
+  the surrounding paragraph or table.
+- Confirm tables use the wider Incremark layout. Check that column boundaries
+  do not move when a cell formula grows.
+- Keep the transcript at the bottom. Look for upward jumps, flashing, table
+  replacement, duplicate text, missing text, or browser slowdown warnings.
+- Confirm the composer remains usable while a formula preview updates.
+- Switch to Incremark and Incremark Typewriter. Confirm both retain fixed table
+  geometry and their previous smooth behavior.
+- Switch to Marked. Confirm its output and table behavior are unchanged.
+- Stop, reload, reconnect, scroll manually, and resume a hidden tab. Confirm
+  final semantic text and all completed formulas remain unchanged.
