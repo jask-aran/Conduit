@@ -2,7 +2,7 @@ import { createSignal, Index, lazy, Show, Suspense } from "solid-js";
 import { BrainIcon, ChevronDownIcon } from "lucide-solid";
 import type { TurnTraceData } from "../turn-rows";
 import { ToolCard } from "./tool-card";
-import type { MarkdownRendererId } from "./markdown";
+import type { MarkdownRendererId } from "./markdown-settings";
 
 const ChatMarkdown = lazy(() => import("./markdown").then((module) => ({ default: module.ChatMarkdown })));
 

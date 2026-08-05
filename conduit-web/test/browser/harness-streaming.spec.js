@@ -36,6 +36,7 @@ test("a deterministic stream reports browser delivery and visible rendering cade
   const expectedInteractions = jsonEnv("HARNESS_EXPECTED_INTERACTIONS") ?? fixture?.expectedInteractions ?? {};
   const streamingAssertion = jsonEnv("HARNESS_EXPECTED_STREAMING") ?? fixture?.streamingAssertion ?? null;
   const renderer = process.env.HARNESS_RENDERER || "marked";
+  const typewriter = process.env.HARNESS_TYPEWRITER === "1";
   const seed = Number(process.env.HARNESS_SEED || 1);
   const cadence = process.env.HARNESS_PROFILE
     ? createCadence(process.env.HARNESS_PROFILE, {
@@ -57,13 +58,19 @@ test("a deterministic stream reports browser delivery and visible rendering cade
     expectedSemanticFingerprint,
     expectedAssertions,
     expectedInteractions,
+    maxKaTeXCalls: fixture?.maxKaTeXCalls ?? null,
+    maxLongestTaskMs: fixture?.maxLongestTaskMs ?? null,
+    maxRemovedMathNodes: fixture?.maxRemovedMathNodes ?? null,
+    maxIncrementalResets: fixture?.maxIncrementalResets ?? null,
     streamingAssertion,
     fixture: fixture?.id || null,
     requiresStructuralContract: fixture?.requiresStructuralContract || false,
+    skipStructuralFingerprint: fixture?.skipStructuralFingerprint || false,
     scrollProbe: fixture?.scrollProbe || false,
     instrumentation: process.env.HARNESS_INSTRUMENTATION !== "off",
     seed,
     renderer,
+    typewriter,
   };
   let report = await runBrowserStreamingScenario(page, scenario);
   if (process.env.HARNESS_PAIRED_INSTRUMENTATION === "1") {
@@ -116,7 +123,16 @@ test("a deterministic stream reports browser delivery and visible rendering cade
   expect(report.mode).toBe("deterministic-browser");
   expect(report.target).toBe("playwright-production-client");
   expect(report.browser.renderer).toBe(renderer);
+  expect(report.browser.typewriter).toBe(typewriter);
   if (expectedSemanticText != null) expect(report.browser.finalSemanticTextEvidence).toMatchObject(hashRedactedText(expectedSemanticText));
+  if (typewriter && process.env.HARNESS_REQUIRE_TYPEWRITER_METRICS === "1") {
+    expect(report.browser.clientWork.typewriter.sampleCount).toBeGreaterThan(0);
+  }
+  if (typewriter && report.browser.clientWork.typewriter.sampleCount > 0) {
+    expect(report.browser.clientWork.typewriter.last?.backlogCharacters).toBe(0);
+    expect(report.browser.clientWork.typewriter.last?.displayedVisibleCharacters)
+      .toBe(report.browser.clientWork.typewriter.last?.sourceVisibleCharacters);
+  }
   expect(report.outcome).toBe("passed");
   expect(report.browser.webSocketDeltaCount).toBe(cadence.deltas.length);
   if (scenario.instrumentation) {
@@ -139,6 +155,7 @@ test("a dropped stream reports reconnect recovery without duplicated output", as
   const expectedAssertions = jsonEnv("HARNESS_EXPECTED_ASSERTIONS") ?? fixture?.expectedAssertions ?? {};
   const expectedInteractions = jsonEnv("HARNESS_EXPECTED_INTERACTIONS") ?? fixture?.expectedInteractions ?? {};
   const renderer = process.env.HARNESS_RENDERER || "marked";
+  const typewriter = process.env.HARNESS_TYPEWRITER === "1";
   const report = await runBrowserReconnectScenario(page, {
     name: process.env.HARNESS_SCENARIO || "browser-reconnect-answer",
     initialText,
@@ -150,6 +167,7 @@ test("a dropped stream reports reconnect recovery without duplicated output", as
     requiresStructuralContract: fixture?.requiresStructuralContract || false,
     instrumentation: process.env.HARNESS_INSTRUMENTATION !== "off",
     renderer,
+    typewriter,
   });
   await testInfo.attach("harness-report", {
     body: Buffer.from(JSON.stringify(report, null, 2)),
@@ -159,11 +177,18 @@ test("a dropped stream reports reconnect recovery without duplicated output", as
   expect(report.schemaVersion).toBe(1);
   expect(report.mode).toBe("deterministic-browser-reconnect");
   expect(report.browser.renderer).toBe(renderer);
+  expect(report.browser.typewriter).toBe(typewriter);
   expect(report.browser.socketCount).toBe(2);
   expect(report.browser.resumeCount).toBe(1);
   expect(report.browser.recoveryMs).toBeGreaterThanOrEqual(0);
   expect(report.browser.finalSemanticTextEvidence).toMatchObject(hashRedactedText(initialText + recoveredDelta));
   expect(report.browser.duplicateCharacters).toBe(0);
+  if (typewriter && process.env.HARNESS_REQUIRE_TYPEWRITER_METRICS === "1") {
+    expect(report.browser.clientWork.typewriter.sampleCount).toBeGreaterThan(0);
+  }
+  if (typewriter && report.browser.clientWork.typewriter.sampleCount > 0) {
+    expect(report.browser.clientWork.typewriter.last?.backlogCharacters).toBe(0);
+  }
   expect(report.outcome).toBe("passed");
   expect(report.errors).toEqual([]);
 });

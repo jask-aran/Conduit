@@ -1775,3 +1775,551 @@ change still requires owner approval after Slice 7.
 **Slice 9** is queued for desktop panel motion under KaTeX-dense transcripts
 (width-tween reflow vs transform/spacer candidates). It is shell layout, not
 part of the renderer decision, and must not block Slice 7.
+
+### Slice 6c — Progressive math preview rejected; invisible pending math retained
+
+The progressive KaTeX preview experiment was rejected during manual testing.
+It called KaTeX while the answer was still streaming and caused visible full-
+transcript flashing. A live math-heavy chat also slowed the browser tab enough
+to trigger the browser's “fix the tab” warning. The experiment was removed
+before promotion; its preview helper, stage animation CSS, and preview-specific
+harness checks are not part of the implementation.
+
+The contract returns to the Slice 6b presentation refinement:
+
+- stable prose, code, links, and other Markdown use the existing renderer path;
+- an open math construct has no visible TeX and no partial KaTeX rendering;
+- the pending math region remains invisible with fixed geometry while it is
+  open, so the transcript does not grow on every math token;
+- KaTeX renders once after the closing delimiter arrives, then uses the small
+  arrival animation;
+- no new math-specific parser, animation stage, or repeated preview work is
+  added to either renderer.
+
+This is a presentation and workload boundary, not Incremark performance
+evidence. The shared delimiter classifier remains. The focused harness must
+continue to assert zero visible pending math, zero pending text, stable pending
+height, final KaTeX, and no regression in ordinary Markdown streaming.
+
+Manual validation for this direction:
+
+- Stream a long prose answer. Confirm ordinary text does not flash or pause.
+- Stream an incomplete display equation. Confirm no partial equation, raw
+  delimiter, label, or visible placeholder appears.
+- Close the equation. Confirm one KaTeX block appears and uses the arrival
+  animation.
+- Repeat with inline math and with both Marked and Incremark selected.
+- Pause a long math-heavy generation. Confirm the browser tab remains
+  responsive and the transcript does not repeatedly repaint.
+- Run `rich-markdown`, `scroll`, `incomplete-math-block`,
+  `incomplete-math-inline`, and `stopped-incomplete-math` in the deterministic
+  browser harness. Record results here, not in a separate file.
+
+#### Slice 6c result — 4 August 2026
+
+The progressive preview code was removed. The final working tree contains the
+committed invisible-pending implementation plus this documentation note only.
+The managed server was restarted with
+`bash .devcontainer/start-conduit.sh restart`; health returned
+`{"ok":true,"status":"ready","release":"development"}` and `ss` showed
+`0.0.0.0:4310`.
+
+The focused deterministic browser run used Chromium `149.0.7827.55`, Node
+`v24.18.0`, steady 16 ms cadence, three-character deltas, and seed `1`:
+
+| Fixture | Renderer | Completion ms | DOM mutations | Long tasks | Max layout shift | Pending visibility / text / height |
+| --- | --- | ---: | ---: | ---: | ---: | --- |
+| `incomplete-math-block` | Marked | 981.4 | 25 | 2 / 110 ms | 0.000195 | 0 / 0 / 0 px |
+| `incomplete-math-block` | Incremark | 1050.3 | 45 | 3 / 71 ms | 0.000011 | 0 / 0 / 0 px |
+| `incomplete-math-inline` | Marked | 714.6 | 29 | 1 / 97 ms | 0.000038 | 0 / 0 / 0 px |
+| `incomplete-math-inline` | Incremark | 362.1 | 37 | 0 / 0 ms | 0 | 0 / 0 / 0 px |
+| `stopped-incomplete-math` | Marked | 505.0 | 18 | 2 / 70 ms | 0 | 0 / 0 / 0 px |
+| `stopped-incomplete-math` | Incremark | 708.6 | 21 | 2 / 69 ms | 0 | 0 / 0 / 0 px |
+
+All six cases passed. The normal Incremark inline run missed the short open-
+math snapshot window; one `CI=1` retry passed. This is a harness timing issue;
+the final semantic result had KaTeX and no pending node.
+
+The rich and scroll comparison in the same run passed on both renderers. Rich
+Markdown used 45 DOM mutations on Marked and 88 on Incremark, with completion
+times of 684.4 ms and 649.5 ms. The scroll fixture used 217 and 411 DOM
+mutations, with completion times of 3779.2 ms and 3851.1 ms. Neither renderer
+reported a Long Task. Marked and Incremark both ended the scroll fixture at
+zero distance from the bottom. The Incremark rich fixture ended 36 px above
+the bottom in this repeat and remains an existing follow-mode observation.
+
+Verification completed:
+
+- `npm run typecheck`: passed.
+- `node --test test/streaming-markdown.test.js`: 7 passed.
+- `npm test`: 273 passed, 0 failed.
+- `npm run build`: Vite completed, then the existing bundle gate reported the
+  exact failure `initial JS is 233518 B gzip; budget is 180000 B.`
+- `CONDUIT_BUDGET_INITIAL_JS_GZIP=300000 npm run build`: passed with initial JS
+  `233518 B gzip`, initial CSS `27919 B gzip`, and largest lazy JS
+  `185186 B gzip`.
+- Managed agent-browser loaded the linked chat on Marked and Incremark. The
+  final transcript had 205 KaTeX nodes, zero pending nodes, and zero raw dollar
+  delimiters inside each Markdown root. No page errors appeared.
+
+Verdict: the visible progressive-preview experiment is rejected. Keep
+incomplete math invisible and render KaTeX once at completion. Do not change
+ordinary Markdown streaming to make math look smoother.
+
+### Slice 6d — Stable transcript tail and invisible pending KaTeX
+
+The live test exposed a separate regression: the renderer rebuilt the full
+stable transcript on every delta. In a long math answer, this repeatedly
+called KaTeX and reconciled every prior equation. The browser then flashed the
+transcript and could show the browser slow-tab warning.
+
+The implementation now keeps two boundaries in the block Markdown root:
+
+- completed top-level tokens stay in place and keep their DOM nodes;
+- only the current top-level Markdown tail is parsed, sanitised, and replaced;
+- open math still renders no TeX and uses the existing invisible fixed-height
+  pending region;
+- completed KaTeX HTML uses a bounded 512-entry Marked cache, so a formula is
+  rendered once even while its tail receives later whitespace or prose;
+- Incremark keeps completed `ParsedBlock.id` nodes and caches each AST math
+  node's KaTeX HTML;
+- inline Markdown keeps the existing full inline path. This slice changes the
+  block stream path only.
+
+This preserves the ordinary visible Markdown contract. It removes repeated
+work from completed math and stable transcript nodes. It does not add a
+progressive math preview.
+
+#### Slice 6d benchmark — 4 August 2026
+
+The deterministic stress fixture is `math-stress`: 96 display equations,
+9,017 source characters, 282 deltas, 32-character chunks, zero interval, and
+seed `1`. The browser was Chromium `149.0.7827.55` on Node `v24.18.0`.
+
+| Renderer | Baseline completion | Result completion | Baseline DOM mutations | Result DOM mutations | Baseline actual KaTeX renders | Result actual KaTeX renders | Baseline long tasks | Result long tasks | Result max task |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Marked | 22,197.8 ms | 6,079.5 ms | 10,373 | 839 | 13,673 | 96 | 161 / 415 ms max | 2 / 139 ms max | 139 ms |
+| Incremark adapter | not recorded before this slice | 5,611.2 ms | not recorded before this slice | 411 | not recorded before this slice | 103 | not recorded before this slice | 1 / 68 ms max | 68 ms |
+
+The Marked result is a measured improvement: completion is 72.6% lower,
+DOM mutations are 91.9% lower, and actual KaTeX renders are 99.3% lower.
+Both renderers passed the `maxKaTeXCalls: 120` and `maxLongestTaskMs: 250`
+stress gates. The Incremark result is a current measurement, not a before and
+after claim; its pre-slice stress baseline was not recorded.
+
+The focused browser matrix passed for both renderers: `rich-markdown`,
+`security`, `katex`, `incomplete-math-block`, `incomplete-math-inline`,
+`stopped-incomplete-math`, `incomplete-fence`, `code-copy`,
+`external-confirmation`, and `scroll`. The first Marked stopped-math run found
+the final-state marker bug; the fixed case passed on rerun.
+
+Bundle result: the normal `npm run build` completed Vite and failed the
+existing budget at `initial JS is 234365 B gzip; budget is 180000 B`. The
+diagnostic `CONDUIT_BUDGET_INITIAL_JS_GZIP=300000 npm run build` passed with
+initial JS `234365 B gzip`, initial CSS `27919 B gzip`, and largest lazy JS
+`185187 B gzip`. The initial JS increase from the prior `233518 B gzip` result
+is `847 B gzip`.
+
+The managed server was restarted with
+`bash .devcontainer/start-conduit.sh restart`. It reported ready on port 4310
+with PID `99982`; `ss` showed `0.0.0.0:4310`. The unauthenticated browser check
+redirected the exact chat URL to `/login`, as expected for a new browser
+session. The allow-listed manifest returned successfully. The deterministic
+browser harness supplied the renderer evidence.
+
+Manual validation checklist:
+
+- Open the exact chat URL with `?markdownRenderer=marked`, then repeat with
+  `?markdownRenderer=incremark`.
+- Send `Output a lot of math` or replay a long math answer. Confirm that prior
+  prose and equations do not flash when new text arrives.
+- While `$$ ... $$` is open, confirm that no raw delimiter, partial TeX, or
+  partial KaTeX appears. Confirm that the reserved region does not change
+  height.
+- When the closing delimiter arrives, confirm that one complete equation
+  appears. Confirm that the small arrival animation does not move the full
+  transcript.
+- Pause generation during an equation. Confirm that the tab stays responsive
+  and the visible transcript remains unchanged.
+- Repeat with inline math, an open fenced code block, copy controls, an
+  external link, and scroll-away from the bottom. Confirm that ordinary
+  Markdown, security behavior, and follow mode remain unchanged.
+
+Current conclusion: keep both renderers available. The stable-tail work
+removes the measured full-transcript math regression. It does not select a
+default renderer or advance the Slice 7 adoption gate.
+
+### Slice 6e — Instant completed-math reveal and ordinary-path guard — 4 August 2026
+
+Manual review changed the presentation direction again. Keep the completed
+KaTeX reveal, but make it appear immediately after its final render. Remove the
+fade/transform arrival animation. The open construct remains invisible with
+fixed geometry. This avoids showing a semi-rendered equation and removes a
+separate paint effect from the math path.
+
+The implementation also keeps the existing Marked path for ordinary block
+messages. The stable-tail path activates only when the source contains a
+parsed math token or an open math construct. Inline Markdown continues to use
+the existing full parse/reconcile path. Removed dead code includes the
+`animateMath` plumbing, the Incremark new-math `WeakSet`, and the
+`streaming-final-math` CSS rule and keyframe.
+
+The Incremark persisted/stopped path received one correctness fix in this
+round. A non-prefix source now resets and appends through the parser, merges
+all parser updates, and does not finalize while the shared splitter still
+reports an open construct. This preserves completed blocks instead of showing
+only an invisible pending shell after reload.
+
+#### Slice 6e measurements
+
+The deterministic stress fixture is `math-stress`: 96 display equations,
+9,017 source characters, 282 deltas, 32-character chunks, zero interval, and
+seed `1`. The browser was Chromium `149.0.7827.55` on Node `v24.18.0`.
+
+| Renderer | Completion ms | DOM mutations | Actual KaTeX renders | Long tasks | Max task | Math-root mutation target |
+| --- | ---: | ---: | ---: | ---: | ---: | --- |
+| Marked | 6,108.0 | 749 | 96 | 2 | 142 ms | `.chat-markdown`: 711 child-list records |
+| Incremark adapter | 5,942.2 | 403 | 103 | 1 | 51 ms | `.incremark`: 385 child-list records |
+
+Against the recorded Marked full-reconcile baseline of 22,197.8 ms,
+10,373 DOM mutations, 13,673 actual KaTeX renders, and 161 long tasks, the
+current Marked stress result is 72.5% faster to completion, has 92.8% fewer DOM
+mutations, 99.3% fewer KaTeX renders, and 98.8% fewer long tasks. The remaining
+child-list records target the renderer root while the current tail grows; the
+transcript container is not being replaced. This is evidence of reduced work,
+not a claim that every tail mutation is gone.
+
+The final 20-case browser matrix passed for both renderers: `rich-markdown`,
+`security`, `katex`, `incomplete-math-block`, `incomplete-math-inline`,
+`stopped-incomplete-math`, `incomplete-fence`, `code-copy`,
+`external-confirmation`, and `scroll`. The final scroll runs were 3,619 ms /
+218 mutations for Marked and 3,594 ms / 419 mutations for Incremark, with zero
+long tasks in both cases.
+
+The rebuilt managed server was restarted with
+`bash .devcontainer/start-conduit.sh restart`. Health returned
+`{"ok":true,"status":"ready","release":"development"}` and `ss` showed
+`0.0.0.0:4310`. Authenticated browser checks on the linked chat found 52 and
+153 KaTeX blocks in both renderer modes, zero pending nodes, zero raw dollar
+delimiters, zero page errors, and zero `streaming-final-math` elements.
+
+Build verification: `npm run typecheck` passed; `npm test` passed with 273
+tests; `git diff --check` passed. The normal build completed Vite and failed
+the existing bundle gate at the exact value `initial JS is 234477 B gzip;
+budget is 180000 B.` The diagnostic
+`CONDUIT_BUDGET_INITIAL_JS_GZIP=300000 npm run build` passed with initial JS
+`234477 B gzip`, initial CSS `27864 B gzip`, and largest lazy JS
+`185186 B gzip`.
+
+Manual validation checklist for this round:
+
+- Open the linked chat with `?markdownRenderer=marked`, then repeat with
+  `?markdownRenderer=incremark`.
+- Send or replay `Output a lot of math`. Confirm that completed equations
+  appear at once after their closing delimiter. Confirm there is no fade,
+  slide, partial KaTeX, or raw delimiter.
+- Pause while an equation is open. Confirm the equation stays invisible, the
+  reserved region keeps its height, prior transcript content does not flash,
+  and the tab stays responsive.
+- Confirm ordinary prose, headings, code blocks, links, copy controls, and
+  follow-mode scrolling behave as before.
+- Repeat the exact checks after switching the renderer query parameter. Look
+  for missing completed equations, duplicated equations, raw `$` or `$$`,
+  pending placeholders that remain after completion, and any full-transcript
+  jump.
+
+Current conclusion: the requested presentation is now instant completed-math
+reveal with invisible pending math and no math arrival animation. The measured
+Marked improvement remains real. The remaining root-tail mutations and the
+142 ms worst Marked stress task are recorded for the next performance round;
+they do not justify switching the default renderer yet.
+
+### Slice 6f — Prevent source-boundary resets and preserve completed math nodes — 4 August 2026
+
+The stress trace found the remaining flash source. When the second `$` of a
+new `$$` opener arrived, the streaming splitter shortened the visible stable
+source by one character. The old Marked path treated that normal transition as
+a non-prefix source and reset the complete renderer root. Three resets removed
+131 already-rendered KaTeX nodes in batches of 15, 32, and 84.
+
+Marked now trims and reconciles only the mutable tail when the source becomes
+an open math construct. It records `append-pending-trim` instead of
+`full-reset-source`. Completed nodes stay before the stable boundary.
+
+The Incremark path had a smaller equivalent issue. Solid list ownership was
+based on `ParsedBlock` object identity, even though the parser contract gives
+each block a stable `id`. Math messages now use stable block IDs and one
+math-specific completed/pending list. Ordinary Incremark messages retain the
+previous block/pending presentation path so list and table semantics stay
+unchanged.
+
+The stress fixture now gates both regressions with
+`maxRemovedMathNodes: 0` and `maxIncrementalResets: 0`.
+
+#### Slice 6f measurements
+
+The same `math-stress` fixture was run with Chromium `149.0.7827.55`, Node
+`v24.18.0`, 96 display equations, 9,017 source characters, 282 deltas,
+32-character chunks, zero interval, and seed `1`.
+
+| Renderer | Completion ms | DOM mutations | Actual KaTeX renders | Long tasks | Root records | Added nodes | Removed nodes | Removed math nodes |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Marked | 6,089.9 | 743 | 96 | 0 / 0 ms | 702 | 595 | 201 | 0 |
+| Incremark adapter | 6,400.7 | 390 | 96 | 1 / 55 ms | 301 | 247 | 54 | 0 |
+
+The current Marked run is 72.6% faster than the recorded 22,197.8 ms
+full-reconcile baseline, with 92.8% fewer DOM mutations and 99.3% fewer
+actual KaTeX renders. The prior Marked reset trace removed 131 math nodes;
+the current trace removed zero. The outer renderer root remained stable. The
+remaining 702/301 root records are current-tail operations, not completed
+KaTeX removal.
+
+The same final runs reported 3 and 4 frame gaps over 50 ms for Marked and
+Incremark, zero gaps over 100 ms, and maximum layout-shift entries of
+`0.00336` and `0.00224`. The Incremark run's 55 ms longest task remains well
+below the 250 ms stress gate.
+
+The one-frame render scheduler was measured and rejected. It reduced one
+Marked run from 747 to 739 mutation records but increased completion from
+about 6.1 s to 6.95 s and increased frame gaps. No scheduler code remains.
+
+The final 20-case matrix passed for both renderers. `npm test` passed all 273
+tests. `npm run typecheck` and `git diff --check` passed. The normal build
+completed Vite and failed the existing gate at
+`initial JS is 234757 B gzip; budget is 180000 B.` The diagnostic build passed
+with initial JS `234757 B gzip`, initial CSS `27864 B gzip`, and largest lazy
+JS `185188 B gzip`.
+
+The managed server was restarted with
+`bash .devcontainer/start-conduit.sh restart`; health returned
+`{"ok":true,"status":"ready","release":"development"}` and the listener
+was `0.0.0.0:4310`. Restored agent-browser QA on the linked chat passed in both
+renderer modes: math counts `[0, 52, 0, 153]`, zero pending nodes, zero raw
+dollar delimiters, zero animation nodes, and zero page errors.
+
+Manual validation checklist for this round:
+
+- Run `Output a lot of math` in Marked, then Incremark.
+- Pause during an open `$$` construct. Confirm the open equation is invisible,
+  prior equations do not flash, and the browser remains responsive.
+- Watch the first character after a new `$$` opener. Confirm the old
+  transcript remains in place and only the completed equation appears later.
+- Confirm the final equation appears once, with no duplicate, raw delimiter,
+  fade, slide, or pending node.
+- Check ordinary prose, lists, tables, headings, code copy, links, and scroll
+  follow mode. These must keep their prior behavior.
+
+Current conclusion: the known full-root reset and completed-KaTeX removal paths
+are fixed and enforced by the stress gates. Both maintained renderers now have
+quantitative evidence for stable completed math under the reference workload.
+
+### Adaptive Incremark Typewriter Mode — working-tree implementation, 5 August 2026
+
+This spike adds an opt-in typewriter path for Incremark. Marked remains
+unchanged and remains the default. The local control is available only when
+Incremark is selected. It uses URL `markdownTypewriter=1|0` and local storage
+key `conduit:incremark-typewriter`.
+
+`conduit-web/src/client/chat/incremark-typewriter.ts` wraps the native
+`@incremark/core` `BlockTransformer`. The native transformer owns
+`requestAnimationFrame`, block queues, AST slices, cached display nodes,
+`setOptions()`, and hidden-tab pausing. The Conduit controller only measures
+visible AST characters, applies EMA alpha `0.25`, and calculates:
+
+```text
+leadRate = observedRate / 0.90
+catchUpRate = backlogCharacters / 0.250s
+targetRate = max(leadRate, catchUpRate)
+```
+
+There is no permanent visible-character ceiling. `controlRate` adds the
+provider rate while a backlog drains. Source updates may pre-ramp the native
+step before the next display frame; measured display work then limits or
+relaxes that step. The controller uses a safe-step mode and can complete only
+the active native block when sustained frame work exceeds the budget. No
+safe-block fallback was triggered in the measured runs below.
+Backlog age means provider-time distance (`backlog / observedRate`), not time
+since the backlog first appeared. This avoids catch-up credit after a stall.
+
+`conduit-web/src/client/chat/incremark-markdown.tsx` keeps incomplete math on
+the existing invisible pending path, treats completed math as an atomic
+transformer node, renders stable display blocks by block ID and structural
+shape, and retains the existing immediate path when Typewriter is off. In
+Typewriter mode, each completed math node is rendered as one complete KaTeX
+string on a later animation frame. The math shell stays empty while that work
+is pending, and the display-busy state remains true until the queued math work
+finishes. This prevents raw TeX and partial KaTeX from appearing.
+`conduit-web/src/client/chat/transcript.tsx` adds the Incremark-only checkbox
+and busy-state data attribute. `conduit-web/src/client/turn-rows.ts` gives
+live and persisted answers the same display key from user-turn ownership and
+answer order. This preserves the Solid row and display session across
+checkpoint replacement, reconnect projection, and queued follow-ups.
+`conduit-web/src/client/state/active-chat.ts` coalesces adjacent same-block
+text deltas up to a 256-character batch and flushes them before structural
+events. Only an oversized same-block burst enters the bounded animation-frame
+queue; normal deltas keep the existing immediate path. This reduces
+post-stall source bursts without changing the wire protocol or imposing a
+visible-character rate cap.
+`conduit-web/src/client/chat/markdown-settings.ts` keeps renderer selection
+outside the lazy renderer module, so the Marked and Incremark implementations
+remain split from the initial bundle.
+
+#### Refresh-rate-aware Typewriter cadence
+
+The first Typewriter implementation used a fixed `16 ms` native transformer
+interval. That was a startup default, but it also imposed a 60 Hz assumption:
+the native transformer still schedules with `requestAnimationFrame`, yet it
+could only advance when elapsed time reached 16 ms. A 144 Hz display can
+provide callbacks about every `6.94 ms`, so the fixed interval would combine
+multiple display frames into larger visible increments.
+
+The controller now passively measures successive `requestAnimationFrame`
+timestamps only while Typewriter is enabled. It applies an EMA with alpha
+`0.25`, passes the measured interval into native `setOptions()`, and keeps the
+frame-work budget as the safety control. A work EMA above `8 ms` relaxes the
+tick interval to reduce pressure; it does not impose a visible-character cap.
+The probe is stopped when Typewriter is disabled. Marked and immediate
+Incremark do not run it.
+
+The focused test models a 144 Hz interval of `6.944 ms` and verifies that the
+tick interval follows it. The deterministic Chromium smoke run after this
+change measured a frame interval and Typewriter tick interval of p50
+`16.748 ms`, p95 `19.363 ms`, and max `20.250 ms` on its headless 60 Hz
+profile. It produced visible increments of p50 `6`, p95 `8`, and max `8`
+characters, with zero Long Tasks and zero layout shifts. This run used 115
+ordinary-text characters, so it is cadence evidence rather than a replacement
+for the 1,200-character profiles below.
+
+#### Typewriter deterministic measurements
+
+Commands ran from `conduit-web` with Chromium `149.0.7827.55` and Node
+`v24.18.0`. The 1,200-character runs used 200 six-character deltas. Reports
+contain no prompt or transcript bodies.
+
+| Run | Completion ms | Display delay after provider completion | DOM mutations | Root records / added / removed | Long tasks / max task | Frame max gap | Typewriter result |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| Marked immediate, steady 1 ms | 979.5 | — | 190 | 2 / 2 / 0 | 0 / 0 ms | 49.9 ms | final 1,200 |
+| Incremark immediate, steady 1 ms | 1,011.0 | — | 351 | 3 / 2 / 1 | 0 / 0 ms | 49.9 ms | final 1,200 |
+| Incremark Typewriter, steady 1 ms | 1,056.5 | 60.7 ms | 258 | 1 / 1 / 0 | 0 / 0 ms | 33.3 ms | steady lag p95 4.84%; steady age p95 20.7 ms; max step 84 |
+| Incremark Typewriter, burst 128 ms | 3,141.8 | 70.4 ms | 68 | 1 / 1 / 0 | 0 / 0 ms | 50.1 ms | max step 36; steady lag p95 9.09%; steady age p95 127.8 ms |
+| Incremark Typewriter, jitter 5–80 ms | 8,526.5 | 55.9 ms | 406 | 1 / 1 / 0 | 0 / 0 ms | 33.4 ms | steady lag p95 1.14%; steady age p95 41.1 ms |
+| Incremark Typewriter, 300 ms stall | 305.5 | 160.3 ms | 38 | 1 / 1 / 0 | 0 / 0 ms | 33.3 ms | no instant reveal; source gap 300.2 ms; max step 265 |
+
+The final steady run reported source-rate p50 `1,251` characters/s, steady
+relative-lag p95 `4.84%`, backlog-age p95 `20.7 ms`, zero steady-state lag
+misses, and a maximum step of `84` characters per 16 ms frame. The burst run
+reached a maximum step of `36` with zero Long Tasks. The jitter run stayed at
+`1.14%` p95 relative lag and `41.1 ms` p95 backlog age. The stall run
+preserved a non-instant `160.3 ms` display drain after a measured `300.2 ms`
+WebSocket gap and produced zero Long Tasks. During the first frame after a
+scripted burst or stall, relative lag can exceed 10% because the provider
+delivers several deltas in one task. The steady-state target and backlog-age
+measurements are the valid pacing evidence for those profiles.
+
+The client delta coalescing change removed the earlier post-stall Long Task:
+the pre-coalescing run recorded one `74 ms` task, while the final run recorded
+none. It also reduced the burst DOM mutation count from the earlier `388` to
+`72` in the current profile. This is measurable pacing and mutation improvement
+for the tested stream, not proof that Incremark is a generally faster renderer.
+
+For the current steady comparison, Marked produced `190` DOM mutations,
+Incremark immediate produced `351`, and Typewriter produced `258`; Typewriter
+and both immediate paths kept their outer root records at `1`, `2`, and `3`
+respectively. The Typewriter path reduces visible mutation and root
+replacement for this stream, but it does not prove lower total render cost than
+Marked.
+
+All measured text runs ended with exact source content, zero duplicate
+characters, zero layout shifts, and a stable outer Markdown root. Rich
+Markdown passed with structural equality and no Long Tasks. The KaTeX fixture
+passed with two rendered equations and zero removed math nodes. The incomplete
+math fixture passed with hidden pending math, zero pending text, stable pending
+height, and no final pending node. The security fixture passed with unsafe
+elements, unsafe protocols, and images absent. The reconnect Typewriter run
+passed with final length `25`, zero duplicates, and a persistent outer root.
+The 9,017-character math-stress fixture passed with final semantic length
+`13,889`, 96 KaTeX nodes and adapter calls, zero removed math nodes, and exact
+content equality against the immediate Incremark result. The Typewriter run
+reported one `100 ms` Long Task, a `4,422.4 ms` display drain, p95 backlog age
+`678.8 ms`, and 407 steady-state lag misses. The task and lag are caused by
+the 96 atomic KaTeX nodes and their layout work, not ordinary-text Typewriter
+pacing. This remains the known math-only limitation; the fixture gate is
+`250 ms`, so the run passed its current safety threshold but does not meet the
+stricter no-Long-Task/high-rate target for equation-heavy output.
+
+#### Verification and remaining evidence
+
+- `npm run typecheck`: passed.
+- Focused controller and batching tests: passed with 12 tests, 0 failures.
+  The controller tests cover EMA seeding, stall samples, lag and backlog
+  formulas, no fixed 180-character cap, source-update step growth, frame-work
+  limiting, fallback selection, and atomic math counting. The batching tests
+  cover the 256-character same-block limit and structural boundaries.
+- `npm test`: passed with 286 tests, 0 failures.
+- `npm run build`: passed. The bundle report recorded initial JavaScript
+  `128599 B gzip`, initial CSS `19377 B gzip`, and largest lazy JavaScript
+  `185186 B gzip`. Initial JavaScript is 45.4% smaller than the earlier
+  `235258 B gzip` result and is below the `180000 B` budget.
+- The browser harness passed Typewriter steady, burst, jitter, stall,
+  high-throughput math, rich Markdown, KaTeX, incomplete math, security, and
+  reconnect scenarios. It also passed the immediate Marked and Incremark
+  fixture baselines. The incomplete-math harness now waits for the renderer
+  root to be attached, then waits for display-busy to clear; this matches the
+  intentional empty math shell during deferred rendering.
+- `npm run test:browser -- --project=desktop-chromium --workers=1` ran 90
+  Chromium tests but finished red with 8 failures. The failures were in the
+  existing broad app suite: workspace sizing, workspace dialog naming, chat
+  menu contents, message-action payload shape, and legacy stream fixtures that
+  emit `message_start`/`assistant_stream_delta` instead of the current
+  structured generation events. The Typewriter-specific deterministic harness
+  and its renderer/math/security/reconnect contracts passed separately. I did
+  not change those adjacent app tests in this slice.
+- `bash .devcontainer/start-conduit.sh restart`: passed with the normal
+  repository command. `curl -fsS http://127.0.0.1:4310/healthz` returned
+  `{"ok":true,"status":"ready","release":"development"}`. The listener
+  is `0.0.0.0:4310`, so Windows can use `127.0.0.1:4310`.
+- After the post-change restart, agent-browser reached
+  `http://127.0.0.1:4310/login`. `CONDUIT_PASSWORD`,
+  `CONDUIT_PERF_PASSWORD`, and `CONDUIT_AUTH_FILE` were unset. No credential
+  was guessed and no authenticated transcript was changed. Manual
+  authenticated checks remain pending for a credentialed Windows session.
+
+#### Manual checklist — typewriter mode
+
+Run the managed server from the repository root, open
+`http://127.0.0.1:4310`, authenticate, and select Incremark plus Typewriter.
+Record pass or fail in this section. The deterministic harness already covers
+the repeatable performance and semantic checks; this list covers user-visible
+behavior.
+
+- Stream prose, headings, lists, blockquotes, code, links, and tables. Look
+  for missing text, duplicate text, raw Markdown, root flashing, and transcript
+  jumps.
+- Test steady, burst, jitter, a one-second provider stall, and a provider
+  above 700-token/s equivalent. The output speed must increase without an
+  instant catch-up flash, long freeze, or browser slow-tab warning.
+- Confirm provider controls settle before the display finishes draining.
+- Submit a follow-up while the prior answer drains. The prior answer must not
+  reset or reveal instantly.
+- Disable Typewriter. All buffered output must flush immediately. Re-enable it
+  during a response. Existing content must not replay.
+- Switch to Marked. Typewriter must be disabled and off. Switch back to
+  Incremark. No old answer may replay unless Typewriter is enabled again.
+- Reload and confirm the local Typewriter preference. Test URL overrides
+  `markdownTypewriter=1` and `markdownTypewriter=0`.
+- Test incomplete and completed inline and display math. Open math must stay
+  invisible with stable height; closed math must appear once as complete KaTeX.
+- Test stop, reconnect, scroll-follow, manual scroll-away, and hidden-tab
+  pause/resume. Check for blocked controls, raw TeX, pending nodes that remain
+  after completion, duplicate output, long tasks, and browser slowdown warnings.
+
+Current conclusion: Typewriter mode is a useful parallel presentation path.
+The deterministic ordinary-text profiles meet the 10% relative-progress and
+250 ms backlog-age targets, exceed the old 180-character ceiling, preserve
+content, and show fewer root mutations. The final stall profile has zero Long
+Tasks. The separate 96-equation math stress profile passes the current 250 ms
+safety gate but still has one 100 ms math/layout Long Task and misses the
+relative-lag target while atomic equations drain. The managed server is live
+and bound correctly. The broad 90-test Chromium suite is red for 8 adjacent
+app-suite failures, so the repository-wide browser gate is not green. Manual
+authenticated checks remain open before Slice 7 can make an adoption decision.

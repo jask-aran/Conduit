@@ -8,20 +8,23 @@ import "katex/dist/katex.min.css";
 import { Button } from "@/components/primitives";
 import { getHarnessRecorder, recordHarnessMetric } from "../harness-metrics";
 import { splitStreamingMarkdown, type StreamingPending } from "./streaming-markdown";
+import {
+  MARKDOWN_TYPEWRITER_STORAGE_KEY,
+  markdownRendererSwitchEnabled,
+  selectedMarkdownRenderer,
+  selectedMarkdownTypewriter,
+  type MarkdownRendererId,
+} from "./markdown-settings";
+
+export {
+  MARKDOWN_TYPEWRITER_STORAGE_KEY,
+  markdownRendererSwitchEnabled,
+  selectedMarkdownRenderer,
+  selectedMarkdownTypewriter,
+} from "./markdown-settings";
+export type { MarkdownRendererId } from "./markdown-settings";
 
 const allowedProtocols = new Set(["http:", "https:", "mailto:"]);
-
-export type MarkdownRendererId = "marked" | "incremark";
-
-export function selectedMarkdownRenderer(): MarkdownRendererId {
-  const value = new URLSearchParams(location.search).get("markdownRenderer") || localStorage.getItem("conduit:markdown-renderer");
-  return value === "incremark" ? "incremark" : "marked";
-}
-
-export function markdownRendererSwitchEnabled() {
-  return import.meta.env.DEV || ["127.0.0.1", "localhost", "::1"].includes(location.hostname)
-    || new URLSearchParams(location.search).has("markdownRenderer");
-}
 
 const escapeHtml = (value: string) => value
   .replaceAll("&", "&amp;")
@@ -82,7 +85,21 @@ marked.use({
   },
 });
 
-function renderMarkdown(source: string, inline = false, animateMath = false) {
+type MarkedToken = { type?: string; raw?: string; tokens?: MarkedToken[] };
+const markedKatexCache = new Map<string, string>();
+const markedKatexCacheLimit = 512;
+
+function sanitizeMarkdownHtml(html: string, inline: boolean) {
+  const fragment = DOMPurify.sanitize(html, {
+    USE_PROFILES: { html: true },
+    ADD_ATTR: ["aria-label", "data-copy-code", "data-external-url", "data-language", "data-markdown", "class"],
+    FORBID_TAGS: ["img", "script", "style", "iframe", "object", "embed", ...(inline ? ["a", "button"] : [])],
+    RETURN_DOM_FRAGMENT: true,
+  }) as DocumentFragment;
+  return fragment;
+}
+
+function renderMarkdownFragment(source: string, inline: boolean, render: () => string) {
   const recorder = getHarnessRecorder();
   const parseStartedAt = recorder ? performance.now() : 0;
   let katexMs = 0;
@@ -90,48 +107,45 @@ function renderMarkdown(source: string, inline = false, animateMath = false) {
   let katexTimingAvailable = false;
   let katexTimingBlocker: string | null = null;
   let restoreKatex: (() => void) | null = null;
-  if (recorder) {
-    const katexApi = katex as typeof katex & { renderToString: (...args: any[]) => string };
-    const originalRenderToString = katexApi.renderToString;
-    if (typeof originalRenderToString !== "function") {
-      katexTimingBlocker = "katex.renderToString is unavailable";
-    } else {
-      try {
-        katexApi.renderToString = function measuredRenderToString(...args: any[]) {
-          const startedAt = performance.now();
-          try {
-            return originalRenderToString.apply(this, args);
-          } finally {
+  const katexApi = katex as typeof katex & { renderToString: (...args: any[]) => string };
+  const originalRenderToString = katexApi.renderToString;
+  if (typeof originalRenderToString !== "function") {
+    katexTimingBlocker = "katex.renderToString is unavailable";
+  } else {
+    try {
+      katexApi.renderToString = function measuredRenderToString(...args: any[]) {
+        const key = JSON.stringify(args);
+        const cached = markedKatexCache.get(key);
+        if (cached !== undefined) return cached;
+        const startedAt = recorder ? performance.now() : 0;
+        try {
+          const html = originalRenderToString.apply(this, args);
+          if (markedKatexCache.size >= markedKatexCacheLimit) markedKatexCache.delete(markedKatexCache.keys().next().value!);
+          markedKatexCache.set(key, html);
+          return html;
+        } finally {
+          if (recorder) {
             katexCalls += 1;
             katexMs += performance.now() - startedAt;
           }
-        };
-        katexTimingAvailable = true;
-        restoreKatex = () => { katexApi.renderToString = originalRenderToString; };
-      } catch {
-        katexTimingBlocker = "katex.renderToString cannot be wrapped without changing the module export";
-      }
+        }
+      };
+      katexTimingAvailable = true;
+      restoreKatex = () => { katexApi.renderToString = originalRenderToString; };
+    } catch {
+      katexTimingBlocker = "katex.renderToString cannot be wrapped without changing the module export";
     }
   }
   let html: string;
   try {
-    html = (inline ? marked.parseInline(source, { async: false }) : marked.parse(source, { async: false })) as string;
+    html = render();
   } finally {
     restoreKatex?.();
   }
   const parsedAt = recorder ? performance.now() : 0;
-  const fragment = DOMPurify.sanitize(html, {
-    USE_PROFILES: { html: true },
-    ADD_ATTR: ["aria-label", "data-copy-code", "data-external-url", "data-language", "data-markdown", "class"],
-    FORBID_TAGS: ["img", "script", "style", "iframe", "object", "embed", ...(inline ? ["a", "button"] : [])],
-    RETURN_DOM_FRAGMENT: true,
-  }) as DocumentFragment;
-  if (animateMath) {
-    const mathSelector = inline ? ".katex" : ".katex-display, .katex";
-    for (const element of fragment.querySelectorAll(mathSelector)) element.classList.add("streaming-final-math");
-  }
+  const fragment = sanitizeMarkdownHtml(html, inline);
+  const sanitisedAt = recorder ? performance.now() : 0;
   if (recorder) {
-    const sanitisedAt = performance.now();
     recordHarnessMetric(recorder, {
       stage: "markdown-render",
       renderer: "marked",
@@ -147,6 +161,54 @@ function renderMarkdown(source: string, inline = false, animateMath = false) {
     });
   }
   return fragment;
+}
+
+function renderMarkdown(source: string, inline = false) {
+  return renderMarkdownFragment(source, inline, () =>
+    (inline ? marked.parseInline(source, { async: false }) : marked.parse(source, { async: false })) as string);
+}
+
+function renderMarkdownTokens(tokens: MarkedToken[]) {
+  const source = tokens.map((token) => token.raw || "").join("");
+  return renderMarkdownFragment(source, false, () => marked.Parser.parse(tokens as any));
+}
+
+function tokenParts(source: string) {
+  const tokens = marked.lexer(source) as MarkedToken[];
+  let lastContent = tokens.length - 1;
+  while (lastContent >= 0 && tokens[lastContent]?.type === "space") lastContent -= 1;
+  if (lastContent < 0) return { stable: tokens, tail: [] };
+  const tailStart = lastContent;
+  return {
+    stable: tokens.slice(0, tailStart),
+    tail: tokens.slice(tailStart),
+  };
+}
+
+function tokenRaws(tokens: MarkedToken[]) {
+  return tokens.map((token) => (token.raw || "").replace(/\s+$/, ""));
+}
+
+function tokenContainsMath(token: MarkedToken): boolean {
+  if (token.type === "blockKatex" || token.type === "inlineKatex") return true;
+  return Boolean(token.tokens?.some(tokenContainsMath));
+}
+
+function sourceContainsMath(source: string, pending: StreamingPending | null) {
+  if (pending?.kind.startsWith("math")) return true;
+  if (!source.includes("$")) return false;
+  return (marked.lexer(source) as MarkedToken[]).some(tokenContainsMath);
+}
+
+function hasTokenPrefix(value: string[], prefix: string[]) {
+  return prefix.every((entry, index) => value[index] === entry);
+}
+
+function moveBefore(anchor: Comment, nodes: Node[]) {
+  if (!nodes.length) return;
+  const fragment = document.createDocumentFragment();
+  fragment.append(...nodes);
+  anchor.before(fragment);
 }
 
 const sameKind = (current: Node, next: Node) => current.nodeType === next.nodeType
@@ -190,12 +252,40 @@ function reconcileChildren(current: Node, next: Node) {
   while (current.childNodes.length > next.childNodes.length) current.lastChild?.remove();
 }
 
+function reconcileRange(parent: Node, currentNodes: Node[], nextNodes: Node[], anchor: Node) {
+  const retained: Node[] = [];
+  for (let index = 0; index < nextNodes.length; index += 1) {
+    const next = nextNodes[index]!;
+    const current = currentNodes[index];
+    if (!current) {
+      const inserted = next.cloneNode(true);
+      parent.insertBefore(inserted, anchor);
+      retained.push(inserted);
+    } else if (!sameKind(current, next)) {
+      const replacement = next.cloneNode(true);
+      parent.replaceChild(replacement, current);
+      retained.push(replacement);
+    } else {
+      reconcileNode(current, next);
+      retained.push(current);
+    }
+  }
+  for (let index = nextNodes.length; index < currentNodes.length; index += 1) {
+    const current = currentNodes[index];
+    if (current?.parentNode === parent) parent.removeChild(current);
+  }
+  return retained;
+}
+
 export type ChatMarkdownProps = {
   children?: string;
   streaming?: boolean;
   streamVersion?: number;
   inline?: boolean;
   onRendered?: () => void;
+  onDisplayBusyChange?: (busy: boolean) => void;
+  typewriter?: boolean;
+  displayKey?: string;
   renderer?: MarkdownRendererId;
 };
 
@@ -205,27 +295,204 @@ function MarkedMarkdown(props: ChatMarkdownProps) {
   let externalReturnFocus: HTMLElement | null = null;
   let renderedSource = "";
   let renderedVersion = -1;
+  let renderedMarkdownSource = "";
+  let stableBoundary: Comment | null = null;
+  let pendingBoundary: Comment | null = null;
+  let stableTokenRaws: string[] = [];
+  let tailTokenRaws: string[] = [];
+  let tailNodes: Node[] = [];
+  let pendingNodes: Node[] = [];
+  let incrementalActive = false;
+
+  const ensureIncrementalRoot = () => {
+    if (stableBoundary && pendingBoundary) return;
+    stableBoundary = document.createComment("markdown-stable");
+    pendingBoundary = document.createComment("markdown-pending");
+    root.replaceChildren(stableBoundary, pendingBoundary);
+    stableTokenRaws = [];
+    tailTokenRaws = [];
+    tailNodes = [];
+    pendingNodes = [];
+    renderedMarkdownSource = "";
+  };
+
+  const resetIncrementalRoot = () => {
+    stableBoundary = null;
+    pendingBoundary = null;
+    ensureIncrementalRoot();
+  };
+
+  const discardIncrementalState = () => {
+    stableBoundary = null;
+    pendingBoundary = null;
+    stableTokenRaws = [];
+    tailTokenRaws = [];
+    tailNodes = [];
+    pendingNodes = [];
+    renderedMarkdownSource = "";
+    incrementalActive = false;
+  };
+
+  const clearPendingNodes = () => {
+    for (const node of pendingNodes) node.parentNode?.removeChild(node);
+    pendingNodes = [];
+  };
+
+  const renderPending = (pending: StreamingPending | null) => {
+    clearPendingNodes();
+    if (!pending || !pendingBoundary) return;
+    const pendingFragment = DOMPurify.sanitize(pendingMarkup(pending, Boolean(props.streaming)), {
+      USE_PROFILES: { html: true },
+      ADD_ATTR: ["aria-hidden", "aria-label", "class", "data-copy-code", "data-language", "data-streaming-final", "data-streaming-pending"],
+      RETURN_DOM_FRAGMENT: true,
+    }) as DocumentFragment;
+    const nodes = [...pendingFragment.childNodes];
+    if (pending.kind === "math-inline") {
+      const paragraph = [...root.querySelectorAll("p")].at(-1);
+      if (paragraph) {
+        paragraph.append(...nodes);
+        pendingNodes = nodes;
+        return;
+      }
+    }
+    const fragment = document.createDocumentFragment();
+    fragment.append(...nodes);
+    pendingBoundary.after(fragment);
+    pendingNodes = nodes;
+  };
+
+  const renderIncremental = (source: string, split: ReturnType<typeof splitStreamingMarkdown>) => {
+    ensureIncrementalRoot();
+    const pending = split.pending;
+    const markdownSource = pending ? split.stable : source;
+    if (markdownSource === renderedMarkdownSource && Boolean(props.streaming) && pending?.kind.startsWith("math") && pendingNodes.length > 0) {
+      return;
+    }
+    const parts = tokenParts(markdownSource);
+    const nextStableRaws = tokenRaws(parts.stable);
+    const nextTailRaws = tokenRaws(parts.tail);
+    const previousRenderedMarkdownSourceCharacters = renderedMarkdownSource.length;
+    const sourceAppended = markdownSource.startsWith(renderedMarkdownSource);
+    const fullSourceAppended = source.startsWith(renderedSource);
+    const firstSourceMismatchIndex = sourceAppended
+      ? null
+      : [...markdownSource].findIndex((character, index) => character !== renderedMarkdownSource[index]) >= 0
+        ? [...markdownSource].findIndex((character, index) => character !== renderedMarkdownSource[index])
+        : Math.min(markdownSource.length, renderedMarkdownSource.length);
+    const stablePrefixUnchanged = hasTokenPrefix(nextStableRaws, stableTokenRaws);
+    const promoted = nextStableRaws.slice(stableTokenRaws.length);
+    const oldTailPromoted = hasTokenPrefix(promoted, tailTokenRaws)
+      && promoted.length >= tailTokenRaws.length;
+    const tailRemainsMutable = promoted.length === 0;
+    const trimToPending = !sourceAppended && fullSourceAppended
+      && renderedMarkdownSource.startsWith(markdownSource)
+      && markdownSource.length < renderedMarkdownSource.length
+      && tailNodes.length > 0;
+    const canReuse = trimToPending || (sourceAppended && stablePrefixUnchanged
+      && (tailTokenRaws.length === 0 || oldTailPromoted || tailRemainsMutable));
+    const renderStartedAt = getHarnessRecorder() ? performance.now() : 0;
+    let incrementalMode = "append-tail";
+
+    if (trimToPending) {
+      incrementalMode = "append-pending-trim";
+      const tailFragment = renderMarkdownTokens(parts.tail);
+      tailNodes = reconcileRange(root, tailNodes, [...tailFragment.childNodes], pendingBoundary!);
+    } else if (!canReuse) {
+      incrementalMode = !sourceAppended
+        ? "full-reset-source"
+        : !stablePrefixUnchanged
+          ? "full-reset-prefix"
+          : "full-reset-tail";
+      resetIncrementalRoot();
+      const stableFragment = renderMarkdownTokens(parts.stable);
+      const tailFragment = renderMarkdownTokens(parts.tail);
+      moveBefore(stableBoundary!, [...stableFragment.childNodes]);
+      tailNodes = [...tailFragment.childNodes];
+      moveBefore(pendingBoundary!, tailNodes);
+    } else {
+      if (tailTokenRaws.length && oldTailPromoted) {
+        incrementalMode = "append-promote";
+        pendingBoundary!.before(stableBoundary!);
+        tailNodes = [];
+      }
+      const promotedTailLength = oldTailPromoted ? tailTokenRaws.length : 0;
+      const newStableTokens = parts.stable.slice(stableTokenRaws.length + promotedTailLength);
+      moveBefore(stableBoundary!, [...renderMarkdownTokens(newStableTokens).childNodes]);
+      const tailFragment = renderMarkdownTokens(parts.tail);
+      tailNodes = reconcileRange(root, tailNodes, [...tailFragment.childNodes], pendingBoundary!);
+    }
+
+    stableTokenRaws = nextStableRaws;
+    tailTokenRaws = nextTailRaws;
+    renderedMarkdownSource = markdownSource;
+    renderPending(pending);
+    const recorder = getHarnessRecorder();
+    if (recorder) {
+      recordHarnessMetric(recorder, {
+        stage: "markdown-reconcile",
+        renderer: "marked",
+        sourceCharacters: source.length,
+        inline: false,
+        reconcileMs: performance.now() - renderStartedAt,
+        incrementalMode,
+        markdownSourceCharacters: markdownSource.length,
+        previousRenderedMarkdownSourceCharacters,
+        renderedMarkdownSourceCharacters: renderedMarkdownSource.length,
+        stableTokenCount: nextStableRaws.length,
+        previousStableTokenCount: stableTokenRaws.length,
+        tailTokenCount: nextTailRaws.length,
+        previousTailTokenCount: tailTokenRaws.length,
+        sourceAppended,
+        firstSourceMismatchIndex,
+        stablePrefixUnchanged,
+      });
+    }
+  };
 
   createEffect(() => {
     const source = String(props.children || "");
     const version = Number(props.streamVersion || 0);
     if (source === renderedSource && version === renderedVersion) return;
     const split = splitStreamingMarkdown(source);
-    const previousPending = splitStreamingMarkdown(renderedSource).pending;
-    const animateMath = !split.pending && previousPending != null && previousPending.kind.startsWith("math");
-    const fragment = renderMarkdown(split.pending ? split.stable : source, props.inline, animateMath);
-    if (split.pending) appendPendingMarkup(fragment, split.pending, Boolean(props.streaming));
-    const recorder = getHarnessRecorder();
-    const reconcileStartedAt = recorder ? performance.now() : 0;
-    reconcileChildren(root, fragment);
-    if (recorder) {
-      recordHarnessMetric(recorder, {
-        stage: "markdown-reconcile",
-        renderer: "marked",
-        sourceCharacters: source.length,
-        inline: Boolean(props.inline),
-        reconcileMs: performance.now() - reconcileStartedAt,
-      });
+    if (renderedSource && !source.startsWith(renderedSource)) incrementalActive = false;
+    if (props.inline) {
+      const fragment = renderMarkdown(split.pending ? split.stable : source, true);
+      if (split.pending) appendPendingMarkup(fragment, split.pending, Boolean(props.streaming));
+      const recorder = getHarnessRecorder();
+      const reconcileStartedAt = recorder ? performance.now() : 0;
+      reconcileChildren(root, fragment);
+      if (recorder) {
+        recordHarnessMetric(recorder, {
+          stage: "markdown-reconcile",
+          renderer: "marked",
+          sourceCharacters: source.length,
+          inline: true,
+          reconcileMs: performance.now() - reconcileStartedAt,
+        });
+      }
+    } else if (incrementalActive || sourceContainsMath(source, split.pending)) {
+      incrementalActive = true;
+      renderIncremental(source, split);
+    } else {
+      if (incrementalActive) {
+        discardIncrementalState();
+        root.replaceChildren();
+      }
+      const fragment = renderMarkdown(split.pending ? split.stable : source, false);
+      if (split.pending) appendPendingMarkup(fragment, split.pending, Boolean(props.streaming));
+      const recorder = getHarnessRecorder();
+      const reconcileStartedAt = recorder ? performance.now() : 0;
+      reconcileChildren(root, fragment);
+      if (recorder) {
+        recordHarnessMetric(recorder, {
+          stage: "markdown-reconcile",
+          renderer: "marked",
+          sourceCharacters: source.length,
+          inline: false,
+          reconcileMs: performance.now() - reconcileStartedAt,
+          incrementalMode: "legacy-full-reconcile",
+        });
+      }
     }
     renderedSource = source;
     renderedVersion = version;
