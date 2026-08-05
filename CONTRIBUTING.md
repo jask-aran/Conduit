@@ -83,3 +83,40 @@ hard dependency is stated explicitly.
 Close Bugs and Features when the corresponding implementation lands or the work
 is deliberately abandoned. Close a Roadmap when its intended outcome has been
 delivered or deliberately abandoned, not when the first child Feature starts.
+
+## Concurrent working-tree changes
+
+Conduit development may involve more than one agent or user sharing a checkout.
+A dirty working tree is therefore something to inspect, not by itself a reason
+to stop.
+
+- Inspect existing changes before editing so you know whether they overlap your
+  task.
+- Preserve unrelated changes. Do not reset, revert, discard, overwrite, or
+  stash another worker's work merely to obtain a clean tree.
+- Continue when existing changes are unrelated and your work can be isolated
+  safely.
+- Stage and commit only the files or hunks owned by your task.
+- Stop and surface the conflict only when existing changes overlap the same code
+  in a way that makes ownership or the intended result ambiguous.
+
+Task-specific execution plans may deliberately require a particular recorded
+working-tree state. Those stricter checks apply only to that task or handoff;
+they do not establish a repository-wide clean-tree requirement for future work.
+
+## Commits and history
+
+Keep Git history intentional and reviewable.
+
+- Use small, focused commits with scoped, imperative subjects. Conventional
+  Commit prefixes such as `feat:` or `docs:` are not required; use them only
+  when they make the subject clearer rather than as a taxonomy.
+- For non-trivial changes, use the commit body to record the relevant failure
+  mode or motivation, the important invariant or behaviour preserved, and the
+  checks/evidence used to validate the change. Tiny self-explanatory commits do
+  not need a body merely to satisfy a format.
+- Treat sequential `main` history as the canonical implementation record. A
+  natural final commit or an annotated `sprint/` tag may mark the end of a
+  larger run.
+- Treat pull requests as optional review bundles, not as a second source of
+  project history or planning truth.
