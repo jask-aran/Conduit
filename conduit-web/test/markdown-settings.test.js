@@ -30,8 +30,8 @@ test("development renderer controls stay available on tunneled origins", () => {
   });
 });
 
-test("the four renderer preferences stay distinct", () => {
-  for (const renderer of ["marked", "incremark", "incremark-typewriter", "incremark-synthetic"]) {
+test("the five renderer preferences stay distinct", () => {
+  for (const renderer of ["marked-stable", "marked", "incremark", "incremark-typewriter", "incremark-synthetic"]) {
     withBrowserSettings("", { "conduit:markdown-renderer": renderer, "conduit:incremark-typewriter": renderer === "incremark" ? "0" : "1" }, () => {
       assert.equal(selectedMarkdownRenderer(), renderer);
     });

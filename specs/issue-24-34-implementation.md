@@ -3100,12 +3100,262 @@ Verification for this fix:
 - Confirm `$$...$$` and `\[...\]` display previews appear without replacing
   the surrounding paragraph or table.
 - Confirm tables use the wider Incremark layout. Check that column boundaries
-  do not move when a cell formula grows.
+  resize from later cell content without leaving any formula outside its cell.
 - Keep the transcript at the bottom. Look for upward jumps, flashing, table
   replacement, duplicate text, missing text, or browser slowdown warnings.
 - Confirm the composer remains usable while a formula preview updates.
-- Switch to Incremark and Incremark Typewriter. Confirm both retain fixed table
-  geometry and their previous smooth behavior.
+- Switch to Incremark and Incremark Typewriter. Confirm both use content-sized
+  table columns and retain their previous smooth behavior.
 - Switch to Marked. Confirm its output and table behavior are unchanged.
 - Stop, reload, reconnect, scroll manually, and resume a hidden tab. Confirm
   final semantic text and all completed formulas remain unchanged.
+
+### Table-cell math projection and reconciliation — 5 August 2026
+
+The live review found two separate parser failures in the same table stream:
+
+- An unescaped pipe inside TeX, such as \`\\ln|x|\`, was treated as a Markdown
+  column separator.
+- Incremark parsed \`$$...$$\` and \`\\[...\\]\` inside table cells as text or
+  inline fragments instead of display-math nodes.
+
+The repair is client-side and keeps the raw provider transcript unchanged.
+\`table-math.ts\` projects only table-row math before parsing. It replaces
+math-internal pipes with a same-length private-use sentinel, and Incremark
+converts \`\\[...\\]\` to same-length \`$$...$$\` for the parser. The AST and
+Marked token paths restore the original pipe before rendering. Incremark then
+promotes table-cell display math to an atomic math node. The pending-prefix
+parser uses the same projection; this is required to keep completed inline
+math in its original cell while an adjacent display formula is incomplete.
+
+Incremark block IDs now derive from the block start offset, so parser updates
+retain the same display session. Its Typewriter transformer treats a table as
+one native block-level step while the parser still grows the table from the
+stream. This avoids the core slicer's generic child-count merge dropping
+earlier rows or cells.
+
+Deterministic fixture: \`table-cell-display-math\`. It is 365 source
+characters, 122 deltas, and includes:
+
+- \`$\\ln|x|$\` in an inline-math cell.
+- \`$$...$$\` in a display-math cell.
+- \`\\[a|b\\]\` and a longer \`\\[...\\]\` display formula in table cells.
+- Five columns and two data rows.
+
+Evidence captured before the final pending-prefix correction:
+
+| Renderer | Final math cells | Cells per row | CLS | Direction reversals | Removed KaTeX nodes | Result |
+| --- | ---: | --- | ---: | --- | ---: | --- |
+| Marked, pipe projection | 6 | 5/5/5 | 0.016921 | 0/0 | 0 | Math and structure correct; old 0.005 CLS gate failed |
+| Incremark | 6 | 5/5/5 | 0.021237 | 8/4 | 0 | Old gate failed; pending-prefix path still exposed oscillation |
+| Incremark Typewriter | 6 | 5/5/5 | 0.023262 | 6/4 | 2 | Old gate failed; same pending-prefix defect |
+| Incremark Synthetic | 6 | 5/5/5 | 0.026405 | 6/12 | 0 | Old gate failed; synthetic fallback also needed projection |
+
+The Marked result after enabling TeX-display conversion reached 6 math cells,
+5 cells in every row, 100 DOM mutations, 9 CLS entries, and zero block-height
+or block-top direction reversals. The compatibility fixture now permits
+measured table growth up to CLS 0.03 and asserts zero direction reversals and
+zero removed completed-math nodes.
+
+Post-correction verification completed without browser binding:
+
+- Focused parser and AST tests: 21 passed.
+- \`npm test\`: 307 passed, 0 failed.
+- \`npm run typecheck\`: passed.
+- \`npm run build\`: passed.
+- \`git diff --check\`: passed.
+- Managed server restart passed. Health returned
+  \`{"ok":true,"status":"ready","release":"development"}\`.
+
+The final browser harness rerun was not executed after the pending-prefix
+correction. The required local Vite bind was blocked by the execution
+environment's approval quota:
+\`Automatic approval review failed ... You've hit your usage limit\`.
+The pre-correction browser figures above are diagnostic evidence, not final
+acceptance evidence.
+
+#### Manual smoke checklist — table-cell math projection
+
+- Open \`http://127.0.0.1:4310\` and select Marked.
+- Select Incremark, Incremark Typewriter, and Incremark Synthetic Math in turn.
+- Use the exact fixture prompt:
+  \`output some inline math with $ quotes, and some block math with $$ a lot of it, the inline interspersed with texta nd the blocks inebetween, add soem tables with a lot of info int them as well\`.
+- Check a cell containing \`$\\ln|x|$\`. It must stay one cell and render KaTeX.
+- Check cells containing \`$$...$$\` and \`\\[...\\]\`. They must render math, not raw
+  delimiters.
+- While the adjacent formula is incomplete, confirm the completed inline
+  formula does not move to another column or disappear.
+- Confirm every table row keeps the same number of cells while the next cell
+  grows.
+- Keep the transcript at the bottom. Check for flashing, vertical reversals,
+  table replacement, duplicate text, missing text, raw TeX, and slowdown
+  warnings.
+- Stop, reload, switch renderer, reconnect, and scroll manually. Confirm the
+  final table and all formulas remain present.
+
+### Historical Synthetic-only table projection isolation — 5 August 2026
+
+This section records the 5 August isolation state. The 6 August section at the
+end of this document supersedes it for the current implementation.
+
+The previous table-projection attempt changed all four renderer paths. That
+was the wrong scope and could regress the already acceptable Marked, naked
+Incremark, and Incremark Typewriter behavior. The current implementation
+removes those changes from the three existing paths:
+
+- `markdown.tsx` uses its previous Marked lexer and immutable-tail path.
+- `incremark-typewriter.ts` uses only its previous math plugin; it does not
+  add a table plugin.
+- `splitStreamingMarkdown` enables table-cell math scanning only when the
+  Synthetic Math adapter requests `tableMath: true`.
+
+At that point, only Synthetic Math used `table-math.ts`. It projected table-row math with
+same-length sentinels, converts `\[...\]` to parser-compatible `$$...$$`,
+restores the AST, and promotes display math inside table cells to atomic math
+nodes. The pending preview path also handles the core parser's partial shapes:
+literal `$$...` text, a literal `$` followed by an `inlineMath` node, and text
+split across punctuation nodes. A lone opening `$` in a Synthetic table is
+hidden as an empty math preview instead of flashing as raw source.
+
+The implementation uses the model's append-only stream. It does not freeze
+table geometry and does not rewrite the provider source. It keeps the active
+formula inside its original cell and keeps completed cells in the normalized
+table AST. The final source slice restores original raw text for block
+positioning, including TeX display delimiters.
+
+This section supersedes the earlier pre-isolation measurements in this
+document. Those measurements remain as historical diagnostics only.
+
+Deterministic evidence after isolation:
+
+| Check | Result |
+| --- | --- |
+| Synthetic table final rows | 3 rows with 5 cells each |
+| Synthetic final math nodes | 6 |
+| Synthetic streamed prefixes checked | 365, one-character prefixes |
+| Raw `$`, `$$`, `\[`, or `\]` in checked table AST text | 0 |
+| Missing Synthetic previews in checked math prefixes | 0 |
+| Focused parser, projection, and split tests | 23 passed, 0 failed |
+
+The browser harness was run against the `table-cell-display-math` fixture with
+the Synthetic Math renderer, one-character chunks, and a 16 ms interval. It
+passed with 365 streamed source characters, 365 source updates, zero block
+height reversals, zero block-top reversals, CLS 0, zero long tasks, 451 DOM
+mutations, and 9 math geometry transitions. It recorded two table-layout
+samples: initial table allocation and the final fixed five-column layout. The
+table used 960 px with five approximately 191.8 px columns. This is evidence
+for the deterministic fixture only; the manual checklist remains required.
+
+The remaining geometry fix is local to each Synthetic display-math wrapper.
+An invalid first partial candidate renders empty inside the stable wrapper.
+Each equation then retains the maximum measured wrapper height seen during its
+stream. A later valid KaTeX candidate can grow the equation, but cannot shrink
+the row that already appeared. This avoids a table-wide geometry freeze and
+keeps the active formula inside its original cell.
+
+#### Manual smoke checklist — Synthetic Math only
+
+- Select **Incremark Synthetic Math**. Use the exact table/math prompt in this
+  document.
+- Confirm partial `$...$`, `\(...\)`, `$$...$$`, and `\[...\]` formulas do not
+  show raw delimiters or raw TeX.
+- Confirm each table row keeps its cell boundaries while the active formula
+  grows. Check the inline pipe in `\ln|x|`.
+- Confirm the final equation in the last table row appears and remains inside
+  its cell after the stream completes.
+- Keep the transcript at the bottom. Check for vertical oscillation, flashing,
+  duplicate text, missing text, table replacement, `.katex-error`, and browser
+  slowdown warnings.
+- Switch to Marked, naked Incremark, and Incremark Typewriter. Confirm their
+  prior behavior remains unchanged; do not use their results as Synthetic
+  acceptance evidence.
+
+### Incremark Stable table geometry and shared cell-math normalization — 6 August 2026
+
+The investigation identified the fixed-column regression. Commit `7de8150`
+added a `colgroup` with percentage widths and `table-layout: fixed` to the
+shared Incremark table adapter. Commit `1612c89` widened that selector to every
+Incremark renderer. The result was not a first-row measurement bug in the
+browser. The adapter supplied equal or hand-picked column widths, and the
+fixed layout prevented later rows and formulas from changing those widths.
+
+The implementation now keeps the useful 150% wide-table rule but removes the
+hard geometry:
+
+- `TableNode` no longer emits a `colgroup`.
+- Incremark tables use `table-layout: auto`.
+- Later cells can resize columns during the append-only stream.
+- KaTeX overflow is checked against each cell boundary.
+- `Incremark` and `Incremark Typewriter` both use the existing
+  `table-math.ts` projection for block content. The projection protects math
+  pipes, converts `\[...\]` to parser-compatible display math, restores source
+  text, and promotes complete table-cell display math to atomic nodes.
+- Synthetic-only eager previews remain in `Incremark Synthetic Math`; this
+  change does not make the experimental preview path the stable path.
+- The renderer selector now names the roles explicitly: `Marked (Experimental)`,
+  `Immediate (Stable)`, `Typewriter (Stable)`, and `Synthetic (Experimental)`.
+  The default remains `Typewriter (Stable)` (`incremark-typewriter`).
+- `Immediate (Stable)` and `Typewriter (Stable)` share the same Incremark
+  parser, table projection, math handling, and Solid reconciliation. Typewriter
+  adds the adaptive native `BlockTransformer` display queue.
+- `Synthetic (Experimental)` adds eager paired-delimiter math previews to the
+  immediate Incremark path. It does not currently enable the Typewriter queue.
+- `Marked (Stable)` is the isolated reference adapter. It ports the old
+  Marked-only `markdown.tsx` path from the tree at commit
+  `e8564b50864cf6a55f3abbf0d92975e827c8aa1e` behind its own renderer ID. It
+  uses no pending-tail hiding, synthetic preview, Incremark projection, or
+  Typewriter queue. The current Marked path remains `Marked (Experimental)`.
+
+The deterministic harness now checks the failure that the earlier fixture
+missed. For the strict Incremark table contract it requires six KaTeX-bearing
+cells, zero raw math delimiters in final and mid-stream text, zero horizontal
+math overflow, and `table-layout: auto`. It also checks these conditions in
+streaming snapshots. Marked keeps its existing comparison contract. On this
+fixture the current Marked path renders three math cells and leaves two raw
+delimiters; this is why it remains labelled experimental.
+
+Deterministic browser evidence used 8-character deltas with a 5 ms interval.
+The fixture contains 365 source characters, five columns, and two data rows.
+The new Marked Stable reference run passed with 46 source deltas, 36 DOM
+mutations, zero long tasks, zero CLS, three rendered KaTeX nodes, and two raw
+dollar delimiters. The raw delimiters are intentional: this reference path
+does not hide incomplete math or apply the streaming delimiter splitter.
+
+| Renderer | Result | Math cells | Raw delimiters | Cell overflow | DOM mutations | Long tasks | Math geometry transitions | Height/top reversals |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| Marked Stable | passed reference contract | 3 | 2 | 0 | 36 | 0 | 0 | 0/0 |
+| Marked Experimental | passed existing contract | 3 | 2 | 0 | 47 | 0 | 0 | 0/0 |
+| Incremark Immediate | passed strict table contract | 6 | 0 | 0 | 25 | 0 | 2 | 0/0 |
+| Incremark Stable | passed strict table contract | 6 | 0 | 0 | 45 | 0 | 1 | 0/0 |
+| Incremark Synthetic Math | passed strict table contract | 6 | 0 | 0 | 37 | 0 | 2 | 0/0 |
+
+The stable Typewriter run completed 270.7 ms after provider completion. The
+table kept `auto` layout throughout the observed samples. The multiline table
+fixture also passed for Incremark Stable with 12 math cells, zero overflow,
+zero raw delimiters, nine math geometry transitions, and zero height/top
+reversals. The existing inline-table and math-table regression fixtures passed
+after their layout-shift thresholds were rebased for intentional dynamic
+column sizing: observed CLS was 0.011395 and 0.057695 respectively. The
+multiline fixture observed CLS 0.171092 and uses a 0.20 gate. These are
+horizontal table reflow baselines, not permission for vertical direction
+reversals; the zero reversal gates remain active.
+
+The 9,017-character `math-stress` fixture passed with Incremark Stable, but it
+exposed a separate high-volume signal: 19 long tasks, a 124 ms longest task,
+36 frame gaps over 50 ms, two over 100 ms, and 2,358 block-top direction
+reversals. The fixture has no table content, so this is not evidence against
+the table fix. It remains an open Typewriter/scroll-follow performance issue
+and must not be described as fully resolved by this slice.
+
+Verification completed after the implementation:
+
+- `npm test`: 310 passed, 0 failed.
+- `npm run typecheck`: passed.
+- `npm run build`: passed. Bundle check passed; Vite emitted only the existing
+  large-chunk warning.
+- `git diff --check`: passed.
+- Strict table fixture: all four renderer probes passed.
+- Existing `inline-math-cell-transition`, `multiline-inline-math-table`, and
+  `math-table-oscillation` probes passed for Incremark Stable.
+- Managed server restart passed. `GET /healthz` returned
+  `{"ok":true,"status":"ready","release":"development"}`.

@@ -5,7 +5,7 @@ type MarkdownNode = any;
 type SyntheticMathPending = {
   kind: "math-inline" | "math-block";
   body: string;
-  opening?: "$" | "\\(";
+  opening?: "$" | "$$" | "\\(" | "\\[";
 };
 
 function isEscaped(source: string, index: number) {
@@ -78,6 +78,7 @@ export function repairSyntheticMathSource(source: string) {
 function replacePendingInlineMath(node: MarkdownNode, opening: string, body: string): [MarkdownNode, boolean] {
   if (!node || typeof node !== "object") return [node, false];
   if (!Array.isArray(node.children)) return [node, false];
+  const previewBody = body.trimEnd();
   const marker = opening === "\\(" ? "(" : opening;
   for (let index = node.children.length - 1; index >= 0; index -= 1) {
     const child = node.children[index];
@@ -90,12 +91,12 @@ function replacePendingInlineMath(node: MarkdownNode, opening: string, body: str
           endIndex += 1;
           candidate += node.children[endIndex].value;
         }
-        if (candidate.startsWith(body)) {
+        if (candidate.startsWith(previewBody)) {
           const replacement = [];
           const prefix = child.value.slice(0, openingIndex);
-          const suffix = candidate.slice(body.length);
+          const suffix = candidate.slice(previewBody.length);
           if (prefix) replacement.push({ type: "text", value: prefix });
-          replacement.push({ type: "inlineMath", value: body, __conduitMathSource: body });
+          replacement.push({ type: "inlineMath", value: previewBody, __conduitMathSource: previewBody });
           if (suffix) replacement.push({ type: "text", value: suffix });
           const children = [...node.children];
           children.splice(index, endIndex - index + 1, ...replacement);
@@ -112,6 +113,58 @@ function replacePendingInlineMath(node: MarkdownNode, opening: string, body: str
   return [node, false];
 }
 
+function replacePendingDisplayMath(node: MarkdownNode, body: string): [MarkdownNode, boolean] {
+  if (!node || typeof node !== "object") return [node, false];
+  if (!Array.isArray(node.children)) return [node, false];
+  // Incremark can tokenize an incomplete `$$...` cell as a literal `$` plus
+  // an inlineMath node after the first closing dollar arrives. Treat that
+  // shape as the same pending display expression instead of exposing its raw
+  // delimiters.
+  const previewBody = (body.endsWith("$") ? body.slice(0, -1) : body).trimEnd();
+  for (let index = node.children.length - 1; index >= 0; index -= 1) {
+    const child = node.children[index];
+    const following = node.children[index + 1];
+    if (child?.type === "text" && child.value === "$" && following?.type === "inlineMath") {
+      const candidate = String(following.value || "");
+      if (candidate === previewBody || candidate.startsWith(previewBody) || previewBody.startsWith(candidate)) {
+        const children = [...node.children];
+        children.splice(index, 2, { type: "math", value: previewBody, __conduitMathSource: previewBody });
+        return [{ ...node, children }, true];
+      }
+    }
+    if (child?.type === "text" && typeof child.value === "string") {
+      const openingIndex = child.value.lastIndexOf("$$");
+      if (openingIndex >= 0) {
+        const prefix = child.value.slice(0, openingIndex);
+        let endIndex = index;
+        let candidate = child.value.slice(openingIndex + 2);
+        while (endIndex + 1 < node.children.length && node.children[endIndex + 1]?.type === "text") {
+          endIndex += 1;
+          candidate += String(node.children[endIndex].value || "");
+        }
+        // The core parser may split TeX spacing commands and punctuation into
+        // separate text nodes, so the AST text is not always byte-equal to the
+        // source body. The pending split has already identified the active
+        // delimiter. Replace the rest of that local text run atomically.
+        if (candidate.startsWith(previewBody) || node.type === "tableCell" || node.type === "tableRow" || node.type === "table") {
+          const replacement = [];
+          if (prefix) replacement.push({ type: "text", value: prefix });
+          replacement.push({ type: "math", value: previewBody, __conduitMathSource: previewBody });
+          const children = [...node.children];
+          children.splice(index, endIndex - index + 1, ...replacement);
+          return [{ ...node, children }, true];
+        }
+      }
+    }
+    const [next, replaced] = replacePendingDisplayMath(node.children[index], body);
+    if (!replaced) continue;
+    const children = [...node.children];
+    children[index] = next;
+    return [{ ...node, children }, true];
+  }
+  return [node, false];
+}
+
 /**
  * Add a display-only math node to the parser's existing pending AST.
  * This keeps the surrounding paragraph or table structure from being
@@ -120,6 +173,9 @@ function replacePendingInlineMath(node: MarkdownNode, opening: string, body: str
 export function createSyntheticMathPreviewNode(node: MarkdownNode, pending: SyntheticMathPending): MarkdownNode | null {
   if (!node || typeof node !== "object") return null;
   if (pending.kind === "math-block") {
+    const [preview, replaced] = replacePendingDisplayMath(node, pending.body);
+    if (replaced) return preview;
+    if (node.type === "table" || node.type === "tableRow" || node.type === "tableCell") return null;
     return {
       type: "math",
       value: pending.body,

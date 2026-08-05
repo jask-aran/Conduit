@@ -364,7 +364,7 @@ svg { stroke-width: 1.5; }
 .chat-markdown ul { list-style: disc; } .chat-markdown ol { list-style: decimal; }
 .chat-markdown blockquote { margin: 1em 0; padding-left: 1em; border-left: 3px solid var(--border); color: var(--muted-foreground); }
 .chat-markdown table { width: 100%; margin: 1em 0; border-collapse: collapse; }
-.chat-markdown[data-renderer^="incremark"] table { table-layout: fixed; }
+.chat-markdown[data-renderer^="incremark"] table { table-layout: auto; }
 @container chat-main (min-width: 760px) {
   .chat-markdown[data-renderer^="incremark"] table {
     width: min(150%, 100cqw);

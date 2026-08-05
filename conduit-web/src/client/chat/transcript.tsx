@@ -182,10 +182,11 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
     <Show when={showMarkdownRendererSwitch}>
       <div class="transcript-renderer-switch">
         <label>Markdown renderer<select aria-label="Markdown renderer" value={markdownRenderer()} onChange={(event) => switchMarkdownRenderer(event.currentTarget.value as MarkdownRendererId)}>
-          <option value="marked">Marked</option>
-          <option value="incremark">Incremark</option>
-          <option value="incremark-typewriter">Incremark Typewriter</option>
-          <option value="incremark-synthetic">Incremark Synthetic Math</option>
+          <option value="marked-stable">Marked (Stable)</option>
+          <option value="marked">Marked (Experimental)</option>
+          <option value="incremark">Immediate (Stable)</option>
+          <option value="incremark-typewriter">Typewriter (Stable)</option>
+          <option value="incremark-synthetic">Synthetic (Experimental)</option>
         </select></label>
       </div>
     </Show>
