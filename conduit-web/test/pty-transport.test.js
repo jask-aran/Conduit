@@ -3,6 +3,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
 import { WebSocket } from "ws";
+import { PTY_REPLAY_PREFIX } from "../src/pty-manager.js";
 import { startConduitHarness, waitFor } from "./helpers/conduit-harness.js";
 
 function openTerminal(origin, id) {
@@ -11,6 +12,7 @@ function openTerminal(origin, id) {
   socket.on("message", (data, isBinary) => messages.push({ data: Buffer.from(data), isBinary }));
   return {
     socket,
+    messages,
     opened: new Promise((resolve, reject) => { socket.once("open", resolve); socket.once("error", reject); }),
     async next(predicate) {
       let found;
@@ -18,6 +20,16 @@ function openTerminal(origin, id) {
       return found;
     },
   };
+}
+
+function jsonFrame(frame) {
+  return JSON.parse(frame.data.toString());
+}
+
+function replayPayload(frame) {
+  const text = frame.data.toString();
+  assert.equal(text.startsWith(PTY_REPLAY_PREFIX), true);
+  return JSON.parse(text.slice(PTY_REPLAY_PREFIX.length));
 }
 
 test("PTY API streams binary terminal output over an authenticated server-owned socket", async () => {
@@ -33,8 +45,16 @@ test("PTY API streams binary terminal output over an authenticated server-owned 
     const terminal = await created.json();
     const stream = openTerminal(harness.origin, terminal.id);
     await stream.opened;
-    const status = await stream.next((frame) => !frame.isBinary && JSON.parse(frame.data.toString()).type === "status");
-    assert.equal(JSON.parse(status.data.toString()).exitCode, null);
+    const replayStart = await stream.next((frame) => !frame.isBinary && jsonFrame(frame).type === "replay_start");
+    assert.equal(jsonFrame(replayStart).complete, true);
+    const replay = await stream.next((frame) => frame.isBinary && frame.data.toString().startsWith(PTY_REPLAY_PREFIX));
+    assert.deepEqual(replayPayload(replay)[0], { type: "resize", cols: 100, rows: 30 });
+    await stream.next((frame) => !frame.isBinary && jsonFrame(frame).type === "replay_end");
+    const status = await stream.next((frame) => !frame.isBinary && jsonFrame(frame).type === "status");
+    assert.equal(jsonFrame(status).status, "running");
+    assert.equal(jsonFrame(status).exitCode, null);
+    const control = await stream.next((frame) => !frame.isBinary && jsonFrame(frame).type === "control");
+    assert.equal(jsonFrame(control).writable, true);
     stream.socket.send(Buffer.from("printf 'conduit-pty-ready\\n'\n"));
     const output = await stream.next((frame) => frame.isBinary && frame.data.toString().includes("conduit-pty-ready"));
     assert.match(output.data.toString(), /conduit-pty-ready/);
@@ -60,6 +80,10 @@ test("PTY API uses a linked Workspace root or the server home directory, never a
     const workspaceStream = openTerminal(harness.origin, workspaceTerminal.id);
     const homeStream = openTerminal(harness.origin, homeTerminal.id);
     await Promise.all([workspaceStream.opened, homeStream.opened]);
+    await Promise.all([
+      workspaceStream.next((frame) => !frame.isBinary && jsonFrame(frame).type === "control" && jsonFrame(frame).writable === true),
+      homeStream.next((frame) => !frame.isBinary && jsonFrame(frame).type === "control" && jsonFrame(frame).writable === true),
+    ]);
     workspaceStream.socket.send(Buffer.from("pwd\n"));
     homeStream.socket.send(Buffer.from("pwd\n"));
     const [workspaceOutput, homeOutput] = await Promise.all([
@@ -70,6 +94,52 @@ test("PTY API uses a linked Workspace root or the server home directory, never a
     assert.match(homeOutput.data.toString(), new RegExp(harness.root));
     workspaceStream.socket.close();
     homeStream.socket.close();
+  } finally {
+    await harness.stop();
+  }
+});
+
+test("only one attached browser controls PTY input and resize at a time", async () => {
+  const harness = await startConduitHarness({ env: { SHELL: "sh" } });
+  try {
+    const project = await harness.createProject("Controller ownership");
+    const created = await (await harness.request("/v0/ptys", { method: "POST", body: JSON.stringify({ projectId: project.id }) })).json();
+    const first = openTerminal(harness.origin, created.id);
+    await first.opened;
+    await first.next((frame) => !frame.isBinary && jsonFrame(frame).type === "control" && jsonFrame(frame).writable === true);
+
+    const second = openTerminal(harness.origin, created.id);
+    await second.opened;
+    await second.next((frame) => !frame.isBinary && jsonFrame(frame).type === "control" && jsonFrame(frame).writable === false);
+    second.socket.send(Buffer.from("printf 'must-not-run\\n'\n"));
+    const denied = await second.next((frame) => !frame.isBinary && jsonFrame(frame).type === "client_error");
+    assert.equal(jsonFrame(denied).code, "pty_read_only");
+
+    const controlsBeforePromotion = second.messages.filter((frame) => !frame.isBinary && jsonFrame(frame).type === "control").length;
+    first.socket.close();
+    await waitFor(() => second.messages
+      .filter((frame) => !frame.isBinary && jsonFrame(frame).type === "control")
+      .slice(controlsBeforePromotion)
+      .some((frame) => jsonFrame(frame).writable === true), "Second terminal client was not promoted");
+    second.socket.send(Buffer.from("printf 'promoted-controller\\n'\n"));
+    const output = await second.next((frame) => frame.isBinary && frame.data.toString().includes("promoted-controller"));
+    assert.match(output.data.toString(), /promoted-controller/);
+    second.socket.close();
+  } finally {
+    await harness.stop();
+  }
+});
+
+test("deleting a Project tears down and removes its resident PTY", async () => {
+  const harness = await startConduitHarness({ env: { SHELL: "sh" } });
+  try {
+    const project = await harness.createProject("Disposable terminal project");
+    const terminal = await (await harness.request("/v0/ptys", { method: "POST", body: JSON.stringify({ projectId: project.id }) })).json();
+    assert.equal(terminal.status, "running");
+    const removed = await harness.request(`/v0/projects/${project.id}`, { method: "DELETE" });
+    assert.equal(removed.status, 204);
+    const listed = await (await harness.request("/v0/ptys")).json();
+    assert.equal(listed.ptys.some((item) => item.projectId === project.id), false);
   } finally {
     await harness.stop();
   }

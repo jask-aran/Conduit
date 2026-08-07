@@ -43,7 +43,7 @@ COPY --chown=node:node conduit-web/src ./conduit-web/src
 COPY --from=production-dependencies --chown=node:node /build/conduit-web/node_modules ./conduit-web/node_modules
 COPY --from=client-build --chown=node:node /build/conduit-web/dist ./conduit-web/dist
 
-RUN mkdir -p /data /workspaces && chown node:node /data /workspaces
+RUN mkdir -p /data/home /workspaces && chown -R node:node /data /workspaces
 
 ENV NODE_ENV=production \
     HOME=/data/home \
@@ -62,4 +62,4 @@ STOPSIGNAL SIGTERM
 HEALTHCHECK --interval=15s --timeout=3s --start-period=20s --retries=3 \
   CMD ["node", "-e", "fetch('http://127.0.0.1:4310/healthz').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
 
-CMD ["node", "conduit-web/src/server.js"]
+CMD ["sh", "-c", "mkdir -p \"$HOME\" && exec node conduit-web/src/server.js"]
