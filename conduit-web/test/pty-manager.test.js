@@ -120,3 +120,14 @@ test("PTY manager compacts persisted exited rows to the newest terminal per Proj
   assert.equal(persisted.sessions.length, 2);
   await fs.rm(root, { recursive: true, force: true });
 });
+
+test("PTY replay journal bounds resize history", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-pty-resize-replay-"));
+  const pty = fakePty();
+  const manager = new PtyManager({ filePath: path.join(root, "remotes.json"), pty });
+  await manager.load();
+  const record = await manager.create({ project: { id: "resize-project" }, cwd: root });
+  for (let index = 0; index < 5000; index += 1) manager.resize(record.id, index % 2 ? 80 : 81, 24);
+  assert.deepEqual(manager.replay(record.id), { complete: false, events: [], bytes: Buffer.alloc(0) });
+  await fs.rm(root, { recursive: true, force: true });
+});

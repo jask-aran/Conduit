@@ -6,6 +6,7 @@ import nodePty from "node-pty";
 
 export const PTY_MAX_SESSIONS = 8;
 export const PTY_SCROLLBACK_BYTES = 256 * 1024;
+export const PTY_MAX_REPLAY_EVENTS = 4096;
 export const PTY_REPLAY_PREFIX = "CONDUIT-PTY-REPLAY/1\n";
 
 const TEMPLATES = {
@@ -52,7 +53,7 @@ class ReplayBuffer {
   appendData(value) {
     const bytes = Buffer.from(value);
     if (!this.complete) return bytes;
-    if (this.length + bytes.length > this.limit) {
+    if (this.length + bytes.length > this.limit || this.events.length >= PTY_MAX_REPLAY_EVENTS) {
       // A tail is not a terminal snapshot. Once any prefix is lost, discard the
       // journal rather than retaining bytes that may begin inside UTF-8/CSI/OSC
       // state or omit an earlier alternate-screen/palette transition.
@@ -70,6 +71,12 @@ class ReplayBuffer {
     if (!this.complete) return;
     const previous = this.events.at(-1);
     if (previous?.type === "resize" && previous.cols === cols && previous.rows === rows) return;
+    if (this.events.length >= PTY_MAX_REPLAY_EVENTS) {
+      this.complete = false;
+      this.events = [];
+      this.length = 0;
+      return;
+    }
     this.events.push({ type: "resize", cols, rows });
   }
 

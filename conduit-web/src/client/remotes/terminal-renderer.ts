@@ -69,17 +69,15 @@ export async function createTerminalRenderer(host: HTMLElement, id = selectedTer
   return createGhosttyRenderer(host);
 }
 
-type ProposedDimensions = { cols: number; rows: number } | undefined;
 type TerminalFit = {
   fit: () => void;
-  proposeDimensions?: () => ProposedDimensions;
   dispose?: () => void;
 };
 type ResizableTerminal = { cols: number; rows: number; resize: (cols: number, rows: number) => void };
 
 type WritableTerminal = ResizableTerminal & {
   write: (bytes: Uint8Array, callback?: () => void) => void;
-  options: { cursorBlink: boolean };
+  options: { cursorBlink?: boolean };
 };
 
 function resizeTerminal(terminal: ResizableTerminal, cols: number, rows: number) {
@@ -98,16 +96,11 @@ function writeTerminal(terminal: WritableTerminal, bytes: Uint8Array) {
   });
 }
 
-function applyFit(terminal: ResizableTerminal, fit: TerminalFit) {
-  const proposed = fit.proposeDimensions?.();
-  if (!proposed) {
-    // ghostty-web versions that do not expose proposeDimensions still keep their
-    // renderer-specific cell measurement behind FitAddon. Conduit owns the
-    // scheduling and falls back to its one mutation entry point here.
-    fit.fit();
-    return;
-  }
-  resizeTerminal(terminal, proposed.cols, proposed.rows);
+function applyFit(fit: TerminalFit) {
+  // FitAddon owns renderer-specific cell metrics and the render invalidation
+  // needed after a resize. Calling fit() also keeps xterm's scrollback viewport
+  // in sync; resizing from proposeDimensions() alone can leave stale geometry.
+  fit.fit();
 }
 
 function observeHostSize(host: HTMLElement, terminal: ResizableTerminal, fit: TerminalFit) {
@@ -119,7 +112,7 @@ function observeHostSize(host: HTMLElement, terminal: ResizableTerminal, fit: Te
   const fitNow = () => {
     frame = undefined;
     if (disposed || !host.isConnected || host.clientWidth <= 0 || host.clientHeight <= 0) return;
-    applyFit(terminal, fit);
+    applyFit(fit);
   };
   const scheduleFit = () => {
     if (frame === undefined) frame = requestAnimationFrame(fitNow);
@@ -167,7 +160,7 @@ async function createGhosttyRenderer(host: HTMLElement): Promise<TerminalRendere
     rows: () => terminal.rows,
     write: (bytes) => writeTerminal(terminal, bytes),
     focus: () => terminal.focus(),
-    fit: () => applyFit(terminal, fit),
+    fit: () => applyFit(fit),
     resize: (cols, rows) => resizeTerminal(terminal, cols, rows),
     onData: (listener) => { const subscription = terminal.onData(listener); return () => subscription.dispose(); },
     onResize: (listener) => { const subscription = terminal.onResize(listener); return () => subscription.dispose(); },
@@ -197,7 +190,7 @@ async function createXtermRenderer(host: HTMLElement): Promise<TerminalRenderer>
     rows: () => terminal.rows,
     write: (bytes) => writeTerminal(terminal, bytes),
     focus: () => terminal.focus(),
-    fit: () => applyFit(terminal, fit),
+    fit: () => applyFit(fit),
     resize: (cols, rows) => resizeTerminal(terminal, cols, rows),
     onData: (listener) => { const subscription = terminal.onData(listener); return () => subscription.dispose(); },
     onResize: (listener) => { const subscription = terminal.onResize(listener); return () => subscription.dispose(); },

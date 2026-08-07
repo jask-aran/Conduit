@@ -1,5 +1,5 @@
 import { createEffect, createSignal, onCleanup, onMount, Show } from "solid-js";
-import { TerminalIcon } from "lucide-solid";
+import { FocusIcon, SquareIcon, TerminalIcon } from "lucide-solid";
 import { Button, Spinner } from "@/components/primitives";
 import { api } from "../api/client";
 import { createTerminalRenderer, selectedTerminalRenderer, type TerminalRenderer, type TerminalRendererId } from "./terminal-renderer";
@@ -50,8 +50,10 @@ export function TerminalPane(props: { projectId: string }) {
   const [error, setError] = createSignal("");
   const [replayWarning, setReplayWarning] = createSignal("");
   const [starting, setStarting] = createSignal(false);
+  const [stopping, setStopping] = createSignal(false);
   const [connectionState, setConnectionState] = createSignal<ConnectionState>("idle");
   const [writable, setWritable] = createSignal(false);
+  const [terminalFocused, setTerminalFocused] = createSignal(false);
   const [rendererId, setRendererId] = createSignal<TerminalRendererId>(selectedTerminalRenderer());
   let host: HTMLDivElement | undefined;
   let terminal: TerminalRenderer | undefined;
@@ -75,6 +77,27 @@ export function TerminalPane(props: { projectId: string }) {
     disposeConnection = undefined;
     socket = undefined;
     setWritable(false);
+    setTerminalFocused(false);
+  };
+
+  const isTerminalTarget = (target: EventTarget | null) => target instanceof Node && Boolean(host?.contains(target));
+  const focusActiveTerminal = () => {
+    if (!terminal || !writable()) return;
+    setTerminalFocused(true);
+    terminal.focus();
+  };
+  const handleTerminalFocusIn = (event: FocusEvent) => {
+    if (writable() && isTerminalTarget(event.target)) setTerminalFocused(true);
+  };
+  const handleTerminalFocusOut = () => {
+    queueMicrotask(() => {
+      if (!isTerminalTarget(document.activeElement)) setTerminalFocused(false);
+    });
+  };
+  const scopeTerminalKeyboard = (event: KeyboardEvent) => {
+    // Let xterm/Ghostty handle the key first, then stop Conduit's window-level
+    // shortcuts from turning terminal chords into application commands.
+    if (terminalFocused() && isTerminalTarget(event.target)) event.stopPropagation();
   };
 
   const disposeRenderer = () => {
@@ -162,7 +185,7 @@ export function TerminalPane(props: { projectId: string }) {
       if (host) host.dataset.terminalReady = "true";
       setConnectionState("attached");
       sendResize();
-      activeTerminal.focus();
+      focusActiveTerminal();
     };
 
     connection.onmessage = (event) => {
@@ -191,10 +214,11 @@ export function TerminalPane(props: { projectId: string }) {
           }
           if (message.type === "control") {
             setWritable(message.writable === true);
+            if (message.writable !== true) setTerminalFocused(false);
             if (message.writable === true) {
               setConnectionState("attached");
               sendResize();
-              activeTerminal.focus();
+              focusActiveTerminal();
             }
             return;
           }
@@ -205,6 +229,7 @@ export function TerminalPane(props: { projectId: string }) {
             notifyPtyChange();
             if (status === "exited") {
               setWritable(false);
+              setTerminalFocused(false);
               setConnectionState("exited");
               intentionallyClosed = true;
               connection.close(1000, "Terminal exited");
@@ -278,6 +303,7 @@ export function TerminalPane(props: { projectId: string }) {
     connection.onclose = (event) => {
       if (generation !== connectionGeneration || intentionallyClosed) return;
       setWritable(false);
+      setTerminalFocused(false);
       if (pty()?.status === "exited") {
         setConnectionState("exited");
         return;
@@ -358,6 +384,45 @@ export function TerminalPane(props: { projectId: string }) {
     await connect(record, rendererId(), { freshRenderer: true });
   };
 
+  const stop = async () => {
+    const record = pty();
+    if (!record || stopping()) return;
+    const projectId = activeProjectId;
+    const id = record.id;
+    setStopping(true);
+    setError("");
+    connectionGeneration += 1;
+    closeConnection();
+    try {
+      await api(`/v0/ptys/${encodeURIComponent(id)}`, { method: "DELETE" });
+      if (projectId !== activeProjectId || pty()?.id !== id) return;
+      disposeRenderer();
+      setPty(null);
+      setReplayWarning("");
+      setConnectionState("idle");
+      notifyPtyChange();
+    } catch (cause) {
+      if (projectId !== activeProjectId || pty()?.id !== id) return;
+      if ((cause as { error?: string }).error === "pty_not_found") {
+        disposeRenderer();
+        setPty(null);
+        setReplayWarning("");
+        setConnectionState("idle");
+        notifyPtyChange();
+        return;
+      }
+      setError((cause as Error).message);
+      try {
+        await connect(record, rendererId(), { freshRenderer: true });
+      } catch (reconnectCause) {
+        setError((reconnectCause as Error).message);
+        setConnectionState("disconnected");
+      }
+    } finally {
+      if (projectId === activeProjectId) setStopping(false);
+    }
+  };
+
   const restart = async () => {
     connectionGeneration += 1;
     closeConnection();
@@ -410,10 +475,38 @@ export function TerminalPane(props: { projectId: string }) {
     disposeRenderer();
   });
 
-  return <section class="terminal-pane" aria-label="Terminal pane">
+  return <section class="terminal-pane" aria-label="Terminal pane" data-terminal-focused={terminalFocused() ? "true" : "false"} onKeyDown={scopeTerminalKeyboard}>
     <header class="terminal-pane-header">
       <div><TerminalIcon /><strong>Terminal</strong><span>{statusLabel()}</span></div>
       <div class="terminal-pane-actions">
+        <Show when={pty()?.status === "running"}>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            class="terminal-focus-action"
+            aria-label={terminalFocused() ? "Terminal focused" : "Focus terminal"}
+            aria-pressed={terminalFocused()}
+            title="Focus terminal to capture keyboard shortcuts"
+            disabled={!writable() || connectionState() !== "attached"}
+            onClick={focusActiveTerminal}
+          >
+            <FocusIcon /><span class="terminal-action-label">{terminalFocused() ? "Focused" : "Focus"}</span>
+          </Button>
+          <Button
+            type="button"
+            variant="destructive"
+            size="sm"
+            class="terminal-stop-action"
+            aria-label="Stop terminal"
+            title="Stop terminal process"
+            disabled={stopping()}
+            onClick={() => void stop()}
+          >
+            <Show when={stopping()} fallback={<SquareIcon />}><Spinner /></Show>
+            <span class="terminal-action-label">{stopping() ? "Stopping…" : "Stop"}</span>
+          </Button>
+        </Show>
         <select aria-label="Terminal renderer" value={rendererId()} onChange={(event) => void switchRenderer(event.currentTarget.value as TerminalRendererId)}>
           <option value="ghostty">Ghostty</option>
           <option value="xterm">xterm</option>
@@ -421,7 +514,15 @@ export function TerminalPane(props: { projectId: string }) {
       </div>
     </header>
     <div class="terminal-pane-body">
-      <div ref={host} class="terminal-canvas" data-active={pty() ? "true" : "false"} data-renderer={rendererId()} />
+      <div
+        ref={host}
+        class="terminal-canvas"
+        data-active={pty() ? "true" : "false"}
+        data-renderer={rendererId()}
+        onClick={() => focusActiveTerminal()}
+        onFocusIn={handleTerminalFocusIn}
+        onFocusOut={handleTerminalFocusOut}
+      />
       <Show when={!pty()}>
         <div class="terminal-pane-empty">
           <TerminalIcon />
