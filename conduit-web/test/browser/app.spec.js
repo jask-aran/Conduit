@@ -51,6 +51,11 @@ async function openSidebar(page, testInfo) {
 }
 
 test.beforeEach(async ({ page }) => {
+  if (process.env.CONDUIT_TEST_MARKDOWN_RENDERER) {
+    await page.addInitScript((renderer) => {
+      localStorage.setItem("conduit:markdown-renderer", renderer);
+    }, process.env.CONDUIT_TEST_MARKDOWN_RENDERER);
+  }
   await page.addInitScript(() => {
     class IdleWebSocket extends EventTarget {
       static OPEN = 1;
@@ -265,7 +270,8 @@ test.beforeEach(async ({ page }) => {
     await route.fulfill({ json: { moved: [] } });
   });
   await page.route("**/v0/live-sessions", async (route) => {
-    await route.fulfill({ json: { id: "live_existing", streamUrl: "/v0/live-sessions/live_existing/stream" } });
+    const chatId = route.request().postDataJSON?.()?.chatId || "session_existing";
+    await route.fulfill({ json: { id: `live_${chatId}`, chatId, streamUrl: `/v0/live-sessions/live_${chatId}/stream` } });
   });
 });
 
@@ -1052,7 +1058,8 @@ test("renders persisted assistant Markdown with safe interactive controls", asyn
 });
 
 test("repairs unfinished Markdown while an assistant response streams", async ({ page }) => {
-  await page.addInitScript(() => {
+  const streamedContent = "## Live response\n\n**still streaming**\n\nRead [the documentation][docs].\n\n```javascript\nconst answer = 42;\n```\n\n$$\nE = mc^2\n$$\n\n- **first item**\n\n  continued first item\n\n- `second item`\n\n[docs]: https://example.com/docs";
+  await page.addInitScript((finalContent) => {
     class MockWebSocket extends EventTarget {
       static OPEN = 1;
 
@@ -1072,55 +1079,34 @@ test("repairs unfinished Markdown while an assistant response streams", async ({
       send(data) {
         const request = JSON.parse(data);
         if (request.type !== "prompt") return;
+        const emit = (payload, delay = 0) => setTimeout(() => this.onmessage?.({ data: JSON.stringify(payload) }), delay);
+        emit({ type: "generation_started", generationId: "g1", seq: 1 });
+        emit({ type: "assistant_message_started", generationId: "g1", seq: 2, messageId: "m1" });
+        emit({ type: "content_block_started", generationId: "g1", seq: 3, messageId: "m1", block: { type: "text", contentIndex: 0, text: "" } });
         setTimeout(() => {
-          this.onmessage?.({ data: JSON.stringify({
-            type: "generation_started",
-            generationId: "g1",
-          }) });
-          this.onmessage?.({ data: JSON.stringify({
-            type: "message_start",
-            generationId: "g1",
-            message: { role: "assistant" },
-          }) });
-          this.onmessage?.({ data: JSON.stringify({
-            type: "assistant_stream_delta",
-            generationId: "g1",
-            delta: "## Live response\n\n",
-          }) });
-          setTimeout(() => this.onmessage?.({ data: JSON.stringify({
-            type: "assistant_stream_delta",
-            generationId: "g1",
-            delta: "**still streaming**\n\nRead [the documentation][docs].\n\n",
-          }) }), 150);
-          setTimeout(() => this.onmessage?.({ data: JSON.stringify({
-            type: "assistant_stream_delta",
-            generationId: "g1",
-            delta: "```javascript\nconst answer = 42;\n```\n\n",
-          }) }), 300);
-          setTimeout(() => this.onmessage?.({ data: JSON.stringify({
-            type: "assistant_stream_delta",
-            generationId: "g1",
-            delta: "$$\nE = mc^2\n$$",
-          }) }), 450);
-          setTimeout(() => this.onmessage?.({ data: JSON.stringify({
-            type: "assistant_stream_delta",
-            generationId: "g1",
-            delta: "\n\n- **first item**\n\n  continued first item\n\n- `second item`",
-          }) }), 550);
+          emit({ type: "content_block_delta", generationId: "g1", seq: 4, messageId: "m1", blockType: "text", contentIndex: 0, delta: "## Live response\n\n" }, 0);
+          emit({ type: "content_block_delta", generationId: "g1", seq: 5, messageId: "m1", blockType: "text", contentIndex: 0, delta: "**still streaming**\n\nRead [the documentation][docs].\n\n" }, 150);
+          emit({ type: "content_block_delta", generationId: "g1", seq: 6, messageId: "m1", blockType: "text", contentIndex: 0, delta: "```javascript\nconst answer = 42;\n```\n\n" }, 300);
+          emit({ type: "content_block_delta", generationId: "g1", seq: 7, messageId: "m1", blockType: "text", contentIndex: 0, delta: "$$\nE = mc^2\n$$" }, 450);
+          emit({ type: "content_block_delta", generationId: "g1", seq: 8, messageId: "m1", blockType: "text", contentIndex: 0, delta: "\n\n- **first item**\n\n  continued first item\n\n- `second item`" }, 550);
           window.__releaseStreamFinal = () => {
             this.onmessage?.({ data: JSON.stringify({
-              type: "assistant_stream_final",
+              type: "assistant_message_completed",
               generationId: "g1",
-              content: "## Live response\n\n**still streaming**\n\nRead [the documentation][docs].\n\n```javascript\nconst answer = 42;\n```\n\n$$\nE = mc^2\n$$\n\n- **first item**\n\n  continued first item\n\n- `second item`\n\n[docs]: https://example.com/docs",
-              html: '<div class="server-markdown">Bogus legacy HTML</div>',
+              seq: 9,
+              messageId: "m1",
+              stopReason: "stop",
+              blocks: [{ type: "text", contentIndex: 0, text: finalContent }],
             }) });
             setTimeout(() => this.onmessage?.({ data: JSON.stringify({
-              type: "agent_end",
+              type: "generation_settled",
               generationId: "g1",
-              willRetry: false,
+              seq: 10,
             }) }), 50);
             setTimeout(() => this.onmessage?.({ data: JSON.stringify({
               type: "session_checkpoint",
+              generationId: "g1",
+              generationSeq: 10,
               chat: { id: "550e8400-e29b-41d4-a716-446655440099" },
             }) }), 100);
           };
@@ -1132,8 +1118,7 @@ test("repairs unfinished Markdown while an assistant response streams", async ({
       configurable: true,
       value: MockWebSocket,
     });
-  });
-  const streamedContent = "## Live response\n\n**still streaming**\n\nRead [the documentation][docs].\n\n```javascript\nconst answer = 42;\n```\n\n$$\nE = mc^2\n$$\n\n- **first item**\n\n  continued first item\n\n- `second item`\n\n[docs]: https://example.com/docs";
+  }, streamedContent);
   await page.route("**/v0/sessions/550e8400-e29b-41d4-a716-446655440099", async (route) => {
     await route.fulfill({ json: {
       id: "550e8400-e29b-41d4-a716-446655440099",
@@ -1147,6 +1132,9 @@ test("repairs unfinished Markdown while an assistant response streams", async ({
       tools: [],
       page: { before: null },
     } });
+  });
+  await page.route("**/v0/live-sessions", async (route) => {
+    await route.fulfill({ status: 201, json: { id: "live_stream", chatId: "550e8400-e29b-41d4-a716-446655440099", streamUrl: "/v0/live-sessions/live_stream/stream" } });
   });
   await page.goto("/");
   await page.getByRole("textbox", { name: "Message Pi" }).fill("Start streaming");
@@ -1397,9 +1385,10 @@ test("ignores queued events from the previous chat socket", async ({ page }, tes
   await expect(page.getByText("Second body")).toBeVisible();
   await page.evaluate(() => {
     const handler = window.__staleSocketHandler;
-    handler({ data: JSON.stringify({ type: "generation_started", generationId: "stale-generation" }) });
-    handler({ data: JSON.stringify({ type: "message_start", generationId: "stale-generation", message: { role: "assistant" } }) });
-    handler({ data: JSON.stringify({ type: "assistant_stream_delta", generationId: "stale-generation", delta: "STALE OUTPUT" }) });
+    handler({ data: JSON.stringify({ type: "generation_started", generationId: "stale-generation", seq: 1 }) });
+    handler({ data: JSON.stringify({ type: "assistant_message_started", generationId: "stale-generation", seq: 2, messageId: "stale-message" }) });
+    handler({ data: JSON.stringify({ type: "content_block_started", generationId: "stale-generation", seq: 3, messageId: "stale-message", block: { type: "text", contentIndex: 0, text: "" } }) });
+    handler({ data: JSON.stringify({ type: "content_block_delta", generationId: "stale-generation", seq: 4, messageId: "stale-message", blockType: "text", contentIndex: 0, delta: "STALE OUTPUT" }) });
   });
   await expect(page.getByText("STALE OUTPUT")).toHaveCount(0);
   await expect(page.getByText("Second body")).toBeVisible();
@@ -2551,14 +2540,15 @@ test("stop freezes the visible response and rejects late generation deltas", asy
       send(data) {
         const command = JSON.parse(data);
         if (command.type === "prompt") queueMicrotask(() => {
-          this.onmessage?.({ data: JSON.stringify({ type: "generation_started", generationId: "g1" }) });
-          this.onmessage?.({ data: JSON.stringify({ type: "message_start", generationId: "g1", message: { role: "assistant" } }) });
-          this.onmessage?.({ data: JSON.stringify({ type: "assistant_stream_delta", generationId: "g1", delta: "Visible partial" }) });
+          this.onmessage?.({ data: JSON.stringify({ type: "generation_started", generationId: "g1", seq: 1 }) });
+          this.onmessage?.({ data: JSON.stringify({ type: "assistant_message_started", generationId: "g1", seq: 2, messageId: "m1" }) });
+          this.onmessage?.({ data: JSON.stringify({ type: "content_block_started", generationId: "g1", seq: 3, messageId: "m1", block: { type: "text", contentIndex: 0, text: "" } }) });
+          this.onmessage?.({ data: JSON.stringify({ type: "content_block_delta", generationId: "g1", seq: 4, messageId: "m1", blockType: "text", contentIndex: 0, delta: "Visible partial" }) });
         });
         if (command.type === "stop_generation") {
           window.__stopCommand = command;
-          this.onmessage?.({ data: JSON.stringify({ type: "assistant_stream_delta", generationId: "g1", delta: "LATE OUTPUT" }) });
-          setTimeout(() => this.onmessage?.({ data: JSON.stringify({ type: "generation_stopped", generationId: "g1", status: "stopped", processTerminated: false }) }), 150);
+          this.onmessage?.({ data: JSON.stringify({ type: "content_block_delta", generationId: "g1", seq: 5, messageId: "m1", blockType: "text", contentIndex: 0, delta: "LATE OUTPUT" }) });
+          setTimeout(() => this.onmessage?.({ data: JSON.stringify({ type: "generation_stopped", generationId: "g1", seq: 6, status: "stopped", processTerminated: false }) }), 150);
         }
       }
     }
@@ -2589,12 +2579,17 @@ test("keeps streaming visible when a user checkpoint replaces the live placehold
         const command = JSON.parse(data);
         if (command.type !== "prompt") return;
         queueMicrotask(() => {
-          this.onmessage?.({ data: JSON.stringify({ type: "generation_started", generationId: "g1" }) });
-          this.onmessage?.({ data: JSON.stringify({ type: "message_start", generationId: "g1", message: { role: "assistant" } }) });
+          this.onmessage?.({ data: JSON.stringify({ type: "generation_started", generationId: "g1", seq: 1 }) });
+          this.onmessage?.({ data: JSON.stringify({ type: "assistant_message_started", generationId: "g1", seq: 2, messageId: "m1" }) });
+          this.onmessage?.({ data: JSON.stringify({ type: "content_block_started", generationId: "g1", seq: 3, messageId: "m1", block: { type: "text", contentIndex: 0, text: "" } }) });
           this.onmessage?.({ data: JSON.stringify({ type: "session_checkpoint", generationId: "g1", chat: { id: "550e8400-e29b-41d4-a716-446655440099" } }) });
           setTimeout(() => this.onmessage?.({ data: JSON.stringify({
-            type: "assistant_stream_delta",
+            type: "content_block_delta",
             generationId: "g1",
+            seq: 4,
+            messageId: "m1",
+            blockType: "text",
+            contentIndex: 0,
             delta: "Visible after checkpoint",
           }) }), 200);
         });
@@ -2654,23 +2649,14 @@ test("a delayed terminal checkpoint cannot clear the next generation", async ({ 
     }
     Object.defineProperty(window, "WebSocket", { configurable: true, value: CheckpointRaceWebSocket });
   });
-  let requests = 0;
   let checkpointRequested;
   const checkpointPending = new Promise((resolve) => { checkpointRequested = resolve; });
   let releaseCheckpoint;
   const checkpointResponse = new Promise((resolve) => { releaseCheckpoint = resolve; });
   await page.route("**/v0/sessions/550e8400-e29b-41d4-a716-446655440099", async (route) => {
-    requests += 1;
-    if (requests === 1) {
-      await route.fulfill({ json: {
-        id: "550e8400-e29b-41d4-a716-446655440099", projectId: "project_chat", status: "active", title: "New chat",
-        messages: [], tools: [], page: { before: null },
-      } });
-      return;
-    }
     checkpointRequested();
     await checkpointResponse;
-    await route.fulfill({ json: {
+    await route.fulfill({ headers: { "cache-control": "no-store" }, json: {
       id: "550e8400-e29b-41d4-a716-446655440099", projectId: "project_chat", status: "active", title: "New chat",
       messages: [{ id: "durable-a", role: "assistant", content: "Generation A" }], tools: [], page: { before: null },
     } });

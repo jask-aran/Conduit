@@ -15,6 +15,8 @@ export type StreamingMarkdownSplit = {
 
 export type StreamingMarkdownOptions = {
   tableMath?: boolean;
+  /** Keep an incomplete math tail visible only while the provider is streaming. */
+  allowUnclosedMath?: boolean;
 };
 
 type SourceRange = { start: number; end: number };
@@ -166,7 +168,9 @@ function findOpenTableCellMath(source: string, ranges: SourceRange[]) {
         index = close + 1;
         continue;
       }
-      if (line.text[index] === "$" && line.text[index + 1] !== "$" && (!line.text[index + 1] || !/[\s\d]/.test(line.text[index + 1]!))) {
+      const nextCharacter = line.text[index + 1];
+      const loneCellOpening = nextCharacter === undefined && /\|\s*$/.test(line.text.slice(0, index));
+      if (line.text[index] === "$" && nextCharacter !== "$" && (loneCellOpening || (nextCharacter && !/[\s\d]/.test(nextCharacter)))) {
         let close = -1;
         for (let cursor = index + 1; cursor < line.text.length; cursor += 1) {
           if (line.text[cursor] !== "$" || line.text[cursor + 1] === "$" || isEscaped(line.text, cursor)) continue;
@@ -174,8 +178,14 @@ function findOpenTableCellMath(source: string, ranges: SourceRange[]) {
           close = cursor;
           break;
         }
-        if (close < 0) return { start: line.start + index, bodyStart: line.start + index + 1, opening: "$" as const, kind: "math-inline" as const };
-        index = close;
+        const remainder = line.text.slice(index + 1);
+        const cellEnd = remainder.indexOf("|");
+        const cellBody = cellEnd < 0 ? remainder : remainder.slice(0, cellEnd);
+        const hasCellBoundary = cellEnd >= 0;
+        if (close < 0 && (!hasCellBoundary || !looksLikeShellVariable(cellBody))) {
+          return { start: line.start + index, bodyStart: line.start + index + 1, opening: "$" as const, kind: "math-inline" as const };
+        }
+        if (close >= 0) index = close;
       }
     }
   }
@@ -195,7 +205,20 @@ function findUnescapedDelimiter(source: string, delimiter: string, start: number
   return -1;
 }
 
-function findInlineMath(source: string, ranges: SourceRange[], blockMathStart: number | null, skipDoubleDollar = false) {
+function looksLikeShellVariable(body: string) {
+  const trimmed = body.trim();
+  const bareVariable = /^([A-Za-z_][A-Za-z0-9_]*(?:[./:-][A-Za-z0-9_.-]*)*)[.,;:!?)]*$/.exec(body)?.[1];
+  if (bareVariable) {
+    // A single uppercase symbol is common at the start of a streamed
+    // formula (for example, `$E = mc^2`), not strong shell-variable evidence.
+    if (bareVariable.length === 1 && bareVariable !== "x") return false;
+    return true;
+  }
+  return !/[=^_{}+*\\]/.test(body)
+    && /\s\$[A-Za-z_][A-Za-z0-9_]*(?:[./:-][A-Za-z0-9_.-]*)?(?=\s|[.,;:!?)]|$)/.test(body);
+}
+
+function findInlineMath(source: string, ranges: SourceRange[], blockMathStart: number | null, skipDoubleDollar = false, allowUnclosedMath = true) {
   let codeDelimiter = 0;
   for (let index = 0; index < source.length; index += 1) {
     if (inRange(index, ranges) || (blockMathStart != null && index >= blockMathStart)) continue;
@@ -217,7 +240,7 @@ function findInlineMath(source: string, ranges: SourceRange[], blockMathStart: n
         continue;
       }
       const body = source.slice(index + 2);
-      if (!/[\r\n]/.test(body)) return { start: index, bodyStart: index + 2 };
+      if (allowUnclosedMath && !/[\r\n]/.test(body)) return { start: index, bodyStart: index + 2 };
       continue;
     }
 
@@ -236,12 +259,13 @@ function findInlineMath(source: string, ranges: SourceRange[], blockMathStart: n
     }
     if (closeFound) continue;
     const body = source.slice(index + 1);
-    if (!/[\r\n]/.test(body)) return { start: index, bodyStart: index + 1 };
+    if (allowUnclosedMath && !/[\r\n]/.test(body) && !looksLikeShellVariable(body)) return { start: index, bodyStart: index + 1 };
   }
   return null;
 }
 
 export function splitStreamingMarkdown(source: string, options: StreamingMarkdownOptions = {}): StreamingMarkdownSplit {
+  const allowUnclosedMath = options.allowUnclosedMath !== false;
   const fences = scanFences(source);
   const candidates: StreamingPending[] = [];
   if (fences.open) {
@@ -253,7 +277,7 @@ export function splitStreamingMarkdown(source: string, options: StreamingMarkdow
     });
   }
 
-  const blockMath = findOpenBlockMath(source, fences.ranges);
+  const blockMath = allowUnclosedMath ? findOpenBlockMath(source, fences.ranges) : null;
   if (blockMath) {
     candidates.push({
       kind: "math-block",
@@ -262,7 +286,7 @@ export function splitStreamingMarkdown(source: string, options: StreamingMarkdow
     });
   }
 
-  const tableMath = options.tableMath ? findOpenTableCellMath(source, fences.ranges) : null;
+  const tableMath = allowUnclosedMath && options.tableMath ? findOpenTableCellMath(source, fences.ranges) : null;
   if (tableMath) {
     candidates.push({
       kind: tableMath.kind,
@@ -273,7 +297,7 @@ export function splitStreamingMarkdown(source: string, options: StreamingMarkdow
   }
 
   const blockMathStart = [blockMath?.start, tableMath?.start].filter((value): value is number => value != null).sort((left, right) => left - right)[0] ?? null;
-  const inlineMath = findInlineMath(source, fences.ranges, blockMathStart, Boolean(options.tableMath));
+  const inlineMath = findInlineMath(source, fences.ranges, blockMathStart, Boolean(options.tableMath), allowUnclosedMath);
   if (inlineMath) {
     candidates.push({
       kind: "math-inline",

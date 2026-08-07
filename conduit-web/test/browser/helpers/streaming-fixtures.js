@@ -78,6 +78,19 @@ const syntheticMathText = [
   "| Fraction | $\\frac{1}{n+1}$ | The second cell also receives a preview. |",
 ].join("\n");
 
+const reviewRegressionText = [
+  "Shell variables stay literal: $PATH and $HOME.",
+  "",
+  "```javascript",
+  ...Array.from({ length: 40 }, (_, index) => `const line${index + 1} = ${index + 1};`),
+  "```",
+  "",
+  "| Item | Cost | Flag |",
+  "| --- | --- | --- |",
+  "| owed $X | yes | ok |",
+  "| formula | $\\ln|x|$ | complete |",
+].join("\n");
+
 export const BROWSER_FIXTURES = Object.freeze({
   "rich-markdown": {
     text: "# Rich answer\n\nA **bold** item with *emphasis*.\n\n- one\n- two\n\n| A | B |\n| - | - |\n| 1 | 2 |",
@@ -222,6 +235,37 @@ export const BROWSER_FIXTURES = Object.freeze({
     skipStructuralFingerprint: true,
     requiresStructuralContract: false,
   },
+  "review-regressions": {
+    text: reviewRegressionText,
+    expectedSemanticText: null,
+    expectedSemanticFingerprint: null,
+    expectedAssertions: { katexRendered: true, tableMathRendered: true, fencedCodeCopyControls: true, artifactControlsPresent: true },
+    expectedInteractions: {},
+    rendererContracts: {
+      "marked-stable": {
+        expectedAssertions: { katexRendered: true, fencedCodeCopyControls: true, artifactControlsPresent: true },
+      },
+      marked: {
+        expectedAssertions: { katexRendered: true, fencedCodeCopyControls: true, artifactControlsPresent: true },
+      },
+      incremark: {
+        expectedAssertions: { katexRendered: true, tableMathRendered: true, fencedCodeCopyControls: true, artifactControlsPresent: true },
+        maxMathCellOverflowCount: 0,
+      },
+      "incremark-typewriter": {
+        expectedAssertions: { katexRendered: true, tableMathRendered: true, fencedCodeCopyControls: true, artifactControlsPresent: true },
+        maxMathCellOverflowCount: 0,
+      },
+      "incremark-synthetic": {
+        expectedAssertions: { katexRendered: true, tableMathRendered: true, fencedCodeCopyControls: true, artifactControlsPresent: true },
+        maxMathCellOverflowCount: 0,
+      },
+    },
+    expectedTableLayout: "auto",
+    maxRemovedMathNodes: 0,
+    skipStructuralFingerprint: true,
+    requiresStructuralContract: false,
+  },
   "table-cell-display-math": {
     text: [
       "# Table-cell math compatibility",
@@ -251,6 +295,7 @@ export const BROWSER_FIXTURES = Object.freeze({
         expectedTableMathCellCount: 6,
         requireNoRawMathDelimiters: true,
         maxMathCellOverflowCount: 0,
+        maxLayoutShiftValue: 0.12,
         streamingAssertion: { requireNoRawMathDelimiters: true, requireNoMathCellOverflow: true },
       },
     },
@@ -279,7 +324,18 @@ export const BROWSER_FIXTURES = Object.freeze({
     skipStructuralFingerprint: true,
   },
   "incomplete-math-block": {
-    text: "Before the formula.\n\n$$\n\\Delta x, \\Delta p \\ge 0\n$$\n\nAfter the formula.",
+    text: [
+      ...Array.from({ length: 24 }, (_, index) => `The preamble establishes the notation for formula ${index + 1}.`),
+      "",
+      "Before the formula.",
+      "",
+      "$$",
+      "\\Delta x, \\Delta p \\ge 0",
+      "$$",
+      "",
+      "After the formula.",
+      ...Array.from({ length: 24 }, (_, index) => `The completed formula remains valid in follow-up explanation ${index + 1}.`),
+    ].join("\n"),
     expectedSemanticText: null,
     expectedSemanticFingerprint: rootContract({ heading: 0, list: 0, table: 0, code: 0, math: 1, link: 0 }),
     expectedAssertions: { katexRendered: true },
@@ -288,7 +344,11 @@ export const BROWSER_FIXTURES = Object.freeze({
     requiresStructuralContract: true,
   },
   "incomplete-math-inline": {
-    text: "The answer is $E = mc^2$ and the units are consistent.",
+    text: [
+      ...Array.from({ length: 24 }, (_, index) => `The preamble establishes the notation for formula ${index + 1}.`),
+      "The answer is $E = mc^2 + a^2 + b^2 + c^2 + \\frac{1}{2} + \\sqrt{x^2 + y^2}$ and the units are consistent.",
+      ...Array.from({ length: 24 }, (_, index) => `The units remain consistent in explanation line ${index + 1}.`),
+    ].join("\n\n"),
     expectedSemanticText: null,
     expectedSemanticFingerprint: rootContract({ heading: 0, list: 0, table: 0, code: 0, math: 1, link: 0 }),
     expectedAssertions: { katexRendered: true },
@@ -306,12 +366,20 @@ export const BROWSER_FIXTURES = Object.freeze({
     requiresStructuralContract: true,
   },
   "incomplete-fence": {
-    text: "Before the example.\n\n```javascript\nconst answer = 42;\n```\n\nAfter the example.",
+    text: [
+      "Before the example.",
+      "",
+      "```javascript",
+      ...Array.from({ length: 40 }, (_, index) => `const line${index + 1} = ${index + 1};`),
+      "```",
+      "",
+      "After the example.",
+    ].join("\n"),
     expectedSemanticText: null,
     expectedSemanticFingerprint: rootContract({ heading: 0, list: 0, table: 0, code: 1, math: 0, link: 0 }),
     expectedAssertions: { fencedCodeCopyControls: true, artifactControlsPresent: true },
     expectedInteractions: { copyCode: true },
-    streamingAssertion: { kind: "fence", requireNoRawDelimiters: true, requirePendingNode: true },
+    streamingAssertion: { kind: "fence", requireNoRawDelimiters: true, requirePendingNode: true, requirePendingGrowth: true },
     requiresStructuralContract: true,
   },
   security: {

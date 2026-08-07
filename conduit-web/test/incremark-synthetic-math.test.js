@@ -83,6 +83,22 @@ test("table math projection keeps TeX display delimiters parser-compatible", () 
   assert.equal(projection.source.split("\n")[2]?.split("|").length, 4);
 });
 
+test("table math projection leaves ordinary dollar cell separators intact", () => {
+  const source = ["| Item | Cost | Flag |", "| --- | --- | --- |", "| owed $X | yes | ok |"].join("\n");
+  const projection = projectTableMathSource(source);
+  assert.equal(projection.pipeRepairs, 0);
+  assert.equal(projection.source, source);
+});
+
+test("table math projection fails open when every sentinel is present", () => {
+  const allSentinels = Array.from({ length: 0xf8ff - 0xe000 + 1 }, (_, index) => String.fromCodePoint(0xe000 + index)).join("");
+  const source = [`| Item | Value |`, `| --- | --- |`, `| ${allSentinels} | ok |`].join("\n");
+  const projection = projectTableMathSource(source);
+  assert.equal(projection.sentinel, null);
+  assert.equal(projection.source, source);
+  assert.equal(projection.pipeRepairs, 0);
+});
+
 test("Incremark promotes display math and restores protected math pipes in table cells", () => {
   const source = [
     "| Name | Inline | Display | TeX display |",
@@ -183,7 +199,9 @@ test("synthetic table previews do not leak raw math across streamed prefixes", (
       if (current.type === "table") {
         for (const row of current.children || []) assert.ok((row.children || []).length <= 5);
       }
-      if (current.type === "text") assert.equal(/(?:\$\$?|\\\[|\\\])/.test(String(current.value || "")), false, `raw math at source offset ${end}`);
+      if (current.type === "text" && split.pending?.kind.startsWith("math")) {
+        assert.equal(/(?:\$\$?|\\\[|\\\])/.test(String(current.value || "")), false, `raw math at source offset ${end}`);
+      }
     });
   }
 });

@@ -3438,3 +3438,243 @@ Manual switch checklist for the next live smoke test:
 - On a completed answer, switch through all five options. Confirm the selected
   value, `data-renderer` roots, math delimiter policy, and table structure update
   immediately.
+
+### Review remediation and provisional regression evidence — 6 August 2026
+
+This pass addressed the review findings that crossed renderer boundaries.
+
+- `streaming-markdown.ts` now distinguishes an open formula from a literal
+  shell variable. `$PATH`, `$HOME`, and `$x` remain literal. A single
+  uppercase symbol such as `$E` remains a pending formula candidate. Final
+  messages do not enter the pending-tail path because `allowUnclosedMath` is
+  false after streaming stops.
+- `incremark-markdown.tsx` excludes the parser block that owns an open
+  construct from the displayed block list. The pending prefix or hidden
+  placeholder is the only visible representation until the construct closes.
+  This removes the one-frame raw `$` leak found by the inline fixture.
+- Open fences use reactive props. Their code body grows on each delta instead
+  of staying at the first snapshot.
+- `table-math.ts` protects only confirmed or strongly evidenced math pipes.
+  Ordinary separators such as `| owed $X | yes |` stay table separators. A
+  sentinel collision fails open and leaves the source unchanged.
+- Marked incremental rewind clears its old boundary state before replacing the
+  root. Overflow delivery merges adjacent text deltas, replaces stale snapshot
+  events, preserves structural order, and drains within a bounded frame
+  budget. Hidden tabs use a timeout instead of an unavailable animation frame.
+- Harness contracts are renderer-specific. Marked is measured as the basic
+  reference path; all Incremark variants are measured against the strict
+  table-math contract. Typewriter metrics now include an explicit terminal
+  sample, so a final zero backlog is not inferred from a stale pre-idle sample.
+- The harness now records all Incremark renderer IDs, counts geometry changes
+  once per capture frame, and reports raw-delimiter samples. The PWA check
+  matches the exact login denylist rule. The unused Transcript display-session
+  write map was removed.
+
+Final deterministic browser matrix after the rebuild used the production
+client, 8-character burst deltas for the review and oscillation fixtures, and
+3-character/16 ms deltas for the table fixture. All 13 probes passed.
+
+| Fixture / renderer | Result | Key evidence |
+| --- | --- | --- |
+| `review-regressions` / Marked Stable | passed reference contract | 2 intentional raw delimiters, 0 table-math cells, 0 overflow, 0 CLS |
+| `review-regressions` / Marked Experimental | passed existing contract | 2 intentional raw delimiters, 0 table-math cells, 0 overflow, 0 CLS |
+| `review-regressions` / Immediate | passed strict Incremark contract | 1 table-math cell, 1 intentional raw `$X`, 0 overflow, 0 CLS |
+| `review-regressions` / Typewriter | passed strict contract | terminal source/display 817/817, backlog 0, 51 ms longest task |
+| `review-regressions` / Synthetic | passed strict contract | terminal source/display 817/817, backlog 0, 53 ms longest task |
+| `table-cell-display-math` / Immediate | passed | 6 cells, raw delimiters 0, overflow 0, `auto` layout, CLS 0.01925, reversals 0/0 |
+| `table-cell-display-math` / Typewriter | passed | 6 cells, raw delimiters 0, overflow 0, CLS 0.01929, terminal backlog 0, reversals 0/0 |
+| `table-cell-display-math` / Synthetic | passed experimental contract | 6 cells, raw delimiters 0, overflow 0, CLS 0.11147, terminal backlog 0, reversals 0/0 |
+| `math-table-oscillation` / Typewriter | passed | 15 cells, raw delimiters 0, math transitions 2, reversals 0/0, longest task 80 ms |
+| `math-table-oscillation` / Synthetic | passed | 15 cells, raw delimiters 0, math transitions 3, reversals 0/0, longest task 72 ms |
+| `incomplete-fence` / Typewriter | passed | pending fence observed and grew, terminal backlog 0 |
+| `incomplete-math-inline` / Typewriter | passed | pending node observed, raw delimiters 0, terminal backlog 0 |
+| `incomplete-math-block` / Typewriter | passed | pending node observed, raw delimiters 0, terminal backlog 0 |
+
+The one raw `$X` count in the Incremark review rows is intentional final
+source text from the table cell `owed $X`; it is not an open-math tail. The
+Marked counts are also intentional because the reference adapter does not
+hide incomplete math or apply the Incremark table projection.
+
+The strict table fixture shows the current trade-off. Immediate and Typewriter
+stay below 0.02 CLS and have no height or top reversals. Synthetic eager
+previews stay within its experimental 0.12 CLS budget, but measured 0.11147 in
+this run. The dedicated mixed math/table fixture still had zero reversals for
+both Typewriter and Synthetic. A mixed code/table review stream recorded
+small direction changes for Typewriter and Synthetic (1 height, 3 top); that
+signal is retained as a follow-up risk rather than hidden by the fixture
+contract.
+
+Repository verification after the final source change:
+
+- `npm test`: 321 passed, 0 failed.
+- `npm run typecheck`: passed.
+- `npm run build`: passed. Bundle check passed; Vite emitted only the existing
+  large-chunk warning.
+- `npx playwright test test/browser/app.spec.js --project=desktop-chromium
+  --workers=1 --grep "renders persisted assistant Markdown|repairs unfinished
+  Markdown"`: 2 passed. The stream mock now uses the current structured live
+  event contract and includes the live record's `chatId`.
+- Broader desktop browser run: 75 passed, 8 failed, 7 skipped. The failures
+  are outside this renderer acceptance gate: four app mocks still use the
+  retired live-event contract or omit `chatId`, one command assertion expects
+  the older regenerate payload, one context-menu assertion omits the current
+  Open terminal item, and two scroll/layout tests need a separate baseline
+  review. I did not fold those unrelated UI-contract changes into this slice.
+- Managed restart: passed with `bash .devcontainer/start-conduit.sh restart`.
+- `GET http://127.0.0.1:4310/healthz`: returned
+  `{"ok":true,"status":"ready","release":"development"}`.
+
+Manual smoke checklist for this checkpoint:
+
+- Check `$PATH`, `$HOME`, `$x`, `$E`, and `$E = mc^2` while streaming. Literal
+  variables must not truncate. Open formulas must not expose raw delimiters.
+- Stream an open fence for at least 40 lines. Confirm the visible code grows
+  before the closing fence and the Copy control remains usable.
+- Stream the table fixture. Check inline `\ln|x|`, display `$$...$$`, and
+  `\[...\]` cells. Confirm six formulas stay inside their cells and columns
+  can resize as later rows arrive.
+- Keep the transcript pinned to the bottom. Check for flashes, duplicate or
+  missing text, vertical movement, raw TeX, `.katex-error`, and browser
+  slowdown warnings.
+- Switch through Marked Stable, Marked Experimental, Immediate Stable,
+  Typewriter Stable, and Synthetic Experimental on a complete answer and
+  during output. Confirm the current source is preserved and no mode replays
+  or duplicates it.
+- Stop during an unclosed formula, reconnect, disable Typewriter, switch to
+  Marked, then switch back. Confirm the terminal Typewriter state has zero
+  backlog and follow-up controls remain available.
+
+The managed server is live on `0.0.0.0:4310` and responds through
+`127.0.0.1:4310`. The deterministic browser matrix is complete. Manual
+agent-browser login was not completed in this sandbox because the CLI reported
+`Socket directory '/run/user/1000/agent-browser' is not writable: Read-only file system`;
+the Playwright production-client harness supplied the browser evidence above.
+
+### Review remediation — current verification correction — 6 August 2026
+
+The preceding matrix was provisional. The final code checks after the last
+structural-node change are:
+
+- `npm test`: 322 passed, 0 failed.
+- `npm run typecheck`: passed.
+- `npm run build`: passed. Bundle check passed. Vite emitted only the existing
+  large-chunk warning.
+- `git diff --check`: passed.
+- Focused app browser regressions: 6 passed. The set covered stale workspace
+  responses, cold-load bottom anchoring, history-anchor restoration, stop and
+  late-delta rejection, live checkpoint replacement, and delayed checkpoint
+  isolation across generations.
+- Managed restart: passed with
+  `bash .devcontainer/start-conduit.sh restart`.
+- Health: `GET http://127.0.0.1:4310/healthz` returned
+  `{"ok":true,"status":"ready","release":"development"}`.
+
+The final focused deterministic probes produced this evidence:
+
+| Fixture / renderer | Result | Evidence |
+| --- | --- | --- |
+| `review-regressions` / Marked Stable | passed | reference contract; raw delimiters are intentional source text |
+| `review-regressions` / Marked Experimental | passed | existing contract; raw delimiters are intentional source text |
+| `review-regressions` / Immediate | passed | table separators and `$X` remain literal; no overflow |
+| `review-regressions` / Typewriter | passed | terminal source/display 817/817, backlog 0, removed math 0, overflow 0 |
+| `review-regressions` / Synthetic | passed | terminal source/display 817/817, backlog 0, removed math 0, overflow 0 |
+| `table-cell-display-math` / Immediate | passed | raw delimiters 0, overflow 0, `auto` layout, CLS about 0.019 |
+| `table-cell-display-math` / Typewriter | passed | raw delimiters 0, overflow 0, reversals 0/0, CLS about 0.019 |
+| `table-cell-display-math` / Synthetic | passed | raw delimiters 0, overflow 0, reversals 0/0, CLS about 0.111 |
+| `math-table-oscillation` / Typewriter | intermittent | one rerun passed with reversals 0/0; a later rerun reproduced one paragraph-height reversal at source 192 |
+| `math-table-oscillation` / Synthetic | passed | reversals 0/0, raw delimiters 0, removed math 0 |
+| `incomplete-fence` / Incremark | passed | pending fence observed and grew across 248 candidate snapshots |
+| `incomplete-math-inline` / Typewriter | passed | 8 candidate snapshots, pending node max 1, raw delimiters 0, terminal source/display 2523/2523 |
+| `incomplete-math-block` / Typewriter | passed | 6 candidate snapshots, pending node max 1, raw delimiters 0, terminal source/display 2875/2875 |
+
+The harness fixes are part of the implementation. Block geometry now uses
+document-relative `y` values, so normal bottom-follow scrolling is not counted
+as layout movement. Pending-math probes count the existing hidden
+`.streaming-pending-math-inline` and `.streaming-pending-math-block` nodes, not
+only the data attributes used by the separate pending-tail component. The
+short math fixtures now keep the open delimiter in flight long enough for the
+observer to capture it.
+
+The remaining Typewriter signal is narrow and concrete. At source character
+192, the active paragraph can still publish a native empty display slice between
+two non-empty slices. The observed sequence was height `24.89 → 0 → 24.89`;
+the final DOM had no removed KaTeX nodes, no raw delimiters, and terminal source
+and display parity. `publishedBlocks` now preserves append-only structural
+paragraph, heading, and table nodes across this native empty slice, and this
+removes the reversal in some runs. The later reproduction means the fix is not
+yet deterministic. Do not loosen the zero-reversal contract or call this issue
+closed until the same fixture passes repeatedly.
+
+Manual checklist for the next smoke test:
+
+- Stream `$PATH`, `$HOME`, `$x`, `$E`, and `$E = mc^2`. Variables must remain
+  literal. Open formulas must not expose raw delimiters.
+- Stream the 40-line open fence. Confirm the code body grows before the closing
+  fence and the Copy control remains usable.
+- Stream the table fixture with inline `$...$`, `\\(...\\)`, `$$...$$`, and
+  `\\[...\\]`. Confirm six formulas stay inside their cells and later rows can
+  change auto-sized columns.
+- Keep the transcript pinned to the bottom. Watch the first paragraph at the
+  source-192 transition for a blank-frame height change. Also check flashing,
+  duplicate or missing text, raw TeX, `.katex-error`, and browser slowdown
+  warnings.
+- Switch through Marked Stable, Marked Experimental, Immediate Stable,
+  Typewriter Stable, and Synthetic Experimental during a complete answer and
+  during output. Confirm source is preserved and no mode replays or duplicates
+  it.
+- Stop during an open formula, reconnect, disable Typewriter, switch to Marked,
+  and switch back. Confirm controls remain available and terminal Typewriter
+  backlog is zero.
+
+### Review remediation — pending-prefix correction — 6 August 2026
+
+The remaining Typewriter reversal was traced to the pending-inline-math
+transition, not to table geometry. When a new `$` arrived, the previous delta
+could still parse it as literal text. The next delta classified it as an open
+math tail. The renderer then replaced the active paragraph with a shorter
+prefix AST. Incremark's native transformer reset progress against that smaller
+AST, which produced sequences such as `26.2 -> 24.89` or, in an earlier
+native-slice case, `24.89 -> 0 -> 24.89`.
+
+The fix preserves the previously visible append-only AST while the pending
+construct remains hidden, but takes the current prefix for the final child.
+This removes the newly opened delimiter from the visible tree without
+restoring an older tail. The existing in-place placeholder remains the only
+representation of incomplete inline math. This also avoids leaking the raw
+`$` from the one-delta literal state.
+
+Verification after this correction:
+
+- `npm test`: 322 passed, 0 failed.
+- `npm run typecheck`: passed.
+- `npm run build`: passed. Bundle check passed; only the existing large-chunk
+  warning remained.
+- `git diff --check`: passed.
+- `math-table-oscillation` / Typewriter, default three-character cadence:
+  passed; terminal source/display `436/436`, backlog `0`, block height/top
+  reversals `0/0`, math transitions `4`, CLS `0.06820`.
+- `math-table-oscillation` / Typewriter, earlier one-character cadence:
+  passed; terminal source/display `394/394`, backlog `0`, block height/top
+  reversals `0/0`, CLS `0.06604`.
+- `incomplete-math-inline` / Typewriter: passed; terminal source/display
+  `2523/2523`, pending node maximum `1`, raw delimiter samples `0`.
+- `incomplete-math-block` / Typewriter: passed; terminal source/display
+  `2875/2875`, pending node maximum `1`, raw delimiter samples `0`.
+- `incomplete-fence` / Typewriter: passed; pending fence observed in `273`
+  snapshots, pending node maximum `1`, terminal source/display `778/778`.
+- `table-cell-display-math` / Typewriter: passed; terminal source/display
+  `73/73`, overflow `0`, raw delimiters `0`, reversals `0/0`, CLS `0.01923`.
+- `table-cell-display-math` / Synthetic: passed; terminal source/display
+  `73/73`, overflow `0`, raw delimiters `0`, reversals `0/0`, CLS `0.10089`.
+- `review-regressions` / Typewriter and Synthetic: both passed with terminal
+  source/display `817/817`, backlog `0`, removed math `0`, and overflow `0`.
+  Each recorded one height reversal in the mixed code/table stream; the
+  dedicated math/table acceptance fixture recorded zero reversals. This
+  mixed-stream signal remains a follow-up risk, not a hidden failure.
+- Immediate Incremark passed `review-regressions`, `incomplete-math-inline`,
+  and `incomplete-math-block` with zero raw delimiter leaks and zero overflow.
+
+The pending-tail behavior is now deterministic for the dedicated math/table
+fixture. Keep the zero-reversal contract. Do not replace it with a relaxed
+threshold. Manual QA should still inspect the mixed code/table stream while
+the Typewriter and Synthetic renderers are selected.

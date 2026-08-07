@@ -10,16 +10,13 @@ import { getHarnessRecorder, recordHarnessMetric } from "../harness-metrics";
 import { splitStreamingMarkdown, type StreamingPending } from "./streaming-markdown";
 import {
   MARKDOWN_RENDERER_STORAGE_KEY,
-  MARKDOWN_TYPEWRITER_STORAGE_KEY,
   markdownRendererSwitchEnabled,
   selectedMarkdownRenderer,
-  selectedMarkdownTypewriter,
   type MarkdownRendererId,
 } from "./markdown-settings";
 
 export {
   MARKDOWN_RENDERER_STORAGE_KEY,
-  MARKDOWN_TYPEWRITER_STORAGE_KEY,
   markdownRendererSwitchEnabled,
   selectedMarkdownRenderer,
   selectedMarkdownTypewriter,
@@ -331,7 +328,6 @@ export type ChatMarkdownProps = {
   streamVersion?: number;
   inline?: boolean;
   onRendered?: () => void;
-  onDisplayBusyChange?: (busy: boolean) => void;
   typewriter?: boolean;
   syntheticMath?: boolean;
   displayKey?: string;
@@ -420,14 +416,16 @@ function MarkedMarkdown(props: ChatMarkdownProps) {
     const parts = tokenParts(markdownSource);
     const nextStableRaws = tokenRaws(parts.stable);
     const nextTailRaws = tokenRaws(parts.tail);
-    const previousRenderedMarkdownSourceCharacters = renderedMarkdownSource.length;
+    const previousRenderedMarkdownSourceCharacters = Array.from(renderedMarkdownSource).length;
+    const markdownCharacters = Array.from(markdownSource);
+    const renderedMarkdownCharacters = Array.from(renderedMarkdownSource);
     const sourceAppended = markdownSource.startsWith(renderedMarkdownSource);
     const fullSourceAppended = source.startsWith(renderedSource);
     const firstSourceMismatchIndex = sourceAppended
       ? null
-      : [...markdownSource].findIndex((character, index) => character !== renderedMarkdownSource[index]) >= 0
-        ? [...markdownSource].findIndex((character, index) => character !== renderedMarkdownSource[index])
-        : Math.min(markdownSource.length, renderedMarkdownSource.length);
+      : markdownCharacters.findIndex((character, index) => character !== renderedMarkdownCharacters[index]) >= 0
+        ? markdownCharacters.findIndex((character, index) => character !== renderedMarkdownCharacters[index])
+        : Math.min(markdownCharacters.length, renderedMarkdownCharacters.length);
     const stablePrefixUnchanged = hasTokenPrefix(nextStableRaws, stableTokenRaws);
     const promoted = nextStableRaws.slice(stableTokenRaws.length);
     const oldTailPromoted = hasTokenPrefix(promoted, tailTokenRaws)
@@ -471,6 +469,8 @@ function MarkedMarkdown(props: ChatMarkdownProps) {
       tailNodes = reconcileRange(root, tailNodes, [...tailFragment.childNodes], pendingBoundary!);
     }
 
+    const previousStableTokenCount = stableTokenRaws.length;
+    const previousTailTokenCount = tailTokenRaws.length;
     stableTokenRaws = nextStableRaws;
     tailTokenRaws = nextTailRaws;
     renderedMarkdownSource = markdownSource;
@@ -486,11 +486,11 @@ function MarkedMarkdown(props: ChatMarkdownProps) {
         incrementalMode,
         markdownSourceCharacters: markdownSource.length,
         previousRenderedMarkdownSourceCharacters,
-        renderedMarkdownSourceCharacters: renderedMarkdownSource.length,
+        renderedMarkdownSourceCharacters: Array.from(renderedMarkdownSource).length,
         stableTokenCount: nextStableRaws.length,
-        previousStableTokenCount: stableTokenRaws.length,
+        previousStableTokenCount,
         tailTokenCount: nextTailRaws.length,
-        previousTailTokenCount: tailTokenRaws.length,
+        previousTailTokenCount,
         sourceAppended,
         firstSourceMismatchIndex,
         stablePrefixUnchanged,
@@ -502,8 +502,13 @@ function MarkedMarkdown(props: ChatMarkdownProps) {
     const source = String(props.children || "");
     const version = Number(props.streamVersion || 0);
     if (source === renderedSource && version === renderedVersion) return;
-    const split = splitStreamingMarkdown(source);
-    if (renderedSource && !source.startsWith(renderedSource)) incrementalActive = false;
+    const split = splitStreamingMarkdown(source, { allowUnclosedMath: Boolean(props.streaming) });
+    const sourceRewound = Boolean(renderedSource && !source.startsWith(renderedSource));
+    if (sourceRewound) {
+      const hadIncrementalState = incrementalActive || stableBoundary !== null || pendingBoundary !== null;
+      discardIncrementalState();
+      if (hadIncrementalState) root.replaceChildren();
+    }
     if (props.inline) {
       const fragment = renderMarkdown(split.pending ? split.stable : source, true);
       if (split.pending) appendPendingMarkup(fragment, split.pending, Boolean(props.streaming));
@@ -523,10 +528,6 @@ function MarkedMarkdown(props: ChatMarkdownProps) {
       incrementalActive = true;
       renderIncremental(source, split);
     } else {
-      if (incrementalActive) {
-        discardIncrementalState();
-        root.replaceChildren();
-      }
       const fragment = renderMarkdown(split.pending ? split.stable : source, false);
       if (split.pending) appendPendingMarkup(fragment, split.pending, Boolean(props.streaming));
       const recorder = getHarnessRecorder();
@@ -545,6 +546,7 @@ function MarkedMarkdown(props: ChatMarkdownProps) {
     }
     renderedSource = source;
     renderedVersion = version;
+    queueMicrotask(() => props.onRendered?.());
   });
 
   const click = async (event: MouseEvent) => {

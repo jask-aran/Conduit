@@ -30,6 +30,30 @@ test("classifies an open inline math tail but ignores currency", () => {
   });
 });
 
+test("does not hide shell variables behind an incomplete math tail", () => {
+  for (const source of ["Cost is $PATH and $HOME.", "Use $PATH.", "Use $x."]) {
+    assert.equal(splitStreamingMarkdown(source).pending, null);
+  }
+});
+
+test("does not mistake a trailing space in a partial formula for a shell variable", () => {
+  const result = splitStreamingMarkdown("The answer is $E ");
+  assert.equal(result.pending?.kind, "math-inline");
+  assert.equal(result.pending?.body, "E ");
+});
+
+test("treats a single uppercase symbol as a partial formula", () => {
+  const result = splitStreamingMarkdown("The answer is $E");
+  assert.equal(result.pending?.kind, "math-inline");
+  assert.equal(result.pending?.body, "E");
+});
+
+test("does not classify an unclosed math tail after streaming ends", () => {
+  assert.equal(splitStreamingMarkdown("The answer is $E=mc", { allowUnclosedMath: false }).pending, null);
+  assert.equal(splitStreamingMarkdown("Before\n\n$$\nx^2", { allowUnclosedMath: false }).pending, null);
+  assert.equal(splitStreamingMarkdown("Before\n\n\\(x^2", { allowUnclosedMath: false }).pending, null);
+});
+
 test("does not classify escaped or code-span dollars", () => {
   assert.equal(splitStreamingMarkdown("Escaped \\$E=mc and `$E=mc`.").pending, null);
 });
@@ -72,6 +96,16 @@ test("classifies an open TeX display formula inside a table cell", () => {
   assert.equal(result.pending?.kind, "math-block");
   assert.equal(result.pending?.opening, "\\[");
   assert.equal(result.pending?.body, "x|y");
+});
+
+test("does not treat a partial table formula as a shell variable", () => {
+  const source = "| Name | Formula |\n| --- | --- |\n| Fourier | $X";
+  assert.equal(splitStreamingMarkdown(source, { tableMath: true }).pending?.kind, "math-inline");
+});
+
+test("hides a table formula opener when the delta ends on the dollar", () => {
+  const source = "| Name | Formula |\n| --- | --- |\n| Fourier | $";
+  assert.equal(splitStreamingMarkdown(source, { tableMath: true }).pending?.kind, "math-inline");
 });
 
 test("classifies an open fenced code tail and preserves its language", () => {

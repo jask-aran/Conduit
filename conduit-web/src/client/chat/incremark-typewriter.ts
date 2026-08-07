@@ -35,6 +35,7 @@ export type TypewriterMetrics = {
   frameWorkEmaMs: number;
   fallbackMode: TypewriterFallbackMode;
   lagTargetMet: boolean;
+  terminal: boolean;
 };
 
 export type AdaptiveRate = {
@@ -226,6 +227,7 @@ export class AdaptiveIncremarkTypewriter {
   private lastFallbackMode: TypewriterFallbackMode = "normal";
   private busy = false;
   private enabled = false;
+  private publishedBlocks = new Map<string, DisplayBlock>();
   private frameProbeId: number | null = null;
   private lastFrameAt: number | null = null;
   private frameIntervalMs = TYPEWRITER_DEFAULT_TICK_INTERVAL_MS;
@@ -247,6 +249,7 @@ export class AdaptiveIncremarkTypewriter {
     frameWorkEmaMs: 0,
     fallbackMode: "normal",
     lagTargetMet: true,
+    terminal: false,
   };
 
   constructor(callbacks: AdaptiveIncremarkTypewriterOptions) {
@@ -260,12 +263,17 @@ export class AdaptiveIncremarkTypewriter {
       onChange: (blocks) => {
         if (this.fallbackInProgress && blocks.length === 0) return;
         const startedAt = performance.now();
-        callbacks.onChange(blocks);
-        this.recordDisplay(blocks, performance.now() - startedAt);
+        const published = this.stabilizeDisplayBlocks(blocks);
+        callbacks.onChange(published);
+        this.recordDisplay(published, performance.now() - startedAt);
       },
       onAllComplete: () => {
+        // The native transformer can finish its final slice without another
+        // observable change callback. Read the committed display state before
+        // emitting the terminal metric, or the harness reports a false tail.
+        this.recordDisplay(this.transformer.getDisplayBlocks(), 0);
         this.setBusy(false);
-        this.emitMetrics(performance.now());
+        this.emitMetrics(performance.now(), true);
       },
     });
   }
@@ -302,6 +310,7 @@ export class AdaptiveIncremarkTypewriter {
 
   reset() {
     this.transformer.reset();
+    this.publishedBlocks.clear();
     this.sourceVisibleCharacters = this.baselineCharacters;
     this.lastSourceCharacters = this.baselineCharacters;
     this.lastSourceAt = null;
@@ -328,6 +337,15 @@ export class AdaptiveIncremarkTypewriter {
     this.recalculate(performance.now());
   }
 
+  /** Record content that is already visible outside the native queue. */
+  completeSeeded() {
+    const now = performance.now();
+    this.lastDisplayedCharacters = this.sourceVisibleCharacters;
+    this.lastDisplayedAt = now;
+    this.emitMetrics(now, true);
+    this.setBusy(false);
+  }
+
   getDisplayBlocks() {
     return this.transformer.getDisplayBlocks();
   }
@@ -336,9 +354,47 @@ export class AdaptiveIncremarkTypewriter {
     return this.metrics;
   }
 
+  getDebugState() {
+    const state = this.transformer.getState();
+    const current = state.currentBlock;
+    const transformer = this.transformer as unknown as { countChars(node: any): number };
+    return {
+      processing: this.transformer.isProcessing(),
+      currentBlockId: current?.id ?? null,
+      currentProgress: state.currentProgress,
+      currentTotal: current ? transformer.countChars(current.node) : 0,
+      pendingBlockCount: state.pendingBlocks.length,
+      completedBlockCount: state.completedBlocks.length,
+    };
+  }
+
   destroy() {
     this.stopFrameProbe();
+    this.publishedBlocks.clear();
     this.transformer.destroy();
+  }
+
+  private stabilizeDisplayBlocks(blocks: DisplayBlock[]) {
+    const next = blocks.map((block) => {
+      const previous = this.publishedBlocks.get(block.id);
+      const previousNode = previous?.displayNode;
+      const currentNode = block.displayNode;
+      const previousCharacters = visibleAstCharacters(previousNode);
+      const currentCharacters = visibleAstCharacters(currentNode);
+      const previousRawText = String((previous as DisplayBlock & { rawText?: string })?.rawText ?? "");
+      const currentRawText = String((block as DisplayBlock & { rawText?: string })?.rawText ?? "");
+      const sourceDidNotShrink = !previousRawText || !currentRawText || currentRawText.length >= previousRawText.length;
+      const sameStructuralNode = previousNode?.type === currentNode?.type;
+      const preservesEmptyStructuralNode = sameStructuralNode
+        && ["paragraph", "heading", "table"].includes(String(previousNode?.type));
+      if (previous && previousNode && currentCharacters === 0 && sourceDidNotShrink
+        && (previousCharacters > 0 || preservesEmptyStructuralNode)) {
+        return { ...block, displayNode: previousNode };
+      }
+      return block;
+    });
+    this.publishedBlocks = new Map(next.map((block) => [block.id, block]));
+    return next;
   }
 
   private scheduleFrameProbe() {
@@ -388,7 +444,12 @@ export class AdaptiveIncremarkTypewriter {
       ? this.overBudgetFrames + 1
       : 0;
     if (this.overBudgetFrames === 0) this.lastFallbackMode = "normal";
-    this.setBusy(this.sourceVisibleCharacters > displayedCharacters || this.transformer.isProcessing());
+    const transformerComplete = !this.transformer.isProcessing();
+    const reachedSource = this.sourceVisibleCharacters <= displayedCharacters;
+    // The DOM has received the final display blocks before onChange returns.
+    // Do not keep a stale busy marker when a later parser update only refreshes
+    // an already-completed block after the native transformer has gone idle.
+    this.setBusy(!reachedSource || !transformerComplete);
     if (this.overBudgetFrames >= 3 && this.sourceVisibleCharacters > displayedCharacters) {
       this.completeCurrentBlockSafely();
     }
@@ -406,6 +467,7 @@ export class AdaptiveIncremarkTypewriter {
     displayedCharacters = this.lastDisplayedCharacters,
     displayRate = this.metrics.displayRate,
     allowStepGrowth = false,
+    terminal = false,
   ) {
     const backlogCharacters = Math.max(0, this.sourceVisibleCharacters - displayedCharacters);
     const adaptive = calculateAdaptiveRate(this.observedRate, backlogCharacters);
@@ -443,6 +505,7 @@ export class AdaptiveIncremarkTypewriter {
       frameWorkEmaMs: this.frameWorkEmaMs,
       fallbackMode,
       lagTargetMet: backlogCharacters === 0 || (relativeLag <= TYPEWRITER_LAG_FRACTION && backlogAgeMs <= TYPEWRITER_BACKLOG_WINDOW_MS),
+      terminal,
     };
     this.callbacks.onMetrics?.(this.metrics);
   }
@@ -468,7 +531,7 @@ export class AdaptiveIncremarkTypewriter {
     this.overBudgetFrames = 0;
   }
 
-  private emitMetrics(now: number) {
-    this.recalculate(now);
+  private emitMetrics(now: number, terminal = false) {
+    this.recalculate(now, this.lastDisplayedCharacters, this.metrics.displayRate, false, terminal);
   }
 }
