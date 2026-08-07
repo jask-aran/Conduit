@@ -145,17 +145,21 @@ Settings → Workspaces stores global-profile inheritance, an explicit ordinary
 profile, or Host Pi. If Host Pi becomes unavailable, Conduit clears that
 override and retries with the inherited profile.
 
-Assistant messages pass through `src/client/chat/markdown.tsx`. Marked parses
-GFM and fenced code, the KaTeX extension renders math, and DOMPurify enforces the
-client boundary. The renderer is lazy-loaded, strips remote images and unsafe
-URLs, requires confirmation for external links, and keeps user messages literal.
-Live deltas are coalesced into one Solid signal update per animation frame. The
-canonical Markdown document is parsed and sanitized, then reconciled into the
-existing DOM so semantic nodes remain stable while unfinished syntax takes
-shape and through durable checkpoint reconciliation. Tool calls use one
-generic disclosure card with lifecycle status, deterministic summaries, lazy
-deferred results, and bounded previews; tools are data, not component registry
-keys.
+Assistant messages pass through `src/client/chat/markdown.tsx`. Settings → UI
+exposes five selectable Markdown renderers: Marked Stable, Marked Experimental,
+Immediate Stable, Typewriter Stable, and Synthetic Experimental. New users use
+Synthetic Experimental by default. Marked Stable is the basic historical
+reference; the three Incremark modes share the parser, table projection, layout,
+reconciliation, security boundary, and final-content path. Typewriter adds the
+adaptive display queue, and Synthetic adds eager provisional KaTeX previews.
+The renderer is lazy-loaded, strips remote images and unsafe URLs, requires
+confirmation for external links, and keeps user messages literal. Live deltas
+are coalesced into one Solid signal update per animation frame. The canonical
+Markdown document is parsed and sanitized, then reconciled into the existing
+DOM so semantic nodes remain stable while unfinished syntax takes shape and
+through durable checkpoint reconciliation. Tool calls use one generic
+disclosure card with lifecycle status, deterministic summaries, lazy deferred
+results, and bounded previews; tools are data, not component registry keys.
 
 The single-line composer owns runtime-aware model and thinking controls. A
 permanent TUI-like status line below it shows fine agent activity, context usage,

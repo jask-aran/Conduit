@@ -3,17 +3,21 @@
 Use the narrowest approach that proves the behavior. Run commands from
 `conduit-web/` unless a command starts with `./scripts` or
 `.devcontainer/start-conduit.sh`; never add a production-only test endpoint.
+The managed server on port 4310 and the deterministic browser server on port
+4173 are different test targets.
 
 ## Choose one approach
 
 | Behavior | Approach | Entry point | Evidence |
 | --- | --- | --- | --- |
-| Types, bundle, PWA artifacts, pure stores and helpers | Static/unit | `npm run typecheck`; `npm run build`; `npm test -- test/<name>.test.js` | exit status and test output |
+| Types, bundle, PWA artifacts, pure stores and helpers | Static/unit | `npm run typecheck`; `npm run build`; `npm test`; `node --test test/<name>.test.js` for one file | exit status and test output |
 | Express, HTTP, WebSocket, SSE, Pi lifecycle | Server contract | `node --test test/<name>.test.js`; use `startConduitHarness()` | public-contract assertions; fake Pi logs/events |
 | Token cadence, coalescing, stalls, high TPS, slow readers | Deterministic transport | `npm run test:harness -- ...` | versioned JSON; no credentials/provider |
-| Solid rendering, DOM mutation, frames, reconnect | Deterministic browser | `npm run test:harness:browser -- ...` | versioned JSON; Playwright failure trace |
+| Markdown rendering, DOM mutation, frames, layout, scroll, reconnect | Deterministic browser renderer | `npm run test:harness:browser -- ...` | versioned JSON; semantic/security and geometry assertions; Playwright failure trace |
+| Immediate Marked/Incremark renderer comparison | Renderer benchmark | `npm run test:harness:renderer -- ...` | comparable JSON; currently a legacy two-renderer baseline |
 | Authenticated UI workflows and site functionality | Agent-browser development QA | `npm run qa:agent-browser` | restored-session snapshots, semantic checks, screenshots, network and accessibility evidence |
-| Release browser set-pieces and terminal performance | Playwright release canary | `npm run test:browser:setpieces`; selected terminal checks when promoted | repeatable assertions, screenshots/traces on failure, performance report |
+| Release browser set-pieces | Playwright release canary | `npm run test:browser:setpieces` | repeatable assertions; screenshots/traces on failure |
+| Terminal renderer and PTY performance | Explicit Playwright performance probe | `npm run test:terminal-performance`; add `:throttled` when needed | timing output; machine-specific thresholds |
 | Real provider, release, TLS, reverse proxy, Internet path | Live transport | `npm run perf:live -- ...` | redacted JSON; release and content parity |
 | Image/package/persistence deployment contract | Deployment proof | `./scripts/package-release.sh <commit>`; `./scripts/prove-deployment.sh` | package checksum and retained evidence |
 
@@ -26,6 +30,9 @@ contracts; deployment proof proves packaging and state boundaries.
 - Local server commands are managed: from the repository root run
   `bash .devcontainer/start-conduit.sh restart`; use `dev` only for Vite HMR.
   Do not launch `node src/server.js`, `npm run start`, or Vite directly.
+- The server contract and deterministic transport harnesses start isolated
+  production server processes themselves. Do not point them at the managed
+  server or repository `data/`.
 - The local launcher keeps its default `CONDUIT_HOST=0.0.0.0` bind so Windows
   can reach a server running inside WSL. Do not replace it with
   `CONDUIT_HOST=127.0.0.1` for ordinary local QA. Use `127.0.0.1:4310` as the
@@ -49,6 +56,9 @@ contracts; deployment proof proves packaging and state boundaries.
 - Every report must identify its scenario, target and release. Compare live
   runs only when prompt, model, thinking level, output bounds and release are
   controlled; otherwise compare cadence only and state the confounder.
+- Always pass a renderer explicitly to renderer comparisons. The application
+  defaults to `incremark-synthetic`, while the browser harness defaults to
+  `marked` for a stable baseline.
 
 ## Server and API contracts
 
@@ -63,7 +73,7 @@ Run one file with:
 
 ```bash
 node --test test/server-api.test.js
-npm test -- test/live-harness.test.js
+node --test test/live-harness.test.js
 ```
 
 ## Deterministic transport
@@ -85,26 +95,115 @@ WebSocket reader. JSON reports include source/delivered counts and characters,
 prompt acceptance, first delta, completion, throughput, p50/p95/p99/max gaps,
 stall and burst counts, coalescing ratio and final-text parity.
 
-## Deterministic browser and UI functionality
+This harness measures server delivery only. It does not measure DOM mutations,
+KaTeX work, layout shifts, scroll behavior, or animation frames.
 
-The browser harness drives the production Solid client through its public
-HTTP/WS contracts with a deterministic stream. Use it only for rendering and
-reconnect performance:
+## Deterministic browser renderer harness
+
+The browser harness drives the production client source through deterministic
+HTTP/WS/EventSource shims. It starts a Vite test server on port 4173 and does
+not use the managed server on port 4310, real authentication, or a real Pi
+process. The client is built with `VITE_CONDUIT_HARNESS=1`, which installs the
+opt-in browser recorder.
+
+Use it for Markdown rendering, renderer comparison, DOM identity, layout,
+scroll, KaTeX, security, and reconnect performance:
 
 ```bash
 npm run test:harness:browser -- \
-  --scenario browser-burst \
-  --profile burst \
-  --text "A browser-rendered response"
+  --renderer incremark-synthetic \
+  --fixture table-cell-display-math \
+  --profile steady \
+  --chunk-size 3 \
+  --require-typewriter-metrics
 npm run test:harness:browser -- \
   --flow reconnect \
+  --renderer incremark-typewriter \
   --initial-text "Answer survives" \
   --recovered-delta " reconnects"
+npm run test:harness:browser -- --list-fixtures
 ```
 
-Reports include WebSocket and visible-text cadence, DOM mutation count,
-animation-frame gaps, long tasks and final semantic text; reconnect reports
-include socket count, resume count, recovery time and duplicate characters.
+The runner supports these renderer IDs:
+
+```text
+marked-stable
+marked
+incremark
+incremark-typewriter
+incremark-synthetic
+```
+
+`incremark-synthetic` includes the Typewriter queue and adds eager provisional
+KaTeX previews. `--typewriter` is a compatibility alias that maps
+`incremark` to `incremark-typewriter`.
+
+The runner accepts the transport cadence profiles `steady`, `burst`, `stall`,
+`high-tps`, and `jitter` through the shared cadence helper. The CLI help text
+currently lists only the first, second, and fifth profiles; use the
+implementation and fixture contracts as the source of truth for the other two
+until the help text is aligned.
+
+Named fixtures store source text, expected semantic structure, security and
+interaction assertions, renderer-specific contracts, and stability thresholds
+in `test/browser/helpers/streaming-fixtures.js`. Add a fixture when a bug or
+accepted behavior needs repeatable source and final-state evidence. Do not put
+provider prompts or transcript contents in reports.
+
+The browser report includes:
+
+- WebSocket and visible-text cadence.
+- DOM mutation counts and mutation categories.
+- Root replacement and removed-math-node evidence.
+- Animation-frame gaps and Long Tasks.
+- Layout-shift count/value.
+- Table layout, structure, cell overflow, and geometry transitions.
+- Math and rendered-block geometry reversals.
+- Scroll writes and distance from the bottom.
+- Semantic structure, security, interaction, and final-content parity.
+- Renderer parse/reconcile/KaTeX timings and counters.
+- Typewriter source/display progress, backlog, backlog age, adaptive rates,
+  frame work, fallback mode, and terminal equality.
+
+Reports carry salted text digests and lengths rather than raw prompts or
+transcripts. Instrumented and uninstrumented paired runs quantify observer
+overhead:
+
+```bash
+npm run test:harness:browser -- \
+  --renderer incremark-synthetic \
+  --fixture math-table-oscillation \
+  --paired-instrumentation
+```
+
+The Typewriter terminal sample comes from the native transformer's
+`onAllComplete` callback. Do not treat the last aggregated sample as terminal
+when live and persisted projections can coexist.
+
+The browser harness is the renderer investigation layer. It is not server,
+authentication, provider, deployment, or full production-bundle proof.
+
+## Renderer benchmark
+
+`npm run test:harness:renderer` runs repeated deterministic browser probes and
+emits one comparison report. Its current scope is the legacy immediate pair:
+`marked` and `incremark`. It does not compare `marked-stable`,
+`incremark-typewriter`, or `incremark-synthetic`.
+
+Use it only for the scope it names:
+
+```bash
+npm run test:harness:renderer -- \
+  --fixtures rich-markdown,table-cell-display-math,math-stress \
+  --runs 2
+```
+
+For the current five-renderer set, run the browser harness separately for each
+explicit renderer and use the same fixture, cadence, chunk size, seed,
+instrumentation setting, and browser project. Do not use the legacy two-way
+benchmark to claim a Synthetic or Typewriter improvement.
+
+## Deterministic browser UI regression
 
 For non-streaming functionality—login, navigation, chat/project creation,
 attachments, Workspace operations, model settings, PWA/mobile behavior and
@@ -158,13 +257,18 @@ release-critical behavior to the Playwright canary.
 
 ## CI browser policy
 
-CI has two browser levels plus the fast code checks:
+CI has one automatic fast-check workflow and one release/set-piece browser
+workflow:
 
-- Fast checks run automatically on pull requests and pushes to `main`.
+- Pull requests and pushes to `main` run `typecheck`, `build`, all Node tests,
+  and one steady deterministic transport harness scenario.
 - Playwright set-pieces run manually or for `v*` release tags through
   `npm run test:browser:setpieces`. The current canaries cover authentication,
   the command palette, the primary chat route, live-stream reconnect, the
-  Workspace terminal route, and desktop/mobile PWA layout.
+  Workspace terminal entry route, and desktop/mobile PWA layout.
+- The deterministic browser renderer harness, renderer benchmark,
+  agent-browser QA, live provider measurement, terminal performance probes,
+  and deployment proof are not automatic CI gates.
 - The full Playwright suite runs locally by opt-in only with
   `npm run test:browser`; use it to maintain or promote canaries, not for
   ordinary development.
@@ -177,6 +281,13 @@ The release canary entry point is:
 
 ```bash
 npm run test:browser:setpieces
+```
+
+The terminal performance probes are separate and machine-sensitive:
+
+```bash
+npm run test:terminal-performance
+npm run test:terminal-performance:throttled
 ```
 
 ## Local managed server
@@ -284,10 +395,42 @@ path latency. Include a correctness/parity observation when it materially
 qualifies the performance result. These headline values are historical
 observations; the structured harness report remains the richer evidence.
 
+## Comparison rules and known limits
+
+Use the same fixture, renderer contract, cadence profile, chunk size, seed,
+browser project, instrumentation setting, and release when comparing runs.
+Use the same prompt identity, model, thinking level, and output bounds for live
+transport comparisons.
+
+Keep these claims separate:
+
+- Deterministic transport proves server delivery and coalescing behavior.
+- Deterministic browser probes prove client rendering and report browser work.
+- Agent-browser proves the authenticated product flow on the managed server.
+- `perf:live` measures real provider/server transport and persisted-content
+  parity, not DOM rendering.
+- Deployment proof verifies packaging, restart, backup/restore, and state
+  boundaries, not provider or browser performance.
+
+Do not treat a passing deterministic fixture as proof that every real model
+stream is smooth. The named fixtures provide controlled regression coverage;
+agent-browser remains the check for browser behavior that depends on real
+layout, browser state, authentication, or a real session.
+
+The renderer harness and fixture contracts are intentionally renderer-specific.
+Marked Stable does not use the Incremark table projection, Typewriter adds the
+adaptive display queue, and Synthetic adds provisional KaTeX previews. Compare
+their final semantic/security output and stability metrics under separate
+contracts. Do not use the legacy `marked` versus `incremark` benchmark to claim
+performance for Typewriter or Synthetic.
+
 ## Evidence checklist
 
 Record the commit/release, target/origin, scenario, prompt identity (not its
 contents), model, thinking level, bounds, command, exit status and report path.
 For failures retain the focused test output and Playwright trace; for live
 runs retain the redacted JSON and the public health response. A measurement is
-not a regression claim until the same scenario has a comparable baseline.
+not a regression claim until the same scenario has a comparable baseline. Keep
+temporary harness JSON under `/tmp`; keep ignored deployment proof under
+`.deployment-evidence/`; never commit prompts, transcript bodies, cookies,
+credentials, `test-results/`, `dist/`, `data/`, or `node_modules/`.
