@@ -147,3 +147,68 @@ Add an entry through `$tacit-knowledge` after explicit approval or validated rep
 - **Rule:** Never transition a CSS property while pointer input directly changes it. Put open/close animation on an inner presentation surface, keep the resize shell immediate and overflow-visible for its gutter, schedule pointer updates with `requestAnimationFrame`, and persist only when the gesture ends.
 - **Scope:** Resizable Solid surfaces, beginning with `WorkspacePanel` and its detail splitter. A visible panel surface may clip its contents; its edge-spanning resize target must not be clipped with them.
 - **Evidence:** The shared 160ms width transition was continuously retargeted during drag, causing cursor-to-panel lag; `overflow: hidden` cut the `left: -12px; width: 24px` workspace gutter in half. The focused browser workspace-panel test now rapidly drags the gutter and asserts the final width.
+
+## Streaming Markdown renderer invariants
+
+### Preserve native display identity across transient slices
+
+- **Type:** Invariant.
+- **Rule:** Key Incremark display blocks by stable source-offset IDs. Keep completed blocks and the active block in one keyed list. When the native transformer emits an empty or shorter cached slice during append-only output, preserve the previous block shape instead of removing rows or cells.
+- **Scope:** `incremark-markdown.tsx`, table streaming, and `BlockTransformer` integration.
+- **Evidence:** An append-only six-row AST produced 37 DOM table-structure changes and 45–60 top reversals. Stable block identity and monotonic table preservation reduced top reversals to zero.
+
+### Promote nested math before native slicing
+
+- **Type:** Invariant.
+- **Rule:** Treat `inlineMath` and `math` nodes inside paragraphs, lists, and table cells as atomic leaves before they enter the native transformer. Remount only the leaf when its AST type changes; preserve the containing paragraph, table, row, and cell.
+- **Scope:** Incremark AST adaptation and table-cell rendering.
+- **Evidence:** Nested math produced 34 geometry transitions and empty formula cells. Atomic promotion and reactive leaf transitions reduced the long-stream case to one geometry settle and rendered all formula cells during streaming.
+
+### Preserve the visible tail when a delimiter becomes pending
+
+- **Type:** Invariant.
+- **Rule:** When a new math opener makes the current construct pending, preserve earlier visible children from the previous AST and use the current prefix only for the final child. Keep the pending placeholder inside the original parent. Never pass a shorter prefix as a replacement block, and never preserve the entire prior AST.
+- **Scope:** Typewriter pending-prefix reconciliation.
+- **Evidence:** The shorter pending prefix caused paragraph shrinkage at source positions 102 and 222. Preserving the entire prior AST leaked the opening `$`. The narrowed child merge removed both failures and restored zero reversals with exact source/display parity.
+
+### Treat table parser protection as a scoped, fail-open projection
+
+- **Type:** Invariant.
+- **Rule:** Before reparsing streamed table prefixes, protect only math-internal pipes with a collision-free sentinel, then restore the original source after parsing. If no safe sentinel exists, skip the projection. Preserve literal `$PATH`, `$HOME`, and ordinary dollar text.
+- **Scope:** `table-math.ts`, pending-prefix reparsing, and synthetic preview reparsing.
+- **Evidence:** Unprotected `\ln|x|` changed table column identity during pending reparses. The review also found `$PATH` truncation and `$X | yes` cell collapse.
+
+### Use automatic table geometry for progressive content
+
+- **Type:** Heuristic.
+- **Rule:** Keep streaming and final tables on the same automatic layout model. Do not derive permanent column widths from the first row or use fixed geometry to hide reconciliation errors. Permit the bounded 150% table width only when the chat pane has spare room.
+- **Scope:** Incremark tables containing progressive text or KaTeX.
+- **Evidence:** Fixed `colgroup` percentages caused narrow first columns, KaTeX overflow, and different streaming/final layouts. Automatic layout removed the fixed-width regression.
+
+### Keep synthetic math repair out of the source stream
+
+- **Type:** Invariant.
+- **Rule:** Apply synthetic closing delimiters only to a display projection of the active block. Keep the raw stream authoritative, preserve source offsets, cache by candidate content, and retain the last valid preview when a partial candidate fails.
+- **Scope:** Synthetic renderer and provisional KaTeX.
+- **Evidence:** Mutating the raw source would break incremental offsets and table reconciliation. Content-aware caching fixed empty final KaTeX caused by caching a mutable AST node by identity alone.
+
+### Do not let provider cadence fight display cadence
+
+- **Type:** Heuristic.
+- **Rule:** When a renderer has a display queue, settle follow-scroll from display completion rather than every provider delta. Do not repeatedly write `scrollTop = scrollHeight` while the rendered tree is changing.
+- **Scope:** Typewriter, Synthetic, and transcript scroll-follow.
+- **Evidence:** The live probe recorded 105 scroll reversals and 109 answer-height reversals without long tasks. Provider-driven scroll writes were more frequent than display updates.
+
+### Use native completion for terminal display metrics
+
+- **Type:** Gotcha.
+- **Rule:** Mark the transformer's `onAllComplete` sample as terminal. Do not use the last aggregated sample when live and persisted projections can coexist.
+- **Scope:** Browser performance harness and Typewriter telemetry.
+- **Evidence:** The last aggregate sample reported a 33-character backlog after the table was visibly complete. The native completion callback reported the correct zero backlog.
+
+### Verify the pinned Solid adapter before using the published wrapper
+
+- **Type:** Gotcha.
+- **Rule:** Test `@incremark/solid` against Conduit's pinned Solid runtime before adopting it. If its JSX runtime or reference-link path fails, integrate `@incremark/core` through the existing custom adapter.
+- **Scope:** Third-party renderer integration.
+- **Evidence:** `@incremark/solid@1.0.2` failed against the pinned `solid-js` runtime and then failed at runtime in its link branch (`url` undefined).
