@@ -17,9 +17,9 @@ function withBrowserSettings(search, stored, run) {
   }
 }
 
-test("new users default to the Incremark Typewriter renderer", () => {
+test("new users default to the Incremark Synthetic renderer", () => {
   withBrowserSettings("", {}, () => {
-    assert.equal(selectedMarkdownRenderer(), "incremark-typewriter");
+    assert.equal(selectedMarkdownRenderer(), "incremark-synthetic");
     assert.equal(selectedMarkdownTypewriter(), true);
   });
 });

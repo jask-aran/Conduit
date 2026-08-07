@@ -2869,6 +2869,20 @@ test("global commands and slash suggestions preserve their intended focus models
   await expect(settingsDialog.getByRole("tab", { name: /General/ })).toHaveAttribute("aria-selected", "true");
   await page.keyboard.press("Escape");
 
+  // Markdown renderer selection belongs in Settings → UI and updates the
+  // active transcript immediately.
+  await page.keyboard.press("Control+k");
+  await palette.getByRole("option", { name: /^Settings…/ }).click();
+  await palette.getByRole("combobox").fill("ui");
+  await palette.getByRole("option", { name: /^UI$/ }).click();
+  settingsDialog = page.getByRole("dialog", { name: "Settings" });
+  await expect(settingsDialog.getByRole("tab", { name: /^UI$/ })).toHaveAttribute("aria-selected", "true");
+  const markdownRenderer = settingsDialog.getByRole("combobox", { name: "Markdown renderer" });
+  await expect(markdownRenderer).toHaveValue("incremark-synthetic");
+  await markdownRenderer.selectOption("incremark-typewriter");
+  await expect(page.locator(".transcript")).toHaveAttribute("data-markdown-renderer", "incremark-typewriter");
+  await page.keyboard.press("Escape");
+
   // Runtime is reached by drilling into Settings, then searching within the page.
   await page.keyboard.press("Control+k");
   await palette.getByRole("option", { name: /^Settings…/ }).click();

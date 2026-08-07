@@ -116,6 +116,7 @@ export const PALETTE_GROUPS: PaletteGroup[] = [
 /** Only sections the Solid Settings surface renders. Target's `diagnostics` is
  *  omitted (no Solid surface yet) to avoid a dead drill-down entry. */
 export const SETTINGS_SECTIONS = [
+  { id: "ui", label: "UI", keywords: ["interface", "appearance", "renderer", "markdown"] },
   { id: "profiles", label: "Profiles", keywords: ["template", "tools", "workspace", "general", "agent"] },
   { id: "workspaces", label: "Workspaces", keywords: ["workspace", "folder", "default", "profile"] },
   { id: "models", label: "Models", keywords: ["model", "llm", "provider"] },

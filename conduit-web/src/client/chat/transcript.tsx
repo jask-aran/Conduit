@@ -6,7 +6,7 @@ import type { ActiveChatStore } from "../state/active-chat";
 import { AttachmentCards } from "./attachments";
 import { TurnTrace } from "./turn-trace";
 import { createTimelineStore } from "../state/timeline-store";
-import { MARKDOWN_RENDERER_STORAGE_KEY, markdownRendererSwitchEnabled, selectedMarkdownRenderer, type MarkdownRendererId } from "./markdown-settings";
+import type { MarkdownRendererId } from "./markdown-settings";
 
 const ChatMarkdown = lazy(() => import("./markdown").then((module) => ({ default: module.ChatMarkdown })));
 function Actions(props: { message: Message; precedingUserId?: string; chat: ActiveChatStore; partialContinue: boolean }) {
@@ -24,16 +24,14 @@ function Actions(props: { message: Message; precedingUserId?: string; chat: Acti
   </div>;
 }
 
-export function Transcript(props: { chat: ActiveChatStore; partialContinue: boolean }) {
+export function Transcript(props: { chat: ActiveChatStore; partialContinue: boolean; markdownRenderer: MarkdownRendererId }) {
   let viewport!: HTMLDivElement;
   let thread!: HTMLDivElement;
   let previousLoaded: string | null = null;
   let historyLoad: Promise<void> | null = null;
   let layoutEpoch = 0;
   const [following, setFollowing] = createSignal(true);
-  const initialRenderer = selectedMarkdownRenderer();
-  const [markdownRenderer, setMarkdownRenderer] = createSignal<MarkdownRendererId>(initialRenderer);
-  const showMarkdownRendererSwitch = markdownRendererSwitchEnabled();
+  const markdownRenderer = () => props.markdownRenderer;
   const rendererUsesTypewriter = () => markdownRenderer() === "incremark-typewriter" || markdownRenderer() === "incremark-synthetic";
   const timeline = createTimelineStore(
     props.chat.messages,
@@ -95,10 +93,6 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
         });
       }));
     }).finally(() => { historyLoad = null; });
-  };
-  const switchMarkdownRenderer = (next: MarkdownRendererId) => {
-    setMarkdownRenderer(next);
-    localStorage.setItem(MARKDOWN_RENDERER_STORAGE_KEY, next);
   };
   createRenderEffect(() => {
     props.chat.loadedId();
@@ -182,17 +176,6 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
   });
 
   return <div class="transcript" data-slot="message-scroller" data-markdown-renderer={markdownRenderer()} data-markdown-typewriter={rendererUsesTypewriter() ? "true" : undefined} data-markdown-synthetic-math={markdownRenderer() === "incremark-synthetic" ? "true" : undefined}>
-    <Show when={showMarkdownRendererSwitch}>
-      <div class="transcript-renderer-switch">
-        <label>Markdown renderer<select aria-label="Markdown renderer" value={markdownRenderer()} onChange={(event) => switchMarkdownRenderer(event.currentTarget.value as MarkdownRendererId)}>
-          <option value="marked-stable">Marked (Stable)</option>
-          <option value="marked">Marked (Experimental)</option>
-          <option value="incremark">Immediate (Stable)</option>
-          <option value="incremark-typewriter">Typewriter (Stable)</option>
-          <option value="incremark-synthetic">Synthetic (Experimental)</option>
-        </select></label>
-      </div>
-    </Show>
     <Show when={empty() && pullDistance() > 8}>
       <div class="empty-pull-hint" data-visible="true" data-armed={pullArmed() ? "true" : "false"} aria-hidden="true">
         {pullArmed() ? "Release to refresh" : "Pull to refresh"}
