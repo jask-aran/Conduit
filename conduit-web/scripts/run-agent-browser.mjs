@@ -1,7 +1,36 @@
 #!/usr/bin/env node
 import { spawnSync } from "node:child_process";
+import { mkdirSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import {
+  DEFAULT_CONDUIT_ORIGIN,
+  resolveLocalTarget,
+} from "./agent-browser-target.mjs";
 
-const origin = process.env.CONDUIT_QA_ORIGIN || "http://127.0.0.1:4310";
+function optionValue(name) {
+  const index = process.argv.indexOf(name);
+  if (index === -1) return null;
+  const value = process.argv[index + 1];
+  if (!value || value.startsWith("--")) {
+    throw new Error(`${name} requires a value`);
+  }
+  return value;
+}
+
+const requestedOrigin = process.env.CONDUIT_QA_ORIGIN || DEFAULT_CONDUIT_ORIGIN;
+const requestedPath =
+  optionValue("--path") || process.env.CONDUIT_QA_PATH || "/";
+const target = resolveLocalTarget({
+  rawOrigin: requestedOrigin,
+  rawPath: requestedPath,
+});
+
+const socketDir =
+  process.env.CONDUIT_AGENT_BROWSER_SOCKET_DIR ||
+  path.join(tmpdir(), "conduit-agent-browser");
+mkdirSync(socketDir, { recursive: true });
+process.env.AGENT_BROWSER_SOCKET_DIR = socketDir;
 
 function run(args, { capture = false } = {}) {
   const result = spawnSync("agent-browser", args, {
@@ -25,10 +54,11 @@ const session = process.env.AGENT_BROWSER_SESSION || run(
 if (!session) throw new Error("agent-browser did not return a session id");
 
 const browser = ["--session", session, "--restore"];
-run([...browser, "open", origin]);
+run([...browser, "open", target]);
 run([...browser, "wait", "--load", "networkidle"]);
 run([...browser, "snapshot", "-i", "-c"]);
 
 process.stdout.write(`\nRestored agent-browser session: ${session}\n`);
+process.stdout.write(`Target: ${target}\n`);
 process.stdout.write(`Continue: agent-browser --session ${session} snapshot -i -c\n`);
 process.stdout.write(`Close: agent-browser --session ${session} close\n`);
