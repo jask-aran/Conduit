@@ -23,6 +23,28 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Validate release changelog
+        if: github.ref_type == 'tag'
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          changelog="docs/releases/${RELEASE_TAG}.md"
+          if [[ ! -f "$changelog" ]]; then
+            echo "::error::Missing release changelog: $changelog"
+            exit 1
+          fi
+          if ! grep -q '[^[:space:]]' "$changelog"; then
+            echo "::error::Release changelog is empty: $changelog"
+            exit 1
+          fi
+          line_count="$(wc -l < "$changelog")"
+          if (( line_count > 40 )); then
+            echo "::error::Release changelog must be 40 lines or shorter: $changelog has $line_count lines"
+            exit 1
+          fi
+
       - name: Set image metadata
         id: image
         shell: bash
@@ -72,8 +94,9 @@ jobs:
           if gh release view "$GITHUB_REF_NAME" --json name > /dev/null 2>&1; then
             echo "Release $GITHUB_REF_NAME already exists — skipping creation"
           else
+            changelog="docs/releases/${GITHUB_REF_NAME}.md"
             gh release create "$GITHUB_REF_NAME" \
-              --generate-notes \
+              --notes-file "$changelog" \
               --verify-tag \
               --latest
           fi
