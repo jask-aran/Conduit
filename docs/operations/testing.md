@@ -262,10 +262,12 @@ workflow:
 
 - Pull requests and pushes to `main` run `typecheck`, `build`, all Node tests,
   and one steady deterministic transport harness scenario.
-- Playwright set-pieces run manually or for `v*` release tags through
-  `npm run test:browser:setpieces`. The current canaries cover authentication,
-  the command palette, the primary chat route, live-stream reconnect, the
-  Workspace terminal entry route, and desktop/mobile PWA layout.
+- Playwright set-pieces run manually or for `v*` release tags. The local
+  `npm run test:browser:setpieces` command includes authentication. The GitHub
+  release workflow uses `npm run test:browser:setpieces:ci`, which excludes the
+  unstable auth canary and covers the command palette, primary chat route,
+  live-stream reconnect, Workspace terminal entry route, and desktop/mobile PWA
+  layout.
 - The deterministic browser renderer harness, renderer benchmark,
   agent-browser QA, live provider measurement, terminal performance probes,
   and deployment proof are not automatic CI gates.
