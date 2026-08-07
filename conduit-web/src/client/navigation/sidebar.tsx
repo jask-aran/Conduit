@@ -1,4 +1,4 @@
-import { createEffect, createSignal, For, onCleanup, onMount, Show } from "solid-js";
+import { batch, createEffect, createSignal, For, onCleanup, onMount, Show } from "solid-js";
 import * as KAlertDialog from "@kobalte/core/alert-dialog";
 import * as KDialog from "@kobalte/core/dialog";
 import {
@@ -45,6 +45,7 @@ import { api } from "../api/client";
 import type { RuntimeStore } from "../state/runtime";
 import { focusFirst, isMobileLayout, MOBILE_LAYOUT_QUERY, restoreFocus } from "./mobile-layout";
 import { ProjectActivityIndicator, RuntimeIndicator } from "./runtime-indicator";
+import { dispatchPanelGeometryMotion } from "../panel-motion";
 
 type WorkspaceMode = "linked" | "created" | "cloned";
 type ProjectInput = { mode: string; name?: string; path?: string; directoryName?: string; cloneUrl?: string; cloneParentPath?: string; cloneDirectoryName?: string };
@@ -106,10 +107,79 @@ export function Sidebar(props: {
   command?: { type: string; nonce: number } | null;
 }) {
   const [collapsed, setCollapsed] = createSignal(localStorage.getItem("conduit.sidebar") === "collapsed");
+  const [visualCollapsed, setVisualCollapsed] = createSignal(collapsed());
   const [newKind, setNewKind] = createSignal<"folder" | "workspace" | null>(null);
   let sidebarRoot: HTMLElement | undefined;
+  let sidebarSurface: HTMLDivElement | undefined;
+  let sidebarSurfaceMotion: Animation | null = null;
+  let sidebarMotionId = 0;
   let mobileReturnFocus: HTMLElement | null = null;
   let mobileWasOpen = false;
+  const cancelSidebarSurfaceMotion = () => {
+    sidebarSurfaceMotion?.cancel();
+    sidebarSurfaceMotion = null;
+  };
+  const toggleSidebar = () => {
+    const nextCollapsed = !collapsed();
+    const startWidth = collapsed() ? 52 : 244;
+    const targetWidth = nextCollapsed ? 52 : 244;
+    if (isMobileLayout() || !sidebarRoot || !sidebarSurface || matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      cancelSidebarSurfaceMotion();
+      batch(() => {
+        setCollapsed(nextCollapsed);
+        setVisualCollapsed(nextCollapsed);
+      });
+      return;
+    }
+    const currentTransform = getComputedStyle(sidebarSurface).transform;
+    const currentX = sidebarSurfaceMotion && currentTransform !== "none"
+      ? new DOMMatrixReadOnly(currentTransform).m41
+      : collapsed() ? -192 : 0;
+    cancelSidebarSurfaceMotion();
+    const id = ++sidebarMotionId;
+    dispatchPanelGeometryMotion({
+      phase: "begin",
+      id,
+      source: "sidebar",
+      size: startWidth,
+      targetSize: targetWidth,
+      duration: 160,
+      easing: "ease",
+    });
+    batch(() => {
+      setCollapsed(nextCollapsed);
+      if (!nextCollapsed) setVisualCollapsed(false);
+    });
+    sidebarSurface.style.width = "244px";
+    sidebarSurface.style.transform = `translateX(${currentX}px)`;
+    sidebarSurface.style.willChange = "transform";
+    const targetX = nextCollapsed ? -192 : 0;
+    const motion = sidebarSurface.animate([
+      { transform: `translateX(${currentX}px)` },
+      { transform: `translateX(${targetX}px)` },
+    ], {
+      duration: 160,
+      easing: "ease",
+      fill: "forwards",
+    });
+    sidebarSurfaceMotion = motion;
+    void motion.finished.catch(() => undefined).then(() => {
+      if (sidebarSurfaceMotion !== motion) return;
+      motion.cancel();
+      sidebarSurfaceMotion = null;
+      sidebarSurface.style.removeProperty("width");
+      sidebarSurface.style.removeProperty("transform");
+      sidebarSurface.style.removeProperty("will-change");
+      setVisualCollapsed(nextCollapsed);
+      dispatchPanelGeometryMotion({ phase: "end", id, source: "sidebar", size: targetWidth });
+    });
+  };
+  onCleanup(() => {
+    cancelSidebarSurfaceMotion();
+    sidebarSurface?.style.removeProperty("width");
+    sidebarSurface?.style.removeProperty("transform");
+    sidebarSurface?.style.removeProperty("will-change");
+  });
   const [phoneLayout, setPhoneLayout] = createSignal(isMobileLayout());
   onMount(() => {
     const media = typeof matchMedia === "function" ? matchMedia(MOBILE_LAYOUT_QUERY) : null;
@@ -145,7 +215,7 @@ export function Sidebar(props: {
     handledCommandNonce = command.nonce;
     if (command.type === "new-folder") openNewDialog("folder");
     if (command.type === "new-workspace") openNewDialog("workspace");
-    if (command.type === "toggle-sidebar") setCollapsed((value) => !value);
+    if (command.type === "toggle-sidebar") toggleSidebar();
     if (command.type === "delete-chat") {
       const project = currentProject();
       const chat = currentChat(project);
@@ -417,15 +487,15 @@ export function Sidebar(props: {
 
   const onSidebarTrigger = () => {
     if (isMobileLayout()) closeMobile();
-    else setCollapsed((value) => !value);
+    else toggleSidebar();
   };
 
   return <>
     <Show when={props.mobileOpen}>
       <button type="button" class="mobile-panel-backdrop" data-mobile-backdrop="sidebar" data-for="sidebar" aria-label="Dismiss sidebar" onClick={closeMobile} />
     </Show>
-    <aside ref={sidebarRoot} data-slot="sidebar" data-state={collapsed() ? "collapsed" : "expanded"} data-mobile-open={props.mobileOpen} class="conduit-sidebar" aria-hidden={phoneLayout() && !props.mobileOpen ? true : undefined} inert={phoneLayout() && !props.mobileOpen ? true : undefined}>
-      <div data-slot="sidebar-container" class="sidebar-container">
+    <aside ref={sidebarRoot} data-slot="sidebar" data-state={collapsed() ? "collapsed" : "expanded"} data-visual-state={visualCollapsed() ? "collapsed" : "expanded"} data-mobile-open={props.mobileOpen} class="conduit-sidebar" aria-hidden={phoneLayout() && !props.mobileOpen ? true : undefined} inert={phoneLayout() && !props.mobileOpen ? true : undefined}>
+      <div ref={sidebarSurface} data-slot="sidebar-container" class="sidebar-container">
         <div data-sidebar="header">
           <Button variant="ghost" size="icon-sm" data-sidebar="trigger" aria-label="Toggle Sidebar" aria-expanded={isMobileLayout() ? props.mobileOpen : !collapsed()} onClick={onSidebarTrigger}><PanelLeftIcon /></Button>
           <button data-sidebar="brand" aria-label="Conduit" onClick={() => startNewChat()}><span>Conduit</span></button>
@@ -440,7 +510,7 @@ export function Sidebar(props: {
           <MenuItem onSelect={() => { closeMobile(); props.onOpenPalette(); }}>Command Palette</MenuItem>
           <MenuItem onSelect={() => fetch("/v0/auth/logout", { method: "POST" }).finally(() => { location.href = "/login"; })}>Sign out</MenuItem>
         </MenuContent></Menu></div>
-        <button data-sidebar="rail" aria-hidden="true" tabIndex={-1} onClick={() => setCollapsed((value) => !value)} />
+        <button data-sidebar="rail" aria-hidden="true" tabIndex={-1} onClick={toggleSidebar} />
       </div>
     </aside>
 

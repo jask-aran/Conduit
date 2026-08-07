@@ -281,16 +281,70 @@ test("workspace panel previews files, shows diff, and persists per chat", async 
   const panel = page.getByRole("complementary", { name: "Workspace panel" });
   await expect(panel).toBeVisible();
   if (page.viewportSize().width > 760) {
-    const [panelBox, widthHandleBox] = await Promise.all([panel.boundingBox(), panel.getByRole("separator", { name: "Resize workspace panel" }).boundingBox()]);
+    const main = page.locator('[data-slot="sidebar-inset"]');
+    const thread = page.locator(".thread");
+    const [panelBox, widthHandleBox, mainBox, threadBox] = await Promise.all([
+      panel.boundingBox(),
+      panel.getByRole("separator", { name: "Resize workspace panel" }).boundingBox(),
+      main.boundingBox(),
+      thread.boundingBox(),
+    ]);
     expect(widthHandleBox.x).toBeLessThan(panelBox.x);
     const widthHandle = panel.getByRole("separator", { name: "Resize workspace panel" });
-    expect(await widthHandle.evaluate((element) => getComputedStyle(element, "::after").content)).toBe("none");
     const originalWidth = Number(await widthHandle.getAttribute("aria-valuenow"));
     await page.mouse.move(widthHandleBox.x + (widthHandleBox.width / 2), widthHandleBox.y + 80);
     await page.mouse.down();
-    await page.mouse.move(widthHandleBox.x - 60, widthHandleBox.y + 80);
+    const resizeSamples = [];
+    for (let step = 1; step <= 6; step += 1) {
+      await page.mouse.move(widthHandleBox.x + (widthHandleBox.width / 2) - (step * 12), widthHandleBox.y + 80);
+      await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(resolve)));
+      resizeSamples.push(await page.evaluate(() => {
+        const shell = document.querySelector("aside.workspace-panel");
+        const surface = shell.querySelector(".workspace-panel-surface");
+        const chat = document.querySelector('[data-slot="sidebar-inset"]');
+        const transcript = document.querySelector(".thread");
+        const handle = shell.querySelector('[aria-label="Resize workspace panel"]');
+        return {
+          panelWidth: shell.getBoundingClientRect().width,
+          surfaceWidth: surface.getBoundingClientRect().width,
+          mainWidth: chat.getBoundingClientRect().width,
+          threadLeft: transcript.getBoundingClientRect().left,
+          threadWidth: transcript.getBoundingClientRect().width,
+          ariaWidth: Number(handle.getAttribute("aria-valuenow")),
+        };
+      }));
+    }
+    expect(new Set(resizeSamples.map((sample) => Math.round(sample.panelWidth))).size).toBe(1);
+    expect(new Set(resizeSamples.map((sample) => Math.round(sample.surfaceWidth))).size).toBeGreaterThan(3);
+    expect(new Set(resizeSamples.map((sample) => Math.round(sample.mainWidth))).size).toBe(1);
+    expect(new Set(resizeSamples.map((sample) => Math.round(sample.threadLeft))).size).toBe(1);
+    expect(new Set(resizeSamples.map((sample) => Math.round(sample.threadWidth))).size).toBeGreaterThan(3);
+    expect(resizeSamples.every((sample) => Math.abs(sample.ariaWidth - sample.surfaceWidth) < 1)).toBe(true);
+    expect(resizeSamples.every((sample, index) =>
+      index === 0 || sample.surfaceWidth >= resizeSamples[index - 1].surfaceWidth - 0.5)).toBe(true);
+    const previewGeometry = await page.evaluate(() => {
+      const surface = document.querySelector(".workspace-panel-surface");
+      const transcript = document.querySelector(".thread");
+      return {
+        surface: surface.getBoundingClientRect().toJSON(),
+        transcript: transcript.getBoundingClientRect().toJSON(),
+      };
+    });
     await page.mouse.up();
     await expect(widthHandle).toHaveAttribute("aria-valuenow", String(Math.min(Math.floor(page.viewportSize().width * 0.65), originalWidth + 72)));
+    await expect.poll(async () => Math.round((await panel.boundingBox()).width)).toBe(originalWidth + 72);
+    const releasedGeometry = await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => {
+      const surface = document.querySelector(".workspace-panel-surface");
+      const transcript = document.querySelector(".thread");
+      resolve({
+        surface: surface.getBoundingClientRect().toJSON(),
+        transcript: transcript.getBoundingClientRect().toJSON(),
+      });
+    })));
+    expect(Math.abs(releasedGeometry.surface.x - previewGeometry.surface.x)).toBeLessThan(1);
+    expect(Math.abs(releasedGeometry.surface.width - previewGeometry.surface.width)).toBeLessThan(1);
+    expect(Math.abs(releasedGeometry.transcript.x - previewGeometry.transcript.x)).toBeLessThan(1);
+    expect(Math.abs(releasedGeometry.transcript.width - previewGeometry.transcript.width)).toBeLessThan(1);
   }
   await panel.getByRole("button", { name: "src" }).click();
   await panel.getByRole("button", { name: "main.ts" }).click();
@@ -320,6 +374,162 @@ test("workspace panel previews files, shows diff, and persists per chat", async 
   await expect(page.getByRole("tab", { name: "Source Control" })).toHaveAttribute("aria-selected", "true");
   await page.keyboard.press(process.platform === "darwin" ? "Meta+." : "Control+.");
   await expect(page.getByRole("complementary", { name: "Workspace panel" })).toHaveCount(0);
+});
+
+test("desktop workspace surface and transcript move continuously with atomic shell geometry", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop-chromium");
+  await page.goto("/");
+  const panel = page.locator("aside.workspace-panel");
+  const surface = panel.locator(".workspace-panel-surface");
+  const main = page.locator('[data-slot="sidebar-inset"]');
+  const sampleShellGeometry = () => page.evaluate(() => new Promise((resolve, reject) => {
+    const shell = document.querySelector("aside.workspace-panel");
+    const chat = document.querySelector('[data-slot="sidebar-inset"]');
+    const transcript = document.querySelector(".thread");
+    if (!shell || !chat || !transcript) {
+      reject(new Error("Workspace shell, chat main, or transcript thread is not mounted"));
+      return;
+    }
+    const samples = [];
+    const sample = () => {
+      samples.push({
+        panelWidth: shell.getBoundingClientRect().width,
+        surfaceLeft: shell.querySelector(".workspace-panel-surface").getBoundingClientRect().left,
+        mainRight: chat.getBoundingClientRect().right,
+        threadLeft: transcript.getBoundingClientRect().left,
+        threadWidth: transcript.getBoundingClientRect().width,
+      });
+      if (samples.length === 8) resolve(samples);
+      else requestAnimationFrame(sample);
+    };
+    requestAnimationFrame(sample);
+  }));
+
+  await expect(page.locator(".thread")).toBeVisible();
+  await expect(panel).toBeAttached();
+  await page.getByRole("button", { name: "Toggle workspace panel" }).click();
+  const openSamples = await sampleShellGeometry();
+  await expect(panel).toHaveAttribute("aria-hidden", "false");
+  await expect(panel).not.toHaveAttribute("inert", "");
+  expect(new Set(openSamples.map((sample) => Math.round(sample.panelWidth))).size).toBe(1);
+  expect(new Set(openSamples.map((sample) => Math.round(sample.surfaceLeft))).size).toBeGreaterThan(3);
+  expect(new Set(openSamples.map((sample) => Math.round(sample.mainRight))).size).toBe(1);
+  expect(new Set(openSamples.map((sample) => Math.round(sample.threadLeft))).size).toBeGreaterThan(3);
+  expect(new Set(openSamples.map((sample) => Math.round(sample.threadWidth))).size).toBe(1);
+  expect(openSamples.every((sample, index) =>
+    index === 0 || sample.surfaceLeft <= openSamples[index - 1].surfaceLeft + 0.5)).toBe(true);
+  const [surfaceBox, closeBox, resizeBox] = await Promise.all([
+    surface.boundingBox(),
+    panel.getByRole("button", { name: "Close workspace panel" }).boundingBox(),
+    panel.getByRole("separator", { name: "Resize workspace panel" }).boundingBox(),
+  ]);
+  expect(surfaceBox.x + surfaceBox.width).toBeLessThanOrEqual(page.viewportSize().width + 1);
+  expect(closeBox.x + closeBox.width).toBeLessThanOrEqual(page.viewportSize().width + 1);
+  expect(resizeBox.x).toBeGreaterThanOrEqual(0);
+  expect(resizeBox.width).toBeGreaterThanOrEqual(24);
+
+  await panel.getByRole("button", { name: "Close workspace panel" }).click();
+  const closeSamples = await sampleShellGeometry();
+  await expect(panel).toHaveAttribute("aria-hidden", "true");
+  await expect(panel).toHaveAttribute("inert", "");
+  expect(new Set(closeSamples.map((sample) => Math.round(sample.panelWidth))).size).toBe(1);
+  expect(new Set(closeSamples.map((sample) => Math.round(sample.surfaceLeft))).size).toBeGreaterThan(3);
+  expect(new Set(closeSamples.map((sample) => Math.round(sample.mainRight))).size).toBe(1);
+  expect(new Set(closeSamples.map((sample) => Math.round(sample.threadLeft))).size).toBeGreaterThan(3);
+  expect(new Set(closeSamples.map((sample) => Math.round(sample.threadWidth))).size).toBe(1);
+  expect(closeSamples.every((sample, index) =>
+    index === 0 || sample.surfaceLeft + 0.5 >= closeSamples[index - 1].surfaceLeft)).toBe(true);
+
+  await page.keyboard.press(process.platform === "darwin" ? "Meta+." : "Control+.");
+  await expect(panel).toHaveAttribute("aria-hidden", "false");
+  await page.keyboard.press(process.platform === "darwin" ? "Meta+." : "Control+.");
+  await expect(panel).toHaveAttribute("aria-hidden", "true");
+  await expect(surface).toHaveCSS("transform", "none");
+});
+
+test("rapid panel reversals continue from rendered geometry and release transcript locks", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop-chromium");
+  await page.goto("/");
+  const sidebar = page.locator(".conduit-sidebar");
+  const sidebarTrigger = sidebar.locator('[data-sidebar="trigger"]');
+  const workspace = page.locator("aside.workspace-panel");
+  const transcriptShell = page.locator(".transcript-motion-shell");
+  const waitFrames = (count) => page.evaluate((frameCount) => new Promise((resolve) => {
+    let remaining = frameCount;
+    const frame = () => {
+      remaining -= 1;
+      if (remaining <= 0) resolve();
+      else requestAnimationFrame(frame);
+    };
+    requestAnimationFrame(frame);
+  }), count);
+  const sampleEdges = (selector, edge, count) => page.evaluate(({ targetSelector, targetEdge, frameCount }) => new Promise((resolve, reject) => {
+    const target = document.querySelector(targetSelector);
+    if (!target) {
+      reject(new Error(`Missing motion target: ${targetSelector}`));
+      return;
+    }
+    const samples = [];
+    const frame = () => {
+      samples.push(target.getBoundingClientRect()[targetEdge]);
+      if (samples.length === frameCount) resolve(samples);
+      else requestAnimationFrame(frame);
+    };
+    requestAnimationFrame(frame);
+  }), { targetSelector: selector, targetEdge: edge, frameCount: count });
+
+  await expect(page.locator(".thread")).toBeVisible();
+  await expect(workspace).toBeAttached();
+  await sidebarTrigger.evaluate((element) => element.click());
+  await waitFrames(3);
+  const sidebarMidpoint = (await sidebar.locator(".sidebar-container").boundingBox()).x;
+  await expect(sidebar).toHaveCSS("width", "52px");
+  expect(sidebarMidpoint).toBeLessThan(0);
+  expect(sidebarMidpoint).toBeGreaterThan(-192);
+  await sidebarTrigger.evaluate((element) => element.click());
+  const sidebarReverse = await sampleEdges(".sidebar-container", "left", 6);
+  expect(sidebarReverse[0]).toBeLessThan(0);
+  expect(sidebarReverse.every((value, index) =>
+    index === 0 || value + 0.5 >= sidebarReverse[index - 1])).toBe(true);
+  await expect(sidebar).toHaveAttribute("data-state", "expanded");
+  await expect(sidebar).toHaveCSS("width", "244px");
+
+  await page.getByRole("button", { name: "Toggle workspace panel" }).evaluate((element) => element.click());
+  await waitFrames(3);
+  const workspaceMidpoint = (await workspace.locator(".workspace-panel-surface").boundingBox()).x;
+  await expect(workspace).toHaveCSS("width", "420px");
+  expect(workspaceMidpoint).toBeGreaterThan(page.viewportSize().width - 430);
+  expect(workspaceMidpoint).toBeLessThan(page.viewportSize().width);
+  await workspace.getByRole("button", { name: "Close workspace panel" }).evaluate((element) => element.click());
+  const workspaceReverse = await sampleEdges(".workspace-panel-surface", "left", 6);
+  expect(workspaceReverse[0]).toBeLessThan(page.viewportSize().width);
+  expect(workspaceReverse.every((value, index) =>
+    index === 0 || value + 0.5 >= workspaceReverse[index - 1])).toBe(true);
+  await expect(workspace).toHaveAttribute("aria-hidden", "true");
+  await expect(workspace).toHaveCSS("width", "0px");
+  await expect.poll(() => transcriptShell.evaluate((element) =>
+    new DOMMatrixReadOnly(getComputedStyle(element).transform).m41)).toBe(0);
+  await expect(page.locator(".transcript")).not.toHaveAttribute("data-panel-motion");
+});
+
+test("desktop panel surfaces settle immediately with reduced motion", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop-chromium");
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.goto("/");
+  const sidebar = page.locator(".conduit-sidebar");
+  await page.locator('[data-sidebar="trigger"]').click();
+  await expect(sidebar).toHaveCSS("width", "52px");
+  expect(await sidebar.evaluate((element) => element.getAnimations().filter((animation) =>
+    animation.effect instanceof KeyframeEffect && animation.effect.target === element).length)).toBe(0);
+  await page.getByRole("button", { name: "Toggle workspace panel" }).click();
+  const panel = page.locator("aside.workspace-panel");
+  const surface = panel.locator(".workspace-panel-surface");
+  await expect(panel).toHaveAttribute("aria-hidden", "false");
+  await expect(panel).toHaveCSS("width", "420px");
+  await expect(surface).toHaveCSS("transform", "none");
+  await expect(surface).toHaveCSS("opacity", "1");
+  expect(await surface.evaluate((element) => element.getAnimations().every((animation) =>
+    Number(animation.effect?.getTiming().duration || 0) <= 1))).toBe(true);
 });
 
 test("reselecting the active chat does not reload its transcript or workspace", async ({ page }) => {
@@ -1609,6 +1819,24 @@ test("uses compact sidebar groups and preserves collapse without a brand icon", 
   await page.goto("/");
   const sidebar = page.locator('[data-slot="sidebar"][data-state]');
   const main = page.locator('[data-slot="sidebar-inset"]');
+  const sampleShellGeometry = () => page.evaluate(() => new Promise((resolve) => {
+    const shell = document.querySelector('[data-slot="sidebar"][data-state]');
+    const chat = document.querySelector('[data-slot="sidebar-inset"]');
+    const transcript = document.querySelector(".thread");
+    const samples = [];
+    const sample = () => {
+      samples.push({
+        sidebarWidth: shell.getBoundingClientRect().width,
+        surfaceLeft: shell.querySelector(".sidebar-container").getBoundingClientRect().left,
+        mainLeft: chat.getBoundingClientRect().left,
+        threadLeft: transcript.getBoundingClientRect().left,
+        threadWidth: transcript.getBoundingClientRect().width,
+      });
+      if (samples.length === 8) resolve(samples);
+      else requestAnimationFrame(sample);
+    };
+    requestAnimationFrame(sample);
+  }));
   const mainBox = await main.boundingBox();
 
   await expect(page.locator('[data-sidebar="header"]').getByRole("button", { name: "Conduit", exact: true })).toBeVisible();
@@ -1640,6 +1868,14 @@ test("uses compact sidebar groups and preserves collapse without a brand icon", 
 
   await page.locator('[data-sidebar="trigger"]:visible').click();
   await expect(sidebar).toHaveAttribute("data-state", "collapsed");
+  const collapsedShellSamples = await sampleShellGeometry();
+  expect(new Set(collapsedShellSamples.map((sample) => Math.round(sample.sidebarWidth))).size).toBe(1);
+  expect(new Set(collapsedShellSamples.map((sample) => Math.round(sample.surfaceLeft))).size).toBeGreaterThan(3);
+  expect(new Set(collapsedShellSamples.map((sample) => Math.round(sample.mainLeft))).size).toBe(1);
+  expect(new Set(collapsedShellSamples.map((sample) => Math.round(sample.threadLeft))).size).toBeGreaterThan(3);
+  expect(new Set(collapsedShellSamples.map((sample) => Math.round(sample.threadWidth))).size).toBe(1);
+  expect(collapsedShellSamples.every((sample, index) =>
+    index === 0 || sample.surfaceLeft <= collapsedShellSamples[index - 1].surfaceLeft + 0.5)).toBe(true);
   await expect.poll(async () => (await main.boundingBox()).x).toBeLessThan(mainBox.x);
   await expect(sidebar).toHaveCSS("width", "52px");
   await expect(page.locator('[data-sidebar="header"] span', { hasText: "Conduit" })).toBeHidden();
@@ -1653,7 +1889,23 @@ test("uses compact sidebar groups and preserves collapse without a brand icon", 
 
   await page.locator('[data-sidebar="trigger"]:visible').click();
   await expect(sidebar).toHaveAttribute("data-state", "expanded");
+  const expandedShellSamples = await sampleShellGeometry();
+  expect(new Set(expandedShellSamples.map((sample) => Math.round(sample.sidebarWidth))).size).toBe(1);
+  expect(new Set(expandedShellSamples.map((sample) => Math.round(sample.surfaceLeft))).size).toBeGreaterThan(3);
+  expect(new Set(expandedShellSamples.map((sample) => Math.round(sample.mainLeft))).size).toBe(1);
+  expect(new Set(expandedShellSamples.map((sample) => Math.round(sample.threadLeft))).size).toBeGreaterThan(3);
+  expect(new Set(expandedShellSamples.map((sample) => Math.round(sample.threadWidth))).size).toBe(1);
+  expect(expandedShellSamples.every((sample, index) =>
+    index === 0 || sample.surfaceLeft + 0.5 >= expandedShellSamples[index - 1].surfaceLeft)).toBe(true);
   await expect.poll(async () => (await main.boundingBox()).x).toBe(mainBox.x);
+
+  await page.locator('[data-sidebar="trigger"]:visible').click();
+  await expect(sidebar).toHaveAttribute("data-state", "collapsed");
+  await page.locator('[data-sidebar="trigger"]:visible').click();
+  await expect(sidebar).toHaveAttribute("data-state", "expanded");
+  await page.locator('[data-sidebar="trigger"]:visible').click();
+  await expect(sidebar).toHaveAttribute("data-state", "collapsed");
+  await expect(sidebar).toHaveCSS("width", "52px");
 });
 
 test("keeps linked workspaces in their own sidebar group", async ({ page }, testInfo) => {
