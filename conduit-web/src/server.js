@@ -102,8 +102,6 @@ async function recycleIdleIsolatedPiProcesses() {
   const candidates = manager.liveRecords().filter((record) => record.runtime?.kind === "conduit_profile"
     && manager.isReclaimable(record));
   for (const record of candidates) {
-    // A browser may attach between discovery and shutdown. Recheck immediately
-    // before stopping so credential changes never deliberately interrupt it.
     if (manager.isReclaimable(record)) await manager.stopAndWait(record.id);
   }
   return { restartedIdleProcesses: candidates.length };
@@ -696,7 +694,18 @@ async function terminalContext(id) {
   const project = await projects.get(id);
   if (!project) throw Object.assign(new Error("Terminal project was not found"), { code: "pty_project_not_found" });
   if (project.kind === "workspace") {
-    await projects.validate(project);
+    try { await projects.validate(project); }
+    catch (error) {
+      if (error.code === "workspace_identity_changed") {
+        throw Object.assign(new Error(`Terminal working directory is unavailable to this Conduit server: ${project.path}`), {
+          code: "pty_cwd_unavailable",
+          status: 409,
+          path: project.path,
+          cause: error,
+        });
+      }
+      throw error;
+    }
     return { project, cwd: project.path };
   }
   const cwd = await fs.realpath(os.homedir());
@@ -991,6 +1000,9 @@ app.delete("/v0/projects/:id", async (request, response, next) => {
     }
     const matching = manager.list().filter((item) => item.projectId === project.id);
     await Promise.all(matching.map((item) => manager.stopAndWait(item.id)));
+    // PTYs own a real process cwd. Tear them down before unregistering or
+    // deleting the working root so no shell survives in a removed Workspace.
+    await terminals.removeProject(project.id);
     const sessions = (await Promise.all(chats
       .map((chat) => findDeletableSession(projectList, chat)))).filter(Boolean);
     await Promise.all(sessions.map(removeSession));
@@ -1319,9 +1331,6 @@ app.patch("/v0/sessions/:id", async (request, response, next) => {
     const projectList = await projects.list();
     const context = await findChatContext(request.params.id);
     if (!context) return response.status(404).json({ error: "chat_not_found" });
-    // Never stop a warm process on rename — that drops the ready indicator and
-    // thrash-kills idle agents. Live writers use Pi's set_session_name RPC;
-    // cold sessions append session_info offline.
     const live = manager.list().find((item) => (
       item.chatId === context.chat.id && ["starting", "running"].includes(item.status)
     ));
@@ -1444,10 +1453,6 @@ app.post("/v0/live-sessions", async (request, response, next) => {
     if (context.chat.piSessionFile) {
       try { await validateSessionHeader(context.chat.piSessionFile, context.project); }
       catch (error) {
-        // A mapping to a file that no longer exists is a stale reference (e.g. a
-        // chat left over from a failed launch), not an integrity error. Drop it
-        // and start a fresh session rather than dead-ending the send. Genuine
-        // integrity problems (bad mapping, cwd mismatch) still surface as 409.
         if (error.code === "ENOENT") context.chat.piSessionFile = null;
         else return response.status(409).json({ error: "session_file_unavailable", message: error.message });
       }
@@ -1561,8 +1566,9 @@ app.use((error, _request, response, _next) => {
   if (["reserved_project", "workspace_already_linked", "clone_target_reserved", "clone_reservation_lost", "workspace_cloning"].includes(error.code)) status = 409;
   if (error.code === "workspace_identity_changed") status = 409;
   if (["chat_move_not_supported", "live_session_starting", "runtime_locked", "session_writer_conflict"].includes(error.code)) status = 409;
-  if (error.code === "live_process_limit" || error.code === "generation_limit") status = 429;
-  if (error.code === "attachment_not_found" || error.code === "path_not_found") status = 404;
+  if (error.code === "live_process_limit" || error.code === "generation_limit" || error.code === "pty_capacity_reached") status = 429;
+  if (["attachment_not_found", "path_not_found", "pty_project_not_found"].includes(error.code)) status = 404;
+  if (["pty_not_running", "pty_cwd_unavailable", "pty_home_unavailable"].includes(error.code)) status = 409;
   if (error.code === "command_failed") status = 502;
   if (error.code === "clone_timeout") status = 504;
   if (error.code === "invalid_attachment_id"
@@ -1596,6 +1602,12 @@ app.use((error, _request, response, _next) => {
       "path_not_file",
       "file_too_large",
       "file_not_text",
+      "pty_template_not_allowed",
+      "pty_project_required",
+      "pty_cwd_required",
+      "pty_resize_invalid",
+      "pty_input_invalid",
+      "pty_control_invalid",
     ].includes(error.code)
     || error.message?.includes("Project names")) status = 400;
   response.status(status).json({
@@ -1609,6 +1621,37 @@ app.use((error, _request, response, _next) => {
 const server = http.createServer(app);
 const wss = new WebSocketServer({ noServer: true });
 const terminalClients = new Map();
+const terminalControllers = new Map();
+
+function sendTerminalControl(id) {
+  const controller = terminalControllers.get(id) || null;
+  for (const ws of terminalClients.get(id) || []) {
+    if (ws.readyState === ws.OPEN) ws.send(JSON.stringify({ type: "control", writable: ws === controller }));
+  }
+}
+
+function promoteTerminalController(id) {
+  if (terminalControllers.has(id)) return;
+  const record = terminals.get(id);
+  if (record?.status !== "running") return sendTerminalControl(id);
+  const next = [...(terminalClients.get(id) || [])].find((ws) => ws.readyState === ws.OPEN);
+  if (next) terminalControllers.set(id, next);
+  sendTerminalControl(id);
+}
+
+function detachTerminalClient(id, ws) {
+  const clients = terminalClients.get(id);
+  if (!clients) return;
+  clients.delete(ws);
+  if (terminalControllers.get(id) === ws) terminalControllers.delete(id);
+  if (!clients.size) {
+    terminalClients.delete(id);
+    terminalControllers.delete(id);
+    return;
+  }
+  promoteTerminalController(id);
+}
+
 const terminalOutput = new PtyOutputBatcher((id, bytes) => {
   for (const ws of terminalClients.get(id) || []) {
     if (ws.readyState !== ws.OPEN) continue;
@@ -1619,7 +1662,20 @@ const terminalOutput = new PtyOutputBatcher((id, bytes) => {
 terminals.on("output", ({ id, bytes }) => terminalOutput.append(id, bytes));
 terminals.on("exit", (record) => {
   terminalOutput.flush(record.id);
-  for (const ws of terminalClients.get(record.id) || []) if (ws.readyState === ws.OPEN) ws.send(JSON.stringify({ type: "status", exitCode: record.exitCode, signal: record.signal }));
+  terminalControllers.delete(record.id);
+  for (const ws of terminalClients.get(record.id) || []) {
+    if (ws.readyState !== ws.OPEN) continue;
+    ws.send(JSON.stringify({ type: "status", status: "exited", exitCode: record.exitCode, signal: record.signal }));
+    ws.send(JSON.stringify({ type: "control", writable: false }));
+  }
+});
+terminals.on("removed", ({ id }) => {
+  terminalOutput.flush(id);
+  terminalControllers.delete(id);
+  for (const ws of terminalClients.get(id) || []) {
+    if (ws.readyState === ws.OPEN) ws.close(1001, "Terminal was removed");
+  }
+  terminalClients.delete(id);
 });
 
 async function promptForChat(record, command, message) {
@@ -1702,7 +1758,6 @@ async function handleClientCommand(record, command) {
     const previous = persisted ? messagesFromEntries(persisted.entries).findLast((message) => message.role === "assistant") : null;
     const partial = previous?.content || record.generation?.partial || "";
     if (!partial || (!previous?.stopped && !record.generation?.closed)) throw new Error("There is no stopped response to continue");
-    // Experimental and intentionally removable: this is an ordinary hidden user prompt, not assistant prefill.
     return manager.promptAccepted(record.id, CONTINUE_PROMPT, { continuationBase: partial });
   }
   if (command.type === "extension_ui_response" || command.type === "host_ui_response") {
@@ -1722,10 +1777,6 @@ server.on("upgrade", async (request, socket, head) => {
   const ptyMatch = pathname.match(/^\/v0\/ptys\/([a-f0-9-]{36})\/attach$/);
   if ((!match || !manager.get(match[1])) && (!ptyMatch || !terminals.get(ptyMatch[1]))) return socket.destroy();
   try {
-    // Mirror the HTTP auth middleware: with no password configured, Conduit runs
-    // fully open (local mode), so the live-session upgrade must not demand a
-    // session cookie the open app never issues. Upgrades bypass Express, so this
-    // bypass has to be repeated here or every generation stream is destroyed.
     if (authStore.hasPassword()) {
       const context = await validateSession(authStore, request);
       if (!context) return socket.destroy();
@@ -1741,23 +1792,33 @@ server.on("upgrade", async (request, socket, head) => {
     clients.add(ws);
     terminalClients.set(id, clients);
     const record = terminals.get(id);
-    const output = terminals.output(id);
-    if (output.length) ws.send(output, { binary: true });
-    ws.send(JSON.stringify({ type: "status", exitCode: record.exitCode, signal: record.signal }));
+    if (record.status === "running" && !terminalControllers.has(id)) terminalControllers.set(id, ws);
+
+    const replay = terminals.replay(id);
+    ws.send(JSON.stringify({ type: "replay_start", complete: replay.complete }));
+    if (replay.bytes.length) ws.send(replay.bytes, { binary: true });
+    ws.send(JSON.stringify({ type: "replay_end" }));
+    ws.send(JSON.stringify({ type: "status", status: record.status, exitCode: record.exitCode, signal: record.signal }));
+    sendTerminalControl(id);
+
     ws.on("message", (data, isBinary) => {
       try {
+        if (terminalControllers.get(id) !== ws) {
+          throw Object.assign(new Error("Another attached browser currently controls this terminal"), { code: "pty_read_only" });
+        }
         if (isBinary) {
           terminalOutput.flush(id);
           terminals.input(id, data);
-        }
-        else {
+        } else {
           const command = JSON.parse(String(data));
           if (command.type === "resize") terminals.resize(id, command.cols, command.rows);
           else throw Object.assign(new Error("Unknown terminal control frame"), { code: "pty_control_invalid" });
         }
-      } catch (error) { ws.send(JSON.stringify({ type: "client_error", code: error.code, message: error.message })); }
+      } catch (error) {
+        if (ws.readyState === ws.OPEN) ws.send(JSON.stringify({ type: "client_error", code: error.code, message: error.message }));
+      }
     });
-    ws.on("close", () => { clients.delete(ws); if (!clients.size) terminalClients.delete(id); });
+    ws.on("close", () => detachTerminalClient(id, ws));
   });
   wss.handleUpgrade(request, socket, head, (ws) => {
     const record = manager.get(match[1]);

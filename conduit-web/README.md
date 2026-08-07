@@ -383,11 +383,16 @@ Their lightweight records persist in
 browser may detach without stopping it, and the server retains a 256 KiB output
 tail for a later attachment.
 
-`WS /v0/ptys/:id/attach` is authenticated like every other upgrade. PTY output
-is sent as raw binary frames and binary client frames are stdin bytes; the only
-JSON frames are `{ "type": "resize", "cols", "rows" }` from client to server
-and `{ "type": "status", "exitCode", "signal" }` (or `client_error`) from
-server to client. The browser owns VT parsing and rendering, while Conduit only
+`WS /v0/ptys/:id/attach` is authenticated like every other upgrade. Binary client
+frames are stdin bytes, and client JSON frames are `{ "type": "resize", "cols",
+"rows" }`. On attach, the server sends `replay_start` with a `complete` flag,
+then an optional binary replay frame prefixed with `CONDUIT-PTY-REPLAY/1\n`, and
+then `replay_end`, `status`, and `control` frames. A complete replay payload is
+an array of `{ "type": "resize", "cols", "rows" }` and `{ "type": "data",
+"data": "<base64>" }` events. The server skips replay when the bounded journal
+is incomplete. `control.writable` identifies the one attached browser that may
+send input and resize; other browsers receive output but get `client_error` with
+`pty_read_only`. The browser owns VT parsing and rendering, while Conduit only
 brokers process I/O and applies the same slow-client protection as other live
 connections.
 
