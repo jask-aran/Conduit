@@ -326,9 +326,6 @@ svg { stroke-width: 1.5; }
 .terminal-canvas > canvas { display: block; max-width: 100%; max-height: 100%; transition: opacity 80ms linear; }
 
 .transcript { position: relative; z-index: 1; min-height: 0; flex: 1; }
-.transcript-renderer-switch { position: absolute; top: 8px; right: 12px; z-index: 3; }
-.transcript-renderer-switch label { display: flex; align-items: center; gap: 6px; color: var(--muted-foreground); font: 10px ui-monospace, SFMono-Regular, Consolas, monospace; text-transform: uppercase; letter-spacing: .06em; }
-.transcript-renderer-switch select { min-height: 26px; border: 1px solid var(--border); border-radius: 5px; background: color-mix(in oklch, var(--background), transparent 8%); padding: 2px 5px; color: var(--foreground); font: 11px ui-monospace, SFMono-Regular, Consolas, monospace; text-transform: none; letter-spacing: normal; }
 .message-scroller-viewport { width: 100%; height: 100%; overflow-y: auto; scrollbar-width: none; }
 .message-scroller-viewport::-webkit-scrollbar { display: none; }
 .thread { width: min(760px, calc(100% - 48px)); min-height: 100%; margin-inline: auto; padding: 64px 44px 32px; }

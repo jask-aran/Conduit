@@ -6,7 +6,10 @@ Marked baseline is recorded below. Slice 6 committed at `0e4d366`. #24 path:
 renderer A/B (6a) → incomplete-construct streaming (6b) → decision (7) →
 optional adoption (8). **Slice 9** (desktop panel motion under heavy KaTeX) is
 queued as a separate shell-layout track; it does not block the #24 gate.
-Issue #24 remains open.
+The original binary adoption path is superseded by the candidate-renderer
+checkpoint recorded at the end of this document. The current checkpoint is
+committed at `4445051`. Issue #24 remains open pending owner selection of the
+default renderer and closure of the remaining performance risks.
 
 Issues:
 
@@ -3678,3 +3681,91 @@ The pending-tail behavior is now deterministic for the dedicated math/table
 fixture. Keep the zero-reversal contract. Do not replace it with a relaxed
 threshold. Manual QA should still inspect the mixed code/table stream while
 the Typewriter and Synthetic renderers are selected.
+
+### Current candidate-renderer checkpoint — 7 August 2026
+
+The implementation no longer follows the original binary “choose Marked or
+adopt Incremark” decision gate. We now keep five selectable renderer
+candidates. This is intentional: the work produced useful reference,
+stable, and experimental paths, and the owner can compare them without
+discarding the alternatives.
+
+| UI label | Renderer ID | Typewriter queue | Incomplete math policy | Role |
+| --- | --- | --- | --- | --- |
+| Marked (Stable) | `marked-stable` | No | Basic Marked behavior; no pending-math hiding | Historical reference |
+| Marked (Experimental) | `marked` | No | Current Marked adapter | Existing comparison path |
+| Immediate (Stable) | `incremark` | No | Incremark safe pending-math path | Immediate Incremark baseline |
+| Typewriter (Stable) | `incremark-typewriter` | Yes | Incremark safe pending-math path | Stable candidate |
+| Synthetic (Experimental) | `incremark-synthetic` | Yes | Eager provisional KaTeX preview | Current default |
+
+Immediate, Typewriter, and Synthetic share the Incremark parser, table-math
+projection, table layout, reconciliation, security boundary, and final
+content path. Synthetic is Typewriter plus provisional KaTeX presentation for
+incomplete math. Its ordinary Markdown animation uses the same adaptive native
+queue. The remaining behavior difference is the pending-math presentation:
+Stable hides the incomplete math tail; Synthetic pairs it temporarily and
+renders the preview.
+
+The current checkpoint is committed at `4445051` (`Harden streaming renderer
+modes and reconciliation`). Earlier sections that describe four renderer
+options or a direct Slice 7/8 adoption decision are historical records. The
+current selector has five options, including Marked Stable.
+
+#### Evidence at this checkpoint
+
+- `npm test`: 322 passed, 0 failed.
+- `npm run typecheck`: passed.
+- `npm run build`: passed; only the existing large-bundle warning remained.
+- Focused application browser regressions: 6 passed.
+- `math-table-oscillation`: Typewriter and Synthetic passed with zero block
+  height/top reversals and zero raw math delimiters.
+- `table-cell-display-math`: Typewriter passed with zero overflow and CLS
+  about `0.01923`; Synthetic passed with zero overflow and CLS about
+  `0.10089`.
+- `review-regressions`: Immediate, Typewriter, and Synthetic all reached
+  source/display parity, zero backlog, zero overflow, and zero removed math.
+
+The owner’s current manual observation is that Synthetic feels smoother and
+flashes less than Typewriter on large tables. This is consistent with its
+eager math node keeping the active cell structurally present. The owner chose
+Synthetic as the default despite the higher CLS measurement because the
+perceived output is better for the current product use.
+
+#### Remaining work
+
+1. Complete the one-time manual product smoke test through all five modes at
+   `127.0.0.1:4310`. Use the table/math prompt, the open-fence prompt, and the
+   renderer-switch checklist already recorded above. This validates the
+   checkpoint; it does not reopen renderer tuning.
+
+2. Defer the same-fixture quantitative comparison of Typewriter and Synthetic
+   to follow-up issue #51. The existing harness remains the measurement path;
+   do not create a separate benchmark file.
+
+3. The default is now Synthetic (`incremark-synthetic`). The selector is in
+   Settings → UI. Existing explicit local-storage or URL renderer overrides
+   remain available for comparison.
+
+4. Defer the remaining high-volume and mixed code/table signals to issue #51.
+   They are not failures of the strict table contract, and they no longer
+   block product work on #24 or #34.
+
+5. Slice 7 is complete as a candidate-selection gate, not a
+   Marked-versus-Incremark binary test. Slice 8 is deferred to issue #51.
+   Slice 9 remains the separate desktop-panel-motion track.
+
+No new renderer architecture is required for the current product work. Future
+renderer changes must start from issue #51 and use narrow fixes for measured
+failures only.
+
+#### Owner decision and issue handoff
+
+The owner accepted the current candidate set and selected
+`incremark-synthetic` as the default. The renderer selector moved from the
+transcript overlay to Settings → UI, with live switching preserved. Renderer
+work is now deferred so it does not displace product work.
+
+Issue #24 contains the measured signals and harness-coverage gap in its
+checkpoint comment. Issue #51 tracks the deferred performance and streaming
+math work. Do not reopen the renderer investigation in this issue unless a
+new product regression blocks normal use.

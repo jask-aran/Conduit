@@ -4,12 +4,13 @@ import * as KDialog from "@kobalte/core/dialog";
 import { CheckIcon, SearchIcon } from "lucide-solid";
 import { Button, Field, FieldGroup, FieldLabel, Input, Spinner } from "@/components/primitives";
 import { api } from "../api/client";
+import { MARKDOWN_RENDERER_OPTIONS, type MarkdownRendererId } from "../chat/markdown-settings";
 import type { Installation, ModelOption, Project, Template } from "../api/contracts";
 import type { ModelSettings } from "../state/model-settings";
 
-const sections = ["general", "models", "profiles", "runtime", "workspaces", "auth"] as const;
+const sections = ["general", "ui", "models", "profiles", "runtime", "workspaces", "auth"] as const;
 type Section = typeof sections[number];
-const label = (section: Section) => section[0]!.toUpperCase() + section.slice(1);
+const label = (section: Section) => section === "ui" ? "UI" : section[0]!.toUpperCase() + section.slice(1);
 
 interface RuntimeSettings {
   maxLiveProcesses: number;
@@ -63,6 +64,8 @@ export function Settings(props: {
   onInstallationsChange: (items: Installation[]) => void;
   onDefaultTemplateChange: (id: string) => Promise<unknown>;
   onWorkspaceDefaultChange: (id: string, templateId: string | null) => Promise<Project>;
+  markdownRenderer: MarkdownRendererId;
+  onMarkdownRendererChange: (renderer: MarkdownRendererId) => void;
 }) {
   const [section, setSection] = createSignal<Section>(props.initialSection || "models");
   const [scope, setScope] = createSignal<string[]>([]);
@@ -289,6 +292,17 @@ export function Settings(props: {
         <main class="settings-content">
           <header><h2>{label(section())}</h2><Button variant="ghost" size="icon-sm" aria-label="Close" onClick={() => props.onOpenChange(false)}>×</Button></header>
           <Show when={section() === "general"}><Show when={!props.templatesLoading} fallback={<div class="settings-loading"><Spinner /><span>Loading profiles…</span></div>}><FieldGroup><Field><FieldLabel for="default-profile">Default profile</FieldLabel><select id="default-profile" value={props.defaultTemplateId} onChange={(event) => void props.onDefaultTemplateChange(event.currentTarget.value)}><For each={props.templates.filter((item) => item.defaultable !== false)}>{(item) => <option value={item.id}>{item.label}</option>}</For></select></Field></FieldGroup></Show></Show>
+          <Show when={section() === "ui"}>
+            <FieldGroup>
+              <Field>
+                <FieldLabel for="markdown-renderer">Markdown renderer</FieldLabel>
+                <select id="markdown-renderer" aria-label="Markdown renderer" value={props.markdownRenderer} onChange={(event) => props.onMarkdownRendererChange(event.currentTarget.value as MarkdownRendererId)}>
+                  <For each={MARKDOWN_RENDERER_OPTIONS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
+                </select>
+                <small>Choose the Markdown renderer used for complete and streaming answers.</small>
+              </Field>
+            </FieldGroup>
+          </Show>
           <Show when={props.open && section() === "models"}>
             <div class="model-scope">
               <Show when={props.models.settingsError()}><div role="alert" class="settings-error"><span>{props.models.settingsError()}</span><Button variant="outline" size="sm" onClick={() => void props.models.reload()}>Retry</Button></div></Show>
