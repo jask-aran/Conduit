@@ -21,7 +21,7 @@ import type {
 import { assignToolSeq, promotePendingUser } from "../timeline-order";
 import { reconcileMessages } from "../reconcile-messages";
 import { getHarnessRecorder, recordHarnessMetric } from "../harness-metrics";
-import { canCoalesceTextDelta } from "./text-delta-batcher";
+import { canCoalesceTextDelta, enqueueOverflowLiveEvent, mergeTextDeltaEvents } from "./text-delta-batcher";
 import type { AttachmentsStore, UploadAttachment } from "./attachments";
 import type { CatalogueStore } from "./catalogue";
 import type { ActiveGenerationView, LiveGenerationChange } from "../turn-rows";
@@ -115,7 +115,11 @@ export function createActiveChat(options: ActiveChatOptions) {
   let pendingTextDeltaTimer: ReturnType<typeof setTimeout> | null = null;
   let overflowLiveEvents: LiveEvent[] = [];
   let overflowLiveEventFrame: number | null = null;
+  let overflowLiveEventTimer: ReturnType<typeof setTimeout> | null = null;
   let overflowMode = false;
+  const OVERFLOW_FRAME_BUDGET_MS = 6;
+  const OVERFLOW_MAX_EVENTS_PER_FRAME = 32;
+  const STOP_TERMINAL_EVENT_TYPES = new Set(["generation_stopping", "generation_stopped", "generation_settled", "generation_failed"]);
 
   const selectedId = catalogue.selectedId;
   const projectId = catalogue.projectId;
@@ -140,8 +144,10 @@ export function createActiveChat(options: ActiveChatOptions) {
   const clearPendingLiveEvents = () => {
     if (pendingTextDeltaTimer) clearTimeout(pendingTextDeltaTimer);
     if (overflowLiveEventFrame != null) cancelAnimationFrame(overflowLiveEventFrame);
+    if (overflowLiveEventTimer != null) clearTimeout(overflowLiveEventTimer);
     pendingTextDeltaTimer = null;
     overflowLiveEventFrame = null;
+    overflowLiveEventTimer = null;
     pendingTextDelta = null;
     overflowLiveEvents = [];
     overflowMode = false;
@@ -156,14 +162,23 @@ export function createActiveChat(options: ActiveChatOptions) {
   };
 
   const scheduleOverflowLiveEvents = () => {
-    if (overflowLiveEventFrame != null || !overflowLiveEvents.length) return;
-    overflowLiveEventFrame = requestAnimationFrame(() => {
+    if (overflowLiveEventFrame != null || overflowLiveEventTimer != null || !overflowLiveEvents.length) return;
+    const drain = () => {
       overflowLiveEventFrame = null;
-      const pending = overflowLiveEvents.shift();
-      if (pending) applyLiveEvent(pending);
+      overflowLiveEventTimer = null;
+      const startedAt = performance.now();
+      let processed = 0;
+      while (overflowLiveEvents.length && processed < OVERFLOW_MAX_EVENTS_PER_FRAME) {
+        const pending = overflowLiveEvents.shift();
+        if (pending) applyLiveEvent(pending);
+        processed += 1;
+        if (processed > 1 && performance.now() - startedAt >= OVERFLOW_FRAME_BUDGET_MS) break;
+      }
       if (overflowLiveEvents.length) scheduleOverflowLiveEvents();
       else overflowMode = false;
-    });
+    };
+    if (document.visibilityState === "hidden") overflowLiveEventTimer = setTimeout(drain, 16);
+    else overflowLiveEventFrame = requestAnimationFrame(drain);
   };
 
   const queueTextDelta = (event: StructuredGenerationEvent) => {
@@ -172,13 +187,9 @@ export function createActiveChat(options: ActiveChatOptions) {
       if (previous && isStructuredGenerationEvent(previous)
         && previous.type === "content_block_delta"
         && canCoalesceTextDelta(previous, event)) {
-        overflowLiveEvents[overflowLiveEvents.length - 1] = {
-          ...previous,
-          seq: event.seq,
-          delta: `${String(previous.delta || "")}${String(event.delta || "")}`,
-        } as StructuredGenerationEvent;
+        overflowLiveEvents[overflowLiveEvents.length - 1] = mergeTextDeltaEvents(previous, event)!;
       } else {
-        overflowLiveEvents.push(event);
+        enqueueOverflowLiveEvent(overflowLiveEvents, event);
       }
       scheduleOverflowLiveEvents();
       return;
@@ -201,7 +212,8 @@ export function createActiveChat(options: ActiveChatOptions) {
       if (pendingTextDeltaTimer) clearTimeout(pendingTextDeltaTimer);
       pendingTextDeltaTimer = null;
       overflowMode = true;
-      overflowLiveEvents.push(previous, event);
+      enqueueOverflowLiveEvent(overflowLiveEvents, previous);
+      enqueueOverflowLiveEvent(overflowLiveEvents, event);
       scheduleOverflowLiveEvents();
     } else {
       flushPendingTextDelta();
@@ -216,7 +228,7 @@ export function createActiveChat(options: ActiveChatOptions) {
       return;
     }
     if (overflowMode) {
-      overflowLiveEvents.push(event);
+      enqueueOverflowLiveEvent(overflowLiveEvents, event);
       scheduleOverflowLiveEvents();
       return;
     }
@@ -250,6 +262,7 @@ export function createActiveChat(options: ActiveChatOptions) {
   };
 
   const applyStructuredGeneration = (event: StructuredGenerationEvent) => {
+    if (stopPending && !STOP_TERMINAL_EVENT_TYPES.has(event.type)) return;
     if (!live() || live()!.chatId !== selectedId()) return;
     const previous = activeGeneration();
     const recorder = getHarnessRecorder();
@@ -529,19 +542,21 @@ export function createActiveChat(options: ActiveChatOptions) {
             const selection = selectionToken;
             const checkpointGenerationId = event.generationId;
             const checkpointGenerationSeq = event.generationSeq;
-            void api<TranscriptDetail>(`/v0/sessions/${encodeURIComponent(event.chatId)}`).then((detail) => {
-              if (selection !== selectionToken || event.chatId !== selectedId()) return;
-              const matching = activeGeneration();
-              if (!matching || matching.id !== checkpointGenerationId
-                || !["stopped", "complete", "failed"].includes(matching.status)
-                || (checkpointGenerationSeq != null && matching.lastSeq < checkpointGenerationSeq)) return;
-              batch(() => {
-                applyDetail(detail, true);
-                generationStore.clear();
-                setActiveGenerationChange(null);
-                setActiveGeneration(null);
-              });
-            }).catch((error) => onError((error as Error).message));
+            queueMicrotask(() => {
+              void api<TranscriptDetail>(`/v0/sessions/${encodeURIComponent(event.chatId)}`, { cache: "no-store" }).then((detail) => {
+                if (selection !== selectionToken || event.chatId !== selectedId()) return;
+                const matching = activeGeneration();
+                if (!matching || matching.id !== checkpointGenerationId
+                  || !["stopped", "complete", "failed"].includes(matching.status)
+                  || (checkpointGenerationSeq != null && matching.lastSeq < checkpointGenerationSeq)) return;
+                batch(() => {
+                  applyDetail(detail, true);
+                  generationStore.clear();
+                  setActiveGenerationChange(null);
+                  setActiveGeneration(null);
+                });
+              }).catch((error) => onError((error as Error).message));
+            });
           } else if (!current) void loadDetail(event.chatId, true).catch((error) => onError((error as Error).message));
         }
         break;
@@ -679,6 +694,7 @@ export function createActiveChat(options: ActiveChatOptions) {
 
   const stop = () => {
     if (!streaming()) return;
+    flushPendingTextDelta();
     stopPending = true;
     setGeneration("stopping");
     const command = JSON.stringify({ type: "stop_generation", generationId: currentGeneration });

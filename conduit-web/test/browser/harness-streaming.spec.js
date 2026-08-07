@@ -63,7 +63,7 @@ test("a deterministic stream reports browser delivery and visible rendering cade
     expectedInteractions,
     maxKaTeXCalls: fixture?.maxKaTeXCalls ?? null,
     maxLayoutShiftCount: fixture?.maxLayoutShiftCount ?? null,
-    maxLayoutShiftValue: fixture?.maxLayoutShiftValue ?? null,
+    maxLayoutShiftValue: rendererContract.maxLayoutShiftValue ?? fixture?.maxLayoutShiftValue ?? null,
     maxLongestTaskMs: fixture?.maxLongestTaskMs ?? null,
     maxRemovedMathNodes: fixture?.maxRemovedMathNodes ?? null,
     maxIncrementalResets: fixture?.maxIncrementalResets ?? null,
@@ -141,11 +141,12 @@ test("a deterministic stream reports browser delivery and visible rendering cade
   if (expectedSemanticText != null) expect(report.browser.finalSemanticTextEvidence).toMatchObject(hashRedactedText(expectedSemanticText));
   if (typewriter && process.env.HARNESS_REQUIRE_TYPEWRITER_METRICS === "1") {
     expect(report.browser.clientWork.typewriter.sampleCount).toBeGreaterThan(0);
+    expect(report.browser.clientWork.typewriter.terminalSampleCount).toBeGreaterThan(0);
   }
   if (typewriter && report.browser.clientWork.typewriter.sampleCount > 0) {
-    expect(report.browser.clientWork.typewriter.last?.backlogCharacters).toBe(0);
-    expect(report.browser.clientWork.typewriter.last?.displayedVisibleCharacters)
-      .toBe(report.browser.clientWork.typewriter.last?.sourceVisibleCharacters);
+    expect(report.browser.clientWork.typewriter.terminal?.backlogCharacters).toBe(0);
+    expect(report.browser.clientWork.typewriter.terminal?.displayedVisibleCharacters)
+      .toBe(report.browser.clientWork.typewriter.terminal?.sourceVisibleCharacters);
   }
   expect(report.outcome).toBe("passed");
   expect(report.browser.webSocketDeltaCount).toBe(cadence.deltas.length);
@@ -199,9 +200,10 @@ test("a dropped stream reports reconnect recovery without duplicated output", as
   expect(report.browser.duplicateCharacters).toBe(0);
   if (typewriter && process.env.HARNESS_REQUIRE_TYPEWRITER_METRICS === "1") {
     expect(report.browser.clientWork.typewriter.sampleCount).toBeGreaterThan(0);
+    expect(report.browser.clientWork.typewriter.terminalSampleCount).toBeGreaterThan(0);
   }
   if (typewriter && report.browser.clientWork.typewriter.sampleCount > 0) {
-    expect(report.browser.clientWork.typewriter.last?.backlogCharacters).toBe(0);
+    expect(report.browser.clientWork.typewriter.terminal?.backlogCharacters).toBe(0);
   }
   expect(report.outcome).toBe("passed");
   expect(report.errors).toEqual([]);

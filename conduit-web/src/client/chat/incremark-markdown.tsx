@@ -26,7 +26,7 @@ type RendererContext = {
   onMathBusyChange: (busy: boolean) => void;
 };
 
-function restoreParsedBlock(block: ParsedBlock, sentinel: string, originalSource: string) {
+function restoreParsedBlock(block: ParsedBlock, sentinel: string | null, originalSource: string) {
   const restoredNode = promoteTableCellDisplayMath(restoreTableMathAst(block.node, sentinel));
   const parsedRawText = typeof (block as ParsedBlock & { rawText?: string }).rawText === "string"
     ? restoreTableMathSentinel((block as ParsedBlock & { rawText?: string }).rawText!, sentinel)
@@ -145,20 +145,32 @@ function ParsedBlockNodes(props: { blocks: () => ParsedBlock[]; context: Rendere
   }}</For>;
 }
 
-function preserveAppendOnlyNode(previous: MarkdownNode | undefined, current: MarkdownNode | undefined): MarkdownNode | undefined {
+function preserveAppendOnlyNode(
+  previous: MarkdownNode | undefined,
+  current: MarkdownNode | undefined,
+  preferCurrentTail = false,
+): MarkdownNode | undefined {
   if (!previous) return current;
-  if (!current) return previous;
+  if (!current) return preferCurrentTail ? undefined : previous;
   if (previous.type !== current.type) return current;
   if (typeof previous.value === "string" && typeof current.value === "string") {
+    if (preferCurrentTail) return current;
     if (current.value.startsWith(previous.value) || previous.value.startsWith(current.value)) {
       return current.value.length >= previous.value.length ? current : previous;
     }
     return current;
   }
   if (!Array.isArray(previous.children) || !Array.isArray(current.children)) return current;
-  const children = Array.from({ length: Math.max(previous.children.length, current.children.length) }, (_, index) =>
-    preserveAppendOnlyNode(previous.children[index], current.children[index]),
-  ).filter((child): child is MarkdownNode => Boolean(child));
+  const childCount = Math.max(previous.children.length, current.children.length);
+  const children = Array.from({ length: childCount }, (_, index) => {
+    const currentChild = current.children[index];
+    const isMissingCurrentTail = preferCurrentTail && index >= current.children.length;
+    return preserveAppendOnlyNode(
+      previous.children[index],
+      currentChild,
+      preferCurrentTail && (index === childCount - 1 || isMissingCurrentTail),
+    );
+  }).filter((child): child is MarkdownNode => Boolean(child));
   return { ...current, children };
 }
 
@@ -424,22 +436,22 @@ function CodeNode(props: { node: MarkdownNode | NodeAccessor }) {
 }
 
 function PendingConstruct(props: { pending: StreamingPending; streaming: boolean }) {
-  const pending = props.pending;
-  if (pending.kind === "fence") {
-    const language = String(pending.language || "text").split(/\s+/)[0]!.toLowerCase();
+  const pending = () => props.pending;
+  if (pending().kind === "fence") {
+    const language = () => String(pending().language || "text").split(/\s+/)[0]!.toLowerCase();
     return <div
       class={props.streaming ? "artifact streaming-pending streaming-pending-fence" : "artifact"}
-      data-language={language}
+      data-language={language()}
       data-streaming-pending={props.streaming ? "fence" : undefined}
     >
-      <div class="artifact-header"><span>{language}</span><button type="button" aria-label="Copy code" data-copy-code onClick={() => { if (navigator.clipboard) void navigator.clipboard.writeText(pending.body); }}>Copy</button></div>
-      <pre><code>{pending.body}</code></pre>
+      <div class="artifact-header"><span>{language()}</span><button type="button" aria-label="Copy code" data-copy-code onClick={() => { if (navigator.clipboard) void navigator.clipboard.writeText(pending().body); }}>Copy</button></div>
+      <pre><code>{pending().body}</code></pre>
     </div>;
   }
-  const className = `streaming-pending ${pending.kind === "math-block" ? "streaming-pending-math-block" : "streaming-pending-math-inline"}`;
-  return pending.kind === "math-block"
-    ? <div class={className} data-streaming-pending={props.streaming ? pending.kind : undefined} aria-hidden="true" />
-    : <span class={className} data-streaming-pending={props.streaming ? pending.kind : undefined} aria-hidden="true" />;
+  const className = () => `streaming-pending ${pending().kind === "math-block" ? "streaming-pending-math-block" : "streaming-pending-math-inline"}`;
+  return pending().kind === "math-block"
+    ? <div class={className()} data-streaming-pending={props.streaming ? pending().kind : undefined} aria-hidden="true" />
+    : <span class={className()} data-streaming-pending={props.streaming ? pending().kind : undefined} aria-hidden="true" />;
 }
 
 function PendingInlineMathPlaceholder() {
@@ -576,7 +588,6 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
     },
     onDisplayBusyChange: (busy) => {
       setDisplayBusy(busy);
-      props.onDisplayBusyChange?.(busy);
     },
     onMetrics: (metrics) => {
       const recorder = getHarnessRecorder();
@@ -601,6 +612,8 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
         frameWorkEmaMs: metrics.frameWorkEmaMs,
         fallbackMode: metrics.fallbackMode,
         lagTargetMet: metrics.lagTargetMet,
+        terminal: metrics.terminal,
+        nativeTransformer: typewriterController.getDebugState(),
       });
     },
   });
@@ -612,7 +625,7 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
     const source = String(props.children || "");
     const syntheticMath = Boolean(props.syntheticMath);
     const tableMath = !props.inline;
-    const split = splitStreamingMarkdown(source, { tableMath });
+    const split = splitStreamingMarkdown(source, { tableMath, allowUnclosedMath: Boolean(props.streaming) });
     const projection = tableMath
       ? projectTableMathSource(source, {
         convertTexDisplayDelimiters: true,
@@ -627,6 +640,10 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
     let update: ReturnType<typeof parser.append> | undefined;
     const updates: Array<ReturnType<typeof parser.append>> = [];
     const syntheticMathModeChanged = previousSyntheticMath !== null && previousSyntheticMath !== syntheticMath;
+    const preserveTypewriterState = Boolean(props.typewriter && !props.inline)
+      && previousTypewriter === true
+      && !syntheticMathModeChanged
+      && source.startsWith(previousSource);
     if (source !== previousSource || (tableMath && parserSource !== previousParserSource) || syntheticMathModeChanged) {
       const canAppend = !syntheticMathModeChanged
         && source.startsWith(previousSource)
@@ -639,11 +656,13 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
         parserMode = "render";
         parser.reset();
         update = parser.append(parserSource);
-        completedById.clear();
-        seededById.clear();
-        displayHistory.clear();
-        setSeededBlocks([]);
-        typewriterController.reset();
+        if (!preserveTypewriterState) {
+          completedById.clear();
+          seededById.clear();
+          displayHistory.clear();
+          setSeededBlocks([]);
+          typewriterController.reset();
+        }
       }
       updates.push(update);
       previousSource = source;
@@ -690,7 +709,7 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
         const previewSource = currentBlock.rawText + syntheticMathClosingDelimiter(source, split.pending);
         const previewProjection = projectTableMathSource(previewSource, {
           convertTexDisplayDelimiters: true,
-          sentinel: projection?.sentinel,
+          sentinel: projection?.sentinel || undefined,
         });
         previewParser.render(previewProjection.source);
         const reparsedNode = previewParser.getAst().children?.[0]
@@ -712,7 +731,7 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
       const prefixProjection = tableMath
         ? projectTableMathSource(prefix, {
           convertTexDisplayDelimiters: true,
-          sentinel: projection?.sentinel,
+          sentinel: projection?.sentinel || undefined,
         })
         : null;
       prefixParser.render(prefixProjection?.source || prefix);
@@ -722,9 +741,18 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
           : prefixParser.getAst().children?.[0]
         : null;
       if (!prefixNode) return null;
+      // A new opening delimiter can make the parser's pending block shorter
+      // than the block that was already visible. Markdown output is append-only:
+      // keep that prior visible AST while the new math stays hidden behind the
+      // in-place placeholder. Otherwise the native transformer receives a
+      // smaller block, resets its progress, and the paragraph briefly shrinks.
+      const previousBlock = currentBlocks.find((block) => block.id === currentBlock.id);
+      const stableNode = previousBlock
+        ? preserveAppendOnlyNode(previousBlock.node, prefixNode, true)
+        : prefixNode;
       return {
         ...currentBlock,
-        node: prefixNode,
+        node: stableNode,
         endOffset: currentBlock.startOffset + prefix.length,
         rawText: prefix,
       };
@@ -740,7 +768,10 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
           completedById.set(normalized.id, normalized);
         }
       }
-      pendingOffset = !props.streaming ? split.pending?.start ?? null : null;
+      // Never let the parser's raw in-progress block reach the DOM while a
+      // streaming construct owns its tail. The pending prefix/placeholder is
+      // the only representation of that block until the delimiter closes.
+      pendingOffset = split.pending?.start ?? null;
       const nextBlocks = [...completedById.values()]
         .filter((block) => pendingOffset == null || !blockContainsOffset(block, pendingOffset))
         .sort((left, right) => left.startOffset - right.startOffset);
@@ -765,8 +796,8 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
       setDisplayBlocks([]);
     } else if (enabled && currentBlocks.length && (
       previousTypewriter === false
-      || previousTypewriter === null
-      || (parserMode === "render" && previousTypewriter === true)
+      || (previousTypewriter === null && !props.streaming)
+      || (parserMode === "render" && previousTypewriter === true && !preserveTypewriterState)
     )) {
       displayHistory.clear();
       seededById.clear();
@@ -787,6 +818,7 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
       typewriterController.observeSource(animated);
       typewriterController.push(animated);
       setDisplayBlocks(typewriterController.getDisplayBlocks());
+      if (animated.length === 0 && currentBlocks.length > 0) typewriterController.completeSeeded();
     }
     previousTypewriter = enabled;
     previousSyntheticMath = syntheticMath;
@@ -825,7 +857,7 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
         reconcileMs: reconciledAt - parsedAt,
       });
     }
-    if (!enabled) queueMicrotask(() => props.onRendered?.());
+    queueMicrotask(() => props.onRendered?.());
   });
 
   const context: RendererContext = {
@@ -844,7 +876,7 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
     return [...byId.values()].sort((left, right) => left.startOffset - right.startOffset);
   };
   return <>
-    <div class="chat-markdown" data-renderer={rendererId()} data-synthetic-math={props.syntheticMath ? "true" : undefined} data-streaming={props.streaming || undefined} data-display-busy={displayBusy() || pendingMathRenders() > 0 ? "true" : undefined} data-display-key={props.displayKey || undefined}>
+    <div class="chat-markdown" data-renderer={rendererId()} data-synthetic-math={props.syntheticMath ? "true" : undefined} data-streaming={props.streaming || undefined} data-display-busy={displayBusy() || pendingMathRenders() > 0 ? "true" : undefined} data-display-animation-busy={displayBusy() ? "true" : undefined} data-pending-math-renders={pendingMathRenders() > 0 ? String(pendingMathRenders()) : undefined} data-display-key={props.displayKey || undefined}>
       <div class="incremark" data-incremark-core="true">
         <Show when={props.inline} fallback={<>
           <Show when={typewriter()} fallback={<ParsedBlockNodes blocks={displayedBlocks} context={context} />}>

@@ -180,6 +180,7 @@ export function MarkedStableMarkdown(props: MarkedStableProps) {
     }
     renderedSource = source;
     renderedVersion = version;
+    queueMicrotask(() => props.onRendered?.());
   });
 
   const click = async (event: MouseEvent) => {

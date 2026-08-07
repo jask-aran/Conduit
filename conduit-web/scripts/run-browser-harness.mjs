@@ -64,6 +64,10 @@ if (!["on", "off"].includes(instrumentation)) throw new Error("--instrumentation
 const renderer = valueAfter(args, "--renderer", "marked");
 if (!["marked-stable", "marked", "incremark", "incremark-typewriter", "incremark-synthetic"].includes(renderer)) throw new Error("--renderer must be marked-stable, marked, incremark, incremark-typewriter, or incremark-synthetic");
 if (args.includes("--typewriter") && !["incremark", "incremark-typewriter", "incremark-synthetic"].includes(renderer)) throw new Error("--typewriter requires an Incremark renderer");
+const rendererContract = fixture?.rendererContracts?.[renderer] || {};
+const resolvedExpectedAssertions = expectedAssertions == null
+  ? rendererContract.expectedAssertions ?? fixture?.expectedAssertions
+  : JSON.parse(expectedAssertions);
 
 const environment = {
   ...process.env,
@@ -82,7 +86,7 @@ const environment = {
   ),
   ...((expectedSemanticText ?? fixture?.expectedSemanticText) == null ? {} : { HARNESS_EXPECTED_SEMANTIC_TEXT: expectedSemanticText ?? fixture.expectedSemanticText }),
   ...((expectedSemanticFingerprint ?? fixture?.expectedSemanticFingerprint) == null ? {} : { HARNESS_EXPECTED_SEMANTIC_FINGERPRINT: JSON.stringify(expectedSemanticFingerprint ? JSON.parse(expectedSemanticFingerprint) : fixture.expectedSemanticFingerprint) }),
-  ...((expectedAssertions ?? fixture?.expectedAssertions) == null ? {} : { HARNESS_EXPECTED_ASSERTIONS: JSON.stringify(expectedAssertions ? JSON.parse(expectedAssertions) : fixture.expectedAssertions) }),
+  ...(resolvedExpectedAssertions == null ? {} : { HARNESS_EXPECTED_ASSERTIONS: JSON.stringify(resolvedExpectedAssertions) }),
   ...((expectedInteractions ?? fixture?.expectedInteractions) == null ? {} : { HARNESS_EXPECTED_INTERACTIONS: JSON.stringify(expectedInteractions ? JSON.parse(expectedInteractions) : fixture.expectedInteractions) }),
   ...(fixture?.scrollProbe ? { HARNESS_SCROLL_PROBE: "1" } : {}),
   HARNESS_INSTRUMENTATION: instrumentation,

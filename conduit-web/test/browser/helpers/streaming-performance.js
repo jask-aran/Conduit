@@ -38,6 +38,7 @@ function summarizeHarnessMetrics(metrics = []) {
   const rendererParserModes = {};
   const rendererIncrementalModes = {};
   const typewriterSamples = [];
+  const typewriterTerminalSamples = [];
   const typewriterSteadyStateSamples = [];
   const changedBlocks = new Set();
   const changedBlockLengths = new Set();
@@ -93,11 +94,12 @@ function summarizeHarnessMetrics(metrics = []) {
     }
     if (metric.stage === "markdown-typewriter") {
       typewriterSamples.push(metric);
+      if (metric.terminal === true) typewriterTerminalSamples.push(metric);
       if (metric.sourceVisibleCharacters >= 500 && metric.displayedVisibleCharacters > 0) {
         typewriterSteadyStateSamples.push(metric);
       }
     }
-    if (metric.renderer === "incremark" && metric.tableAst) {
+    if (metric.renderer?.startsWith("incremark") && metric.tableAst) {
       const signature = JSON.stringify(metric.tableAst);
       if (signature !== lastTableAstSignature) {
         if (tableAstTransitions.length < 128) {
@@ -187,14 +189,16 @@ function summarizeHarnessMetrics(metrics = []) {
       steadyStateBacklogAgeMs: summarizeNumbers(typewriterSteadyStateSamples.map((metric) => metric.backlogAgeMs).filter((value) => typeof value === "number")),
       steadyStateLagTargetMisses: typewriterSteadyStateSamples.filter((metric) => metric.lagTargetMet === false).length,
       last: typewriterSamples.at(-1) || null,
+      terminalSampleCount: typewriterTerminalSamples.length,
+      terminal: typewriterTerminalSamples.at(-1) || null,
     },
   };
 }
 
 function rendererPath(renderer, typewriter = false) {
+  const selectedRenderer = typewriter && renderer === "incremark" ? "incremark-typewriter" : renderer;
   const params = new URLSearchParams({
-    markdownRenderer: renderer,
-    markdownTypewriter: typewriter ? "1" : "0",
+    markdownRenderer: selectedRenderer,
   });
   return `/?${params.toString()}`;
 }
@@ -457,7 +461,7 @@ async function installBrowserProtocol(page, scenario) {
       const root = markdownRoot();
       if (!root || telemetry.promptAt == null) return;
       const visibleText = String(root.textContent || "");
-      const pendingMathNodes = [...root.querySelectorAll('[data-streaming-pending="math-block"], [data-streaming-pending="math-inline"]')];
+      const pendingMathNodes = [...root.querySelectorAll('[data-streaming-pending="math-block"], [data-streaming-pending="math-inline"], .streaming-pending-math-block, .streaming-pending-math-inline')];
       const pendingMathHeights = pendingMathNodes.map((element) => element.getBoundingClientRect().height);
       telemetry.streamingSnapshots.push({
         sourceCharacters: telemetry.streamedText.length,
@@ -465,9 +469,11 @@ async function installBrowserProtocol(page, scenario) {
         rawDollarCount: (visibleText.match(/\$/g) || []).length,
         rawTexDelimiterCount: (visibleText.match(/\\[()[\]]/g) || []).length,
         rawBacktickCount: (visibleText.match(/`/g) || []).length,
-        pendingMathBlockCount: root.querySelectorAll('[data-streaming-pending="math-block"]').length,
-        pendingMathInlineCount: root.querySelectorAll('[data-streaming-pending="math-inline"]').length,
+        pendingMathBlockCount: root.querySelectorAll('[data-streaming-pending="math-block"], .streaming-pending-math-block').length,
+        pendingMathInlineCount: root.querySelectorAll('[data-streaming-pending="math-inline"], .streaming-pending-math-inline').length,
         pendingFenceCount: root.querySelectorAll('[data-streaming-pending="fence"]').length,
+        pendingFenceTextLength: [...root.querySelectorAll('[data-streaming-pending="fence"]')]
+          .reduce((length, element) => Math.max(length, String(element.textContent || "").length), 0),
         pendingMathVisibleCount: pendingMathNodes.filter((element) => {
           const style = getComputedStyle(element);
           return style.visibility !== "hidden" && style.display !== "none" && style.opacity !== "0";
@@ -563,6 +569,7 @@ async function installBrowserProtocol(page, scenario) {
       });
       if (telemetry.promptAt != null && telemetry.lastMathGeometry) {
         const commonCount = Math.min(telemetry.lastMathGeometry.length, mathGeometry.length);
+        let changedMathNode = false;
         for (let index = 0; index < commonCount; index += 1) {
           const previous = telemetry.lastMathGeometry[index];
           const current = mathGeometry[index];
@@ -571,7 +578,7 @@ async function installBrowserProtocol(page, scenario) {
             || Math.abs((previous.katex?.width || 0) - (current.katex?.width || 0)) > 0.5
             || Math.abs((previous.katex?.height || 0) - (current.katex?.height || 0)) > 0.5;
           if (changed) {
-            telemetry.mathGeometryTransitions += 1;
+            changedMathNode = true;
             if (telemetry.mathGeometryEvidence.length < 64) {
               telemetry.mathGeometryEvidence.push({
                 at: performance.now(),
@@ -583,16 +590,21 @@ async function installBrowserProtocol(page, scenario) {
             }
           }
         }
+        if (changedMathNode) telemetry.mathGeometryTransitions += 1;
       }
       telemetry.lastMathGeometry = mathGeometry;
       telemetry.mathGeometry = mathGeometry;
       const incremarkRoot = root.querySelector(".incremark");
+      const scrollViewport = root.closest(".message-scroller-viewport");
+      const scrollTop = scrollViewport instanceof HTMLElement ? scrollViewport.scrollTop : 0;
       if (incremarkRoot) {
         for (const [index, block] of [...incremarkRoot.children].entries()) {
           const value = block.getBoundingClientRect();
           const current = {
             x: Number(value.x.toFixed(2)),
-            y: Number(value.y.toFixed(2)),
+            // Compare document-relative positions. Viewport y changes during
+            // normal follow-scroll are not layout movement of the block.
+            y: Number((value.y + scrollTop).toFixed(2)),
             width: Number(value.width.toFixed(2)),
             height: Number(value.height.toFixed(2)),
           };
@@ -621,6 +633,9 @@ async function installBrowserProtocol(page, scenario) {
                   at: performance.now(),
                   sourceCharacters: telemetry.streamedText.length,
                   index,
+                  tag: block.tagName,
+                  textLength: String(block.textContent || "").length,
+                  textSample: String(block.textContent || "").slice(0, 96),
                   previous: previous.rect,
                   current,
                 });
@@ -1354,6 +1369,13 @@ function streamingPresentationEvidence(assertion, snapshots, sourceText) {
         sourceCharacterSamples: snapshots.map((snapshot) => snapshot.sourceCharacters),
         candidateSnapshotCount: candidates.length,
         delimiterCleanSnapshotCount: delimiterClean.length,
+        rawDelimiterSamples: candidates
+          .filter((snapshot) => snapshot.rawDollarCount > 0 || snapshot.rawTexDelimiterCount > 0)
+          .map((snapshot) => ({
+            sourceCharacters: snapshot.sourceCharacters,
+            rawDollarCount: snapshot.rawDollarCount,
+            rawTexDelimiterCount: snapshot.rawTexDelimiterCount,
+          })),
       },
     };
   }
@@ -1372,6 +1394,14 @@ function streamingPresentationEvidence(assertion, snapshots, sourceText) {
     : assertion.kind === "math-inline" ? snapshot.pendingMathInlineCount : snapshot.pendingFenceCount);
   if (assertion.requirePendingNode && !pendingCount.some((count) => count > 0)) {
     errors.push(`Open ${assertion.kind} did not produce a pending presentation node`);
+  }
+  if (assertion.requirePendingGrowth && assertion.kind === "fence") {
+    const fenceLengths = candidates
+      .filter((snapshot) => snapshot.pendingFenceCount > 0)
+      .map((snapshot) => snapshot.pendingFenceTextLength);
+    if (fenceLengths.length < 2 || Math.max(...fenceLengths) <= Math.min(...fenceLengths)) {
+      errors.push("Open fence presentation did not grow with later source deltas");
+    }
   }
   if (assertion.requireHiddenPending && candidates.some((snapshot) => snapshot.pendingMathVisibleCount !== 0 || snapshot.pendingMathTextLength !== 0)) {
     errors.push(`Open ${assertion.kind} exposed visible or textual pending math`);
@@ -1405,6 +1435,13 @@ function streamingPresentationEvidence(assertion, snapshots, sourceText) {
       sourceCharacterSamples: snapshots.map((snapshot) => snapshot.sourceCharacters),
       candidateSnapshotCount: candidates.length,
       delimiterCleanSnapshotCount: delimiterClean.length,
+      rawDelimiterSamples: candidates
+        .filter((snapshot) => snapshot.rawDollarCount > 0 || snapshot.rawTexDelimiterCount > 0)
+        .map((snapshot) => ({
+          sourceCharacters: snapshot.sourceCharacters,
+          rawDollarCount: snapshot.rawDollarCount,
+          rawTexDelimiterCount: snapshot.rawTexDelimiterCount,
+        })),
       pendingNodeCount: {
         min: pendingCount.length ? Math.min(...pendingCount) : 0,
         max: pendingCount.length ? Math.max(...pendingCount) : 0,
@@ -1447,10 +1484,35 @@ export async function runBrowserStreamingScenario(page, scenario) {
     const typewriterRenderer = renderer === "incremark" ? "incremark-typewriter" : renderer;
     const typewriterSelector = `.chat-markdown[data-renderer="${typewriterRenderer}"]`;
     await page.waitForSelector(typewriterSelector, { state: "attached", timeout: 15_000 });
-    await page.waitForFunction((selector) => {
-      const roots = [...document.querySelectorAll(selector)];
-      return roots.length > 0 && roots.every((root) => root.getAttribute("data-display-busy") !== "true");
-    }, typewriterSelector, { timeout: 15_000 });
+    try {
+      await page.waitForFunction((selector) => {
+        const roots = [...document.querySelectorAll(selector)];
+        return roots.length > 0 && roots.every((root) => root.getAttribute("data-display-busy") !== "true");
+      }, typewriterSelector, { timeout: 15_000 });
+    } catch (error) {
+      const state = await page.evaluate((selector) => [...document.querySelectorAll(selector)].map((root) => ({
+        renderer: root.getAttribute("data-renderer"),
+        busy: root.getAttribute("data-display-busy"),
+        animationBusy: root.getAttribute("data-display-animation-busy"),
+        pendingMathRenders: root.getAttribute("data-pending-math-renders"),
+        streaming: root.getAttribute("data-streaming"),
+        textLength: String(root.textContent || "").length,
+        pendingMath: root.querySelectorAll('[data-streaming-pending^="math-"]').length,
+        pendingFence: root.querySelectorAll('[data-streaming-pending="fence"]').length,
+        recentTypewriterMetrics: (window.__conduitHarness?.metrics || [])
+          .filter((metric) => metric.stage === "markdown-typewriter")
+          .slice(-8)
+          .map((metric) => ({
+            source: metric.sourceVisibleCharacters,
+            displayed: metric.displayedVisibleCharacters,
+            backlog: metric.backlogCharacters,
+            terminal: metric.terminal,
+            native: metric.nativeTransformer,
+            at: metric.at,
+          })),
+      })), typewriterSelector);
+      throw new Error(`${error.message}; typewriter roots=${JSON.stringify(state)}`);
+    }
   }
   // onAllComplete clears data-display-busy before Solid commits the final
   // display nodes. Measure and read correctness after two paint boundaries.

@@ -2,7 +2,7 @@ type MarkdownNode = any;
 
 export type TableMathProjection = {
   source: string;
-  sentinel: string;
+  sentinel: string | null;
   pipeRepairs: number;
 };
 
@@ -56,18 +56,35 @@ function tableLineMask(lines: Array<{ text: string }>) {
   return mask;
 }
 
-function chooseSentinel(source: string) {
+function chooseSentinel(source: string): string | null {
   for (let codePoint = FIRST_SENTINEL; codePoint <= LAST_SENTINEL; codePoint += 1) {
     const candidate = String.fromCodePoint(codePoint);
     if (!source.includes(candidate)) return candidate;
   }
-  return "\uE000";
+  return null;
 }
 
 type MathMode = "dollar-inline" | "dollar-block" | "tex-inline" | "tex-block";
 
+function nextUnescapedPipe(source: string, start: number) {
+  for (let index = start; index < source.length; index += 1) {
+    if (source[index] === "|" && !isEscaped(source, index)) return index;
+  }
+  return -1;
+}
+
+function shouldProtectUnclosedInlinePipe(line: string, pipeIndex: number, mathStart: number) {
+  const body = line.slice(mathStart, pipeIndex);
+  if (/\s$/.test(body) || !/[\\^_{}=]/.test(body)) return false;
+  const nextPipe = nextUnescapedPipe(line, pipeIndex + 1);
+  const following = line.slice(pipeIndex + 1, nextPipe < 0 ? line.length : nextPipe);
+  return !/\s/.test(following);
+}
+
 function projectTableLine(line: string, sentinel: string, convertTexDisplayDelimiters: boolean) {
   let mode: MathMode | null = null;
+  let mathStart = 0;
+  let mathComplete = false;
   let codeLength = 0;
   let pipeRepairs = 0;
   let output = "";
@@ -93,57 +110,77 @@ function projectTableLine(line: string, sentinel: string, convertTexDisplayDelim
     if (mode === "dollar-block" && line.startsWith("$$", index) && !isEscaped(line, index)) {
       output += "$$";
       mode = null;
+      mathComplete = true;
       index += 1;
       continue;
     }
     if (mode === "tex-block" && line.startsWith("\\]", index) && !isEscaped(line, index)) {
       output += convertTexDisplayDelimiters ? "$$" : "\\]";
       mode = null;
+      mathComplete = true;
       index += 1;
       continue;
     }
     if (mode === "dollar-inline" && character === "$" && !isEscaped(line, index) && !/\s/.test(line[index - 1] || "")) {
       output += character;
       mode = null;
+      mathComplete = true;
       continue;
     }
     if (mode === "tex-inline" && line.startsWith("\\)", index) && !isEscaped(line, index)) {
       output += "\\)";
       mode = null;
+      mathComplete = true;
       index += 1;
       continue;
     }
     if (mode) {
-      if (character === "|" && !isEscaped(line, index)) {
+      const protectPipe = mathComplete
+        || mode !== "dollar-inline"
+        || (character === "|" && !isEscaped(line, index) && shouldProtectUnclosedInlinePipe(line, index, mathStart));
+      if (character === "|" && !isEscaped(line, index) && protectPipe) {
         output += sentinel;
         pipeRepairs += 1;
       } else {
+        if (character === "|" && !isEscaped(line, index)) mode = null;
         output += character;
       }
       continue;
     }
 
     if (line.startsWith("$$", index) && !isEscaped(line, index)) {
+      const close = findUnescapedDelimiter(line, "$$", index + 2);
       output += "$$";
       mode = "dollar-block";
+      mathStart = index + 2;
+      mathComplete = close >= 0;
       index += 1;
       continue;
     }
     if (line.startsWith("\\[", index) && !isEscaped(line, index)) {
+      const close = findUnescapedDelimiter(line, "\\]", index + 2);
       output += convertTexDisplayDelimiters ? "$$" : "\\[";
       mode = "tex-block";
+      mathStart = index + 2;
+      mathComplete = close >= 0;
       index += 1;
       continue;
     }
     if (line.startsWith("\\(", index) && !isEscaped(line, index)) {
+      const close = findUnescapedDelimiter(line, "\\)", index + 2);
       output += "\\(";
       mode = "tex-inline";
+      mathStart = index + 2;
+      mathComplete = close >= 0;
       index += 1;
       continue;
     }
     if (character === "$" && !isEscaped(line, index) && line[index + 1] !== "$" && line[index + 1] && !/[\s\d]/.test(line[index + 1]!)) {
       output += character;
+      const close = findInlineDollarClose(line, index + 1);
       mode = "dollar-inline";
+      mathStart = index + 1;
+      mathComplete = close >= 0;
       continue;
     }
     output += character;
@@ -152,8 +189,25 @@ function projectTableLine(line: string, sentinel: string, convertTexDisplayDelim
   return { source: output, pipeRepairs };
 }
 
+function findUnescapedDelimiter(source: string, delimiter: string, start: number) {
+  for (let index = start; index <= source.length - delimiter.length; index += 1) {
+    if (source.startsWith(delimiter, index) && !isEscaped(source, index)) return index;
+  }
+  return -1;
+}
+
+function findInlineDollarClose(source: string, start: number) {
+  for (let index = start; index < source.length; index += 1) {
+    if (source[index] !== "$" || source[index + 1] === "$" || isEscaped(source, index)) continue;
+    if (/\s/.test(source[index - 1] || "")) continue;
+    return index;
+  }
+  return -1;
+}
+
 export function projectTableMathSource(source: string, options: { convertTexDisplayDelimiters?: boolean; sentinel?: string } = {}): TableMathProjection {
   const sentinel = options.sentinel && !source.includes(options.sentinel) ? options.sentinel : chooseSentinel(source);
+  if (!sentinel) return { source, sentinel: null, pipeRepairs: 0 };
   const lines = splitLines(source);
   const tableLines = tableLineMask(lines);
   let pipeRepairs = 0;
@@ -166,11 +220,11 @@ export function projectTableMathSource(source: string, options: { convertTexDisp
   return { source: projected, sentinel, pipeRepairs };
 }
 
-export function restoreTableMathSentinel(value: string, sentinel: string) {
-  return value.replaceAll(sentinel, "|");
+export function restoreTableMathSentinel(value: string, sentinel: string | null) {
+  return sentinel ? value.replaceAll(sentinel, "|") : value;
 }
 
-export function restoreTableMathAst(node: MarkdownNode, sentinel: string): MarkdownNode {
+export function restoreTableMathAst(node: MarkdownNode, sentinel: string | null): MarkdownNode {
   if (!node || typeof node !== "object") return node;
   let changed = false;
   const next: MarkdownNode = { ...node };

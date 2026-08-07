@@ -38,12 +38,23 @@ test("the five renderer preferences stay distinct", () => {
   }
 });
 
-test("the legacy Incremark preference maps through the old Typewriter key", () => {
+test("Immediate remains distinct from the retired Typewriter storage key", () => {
   withBrowserSettings("", { "conduit:markdown-renderer": "incremark", "conduit:incremark-typewriter": "0" }, () => {
     assert.equal(selectedMarkdownRenderer(), "incremark");
     assert.equal(selectedMarkdownTypewriter(), false);
   });
   withBrowserSettings("", { "conduit:markdown-renderer": "incremark", "conduit:incremark-typewriter": "1" }, () => {
+    assert.equal(selectedMarkdownRenderer(), "incremark");
+    assert.equal(selectedMarkdownTypewriter(), false);
+  });
+});
+
+test("the legacy URL override still selects the explicit renderer when no renderer is stored", () => {
+  withBrowserSettings("?markdownTypewriter=0", {}, () => {
+    assert.equal(selectedMarkdownRenderer(), "incremark");
+    assert.equal(selectedMarkdownTypewriter(), false);
+  });
+  withBrowserSettings("?markdownTypewriter=1", {}, () => {
     assert.equal(selectedMarkdownRenderer(), "incremark-typewriter");
     assert.equal(selectedMarkdownTypewriter(), true);
   });

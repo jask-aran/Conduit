@@ -26,7 +26,7 @@ test("production dist exposes PWA shell without /v0 runtime caching", { skip: !h
 
   const swText = fs.readFileSync(path.join(dist, serviceWorker), "utf8");
   assert.match(swText, /denylist:\[[^\]]*\/v0/, "NavigationRoute denylist must exclude /v0");
-  assert.match(swText, /\/login[^\]]*\\?/, "NavigationRoute denylist must exclude /login query navigations");
+  assert.equal(swText.includes("/^\\/login(?:\\?.*)?$/"), true, "NavigationRoute denylist must exclude /login query navigations");
   const withoutDenylist = swText.replace(/denylist:\[[^\]]*\]/g, "denylist:[]");
   assert.equal(/\/v0\b/.test(withoutDenylist), false, "sw.js must not mention /v0 outside the denylist");
   assert.equal(/runtimeCaching/i.test(swText), false, "sw.js must not enable Workbox runtimeCaching");
