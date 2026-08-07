@@ -19,6 +19,7 @@
     "perf:live": "node scripts/run-live-harness.mjs",
     "test:browser": "playwright test",
     "test:browser:setpieces": "playwright test test/browser/auth.spec.js test/browser/palette.spec.js test/browser/app.spec.js --project=desktop-chromium --workers=1 --grep \"unauthenticated visit|correct password reaches|browses grouped commands|creates a durable chat route|reconnects a live chat after socket loss\" && playwright test test/browser/app.spec.js --project=desktop-chromium --workers=1 --grep \"Workspace views use the nested palette page\" && playwright test test/browser/pwa-mobile.spec.js --workers=1 --grep \"acceptance:\"",
+    "test:browser:setpieces:ci": "playwright test test/browser/palette.spec.js test/browser/app.spec.js --project=desktop-chromium --workers=1 --grep \"browses grouped commands|creates a durable chat route|reconnects a live chat after socket loss\" && playwright test test/browser/app.spec.js --project=desktop-chromium --workers=1 --grep \"Workspace views use the nested palette page\" && playwright test test/browser/pwa-mobile.spec.js --workers=1 --grep \"acceptance:\"",
     "test:terminal-performance": "PERF=1 playwright test test/browser/terminal-performance.spec.js --project=desktop-chromium --workers=1",
     "test:terminal-performance:throttled": "PERF=1 PERF_CPU_RATE=4 playwright test test/browser/terminal-performance.spec.js --project=desktop-chromium --workers=1",
     "test:browser:headed": "playwright test --headed",

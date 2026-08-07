@@ -25,4 +25,4 @@ jobs:
           cache-dependency-path: conduit-web/package-lock.json
       - run: npm ci
       - run: npx playwright install --with-deps chromium
-      - run: npm run test:browser:setpieces
+      - run: npm run test:browser:setpieces:ci
