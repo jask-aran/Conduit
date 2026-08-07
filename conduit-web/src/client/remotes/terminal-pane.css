@@ -1,0 +1,73 @@
+.terminal-pane-body {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex: 1;
+  overflow: hidden;
+  background: var(--conduit-terminal-background, #121315);
+}
+
+.terminal-pane-body .terminal-canvas {
+  width: 100%;
+  height: 100%;
+  flex: 1;
+  background: var(--conduit-terminal-background, #121315);
+}
+
+.terminal-canvas[data-active="false"] {
+  visibility: hidden;
+}
+
+.terminal-pane-body .terminal-pane-empty,
+.terminal-pane-state {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  background: color-mix(in oklch, var(--background), black 9%);
+}
+
+.terminal-pane-state {
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 10px;
+  padding: 28px;
+  text-align: center;
+}
+
+.terminal-pane-state strong {
+  color: var(--foreground);
+  font-size: 13px;
+  font-weight: 560;
+}
+
+.terminal-pane-warning,
+.terminal-pane-error {
+  position: absolute;
+  z-index: 4;
+  right: 10px;
+  bottom: 10px;
+  max-width: min(440px, calc(100% - 20px));
+  margin: 0;
+  padding: 7px 9px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: color-mix(in oklch, var(--popover), transparent 4%);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 28%);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.terminal-pane-warning {
+  color: var(--muted-foreground);
+}
+
+.terminal-pane-error {
+  border-color: color-mix(in oklch, var(--destructive), transparent 45%);
+  color: var(--destructive);
+}
+
+.terminal-pane-warning + .terminal-pane-error {
+  bottom: 58px;
+}

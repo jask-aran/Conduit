@@ -6,6 +6,7 @@ import nodePty from "node-pty";
 
 export const PTY_MAX_SESSIONS = 8;
 export const PTY_SCROLLBACK_BYTES = 256 * 1024;
+export const PTY_REPLAY_PREFIX = "CONDUIT-PTY-REPLAY/1\n";
 
 const TEMPLATES = {
   shell: {
@@ -33,34 +34,73 @@ function view(record) {
   };
 }
 
-class ScrollbackBuffer {
+function encodeReplay(events) {
+  const payload = events.map((event) => event.type === "data"
+    ? { type: "data", data: event.bytes.toString("base64") }
+    : { type: "resize", cols: event.cols, rows: event.rows });
+  return Buffer.from(`${PTY_REPLAY_PREFIX}${JSON.stringify(payload)}`, "utf8");
+}
+
+class ReplayBuffer {
   constructor(limit) {
     this.limit = limit;
-    this.chunks = [];
+    this.events = [];
     this.length = 0;
+    this.complete = true;
   }
 
-  append(value) {
-    const chunk = Buffer.from(value);
-    this.chunks.push(chunk);
-    this.length += chunk.length;
-    while (this.length > this.limit && this.chunks.length) {
-      const first = this.chunks[0];
-      const excess = this.length - this.limit;
-      if (first.length <= excess) {
-        this.chunks.shift();
-        this.length -= first.length;
-      } else {
-        this.chunks[0] = first.subarray(excess);
-        this.length -= excess;
-      }
+  appendData(value) {
+    const bytes = Buffer.from(value);
+    if (!this.complete) return bytes;
+    if (this.length + bytes.length > this.limit) {
+      // A tail is not a terminal snapshot. Once any prefix is lost, discard the
+      // journal rather than retaining bytes that may begin inside UTF-8/CSI/OSC
+      // state or omit an earlier alternate-screen/palette transition.
+      this.complete = false;
+      this.events = [];
+      this.length = 0;
+      return bytes;
     }
-    return chunk;
+    this.events.push({ type: "data", bytes });
+    this.length += bytes.length;
+    return bytes;
+  }
+
+  appendResize(cols, rows) {
+    if (!this.complete) return;
+    const previous = this.events.at(-1);
+    if (previous?.type === "resize" && previous.cols === cols && previous.rows === rows) return;
+    this.events.push({ type: "resize", cols, rows });
   }
 
   snapshot() {
-    return Buffer.concat(this.chunks, this.length);
+    if (!this.complete) return Buffer.alloc(0);
+    const chunks = this.events.filter((event) => event.type === "data").map((event) => event.bytes);
+    return Buffer.concat(chunks, this.length);
   }
+
+  replay() {
+    const events = this.complete
+      ? this.events.map((event) => event.type === "data" ? { type: "data", bytes: Buffer.from(event.bytes) } : { ...event })
+      : [];
+    return {
+      complete: this.complete,
+      events,
+      bytes: this.complete ? encodeReplay(events) : Buffer.alloc(0),
+    };
+  }
+}
+
+function latestPerProject(items) {
+  const latest = new Map();
+  for (const item of items) {
+    if (!item?.id || !item.projectId || !TEMPLATES[item.templateId]) continue;
+    const previous = latest.get(item.projectId);
+    const previousAt = String(previous?.updatedAt || previous?.createdAt || "");
+    const itemAt = String(item.updatedAt || item.createdAt || "");
+    if (!previous || itemAt >= previousAt) latest.set(item.projectId, item);
+  }
+  return [...latest.values()];
 }
 
 export class PtyManager extends EventEmitter {
@@ -80,9 +120,14 @@ export class PtyManager extends EventEmitter {
     let persisted = { version: 1, sessions: [] };
     try { persisted = JSON.parse(await fs.readFile(this.filePath, "utf8")); }
     catch (error) { if (error.code !== "ENOENT") throw error; }
-    for (const item of Array.isArray(persisted.sessions) ? persisted.sessions : []) {
-      if (!item?.id || !item.projectId || !TEMPLATES[item.templateId]) continue;
-      this.records.set(item.id, { ...item, status: "exited", exitCode: null, signal: "server_restart", updatedAt: new Date().toISOString() });
+    for (const item of latestPerProject(Array.isArray(persisted.sessions) ? persisted.sessions : [])) {
+      this.records.set(item.id, {
+        ...item,
+        status: "exited",
+        exitCode: null,
+        signal: "server_restart",
+        updatedAt: new Date().toISOString(),
+      });
     }
     await this.persist();
     return this.list();
@@ -91,26 +136,49 @@ export class PtyManager extends EventEmitter {
   list() { return [...this.records.values()].map(view).sort((a, b) => b.createdAt.localeCompare(a.createdAt)); }
   get(id) { const record = this.records.get(id); return record ? view(record) : null; }
   output(id) { return this.scrollback.get(id)?.snapshot() || Buffer.alloc(0); }
+  replay(id) {
+    const buffer = this.scrollback.get(id);
+    if (!buffer) return { complete: false, events: [], bytes: Buffer.alloc(0) };
+    return buffer.replay();
+  }
 
   async create({ project, cwd, templateId = "shell", cols = 80, rows = 24 }) {
     const template = TEMPLATES[templateId];
     if (!template) throw failure("pty_template_not_allowed", "That terminal template is not available");
     if (!project?.id) throw failure("pty_project_required", "A terminal must belong to a project");
     if (!cwd || !path.isAbsolute(cwd)) throw failure("pty_cwd_required", "Terminal working directory is unavailable");
+    let cwdStat;
+    try { cwdStat = await fs.stat(cwd); }
+    catch (error) {
+      if (error.code === "ENOENT") throw failure("pty_cwd_unavailable", "Terminal working directory does not exist on this server");
+      throw error;
+    }
+    if (!cwdStat.isDirectory()) throw failure("pty_cwd_unavailable", "Terminal working directory is not a directory");
     const resident = [...this.records.values()].find((item) => item.projectId === project.id && item.status === "running");
     if (resident) return view(resident);
     if (this.handles.size >= this.maxSessions) throw failure("pty_capacity_reached", "The terminal session limit has been reached");
+
+    for (const item of [...this.records.values()]) {
+      if (item.projectId !== project.id || item.status === "running") continue;
+      this.records.delete(item.id);
+      this.scrollback.delete(item.id);
+    }
+
+    const width = Math.max(1, Math.min(500, Math.trunc(Number(cols)) || 80));
+    const height = Math.max(1, Math.min(500, Math.trunc(Number(rows)) || 24));
     const id = crypto.randomUUID();
     const now = new Date().toISOString();
     const record = { id, projectId: project.id, templateId, title: template.title, status: "running", createdAt: now, updatedAt: now, exitCode: null, signal: null };
     const env = { ...process.env, TERM: "xterm-256color", COLORTERM: "truecolor" };
     delete env.NO_COLOR;
-    const handle = this.pty.spawn(template.command, template.args, { name: "xterm-256color", cols: Math.max(1, Math.trunc(cols)), rows: Math.max(1, Math.trunc(rows)), cwd, env });
+    const handle = this.pty.spawn(template.command, template.args, { name: "xterm-256color", cols: width, rows: height, cwd, env });
+    const replay = new ReplayBuffer(this.scrollbackBytes);
+    replay.appendResize(width, height);
     this.records.set(id, record);
     this.handles.set(id, handle);
-    this.scrollback.set(id, new ScrollbackBuffer(this.scrollbackBytes));
+    this.scrollback.set(id, replay);
     handle.onData((data) => {
-      const bytes = this.scrollback.get(id)?.append(data);
+      const bytes = this.scrollback.get(id)?.appendData(data);
       if (!bytes) return;
       this.emit("output", { id, bytes });
     });
@@ -120,6 +188,7 @@ export class PtyManager extends EventEmitter {
       this.handles.delete(id);
       Object.assign(current, { status: "exited", exitCode: exitCode ?? null, signal: signal ?? null, updatedAt: new Date().toISOString() });
       this.emit("exit", view(current));
+      this.scrollback.delete(id);
       void this.persist();
     });
     await this.persist();
@@ -151,16 +220,35 @@ export class PtyManager extends EventEmitter {
     if (!handle) throw failure("pty_not_running", "Terminal is not running");
     if (!Number.isInteger(width) || !Number.isInteger(height) || width < 1 || width > 500 || height < 1 || height > 500) throw failure("pty_resize_invalid", "Terminal dimensions are out of range");
     handle.resize(width, height);
+    this.scrollback.get(id)?.appendResize(width, height);
   }
 
   async remove(id) {
+    const record = this.records.get(id);
+    if (!record) return false;
     const handle = this.handles.get(id);
-    if (handle) handle.kill();
-    const existed = this.records.delete(id);
+    this.records.delete(id);
     this.handles.delete(id);
     this.scrollback.delete(id);
-    if (existed) await this.persist();
-    return existed;
+    handle?.kill();
+    this.emit("removed", { id, projectId: record.projectId });
+    await this.persist();
+    return true;
+  }
+
+  async removeProject(projectId) {
+    const matching = [...this.records.values()].filter((item) => item.projectId === projectId);
+    if (!matching.length) return 0;
+    for (const record of matching) {
+      const handle = this.handles.get(record.id);
+      this.records.delete(record.id);
+      this.handles.delete(record.id);
+      this.scrollback.delete(record.id);
+      handle?.kill();
+      this.emit("removed", { id: record.id, projectId });
+    }
+    await this.persist();
+    return matching.length;
   }
 
   async stopAll() {
