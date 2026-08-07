@@ -17,10 +17,6 @@ async function availablePort() {
   });
 }
 
-function escapeRegExp(value) {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
 async function fakePi(root) {
   const conduitPi = path.join(root, "conduit-pi");
   await fs.writeFile(conduitPi, `#!/usr/bin/env node
@@ -127,10 +123,9 @@ test("correct password reaches the app, reload stays authenticated, logout retur
   test.skip(isMobile, "sidebar footer is rendered behind the mobile sheet; covered by the desktop run");
   await page.goto(server.origin, { waitUntil: "domcontentloaded" });
   await page.getByLabel("Password").fill("fixture-pw");
-  await Promise.all([
-    page.waitForURL(new RegExp(`^${escapeRegExp(server.origin)}/chat/`, "i"), { timeout: 30_000 }),
-    page.getByRole("button", { name: "Sign in" }).click(),
-  ]);
+  await page.getByRole("button", { name: "Sign in" }).click();
+  await expect.poll(() => new URL(page.url()).pathname, { timeout: 30_000 })
+    .toMatch(/^\/chat\/[0-9a-f-]+$/i);
   const currentUrl = new URL(page.url());
   expect(currentUrl.pathname).toMatch(/^\/chat\/[0-9a-f-]+$/i);
   const durableUrl = page.url();
