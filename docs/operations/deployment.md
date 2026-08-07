@@ -89,6 +89,12 @@ log, and health response all carry the full commit SHA. The Node base image is
 pinned by multi-platform digest, npm installs from `package-lock.json`, and the
 bundled Pi packages remain exact versions.
 
+Tagged releases also require a short committed changelog at
+`docs/releases/<tag>.md`, for example `docs/releases/v0.3.2.md`. The publish
+workflow checks this file before it builds or pushes the image, then uses it as
+the GitHub release body. Keep the file to 40 lines or fewer and describe the
+user-visible changes and any important deployment note.
+
 Deploying a packaged release is the same two-step flow:
 
 ```bash
