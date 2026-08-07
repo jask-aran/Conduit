@@ -7,6 +7,7 @@ import { AttachmentCards } from "./attachments";
 import { TurnTrace } from "./turn-trace";
 import { createTimelineStore } from "../state/timeline-store";
 import type { MarkdownRendererId } from "./markdown-settings";
+import { mountTranscriptPanelMotion } from "./transcript-motion";
 
 const ChatMarkdown = lazy(() => import("./markdown").then((module) => ({ default: module.ChatMarkdown })));
 function Actions(props: { message: Message; precedingUserId?: string; chat: ActiveChatStore; partialContinue: boolean }) {
@@ -25,11 +26,16 @@ function Actions(props: { message: Message; precedingUserId?: string; chat: Acti
 }
 
 export function Transcript(props: { chat: ActiveChatStore; partialContinue: boolean; markdownRenderer: MarkdownRendererId }) {
+  let transcriptRoot!: HTMLDivElement;
+  let motionShell!: HTMLDivElement;
   let viewport!: HTMLDivElement;
   let thread!: HTMLDivElement;
   let previousLoaded: string | null = null;
   let historyLoad: Promise<void> | null = null;
   let layoutEpoch = 0;
+  let virtualizationEpoch = 0;
+  let virtualizationFrame: number | null = null;
+  let virtualizationIdle: number | null = null;
   const [following, setFollowing] = createSignal(true);
   const markdownRenderer = () => props.markdownRenderer;
   const rendererUsesTypewriter = () => markdownRenderer() === "incremark-typewriter" || markdownRenderer() === "incremark-synthetic";
@@ -42,12 +48,18 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
   const empty = createMemo(() => !timeline.length && !props.chat.activity()?.label);
 
   let scrollFrame: number | null = null;
+  let programmaticScrollTop: number | null = null;
+  const setViewportScrollTop = (next: number) => {
+    programmaticScrollTop = next;
+    viewport.scrollTop = next;
+    programmaticScrollTop = viewport.scrollTop;
+  };
   const scrollBottomNow = () => {
     if (scrollFrame != null) {
       cancelAnimationFrame(scrollFrame);
       scrollFrame = null;
     }
-    viewport.scrollTop = viewport.scrollHeight;
+    setViewportScrollTop(viewport.scrollHeight);
     if (viewport.scrollTop < 240) loadEarlier();
   };
   const scrollBottom = () => {
@@ -77,7 +89,7 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
     const previousHeight = viewport.scrollHeight;
     const previousTop = viewport.scrollTop;
     const restoreAnchor = () => {
-      viewport.scrollTop = previousTop + viewport.scrollHeight - previousHeight;
+      setViewportScrollTop(previousTop + viewport.scrollHeight - previousHeight);
     };
     historyLoad = props.chat.loadOlder().then((loaded) => {
       if (!loaded) return;
@@ -97,6 +109,33 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
   createRenderEffect(() => {
     props.chat.loadedId();
     layoutEpoch += 1;
+  });
+  const cancelVirtualizationPreparation = () => {
+    virtualizationEpoch += 1;
+    if (virtualizationFrame != null) cancelAnimationFrame(virtualizationFrame);
+    if (virtualizationIdle != null) cancelIdleCallback(virtualizationIdle);
+    virtualizationFrame = null;
+    virtualizationIdle = null;
+  };
+  const prepareVirtualizedLayout = () => {
+    cancelVirtualizationPreparation();
+    delete transcriptRoot.dataset.layoutVirtualized;
+    const epoch = virtualizationEpoch;
+    void document.fonts.ready.then(() => {
+      if (epoch !== virtualizationEpoch) return;
+      virtualizationFrame = requestAnimationFrame(() => {
+        virtualizationFrame = null;
+        if (epoch !== virtualizationEpoch) return;
+        virtualizationIdle = requestIdleCallback(() => {
+          virtualizationIdle = null;
+          if (epoch === virtualizationEpoch) transcriptRoot.dataset.layoutVirtualized = "true";
+        }, { timeout: 2500 });
+      });
+    });
+  };
+  createEffect(() => {
+    props.chat.loadedId();
+    prepareVirtualizedLayout();
   });
   createEffect(() => {
     const loaded = props.chat.loadedId();
@@ -119,7 +158,13 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
   let pulling = false;
 
   onMount(() => {
+    const unmountPanelMotion = mountTranscriptPanelMotion(transcriptRoot, motionShell);
     const onScroll = () => {
+      if (programmaticScrollTop != null && Math.abs(viewport.scrollTop - programmaticScrollTop) < 1) {
+        programmaticScrollTop = null;
+        return;
+      }
+      programmaticScrollTop = null;
       setFollowing(viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight < 80);
       if (viewport.scrollTop < 240) loadEarlier();
     };
@@ -160,7 +205,7 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
     viewport.addEventListener("touchend", onTouchEnd);
     viewport.addEventListener("touchcancel", onTouchEnd);
     const resizeObserver = new ResizeObserver(() => {
-      if (following()) scrollBottomNow();
+      if (following()) scrollBottom();
     });
     resizeObserver.observe(thread);
     onCleanup(() => {
@@ -172,17 +217,20 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
       viewport.removeEventListener("touchend", onTouchEnd);
       viewport.removeEventListener("touchcancel", onTouchEnd);
       if (scrollFrame != null) cancelAnimationFrame(scrollFrame);
+      cancelVirtualizationPreparation();
+      unmountPanelMotion();
     });
   });
 
-  return <div class="transcript" data-slot="message-scroller" data-markdown-renderer={markdownRenderer()} data-markdown-typewriter={rendererUsesTypewriter() ? "true" : undefined} data-markdown-synthetic-math={markdownRenderer() === "incremark-synthetic" ? "true" : undefined}>
+  return <div ref={transcriptRoot} class="transcript" data-slot="message-scroller" data-markdown-renderer={markdownRenderer()} data-markdown-typewriter={rendererUsesTypewriter() ? "true" : undefined} data-markdown-synthetic-math={markdownRenderer() === "incremark-synthetic" ? "true" : undefined}>
     <Show when={empty() && pullDistance() > 8}>
       <div class="empty-pull-hint" data-visible="true" data-armed={pullArmed() ? "true" : "false"} aria-hidden="true">
         {pullArmed() ? "Release to refresh" : "Pull to refresh"}
       </div>
     </Show>
-    <div ref={viewport} class="message-scroller-viewport" data-slot="message-scroller-viewport">
-      <div ref={thread} class="thread" data-slot="message-scroller-content" style={empty() && pullDistance() > 0 ? { transform: `translateY(${pullDistance()}px)` } : undefined}>
+    <div ref={motionShell} class="transcript-motion-shell">
+      <div ref={viewport} class="message-scroller-viewport" data-slot="message-scroller-viewport">
+        <div ref={thread} class="thread" data-slot="message-scroller-content" style={empty() && pullDistance() > 0 ? { transform: `translateY(${pullDistance()}px)` } : undefined}>
         <Show when={props.chat.loadingOlder()}>
           <div data-slot="message-scroller-item" class="flex justify-center" role="status" aria-label="Loading earlier messages"><Spinner /></div>
         </Show>
@@ -214,8 +262,9 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
             </article>
           </div>;
         }}</For>
+        </div>
       </div>
+      <Show when={!following()}><Button class="message-scroller-button" aria-label="Scroll to latest" onClick={() => { setFollowing(true); scrollBottom(); }}>↓</Button></Show>
     </div>
-    <Show when={!following()}><Button class="message-scroller-button" aria-label="Scroll to latest" onClick={() => { setFollowing(true); scrollBottom(); }}>↓</Button></Show>
   </div>;
 }

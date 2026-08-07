@@ -10,20 +10,34 @@ function rule(styles, selector) {
   return styles.match(new RegExp(`${escaped}\\s*\\{([^}]+)\\}`))?.[1] ?? "";
 }
 
-test("desktop panels remain docked and resize the center chat surface", async () => {
+test("desktop panel shells commit atomically while bounded surfaces animate", async () => {
   const styles = await fs.readFile(stylesPath, "utf8");
   const sidebar = rule(styles, ".conduit-sidebar");
   const collapsedSidebar = rule(styles, ".conduit-sidebar[data-state=\"collapsed\"]");
   const workspace = rule(styles, ".workspace-panel");
   const openWorkspace = rule(styles, ".workspace-panel.workspace-panel-open");
+  const workspaceSurface = rule(styles, ".workspace-panel-surface");
 
   assert.match(sidebar, /width:\s*244px/);
-  assert.match(sidebar, /transition:\s*width/);
+  assert.match(sidebar, /overflow:\s*visible/);
+  assert.doesNotMatch(sidebar, /transition:[^;]*width/);
   assert.match(collapsedSidebar, /width:\s*52px/);
   assert.match(workspace, /position:\s*relative/);
   assert.match(workspace, /width:\s*0/);
-  assert.match(workspace, /transition:[^;]*width/);
-  assert.match(openWorkspace, /width:\s*var\(--workspace-panel-width\)/);
+  assert.doesNotMatch(workspace, /transition:[^;]*width/);
+  assert.match(openWorkspace, /pointer-events:\s*auto/);
+  assert.match(workspaceSurface, /width:\s*var\(--workspace-panel-width\)/);
+  assert.match(workspaceSurface, /position:\s*absolute/);
+  assert.match(workspaceSurface, /right:\s*0/);
+  assert.match(workspaceSurface, /contain:\s*layout paint/);
+  assert.doesNotMatch(styles, /\.workspace-resizing \.chat-meteors/);
+  const transcriptMotionShell = rule(styles, ".transcript-motion-shell");
+  assert.match(transcriptMotionShell, /width:\s*100%/);
+  assert.match(transcriptMotionShell, /position:\s*relative/);
+  assert.match(transcriptMotionShell, /contain:\s*layout paint/);
+  assert.match(transcriptMotionShell, /container-name:\s*chat-main/);
+  assert.match(transcriptMotionShell, /container-type:\s*inline-size/);
+  assert.match(styles, /data-layout-virtualized="true"[^}]+\.chat-markdown > \.incremark > \*/);
 });
 
 test("reduced motion preserves the explicitly requested meteor timeline", async () => {
