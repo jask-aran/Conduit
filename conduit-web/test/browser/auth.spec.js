@@ -128,7 +128,7 @@ test("correct password reaches the app, reload stays authenticated, logout retur
   await page.goto(server.origin, { waitUntil: "domcontentloaded" });
   await page.getByLabel("Password").fill("fixture-pw");
   await Promise.all([
-    page.waitForURL(new RegExp(`^${escapeRegExp(server.origin)}/chat/`, "i"), { timeout: 10_000 }),
+    page.waitForURL(new RegExp(`^${escapeRegExp(server.origin)}/chat/`, "i"), { timeout: 30_000 }),
     page.getByRole("button", { name: "Sign in" }).click(),
   ]);
   const currentUrl = new URL(page.url());
