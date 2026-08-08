@@ -5,7 +5,7 @@ import { api, asList } from "../api/client";
 import { focusFirst, isMobileLayout, restoreFocus } from "../navigation/mobile-layout";
 import { ownsWorkspaceRequest, type WorkspaceRequest } from "./request-ownership";
 import { TerminalPane } from "../remotes/terminal-pane";
-import { dispatchPanelGeometryMotion } from "../panel-motion";
+import { animatePanelEdge, dispatchPanelGeometryMotion, PANEL_MOTION_DURATION_MS, type PanelEdgeAnimation } from "../panel-motion";
 
 interface TreeEntry { name: string; path: string; type: "directory" | "file" | "other"; }
 interface DirectoryListing { entries: TreeEntry[]; truncated: boolean; }
@@ -47,8 +47,8 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
   let panelRoot: HTMLElement | undefined;
   let panelSurface: HTMLDivElement | undefined;
   let resizeHandle: HTMLDivElement | undefined;
-  let panelSurfaceMotion: Animation | null = null;
-  let panelSurfaceMotionId: number | null = null;
+  let panelEdgeMotion: PanelEdgeAnimation | null = null;
+  let panelEdgeMotionId: number | null = null;
   let panelMotionId = 0;
   let mobileReturnFocus: HTMLElement | null = null;
   let mobileWasOpen = false;
@@ -110,20 +110,20 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
   };
   const wasAborted = (cause: unknown) => (cause as { name?: string })?.name === "AbortError";
   let panelWasOpen = props.open();
-  const cancelPanelSurfaceMotion = () => {
-    panelSurfaceMotion?.cancel();
-    panelSurfaceMotion = null;
+  const cancelPanelEdgeMotion = () => {
+    panelEdgeMotion?.cancel();
+    panelEdgeMotion = null;
   };
   const clearPanelSurfaceMotion = () => {
     panelSurface?.style.removeProperty("transform");
     panelSurface?.style.removeProperty("opacity");
     panelSurface?.style.removeProperty("will-change");
   };
-  const settlePanelSurfaceMotion = () => {
-    if (!panelSurfaceMotion || panelSurfaceMotionId == null) return;
-    const id = panelSurfaceMotionId;
-    cancelPanelSurfaceMotion();
-    panelSurfaceMotionId = null;
+  const settlePanelEdgeMotion = () => {
+    if (!panelEdgeMotion || panelEdgeMotionId == null) return;
+    const id = panelEdgeMotionId;
+    cancelPanelEdgeMotion();
+    panelEdgeMotionId = null;
     clearPanelSurfaceMotion();
     dispatchPanelGeometryMotion({
       phase: "end",
@@ -134,13 +134,15 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
   };
   const animatePanelGeometry = (open: boolean) => {
     const mobile = isMobileLayout();
+    const startWidth = shellWidth();
     const startGap = shellGap();
-    const startSize = shellWidth() + shellGap();
     const targetWidth = open ? width() : 0;
     const targetGap = open && !mobile ? 10 : 0;
+    const startSize = startWidth + startGap;
+    const targetSize = targetWidth + targetGap;
     if (mobile || !panelRoot || !panelSurface || matchMedia("(prefers-reduced-motion: reduce)").matches) {
-      cancelPanelSurfaceMotion();
-      panelSurfaceMotionId = null;
+      cancelPanelEdgeMotion();
+      panelEdgeMotionId = null;
       clearPanelSurfaceMotion();
       batch(() => {
         setShellWidth(targetWidth);
@@ -148,58 +150,65 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
       });
       return;
     }
-    const reversing = Boolean(panelSurfaceMotion);
-    const currentBox = reversing ? panelSurface.getBoundingClientRect() : null;
-    const currentOpacity = reversing
-      ? Number.parseFloat(getComputedStyle(panelSurface).opacity)
-      : 1;
-    cancelPanelSurfaceMotion();
+    // Interrupt in-flight edge motion from the live shell size.
+    cancelPanelEdgeMotion();
+    clearPanelSurfaceMotion();
     const id = ++panelMotionId;
+    panelEdgeMotionId = id;
+    // Edge mode (no targetSize): transcript keeps a width preview and does not
+    // full-reflow until the shell settles, same path as pointer resize.
     dispatchPanelGeometryMotion({
       phase: "begin",
       id,
       source: "workspace",
       size: startSize,
-      targetSize: targetWidth + targetGap,
-      duration: 160,
-      easing: "ease",
     });
-    batch(() => {
-      setShellWidth(targetWidth);
-      setShellGap(targetGap);
-    });
-    // Surface keeps its intrinsic panel width and slides within/beside the
-    // committed shell. Open starts fully past the shell's right edge so the
-    // shell background (not the app frame) is what the eye reads first.
-    const panelWidth = width();
-    const targetBaseLeft = window.innerWidth - targetGap - panelWidth;
-    const startX = currentBox
-      ? currentBox.left - targetBaseLeft
-      : open
-        ? panelWidth
-        : -startGap;
-    const targetX = open ? 0 : panelWidth;
-    const targetOpacity = open ? 1 : 0;
-    panelSurface.style.transform = `translateX(${startX}px)`;
-    panelSurface.style.opacity = String(currentOpacity);
-    panelSurface.style.willChange = "transform, opacity";
-    const motion = panelSurface.animate([
-      { transform: `translateX(${startX}px)`, opacity: currentOpacity },
-      { transform: `translateX(${targetX}px)`, opacity: targetOpacity },
-    ], {
-      duration: 160,
-      easing: "ease",
-      fill: "forwards",
-    });
-    panelSurfaceMotion = motion;
-    panelSurfaceMotionId = id;
-    void motion.finished.catch(() => undefined).then(() => {
-      if (panelSurfaceMotion !== motion) return;
-      motion.cancel();
-      panelSurfaceMotion = null;
-      panelSurfaceMotionId = null;
-      clearPanelSurfaceMotion();
-      dispatchPanelGeometryMotion({ phase: "end", id, source: "workspace", size: targetWidth + targetGap });
+    panelSurface.style.opacity = "1";
+    const paintWorkspaceEdge = (nextWidth: number, nextGap: number) => {
+      if (!panelRoot) return;
+      panelRoot.style.width = `${nextWidth}px`;
+      panelRoot.style.marginRight = `${nextGap}px`;
+      panelRoot.style.setProperty("--workspace-shell-width", `${nextWidth}px`);
+    };
+    paintWorkspaceEdge(startWidth, startGap);
+    panelEdgeMotion = animatePanelEdge({
+      from: 0,
+      to: 1,
+      durationMs: PANEL_MOTION_DURATION_MS,
+      onUpdate: (progress) => {
+        const nextWidth = startWidth + (targetWidth - startWidth) * progress;
+        const nextGap = startGap + (targetGap - startGap) * progress;
+        // Direct DOM writes keep the edge on the display refresh; Solid signals
+        // catch up for reactive consumers without gating the paint.
+        paintWorkspaceEdge(nextWidth, nextGap);
+        batch(() => {
+          setShellWidth(nextWidth);
+          setShellGap(nextGap);
+        });
+        dispatchPanelGeometryMotion({
+          phase: "change",
+          id,
+          source: "workspace",
+          size: nextWidth + nextGap,
+        });
+      },
+      onComplete: () => {
+        if (panelEdgeMotionId !== id) return;
+        panelEdgeMotion = null;
+        panelEdgeMotionId = null;
+        paintWorkspaceEdge(targetWidth, targetGap);
+        batch(() => {
+          setShellWidth(targetWidth);
+          setShellGap(targetGap);
+        });
+        clearPanelSurfaceMotion();
+        dispatchPanelGeometryMotion({
+          phase: "end",
+          id,
+          source: "workspace",
+          size: targetSize,
+        });
+      },
     });
   };
 
@@ -356,7 +365,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
     let frame = 0;
     let stopped = false;
     const id = ++panelMotionId;
-    settlePanelSurfaceMotion();
+    settlePanelEdgeMotion();
     dispatchPanelGeometryMotion({ phase: "begin", id, source: "workspace", size: startWidth + shellGap() });
     const apply = () => {
       frame = 0;
@@ -404,7 +413,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
     window.addEventListener("blur", stop, { once: true });
     resizeHandle?.addEventListener("lostpointercapture", stop, { once: true });
   };
-  onCleanup(() => { resetRequestScope(); cancelPanelSurfaceMotion(); clearPanelSurfaceMotion(); stopResize?.(); stopDetailResize?.(); document.body.classList.remove("workspace-resizing"); document.body.classList.remove("workspace-detail-resizing"); });
+  onCleanup(() => { resetRequestScope(); cancelPanelEdgeMotion(); clearPanelSurfaceMotion(); stopResize?.(); stopDetailResize?.(); document.body.classList.remove("workspace-resizing"); document.body.classList.remove("workspace-detail-resizing"); });
 
   let loadedProjectId = "";
   createEffect(on(() => props.chatId(), () => {
@@ -461,7 +470,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
     <Show when={props.open()}>
       <button type="button" class="mobile-panel-backdrop" data-mobile-backdrop="workspace" data-for="workspace" aria-label="Dismiss workspace panel" onClick={props.onClose} />
     </Show>
-    <aside ref={panelRoot} class="workspace-panel" classList={{ "workspace-panel-open": props.open() }} aria-label="Workspace panel" aria-hidden={!props.open()} inert={!props.open()} style={{ "--workspace-panel-width": `${width()}px`, "--workspace-shell-width": `${shellWidth()}px`, width: `${shellWidth()}px`, "margin-right": `${shellGap()}px` }}>
+    <aside ref={panelRoot} class="workspace-panel" classList={{ "workspace-panel-open": props.open() || shellWidth() > 0.5 }} aria-label="Workspace panel" aria-hidden={!props.open()} inert={!props.open()} style={{ "--workspace-panel-width": `${width()}px`, "--workspace-shell-width": `${shellWidth()}px`, width: `${shellWidth()}px`, "margin-right": `${shellGap()}px` }}>
     <div ref={resizeHandle} class="workspace-resize-handle" role="separator" aria-label="Resize workspace panel" aria-orientation="vertical" aria-valuemin="300" aria-valuemax={Math.floor(window.innerWidth * 0.65)} aria-valuenow={width()} tabIndex={0} onPointerDown={startResize} onKeyDown={(event) => { if (event.key === "ArrowLeft") saveWidth(width() + 20); if (event.key === "ArrowRight") saveWidth(width() - 20); }} />
     <div ref={panelSurface} class="workspace-panel-surface">
     <header class="workspace-panel-header"><div><strong>Workspace</strong><small>Project context and tools</small></div><Button variant="ghost" size="icon-sm" aria-label="Close workspace panel" onClick={props.onClose}><XIcon /></Button></header>
