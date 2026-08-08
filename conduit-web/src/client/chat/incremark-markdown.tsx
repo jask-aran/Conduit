@@ -582,7 +582,7 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
     setDisplayBlockStore("items", reconcile(next, { key: "id", merge: true }));
   };
   const typewriterController = new AdaptiveIncremarkTypewriter({
-    adaptive: Boolean(props.typewriter && !props.inline && !props.syntheticMath),
+    adaptive: Boolean(props.typewriter && !props.inline),
     onChange: (next) => {
       setDisplayBlocks(next);
       queueMicrotask(() => props.onRendered?.());
