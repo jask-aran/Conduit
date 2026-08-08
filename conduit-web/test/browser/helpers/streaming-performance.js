@@ -178,6 +178,15 @@ function summarizeHarnessMetrics(metrics = []) {
       tickInterval: summarizeNumbers(typewriterSamples.map((metric) => metric.tickInterval).filter((value) => typeof value === "number")),
       frameWorkMs: summarizeNumbers(typewriterSamples.map((metric) => metric.frameWorkMs).filter((value) => typeof value === "number")),
       frameWorkEmaMs: summarizeNumbers(typewriterSamples.map((metric) => metric.frameWorkEmaMs).filter((value) => typeof value === "number")),
+      frameGapMs: summarizeNumbers(typewriterSamples.map((metric) => metric.frameGapMs).filter((value) => typeof value === "number")),
+      commitToNextFrameMs: summarizeNumbers(typewriterSamples.map((metric) => metric.commitToNextFrameMs).filter((value) => typeof value === "number")),
+      saturationMs: summarizeNumbers(typewriterSamples.map((metric) => metric.saturationMs).filter((value) => typeof value === "number")),
+      frameHealthyFalseCount: typewriterSamples.filter((metric) => metric.frameHealthy === false).length,
+      stepChangedCount: typewriterSamples.filter((metric) => metric.stepChanged === true).length,
+      stepIncreaseMax: Math.max(0, ...typewriterSamples.map((metric) => {
+        if (typeof metric.previousCharsPerTick !== "number" || typeof metric.charsPerTick !== "number") return 0;
+        return Math.max(0, metric.charsPerTick - metric.previousCharsPerTick);
+      })),
       fallbackModes: Object.fromEntries(typewriterSamples.reduce((counts, metric) => {
         if (typeof metric.fallbackMode === "string") counts.set(metric.fallbackMode, (counts.get(metric.fallbackMode) || 0) + 1);
         return counts;
@@ -273,7 +282,9 @@ async function installBrowserProtocol(page, scenario) {
       scrollSamples: [],
       scrollEvents: 0,
       scrollWrites: 0,
+      scrollProbeWrites: 0,
       scrollWriteEvidence: [],
+      domUpdateEvidence: [],
       identity: { first: null, last: null },
       finalFingerprint: null,
       finalSemanticShape: null,
@@ -304,9 +315,19 @@ async function installBrowserProtocol(page, scenario) {
       disconnectedAt: null,
       resumedAt: null,
       record(metric) {
-        this.metrics.push(metric);
+        this.metrics.push({ ...metric, frameIndex: this.frames.length, frameToken: this.currentFrameToken });
       },
     };
+    telemetry.currentFrameToken = 0;
+    if (telemetry.instrumentationEnabled) {
+      const nativeRequestAnimationFrame = window.requestAnimationFrame.bind(window);
+      let frameToken = 0;
+      window.requestAnimationFrame = (callback) => nativeRequestAnimationFrame((timestamp) => {
+        frameToken += 1;
+        telemetry.currentFrameToken = frameToken;
+        callback(timestamp);
+      });
+    }
     const blockGeometryState = new Map();
     Object.defineProperty(window, "__conduitHarness", { configurable: true, value: telemetry });
     try {
@@ -710,9 +731,13 @@ async function installBrowserProtocol(page, scenario) {
           setTimeout(attempt, 10);
           return;
         }
+        telemetry.scrollProbeWrites += 1;
         viewport.scrollTop = Math.max(0, viewport.scrollHeight - viewport.clientHeight - 24);
         setTimeout(() => {
-          if (inPromptWindow()) viewport.scrollTop = viewport.scrollHeight;
+          if (inPromptWindow()) {
+            telemetry.scrollProbeWrites += 1;
+            viewport.scrollTop = viewport.scrollHeight;
+          }
         }, 10);
       };
       attempt();
@@ -820,6 +845,8 @@ async function installBrowserProtocol(page, scenario) {
         if (nextText === visibleText) return;
         telemetry.visibleIncrements.push({
           at: performance.now(),
+          frameIndex: telemetry.frames.length,
+          sourceCharacters: telemetry.streamedText.length,
           characters: Math.max(0, nextText.length - visibleText.length),
           totalCharacters: nextText.length,
         });
@@ -856,6 +883,14 @@ async function installBrowserProtocol(page, scenario) {
                 });
               }
             }
+          }
+          if (telemetry.domUpdateEvidence.length < 256) {
+            telemetry.domUpdateEvidence.push({
+              at: performance.now(),
+              frameIndex: telemetry.frames.length,
+              mutationCount: records.length,
+              sourceCharacters: telemetry.streamedText.length,
+            });
           }
           captureDomState();
           updateVisibleText();
@@ -1533,6 +1568,10 @@ export async function runBrowserStreamingScenario(page, scenario) {
   const visibleGaps = raw.visibleIncrements.slice(1)
     .map((frame, index) => frame.at - raw.visibleIncrements[index].at);
   const frameGaps = raw.frames.slice(1).map((frame, index) => frame - raw.frames[index]);
+  const domUpdateToNextFrame = raw.domUpdateEvidence.flatMap((entry) => {
+    const nextFrame = raw.frames.find((frame) => frame >= entry.at);
+    return nextFrame == null ? [] : [nextFrame - entry.at];
+  });
   const measurementCompletedAt = displayCompletedAt ?? raw.completedAt;
   const scopedLongTasks = raw.longTasks.filter((entry) =>
     entry.startTime <= measurementCompletedAt && entry.startTime + entry.duration >= raw.promptAt);
@@ -1641,6 +1680,7 @@ export async function runBrowserStreamingScenario(page, scenario) {
       visibleIncrementCharacters: summary(raw.visibleIncrements.map((entry) => entry.characters)),
       visibleGapMs: summary(visibleGaps),
       domMutationCount: raw.mutationCount,
+      domUpdateToNextFrameMs: summary(domUpdateToNextFrame),
       frameGapMs: summary(frameGaps),
       frameGapsOver32Ms: frameGaps.filter((gap) => gap > 32).length,
       frameGapsOver50Ms: frameGaps.filter((gap) => gap > 50).length,
@@ -1692,6 +1732,8 @@ export async function runBrowserStreamingScenario(page, scenario) {
         finalDistanceFromBottom: raw.scrollSamples.at(-1)?.distanceFromBottom ?? null,
         scrollEventCount: raw.scrollEvents,
         programmaticWriteCount: raw.scrollWrites,
+        applicationProgrammaticWriteCount: Math.max(0, raw.scrollWrites - raw.scrollProbeWrites),
+        scrollProbeWriteCount: raw.scrollProbeWrites,
         programmaticWriteEvidence: raw.scrollWriteEvidence,
       },
       instrumentation: {

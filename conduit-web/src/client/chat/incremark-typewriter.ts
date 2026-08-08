@@ -15,6 +15,9 @@ export const TYPEWRITER_MIN_FRAME_INTERVAL_MS = 4;
 export const TYPEWRITER_MAX_FRAME_INTERVAL_MS = TYPEWRITER_RELAXED_TICK_INTERVAL_MS;
 export const TYPEWRITER_FRAME_INTERVAL_EMA_ALPHA = 0.25;
 export const TYPEWRITER_LAG_CORRECTION_WINDOW_MS = 100;
+export const TYPEWRITER_SATURATION_WINDOW_MS = 120;
+export const TYPEWRITER_SAFE_BLOCK_WINDOW_MS = 1000;
+export const TYPEWRITER_NO_PROGRESS_WINDOW_MS = 500;
 export type TypewriterFallbackMode = "normal" | "safe-step" | "safe-block";
 const TYPEWRITER_MATH_SOURCE = "__conduitMathSource";
 
@@ -36,6 +39,12 @@ export type TypewriterMetrics = {
   fallbackMode: TypewriterFallbackMode;
   lagTargetMet: boolean;
   terminal: boolean;
+  frameGapMs?: number | null;
+  commitToNextFrameMs?: number | null;
+  frameHealthy?: boolean;
+  saturationMs?: number;
+  stepChanged?: boolean;
+  previousCharsPerTick?: number;
 };
 
 export type AdaptiveRate = {
@@ -139,6 +148,50 @@ export function chooseCharsPerTick(
   return Math.min(desiredStep, Math.max(currentStep, currentStep * 4));
 }
 
+export function isFrameHealthy(
+  frameWorkEmaMs: number,
+  commitToNextFrameMs: number | null,
+  frameGapMs: number | null,
+  frameIntervalMs = TYPEWRITER_DEFAULT_TICK_INTERVAL_MS,
+  frameWorkBudgetMs = TYPEWRITER_FRAME_WORK_BUDGET_MS,
+) {
+  if (!Number.isFinite(frameWorkEmaMs) || frameWorkEmaMs > frameWorkBudgetMs) return false;
+  const expectedFrame = normalizeFrameInterval(frameIntervalMs);
+  const frameBudget = Math.max(expectedFrame * 1.75, expectedFrame + 8);
+  if (commitToNextFrameMs != null && commitToNextFrameMs > frameBudget) return false;
+  if (frameGapMs != null && frameGapMs > frameBudget) return false;
+  return true;
+}
+
+export function chooseAdaptiveTickInterval(
+  frameWorkEmaMs: number,
+  commitToNextFrameMs: number | null,
+  frameGapMs: number | null,
+  frameIntervalMs = TYPEWRITER_DEFAULT_TICK_INTERVAL_MS,
+) {
+  const frameInterval = normalizeFrameInterval(frameIntervalMs);
+  if (isFrameHealthy(frameWorkEmaMs, commitToNextFrameMs, frameGapMs, frameInterval)) return frameInterval;
+  return Math.min(TYPEWRITER_MAX_FRAME_INTERVAL_MS, Math.max(frameInterval, frameInterval * 2));
+}
+
+export function chooseAdaptiveCharsPerTick(
+  targetRate: number,
+  tickInterval: number,
+  previousStep: number,
+  frameHealthy: boolean,
+  allowGrowth = true,
+) {
+  const desiredStep = Math.max(1, Math.ceil(Math.max(0, targetRate) * tickInterval / 1000));
+  const currentStep = Math.max(1, Math.trunc(previousStep) || 1);
+  if (!frameHealthy) {
+    const reduction = Math.max(1, Math.floor(currentStep * 0.25));
+    return Math.max(1, Math.min(desiredStep, currentStep - reduction));
+  }
+  if (!allowGrowth) return Math.min(desiredStep, currentStep);
+  const growth = Math.max(1, Math.ceil(currentStep * 0.25));
+  return Math.min(desiredStep, currentStep + growth);
+}
+
 export function chooseFallbackMode(
   frameWorkEmaMs: number,
   charsPerTick: number,
@@ -200,6 +253,7 @@ export type AdaptiveIncremarkTypewriterOptions = {
   onChange: (blocks: DisplayBlock[]) => void;
   onDisplayBusyChange?: (busy: boolean) => void;
   onMetrics?: (metrics: TypewriterMetrics) => void;
+  adaptive?: boolean;
 };
 
 /**
@@ -212,6 +266,7 @@ export type AdaptiveIncremarkTypewriterOptions = {
 export class AdaptiveIncremarkTypewriter {
   readonly transformer;
   private readonly callbacks: AdaptiveIncremarkTypewriterOptions;
+  private readonly adaptive: boolean;
   private baselineCharacters = 0;
   private sourceVisibleCharacters = 0;
   private observedRate: number | null = null;
@@ -232,6 +287,15 @@ export class AdaptiveIncremarkTypewriter {
   private lastFrameAt: number | null = null;
   private frameIntervalMs = TYPEWRITER_DEFAULT_TICK_INTERVAL_MS;
   private frameIntervalEmaMs = TYPEWRITER_DEFAULT_TICK_INTERVAL_MS;
+  private lastFrameGapMs: number | null = null;
+  private commitToNextFrameMs: number | null = null;
+  private pendingCommitAt: number | null = null;
+  private commitProbeId: number | null = null;
+  private frameHealthy = true;
+  private saturationSince: number | null = null;
+  private saturationMs = 0;
+  private lastProgressAt: number | null = null;
+  private adaptiveFallbackMode: TypewriterFallbackMode = "normal";
   private metrics: TypewriterMetrics = {
     sourceVisibleCharacters: 0,
     displayedVisibleCharacters: 0,
@@ -254,6 +318,7 @@ export class AdaptiveIncremarkTypewriter {
 
   constructor(callbacks: AdaptiveIncremarkTypewriterOptions) {
     this.callbacks = callbacks;
+    this.adaptive = callbacks.adaptive === true;
     this.transformer = createBlockTransformer({
       charsPerTick: 1,
       tickInterval: TYPEWRITER_DEFAULT_TICK_INTERVAL_MS,
@@ -265,7 +330,9 @@ export class AdaptiveIncremarkTypewriter {
         const startedAt = performance.now();
         const published = this.stabilizeDisplayBlocks(blocks);
         callbacks.onChange(published);
-        this.recordDisplay(published, performance.now() - startedAt);
+        const committedAt = performance.now();
+        this.recordDisplay(published, committedAt - startedAt);
+        this.scheduleCommitProbe(committedAt);
       },
       onAllComplete: () => {
         // The native transformer can finish its final slice without another
@@ -300,7 +367,7 @@ export class AdaptiveIncremarkTypewriter {
     this.lastSourceAt = now;
     this.lastSourceCharacters = sourceCharacters;
     this.sourceVisibleCharacters = sourceCharacters;
-    this.recalculate(now, this.lastDisplayedCharacters, this.metrics.displayRate, true);
+    this.recalculate(now, this.lastDisplayedCharacters, this.metrics.displayRate, !this.adaptive);
   }
 
   push(blocks: ParsedBlock[]) {
@@ -317,6 +384,7 @@ export class AdaptiveIncremarkTypewriter {
     this.observedRate = null;
     this.lastDisplayedCharacters = this.baselineCharacters;
     this.lastDisplayedAt = null;
+    this.resetAdaptiveHealth();
     this.setBusy(false);
     this.recalculate(performance.now());
   }
@@ -405,13 +473,36 @@ export class AdaptiveIncremarkTypewriter {
       if (this.lastFrameAt != null) {
         const gap = timestamp - this.lastFrameAt;
         if (gap >= TYPEWRITER_MIN_FRAME_INTERVAL_MS && gap <= 100) {
-          const next = updateFrameInterval(this.frameIntervalEmaMs, gap);
-          if (Math.abs(next - this.frameIntervalMs) >= 0.1) {
+          if (this.adaptive) {
+            const previousInterval = this.frameIntervalMs;
+            const previousHealthy = this.frameHealthy;
+            const previousFallback = this.adaptiveFallbackMode;
+            this.lastFrameGapMs = gap;
+            const next = updateFrameInterval(this.frameIntervalEmaMs, gap);
             this.frameIntervalMs = next;
             this.frameIntervalEmaMs = next;
-            this.recalculate(timestamp);
+            this.frameHealthy = isFrameHealthy(
+              this.frameWorkEmaMs,
+              this.commitToNextFrameMs,
+              this.lastFrameGapMs,
+              previousInterval,
+            );
+            const shouldBlock = this.updateAdaptiveHealth(timestamp, this.lastDisplayedCharacters);
+            if (shouldBlock) this.completeCurrentBlockSafely();
+            if (previousHealthy !== this.frameHealthy
+              || previousFallback !== this.adaptiveFallbackMode
+              || Math.abs(next - previousInterval) >= 0.1) {
+              this.recalculate(timestamp);
+            }
           } else {
-            this.frameIntervalEmaMs = next;
+            const next = updateFrameInterval(this.frameIntervalEmaMs, gap);
+            if (Math.abs(next - this.frameIntervalMs) >= 0.1) {
+              this.frameIntervalMs = next;
+              this.frameIntervalEmaMs = next;
+              this.recalculate(timestamp);
+            } else {
+              this.frameIntervalEmaMs = next;
+            }
           }
         }
       }
@@ -426,9 +517,18 @@ export class AdaptiveIncremarkTypewriter {
     }
     this.frameProbeId = null;
     this.lastFrameAt = null;
+    if (this.commitProbeId != null && typeof cancelAnimationFrame === "function") {
+      cancelAnimationFrame(this.commitProbeId);
+    }
+    this.commitProbeId = null;
+    this.pendingCommitAt = null;
   }
 
   private recordDisplay(blocks: DisplayBlock[], frameWorkMs: number) {
+    if (this.adaptive) {
+      this.recordAdaptiveDisplay(blocks, frameWorkMs);
+      return;
+    }
     const now = performance.now();
     const displayedCharacters = this.baselineCharacters + visibleBlockCharacters(blocks, true);
     const elapsed = this.lastDisplayedAt == null ? 0 : now - this.lastDisplayedAt;
@@ -456,6 +556,102 @@ export class AdaptiveIncremarkTypewriter {
     this.recalculate(now, displayedCharacters, displayRate, true);
   }
 
+  private recordAdaptiveDisplay(blocks: DisplayBlock[], frameWorkMs: number) {
+    const now = performance.now();
+    const displayedCharacters = this.baselineCharacters + visibleBlockCharacters(blocks, true);
+    const elapsed = this.lastDisplayedAt == null ? 0 : now - this.lastDisplayedAt;
+    const delta = displayedCharacters - this.lastDisplayedCharacters;
+    const displayRate = elapsed > 0 && delta > 0 ? delta / elapsed * 1000 : this.metrics.displayRate;
+    this.lastDisplayedAt = now;
+    this.lastDisplayedCharacters = displayedCharacters;
+    this.frameWorkMs = Math.max(0, frameWorkMs);
+    this.frameWorkEmaMs = this.frameWorkEmaMs === 0
+      ? this.frameWorkMs
+      : updateRateEma(this.frameWorkEmaMs, this.frameWorkMs) || this.frameWorkMs;
+    if (delta > 0) this.lastProgressAt = now;
+    this.frameHealthy = isFrameHealthy(
+      this.frameWorkEmaMs,
+      this.commitToNextFrameMs,
+      this.lastFrameGapMs,
+      this.frameIntervalMs,
+    );
+    const shouldBlock = this.updateAdaptiveHealth(now, displayedCharacters);
+    const transformerComplete = !this.transformer.isProcessing();
+    const reachedSource = this.sourceVisibleCharacters <= displayedCharacters;
+    this.setBusy(!reachedSource || !transformerComplete);
+    if (shouldBlock) this.completeCurrentBlockSafely();
+    this.recalculate(now, displayedCharacters, displayRate, delta > 0);
+  }
+
+  private scheduleCommitProbe(committedAt: number) {
+    if (!this.adaptive || !this.enabled || typeof requestAnimationFrame !== "function") return;
+    this.pendingCommitAt = committedAt;
+    if (this.commitProbeId != null) return;
+    this.commitProbeId = requestAnimationFrame((timestamp) => {
+      this.commitProbeId = null;
+      const pendingCommitAt = this.pendingCommitAt;
+      this.pendingCommitAt = null;
+      if (pendingCommitAt == null || !this.enabled) return;
+      this.commitToNextFrameMs = Math.max(0, timestamp - pendingCommitAt);
+      const previousHealthy = this.frameHealthy;
+      const previousFallback = this.adaptiveFallbackMode;
+      this.frameHealthy = isFrameHealthy(
+        this.frameWorkEmaMs,
+        this.commitToNextFrameMs,
+        this.lastFrameGapMs,
+        this.frameIntervalMs,
+      );
+      const shouldBlock = this.updateAdaptiveHealth(timestamp, this.lastDisplayedCharacters);
+      if (shouldBlock) this.completeCurrentBlockSafely();
+      if (previousHealthy !== this.frameHealthy || previousFallback !== this.adaptiveFallbackMode) {
+        this.recalculate(timestamp);
+      }
+    });
+  }
+
+  private updateAdaptiveHealth(now: number, displayedCharacters: number) {
+    const backlogCharacters = Math.max(0, this.sourceVisibleCharacters - displayedCharacters);
+    if (backlogCharacters <= 0) {
+      this.saturationSince = null;
+      this.saturationMs = 0;
+      this.lastProgressAt = null;
+      this.adaptiveFallbackMode = "normal";
+      return false;
+    }
+    if (this.lastProgressAt == null) this.lastProgressAt = now;
+    if (this.frameHealthy) {
+      this.saturationSince = null;
+      this.saturationMs = 0;
+      if (this.adaptiveFallbackMode === "safe-step") this.adaptiveFallbackMode = "normal";
+      return false;
+    }
+    if (this.saturationSince == null) this.saturationSince = now;
+    this.saturationMs = Math.max(0, now - this.saturationSince);
+    if (this.saturationMs >= TYPEWRITER_SATURATION_WINDOW_MS
+      && this.adaptiveFallbackMode === "normal") {
+      this.adaptiveFallbackMode = "safe-step";
+    }
+    const noProgressMs = this.lastProgressAt == null ? 0 : Math.max(0, now - this.lastProgressAt);
+    if (this.saturationMs >= TYPEWRITER_SAFE_BLOCK_WINDOW_MS
+      && noProgressMs >= TYPEWRITER_NO_PROGRESS_WINDOW_MS
+      && this.adaptiveFallbackMode !== "safe-block") {
+      this.adaptiveFallbackMode = "safe-block";
+      return true;
+    }
+    return false;
+  }
+
+  private resetAdaptiveHealth() {
+    this.lastFrameGapMs = null;
+    this.commitToNextFrameMs = null;
+    this.pendingCommitAt = null;
+    this.frameHealthy = true;
+    this.saturationSince = null;
+    this.saturationMs = 0;
+    this.lastProgressAt = null;
+    this.adaptiveFallbackMode = "normal";
+  }
+
   private setBusy(next: boolean) {
     if (next === this.busy) return;
     this.busy = next;
@@ -471,23 +667,34 @@ export class AdaptiveIncremarkTypewriter {
   ) {
     const backlogCharacters = Math.max(0, this.sourceVisibleCharacters - displayedCharacters);
     const adaptive = calculateAdaptiveRate(this.observedRate, backlogCharacters);
-    const controlRate = calculateControlRate(this.observedRate, backlogCharacters, undefined, undefined, this.sourceVisibleCharacters);
-    const tickInterval = chooseTickInterval(this.frameWorkEmaMs, this.frameIntervalMs);
-    const nextStep = chooseCharsPerTick(
-      controlRate,
-      tickInterval,
-      this.currentStep,
-      this.frameWorkMs,
-      TYPEWRITER_FRAME_WORK_BUDGET_MS,
-      allowStepGrowth,
-    );
+    const controlRate = this.adaptive
+      ? adaptive.targetRate
+      : calculateControlRate(this.observedRate, backlogCharacters, undefined, undefined, this.sourceVisibleCharacters);
+    const tickInterval = this.adaptive
+      ? chooseAdaptiveTickInterval(this.frameWorkEmaMs, this.commitToNextFrameMs, this.lastFrameGapMs, this.frameIntervalMs)
+      : chooseTickInterval(this.frameWorkEmaMs, this.frameIntervalMs);
+    const previousStep = this.currentStep;
+    const nextStep = this.adaptive
+      ? this.adaptiveFallbackMode === "normal"
+        ? chooseAdaptiveCharsPerTick(controlRate, tickInterval, this.currentStep, this.frameHealthy, allowStepGrowth)
+        : 1
+      : chooseCharsPerTick(
+        controlRate,
+        tickInterval,
+        this.currentStep,
+        this.frameWorkMs,
+        TYPEWRITER_FRAME_WORK_BUDGET_MS,
+        allowStepGrowth,
+      );
     this.currentStep = nextStep;
     this.transformer.setOptions({ charsPerTick: nextStep, tickInterval });
     const backlogAgeMs = calculateBacklogAgeMs(backlogCharacters, this.observedRate);
     const relativeLag = this.sourceVisibleCharacters > 0
       ? backlogCharacters / this.sourceVisibleCharacters
       : 0;
-    const fallbackMode = chooseFallbackMode(this.frameWorkEmaMs, nextStep, this.lastFallbackMode === "safe-block");
+    const fallbackMode = this.adaptive
+      ? this.adaptiveFallbackMode
+      : chooseFallbackMode(this.frameWorkEmaMs, nextStep, this.lastFallbackMode === "safe-block");
     this.metrics = {
       sourceVisibleCharacters: this.sourceVisibleCharacters,
       displayedVisibleCharacters: displayedCharacters,
@@ -506,6 +713,14 @@ export class AdaptiveIncremarkTypewriter {
       fallbackMode,
       lagTargetMet: backlogCharacters === 0 || (relativeLag <= TYPEWRITER_LAG_FRACTION && backlogAgeMs <= TYPEWRITER_BACKLOG_WINDOW_MS),
       terminal,
+      ...(this.adaptive ? {
+        frameGapMs: this.lastFrameGapMs,
+        commitToNextFrameMs: this.commitToNextFrameMs,
+        frameHealthy: this.frameHealthy,
+        saturationMs: this.saturationMs,
+        stepChanged: nextStep !== previousStep,
+        previousCharsPerTick: previousStep,
+      } : {}),
     };
     this.callbacks.onMetrics?.(this.metrics);
   }
@@ -521,6 +736,7 @@ export class AdaptiveIncremarkTypewriter {
     if (!state.currentBlock) return;
     this.fallbackInProgress = true;
     this.lastFallbackMode = "safe-block";
+    if (this.adaptive) this.adaptiveFallbackMode = "safe-block";
     const completed = [...state.completedBlocks, state.currentBlock];
     const pending = [...state.pendingBlocks];
     this.transformer.reset();
