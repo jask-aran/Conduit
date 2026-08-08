@@ -40,6 +40,7 @@ function summarizeHarnessMetrics(metrics = []) {
   const typewriterSamples = [];
   const typewriterTerminalSamples = [];
   const typewriterSteadyStateSamples = [];
+  const transcriptScrollSamples = [];
   const changedBlocks = new Set();
   const changedBlockLengths = new Set();
   const projectionModes = {};
@@ -98,6 +99,9 @@ function summarizeHarnessMetrics(metrics = []) {
       if (metric.sourceVisibleCharacters >= 500 && metric.displayedVisibleCharacters > 0) {
         typewriterSteadyStateSamples.push(metric);
       }
+    }
+    if (metric.stage === "transcript-scroll" && metric.owner === "typewriter-tail-inertial") {
+      transcriptScrollSamples.push(metric);
     }
     if (metric.renderer?.startsWith("incremark") && metric.tableAst) {
       const signature = JSON.stringify(metric.tableAst);
@@ -201,6 +205,48 @@ function summarizeHarnessMetrics(metrics = []) {
       terminalSampleCount: typewriterTerminalSamples.length,
       terminal: typewriterTerminalSamples.at(-1) || null,
     },
+    transcriptScroll: {
+      sampleCount: transcriptScrollSamples.length,
+      scrollHeightReadCount: transcriptScrollSamples.reduce((total, metric) => total + (Number(metric.scrollHeightReadCount) || 0), 0),
+      scrollTopWriteCount: transcriptScrollSamples.reduce((total, metric) => total + (Number(metric.scrollTopWriteCount) || 0), 0),
+      maxWritesPerFrame: Math.max(0, ...Object.values(transcriptScrollSamples.reduce((counts, metric) => {
+        const frame = String(metric.frameToken ?? metric.frameIndex ?? "unknown");
+        counts[frame] = (counts[frame] || 0) + (Number(metric.scrollTopWriteCount) || 0);
+        return counts;
+      }, {}))),
+      maxReadsPerFrame: Math.max(0, ...Object.values(transcriptScrollSamples.reduce((counts, metric) => {
+        const frame = String(metric.frameToken ?? metric.frameIndex ?? "unknown");
+        counts[frame] = (counts[frame] || 0) + (Number(metric.scrollHeightReadCount) || 0);
+        return counts;
+      }, {}))),
+      trackingSampleCount: transcriptScrollSamples.filter((metric) => metric.mode === "tracking").length,
+      settledSampleCount: transcriptScrollSamples.filter((metric) => metric.mode === "settled").length,
+      rebaseSampleCount: transcriptScrollSamples.filter((metric) => metric.mode === "rebase").length,
+      snapSampleCount: transcriptScrollSamples.filter((metric) => ["catch-up", "correct", "damped"].includes(metric.mode)).length,
+      userSampleCount: transcriptScrollSamples.filter((metric) => metric.ownership === "user").length,
+      appSampleCount: transcriptScrollSamples.filter((metric) => metric.ownership === "app").length,
+      userOwnedScrollTopWriteCount: transcriptScrollSamples
+        .filter((metric) => metric.ownership === "user")
+        .reduce((total, metric) => total + (Number(metric.scrollTopWriteCount) || 0), 0),
+      ownershipTransitions: transcriptScrollSamples.reduce((count, metric, index) => {
+        return index > 0 && metric.ownership !== transcriptScrollSamples[index - 1].ownership ? count + 1 : count;
+      }, 0),
+      movementPx: summarizeNumbers(transcriptScrollSamples.map((metric) => metric.movementPx).filter((value) => typeof value === "number")),
+      velocityPxPerSecond: summarizeNumbers(transcriptScrollSamples.map((metric) => metric.velocityPxPerSecond).filter((value) => typeof value === "number")),
+      frameIntervalMs: summarizeNumbers(transcriptScrollSamples.map((metric) => metric.frameIntervalMs).filter((value) => typeof value === "number")),
+      scrollHeightDelta: summarizeNumbers(transcriptScrollSamples.map((metric) => metric.scrollHeightDelta).filter((value) => typeof value === "number")),
+      targetDeltaPx: summarizeNumbers(transcriptScrollSamples.map((metric) => metric.targetDeltaPx).filter((value) => typeof value === "number")),
+      browserCompensationPx: summarizeNumbers(transcriptScrollSamples.map((metric) => metric.browserCompensationPx).filter((value) => typeof value === "number")),
+      uncompensatedTargetDeltaPx: summarizeNumbers(transcriptScrollSamples.map((metric) => metric.uncompensatedTargetDeltaPx).filter((value) => typeof value === "number")),
+      feedForwardTargetDeltaPx: summarizeNumbers(transcriptScrollSamples.map((metric) => metric.feedForwardTargetDeltaPx).filter((value) => typeof value === "number")),
+      targetDeltaEmaPx: summarizeNumbers(transcriptScrollSamples.map((metric) => metric.targetDeltaEmaPx).filter((value) => typeof value === "number")),
+      feedForwardVelocityPxPerSecond: summarizeNumbers(transcriptScrollSamples.map((metric) => metric.feedForwardVelocityPxPerSecond).filter((value) => typeof value === "number")),
+      directionReversalCount: countTailDirectionReversals(transcriptScrollSamples),
+      distanceFromBottom: summarizeNumbers(transcriptScrollSamples.map((metric) => metric.distanceBeforeBottom).filter((value) => typeof value === "number")),
+      distanceAfterBottom: summarizeNumbers(transcriptScrollSamples.map((metric) => metric.distanceAfterBottom).filter((value) => typeof value === "number")),
+      distanceToTarget: summarizeNumbers(transcriptScrollSamples.map((metric) => metric.distanceToTarget).filter((value) => typeof value === "number")),
+      reasons: [...new Set(transcriptScrollSamples.flatMap((metric) => Array.isArray(metric.reasons) ? metric.reasons : []))],
+    },
   };
 }
 
@@ -222,6 +268,19 @@ function summarizeNumbers(values) {
     max: sorted.at(-1) ?? null,
     last: values.at(-1) ?? null,
   };
+}
+
+function countTailDirectionReversals(samples) {
+  let reversals = 0;
+  let previousMovement = 0;
+  for (const sample of samples) {
+    const movement = Number(sample.movementPx) || 0;
+    if (Math.abs(movement) > 0.01 && previousMovement !== 0 && Math.sign(movement) !== Math.sign(previousMovement)) {
+      reversals += 1;
+    }
+    if (Math.abs(movement) > 0.01) previousMovement = movement;
+  }
+  return reversals;
 }
 
 const chatId = "550e8400-e29b-41d4-a716-446655440099";
@@ -1513,6 +1572,28 @@ export async function runBrowserStreamingScenario(page, scenario) {
     ? null
     : normalizeSemanticText(scenario.expectedSemanticText);
   if (scenario.scrollProbe) await page.evaluate(() => window.__conduitHarness?.startScrollProbe?.());
+  if (scenario.wheelProbe && renderer === "incremark-typewriter") {
+    await page.waitForFunction(() => {
+      const viewport = document.querySelector('[data-slot="message-scroller-viewport"]');
+      return (window.__conduitHarness?.webSocketDeltas?.length || 0) >= 24
+        && viewport instanceof HTMLElement
+        && viewport.scrollHeight - viewport.clientHeight > 240;
+    }, { timeout: 15_000 });
+    const viewportBox = await page.locator('[data-slot="message-scroller-viewport"]').boundingBox();
+    if (!viewportBox) throw new Error("Wheel probe could not locate the transcript viewport");
+    await page.mouse.move(viewportBox.x + viewportBox.width / 2, viewportBox.y + viewportBox.height / 2);
+    for (let index = 0; index < 3; index += 1) await page.mouse.wheel(0, -600);
+    await page.waitForFunction(() => window.__conduitHarness?.metrics?.some((metric) =>
+      metric.stage === "transcript-scroll" && metric.owner === "typewriter-tail-inertial" && metric.ownership === "user"), { timeout: 5_000 });
+    await page.mouse.wheel(0, 10_000);
+    await page.waitForFunction(() => {
+      const metrics = window.__conduitHarness?.metrics || [];
+      const userIndex = metrics.findIndex((metric) => metric.stage === "transcript-scroll"
+        && metric.owner === "typewriter-tail-inertial" && metric.ownership === "user");
+      return userIndex >= 0 && metrics.slice(userIndex + 1).some((metric) => metric.stage === "transcript-scroll"
+        && metric.owner === "typewriter-tail-inertial" && metric.ownership === "app");
+    }, { timeout: 5_000 });
+  }
   await page.waitForFunction(() => Boolean(window.__conduitHarness?.completedAt));
   let displayCompletedAt = null;
   if (scenario.typewriter) {
@@ -1735,6 +1816,7 @@ export async function runBrowserStreamingScenario(page, scenario) {
         applicationProgrammaticWriteCount: Math.max(0, raw.scrollWrites - raw.scrollProbeWrites),
         scrollProbeWriteCount: raw.scrollProbeWrites,
         programmaticWriteEvidence: raw.scrollWriteEvidence,
+        typewriterTail: clientWork.transcriptScroll,
       },
       instrumentation: {
         enabled: Boolean(raw.instrumentationEnabled),

@@ -236,6 +236,18 @@ export const BROWSER_FIXTURES = Object.freeze({
     requiresStructuralContract: false,
     scrollProbe: true,
   },
+  "typewriter-tail-wheel": {
+    text: mixedScrollStressText,
+    expectedSemanticText: null,
+    expectedSemanticFingerprint: null,
+    expectedAssertions: { katexRendered: true, tableMathRendered: true },
+    expectedInteractions: {},
+    maxLongestTaskMs: 250,
+    maxRemovedMathNodes: 0,
+    skipStructuralFingerprint: true,
+    requiresStructuralContract: false,
+    wheelProbe: true,
+  },
   "standard-math-delimiters": {
     text: [
       "Mixed delimiters should keep completed formulas in place: $x^2$ and \\(y^2\\).",
