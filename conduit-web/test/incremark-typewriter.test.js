@@ -16,6 +16,11 @@ import {
   updateRateEma,
   visibleAstCharacters,
 } from "../src/client/chat/incremark-typewriter.ts";
+import {
+  advanceTailFollow,
+  createTailFollowState,
+  rebaseTailFollowState,
+} from "../src/client/chat/transcript-tail-follow.ts";
 
 test("the first observed rate seeds the EMA and later samples use alpha 0.25", () => {
   assert.equal(updateRateEma(null, 400), 400);
@@ -121,4 +126,54 @@ test("nested math is prepared as an atomic leaf for the native slicer", () => {
   assert.equal(node.children[1].value, undefined);
   assert.equal(node.children[1].__conduitMathSource, "\\frac{a}{b}");
   assert.equal(visibleAstCharacters(node), 14);
+});
+
+test("inertial tail-follow moves by fractional frame steps without a gutter jump", () => {
+  let frame = advanceTailFollow(createTailFollowState(0), 100, 0, 0);
+  assert.equal(frame.nextScrollTop, 0);
+  frame = advanceTailFollow(frame.state, 100, 16, 0);
+  assert.ok(frame.nextScrollTop > 0);
+  assert.ok(frame.nextScrollTop < 8);
+  assert.equal(frame.mode, "tracking");
+});
+
+test("inertial tail-follow remains monotonic and does not overshoot", () => {
+  let state = createTailFollowState(0);
+  let previous = 0;
+  for (let time = 0; time <= 1_000; time += 16) {
+    const frame = advanceTailFollow(state, 100, time, previous);
+    state = frame.state;
+    assert.ok(frame.nextScrollTop >= previous);
+    assert.ok(frame.nextScrollTop <= 100);
+    previous = frame.nextScrollTop;
+  }
+  assert.ok(previous > 99);
+});
+
+test("layout growth adds fractional feed-forward without a catch-up snap", () => {
+  let frame = advanceTailFollow(createTailFollowState(0), 0, 0, 0);
+  const withoutFeedForward = advanceTailFollow(frame.state, 100, 16, 0, 0);
+  const withFeedForward = advanceTailFollow(frame.state, 100, 16, 0, 100);
+  assert.ok(withFeedForward.feedForwardVelocityPxPerSecond > 0);
+  assert.ok(withFeedForward.nextScrollTop > withoutFeedForward.nextScrollTop);
+  assert.ok(withFeedForward.nextScrollTop > 0);
+  assert.ok(withFeedForward.nextScrollTop < 100);
+  assert.equal(withFeedForward.mode, "tracking");
+});
+
+test("a long frame gap rebases instead of creating a catch-up jump", () => {
+  let frame = advanceTailFollow(createTailFollowState(0), 100, 0, 0);
+  frame = advanceTailFollow(frame.state, 100, 16, 0);
+  const resumed = advanceTailFollow(frame.state, 200, 200, frame.nextScrollTop);
+  assert.equal(resumed.mode, "rebase");
+  assert.equal(resumed.movementPx, 0);
+  assert.equal(resumed.state.velocity, 0);
+});
+
+test("user-owned scrolling does not receive app movement", () => {
+  const state = rebaseTailFollowState(createTailFollowState(0), 20, "user");
+  const frame = advanceTailFollow(state, 200, 16, 20);
+  assert.equal(frame.nextScrollTop, 20);
+  assert.equal(frame.movementPx, 0);
+  assert.equal(frame.state.owner, "user");
 });

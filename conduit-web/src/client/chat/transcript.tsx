@@ -9,6 +9,14 @@ import { createTimelineStore } from "../state/timeline-store";
 import type { MarkdownRendererId } from "./markdown-settings";
 import { mountTranscriptPanelMotion } from "./transcript-motion";
 import { mountTranscriptVisibility } from "./transcript-visibility";
+import { getHarnessRecorder, recordHarnessMetric } from "../harness-metrics";
+import {
+  advanceTailFollow,
+  createTailFollowState,
+  rebaseTailFollowState,
+  type TailFollowOwner,
+  type TailFollowState,
+} from "./transcript-tail-follow";
 
 const ChatMarkdown = lazy(() => import("./markdown").then((module) => ({ default: module.ChatMarkdown })));
 function Actions(props: { message: Message; precedingUserId?: string; chat: ActiveChatStore; partialContinue: boolean }) {
@@ -39,6 +47,7 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
   const [following, setFollowing] = createSignal(true);
   const markdownRenderer = () => props.markdownRenderer;
   const rendererUsesTypewriter = () => markdownRenderer() === "incremark-typewriter" || markdownRenderer() === "incremark-synthetic";
+  const rendererUsesAdaptiveTypewriter = () => markdownRenderer() === "incremark-typewriter";
   const timeline = createTimelineStore(
     props.chat.messages,
     props.chat.tools,
@@ -48,7 +57,46 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
   const empty = createMemo(() => !timeline.length && !props.chat.activity()?.label);
 
   let scrollFrame: number | null = null;
+  let typewriterTailFrame: number | null = null;
+  const typewriterTailReasons = new Set<string>();
+  let typewriterTailState: TailFollowState = createTailFollowState();
+  let typewriterTailRejoinTimer: number | null = null;
+  let typewriterTailLastHeight: number | null = null;
+  let typewriterTailLastTarget: number | null = null;
+  let typewriterTailLastExpected: number | null = null;
+  let typewriterTailTargetDeltaEma = 0;
   let programmaticScrollTop: number | null = null;
+  let previousRenderer: MarkdownRendererId | null = null;
+  const currentViewportScrollTop = () => viewport?.scrollTop ?? 0;
+  const cancelTypewriterTailFrame = () => {
+    if (typewriterTailFrame == null) return;
+    cancelAnimationFrame(typewriterTailFrame);
+    typewriterTailFrame = null;
+  };
+  const cancelTypewriterTailRejoin = () => {
+    if (typewriterTailRejoinTimer == null) return;
+    clearTimeout(typewriterTailRejoinTimer);
+    typewriterTailRejoinTimer = null;
+  };
+  const setTypewriterTailOwner = (owner: TailFollowOwner, rebase = false) => {
+    typewriterTailState = rebase
+      ? rebaseTailFollowState(typewriterTailState, currentViewportScrollTop(), owner)
+      : { ...typewriterTailState, owner, velocity: owner === "user" ? 0 : typewriterTailState.velocity };
+    if (owner === "user") {
+      cancelTypewriterTailFrame();
+      typewriterTailReasons.clear();
+    }
+  };
+  const scheduleTypewriterTailRejoin = () => {
+    cancelTypewriterTailRejoin();
+    if (!rendererUsesAdaptiveTypewriter() || !following()) return;
+    typewriterTailRejoinTimer = window.setTimeout(() => {
+      typewriterTailRejoinTimer = null;
+      if (!rendererUsesAdaptiveTypewriter() || !following()) return;
+      setTypewriterTailOwner("app", true);
+      requestTypewriterTailFollow("user-idle");
+    }, 120);
+  };
   const setViewportScrollTop = (next: number) => {
     programmaticScrollTop = next;
     viewport.scrollTop = next;
@@ -69,12 +117,115 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
       if (following()) scrollBottomNow();
     });
   };
+  const resumeTypewriterTailFollow = (reason: string) => {
+    if (!rendererUsesAdaptiveTypewriter()) return;
+    cancelTypewriterTailRejoin();
+    setFollowing(true);
+    setTypewriterTailOwner("app", true);
+    typewriterTailLastHeight = null;
+    typewriterTailLastTarget = null;
+    typewriterTailLastExpected = null;
+    typewriterTailTargetDeltaEma = 0;
+    requestTypewriterTailFollow(reason);
+  };
+  const requestTypewriterTailFollow = (reason: string) => {
+    if (!rendererUsesAdaptiveTypewriter() || !following() || typewriterTailState.owner !== "app") return;
+    typewriterTailReasons.add(reason);
+    if (typewriterTailFrame != null) return;
+    if (scrollFrame != null) {
+      cancelAnimationFrame(scrollFrame);
+      scrollFrame = null;
+    }
+    typewriterTailFrame = requestAnimationFrame((now) => {
+      typewriterTailFrame = null;
+      const reasons = [...typewriterTailReasons];
+      typewriterTailReasons.clear();
+      if (!rendererUsesAdaptiveTypewriter() || !following() || typewriterTailState.owner !== "app") return;
+
+      const scrollHeight = viewport.scrollHeight;
+      const maxScrollTop = Math.max(0, scrollHeight - viewport.clientHeight);
+      const overflow = maxScrollTop > 0;
+      const currentScrollTop = viewport.scrollTop;
+      const targetScrollTop = maxScrollTop;
+      const previousHeight = typewriterTailLastHeight;
+      const previousTarget = typewriterTailLastTarget;
+      const scrollHeightDelta = previousHeight == null ? 0 : scrollHeight - previousHeight;
+      const targetDeltaPx = previousTarget == null ? 0 : targetScrollTop - previousTarget;
+      const browserCompensationPx = typewriterTailLastExpected == null
+        ? 0
+        : currentScrollTop - typewriterTailLastExpected;
+      const uncompensatedTargetDeltaPx = targetDeltaPx - browserCompensationPx;
+      const previousTargetDeltaEma = typewriterTailTargetDeltaEma;
+      const targetDeltaMagnitude = Math.abs(uncompensatedTargetDeltaPx);
+      const feedForwardTargetDeltaPx = previousTargetDeltaEma > 0
+        ? Math.sign(uncompensatedTargetDeltaPx) * Math.min(targetDeltaMagnitude, previousTargetDeltaEma * 2)
+        : 0;
+      if (targetDeltaMagnitude > 0) {
+        typewriterTailTargetDeltaEma = previousTargetDeltaEma > 0
+          ? previousTargetDeltaEma * 0.75 + targetDeltaMagnitude * 0.25
+          : targetDeltaMagnitude;
+      }
+      const distanceFromBottom = Math.max(0, maxScrollTop - currentScrollTop);
+      const frame = advanceTailFollow(typewriterTailState, targetScrollTop, now, currentScrollTop, feedForwardTargetDeltaPx);
+      typewriterTailState = frame.state;
+      const nextScrollTop = frame.nextScrollTop;
+      const distanceToTarget = targetScrollTop - currentScrollTop;
+      const shouldWrite = !frame.rebased && Math.abs(nextScrollTop - currentScrollTop) > 0.05;
+      if (shouldWrite) setViewportScrollTop(nextScrollTop);
+      const distanceAfterBottom = Math.max(0, maxScrollTop - viewport.scrollTop);
+      const recorder = getHarnessRecorder();
+      if (recorder) {
+        recordHarnessMetric(recorder, {
+          stage: "transcript-scroll",
+          renderer: markdownRenderer(),
+          owner: "typewriter-tail-inertial",
+          ownership: typewriterTailState.owner,
+          reasons,
+          mode: frame.mode,
+          rebased: frame.rebased,
+          overflow,
+          scrollHeightReadCount: 1,
+          scrollTopWriteCount: shouldWrite ? 1 : 0,
+          frameIntervalMs: frame.frameIntervalMs,
+          scrollHeightDelta,
+          targetDeltaPx,
+          browserCompensationPx,
+          uncompensatedTargetDeltaPx,
+          feedForwardTargetDeltaPx,
+          targetDeltaEmaPx: typewriterTailTargetDeltaEma,
+          feedForwardVelocityPxPerSecond: frame.feedForwardVelocityPxPerSecond,
+          movementPx: shouldWrite ? nextScrollTop - currentScrollTop : 0,
+          velocityPxPerSecond: typewriterTailState.velocity,
+          distanceBeforeBottom: distanceFromBottom,
+          distanceAfterBottom,
+          distanceToTarget,
+          targetScrollTop,
+          currentScrollTop,
+          nextScrollTop,
+        });
+      }
+      if (viewport.scrollTop < 240) loadEarlier(scrollHeight, viewport.scrollTop);
+
+      typewriterTailLastHeight = scrollHeight;
+      typewriterTailLastTarget = targetScrollTop;
+      typewriterTailLastExpected = nextScrollTop;
+      const stillMoving = Math.abs(targetScrollTop - nextScrollTop) > 0.25 || Math.abs(typewriterTailState.velocity) > 1;
+      if (following() && rendererUsesAdaptiveTypewriter() && typewriterTailState.owner === "app" && stillMoving) {
+        requestTypewriterTailFollow("inertia");
+      }
+    });
+  };
   const settleInitialLayout = (epoch: number) => {
     if (epoch !== layoutEpoch || !following()) return;
-    scrollBottomNow();
+    if (rendererUsesAdaptiveTypewriter()) requestTypewriterTailFollow("initial-layout");
+    else scrollBottomNow();
   };
   let displayScrollQueued = false;
   const settleAfterMarkdown = () => {
+    if (rendererUsesAdaptiveTypewriter()) {
+      requestTypewriterTailFollow("markdown-render");
+      return;
+    }
     if (!following() || displayScrollQueued) return;
     displayScrollQueued = true;
     queueMicrotask(() => {
@@ -123,11 +274,30 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
     if (loaded !== previousLoaded) {
       previousLoaded = loaded;
       const epoch = layoutEpoch;
-      setFollowing(true);
-      scrollBottom();
+      if (rendererUsesAdaptiveTypewriter()) resumeTypewriterTailFollow("loaded");
+      else {
+        setFollowing(true);
+        scrollBottom();
+      }
       void document.fonts.ready.then(() => settleInitialLayout(epoch));
     }
     else if (following() && !rendererUsesTypewriter()) scrollBottom();
+  });
+  createEffect(() => {
+    const renderer = markdownRenderer();
+    if (previousRenderer == null) {
+      previousRenderer = renderer;
+      return;
+    }
+    if (renderer === previousRenderer) return;
+    previousRenderer = renderer;
+    if (renderer === "incremark-typewriter") resumeTypewriterTailFollow("renderer-switch");
+    else {
+      cancelTypewriterTailRejoin();
+      cancelTypewriterTailFrame();
+      typewriterTailReasons.clear();
+      setTypewriterTailOwner("app", true);
+    }
   });
 
   const [pullDistance, setPullDistance] = createSignal(0);
@@ -138,18 +308,49 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
   onMount(() => {
     panelMotion = mountTranscriptPanelMotion(transcriptRoot, motionShell);
     transcriptVisibility = mountTranscriptVisibility(transcriptRoot, viewport, thread);
+    const claimUserScroll = () => {
+      if (!rendererUsesAdaptiveTypewriter()) return;
+      const changedOwner = typewriterTailState.owner !== "user";
+      programmaticScrollTop = null;
+      cancelTypewriterTailRejoin();
+      setTypewriterTailOwner("user", true);
+      if (changedOwner) {
+        const recorder = getHarnessRecorder();
+        if (recorder) {
+          recordHarnessMetric(recorder, {
+            stage: "transcript-scroll",
+            renderer: markdownRenderer(),
+            owner: "typewriter-tail-inertial",
+            ownership: "user",
+            reasons: ["user-input"],
+            mode: "user",
+            scrollHeightReadCount: 0,
+            scrollTopWriteCount: 0,
+            movementPx: 0,
+            velocityPxPerSecond: 0,
+          });
+        }
+      }
+    };
     const onScroll = () => {
       if (programmaticScrollTop != null && Math.abs(viewport.scrollTop - programmaticScrollTop) < 1) {
         programmaticScrollTop = null;
         return;
       }
       programmaticScrollTop = null;
-      setFollowing(viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight < 80);
+      const nearLatest = viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight < 80;
+      if (!rendererUsesAdaptiveTypewriter() || typewriterTailState.owner === "user" || !following()) {
+        setFollowing(nearLatest);
+      }
+      if (rendererUsesAdaptiveTypewriter() && typewriterTailState.owner === "user" && nearLatest) {
+        scheduleTypewriterTailRejoin();
+      }
       if (viewport.scrollTop < 240) loadEarlier();
     };
     // Empty-state pull-to-refresh: hard reload so a stuck PWA shell or live
     // socket can recover without hunting browser menus.
     const onTouchStart = (event: TouchEvent) => {
+      claimUserScroll();
       if (!empty() || event.touches.length !== 1) return;
       pullStartY = event.touches[0]!.clientY;
       pulling = true;
@@ -179,24 +380,30 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
       if (shouldReload) location.reload();
     };
     viewport.addEventListener("scroll", onScroll, { passive: true });
+    viewport.addEventListener("wheel", claimUserScroll, { passive: true });
     viewport.addEventListener("touchstart", onTouchStart, { passive: true });
     viewport.addEventListener("touchmove", onTouchMove, { passive: false });
     viewport.addEventListener("touchend", onTouchEnd);
     viewport.addEventListener("touchcancel", onTouchEnd);
     const resizeObserver = new ResizeObserver(() => {
       if (!following()) return;
-      scrollBottom();
+      if (rendererUsesAdaptiveTypewriter()) requestTypewriterTailFollow("resize");
+      else scrollBottom();
     });
     resizeObserver.observe(thread);
     onCleanup(() => {
       layoutEpoch += 1;
       resizeObserver.disconnect();
       viewport.removeEventListener("scroll", onScroll);
+      viewport.removeEventListener("wheel", claimUserScroll);
       viewport.removeEventListener("touchstart", onTouchStart);
       viewport.removeEventListener("touchmove", onTouchMove);
       viewport.removeEventListener("touchend", onTouchEnd);
       viewport.removeEventListener("touchcancel", onTouchEnd);
       if (scrollFrame != null) cancelAnimationFrame(scrollFrame);
+      cancelTypewriterTailFrame();
+      cancelTypewriterTailRejoin();
+      typewriterTailReasons.clear();
       transcriptVisibility?.destroy();
       transcriptVisibility = null;
       panelMotion?.destroy();
@@ -246,7 +453,7 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
         }}</For>
         </div>
       </div>
-      <Show when={!following()}><Button class="message-scroller-button" aria-label="Scroll to latest" onClick={() => { setFollowing(true); scrollBottom(); }}>↓</Button></Show>
+      <Show when={!following()}><Button class="message-scroller-button" aria-label="Scroll to latest" onClick={() => { if (rendererUsesAdaptiveTypewriter()) resumeTypewriterTailFollow("user-scroll-to-latest"); else { setFollowing(true); scrollBottom(); } }}>↓</Button></Show>
     </div>
   </div>;
 }

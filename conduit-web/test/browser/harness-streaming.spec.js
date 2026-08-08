@@ -81,6 +81,7 @@ test("a deterministic stream reports browser delivery and visible rendering cade
     requiresStructuralContract: fixture?.requiresStructuralContract || false,
     skipStructuralFingerprint: fixture?.skipStructuralFingerprint || false,
     scrollProbe: fixture?.scrollProbe || false,
+    wheelProbe: fixture?.wheelProbe || false,
     instrumentation: process.env.HARNESS_INSTRUMENTATION !== "off",
     seed,
     renderer,
@@ -147,6 +148,24 @@ test("a deterministic stream reports browser delivery and visible rendering cade
     expect(report.browser.clientWork.typewriter.terminal?.backlogCharacters).toBe(0);
     expect(report.browser.clientWork.typewriter.terminal?.displayedVisibleCharacters)
       .toBe(report.browser.clientWork.typewriter.terminal?.sourceVisibleCharacters);
+  }
+  if (typewriter && selectedRenderer === "incremark-typewriter" && fixture?.id === "mixed-scroll-stress") {
+    expect(report.browser.scroll.typewriterTail.sampleCount).toBeGreaterThan(0);
+    expect(report.browser.scroll.typewriterTail.trackingSampleCount).toBeGreaterThan(0);
+    expect(report.browser.scroll.typewriterTail.snapSampleCount).toBe(0);
+    expect(report.browser.scroll.typewriterTail.maxReadsPerFrame).toBeLessThanOrEqual(1);
+    expect(report.browser.scroll.typewriterTail.maxWritesPerFrame).toBeLessThanOrEqual(1);
+    expect(report.browser.scroll.typewriterTail.directionReversalCount).toBe(0);
+    expect(report.browser.scroll.typewriterTail.uncompensatedTargetDeltaPx.count).toBeGreaterThan(0);
+  }
+  if (typewriter && selectedRenderer === "incremark-synthetic" && fixture?.id === "mixed-scroll-stress") {
+    expect(report.browser.scroll.typewriterTail.sampleCount).toBe(0);
+  }
+  if (typewriter && selectedRenderer === "incremark-typewriter" && fixture?.id === "typewriter-tail-wheel") {
+    expect(report.browser.scroll.typewriterTail.userSampleCount).toBeGreaterThan(0);
+    expect(report.browser.scroll.typewriterTail.ownershipTransitions).toBeGreaterThan(0);
+    expect(report.browser.scroll.typewriterTail.userOwnedScrollTopWriteCount).toBe(0);
+    expect(report.browser.scroll.typewriterTail.rebaseSampleCount).toBeGreaterThan(0);
   }
   expect(report.outcome).toBe("passed");
   expect(report.browser.webSocketDeltaCount).toBe(cadence.deltas.length);
