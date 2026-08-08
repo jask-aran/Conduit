@@ -63,6 +63,29 @@ const mathTableOscillationText = [
   "After the table, inline math continues with $\\int u\\,dv = uv - \\int v\\,du$ and $\\det(A) \\ne 0$.",
 ].join("\n");
 
+const mixedScrollStressText = [
+  "# Mixed scroll-follow stress",
+  "",
+  ...Array.from({ length: 4 }, (_, section) => [
+    `## Section ${section + 1}: prose, inline math, and a growing table`,
+    `The explanation continues through the active tail with $F = ma$, $x_${section + 1} = y_${section + 2}$, and $\\ln|x|$. The browser must keep the transcript at the bottom while this section grows.`,
+    "",
+    "$$",
+    `\\frac{${section + 2}x^2 + ${section + 3}}{x + ${section + 4}} = \\sum_{n=1}^{${section + 5}} \\frac{n^2 + 1}{n + 1}`,
+    "$$",
+    "",
+    "| Quantity | Definition | Formula | Result | Notes |",
+    "| --- | --- | --- | --- | --- |",
+    ...Array.from({ length: 5 }, (_, row) => `| Row ${row + 1} | A wrapped cell explains the value for section ${section + 1}. | $a_${row + 1} = b_${section + 1}$ | $F = ma$ and $x^2 + y^2 = z^2$ | The table remains readable while more rows arrive. |`),
+    "",
+  ].join("\n")),
+  "The final paragraph keeps the tail active with $\\int_0^1 x^2\\,dx = \\frac{1}{3}$ and a closing block.",
+  "",
+  "$$",
+  "\\Delta x \\rightarrow 0, \\qquad \\lim_{x \\to 0} \\frac{\\sin x}{x} = 1",
+  "$$",
+].join("\n");
+
 export const TABLE_MATH_TEST_PROMPT = "output some inline math with $ quotes, and some block math with $$ a lot of it, the inline interspersed with texta nd the blocks inebetween, add soem tables with a lot of info int them as well";
 
 const syntheticMathText = [
@@ -200,6 +223,18 @@ export const BROWSER_FIXTURES = Object.freeze({
     maxMathGeometryTransitions: 6,
     skipStructuralFingerprint: true,
     requiresStructuralContract: false,
+  },
+  "mixed-scroll-stress": {
+    text: mixedScrollStressText,
+    expectedSemanticText: null,
+    expectedSemanticFingerprint: null,
+    expectedAssertions: { katexRendered: true, tableMathRendered: true },
+    expectedInteractions: {},
+    maxLongestTaskMs: 250,
+    maxRemovedMathNodes: 0,
+    skipStructuralFingerprint: true,
+    requiresStructuralContract: false,
+    scrollProbe: true,
   },
   "standard-math-delimiters": {
     text: [

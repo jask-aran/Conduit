@@ -84,10 +84,10 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
       settleInitialLayout(epoch);
     });
   };
-  const loadEarlier = () => {
+  const loadEarlier = (knownHeight?: number, knownTop?: number) => {
     if (historyLoad || !props.chat.pageBefore() || props.chat.loadingOlder()) return;
-    const previousHeight = viewport.scrollHeight;
-    const previousTop = viewport.scrollTop;
+    const previousHeight = knownHeight ?? viewport.scrollHeight;
+    const previousTop = knownTop ?? viewport.scrollTop;
     const restoreAnchor = () => {
       setViewportScrollTop(previousTop + viewport.scrollHeight - previousHeight);
     };
@@ -184,7 +184,8 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
     viewport.addEventListener("touchend", onTouchEnd);
     viewport.addEventListener("touchcancel", onTouchEnd);
     const resizeObserver = new ResizeObserver(() => {
-      if (following()) scrollBottom();
+      if (!following()) return;
+      scrollBottom();
     });
     resizeObserver.observe(thread);
     onCleanup(() => {

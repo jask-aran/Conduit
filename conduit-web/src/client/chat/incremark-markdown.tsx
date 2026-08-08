@@ -582,6 +582,7 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
     setDisplayBlockStore("items", reconcile(next, { key: "id", merge: true }));
   };
   const typewriterController = new AdaptiveIncremarkTypewriter({
+    adaptive: Boolean(props.typewriter && !props.inline && !props.syntheticMath),
     onChange: (next) => {
       setDisplayBlocks(next);
       queueMicrotask(() => props.onRendered?.());
@@ -613,6 +614,14 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
         fallbackMode: metrics.fallbackMode,
         lagTargetMet: metrics.lagTargetMet,
         terminal: metrics.terminal,
+        ...(metrics.frameGapMs !== undefined ? {
+          frameGapMs: metrics.frameGapMs,
+          commitToNextFrameMs: metrics.commitToNextFrameMs,
+          frameHealthy: metrics.frameHealthy,
+          saturationMs: metrics.saturationMs,
+          stepChanged: metrics.stepChanged,
+          previousCharsPerTick: metrics.previousCharsPerTick,
+        } : {}),
         nativeTransformer: typewriterController.getDebugState(),
       });
     },

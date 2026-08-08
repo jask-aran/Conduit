@@ -4,9 +4,12 @@ import {
   calculateAdaptiveRate,
   calculateBacklogAgeMs,
   calculateControlRate,
+  chooseAdaptiveCharsPerTick,
+  chooseAdaptiveTickInterval,
   chooseCharsPerTick,
   chooseFallbackMode,
   chooseTickInterval,
+  isFrameHealthy,
   normalizeFrameInterval,
   prepareTypewriterNode,
   updateFrameInterval,
@@ -73,6 +76,26 @@ test("tick cadence follows the measured display refresh interval", () => {
 test("source updates can ramp the step before the next display frame", () => {
   assert.equal(chooseCharsPerTick(10_000, 16, 1, 0, 8, true), 4);
   assert.equal(chooseCharsPerTick(10_000, 16, 4, 0, 8, true), 16);
+});
+
+test("adaptive Typewriter growth is gradual and only display frames may grow it", () => {
+  assert.equal(chooseAdaptiveCharsPerTick(10_000, 16, 1, true, true), 2);
+  assert.equal(chooseAdaptiveCharsPerTick(10_000, 16, 4, true, true), 5);
+  assert.equal(chooseAdaptiveCharsPerTick(10_000, 16, 20, true, false), 20);
+});
+
+test("adaptive Typewriter reduces the step by a quarter when frame health degrades", () => {
+  assert.equal(chooseAdaptiveCharsPerTick(10_000, 16, 20, false, true), 15);
+  assert.equal(chooseAdaptiveCharsPerTick(10_000, 16, 2, false, true), 1);
+});
+
+test("adaptive frame health includes browser commit and frame-gap cost", () => {
+  assert.equal(isFrameHealthy(4, 20, 18, 16), true);
+  assert.equal(isFrameHealthy(9, 20, 18, 16), false);
+  assert.equal(isFrameHealthy(4, 30, 18, 16), false);
+  assert.equal(isFrameHealthy(4, 20, 30, 16), false);
+  assert.equal(chooseAdaptiveTickInterval(4, 20, 18, 16), 16);
+  assert.equal(chooseAdaptiveTickInterval(9, 20, 18, 16), 32);
 });
 
 test("frame work selects safe-step and safe-block fallback modes", () => {
