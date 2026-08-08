@@ -303,48 +303,81 @@ test("workspace panel previews files, shows diff, and persists per chat", async 
         const surface = shell.querySelector(".workspace-panel-surface");
         const chat = document.querySelector('[data-slot="sidebar-inset"]');
         const transcript = document.querySelector(".thread");
+        const motionShell = document.querySelector(".transcript-motion-shell");
         const handle = shell.querySelector('[aria-label="Resize workspace panel"]');
+        const shellBox = shell.getBoundingClientRect();
+        const surfaceBox = surface.getBoundingClientRect();
+        const chatBox = chat.getBoundingClientRect();
+        const motionBox = motionShell.getBoundingClientRect();
         return {
-          panelWidth: shell.getBoundingClientRect().width,
-          surfaceWidth: surface.getBoundingClientRect().width,
-          mainWidth: chat.getBoundingClientRect().width,
+          panelWidth: shellBox.width,
+          surfaceWidth: surfaceBox.width,
+          surfaceLeft: surfaceBox.left,
+          mainWidth: chatBox.width,
+          mainRight: chatBox.right,
           threadLeft: transcript.getBoundingClientRect().left,
           threadWidth: transcript.getBoundingClientRect().width,
+          motionRight: motionBox.right,
+          gapMainToSurface: surfaceBox.left - chatBox.right,
+          gapMotionToSurface: surfaceBox.left - motionBox.right,
+          emptyShellLeft: surfaceBox.left - shellBox.left,
           ariaWidth: Number(handle.getAttribute("aria-valuenow")),
         };
       }));
     }
-    expect(new Set(resizeSamples.map((sample) => Math.round(sample.panelWidth))).size).toBe(1);
+    // Coupled resize: shell tracks surface every frame; chat stays adjacent.
+    expect(new Set(resizeSamples.map((sample) => Math.round(sample.panelWidth))).size).toBeGreaterThan(3);
     expect(new Set(resizeSamples.map((sample) => Math.round(sample.surfaceWidth))).size).toBeGreaterThan(3);
-    expect(new Set(resizeSamples.map((sample) => Math.round(sample.mainWidth))).size).toBe(1);
-    expect(new Set(resizeSamples.map((sample) => Math.round(sample.threadLeft))).size).toBe(1);
-    expect(new Set(resizeSamples.map((sample) => Math.round(sample.threadWidth))).size).toBeGreaterThan(3);
+    expect(new Set(resizeSamples.map((sample) => Math.round(sample.mainWidth))).size).toBeGreaterThan(3);
+    expect(resizeSamples.every((sample) => Math.abs(sample.panelWidth - sample.surfaceWidth) < 1)).toBe(true);
+    expect(resizeSamples.every((sample) => Math.abs(sample.emptyShellLeft) < 1)).toBe(true);
+    expect(resizeSamples.every((sample) => Math.abs(sample.gapMainToSurface - 10) < 1.5)).toBe(true);
+    expect(resizeSamples.every((sample) => Math.abs(sample.gapMotionToSurface - 10) < 1.5)).toBe(true);
     expect(resizeSamples.every((sample) => Math.abs(sample.ariaWidth - sample.surfaceWidth) < 1)).toBe(true);
     expect(resizeSamples.every((sample, index) =>
       index === 0 || sample.surfaceWidth >= resizeSamples[index - 1].surfaceWidth - 0.5)).toBe(true);
     const previewGeometry = await page.evaluate(() => {
+      const shell = document.querySelector("aside.workspace-panel");
       const surface = document.querySelector(".workspace-panel-surface");
+      const chat = document.querySelector('[data-slot="sidebar-inset"]');
       const transcript = document.querySelector(".thread");
+      const motionShell = document.querySelector(".transcript-motion-shell");
       return {
+        shell: shell.getBoundingClientRect().toJSON(),
         surface: surface.getBoundingClientRect().toJSON(),
+        main: chat.getBoundingClientRect().toJSON(),
         transcript: transcript.getBoundingClientRect().toJSON(),
+        motion: motionShell.getBoundingClientRect().toJSON(),
       };
     });
     await page.mouse.up();
     await expect(widthHandle).toHaveAttribute("aria-valuenow", String(Math.min(Math.floor(page.viewportSize().width * 0.65), originalWidth + 72)));
     await expect.poll(async () => Math.round((await panel.boundingBox()).width)).toBe(originalWidth + 72);
     const releasedGeometry = await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => {
+      const shell = document.querySelector("aside.workspace-panel");
       const surface = document.querySelector(".workspace-panel-surface");
+      const chat = document.querySelector('[data-slot="sidebar-inset"]');
       const transcript = document.querySelector(".thread");
+      const motionShell = document.querySelector(".transcript-motion-shell");
       resolve({
+        shell: shell.getBoundingClientRect().toJSON(),
         surface: surface.getBoundingClientRect().toJSON(),
+        main: chat.getBoundingClientRect().toJSON(),
         transcript: transcript.getBoundingClientRect().toJSON(),
+        motion: motionShell.getBoundingClientRect().toJSON(),
       });
     })));
+    // Release continuity: first released frame matches final drag frame.
+    expect(Math.abs(releasedGeometry.shell.width - previewGeometry.shell.width)).toBeLessThan(1);
+    expect(Math.abs(releasedGeometry.shell.x - previewGeometry.shell.x)).toBeLessThan(1);
     expect(Math.abs(releasedGeometry.surface.x - previewGeometry.surface.x)).toBeLessThan(1);
     expect(Math.abs(releasedGeometry.surface.width - previewGeometry.surface.width)).toBeLessThan(1);
+    expect(Math.abs(releasedGeometry.main.right - previewGeometry.main.right)).toBeLessThan(1);
+    expect(Math.abs(releasedGeometry.main.width - previewGeometry.main.width)).toBeLessThan(1);
     expect(Math.abs(releasedGeometry.transcript.x - previewGeometry.transcript.x)).toBeLessThan(1);
     expect(Math.abs(releasedGeometry.transcript.width - previewGeometry.transcript.width)).toBeLessThan(1);
+    expect(Math.abs(releasedGeometry.motion.x - previewGeometry.motion.x)).toBeLessThan(1);
+    expect(Math.abs(releasedGeometry.motion.width - previewGeometry.motion.width)).toBeLessThan(1);
   }
   await panel.getByRole("button", { name: "src" }).click();
   await panel.getByRole("button", { name: "main.ts" }).click();
@@ -418,6 +451,20 @@ test("desktop workspace surface and transcript move continuously with atomic she
   expect(new Set(openSamples.map((sample) => Math.round(sample.threadWidth))).size).toBe(1);
   expect(openSamples.every((sample, index) =>
     index === 0 || sample.surfaceLeft <= openSamples[index - 1].surfaceLeft + 0.5)).toBe(true);
+  const openShellPaint = await page.evaluate(() => {
+    const shell = document.querySelector("aside.workspace-panel");
+    const surface = shell.querySelector(".workspace-panel-surface");
+    const styles = getComputedStyle(shell);
+    return {
+      background: styles.backgroundColor,
+      open: shell.classList.contains("workspace-panel-open"),
+      radius: styles.borderRadius,
+      surfaceOpacity: getComputedStyle(surface).opacity,
+    };
+  });
+  expect(openShellPaint.open).toBe(true);
+  expect(openShellPaint.background).not.toBe("rgba(0, 0, 0, 0)");
+  expect(openShellPaint.background).not.toBe("transparent");
   const [surfaceBox, closeBox, resizeBox] = await Promise.all([
     surface.boundingBox(),
     panel.getByRole("button", { name: "Close workspace panel" }).boundingBox(),
@@ -510,6 +557,120 @@ test("rapid panel reversals continue from rendered geometry and release transcri
   await expect.poll(() => transcriptShell.evaluate((element) =>
     new DOMMatrixReadOnly(getComputedStyle(element).transform).m41)).toBe(0);
   await expect(page.locator(".transcript")).not.toHaveAttribute("data-panel-motion");
+});
+
+test("overlapping resize and panel motion cannot retain transcript preview geometry", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop-chromium");
+  await page.goto("/");
+  await page.getByRole("button", { name: "Toggle workspace panel" }).click();
+  const workspace = page.locator("aside.workspace-panel");
+  const handle = workspace.getByRole("separator", { name: "Resize workspace panel" });
+  await expect(workspace).toHaveAttribute("aria-hidden", "false");
+  await page.waitForTimeout(180);
+
+  const handleBox = await handle.boundingBox();
+  await page.mouse.move(handleBox.x + (handleBox.width / 2), handleBox.y + 100);
+  await page.mouse.down();
+  await page.mouse.move(handleBox.x - 72, handleBox.y + 100, { steps: 6 });
+  await page.locator('[data-sidebar="trigger"]').evaluate((element) => element.click());
+  await page.mouse.up();
+
+  const transcript = page.locator(".transcript");
+  const motionShell = page.locator(".transcript-motion-shell");
+  await expect(transcript).not.toHaveAttribute("data-panel-motion");
+  await expect.poll(() => motionShell.evaluate((element) => element.style.width)).toBe("");
+  const settled = await page.evaluate(() => {
+    const transcript = document.querySelector(".transcript").getBoundingClientRect();
+    const shell = document.querySelector(".transcript-motion-shell").getBoundingClientRect();
+    const surface = document.querySelector(".workspace-panel-surface").getBoundingClientRect();
+    return {
+      transcriptWidth: transcript.width,
+      shellWidth: shell.width,
+      gap: surface.left - shell.right,
+    };
+  });
+  expect(Math.abs(settled.transcriptWidth - settled.shellWidth)).toBeLessThan(1);
+  expect(Math.abs(settled.gap - 10)).toBeLessThan(1);
+
+  await page.locator('[data-sidebar="trigger"]').click();
+  const secondHandleBox = await handle.boundingBox();
+  await page.mouse.move(secondHandleBox.x + (secondHandleBox.width / 2), secondHandleBox.y + 100);
+  await page.mouse.down();
+  await page.mouse.move(secondHandleBox.x - 48, secondHandleBox.y + 100, { steps: 4 });
+  await page.getByRole("button", { name: "Existing chat" }).evaluate((element) => element.click());
+  await page.mouse.up();
+  await expect(page.getByText("Previous question")).toBeVisible();
+  await expect.poll(() => motionShell.evaluate((element) => element.style.width)).toBe("");
+
+  if (await workspace.getAttribute("aria-hidden") === "false") {
+    await workspace.getByRole("button", { name: "Close workspace panel" }).click();
+  }
+  await expect(workspace).toHaveCSS("width", "0px");
+  const tableGeometry = await page.evaluate(() => {
+    const markdown = document.createElement("div");
+    markdown.className = "chat-markdown";
+    markdown.dataset.renderer = "incremark-synthetic";
+    markdown.innerHTML = "<div class=\"incremark\"><table><tbody><tr><td>one</td><td>two</td></tr></tbody></table></div>";
+    document.querySelector(".thread").append(markdown);
+    const table = markdown.querySelector("table").getBoundingClientRect();
+    return {
+      markdownWidth: markdown.getBoundingClientRect().width,
+      tableWidth: table.width,
+    };
+  });
+  expect(Math.abs((tableGeometry.tableWidth / tableGeometry.markdownWidth) - 1.5)).toBeLessThan(0.01);
+});
+
+test("explicit transcript visibility preserves offscreen geometry and reveals scrolled blocks", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop-chromium");
+  const content = Array.from({ length: 24 }, (_, index) =>
+    `## Section ${index + 1}\n\n${"This section has enough text to occupy several wrapped lines while the transcript width changes. ".repeat(4)}`).join("\n\n");
+  await page.route("**/v0/sessions/session_existing", (route) => route.fulfill({ json: {
+    id: "session_existing",
+    projectId: "project_chat",
+    status: "active",
+    title: "Existing chat",
+    model: model.spec,
+    thinkingLevel: "medium",
+    messages: [
+      { id: "message_existing", role: "user", content: "Previous question" },
+      { id: "message_long", role: "assistant", content },
+    ],
+    tools: [],
+  } }));
+  await page.goto("/?markdownRenderer=incremark");
+  await page.getByRole("button", { name: "Existing chat" }).click();
+  const blocks = page.locator(".chat-markdown > .incremark > *");
+  await expect(blocks).toHaveCount(48);
+  await expect.poll(() => page.locator('[data-transcript-visibility="hidden"]').count()).toBeGreaterThan(20);
+
+  const before = await page.evaluate(() => {
+    const viewport = document.querySelector(".message-scroller-viewport");
+    return { scrollHeight: viewport.scrollHeight, clientHeight: viewport.clientHeight };
+  });
+  await page.evaluate(() => {
+    const viewport = document.querySelector(".message-scroller-viewport");
+    viewport.scrollTop = Math.round(viewport.scrollHeight * 0.45);
+  });
+  await page.waitForTimeout(700);
+  const after = await page.evaluate(() => {
+    const viewport = document.querySelector(".message-scroller-viewport");
+    const bounds = viewport.getBoundingClientRect();
+    const crossing = [...document.querySelectorAll(".chat-markdown > .incremark > *")]
+      .filter((element) => {
+        const rect = element.getBoundingClientRect();
+        return rect.bottom >= bounds.top && rect.top <= bounds.bottom;
+      });
+    return {
+      scrollHeight: viewport.scrollHeight,
+      crossing: crossing.length,
+      hiddenCrossing: crossing.filter((element) =>
+        element.getAttribute("data-transcript-visibility") === "hidden").length,
+    };
+  });
+  expect(after.crossing).toBeGreaterThan(0);
+  expect(after.hiddenCrossing).toBe(0);
+  expect(Math.abs(after.scrollHeight - before.scrollHeight)).toBeLessThan(before.clientHeight * 0.1);
 });
 
 test("desktop panel surfaces settle immediately with reduced motion", async ({ page }, testInfo) => {

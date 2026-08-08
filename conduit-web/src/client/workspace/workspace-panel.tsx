@@ -150,7 +150,9 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
     }
     const reversing = Boolean(panelSurfaceMotion);
     const currentBox = reversing ? panelSurface.getBoundingClientRect() : null;
-    const currentOpacity = reversing ? Number.parseFloat(getComputedStyle(panelSurface).opacity) : open ? 0 : 1;
+    const currentOpacity = reversing
+      ? Number.parseFloat(getComputedStyle(panelSurface).opacity)
+      : 1;
     cancelPanelSurfaceMotion();
     const id = ++panelMotionId;
     dispatchPanelGeometryMotion({
@@ -166,16 +168,24 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
       setShellWidth(targetWidth);
       setShellGap(targetGap);
     });
+    // Surface keeps its intrinsic panel width and slides within/beside the
+    // committed shell. Open starts fully past the shell's right edge so the
+    // shell background (not the app frame) is what the eye reads first.
     const panelWidth = width();
     const targetBaseLeft = window.innerWidth - targetGap - panelWidth;
-    const startX = currentBox ? currentBox.left - targetBaseLeft : open ? panelWidth + targetGap : -startGap;
+    const startX = currentBox
+      ? currentBox.left - targetBaseLeft
+      : open
+        ? panelWidth
+        : -startGap;
     const targetX = open ? 0 : panelWidth;
+    const targetOpacity = open ? 1 : 0;
     panelSurface.style.transform = `translateX(${startX}px)`;
     panelSurface.style.opacity = String(currentOpacity);
     panelSurface.style.willChange = "transform, opacity";
     const motion = panelSurface.animate([
       { transform: `translateX(${startX}px)`, opacity: currentOpacity },
-      { transform: `translateX(${targetX}px)`, opacity: open ? 1 : 0 },
+      { transform: `translateX(${targetX}px)`, opacity: targetOpacity },
     ], {
       duration: 160,
       easing: "ease",
@@ -337,17 +347,26 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
     if (isMobileLayout()) return;
     stopResize?.();
     event.preventDefault();
+    resizeHandle?.setPointerCapture(event.pointerId);
+    const pointerId = event.pointerId;
     const startX = event.clientX;
     const startWidth = width();
+    const resizeStorageKey = widthKey();
     let pendingWidth = startWidth;
     let frame = 0;
+    let stopped = false;
     const id = ++panelMotionId;
     settlePanelSurfaceMotion();
     dispatchPanelGeometryMotion({ phase: "begin", id, source: "workspace", size: startWidth + shellGap() });
     const apply = () => {
       frame = 0;
       const nextWidth = clampWidth(pendingWidth);
-      setWidth(nextWidth);
+      // Resize edge is layout truth: shell and surface stay equal every frame so
+      // chat-main stays adjacent and the flex slot cannot outgrow the surface.
+      batch(() => {
+        setWidth(nextWidth);
+        setShellWidth(nextWidth);
+      });
       dispatchPanelGeometryMotion({ phase: "change", id, source: "workspace", size: nextWidth + shellGap() });
     };
     const move = (moveEvent: PointerEvent) => {
@@ -355,6 +374,8 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
       if (!frame) frame = requestAnimationFrame(apply);
     };
     const stop = () => {
+      if (stopped) return;
+      stopped = true;
       if (frame) {
         cancelAnimationFrame(frame);
         apply();
@@ -364,11 +385,14 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
         setWidth(nextWidth);
         setShellWidth(nextWidth);
       });
-      localStorage.setItem(widthKey(), String(nextWidth));
+      localStorage.setItem(resizeStorageKey, String(nextWidth));
       dispatchPanelGeometryMotion({ phase: "end", id, source: "workspace", size: nextWidth + shellGap() });
       window.removeEventListener("pointermove", move);
       window.removeEventListener("pointerup", stop);
       window.removeEventListener("pointercancel", stop);
+      window.removeEventListener("blur", stop);
+      resizeHandle?.removeEventListener("lostpointercapture", stop);
+      if (resizeHandle?.hasPointerCapture(pointerId)) resizeHandle.releasePointerCapture(pointerId);
       document.body.classList.remove("workspace-resizing");
       stopResize = undefined;
     };
@@ -377,11 +401,14 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", stop, { once: true });
     window.addEventListener("pointercancel", stop, { once: true });
+    window.addEventListener("blur", stop, { once: true });
+    resizeHandle?.addEventListener("lostpointercapture", stop, { once: true });
   };
   onCleanup(() => { resetRequestScope(); cancelPanelSurfaceMotion(); clearPanelSurfaceMotion(); stopResize?.(); stopDetailResize?.(); document.body.classList.remove("workspace-resizing"); document.body.classList.remove("workspace-detail-resizing"); });
 
   let loadedProjectId = "";
   createEffect(on(() => props.chatId(), () => {
+    stopResize?.();
     const nextTab = (localStorage.getItem(storageKey()) as PanelTab) || "files";
     batch(() => {
       setDetailOpen(detailOpenFor(nextTab) === "true");

@@ -8,6 +8,7 @@ import { TurnTrace } from "./turn-trace";
 import { createTimelineStore } from "../state/timeline-store";
 import type { MarkdownRendererId } from "./markdown-settings";
 import { mountTranscriptPanelMotion } from "./transcript-motion";
+import { mountTranscriptVisibility } from "./transcript-visibility";
 
 const ChatMarkdown = lazy(() => import("./markdown").then((module) => ({ default: module.ChatMarkdown })));
 function Actions(props: { message: Message; precedingUserId?: string; chat: ActiveChatStore; partialContinue: boolean }) {
@@ -30,12 +31,11 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
   let motionShell!: HTMLDivElement;
   let viewport!: HTMLDivElement;
   let thread!: HTMLDivElement;
+  let panelMotion: ReturnType<typeof mountTranscriptPanelMotion> | null = null;
+  let transcriptVisibility: ReturnType<typeof mountTranscriptVisibility> | null = null;
   let previousLoaded: string | null = null;
   let historyLoad: Promise<void> | null = null;
   let layoutEpoch = 0;
-  let virtualizationEpoch = 0;
-  let virtualizationFrame: number | null = null;
-  let virtualizationIdle: number | null = null;
   const [following, setFollowing] = createSignal(true);
   const markdownRenderer = () => props.markdownRenderer;
   const rendererUsesTypewriter = () => markdownRenderer() === "incremark-typewriter" || markdownRenderer() === "incremark-synthetic";
@@ -110,32 +110,10 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
     props.chat.loadedId();
     layoutEpoch += 1;
   });
-  const cancelVirtualizationPreparation = () => {
-    virtualizationEpoch += 1;
-    if (virtualizationFrame != null) cancelAnimationFrame(virtualizationFrame);
-    if (virtualizationIdle != null) cancelIdleCallback(virtualizationIdle);
-    virtualizationFrame = null;
-    virtualizationIdle = null;
-  };
-  const prepareVirtualizedLayout = () => {
-    cancelVirtualizationPreparation();
-    delete transcriptRoot.dataset.layoutVirtualized;
-    const epoch = virtualizationEpoch;
-    void document.fonts.ready.then(() => {
-      if (epoch !== virtualizationEpoch) return;
-      virtualizationFrame = requestAnimationFrame(() => {
-        virtualizationFrame = null;
-        if (epoch !== virtualizationEpoch) return;
-        virtualizationIdle = requestIdleCallback(() => {
-          virtualizationIdle = null;
-          if (epoch === virtualizationEpoch) transcriptRoot.dataset.layoutVirtualized = "true";
-        }, { timeout: 2500 });
-      });
-    });
-  };
   createEffect(() => {
     props.chat.loadedId();
-    prepareVirtualizedLayout();
+    panelMotion?.reset();
+    transcriptVisibility?.reset();
   });
   createEffect(() => {
     const loaded = props.chat.loadedId();
@@ -158,7 +136,8 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
   let pulling = false;
 
   onMount(() => {
-    const unmountPanelMotion = mountTranscriptPanelMotion(transcriptRoot, motionShell);
+    panelMotion = mountTranscriptPanelMotion(transcriptRoot, motionShell);
+    transcriptVisibility = mountTranscriptVisibility(transcriptRoot, viewport, thread);
     const onScroll = () => {
       if (programmaticScrollTop != null && Math.abs(viewport.scrollTop - programmaticScrollTop) < 1) {
         programmaticScrollTop = null;
@@ -217,8 +196,10 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
       viewport.removeEventListener("touchend", onTouchEnd);
       viewport.removeEventListener("touchcancel", onTouchEnd);
       if (scrollFrame != null) cancelAnimationFrame(scrollFrame);
-      cancelVirtualizationPreparation();
-      unmountPanelMotion();
+      transcriptVisibility?.destroy();
+      transcriptVisibility = null;
+      panelMotion?.destroy();
+      panelMotion = null;
     });
   });
 

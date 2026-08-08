@@ -26,6 +26,8 @@ test("desktop panel shells commit atomically while bounded surfaces animate", as
   assert.match(workspace, /width:\s*0/);
   assert.doesNotMatch(workspace, /transition:[^;]*width/);
   assert.match(openWorkspace, /pointer-events:\s*auto/);
+  // Open shell paints panel chrome so the committed slot is not the app frame.
+  assert.match(openWorkspace, /background:\s*var\(--background\)/);
   assert.match(workspaceSurface, /width:\s*var\(--workspace-panel-width\)/);
   assert.match(workspaceSurface, /position:\s*absolute/);
   assert.match(workspaceSurface, /right:\s*0/);
@@ -37,7 +39,8 @@ test("desktop panel shells commit atomically while bounded surfaces animate", as
   assert.match(transcriptMotionShell, /contain:\s*layout paint/);
   assert.match(transcriptMotionShell, /container-name:\s*chat-main/);
   assert.match(transcriptMotionShell, /container-type:\s*inline-size/);
-  assert.match(styles, /data-layout-virtualized="true"[^}]+\.chat-markdown > \.incremark > \*/);
+  const hiddenTranscriptContent = rule(styles, "[data-transcript-visibility=\"hidden\"]");
+  assert.match(hiddenTranscriptContent, /content-visibility:\s*hidden/);
 });
 
 test("reduced motion preserves the explicitly requested meteor timeline", async () => {
