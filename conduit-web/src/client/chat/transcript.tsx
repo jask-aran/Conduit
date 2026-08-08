@@ -47,7 +47,7 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
   const [following, setFollowing] = createSignal(true);
   const markdownRenderer = () => props.markdownRenderer;
   const rendererUsesTypewriter = () => markdownRenderer() === "incremark-typewriter" || markdownRenderer() === "incremark-synthetic";
-  const rendererUsesAdaptiveTypewriter = () => markdownRenderer() === "incremark-typewriter";
+  const rendererUsesInertialTailFollow = () => markdownRenderer() === "incremark-typewriter" || markdownRenderer() === "incremark-synthetic";
   const timeline = createTimelineStore(
     props.chat.messages,
     props.chat.tools,
@@ -89,10 +89,10 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
   };
   const scheduleTypewriterTailRejoin = () => {
     cancelTypewriterTailRejoin();
-    if (!rendererUsesAdaptiveTypewriter() || !following()) return;
+    if (!rendererUsesInertialTailFollow() || !following()) return;
     typewriterTailRejoinTimer = window.setTimeout(() => {
       typewriterTailRejoinTimer = null;
-      if (!rendererUsesAdaptiveTypewriter() || !following()) return;
+      if (!rendererUsesInertialTailFollow() || !following()) return;
       setTypewriterTailOwner("app", true);
       requestTypewriterTailFollow("user-idle");
     }, 120);
@@ -118,7 +118,7 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
     });
   };
   const resumeTypewriterTailFollow = (reason: string) => {
-    if (!rendererUsesAdaptiveTypewriter()) return;
+    if (!rendererUsesInertialTailFollow()) return;
     cancelTypewriterTailRejoin();
     setFollowing(true);
     setTypewriterTailOwner("app", true);
@@ -129,7 +129,7 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
     requestTypewriterTailFollow(reason);
   };
   const requestTypewriterTailFollow = (reason: string) => {
-    if (!rendererUsesAdaptiveTypewriter() || !following() || typewriterTailState.owner !== "app") return;
+    if (!rendererUsesInertialTailFollow() || !following() || typewriterTailState.owner !== "app") return;
     typewriterTailReasons.add(reason);
     if (typewriterTailFrame != null) return;
     if (scrollFrame != null) {
@@ -140,7 +140,7 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
       typewriterTailFrame = null;
       const reasons = [...typewriterTailReasons];
       typewriterTailReasons.clear();
-      if (!rendererUsesAdaptiveTypewriter() || !following() || typewriterTailState.owner !== "app") return;
+      if (!rendererUsesInertialTailFollow() || !following() || typewriterTailState.owner !== "app") return;
 
       const scrollHeight = viewport.scrollHeight;
       const maxScrollTop = Math.max(0, scrollHeight - viewport.clientHeight);
@@ -210,19 +210,19 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
       typewriterTailLastTarget = targetScrollTop;
       typewriterTailLastExpected = nextScrollTop;
       const stillMoving = Math.abs(targetScrollTop - nextScrollTop) > 0.25 || Math.abs(typewriterTailState.velocity) > 1;
-      if (following() && rendererUsesAdaptiveTypewriter() && typewriterTailState.owner === "app" && stillMoving) {
+      if (following() && rendererUsesInertialTailFollow() && typewriterTailState.owner === "app" && stillMoving) {
         requestTypewriterTailFollow("inertia");
       }
     });
   };
   const settleInitialLayout = (epoch: number) => {
     if (epoch !== layoutEpoch || !following()) return;
-    if (rendererUsesAdaptiveTypewriter()) requestTypewriterTailFollow("initial-layout");
+    if (rendererUsesInertialTailFollow()) requestTypewriterTailFollow("initial-layout");
     else scrollBottomNow();
   };
   let displayScrollQueued = false;
   const settleAfterMarkdown = () => {
-    if (rendererUsesAdaptiveTypewriter()) {
+    if (rendererUsesInertialTailFollow()) {
       requestTypewriterTailFollow("markdown-render");
       return;
     }
@@ -274,7 +274,7 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
     if (loaded !== previousLoaded) {
       previousLoaded = loaded;
       const epoch = layoutEpoch;
-      if (rendererUsesAdaptiveTypewriter()) resumeTypewriterTailFollow("loaded");
+      if (rendererUsesInertialTailFollow()) resumeTypewriterTailFollow("loaded");
       else {
         setFollowing(true);
         scrollBottom();
@@ -291,7 +291,7 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
     }
     if (renderer === previousRenderer) return;
     previousRenderer = renderer;
-    if (renderer === "incremark-typewriter") resumeTypewriterTailFollow("renderer-switch");
+    if (rendererUsesInertialTailFollow()) resumeTypewriterTailFollow("renderer-switch");
     else {
       cancelTypewriterTailRejoin();
       cancelTypewriterTailFrame();
@@ -309,7 +309,7 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
     panelMotion = mountTranscriptPanelMotion(transcriptRoot, motionShell);
     transcriptVisibility = mountTranscriptVisibility(transcriptRoot, viewport, thread);
     const claimUserScroll = () => {
-      if (!rendererUsesAdaptiveTypewriter()) return;
+      if (!rendererUsesInertialTailFollow()) return;
       const changedOwner = typewriterTailState.owner !== "user";
       programmaticScrollTop = null;
       cancelTypewriterTailRejoin();
@@ -339,10 +339,10 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
       }
       programmaticScrollTop = null;
       const nearLatest = viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight < 80;
-      if (!rendererUsesAdaptiveTypewriter() || typewriterTailState.owner === "user" || !following()) {
+      if (!rendererUsesInertialTailFollow() || typewriterTailState.owner === "user" || !following()) {
         setFollowing(nearLatest);
       }
-      if (rendererUsesAdaptiveTypewriter() && typewriterTailState.owner === "user" && nearLatest) {
+      if (rendererUsesInertialTailFollow() && typewriterTailState.owner === "user" && nearLatest) {
         scheduleTypewriterTailRejoin();
       }
       if (viewport.scrollTop < 240) loadEarlier();
@@ -387,7 +387,7 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
     viewport.addEventListener("touchcancel", onTouchEnd);
     const resizeObserver = new ResizeObserver(() => {
       if (!following()) return;
-      if (rendererUsesAdaptiveTypewriter()) requestTypewriterTailFollow("resize");
+      if (rendererUsesInertialTailFollow()) requestTypewriterTailFollow("resize");
       else scrollBottom();
     });
     resizeObserver.observe(thread);
@@ -453,7 +453,7 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
         }}</For>
         </div>
       </div>
-      <Show when={!following()}><Button class="message-scroller-button" aria-label="Scroll to latest" onClick={() => { if (rendererUsesAdaptiveTypewriter()) resumeTypewriterTailFollow("user-scroll-to-latest"); else { setFollowing(true); scrollBottom(); } }}>↓</Button></Show>
+      <Show when={!following()}><Button class="message-scroller-button" aria-label="Scroll to latest" onClick={() => { if (rendererUsesInertialTailFollow()) resumeTypewriterTailFollow("user-scroll-to-latest"); else { setFollowing(true); scrollBottom(); } }}>↓</Button></Show>
     </div>
   </div>;
 }

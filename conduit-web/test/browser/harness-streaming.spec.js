@@ -149,7 +149,7 @@ test("a deterministic stream reports browser delivery and visible rendering cade
     expect(report.browser.clientWork.typewriter.terminal?.displayedVisibleCharacters)
       .toBe(report.browser.clientWork.typewriter.terminal?.sourceVisibleCharacters);
   }
-  if (typewriter && selectedRenderer === "incremark-typewriter" && fixture?.id === "mixed-scroll-stress") {
+  if (typewriter && ["incremark-typewriter", "incremark-synthetic"].includes(selectedRenderer) && fixture?.id === "mixed-scroll-stress") {
     expect(report.browser.scroll.typewriterTail.sampleCount).toBeGreaterThan(0);
     expect(report.browser.scroll.typewriterTail.trackingSampleCount).toBeGreaterThan(0);
     expect(report.browser.scroll.typewriterTail.snapSampleCount).toBe(0);
@@ -157,9 +157,6 @@ test("a deterministic stream reports browser delivery and visible rendering cade
     expect(report.browser.scroll.typewriterTail.maxWritesPerFrame).toBeLessThanOrEqual(1);
     expect(report.browser.scroll.typewriterTail.directionReversalCount).toBe(0);
     expect(report.browser.scroll.typewriterTail.uncompensatedTargetDeltaPx.count).toBeGreaterThan(0);
-  }
-  if (typewriter && selectedRenderer === "incremark-synthetic" && fixture?.id === "mixed-scroll-stress") {
-    expect(report.browser.scroll.typewriterTail.sampleCount).toBe(0);
   }
   if (typewriter && selectedRenderer === "incremark-typewriter" && fixture?.id === "typewriter-tail-wheel") {
     expect(report.browser.scroll.typewriterTail.userSampleCount).toBeGreaterThan(0);
