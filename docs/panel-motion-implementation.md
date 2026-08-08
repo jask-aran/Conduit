@@ -337,3 +337,76 @@ Verification on this source:
   pre-existing renderer-threshold class recorded above; the isolated fixture
   does not mount the panel-motion path.
 - `git diff --check`: passed.
+
+## Medium-ground correction
+
+The checkpoint at `2d5c58f` exposed one state-machine defect and one incomplete
+performance policy.
+
+An authenticated real-pointer probe confirmed that a normal Workspace drag
+keeps the Workspace surface and transcript preview 10 px apart and hands the
+same width to the final shell. The permanent black gap occurs when another
+panel motion remains active as the resize ends. `transcript-motion.ts` clears
+the inline preview width only when the last completed event is itself the
+resize event. A later sidebar or Workspace animation end therefore leaves the
+old inline width on `.transcript-motion-shell`. A chat change then preserves
+that orphaned width. The same element is the `chat-main` query container, so
+the orphan also changes the wide-table rule.
+
+The correction keeps the accepted continuous visual model:
+
+1. Make preview-width ownership explicit. Normalize every resize from the
+   actual transcript viewport, keep the last preview through the shell commit,
+   and remove it only on the next animation frame after the parent and preview
+   widths match. Clear orphaned state on interruption, window blur, page
+   hiding, and teardown.
+2. Keep the real Workspace surface adjacent to the preview throughout the
+   drag. Use pointer capture so release cannot be lost outside the handle.
+3. Replace automatic `content-visibility` with an explicit viewport policy.
+   Preserve measured intrinsic block heights, keep visible Incremark blocks
+   live, and exclude off-screen blocks from drag layouts. Pin automatic-layout
+   tables only for the resize gesture, then release them into the final width
+   at the shell commit.
+4. Extend browser coverage with overlapping-motion cleanup, chat-change
+   cleanup, release-frame continuity, final 150% table geometry, and visible
+   open/close surface progression. Re-run the authenticated trace against this
+   exact build.
+
+The correction is implemented in production asset `index-HTmIQpN7.js`.
+Browser checks confirm that:
+
+- a real pointer drag keeps the transcript preview and Workspace surface 10 px
+  apart, including when the Workspace reaches 932 px;
+- resize completion during an active sidebar animation does not retain an
+  inline transcript width;
+- chat navigation during a captured resize releases the preview;
+- the first released frame matches the final preview frame;
+- a settled wide Incremark table is exactly 150% of its Markdown width;
+- off-screen blocks retain scroll geometry and become visible before they
+  cross the scroller viewport;
+- desktop open and close surfaces progress across multiple frames;
+- reduced motion settles immediately; and
+- mobile overlays remain full-bleed and mutually exclusive.
+
+Verification on this source:
+
+- `npm run typecheck`: passed.
+- `npm run build`: passed; initial JavaScript 131,261 B gzip, initial CSS
+  19,466 B gzip, largest lazy JavaScript 185,186 B gzip.
+- `npm test`: 331 passed.
+- Six focused desktop tests passed when run alone or without worker
+  contention. The existing close-frame monotonicity assertion failed once in a
+  five-worker run and passed alone, matching its prior recorded contention
+  behavior.
+- The mobile full-bleed and exclusive-overlay test passed.
+- `table-cell-display-math`: passed.
+- `math-table-oscillation`: failed with `KaTeX actual render count 144 exceeded
+  64`, `Math geometry transitions 78 exceeded 6`, and
+  `Rendered block height direction reversals 2 exceeded 0`. This reproduces
+  the existing renderer-threshold failure and does not mount panel motion.
+
+The final authenticated performance trace is pending. The temporary Chrome
+page changed from the current asset back to checkpoint asset
+`index-BI-WORSM.js` through its old service-worker navigation cache. The cache
+was cleared, but the execution approval gate reached its quota before Chrome
+could reload. Do not use that stale page for acceptance metrics.

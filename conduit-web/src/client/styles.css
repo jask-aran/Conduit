@@ -138,8 +138,11 @@ svg { stroke-width: 1.5; }
 .palette-trigger { display: inline-flex; flex: none; }
 .chat-header-actions { display: flex; margin-left: auto; flex: none; align-items: center; gap: 2px; }
 
-.workspace-panel { position: relative; display: flex; width: 0; height: calc(100dvh - 16px); margin: 8px 0 8px 0; flex: none; overflow: visible; pointer-events: none; }
-.workspace-panel.workspace-panel-open { pointer-events: auto; }
+.workspace-panel { position: relative; display: flex; width: 0; height: calc(100dvh - 16px); margin: 8px 0 8px 0; flex: none; overflow: visible; pointer-events: none; border-radius: 16px; }
+.workspace-panel.workspace-panel-open { pointer-events: auto; background: var(--background); }
+/* Surface width tracks --workspace-panel-width. During resize shellWidth ===
+   panel width so the surface fills the shell; during open/close the shell may
+   differ while the surface translates. */
 .workspace-panel-surface { position: absolute; top: 0; right: 0; display: flex; width: var(--workspace-panel-width); min-width: 0; height: 100%; contain: layout paint; flex: none; flex-direction: column; overflow: hidden; border: 1px solid transparent; border-radius: 16px; background: var(--background); opacity: 0; transition: opacity var(--panel-motion-duration) var(--panel-motion-easing); }
 .workspace-panel-open .workspace-panel-surface { border-color: var(--border); opacity: 1; }
 .workspace-panel-surface > * { max-width: 100%; }
@@ -194,6 +197,7 @@ svg { stroke-width: 1.5; }
 .workspace-panel-empty { display: grid; min-height: 120px; flex: 1; place-items: center; padding: 20px; color: var(--muted-foreground); font-size: 12px; text-align: center; }
 .workspace-panel-error { padding: 9px 12px; border-bottom: 1px solid color-mix(in oklch, var(--destructive), transparent 45%); color: var(--destructive); font-size: 12px; }
 .workspace-panel-loading { position: absolute; inset: auto 12px 12px auto; display: flex; align-items: center; gap: 7px; padding: 6px 9px; border: 1px solid var(--border); border-radius: 999px; background: var(--popover); color: var(--muted-foreground); font-size: 11px; box-shadow: 0 8px 24px rgb(0 0 0 / 25%); }
+/* When shellWidth === panel width the handle sits on the shell's left edge. */
 .workspace-resize-handle { position: absolute; inset-block: 0; left: calc(var(--workspace-shell-width) - var(--workspace-panel-width) - 12px); z-index: 40; width: 24px; cursor: col-resize; touch-action: none; }
 .workspace-resize-handle::after { content: ""; position: absolute; inset-block: 0; left: 11px; width: 1px; background: var(--accent-cool); opacity: 0; pointer-events: none; }
 .workspace-resizing .workspace-resize-handle::after { opacity: 1; }
@@ -332,8 +336,7 @@ svg { stroke-width: 1.5; }
 .message-scroller-viewport::-webkit-scrollbar { display: none; }
 .thread { width: min(760px, calc(100% - 48px)); min-height: 100%; margin-inline: auto; padding: 64px 44px 32px; }
 [data-slot="message-scroller-item"] { margin-block: 10px; content-visibility: visible; contain-intrinsic-size: none; }
-.transcript[data-layout-virtualized="true"] [data-slot="message-scroller-item"] { content-visibility: auto; contain-intrinsic-size: auto 120px; }
-.transcript[data-layout-virtualized="true"] .chat-markdown > .incremark > * { content-visibility: auto; contain-intrinsic-size: auto 160px; }
+[data-transcript-visibility="hidden"] { content-visibility: hidden; }
 [data-slot="message"] { display: flex; width: 100%; }
 [data-slot="message-content"] { display: flex; min-width: 0; max-width: 100%; flex-direction: column; gap: 4px; }
 .message-user { justify-content: flex-end; }

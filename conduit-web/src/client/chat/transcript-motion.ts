@@ -15,13 +15,46 @@ export function mountTranscriptPanelMotion(
   motionShell: HTMLElement,
 ) {
   let motion: Animation | null = null;
+  let releaseFrame: number | null = null;
   const activeIds = new Map<PanelGeometryMotionSource, number>();
   const resizeStarts = new Map<PanelGeometryMotionSource, { size: number; width: number }>();
+
+  const cancelRelease = () => {
+    if (releaseFrame != null) cancelAnimationFrame(releaseFrame);
+    releaseFrame = null;
+  };
 
   const setTransform = (next: number) => {
     motion?.cancel();
     motion = null;
     motionShell.style.transform = next ? `translateX(${next}px)` : "";
+  };
+
+  const releasePreviewWidth = () => {
+    cancelRelease();
+    releaseFrame = requestAnimationFrame(() => {
+      releaseFrame = null;
+      if (activeIds.size || resizeStarts.size || !motionShell.style.width) return;
+      const parentWidth = transcript.clientWidth;
+      const previewWidth = motionShell.getBoundingClientRect().width;
+      if (Math.abs(parentWidth - previewWidth) > 1) {
+        motionShell.style.width = `${parentWidth}px`;
+        releasePreviewWidth();
+        return;
+      }
+      motionShell.style.removeProperty("width");
+    });
+  };
+
+  const reset = () => {
+    activeIds.clear();
+    resizeStarts.clear();
+    setTransform(0);
+    if (motionShell.style.width) {
+      motionShell.style.width = `${transcript.clientWidth}px`;
+      releasePreviewWidth();
+    }
+    delete transcript.dataset.panelMotion;
   };
 
   const animateTransform = (current: number, next: number, duration: number, easing: string) => {
@@ -43,12 +76,15 @@ export function mountTranscriptPanelMotion(
   const onMotion = (event: Event) => {
     const detail = (event as CustomEvent<PanelGeometryMotionDetail>).detail;
     if (detail.phase === "begin") {
+      cancelRelease();
       const current = transformX(motionShell);
       activeIds.set(detail.source, detail.id);
       if (detail.targetSize == null) {
+        const width = transcript.clientWidth;
+        motionShell.style.width = `${width}px`;
         resizeStarts.set(detail.source, {
           size: detail.size,
-          width: motionShell.getBoundingClientRect().width,
+          width,
         });
         transcript.dataset.panelMotion = "resize";
         setTransform(0);
@@ -71,22 +107,40 @@ export function mountTranscriptPanelMotion(
     const wasResize = resizeStarts.has(detail.source);
     activeIds.delete(detail.source);
     resizeStarts.delete(detail.source);
+    if (wasResize) {
+      setTransform(0);
+      motionShell.style.width = `${transcript.clientWidth}px`;
+    }
+    if (!resizeStarts.size && motionShell.style.width) releasePreviewWidth();
     if (!activeIds.size) {
-      if (wasResize) {
-        setTransform(0);
-        motionShell.style.removeProperty("width");
-      }
       delete transcript.dataset.panelMotion;
     }
   };
 
+  const onPageLeave = () => reset();
+  const onVisibilityChange = () => {
+    if (document.visibilityState === "hidden") reset();
+  };
+  const orphanObserver = new ResizeObserver(() => {
+    if (!activeIds.size && !resizeStarts.size && motionShell.style.width) releasePreviewWidth();
+  });
   window.addEventListener(PANEL_GEOMETRY_MOTION_EVENT, onMotion);
-  return () => {
-    window.removeEventListener(PANEL_GEOMETRY_MOTION_EVENT, onMotion);
-    activeIds.clear();
-    resizeStarts.clear();
-    setTransform(0);
-    motionShell.style.removeProperty("width");
-    delete transcript.dataset.panelMotion;
+  window.addEventListener("blur", onPageLeave);
+  document.addEventListener("visibilitychange", onVisibilityChange);
+  orphanObserver.observe(transcript);
+  return {
+    reset,
+    destroy: () => {
+      window.removeEventListener(PANEL_GEOMETRY_MOTION_EVENT, onMotion);
+      window.removeEventListener("blur", onPageLeave);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+      orphanObserver.disconnect();
+      cancelRelease();
+      activeIds.clear();
+      resizeStarts.clear();
+      setTransform(0);
+      motionShell.style.removeProperty("width");
+      delete transcript.dataset.panelMotion;
+    },
   };
 }
