@@ -45,7 +45,7 @@ import { api } from "../api/client";
 import type { RuntimeStore } from "../state/runtime";
 import { focusFirst, isMobileLayout, MOBILE_LAYOUT_QUERY, restoreFocus } from "./mobile-layout";
 import { ProjectActivityIndicator, RuntimeIndicator } from "./runtime-indicator";
-import { dispatchPanelGeometryMotion } from "../panel-motion";
+import { animatePanelEdge, dispatchPanelGeometryMotion, PANEL_MOTION_DURATION_MS, type PanelEdgeAnimation } from "../panel-motion";
 
 type WorkspaceMode = "linked" | "created" | "cloned";
 type ProjectInput = { mode: string; name?: string; path?: string; directoryName?: string; cloneUrl?: string; cloneParentPath?: string; cloneDirectoryName?: string };
@@ -108,77 +108,100 @@ export function Sidebar(props: {
 }) {
   const [collapsed, setCollapsed] = createSignal(localStorage.getItem("conduit.sidebar") === "collapsed");
   const [visualCollapsed, setVisualCollapsed] = createSignal(collapsed());
+  const [shellWidth, setShellWidth] = createSignal(collapsed() ? 52 : 244);
   const [newKind, setNewKind] = createSignal<"folder" | "workspace" | null>(null);
   let sidebarRoot: HTMLElement | undefined;
   let sidebarSurface: HTMLDivElement | undefined;
-  let sidebarSurfaceMotion: Animation | null = null;
+  let sidebarEdgeMotion: PanelEdgeAnimation | null = null;
   let sidebarMotionId = 0;
   let mobileReturnFocus: HTMLElement | null = null;
   let mobileWasOpen = false;
-  const cancelSidebarSurfaceMotion = () => {
-    sidebarSurfaceMotion?.cancel();
-    sidebarSurfaceMotion = null;
+  const cancelSidebarEdgeMotion = () => {
+    sidebarEdgeMotion?.cancel();
+    sidebarEdgeMotion = null;
+  };
+  const clearSidebarSurfaceStyles = () => {
+    sidebarSurface?.style.removeProperty("width");
+    sidebarSurface?.style.removeProperty("min-width");
+    sidebarSurface?.style.removeProperty("transform");
+    sidebarSurface?.style.removeProperty("will-change");
+  };
+  /** Keep the 244px chrome aligned so the rail shows the right edge (toggle). */
+  const paintSidebarEdge = (shell: number) => {
+    if (sidebarRoot) sidebarRoot.style.width = `${shell}px`;
+    if (!sidebarSurface) return;
+    sidebarSurface.style.width = "244px";
+    sidebarSurface.style.minWidth = "244px";
+    sidebarSurface.style.willChange = "transform";
+    // Shell clips from the right as it shrinks; shift chrome left so the toggle
+    // strip (right side when expanded) stays in the visible rail.
+    sidebarSurface.style.transform = `translateX(${Math.min(0, shell - 244)}px)`;
   };
   const toggleSidebar = () => {
     const nextCollapsed = !collapsed();
-    const startWidth = collapsed() ? 52 : 244;
+    const startWidth = shellWidth();
     const targetWidth = nextCollapsed ? 52 : 244;
     if (isMobileLayout() || !sidebarRoot || !sidebarSurface || matchMedia("(prefers-reduced-motion: reduce)").matches) {
-      cancelSidebarSurfaceMotion();
+      cancelSidebarEdgeMotion();
+      clearSidebarSurfaceStyles();
+      if (sidebarRoot) sidebarRoot.style.width = `${targetWidth}px`;
       batch(() => {
         setCollapsed(nextCollapsed);
         setVisualCollapsed(nextCollapsed);
+        setShellWidth(targetWidth);
       });
       return;
     }
-    const currentTransform = getComputedStyle(sidebarSurface).transform;
-    const currentX = sidebarSurfaceMotion && currentTransform !== "none"
-      ? new DOMMatrixReadOnly(currentTransform).m41
-      : collapsed() ? -192 : 0;
-    cancelSidebarSurfaceMotion();
+    cancelSidebarEdgeMotion();
     const id = ++sidebarMotionId;
+    // Logical collapsed state updates immediately for a11y; labels stay until
+    // visualCollapsed flips at the end of a collapse.
+    batch(() => {
+      setCollapsed(nextCollapsed);
+      if (!nextCollapsed) setVisualCollapsed(false);
+    });
     dispatchPanelGeometryMotion({
       phase: "begin",
       id,
       source: "sidebar",
       size: startWidth,
-      targetSize: targetWidth,
-      duration: 160,
-      easing: "ease",
     });
-    batch(() => {
-      setCollapsed(nextCollapsed);
-      if (!nextCollapsed) setVisualCollapsed(false);
-    });
-    sidebarSurface.style.width = "244px";
-    sidebarSurface.style.transform = `translateX(${currentX}px)`;
-    sidebarSurface.style.willChange = "transform";
-    const targetX = nextCollapsed ? -192 : 0;
-    const motion = sidebarSurface.animate([
-      { transform: `translateX(${currentX}px)` },
-      { transform: `translateX(${targetX}px)` },
-    ], {
-      duration: 160,
-      easing: "ease",
-      fill: "forwards",
-    });
-    sidebarSurfaceMotion = motion;
-    void motion.finished.catch(() => undefined).then(() => {
-      if (sidebarSurfaceMotion !== motion) return;
-      motion.cancel();
-      sidebarSurfaceMotion = null;
-      sidebarSurface.style.removeProperty("width");
-      sidebarSurface.style.removeProperty("transform");
-      sidebarSurface.style.removeProperty("will-change");
-      setVisualCollapsed(nextCollapsed);
-      dispatchPanelGeometryMotion({ phase: "end", id, source: "sidebar", size: targetWidth });
+    paintSidebarEdge(startWidth);
+    sidebarEdgeMotion = animatePanelEdge({
+      from: startWidth,
+      to: targetWidth,
+      durationMs: PANEL_MOTION_DURATION_MS,
+      onUpdate: (value) => {
+        // Write the shell width to the DOM each frame so motion is not gated on
+        // Solid's async render flush (which can collapse a 160ms ease into a pop).
+        paintSidebarEdge(value);
+        setShellWidth(value);
+        dispatchPanelGeometryMotion({
+          phase: "change",
+          id,
+          source: "sidebar",
+          size: value,
+        });
+      },
+      onComplete: () => {
+        if (sidebarMotionId !== id) return;
+        sidebarEdgeMotion = null;
+        if (sidebarRoot) sidebarRoot.style.width = `${targetWidth}px`;
+        setShellWidth(targetWidth);
+        clearSidebarSurfaceStyles();
+        setVisualCollapsed(nextCollapsed);
+        dispatchPanelGeometryMotion({
+          phase: "end",
+          id,
+          source: "sidebar",
+          size: targetWidth,
+        });
+      },
     });
   };
   onCleanup(() => {
-    cancelSidebarSurfaceMotion();
-    sidebarSurface?.style.removeProperty("width");
-    sidebarSurface?.style.removeProperty("transform");
-    sidebarSurface?.style.removeProperty("will-change");
+    cancelSidebarEdgeMotion();
+    clearSidebarSurfaceStyles();
   });
   const [phoneLayout, setPhoneLayout] = createSignal(isMobileLayout());
   onMount(() => {
@@ -494,7 +517,7 @@ export function Sidebar(props: {
     <Show when={props.mobileOpen}>
       <button type="button" class="mobile-panel-backdrop" data-mobile-backdrop="sidebar" data-for="sidebar" aria-label="Dismiss sidebar" onClick={closeMobile} />
     </Show>
-    <aside ref={sidebarRoot} data-slot="sidebar" data-state={collapsed() ? "collapsed" : "expanded"} data-visual-state={visualCollapsed() ? "collapsed" : "expanded"} data-mobile-open={props.mobileOpen} class="conduit-sidebar" aria-hidden={phoneLayout() && !props.mobileOpen ? true : undefined} inert={phoneLayout() && !props.mobileOpen ? true : undefined}>
+    <aside ref={sidebarRoot} data-slot="sidebar" data-state={collapsed() ? "collapsed" : "expanded"} data-visual-state={visualCollapsed() ? "collapsed" : "expanded"} data-mobile-open={props.mobileOpen} class="conduit-sidebar" style={{ width: `${shellWidth()}px` }} aria-hidden={phoneLayout() && !props.mobileOpen ? true : undefined} inert={phoneLayout() && !props.mobileOpen ? true : undefined}>
       <div ref={sidebarSurface} data-slot="sidebar-container" class="sidebar-container">
         <div data-sidebar="header">
           <Button variant="ghost" size="icon-sm" data-sidebar="trigger" aria-label="Toggle Sidebar" aria-expanded={isMobileLayout() ? props.mobileOpen : !collapsed()} onClick={onSidebarTrigger}><PanelLeftIcon /></Button>

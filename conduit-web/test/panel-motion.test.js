@@ -10,24 +10,27 @@ function rule(styles, selector) {
   return styles.match(new RegExp(`${escaped}\\s*\\{([^}]+)\\}`))?.[1] ?? "";
 }
 
-test("desktop panel shells commit atomically while bounded surfaces animate", async () => {
+test("desktop panel shells ease open and close while surfaces fill the shell", async () => {
   const styles = await fs.readFile(stylesPath, "utf8");
   const sidebar = rule(styles, ".conduit-sidebar");
   const collapsedSidebar = rule(styles, ".conduit-sidebar[data-state=\"collapsed\"]");
+  const sidebarContainer = rule(styles, ".sidebar-container");
   const workspace = rule(styles, ".workspace-panel");
   const openWorkspace = rule(styles, ".workspace-panel.workspace-panel-open");
   const workspaceSurface = rule(styles, ".workspace-panel-surface");
 
   assert.match(sidebar, /width:\s*244px/);
-  assert.match(sidebar, /overflow:\s*visible/);
+  assert.match(sidebar, /overflow:\s*hidden/);
   assert.doesNotMatch(sidebar, /transition:[^;]*width/);
   assert.match(collapsedSidebar, /width:\s*52px/);
+  // Settled collapsed rail is 52px wide; 244px chrome is only forced during motion.
+  assert.doesNotMatch(sidebarContainer, /min-width:\s*244px/);
   assert.match(workspace, /position:\s*relative/);
   assert.match(workspace, /width:\s*0/);
-  assert.doesNotMatch(workspace, /transition:[^;]*width/);
+  assert.match(workspace, /overflow:\s*hidden/);
   assert.match(openWorkspace, /pointer-events:\s*auto/);
-  // Open shell paints panel chrome so the committed slot is not the app frame.
   assert.match(openWorkspace, /background:\s*var\(--background\)/);
+  // Surface keeps settled panel width; shell clips during edge open/close.
   assert.match(workspaceSurface, /width:\s*var\(--workspace-panel-width\)/);
   assert.match(workspaceSurface, /position:\s*absolute/);
   assert.match(workspaceSurface, /right:\s*0/);
