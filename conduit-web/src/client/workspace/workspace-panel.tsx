@@ -5,7 +5,7 @@ import { api, asList } from "../api/client";
 import { focusFirst, isMobileLayout, restoreFocus } from "../navigation/mobile-layout";
 import { ownsWorkspaceRequest, type WorkspaceRequest } from "./request-ownership";
 import { TerminalPane } from "../remotes/terminal-pane";
-import { animatePanelEdge, dispatchPanelGeometryMotion, PANEL_MOTION_DURATION_MS, type PanelEdgeAnimation } from "../panel-motion";
+import { dispatchPanelGeometryMotion, PANEL_MOTION_DURATION_MS } from "../panel-motion";
 
 interface TreeEntry { name: string; path: string; type: "directory" | "file" | "other"; }
 interface DirectoryListing { entries: TreeEntry[]; truncated: boolean; }
@@ -47,9 +47,9 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
   let panelRoot: HTMLElement | undefined;
   let panelSurface: HTMLDivElement | undefined;
   let resizeHandle: HTMLDivElement | undefined;
-  let panelEdgeMotion: PanelEdgeAnimation | null = null;
   let panelEdgeMotionId: number | null = null;
   let panelMotionId = 0;
+  let panelEdgeRaf = 0;
   let mobileReturnFocus: HTMLElement | null = null;
   let mobileWasOpen = false;
   const [pending, setPending] = createSignal(new Map<number, { foreground: boolean }>());
@@ -111,8 +111,11 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
   const wasAborted = (cause: unknown) => (cause as { name?: string })?.name === "AbortError";
   let panelWasOpen = props.open();
   const cancelPanelEdgeMotion = () => {
-    panelEdgeMotion?.cancel();
-    panelEdgeMotion = null;
+    if (panelEdgeRaf) {
+      cancelAnimationFrame(panelEdgeRaf);
+      panelEdgeRaf = 0;
+    }
+    panelRoot?.removeAttribute("data-edge-instant");
   };
   const clearPanelSurfaceMotion = () => {
     panelSurface?.style.removeProperty("transform");
@@ -120,7 +123,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
     panelSurface?.style.removeProperty("will-change");
   };
   const settlePanelEdgeMotion = () => {
-    if (!panelEdgeMotion || panelEdgeMotionId == null) return;
+    if (panelEdgeMotionId == null) return;
     const id = panelEdgeMotionId;
     cancelPanelEdgeMotion();
     panelEdgeMotionId = null;
@@ -140,23 +143,22 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
     const targetGap = open && !mobile ? 10 : 0;
     const startSize = startWidth + startGap;
     const targetSize = targetWidth + targetGap;
+    cancelPanelEdgeMotion();
+    clearPanelSurfaceMotion();
     if (mobile || !panelRoot || !panelSurface || matchMedia("(prefers-reduced-motion: reduce)").matches) {
-      cancelPanelEdgeMotion();
       panelEdgeMotionId = null;
-      clearPanelSurfaceMotion();
+      panelRoot?.setAttribute("data-edge-instant", "true");
       batch(() => {
         setShellWidth(targetWidth);
         setShellGap(targetGap);
       });
+      requestAnimationFrame(() => panelRoot?.removeAttribute("data-edge-instant"));
       return;
     }
-    // Interrupt in-flight edge motion from the live shell size.
-    cancelPanelEdgeMotion();
-    clearPanelSurfaceMotion();
     const id = ++panelMotionId;
     panelEdgeMotionId = id;
-    // Edge mode (no targetSize): transcript keeps a width preview and does not
-    // full-reflow until the shell settles, same path as pointer resize.
+    // Resize path for transcript: begin without targetSize pins width. CSS eases
+    // the shell; each frame samples the live edge so content tracks (no jump+slide).
     dispatchPanelGeometryMotion({
       phase: "begin",
       id,
@@ -164,52 +166,36 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
       size: startSize,
     });
     panelSurface.style.opacity = "1";
-    const paintWorkspaceEdge = (nextWidth: number, nextGap: number) => {
-      if (!panelRoot) return;
-      panelRoot.style.width = `${nextWidth}px`;
-      panelRoot.style.marginRight = `${nextGap}px`;
-      panelRoot.style.setProperty("--workspace-shell-width", `${nextWidth}px`);
-    };
-    paintWorkspaceEdge(startWidth, startGap);
-    panelEdgeMotion = animatePanelEdge({
-      from: 0,
-      to: 1,
-      durationMs: PANEL_MOTION_DURATION_MS,
-      onUpdate: (progress) => {
-        const nextWidth = startWidth + (targetWidth - startWidth) * progress;
-        const nextGap = startGap + (targetGap - startGap) * progress;
-        // Direct DOM writes keep the edge on the display refresh; Solid signals
-        // catch up for reactive consumers without gating the paint.
-        paintWorkspaceEdge(nextWidth, nextGap);
-        batch(() => {
-          setShellWidth(nextWidth);
-          setShellGap(nextGap);
-        });
-        dispatchPanelGeometryMotion({
-          phase: "change",
-          id,
-          source: "workspace",
-          size: nextWidth + nextGap,
-        });
-      },
-      onComplete: () => {
-        if (panelEdgeMotionId !== id) return;
-        panelEdgeMotion = null;
-        panelEdgeMotionId = null;
-        paintWorkspaceEdge(targetWidth, targetGap);
-        batch(() => {
-          setShellWidth(targetWidth);
-          setShellGap(targetGap);
-        });
-        clearPanelSurfaceMotion();
-        dispatchPanelGeometryMotion({
-          phase: "end",
-          id,
-          source: "workspace",
-          size: targetSize,
-        });
-      },
+    batch(() => {
+      setShellWidth(targetWidth);
+      setShellGap(targetGap);
     });
+    const startedAt = performance.now();
+    const sampleEdge = () => {
+      if (panelEdgeMotionId !== id || !panelRoot) return;
+      const box = panelRoot.getBoundingClientRect();
+      const gap = Number.parseFloat(getComputedStyle(panelRoot).marginRight) || 0;
+      dispatchPanelGeometryMotion({
+        phase: "change",
+        id,
+        source: "workspace",
+        size: box.width + gap,
+      });
+      if (performance.now() - startedAt < PANEL_MOTION_DURATION_MS) {
+        panelEdgeRaf = requestAnimationFrame(sampleEdge);
+        return;
+      }
+      panelEdgeRaf = 0;
+      panelEdgeMotionId = null;
+      clearPanelSurfaceMotion();
+      dispatchPanelGeometryMotion({
+        phase: "end",
+        id,
+        source: "workspace",
+        size: targetSize,
+      });
+    };
+    panelEdgeRaf = requestAnimationFrame(sampleEdge);
   };
 
   const selectTab = (next: PanelTab) => {
@@ -366,6 +352,10 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
     let stopped = false;
     const id = ++panelMotionId;
     settlePanelEdgeMotion();
+    // Open/close uses CSS width transition; resize must not, or the shell lags
+    // the pointer and the gutter/transcript fight the ease.
+    panelRoot?.setAttribute("data-edge-instant", "true");
+    if (panelRoot) panelRoot.style.transition = "none";
     dispatchPanelGeometryMotion({ phase: "begin", id, source: "workspace", size: startWidth + shellGap() });
     const apply = () => {
       frame = 0;
@@ -403,6 +393,8 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
       resizeHandle?.removeEventListener("lostpointercapture", stop);
       if (resizeHandle?.hasPointerCapture(pointerId)) resizeHandle.releasePointerCapture(pointerId);
       document.body.classList.remove("workspace-resizing");
+      panelRoot?.removeAttribute("data-edge-instant");
+      panelRoot?.style.removeProperty("transition");
       stopResize = undefined;
     };
     stopResize = stop;

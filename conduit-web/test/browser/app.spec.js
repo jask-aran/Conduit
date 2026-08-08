@@ -474,15 +474,20 @@ test("desktop workspace shell and surface ease open and close together", async (
   expect(openShellPaint.open).toBe(true);
   expect(openShellPaint.background).not.toBe("rgba(0, 0, 0, 0)");
   expect(openShellPaint.background).not.toBe("transparent");
-  const [surfaceBox, closeBox, resizeBox] = await Promise.all([
+  const [surfaceBox, closeBox, resizeBox, panelBox, mainBox] = await Promise.all([
     surface.boundingBox(),
     panel.getByRole("button", { name: "Close workspace panel" }).boundingBox(),
     panel.getByRole("separator", { name: "Resize workspace panel" }).boundingBox(),
+    panel.boundingBox(),
+    page.locator('[data-slot="sidebar-inset"]').boundingBox(),
   ]);
   expect(surfaceBox.x + surfaceBox.width).toBeLessThanOrEqual(page.viewportSize().width + 1);
   expect(closeBox.x + closeBox.width).toBeLessThanOrEqual(page.viewportSize().width + 1);
-  expect(resizeBox.x).toBeGreaterThanOrEqual(0);
   expect(resizeBox.width).toBeGreaterThanOrEqual(24);
+  // Gutter is centered on the shell's left edge (between chat and panel).
+  expect(resizeBox.x).toBeLessThan(panelBox.x);
+  expect(resizeBox.x + resizeBox.width).toBeGreaterThan(panelBox.x);
+  expect(resizeBox.x).toBeGreaterThanOrEqual(mainBox.x + mainBox.width - resizeBox.width);
 
   await panel.getByRole("button", { name: "Close workspace panel" }).click();
   const closeSamples = await sampleShellGeometry();

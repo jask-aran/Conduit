@@ -64,8 +64,9 @@ export function mountTranscriptPanelMotion(
     if (detail.phase === "begin") {
       cancelRelease();
       activeIds.set(detail.source, detail.id);
-      // Open/close edge and pointer resize share the width-preview path.
-      // targetSize is reserved for rare inverse-translate-only callers.
+      // Edge path (resize + open/close): pin width, follow shell on change.
+      // targetSize inverse-translate is only for atomic shell commits — it
+      // jumps then slides if the shell is already CSS-easing.
       if (detail.targetSize != null) {
         transcript.dataset.panelMotion = "translate";
         const current = transformX(motionShell);
@@ -73,7 +74,7 @@ export function mountTranscriptPanelMotion(
         const naturalShift = detail.source === "sidebar" ? delta / 2 : -delta / 2;
         motion?.cancel();
         motionShell.style.removeProperty("transform");
-        const nextMotion = motionShell.animate([
+        motion = motionShell.animate([
           { transform: `translateX(${current - naturalShift}px)` },
           { transform: "translateX(0px)" },
         ], {
@@ -81,7 +82,6 @@ export function mountTranscriptPanelMotion(
           easing: detail.easing || "linear",
           fill: "forwards",
         });
-        motion = nextMotion;
         return;
       }
       const width = transcript.clientWidth;

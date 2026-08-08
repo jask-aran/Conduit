@@ -82,9 +82,11 @@ button, textarea, input, select { font: inherit; }
 svg { stroke-width: 1.5; }
 
 /* One concrete sidebar; no generic provider/component framework. */
-.conduit-sidebar { position: relative; z-index: 20; width: 244px; contain: layout; flex: none; overflow: hidden; }
-.sidebar-container { display: flex; width: 100%; height: 100dvh; contain: layout paint; flex-direction: column; overflow: hidden; background: var(--sidebar); color: var(--sidebar-foreground); }
+.conduit-sidebar { position: relative; z-index: 20; width: 244px; contain: layout; flex: none; overflow: hidden; transition: width var(--panel-motion-duration) var(--panel-motion-easing); }
+/* Fixed 244px chrome, pinned to the shell's right edge so the 52px rail shows the toggle. */
+.sidebar-container { position: absolute; top: 0; right: 0; bottom: 0; display: flex; width: 244px; flex-direction: column; overflow: hidden; background: var(--sidebar); color: var(--sidebar-foreground); }
 .conduit-sidebar[data-state="collapsed"] { width: 52px; }
+.conduit-sidebar[data-edge-instant="true"] { transition: none; }
 .conduit-sidebar[data-visual-state="collapsed"] .sidebar-container span,
 .conduit-sidebar[data-visual-state="collapsed"] [data-sidebar="group-label"],
 .conduit-sidebar[data-visual-state="collapsed"] .sidebar-group-action,
@@ -130,7 +132,8 @@ svg { stroke-width: 1.5; }
 /* Collapse control lives inside the sidebar chrome (including the 52px rail). */
 [data-sidebar="trigger"] { display: inline-flex; width: 32px; height: 32px; flex: none; }
 [data-sidebar="trigger"] svg { width: 16px; height: 16px; }
-.conduit-sidebar[data-visual-state="collapsed"]:not([data-mobile-open="true"]) [data-sidebar="header"] { justify-content: center; padding-inline: 0; }
+/* Visible rail is the right 52px of the 244px chrome; keep the trigger there. */
+.conduit-sidebar[data-visual-state="collapsed"]:not([data-mobile-open="true"]) [data-sidebar="header"] { justify-content: flex-end; padding-inline: 10px; }
 .conduit-sidebar[data-visual-state="collapsed"]:not([data-mobile-open="true"]) [data-sidebar="brand"] { display: none; }
 .conduit-sidebar[data-visual-state="collapsed"]:not([data-mobile-open="true"]) [data-sidebar="header"] > [data-sidebar="trigger"] { order: 0; margin-left: 0; }
 .chat-header [data-slot="button"] svg { width: 16px; height: 16px; }
@@ -138,10 +141,12 @@ svg { stroke-width: 1.5; }
 .palette-trigger { display: inline-flex; flex: none; }
 .chat-header-actions { display: flex; margin-left: auto; flex: none; align-items: center; gap: 2px; }
 
-.workspace-panel { position: relative; display: flex; width: 0; height: calc(100dvh - 16px); margin: 8px 0 8px 0; flex: none; overflow: hidden; pointer-events: none; border-radius: 16px; }
+/* overflow:visible keeps the resize gutter (left:-12px) between chat and panel. */
+.workspace-panel { position: relative; display: flex; width: 0; height: calc(100dvh - 16px); margin: 8px 0 8px 0; flex: none; overflow: visible; pointer-events: none; border-radius: 16px; transition: width var(--panel-motion-duration) var(--panel-motion-easing), margin-right var(--panel-motion-duration) var(--panel-motion-easing); }
 .workspace-panel.workspace-panel-open { pointer-events: auto; background: var(--background); }
-/* Surface keeps the settled panel width and is right-anchored. The shell clips
-   it while shellWidth eases, so open/close reads as a slideover of full chrome. */
+.workspace-panel[data-edge-instant="true"],
+body.workspace-resizing .workspace-panel { transition: none !important; }
+/* Surface keeps settled panel width, right-anchored inside the shell. */
 .workspace-panel-surface { position: absolute; top: 0; right: 0; display: flex; width: var(--workspace-panel-width); min-width: 0; height: 100%; contain: layout paint; flex: none; flex-direction: column; overflow: hidden; border: 1px solid transparent; border-radius: 16px; background: var(--background); opacity: 0; transition: opacity var(--panel-motion-duration) var(--panel-motion-easing); }
 .workspace-panel-open .workspace-panel-surface { border-color: var(--border); opacity: 1; }
 .workspace-panel-surface > * { max-width: 100%; }
@@ -196,7 +201,7 @@ svg { stroke-width: 1.5; }
 .workspace-panel-empty { display: grid; min-height: 120px; flex: 1; place-items: center; padding: 20px; color: var(--muted-foreground); font-size: 12px; text-align: center; }
 .workspace-panel-error { padding: 9px 12px; border-bottom: 1px solid color-mix(in oklch, var(--destructive), transparent 45%); color: var(--destructive); font-size: 12px; }
 .workspace-panel-loading { position: absolute; inset: auto 12px 12px auto; display: flex; align-items: center; gap: 7px; padding: 6px 9px; border: 1px solid var(--border); border-radius: 999px; background: var(--popover); color: var(--muted-foreground); font-size: 11px; box-shadow: 0 8px 24px rgb(0 0 0 / 25%); }
-/* Handle sits on the shell's left edge while surface fills the shell. */
+/* 24px hit target centered on the gap between chat-main and the panel edge. */
 .workspace-resize-handle { position: absolute; inset-block: 0; left: -12px; z-index: 40; width: 24px; cursor: col-resize; touch-action: none; }
 .workspace-resize-handle::after { content: ""; position: absolute; inset-block: 0; left: 11px; width: 1px; background: var(--accent-cool); opacity: 0; pointer-events: none; }
 .workspace-resizing .workspace-resize-handle::after { opacity: 1; }
