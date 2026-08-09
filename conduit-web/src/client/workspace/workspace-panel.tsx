@@ -162,7 +162,15 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
     const currentSurfaceX = cancelPanelSurfaceMotion();
     cancelPanelEdgeMotion();
     clearPanelSurfaceMotion();
-    if (mobile || !panelRoot || !panelSurface || matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    if (mobile) {
+      panelEdgeMotionId = null;
+      batch(() => {
+        setShellWidth(targetWidth);
+        setShellGap(targetGap);
+      });
+      return;
+    }
+    if (!panelRoot || !panelSurface || matchMedia("(prefers-reduced-motion: reduce)").matches) {
       panelEdgeMotionId = null;
       panelRoot?.setAttribute("data-edge-instant", "true");
       batch(() => {

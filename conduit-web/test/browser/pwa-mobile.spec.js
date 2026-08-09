@@ -41,6 +41,24 @@ async function openSidebar(page, testInfo) {
   }
 }
 
+async function sampleTranslateX(page, selector, count = 8) {
+  return page.evaluate(({ selector: targetSelector, count: frameCount }) => new Promise((resolve, reject) => {
+    const target = document.querySelector(targetSelector);
+    if (!target) {
+      reject(new Error(`Missing mobile motion target: ${targetSelector}`));
+      return;
+    }
+    const samples = [];
+    const sample = () => {
+      const transform = getComputedStyle(target).transform;
+      samples.push(transform === "none" ? 0 : new DOMMatrixReadOnly(transform).m41);
+      if (samples.length === frameCount) resolve(samples);
+      else requestAnimationFrame(sample);
+    };
+    requestAnimationFrame(sample);
+  }), { selector, count });
+}
+
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => {
     class IdleWebSocket extends EventTarget {
@@ -155,13 +173,19 @@ test("acceptance: mobile sidebar is a full-bleed exclusive overlay", async ({ pa
   await page.goto("/");
   await page.locator(".mobile-sidebar-trigger").click();
   const sidebar = page.locator(".conduit-sidebar");
+  const opening = await sampleTranslateX(page, ".conduit-sidebar");
   await expect(sidebar).toHaveAttribute("data-mobile-open", "true");
   await expect(page.locator("html")).toHaveAttribute("data-mobile-overlay", "sidebar");
   const box = await sidebar.boundingBox();
   expect(Math.abs(box.width - page.viewportSize().width)).toBeLessThanOrEqual(2);
+  expect(new Set(opening.map((value) => Math.round(value))).size).toBeGreaterThan(2);
+  expect(opening.every((value, index) => index === 0 || value >= opening[index - 1] - 0.5)).toBe(true);
   await sidebar.locator('[data-sidebar="trigger"]').click();
+  const closing = await sampleTranslateX(page, ".conduit-sidebar");
   await expect(sidebar).toHaveAttribute("data-mobile-open", "false");
   await expect(page.locator("html")).not.toHaveAttribute("data-mobile-overlay", "sidebar");
+  expect(new Set(closing.map((value) => Math.round(value))).size).toBeGreaterThan(2);
+  expect(closing.every((value, index) => index === 0 || value <= closing[index - 1] + 0.5)).toBe(true);
 });
 
 test("acceptance: mobile workspace is full-bleed and closes via panel X only", async ({ page }, testInfo) => {
@@ -169,14 +193,20 @@ test("acceptance: mobile workspace is full-bleed and closes via panel X only", a
   await page.goto("/");
   await page.getByRole("button", { name: "Toggle workspace panel" }).click();
   const panel = page.getByRole("complementary", { name: "Workspace panel" });
+  const opening = await sampleTranslateX(page, ".workspace-panel");
   await expect(panel).toBeVisible();
   await expect(page.locator("html")).toHaveAttribute("data-mobile-overlay", "workspace");
   const box = await panel.boundingBox();
   expect(Math.abs(box.width - page.viewportSize().width)).toBeLessThanOrEqual(2);
+  expect(new Set(opening.map((value) => Math.round(value))).size).toBeGreaterThan(2);
+  expect(opening.every((value, index) => index === 0 || value <= opening[index - 1] + 0.5)).toBe(true);
   await expect(page.getByRole("button", { name: "Toggle workspace panel" })).toHaveCount(0);
   await page.getByRole("button", { name: "Close workspace panel" }).click();
+  const closing = await sampleTranslateX(page, ".workspace-panel");
   await expect(panel).toBeHidden();
   await expect(page.getByRole("button", { name: "Toggle workspace panel" })).toBeVisible();
+  expect(new Set(closing.map((value) => Math.round(value))).size).toBeGreaterThan(2);
+  expect(closing.every((value, index) => index === 0 || value >= closing[index - 1] - 0.5)).toBe(true);
 });
 
 test("acceptance: long-press sidebar chat opens a viewport-bounded menu without navigating", async ({ page }, testInfo) => {
