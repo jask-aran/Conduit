@@ -60,5 +60,9 @@ run([...browser, "snapshot", "-i", "-c"]);
 
 process.stdout.write(`\nRestored agent-browser session: ${session}\n`);
 process.stdout.write(`Target: ${target}\n`);
-process.stdout.write(`Continue: agent-browser --session ${session} snapshot -i -c\n`);
-process.stdout.write(`Close: agent-browser --session ${session} close\n`);
+process.stdout.write(
+  `Continue: npm run agent-browser:local -- --session ${session} --restore snapshot -i -c\n`,
+);
+process.stdout.write(
+  `Close: npm run agent-browser:local -- --session ${session} close\n`,
+);

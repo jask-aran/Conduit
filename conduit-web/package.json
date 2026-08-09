@@ -16,6 +16,7 @@
     "test:harness:browser": "node scripts/run-browser-harness.mjs",
     "test:harness:renderer": "node scripts/run-renderer-benchmark.mjs",
     "qa:agent-browser": "node scripts/run-agent-browser.mjs",
+    "agent-browser:local": "node scripts/run-agent-browser-command.mjs",
     "perf:live": "node scripts/run-live-harness.mjs",
     "test:browser": "playwright test",
     "test:browser:setpieces": "playwright test test/browser/auth.spec.js test/browser/palette.spec.js test/browser/app.spec.js --project=desktop-chromium --workers=1 --grep \"unauthenticated visit|correct password reaches|browses grouped commands|creates a durable chat route|reconnects a live chat after socket loss\" && playwright test test/browser/app.spec.js --project=desktop-chromium --workers=1 --grep \"Workspace views use the nested palette page|workspace panel previews files|desktop workspace surface and transcript move continuously|rapid panel reversals|desktop panel surfaces settle immediately|uses compact sidebar groups\" && playwright test test/browser/pwa-mobile.spec.js --workers=1 --grep \"acceptance:\"",

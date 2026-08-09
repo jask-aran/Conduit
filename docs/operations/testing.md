@@ -239,10 +239,28 @@ Use the restored session for the changed flow:
   evidence.
 - Store temporary evidence under `/tmp`; do not record credentials, cookies,
   prompts, or transcript contents.
-- Close the session after use:
+- Run page actions through the local wrapper so every command uses the same
+  writable browser socket directory:
 
 ```bash
-agent-browser --session <session-id-printed-by-qa> close
+npm run agent-browser:local -- --session <session-id-printed-by-qa> --restore snapshot -i -c
+npm run agent-browser:local -- --session <session-id-printed-by-qa> --restore click @e1
+npm run agent-browser:local -- --session <session-id-printed-by-qa> --restore screenshot /tmp/conduit-qa.png
+```
+
+The wrapper accepts local Conduit navigation and ordinary QA actions. It rejects
+external `open` and `read` URLs, arbitrary `eval`, network, storage, cookie,
+auth, upload, download, plugin, and multi-session commands. Keep those actions
+under Auto-review. The wrapper command also remains under Auto-review because
+the command policy cannot inspect its validated action; approve only local QA
+actions. If the browser reports a separate Chrome or CDP host boundary, rerun
+the same wrapper command with host permission; do not switch to raw
+`agent-browser` commands.
+
+Close the session after use:
+
+```bash
+npm run agent-browser:local -- --session <session-id-printed-by-qa> close
 ```
 
 The normal pre-commit ladder is the fast code checks, the deterministic
