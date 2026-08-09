@@ -81,25 +81,6 @@ prefix_rule(
     justification="Check the managed Conduit health endpoint over the local WSL surface",
 )
 
-# Exact local browser inspection only. Observed in the post-update browser
-# review batch; external URLs, dynamic sessions, arbitrary evaluation, and
-# interaction commands remain under review.
-prefix_rule(
-    pattern=["agent-browser", "--session", "conduit-local", "open", "http://127.0.0.1:4310"],
-    decision="allow",
-    justification="Open the documented local Conduit browser session",
-)
-prefix_rule(
-    pattern=["agent-browser", "--session", "conduit-local", "snapshot", "-i"],
-    decision="allow",
-    justification="Inspect the documented local Conduit browser session",
-)
-prefix_rule(
-    pattern=["agent-browser", "--session", "conduit-local", "eval", "document.title"],
-    decision="allow",
-    justification="Read the documented local Conduit page title",
-)
-
 # Repository inspection only. Observed during project review; staging,
 # commits, pushes, history changes, and compound shell forms remain under
 # review.
