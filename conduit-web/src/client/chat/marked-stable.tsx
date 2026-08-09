@@ -1,10 +1,11 @@
-import { createEffect, createSignal, onCleanup, onMount } from "solid-js";
+import { createEffect, onCleanup, onMount } from "solid-js";
 import { Marked } from "marked";
 import markedKatex from "marked-katex-extension";
 import katex from "katex";
 import "katex/dist/katex.min.css";
 import { getHarnessRecorder, recordHarnessMetric } from "../harness-metrics";
 import { ExternalLinkDialog } from "./external-link-dialog";
+import { createExternalLinkController, handleMarkdownClick } from "./markdown-actions";
 import { escapeHtml, renderMarkdownLink, sanitizeMarkdownFragment } from "./markdown-security";
 
 // This instance is isolated from the current Marked Experimental extensions.
@@ -140,8 +141,7 @@ function reconcileChildren(current: Node, next: Node) {
 
 export function MarkedStableMarkdown(props: MarkedStableProps) {
   let root!: HTMLDivElement;
-  const [externalUrl, setExternalUrl] = createSignal<string | null>(null);
-  let externalReturnFocus: HTMLElement | null = null;
+  const external = createExternalLinkController();
   let renderedSource = "";
   let renderedVersion = -1;
 
@@ -167,16 +167,7 @@ export function MarkedStableMarkdown(props: MarkedStableProps) {
     queueMicrotask(() => props.onRendered?.());
   });
 
-  const click = async (event: MouseEvent) => {
-    const target = (event.target as HTMLElement).closest<HTMLElement>("[data-copy-code], [data-external-url]");
-    if (!target) return;
-    if (target.hasAttribute("data-copy-code")) {
-      await navigator.clipboard.writeText(target.closest("[data-language]")?.querySelector("code")?.textContent || "");
-    } else {
-      externalReturnFocus = target;
-      setExternalUrl(target.dataset.externalUrl || null);
-    }
-  };
+  const click = (event: MouseEvent) => handleMarkdownClick(event, root, external.request);
 
   onMount(() => {
     root.addEventListener("click", click);
@@ -186,6 +177,6 @@ export function MarkedStableMarkdown(props: MarkedStableProps) {
 
   return <>
     <div ref={root} class="chat-markdown" data-renderer="marked-stable" data-streaming={props.streaming || undefined} />
-    <ExternalLinkDialog url={externalUrl} onClose={() => setExternalUrl(null)} returnFocus={() => externalReturnFocus} onFocusRestored={() => { externalReturnFocus = null; }} />
+    <ExternalLinkDialog url={external.url} onClose={external.close} returnFocus={external.returnFocus} onFocusRestored={external.clearReturnFocus} />
   </>;
 }
