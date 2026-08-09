@@ -147,8 +147,8 @@ svg { stroke-width: 1.5; }
 .workspace-panel[data-edge-instant="true"],
 body.workspace-resizing .workspace-panel { transition: none !important; }
 /* Surface keeps settled panel width, right-anchored inside the shell. */
-.workspace-panel-surface { position: absolute; top: 0; right: 0; display: flex; width: var(--workspace-panel-width); min-width: 0; height: 100%; contain: layout paint; flex: none; flex-direction: column; overflow: hidden; border: 1px solid transparent; border-radius: 16px; background: var(--background); opacity: 0; transition: opacity var(--panel-motion-duration) var(--panel-motion-easing); }
-.workspace-panel-open .workspace-panel-surface { border-color: var(--border); opacity: 1; }
+.workspace-panel-surface { position: absolute; top: 0; right: 0; display: flex; width: var(--workspace-panel-width); min-width: 0; height: 100%; contain: layout paint; flex: none; flex-direction: column; overflow: hidden; border: 1px solid transparent; border-radius: 16px; background: var(--background); opacity: 0; transform: translateX(100%); }
+.workspace-panel-open .workspace-panel-surface { border-color: var(--border); opacity: 1; transform: translateX(0); }
 .workspace-panel-surface > * { max-width: 100%; }
 .workspace-panel-header { display: flex; min-height: 40px; flex: none; align-items: center; justify-content: space-between; padding: 4px 8px 4px 14px; border-bottom: 1px solid var(--border); }
 .workspace-panel-header > div { display: flex; min-width: 0; align-items: baseline; gap: 8px; }
@@ -685,7 +685,7 @@ body.workspace-resizing .workspace-panel { transition: none !important; }
     transition: transform var(--panel-motion-duration) var(--panel-motion-easing);
   }
   .workspace-panel.workspace-panel-open { margin: 0; transform: translateX(0); }
-  .workspace-panel-surface { width: 100%; border: 0; border-radius: 0; overscroll-behavior: contain; }
+  .workspace-panel-surface { width: 100%; border: 0; border-radius: 0; overscroll-behavior: contain; opacity: 1; transform: none; }
   .workspace-tree, .workspace-preview, .workspace-diff, .workspace-changes, .workspace-git-graph, .workspace-diff-content { overscroll-behavior: contain; }
   .workspace-resize-handle { display: none; }
   .workspace-files { grid-template-rows: minmax(160px, 42%) 1fr; }

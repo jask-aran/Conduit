@@ -429,10 +429,14 @@ test("desktop workspace shell and surface ease open and close together", async (
       const surfaceBox = shell.querySelector(".workspace-panel-surface").getBoundingClientRect();
       const chatBox = chat.getBoundingClientRect();
       const motionBox = motionShell.getBoundingClientRect();
+      const surfaceTransform = getComputedStyle(shell.querySelector(".workspace-panel-surface")).transform;
+      const surfaceStyles = getComputedStyle(shell.querySelector(".workspace-panel-surface"));
       samples.push({
         panelWidth: shellBox.width,
         surfaceWidth: surfaceBox.width,
         surfaceLeft: surfaceBox.left,
+        surfaceTranslateX: surfaceTransform === "none" ? 0 : new DOMMatrixReadOnly(surfaceTransform).m41,
+        surfaceOpacity: Number(surfaceStyles.opacity),
         shellLeft: shellBox.left,
         mainRight: chatBox.right,
         // Chat-main right margin keeps ~10px between main and the shell edge.
@@ -453,14 +457,13 @@ test("desktop workspace shell and surface ease open and close together", async (
   const openSamples = await sampleShellGeometry();
   await expect(panel).toHaveAttribute("aria-hidden", "false");
   await expect(panel).not.toHaveAttribute("inert", "");
-  // Shell edge eases: multiple widths and main rights. Surface stays full panel
-  // width (may overhang while shell clips). Gap main→shell stays ~10.
-  expect(new Set(openSamples.map((sample) => Math.round(sample.panelWidth))).size).toBeGreaterThan(3);
-  expect(new Set(openSamples.map((sample) => Math.round(sample.shellLeft))).size).toBeGreaterThan(3);
-  expect(new Set(openSamples.map((sample) => Math.round(sample.mainRight))).size).toBeGreaterThan(3);
-  expect(openSamples.filter((sample) => sample.panelWidth > 8).every((sample) => Math.abs(sample.gapMainToShell - 10) < 2)).toBe(true);
+  // The shell commits once; the visible Workspace surface slides from the right
+  // edge while the transcript stays on its final geometry.
+  expect(new Set(openSamples.map((sample) => Math.round(sample.surfaceTranslateX))).size).toBeGreaterThan(3);
   expect(openSamples.every((sample, index) =>
-    index === 0 || sample.panelWidth + 0.5 >= openSamples[index - 1].panelWidth)).toBe(true);
+    index === 0 || sample.surfaceTranslateX <= openSamples[index - 1].surfaceTranslateX + 0.5)).toBe(true);
+  expect(openSamples.every((sample) => sample.surfaceOpacity >= 0.99)).toBe(true);
+  expect(openSamples.filter((sample) => sample.panelWidth > 8).every((sample) => Math.abs(sample.gapMainToShell - 10) < 2)).toBe(true);
   const openShellPaint = await page.evaluate(() => {
     const shell = document.querySelector("aside.workspace-panel");
     const surface = shell.querySelector(".workspace-panel-surface");
@@ -493,10 +496,13 @@ test("desktop workspace shell and surface ease open and close together", async (
   const closeSamples = await sampleShellGeometry();
   await expect(panel).toHaveAttribute("aria-hidden", "true");
   await expect(panel).toHaveAttribute("inert", "");
-  expect(new Set(closeSamples.map((sample) => Math.round(sample.panelWidth))).size).toBeGreaterThan(3);
+  expect(new Set(closeSamples.map((sample) => Math.round(sample.surfaceTranslateX))).size).toBeGreaterThan(3);
   expect(closeSamples.every((sample, index) =>
-    index === 0 || sample.panelWidth <= closeSamples[index - 1].panelWidth + 0.5)).toBe(true);
-  expect(closeSamples.filter((sample) => sample.panelWidth > 8).every((sample) => Math.abs(sample.gapMainToShell - 10) < 2)).toBe(true);
+    index === 0 || sample.surfaceTranslateX + 0.5 >= closeSamples[index - 1].surfaceTranslateX)).toBe(true);
+  expect(closeSamples[0].surfaceOpacity).toBeGreaterThanOrEqual(0.99);
+  expect(closeSamples
+    .filter((sample) => sample.surfaceTranslateX < sample.surfaceWidth - 1)
+    .every((sample) => sample.surfaceOpacity >= 0.99)).toBe(true);
 
   await page.keyboard.press(process.platform === "darwin" ? "Meta+." : "Control+.");
   await expect(panel).toHaveAttribute("aria-hidden", "false");
@@ -535,6 +541,21 @@ test("rapid panel reversals continue from rendered geometry and release transcri
     };
     requestAnimationFrame(frame);
   }), { targetSelector: selector, targetEdge: edge, frameCount: count });
+  const sampleTransforms = (selector, count) => page.evaluate(({ targetSelector, frameCount }) => new Promise((resolve, reject) => {
+    const target = document.querySelector(targetSelector);
+    if (!target) {
+      reject(new Error(`Missing motion target: ${targetSelector}`));
+      return;
+    }
+    const samples = [];
+    const frame = () => {
+      const transform = getComputedStyle(target).transform;
+      samples.push(transform === "none" ? 0 : new DOMMatrixReadOnly(transform).m41);
+      if (samples.length === frameCount) resolve(samples);
+      else requestAnimationFrame(frame);
+    };
+    requestAnimationFrame(frame);
+  }), { targetSelector: selector, frameCount: count });
 
   await expect(page.locator(".thread")).toBeVisible();
   await expect(workspace).toBeAttached();
@@ -557,16 +578,18 @@ test("rapid panel reversals continue from rendered geometry and release transcri
   await page.getByRole("button", { name: "Toggle workspace panel" }).evaluate((element) => element.click());
   await waitFrames(3);
   const workspaceMid = await page.evaluate(() => {
-    const shell = document.querySelector("aside.workspace-panel");
-    return shell ? shell.getBoundingClientRect().width : 0;
+    const surface = document.querySelector(".workspace-panel-surface");
+    if (!surface) return 0;
+    const transform = getComputedStyle(surface).transform;
+    return transform === "none" ? 0 : new DOMMatrixReadOnly(transform).m41;
   });
   expect(workspaceMid).toBeGreaterThan(0);
   expect(workspaceMid).toBeLessThan(420);
   await workspace.getByRole("button", { name: "Close workspace panel" }).evaluate((element) => element.click());
-  const workspaceReverse = await sampleEdges("aside.workspace-panel", "width", 8);
-  expect(workspaceReverse[0]).toBeLessThan(420);
+  const workspaceReverse = await sampleTransforms(".workspace-panel-surface", 8);
+  expect(workspaceReverse[0]).toBeGreaterThan(0);
   expect(workspaceReverse.every((value, index) =>
-    index === 0 || value <= workspaceReverse[index - 1] + 0.5)).toBe(true);
+    index === 0 || value + 0.5 >= workspaceReverse[index - 1])).toBe(true);
   await expect(workspace).toHaveAttribute("aria-hidden", "true");
   await expect.poll(async () => Math.round((await workspace.boundingBox())?.width || 0)).toBe(0);
   await expect.poll(() => transcriptShell.evaluate((element) =>
