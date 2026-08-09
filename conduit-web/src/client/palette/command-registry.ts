@@ -14,15 +14,6 @@
 
 import type { ChatSummary, Project, Template } from "../api/contracts";
 
-/** Server-provided Pi slash command. Deferred: `context.commands` stays [] until
- *  composer-slash parity populates it, so the `pi-commands` source is inert. */
-export interface PiCommand {
-  name: string;
-  description?: string;
-  source?: string;
-  dispatch?: "insert" | "prompt";
-}
-
 export interface PaletteContext {
   chatId: string | null;
   project?: Project;
@@ -37,7 +28,6 @@ export interface PaletteContext {
   canRegenerate: boolean;
   canContinue: boolean;
   canCopy: boolean;
-  commands: PiCommand[];
 }
 
 export interface PaletteActions {
@@ -68,8 +58,6 @@ export interface PaletteActions {
   chooseModel: (spec: string) => void;
   chooseEffort: (level: string) => void;
   setChatProfile: (id: string) => void;
-  insertCommand?: (text: string) => void;
-  sendText?: (text: string) => void;
 }
 
 export interface PaletteCommand {
@@ -491,28 +479,6 @@ export const paletteSources: PaletteSource[] = [{
       }
       return rows;
     });
-  },
-}, {
-  id: "pi-commands",
-  page: null,
-  // Deferred: inert until composer-slash parity populates `context.commands`.
-  commands(context) {
-    const commands = Array.isArray(context.commands) ? context.commands : [];
-    return commands
-      .filter((command) => command && typeof command.name === "string" && command.name)
-      .map((command) => ({
-        id: `pi-command:${command.name}`,
-        group: "commands",
-        label: `/${command.name}`,
-        description: command.description || `Run the ${command.name} command`,
-        icon: "command",
-        keywords: ["command", "slash", command.name, command.source || ""],
-        searchValue: `command ${command.name} ${command.description || ""}`,
-        isAvailable: (ctx) => Boolean(ctx.chatId),
-        run: (actions) => command.dispatch === "insert"
-          ? actions.insertCommand?.(`/${command.name}`)
-          : actions.sendText?.(`/${command.name}`),
-      }));
   },
 }, {
   id: "thinking-levels",

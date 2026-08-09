@@ -1,4 +1,5 @@
 import { createMemo, createSignal, onCleanup } from "solid-js";
+import type { Accessor } from "solid-js";
 import { api, asList } from "../api/client";
 import type { Attachment } from "../api/contracts";
 
@@ -12,8 +13,17 @@ export interface UploadAttachment extends Attachment {
 }
 
 const MAX_CONCURRENT_UPLOADS = 3;
+export const DEFAULT_MAX_ATTACHMENT_BYTES = 100 * 1024 * 1024;
 
-export function createAttachments(onError: (message: string) => void) {
+function formatAttachmentLimit(bytes: number) {
+  const megabytes = bytes / (1024 * 1024);
+  return `${Number.isInteger(megabytes) ? megabytes : megabytes.toFixed(1)} MiB`;
+}
+
+export function createAttachments(
+  onError: (message: string) => void,
+  maxBytes: Accessor<number> = () => DEFAULT_MAX_ATTACHMENT_BYTES,
+) {
   const [items, setItems] = createSignal<UploadAttachment[]>([]);
   const [chatId, setChatId] = createSignal("");
   const queue: UploadAttachment[] = [];
@@ -56,8 +66,8 @@ export function createAttachments(onError: (message: string) => void) {
     });
     request.addEventListener("load", () => {
       try {
-        const body = request.responseText ? JSON.parse(request.responseText) as Attachment : {} as Attachment;
-        if (request.status < 200 || request.status >= 300) throw new Error("Upload failed");
+        const body = request.responseText ? JSON.parse(request.responseText) as Attachment & { message?: string } : {} as Attachment & { message?: string };
+        if (request.status < 200 || request.status >= 300) throw new Error(body.message || "Upload failed");
         update(item.id, { ...body, status: "done", progress: 100, announced: false });
       } catch (error) {
         update(item.id, { status: "error", error: (error as Error).message });
@@ -71,7 +81,12 @@ export function createAttachments(onError: (message: string) => void) {
   };
 
   const addFiles = (files: FileList | File[]) => {
-    const additions = [...files].map<UploadAttachment>((file) => {
+    const limit = Math.max(1, Math.trunc(maxBytes() || DEFAULT_MAX_ATTACHMENT_BYTES));
+    const additions = [...files].filter((file) => {
+      if (file.size <= limit) return true;
+      onError(`${file.name || "File"} exceeds the ${formatAttachmentLimit(limit)} attachment limit`);
+      return false;
+    }).map<UploadAttachment>((file) => {
       const objectUrl = file.type.startsWith("image/") ? URL.createObjectURL(file) : null;
       if (objectUrl) objectUrls.add(objectUrl);
       return { id: crypto.randomUUID(), name: file.name, size: file.size, type: file.type, file, objectUrl, status: "queued", progress: 0, announced: false };

@@ -48,8 +48,10 @@ superseded regeneration branches attached to one sidebar chat while preserving
 their JSONL files.
 
 Raw attachment bodies stream to exclusive `.part` files and publish by atomic
-rename. The filesystem is the durable attachment registry. Prompt envelopes
-contain validated relative paths rather than file bytes. Generation IDs gate
+rename. Each upload is capped by `CONDUIT_MAX_ATTACHMENT_BYTES` (100 MiB by
+default), including chunked requests. The filesystem is the durable attachment
+registry. Prompt envelopes contain validated relative paths rather than file
+bytes. Generation IDs gate
 late output after stop; Pi receives public `abort` and `fork` RPC commands, and
 a hung abort terminates the process after 250 ms for clean resumption.
 
@@ -175,7 +177,9 @@ that could replace it.
 ### Auth
 
 Every route below — plus the SPA bundle, every static asset, every upload, and
-every WebSocket upgrade — requires an authenticated session except the login flow.
+every WebSocket upgrade — requires an authenticated session except the login
+flow, `GET /healthz`, and the public PWA bootstrap assets (`favicon.svg`, PWA
+icons, manifests, service workers, and Workbox assets).
 Provision one user, one password from the CLI:
 
 ```bash
@@ -192,7 +196,8 @@ cookie (`HttpOnly`, `SameSite=Lax`, `Secure` over HTTPS/X-Forwarded-Proto),
 
 Enforcement is a single `requireAuth` middleware mounted before every other
 route and static handler, plus the WebSocket upgrade validator. The allowlist
-is just `GET /login`, `POST /v0/auth/login`, and `GET /healthz`. Logout
+is `GET /login`, `POST /v0/auth/login`, `GET /healthz`, and the PWA bootstrap
+assets required before the application session exists. Logout
 (`POST /v0/auth/logout`) requires a valid session like any other route. Loopback
 binding without a configured password stays open for local dev; non-loopback
 binding refuses to start without a password or `CONDUIT_ALLOW_INSECURE=1`.

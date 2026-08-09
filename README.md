@@ -146,7 +146,7 @@ Detailed references:
   boundaries.
 - [Contributor contract](AGENTS.md) — invariants, development workflow, and
   verification requirements.
-- [Engineering distillations](references/distillations.md) — retained
+- [Engineering distillations](docs/references/distillations.md) — retained
   implementation decisions.
 
 ## Verify

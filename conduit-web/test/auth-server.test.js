@@ -122,6 +122,8 @@ test("unauthenticated routes redirect or return 401; only the allowlist is publi
       ["GET", "/v0/pi-installations"],
       ["GET", "/v0/pi-auth"],
       ["GET", "/v0/pi-auth/attempt"],
+      ["PUT", "/v0/pi-auth/api-key"],
+      ["DELETE", "/v0/pi-auth/openai"],
       ["PATCH", "/v0/preferences"],
       ["GET", "/v0/models"],
     ];
@@ -265,6 +267,16 @@ test("loopback bind without a password starts open and serves the SPA", async ()
     const piAuth = await fetch(`${server.origin}/v0/pi-auth`);
     assert.equal(piAuth.status, 403);
     assert.equal((await piAuth.json()).error, "pi_auth_login_required");
+    const apiKey = await fetch(`${server.origin}/v0/pi-auth/api-key`, {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ providerId: "openai", key: "should-not-save" }),
+    });
+    assert.equal(apiKey.status, 403);
+    assert.equal((await apiKey.json()).error, "pi_auth_login_required");
+    const removed = await fetch(`${server.origin}/v0/pi-auth/openai`, { method: "DELETE" });
+    assert.equal(removed.status, 403);
+    assert.equal((await removed.json()).error, "pi_auth_login_required");
   } finally {
     await stop(server);
   }

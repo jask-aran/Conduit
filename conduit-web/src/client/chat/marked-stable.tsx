@@ -1,20 +1,11 @@
 import { createEffect, createSignal, onCleanup, onMount } from "solid-js";
-import DOMPurify from "dompurify";
 import { Marked } from "marked";
 import markedKatex from "marked-katex-extension";
 import katex from "katex";
-import * as KAlertDialog from "@kobalte/core/alert-dialog";
 import "katex/dist/katex.min.css";
-import { Button } from "@/components/primitives";
 import { getHarnessRecorder, recordHarnessMetric } from "../harness-metrics";
-
-const allowedProtocols = new Set(["http:", "https:", "mailto:"]);
-
-const escapeHtml = (value: string) => value
-  .replaceAll("&", "&amp;")
-  .replaceAll("<", "&lt;")
-  .replaceAll(">", "&gt;")
-  .replaceAll('"', "&quot;");
+import { ExternalLinkDialog } from "./external-link-dialog";
+import { escapeHtml, renderMarkdownLink, sanitizeMarkdownFragment } from "./markdown-security";
 
 // This instance is isolated from the current Marked Experimental extensions.
 // It intentionally keeps the old reference path: GFM, marked-katex, and the
@@ -32,14 +23,12 @@ markedStable.use({
     image() { return ""; },
     link({ href, title, tokens }) {
       const label = this.parser.parseInline(tokens);
-      try {
-        const target = new URL(href, location.href);
-        if (!allowedProtocols.has(target.protocol)) return label;
-        if (target.origin === location.origin || target.protocol === "mailto:") {
-          return `<a href="${escapeHtml(href)}"${title ? ` title="${escapeHtml(title)}"` : ""}>${label}</a>`;
-        }
-        return `<button type="button" class="external-markdown-link" data-external-url="${escapeHtml(target.href)}" aria-label="${escapeHtml(String(tokens.map((token) => "text" in token ? token.text : "").join("") || target.href))}">${label}</button>`;
-      } catch { return label; }
+      return renderMarkdownLink({
+        href,
+        title,
+        label,
+        labelText: String(tokens.map((token) => "text" in token ? token.text : "").join("")),
+      });
     },
     code({ text, lang }) {
       const language = String(lang || "text").split(/\s+/)[0]!.toLowerCase();
@@ -94,12 +83,7 @@ function renderMarkdown(source: string, inline = false) {
     restoreKatex?.();
   }
   const parsedAt = recorder ? performance.now() : 0;
-  const fragment = DOMPurify.sanitize(html, {
-    USE_PROFILES: { html: true },
-    ADD_ATTR: ["aria-label", "data-copy-code", "data-external-url", "data-language", "data-markdown", "class"],
-    FORBID_TAGS: ["img", "script", "style", "iframe", "object", "embed", ...(inline ? ["a", "button"] : [])],
-    RETURN_DOM_FRAGMENT: true,
-  }) as DocumentFragment;
+  const fragment = sanitizeMarkdownFragment(html, { inline });
   if (recorder) {
     const sanitisedAt = performance.now();
     recordHarnessMetric(recorder, {
@@ -202,18 +186,6 @@ export function MarkedStableMarkdown(props: MarkedStableProps) {
 
   return <>
     <div ref={root} class="chat-markdown" data-renderer="marked-stable" data-streaming={props.streaming || undefined} />
-    <KAlertDialog.Root open={Boolean(externalUrl())} onOpenChange={(open) => { if (!open) setExternalUrl(null); }}>
-      <KAlertDialog.Portal><KAlertDialog.Content data-state={externalUrl() ? "open" : "closed"} class="external-link-dialog" onCloseAutoFocus={(event) => { event.preventDefault(); if (externalReturnFocus?.isConnected) externalReturnFocus.focus(); externalReturnFocus = null; }}>
-        <div class="external-link-dialog-card">
-          <KAlertDialog.Title>Open external link?</KAlertDialog.Title>
-          <KAlertDialog.Description>This link opens outside Conduit.</KAlertDialog.Description>
-          <code class="external-link-url">{externalUrl()}</code>
-          <div class="flex justify-end gap-2">
-            <Button variant="outline" onClick={() => setExternalUrl(null)}>Cancel</Button>
-            <Button onClick={() => { if (externalUrl()) window.open(externalUrl()!, "_blank", "noopener,noreferrer"); setExternalUrl(null); }}>Open link</Button>
-          </div>
-        </div>
-      </KAlertDialog.Content></KAlertDialog.Portal>
-    </KAlertDialog.Root>
+    <ExternalLinkDialog url={externalUrl} onClose={() => setExternalUrl(null)} returnFocus={() => externalReturnFocus} onFocusRestored={() => { externalReturnFocus = null; }} />
   </>;
 }

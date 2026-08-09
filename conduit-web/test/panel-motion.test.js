@@ -4,6 +4,7 @@ import path from "node:path";
 import test from "node:test";
 
 const stylesPath = path.resolve(import.meta.dirname, "../../conduit-web/src/client/styles.css");
+const workspaceStylesPath = path.resolve(import.meta.dirname, "../../conduit-web/src/client/workspace/workspace.css");
 
 function rule(styles, selector) {
   const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -12,13 +13,14 @@ function rule(styles, selector) {
 
 test("desktop panel shells transition open and close while surfaces fill the shell", async () => {
   const styles = await fs.readFile(stylesPath, "utf8");
+  const workspaceStyles = await fs.readFile(workspaceStylesPath, "utf8");
   const sidebar = rule(styles, ".conduit-sidebar");
   const collapsedSidebar = rule(styles, ".conduit-sidebar[data-state=\"collapsed\"]");
   const sidebarContainer = rule(styles, ".sidebar-container");
-  const workspace = rule(styles, ".workspace-panel");
-  const openWorkspace = rule(styles, ".workspace-panel.workspace-panel-open");
-  const workspaceSurface = rule(styles, ".workspace-panel-surface");
-  const resizeHandle = rule(styles, ".workspace-resize-handle");
+  const workspace = rule(workspaceStyles, ".workspace-panel");
+  const openWorkspace = rule(workspaceStyles, ".workspace-panel.workspace-panel-open");
+  const workspaceSurface = rule(workspaceStyles, ".workspace-panel-surface");
+  const resizeHandle = rule(workspaceStyles, ".workspace-resize-handle");
 
   assert.match(sidebar, /width:\s*244px/);
   assert.match(sidebar, /overflow:\s*hidden/);

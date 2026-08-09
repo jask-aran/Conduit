@@ -5,12 +5,14 @@ import fsp from "node:fs/promises";
 import path from "node:path";
 import { constants } from "node:fs";
 import { pipeline } from "node:stream/promises";
+import { Transform } from "node:stream";
 import { chatDirectory } from "./chat-store.js";
 import { ensureChatTree } from "./owned-paths.js";
 
 const ATTACHMENT_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const STORED_FILE = /^([0-9a-f-]{36})--(.+)$/i;
 const MAX_NAME_BYTES = 180;
+export const DEFAULT_MAX_ATTACHMENT_BYTES = 100 * 1024 * 1024;
 
 export function isAttachmentId(value) {
   return ATTACHMENT_ID.test(String(value || ""));
@@ -39,6 +41,25 @@ function mimeFor(name) {
     ".webp": "image/webp", ".svg": "image/svg+xml", ".pdf": "application/pdf", ".json": "application/json",
     ".txt": "text/plain", ".md": "text/markdown", ".csv": "text/csv",
   })[extension] || "application/octet-stream";
+}
+
+function attachmentLimitError(maxBytes) {
+  return Object.assign(new Error(`Attachment exceeds the ${maxBytes} byte limit`), {
+    code: "attachment_too_large",
+    status: 413,
+    maxBytes,
+  });
+}
+
+function limitedReadable(maxBytes) {
+  let received = 0;
+  return new Transform({
+    transform(chunk, encoding, callback) {
+      received += Buffer.isBuffer(chunk) ? chunk.length : Buffer.byteLength(String(chunk), encoding);
+      if (received > maxBytes) return callback(attachmentLimitError(maxBytes));
+      callback(null, chunk);
+    },
+  });
 }
 
 async function excludeConduitFromGit(projectPath) {
@@ -89,8 +110,9 @@ async function mimeForFile(file, name) {
 }
 
 export class AttachmentStore {
-  constructor(chatStore) {
+  constructor(chatStore, { maxBytes = DEFAULT_MAX_ATTACHMENT_BYTES } = {}) {
     this.chatStore = chatStore;
+    this.maxBytes = Number.isSafeInteger(maxBytes) && maxBytes >= 1 ? maxBytes : DEFAULT_MAX_ATTACHMENT_BYTES;
   }
 
   directories(project, chatId) {
@@ -150,7 +172,7 @@ export class AttachmentStore {
     const finalPath = path.join(attachments, storedName);
     const stream = fs.createWriteStream(partPath, { flags: "wx" });
     try {
-      await pipeline(readable, stream);
+      await pipeline(readable, limitedReadable(this.maxBytes), stream);
       await fsp.rename(partPath, finalPath);
       const workspaceWarning = existingAttachments.length === 0
         ? await excludeConduitFromGit(project.path).catch(() => "Could not add .conduit/ to Git's local exclude file")

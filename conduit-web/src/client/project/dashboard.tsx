@@ -35,6 +35,7 @@ import { api } from "../api/client";
 import type { DashboardChat, Project, ProjectDashboardPayload, Template, WorkspaceOperation } from "../api/contracts";
 import type { RuntimeStore } from "../state/runtime";
 import { RuntimeIndicator } from "../navigation/runtime-indicator";
+import "./dashboard.css";
 
 function workspaceProject(project: Project) {
   return project.kind === "workspace" || ["linked", "created", "cloned"].includes(project.origin || "");
