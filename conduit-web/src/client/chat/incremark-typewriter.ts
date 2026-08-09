@@ -155,23 +155,31 @@ export function isFrameHealthy(
   frameIntervalMs = TYPEWRITER_DEFAULT_TICK_INTERVAL_MS,
   frameWorkBudgetMs = TYPEWRITER_FRAME_WORK_BUDGET_MS,
 ) {
-  if (!Number.isFinite(frameWorkEmaMs) || frameWorkEmaMs > frameWorkBudgetMs) return false;
   const expectedFrame = normalizeFrameInterval(frameIntervalMs);
-  const frameBudget = Math.max(expectedFrame * 1.75, expectedFrame + 8);
+  // A fixed 8 ms budget already misses a 144 Hz frame (6.94 ms). Scale the
+  // budget with the measured display interval and reserve half a frame for
+  // the renderer's own commit and compositor work.
+  const measuredWorkBudget = Math.min(frameWorkBudgetMs, Math.max(2, expectedFrame * 0.5));
+  if (!Number.isFinite(frameWorkEmaMs) || frameWorkEmaMs > measuredWorkBudget) return false;
+  // Treat a missed display interval as unhealthy. The old 1.75x + 8 ms
+  // threshold allowed one or more dropped frames to look healthy, then the
+  // adaptive path slowed the animation further.
+  const frameBudget = Math.max(expectedFrame * 1.5, expectedFrame + 2);
   if (commitToNextFrameMs != null && commitToNextFrameMs > frameBudget) return false;
   if (frameGapMs != null && frameGapMs > frameBudget) return false;
   return true;
 }
 
 export function chooseAdaptiveTickInterval(
-  frameWorkEmaMs: number,
-  commitToNextFrameMs: number | null,
-  frameGapMs: number | null,
+  _frameWorkEmaMs: number,
+  _commitToNextFrameMs: number | null,
+  _frameGapMs: number | null,
   frameIntervalMs = TYPEWRITER_DEFAULT_TICK_INTERVAL_MS,
 ) {
-  const frameInterval = normalizeFrameInterval(frameIntervalMs);
-  if (isFrameHealthy(frameWorkEmaMs, commitToNextFrameMs, frameGapMs, frameInterval)) return frameInterval;
-  return Math.min(TYPEWRITER_MAX_FRAME_INTERVAL_MS, Math.max(frameInterval, frameInterval * 2));
+  // Keep the transformer on the browser's rAF cadence. Adaptive health
+  // reduces charsPerTick; doubling tickInterval creates an artificial 30 Hz
+  // fallback after a dropped frame.
+  return normalizeFrameInterval(frameIntervalMs);
 }
 
 export function chooseAdaptiveCharsPerTick(
@@ -285,8 +293,8 @@ export class AdaptiveIncremarkTypewriter {
   private publishedBlocks = new Map<string, DisplayBlock>();
   private frameProbeId: number | null = null;
   private lastFrameAt: number | null = null;
-  private frameIntervalMs = TYPEWRITER_DEFAULT_TICK_INTERVAL_MS;
-  private frameIntervalEmaMs = TYPEWRITER_DEFAULT_TICK_INTERVAL_MS;
+  private frameIntervalMs = TYPEWRITER_MIN_FRAME_INTERVAL_MS;
+  private frameIntervalEmaMs = TYPEWRITER_MIN_FRAME_INTERVAL_MS;
   private lastFrameGapMs: number | null = null;
   private commitToNextFrameMs: number | null = null;
   private pendingCommitAt: number | null = null;
@@ -307,8 +315,8 @@ export class AdaptiveIncremarkTypewriter {
     displayRate: null,
     relativeLag: null,
     charsPerTick: 1,
-    frameIntervalMs: TYPEWRITER_DEFAULT_TICK_INTERVAL_MS,
-    tickInterval: TYPEWRITER_DEFAULT_TICK_INTERVAL_MS,
+    frameIntervalMs: TYPEWRITER_MIN_FRAME_INTERVAL_MS,
+    tickInterval: TYPEWRITER_MIN_FRAME_INTERVAL_MS,
     frameWorkMs: 0,
     frameWorkEmaMs: 0,
     fallbackMode: "normal",
@@ -321,7 +329,7 @@ export class AdaptiveIncremarkTypewriter {
     this.adaptive = callbacks.adaptive === true;
     this.transformer = createBlockTransformer({
       charsPerTick: 1,
-      tickInterval: TYPEWRITER_DEFAULT_TICK_INTERVAL_MS,
+      tickInterval: TYPEWRITER_MIN_FRAME_INTERVAL_MS,
       effect: "none",
       pauseOnHidden: true,
       plugins: [mathPlugin],
@@ -478,7 +486,9 @@ export class AdaptiveIncremarkTypewriter {
             const previousHealthy = this.frameHealthy;
             const previousFallback = this.adaptiveFallbackMode;
             this.lastFrameGapMs = gap;
-            const next = updateFrameInterval(this.frameIntervalEmaMs, gap);
+            const next = this.lastFrameAt == null
+              ? normalizeFrameInterval(gap)
+              : updateFrameInterval(this.frameIntervalEmaMs, gap);
             this.frameIntervalMs = next;
             this.frameIntervalEmaMs = next;
             this.frameHealthy = isFrameHealthy(
@@ -495,7 +505,9 @@ export class AdaptiveIncremarkTypewriter {
               this.recalculate(timestamp);
             }
           } else {
-            const next = updateFrameInterval(this.frameIntervalEmaMs, gap);
+            const next = this.lastFrameAt == null
+              ? normalizeFrameInterval(gap)
+              : updateFrameInterval(this.frameIntervalEmaMs, gap);
             if (Math.abs(next - this.frameIntervalMs) >= 0.1) {
               this.frameIntervalMs = next;
               this.frameIntervalEmaMs = next;

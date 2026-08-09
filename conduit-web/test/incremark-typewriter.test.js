@@ -100,7 +100,13 @@ test("adaptive frame health includes browser commit and frame-gap cost", () => {
   assert.equal(isFrameHealthy(4, 30, 18, 16), false);
   assert.equal(isFrameHealthy(4, 20, 30, 16), false);
   assert.equal(chooseAdaptiveTickInterval(4, 20, 18, 16), 16);
-  assert.equal(chooseAdaptiveTickInterval(9, 20, 18, 16), 32);
+  assert.equal(chooseAdaptiveTickInterval(9, 20, 18, 16), 16);
+});
+
+test("adaptive typewriter keeps native cadence at high refresh rates when work is unhealthy", () => {
+  const refresh144Hz = 1000 / 144;
+  assert.equal(isFrameHealthy(4, null, null, refresh144Hz), false);
+  assert.ok(Math.abs(chooseAdaptiveTickInterval(9, 20, 18, refresh144Hz) - refresh144Hz) < 0.001);
 });
 
 test("frame work selects safe-step and safe-block fallback modes", () => {
