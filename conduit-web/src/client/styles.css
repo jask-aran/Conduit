@@ -203,8 +203,6 @@ body.workspace-resizing .workspace-panel { transition: none !important; }
 .workspace-panel-loading { position: absolute; inset: auto 12px 12px auto; display: flex; align-items: center; gap: 7px; padding: 6px 9px; border: 1px solid var(--border); border-radius: 999px; background: var(--popover); color: var(--muted-foreground); font-size: 11px; box-shadow: 0 8px 24px rgb(0 0 0 / 25%); }
 /* 24px hit target centered on the gap between chat-main and the panel edge. */
 .workspace-resize-handle { position: absolute; inset-block: 0; left: -12px; z-index: 40; width: 24px; cursor: col-resize; touch-action: none; }
-.workspace-resize-handle::after { content: ""; position: absolute; inset-block: 0; left: 11px; width: 1px; background: var(--accent-cool); opacity: 0; pointer-events: none; }
-.workspace-resizing .workspace-resize-handle::after { opacity: 1; }
 .workspace-resizing { cursor: col-resize; user-select: none; }
 .workspace-detail-resizing { cursor: row-resize; user-select: none; }
 .workspace-artifacts { display: flex; min-height: 0; flex: 1; flex-direction: column; }
