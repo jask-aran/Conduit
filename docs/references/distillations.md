@@ -58,7 +58,7 @@ Add an entry through `$tacit-knowledge` after explicit approval or validated rep
 ### Keep one authentication boundary
 
 - **Type:** Invariant.
-- **Rule:** Put every route, static asset, and upload behind `requireAuth` except `GET /login`, `POST /v0/auth/login`, and `GET /healthz`; validate the session cookie before WebSocket upgrade; require a password on non-loopback binds and never use the insecure override.
+- **Rule:** Put every application route, static asset, and upload behind `requireAuth` except `GET /login`, `POST /v0/auth/login`, `GET /healthz`, and the public PWA bootstrap assets; validate the session cookie before WebSocket upgrade; require a password on non-loopback binds and never use the insecure override.
 - **Scope:** HTTP routes, static assets, uploads, and WebSocket upgrades.
 - **Evidence:** Protected-auth implementation and route/upgrade tests.
 
@@ -72,7 +72,7 @@ Add an entry through `$tacit-knowledge` after explicit approval or validated rep
 ### Keep one client interpretation layer
 
 - **Type:** Invariant.
-- **Rule:** Render assistant Markdown only through `src/client/chat/markdown.tsx` (Marked, DOMPurify, KaTeX); keep user prompts literal and use one data-driven tool registry with useful generic cards for unknown tools; use Kobalte as the only accessibility primitive, keep the client strict TypeScript without React production dependencies, and expose new keyboard-relevant actions through the typed Cmd/Ctrl+K palette.
+- **Rule:** Render assistant Markdown through `src/client/chat/markdown.tsx` and its renderer modules; keep URL policy and DOM sanitization in `src/client/chat/markdown-security.ts`, user prompts literal, and tool rendering data-driven with useful generic cards for unknown tools; use Kobalte as the only accessibility primitive, keep the client strict TypeScript without React production dependencies, and expose new keyboard-relevant actions through the typed Cmd/Ctrl+K palette.
 - **Scope:** Client rendering, tool cards, accessibility primitives, and new surface features.
 - **Evidence:** Client architecture and UI-parity constraints.
 

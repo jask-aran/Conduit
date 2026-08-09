@@ -32,6 +32,7 @@ test("default runtime paths are owned by the repository root", () => {
   assert.equal(config.installations.get("conduit-pinned").version, "0.80.6");
   assert.equal(path.isAbsolute(config.installations.get("conduit-pinned").command), true);
   assert.equal(config.enablePartialContinue, true);
+  assert.equal(config.maxAttachmentBytes, 100 * 1024 * 1024);
   assert.equal(loadConfig({ ENABLE_PARTIAL_CONTINUE: "false" }).enablePartialContinue, false);
 });
 
@@ -52,5 +53,6 @@ test("one data root relocates every durable Conduit path", () => {
   assert.equal(config.authFile, path.join(dataRoot, "auth.json"));
   assert.equal(config.piAgentDir, path.join(dataRoot, "pi"));
   assert.equal(config.release, "0123456789abcdef");
+  assert.equal(loadConfig({ CONDUIT_MAX_ATTACHMENT_BYTES: "2048" }).maxAttachmentBytes, 2048);
   assert.equal(config.workspaceSuggestionRoot, path.resolve("/tmp/workspace-suggestions"));
 });

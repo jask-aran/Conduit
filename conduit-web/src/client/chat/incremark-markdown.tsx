@@ -2,12 +2,12 @@ import { createEffect, createSignal, For, Index, onCleanup, Show } from "solid-j
 import { createStore, reconcile } from "solid-js/store";
 import { createIncremarkParser, type DisplayBlock, type ParsedBlock } from "@incremark/core";
 import katex from "katex";
-import * as KAlertDialog from "@kobalte/core/alert-dialog";
-import { Button } from "@/components/primitives";
 import { getHarnessRecorder, recordHarnessMetric } from "@/client/harness-metrics";
 import type { ChatMarkdownProps } from "./markdown";
+import { ExternalLinkDialog } from "./external-link-dialog";
 import { createSyntheticMathPreviewNode, repairSyntheticMathSource } from "./incremark-synthetic-math";
 import { AdaptiveIncremarkTypewriter, visibleAstCharacters } from "./incremark-typewriter";
+import { resolveMarkdownUrl } from "./markdown-security";
 import { projectTableMathSource, promoteTableCellDisplayMath, restoreTableMathAst, restoreTableMathSentinel } from "./table-math";
 import type { StreamingPending } from "./streaming-markdown";
 import { splitStreamingMarkdown } from "./streaming-markdown";
@@ -18,7 +18,7 @@ const incremarkParserOptions = { gfm: true, math: { tex: true }, htmlTree: true,
 type RendererContext = {
   definitions: () => Record<string, Definition>;
   inline: boolean;
-  requestExternalLink: (url: string) => void;
+  requestExternalLink: (url: string, trigger?: HTMLElement) => void;
   deferMath: () => boolean;
   syntheticMath: () => boolean;
   rendererId: () => string;
@@ -45,19 +45,8 @@ function restoreParsedBlock(block: ParsedBlock, sentinel: string | null, origina
   } as ParsedBlock;
 }
 
-const allowedProtocols = new Set(["http:", "https:", "mailto:"]);
-
 function safeUrl(value: unknown): { href: string; external: boolean } | null {
-  try {
-    const target = new URL(String(value || ""), location.href);
-    if (!allowedProtocols.has(target.protocol)) return null;
-    return {
-      href: target.href,
-      external: target.protocol !== "mailto:" && target.origin !== location.origin,
-    };
-  } catch {
-    return null;
-  }
+  return resolveMarkdownUrl(value);
 }
 
 function inlineText(nodes: MarkdownNode[]) {
@@ -230,7 +219,7 @@ function LinkNode(props: { node: MarkdownNode | NodeAccessor; context: RendererC
           class="external-markdown-link"
           data-external-url={resolved().href}
           aria-label={inlineText(node()?.children || []) || resolved().href}
-          onClick={() => props.context.requestExternalLink(resolved().href)}
+          onClick={(event) => props.context.requestExternalLink(resolved().href, event.currentTarget as HTMLElement)}
         >{label()}</button>
       </Show>
     </Show>}
@@ -565,6 +554,7 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
   const [pendingInlineBlockId, setPendingInlineBlockId] = createSignal<string | null>(null);
   const [definitions, setDefinitions] = createSignal<Record<string, Definition>>({});
   const [externalUrl, setExternalUrl] = createSignal<string | null>(null);
+  let externalReturnFocus: HTMLElement | null = null;
   const displayHistory = new Map<string, MarkdownNode>();
   const completedById = new Map<string, ParsedBlock>();
   const seededById = new Map<string, ParsedBlock>();
@@ -872,7 +862,10 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
   const context: RendererContext = {
     definitions,
     inline: Boolean(props.inline),
-    requestExternalLink: setExternalUrl,
+    requestExternalLink: (url, trigger) => {
+      externalReturnFocus = trigger || (document.activeElement instanceof HTMLElement ? document.activeElement : null);
+      setExternalUrl(url);
+    },
     deferMath: () => typewriter(),
     syntheticMath: () => Boolean(props.syntheticMath),
     rendererId,
@@ -903,18 +896,6 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
         </Show>
       </div>
     </div>
-    <KAlertDialog.Root open={Boolean(externalUrl())} onOpenChange={(open) => { if (!open) setExternalUrl(null); }}>
-      <KAlertDialog.Portal><KAlertDialog.Content data-state={externalUrl() ? "open" : "closed"} class="external-link-dialog">
-        <div class="external-link-dialog-card">
-          <KAlertDialog.Title>Open external link?</KAlertDialog.Title>
-          <KAlertDialog.Description>This link opens outside Conduit.</KAlertDialog.Description>
-          <code class="external-link-url">{externalUrl()}</code>
-          <div class="flex justify-end gap-2">
-            <Button variant="outline" onClick={() => setExternalUrl(null)}>Cancel</Button>
-            <Button onClick={() => { if (externalUrl()) window.open(externalUrl()!, "_blank", "noopener,noreferrer"); setExternalUrl(null); }}>Open link</Button>
-          </div>
-        </div>
-      </KAlertDialog.Content></KAlertDialog.Portal>
-    </KAlertDialog.Root>
+    <ExternalLinkDialog url={externalUrl} onClose={() => setExternalUrl(null)} returnFocus={() => externalReturnFocus} onFocusRestored={() => { externalReturnFocus = null; }} />
   </>;
 }

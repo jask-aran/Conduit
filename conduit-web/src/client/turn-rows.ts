@@ -189,15 +189,23 @@ export function buildLiveToolSegment(
   return {
     kind: "tool",
     id: `tool:${toolCallId}`,
-    tool: {
-      id: toolCallId,
-      name: execution.name || block.name || "tool",
-      args: execution.arguments ?? block.arguments,
-      partialResult: execution.partialResult,
-      result: execution.result,
-      done: execution.status === "complete" || execution.status === "error",
-      error: Boolean(execution.isError || execution.status === "error"),
-    },
+    tool: buildLiveToolItem(toolCallId, execution, { name: block.name, args: block.arguments }),
+  };
+}
+
+export function buildLiveToolItem(
+  toolCallId: string,
+  execution: ActiveGenerationView["toolExecutions"][string] = {},
+  fallback: { name?: string; args?: unknown } = {},
+): ToolItem {
+  return {
+    id: toolCallId,
+    name: execution.name || fallback.name || "tool",
+    args: execution.arguments ?? fallback.args,
+    partialResult: execution.partialResult,
+    result: execution.result,
+    done: execution.status === "complete" || execution.status === "error",
+    error: Boolean(execution.isError || execution.status === "error"),
   };
 }
 
@@ -217,21 +225,7 @@ function liveRows(generation: ActiveGenerationView, owner: Message | null, index
       } else if (block.type === "text" && classifications[block.identity] === "interim") {
         segments.push({ kind: "narration", id: block.identity, text: block.text || "", live: block.status === "streaming" });
       } else if (block.type === "toolCall") {
-        const execution = generation.toolExecutions[block.toolCallId || ""] || {};
-        const toolCallId = block.toolCallId || block.identity;
-        segments.push({
-          kind: "tool",
-          id: `tool:${toolCallId}`,
-          tool: {
-            id: toolCallId,
-            name: execution.name || block.name || "tool",
-            args: execution.arguments ?? block.arguments,
-            partialResult: execution.partialResult,
-            result: execution.result,
-            done: execution.status === "complete" || execution.status === "error",
-            error: Boolean(execution.isError || execution.status === "error"),
-          },
-        });
+        segments.push(buildLiveToolSegment(generation, block));
       }
     }
     if (answer) {

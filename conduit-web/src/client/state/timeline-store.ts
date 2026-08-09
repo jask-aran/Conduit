@@ -12,6 +12,7 @@ import type {
 import {
   buildLiveAnswerRow,
   buildLiveProjectionIndex,
+  buildLiveToolItem,
   buildLiveToolSegment,
   buildTurnRows,
 } from "../turn-rows";
@@ -144,15 +145,7 @@ export function createTimelineStore(
     const nextSegment: TraceSegment = {
       kind: "tool",
       id: segment.id,
-      tool: {
-        ...segment.tool,
-        name: execution.name || segment.tool.name,
-        args: execution.arguments ?? segment.tool.args,
-        partialResult: execution.partialResult,
-        result: execution.result,
-        done: execution.status === "complete" || execution.status === "error",
-        error: Boolean(execution.isError || execution.status === "error"),
-      },
+      tool: buildLiveToolItem(change.toolCallId, execution, { name: segment.tool.name, args: segment.tool.args }),
     };
     const nextValue = updateTraceSegment(current, location.segmentIndex, nextSegment);
     if (!nextValue) return null;

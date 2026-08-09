@@ -18,7 +18,7 @@ import { bindVisualViewportShell, isMobileLayout, MOBILE_LAYOUT_QUERY, setMobile
 import { Sidebar } from "./navigation/sidebar";
 import { Settings } from "./settings/settings";
 import { createActiveChat } from "./state/active-chat";
-import { createAttachments } from "./state/attachments";
+import { createAttachments, DEFAULT_MAX_ATTACHMENT_BYTES } from "./state/attachments";
 import { createCatalogueStore } from "./state/catalogue";
 import { createModelSettings } from "./state/model-settings";
 import { createRuntimeStore } from "./state/runtime";
@@ -74,6 +74,7 @@ function App() {
   const [workspaceSuggestions, setWorkspaceSuggestions] = createSignal<WorkspaceSuggestion[]>([]);
   const [defaultTemplateId, setDefaultTemplateId] = createSignal("chat");
   const [partialContinue, setPartialContinue] = createSignal(true);
+  const [maxAttachmentBytes, setMaxAttachmentBytes] = createSignal(DEFAULT_MAX_ATTACHMENT_BYTES);
   const [markdownRenderer, setMarkdownRenderer] = createSignal<MarkdownRendererId>(selectedMarkdownRenderer());
   const [settingsOpen, setSettingsOpen] = createSignal(false);
   const [settingsSection, setSettingsSection] = createSignal<SettingsSection>("models");
@@ -99,7 +100,7 @@ function App() {
   const catalogue = createCatalogueStore();
   const runtime = createRuntimeStore();
   const models = createModelSettings(showError);
-  const attachments = createAttachments(showError);
+  const attachments = createAttachments(showError, maxAttachmentBytes);
 
   const saveWorkspaceDefault = async (workspaceId: string, templateId: string | null) => {
     const saved = await api<Project>(`/v0/projects/${encodeURIComponent(workspaceId)}`, { method: "PATCH", body: JSON.stringify({ defaultTemplateId: templateId }) });
@@ -397,7 +398,6 @@ function App() {
     canRegenerate: Boolean(lastUserEntryId()) && !chat.streaming() && !chat.stopping(),
     canContinue: partialContinue() && Boolean(lastAssistant()?.stopped) && !chat.streaming(),
     canCopy: Boolean(lastAssistant()?.content),
-    commands: [],
   }));
 
   const paletteActions: PaletteActions = {
@@ -488,8 +488,12 @@ function App() {
         setTemplatesLoading(false);
         return payload;
       });
-    void api<{ partialContinue?: boolean }>("/v0/capabilities")
-      .then((payload) => setPartialContinue(payload.partialContinue !== false))
+    void api<{ partialContinue?: boolean; maxAttachmentBytes?: number }>("/v0/capabilities")
+      .then((payload) => {
+        setPartialContinue(payload.partialContinue !== false);
+        const maxBytes = payload.maxAttachmentBytes;
+        if (typeof maxBytes === "number" && Number.isSafeInteger(maxBytes) && maxBytes > 0) setMaxAttachmentBytes(maxBytes);
+      })
       .catch(() => setPartialContinue(true));
     void api<{ installations: Installation[] }>("/v0/pi-installations")
       .then((payload) => setInstallations(asList<Installation>(payload.installations)))

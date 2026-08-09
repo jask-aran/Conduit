@@ -1,12 +1,12 @@
 import { createEffect, createSignal, lazy, onCleanup, onMount, Show, Suspense } from "solid-js";
-import DOMPurify from "dompurify";
 import { marked } from "marked";
 import markedKatex from "marked-katex-extension";
 import katex from "katex";
-import * as KAlertDialog from "@kobalte/core/alert-dialog";
 import "katex/dist/katex.min.css";
-import { Button } from "@/components/primitives";
+import "./markdown.css";
 import { getHarnessRecorder, recordHarnessMetric } from "../harness-metrics";
+import { ExternalLinkDialog } from "./external-link-dialog";
+import { escapeHtml, renderMarkdownLink, sanitizeMarkdownFragment } from "./markdown-security";
 import { splitStreamingMarkdown, type StreamingPending } from "./streaming-markdown";
 import {
   MARKDOWN_RENDERER_STORAGE_KEY,
@@ -23,14 +23,6 @@ export {
 } from "./markdown-settings";
 export type { MarkdownRendererId } from "./markdown-settings";
 
-const allowedProtocols = new Set(["http:", "https:", "mailto:"]);
-
-const escapeHtml = (value: string) => value
-  .replaceAll("&", "&amp;")
-  .replaceAll("<", "&lt;")
-  .replaceAll(">", "&gt;")
-  .replaceAll('"', "&quot;");
-
 function pendingMarkup(pending: StreamingPending, streaming: boolean) {
   if (pending.kind === "fence") {
     const language = escapeHtml(pending.language || "text");
@@ -42,11 +34,9 @@ function pendingMarkup(pending: StreamingPending, streaming: boolean) {
 }
 
 function appendPendingMarkup(fragment: DocumentFragment, pending: StreamingPending, streaming: boolean) {
-  const pendingFragment = DOMPurify.sanitize(pendingMarkup(pending, streaming), {
-    USE_PROFILES: { html: true },
-    ADD_ATTR: ["aria-hidden", "aria-label", "class", "data-copy-code", "data-language", "data-streaming-final", "data-streaming-pending"],
-    RETURN_DOM_FRAGMENT: true,
-  }) as DocumentFragment;
+  const pendingFragment = sanitizeMarkdownFragment(pendingMarkup(pending, streaming), {
+    additionalAttributes: ["aria-hidden", "data-streaming-final", "data-streaming-pending"],
+  });
   if (pending.kind === "math-inline") {
     const paragraph = [...fragment.children].reverse().find((child) => child.tagName === "P");
     if (paragraph) {
@@ -114,14 +104,12 @@ marked.use({
     image() { return ""; },
     link({ href, title, tokens }) {
       const label = this.parser.parseInline(tokens);
-      try {
-        const target = new URL(href, location.href);
-        if (!allowedProtocols.has(target.protocol)) return label;
-        if (target.origin === location.origin || target.protocol === "mailto:") {
-          return `<a href="${escapeHtml(href)}"${title ? ` title="${escapeHtml(title)}"` : ""}>${label}</a>`;
-        }
-        return `<button type="button" class="external-markdown-link" data-external-url="${escapeHtml(target.href)}" aria-label="${escapeHtml(String(tokens.map((token) => "text" in token ? token.text : "").join("") || target.href))}">${label}</button>`;
-      } catch { return label; }
+      return renderMarkdownLink({
+        href,
+        title,
+        label,
+        labelText: String(tokens.map((token) => "text" in token ? token.text : "").join("")),
+      });
     },
     code({ text, lang }) {
       const language = String(lang || "text").split(/\s+/)[0]!.toLowerCase();
@@ -133,16 +121,6 @@ marked.use({
 type MarkedToken = { type?: string; raw?: string; tokens?: MarkedToken[] };
 const markedKatexCache = new Map<string, string>();
 const markedKatexCacheLimit = 512;
-
-function sanitizeMarkdownHtml(html: string, inline: boolean) {
-  const fragment = DOMPurify.sanitize(html, {
-    USE_PROFILES: { html: true },
-    ADD_ATTR: ["aria-label", "data-copy-code", "data-external-url", "data-language", "data-markdown", "class"],
-    FORBID_TAGS: ["img", "script", "style", "iframe", "object", "embed", ...(inline ? ["a", "button"] : [])],
-    RETURN_DOM_FRAGMENT: true,
-  }) as DocumentFragment;
-  return fragment;
-}
 
 function renderMarkdownFragment(source: string, inline: boolean, render: () => string) {
   const recorder = getHarnessRecorder();
@@ -188,7 +166,7 @@ function renderMarkdownFragment(source: string, inline: boolean, render: () => s
     restoreKatex?.();
   }
   const parsedAt = recorder ? performance.now() : 0;
-  const fragment = sanitizeMarkdownHtml(html, inline);
+  const fragment = sanitizeMarkdownFragment(html, { inline });
   const sanitisedAt = recorder ? performance.now() : 0;
   if (recorder) {
     recordHarnessMetric(recorder, {
@@ -386,11 +364,9 @@ function MarkedMarkdown(props: ChatMarkdownProps) {
   const renderPending = (pending: StreamingPending | null) => {
     clearPendingNodes();
     if (!pending || !pendingBoundary) return;
-    const pendingFragment = DOMPurify.sanitize(pendingMarkup(pending, Boolean(props.streaming)), {
-      USE_PROFILES: { html: true },
-      ADD_ATTR: ["aria-hidden", "aria-label", "class", "data-copy-code", "data-language", "data-streaming-final", "data-streaming-pending"],
-      RETURN_DOM_FRAGMENT: true,
-    }) as DocumentFragment;
+    const pendingFragment = sanitizeMarkdownFragment(pendingMarkup(pending, Boolean(props.streaming)), {
+      additionalAttributes: ["aria-hidden", "data-streaming-final", "data-streaming-pending"],
+    });
     const nodes = [...pendingFragment.childNodes];
     if (pending.kind === "math-inline") {
       const paragraph = [...root.querySelectorAll("p")].at(-1);
@@ -568,19 +544,7 @@ function MarkedMarkdown(props: ChatMarkdownProps) {
 
   return <>
     <div ref={root} class="chat-markdown" data-streaming={props.streaming || undefined} />
-    <KAlertDialog.Root open={Boolean(externalUrl())} onOpenChange={(open) => { if (!open) setExternalUrl(null); }}>
-      <KAlertDialog.Portal><KAlertDialog.Content data-state={externalUrl() ? "open" : "closed"} class="external-link-dialog" onCloseAutoFocus={(event) => { event.preventDefault(); if (externalReturnFocus?.isConnected) externalReturnFocus.focus(); externalReturnFocus = null; }}>
-        <div class="external-link-dialog-card">
-          <KAlertDialog.Title>Open external link?</KAlertDialog.Title>
-          <KAlertDialog.Description>This link opens outside Conduit.</KAlertDialog.Description>
-          <code class="external-link-url">{externalUrl()}</code>
-          <div class="flex justify-end gap-2">
-            <Button variant="outline" onClick={() => setExternalUrl(null)}>Cancel</Button>
-            <Button onClick={() => { if (externalUrl()) window.open(externalUrl()!, "_blank", "noopener,noreferrer"); setExternalUrl(null); }}>Open link</Button>
-          </div>
-        </div>
-      </KAlertDialog.Content></KAlertDialog.Portal>
-    </KAlertDialog.Root>
+    <ExternalLinkDialog url={externalUrl} onClose={() => setExternalUrl(null)} returnFocus={() => externalReturnFocus} onFocusRestored={() => { externalReturnFocus = null; }} />
   </>;
 }
 

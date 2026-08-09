@@ -12,8 +12,6 @@ import { duplicateSession, messagesFromEntries, readAnnouncedAttachmentIds, read
 import { PiManager } from "./pi-manager.js";
 import { ChatStore, chatView, isChatId } from "./chat-store.js";
 import { AttachmentStore } from "./attachment-store.js";
-import { serializeAttachmentEnvelope } from "./attachment-envelope.js";
-import { CONTINUE_PROMPT } from "./continuation.js";
 import { RuntimeHub } from "./runtime-hub.js";
 import { defaultsFromEnv, RuntimeSettingsStore } from "./runtime-settings.js";
 import { PreferencesStore } from "./preferences-store.js";
@@ -28,21 +26,20 @@ import { PiAuthBroker } from "./pi-auth-broker.js";
 import { ChatLifecycle } from "./chat-lifecycle.js";
 import {
   authStartupViolation,
-  clearSessionCookie,
-  createRateLimiter,
-  issueSessionCookie,
-  isSecureRequest,
   prepareAuthMiddleware,
-  readCookie,
-  safeRedirectTarget,
   validateSession,
 } from "./auth-middleware.js";
-import { renderLoginPage } from "./auth-login-page.js";
 import { listWorkspaceDirectory, readWorkspaceDiff, readWorkspaceFile } from "./workspace-inspector.js";
 import { currentMagicDnsOrigin } from "./tailscale-share.js";
 import { buildProjectDashboard } from "./project-dashboard.js";
 import { PtyManager } from "./pty-manager.js";
-import { PtyOutputBatcher } from "./pty-output-batcher.js";
+import { createLiveSessionStream } from "./server/live-session-stream.js";
+import { createTerminalStream } from "./server/terminal-stream.js";
+import { registerAttachmentRoutes } from "./server/routes/attachments.js";
+import { registerAuthRoutes } from "./server/routes/auth.js";
+import { registerPiAuthRoutes } from "./server/routes/pi-auth.js";
+import { registerPtyRoutes } from "./server/routes/ptys.js";
+import { registerRuntimeRoutes } from "./server/routes/runtime.js";
 
 const config = loadConfig();
 const projects = new ProjectStore(config);
@@ -69,7 +66,7 @@ const registry = new ChatStore(config.sessionRegistryFile, {
   },
 });
 await registry.initialize(await projects.list());
-const attachments = new AttachmentStore(registry);
+const attachments = new AttachmentStore(registry, { maxBytes: config.maxAttachmentBytes });
 const runtimeSettings = new RuntimeSettingsStore(config.runtimeSettingsFile, defaultsFromEnv(process.env));
 await runtimeSettings.load();
 const knownTemplateIds = config.piTemplates
@@ -84,7 +81,6 @@ await preferences.load();
 const authStore = new AuthStore(config.authFile);
 await authStore.load();
 await authStore.pruneExpired();
-const loginRateLimiter = createRateLimiter();
 const startupViolation = authStartupViolation(config, authStore);
 if (startupViolation) {
   console.error(startupViolation.message);
@@ -338,87 +334,12 @@ async function findChatContext(chatId) {
   return { chat, project };
 }
 
-app.put("/v0/chats/:chatId/attachments/:attachmentId", async (request, response, next) => {
-  try {
-    const context = await findChatContext(request.params.chatId);
-    if (!context) return response.status(404).json({ error: "chat_not_found" });
-    const attachment = await attachments.write(
-      context.project,
-      context.chat.id,
-      request.params.attachmentId,
-      request.query.name,
-      request,
-    );
-    response.status(201).json(attachment);
-  } catch (error) {
-    if (error.code === "EEXIST") return response.status(409).json({ error: "attachment_exists" });
-    next(error);
-  }
-});
+registerAttachmentRoutes(app, { attachments, findChatContext });
 
 app.use(express.json({ limit: "128kb" }));
 app.use(express.urlencoded({ extended: false, limit: "32kb" }));
 
-app.get("/login", (request, response) => {
-  const after = safeRedirectTarget(request.query.after);
-  response.type("text/html").send(renderLoginPage({ after }));
-});
-
-app.post("/v0/auth/login", async (request, response) => {
-  const password = String(request.body?.password || "");
-  const after = safeRedirectTarget(request.body?.after);
-  const acceptsJson = String(request.headers["accept"] || "").includes("application/json")
-    || String(request.headers["content-type"] || "").includes("application/json");
-  if (loginRateLimiter.isThrottled()) {
-    await authStore.verifyPassword(password).catch(() => false);
-    if (acceptsJson) return response.status(429).json({ error: "rate_limited", message: "Too many failed attempts. Try again shortly." });
-    return response.type("text/html").status(429).send(renderLoginPage({ error: "Too many failed attempts. Try again shortly.", after }));
-  }
-  const login = await authStore.authenticateAndCreateSession(password, {
-    userAgent: String(request.headers["user-agent"] || "").slice(0, 256) || null,
-  }).catch(() => null);
-  if (!login) {
-    loginRateLimiter.noteFailure();
-    if (acceptsJson) return response.status(401).json({ error: "invalid_credentials", message: "Incorrect password." });
-    return response.type("text/html").status(401).send(renderLoginPage({ error: "Incorrect password.", after }));
-  }
-  loginRateLimiter.noteSuccess();
-  issueSessionCookie(response, login.token, { secure: isSecureRequest(request) });
-  if (acceptsJson) return response.json({ ok: true, redirect: after });
-  response.redirect(303, after);
-});
-
-app.post("/v0/auth/logout", async (request, response) => {
-  const token = readCookie(request);
-  await authStore.removeSession(token).catch(() => false);
-  const secure = isSecureRequest(request);
-  clearSessionCookie(response, { secure });
-  response.json({ ok: true });
-});
-
-app.get("/v0/auth/status", (request, response) => {
-  const context = request.conduitAuth;
-  if (context) {
-    response.json({
-      hasPassword: authStore.hasPassword(),
-      authenticated: true,
-      sessionCount: authStore.sessions().length,
-    });
-  } else {
-    response.json({
-      hasPassword: authStore.hasPassword(),
-      authenticated: false,
-      sessionCount: authStore.sessions().length,
-    });
-  }
-});
-
-app.post("/v0/auth/reset-sessions", async (request, response) => {
-  const context = request.conduitAuth;
-  if (!context) return response.status(401).json({ error: "unauthorized" });
-  await authStore.removeOtherSessions(context.token);
-  response.json({ ok: true });
-});
+registerAuthRoutes(app, { authStore });
 
 const pendingCheckpoints = new Set();
 let shuttingDown = false;
@@ -450,197 +371,26 @@ manager.on("event", ({ record, event }) => {
       .finally(() => pendingCheckpoints.delete(checkpointId));
   }, 50).unref();
 });
-app.get("/healthz", (_request, response) => response.status(shuttingDown ? 503 : 200).json({
-  ok: !shuttingDown,
-  status: shuttingDown ? "stopping" : "ready",
-  release: config.release,
-}));
-app.get("/v0/capabilities", (_request, response) => response.json({
-  runtime: "pi-rpc", create: true, resume: true, projects: true,
-  sessionManagement: true, chatIdentity: "conduit", attachments: "raw-http",
-  partialContinue: config.enablePartialContinue,
-  stream: "websocket", processOwner: "conduit-server", sessionAuthority: "pi-jsonl",
-  globalRuntime: "sse",
-  templates: true,
-  workspaces: true,
-  workspaceModes: ["managed", "linked", "created", "cloned"],
-  piRuntimes: ["conduit_profile", "native_pi"],
-}));
-app.get("/v0/share-origin", async (_request, response, next) => {
-  try {
-    response.json({ origin: await currentMagicDnsOrigin() });
-  } catch (error) {
-    next(Object.assign(new Error("Unable to determine this host's Tailscale address"), { cause: error }));
-  }
+registerRuntimeRoutes(app, {
+  attachments,
+  config,
+  currentMagicDnsOrigin,
+  isPathInside,
+  isShuttingDown: () => shuttingDown,
+  listDirectorySuggestions,
+  nativePreflight,
+  preferences,
+  resolveTemplate,
+  runtimeHub,
+  templatePublicView,
+  projects,
 });
 
-app.get("/v0/pi-installations", async (_request, response, next) => {
-  try { response.json({ installations: await installationViews() }); }
-  catch (error) { next(error); }
-});
-
-app.post("/v0/pi-installations/host/detect", async (_request, response, next) => {
-  try {
-    const detected = await config.installations.detectHost();
-    if (!detected.available) await clearHostPiDefaults();
-    response.json((await installationViews()).find((item) => item.id === "host-pi"));
-  } catch (error) { next(error); }
-});
-
-function piAuthOwner(request) {
-  const owner = request.conduitAuth?.session?.tokenHash;
-  if (!owner) {
-    throw Object.assign(new Error("Pi credential management requires an authenticated Conduit session. Set a Conduit password first."), {
-      code: "pi_auth_login_required",
-      status: 403,
-    });
-  }
-  return owner;
-}
-
-function noStore(response) {
-  response.set("Cache-Control", "no-store");
-}
-
-app.get("/v0/pi-auth", (request, response, next) => {
-  try {
-    piAuthOwner(request);
-    noStore(response);
-    response.json({ installationId: "conduit-pinned", providers: piAuth.providers() });
-  } catch (error) { next(error); }
-});
-
-app.get("/v0/pi-auth/attempt", (request, response, next) => {
-  try {
-    noStore(response);
-    response.json({ attempt: piAuth.activeFor(piAuthOwner(request)) });
-  } catch (error) { next(error); }
-});
-
-app.post("/v0/pi-auth/oauth", (request, response, next) => {
-  try {
-    const attempt = piAuth.start(piAuthOwner(request), String(request.body?.providerId || ""));
-    noStore(response);
-    response.status(202).json({ attempt });
-  } catch (error) { next(error); }
-});
-
-app.post("/v0/pi-auth/attempt/respond", (request, response, next) => {
-  try {
-    const attempt = piAuth.respond(piAuthOwner(request), request.body?.value);
-    noStore(response);
-    response.json({ attempt });
-  } catch (error) { next(error); }
-});
-
-app.post("/v0/pi-auth/attempt/cancel", (request, response, next) => {
-  try {
-    noStore(response);
-    response.json({ cancelled: piAuth.cancel(piAuthOwner(request)) });
-  } catch (error) { next(error); }
-});
-
-app.put("/v0/pi-auth/api-key", async (request, response, next) => {
-  try {
-    await piAuth.setApiKey(String(request.body?.providerId || ""), request.body?.key);
-    noStore(response);
-    response.status(204).end();
-  } catch (error) { next(error); }
-});
-
-app.delete("/v0/pi-auth/:providerId", async (request, response, next) => {
-  try {
-    const removed = await piAuth.remove(String(request.params.providerId || ""));
-    noStore(response);
-    response.json({ removed });
-  } catch (error) { next(error); }
-});
-
-app.get("/v0/workspaces/:id/native-preflight", async (request, response, next) => {
-  try {
-    const project = await projects.get(request.params.id);
-    if (!project || project.kind !== "workspace") return response.status(404).json({ error: "workspace_not_found" });
-    await projects.validate(project);
-    response.json(await nativePreflight(project));
-  } catch (error) { next(error); }
-});
-
-app.get("/v0/workspaces/policy", (_request, response) => {
-  response.json({
-    allowlist: config.workspaceAllowlist,
-    filesRoot: config.filesRoot,
-    templatesRoot: config.templatesRoot,
-    modes: ["managed", "linked", "created", "cloned"],
-  });
-});
-
-app.get("/v0/workspaces/suggestions", async (_request, response, next) => {
-  try {
-    const suggestionRoot = config.workspaceSuggestionRoot;
-    if (!config.workspaceAllowlist.some((root) => isPathInside(suggestionRoot, root))) {
-      return response.json({ root: suggestionRoot, folders: [] });
-    }
-    const folders = await listDirectorySuggestions(suggestionRoot);
-    response.json({
-      root: suggestionRoot,
-      folders: folders.map((folder) => ({
-        name: folder.name,
-        path: folder.path,
-        displayPath: `~/${folder.name}`,
-      })),
-    });
-  } catch (error) { next(error); }
-});
-
-app.get("/v0/templates", (_request, response) => {
-  const prefs = preferences.get();
-  response.json({
-    defaultTemplateId: prefs.defaultTemplateId,
-    templates: config.piTemplates.map((template) => templatePublicView(template)),
-  });
-});
-
-app.get("/v0/preferences", (_request, response) => {
-  response.json(preferences.get());
-});
-
-app.patch("/v0/preferences", async (request, response, next) => {
-  try {
-    const requested = request.body?.defaultTemplateId;
-    const template = requested == null ? null : resolveTemplate(config, requested);
-    if (requested != null && !template) {
-      return response.status(400).json({ error: "unknown_template", templateId: requested });
-    }
-    if (template?.defaultable === false) {
-      return response.status(400).json({ error: "special_template", templateId: requested });
-    }
-    const saved = await preferences.save({
-      defaultTemplateId: requested ?? preferences.get().defaultTemplateId,
-    });
-    response.json(saved);
-  } catch (error) { next(error); }
-});
-
-app.get("/v0/runtime", (_request, response) => {
-  response.json(runtimeHub.snapshot());
-});
-
-app.get("/v0/runtime/stream", (request, response) => {
-  response.setHeader("Content-Type", "text/event-stream");
-  response.setHeader("Cache-Control", "no-cache, no-transform");
-  response.setHeader("Connection", "keep-alive");
-  response.flushHeaders?.();
-  const client = { kind: "sse", response };
-  const detach = runtimeHub.attach(client);
-  const heartbeat = setInterval(() => {
-    try { response.write(": ping\n\n"); }
-    catch { clearInterval(heartbeat); detach(); }
-  }, 25000);
-  heartbeat.unref?.();
-  request.on("close", () => {
-    clearInterval(heartbeat);
-    detach();
-  });
+registerPiAuthRoutes(app, {
+  piAuth,
+  installationViews,
+  clearHostPiDefaults,
+  detectHost: () => config.installations.detectHost(),
 });
 
 async function stopSessionProcesses(session) {
@@ -690,45 +440,7 @@ async function moveRegisteredChat({ chat, source, target, session }) {
   }
 }
 
-async function terminalContext(id) {
-  const project = await projects.get(id);
-  if (!project) throw Object.assign(new Error("Terminal project was not found"), { code: "pty_project_not_found" });
-  if (project.kind === "workspace") {
-    try { await projects.validate(project); }
-    catch (error) {
-      if (error.code === "workspace_identity_changed") {
-        throw Object.assign(new Error(`Terminal working directory is unavailable to this Conduit server: ${project.path}`), {
-          code: "pty_cwd_unavailable",
-          status: 409,
-          path: project.path,
-          cause: error,
-        });
-      }
-      throw error;
-    }
-    return { project, cwd: project.path };
-  }
-  const cwd = await fs.realpath(os.homedir());
-  if (!(await fs.stat(cwd)).isDirectory()) throw Object.assign(new Error("Terminal home directory is unavailable"), { code: "pty_home_unavailable" });
-  return { project, cwd };
-}
-
-app.get("/v0/ptys", (_request, response) => response.json({ ptys: terminals.list() }));
-app.post("/v0/ptys", async (request, response, next) => {
-  try {
-    const { project, cwd } = await terminalContext(String(request.body?.projectId || ""));
-    response.status(201).json(await terminals.create({ project, cwd, templateId: String(request.body?.templateId || "shell"), cols: request.body?.cols, rows: request.body?.rows }));
-  }
-  catch (error) { next(error); }
-});
-app.post("/v0/ptys/:id/rename", async (request, response, next) => {
-  try { const record = await terminals.rename(request.params.id, request.body?.title); if (!record) return response.status(404).json({ error: "pty_not_found" }); response.json(record); }
-  catch (error) { next(error); }
-});
-app.delete("/v0/ptys/:id", async (request, response, next) => {
-  try { const removed = await terminals.remove(request.params.id); if (!removed) return response.status(404).json({ error: "pty_not_found" }); response.status(204).end(); }
-  catch (error) { next(error); }
-});
+registerPtyRoutes(app, { projects, terminals });
 
 app.get("/v0/projects", async (_request, response, next) => {
   try {
@@ -1568,6 +1280,7 @@ app.use((error, _request, response, _next) => {
   if (["chat_move_not_supported", "live_session_starting", "runtime_locked", "session_writer_conflict"].includes(error.code)) status = 409;
   if (error.code === "live_process_limit" || error.code === "generation_limit" || error.code === "pty_capacity_reached") status = 429;
   if (["attachment_not_found", "path_not_found", "pty_project_not_found"].includes(error.code)) status = 404;
+  if (error.code === "attachment_too_large") status = 413;
   if (["pty_not_running", "pty_cwd_unavailable", "pty_home_unavailable"].includes(error.code)) status = 409;
   if (error.code === "command_failed") status = 502;
   if (error.code === "clone_timeout") status = 504;
@@ -1615,161 +1328,23 @@ app.use((error, _request, response, _next) => {
     message: error.message,
     path: error.path,
     allowlist: error.allowlist,
+    maxBytes: error.maxBytes,
   });
 });
 
 const server = http.createServer(app);
 const wss = new WebSocketServer({ noServer: true });
-const terminalClients = new Map();
-const terminalControllers = new Map();
-
-function sendTerminalControl(id) {
-  const controller = terminalControllers.get(id) || null;
-  for (const ws of terminalClients.get(id) || []) {
-    if (ws.readyState === ws.OPEN) ws.send(JSON.stringify({ type: "control", writable: ws === controller }));
-  }
-}
-
-function promoteTerminalController(id) {
-  if (terminalControllers.has(id)) return;
-  const record = terminals.get(id);
-  if (record?.status !== "running") return sendTerminalControl(id);
-  const next = [...(terminalClients.get(id) || [])].find((ws) => ws.readyState === ws.OPEN);
-  if (next) terminalControllers.set(id, next);
-  sendTerminalControl(id);
-}
-
-function detachTerminalClient(id, ws) {
-  const clients = terminalClients.get(id);
-  if (!clients) return;
-  clients.delete(ws);
-  if (terminalControllers.get(id) === ws) terminalControllers.delete(id);
-  if (!clients.size) {
-    terminalClients.delete(id);
-    terminalControllers.delete(id);
-    return;
-  }
-  promoteTerminalController(id);
-}
-
-const terminalOutput = new PtyOutputBatcher((id, bytes) => {
-  for (const ws of terminalClients.get(id) || []) {
-    if (ws.readyState !== ws.OPEN) continue;
-    if (ws.bufferedAmount > 1024 * 1024) { ws.close(1013, "Terminal client is too slow"); continue; }
-    ws.send(bytes, { binary: true });
-  }
+const terminalStream = createTerminalStream({ terminals, wss });
+const liveSessionStream = createLiveSessionStream({
+  manager,
+  wss,
+  attachments,
+  registry,
+  config,
+  findChatContext,
+  findRegisteredSession,
+  chatModelView,
 });
-terminals.on("output", ({ id, bytes }) => terminalOutput.append(id, bytes));
-terminals.on("exit", (record) => {
-  terminalOutput.flush(record.id);
-  terminalControllers.delete(record.id);
-  for (const ws of terminalClients.get(record.id) || []) {
-    if (ws.readyState !== ws.OPEN) continue;
-    ws.send(JSON.stringify({ type: "status", status: "exited", exitCode: record.exitCode, signal: record.signal }));
-    ws.send(JSON.stringify({ type: "control", writable: false }));
-  }
-});
-terminals.on("removed", ({ id }) => {
-  terminalOutput.flush(id);
-  terminalControllers.delete(id);
-  for (const ws of terminalClients.get(id) || []) {
-    if (ws.readyState === ws.OPEN) ws.close(1001, "Terminal was removed");
-  }
-  terminalClients.delete(id);
-});
-
-async function promptForChat(record, command, message) {
-  const context = await findChatContext(record.chatId);
-  if (!context) throw new Error("Chat no longer exists");
-  const selectedAttachments = await attachments.resolveMany(context.project, context.chat.id, command.attachmentIds);
-  const prompt = serializeAttachmentEnvelope({ chatId: context.chat.id, attachments: selectedAttachments, message });
-  return { context, prompt };
-}
-
-async function sendPrompt(record, prepared, options) {
-  const generationId = await manager.promptAccepted(record.id, prepared.prompt, options);
-  if (prepared.context.chat.status === "draft") {
-    await registry.update(prepared.context.chat.id, {
-      status: "active",
-      piSessionId: record.sessionId || null,
-      piSessionFile: record.sessionFile,
-    });
-  }
-  return generationId;
-}
-
-async function applyComposerModel(record, command) {
-  const model = String(command.model || "").trim();
-  const thinkingLevel = String(command.thinkingLevel || "").trim();
-  if (!model && !thinkingLevel) return;
-  const context = await findChatContext(record.chatId);
-  if (!context) throw new Error("Chat no longer exists");
-  const current = await chatModelView(context);
-  if (model && !current.models.some((item) => item.spec === model)) {
-    throw Object.assign(new Error("Selected model is unavailable for this chat"), { code: "invalid_model" });
-  }
-  if (model && model !== current.model) await manager.setModel(record.id, model);
-  if (thinkingLevel && thinkingLevel !== current.thinkingLevel) await manager.setThinkingLevel(record.id, thinkingLevel);
-}
-
-async function syncForkedChat(record) {
-  const context = await findChatContext(record.chatId);
-  if (!context) throw new Error("Chat no longer exists");
-  await registry.update(context.chat.id, {
-    piSessionId: record.sessionId || context.chat.piSessionId,
-    piSessionFile: record.sessionFile,
-  });
-  manager.publish(record, { type: "history_forked", chat: chatView(registry.metadata(context.chat.id)) });
-  return registry.metadata(context.chat.id);
-}
-
-async function handleClientCommand(record, command) {
-  if (command.type === "prompt") {
-    const prepared = await promptForChat(record, command, String(command.message || ""));
-    const streamingBehavior = command.streamingBehavior === "steer" || command.streamingBehavior === "followUp"
-      ? command.streamingBehavior
-      : null;
-    return sendPrompt(record, prepared, { streamingBehavior });
-  }
-  if (command.type === "follow_up" || command.type === "steer") {
-    const prepared = await promptForChat(record, command, String(command.message || ""));
-    await manager.queueAccepted(record.id, command.type, prepared.prompt);
-    return null;
-  }
-  if (command.type === "stop_generation" || command.type === "abort") {
-    return manager.abortGeneration(record.id, command.generationId || null);
-  }
-  if (command.type === "fork_and_prompt") {
-    await manager.fork(record.id, command.entryId);
-    await syncForkedChat(record);
-    await applyComposerModel(record, command);
-    const prepared = await promptForChat(record, command, String(command.message || ""));
-    return sendPrompt(record, prepared);
-  }
-  if (command.type === "regenerate") {
-    const forked = await manager.fork(record.id, command.entryId);
-    await syncForkedChat(record);
-    await applyComposerModel(record, command);
-    return manager.promptAccepted(record.id, forked.text);
-  }
-  if (command.type === "continue") {
-    if (!config.enablePartialContinue) throw Object.assign(new Error("Partial continuation is disabled"), { code: "partial_continue_disabled" });
-    const persisted = await findRegisteredSession(record.chatId);
-    const previous = persisted ? messagesFromEntries(persisted.entries).findLast((message) => message.role === "assistant") : null;
-    const partial = previous?.content || record.generation?.partial || "";
-    if (!partial || (!previous?.stopped && !record.generation?.closed)) throw new Error("There is no stopped response to continue");
-    return manager.promptAccepted(record.id, CONTINUE_PROMPT, { continuationBase: partial });
-  }
-  if (command.type === "extension_ui_response" || command.type === "host_ui_response") {
-    manager.respondHostUi(record.id, command);
-    return null;
-  }
-  if (command.type === "refresh_context") {
-    return manager.refreshContextUsage(record.id);
-  }
-  manager.send(record.id, command);
-  return null;
-}
 
 server.on("upgrade", async (request, socket, head) => {
   const pathname = new URL(request.url, "http://localhost").pathname;
@@ -1785,62 +1360,8 @@ server.on("upgrade", async (request, socket, head) => {
     console.error("WebSocket session validation failed", error);
     return socket.destroy();
   }
-  if (ptyMatch) return wss.handleUpgrade(request, socket, head, (ws) => {
-    const id = ptyMatch[1];
-    terminalOutput.flush(id);
-    const clients = terminalClients.get(id) || new Set();
-    clients.add(ws);
-    terminalClients.set(id, clients);
-    const record = terminals.get(id);
-    if (record.status === "running" && !terminalControllers.has(id)) terminalControllers.set(id, ws);
-
-    const replay = terminals.replay(id);
-    ws.send(JSON.stringify({ type: "replay_start", complete: replay.complete }));
-    if (replay.bytes.length) ws.send(replay.bytes, { binary: true });
-    ws.send(JSON.stringify({ type: "replay_end" }));
-    ws.send(JSON.stringify({ type: "status", status: record.status, exitCode: record.exitCode, signal: record.signal }));
-    sendTerminalControl(id);
-
-    ws.on("message", (data, isBinary) => {
-      try {
-        if (terminalControllers.get(id) !== ws) {
-          throw Object.assign(new Error("Another attached browser currently controls this terminal"), { code: "pty_read_only" });
-        }
-        if (isBinary) {
-          terminalOutput.flush(id);
-          terminals.input(id, data);
-        } else {
-          const command = JSON.parse(String(data));
-          if (command.type === "resize") terminals.resize(id, command.cols, command.rows);
-          else throw Object.assign(new Error("Unknown terminal control frame"), { code: "pty_control_invalid" });
-        }
-      } catch (error) {
-        if (ws.readyState === ws.OPEN) ws.send(JSON.stringify({ type: "client_error", code: error.code, message: error.message }));
-      }
-    });
-    ws.on("close", () => detachTerminalClient(id, ws));
-  });
-  wss.handleUpgrade(request, socket, head, (ws) => {
-    const record = manager.get(match[1]);
-    const generationResume = manager.attach(match[1], ws);
-    if (generationResume) ws.send(JSON.stringify(generationResume));
-    if (record.status === "running" && !record.contextUsage?.contextWindow) {
-      manager.refreshContextUsage(record.id).catch(() => {});
-    }
-    ws.send(JSON.stringify({
-      type: "runtime_state",
-      session: manager.view(record),
-      hostUiRequests: record.hostUiRequests || [],
-      queue: record.queue || { steering: [], followUp: [] },
-      contextUsage: record.contextUsage || null,
-    }));
-    if (record.lastCheckpoint) ws.send(JSON.stringify(record.lastCheckpoint));
-    ws.on("message", (data) => {
-      Promise.resolve()
-        .then(() => handleClientCommand(record, JSON.parse(String(data))))
-        .catch((error) => ws.send(JSON.stringify({ type: "client_error", code: error.code, message: error.message })));
-    });
-  });
+  if (ptyMatch) return terminalStream.handleUpgrade(ptyMatch[1], request, socket, head);
+  return liveSessionStream.handleUpgrade(match[1], request, socket, head);
 });
 
 async function shutdown(signal) {

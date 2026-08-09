@@ -16,6 +16,11 @@ function boundedMilliseconds(value, fallback) {
   return Number.isFinite(parsed) && parsed >= 1_000 ? parsed : fallback;
 }
 
+function boundedBytes(value, fallback) {
+  const parsed = Number(value);
+  return Number.isSafeInteger(parsed) && parsed >= 1 ? parsed : fallback;
+}
+
 export function loadConfig(env = process.env) {
   const templatesRoot = absolute(env.CONDUIT_TEMPLATES_ROOT || path.join(repositoryRoot, "templates"));
   const defaultTemplateFile = env.CONDUIT_PI_TEMPLATE
@@ -61,6 +66,7 @@ export function loadConfig(env = process.env) {
     remotesFile: absolute(env.CONDUIT_REMOTES_FILE || path.join(dataRoot, "remotes.json")),
     authFile: absolute(env.CONDUIT_AUTH_FILE || path.join(dataRoot, "auth.json")),
     cloneTimeoutMs: boundedMilliseconds(env.CONDUIT_CLONE_TIMEOUT_MS, 120_000),
+    maxAttachmentBytes: boundedBytes(env.CONDUIT_MAX_ATTACHMENT_BYTES, 100 * 1024 * 1024),
     allowInsecure: env.CONDUIT_ALLOW_INSECURE === "1",
     templatesRoot,
     workspaceAllowlist,

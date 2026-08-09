@@ -43,6 +43,19 @@ test("failed streams remove partial data and never publish a final attachment", 
   await fs.rm(root, { recursive: true, force: true });
 });
 
+test("bounded streams reject oversized uploads and remove partial data", async () => {
+  const { root, project, chat, store } = await fixture();
+  const bounded = new AttachmentStore(store.chatStore, { maxBytes: 4 });
+  const id = crypto.randomUUID();
+  await assert.rejects(
+    bounded.write(project, chat.id, id, "too-large.txt", Readable.from(["12345"])),
+    (error) => error.code === "attachment_too_large" && error.status === 413 && error.maxBytes === 4,
+  );
+  assert.deepEqual(await bounded.list(project, chat.id), []);
+  assert.deepEqual(await fs.readdir(path.join(chatDirectory(project, chat.id), ".partial")), []);
+  await fs.rm(root, { recursive: true, force: true });
+});
+
 test("large generated uploads remain ordinary streamed files and symlinks fail closed", async () => {
   const { root, project, chat, store } = await fixture();
   const id = crypto.randomUUID();
