@@ -234,9 +234,10 @@ managed-server rule and the QA rule separately matchable by Codex.
 Use the restored session for the changed flow:
 
 - Prefer `snapshot -i -c` and semantic `find` commands.
-- Use `batch` for short flows and refresh snapshots after page changes.
-- Use filtered network requests, screenshots, and `a11y` when they add
-  evidence.
+- Use short, separate wrapper commands for multi-step flows and refresh
+  snapshots after page changes.
+- Use screenshots and `a11y` when they add evidence. Keep network inspection
+  under Auto-review; the local wrapper rejects network commands.
 - Store temporary evidence under `/tmp`; do not record credentials, cookies,
   prompts, or transcript contents.
 - Run page actions through the local wrapper so every command uses the same
@@ -249,13 +250,16 @@ npm run agent-browser:local -- --session <session-id-printed-by-qa> --restore sc
 ```
 
 The wrapper accepts local Conduit navigation and ordinary QA actions. It rejects
-external `open` and `read` URLs, arbitrary `eval`, network, storage, cookie,
-auth, upload, download, plugin, and multi-session commands. Keep those actions
-under Auto-review. The wrapper command also remains under Auto-review because
-the command policy cannot inspect its validated action; approve only local QA
-actions. If the browser reports a separate Chrome or CDP host boundary, rerun
-the same wrapper command with host permission; do not switch to raw
-`agent-browser` commands.
+external URLs for `open`, `read`, and `a11y`, arbitrary `eval`, CDP attachment,
+network, storage, cookie, auth, upload, download, plugin, and multi-session
+commands. Keep those actions under Auto-review. The wrapper command also
+remains under Auto-review because the policy cannot inspect page state or
+resulting navigation; approve only local QA actions. If the browser reports a
+separate Chrome or CDP host boundary, stop the local QA flow and request that
+separate action under Auto-review; do not pass `--cdp` or similar options
+through this wrapper. The wrapper also supplies a checked-in empty
+agent-browser config and removes unsafe agent-browser environment overrides;
+user and project config files cannot add startup actions to the local flow.
 
 Close the session after use:
 

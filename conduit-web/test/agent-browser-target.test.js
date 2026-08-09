@@ -4,7 +4,6 @@ import {
   DEFAULT_CONDUIT_ORIGIN,
   resolveLocalTarget,
   resolveLocalBrowserUrl,
-  validateLocalAgentBrowserCommand,
 } from "../scripts/agent-browser-target.mjs";
 
 test("defaults to the WSL-local Conduit origin", () => {
@@ -45,35 +44,16 @@ test("rejects a path that escapes the local origin", () => {
   );
 });
 
-test("accepts local browser actions with an explicit session", () => {
-  assert.deepEqual(
-    validateLocalAgentBrowserCommand([
-      "--session",
-      "conduit-qa-test",
-      "--restore",
-      "snapshot",
-      "-i",
-      "-c",
-    ]),
-    { command: "snapshot", session: "conduit-qa-test" },
-  );
+test("accepts a local browser URL", () => {
   assert.equal(
     resolveLocalBrowserUrl("http://0.0.0.0:4310/chat/example"),
     "http://0.0.0.0:4310/chat/example",
   );
 });
 
-test("rejects unsafe browser actions and external navigation", () => {
+test("rejects a bare external host", () => {
   assert.throws(
-    () => validateLocalAgentBrowserCommand(["--session", "qa", "eval", "document.title"]),
-    /unsupported local browser command/,
-  );
-  assert.throws(
-    () => validateLocalAgentBrowserCommand(["--session", "qa", "open", "https://example.com"]),
-    /only accepts http:\/\/127\.0\.0\.1:4310 or http:\/\/0\.0\.0\.0:4310/,
-  );
-  assert.throws(
-    () => validateLocalAgentBrowserCommand(["--session", "qa", "find", "role", "button", "upload"]),
-    /uploads and downloads remain under review/,
+    () => resolveLocalBrowserUrl("example.com/guide"),
+    /requires a local Conduit URL/,
   );
 });

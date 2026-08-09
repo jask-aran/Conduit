@@ -157,10 +157,10 @@ Browser development and pre-commit QA uses the restored agent-browser session:
 bash .devcontainer/start-conduit.sh restart
 cd conduit-web
 agent-browser skills get core
-SESSION="$(agent-browser session id --scope worktree --prefix conduit-qa)"
-AGENT_BROWSER_SESSION="$SESSION" npm run qa:agent-browser
-# Continue with the affected flow, then close the session.
-agent-browser --session "$SESSION" close
+agent-browser skills get dogfood
+npm run qa:agent-browser
+# Continue with the affected flow and close the session using the wrapper
+# commands printed by qa:agent-browser.
 ```
 
 Fast checks:
