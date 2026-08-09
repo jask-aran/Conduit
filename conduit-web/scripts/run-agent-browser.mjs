@@ -1,12 +1,9 @@
 #!/usr/bin/env node
-import { spawnSync } from "node:child_process";
-import { mkdirSync } from "node:fs";
-import { tmpdir } from "node:os";
-import path from "node:path";
 import {
   DEFAULT_CONDUIT_ORIGIN,
   resolveLocalTarget,
 } from "./agent-browser-target.mjs";
+import { spawnLocalAgentBrowser } from "./agent-browser-runtime.mjs";
 
 function optionValue(name) {
   const index = process.argv.indexOf(name);
@@ -26,23 +23,8 @@ const target = resolveLocalTarget({
   rawPath: requestedPath,
 });
 
-const socketDir =
-  process.env.CONDUIT_AGENT_BROWSER_SOCKET_DIR ||
-  path.join(tmpdir(), "conduit-agent-browser");
-mkdirSync(socketDir, { recursive: true });
-process.env.AGENT_BROWSER_SOCKET_DIR = socketDir;
-
 function run(args, { capture = false } = {}) {
-  const result = spawnSync("agent-browser", args, {
-    encoding: "utf8",
-    stdio: capture ? ["ignore", "pipe", "inherit"] : "inherit",
-  });
-  if (result.error) {
-    if (result.error.code === "ENOENT") {
-      throw new Error("agent-browser is not installed or is not on PATH");
-    }
-    throw result.error;
-  }
+  const result = spawnLocalAgentBrowser(args, { capture });
   if (result.status !== 0) process.exit(result.status ?? 1);
   return result.stdout?.trim() || "";
 }
