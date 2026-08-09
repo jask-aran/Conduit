@@ -20,6 +20,7 @@ export function mountTranscriptPanelMotion(
   // Edge motions (resize + open/close shell easing) pin a preview width so the
   // heavy transcript does not take natural flex width on every frame.
   const edgeStarts = new Map<PanelGeometryMotionSource, { size: number; width: number }>();
+  let transformSource: PanelGeometryMotionSource | null = null;
 
   const cancelRelease = () => {
     if (releaseFrame != null) cancelAnimationFrame(releaseFrame);
@@ -51,6 +52,7 @@ export function mountTranscriptPanelMotion(
   const reset = () => {
     activeIds.clear();
     edgeStarts.clear();
+    transformSource = null;
     setTransform(0);
     if (motionShell.style.width) {
       motionShell.style.width = `${transcript.clientWidth}px`;
@@ -68,6 +70,9 @@ export function mountTranscriptPanelMotion(
       // targetSize inverse-translate is only for atomic shell commits — it
       // jumps then slides if the shell is already CSS-easing.
       if (detail.targetSize != null) {
+        edgeStarts.delete(detail.source);
+        if (!edgeStarts.size) motionShell.style.removeProperty("width");
+        transformSource = detail.source;
         transcript.dataset.panelMotion = "translate";
         const current = transformX(motionShell);
         const delta = detail.targetSize - detail.size;
@@ -84,6 +89,7 @@ export function mountTranscriptPanelMotion(
         });
         return;
       }
+      transformSource = null;
       const width = transcript.clientWidth;
       motionShell.style.width = `${width}px`;
       edgeStarts.set(detail.source, {
@@ -103,11 +109,15 @@ export function mountTranscriptPanelMotion(
       return;
     }
     const wasEdge = edgeStarts.has(detail.source);
+    const ownsTransform = transformSource === detail.source;
     activeIds.delete(detail.source);
     edgeStarts.delete(detail.source);
     if (wasEdge) {
-      setTransform(0);
+      if (transformSource == null) setTransform(0);
       motionShell.style.width = `${transcript.clientWidth}px`;
+    } else if (ownsTransform) {
+      transformSource = null;
+      setTransform(0);
     }
     if (!edgeStarts.size && motionShell.style.width) releasePreviewWidth();
     if (!activeIds.size) {
@@ -136,6 +146,7 @@ export function mountTranscriptPanelMotion(
       cancelRelease();
       activeIds.clear();
       edgeStarts.clear();
+      transformSource = null;
       setTransform(0);
       motionShell.style.removeProperty("width");
       delete transcript.dataset.panelMotion;

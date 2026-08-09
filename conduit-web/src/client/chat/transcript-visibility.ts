@@ -167,7 +167,7 @@ export function mountTranscriptVisibility(
       cancelRefresh();
       if (!activeIds.size) refresh();
       activeIds.set(detail.source, detail.id);
-      if (detail.targetSize == null) {
+      if (detail.source === "workspace" && detail.targetSize == null) {
         resizeIds.set(detail.source, detail.id);
         lockTables();
       }
@@ -184,7 +184,13 @@ export function mountTranscriptVisibility(
   const mutationObserver = new MutationObserver(() => scheduleRefresh(true));
   const viewportObserver = new ResizeObserver(() => scheduleRefresh());
   const onScroll = () => scheduleRefresh();
+  const onPageLeave = () => reset();
+  const onVisibility = () => {
+    if (document.visibilityState === "hidden") reset();
+  };
   window.addEventListener(PANEL_GEOMETRY_MOTION_EVENT, onMotion);
+  window.addEventListener("blur", onPageLeave);
+  document.addEventListener("visibilitychange", onVisibility);
   viewport.addEventListener("scroll", onScroll, { passive: true });
   mutationObserver.observe(thread, { childList: true, subtree: true });
   viewportObserver.observe(viewport);
@@ -197,6 +203,8 @@ export function mountTranscriptVisibility(
     reset,
     destroy: () => {
       window.removeEventListener(PANEL_GEOMETRY_MOTION_EVENT, onMotion);
+      window.removeEventListener("blur", onPageLeave);
+      document.removeEventListener("visibilitychange", onVisibility);
       viewport.removeEventListener("scroll", onScroll);
       mutationObserver.disconnect();
       viewportObserver.disconnect();
