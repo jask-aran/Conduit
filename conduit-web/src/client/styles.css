@@ -650,7 +650,7 @@ body.workspace-resizing .workspace-panel { transition: none !important; }
   .conduit-sidebar { position: fixed; inset-block: 0; left: 0; z-index: 55; width: 100vw; background: var(--frame); transform: translateX(-102%); transition: transform var(--panel-motion-duration) var(--panel-motion-easing); }
   .conduit-sidebar[data-mobile-open="true"] { transform: translateX(0); }
   .conduit-sidebar[data-state="collapsed"] { width: 100vw; }
-  .conduit-sidebar .sidebar-container { background: var(--frame); overscroll-behavior: contain; }
+  .conduit-sidebar .sidebar-container { width: 100%; background: var(--frame); overscroll-behavior: contain; }
   .conduit-sidebar .sidebar-content { overscroll-behavior: contain; }
   .conduit-sidebar[data-state="collapsed"] .sidebar-container span,
   .conduit-sidebar[data-state="collapsed"] [data-sidebar="group-label"],
