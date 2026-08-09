@@ -5,6 +5,7 @@ import katex from "katex";
 import { getHarnessRecorder, recordHarnessMetric } from "@/client/harness-metrics";
 import type { ChatMarkdownProps } from "./markdown";
 import { ExternalLinkDialog } from "./external-link-dialog";
+import { createExternalLinkController } from "./markdown-actions";
 import { createSyntheticMathPreviewNode, repairSyntheticMathSource } from "./incremark-synthetic-math";
 import { AdaptiveIncremarkTypewriter, visibleAstCharacters } from "./incremark-typewriter";
 import { resolveMarkdownUrl } from "./markdown-security";
@@ -553,8 +554,7 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
   const [pending, setPending] = createSignal<StreamingPending | null>(null);
   const [pendingInlineBlockId, setPendingInlineBlockId] = createSignal<string | null>(null);
   const [definitions, setDefinitions] = createSignal<Record<string, Definition>>({});
-  const [externalUrl, setExternalUrl] = createSignal<string | null>(null);
-  let externalReturnFocus: HTMLElement | null = null;
+  const external = createExternalLinkController();
   const displayHistory = new Map<string, MarkdownNode>();
   const completedById = new Map<string, ParsedBlock>();
   const seededById = new Map<string, ParsedBlock>();
@@ -862,10 +862,7 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
   const context: RendererContext = {
     definitions,
     inline: Boolean(props.inline),
-    requestExternalLink: (url, trigger) => {
-      externalReturnFocus = trigger || (document.activeElement instanceof HTMLElement ? document.activeElement : null);
-      setExternalUrl(url);
-    },
+    requestExternalLink: external.request,
     deferMath: () => typewriter(),
     syntheticMath: () => Boolean(props.syntheticMath),
     rendererId,
@@ -896,6 +893,6 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
         </Show>
       </div>
     </div>
-    <ExternalLinkDialog url={externalUrl} onClose={() => setExternalUrl(null)} returnFocus={() => externalReturnFocus} onFocusRestored={() => { externalReturnFocus = null; }} />
+    <ExternalLinkDialog url={external.url} onClose={external.close} returnFocus={external.returnFocus} onFocusRestored={external.clearReturnFocus} />
   </>;
 }

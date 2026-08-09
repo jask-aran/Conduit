@@ -1,4 +1,4 @@
-import { createEffect, createSignal, lazy, onCleanup, onMount, Show, Suspense } from "solid-js";
+import { createEffect, lazy, onCleanup, onMount, Show, Suspense } from "solid-js";
 import { marked } from "marked";
 import markedKatex from "marked-katex-extension";
 import katex from "katex";
@@ -6,6 +6,7 @@ import "katex/dist/katex.min.css";
 import "./markdown.css";
 import { getHarnessRecorder, recordHarnessMetric } from "../harness-metrics";
 import { ExternalLinkDialog } from "./external-link-dialog";
+import { createExternalLinkController, handleMarkdownClick } from "./markdown-actions";
 import { escapeHtml, renderMarkdownLink, sanitizeMarkdownFragment } from "./markdown-security";
 import { splitStreamingMarkdown, type StreamingPending } from "./streaming-markdown";
 import {
@@ -314,8 +315,7 @@ export type ChatMarkdownProps = {
 
 function MarkedMarkdown(props: ChatMarkdownProps) {
   let root!: HTMLDivElement;
-  const [externalUrl, setExternalUrl] = createSignal<string | null>(null);
-  let externalReturnFocus: HTMLElement | null = null;
+  const external = createExternalLinkController();
   let renderedSource = "";
   let renderedVersion = -1;
   let renderedMarkdownSource = "";
@@ -525,16 +525,7 @@ function MarkedMarkdown(props: ChatMarkdownProps) {
     queueMicrotask(() => props.onRendered?.());
   });
 
-  const click = async (event: MouseEvent) => {
-    const target = (event.target as HTMLElement).closest<HTMLElement>("[data-copy-code], [data-external-url]");
-    if (!target) return;
-    if (target.hasAttribute("data-copy-code")) {
-      await navigator.clipboard.writeText(target.closest("[data-language]")?.querySelector("code")?.textContent || "");
-    } else {
-      externalReturnFocus = target;
-      setExternalUrl(target.dataset.externalUrl || null);
-    }
-  };
+  const click = (event: MouseEvent) => handleMarkdownClick(event, root, external.request);
 
   onMount(() => {
     root.addEventListener("click", click);
@@ -544,7 +535,7 @@ function MarkedMarkdown(props: ChatMarkdownProps) {
 
   return <>
     <div ref={root} class="chat-markdown" data-streaming={props.streaming || undefined} />
-    <ExternalLinkDialog url={externalUrl} onClose={() => setExternalUrl(null)} returnFocus={() => externalReturnFocus} onFocusRestored={() => { externalReturnFocus = null; }} />
+    <ExternalLinkDialog url={external.url} onClose={external.close} returnFocus={external.returnFocus} onFocusRestored={external.clearReturnFocus} />
   </>;
 }
 

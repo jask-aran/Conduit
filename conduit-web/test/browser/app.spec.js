@@ -2068,11 +2068,11 @@ test("uses compact sidebar groups and preserves collapse without a brand icon", 
   await page.locator('[data-sidebar="trigger"]:visible').click();
   await expect(sidebar).toHaveAttribute("data-state", "collapsed");
   const collapsedShellSamples = await sampleShellGeometry();
-  expect(new Set(collapsedShellSamples.map((sample) => Math.round(sample.sidebarWidth))).size).toBe(1);
+  expect(new Set(collapsedShellSamples.map((sample) => Math.round(sample.sidebarWidth))).size).toBeGreaterThan(3);
   expect(new Set(collapsedShellSamples.map((sample) => Math.round(sample.surfaceLeft))).size).toBeGreaterThan(3);
-  expect(new Set(collapsedShellSamples.map((sample) => Math.round(sample.mainLeft))).size).toBe(1);
+  expect(new Set(collapsedShellSamples.map((sample) => Math.round(sample.mainLeft))).size).toBeGreaterThan(3);
   expect(new Set(collapsedShellSamples.map((sample) => Math.round(sample.threadLeft))).size).toBeGreaterThan(3);
-  expect(new Set(collapsedShellSamples.map((sample) => Math.round(sample.threadWidth))).size).toBe(1);
+  expect(new Set(collapsedShellSamples.map((sample) => Math.round(sample.threadWidth))).size).toBeGreaterThan(3);
   expect(collapsedShellSamples.every((sample, index) =>
     index === 0 || sample.surfaceLeft <= collapsedShellSamples[index - 1].surfaceLeft + 0.5)).toBe(true);
   await expect.poll(async () => (await main.boundingBox()).x).toBeLessThan(mainBox.x);
@@ -2089,11 +2089,11 @@ test("uses compact sidebar groups and preserves collapse without a brand icon", 
   await page.locator('[data-sidebar="trigger"]:visible').click();
   await expect(sidebar).toHaveAttribute("data-state", "expanded");
   const expandedShellSamples = await sampleShellGeometry();
-  expect(new Set(expandedShellSamples.map((sample) => Math.round(sample.sidebarWidth))).size).toBe(1);
+  expect(new Set(expandedShellSamples.map((sample) => Math.round(sample.sidebarWidth))).size).toBeGreaterThan(3);
   expect(new Set(expandedShellSamples.map((sample) => Math.round(sample.surfaceLeft))).size).toBeGreaterThan(3);
-  expect(new Set(expandedShellSamples.map((sample) => Math.round(sample.mainLeft))).size).toBe(1);
+  expect(new Set(expandedShellSamples.map((sample) => Math.round(sample.mainLeft))).size).toBeGreaterThan(3);
   expect(new Set(expandedShellSamples.map((sample) => Math.round(sample.threadLeft))).size).toBeGreaterThan(3);
-  expect(new Set(expandedShellSamples.map((sample) => Math.round(sample.threadWidth))).size).toBe(1);
+  expect(new Set(expandedShellSamples.map((sample) => Math.round(sample.threadWidth))).size).toBeGreaterThan(3);
   expect(expandedShellSamples.every((sample, index) =>
     index === 0 || sample.surfaceLeft + 0.5 >= expandedShellSamples[index - 1].surfaceLeft)).toBe(true);
   await expect.poll(async () => (await main.boundingBox()).x).toBe(mainBox.x);

@@ -46,6 +46,7 @@ import type { RuntimeStore } from "../state/runtime";
 import { focusFirst, isMobileLayout, MOBILE_LAYOUT_QUERY, restoreFocus } from "./mobile-layout";
 import { ProjectActivityIndicator, RuntimeIndicator } from "./runtime-indicator";
 import { dispatchPanelGeometryMotion, PANEL_MOTION_DURATION_MS } from "../panel-motion";
+import "./sidebar.css";
 
 type WorkspaceMode = "linked" | "created" | "cloned";
 type ProjectInput = { mode: string; name?: string; path?: string; directoryName?: string; cloneUrl?: string; cloneParentPath?: string; cloneDirectoryName?: string };
