@@ -1,0 +1,8 @@
+# Conduit browser, harness, and resident-server commands need host process
+# residency and local listeners. This trusted project uses full local access so
+# the first command runs on the host instead of failing inside a sandbox.
+default_permissions = ":danger-full-access"
+
+# The native Chrome DevTools CLI stores its daemon socket and PID here.
+[shell_environment_policy]
+set = { XDG_RUNTIME_DIR = "/tmp/conduit-chrome-devtools" }

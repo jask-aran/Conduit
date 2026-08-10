@@ -46,6 +46,10 @@ const unhandledApiRequests = new WeakMap();
 
 async function openSidebar(page, testInfo) {
   if (testInfo.project.name === "mobile-chromium") {
+    const panel = page.getByRole("complementary", { name: "Workspace panel" });
+    if (await panel.count() && await panel.getAttribute("aria-hidden") === "false") {
+      await panel.getByRole("button", { name: "Close workspace panel" }).click();
+    }
     await page.locator(".mobile-sidebar-trigger").click();
   }
 }
@@ -644,6 +648,10 @@ test("overlapping resize and panel motion cannot retain transcript preview geome
     await workspace.getByRole("button", { name: "Close workspace panel" }).click();
   }
   await expect(workspace).toHaveCSS("width", "0px");
+  await expect.poll(() => motionShell.evaluate((element) => element.getBoundingClientRect().width)).toBeGreaterThan(200);
+  await expect.poll(() => motionShell.evaluate((element) => Math.abs(
+    element.getBoundingClientRect().width - element.parentElement.getBoundingClientRect().width,
+  ))).toBeLessThan(1);
   const tableGeometry = await page.evaluate(() => {
     const markdown = document.createElement("div");
     markdown.className = "chat-markdown";
@@ -731,8 +739,9 @@ test("desktop panel surfaces settle immediately with reduced motion", async ({ p
     Number(animation.effect?.getTiming().duration || 0) <= 1))).toBe(true);
 });
 
-test("reselecting the active chat does not reload its transcript or workspace", async ({ page }) => {
+test("reselecting the active chat does not reload its transcript or workspace", async ({ page }, testInfo) => {
   await page.goto("/");
+  await openSidebar(page, testInfo);
   await page.getByRole("button", { name: "Existing chat" }).click();
   await expect(page.getByText("Previous question")).toBeVisible();
   const activeChat = page.locator(".sidebar-chat[aria-current='page']");
@@ -742,6 +751,7 @@ test("reselecting the active chat does not reload its transcript or workspace", 
     if (request.url().includes("/v0/sessions/session_existing")) requests.push(request.url());
   });
 
+  await openSidebar(page, testInfo);
   await activeChat.click();
   await page.waitForTimeout(150);
 
@@ -749,7 +759,7 @@ test("reselecting the active chat does not reload its transcript or workspace", 
   await expect(activeChat).toHaveAttribute("aria-current", "page");
 });
 
-test("keeps the workspace panel mounted and warm between chats in one project", async ({ page }) => {
+test("keeps the workspace panel mounted and warm between chats in one project", async ({ page }, testInfo) => {
   const sibling = { id: "session_other", projectId: "project_chat", status: "draft", title: "Other chat" };
   await page.unroute("**/v0/projects");
   await page.route("**/v0/projects", async (route) => {
@@ -765,6 +775,7 @@ test("keeps the workspace panel mounted and warm between chats in one project", 
   });
 
   await page.goto("/");
+  await openSidebar(page, testInfo);
   await page.getByRole("button", { name: "Existing chat" }).click();
   await page.getByRole("button", { name: "Toggle workspace panel" }).click();
   const panel = page.getByRole("complementary", { name: "Workspace panel" });
@@ -776,6 +787,7 @@ test("keeps the workspace panel mounted and warm between chats in one project", 
     localStorage.setItem("conduit:workspace-panel:session_other:tab", "diff");
   });
 
+  await openSidebar(page, testInfo);
   await page.getByRole("button", { name: "Other chat" }).click();
   await expect(page.getByRole("navigation", { name: "breadcrumb" })).toContainText("Other chat");
   await page.waitForTimeout(150);
@@ -784,7 +796,7 @@ test("keeps the workspace panel mounted and warm between chats in one project", 
   expect(await panel.evaluate((element, original) => element === original, originalPanel)).toBe(true);
 });
 
-test("restores cached Git status when returning to a workspace", async ({ page }) => {
+test("restores cached Git status when returning to a workspace", async ({ page }, testInfo) => {
   const sibling = { id: "session_research", projectId: "project_research", status: "draft", title: "Research chat" };
   await page.unroute("**/v0/projects");
   await page.route("**/v0/projects", async (route) => {
@@ -801,6 +813,7 @@ test("restores cached Git status when returning to a workspace", async ({ page }
   });
 
   await page.goto("/");
+  await openSidebar(page, testInfo);
   await page.getByRole("button", { name: "Existing chat" }).click();
   await page.getByRole("button", { name: "Toggle workspace panel" }).click();
   const panel = page.getByRole("complementary", { name: "Workspace panel" });
@@ -812,8 +825,11 @@ test("restores cached Git status when returning to a workspace", async ({ page }
     localStorage.setItem("conduit:workspace-panel:session_research:tab", "diff");
   });
 
+  await openSidebar(page, testInfo);
   await page.getByRole("button", { name: "Research chat" }).click();
   await expect(panel.getByText("main", { exact: true })).toBeVisible();
+  await openSidebar(page, testInfo);
+  await page.evaluate(() => localStorage.setItem("conduit:workspace-panel:session_existing:open", "true"));
   await page.getByRole("button", { name: "Existing chat" }).click();
   await expect(panel.getByText("master", { exact: true })).toBeVisible();
 
@@ -822,7 +838,7 @@ test("restores cached Git status when returning to a workspace", async ({ page }
   await expect(panel.locator(".workspace-panel-loading")).toHaveCount(0);
 });
 
-test("does not commit a stale workspace response after project navigation", async ({ page }) => {
+test("does not commit a stale workspace response after project navigation", async ({ page }, testInfo) => {
   const sibling = { id: "session_research", projectId: "project_research", status: "draft", title: "Research chat" };
   await page.unroute("**/v0/projects");
   await page.route("**/v0/projects", async (route) => {
@@ -844,6 +860,7 @@ test("does not commit a stale workspace response after project navigation", asyn
   });
 
   await page.goto("/");
+  await openSidebar(page, testInfo);
   await page.getByRole("button", { name: "Existing chat" }).click();
   await page.getByRole("button", { name: "Toggle workspace panel" }).click();
   const panel = page.getByRole("complementary", { name: "Workspace panel" });
@@ -853,6 +870,7 @@ test("does not commit a stale workspace response after project navigation", asyn
     localStorage.setItem("conduit:workspace-panel:session_research:tab", "files");
   });
 
+  await openSidebar(page, testInfo);
   await page.getByRole("button", { name: "Research chat" }).click();
   await expect(panel.getByRole("button", { name: "research-only.md" })).toBeVisible();
   await releaseChatTree();
@@ -861,7 +879,7 @@ test("does not commit a stale workspace response after project navigation", asyn
   await expect(panel.getByText("research-only.md")).toBeVisible();
 });
 
-test("closing the workspace panel cancels hidden tree, file, and diff work", async ({ page }) => {
+test("closing the workspace panel cancels hidden tree, file, and diff work", async ({ page }, testInfo) => {
   await page.unroute("**/v0/projects/*/tree?*");
   const treeGates = [];
   let treeRequests = 0;
@@ -888,6 +906,7 @@ test("closing the workspace panel cancels hidden tree, file, and diff work", asy
   });
 
   await page.goto("/");
+  await openSidebar(page, testInfo);
   await page.getByRole("button", { name: "Existing chat" }).click();
   await page.getByRole("button", { name: "Toggle workspace panel" }).click();
   const panel = page.getByRole("complementary", { name: "Workspace panel" });
@@ -957,7 +976,7 @@ test("creates a durable chat route and renders the primary surface", async ({ pa
   await expect(sendButton).toHaveAttribute("data-variant", "default");
 });
 
-test("Workspace views use the nested palette page and terminal lives in the Workspace panel", async ({ page }) => {
+test("Workspace views use the nested palette page and terminal lives in the Workspace panel", async ({ page }, testInfo) => {
   const workspace = {
     id: "project_conduit",
     slug: "conduit",
@@ -994,6 +1013,7 @@ test("Workspace views use the nested palette page and terminal lives in the Work
   }
   await page.getByRole("tab", { name: "Files" }).click();
   await expect(terminal).toHaveCount(0);
+  await openSidebar(page, testInfo);
   await page.getByRole("button", { name: "Conduit work" }).click({ button: "right" });
   await page.getByRole("menuitem", { name: "Open terminal" }).click();
   await expect(terminal).toBeVisible();
@@ -1235,9 +1255,9 @@ test("keeps the workspace panel open while Escape dismisses sidebar dialogs and 
   if (testInfo.project.name !== "mobile-chromium") await expect(panel).toBeVisible();
 
   await page.getByRole("button", { name: "New workspace" }).click();
-  await expect(page.getByRole("dialog", { name: "New workspace" })).toBeVisible();
+  await expect(page.getByRole("dialog", { name: "Add workspace" })).toBeVisible();
   await page.keyboard.press("Escape");
-  await expect(page.getByRole("dialog", { name: "New workspace" })).toHaveCount(0);
+  await expect(page.getByRole("dialog", { name: "Add workspace" })).toHaveCount(0);
   if (testInfo.project.name !== "mobile-chromium") await expect(panel).toBeVisible();
 
   await page.locator('[data-sidebar="footer"]').getByRole("button", { name: /Conduit/ }).click();
@@ -1853,9 +1873,9 @@ test("cold-loads a viewport-filling thread pinned to the true bottom after Markd
   });
   await expect(page.getByText("Paragraph 24 carries enough words")).toBeVisible();
 
-  // The usage-site override must win the tailwind-merge dedupe, so items lay out
-  // at real height (not a content-visibility placeholder) during pre-paint scroll.
-  const contentVisibility = await page.locator('[data-slot="message-scroller-item"]').first()
+  // Earlier rows may be virtualized; the tail row must stay fully laid out while
+  // the viewport follows the answer through Markdown resolution.
+  const contentVisibility = await page.locator('[data-message-id="tall-assistant-2"]')
     .evaluate((element) => getComputedStyle(element).contentVisibility);
   expect(contentVisibility).toBe("visible");
 
@@ -1973,6 +1993,7 @@ test("hides transient new chats and provides complete right-click menus", async 
     "Rename",
     "Move to folder…",
     "Copy transcript",
+    "Open terminal",
     "Delete chat",
   ]);
 
@@ -2537,6 +2558,7 @@ test("leaves an uncommitted new chat without blocking target navigation when cle
   await page.waitForURL(/\/chat\/550e8400-e29b-41d4-a716-446655440099/);
   await expect(page.locator(".sidebar-chat", { hasText: "New chat" })).toBeVisible();
 
+  await openSidebar(page, testInfo);
   await page.getByRole("button", { name: "Existing chat" }).click();
 
   await expect(page).toHaveURL(/\/chat\/session_existing$/);
@@ -2697,10 +2719,10 @@ test("previews the latest trace activity while a turn runs and keeps it after co
         emit({ type: "content_block_started", generationId: "g1", seq: 19, messageId: "m3", block: { type: "text", contentIndex: 0, text: "" } }, 2410);
         emit({ type: "content_block_delta", generationId: "g1", seq: 20, messageId: "m3", blockType: "text", contentIndex: 0, delta: "Here is what I found." }, 2420);
         emit({ type: "assistant_message_completed", generationId: "g1", seq: 21, messageId: "m3", stopReason: "stop", blocks: [{ type: "text", contentIndex: 0, text: "Here is what I found." }] }, 3200);
-        setTimeout(() => {
+        window.__releaseAgentEnd = () => {
           window.__agentEnded = true;
           this.onmessage?.({ data: JSON.stringify({ type: "generation_settled", generationId: "g1", seq: 22 }) });
-        }, 5000);
+        };
       }
     }
     Object.defineProperty(window, "WebSocket", { configurable: true, value: MockWebSocket });
@@ -2733,6 +2755,7 @@ test("previews the latest trace activity while a turn runs and keeps it after co
   // The complete chronology is already present while the final answer streams,
   // before agent_end or a checkpoint reload can rebuild it from JSONL.
   expect(await page.evaluate(() => Boolean(window.__agentEnded))).toBe(false);
+  await page.evaluate(() => window.__releaseAgentEnd());
   await expect(page.locator(".agent-activity")).toContainText("Ready", { timeout: 6000 });
 });
 
@@ -3428,7 +3451,12 @@ test("message actions copy source, edit from a Pi entry, and regenerate via fork
   await expect(page.locator(".composer-wrap > .attachment-tray")).toHaveCount(0);
   await page.getByText("Source Markdown", { exact: true }).hover();
   await page.getByRole("button", { name: "Regenerate response" }).click();
-  await expect.poll(() => page.evaluate(() => window.__commands?.find((command) => command.type === "regenerate"))).toEqual({ type: "regenerate", entryId: "entry-user" });
+  await expect.poll(() => page.evaluate(() => window.__commands?.find((command) => command.type === "regenerate"))).toEqual({
+    type: "regenerate",
+    entryId: "entry-user",
+    model: "example/reasoner",
+    thinkingLevel: "medium",
+  });
 });
 
 test("settings remains centered with a persistent vertical rail at narrow widths", async ({ page }, testInfo) => {

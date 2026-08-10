@@ -52,6 +52,8 @@ test("a deterministic stream reports browser delivery and visible rendering cade
       maxDelayMs: Number(process.env.HARNESS_MAX_DELAY_MS || 80),
     })
     : { delaysMs: [0, 20, 20], deltas: ["One", " two", " three"] };
+  const cadenceDurationMs = cadence.delaysMs.reduce((total, delayMs) => total + delayMs, 0);
+  testInfo.setTimeout(Math.max(testInfo.timeout, cadenceDurationMs + 30_000));
   const scenario = {
     name,
     profile: process.env.HARNESS_PROFILE || "fixed",
