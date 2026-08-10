@@ -112,6 +112,7 @@ export async function buildProjectDashboard({
       externalPath: project.externalPath || null,
       createdAt: project.createdAt,
       defaultTemplateId: project.defaultTemplateId || null,
+      workspaceAppearance: project.workspaceAppearance || null,
       deletesFilesOnRemove: project.deletesFilesOnRemove,
     },
     stats: {

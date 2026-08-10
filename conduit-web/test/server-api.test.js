@@ -318,6 +318,27 @@ exit 0
     const hostDefaultChatBody = await hostDefaultChat.json();
     assert.equal(hostDefaultChatBody.runtime.kind, "native_pi");
     assert.equal(hostDefaultChatBody.templateId, "workspace");
+    const appearancePatch = await fetch(`${origin}/v0/projects/${linked.id}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ workspaceAppearance: { mode: "monogram", value: "AI", color: "mauve" } }),
+    });
+    assert.equal(appearancePatch.status, 200);
+    assert.deepEqual((await appearancePatch.json()).workspaceAppearance, { mode: "monogram", value: "AI", color: "mauve" });
+    const customColorAppearance = await fetch(`${origin}/v0/projects/${linked.id}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ workspaceAppearance: { mode: "icon", value: "atom", color: "#123456" } }),
+    });
+    assert.equal(customColorAppearance.status, 200);
+    assert.deepEqual((await customColorAppearance.json()).workspaceAppearance, { mode: "icon", value: "atom", color: "#123456" });
+    const invalidAppearance = await fetch(`${origin}/v0/projects/${linked.id}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ workspaceAppearance: { mode: "monogram", value: "ABC", color: "mauve" } }),
+    });
+    assert.equal(invalidAppearance.status, 400);
+    assert.equal((await invalidAppearance.json()).error, "workspace_appearance_invalid");
     await fetch(`${origin}/v0/projects/${linked.id}`, {
       method: "PATCH",
       headers: { "content-type": "application/json" },

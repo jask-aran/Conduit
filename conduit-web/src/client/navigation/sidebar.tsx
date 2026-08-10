@@ -46,6 +46,7 @@ import {
 } from "@/components/primitives";
 import type { ChatSummary, Project, RuntimeProcess, WorkspaceSuggestion } from "../api/contracts";
 import { api } from "../api/client";
+import { WorkspaceGlyph } from "../project/workspace-appearance";
 import type { RuntimeStore } from "../state/runtime";
 import { focusFirst, isMobileLayout, MOBILE_LAYOUT_QUERY, restoreFocus } from "./mobile-layout";
 import { ProjectActivityIndicator, RuntimeIndicator } from "./runtime-indicator";
@@ -290,7 +291,8 @@ export function Sidebar(props: {
       return (right.chat.updatedAt || right.chat.createdAt || "").localeCompare(left.chat.updatedAt || left.chat.createdAt || "");
     })
     .slice(0, 5);
-  const railProjects = () => [...folders(), ...workspaces()].slice(0, 5);
+  const railFolders = () => folders().slice(0, 5);
+  const railWorkspaces = () => workspaces().slice(0, 5);
   const railProjectIsActive = (project: Project) => project.id === props.projectId || project.sessions.some((chat) => chat.id === props.selectedId);
   const railProjectIsLive = (project: Project) => project.sessions.some((chat) => Boolean(processFor(chat)));
   const RailAction = (railProps: { label: string; onClick: () => void; current?: boolean; live?: boolean; children: unknown }) => <Tooltip>
@@ -454,7 +456,7 @@ export function Sidebar(props: {
             closeMobile();
             void props.onOpenProject(blockProps.project);
           }}>
-            <FolderIcon />
+            <Show when={isWorkspace()} fallback={<FolderIcon />}><WorkspaceGlyph appearance={blockProps.project.workspaceAppearance} /></Show>
             <ProjectActivityIndicator sessions={blockProps.project.sessions} processFor={processFor} stale={props.runtime.stale()} />
             <span>{blockProps.project.name}</span>
             <Show when={cloning()}><span class="workspace-cloning-badge"><LoaderCircleIcon />Cloning</span></Show>
@@ -535,20 +537,37 @@ export function Sidebar(props: {
         </div>
         <div data-sidebar="content" class="sidebar-content">
           <div data-sidebar="rail-actions" class="sidebar-rail-actions" aria-label="Quick navigation">
-            <RailAction label="New chat" onClick={() => startNewChat()}><MessageSquarePlusIcon /></RailAction>
-            <div data-sidebar="rail-divider" aria-hidden="true" />
-            <For each={railChats()}>{(item) => <RailAction
-              label={`Open chat ${item.chat.title || "New chat"}`}
-              current={props.selectedId === item.chat.id}
-              live={Boolean(processFor(item.chat))}
-              onClick={() => { closeMobile(); void props.onOpenChat(item.chat, item.project); }}
-            ><MessageSquareIcon /></RailAction>}</For>
-            <For each={railProjects()}>{(project) => <RailAction
-              label={`Open ${project.name}`}
-              current={railProjectIsActive(project)}
-              live={railProjectIsLive(project)}
-              onClick={() => { closeMobile(); void props.onOpenProject(project); }}
-            ><FolderIcon /></RailAction>}</For>
+            <div data-sidebar="rail-section" data-sidebar-section="chats" class="sidebar-rail-section">
+              <RailAction label="New chat" onClick={() => startNewChat()}><MessageSquarePlusIcon /></RailAction>
+              <For each={railChats()}>{(item) => <RailAction
+                label={`Chat: ${item.chat.title || "New chat"}`}
+                current={props.selectedId === item.chat.id}
+                live={Boolean(processFor(item.chat))}
+                onClick={() => { closeMobile(); void props.onOpenChat(item.chat, item.project); }}
+              ><MessageSquareIcon /></RailAction>}</For>
+            </div>
+            <Show when={railFolders().length}>
+              <div data-sidebar="rail-divider" aria-hidden="true" />
+              <div data-sidebar="rail-section" data-sidebar-section="projects" class="sidebar-rail-section">
+                <For each={railFolders()}>{(project) => <RailAction
+                  label={`Project: ${project.name}`}
+                  current={railProjectIsActive(project)}
+                  live={railProjectIsLive(project)}
+                  onClick={() => { closeMobile(); void props.onOpenProject(project); }}
+                ><FolderIcon /></RailAction>}</For>
+              </div>
+            </Show>
+            <Show when={railWorkspaces().length}>
+              <div data-sidebar="rail-divider" aria-hidden="true" />
+              <div data-sidebar="rail-section" data-sidebar-section="workspaces" class="sidebar-rail-section">
+                <For each={railWorkspaces()}>{(project) => <RailAction
+                  label={project.name}
+                  current={railProjectIsActive(project)}
+                  live={railProjectIsLive(project)}
+                  onClick={() => { closeMobile(); void props.onOpenProject(project); }}
+                ><WorkspaceGlyph appearance={project.workspaceAppearance} /></RailAction>}</For>
+              </div>
+            </Show>
           </div>
           <Group label="Chats" projects={[]} chatRoot={chats()} addLabel="New chat" onAdd={() => startNewChat()} />
           <Group label="Projects" projects={folders()} emptyLabel="No projects" addLabel="New folder" onAdd={() => openNewDialog("folder")} />

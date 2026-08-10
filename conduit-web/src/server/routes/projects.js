@@ -27,6 +27,41 @@ function resolveProjectDefaultTemplateId(config, requested, fallback = null, { a
   return requested;
 }
 
+const WORKSPACE_APPEARANCE_ICON_IDS = new Set([
+  "activity", "aperture", "atom", "award", "badge-check", "bell",
+  "book-open", "briefcase-business", "boxes", "braces", "building-2", "bug",
+  "calendar-days", "camera", "chart-no-axes-combined", "code", "component",
+  "cpu", "database", "folder-git-2", "flame", "gauge", "git-branch", "globe",
+  "graduation-cap", "layers", "layers-2", "lightbulb", "map", "palette",
+  "puzzle", "rocket", "route", "server-cog", "shield-check", "sparkles",
+  "star", "terminal", "workflow", "zap",
+]);
+const WORKSPACE_APPEARANCE_COLOR_IDS = new Set([
+  "rosewater", "flamingo", "pink", "mauve", "red", "peach", "yellow",
+  "green", "teal", "sky", "sapphire", "blue", "lavender",
+]);
+const WORKSPACE_APPEARANCE_HEX_COLOR = /^#[0-9a-f]{6}$/i;
+
+function workspaceAppearanceError(message) {
+  return Object.assign(new Error(message), { code: "workspace_appearance_invalid", status: 400 });
+}
+
+function normalizeWorkspaceAppearance(requested) {
+  if (requested == null) return null;
+  if (typeof requested !== "object" || Array.isArray(requested)) throw workspaceAppearanceError("Workspace identity must be an object");
+  const mode = requested.mode;
+  const value = String(requested.value || "").trim();
+  const color = String(requested.color || "").trim().toLowerCase();
+  if (mode !== "icon" && mode !== "monogram") throw workspaceAppearanceError("Workspace identity marker type is invalid");
+  if (!WORKSPACE_APPEARANCE_COLOR_IDS.has(color) && !WORKSPACE_APPEARANCE_HEX_COLOR.test(color)) throw workspaceAppearanceError("Workspace identity color is invalid");
+  if (mode === "icon") {
+    if (!WORKSPACE_APPEARANCE_ICON_IDS.has(value)) throw workspaceAppearanceError("Workspace identity icon is invalid");
+    return { mode, value, color: color.toLowerCase() };
+  }
+  if (!/^\p{L}{1,2}$/u.test(value)) throw workspaceAppearanceError("Workspace identity must use one or two letters");
+  return { mode, value: value.toUpperCase(), color };
+}
+
 export function registerProjectRoutes(app, {
   buildProjectDashboard,
   config,
@@ -169,13 +204,18 @@ export function registerProjectRoutes(app, {
       if (!current) return response.status(404).json({ error: "project_not_found" });
       const hasName = Object.hasOwn(request.body || {}, "name");
       const hasDefault = Object.hasOwn(request.body || {}, "defaultTemplateId");
-      if (!hasName && !hasDefault) return response.status(400).json({ error: "project_update_required" });
+      const hasAppearance = Object.hasOwn(request.body || {}, "workspaceAppearance");
+      if (!hasName && !hasDefault && !hasAppearance) return response.status(400).json({ error: "project_update_required" });
       const changes = {};
       if (hasName) {
         changes.name = String(request.body.name || "").trim();
         if (!changes.name) return response.status(400).json({ error: "project_name_required" });
       }
       if (hasDefault) changes.defaultTemplateId = resolveProjectDefaultTemplateId(config, request.body.defaultTemplateId, null, { allowHostPi: current.kind === "workspace" });
+      if (hasAppearance) {
+        if (current.kind !== "workspace" && !["linked", "created", "cloned"].includes(current.origin)) return response.status(400).json({ error: "workspace_appearance_not_supported" });
+        changes.workspaceAppearance = normalizeWorkspaceAppearance(request.body.workspaceAppearance);
+      }
       const project = await projects.update(request.params.id, changes);
       if (!project) return response.status(404).json({ error: "project_not_found" });
       response.json(project);

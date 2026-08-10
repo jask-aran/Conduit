@@ -9,6 +9,7 @@ import {
   FolderGit2Icon,
   GitBranchIcon,
   MessageSquarePlusIcon,
+  PaletteIcon,
   PencilIcon,
   Settings2Icon,
   Trash2Icon,
@@ -30,11 +31,15 @@ import {
   MenuSeparator,
   MenuTrigger,
   Spinner,
+  Dialog,
+  DialogContent,
 } from "@/components/primitives";
 import { api } from "../api/client";
-import type { DashboardChat, Project, ProjectDashboardPayload, Template, WorkspaceOperation } from "../api/contracts";
+import type { DashboardChat, Project, ProjectDashboardPayload, Template, WorkspaceAppearance, WorkspaceOperation } from "../api/contracts";
 import type { RuntimeStore } from "../state/runtime";
 import { RuntimeIndicator } from "../navigation/runtime-indicator";
+import { WorkspaceGlyph } from "./workspace-appearance";
+import { WorkspaceAppearanceEditor } from "./workspace-appearance-editor";
 import "./dashboard.css";
 
 function workspaceProject(project: Project) {
@@ -84,6 +89,7 @@ export function ProjectDashboard(props: {
   onDelete: () => void;
   onOpenSettings: (section: string, workspaceId?: string | null) => void;
   onSaveDefault: (projectId: string, templateId: string | null) => Promise<Project>;
+  onSaveAppearance: (projectId: string, appearance: WorkspaceAppearance) => Promise<Project>;
   onRefresh: () => Promise<unknown>;
   onCancelClone: (operationId: string) => Promise<void>;
   onDestroyWorkspace: (confirmation: string) => Promise<boolean>;
@@ -94,6 +100,9 @@ export function ProjectDashboard(props: {
   const [showAll, setShowAll] = createSignal(false);
   const [savingProfile, setSavingProfile] = createSignal(false);
   const [savedDefault, setSavedDefault] = createSignal<{ projectId: string; value: string | null } | null>(null);
+  const [savingAppearance, setSavingAppearance] = createSignal(false);
+  const [savedAppearance, setSavedAppearance] = createSignal<{ projectId: string; value: WorkspaceAppearance | null } | null>(null);
+  const [appearanceOpen, setAppearanceOpen] = createSignal(false);
   const [copied, setCopied] = createSignal(false);
   const [refreshVersion, setRefreshVersion] = createSignal(0);
   const [operation, setOperation] = createSignal<WorkspaceOperation | null>(null);
@@ -119,6 +128,7 @@ export function ProjectDashboard(props: {
     setError("");
     setShowAll(false);
     setSavedDefault(null);
+    setSavedAppearance(null);
     void api<ProjectDashboardPayload>(`/v0/projects/${encodeURIComponent(id)}/dashboard`, { signal: controller.signal })
       .then((next) => { if (!controller.signal.aborted) setPayload(next); })
       .catch((requestError) => {
@@ -159,6 +169,11 @@ export function ProjectDashboard(props: {
     if (saved?.projectId === projectId()) return saved.value;
     return payload()?.identity.defaultTemplateId ?? props.project.defaultTemplateId ?? null;
   });
+  const activeAppearance = createMemo(() => {
+    const saved = savedAppearance();
+    if (saved?.projectId === projectId()) return saved.value;
+    return payload()?.identity.workspaceAppearance ?? props.project.workspaceAppearance ?? null;
+  });
   const defaultLabel = createMemo(() => {
     if (activeDefault() === "host-pi") return "Host Pi";
     if (!activeDefault()) return "Use app default";
@@ -193,6 +208,25 @@ export function ProjectDashboard(props: {
       props.onError((saveError as Error).message);
     } finally {
       setSavingProfile(false);
+    }
+  };
+
+  const saveAppearance = async (appearance: WorkspaceAppearance) => {
+    if (savingAppearance()) return;
+    setSavingAppearance(true);
+    try {
+      const saved = await props.onSaveAppearance(props.project.id, appearance);
+      const value = saved.workspaceAppearance || null;
+      setSavedAppearance({ projectId: props.project.id, value });
+      setPayload((current) => current ? {
+        ...current,
+        identity: { ...current.identity, workspaceAppearance: value },
+      } : current);
+      setAppearanceOpen(false);
+    } catch (saveError) {
+      props.onError((saveError as Error).message);
+    } finally {
+      setSavingAppearance(false);
     }
   };
 
@@ -239,7 +273,7 @@ export function ProjectDashboard(props: {
     <div class="project-dashboard-content">
       <header class="project-identity">
         <div class="project-identity-title">
-          <div class="project-kind-icon"><FolderGit2Icon /></div>
+          <div class="project-kind-icon"><Show when={workspaceProject(props.project)} fallback={<FolderGit2Icon />}><WorkspaceGlyph appearance={activeAppearance()} /></Show></div>
           <div>
             <div class="project-title-line">
               <h1>{props.project.name}</h1>
@@ -253,6 +287,7 @@ export function ProjectDashboard(props: {
           </div>
         </div>
         <div class="project-identity-actions">
+          <Show when={workspaceProject(props.project)}><Button class="workspace-identity-action" variant="outline" size="sm" onClick={() => setAppearanceOpen(true)}><PaletteIcon />Identity</Button></Show>
           <Button variant="outline" size="sm" onClick={props.onRename}><PencilIcon />Rename</Button>
           <Show when={cloning()} fallback={<Button size="sm" onClick={() => void props.onNewChat(props.project)}><MessageSquarePlusIcon />New chat</Button>}>
             <Button variant="destructive" size="sm" disabled={cancellingClone()} onClick={() => void cancelClone()}><XIcon />{cancellingClone() ? "Cancelling…" : "Cancel clone"}</Button>
@@ -266,6 +301,16 @@ export function ProjectDashboard(props: {
           <div class="clone-progress-path"><span>Destination</span><code>{props.project.path || props.project.externalPath}</code></div>
           <pre aria-label="Clone output preview">{operation()?.diagnostic || "Preparing clone…"}</pre>
         </section>
+      </Show>
+
+      <Show when={!cloning() && workspaceProject(props.project)}>
+        <Dialog open={appearanceOpen()} onOpenChange={(open) => { if (!savingAppearance()) setAppearanceOpen(open); }}>
+          <DialogContent class="workspace-appearance-dialog" title="Workspace identity" description="Choose a short mark or a Lucide icon, then choose a preset or custom color.">
+            <Show when={appearanceOpen()}>
+              <WorkspaceAppearanceEditor compact value={activeAppearance()} saving={savingAppearance()} onSave={(appearance) => void saveAppearance(appearance)} />
+            </Show>
+          </DialogContent>
+        </Dialog>
       </Show>
 
       <Show when={error() && !cloning()}>
