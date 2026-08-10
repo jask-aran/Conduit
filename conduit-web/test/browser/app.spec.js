@@ -2103,8 +2103,9 @@ test("uses compact sidebar groups and preserves a useful desktop rail", async ({
   const rail = sidebar.locator('[data-sidebar="rail-actions"]');
   await expect(rail).toBeVisible();
   await expect(rail.getByRole("button", { name: "New chat", exact: true })).toBeVisible();
-  await expect(rail.getByRole("button", { name: "Open chat Existing chat", exact: true })).toBeVisible();
-  await expect(rail.getByRole("button", { name: "Open Research", exact: true })).toBeVisible();
+  await expect(rail.getByRole("button", { name: "Chat: Existing chat", exact: true })).toBeVisible();
+  await expect(rail.getByRole("button", { name: "Project: Research", exact: true })).toBeVisible();
+  await expect(rail.locator('[data-sidebar="rail-divider"]')).toHaveCount(1);
 
   const [collapsedSidebarBox, collapsedTriggerBox] = await Promise.all([
     page.locator('[data-slot="sidebar-container"]').boundingBox(),
@@ -2167,6 +2168,13 @@ test("keeps linked workspaces in their own sidebar group", async ({ page }, test
   await expect(page.locator('[data-sidebar="group-label"]')).toHaveText(["Chats", "Projects", "Workspaces"]);
   await expect(page.getByRole("button", { name: "JaskFish" })).toBeVisible();
   await expect(page.getByRole("button", { name: "New workspace" })).toBeVisible();
+  if (testInfo.project.name === "desktop-chromium") {
+    await page.locator('[data-sidebar="trigger"]:visible').click();
+    const rail = page.locator('[data-sidebar="rail-actions"]');
+    await expect(rail.getByRole("button", { name: "JaskFish", exact: true })).toBeVisible();
+    await expect(rail.locator('[data-sidebar="rail-divider"]')).toHaveCount(2);
+    await expect(rail.getByRole("button", { name: "JaskFish", exact: true }).locator(".workspace-glyph")).toHaveAttribute("data-value", "boxes");
+  }
 });
 
 test("opens a targeted Workspace settings card from its context menu", async ({ page }, testInfo) => {
@@ -3640,6 +3648,7 @@ test("workspace dashboard is a direct routable operator surface", async ({ page 
     externalPath: "/home/conduit",
     createdAt: "2026-07-20T10:00:00.000Z",
     defaultTemplateId: "workspace",
+    workspaceAppearance: { mode: "icon", value: "boxes", color: "mauve" },
     deletesFilesOnRemove: false,
     sessions: [{
       id: "session_workspace",
@@ -3679,7 +3688,11 @@ test("workspace dashboard is a direct routable operator surface", async ({ page 
   await page.route("**/v0/projects/project_workspace", async (route) => {
     if (route.request().method() === "DELETE") return route.fulfill({ status: 204, body: "" });
     const body = route.request().postDataJSON();
-    await route.fulfill({ json: { ...workspace, defaultTemplateId: body.defaultTemplateId } });
+    await route.fulfill({ json: {
+      ...workspace,
+      defaultTemplateId: Object.hasOwn(body, "defaultTemplateId") ? body.defaultTemplateId : workspace.defaultTemplateId,
+      workspaceAppearance: Object.hasOwn(body, "workspaceAppearance") ? body.workspaceAppearance : workspace.workspaceAppearance,
+    } });
   });
 
   await page.goto("/workspace/project_workspace");
@@ -3704,6 +3717,22 @@ test("workspace dashboard is a direct routable operator surface", async ({ page 
   await expect(page.getByText("resident PTY")).toBeVisible();
   await expect(page.getByRole("button", { name: "Open command palette" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Copy Tailscale workspace link" })).toBeVisible();
+  await expect(page.locator('[data-workspace-appearance="editor"]')).toHaveCount(0);
+  await page.getByRole("button", { name: "Identity", exact: true }).click();
+  const appearanceDialog = page.getByRole("dialog", { name: "Workspace identity" });
+  await expect(appearanceDialog.locator('[data-workspace-appearance="editor"]')).toBeVisible();
+  await expect(appearanceDialog.getByRole("radio", { name: "Boxes" })).toHaveAttribute("aria-checked", "true");
+  await appearanceDialog.getByRole("button", { name: "Browse icons" }).click();
+  await appearanceDialog.getByLabel("Search icons").fill("atom");
+  await appearanceDialog.getByRole("radio", { name: "Atom" }).click();
+  await appearanceDialog.getByRole("button", { name: "More colours" }).click();
+  await appearanceDialog.getByLabel("Hex colour").fill("#123456");
+  const appearancePatch = page.waitForRequest((request) => request.url().endsWith("/v0/projects/project_workspace")
+    && request.method() === "PATCH" && request.postDataJSON()?.workspaceAppearance);
+  await appearanceDialog.getByRole("button", { name: "Save identity" }).click();
+  expect((await appearancePatch).postDataJSON()).toEqual({ workspaceAppearance: { mode: "icon", value: "atom", color: "#123456" } });
+  await expect(appearanceDialog).toBeHidden();
+  await expect(page.locator(".project-kind-icon .workspace-glyph")).toHaveAttribute("data-mode", "icon");
   await page.getByText("Danger zone").click();
   await page.getByRole("button", { name: "Delete Workspace and files" }).click();
   const destructiveDialog = page.getByRole("alertdialog");

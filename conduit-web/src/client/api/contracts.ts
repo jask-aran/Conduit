@@ -25,6 +25,12 @@ export interface ChatSummary {
   pinned?: boolean;
 }
 
+export interface WorkspaceAppearance {
+  mode: "icon" | "monogram";
+  value: string;
+  color: string;
+}
+
 export interface Project {
   id: string;
   slug: string;
@@ -37,6 +43,7 @@ export interface Project {
   cloneOperationId?: string | null;
   createdAt?: string;
   defaultTemplateId?: string | null;
+  workspaceAppearance?: WorkspaceAppearance | null;
   deletesFilesOnRemove?: boolean;
   sessions: ChatSummary[];
 }

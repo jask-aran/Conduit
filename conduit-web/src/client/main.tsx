@@ -7,7 +7,7 @@ import { DefaultMeteorShower } from "@jask-aran/solid-components/meteor-shower";
 import "@jask-aran/solid-components/meteor-shower.css";
 import { Button, Spinner } from "@/components/primitives";
 import { api, asList, pathChatId, pathProjectId, projectPath } from "./api/client";
-import type { ChatSummary, DashboardChat, Installation, Project, RuntimeIdentity, Template, TranscriptDetail, WorkspaceSuggestion } from "./api/contracts";
+import type { ChatSummary, DashboardChat, Installation, Project, RuntimeIdentity, Template, TranscriptDetail, WorkspaceAppearance, WorkspaceSuggestion } from "./api/contracts";
 import { Composer } from "./chat/composer";
 import { HostUiRequests } from "./chat/host-ui-card";
 import { MARKDOWN_RENDERER_STORAGE_KEY, selectedMarkdownRenderer, type MarkdownRendererId } from "./chat/markdown-settings";
@@ -104,6 +104,12 @@ function App() {
 
   const saveWorkspaceDefault = async (workspaceId: string, templateId: string | null) => {
     const saved = await api<Project>(`/v0/projects/${encodeURIComponent(workspaceId)}`, { method: "PATCH", body: JSON.stringify({ defaultTemplateId: templateId }) });
+    catalogue.setProjects((current) => current.map((project) => project.id === workspaceId ? { ...project, ...saved, sessions: project.sessions } : project));
+    return saved;
+  };
+
+  const saveWorkspaceAppearance = async (workspaceId: string, workspaceAppearance: WorkspaceAppearance) => {
+    const saved = await api<Project>(`/v0/projects/${encodeURIComponent(workspaceId)}`, { method: "PATCH", body: JSON.stringify({ workspaceAppearance }) });
     catalogue.setProjects((current) => current.map((project) => project.id === workspaceId ? { ...project, ...saved, sessions: project.sessions } : project));
     return saved;
   };
@@ -590,7 +596,7 @@ function App() {
           <ProjectDashboard project={selectedProject()!} templates={templates()} runtime={runtime}
             onNewChat={createChat} onOpenChat={(target: DashboardChat, project) => openChat(target, project)}
             onRename={() => runSidebar("rename-folder")} onDelete={() => runSidebar("delete-project")}
-            onOpenSettings={openSettings} onSaveDefault={saveWorkspaceDefault} onRefresh={refresh} onCancelClone={cancelClone} onDestroyWorkspace={(confirmation) => destroyWorkspace(selectedProject()!, confirmation)} onError={showError} />
+            onOpenSettings={openSettings} onSaveDefault={saveWorkspaceDefault} onSaveAppearance={saveWorkspaceAppearance} onRefresh={refresh} onCancelClone={cancelClone} onDestroyWorkspace={(confirmation) => destroyWorkspace(selectedProject()!, confirmation)} onError={showError} />
         </Show>
       </Show>
     </main>

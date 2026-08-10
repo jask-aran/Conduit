@@ -226,6 +226,7 @@ export class ProjectStore {
       state: project.state === "cloning" ? "cloning" : "ready",
       cloneOperationId: project.cloneOperationId || null,
       defaultTemplateId: project.defaultTemplateId || null,
+      workspaceAppearance: project.workspaceAppearance || null,
       createdAt: project.createdAt,
       path: projectPath,
       sessionsDir: sessionDirectoryFor(projectPath, this.piAgentDir),
@@ -765,6 +766,7 @@ export class ProjectStore {
         project.name = name;
       }
       if (Object.hasOwn(changes, "defaultTemplateId")) project.defaultTemplateId = changes.defaultTemplateId || null;
+      if (Object.hasOwn(changes, "workspaceAppearance")) project.workspaceAppearance = changes.workspaceAppearance || null;
       await this.writeCatalog(this.catalogFile, catalog);
       return this.projectView(project);
     });
