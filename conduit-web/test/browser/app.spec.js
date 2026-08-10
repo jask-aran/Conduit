@@ -2034,7 +2034,7 @@ test("hides transient new chats and provides complete right-click menus", async 
   await expect(page.getByRole("menuitem", { name: "Move chats to…" })).toBeDisabled();
 });
 
-test("uses compact sidebar groups and preserves collapse without a brand icon", async ({ page }, testInfo) => {
+test("uses compact sidebar groups and preserves a useful desktop rail", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "desktop-chromium");
   await page.goto("/");
   const sidebar = page.locator('[data-slot="sidebar"][data-state]');
@@ -2099,6 +2099,12 @@ test("uses compact sidebar groups and preserves collapse without a brand icon", 
   await expect.poll(async () => (await main.boundingBox()).x).toBeLessThan(mainBox.x);
   await expect(sidebar).toHaveCSS("width", "52px");
   await expect(page.locator('[data-sidebar="header"] span', { hasText: "Conduit" })).toBeHidden();
+  await expect(page.locator(".mobile-sidebar-trigger")).toBeHidden();
+  const rail = sidebar.locator('[data-sidebar="rail-actions"]');
+  await expect(rail).toBeVisible();
+  await expect(rail.getByRole("button", { name: "New chat", exact: true })).toBeVisible();
+  await expect(rail.getByRole("button", { name: "Open chat Existing chat", exact: true })).toBeVisible();
+  await expect(rail.getByRole("button", { name: "Open Research", exact: true })).toBeVisible();
 
   const [collapsedSidebarBox, collapsedTriggerBox] = await Promise.all([
     page.locator('[data-slot="sidebar-container"]').boundingBox(),
