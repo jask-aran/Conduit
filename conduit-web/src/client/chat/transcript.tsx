@@ -130,6 +130,11 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
   };
   const requestTypewriterTailFollow = (reason: string) => {
     if (!rendererUsesInertialTailFollow() || !following() || typewriterTailState.owner !== "app") return;
+    if (!props.chat.activeGeneration()) {
+      const targetScrollTop = Math.max(0, viewport.scrollHeight - viewport.clientHeight);
+      setViewportScrollTop(targetScrollTop);
+      typewriterTailState = rebaseTailFollowState(typewriterTailState, targetScrollTop, "app");
+    }
     typewriterTailReasons.add(reason);
     if (typewriterTailFrame != null) return;
     if (scrollFrame != null) {
@@ -145,8 +150,15 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
       const scrollHeight = viewport.scrollHeight;
       const maxScrollTop = Math.max(0, scrollHeight - viewport.clientHeight);
       const overflow = maxScrollTop > 0;
-      const currentScrollTop = viewport.scrollTop;
       const targetScrollTop = maxScrollTop;
+      // A persisted transcript is already complete. Keep its tail pinned while
+      // lazy Markdown resolves; the spring is for live output, where the target
+      // moves continuously and a snap would fight the display cadence.
+      if (!props.chat.activeGeneration()) {
+        setViewportScrollTop(targetScrollTop);
+        typewriterTailState = rebaseTailFollowState(typewriterTailState, targetScrollTop, "app");
+      }
+      const currentScrollTop = viewport.scrollTop;
       const previousHeight = typewriterTailLastHeight;
       const previousTarget = typewriterTailLastTarget;
       const scrollHeightDelta = previousHeight == null ? 0 : scrollHeight - previousHeight;
@@ -236,10 +248,25 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
     });
   };
   const loadEarlier = (knownHeight?: number, knownTop?: number) => {
+    const userRequested = knownHeight == null && knownTop == null;
+    if (userRequested && rendererUsesInertialTailFollow()) {
+      cancelTypewriterTailRejoin();
+      setTypewriterTailOwner("user", true);
+      setFollowing(false);
+    }
     if (historyLoad || !props.chat.pageBefore() || props.chat.loadingOlder()) return;
     const previousHeight = knownHeight ?? viewport.scrollHeight;
     const previousTop = knownTop ?? viewport.scrollTop;
+    const anchor = thread.querySelector<HTMLElement>('[data-message-id]');
+    const anchorTop = anchor?.getBoundingClientRect().top ?? null;
+    const previousOverflowAnchor = viewport.style.overflowAnchor;
+    viewport.style.overflowAnchor = "none";
     const restoreAnchor = () => {
+      if (anchor?.isConnected && anchorTop != null) {
+        const delta = anchor.getBoundingClientRect().top - anchorTop;
+        if (Math.abs(delta) > 0.05) setViewportScrollTop(viewport.scrollTop + delta);
+        return;
+      }
       setViewportScrollTop(previousTop + viewport.scrollHeight - previousHeight);
     };
     historyLoad = props.chat.loadOlder().then((loaded) => {
@@ -255,7 +282,10 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
           resolve();
         });
       }));
-    }).finally(() => { historyLoad = null; });
+    }).finally(() => {
+      viewport.style.overflowAnchor = previousOverflowAnchor;
+      historyLoad = null;
+    });
   };
   createRenderEffect(() => {
     props.chat.loadedId();
