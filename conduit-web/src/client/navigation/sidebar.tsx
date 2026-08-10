@@ -8,6 +8,7 @@ import {
   FolderIcon,
   FolderInputIcon,
   FolderPlusIcon,
+  MessageSquareIcon,
   MessageSquarePlusIcon,
   PanelLeftIcon,
   PencilIcon,
@@ -39,6 +40,9 @@ import {
   MenuItem,
   MenuTrigger,
   Spinner,
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
 } from "@/components/primitives";
 import type { ChatSummary, Project, RuntimeProcess, WorkspaceSuggestion } from "../api/contracts";
 import { api } from "../api/client";
@@ -277,6 +281,25 @@ export function Sidebar(props: {
       active: chat.liveActive,
     } : null);
 
+  const railChats = () => [...props.projects.flatMap((project) => project.sessions
+    .filter((chat) => chat.status !== "draft" || chat.id !== props.selectedId || chat.pinned || Boolean(props.runtime.getProcess(chat.id)))
+    .map((chat) => ({ chat, project })))]
+    .sort((left, right) => {
+      const selected = Number(right.chat.id === props.selectedId) - Number(left.chat.id === props.selectedId);
+      if (selected) return selected;
+      return (right.chat.updatedAt || right.chat.createdAt || "").localeCompare(left.chat.updatedAt || left.chat.createdAt || "");
+    })
+    .slice(0, 5);
+  const railProjects = () => [...folders(), ...workspaces()].slice(0, 5);
+  const railProjectIsActive = (project: Project) => project.id === props.projectId || project.sessions.some((chat) => chat.id === props.selectedId);
+  const railProjectIsLive = (project: Project) => project.sessions.some((chat) => Boolean(processFor(chat)));
+  const RailAction = (railProps: { label: string; onClick: () => void; current?: boolean; live?: boolean; children: unknown }) => <Tooltip>
+    <TooltipTrigger as="button" type="button" class="sidebar-rail-action" data-sidebar="rail-action" aria-label={railProps.label} aria-current={railProps.current ? "page" : undefined} data-live={railProps.live ? "true" : undefined} onClick={railProps.onClick}>
+      {railProps.children as never}
+    </TooltipTrigger>
+    <TooltipContent>{railProps.label}</TooltipContent>
+  </Tooltip>;
+
   const openNewDialog = (kind: "folder" | "workspace") => {
     if (kind === "workspace") props.onWorkspaceSuggestionsNeeded();
     setMode(kind === "workspace" ? "linked" : "managed");
@@ -511,11 +534,27 @@ export function Sidebar(props: {
           <button data-sidebar="brand" aria-label="Conduit" onClick={() => startNewChat()}><span>Conduit</span></button>
         </div>
         <div data-sidebar="content" class="sidebar-content">
+          <div data-sidebar="rail-actions" class="sidebar-rail-actions" aria-label="Quick navigation">
+            <RailAction label="New chat" onClick={() => startNewChat()}><MessageSquarePlusIcon /></RailAction>
+            <div data-sidebar="rail-divider" aria-hidden="true" />
+            <For each={railChats()}>{(item) => <RailAction
+              label={`Open chat ${item.chat.title || "New chat"}`}
+              current={props.selectedId === item.chat.id}
+              live={Boolean(processFor(item.chat))}
+              onClick={() => { closeMobile(); void props.onOpenChat(item.chat, item.project); }}
+            ><MessageSquareIcon /></RailAction>}</For>
+            <For each={railProjects()}>{(project) => <RailAction
+              label={`Open ${project.name}`}
+              current={railProjectIsActive(project)}
+              live={railProjectIsLive(project)}
+              onClick={() => { closeMobile(); void props.onOpenProject(project); }}
+            ><FolderIcon /></RailAction>}</For>
+          </div>
           <Group label="Chats" projects={[]} chatRoot={chats()} addLabel="New chat" onAdd={() => startNewChat()} />
           <Group label="Projects" projects={folders()} emptyLabel="No projects" addLabel="New folder" onAdd={() => openNewDialog("folder")} />
           <Group label="Workspaces" projects={workspaces()} workspace emptyLabel="No workspaces" addLabel="New workspace" onAdd={() => openNewDialog("workspace")} />
         </div>
-        <div data-sidebar="footer"><Menu><MenuTrigger class="sidebar-user"><CableIcon /><span><strong>Conduit</strong><small>{connectionLabel()}</small></span><span class={`server-status-indicator runtime-indicator runtime-indicator-${connectionTone()}`} aria-hidden="true"><Show when={props.connectivity === "connecting" || props.connectivity === "reconnecting"} fallback={<span class="runtime-indicator-dot" />}><Spinner class="size-3" /></Show></span></MenuTrigger><MenuContent>
+        <div data-sidebar="footer"><Menu><MenuTrigger class="sidebar-user" aria-label={`Conduit · ${connectionLabel()}`} title={connectionLabel()}><CableIcon /><span><strong>Conduit</strong><small>{connectionLabel()}</small></span><span class={`server-status-indicator runtime-indicator runtime-indicator-${connectionTone()}`} aria-hidden="true"><Show when={props.connectivity === "connecting" || props.connectivity === "reconnecting"} fallback={<span class="runtime-indicator-dot" />}><Spinner class="size-3" /></Show></span></MenuTrigger><MenuContent>
           <MenuItem onSelect={() => { closeMobile(); props.onOpenSettings("models"); }}>Manage settings</MenuItem>
           <MenuItem onSelect={() => { closeMobile(); props.onOpenPalette(); }}>Command Palette</MenuItem>
           <MenuItem onSelect={() => fetch("/v0/auth/logout", { method: "POST" }).finally(() => { location.href = "/login"; })}>Sign out</MenuItem>
