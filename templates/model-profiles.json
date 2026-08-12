@@ -15,7 +15,7 @@
       "label": "Brave search",
       "matches": ["*"],
       "searchRouting": {
-        "providers": ["brave"],
+        "providers": ["brave", "exa", "parallel", "openai"],
         "fallbackOn": ["transient", "quota", "network"]
       }
     }

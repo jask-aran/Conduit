@@ -413,12 +413,12 @@ exit 0
       id: "brave-search",
       label: "Brave search",
       searchRouting: {
-        providers: ["brave"],
+        providers: ["brave", "exa", "parallel", "openai"],
         fallbackOn: ["transient", "quota", "network"],
       },
     });
     const derivedSearchConfig = JSON.parse(await fs.readFile(path.join(root, "pi", "model-profiles", "brave-search", "web-search.json"), "utf8"));
-    assert.deepEqual(derivedSearchConfig.searchRouting.providers, ["brave"]);
+    assert.deepEqual(derivedSearchConfig.searchRouting.providers, ["brave", "exa", "parallel", "openai"]);
     assert.equal("provider" in derivedSearchConfig, false);
     assert.equal("searchProvider" in derivedSearchConfig, false);
     await assert.rejects(fs.access(freshSessionFile), { code: "ENOENT" });
