@@ -250,6 +250,9 @@ export function createClientActiveGenerationStore({ collectMetrics = false } = {
             status: event.stopReason === "error" || event.stopReason === "aborted" ? "error" : "complete",
             stopReason: event.stopReason,
             errorMessage: event.errorMessage || null,
+            ...(event.provider ? { provider: event.provider } : {}),
+            ...(event.model ? { model: event.model } : {}),
+            ...(event.timestamp ? { timestamp: event.timestamp } : {}),
           });
           rebuildMessageIndex(messageIndex);
           break;

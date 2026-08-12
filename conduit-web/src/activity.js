@@ -193,7 +193,8 @@ export function deriveFineActivity({
   toolName = null,
   retry = null,
 } = {}) {
-  if (generation === "failed" || coarse === "failed" || processStatus === "failed") return { kind: "failed", label: "Failed" };
+  if (coarse === "failed" || processStatus === "failed") return { kind: "runtime_failed", label: "Pi failed" };
+  if (generation === "failed") return { kind: "request_failed", label: "Request failed · Ready to retry" };
   if (generation === "stopping" || coarse === "stopping") return { kind: "stopping", label: "Stopping" };
   if (coarse === "waiting_for_user") return { kind: "waiting_for_user", label: "Waiting for your confirmation" };
   if (coarse === "compacting") return { kind: "compacting", label: "Compacting context" };

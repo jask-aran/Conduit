@@ -420,6 +420,9 @@ export class PiManager extends EventEmitter {
         message: `Pi process exited (${signal || code || "unknown"})`,
       });
       this.publish(record, { type: "runtime_exit", code, signal });
+      for (const socket of [...record.clients]) {
+        socket.close?.(1012, "Pi process exited");
+      }
       this.emit("process_removed", { id: record.id, chatId: record.chatId });
       this.processes.delete(record.id);
     });

@@ -19,7 +19,15 @@ export interface ActiveGenerationView {
   lastSeq: number;
   continuation?: boolean;
   continuationBase?: string;
-  assistantMessages: Array<{ id: string; stopReason?: string | null; blocks: LiveBlock[] }>;
+  assistantMessages: Array<{
+    id: string;
+    stopReason?: string | null;
+    errorMessage?: string | null;
+    provider?: string | null;
+    model?: string | null;
+    timestamp?: string | null;
+    blocks: LiveBlock[];
+  }>;
   toolExecutions: Record<string, {
     toolCallId?: string;
     name?: string;
@@ -158,7 +166,10 @@ export function buildLiveAnswerRow(
     .filter((block) => block.type === "text" && answerIdentities.has(block.identity))
     .map((block) => block.text || "")
     .join("\n");
-  if (!answer) return null;
+  const terminalError = generation.status === "failed"
+    && assistant.stopReason === "error"
+    && generation.assistantMessages.at(-1) === assistant;
+  if (!answer && !terminalError) return null;
   const content = generation.continuation && index.firstAnswerAssistantId === assistantId
     ? mergeContinuation(generation.continuationBase || "", answer)
     : answer;
@@ -174,6 +185,11 @@ export function buildLiveAnswerRow(
       key: `live:${generation.id}:${assistantId}`,
       role: "assistant",
       content,
+      stopReason: assistant.stopReason || undefined,
+      errorMessage: terminalError ? assistant.errorMessage || "The model request failed." : null,
+      provider: assistant.provider || null,
+      model: assistant.model || null,
+      timestamp: assistant.timestamp || undefined,
       stopped: generation.status === "stopped",
       status: generation.status === "stopped" ? "stopped" : null,
     },
@@ -228,7 +244,10 @@ function liveRows(generation: ActiveGenerationView, owner: Message | null, index
         segments.push(buildLiveToolSegment(generation, block));
       }
     }
-    if (answer) {
+    const terminalError = generation.status === "failed"
+      && assistant.stopReason === "error"
+      && generation.assistantMessages.at(-1) === assistant;
+    if (answer || terminalError) {
       const content = generation.continuation && answers.length === 0
         ? mergeContinuation(generation.continuationBase || "", answer)
         : answer;
@@ -244,6 +263,11 @@ function liveRows(generation: ActiveGenerationView, owner: Message | null, index
           key: `live:${generation.id}:${assistant.id}`,
           role: "assistant",
           content,
+          stopReason: assistant.stopReason || undefined,
+          errorMessage: terminalError ? assistant.errorMessage || "The model request failed." : null,
+          provider: assistant.provider || null,
+          model: assistant.model || null,
+          timestamp: assistant.timestamp || undefined,
           stopped: generation.status === "stopped",
           status: generation.status === "stopped" ? "stopped" : null,
         },
@@ -329,7 +353,7 @@ export function buildTurnRows(
       }
       if (segments.length > 0) rows.push({ key: `trace:${turn.userMessage ? messageKey(turn.userMessage) : messageKey(turn.assistants[0]!)}`, type: "trace", value: { active: false, segments } });
       const text = String(bubble?.content || "").trim();
-      if (bubble && text) {
+      if (bubble && (text || (bubble.stopReason === "error" && bubble.errorMessage))) {
         const displayKey = answerDisplayKey(turn.userMessage, answerIndex, `message:${messageKey(bubble)}`);
         rows.push({ key: displayKey, displayKey, type: "message", value: bubble, index: messages.indexOf(bubble) });
       }

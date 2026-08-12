@@ -3054,6 +3054,105 @@ test("stop freezes the visible response and rejects late generation deltas", asy
   expect(await page.evaluate(() => window.__stopCommand)).toEqual({ type: "stop_generation", generationId: "g1" });
 });
 
+test("shows settled provider errors as assistant messages without a busy spinner", async ({ page }) => {
+  let sessionReads = 0;
+  let promptStarted = false;
+  await page.route("**/v0/sessions/550e8400-e29b-41d4-a716-446655440099", async (route) => {
+    sessionReads += 1;
+    await route.fulfill({ json: {
+      id: "550e8400-e29b-41d4-a716-446655440099",
+      projectId: "project_chat",
+      status: "active",
+      title: "New chat",
+      messages: promptStarted ? [
+        { id: "persisted-user", role: "user", content: "Trigger an error" },
+        ...(sessionReads > 1 ? [{
+          id: "persisted-error",
+          role: "assistant",
+          content: "",
+          stopReason: "error",
+          errorMessage: "429: Free usage limit reached",
+          provider: "opencode",
+          model: "deepseek-v4-flash-free",
+          timestamp: "2026-08-12T09:48:47.341Z",
+        }] : []),
+      ] : [],
+      tools: [],
+      page: { before: null },
+    } });
+  });
+  await page.addInitScript(() => {
+    class ErrorWebSocket extends EventTarget {
+      static OPEN = 1;
+      constructor() {
+        super();
+        this.readyState = 0;
+        queueMicrotask(() => { this.readyState = ErrorWebSocket.OPEN; this.dispatchEvent(new Event("open")); });
+      }
+      close() { this.readyState = 3; }
+      send(data) {
+        if (JSON.parse(data).type !== "prompt") return;
+        queueMicrotask(() => {
+          this.onmessage?.({ data: JSON.stringify({ type: "generation_started", generationId: "g_error", seq: 1 }) });
+          this.onmessage?.({ data: JSON.stringify({ type: "generation_running", generationId: "g_error", seq: 2 }) });
+          this.onmessage?.({ data: JSON.stringify({ type: "assistant_message_started", generationId: "g_error", seq: 3, messageId: "m_error" }) });
+          this.onmessage?.({ data: JSON.stringify({
+            type: "assistant_message_completed",
+            generationId: "g_error",
+            seq: 4,
+            messageId: "m_error",
+            stopReason: "error",
+            errorMessage: "429: Free usage limit reached",
+            provider: "opencode",
+            model: "deepseek-v4-flash-free",
+            timestamp: "2026-08-12T09:48:47.341Z",
+            blocks: [],
+          }) });
+          this.onmessage?.({ data: JSON.stringify({ type: "generation_turn_ended", generationId: "g_error", seq: 5, willRetry: false }) });
+          this.onmessage?.({ data: JSON.stringify({ type: "generation_settled", generationId: "g_error", seq: 6 }) });
+          setTimeout(() => this.onmessage?.({ data: JSON.stringify({
+            type: "session_checkpoint",
+            generationId: "g_error",
+            generationSeq: 6,
+            chat: { id: "550e8400-e29b-41d4-a716-446655440099" },
+          }) }), 50);
+        });
+      }
+    }
+    Object.defineProperty(window, "WebSocket", { configurable: true, value: ErrorWebSocket });
+  });
+  await page.route("**/v0/live-sessions", async (route) => {
+    promptStarted = true;
+    const body = route.request().postDataJSON();
+    await route.fulfill({ status: 201, json: { id: "live_error", chatId: body.chatId, streamUrl: "/v0/live-sessions/live_error/stream" } });
+  });
+
+  await page.goto("/");
+  await page.getByRole("textbox", { name: "Message Pi" }).fill("Trigger an error");
+  await page.getByRole("button", { name: "Send message" }).click();
+
+  const error = page.locator(".assistant-error");
+  await expect(error).toContainText("Request failed");
+  await expect(error).toContainText("429: Free usage limit reached");
+  await expect(error).toContainText("deepseek-v4-flash-free");
+  await expect(error).toContainText("opencode");
+  await expect(error).toContainText("Assistant");
+  await expect(error.locator("time")).toHaveAttribute("datetime", "2026-08-12T09:48:47.341Z");
+  await expect.poll(() => sessionReads).toBeGreaterThan(0);
+  await expect(error).toContainText("429: Free usage limit reached");
+  await expect(page.locator(".composer-status-state")).toContainText("Request failed · Ready to retry");
+  await expect(page.locator(".composer-status-state .animate-spin")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Stop response" })).toHaveCount(0);
+  await page.getByRole("textbox", { name: "Message Pi" }).fill("Try another request");
+  await expect(page.getByRole("button", { name: "Send message" })).toBeEnabled();
+
+  await page.goto("/");
+  await page.goto("/chat/550e8400-e29b-41d4-a716-446655440099");
+  await expect(page.locator(".assistant-error")).toContainText("429: Free usage limit reached");
+  await expect(page.locator(".composer-status-state")).toContainText("Request failed · Ready to retry");
+  await expect(page.locator(".composer-status-state .animate-spin")).toHaveCount(0);
+});
+
 test("keeps streaming visible when a user checkpoint replaces the live placeholder", async ({ page }) => {
   await page.addInitScript(() => {
     class CheckpointWebSocket extends EventTarget {

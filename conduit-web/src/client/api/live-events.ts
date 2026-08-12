@@ -152,6 +152,7 @@ function protocolMessage(value: unknown): ProtocolMessage {
     content: source.content,
     timestamp: optionalText(source.timestamp) || undefined,
     stopReason: optionalText(source.stopReason) || undefined,
+    errorMessage: optionalText(source.errorMessage),
   };
 }
 

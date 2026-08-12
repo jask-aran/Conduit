@@ -116,6 +116,9 @@ export interface Message {
   /** Raw Pi content blocks (text / thinking / toolCall) — source of persisted reasoning. */
   blocks?: ContentBlock[];
   stopReason?: string;
+  errorMessage?: string | null;
+  provider?: string | null;
+  model?: string | null;
   timestamp?: string;
   stopped?: boolean;
   status?: string | null;

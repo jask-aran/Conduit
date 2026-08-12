@@ -526,6 +526,9 @@ export function messagesFromEntries(entries) {
       usage: entry.message.usage || null,
       timestamp: entry.timestamp || null,
       stopReason: entry.message.stopReason || null,
+      errorMessage: entry.message.errorMessage || null,
+      provider: entry.message.provider || null,
+      model: entry.message.model || null,
       stopped: entry.message.stopReason === "aborted",
       attachments: envelope?.attachments || [],
     };
@@ -535,6 +538,9 @@ export function messagesFromEntries(entries) {
       if (previous) {
         previous.content = mergeContinuation(previous.content, message.content);
         previous.stopReason = message.stopReason;
+        previous.errorMessage = message.errorMessage;
+        previous.provider = message.provider;
+        previous.model = message.model;
         previous.stopped = message.stopped;
         previous.continued = true;
         previous.timestamp = message.timestamp || previous.timestamp;

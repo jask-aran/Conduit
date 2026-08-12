@@ -76,6 +76,29 @@ test("presents attachment labels separately and merges hidden continuation turns
   assert.equal(messages[1].stopped, false);
 });
 
+test("preserves assistant provider errors for transcript rendering", () => {
+  const [message] = messagesFromEntries([{
+    type: "message",
+    id: "failed-assistant",
+    timestamp: "2026-08-12T09:48:47.341Z",
+    message: {
+      role: "assistant",
+      content: [],
+      stopReason: "error",
+      errorMessage: "429: provider limit reached",
+      provider: "opencode",
+      model: "deepseek-v4-flash-free",
+    },
+  }]);
+
+  assert.equal(message.stopReason, "error");
+  assert.equal(message.errorMessage, "429: provider limit reached");
+  assert.equal(message.provider, "opencode");
+  assert.equal(message.model, "deepseek-v4-flash-free");
+  assert.equal(message.timestamp, "2026-08-12T09:48:47.341Z");
+  assert.equal(message.content, "");
+});
+
 test("pages complete recent turns with a character soft limit", () => {
   const entries = Array.from({ length: 12 }, (_, index) => ([
     { type: "message", message: { role: "user", content: `Question ${index}` } },
