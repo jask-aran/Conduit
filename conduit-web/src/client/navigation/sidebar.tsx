@@ -129,7 +129,7 @@ export function Sidebar(props: {
   onOpenTerminal: (chat: ChatSummary, project: Project) => void;
   onOpenWorkspaceIdentity: (project: Project) => void;
   onOpenSettings: (section?: string, workspaceId?: string | null) => void;
-  onOpenPalette: (page?: string | null, chatScopeProjectId?: string | null) => void;
+  onOpenPalette: (page?: string | null, initialQuery?: string | null) => void;
   chatLimit: number;
   mobileOpen: boolean;
   onMobileOpenChange: (open: boolean) => void;
@@ -304,13 +304,12 @@ export function Sidebar(props: {
     if (!selectedId) return;
     const owner = props.projects.find((project) => project.sessions.some((chat) => chat.id === selectedId));
     if (!owner) return;
-    if (collapsedProjectIds().has(owner.id)) {
-      setCollapsedProjectIds((current) => {
-        const next = new Set(current);
-        next.delete(owner.id);
-        return next;
-      });
-    }
+    setCollapsedProjectIds((current) => {
+      if (!current.has(owner.id)) return current;
+      const next = new Set(current);
+      next.delete(owner.id);
+      return next;
+    });
     queueMicrotask(() => {
       const row = document.querySelector<HTMLElement>(`[data-chat-id="${CSS.escape(selectedId)}"]`);
       row?.scrollIntoView({ block: "nearest" });
@@ -697,7 +696,7 @@ export function Sidebar(props: {
       <Show when={groupProps.chatRoot}>
         <For each={visibleChats()}>{(chat) => <ChatMenu chat={chat} project={groupProps.chatRoot!} />}</For>
         <Show when={moreChats() > 0}>
-          <button type="button" class="sidebar-view-more" onClick={() => props.onOpenPalette("chat-search", groupProps.chatRoot!.id)}>
+          <button type="button" class="sidebar-view-more" onClick={() => props.onOpenPalette("chat-search", "scope:chats ")}>
             <SearchIcon /><span>View all chats</span><small>{moreChats()} more</small>
           </button>
         </Show>
