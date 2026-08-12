@@ -1,16 +1,17 @@
 import { createEffect, createMemo, createSignal, For, Show } from "solid-js";
 import type { JSX } from "solid-js";
+import * as KAlertDialog from "@kobalte/core/alert-dialog";
 import * as KDialog from "@kobalte/core/dialog";
 import {
-  ArrowLeftIcon, BrainIcon, ChevronRightIcon, CopyIcon, FileInputIcon, FilePlus2Icon,
-  FolderInputIcon, FolderPlusIcon, LayersIcon, LogOutIcon, MessageSquareIcon,
+  ArrowLeftIcon, BrainIcon, CheckIcon, ChevronRightIcon, CopyIcon, FileInputIcon, FilePlus2Icon,
+  FolderIcon, FolderInputIcon, FolderPlusIcon, LayersIcon, LogOutIcon, MessageSquareIcon,
   MessageSquarePlusIcon, PanelLeftIcon, PanelRightIcon, PencilIcon, PlayIcon, RefreshCwIcon, SettingsIcon,
   SlashIcon, SlidersHorizontalIcon, SquareIcon, TerminalIcon, Trash2Icon, XIcon,
 } from "lucide-solid";
 import { Button } from "@/components/primitives";
-import type { ModelOption } from "../api/contracts";
+import type { ChatSummary, ModelOption, Project } from "../api/contracts";
 import {
-  groupPaletteCommands, PALETTE_PAGES, resolvePaletteCommands,
+  chatDateSection, groupPaletteCommands, PALETTE_PAGES, resolvePaletteCommands,
 } from "../palette/command-registry";
 import type { PaletteActions, PaletteCommand, PaletteContext } from "../palette/command-registry";
 import { rankPaletteResults } from "../palette/palette-search";
@@ -60,7 +61,11 @@ const BACK_COMMAND: PaletteCommand = {
 type Row =
   | { type: "heading"; key: string; label: string }
   | { type: "command"; key: string; index: number; command: PaletteCommand }
-  | { type: "model"; key: string; index: number; model: ModelOption };
+  | { type: "model"; key: string; index: number; model: ModelOption }
+  | { type: "destination"; key: string; index: number; project: Project };
+
+type SelectableRow = Exclude<Row, { type: "heading" }>;
+type ChatTarget = { chat: ChatSummary; project: Project };
 
 function groupModels(models: ModelOption[]): { provider: string; items: ModelOption[] }[] {
   const order: string[] = [];
@@ -75,60 +80,124 @@ function groupModels(models: ModelOption[]): { provider: string; items: ModelOpt
 
 const optionId = (index: number) => `command-option-${index}`;
 
+function formatChatDate(value?: string): string {
+  if (!value || !Number.isFinite(Date.parse(value))) return "Unknown date";
+  return new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", year: "numeric" }).format(new Date(value));
+}
+
 export function CommandMenu(props: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   initialPage?: string | null;
   launchNonce?: number;
+  directLaunch?: boolean;
+  chatScopeProjectId?: string | null;
   context: PaletteContext;
   actions: PaletteActions;
   models: ModelOption[];
   currentModel: string;
   onChooseModel: (spec: string) => void;
+  details?: JSX.Element;
 }) {
   const [query, setQuery] = createSignal("");
   const [page, setPage] = createSignal<string | null>(null);
+  const [scopeProjectId, setScopeProjectId] = createSignal<string | null>(null);
   const [active, setActive] = createSignal(0);
+  const [selectionMode, setSelectionMode] = createSignal(false);
+  const [selectedChatIds, setSelectedChatIds] = createSignal<Set<string>>(new Set());
+  const [moveMode, setMoveMode] = createSignal(false);
+  const [editingId, setEditingId] = createSignal<string | null>(null);
+  const [editingValue, setEditingValue] = createSignal("");
+  const [pendingDelete, setPendingDelete] = createSignal<ChatTarget[] | null>(null);
   let input!: HTMLInputElement;
+  let listbox!: HTMLDivElement;
+  let renameInput!: HTMLInputElement;
   let returnFocus: HTMLElement | null = null;
   let wasOpen = false;
+  let lastLaunchNonce: number | undefined;
+  let directMode = false;
 
   const pageMeta = createMemo(() => (page() ? PALETTE_PAGES[page()!] : null));
   const searching = createMemo(() => Boolean(query().trim()));
+  const chatPage = createMemo(() => page() === "chat-search" || page() === "goto");
+
+  const resetTransient = () => {
+    setQuery("");
+    setPage(null);
+    setScopeProjectId(null);
+    setSelectionMode(false);
+    setSelectedChatIds(new Set<string>());
+    setMoveMode(false);
+    setEditingId(null);
+    setEditingValue("");
+    setPendingDelete(null);
+    directMode = false;
+  };
 
   createEffect(() => {
     // Track launchNonce so re-opening on the same page re-applies the initial page.
     void props.launchNonce;
-    if (props.open && !wasOpen) {
-      returnFocus = document.activeElement as HTMLElement | null;
+    const launchChanged = props.launchNonce !== lastLaunchNonce;
+    if (props.open && (!wasOpen || launchChanged)) {
+      if (!wasOpen) returnFocus = document.activeElement as HTMLElement | null;
       setPage(props.initialPage || null);
       setQuery("");
+      setScopeProjectId(props.chatScopeProjectId || null);
+      setSelectionMode(false);
+      setSelectedChatIds(new Set<string>());
+      setMoveMode(false);
+      setEditingId(null);
+      setPendingDelete(null);
+      directMode = Boolean(props.directLaunch);
+      lastLaunchNonce = props.launchNonce;
       queueMicrotask(() => input?.focus());
     }
-    if (!props.open && wasOpen) { setPage(null); setQuery(""); }
+    if (!props.open && wasOpen) resetTransient();
     wasOpen = props.open;
+  });
+
+  const commands = createMemo(() => {
+    const currentPage = page();
+    const all = resolvePaletteCommands(props.context, { page: currentPage });
+    const scope = scopeProjectId();
+    if (!scope || !chatPage()) return all;
+    return all.filter((command) => command.entity === "chat"
+      ? command.project?.id === scope
+      : command.id === `new-chat-in:${scope}`);
   });
 
   const rows = createMemo<Row[]>(() => {
     if (!props.open) return [];
     const currentPage = page();
-    const commands = resolvePaletteCommands(props.context, { page: currentPage });
+    const source = commands();
     const out: Row[] = [];
     let index = 0;
     const push = (row: Row) => out.push(row);
 
+    if (moveMode()) {
+      push({ type: "command", key: "page-back", index: index++, command: BACK_COMMAND });
+      push({ type: "heading", key: "move-heading", label: "Move selected chats to" });
+      for (const project of props.context.projects || []) {
+        push({ type: "destination", key: `destination:${project.id}`, index: index++, project });
+      }
+      return out;
+    }
+
     if (searching()) {
       const ranked = rankPaletteResults<PaletteCommand, ModelOption>({
-        commands,
+        commands: source,
         models: currentPage ? [] : props.models,
         query: query(),
         currentModel: props.currentModel,
       }) || [];
       let lastGroup = "";
       for (const row of ranked) {
-        if (row.group !== lastGroup) {
-          push({ type: "heading", key: `h-${row.group}-${index}`, label: GROUP_HEADINGS[row.group] || row.group });
-          lastGroup = row.group;
+        const group = row.command?.entity === "chat" && chatPage()
+          ? (row.command.section || "Chats")
+          : row.group;
+        if (group !== lastGroup) {
+          push({ type: "heading", key: `h-${group}-${index}`, label: GROUP_HEADINGS[group] || group });
+          lastGroup = group;
         }
         if (row.kind === "model" && row.model) push({ type: "model", key: row.id, index: index++, model: row.model });
         else if (row.command) push({ type: "command", key: row.command.id, index: index++, command: row.command });
@@ -138,12 +207,24 @@ export function CommandMenu(props: {
 
     if (currentPage) {
       push({ type: "command", key: "page-back", index: index++, command: BACK_COMMAND });
-      push({ type: "heading", key: "page-heading", label: pageMeta()?.heading || "Results" });
-      for (const command of commands) push({ type: "command", key: command.id, index: index++, command });
+      if (!chatPage()) {
+        push({ type: "heading", key: "page-heading", label: pageMeta()?.heading || "Results" });
+        for (const command of source) push({ type: "command", key: command.id, index: index++, command });
+        return out;
+      }
+      let lastSection = "";
+      for (const command of source) {
+        const section = command.entity === "chat" ? (command.section || "Older") : "Actions";
+        if (section !== lastSection) {
+          push({ type: "heading", key: `chat-${section}`, label: section });
+          lastSection = section;
+        }
+        push({ type: "command", key: command.id, index: index++, command });
+      }
       return out;
     }
 
-    for (const group of groupPaletteCommands(commands)) {
+    for (const group of groupPaletteCommands(source)) {
       push({ type: "heading", key: `g-${group.id}`, label: group.heading });
       for (const command of group.items) push({ type: "command", key: command.id, index: index++, command });
     }
@@ -154,22 +235,100 @@ export function CommandMenu(props: {
     return out;
   });
 
-  const selectable = createMemo(() => rows().filter((row): row is Exclude<Row, { type: "heading" }> => row.type !== "heading"));
+  const selectable = createMemo<SelectableRow[]>(() => rows().filter((row): row is SelectableRow => row.type !== "heading"));
+  const allChatTargets = createMemo<ChatTarget[]>(() => (props.context.projects || []).flatMap((project) =>
+    (project.sessions || []).map((chat) => ({ chat, project }))));
+  const selectedTargets = createMemo<ChatTarget[]>(() => {
+    const lookup = new Map(allChatTargets().map((target) => [target.chat.id, target]));
+    return [...selectedChatIds()].map((id) => lookup.get(id)).filter((target): target is ChatTarget => Boolean(target));
+  });
+  const activeChat = createMemo<ChatTarget | null>(() => {
+    const row = selectable()[active()];
+    if (!row || row.type !== "command" || row.command.entity !== "chat" || !row.command.chat || !row.command.project) return null;
+    return { chat: row.command.chat, project: row.command.project };
+  });
 
-  // Keep the active index in range whenever the visible set changes.
-  createEffect(() => { const count = selectable().length; if (active() >= count) setActive(count ? count - 1 : 0); });
-  createEffect(() => { void query(); void page(); setActive(0); if (props.open) queueMicrotask(() => input?.focus()); });
-  createEffect(() => { if (props.open) document.getElementById(optionId(active()))?.scrollIntoView({ block: "nearest" }); });
+  createEffect(() => {
+    const count = selectable().length;
+    if (active() >= count) setActive(count ? count - 1 : 0);
+  });
+  createEffect(() => {
+    void query(); void page(); void moveMode();
+    setActive(0);
+    if (props.open && !selectionMode() && !editingId()) queueMicrotask(() => input?.focus());
+  });
+  createEffect(() => {
+    if (props.open) document.getElementById(optionId(active()))?.scrollIntoView({ block: "nearest" });
+  });
+  createEffect(() => {
+    if (selectionMode() && props.open) queueMicrotask(() => listbox?.focus());
+  });
+  createEffect(() => {
+    if (editingId() && props.open) queueMicrotask(() => { renameInput?.focus(); renameInput?.select(); });
+  });
 
-  const close = () => { setQuery(""); setPage(null); props.onOpenChange(false); };
-  const goBack = () => { setPage(null); setQuery(""); };
+  const close = () => { resetTransient(); props.onOpenChange(false); };
+  const goBack = () => {
+    if (moveMode()) { setMoveMode(false); setQuery(""); return; }
+    setPage(null); setQuery(""); setScopeProjectId(null); setSelectionMode(false); setSelectedChatIds(new Set<string>()); directMode = false;
+  };
 
-  const runRow = (row?: Exclude<Row, { type: "heading" }>) => {
+  const toggleChatSelection = (id: string) => {
+    setSelectedChatIds((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+  const enterSelection = () => {
+    if (!chatPage()) return;
+    const fallback = selectable().find((row): row is Extract<SelectableRow, { type: "command" }> => row.type === "command" && row.command.entity === "chat" && Boolean(row.command.chat && row.command.project));
+    const target = activeChat() || (fallback?.command.chat && fallback.command.project ? { chat: fallback.command.chat, project: fallback.command.project } : null);
+    if (target) setSelectedChatIds(new Set([target.chat.id]));
+    setSelectionMode(true);
+  };
+  const startRename = () => {
+    const target = selectedTargets();
+    if (target.length !== 1) return;
+    setEditingId(target[0]!.chat.id);
+    setEditingValue(target[0]!.chat.title || "");
+  };
+  const submitRename = async () => {
+    const id = editingId();
+    const target = selectedTargets().find((item) => item.chat.id === id);
+    const value = editingValue().trim();
+    if (!target || !value) return;
+    const saved = await props.actions.renameChat(target.chat, target.project, value);
+    if (saved) setEditingId(null);
+  };
+  const copySelected = () => { if (selectedTargets().length) void props.actions.copyChatLinks(selectedTargets()); };
+  const requestDelete = () => { if (selectedTargets().length) setPendingDelete(selectedTargets()); };
+  const confirmDelete = async () => {
+    const targets = pendingDelete();
+    if (!targets) return;
+    setPendingDelete(null);
+    const failed = await props.actions.deleteChats(targets);
+    setSelectedChatIds(new Set(failed));
+    if (!failed.length) { setSelectionMode(false); close(); }
+  };
+  const chooseDestination = async (project: Project) => {
+    const targets = selectedTargets();
+    if (!targets.length) return;
+    const failed = await props.actions.moveChats(targets, project);
+    setSelectedChatIds(new Set(failed));
+    if (!failed.length) { setSelectionMode(false); setMoveMode(false); close(); }
+  };
+
+  const runRow = (row?: SelectableRow) => {
     if (!row) return;
     if (row.type === "model") { close(); requestAnimationFrame(() => props.onChooseModel(row.model.spec)); return; }
+    if (row.type === "destination") { void chooseDestination(row.project); return; }
     const command = row.command;
     if (command.id === "page-back") { goBack(); return; }
-    if (command.kind === "page" && command.page) { setPage(command.page); setQuery(""); return; }
+    if (selectionMode() && command.entity === "chat" && command.chat) { toggleChatSelection(command.chat.id); return; }
+    if (command.kind === "page" && command.page) {
+      setPage(command.page); setQuery(""); setScopeProjectId(null); setMoveMode(false); setSelectionMode(false); setSelectedChatIds(new Set<string>()); directMode = false; return;
+    }
     close();
     requestAnimationFrame(() => command.run(props.actions));
   };
@@ -181,18 +340,43 @@ export function CommandMenu(props: {
   };
 
   const keydown = (event: KeyboardEvent) => {
+    const key = event.key.toLowerCase();
+    if ((event.metaKey || event.ctrlKey) && !event.altKey && key === "e" && chatPage()) {
+      event.preventDefault(); event.stopPropagation(); enterSelection(); return;
+    }
+    // Selection mode is modal. Keep its actions available even if the input
+    // still owns focus for one event while the listbox focus handoff settles.
+    if (selectionMode() && !event.metaKey && !event.ctrlKey && !event.altKey) {
+      if (event.key === " ") { event.preventDefault(); const target = activeChat(); if (target) toggleChatSelection(target.chat.id); return; }
+      if (key === "r") { event.preventDefault(); startRename(); return; }
+      if (key === "m") { event.preventDefault(); if (selectedTargets().length) { setMoveMode(true); setQuery(""); } return; }
+      if (key === "c") { event.preventDefault(); copySelected(); return; }
+      if (key === "d" || event.key === "Delete") { event.preventDefault(); requestDelete(); return; }
+      if (key === "/") { event.preventDefault(); input?.focus(); return; }
+    }
     if (event.key === "ArrowDown") { event.preventDefault(); move(1); return; }
     if (event.key === "ArrowUp") { event.preventDefault(); move(-1); return; }
     if (event.key === "Home") { event.preventDefault(); setActive(0); return; }
     if (event.key === "End") { event.preventDefault(); setActive(Math.max(0, selectable().length - 1)); return; }
-    if (event.key === "Enter") { event.preventDefault(); runRow(selectable()[active()]); return; }
-    if (event.key === "Escape") {
-      event.preventDefault();
-      event.stopPropagation();
-      if (page()) goBack(); else close();
+    if (event.key === "Tab" && !event.shiftKey) {
+      const row = selectable()[active()];
+      if (row?.type === "command" && row.command.kind === "page") { event.preventDefault(); runRow(row); }
       return;
     }
-    if (event.key === "Backspace" && page() && !query()) { event.preventDefault(); goBack(); }
+    if (event.key === "Enter") { event.preventDefault(); runRow(selectable()[active()]); return; }
+    if (event.key === "Escape") {
+      event.preventDefault(); event.stopPropagation();
+      if (editingId()) { setEditingId(null); return; }
+      if (selectionMode()) { setSelectionMode(false); setSelectedChatIds(new Set<string>()); input?.focus(); return; }
+      if (page() && !directMode) goBack(); else close();
+    }
+    // Backspace edits the query. It never exits a page when the query is empty.
+  };
+
+  const renameKeydown = (event: KeyboardEvent) => {
+    event.stopPropagation();
+    if (event.key === "Enter") { event.preventDefault(); void submitRename(); }
+    if (event.key === "Escape") { event.preventDefault(); setEditingId(null); }
   };
 
   const changeOpen = (open: boolean) => { if (!open) close(); else props.onOpenChange(true); };
@@ -205,7 +389,7 @@ export function CommandMenu(props: {
       role: "option",
       "aria-selected": selected(),
       class: "command-option",
-      // Keep focus in the input so keyboard control (Escape/paging) survives a click.
+      // Keep focus in the input or list so keyboard control survives a click.
       onMouseDown: (event: MouseEvent) => event.preventDefault(),
       onMouseMove: () => setActive(row.index),
       onClick: () => runRow(row),
@@ -217,64 +401,100 @@ export function CommandMenu(props: {
         <span class="command-copy"><span class="command-label">{row.model.label}</span><small>{row.model.spec}</small></span>
       </div>;
     }
+    if (row.type === "destination") {
+      return <div {...commonProps} data-highlighted={selected() || undefined}>
+        <FolderIcon class="command-icon" />
+        <span class="command-copy"><span class="command-label">{row.project.name}</span><small>{row.project.slug === "chat" ? "Chats" : "Folder or workspace"}</small></span>
+      </div>;
+    }
     const command = row.command;
     const Icon = icons[command.icon];
-    return <div {...commonProps} data-highlighted={selected() || undefined} data-danger={command.destructive || undefined} data-checked={command.checked || undefined}>
+    const chatSelected = () => Boolean(command.chat && selectedChatIds().has(command.chat.id));
+    const editing = () => command.chat?.id === editingId();
+    return <div {...commonProps} title={command.chat?.title || command.label} data-highlighted={selected() || undefined} data-danger={command.destructive || undefined} data-checked={command.checked || undefined} data-chat-row={command.entity === "chat" || undefined} data-chat-selected={chatSelected() || undefined}>
+      <Show when={selectionMode() && command.entity === "chat"}>
+        <span class="command-select-mark" aria-hidden="true">{chatSelected() ? <CheckIcon /> : null}</span>
+      </Show>
       <Show when={Icon}>{(resolved) => { const C = resolved(); return <C class="command-icon" />; }}</Show>
       <span class="command-copy">
-        <span class="command-label">{command.label}</span>
-        <Show when={command.detail}><small>{command.detail}</small></Show>
+        <Show when={editing()} fallback={<span class="command-label">{command.label}</span>}>
+          <input ref={renameInput} class="command-rename-input" value={editingValue()} onInput={(event) => setEditingValue(event.currentTarget.value)} onKeyDown={renameKeydown} onClick={(event) => event.stopPropagation()} aria-label={`Rename ${command.label}`} />
+        </Show>
+        <Show when={!editing() && command.detail}><small>{command.detail}{command.chat ? ` · ${formatChatDate(command.chat.createdAt)}` : ""}</small></Show>
+        <Show when={editing()}><small>Enter to save · Escape to cancel</small></Show>
       </span>
       <Show when={command.kind === "page"}><ChevronRightIcon class="command-chevron" /></Show>
       <Show when={command.shortcut}><kbd class="command-shortcut">{command.shortcut}</kbd></Show>
     </div>;
   };
 
-  return <KDialog.Root open={props.open} onOpenChange={changeOpen}>
-    <KDialog.Portal>
-      <KDialog.Content
-        class="command-dialog"
-        onCloseAutoFocus={(event) => { event.preventDefault(); if (returnFocus?.isConnected) returnFocus.focus(); returnFocus = null; }}
-        onPointerDown={(event) => { if (event.target === event.currentTarget) close(); }}
-      >
-        <div class="command-shell">
-          <KDialog.Title class="sr-only">Command Palette</KDialog.Title>
-          <KDialog.Description class="sr-only">Search commands, chats, settings, and models.</KDialog.Description>
-          <div class="command-input-row">
-            <Show when={pageMeta()}><span class="command-page-prefix">{pageMeta()!.prefix}</span></Show>
-            <input
-              ref={input}
-              class="command-input"
-              role="combobox"
-              aria-expanded="true"
-              aria-controls="command-listbox"
-              aria-autocomplete="list"
-              aria-activedescendant={selectable().length ? optionId(active()) : undefined}
-              aria-label="Search commands"
-              placeholder={pageMeta()?.placeholder || "Search commands…"}
-              value={query()}
-              onInput={(event) => setQuery(event.currentTarget.value)}
-              onKeyDown={keydown}
-            />
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-sm"
-              class="command-close"
-              aria-label="Close command palette"
-              title="Close"
-              onMouseDown={(event) => event.preventDefault()}
-              onClick={() => close()}
-            >
-              <XIcon />
-            </Button>
+  return <>
+    <KDialog.Root open={props.open} onOpenChange={changeOpen}>
+      <KDialog.Portal>
+        <KDialog.Content
+          class={`command-dialog${chatPage() ? " command-dialog-chat-search" : ""}`}
+          onCloseAutoFocus={(event) => { event.preventDefault(); if (returnFocus?.isConnected) returnFocus.focus(); returnFocus = null; }}
+          onPointerDown={(event) => { if (event.target === event.currentTarget) close(); }}
+        >
+          <div class="command-shell">
+            <KDialog.Title class="sr-only">Command Palette</KDialog.Title>
+            <KDialog.Description class="sr-only">Search commands, chats, settings, and models.</KDialog.Description>
+            <div class="command-input-row">
+              <Show when={pageMeta()}><span class="command-page-prefix">{pageMeta()!.prefix}</span></Show>
+              <Show when={scopeProjectId() && chatPage()}>
+                <button type="button" class="command-scope-chip" aria-label="Search all chats" title="Remove Chats scope" onMouseDown={(event) => event.preventDefault()} onClick={() => { setScopeProjectId(null); input?.focus(); }}>
+                  Chats <span aria-hidden="true">×</span>
+                </button>
+              </Show>
+              <input
+                ref={input}
+                class="command-input"
+                role="combobox"
+                aria-expanded="true"
+                aria-controls="command-listbox"
+                aria-autocomplete="list"
+                aria-activedescendant={selectable().length ? optionId(active()) : undefined}
+                aria-label="Search commands"
+                placeholder={pageMeta()?.placeholder || "Search commands…"}
+                value={query()}
+                onInput={(event) => setQuery(event.currentTarget.value)}
+                onKeyDown={keydown}
+              />
+              <Show when={selectionMode()}><span class="command-selection-count">{selectedTargets().length} selected</span></Show>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                class="command-close"
+                aria-label="Close command palette"
+                title="Close"
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={() => close()}
+              >
+                <XIcon />
+              </Button>
+            </div>
+            <div id="command-listbox" ref={listbox} role="listbox" aria-label={chatPage() ? "Chats" : "Commands"} class="command-list" tabIndex={selectionMode() || moveMode() ? 0 : -1} onKeyDown={keydown}>
+              <Show when={!selectable().length}><p class="command-empty">No matching commands.</p></Show>
+              <For each={rows()}>{renderRow}</For>
+            </div>
           </div>
-          <div id="command-listbox" role="listbox" aria-label="Commands" class="command-list">
-            <Show when={!selectable().length}><p class="command-empty">No matching commands.</p></Show>
-            <For each={rows()}>{renderRow}</For>
+          <Show when={props.details}>
+            <aside class="command-detail-pane" aria-label="Search preview">{props.details}</aside>
+          </Show>
+        </KDialog.Content>
+      </KDialog.Portal>
+    </KDialog.Root>
+    <KAlertDialog.Root open={Boolean(pendingDelete())} onOpenChange={(open) => { if (!open) setPendingDelete(null); }}>
+      <KAlertDialog.Portal>
+        <KAlertDialog.Content class="conduit-modal" onEscapeKeyDown={(event) => { event.preventDefault(); setPendingDelete(null); }}>
+          <div class="conduit-modal-card">
+            <KAlertDialog.Title>Delete {pendingDelete()?.length || 0} chats?</KAlertDialog.Title>
+            <KAlertDialog.Description>This permanently deletes the selected Pi session transcripts and attached files.</KAlertDialog.Description>
+            <div class="dialog-actions"><Button variant="outline" onClick={() => setPendingDelete(null)}>Cancel</Button><Button variant="destructive" onClick={() => void confirmDelete()}>Delete chats</Button></div>
           </div>
-        </div>
-      </KDialog.Content>
-    </KDialog.Portal>
-  </KDialog.Root>;
+        </KAlertDialog.Content>
+      </KAlertDialog.Portal>
+    </KAlertDialog.Root>
+  </>;
 }

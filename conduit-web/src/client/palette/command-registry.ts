@@ -3,8 +3,9 @@
  *
  * Ported from the React app. Palette owns persistent application actions. Add a
  * static command to `paletteCommands`, or a dynamic list via `paletteSources`.
- * Nested lists (settings sections, go-to targets) live behind page portals so
- * the root browse/search view stays short; children only appear on that page.
+ * Nested lists (settings sections, chat search targets, and workspace views)
+ * live behind page portals so the root browse/search view stays short; children
+ * only appear on that page.
  *
  * Command shape:
  *   id, label, group, icon, keywords[], isAvailable(context), run(actions)
@@ -54,7 +55,11 @@ export interface PaletteActions {
   deleteFolder: () => void;
   settings: (section: string) => void;
   workspaceSettings?: (id: string) => void;
-  openChat: (session: ChatSummary, project: Project) => void;
+  openChat: (session: ChatSummary, project: Project) => void | Promise<void>;
+  renameChat: (chat: ChatSummary, project: Project, name: string) => Promise<boolean>;
+  moveChats: (targets: Array<{ chat: ChatSummary; project: Project }>, destination: Project) => Promise<string[]>;
+  copyChatLinks: (targets: Array<{ chat: ChatSummary; project: Project }>) => Promise<boolean>;
+  deleteChats: (targets: Array<{ chat: ChatSummary; project: Project }>) => Promise<string[]>;
   chooseModel: (spec: string) => void;
   chooseEffort: (level: string) => void;
   setChatProfile: (id: string) => void;
@@ -72,6 +77,10 @@ export interface PaletteCommand {
   checked?: boolean;
   detail?: string;
   searchValue?: string;
+  entity?: "chat";
+  chat?: ChatSummary;
+  project?: Project;
+  section?: string;
   kind?: "page";
   page?: string | null;
   isAvailable?: (context: PaletteContext) => boolean;
@@ -104,7 +113,7 @@ export const PALETTE_GROUPS: PaletteGroup[] = [
 /** Only sections the Solid Settings surface renders. Target's `diagnostics` is
  *  omitted (no Solid surface yet) to avoid a dead drill-down entry. */
 export const SETTINGS_SECTIONS = [
-  { id: "ui", label: "UI", keywords: ["interface", "appearance", "renderer", "markdown"] },
+  { id: "ui", label: "UI", keywords: ["interface", "appearance", "renderer", "markdown", "sidebar", "chats"] },
   { id: "profiles", label: "Profiles", keywords: ["template", "tools", "workspace", "general", "agent"] },
   { id: "workspaces", label: "Workspaces", keywords: ["workspace", "folder", "default", "profile"] },
   { id: "models", label: "Models", keywords: ["model", "llm", "provider"] },
@@ -139,6 +148,18 @@ export const PALETTE_PAGES: Record<string, PalettePage> = {
     prefix: "Go to ›",
     placeholder: "Search chats and folders…",
     heading: "Go to",
+  },
+  "chat-search": {
+    id: "chat-search",
+    label: "Search chats…",
+    description: "Find and manage chats across folders and workspaces",
+    icon: "chat",
+    shortcut: "⌘P",
+    keywords: ["search", "find", "chat", "conversation", "folder", "workspace"],
+    group: "commands",
+    prefix: "Chats ›",
+    placeholder: "Search chats and folders…",
+    heading: "Chats",
   },
   workspace: {
     id: "workspace",
@@ -345,8 +366,6 @@ export const paletteCommands: PaletteCommand[] = [{
   run: (actions) => actions.deleteFolder(),
 }];
 
-const NAV_CHAT_LIMIT = 25;
-
 function settingsSectionCommands(context: PaletteContext): PaletteCommand[] {
   return SETTINGS_SECTIONS.map((section) => ({
     id: `settings:${section.id}`,
@@ -391,14 +410,19 @@ function chatCommands(context: PaletteContext): PaletteCommand[] {
   const rows: { project: Project; session: ChatSummary }[] = [];
   for (const project of projects) {
     for (const session of project.sessions || []) {
-      if (session.id === context.chatId) continue;
       rows.push({ project, session });
     }
   }
-  return rows.slice(0, NAV_CHAT_LIMIT).map(({ project, session }) => ({
+  rows.sort((left, right) => String(right.session.createdAt || "").localeCompare(String(left.session.createdAt || ""))
+    || String(right.session.id || "").localeCompare(String(left.session.id || "")));
+  return rows.map(({ project, session }) => ({
     id: `open-chat:${session.id}`,
     group: "navigation",
-    page: "goto",
+    page: "chat-search",
+    entity: "chat",
+    chat: session,
+    project,
+    section: chatDateSection(session.createdAt),
     label: session.title || "Untitled chat",
     detail: project.name,
     description: `Open chat in ${project.name}`,
@@ -410,12 +434,26 @@ function chatCommands(context: PaletteContext): PaletteCommand[] {
   }));
 }
 
+export function chatDateSection(value?: string): string {
+  const timestamp = value ? Date.parse(value) : NaN;
+  if (!Number.isFinite(timestamp)) return "Older";
+  const now = new Date();
+  const date = new Date(timestamp);
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const startOfDate = new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
+  const days = Math.floor((startOfToday - startOfDate) / 86_400_000);
+  if (days <= 0) return "Today";
+  if (days === 1) return "Yesterday";
+  if (days <= 7) return "Previous 7 days";
+  return "Older";
+}
+
 function folderCommands(context: PaletteContext): PaletteCommand[] {
   const projects = Array.isArray(context.projects) ? context.projects : [];
   return projects.map((project) => ({
     id: `new-chat-in:${project.id}`,
     group: "navigation",
-    page: "goto",
+    page: "chat-search",
     label: `New chat in ${project.name}`,
     detail: project.slug === "chat" ? "Default chats" : "Folder",
     description: `Start a chat in ${project.name}`,
@@ -501,11 +539,11 @@ export const paletteSources: PaletteSource[] = [{
   },
 }, {
   id: "chats",
-  page: "goto",
+  page: "chat-search",
   commands: chatCommands,
 }, {
   id: "folders",
-  page: "goto",
+  page: "chat-search",
   commands: folderCommands,
 }];
 
@@ -544,7 +582,10 @@ function filterAvailable(items: PaletteCommand[], context: PaletteContext): Pale
  * - page set: only that page's children
  */
 export function resolvePaletteCommands(context: PaletteContext, options: { page?: string | null } = {}): PaletteCommand[] {
-  const page = options.page || null;
+  const requestedPage = options.page || null;
+  // `goto` remains a compatibility alias for bookmarks and the existing
+  // Cmd/Ctrl+Shift+O shortcut. Both aliases use the same first-class chat mode.
+  const page = requestedPage === "goto" ? "chat-search" : requestedPage;
 
   if (page) {
     return paletteSources

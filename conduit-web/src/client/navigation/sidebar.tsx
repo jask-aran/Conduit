@@ -14,6 +14,7 @@ import {
   PaletteIcon,
   PencilIcon,
   PlusIcon,
+  SearchIcon,
   Settings2Icon,
   TerminalIcon,
   Trash2Icon,
@@ -128,7 +129,8 @@ export function Sidebar(props: {
   onOpenTerminal: (chat: ChatSummary, project: Project) => void;
   onOpenWorkspaceIdentity: (project: Project) => void;
   onOpenSettings: (section?: string, workspaceId?: string | null) => void;
-  onOpenPalette: () => void;
+  onOpenPalette: (page?: string | null, chatScopeProjectId?: string | null) => void;
+  chatLimit: number;
   mobileOpen: boolean;
   onMobileOpenChange: (open: boolean) => void;
   command?: { type: string; nonce: number } | null;
@@ -296,6 +298,23 @@ export function Sidebar(props: {
     const available = new Set(props.projects.flatMap((project) => project.sessions.map((chat) => chat.id)));
     const retained = [...selectedChatIds()].filter((id) => available.has(id));
     if (retained.length !== selectedChatIds().size) setSelectedChatIds(new Set(retained));
+  });
+  createEffect(() => {
+    const selectedId = props.selectedId;
+    if (!selectedId) return;
+    const owner = props.projects.find((project) => project.sessions.some((chat) => chat.id === selectedId));
+    if (!owner) return;
+    if (collapsedProjectIds().has(owner.id)) {
+      setCollapsedProjectIds((current) => {
+        const next = new Set(current);
+        next.delete(owner.id);
+        return next;
+      });
+    }
+    queueMicrotask(() => {
+      const row = document.querySelector<HTMLElement>(`[data-chat-id="${CSS.escape(selectedId)}"]`);
+      row?.scrollIntoView({ block: "nearest" });
+    });
   });
   createEffect(() => {
     const open = props.mobileOpen;
@@ -533,6 +552,7 @@ export function Sidebar(props: {
     <ContextMenuTrigger
       as="button"
       class="sidebar-row sidebar-chat"
+      data-chat-id={menuProps.chat.id}
       aria-current={props.selectedId === menuProps.chat.id ? "page" : undefined}
       aria-label={`${menuProps.chat.title || "New chat"}${selected() ? ", selected" : ""}`}
       data-selected={selected() ? "true" : undefined}
@@ -654,23 +674,39 @@ export function Sidebar(props: {
     </div>;
   };
 
-  const Group = (groupProps: { label: string; projects: Project[]; chatRoot?: Project; workspace?: boolean; emptyLabel?: string; onAdd?: () => void; addLabel?: string }) => <section class="sidebar-group">
-    <div class="sidebar-group-header">
-      <div data-sidebar="group-label">{groupProps.label}</div>
-      <Show when={groupProps.onAdd}>
-        <button class="sidebar-group-action" aria-label={groupProps.addLabel} title={groupProps.addLabel} onClick={groupProps.onAdd}>
-          {groupProps.label === "Chats" ? <PlusIcon /> : <FolderPlusIcon />}
-        </button>
+  const Group = (groupProps: { label: string; projects: Project[]; chatRoot?: Project; workspace?: boolean; emptyLabel?: string; onAdd?: () => void; addLabel?: string }) => {
+    const allChats = () => groupProps.chatRoot?.sessions.filter((chat) => chat.status !== "draft" || chat.id !== props.selectedId || chat.pinned || Boolean(props.runtime.getProcess(chat.id))) || [];
+    const visibleChats = () => {
+      const chats = allChats();
+      if (chats.length <= props.chatLimit) return chats;
+      const selected = chats.find((chat) => chat.id === props.selectedId);
+      const first = chats.slice(0, Math.max(0, props.chatLimit));
+      if (!selected || first.some((chat) => chat.id === selected.id)) return first;
+      return [...first.slice(0, Math.max(0, props.chatLimit - 1)), selected];
+    };
+    const moreChats = () => Math.max(0, allChats().length - visibleChats().length);
+    return <section class="sidebar-group">
+      <div class="sidebar-group-header">
+        <div data-sidebar="group-label">{groupProps.label}</div>
+        <Show when={groupProps.onAdd}>
+          <button class="sidebar-group-action" aria-label={groupProps.addLabel} title={groupProps.addLabel} onClick={groupProps.onAdd}>
+            {groupProps.label === "Chats" ? <PlusIcon /> : <FolderPlusIcon />}
+          </button>
+        </Show>
+      </div>
+      <Show when={groupProps.chatRoot}>
+        <For each={visibleChats()}>{(chat) => <ChatMenu chat={chat} project={groupProps.chatRoot!} />}</For>
+        <Show when={moreChats() > 0}>
+          <button type="button" class="sidebar-view-more" onClick={() => props.onOpenPalette("chat-search", groupProps.chatRoot!.id)}>
+            <SearchIcon /><span>View all chats</span><small>{moreChats()} more</small>
+          </button>
+        </Show>
+        <Show when={!allChats().length}><div class="sidebar-empty">No chats</div></Show>
       </Show>
-    </div>
-    <Show when={groupProps.chatRoot}>
-      {/* Hide the transient auto-created draft while it's selected; keep
-          explicitly created (pinned) drafts and any chat with a live process. */}
-      <For each={groupProps.chatRoot!.sessions.filter((chat) => chat.status !== "draft" || chat.id !== props.selectedId || chat.pinned || Boolean(props.runtime.getProcess(chat.id)))}>{(chat) => <ChatMenu chat={chat} project={groupProps.chatRoot!} />}</For>
-    </Show>
-    <For each={groupProps.projects}>{(project) => <ProjectBlock project={project} workspace={groupProps.workspace} />}</For>
-    <Show when={!groupProps.chatRoot && !groupProps.projects.length && groupProps.emptyLabel}><div class="sidebar-empty">{groupProps.emptyLabel}</div></Show>
-  </section>;
+      <For each={groupProps.projects}>{(project) => <ProjectBlock project={project} workspace={groupProps.workspace} />}</For>
+      <Show when={!groupProps.chatRoot && !groupProps.projects.length && groupProps.emptyLabel}><div class="sidebar-empty">{groupProps.emptyLabel}</div></Show>
+    </section>;
+  };
 
   const connectionLabel = () => props.connectivity === "online" ? "Server connected" : props.connectivity === "offline" ? "Server unavailable" : props.connectivity === "reconnecting" ? "Reconnecting" : "Connecting";
   const connectionTone = () => props.connectivity === "online" ? "success" : props.connectivity === "offline" ? "danger" : props.connectivity === "reconnecting" ? "warn" : "muted";

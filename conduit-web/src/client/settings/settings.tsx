@@ -7,6 +7,7 @@ import { api } from "../api/client";
 import { MARKDOWN_RENDERER_OPTIONS, type MarkdownRendererId } from "../chat/markdown-settings";
 import type { Installation, ModelOption, Project, Template } from "../api/contracts";
 import type { ModelSettings } from "../state/model-settings";
+import { MAX_SIDEBAR_CHAT_LIMIT, MIN_SIDEBAR_CHAT_LIMIT } from "../navigation/sidebar-preferences";
 
 const sections = ["general", "ui", "models", "profiles", "runtime", "workspaces", "search", "auth"] as const;
 type Section = typeof sections[number];
@@ -84,6 +85,8 @@ export function Settings(props: {
   onWorkspaceDefaultChange: (id: string, templateId: string | null) => Promise<Project>;
   markdownRenderer: MarkdownRendererId;
   onMarkdownRendererChange: (renderer: MarkdownRendererId) => void;
+  sidebarChatLimit: number;
+  onSidebarChatLimitChange: (limit: number) => void;
 }) {
   const [section, setSection] = createSignal<Section>(props.initialSection || "models");
   const [scope, setScope] = createSignal<string[]>([]);
@@ -365,6 +368,11 @@ export function Settings(props: {
                   <For each={MARKDOWN_RENDERER_OPTIONS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
                 </select>
                 <small>Choose the Markdown renderer used for complete and streaming answers.</small>
+              </Field>
+              <Field>
+                <FieldLabel for="sidebar-chat-limit">Chats shown in sidebar</FieldLabel>
+                <Input id="sidebar-chat-limit" type="number" min={MIN_SIDEBAR_CHAT_LIMIT} max={MAX_SIDEBAR_CHAT_LIMIT} step="1" value={props.sidebarChatLimit} onChange={(event) => props.onSidebarChatLimitChange(Number(event.currentTarget.value))} onBlur={(event) => props.onSidebarChatLimitChange(Number(event.currentTarget.value))} />
+                <small>Show this many recent chats in the Chats group. Use View all chats to search older chats.</small>
               </Field>
             </FieldGroup>
           </Show>

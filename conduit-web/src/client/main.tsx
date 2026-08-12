@@ -19,6 +19,7 @@ import { CommandMenu } from "./navigation/command-menu";
 import type { PaletteActions, PaletteContext } from "./palette/command-registry";
 import { bindVisualViewportShell, isMobileLayout, MOBILE_LAYOUT_QUERY, setMobileOverlayKind } from "./navigation/mobile-layout";
 import { Sidebar } from "./navigation/sidebar";
+import { clampSidebarChatLimit, selectedSidebarChatLimit, SIDEBAR_CHAT_LIMIT_STORAGE_KEY } from "./navigation/sidebar-preferences";
 import { WorkspaceAppearanceEditor } from "./project/workspace-appearance-editor";
 import { Settings } from "./settings/settings";
 import { createActiveChat } from "./state/active-chat";
@@ -84,6 +85,7 @@ function App() {
   const [partialContinue, setPartialContinue] = createSignal(true);
   const [maxAttachmentBytes, setMaxAttachmentBytes] = createSignal(DEFAULT_MAX_ATTACHMENT_BYTES);
   const [markdownRenderer, setMarkdownRenderer] = createSignal<MarkdownRendererId>(selectedMarkdownRenderer());
+  const [sidebarChatLimit, setSidebarChatLimit] = createSignal(selectedSidebarChatLimit());
   const [settingsOpen, setSettingsOpen] = createSignal(false);
   const [settingsSection, setSettingsSection] = createSignal<SettingsSection>("models");
   const [settingsWorkspaceId, setSettingsWorkspaceId] = createSignal<string | null>(null);
@@ -91,6 +93,8 @@ function App() {
   const [workspaceIdentitySaving, setWorkspaceIdentitySaving] = createSignal(false);
   const [paletteOpen, setPaletteOpen] = createSignal(false);
   const [palettePage, setPalettePage] = createSignal<string | null>(null);
+  const [paletteDirectLaunch, setPaletteDirectLaunch] = createSignal(false);
+  const [paletteChatScopeProjectId, setPaletteChatScopeProjectId] = createSignal<string | null>(null);
   const [paletteNonce, setPaletteNonce] = createSignal(0);
   const [sidebarCommand, setSidebarCommand] = createSignal<{ type: string; nonce: number } | null>(null);
   const [dropActive, setDropActive] = createSignal(false);
@@ -469,12 +473,23 @@ function App() {
     setMarkdownRenderer(next);
     localStorage.setItem(MARKDOWN_RENDERER_STORAGE_KEY, next);
   };
+  const switchSidebarChatLimit = (next: number) => {
+    const value = clampSidebarChatLimit(next);
+    setSidebarChatLimit(value);
+    localStorage.setItem(SIDEBAR_CHAT_LIMIT_STORAGE_KEY, String(value));
+  };
   const saveDefaultTemplate = async (id: string) => {
     const saved = await api<{ defaultTemplateId: string }>("/v0/preferences", { method: "PATCH", body: JSON.stringify({ defaultTemplateId: id }) });
     setDefaultTemplateId(saved.defaultTemplateId || id);
     return saved;
   };
-  const openPalette = (page: string | null = null) => { setPalettePage(page); setPaletteNonce((value) => value + 1); setPaletteOpen(true); };
+  const openPalette = (page: string | null = null, chatScopeProjectId: string | null = null, direct = false) => {
+    setPalettePage(page);
+    setPaletteChatScopeProjectId(chatScopeProjectId);
+    setPaletteDirectLaunch(direct);
+    setPaletteNonce((value) => value + 1);
+    setPaletteOpen(true);
+  };
   const togglePanel = () => {
     const next = !panelOpen();
     if (next && isMobileLayout()) setMobileSidebarOpen(false);
@@ -580,6 +595,10 @@ function App() {
     settings: (section) => openSettings(section),
     workspaceSettings: (id) => openSettings("workspaces", id),
     openChat: (session, project) => { setMobileSidebarOpen(false); void openChat(session, project); },
+    renameChat,
+    moveChats,
+    copyChatLinks,
+    deleteChats,
     chooseModel: (spec) => void models.chooseModel(spec),
     chooseEffort: (level) => void models.chooseEffort(level),
     setChatProfile: (id) => void switchProfile(id),
@@ -594,7 +613,8 @@ function App() {
     if (!(event.metaKey || event.ctrlKey) || event.altKey) return;
     const key = event.key.toLowerCase();
     if (key === "k" && !event.shiftKey) { event.preventDefault(); if (paletteOpen()) setPaletteOpen(false); else openPalette(null); }
-    if (key === "o" && event.shiftKey) { event.preventDefault(); openPalette("goto"); }
+    if (key === "p" && !event.shiftKey) { event.preventDefault(); openPalette("chat-search", null, true); }
+    if (key === "o" && event.shiftKey) { event.preventDefault(); openPalette("goto", null, true); }
     if (key === "c" && event.shiftKey) { event.preventDefault(); setMobileSidebarOpen(false); void createChat(); }
     if (key === "b" && !event.shiftKey) { event.preventDefault(); runSidebar("toggle-sidebar"); }
     if (key === "." && !event.shiftKey) { event.preventDefault(); togglePanel(); }
@@ -717,7 +737,7 @@ function App() {
         <Show when={workspaceIdentityProject()}>{(project) => <WorkspaceAppearanceEditor compact value={project().workspaceAppearance} saving={workspaceIdentitySaving()} onSave={(appearance) => void saveWorkspaceIdentity(appearance)} />}</Show>
       </DialogContent>
     </Dialog>
-    <Sidebar projects={catalogue.projects()} projectId={catalogue.projectId()} selectedId={catalogue.selectedId()} runtime={runtime}
+    <Sidebar projects={catalogue.projects()} projectId={catalogue.projectId()} selectedId={catalogue.selectedId()} runtime={runtime} chatLimit={sidebarChatLimit()}
       connectivity={runtime.connectivity()} workspaceSuggestions={workspaceSuggestions()} workspacePolicy={workspacePolicy()} command={sidebarCommand()}
       mobileOpen={mobileSidebarOpen()} onMobileOpenChange={setMobileSidebar}
       onWorkspaceSuggestionsNeeded={() => void loadWorkspaceSuggestions()}
@@ -725,7 +745,7 @@ function App() {
       onMoveChat={moveChat} onMoveChats={moveChats} onMoveProjectChats={moveProjectChats} onCopyTranscript={copyTranscript} onCopyChatLinks={copyChatLinks}
       onDeleteChat={deleteChat} onDeleteChats={deleteChats} onDeleteProject={deleteProject}
       onOpenTerminal={(target, project) => { void openChat(target, project).then(() => openWorkspaceView("terminal")); }}
-      onOpenWorkspaceIdentity={openWorkspaceIdentity} onOpenSettings={openSettings} onOpenPalette={() => openPalette(null)} />
+      onOpenWorkspaceIdentity={openWorkspaceIdentity} onOpenSettings={openSettings} onOpenPalette={(page, scope) => openPalette(page || null, scope || null, page === "chat-search")} />
     <main data-slot="sidebar-inset" class={`chat-main${routeKind() === "chat" && emptyChat() ? " chat-main-empty" : ""}`} {...(routeKind() === "chat" ? dropHandlers : {})}>
       <Show when={routeBootstrap() === "ready"} fallback={<div class="chat-bootstrap" role={routeBootstrap() === "error" ? "alert" : "status"}>{routeBootstrap() === "error"
         ? routeBootstrapError() || (routeKind() === "project" ? "This project could not be loaded." : "This chat could not be loaded.")
@@ -756,9 +776,9 @@ function App() {
       </Show>
     </main>
     <Show when={Boolean(selectedProject()) && Boolean(workspacePanelScope())}><WorkspacePanel projectId={() => selectedProject()!.id} chatId={() => workspacePanelScope()!} open={panelOpen} requestedTab={workspaceViewRequest} onClose={togglePanel} /></Show>
-    <CommandMenu open={paletteOpen()} onOpenChange={setPaletteOpen} initialPage={palettePage()} launchNonce={paletteNonce()}
+    <CommandMenu open={paletteOpen()} onOpenChange={setPaletteOpen} initialPage={palettePage()} launchNonce={paletteNonce()} directLaunch={paletteDirectLaunch()} chatScopeProjectId={paletteChatScopeProjectId()}
       context={paletteContext()} actions={paletteActions} models={models.models()} currentModel={models.model()} onChooseModel={(spec) => void models.chooseModel(spec)} />
-    <Settings open={settingsOpen()} initialSection={settingsSection()} initialWorkspaceId={settingsWorkspaceId()} onOpenChange={setSettingsOpen} models={models} templates={templates()} templatesLoading={templatesLoading()} defaultTemplateId={defaultTemplateId()} projects={catalogue.projects()} installations={installations()} installationsLoading={installationsLoading()} onInstallationsChange={setInstallations} onDefaultTemplateChange={saveDefaultTemplate} onWorkspaceDefaultChange={saveWorkspaceDefault} markdownRenderer={markdownRenderer()} onMarkdownRendererChange={switchMarkdownRenderer} />
+    <Settings open={settingsOpen()} initialSection={settingsSection()} initialWorkspaceId={settingsWorkspaceId()} onOpenChange={setSettingsOpen} models={models} templates={templates()} templatesLoading={templatesLoading()} defaultTemplateId={defaultTemplateId()} projects={catalogue.projects()} installations={installations()} installationsLoading={installationsLoading()} onInstallationsChange={setInstallations} onDefaultTemplateChange={saveDefaultTemplate} onWorkspaceDefaultChange={saveWorkspaceDefault} markdownRenderer={markdownRenderer()} onMarkdownRendererChange={switchMarkdownRenderer} sidebarChatLimit={sidebarChatLimit()} onSidebarChatLimitChange={switchSidebarChatLimit} />
   </>;
 }
 
