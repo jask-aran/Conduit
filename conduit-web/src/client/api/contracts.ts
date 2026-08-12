@@ -82,10 +82,23 @@ export interface ProjectDashboardPayload {
   recentChats: DashboardChat[];
 }
 
+export interface WorkspacePolicy {
+  allowlist: string[];
+  defaultRoot: string | null;
+  defaultInputPath: string | null;
+  suggestionRoot: string;
+  modes: string[];
+}
+
 export interface WorkspaceSuggestion {
   name: string;
   path: string;
   displayPath?: string;
+}
+
+export interface WorkspaceSuggestionsPayload extends WorkspacePolicy {
+  root: string;
+  folders: WorkspaceSuggestion[];
 }
 
 export interface Attachment {

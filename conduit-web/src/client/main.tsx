@@ -7,9 +7,9 @@ import { Toaster, toast } from "solid-sonner";
 import "solid-sonner/styles.css";
 import { DefaultMeteorShower } from "@jask-aran/solid-components/meteor-shower";
 import "@jask-aran/solid-components/meteor-shower.css";
-import { Button, Spinner } from "@/components/primitives";
+import { Button, Dialog, DialogContent, Spinner } from "@/components/primitives";
 import { api, asList, pathChatId, pathProjectId, projectPath } from "./api/client";
-import type { ChatSummary, DashboardChat, Installation, Project, RuntimeIdentity, Template, TranscriptDetail, WorkspaceAppearance, WorkspaceSuggestion } from "./api/contracts";
+import type { ChatSummary, DashboardChat, Installation, Project, RuntimeIdentity, Template, TranscriptDetail, WorkspaceAppearance, WorkspacePolicy, WorkspaceSuggestion, WorkspaceSuggestionsPayload } from "./api/contracts";
 import { createErrorDiagnostic, formatRuntimeDiagnosticPrompt, type ErrorDiagnostic, type ErrorDiagnosticContext } from "./error-diagnostics";
 import { Composer } from "./chat/composer";
 import { HostUiRequests } from "./chat/host-ui-card";
@@ -19,12 +19,14 @@ import { CommandMenu } from "./navigation/command-menu";
 import type { PaletteActions, PaletteContext } from "./palette/command-registry";
 import { bindVisualViewportShell, isMobileLayout, MOBILE_LAYOUT_QUERY, setMobileOverlayKind } from "./navigation/mobile-layout";
 import { Sidebar } from "./navigation/sidebar";
+import { WorkspaceAppearanceEditor } from "./project/workspace-appearance-editor";
 import { Settings } from "./settings/settings";
 import { createActiveChat } from "./state/active-chat";
 import { createAttachments, DEFAULT_MAX_ATTACHMENT_BYTES } from "./state/attachments";
 import { createCatalogueStore } from "./state/catalogue";
 import { createModelSettings } from "./state/model-settings";
 import { createRuntimeStore } from "./state/runtime";
+import "./project/dashboard.css";
 import "./styles.css";
 
 if (import.meta.env.PROD) registerSW({ immediate: true });
@@ -77,6 +79,7 @@ function App() {
   const [installations, setInstallations] = createSignal<Installation[]>([]);
   const [installationsLoading, setInstallationsLoading] = createSignal(true);
   const [workspaceSuggestions, setWorkspaceSuggestions] = createSignal<WorkspaceSuggestion[]>([]);
+  const [workspacePolicy, setWorkspacePolicy] = createSignal<WorkspacePolicy | null>(null);
   const [defaultTemplateId, setDefaultTemplateId] = createSignal("chat");
   const [partialContinue, setPartialContinue] = createSignal(true);
   const [maxAttachmentBytes, setMaxAttachmentBytes] = createSignal(DEFAULT_MAX_ATTACHMENT_BYTES);
@@ -84,6 +87,8 @@ function App() {
   const [settingsOpen, setSettingsOpen] = createSignal(false);
   const [settingsSection, setSettingsSection] = createSignal<SettingsSection>("models");
   const [settingsWorkspaceId, setSettingsWorkspaceId] = createSignal<string | null>(null);
+  const [workspaceIdentityId, setWorkspaceIdentityId] = createSignal<string | null>(null);
+  const [workspaceIdentitySaving, setWorkspaceIdentitySaving] = createSignal(false);
   const [paletteOpen, setPaletteOpen] = createSignal(false);
   const [palettePage, setPalettePage] = createSignal<string | null>(null);
   const [paletteNonce, setPaletteNonce] = createSignal(0);
@@ -128,6 +133,28 @@ function App() {
     const saved = await api<Project>(`/v0/projects/${encodeURIComponent(workspaceId)}`, { method: "PATCH", body: JSON.stringify({ workspaceAppearance }) });
     catalogue.setProjects((current) => current.map((project) => project.id === workspaceId ? { ...project, ...saved, sessions: project.sessions } : project));
     return saved;
+  };
+
+  const workspaceIdentityProject = createMemo(() => {
+    const id = workspaceIdentityId();
+    return id ? catalogue.projects().find((project) => project.id === id) : undefined;
+  });
+  const openWorkspaceIdentity = (project: Project) => setWorkspaceIdentityId(project.id);
+  const closeWorkspaceIdentity = () => {
+    if (!workspaceIdentitySaving()) setWorkspaceIdentityId(null);
+  };
+  const saveWorkspaceIdentity = async (appearance: WorkspaceAppearance) => {
+    const project = workspaceIdentityProject();
+    if (!project || workspaceIdentitySaving()) return;
+    setWorkspaceIdentitySaving(true);
+    try {
+      await saveWorkspaceAppearance(project.id, appearance);
+      setWorkspaceIdentityId(null);
+    } catch (error) {
+      showError(error);
+    } finally {
+      setWorkspaceIdentitySaving(false);
+    }
   };
 
   const chat = createActiveChat({ catalogue, runtime, models, attachments, onError: showError, defaultTemplateId, saveWorkspaceDefault });
@@ -482,9 +509,21 @@ function App() {
   const runSidebar = (type: string) => setSidebarCommand({ type, nonce: Date.now() });
   const loadWorkspaceSuggestions = () => {
     if (workspaceSuggestionsRequest) return workspaceSuggestionsRequest;
-    workspaceSuggestionsRequest = api<{ folders: WorkspaceSuggestion[] }>("/v0/workspaces/suggestions")
-      .then((payload) => { setWorkspaceSuggestions(asList<WorkspaceSuggestion>(payload.folders)); })
-      .catch(() => { setWorkspaceSuggestions([]); });
+    workspaceSuggestionsRequest = api<WorkspaceSuggestionsPayload>("/v0/workspaces/suggestions")
+      .then((payload) => {
+        setWorkspaceSuggestions(asList<WorkspaceSuggestion>(payload.folders));
+        setWorkspacePolicy({
+          allowlist: asList<string>(payload.allowlist),
+          defaultRoot: payload.defaultRoot || null,
+          defaultInputPath: payload.defaultInputPath || null,
+          suggestionRoot: String(payload.suggestionRoot || payload.root || ""),
+          modes: asList<string>(payload.modes),
+        });
+      })
+      .catch(() => {
+        setWorkspaceSuggestions([]);
+        setWorkspacePolicy(null);
+      });
     return workspaceSuggestionsRequest;
   };
 
@@ -673,15 +712,20 @@ function App() {
   return <>
     <Toaster richColors />
     <input ref={attachFileInput} type="file" multiple hidden aria-hidden="true" onChange={(event) => { if (event.currentTarget.files) attachments.addFiles(event.currentTarget.files); event.currentTarget.value = ""; }} />
+    <Dialog open={Boolean(workspaceIdentityProject())} onOpenChange={(open) => { if (!open) closeWorkspaceIdentity(); }}>
+      <DialogContent class="workspace-appearance-dialog" title="Workspace identity" description="Choose a short mark or a Lucide icon, then choose a preset or custom color.">
+        <Show when={workspaceIdentityProject()}>{(project) => <WorkspaceAppearanceEditor compact value={project().workspaceAppearance} saving={workspaceIdentitySaving()} onSave={(appearance) => void saveWorkspaceIdentity(appearance)} />}</Show>
+      </DialogContent>
+    </Dialog>
     <Sidebar projects={catalogue.projects()} projectId={catalogue.projectId()} selectedId={catalogue.selectedId()} runtime={runtime}
-      connectivity={runtime.connectivity()} workspaceSuggestions={workspaceSuggestions()} command={sidebarCommand()}
+      connectivity={runtime.connectivity()} workspaceSuggestions={workspaceSuggestions()} workspacePolicy={workspacePolicy()} command={sidebarCommand()}
       mobileOpen={mobileSidebarOpen()} onMobileOpenChange={setMobileSidebar}
       onWorkspaceSuggestionsNeeded={() => void loadWorkspaceSuggestions()}
       onNewChat={async (project) => { await createChat(project); }} onOpenChat={openChat} onOpenProject={openProject} onAddProject={addProject} onRenameChat={renameChat} onRenameProject={renameProject}
       onMoveChat={moveChat} onMoveChats={moveChats} onMoveProjectChats={moveProjectChats} onCopyTranscript={copyTranscript} onCopyChatLinks={copyChatLinks}
       onDeleteChat={deleteChat} onDeleteChats={deleteChats} onDeleteProject={deleteProject}
       onOpenTerminal={(target, project) => { void openChat(target, project).then(() => openWorkspaceView("terminal")); }}
-      onOpenSettings={openSettings} onOpenPalette={() => openPalette(null)} />
+      onOpenWorkspaceIdentity={openWorkspaceIdentity} onOpenSettings={openSettings} onOpenPalette={() => openPalette(null)} />
     <main data-slot="sidebar-inset" class={`chat-main${routeKind() === "chat" && emptyChat() ? " chat-main-empty" : ""}`} {...(routeKind() === "chat" ? dropHandlers : {})}>
       <Show when={routeBootstrap() === "ready"} fallback={<div class="chat-bootstrap" role={routeBootstrap() === "error" ? "alert" : "status"}>{routeBootstrap() === "error"
         ? routeBootstrapError() || (routeKind() === "project" ? "This project could not be loaded." : "This chat could not be loaded.")

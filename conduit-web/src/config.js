@@ -40,6 +40,9 @@ export function loadConfig(env = process.env) {
     fallback: [os.homedir(), repositoryRoot, filesRoot],
   });
   const workspaceSuggestionRoot = absolute(env.CONDUIT_WORKSPACE_SUGGESTION_ROOT || os.homedir());
+  const workspaceDefaultRoot = absolute(
+    env.CONDUIT_WORKSPACE_DEFAULT_ROOT || env.CONDUIT_WORKSPACE_SUGGESTION_ROOT || os.homedir(),
+  );
   const piAgentDir = absolute(env.CONDUIT_PI_AGENT_DIR || path.join(dataRoot, "pi"));
   const modelProfilesFile = absolute(env.CONDUIT_MODEL_PROFILES_FILE || path.join(templatesRoot, "model-profiles.json"));
   const installations = new PiInstallationRegistry({
@@ -75,6 +78,7 @@ export function loadConfig(env = process.env) {
     allowInsecure: env.CONDUIT_ALLOW_INSECURE === "1",
     templatesRoot,
     workspaceAllowlist,
+    workspaceDefaultRoot,
     workspaceSuggestionRoot,
     piTemplates: discovered,
     piTemplateById: byId,

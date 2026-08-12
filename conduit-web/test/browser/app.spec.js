@@ -42,6 +42,15 @@ const templates = [{
   tools: ["read", "write", "edit", "bash"],
 }];
 
+const nativeWorkspaceSuggestions = {
+  root: "/home/user",
+  allowlist: ["/home/user"],
+  defaultRoot: "/home/user",
+  defaultInputPath: "~",
+  suggestionRoot: "/home/user",
+  modes: ["managed", "linked", "created", "cloned"],
+};
+
 const unhandledApiRequests = new WeakMap();
 
 async function openSidebar(page, testInfo) {
@@ -115,7 +124,7 @@ test.beforeEach(async ({ page }) => {
     await route.fulfill({ json: { templates, defaultTemplateId: "chat" } });
   });
   await page.route("**/v0/workspaces/suggestions", async (route) => {
-    await route.fulfill({ json: { folders: [] } });
+    await route.fulfill({ json: { ...nativeWorkspaceSuggestions, folders: [] } });
   });
   await page.route("**/v0/preferences", async (route) => {
     const body = route.request().postDataJSON?.() || {};
@@ -1885,6 +1894,28 @@ test("cold-loads a viewport-filling thread pinned to the true bottom after Markd
   expect(worstDistanceFromBottom).toBeLessThanOrEqual(32);
 });
 
+test("uses the container workspace namespace for defaults and suggestions", async ({ page }, testInfo) => {
+  await page.unroute("**/v0/workspaces/suggestions");
+  await page.route("**/v0/workspaces/suggestions", (route) => route.fulfill({ json: {
+    root: "/workspaces",
+    allowlist: ["/workspaces"],
+    defaultRoot: "/workspaces",
+    defaultInputPath: "/workspaces",
+    suggestionRoot: "/workspaces",
+    modes: ["managed", "linked", "created", "cloned"],
+    folders: [{ name: "existing-repo", path: "/workspaces/existing-repo", displayPath: "/workspaces/existing-repo" }],
+  } }));
+  await page.goto("/");
+  await openSidebar(page, testInfo);
+  await page.getByRole("button", { name: "New workspace" }).click();
+  const dialog = page.getByRole("dialog", { name: "Add workspace" });
+  await expect(dialog.getByLabel("Existing folder")).toHaveAttribute("placeholder", "/workspaces/existing-folder");
+  await dialog.getByRole("radio", { name: /Create folder/ }).click();
+  await expect(dialog.getByLabel("Parent directory")).toHaveValue("/workspaces");
+  await expect(dialog.getByText(/New folders and clones start in \/workspaces/)).toBeVisible();
+  await expect(dialog.locator("#workspace-path-suggestions option[value='/workspaces/existing-repo']")).toHaveCount(1);
+});
+
 test("renders a selected chat before optional startup data and loads workspace suggestions on demand", async ({ page }, testInfo) => {
   let releaseOptional;
   const optionalGate = new Promise((resolve) => { releaseOptional = resolve; });
@@ -1910,7 +1941,7 @@ test("renders a selected chat before optional startup data and loads workspace s
   let suggestionRequests = 0;
   await page.route("**/v0/workspaces/suggestions", async (route) => {
     suggestionRequests += 1;
-    await route.fulfill({ json: { folders: [] } });
+    await route.fulfill({ json: { ...nativeWorkspaceSuggestions, folders: [] } });
   });
 
   await page.goto("/chat/session_existing");
@@ -2427,16 +2458,35 @@ test("opens a targeted Workspace settings card from its context menu", async ({ 
     origin: "linked",
     path: "/home/user/JaskFish",
     defaultTemplateId: null,
+    workspaceAppearance: { mode: "icon", value: "boxes", color: "mauve" },
     sessions: [],
   };
   await page.unroute("**/v0/projects");
   await page.route("**/v0/projects", (route) => route.fulfill({ json: { projects: [...projects, workspace] } }));
   await page.route("**/v0/projects/project_workspace", async (route) => {
     const body = route.request().postDataJSON();
-    await route.fulfill({ json: { ...workspace, defaultTemplateId: body.defaultTemplateId } });
+    await route.fulfill({ json: {
+      ...workspace,
+      defaultTemplateId: Object.hasOwn(body, "defaultTemplateId") ? body.defaultTemplateId : workspace.defaultTemplateId,
+      workspaceAppearance: Object.hasOwn(body, "workspaceAppearance") ? body.workspaceAppearance : workspace.workspaceAppearance,
+    } });
   });
   await page.goto("/");
   await openSidebar(page, testInfo);
+  await page.getByRole("button", { name: "JaskFish" }).click({ button: "right" });
+  await page.getByRole("menuitem", { name: "Identity", exact: true }).click();
+  const identity = page.getByRole("dialog", { name: "Workspace identity" });
+  await expect(identity.locator('[data-workspace-appearance="editor"]')).toBeVisible();
+  await identity.getByRole("button", { name: "Browse icons" }).click();
+  await identity.getByRole("radio", { name: "Atom" }).click();
+  const appearanceRequest = page.waitForRequest((request) => request.url().endsWith("/v0/projects/project_workspace")
+    && request.method() === "PATCH" && request.postDataJSON()?.workspaceAppearance);
+  await identity.getByRole("button", { name: "Save identity" }).click();
+  expect((await appearanceRequest).postDataJSON()).toEqual({ workspaceAppearance: { mode: "icon", value: "atom", color: "mauve" } });
+  await expect(identity).toBeHidden();
+  await openSidebar(page, testInfo);
+  await expect(page.getByRole("button", { name: "JaskFish" }).locator(".workspace-glyph")).toHaveAttribute("data-value", "atom");
+
   await page.getByRole("button", { name: "JaskFish" }).click({ button: "right" });
   await page.getByRole("menuitem", { name: "Workspace settings" }).click();
   const settings = page.getByRole("dialog", { name: "Settings" });

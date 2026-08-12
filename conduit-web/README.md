@@ -274,8 +274,10 @@ starting, and browser-attached processes remain resident.
 - `GET /v0/projects/:id/file?path=…` returns a size-capped text preview
 - `GET /v0/projects/:id/diff` returns bounded Git status; `?patch=1&reuse=1` reuses the short-lived status inspection and additionally returns staged/unstaged unified diff after the patch disclosure opens
 - `POST /v0/projects/:id/move-sessions`
-- `GET /v0/workspaces/policy` returns the server-owned linked-workspace roots
-- `GET /v0/workspaces/suggestions` returns visible direct folders under `~/`
+- `GET /v0/workspaces/policy` returns the server-owned allowlist, default
+  Workspace parent, and input-safe default path
+- `GET /v0/workspaces/suggestions` returns visible direct folders under the
+  configured suggestion root, using `~` only for paths under the native home
 - `GET /v0/workspaces/:id/native-preflight` reports derived host trust/resource status
 - `GET /v0/pi-installations` lists safe installation/version status
 - `POST /v0/pi-installations/host/detect` re-detects the host Pi executable

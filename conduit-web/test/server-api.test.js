@@ -71,6 +71,8 @@ exit 0
   await fs.chmod(fakeGit, 0o755);
   const workspace = path.join(root, "workspace");
   const workspaceParent = path.join(root, "workspace-parent");
+  const home = path.join(root, "home");
+  await fs.mkdir(home);
   await fs.mkdir(workspace);
   await fs.mkdir(workspaceParent);
   const child = spawn(process.execPath, ["src/server.js"], {
@@ -78,7 +80,7 @@ exit 0
     stdio: ["ignore", "pipe", "pipe"],
     env: {
       ...process.env,
-      HOME: root,
+      HOME: home,
       CONDUIT_HOST: "127.0.0.1",
       CONDUIT_PORT: String(port),
       CONDUIT_FILES_ROOT: path.join(root, "files"),
@@ -91,6 +93,8 @@ exit 0
       CONDUIT_NATIVE_PI_COMMAND: nativePi,
       CONDUIT_NATIVE_PI_AGENT_DIR: path.join(root, "native-agent"),
       CONDUIT_WORKSPACE_ALLOWLIST: root,
+      CONDUIT_WORKSPACE_DEFAULT_ROOT: workspaceParent,
+      CONDUIT_WORKSPACE_SUGGESTION_ROOT: workspaceParent,
       PATH: `${fakeGitDirectory}:${process.env.PATH}`,
       FAKE_GIT_MARKER: fakeGitMarker,
     },
@@ -98,6 +102,18 @@ exit 0
 
   try {
     await waitForServer(origin, child);
+    const workspacePolicy = await fetch(`${origin}/v0/workspaces/policy`).then((response) => response.json());
+    assert.deepEqual(workspacePolicy.defaultRoot, workspaceParent);
+    assert.deepEqual(workspacePolicy.defaultInputPath, workspaceParent);
+    assert.deepEqual(workspacePolicy.suggestionRoot, workspaceParent);
+    await fs.mkdir(path.join(workspaceParent, "existing-repo"));
+    const workspaceSuggestions = await fetch(`${origin}/v0/workspaces/suggestions`).then((response) => response.json());
+    assert.equal(workspaceSuggestions.defaultInputPath, workspaceParent);
+    assert.deepEqual(workspaceSuggestions.folders, [{
+      name: "existing-repo",
+      path: path.join(workspaceParent, "existing-repo"),
+      displayPath: path.join(workspaceParent, "existing-repo"),
+    }]);
     const templatesResponse = await fetch(`${origin}/v0/templates`);
     assert.equal(templatesResponse.status, 200);
     const templateCatalog = await templatesResponse.json();

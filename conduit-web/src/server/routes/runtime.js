@@ -2,6 +2,7 @@ export function registerRuntimeRoutes(app, {
   attachments,
   config,
   currentMagicDnsOrigin,
+  formatWorkspacePath,
   isPathInside,
   isShuttingDown,
   listDirectorySuggestions,
@@ -48,12 +49,22 @@ export function registerRuntimeRoutes(app, {
     } catch (error) { next(error); }
   });
 
+  const workspacePolicy = () => {
+    const defaultRootAllowed = config.workspaceAllowlist.some((root) => isPathInside(config.workspaceDefaultRoot, root));
+    return {
+      allowlist: config.workspaceAllowlist,
+      defaultRoot: defaultRootAllowed ? config.workspaceDefaultRoot : null,
+      defaultInputPath: defaultRootAllowed ? formatWorkspacePath(config.workspaceDefaultRoot) : null,
+      suggestionRoot: config.workspaceSuggestionRoot,
+      modes: ["managed", "linked", "created", "cloned"],
+    };
+  };
+
   app.get("/v0/workspaces/policy", (_request, response) => {
     response.json({
-      allowlist: config.workspaceAllowlist,
+      ...workspacePolicy(),
       filesRoot: config.filesRoot,
       templatesRoot: config.templatesRoot,
-      modes: ["managed", "linked", "created", "cloned"],
     });
   });
 
@@ -61,15 +72,16 @@ export function registerRuntimeRoutes(app, {
     try {
       const suggestionRoot = config.workspaceSuggestionRoot;
       if (!config.workspaceAllowlist.some((root) => isPathInside(suggestionRoot, root))) {
-        return response.json({ root: suggestionRoot, folders: [] });
+        return response.json({ root: suggestionRoot, ...workspacePolicy(), folders: [] });
       }
       const folders = await listDirectorySuggestions(suggestionRoot);
       response.json({
         root: suggestionRoot,
+        ...workspacePolicy(),
         folders: folders.map((folder) => ({
           name: folder.name,
           path: folder.path,
-          displayPath: `~/${folder.name}`,
+          displayPath: formatWorkspacePath(folder.path),
         })),
       });
     } catch (error) { next(error); }

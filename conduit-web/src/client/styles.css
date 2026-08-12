@@ -287,6 +287,7 @@ svg { stroke-width: 1.5; }
 .workspace-mode-picker small, .workspace-path-preview small { color: var(--muted-foreground); font-size: 12px; line-height: 1.35; }
 .workspace-path-preview { display: grid; gap: 4px; border-left: 2px solid var(--primary); background: var(--muted); padding: 9px 10px; }
 .workspace-path-preview strong { overflow-wrap: anywhere; font: 12px/1.35 ui-monospace, monospace; }
+.workspace-path-hint { margin: -2px 0 0; color: var(--muted-foreground); font-size: 12px; line-height: 1.4; }
 .workspace-preview-error { margin: 0; color: var(--destructive); font-size: 13px; }
 
 .settings-shell { display: flex; width: min(900px, calc(100vw - 32px)); height: min(720px, calc(100dvh - 32px)); overflow: hidden; border: 1px solid var(--border); border-radius: 13px; background: var(--background); box-shadow: 0 24px 80px rgb(0 0 0 / 40%); }

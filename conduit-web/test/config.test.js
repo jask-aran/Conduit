@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { loadConfig } from "../src/config.js";
@@ -38,6 +39,7 @@ test("default runtime paths are owned by the repository root", () => {
   assert.equal(path.isAbsolute(config.installations.get("conduit-pinned").command), true);
   assert.equal(config.enablePartialContinue, true);
   assert.equal(config.maxAttachmentBytes, 100 * 1024 * 1024);
+  assert.equal(config.workspaceDefaultRoot, os.homedir());
   assert.equal(loadConfig({ ENABLE_PARTIAL_CONTINUE: "false" }).enablePartialContinue, false);
 });
 
@@ -61,4 +63,9 @@ test("one data root relocates every durable Conduit path", () => {
   assert.equal(config.release, "0123456789abcdef");
   assert.equal(loadConfig({ CONDUIT_MAX_ATTACHMENT_BYTES: "2048" }).maxAttachmentBytes, 2048);
   assert.equal(config.workspaceSuggestionRoot, path.resolve("/tmp/workspace-suggestions"));
+  assert.equal(config.workspaceDefaultRoot, path.resolve("/tmp/workspace-suggestions"));
+  assert.equal(loadConfig({
+    CONDUIT_WORKSPACE_SUGGESTION_ROOT: "/tmp/workspace-suggestions",
+    CONDUIT_WORKSPACE_DEFAULT_ROOT: "/tmp/workspace-default",
+  }).workspaceDefaultRoot, path.resolve("/tmp/workspace-default"));
 });
