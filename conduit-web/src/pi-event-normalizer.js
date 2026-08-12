@@ -2,6 +2,12 @@ function record(value) {
   return value && typeof value === "object" ? value : {};
 }
 
+function normalizeTimestamp(value) {
+  if (value == null || value === "") return null;
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
+}
+
 function normalizeBlock(block, contentIndex) {
   if (block?.type === "thinking") {
     return {
@@ -112,6 +118,9 @@ export function createPiEventNormalizer(generationId, { startingSequence = 0 } =
           blocks,
           stopReason: String(source.message.stopReason || "stop"),
           errorMessage: source.message.errorMessage ? String(source.message.errorMessage) : null,
+          provider: source.message.provider ? String(source.message.provider) : null,
+          model: source.message.model ? String(source.message.model) : null,
+          timestamp: normalizeTimestamp(source.message.timestamp),
           usage: source.message.usage || null,
         })];
       }

@@ -232,6 +232,9 @@ test("provider error settles as a failed generation", () => {
   assert.equal(state.status, "failed");
   assert.equal(state.assistantMessages[0].status, "error");
   assert.equal(state.assistantMessages[0].errorMessage, "Provider rejected the request");
+  assert.equal(state.assistantMessages[0].provider, "anthropic");
+  assert.equal(state.assistantMessages[0].model, "fixture-model");
+  assert.equal(state.assistantMessages[0].timestamp, "2025-07-22T16:00:00.000Z");
 });
 
 test("multiple native text and thinking blocks retain their separate positions", () => {

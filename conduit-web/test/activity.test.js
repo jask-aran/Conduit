@@ -110,6 +110,8 @@ test("fine activity prefers tools and stop over generic working", () => {
   assert.equal(deriveFineActivity({ generation: "idle" }).kind, "idle");
   // Stale coarse "working" must not keep the transcript row after the turn is idle.
   assert.equal(deriveFineActivity({ generation: "idle", coarse: "working" }).kind, "idle");
+  assert.deepEqual(deriveFineActivity({ generation: "failed" }), { kind: "request_failed", label: "Request failed · Ready to retry" });
+  assert.deepEqual(deriveFineActivity({ generation: "failed", processStatus: "failed" }), { kind: "runtime_failed", label: "Pi failed" });
 });
 
 test("activity labels and ranking", () => {

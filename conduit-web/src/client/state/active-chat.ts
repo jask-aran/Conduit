@@ -549,8 +549,13 @@ export function createActiveChat(options: ActiveChatOptions) {
                 if (!matching || matching.id !== checkpointGenerationId
                   || !["stopped", "complete", "failed"].includes(matching.status)
                   || (checkpointGenerationSeq != null && matching.lastSeq < checkpointGenerationSeq)) return;
+                const liveProviderError = matching.status === "failed"
+                  && matching.assistantMessages.some((message) => message.stopReason === "error");
+                const persistedProviderError = asList<Message>(detail.messages)
+                  .some((message) => message.role === "assistant" && message.stopReason === "error");
                 batch(() => {
                   applyDetail(detail, true);
+                  if (liveProviderError && !persistedProviderError) return;
                   generationStore.clear();
                   setActiveGenerationChange(null);
                   setActiveGeneration(null);
@@ -769,6 +774,12 @@ export function createActiveChat(options: ActiveChatOptions) {
       retry: retry(),
     });
     if (hostUiRequests().length) return { kind: "waiting_for_user", label: "Waiting for your confirmation" };
+    if (derived.kind === "idle") {
+      const lastAssistant = [...messages()].reverse().find((message) => message.role === "assistant");
+      if (lastAssistant?.stopReason === "error") {
+        return { kind: "request_failed", label: "Request failed · Ready to retry" };
+      }
+    }
     return derived.kind === "starting" ? { kind: "idle", label: null } : derived;
   });
 

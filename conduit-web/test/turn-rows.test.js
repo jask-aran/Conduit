@@ -118,6 +118,67 @@ test("keeps the answer display key across live and persisted projections", () =>
   assert.equal(persistedAnswer?.type === "message" && persistedAnswer.displayKey, "answer:u1:0");
 });
 
+test("projects empty and partial assistant errors as highlighted message rows", () => {
+  const user = { id: "u1", role: "user", content: "Try this request" };
+  const persisted = buildTurnRows([
+    user,
+    {
+      id: "persisted-error",
+      role: "assistant",
+      content: "",
+      stopReason: "error",
+      errorMessage: "Provider rejected the request",
+    },
+  ], []);
+  assert.equal(persisted[1]?.type, "message");
+  assert.equal(persisted[1]?.type === "message" && persisted[1].value.errorMessage, "Provider rejected the request");
+
+  const live = buildTurnRows([user], [], {
+    activeGeneration: {
+      id: "g_error",
+      status: "failed",
+      lastSeq: 5,
+      toolExecutions: {},
+      assistantMessages: [{
+        id: "m_error",
+        stopReason: "error",
+        errorMessage: "Connection closed",
+        provider: "example-provider",
+        model: "example-model",
+        timestamp: "2026-08-12T09:48:47.341Z",
+        blocks: [{ type: "text", identity: "g_error:m_error:0", contentIndex: 0, text: "Partial response", status: "complete" }],
+      }],
+    },
+  });
+  assert.equal(live[1]?.type === "message" && live[1].value.content, "Partial response");
+  assert.equal(live[1]?.type === "message" && live[1].value.errorMessage, "Connection closed");
+  assert.equal(live[1]?.type === "message" && live[1].value.stopReason, "error");
+  assert.equal(live[1]?.type === "message" && live[1].value.provider, "example-provider");
+  assert.equal(live[1]?.type === "message" && live[1].value.model, "example-model");
+  assert.equal(live[1]?.type === "message" && live[1].value.timestamp, "2026-08-12T09:48:47.341Z");
+});
+
+test("does not expose a transient assistant error as terminal while Pi retries", () => {
+  const rows = buildTurnRows([
+    { id: "u1", role: "user", content: "Try this request" },
+  ], [], {
+    activeGeneration: {
+      id: "g_retry",
+      status: "running",
+      lastSeq: 5,
+      toolExecutions: {},
+      assistantMessages: [{
+        id: "m_error",
+        stopReason: "error",
+        errorMessage: "Temporary provider failure",
+        blocks: [],
+      }],
+    },
+  });
+
+  assert.deepEqual(rows.map((row) => row.key), ["message:u1"]);
+});
+
 test("indexes live blocks to one trace or answer row", () => {
   const generation = {
     id: "g_index",

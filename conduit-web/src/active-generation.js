@@ -155,6 +155,9 @@ export function reduceActiveGeneration(current, event) {
       message.status = event.stopReason === "error" || event.stopReason === "aborted" ? "error" : "complete";
       message.stopReason = event.stopReason;
       message.errorMessage = event.errorMessage || null;
+      if (event.provider) message.provider = event.provider;
+      if (event.model) message.model = event.model;
+      if (event.timestamp) message.timestamp = event.timestamp;
       break;
     }
     case "tool_execution_started":

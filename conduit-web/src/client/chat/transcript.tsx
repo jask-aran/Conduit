@@ -1,5 +1,5 @@
 import { createEffect, createMemo, createRenderEffect, createSignal, For, lazy, onCleanup, onMount, Show, Suspense } from "solid-js";
-import { CopyIcon, PencilIcon, PlayIcon, RefreshCwIcon } from "lucide-solid";
+import { CopyIcon, PencilIcon, PlayIcon, RefreshCwIcon, TriangleAlertIcon } from "lucide-solid";
 import { Button, Spinner } from "@/components/primitives";
 import type { Message, RuntimeActivity, ToolItem } from "../api/contracts";
 import type { ActiveChatStore } from "../state/active-chat";
@@ -19,6 +19,21 @@ import {
 } from "./transcript-tail-follow";
 
 const ChatMarkdown = lazy(() => import("./markdown").then((module) => ({ default: module.ChatMarkdown })));
+const fullDateTime = (value?: string) => {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return new Intl.DateTimeFormat([], {
+    year: "numeric",
+    month: "short",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    timeZoneName: "short",
+  }).format(date);
+};
+
 function Actions(props: { message: Message; precedingUserId?: string; chat: ActiveChatStore; partialContinue: boolean }) {
   const [copied, setCopied] = createSignal(false);
   const assistant = () => props.message.role !== "user";
@@ -27,14 +42,14 @@ function Actions(props: { message: Message; precedingUserId?: string; chat: Acti
       <Button variant="ghost" size="icon-sm" aria-label={props.chat.editingEntryId() === props.message.id ? "Cancel editing" : "Edit from here"} onClick={() => props.chat.edit(props.message)}><PencilIcon /></Button>
     </Show>
     <Show when={assistant()}>
-      <Button variant="ghost" size="icon-sm" aria-label={copied() ? "Copied" : "Copy Markdown"} onClick={async () => { await navigator.clipboard.writeText(props.message.content || ""); setCopied(true); setTimeout(() => setCopied(false), 1600); }}><CopyIcon /></Button>
+      <Button variant="ghost" size="icon-sm" aria-label={copied() ? "Copied" : "Copy Markdown"} onClick={async () => { await navigator.clipboard.writeText(props.message.content || props.message.errorMessage || ""); setCopied(true); setTimeout(() => setCopied(false), 1600); }}><CopyIcon /></Button>
       <Show when={props.precedingUserId}><Button variant="ghost" size="icon-sm" aria-label="Regenerate response" onClick={() => void props.chat.regenerate(props.precedingUserId!)}><RefreshCwIcon /></Button></Show>
       <Show when={props.partialContinue && props.message.stopped}><Button variant="ghost" size="icon-sm" aria-label="Continue stopped response" onClick={() => void props.chat.continueResponse()}><PlayIcon /></Button></Show>
     </Show>
   </div>;
 }
 
-export function Transcript(props: { chat: ActiveChatStore; partialContinue: boolean; markdownRenderer: MarkdownRendererId }) {
+export function Transcript(props: { chat: ActiveChatStore; partialContinue: boolean; markdownRenderer: MarkdownRendererId; profileLabel?: string }) {
   let transcriptRoot!: HTMLDivElement;
   let motionShell!: HTMLDivElement;
   let viewport!: HTMLDivElement;
@@ -458,6 +473,7 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
           if (item.type === "trace") return <div data-slot="message-scroller-item"><TurnTrace trace={item.value} sessionId={props.chat.loadedId()} renderer={markdownRenderer()} /></div>;
           const message = createMemo(() => item.value);
           const user = createMemo(() => message().role === "user");
+          const failed = createMemo(() => !user() && message().stopReason === "error");
           const live = createMemo(() => {
             if (item.live != null) return item.live;
             const last = props.chat.messages().at(-1);
@@ -468,9 +484,23 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
             <article data-slot="message" data-align={user() ? "end" : "start"} class={user() ? "message-user" : "message-assistant"}>
               <div data-slot="message-content">
                 <Show when={message().timestamp}><time>{new Date(message().timestamp!).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</time></Show>
-                <div data-slot="bubble" data-align={user() ? "end" : "start"} data-editing={props.chat.editingEntryId() === message().id ? "true" : "false"} class={user() ? "bubble bubble-user" : "bubble bubble-assistant"}>
+                <div data-slot="bubble" data-align={user() ? "end" : "start"} data-error={failed() ? "true" : undefined} data-editing={props.chat.editingEntryId() === message().id ? "true" : "false"} class={user() ? "bubble bubble-user" : "bubble bubble-assistant"}>
                   <div data-slot="bubble-content">
-                    <Show when={user()} fallback={<Suspense fallback={<div class="markdown-skeleton" />}><ChatMarkdown renderer={markdownRenderer()} typewriter={rendererUsesTypewriter()} syntheticMath={markdownRenderer() === "incremark-synthetic"} displayKey={item.displayKey} streaming={live()} streamVersion={item.streamVersion} onRendered={settleAfterMarkdown}>{message().content || ""}</ChatMarkdown></Suspense>}><span class="user-message-text">{message().content || ""}</span></Show>
+                    <Show when={user()} fallback={<>
+                      <Show when={message().content}><Suspense fallback={<div class="markdown-skeleton" />}><ChatMarkdown renderer={markdownRenderer()} typewriter={rendererUsesTypewriter()} syntheticMath={markdownRenderer() === "incremark-synthetic"} displayKey={item.displayKey} streaming={live()} streamVersion={item.streamVersion} onRendered={settleAfterMarkdown}>{message().content || ""}</ChatMarkdown></Suspense></Show>
+                      <Show when={failed()}>
+                        <details class="assistant-error" open role="alert">
+                          <summary><TriangleAlertIcon aria-hidden="true" /><strong>Request failed</strong></summary>
+                          <dl class="assistant-error-meta">
+                            <Show when={message().model}><div><dt>Model</dt><dd>{message().model}</dd></div></Show>
+                            <Show when={message().provider}><div><dt>Provider</dt><dd>{message().provider}</dd></div></Show>
+                            <Show when={props.profileLabel}><div><dt>Profile</dt><dd>{props.profileLabel}</dd></div></Show>
+                            <Show when={message().timestamp}><div><dt>Time</dt><dd><time dateTime={message().timestamp}>{fullDateTime(message().timestamp)}</time></dd></div></Show>
+                          </dl>
+                          <pre>{message().errorMessage || "The model request failed."}</pre>
+                        </details>
+                      </Show>
+                    </>}><span class="user-message-text">{message().content || ""}</span></Show>
                   </div>
                 </div>
                 <Show when={user() && message().pending}><div class="marker">{message().queueMode === "steer" ? "Queued · steer (after tools)" : "Queued · follow-up (after turn)"}</div></Show>

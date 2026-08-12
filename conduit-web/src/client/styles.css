@@ -129,6 +129,18 @@ svg { stroke-width: 1.5; }
 .bubble { max-width: min(640px, 88vw); border-radius: 15px; }
 .bubble-user { padding: 10px 13px; border: 1px solid var(--glass-border); white-space: pre-wrap; background: linear-gradient(180deg, oklch(1 0 0 / 9%), oklch(1 0 0 / 2%) 58%), var(--glass-bg); backdrop-filter: blur(30px) saturate(168%) brightness(1.05); -webkit-backdrop-filter: blur(30px) saturate(168%) brightness(1.05); box-shadow: inset 0 1px 0 oklch(1 0 0 / 30%), inset 0 -1px 1px oklch(0 0 0 / 18%), 0 8px 24px -18px rgb(0 0 0 / 62%); }
 .bubble-assistant { width: 100%; }
+.bubble-assistant[data-error="true"] { padding: 12px 14px; border: 1px solid color-mix(in oklch, var(--destructive), transparent 45%); background: color-mix(in oklch, var(--destructive), transparent 92%); }
+.assistant-error { color: color-mix(in oklch, var(--destructive), white 18%); }
+.assistant-error summary { display: flex; align-items: center; gap: 7px; cursor: pointer; font-size: 13px; list-style: none; }
+.assistant-error summary::-webkit-details-marker { display: none; }
+.assistant-error summary svg { width: 15px; height: 15px; flex: none; }
+.assistant-error-meta { display: flex; flex-wrap: wrap; gap: 5px 14px; margin: 9px 0 0; color: var(--muted-foreground); font-size: 11px; }
+.assistant-error-meta div { display: flex; min-width: 0; gap: 5px; }
+.assistant-error-meta dt { color: var(--foreground); font-weight: 600; }
+.assistant-error-meta dd { min-width: 0; margin: 0; overflow-wrap: anywhere; }
+.assistant-error-meta time { color: inherit; font-size: inherit; }
+.assistant-error pre { max-height: 180px; margin: 9px 0 0; overflow: auto; color: var(--foreground); font: 12px/1.5 ui-monospace, SFMono-Regular, Consolas, monospace; overflow-wrap: anywhere; white-space: pre-wrap; }
+.bubble-assistant[data-error="true"] .chat-markdown { margin-bottom: 10px; }
 .bubble[data-editing="true"] { outline: 2px solid var(--ring); outline-offset: 2px; }
 .welcome { display: grid; min-height: 56vh; place-content: center; color: var(--muted-foreground); text-align: center; }
 .welcome h1 { margin: 0; color: var(--foreground); font-size: clamp(22px, 3vw, 26px); font-weight: 600; letter-spacing: -0.04em; }
@@ -137,6 +149,7 @@ svg { stroke-width: 1.5; }
 .empty-pull-hint[data-armed="true"] { color: var(--foreground); }
 .marker { color: var(--muted-foreground); font-size: 12px; }
 .agent-activity { display: flex; align-items: center; color: var(--muted-foreground); font-size: 12px; }
+.composer-status-state > svg { width: 13px; height: 13px; flex: none; }
 .message-scroller-button { position: absolute; right: 24px; bottom: 18px; }
 .response-actions { display: flex; min-height: 28px; align-items: center; gap: 2px; opacity: 0; transition: opacity 120ms; }
 [data-slot="message-scroller-item"]:hover .response-actions, .response-actions:focus-within { opacity: 1; }

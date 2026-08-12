@@ -1,5 +1,5 @@
 import { createEffect, createMemo, createSignal, For, onMount, Show } from "solid-js";
-import { ArrowUpIcon, ChevronDownIcon, PaperclipIcon, SquareIcon, WaypointsIcon } from "lucide-solid";
+import { ArrowUpIcon, ChevronDownIcon, PaperclipIcon, SquareIcon, TriangleAlertIcon, WaypointsIcon } from "lucide-solid";
 import {
   Button,
   Menu,
@@ -20,6 +20,7 @@ import type { ModelSettings } from "../state/model-settings";
 import { AttachmentCards } from "./attachments";
 
 const thinkingLabel = (value: string) => value ? value[0]!.toUpperCase() + value.slice(1) : "Off";
+const SPINNING_ACTIVITY = new Set(["starting", "thinking", "responding", "using_tool", "retrying", "compacting", "stopping", "waiting_for_model"]);
 
 export function Composer(props: {
   chat: ActiveChatStore;
@@ -146,7 +147,11 @@ export function Composer(props: {
       </div>
     </div>
     <div class="agent-activity composer-status" role="status" aria-live="polite">
-      <span class="composer-status-state"><Show when={activity()?.kind && activity()?.kind !== "idle"}><Spinner /></Show>{activity()?.label || "Ready"}</span>
+      <span class="composer-status-state">
+        <Show when={SPINNING_ACTIVITY.has(activity()?.kind || "")}><Spinner /></Show>
+        <Show when={["request_failed", "runtime_failed"].includes(activity()?.kind || "")}><TriangleAlertIcon aria-hidden="true" /></Show>
+        {activity()?.label || "Ready"}
+      </span>
       <span class="composer-status-segment">{contextDetail()}</span>
       <Show when={queueCount()}><span class="composer-status-segment">Queue {queueCount()}</span></Show>
     </div>

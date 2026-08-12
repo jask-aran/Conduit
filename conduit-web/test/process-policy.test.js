@@ -116,6 +116,27 @@ test("an intentional stop absorbs a late Pi stdin error", () => {
   assert.doesNotThrow(() => stdin.emit("error", Object.assign(new Error("broken pipe"), { code: "EPIPE" })));
 });
 
+test("a Pi process exit closes attached clients so they reconnect to its replacement", async () => {
+  const { manager, children } = makeManager();
+  const record = manager.create({ project: project("socket-handoff"), chatId: "chat-socket-handoff" });
+  children[0].emit("spawn");
+  const socket = new EventEmitter();
+  socket.OPEN = 1;
+  socket.readyState = 1;
+  socket.send = () => {};
+  socket.close = (code, reason) => {
+    socket.closeArgs = { code, reason };
+    socket.readyState = 3;
+    socket.emit("close");
+  };
+  manager.attach(record.id, socket);
+
+  await manager.stopAndWait(record.id);
+
+  assert.deepEqual(socket.closeArgs, { code: 1012, reason: "Pi process exited" });
+  assert.equal(record.clients.size, 0);
+});
+
 test("starting processes are not reclaimable", async () => {
   const { manager, children } = makeManager({ maxLiveProcesses: 1 });
   const starting = manager.create({ project: project("boot"), chatId: "chat-boot" });
