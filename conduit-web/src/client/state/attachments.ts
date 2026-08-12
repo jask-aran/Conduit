@@ -21,7 +21,7 @@ function formatAttachmentLimit(bytes: number) {
 }
 
 export function createAttachments(
-  onError: (message: string) => void,
+  onError: (error: unknown) => void,
   maxBytes: Accessor<number> = () => DEFAULT_MAX_ATTACHMENT_BYTES,
 ) {
   const [items, setItems] = createSignal<UploadAttachment[]>([]);
@@ -71,7 +71,7 @@ export function createAttachments(
         update(item.id, { ...body, status: "done", progress: 100, announced: false });
       } catch (error) {
         update(item.id, { status: "error", error: (error as Error).message });
-        onError((error as Error).message);
+        onError(error);
       }
       finish();
     });
@@ -125,7 +125,7 @@ export function createAttachments(
       const payload = await api<{ attachments?: Attachment[] }>(`/v0/chats/${encodeURIComponent(nextChatId)}/attachments`);
       if (sequence !== loadSequence) return;
       setItems(asList<Attachment>(payload.attachments).filter((item) => !(item as UploadAttachment).announced).map((item) => ({ ...item, status: "done", progress: 100 })));
-    } catch (error) { if (sequence === loadSequence) onError((error as Error).message); }
+    } catch (error) { if (sequence === loadSequence) onError(error); }
   };
 
   const remove = async (item: UploadAttachment) => {
@@ -134,7 +134,7 @@ export function createAttachments(
     if (index >= 0) queue.splice(index, 1);
     try {
       if (item.status === "done" && !item.restored) await api(`/v0/chats/${encodeURIComponent(chatId())}/attachments/${item.id}`, { method: "DELETE" });
-    } catch (error) { onError((error as Error).message); return false; }
+    } catch (error) { onError(error); return false; }
     if (item.objectUrl) { URL.revokeObjectURL(item.objectUrl); objectUrls.delete(item.objectUrl); }
     setItems((current) => current.filter((candidate) => candidate.id !== item.id));
     return true;

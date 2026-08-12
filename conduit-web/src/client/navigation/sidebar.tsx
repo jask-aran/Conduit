@@ -1,4 +1,4 @@
-import { batch, createEffect, createSignal, For, onCleanup, onMount, Show } from "solid-js";
+import { batch, createEffect, createMemo, createSignal, For, onCleanup, onMount, Show } from "solid-js";
 import * as KAlertDialog from "@kobalte/core/alert-dialog";
 import * as KDialog from "@kobalte/core/dialog";
 import {
@@ -17,6 +17,7 @@ import {
   TerminalIcon,
   Trash2Icon,
   LoaderCircleIcon,
+  XIcon,
 } from "lucide-solid";
 import {
   Button,
@@ -56,6 +57,20 @@ import "./sidebar.css";
 type WorkspaceMode = "linked" | "created" | "cloned";
 type ProjectInput = { mode: string; name?: string; path?: string; directoryName?: string; cloneUrl?: string; cloneParentPath?: string; cloneDirectoryName?: string };
 type WorkspacePreview = { key: string; path: string; ownership: string };
+type ChatTarget = { chat: ChatSummary; project: Project };
+type DeleteTarget = { type: "chat"; chat: ChatSummary; project: Project }
+  | { type: "project"; project: Project }
+  | { type: "chats"; targets: ChatTarget[] };
+const COLLAPSED_PROJECTS_KEY = "conduit.sidebar.collapsed-projects";
+
+function storedCollapsedProjects(): Set<string> {
+  try {
+    const value = JSON.parse(localStorage.getItem(COLLAPSED_PROJECTS_KEY) || "[]");
+    return new Set<string>(Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : []);
+  } catch {
+    return new Set<string>();
+  }
+}
 
 function Modal(props: { open: boolean; title: string; description?: string; children: unknown; onClose: () => void; class?: string }) {
   let returnFocus: HTMLElement | null = null;
@@ -101,9 +116,12 @@ export function Sidebar(props: {
   onRenameChat: (chat: ChatSummary, project: Project, name: string) => Promise<boolean>;
   onRenameProject: (project: Project, name: string) => Promise<boolean>;
   onMoveChat: (chat: ChatSummary, source: Project, target: Project) => Promise<void>;
+  onMoveChats: (targets: ChatTarget[], destination: Project) => Promise<string[]>;
   onMoveProjectChats: (source: Project, target: Project) => Promise<void>;
   onCopyTranscript: (chat: ChatSummary) => Promise<void>;
+  onCopyChatLinks: (targets: ChatTarget[]) => Promise<boolean>;
   onDeleteChat: (chat: ChatSummary, project: Project) => Promise<void>;
+  onDeleteChats: (targets: ChatTarget[]) => Promise<string[]>;
   onDeleteProject: (project: Project) => Promise<void>;
   onOpenTerminal: (chat: ChatSummary, project: Project) => void;
   onOpenSettings: (section?: string, workspaceId?: string | null) => void;
@@ -115,6 +133,8 @@ export function Sidebar(props: {
   const [collapsed, setCollapsed] = createSignal(localStorage.getItem("conduit.sidebar") === "collapsed");
   const [visualCollapsed, setVisualCollapsed] = createSignal(collapsed());
   const [shellWidth, setShellWidth] = createSignal(collapsed() ? 52 : 244);
+  const [collapsedProjectIds, setCollapsedProjectIds] = createSignal(storedCollapsedProjects());
+  const [selectedChatIds, setSelectedChatIds] = createSignal<Set<string>>(new Set());
   const [newKind, setNewKind] = createSignal<"folder" | "workspace" | null>(null);
   let sidebarRoot: HTMLElement | undefined;
   let sidebarSurface: HTMLDivElement | undefined;
@@ -204,6 +224,22 @@ export function Sidebar(props: {
     media.addEventListener("change", sync);
     onCleanup(() => media.removeEventListener("change", sync));
   });
+  onMount(() => {
+    const keydown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || selectedChatIds().size === 0) return;
+      clearSelection();
+    };
+    const click = (event: MouseEvent) => {
+      if (event.button !== 0 || event.ctrlKey || event.metaKey || selectedChatIds().size === 0) return;
+      queueMicrotask(clearSelection);
+    };
+    window.addEventListener("keydown", keydown);
+    window.addEventListener("click", click);
+    onCleanup(() => {
+      window.removeEventListener("keydown", keydown);
+      window.removeEventListener("click", click);
+    });
+  });
   const [mode, setMode] = createSignal<"managed" | WorkspaceMode>("managed");
   const [name, setName] = createSignal("");
   const [path, setPath] = createSignal("");
@@ -215,7 +251,7 @@ export function Sidebar(props: {
   const [submitting, setSubmitting] = createSignal(false);
   const [rename, setRename] = createSignal<{ type: "chat"; chat: ChatSummary; project: Project } | { type: "project"; project: Project } | null>(null);
   const [renameValue, setRenameValue] = createSignal("");
-  const [deleting, setDeleting] = createSignal<{ type: "chat"; chat: ChatSummary; project: Project } | { type: "project"; project: Project } | null>(null);
+  const [deleting, setDeleting] = createSignal<DeleteTarget | null>(null);
   const [moving, setMoving] = createSignal<{ chat: ChatSummary; project: Project } | null>(null);
   let handledCommandNonce: number | null = null;
 
@@ -251,6 +287,12 @@ export function Sidebar(props: {
   });
 
   createEffect(() => localStorage.setItem("conduit.sidebar", collapsed() ? "collapsed" : "expanded"));
+  createEffect(() => localStorage.setItem(COLLAPSED_PROJECTS_KEY, JSON.stringify([...collapsedProjectIds()])));
+  createEffect(() => {
+    const available = new Set(props.projects.flatMap((project) => project.sessions.map((chat) => chat.id)));
+    const retained = [...selectedChatIds()].filter((id) => available.has(id));
+    if (retained.length !== selectedChatIds().size) setSelectedChatIds(new Set(retained));
+  });
   createEffect(() => {
     const open = props.mobileOpen;
     if (open && !mobileWasOpen) {
@@ -266,6 +308,26 @@ export function Sidebar(props: {
   const chats = () => props.projects.find((project) => project.slug === "chat") || props.projects[0];
   const folders = () => props.projects.filter((project) => project.slug !== "chat" && project.origin !== "linked" && project.origin !== "created" && project.origin !== "cloned" && project.kind !== "workspace");
   const workspaces = () => props.projects.filter((project) => project.origin === "linked" || project.origin === "created" || project.origin === "cloned" || project.kind === "workspace");
+  const selectedTargets = createMemo<ChatTarget[]>(() => props.projects.flatMap((project) =>
+    project.sessions.filter((chat) => selectedChatIds().has(chat.id)).map((chat) => ({ chat, project }))));
+  const clearSelection = () => setSelectedChatIds(new Set<string>());
+  const toggleChatSelection = (chatId: string) => {
+    setSelectedChatIds((current) => {
+      const next = new Set(current);
+      if (next.has(chatId)) next.delete(chatId);
+      else next.add(chatId);
+      return next;
+    });
+  };
+  const applyBulkFailures = (failedIds: string[]) => setSelectedChatIds(new Set(failedIds));
+  const toggleProject = (projectId: string) => {
+    setCollapsedProjectIds((current) => {
+      const next = new Set(current);
+      if (next.has(projectId)) next.delete(projectId);
+      else next.add(projectId);
+      return next;
+    });
+  };
   const closeMobile = () => props.onMobileOpenChange(false);
   const startNewChat = (project?: Project) => {
     closeMobile();
@@ -384,16 +446,34 @@ export function Sidebar(props: {
     if (!target) return;
     setDeleting(null);
     if (target.type === "chat") await props.onDeleteChat(target.chat, target.project);
+    else if (target.type === "chats") applyBulkFailures(await props.onDeleteChats(target.targets));
     else await props.onDeleteProject(target.project);
   };
 
   const deleteCopy = () => {
     const target = deleting();
+    if (target?.type === "chats") {
+      const count = target.targets.length;
+      return {
+        title: `Delete ${count} chats?`,
+        description: `This permanently deletes ${count} Pi session transcripts and their attached files.`,
+      };
+    }
     if (target?.type !== "project") return { title: "Delete this chat?", description: "This permanently deletes the Pi session transcript and this chat's attached files." };
     if (target.project.origin === "linked") return { title: "Unlink this workspace?", description: `This unregisters ${target.project.name} and deletes its Conduit chats. The linked directory on disk is kept.` };
     if (target.project.origin === "created") return { title: "Unlink this workspace?", description: `This unregisters ${target.project.name} and deletes its Conduit chats. The created directory on disk is kept.` };
     if (target.project.origin === "cloned") return { title: "Unlink this workspace?", description: `This unregisters ${target.project.name} and deletes its Conduit chats. The cloned directory on disk is kept.` };
     return { title: "Delete this folder?", description: `This permanently deletes ${target.project.name}, its working files, and all of its chats.` };
+  };
+  const deleteButtonLabel = () => {
+    const target = deleting();
+    return target?.type === "chats" ? `Delete ${target.targets.length} chats` : "Delete";
+  };
+
+  const moveSelectedChats = async (destination: Project) => {
+    const targets = selectedTargets();
+    if (!targets.length) return;
+    applyBulkFailures(await props.onMoveChats(targets, destination));
   };
 
   /** Long-press opens the menu then synthesizes a click; swallow that click. */
@@ -409,39 +489,74 @@ export function Sidebar(props: {
 
   const ChatMenu = (menuProps: { chat: ChatSummary; project: Project }) => {
     const guard = guardFor(menuProps.chat);
+    const selected = () => selectedChatIds().has(menuProps.chat.id);
     return <ContextMenu placement={phoneLayout() ? "bottom-start" : "right-start"} onOpenChange={(open) => { if (open) guard.suppressClick = true; }}>
-    <ContextMenuTrigger as="button" class="sidebar-row sidebar-chat" aria-current={props.selectedId === menuProps.chat.id ? "page" : undefined} onClick={() => {
-      if (guard.suppressClick) { guard.suppressClick = false; return; }
-      closeMobile();
-      void props.onOpenChat(menuProps.chat, menuProps.project);
-    }}>
+    <ContextMenuTrigger
+      as="button"
+      class="sidebar-row sidebar-chat"
+      aria-current={props.selectedId === menuProps.chat.id ? "page" : undefined}
+      aria-label={`${menuProps.chat.title || "New chat"}${selected() ? ", selected" : ""}`}
+      data-selected={selected() ? "true" : undefined}
+      onContextMenu={() => { if (!selected()) clearSelection(); }}
+      onClick={(event: MouseEvent) => {
+        if (guard.suppressClick) { guard.suppressClick = false; return; }
+        if (event.ctrlKey || event.metaKey) {
+          event.preventDefault();
+          toggleChatSelection(menuProps.chat.id);
+          return;
+        }
+        clearSelection();
+        closeMobile();
+        void props.onOpenChat(menuProps.chat, menuProps.project);
+      }}
+    >
       <RuntimeIndicator process={processFor(menuProps.chat)} stale={props.runtime.stale()} />
       <span>{menuProps.chat.title || "New chat"}</span>
     </ContextMenuTrigger>
     <ContextMenuContent class="w-60 sidebar-context-menu">
-      <ContextMenuGroup>
-        <ContextMenuItem onSelect={() => requestRenameChat(menuProps.chat, menuProps.project)}><PencilIcon />Rename</ContextMenuItem>
-        <ContextMenuSub>
-          <ContextMenuSubTrigger><FolderInputIcon />Move to folder…</ContextMenuSubTrigger>
-          <ContextMenuSubContent class="w-48 sidebar-context-menu">
-            <ContextMenuRadioGroup value={menuProps.project.id} onChange={(id) => { const target = props.projects.find((item) => item.id === id); if (target) void props.onMoveChat(menuProps.chat, menuProps.project, target); }}>
-              <For each={props.projects}>{(target) => <ContextMenuRadioItem value={target.id}>{target.name}</ContextMenuRadioItem>}</For>
-            </ContextMenuRadioGroup>
-          </ContextMenuSubContent>
-        </ContextMenuSub>
-        <ContextMenuItem onSelect={() => void props.onCopyTranscript(menuProps.chat)}><ClipboardCopyIcon />Copy transcript</ContextMenuItem>
-        <ContextMenuItem onSelect={() => props.onOpenTerminal(menuProps.chat, menuProps.project)}><TerminalIcon />Open terminal</ContextMenuItem>
-      </ContextMenuGroup>
-      <ContextMenuSeparator />
-      <ContextMenuGroup>
-        <ContextMenuItem variant="destructive" onSelect={() => setDeleting({ type: "chat", ...menuProps })}><Trash2Icon />Delete chat</ContextMenuItem>
-      </ContextMenuGroup>
+      <Show when={selected()} fallback={<>
+        <ContextMenuGroup>
+          <ContextMenuItem onSelect={() => requestRenameChat(menuProps.chat, menuProps.project)}><PencilIcon />Rename</ContextMenuItem>
+          <ContextMenuSub>
+            <ContextMenuSubTrigger><FolderInputIcon />Move to folder…</ContextMenuSubTrigger>
+            <ContextMenuSubContent class="w-48 sidebar-context-menu">
+              <ContextMenuRadioGroup value={menuProps.project.id} onChange={(id) => { const target = props.projects.find((item) => item.id === id); if (target) void props.onMoveChat(menuProps.chat, menuProps.project, target); }}>
+                <For each={props.projects}>{(target) => <ContextMenuRadioItem value={target.id}>{target.name}</ContextMenuRadioItem>}</For>
+              </ContextMenuRadioGroup>
+            </ContextMenuSubContent>
+          </ContextMenuSub>
+          <ContextMenuItem onSelect={() => void props.onCopyTranscript(menuProps.chat)}><ClipboardCopyIcon />Copy transcript</ContextMenuItem>
+          <ContextMenuItem onSelect={() => props.onOpenTerminal(menuProps.chat, menuProps.project)}><TerminalIcon />Open terminal</ContextMenuItem>
+        </ContextMenuGroup>
+        <ContextMenuSeparator />
+        <ContextMenuGroup>
+          <ContextMenuItem variant="destructive" onSelect={() => setDeleting({ type: "chat", ...menuProps })}><Trash2Icon />Delete chat</ContextMenuItem>
+        </ContextMenuGroup>
+      </>}>
+        <ContextMenuGroup>
+          <ContextMenuItem disabled><MessageSquareIcon />{selectedTargets().length} chats selected</ContextMenuItem>
+          <ContextMenuSub>
+            <ContextMenuSubTrigger><FolderInputIcon />Move to folder…</ContextMenuSubTrigger>
+            <ContextMenuSubContent class="w-48 sidebar-context-menu">
+              <For each={props.projects}>{(target) =>
+                <ContextMenuItem disabled={selectedTargets().every((item) => item.project.id === target.id)} onSelect={() => void moveSelectedChats(target)}>{target.name}</ContextMenuItem>}
+              </For>
+            </ContextMenuSubContent>
+          </ContextMenuSub>
+          <ContextMenuItem onSelect={() => void props.onCopyChatLinks(selectedTargets())}><ClipboardCopyIcon />Copy links</ContextMenuItem>
+          <ContextMenuItem onSelect={clearSelection}><XIcon />Clear selection</ContextMenuItem>
+        </ContextMenuGroup>
+        <ContextMenuSeparator />
+        <ContextMenuGroup>
+          <ContextMenuItem variant="destructive" onSelect={() => setDeleting({ type: "chats", targets: selectedTargets() })}><Trash2Icon />Delete {selectedTargets().length} chats</ContextMenuItem>
+        </ContextMenuGroup>
+      </Show>
     </ContextMenuContent>
   </ContextMenu>;
   };
 
   const ProjectBlock = (blockProps: { project: Project; workspace?: boolean }) => {
-    const [open, setOpen] = createSignal(true);
+    const open = () => !collapsedProjectIds().has(blockProps.project.id);
     const guard = guardFor(blockProps.project);
     const isWorkspace = () => blockProps.project.origin === "linked" || blockProps.project.origin === "created" || blockProps.project.origin === "cloned" || blockProps.project.kind === "workspace";
     const cloning = () => blockProps.project.state === "cloning";
@@ -463,7 +578,7 @@ export function Sidebar(props: {
           </button>
           <button class="sidebar-project-toggle" aria-label={`${open() ? "Collapse" : "Expand"} chat list`} title={`${open() ? "Collapse" : "Expand"} ${blockProps.project.name}`} aria-expanded={open()} onClick={(event) => {
             event.stopPropagation();
-            setOpen((value) => !value);
+            toggleProject(blockProps.project.id);
           }}>
             <ChevronRightIcon class="sidebar-chevron" />
           </button>
@@ -613,7 +728,7 @@ export function Sidebar(props: {
     </Modal>
 
     <AlertModal open={Boolean(deleting())} title={deleteCopy().title} description={deleteCopy().description} onClose={() => setDeleting(null)}>
-      <div class="mt-4 flex justify-end gap-2"><Button variant="outline" onClick={() => setDeleting(null)}>Cancel</Button><Button variant="destructive" onClick={() => void confirmDelete()}>Delete</Button></div>
+      <div class="mt-4 flex justify-end gap-2"><Button variant="outline" onClick={() => setDeleting(null)}>Cancel</Button><Button variant="destructive" onClick={() => void confirmDelete()}>{deleteButtonLabel()}</Button></div>
     </AlertModal>
 
     <Modal open={Boolean(moving())} title="Move chat" description="Choose the working folder for this chat and its attachments." onClose={() => setMoving(null)}>

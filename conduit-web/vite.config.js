@@ -17,11 +17,14 @@ export default defineConfig(() => {
     plugins: [
       solid(),
       tailwindcss(),
-      // Production-only installability: SW registration is injected into the
-      // built index.html. Dev keeps HMR free of a controlling worker.
+      // Production-only installability: the client owns SW registration so
+      // updates can reload the current page. Dev keeps HMR free of a worker.
       VitePWA({
         registerType: "autoUpdate",
-        injectRegister: "auto",
+        // Register through the application so autoUpdate can reload the page
+        // when a new worker takes control. The generated fallback script does
+        // not expose that update lifecycle to the current page.
+        injectRegister: false,
         includeAssets: ["favicon.svg", "pwa-192x192.png", "pwa-512x512.png"],
         manifest: {
           name: "Conduit",
@@ -40,6 +43,8 @@ export default defineConfig(() => {
         workbox: {
           // App shell only. Never add runtimeCaching for /v0 — those routes are
           // authenticated and mutable (catalogue, chat, runtime, live session).
+          skipWaiting: true,
+          clientsClaim: true,
           globPatterns: ["**/*.{js,css,html,svg,png,ico,woff2}"],
           navigateFallback: "/index.html",
           navigateFallbackDenylist: [

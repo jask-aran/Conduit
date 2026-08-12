@@ -1,6 +1,8 @@
+/// <reference types="vite-plugin-pwa/client" />
 import { batch, createEffect, createMemo, createSignal, ErrorBoundary, lazy, onCleanup, onMount, Show } from "solid-js";
 import { render } from "solid-js/web";
 import { PanelLeftIcon, PanelRightIcon, SearchIcon, ShareIcon, TriangleAlertIcon } from "lucide-solid";
+import { registerSW } from "virtual:pwa-register";
 import { Toaster, toast } from "solid-sonner";
 import "solid-sonner/styles.css";
 import { DefaultMeteorShower } from "@jask-aran/solid-components/meteor-shower";
@@ -8,6 +10,7 @@ import "@jask-aran/solid-components/meteor-shower.css";
 import { Button, Spinner } from "@/components/primitives";
 import { api, asList, pathChatId, pathProjectId, projectPath } from "./api/client";
 import type { ChatSummary, DashboardChat, Installation, Project, RuntimeIdentity, Template, TranscriptDetail, WorkspaceAppearance, WorkspaceSuggestion } from "./api/contracts";
+import { createErrorDiagnostic, formatRuntimeDiagnosticPrompt, type ErrorDiagnostic, type ErrorDiagnosticContext } from "./error-diagnostics";
 import { Composer } from "./chat/composer";
 import { HostUiRequests } from "./chat/host-ui-card";
 import { MARKDOWN_RENDERER_STORAGE_KEY, selectedMarkdownRenderer, type MarkdownRendererId } from "./chat/markdown-settings";
@@ -23,6 +26,8 @@ import { createCatalogueStore } from "./state/catalogue";
 import { createModelSettings } from "./state/model-settings";
 import { createRuntimeStore } from "./state/runtime";
 import "./styles.css";
+
+if (import.meta.env.PROD) registerSW({ immediate: true });
 
 type SettingsSection = "general" | "ui" | "models" | "profiles" | "runtime" | "workspaces" | "search" | "auth";
 type WorkspaceView = "files" | "diff" | "artifacts" | "terminal";
@@ -96,7 +101,18 @@ function App() {
   let attachFileInput: HTMLInputElement | undefined;
   let workspaceSuggestionsRequest: Promise<void> | null = null;
 
-  const showError = (message: string) => toast.error(message);
+  let diagnosticContext: () => ErrorDiagnosticContext = () => ({ route: location.pathname });
+  let askRuntimeForError: (diagnostic: ErrorDiagnostic) => Promise<void> = async () => {};
+  let suppressDiagnosticActions = false;
+  const showPlainError = (error: unknown) => toast.error(error instanceof Error ? error.message : String(error || "Request failed"));
+  const showError = (error: unknown) => {
+    if (suppressDiagnosticActions) return showPlainError(error);
+    const diagnostic = createErrorDiagnostic(error, diagnosticContext());
+    toast.error(diagnostic.message, {
+      duration: 12_000,
+      action: { label: "Ask Runtime", onClick: () => void askRuntimeForError(diagnostic) },
+    });
+  };
   const catalogue = createCatalogueStore();
   const runtime = createRuntimeStore();
   const models = createModelSettings(showError);
@@ -126,9 +142,26 @@ function App() {
   });
   const activeProfile = createMemo(() => chat.runtimeIdentity()?.kind === "native_pi"
     ? profiles().find((item) => item.id === "host-pi")
-    : profiles().find((item) => item.id === chat.templateId()) || templates().find((item) => item.id === defaultTemplateId()) || null);
+    : templates().find((item) => item.id === chat.templateId()) || templates().find((item) => item.id === defaultTemplateId()) || null);
   const emptyChat = createMemo(() => chat.loadedId() === catalogue.selectedId() && !chat.messages().length && !chat.tools().length && !chat.activity()?.label);
   const workspacePanelScope = createMemo(() => catalogue.selectedId() || (routeKind() === "project" && catalogue.projectId() ? `project:${catalogue.projectId()}` : null));
+
+  diagnosticContext = () => {
+    const identity = chat.runtimeIdentity();
+    return {
+      route: location.pathname,
+      chat: { id: catalogue.selectedId(), projectId: catalogue.projectId(), status: chat.status() },
+      runtime: {
+        kind: identity?.kind,
+        installationId: identity?.installationId,
+        binaryVersion: identity?.binaryVersion,
+        profileId: chat.templateId(),
+      },
+      model: models.model(),
+      thinkingLevel: models.effort(),
+      connectivity: runtime.connectivity(),
+    };
+  };
 
   createEffect(() => {
     const id = workspacePanelScope();
@@ -164,9 +197,10 @@ function App() {
     if (id) await api(`/v0/chats/${encodeURIComponent(id)}?ifEmpty=true`, { method: "DELETE" });
   };
 
-  const createChat = async (target?: Project, launch: { templateId?: string; runtimeKind?: string } = {}) => {
+  const createChat = async (target?: Project, launch: { templateId?: string; runtimeKind?: string } = {}, options: { reportFailure?: boolean } = {}) => {
+    const reportFailure = options.reportFailure !== false;
     const project = target || selectedProject() || catalogue.projects().find((item) => item.slug === "chat") || catalogue.projects()[0];
-    if (!project) return;
+    if (!project) return null;
     const replacedDraftId = currentDraftId();
     const fromDashboard = routeKind() === "project";
     try {
@@ -196,11 +230,29 @@ function App() {
         try { await discardDraft(replacedDraftId); }
         catch (error) {
           const detail = error as Error & { error?: string };
-          if (detail.error !== "chat_not_found") showError(`The new chat was created, but the old empty draft could not be removed: ${detail.message}`);
+          if (detail.error !== "chat_not_found") (reportFailure ? showError : showPlainError)(`The new chat was created, but the old empty draft could not be removed: ${detail.message}`);
         }
       }
+      return created;
     } catch (error) {
-      showError((error as Error).message);
+      if (reportFailure) showError(error);
+      else throw error;
+      return null;
+    }
+  };
+
+  askRuntimeForError = async (diagnostic) => {
+    if (suppressDiagnosticActions) return;
+    suppressDiagnosticActions = true;
+    try {
+      const created = await createChat(undefined, { templateId: "runtime" }, { reportFailure: false });
+      if (!created) throw new Error("No Chats project is available for a Runtime chat");
+      chat.setDraft(formatRuntimeDiagnosticPrompt(diagnostic));
+      await chat.send();
+    } catch (error) {
+      showPlainError(error);
+    } finally {
+      suppressDiagnosticActions = false;
     }
   };
 
@@ -213,7 +265,7 @@ function App() {
         onCommit: () => setRouteKind("chat"),
       });
     }
-    catch (error) { showError((error as Error).message); return; }
+    catch (error) { showError(error); return; }
     if (!abandonedDraftId || abandonedDraftId === target.id) return;
     try {
       await discardDraft(abandonedDraftId);
@@ -281,35 +333,93 @@ function App() {
       if (["link", "linked", "create", "created"].includes(input.mode)) await openProject(created);
       else await createChat(created, { templateId: created.defaultTemplateId || defaultTemplateId() || "chat" });
       return true;
-    } catch (error) { showError((error as Error).message); return false; }
+    } catch (error) { showError(error); return false; }
   };
   const renameChat = async (target: ChatSummary, _project: Project, name: string) => {
     try { const saved = await api<ChatSummary>(`/v0/sessions/${target.id}`, { method: "PATCH", body: JSON.stringify({ name }) }); if (catalogue.selectedId() === target.id) chat.setTitle(saved.title); await refresh(); return true; }
-    catch (error) { showError((error as Error).message); return false; }
+    catch (error) { showError(error); return false; }
   };
   const renameProject = async (target: Project, name: string) => {
     try { await api(`/v0/projects/${target.id}`, { method: "PATCH", body: JSON.stringify({ name }) }); await refresh(); return true; }
-    catch (error) { showError((error as Error).message); return false; }
+    catch (error) { showError(error); return false; }
   };
   const moveChat = async (target: ChatSummary, _source: Project, destination: Project) => {
     try { await api(`/v0/sessions/${target.id}/move`, { method: "POST", body: JSON.stringify({ projectId: destination.id }) }); await refresh(); }
-    catch (error) { showError((error as Error).message); }
+    catch (error) { showError(error); }
+  };
+  const moveChats = async (targets: Array<{ chat: ChatSummary; project: Project }>, destination: Project) => {
+    const candidates = targets.filter((target) => target.project.id !== destination.id);
+    const results = await Promise.all(candidates.map(async (target) => {
+      try {
+        await api(`/v0/sessions/${target.chat.id}/move`, { method: "POST", body: JSON.stringify({ projectId: destination.id }) });
+        return null;
+      } catch (error) {
+        return { id: target.chat.id, error };
+      }
+    }));
+    const failures = results.filter((result): result is { id: string; error: unknown } => Boolean(result));
+    await refresh();
+    if (failures.length) {
+      const first = failures[0]!.error;
+      const detail = first instanceof Error ? first.message : String(first || "Request failed");
+      showError(Object.assign(new Error(`${failures.length} of ${targets.length} chats could not be moved: ${detail}`), {
+        code: "bulk_move_failed",
+        apiRequest: (first as { apiRequest?: unknown })?.apiRequest,
+      }));
+    }
+    return failures.map((failure) => failure.id);
   };
   const moveProjectChats = async (source: Project, destination: Project) => {
     try { await api(`/v0/projects/${source.id}/move-sessions`, { method: "POST", body: JSON.stringify({ projectId: destination.id }) }); await refresh(); }
-    catch (error) { showError((error as Error).message); }
+    catch (error) { showError(error); }
   };
   const copyTranscript = async (target: ChatSummary) => {
     try { const response = await fetch(`/v0/sessions/${target.id}/transcript`); if (!response.ok) throw new Error("Could not load the transcript"); await navigator.clipboard.writeText(await response.text()); }
-    catch (error) { showError((error as Error).message); }
+    catch (error) { showError(error); }
+  };
+  const copyChatLinks = async (targets: Array<{ chat: ChatSummary; project: Project }>) => {
+    try {
+      const { origin } = await api<{ origin: string }>("/v0/share-origin");
+      const links = targets.map((target) => `${origin}/chat/${encodeURIComponent(target.chat.id)}`);
+      await navigator.clipboard.writeText(links.join("\n"));
+      toast.success(`${links.length} chat links copied`);
+      return true;
+    } catch (error) {
+      showError(error);
+      return false;
+    }
   };
   const deleteChat = async (target: ChatSummary, project: Project) => {
     try { await api(`/v0/sessions/${target.id}`, { method: "DELETE" }); if (catalogue.selectedId() === target.id) await createChat(project); await refresh(); }
-    catch (error) { showError((error as Error).message); }
+    catch (error) { showError(error); }
+  };
+  const deleteChats = async (targets: Array<{ chat: ChatSummary; project: Project }>) => {
+    const displayedId = catalogue.selectedId();
+    const displayedTarget = targets.find((target) => target.chat.id === displayedId);
+    const results = await Promise.all(targets.map(async (target) => {
+      try {
+        await api(`/v0/sessions/${target.chat.id}`, { method: "DELETE" });
+        return null;
+      } catch (error) {
+        return { id: target.chat.id, error };
+      }
+    }));
+    const failures = results.filter((result): result is { id: string; error: unknown } => Boolean(result));
+    if (displayedTarget && !failures.some((failure) => failure.id === displayedId)) await createChat(displayedTarget.project);
+    await refresh();
+    if (failures.length) {
+      const first = failures[0]!.error;
+      const detail = first instanceof Error ? first.message : String(first || "Request failed");
+      showError(Object.assign(new Error(`${failures.length} of ${targets.length} chats could not be deleted: ${detail}`), {
+        code: "bulk_delete_failed",
+        apiRequest: (first as { apiRequest?: unknown })?.apiRequest,
+      }));
+    }
+    return failures.map((failure) => failure.id);
   };
   const deleteProject = async (target: Project) => {
     try { await api(`/v0/projects/${target.id}`, { method: "DELETE" }); if (catalogue.projectId() === target.id) await createChat(catalogue.projects().find((item) => item.slug === "chat")); await refresh(); }
-    catch (error) { showError((error as Error).message); }
+    catch (error) { showError(error); }
   };
   const destroyWorkspace = async (target: Project, confirmation: string) => {
     try {
@@ -317,7 +427,7 @@ function App() {
       if (catalogue.projectId() === target.id) await createChat(catalogue.projects().find((item) => item.slug === "chat"));
       await refresh();
       return true;
-    } catch (error) { showError((error as Error).message); return false; }
+    } catch (error) { showError(error); return false; }
   };
   const cancelClone = async (operationId: string) => {
     await api(`/v0/workspace-operations/${encodeURIComponent(operationId)}`, { method: "DELETE" });
@@ -357,7 +467,7 @@ function App() {
       await navigator.clipboard.writeText(`${origin}/chat/${encodeURIComponent(chatId)}`);
       toast.success("Tailscale chat link copied");
     } catch (error) {
-      showError((error as Error).message);
+      showError(error);
     }
   };
   const shareProject = async () => {
@@ -367,7 +477,7 @@ function App() {
       const { origin } = await api<{ origin: string }>("/v0/share-origin");
       await navigator.clipboard.writeText(`${origin}${projectPath(project)}`);
       toast.success("Tailscale workspace link copied");
-    } catch (error) { showError((error as Error).message); }
+    } catch (error) { showError(error); }
   };
   const runSidebar = (type: string) => setSidebarCommand({ type, nonce: Date.now() });
   const loadWorkspaceSuggestions = () => {
@@ -482,7 +592,7 @@ function App() {
         const target = owner?.sessions.find((item) => item.id === chatId);
         if (!owner || !target) throw new Error("Chat not found");
         await chat.select(target, owner, { history: "none", onCommit: () => setRouteKind("chat") });
-      })().catch((error) => showError((error as Error).message));
+      })().catch((error) => showError(error));
     };
     window.addEventListener("popstate", onPopState);
     onCleanup(() => window.removeEventListener("popstate", onPopState));
@@ -567,8 +677,9 @@ function App() {
       connectivity={runtime.connectivity()} workspaceSuggestions={workspaceSuggestions()} command={sidebarCommand()}
       mobileOpen={mobileSidebarOpen()} onMobileOpenChange={setMobileSidebar}
       onWorkspaceSuggestionsNeeded={() => void loadWorkspaceSuggestions()}
-      onNewChat={createChat} onOpenChat={openChat} onOpenProject={openProject} onAddProject={addProject} onRenameChat={renameChat} onRenameProject={renameProject}
-      onMoveChat={moveChat} onMoveProjectChats={moveProjectChats} onCopyTranscript={copyTranscript} onDeleteChat={deleteChat} onDeleteProject={deleteProject}
+      onNewChat={async (project) => { await createChat(project); }} onOpenChat={openChat} onOpenProject={openProject} onAddProject={addProject} onRenameChat={renameChat} onRenameProject={renameProject}
+      onMoveChat={moveChat} onMoveChats={moveChats} onMoveProjectChats={moveProjectChats} onCopyTranscript={copyTranscript} onCopyChatLinks={copyChatLinks}
+      onDeleteChat={deleteChat} onDeleteChats={deleteChats} onDeleteProject={deleteProject}
       onOpenTerminal={(target, project) => { void openChat(target, project).then(() => openWorkspaceView("terminal")); }}
       onOpenSettings={openSettings} onOpenPalette={() => openPalette(null)} />
     <main data-slot="sidebar-inset" class={`chat-main${routeKind() === "chat" && emptyChat() ? " chat-main-empty" : ""}`} {...(routeKind() === "chat" ? dropHandlers : {})}>
@@ -594,7 +705,7 @@ function App() {
         </>}>
           <ChatHeader project={selectedProject()} title="Dashboard" panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onOpenPalette={() => openPalette(null)} onTogglePanel={togglePanel} onShare={() => void shareProject()} dashboard />
           <ProjectDashboard project={selectedProject()!} templates={templates()} runtime={runtime}
-            onNewChat={createChat} onOpenChat={(target: DashboardChat, project) => openChat(target, project)}
+            onNewChat={async (project) => { await createChat(project); }} onOpenChat={(target: DashboardChat, project) => openChat(target, project)}
             onRename={() => runSidebar("rename-folder")} onDelete={() => runSidebar("delete-project")}
             onOpenSettings={openSettings} onSaveDefault={saveWorkspaceDefault} onSaveAppearance={saveWorkspaceAppearance} onRefresh={refresh} onCancelClone={cancelClone} onDestroyWorkspace={(confirmation) => destroyWorkspace(selectedProject()!, confirmation)} onError={showError} />
         </Show>

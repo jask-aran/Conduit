@@ -234,7 +234,8 @@ svg { stroke-width: 1.5; }
 .composer-actions [data-slot="button"] svg { width: 16px; height: 16px; }
 .composer-actions-left, .composer-actions-right { display: flex; min-width: 0; align-items: center; gap: 3px; }
 .model-trigger { min-height: 30px; padding: 4px 7px; font-size: 13px; }
-.model-trigger:hover { background: var(--accent); }
+.model-trigger:hover:not(:disabled) { background: var(--accent); }
+.model-trigger:disabled { cursor: default; color: var(--muted-foreground); opacity: .62; }
 .model-trigger span { max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .model-trigger svg { width: 14px; height: 14px; }
 .composer-status { width: 100%; min-height: 22px; margin-top: 6px; overflow: hidden; border-radius: 5px; background: oklch(1 0 0 / 3%); font: 11px/22px ui-monospace, SFMono-Regular, Consolas, monospace; letter-spacing: 0.015em; }
