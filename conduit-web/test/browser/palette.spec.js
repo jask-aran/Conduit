@@ -115,7 +115,8 @@ test("drills into the Settings page and steps back with Escape", async ({ page }
   await page.keyboard.press("Escape");
   // Escape on a page returns to root (does not close the palette).
   await expect(page.getByText("Settings ›")).toHaveCount(0);
-  await expect(page.getByRole("option", { name: /^Go to…/ })).toBeVisible();
+  await expect(page.getByRole("option", { name: /^Search chats…/ })).toHaveCount(1);
+  await expect(page.getByRole("option", { name: /^Go to…/ })).toHaveCount(0);
 
   await page.screenshot({ path: "/home/jask/.claude/jobs/a9046fd1/tmp/command-palette.png" });
 });
@@ -146,17 +147,25 @@ test("keyboard navigation moves the active option and Escape closes root", async
 });
 
 test("Control-P opens direct chat search and Backspace stays inside the mode", async ({ page }) => {
+  await page.addInitScript(() => {
+    window.__printCalls = 0;
+    window.print = () => { window.__printCalls += 1; };
+  });
   await page.goto("/");
   await page.keyboard.press("Control+p");
   const dialog = page.getByRole("dialog", { name: "Command Palette" });
   await expect(dialog).toBeVisible();
-  await expect(dialog.getByText("Chats ›")).toBeVisible();
+  await expect(dialog.getByText("Search ›")).toBeVisible();
   await expect(dialog.getByRole("option", { name: /Existing chat/ })).toBeVisible();
+  await expect.poll(() => page.evaluate(() => window.__printCalls)).toBe(0);
 
   await page.keyboard.press("Backspace");
-  await expect(dialog.getByText("Chats ›")).toBeVisible();
+  await expect(dialog.getByText("Search ›")).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(dialog).toHaveCount(0);
+  await page.keyboard.press("Control+Shift+o");
+  await expect(page.getByRole("dialog", { name: "Command Palette" }).getByText("Search ›")).toBeVisible();
+  await page.keyboard.press("Escape");
 });
 
 test("Tab enters the highlighted page and Ctrl-E starts chat selection mode", async ({ page }) => {
@@ -185,14 +194,37 @@ test("sidebar View all opens a Chats-scoped search after the twenty-row limit", 
     createdAt: new Date(Date.now() - index * 60_000).toISOString(),
   }));
   await page.unroute("**/v0/projects");
-  await page.route("**/v0/projects", (route) => route.fulfill({ json: { projects: [{ id: "project_chat", slug: "chat", name: "Chats", sessions }] } }));
+  const researchChat = { id: "session_research", projectId: "project_research", status: "active", title: "Research chat", createdAt: new Date().toISOString() };
+  await page.route("**/v0/projects", (route) => route.fulfill({ json: { projects: [{ id: "project_chat", slug: "chat", name: "Chats", sessions }, { ...projects[1], sessions: [researchChat] }] } }));
   await page.goto("/");
-  await expect(page.locator(".sidebar-chat")).toHaveCount(20);
+  const chatsGroup = page.locator(".sidebar-group").filter({ has: page.getByText("Chats", { exact: true }) }).first();
+  await expect(chatsGroup.locator(".sidebar-chat")).toHaveCount(20);
   await page.getByRole("button", { name: "View all chats" }).click();
   const dialog = page.getByRole("dialog", { name: "Command Palette" });
-  await expect(dialog.getByText("Chats ›")).toBeVisible();
-  await dialog.getByRole("combobox", { name: "Search commands" }).fill("Many chat 23");
-  await expect(dialog.getByRole("option", { name: /Many chat 23/ })).toBeVisible();
+  await expect(dialog.getByText("Search ›")).toBeVisible();
+  await expect(dialog.getByRole("button", { name: "Remove Chats filter" })).toBeVisible();
+  await expect(dialog.getByRole("option", { name: /Research chat/ })).toHaveCount(0);
+  const input = dialog.getByRole("combobox", { name: "Search commands" });
+  await input.press("Backspace");
+  await expect(dialog.getByRole("button", { name: "Remove Chats filter" })).toHaveCount(0);
+  await expect(dialog.getByRole("option", { name: /Research chat/ })).toBeVisible();
+  await dialog.getByRole("button", { name: "Close command palette" }).click();
+  await page.getByRole("button", { name: "View all chats" }).click();
+  const scopedDialog = page.getByRole("dialog", { name: "Command Palette" });
+  await expect(scopedDialog.getByRole("button", { name: "Remove Chats filter" })).toBeVisible();
+  await scopedDialog.getByRole("combobox", { name: "Search commands" }).fill("Many chat 23");
+  await expect(scopedDialog.getByRole("button", { name: "Remove Chats filter" })).toBeVisible();
+  await expect(scopedDialog.getByRole("option", { name: /Many chat 23/ })).toBeVisible();
+  await scopedDialog.getByRole("button", { name: "Remove Chats filter" }).click();
+  await scopedDialog.getByRole("combobox", { name: "Search commands" }).fill("");
+  await expect(scopedDialog.getByRole("option", { name: /Research chat/ })).toBeVisible();
+  await scopedDialog.getByRole("combobox", { name: "Search commands" }).fill('in:"Research"');
+  await expect(scopedDialog.getByRole("option", { name: /Research chat/ })).toBeVisible();
+  await expect(scopedDialog.getByRole("option", { name: /Many chat 23/ })).toHaveCount(0);
+  await scopedDialog.getByRole("combobox", { name: "Search commands" }).fill("scope:all");
+  await expect(scopedDialog.getByRole("button", { name: "Remove All chats filter" })).toBeVisible();
+  await expect(scopedDialog.getByRole("option", { name: /Many chat 23/ })).toBeVisible();
+  await expect(scopedDialog.getByRole("option", { name: /Research chat/ })).toBeVisible();
 });
 
 test("Settings UI exposes and persists the sidebar chat limit", async ({ page }) => {
@@ -268,6 +300,26 @@ test("chat deletion from selection mode requires confirmation", async ({ page })
 
 test("opening a chat from search expands its collapsed parent folder", async ({ page }) => {
   const researchChat = { id: "session_research", projectId: "project_research", status: "active", title: "Research chat", createdAt: new Date().toISOString() };
+  await page.addInitScript((chatId) => {
+    class WorkingEventSource extends EventTarget {
+      constructor(url) {
+        super(); this.url = url; this.readyState = 0; this.onerror = null; this.onmessage = null;
+        queueMicrotask(() => {
+          if (this.readyState === 2) return;
+          this.readyState = 1;
+          const payload = { data: JSON.stringify({
+            type: "runtime_global_snapshot",
+            processes: [{ chatId, status: "running", active: true, activity: "working" }],
+            at: new Date().toISOString(),
+          }) };
+          this.onmessage?.(payload);
+          this.dispatchEvent(new MessageEvent("message", payload));
+        });
+      }
+      close() { this.readyState = 2; }
+    }
+    Object.defineProperty(window, "EventSource", { configurable: true, value: WorkingEventSource });
+  }, researchChat.id);
   await page.unroute("**/v0/projects");
   await page.route("**/v0/projects", (route) => route.fulfill({ json: {
     projects: [projects[0], { ...projects[1], sessions: [researchChat] }],
@@ -284,4 +336,9 @@ test("opening a chat from search expands its collapsed parent folder", async ({ 
   await page.getByRole("option", { name: /Research chat/ }).click();
   await expect(page).toHaveURL(/\/chat\/session_research$/);
   await expect(block.getByRole("button", { name: "Research chat" })).toBeVisible();
+  const projectLink = block.locator(".sidebar-project-link");
+  await expect(projectLink.locator(".runtime-indicator-active")).toBeVisible();
+  await block.getByRole("button", { name: "Collapse chat list" }).click();
+  await expect(block.getByRole("button", { name: "Research chat" })).toHaveCount(0);
+  await expect(projectLink.locator(".runtime-indicator-active")).toBeVisible();
 });

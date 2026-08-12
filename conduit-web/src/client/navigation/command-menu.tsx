@@ -15,6 +15,10 @@ import {
 } from "../palette/command-registry";
 import type { PaletteActions, PaletteCommand, PaletteContext } from "../palette/command-registry";
 import { rankPaletteResults } from "../palette/palette-search";
+import {
+  parseChatQuery, removeChatQueryFilter, resolveChatQueryScope, serializeChatQuery,
+} from "../palette/chat-query";
+import type { ChatQueryFilter } from "../palette/chat-query";
 
 const icons: Record<string, (props: { class?: string }) => JSX.Element> = {
   "new-chat": MessageSquarePlusIcon,
@@ -47,7 +51,7 @@ const icons: Record<string, (props: { class?: string }) => JSX.Element> = {
 const GROUP_HEADINGS: Record<string, string> = {
   commands: "Commands",
   settings: "Settings",
-  navigation: "Go to",
+  navigation: "Chat actions",
   profiles: "Profiles",
   thinking: "Thinking level",
   danger: "Danger zone",
@@ -79,6 +83,7 @@ function groupModels(models: ModelOption[]): { provider: string; items: ModelOpt
 }
 
 const optionId = (index: number) => `command-option-${index}`;
+const canonicalPage = (value?: string | null) => value === "goto" ? "chat-search" : (value || null);
 
 function formatChatDate(value?: string): string {
   if (!value || !Number.isFinite(Date.parse(value))) return "Unknown date";
@@ -91,7 +96,7 @@ export function CommandMenu(props: {
   initialPage?: string | null;
   launchNonce?: number;
   directLaunch?: boolean;
-  chatScopeProjectId?: string | null;
+  initialQuery?: string | null;
   context: PaletteContext;
   actions: PaletteActions;
   models: ModelOption[];
@@ -101,7 +106,6 @@ export function CommandMenu(props: {
 }) {
   const [query, setQuery] = createSignal("");
   const [page, setPage] = createSignal<string | null>(null);
-  const [scopeProjectId, setScopeProjectId] = createSignal<string | null>(null);
   const [active, setActive] = createSignal(0);
   const [selectionMode, setSelectionMode] = createSignal(false);
   const [selectedChatIds, setSelectedChatIds] = createSignal<Set<string>>(new Set());
@@ -118,13 +122,14 @@ export function CommandMenu(props: {
   let directMode = false;
 
   const pageMeta = createMemo(() => (page() ? PALETTE_PAGES[page()!] : null));
-  const searching = createMemo(() => Boolean(query().trim()));
-  const chatPage = createMemo(() => page() === "chat-search" || page() === "goto");
+  const parsedQuery = createMemo(() => parseChatQuery(query()));
+  const searching = createMemo(() => Boolean(parsedQuery().text));
+  const chatPage = createMemo(() => page() === "chat-search");
+  const chatScope = createMemo(() => resolveChatQueryScope(parsedQuery(), props.context.projects || []));
 
   const resetTransient = () => {
     setQuery("");
     setPage(null);
-    setScopeProjectId(null);
     setSelectionMode(false);
     setSelectedChatIds(new Set<string>());
     setMoveMode(false);
@@ -140,9 +145,8 @@ export function CommandMenu(props: {
     const launchChanged = props.launchNonce !== lastLaunchNonce;
     if (props.open && (!wasOpen || launchChanged)) {
       if (!wasOpen) returnFocus = document.activeElement as HTMLElement | null;
-      setPage(props.initialPage || null);
-      setQuery("");
-      setScopeProjectId(props.chatScopeProjectId || null);
+      setPage(canonicalPage(props.initialPage));
+      setQuery(props.initialQuery || "");
       setSelectionMode(false);
       setSelectedChatIds(new Set<string>());
       setMoveMode(false);
@@ -159,11 +163,12 @@ export function CommandMenu(props: {
   const commands = createMemo(() => {
     const currentPage = page();
     const all = resolvePaletteCommands(props.context, { page: currentPage });
-    const scope = scopeProjectId();
-    if (!scope || !chatPage()) return all;
+    const scope = chatScope();
+    if (!chatPage() || scope.kind === "all") return all;
+    if (scope.kind === "unresolved") return [];
     return all.filter((command) => command.entity === "chat"
-      ? command.project?.id === scope
-      : command.id === `new-chat-in:${scope}`);
+      ? command.project?.id === scope.project.id
+      : command.id === `new-chat-in:${scope.project.id}`);
   });
 
   const rows = createMemo<Row[]>(() => {
@@ -187,7 +192,7 @@ export function CommandMenu(props: {
       const ranked = rankPaletteResults<PaletteCommand, ModelOption>({
         commands: source,
         models: currentPage ? [] : props.models,
-        query: query(),
+        query: parsedQuery().text,
         currentModel: props.currentModel,
       }) || [];
       let lastGroup = "";
@@ -270,7 +275,24 @@ export function CommandMenu(props: {
   const close = () => { resetTransient(); props.onOpenChange(false); };
   const goBack = () => {
     if (moveMode()) { setMoveMode(false); setQuery(""); return; }
-    setPage(null); setQuery(""); setScopeProjectId(null); setSelectionMode(false); setSelectedChatIds(new Set<string>()); directMode = false;
+    setPage(null); setQuery(""); setSelectionMode(false); setSelectedChatIds(new Set<string>()); directMode = false;
+  };
+
+  const filterLabel = (filter: ChatQueryFilter): string => {
+    if (filter.kind === "scope" && filter.value.toLocaleLowerCase() === "chats") return "Chats";
+    if (filter.kind === "scope" && filter.value.toLocaleLowerCase() === "all") return "All chats";
+    const scope = chatScope();
+    return scope.kind === "project" ? scope.project.name : `in:${filter.value}`;
+  };
+  const removeFilter = (index: number) => {
+    setQuery(removeChatQueryFilter(parsedQuery(), index));
+    queueMicrotask(() => input?.focus());
+  };
+  const emptyMessage = () => {
+    const scope = chatScope();
+    if (scope.kind === "unresolved") return `No chats in “${scope.value}”.`;
+    if (chatPage() && parsedQuery().filters.length) return "No chats match this filter.";
+    return "No matching commands.";
   };
 
   const toggleChatSelection = (id: string) => {
@@ -327,7 +349,7 @@ export function CommandMenu(props: {
     if (command.id === "page-back") { goBack(); return; }
     if (selectionMode() && command.entity === "chat" && command.chat) { toggleChatSelection(command.chat.id); return; }
     if (command.kind === "page" && command.page) {
-      setPage(command.page); setQuery(""); setScopeProjectId(null); setMoveMode(false); setSelectionMode(false); setSelectedChatIds(new Set<string>()); directMode = false; return;
+      setPage(canonicalPage(command.page)); setQuery(""); setMoveMode(false); setSelectionMode(false); setSelectedChatIds(new Set<string>()); directMode = false; return;
     }
     close();
     requestAnimationFrame(() => command.run(props.actions));
@@ -370,7 +392,11 @@ export function CommandMenu(props: {
       if (selectionMode()) { setSelectionMode(false); setSelectedChatIds(new Set<string>()); input?.focus(); return; }
       if (page() && !directMode) goBack(); else close();
     }
-    // Backspace edits the query. It never exits a page when the query is empty.
+    if (event.key === "Backspace" && chatPage() && !parsedQuery().text && parsedQuery().filters.length) {
+      event.preventDefault();
+      removeFilter(parsedQuery().filters.length - 1);
+    }
+    // Backspace edits the query. It never exits a page when no filter remains.
   };
 
   const renameKeydown = (event: KeyboardEvent) => {
@@ -441,10 +467,13 @@ export function CommandMenu(props: {
             <KDialog.Description class="sr-only">Search commands, chats, settings, and models.</KDialog.Description>
             <div class="command-input-row">
               <Show when={pageMeta()}><span class="command-page-prefix">{pageMeta()!.prefix}</span></Show>
-              <Show when={scopeProjectId() && chatPage()}>
-                <button type="button" class="command-scope-chip" aria-label="Search all chats" title="Remove Chats scope" onMouseDown={(event) => event.preventDefault()} onClick={() => { setScopeProjectId(null); input?.focus(); }}>
-                  Chats <span aria-hidden="true">×</span>
-                </button>
+              <Show when={chatPage()}>
+                <For each={parsedQuery().filters}>{(filter, index) => {
+                  const label = () => filterLabel(filter);
+                  return <button type="button" class="command-filter-chip" aria-label={`Remove ${label()} filter`} title={`Remove ${label()} filter`} onMouseDown={(event) => event.preventDefault()} onClick={() => removeFilter(index())}>
+                    {label()} <span aria-hidden="true">×</span>
+                  </button>;
+                }}</For>
               </Show>
               <input
                 ref={input}
@@ -456,8 +485,8 @@ export function CommandMenu(props: {
                 aria-activedescendant={selectable().length ? optionId(active()) : undefined}
                 aria-label="Search commands"
                 placeholder={pageMeta()?.placeholder || "Search commands…"}
-                value={query()}
-                onInput={(event) => setQuery(event.currentTarget.value)}
+                value={parsedQuery().text}
+                onInput={(event) => setQuery(serializeChatQuery(parsedQuery().filters, event.currentTarget.value))}
                 onKeyDown={keydown}
               />
               <Show when={selectionMode()}><span class="command-selection-count">{selectedTargets().length} selected</span></Show>
@@ -475,7 +504,7 @@ export function CommandMenu(props: {
               </Button>
             </div>
             <div id="command-listbox" ref={listbox} role="listbox" aria-label={chatPage() ? "Chats" : "Commands"} class="command-list" tabIndex={selectionMode() || moveMode() ? 0 : -1} onKeyDown={keydown}>
-              <Show when={!selectable().length}><p class="command-empty">No matching commands.</p></Show>
+              <Show when={!selectable().length}><p class="command-empty">{emptyMessage()}</p></Show>
               <For each={rows()}>{renderRow}</For>
             </div>
           </div>

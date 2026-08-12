@@ -61,20 +61,25 @@ Persisted image cards use the attachment preview route, including when restored
 for edit. The compact composer model menu remains separate from Settings'
 searchable multi-model picker. Cmd/Ctrl+K opens the typed application command
 palette. Root lists concrete app actions and models; Settings…, Search chats…,
-Go to…, and Workspace views… are drill-down pages with search prefixes
-(`Settings ›`, `Chats ›`, `Go to ›`, `Workspace ›`) so sections, chats, and
-panel tabs do not flood the root list. Cmd/Ctrl+P opens Chat search directly
-and prevents the browser print shortcut while the page has focus. The legacy
-Cmd/Ctrl+Shift+O shortcut opens the same chat mode. Empty-query Backspace stays
-inside the active mode; Escape returns to the root palette or closes a direct
-launch. Tab enters a highlighted drill-down page.
+and Workspace views… are drill-down pages with search prefixes
+(`Settings ›`, `Search ›`, `Workspace ›`) so sections, chats, and panel tabs do
+not flood the root list. Cmd/Ctrl+P opens Chat search directly and prevents the
+browser print shortcut while the page has focus. The legacy Cmd/Ctrl+Shift+O
+shortcut opens the same chat mode as a compatibility alias. Chat search accepts
+`scope:chats`, `scope:all`, and quoted `in:<folder-or-workspace>` filters; View
+all chats pre-applies `scope:chats` in the same surface. Empty-query Backspace
+removes a filter before it can change palette level; Escape returns to the root
+palette or closes a direct launch. Tab enters a highlighted drill-down page.
 
 Chat search matches chat titles and their owning folder or Workspace. It shows
 creation dates, includes the current chat, and supports Cmd/Ctrl+E selection
 mode. Selection mode supports Space, R (rename), M (move), C (copy links), and
 D/Delete (confirmed delete). The sidebar's Chats group shows 20 rows by
 default; Settings → UI stores an integer limit from 5 to 100, and View all
-chats opens a Chats-scoped search for older rows. Search and management use the
+chats opens a Chats-scoped search for older rows. A folder or Workspace can
+remain collapsed even when it contains the active chat; Search chats remains
+the route to that session. Existing generation indicators stay unchanged.
+Search and management use the
 same palette shell so later file, artifact, and host search domains can add
 rows and previews without a second dialog.
 

@@ -137,18 +137,6 @@ export const PALETTE_PAGES: Record<string, PalettePage> = {
     placeholder: "Search settings…",
     heading: "Settings",
   },
-  goto: {
-    id: "goto",
-    label: "Go to…",
-    description: "Open a chat or start one in a folder",
-    icon: "chat",
-    shortcut: "⌘⇧O",
-    keywords: ["open", "navigate", "jump", "chat", "folder"],
-    group: "commands",
-    prefix: "Go to ›",
-    placeholder: "Search chats and folders…",
-    heading: "Go to",
-  },
   "chat-search": {
     id: "chat-search",
     label: "Search chats…",
@@ -157,7 +145,7 @@ export const PALETTE_PAGES: Record<string, PalettePage> = {
     shortcut: "⌘P",
     keywords: ["search", "find", "chat", "conversation", "folder", "workspace"],
     group: "commands",
-    prefix: "Chats ›",
+    prefix: "Search ›",
     placeholder: "Search chats and folders…",
     heading: "Chats",
   },
@@ -577,14 +565,14 @@ function filterAvailable(items: PaletteCommand[], context: PaletteContext): Pale
 /**
  * Resolve commands for the palette.
  * - page null: root only (static actions, portals, root sources). Page children
- *   never leak into root search — enter Settings… / Go to… (or a shortcut that
- *   opens that page) to search within them.
+ *   never leak into root search — enter a page portal (or use its shortcut) to
+ *   search within it.
  * - page set: only that page's children
  */
 export function resolvePaletteCommands(context: PaletteContext, options: { page?: string | null } = {}): PaletteCommand[] {
   const requestedPage = options.page || null;
-  // `goto` remains a compatibility alias for bookmarks and the existing
-  // Cmd/Ctrl+Shift+O shortcut. Both aliases use the same first-class chat mode.
+  // `goto` remains a compatibility alias for older callers and the existing
+  // Cmd/Ctrl+Shift+O shortcut. It is not a visible page portal.
   const page = requestedPage === "goto" ? "chat-search" : requestedPage;
 
   if (page) {

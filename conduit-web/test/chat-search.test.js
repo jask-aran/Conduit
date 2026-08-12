@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { chatDateSection, resolvePaletteCommands } from "../src/client/palette/command-registry.ts";
+import {
+  parseChatQuery, removeChatQueryFilter, resolveChatQueryScope, serializeChatQuery,
+} from "../src/client/palette/chat-query.ts";
 
 function context(projects, chatId = null) {
   return {
@@ -53,4 +56,36 @@ test("chat date sections use local calendar boundaries", () => {
   assert.equal(chatDateSection(localDate(3)), "Previous 7 days");
   assert.equal(chatDateSection(localDate(10)), "Older");
   assert.equal(chatDateSection(undefined), "Older");
+});
+
+test("chat query parser separates filters from free text and round-trips them", () => {
+  const parsed = parseChatQuery('invoice scope:chats in:"Design notes"');
+  assert.equal(parsed.text, "invoice");
+  assert.deepEqual(parsed.filters.map(({ kind, value }) => ({ kind, value })), [
+    { kind: "scope", value: "chats" },
+    { kind: "in", value: "Design notes" },
+  ]);
+  assert.equal(serializeChatQuery(parsed.filters, parsed.text), 'scope:chats in:"Design notes" invoice');
+  assert.equal(removeChatQueryFilter(parsed, 0), 'in:"Design notes" invoice');
+});
+
+test("chat query parser keeps unknown colon text and resolves scopes by project metadata", () => {
+  const projects = [
+    { id: "project_chat", slug: "chat", name: "Chats", sessions: [] },
+    { id: "project_design", slug: "design", name: "Design notes", sessions: [] },
+  ];
+  assert.equal(parseChatQuery("url:https://example.test/in:box").text, "url:https://example.test/in:box");
+  assert.equal(parseChatQuery("scope:other invoice").text, "scope:other invoice");
+  assert.equal(resolveChatQueryScope(parseChatQuery("scope:chats"), projects).kind, "project");
+  assert.equal(resolveChatQueryScope(parseChatQuery("IN:DESIGN"), projects).kind, "project");
+  assert.equal(resolveChatQueryScope(parseChatQuery("in:missing"), projects).kind, "unresolved");
+  assert.equal(resolveChatQueryScope(parseChatQuery("scope:all"), projects).kind, "all");
+});
+
+test("chat query parser makes duplicate filters deterministic", () => {
+  const parsed = parseChatQuery("scope:chats scope:all scope:chats in:design in:design");
+  assert.deepEqual(parsed.filters.map(({ kind, value }) => ({ kind, value })), [
+    { kind: "scope", value: "chats" },
+    { kind: "in", value: "design" },
+  ]);
 });
