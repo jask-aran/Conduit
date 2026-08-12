@@ -110,6 +110,8 @@ test("drills into the Settings page and steps back with Escape", async ({ page }
   await expect(page.getByRole("option", { name: /^Models/ })).toBeVisible();
   await expect(page.getByRole("option", { name: /^Back/ })).toBeVisible();
 
+  await page.keyboard.press("Backspace");
+  await expect(page.getByText("Settings ›")).toBeVisible();
   await page.keyboard.press("Escape");
   // Escape on a page returns to root (does not close the palette).
   await expect(page.getByText("Settings ›")).toHaveCount(0);
@@ -141,4 +143,145 @@ test("keyboard navigation moves the active option and Escape closes root", async
   await expect(input).toHaveAttribute("aria-activedescendant", /command-option-\d+/);
   await page.keyboard.press("Escape");
   await expect(page.getByRole("dialog", { name: "Command Palette" })).toHaveCount(0);
+});
+
+test("Control-P opens direct chat search and Backspace stays inside the mode", async ({ page }) => {
+  await page.goto("/");
+  await page.keyboard.press("Control+p");
+  const dialog = page.getByRole("dialog", { name: "Command Palette" });
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByText("Chats ›")).toBeVisible();
+  await expect(dialog.getByRole("option", { name: /Existing chat/ })).toBeVisible();
+
+  await page.keyboard.press("Backspace");
+  await expect(dialog.getByText("Chats ›")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(dialog).toHaveCount(0);
+});
+
+test("Tab enters the highlighted page and Ctrl-E starts chat selection mode", async ({ page }) => {
+  await page.goto("/");
+  await openPalette(page);
+  const input = page.getByRole("combobox", { name: "Search commands" });
+  const settings = page.getByRole("option", { name: /^Settings…/ });
+  await settings.hover();
+  await input.press("Tab");
+  await expect(page.getByText("Settings ›")).toBeVisible();
+
+  await page.keyboard.press("Escape");
+  await page.keyboard.press("Control+p");
+  await page.keyboard.press("Control+e");
+  await expect(page.getByText("1 selected")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.getByText("1 selected")).toHaveCount(0);
+});
+
+test("sidebar View all opens a Chats-scoped search after the twenty-row limit", async ({ page }) => {
+  const sessions = Array.from({ length: 24 }, (_, index) => ({
+    id: `session_many_${index}`,
+    projectId: "project_chat",
+    status: "active",
+    title: `Many chat ${index}`,
+    createdAt: new Date(Date.now() - index * 60_000).toISOString(),
+  }));
+  await page.unroute("**/v0/projects");
+  await page.route("**/v0/projects", (route) => route.fulfill({ json: { projects: [{ id: "project_chat", slug: "chat", name: "Chats", sessions }] } }));
+  await page.goto("/");
+  await expect(page.locator(".sidebar-chat")).toHaveCount(20);
+  await page.getByRole("button", { name: "View all chats" }).click();
+  const dialog = page.getByRole("dialog", { name: "Command Palette" });
+  await expect(dialog.getByText("Chats ›")).toBeVisible();
+  await dialog.getByRole("combobox", { name: "Search commands" }).fill("Many chat 23");
+  await expect(dialog.getByRole("option", { name: /Many chat 23/ })).toBeVisible();
+});
+
+test("Settings UI exposes and persists the sidebar chat limit", async ({ page }) => {
+  await page.goto("/");
+  await openPalette(page);
+  await page.getByRole("option", { name: /^Settings…/ }).click();
+  await page.getByRole("option", { name: /^UI$/ }).click();
+  const settings = page.getByRole("dialog", { name: "Settings" });
+  const limit = settings.getByLabel("Chats shown in sidebar");
+  await expect(limit).toHaveValue("20");
+  await limit.fill("8");
+  await limit.blur();
+  await expect(limit).toHaveValue("8");
+  await settings.getByRole("button", { name: "Close" }).click();
+  await page.keyboard.press("Control+k");
+  await page.getByRole("option", { name: /^Settings…/ }).click();
+  await page.getByRole("option", { name: /^UI$/ }).click();
+  await expect(page.getByRole("dialog", { name: "Settings" }).getByLabel("Chats shown in sidebar")).toHaveValue("8");
+});
+
+test("chat selection mode supports rename, copy links, and move destinations", async ({ page }) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText: async (text) => { window.__copiedChatLinks = text; } },
+    });
+  });
+  await page.route("**/v0/share-origin", (route) => route.fulfill({ json: { origin: "https://conduit.example" } }));
+  const renames = [];
+  await page.route("**/v0/sessions/session_existing", async (route) => {
+    if (route.request().method() !== "PATCH") return route.fallback();
+    renames.push(route.request().postDataJSON());
+    await route.fulfill({ json: { ...projects[0].sessions[0], title: "Renamed chat" } });
+  });
+  const moves = [];
+  await page.route("**/v0/sessions/session_existing/move", async (route) => {
+    moves.push(route.request().postDataJSON());
+    await route.fulfill({ json: {} });
+  });
+
+  await page.goto("/");
+  await page.keyboard.press("Control+p");
+  await page.keyboard.press("Control+e");
+  await expect(page.getByText("1 selected")).toBeVisible();
+  await page.keyboard.press("r");
+  const rename = page.getByRole("textbox", { name: "Rename Existing chat" });
+  await expect(rename).toBeVisible();
+  await rename.fill("Renamed chat");
+  await rename.press("Enter");
+  await expect.poll(() => renames).toEqual([{ name: "Renamed chat" }]);
+
+  await page.locator(".command-list").focus();
+  await page.keyboard.press("c");
+  await expect.poll(() => page.evaluate(() => window.__copiedChatLinks)).toBe("https://conduit.example/chat/session_existing");
+  await page.keyboard.press("m");
+  await expect(page.getByRole("option", { name: /^Research/ })).toBeVisible();
+  await page.getByRole("option", { name: /^Research/ }).click();
+  await expect.poll(() => moves).toEqual([{ projectId: "project_research" }]);
+  await expect(page.getByRole("dialog", { name: "Command Palette" })).toHaveCount(0);
+});
+
+test("chat deletion from selection mode requires confirmation", async ({ page }) => {
+  await page.goto("/");
+  await page.keyboard.press("Control+p");
+  await page.keyboard.press("Control+e");
+  await page.keyboard.press("Delete");
+  const confirmation = page.getByRole("alertdialog", { name: "Delete 1 chats?" });
+  await expect(confirmation).toBeVisible();
+  await expect(confirmation).toContainText("permanently deletes");
+  await confirmation.getByRole("button", { name: "Delete chats" }).click();
+  await expect(page.getByRole("dialog", { name: "Command Palette" })).toHaveCount(0);
+});
+
+test("opening a chat from search expands its collapsed parent folder", async ({ page }) => {
+  const researchChat = { id: "session_research", projectId: "project_research", status: "active", title: "Research chat", createdAt: new Date().toISOString() };
+  await page.unroute("**/v0/projects");
+  await page.route("**/v0/projects", (route) => route.fulfill({ json: {
+    projects: [projects[0], { ...projects[1], sessions: [researchChat] }],
+  } }));
+  await page.route("**/v0/chats/session_research", (route) => route.fulfill({ json: researchChat }));
+  await page.route("**/v0/sessions/session_research", (route) => route.fulfill({ json: { ...researchChat, messages: [], tools: [], page: { before: null } } }));
+  await page.goto("/");
+  const block = page.locator(".sidebar-project-block").filter({ hasText: "Research" });
+  await block.getByRole("button", { name: "Collapse chat list" }).click();
+  await expect(block.getByRole("button", { name: "Research chat" })).toHaveCount(0);
+
+  await page.keyboard.press("Control+p");
+  await page.getByRole("combobox", { name: "Search commands" }).fill("Research chat");
+  await page.getByRole("option", { name: /Research chat/ }).click();
+  await expect(page).toHaveURL(/\/chat\/session_research$/);
+  await expect(block.getByRole("button", { name: "Research chat" })).toBeVisible();
 });

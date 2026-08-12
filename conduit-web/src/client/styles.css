@@ -341,13 +341,19 @@ svg { stroke-width: 1.5; }
 .search-provider-card input:disabled { cursor: not-allowed; }
 .command-dialog { width: 100vw; height: 100dvh; margin: 0; }
 .command-shell { display: flex; flex-direction: column; width: min(640px, calc(100vw - 28px)); max-height: min(600px, calc(100dvh - 28px)); overflow: hidden; border: 1px solid var(--border); border-radius: 14px; background: var(--popover); box-shadow: 0 24px 80px rgb(0 0 0 / 42%); }
+.command-dialog-chat-search .command-shell { width: min(900px, calc(100vw - 28px)); max-height: min(720px, calc(100dvh - 28px)); }
 .command-input-row { display: flex; align-items: center; gap: 8px; padding: 0 8px 0 13px; border-bottom: 1px solid var(--border); }
 .command-page-prefix { color: var(--muted-foreground); font-size: 13px; white-space: nowrap; }
+.command-scope-chip { display: inline-flex; flex: none; align-items: center; gap: 5px; border: 1px solid var(--border); border-radius: 999px; background: var(--accent); padding: 3px 7px 3px 9px; color: var(--accent-foreground); font-size: 12px; }
+.command-scope-chip span { color: var(--muted-foreground); font-size: 14px; line-height: 1; }
+.command-scope-chip:hover, .command-scope-chip:focus-visible { border-color: var(--ring); }
 .command-input { min-width: 0; flex: 1; min-height: 50px; border: 0; outline: 0; background: transparent; padding: 0; color: inherit; font-size: 15px; }
 .command-input::placeholder { color: var(--muted-foreground); }
 .command-close { flex: none; color: var(--muted-foreground); }
 .command-close svg { width: 16px; height: 16px; }
+.command-selection-count { flex: none; color: var(--muted-foreground); font-size: 12px; white-space: nowrap; }
 .command-list { min-height: 0; flex: 1; overflow-y: auto; padding: 7px; scrollbar-width: thin; }
+.command-list:focus-visible { outline: 2px solid var(--ring); outline-offset: -2px; }
 .command-list, .model-scope-list, .settings-content, .artifact pre, .tool-card pre, .composer textarea, .attachment-tray, .external-link-url, .conduit-modal-card, .workspace-tree, .workspace-preview pre, .workspace-changes, .workspace-git-graph, .workspace-diff-content { scrollbar-color: color-mix(in oklch, var(--foreground), transparent 72%) transparent; scrollbar-width: thin; }
 .command-list::-webkit-scrollbar, .model-scope-list::-webkit-scrollbar, .settings-content::-webkit-scrollbar, .artifact pre::-webkit-scrollbar, .tool-card pre::-webkit-scrollbar, .composer textarea::-webkit-scrollbar, .attachment-tray::-webkit-scrollbar, .external-link-url::-webkit-scrollbar, .conduit-modal-card::-webkit-scrollbar, .workspace-tree::-webkit-scrollbar, .workspace-preview pre::-webkit-scrollbar, .workspace-changes::-webkit-scrollbar, .workspace-git-graph::-webkit-scrollbar, .workspace-diff-content::-webkit-scrollbar { width: 7px; height: 7px; }
 .command-list::-webkit-scrollbar-thumb, .model-scope-list::-webkit-scrollbar-thumb, .settings-content::-webkit-scrollbar-thumb, .artifact pre::-webkit-scrollbar-thumb, .tool-card pre::-webkit-scrollbar-thumb, .composer textarea::-webkit-scrollbar-thumb, .attachment-tray::-webkit-scrollbar-thumb, .external-link-url::-webkit-scrollbar-thumb, .conduit-modal-card::-webkit-scrollbar-thumb, .workspace-tree::-webkit-scrollbar-thumb, .workspace-preview pre::-webkit-scrollbar-thumb, .workspace-changes::-webkit-scrollbar-thumb, .workspace-git-graph::-webkit-scrollbar-thumb, .workspace-diff-content::-webkit-scrollbar-thumb { border: 2px solid transparent; border-radius: 999px; background: color-mix(in oklch, var(--foreground), transparent 72%); background-clip: padding-box; }
@@ -361,10 +367,17 @@ svg { stroke-width: 1.5; }
 .command-option[data-danger] .command-icon { color: var(--destructive); }
 .command-copy { display: flex; min-width: 0; flex: 1; flex-direction: column; }
 .command-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.command-option[data-chat-row="true"] .command-label { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; white-space: normal; }
 .command-copy small { overflow: hidden; color: var(--muted-foreground); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
 .command-chevron { width: 15px; height: 15px; flex: none; color: var(--muted-foreground); }
 .command-shortcut { flex: none; color: var(--muted-foreground); font-size: 11px; font-family: inherit; }
 .command-option[data-checked] .command-label::after { content: "✓"; margin-left: 8px; color: var(--primary); }
+.command-select-mark { display: grid; width: 17px; height: 17px; flex: none; place-items: center; border: 1px solid var(--border); border-radius: 4px; color: var(--primary); }
+.command-select-mark svg { width: 13px; height: 13px; }
+.command-option[data-chat-selected="true"] { box-shadow: inset 2px 0 var(--accent-cool); }
+.command-rename-input { min-width: 0; width: 100%; border: 1px solid var(--ring); border-radius: 5px; outline: 0; background: var(--background); padding: 2px 5px; color: inherit; font: inherit; }
+.command-detail-pane { width: min(320px, calc(100vw - 28px)); max-height: min(600px, calc(100dvh - 28px)); overflow: auto; border: 1px solid var(--border); border-left: 0; border-radius: 0 14px 14px 0; background: var(--popover); padding: 16px; }
+.dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
 .palette-move-list { display: flex; flex-direction: column; gap: 2px; max-height: 320px; overflow-y: auto; margin-top: 12px; }
 .palette-move-option { width: 100%; justify-content: flex-start; gap: 10px; }
 
