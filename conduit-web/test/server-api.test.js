@@ -407,7 +407,20 @@ exit 0
       body: JSON.stringify({ chatId: chat.id, projectId: "project_chat" }),
     });
     assert.equal(freshLive.status, 201);
-    assert.equal((await freshLive.json()).status, "running");
+    const freshLiveBody = await freshLive.json();
+    assert.equal(freshLiveBody.status, "running");
+    assert.deepEqual(freshLiveBody.modelProfile, {
+      id: "brave-search",
+      label: "Brave search",
+      searchRouting: {
+        providers: ["brave"],
+        fallbackOn: ["transient", "quota", "network"],
+      },
+    });
+    const derivedSearchConfig = JSON.parse(await fs.readFile(path.join(root, "pi", "model-profiles", "brave-search", "web-search.json"), "utf8"));
+    assert.deepEqual(derivedSearchConfig.searchRouting.providers, ["brave"]);
+    assert.equal("provider" in derivedSearchConfig, false);
+    assert.equal("searchProvider" in derivedSearchConfig, false);
     await assert.rejects(fs.access(freshSessionFile), { code: "ENOENT" });
 
     const directory = path.join(root, "files", ".conduit", "chats", chat.id);

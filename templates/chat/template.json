@@ -1,6 +1,6 @@
 {
   "id": "chat",
-  "version": "6",
+  "version": "8",
   "label": "Assistant",
   "description": "General-purpose Pi with file, shell, and model-agnostic web research tools.",
   "posture": "read / write / edit / shell / web search / source fetch",
@@ -15,6 +15,9 @@
   "extensions": [
     "../../conduit-web/node_modules/pi-web-access"
   ],
-  "skills": [],
+  "runtimeOverlays": ["web-search"],
+  "skills": [
+    "../workspace/skills/web-research"
+  ],
   "promptTemplates": []
 }

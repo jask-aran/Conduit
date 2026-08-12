@@ -1,0 +1,23 @@
+{
+  "version": "1",
+  "profiles": [
+    {
+      "id": "openai-search",
+      "label": "OpenAI search",
+      "matches": ["openai-codex/*", "openai/*"],
+      "searchRouting": {
+        "providers": ["openai", "brave"],
+        "fallbackOn": ["transient", "quota", "network"]
+      }
+    },
+    {
+      "id": "brave-search",
+      "label": "Brave search",
+      "matches": ["*"],
+      "searchRouting": {
+        "providers": ["brave"],
+        "fallbackOn": ["transient", "quota", "network"]
+      }
+    }
+  ]
+}

@@ -159,6 +159,15 @@ export interface ModelOption {
   thinkingLevels: string[];
 }
 
+export interface ModelProfileView {
+  id: string;
+  label: string;
+  searchRouting: {
+    providers: string[];
+    fallbackOn: string[];
+  };
+}
+
 export interface ModelState {
   installationId?: string;
   runtimeKind?: RuntimeKind;
@@ -172,6 +181,7 @@ export interface ModelState {
   enabledModels?: string[];
   requiresAuthentication?: boolean;
   warnings?: string[];
+  modelProfile?: ModelProfileView | null;
   source?: string;
 }
 
@@ -182,6 +192,7 @@ export interface Template {
   posture?: string;
   defaultable?: boolean;
   tools?: string[];
+  runtimeOverlays?: string[];
   runtime?: RuntimeIdentity;
   disabled?: boolean;
 }
@@ -242,6 +253,7 @@ export interface RuntimeProcess {
   hostUiRequests?: HostUiRequest[];
   compacting?: boolean;
   retry?: RetryState | null;
+  modelProfile?: ModelProfileView | null;
 }
 
 export interface LiveRecord {
@@ -253,4 +265,5 @@ export interface LiveRecord {
   binaryVersion?: string;
   trustPosture?: string;
   sessionFile?: string;
+  modelProfile?: ModelProfileView | null;
 }

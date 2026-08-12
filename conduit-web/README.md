@@ -78,14 +78,18 @@ leaves its tab.
 
 Every Isolated Pi profile process receives:
 
-- `PI_CODING_AGENT_DIR=$CONDUIT_DATA_ROOT/pi`;
+- `PI_CODING_AGENT_DIR=$CONDUIT_DATA_ROOT/pi`, except a web-search-enabled
+  isolated process with a model-aware overlay, which uses
+  `$CONDUIT_DATA_ROOT/pi/model-profiles/<profile-id>`;
 - the selected project directory as `cwd`;
 - resources from the chat's sticky profile (`templates/<id>/template.json`) as
   explicit CLI arguments.
 
-No session-directory override is supplied. Pi writes native JSONL sessions to
-`$CONDUIT_DATA_ROOT/pi/sessions/<encoded-cwd>/`, and Conduit verifies each JSONL header's `cwd`
-when associating sessions with projects.
+No session-directory override is supplied. The model-profile directory links
+to canonical Pi auth and model files; it contains only derived web-search
+routing. Pi writes native JSONL sessions to
+`$CONDUIT_DATA_ROOT/pi/sessions/<encoded-cwd>/`, and Conduit verifies each JSONL
+header's `cwd` when associating sessions with projects.
 
 Host Pi Workspace processes instead use the detected absolute host executable,
 login-shell environment and effective Pi home/configuration, the Workspace as `cwd`, and only the
@@ -108,14 +112,17 @@ JSONL remains authoritative for persisted messages, tool calls, model changes,
 and thinking-level changes. Opening a chat reconstructs that state from its
 entries through an append-aware index: ordinary transcript requests read only
 the requested turn window, incomplete final writes are ignored, and file
-replacement or truncation invalidates cached offsets. Selecting a model updates the active process and Pi's shared
-`defaultModel`; a new chat starts with that saved model while an existing chat
-retains its recorded model. Pi has one active thinking level, so Conduit stores
-the last valid level for each model on the stable chat record and reapplies it
-when that model is selected. The selected transcript response seeds the
-composer's model and thinking level immediately; one runtime-aware chat-model
-request supplies its catalogue and reconciles resident process state without a
-second post-WebSocket reload.
+replacement or truncation invalidates cached offsets. Selecting a model updates
+the active process and Pi's shared `defaultModel`; a new chat starts with that
+saved model while an existing chat retains its recorded model. For
+web-search-enabled profiles, changing between different model profiles restarts
+an idle process against the same session file; the server rejects that change
+during generation. Changing within one model profile stays live. Pi has one active thinking level, so
+Conduit stores the last valid level for each model on the stable chat record and
+reapplies it when that model is selected. The selected transcript response
+seeds the composer's model and thinking level immediately; one runtime-aware
+chat-model request supplies its catalogue and reconciles resident process state
+without a second post-WebSocket reload.
 
 ## Client composition
 
@@ -166,8 +173,9 @@ results, and bounded previews; tools are data, not component registry keys.
 The single-line composer owns runtime-aware model and thinking controls. A
 permanent TUI-like status line below it shows fine agent activity, context usage,
 and queued-message count without displacing composer controls. Isolated Pi reads
-`data/pi`; Host Pi reads its detected agent home and reconciles against
-the live process through `get_available_models` and `get_state`. A selection is
+canonical `data/pi` state, with the selected profile's derived web-search overlay
+selected at launch; Host Pi reads its detected agent home and reconciles against the live
+process through `get_available_models` and `get_state`. A selection is
 sent through correlated RPC and saved as that installation's next-chat default.
 Opening a persisted session restores JSONL state and does not pass model flags
 that could replace it.

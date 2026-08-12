@@ -46,6 +46,8 @@ import { registerProjectRoutes } from "./server/routes/projects.js";
 import { registerSessionRoutes } from "./server/routes/sessions.js";
 import { registerSearchRoutes } from "./server/routes/search.js";
 import { SearchSettingsStore } from "./search-settings.js";
+import { ModelProfileRuntime, usesWebSearchOverlay } from "./model-profile-runtime.js";
+import { publicModelProfile, resolveModelProfile } from "./model-profiles.js";
 
 const config = loadConfig();
 const projects = new ProjectStore(config);
@@ -77,6 +79,10 @@ const runtimeSettings = new RuntimeSettingsStore(config.runtimeSettingsFile, def
 await runtimeSettings.load();
 const searchSettings = new SearchSettingsStore({ filePath: config.searchConfigFile, environment: process.env });
 await searchSettings.initialize();
+const modelProfileRuntime = new ModelProfileRuntime({
+  agentDir: config.piAgentDir,
+  searchConfigFile: config.searchConfigFile,
+});
 const knownTemplateIds = config.piTemplates
   .filter((template) => template.defaultable !== false)
   .map((template) => template.id);
@@ -193,6 +199,9 @@ async function chatModelView(context) {
       outsideScope: true,
     }];
   }
+  const modelProfile = runtime.kind === "conduit_profile" && usesWebSearchOverlay(template)
+    ? publicModelProfile(resolveModelProfile(config.modelProfiles, model || "unknown/unresolved"))
+    : null;
   return {
     installationId: runtime.installationId,
     runtimeKind: runtime.kind,
@@ -204,6 +213,7 @@ async function chatModelView(context) {
     defaultThinkingLevel: catalogView.defaultThinkingLevel,
     requiresAuthentication: catalogView.requiresAuthentication,
     warnings: catalogView.warnings,
+    modelProfile,
     source,
   };
 }
@@ -422,12 +432,27 @@ registerProjectRoutes(app, {
   terminals,
   lifecycle,
 });
+const launchLiveSession = registerLiveSessionRoutes(app, {
+  catalogFor,
+  config,
+  findChatContext,
+  findRegisteredSession,
+  lifecycle,
+  manager,
+  modelProfileRuntime,
+  nativePreflight,
+  registry,
+  runtimeFor,
+  runtimeSettings,
+  templateForChat,
+});
 registerChatRoutes(app, {
   catalogFor,
   chatModelView,
   config,
   defaultTemplate,
   findChatContext,
+  launchLiveSession,
   lifecycle,
   manager,
   modelCatalog,
@@ -445,19 +470,6 @@ registerSessionRoutes(app, {
   projects,
   readSessionPage,
   registry,
-});
-registerLiveSessionRoutes(app, {
-  catalogFor,
-  config,
-  findChatContext,
-  findRegisteredSession,
-  lifecycle,
-  manager,
-  nativePreflight,
-  registry,
-  runtimeFor,
-  runtimeSettings,
-  templateForChat,
 });
 app.use(express.static(dist, {
   setHeaders(response, file) {
@@ -523,6 +535,10 @@ app.use((error, _request, response, _next) => {
       "search_key_invalid",
       "search_provider_locked",
       "search_provider_unknown",
+      "model_profile_required",
+      "model_profile_unresolved",
+      "model_profile_overlay_invalid",
+      "model_profile_search_config_invalid",
     ].includes(error.code)
     || error.message?.includes("Project names")) status = 400;
   response.status(status).json({
