@@ -2,7 +2,7 @@ import { createSignal } from "solid-js";
 import { api, asList } from "../api/client";
 import type { ModelOption, ModelState } from "../api/contracts";
 
-type ErrorHandler = (message: string) => void;
+type ErrorHandler = (error: unknown) => void;
 
 export function createModelSettings(onError: ErrorHandler) {
   const [allModels, setAllModels] = createSignal<ModelOption[]>([]);
@@ -47,7 +47,7 @@ export function createModelSettings(onError: ErrorHandler) {
         api<ModelState>(`/v0/models?projectId=${encodeURIComponent(projectId)}`),
       ]);
       if (activeProjectId === projectId) applySettings(settings, catalog);
-    } catch (error) { setSettingsError((error as Error).message); onError((error as Error).message); }
+    } catch (error) { setSettingsError((error as Error).message); onError(error); }
     finally { if (activeProjectId === projectId) setSettingsLoading(false); }
   };
 
@@ -74,7 +74,7 @@ export function createModelSettings(onError: ErrorHandler) {
         ? `Authenticate ${catalog.runtimeKind === "native_pi" ? "Host Pi" : "Isolated Pi"} to use models.`
         : "");
     } catch (error) {
-      if (activeChatId === chatId && requestId === requestSequence) onError((error as Error).message);
+      if (activeChatId === chatId && requestId === requestSequence) onError(error);
     } finally {
       if (activeChatId === chatId && requestId === requestSequence) setChatLoading(false);
     }
@@ -116,7 +116,7 @@ export function createModelSettings(onError: ErrorHandler) {
       setEnabledModels(previousEnabled);
       setSettingsDefaultModel(previousDefault);
       setSettingsError((error as Error).message);
-      onError((error as Error).message);
+      onError(error);
       return false;
     } finally { setSaving(false); }
   };
@@ -146,7 +146,7 @@ export function createModelSettings(onError: ErrorHandler) {
       setModel(previousModel);
       setEffort(previousEffort);
       setModelThinkingLevels(previousLevels);
-      onError((error as Error).message);
+      onError(error);
       return false;
     }
   };
@@ -168,7 +168,7 @@ export function createModelSettings(onError: ErrorHandler) {
     } catch (error) {
       setEffort(previous);
       setModelThinkingLevels(previousLevels);
-      onError((error as Error).message);
+      onError(error);
       return false;
     }
   };

@@ -1,3 +1,9 @@
+export interface ApiRequestMetadata {
+  method: string;
+  path: string;
+  status: number;
+}
+
 export async function api<T>(url: string, options: RequestInit = {}): Promise<T> {
   const headers = new Headers(options.headers);
   if (options.body && !headers.has("content-type") && !(options.body instanceof FormData)) {
@@ -14,7 +20,14 @@ export async function api<T>(url: string, options: RequestInit = {}): Promise<T>
   }
   if (!response.ok) {
     const detail = body && typeof body === "object" ? body as Record<string, unknown> : {};
-    throw Object.assign(new Error(String(detail.message || detail.error || "Request failed")), detail);
+    const request = new URL(url, location.href);
+    throw Object.assign(new Error(String(detail.message || detail.error || "Request failed")), detail, {
+      apiRequest: {
+        method: String(options.method || "GET").toUpperCase(),
+        path: request.pathname,
+        status: response.status,
+      } satisfies ApiRequestMetadata,
+    });
   }
   return body as T;
 }

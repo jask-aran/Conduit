@@ -27,11 +27,14 @@
 .sidebar-group-action:hover { background: var(--sidebar-accent); opacity: 1; }
 .sidebar-group-action svg { width: 15px; height: 15px; }
 .sidebar-empty { padding: 3px 8px 5px; color: color-mix(in oklch, var(--sidebar-foreground), transparent 55%); font-size: 11px; }
-.sidebar-chevron { margin-left: auto; color: var(--muted-foreground); transition: rotate 140ms ease; }
-.sidebar-project[data-open="true"] .sidebar-chevron { rotate: 90deg; }
+.sidebar-chevron { color: var(--muted-foreground); transition: rotate 140ms ease; }
+.sidebar-project:has(.sidebar-project-toggle[aria-expanded="true"]) .sidebar-chevron { rotate: 90deg; }
 .sidebar-row, .sidebar-user { display: flex; min-width: 0; align-items: center; gap: 8px; border: 0; border-radius: var(--radius-md); background: transparent; color: inherit; }
 .sidebar-row { width: 100%; min-height: 30px; padding: 5px 8px; text-align: left; font-size: 13px; color: color-mix(in oklch, var(--sidebar-foreground), transparent 12%); }
 .sidebar-row:hover, .sidebar-row[aria-current="page"] { background: var(--sidebar-accent); color: var(--sidebar-accent-foreground); }
+.sidebar-project:hover { background: transparent; color: color-mix(in oklch, var(--sidebar-foreground), transparent 12%); }
+.sidebar-project[aria-current="page"], .sidebar-project[aria-current="page"]:hover { background: var(--sidebar-accent); color: var(--sidebar-accent-foreground); }
+.sidebar-chat[data-selected="true"] { background: var(--sidebar-accent); box-shadow: inset 2px 0 var(--accent-cool); color: var(--sidebar-accent-foreground); }
 .sidebar-row > svg { width: 15px; height: 15px; flex: none; color: var(--muted-foreground); }
 .sidebar-row:hover > svg, .sidebar-row[aria-current="page"] > svg { color: var(--sidebar-accent-foreground); }
 .sidebar-row span { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -39,8 +42,9 @@
 .sidebar-project { font-weight: 500; }
 .sidebar-project-link { display: flex; min-width: 0; min-height: 20px; flex: 1; align-items: center; gap: 8px; border: 0; background: transparent; padding: 0; color: inherit; text-align: left; }
 .sidebar-project-link > svg, .sidebar-project-link > .workspace-glyph { width: 15px; height: 15px; flex: none; color: var(--muted-foreground); }
-.sidebar-project-toggle { display: grid; width: 24px; height: 24px; flex: none; place-items: center; border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--muted-foreground); }
-.sidebar-project-toggle:hover { background: color-mix(in oklch, var(--sidebar-accent), white 4%); color: var(--sidebar-accent-foreground); }
+.sidebar-project-toggle { display: grid; width: 24px; height: 24px; flex: none; cursor: pointer; place-items: center; border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--muted-foreground); }
+.sidebar-project-toggle:hover { color: var(--sidebar-accent-foreground); }
+.sidebar-project-toggle:focus-visible { outline: 2px solid var(--ring); outline-offset: -2px; }
 .sidebar-project-toggle svg { width: 15px; height: 15px; }
 .sidebar-project-block .sidebar-row:not(.sidebar-project) { padding-left: 26px; }
 .workspace-cloning-badge { display: inline-flex; margin-left: auto; align-items: center; gap: 4px; color: var(--accent-cool); font-size: 10px; font-weight: 650; letter-spacing: .025em; }

@@ -30,7 +30,7 @@ import type { RuntimeStore } from "./runtime";
 import { createClientActiveGenerationStore } from "./active-generation-store.js";
 
 type UnknownRecord = Record<string, unknown>;
-type ErrorHandler = (message: string) => void;
+type ErrorHandler = (error: unknown) => void;
 
 function generationChangeFor(event: StructuredGenerationEvent): LiveGenerationChange {
   const block = event.block && typeof event.block === "object" ? event.block as UnknownRecord : null;
@@ -416,7 +416,7 @@ export function createActiveChat(options: ActiveChatOptions) {
       try {
         const event = normalizeLiveEvent(JSON.parse(String(data)));
         consume(event);
-      } catch (error) { onError((error as Error).message); }
+      } catch (error) { onError(error); }
     };
     next.addEventListener("close", () => {
       if (socket !== next) return;
@@ -560,9 +560,9 @@ export function createActiveChat(options: ActiveChatOptions) {
                   setActiveGenerationChange(null);
                   setActiveGeneration(null);
                 });
-              }).catch((error) => onError((error as Error).message));
+              }).catch((error) => onError(error));
             });
-          } else if (!current) void loadDetail(event.chatId, true).catch((error) => onError((error as Error).message));
+          } else if (!current) void loadDetail(event.chatId, true).catch((error) => onError(error));
         }
         break;
       case "message_end":
@@ -582,7 +582,11 @@ export function createActiveChat(options: ActiveChatOptions) {
             return current;
           });
         }
-        onError(event.message || (event.code === "generation_limit" ? "Too many concurrent generations. Wait for another chat to finish." : "Runtime error"));
+        const message = event.message || (event.code === "generation_limit" ? "Too many concurrent generations. Wait for another chat to finish." : "Runtime error");
+        onError(Object.assign(new Error(message), {
+          code: event.code,
+          runtimeEvent: { type: event.type, code: event.code, generationId: event.generationId },
+        }));
         break;
       case "unknown":
         break;
@@ -661,13 +665,13 @@ export function createActiveChat(options: ActiveChatOptions) {
         await ensureLive();
         socket!.send(JSON.stringify({ type: queueMode === "steer" ? "steer" : "follow_up", message: text, attachmentIds }));
         attachments.markAnnounced(attachmentIds);
-      } catch (error) { setMessages((current) => current.filter((item) => item.id !== local.id)); setDraft(text); onError((error as Error).message); }
+      } catch (error) { setMessages((current) => current.filter((item) => item.id !== local.id)); setDraft(text); onError(error); }
       return;
     }
 
     if (!live() || live()!.chatId !== selectedId() || socket?.readyState !== WebSocket.OPEN) {
       setGeneration("submitting");
-      try { await ensureLive("prompt"); } catch (error) { setGeneration("idle"); onError((error as Error).message); return; }
+      try { await ensureLive("prompt"); } catch (error) { setGeneration("idle"); onError(error); return; }
     }
 
     const previous = messages();
@@ -693,7 +697,7 @@ export function createActiveChat(options: ActiveChatOptions) {
       attachments.restoreDraft(sentAttachments);
       setDraft(text);
       setGeneration("idle");
-      onError((error as Error).message);
+      onError(error);
     }
   };
 
@@ -704,7 +708,7 @@ export function createActiveChat(options: ActiveChatOptions) {
     setGeneration("stopping");
     const command = JSON.stringify({ type: "stop_generation", generationId: currentGeneration });
     if (socket?.readyState === WebSocket.OPEN) socket.send(command);
-    else void ensureLive("open").then(() => socket?.send(command)).catch((error) => onError((error as Error).message));
+    else void ensureLive("open").then(() => socket?.send(command)).catch((error) => onError(error));
   };
 
   const regenerate = async (entryId: string) => {
@@ -714,13 +718,13 @@ export function createActiveChat(options: ActiveChatOptions) {
       setMessages((current) => { const index = current.findIndex((item) => item.id === entryId); return index >= 0 ? current.slice(0, index + 1) : current; });
       setGeneration("active");
       socket!.send(JSON.stringify({ type: "regenerate", entryId, model: models.model(), thinkingLevel: models.effort() }));
-    } catch (error) { setGeneration("idle"); onError((error as Error).message); }
+    } catch (error) { setGeneration("idle"); onError(error); }
   };
 
   const continueResponse = async () => {
     if (streaming() || stopping()) return;
     try { await ensureLive(); setGeneration("active"); socket!.send(JSON.stringify({ type: "continue" })); }
-    catch (error) { setGeneration("idle"); onError((error as Error).message); }
+    catch (error) { setGeneration("idle"); onError(error); }
   };
 
   const loadOlder = async () => {
@@ -736,7 +740,7 @@ export function createActiveChat(options: ActiveChatOptions) {
       setPageBefore(detail.page?.before || null);
       return true;
     } catch (error) {
-      if (selection === selectionToken && selectedId() === chatId) onError((error as Error).message);
+      if (selection === selectionToken && selectedId() === chatId) onError(error);
       return false;
     }
     finally { if (selection === selectionToken) setLoadingOlder(false); }

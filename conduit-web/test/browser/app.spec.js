@@ -2034,6 +2034,247 @@ test("hides transient new chats and provides complete right-click menus", async 
   await expect(page.getByRole("menuitem", { name: "Move chats to…" })).toBeDisabled();
 });
 
+test("error toasts can open a Runtime chat with safe diagnostics", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop-chromium");
+  await page.addInitScript(() => {
+    class RecordingWebSocket extends EventTarget {
+      static OPEN = 1;
+      constructor() {
+        super();
+        this.readyState = 0;
+        queueMicrotask(() => { this.readyState = RecordingWebSocket.OPEN; this.dispatchEvent(new Event("open")); });
+      }
+      send(payload) {
+        window.__runtimeChatCommands = [...(window.__runtimeChatCommands || []), JSON.parse(payload)];
+      }
+      close() { this.readyState = 3; this.dispatchEvent(new Event("close")); }
+    }
+    Object.defineProperty(window, "WebSocket", { configurable: true, value: RecordingWebSocket });
+  });
+  await page.unroute("**/v0/sessions/session_existing/move");
+  await page.unroute("**/v0/templates");
+  await page.route("**/v0/templates", async (route) => {
+    await route.fulfill({ json: { templates: [...templates, {
+      id: "runtime",
+      label: "Runtime",
+      version: 1,
+      defaultable: false,
+      posture: "read / edit / shell",
+      tools: ["read", "write", "edit", "bash"],
+    }], defaultTemplateId: "chat" } });
+  });
+  await page.route("**/v0/sessions/session_existing/move", async (route) => {
+    await route.fulfill({ status: 500, json: {
+      error: "invalid_session_mapping",
+      message: "Pi session mapping is outside the runtime session directory",
+    } });
+  });
+  await page.route("**/v0/runtime/chats", async (route) => {
+    await route.fulfill({ status: 201, json: {
+      id: "runtime_chat",
+      projectId: "project_chat",
+      status: "draft",
+      title: "New chat",
+      templateId: "runtime",
+      runtime: { kind: "conduit_profile", installationId: "conduit-pinned" },
+    } });
+  });
+  await page.route("**/v0/sessions/runtime_chat", async (route) => {
+    await route.fulfill({ json: {
+      id: "runtime_chat", projectId: "project_chat", status: "active", title: "Runtime diagnosis",
+      messages: [], tools: [], page: { before: null },
+    } });
+  });
+
+  await page.goto("/chat/session_existing");
+  await page.getByRole("button", { name: "Existing chat" }).click({ button: "right" });
+  await page.getByRole("menuitem", { name: "Move to folder…" }).hover();
+  const research = page.getByRole("menuitemradio", { name: "Research" });
+  const researchBox = await research.boundingBox();
+  await page.mouse.move(researchBox.x + researchBox.width / 2, researchBox.y + researchBox.height / 2, { steps: 12 });
+  await research.click();
+
+  await expect(page.getByRole("button", { name: "Ask Runtime" })).toBeVisible();
+  await page.getByRole("button", { name: "Ask Runtime" }).click();
+  await expect(page).toHaveURL(/\/chat\/runtime_chat$/);
+  await expect(page.locator(".chat-profile-posture")).toContainText("Runtime");
+  await expect(page.getByRole("button", { name: "Profile Runtime" })).toBeDisabled();
+  await expect.poll(() => page.evaluate(() => window.__runtimeChatCommands || [])).toContainEqual(expect.objectContaining({
+    type: "prompt",
+    message: expect.stringContaining("The following is a bounded, redacted Conduit error report"),
+  }));
+  const prompt = await page.evaluate(() => window.__runtimeChatCommands.find((command) => command.type === "prompt")?.message || "");
+  expect(prompt).toContain("invalid_session_mapping");
+  expect(prompt).toContain("/v0/sessions/session_existing/move");
+  expect(prompt).not.toContain("apiKey");
+});
+
+test("keeps folder expansion state through chat refreshes and reloads", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop-chromium");
+  const sidebarProjects = [{
+    id: "project_chat",
+    slug: "chat",
+    name: "Chats",
+    sessions: [
+      { id: "session_first", projectId: "project_chat", status: "active", title: "First chat" },
+      { id: "session_second", projectId: "project_chat", status: "active", title: "Second chat" },
+    ],
+  }, {
+    id: "project_research",
+    slug: "research",
+    name: "Research",
+    sessions: [{ id: "session_research", projectId: "project_research", status: "active", title: "Research chat" }],
+  }, {
+    id: "project_archive",
+    slug: "archive",
+    name: "Archive",
+    sessions: [],
+  }];
+  await page.unroute("**/v0/projects");
+  await page.route("**/v0/projects", (route) => route.fulfill({
+    json: { projects: structuredClone(sidebarProjects) },
+  }));
+  for (const chat of sidebarProjects[0].sessions) {
+    await page.route(`**/v0/chats/${chat.id}`, (route) => route.fulfill({ json: chat }));
+    await page.route(`**/v0/sessions/${chat.id}`, (route) => route.fulfill({
+      json: { ...chat, messages: [], tools: [], page: { before: null } },
+    }));
+  }
+
+  await page.goto("/");
+  const toggles = page.locator(".sidebar-project-toggle");
+  await expect(toggles).toHaveCount(2);
+  await expect(toggles.first()).toHaveAttribute("aria-expanded", "true");
+  await expect(toggles.first().locator("svg")).toHaveCSS("rotate", "90deg");
+  for (let index = 0; index < 2; index += 1) await toggles.nth(index).click();
+  await expect(page.getByRole("button", { name: "Expand chat list" })).toHaveCount(2);
+  await expect(toggles.first().locator("svg")).toHaveCSS("rotate", "none");
+
+  await page.getByRole("button", { name: "First chat" }).click();
+  await expect(page).toHaveURL(/\/chat\/session_first$/);
+  await page.getByRole("button", { name: "Second chat" }).click();
+  await expect(page).toHaveURL(/\/chat\/session_second$/);
+  await expect(page.getByRole("button", { name: "Expand chat list" })).toHaveCount(2);
+
+  await page.reload();
+  await expect(page.getByRole("button", { name: "Expand chat list" })).toHaveCount(2);
+  const toggle = page.locator(".sidebar-project-toggle").first();
+  const icon = toggle.locator("svg");
+  await expect(toggle).toBeVisible();
+  await expect(icon).toBeVisible();
+  const [toggleBox, iconBox] = await Promise.all([toggle.boundingBox(), icon.boundingBox()]);
+  expect(Math.abs((toggleBox.x + toggleBox.width / 2) - (iconBox.x + iconBox.width / 2))).toBeLessThan(1);
+  expect(Math.abs((toggleBox.y + toggleBox.height / 2) - (iconBox.y + iconBox.height / 2))).toBeLessThan(1);
+  await toggle.hover();
+  await expect(toggle).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+  await expect(toggle).toHaveCSS("cursor", "pointer");
+});
+
+test("selects chats without navigation and applies bulk context actions", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop-chromium");
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText: async (text) => { window.__copiedChatLinks = text; } },
+    });
+  });
+  const first = { id: "session_first", projectId: "project_chat", status: "active", title: "First chat" };
+  const second = { id: "session_second", projectId: "project_chat", status: "active", title: "Second chat" };
+  const research = { id: "session_research", projectId: "project_research", status: "active", title: "Research chat" };
+  const sidebarProjects = [{
+    id: "project_chat", slug: "chat", name: "Chats", sessions: [first, second],
+  }, {
+    id: "project_research", slug: "research", name: "Research", sessions: [research],
+  }, {
+    id: "project_archive", slug: "archive", name: "Archive", sessions: [],
+  }];
+  await page.unroute("**/v0/projects");
+  await page.route("**/v0/projects", (route) => route.fulfill({
+    json: { projects: structuredClone(sidebarProjects) },
+  }));
+  await page.route("**/v0/sessions/session_first", (route) => route.fulfill({
+    json: {
+      ...first,
+      messages: [{ id: "first-message", role: "user", content: "First thread body" }],
+      tools: [],
+      page: { before: null },
+    },
+  }));
+  await page.route("**/v0/share-origin", (route) => route.fulfill({
+    json: { origin: "https://conduit.example" },
+  }));
+  const moves = [];
+  await page.route("**/v0/sessions/*/move", async (route) => {
+    moves.push({
+      id: new URL(route.request().url()).pathname.split("/").at(-2),
+      body: route.request().postDataJSON(),
+    });
+    await route.fulfill({ json: {} });
+  });
+  const deletes = [];
+  await page.route("**/v0/sessions/*", async (route) => {
+    if (route.request().method() !== "DELETE") return route.fallback();
+    const id = new URL(route.request().url()).pathname.split("/").at(-1);
+    deletes.push(id);
+    if (id === research.id) {
+      await route.fulfill({ status: 409, json: { error: "chat_is_busy" } });
+      return;
+    }
+    await route.fulfill({ status: 204, body: "" });
+  });
+
+  await page.goto("/");
+  await page.getByRole("button", { name: "First chat" }).click();
+  await expect(page.getByText("First thread body")).toBeVisible();
+  const firstUrl = page.url();
+
+  await page.getByRole("button", { name: "Second chat" }).click({ modifiers: ["Control"] });
+  await page.getByRole("button", { name: "Research chat" }).click({ modifiers: ["Control"] });
+  await expect(page.locator('.sidebar-chat[data-selected="true"]')).toHaveCount(2);
+  expect(page.url()).toBe(firstUrl);
+  await expect(page.getByText("First thread body")).toBeVisible();
+
+  await page.locator(".chat-header").click();
+  await expect(page.locator('.sidebar-chat[data-selected="true"]')).toHaveCount(0);
+  expect(page.url()).toBe(firstUrl);
+  await page.getByRole("button", { name: "Second chat" }).click({ modifiers: ["Control"] });
+  await page.getByRole("button", { name: "Research chat" }).click({ modifiers: ["Control"] });
+
+  await page.getByRole("button", { name: "Second chat, selected" }).click({ button: "right" });
+  await expect(page.getByRole("menuitem", { name: "2 chats selected" })).toBeVisible();
+  await page.getByRole("menuitem", { name: "Copy links" }).click();
+  await expect.poll(() => page.evaluate(() => window.__copiedChatLinks)).toBe(
+    "https://conduit.example/chat/session_second\nhttps://conduit.example/chat/session_research",
+  );
+
+  await expect(page.locator('.sidebar-chat[data-selected="true"]')).toHaveCount(0);
+  await page.getByRole("button", { name: "Second chat" }).click({ modifiers: ["Control"] });
+  await page.getByRole("button", { name: "Second chat" }).click({ modifiers: ["Control"] });
+  await page.getByRole("button", { name: "Research chat" }).click({ modifiers: ["Control"] });
+  await page.getByRole("button", { name: "Second chat, selected" }).click({ button: "right" });
+  await page.getByRole("menuitem", { name: "Move to folder…" }).hover();
+  const archive = page.getByRole("menuitem", { name: "Archive" });
+  const archiveBox = await archive.boundingBox();
+  await page.mouse.move(archiveBox.x + archiveBox.width / 2, archiveBox.y + archiveBox.height / 2, { steps: 12 });
+  await archive.click();
+  await expect.poll(() => moves).toEqual([
+    { id: "session_second", body: { projectId: "project_archive" } },
+    { id: "session_research", body: { projectId: "project_archive" } },
+  ]);
+  await expect(page.locator('.sidebar-chat[data-selected="true"]')).toHaveCount(0);
+
+  await page.getByRole("button", { name: "Second chat" }).click({ modifiers: ["Control"] });
+  await page.getByRole("button", { name: "Research chat" }).click({ modifiers: ["Control"] });
+  await page.getByRole("button", { name: "Research chat, selected" }).click({ button: "right" });
+  await page.getByRole("menuitem", { name: "Delete 2 chats" }).click();
+  const dialog = page.getByRole("alertdialog", { name: "Delete 2 chats?" });
+  await dialog.getByRole("button", { name: "Delete 2 chats" }).click();
+  await expect.poll(() => deletes.sort()).toEqual(["session_research", "session_second"]);
+  await expect(page.getByRole("button", { name: "Research chat, selected" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Second chat, selected" })).toHaveCount(0);
+  expect(page.url()).toBe(firstUrl);
+});
+
 test("uses compact sidebar groups and preserves a useful desktop rail", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "desktop-chromium");
   await page.goto("/");
