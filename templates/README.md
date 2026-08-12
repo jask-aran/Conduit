@@ -8,8 +8,9 @@ Shipped profiles:
 
 | id | Label | Role |
 |----|--------|------|
-| `chat` | General | Restrained tools (`read`, `bash`) for ordinary conversation |
+| `chat` | Assistant | Workspace files, code-mode shell, and model-agnostic web research |
 | `workspace` | Coding | Full tools + git/web/develop skills for real folders |
+| `codemode` | Code Mode | Experimental profile exposing only the `pi-code-tool` Python code tool |
 | `runtime` | Runtime | Special one-off admin chat for templates and Pi package management |
 
 ## Discovery and durable identity
@@ -20,7 +21,9 @@ stores `templateId` and `templateVersion` in `data/sessions.json`. Missing
 identity is stamped with the app (or project) default the next time the runtime
 touches the chat. Resume reloads the template by id from disk.
 
-General and Coding are ordinary selectable profiles. Runtime is special: it
+Assistant, Coding, and Code Mode are ordinary selectable profiles. Code Mode is
+an experiment: it loads only `pi-code-tool`, exposes only the top-level `code`
+tool, and keeps the package's default mutation approval behavior. Runtime is special: it
 cannot be an app or project default and does not appear in ordinary profile
 switching. Settings → Profiles shows its details separately and provides
 **Open runtime chat**; each activation creates a fresh management chat.
@@ -68,6 +71,19 @@ Paths resolve relative to the template directory:
 
 Templates launch with `--no-approve` and ambient resources disabled. Treat tool
 lists and resources as trusted executable configuration.
+
+The Assistant profile explicitly loads the pinned `pi-web-access` extension.
+Its file tools and shell are Pi-native tools, guided by the active-working-
+directory instruction in `SYSTEM.md`; this profile does not provide an
+OS-level workspace sandbox. Its web tools use OpenAI/Codex search when
+available, then the configured provider fallback chain. Conduit sets the
+extension workflow to `none` so research does not open Pi's curator UI.
+
+The Code Mode profile explicitly loads the pinned `pi-code-tool` extension. Its
+Python workspace mount is read-only, and its bridged `bash`, `edit`, and `write`
+calls retain the package's approval gate. Conduit RPC has no native approval
+dialog, so mutation behavior must be validated before this profile is used for
+write-heavy work.
 
 ## Managing plugins and skills
 

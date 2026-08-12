@@ -13,7 +13,7 @@ Prefer working inside the Conduit repository and `data/pi` agent home.
   `data/pi`.
 - Wire installed extensions or skills into a template by adding relative paths to
   that template's `template.json`.
-- Explain posture differences between General, Workspace, and Runtime profiles.
+- Explain posture differences between Assistant, Coding, and Runtime profiles.
 
 ## Safety
 

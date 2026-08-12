@@ -1179,7 +1179,7 @@ async function installBrowserProtocol(page, scenario) {
     const method = request.method();
     if (pathname === "/v0/capabilities") return route.fulfill({ json: { partialContinue: true, globalRuntime: "sse" } });
     if (pathname === "/v0/templates") return route.fulfill({ json: {
-      templates: [{ id: "chat", label: "General", version: 1, defaultable: true, tools: [] }],
+      templates: [{ id: "chat", label: "Assistant", version: 5, defaultable: true, tools: ["read", "bash", "edit", "write", "web_search", "fetch_content", "get_search_content", "source_check"] }],
       defaultTemplateId: "chat",
     } });
     if (pathname === "/v0/preferences") return route.fulfill({ json: { defaultTemplateId: "chat" } });
@@ -1193,7 +1193,7 @@ async function installBrowserProtocol(page, scenario) {
     if (pathname === "/v0/runtime") return route.fulfill({ json: { type: "runtime_global_snapshot", processes: [] } });
     if (pathname === "/v0/share-origin") return route.fulfill({ json: { origin: null } });
     if (pathname === "/v0/pi-installations") return route.fulfill({ json: {
-      installations: [{ id: "conduit-pinned", label: "Isolated Pi", version: "0.80.6", available: true }],
+      installations: [{ id: "conduit-pinned", label: "Isolated Pi", version: "0.84.1", available: true }],
     } });
     if (pathname === "/v0/ptys") return route.fulfill({ json: { ptys: [] } });
     if (pathname === "/v0/projects") return route.fulfill({ json: { projects: [project] } });

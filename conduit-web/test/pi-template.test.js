@@ -19,6 +19,7 @@ test("repository templates are discoverable launch presets", () => {
   const templates = listPiTemplates(root);
   assert.ok(templates.some((template) => template.id === "chat"));
   assert.ok(templates.some((template) => template.id === "workspace"));
+  assert.ok(templates.some((template) => template.id === "codemode"));
   assert.ok(templates.some((template) => template.id === "runtime"));
   const workspace = templates.find((template) => template.id === "workspace");
   const general = templates.find((template) => template.id === "chat");
@@ -27,7 +28,23 @@ test("repository templates are discoverable launch presets", () => {
   assert.equal(view.defaultable, true);
   assert.ok(view.tools.includes("edit"));
   assert.ok(view.skillCount >= 1);
-  assert.deepEqual(general.tools, ["read", "bash"]);
+  assert.equal(general.label, "Assistant");
+  assert.equal(general.version, "6");
+  assert.deepEqual(general.tools, ["read", "bash", "edit", "write", "web_search", "fetch_content", "get_search_content", "source_check"]);
+  assert.deepEqual(general.extensions, [path.resolve(root, "../conduit-web/node_modules/pi-web-access")]);
+  const systemPrompt = fs.readFileSync(general.systemPrompt, "utf8");
+  assert.match(systemPrompt, /Bash is your code-mode runtime/);
+  assert.match(systemPrompt, /Use this sequence:/);
+  assert.match(systemPrompt, /fetch_content.*selected pages/s);
+  const codemode = templates.find((template) => template.id === "codemode");
+  assert.equal(codemode.label, "Code Mode");
+  assert.equal(codemode.version, "1");
+  assert.deepEqual(codemode.tools, ["code"]);
+  assert.deepEqual(codemode.extensions, [path.resolve(root, "../conduit-web/node_modules/pi-code-tool/extensions/index.js")]);
+  assert.equal(codemode.skills.length, 0);
+  const codemodePrompt = fs.readFileSync(codemode.systemPrompt, "utf8");
+  assert.match(codemodePrompt, /sandboxed Python/);
+  assert.match(codemodePrompt, /does not load Conduit's sandbox, web-search, or\s+skills extensions/);
   assert.equal(view.extensionCount, 0);
   assert.equal(templatePublicView(templates.find((template) => template.id === "runtime")).defaultable, false);
 });
@@ -181,7 +198,7 @@ test("create can launch a non-default template and exposes it on the process vie
     template: {
       id: "chat",
       version: "1",
-      label: "General",
+      label: "Assistant",
       tools: ["read"],
       models: [],
       extensions: [],

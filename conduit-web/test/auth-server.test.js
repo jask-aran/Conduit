@@ -34,7 +34,7 @@ async function waitForServer(origin, child) {
 async function fakePi(root) {
   const conduitPi = path.join(root, "conduit-pi");
   await fs.writeFile(conduitPi, `#!/usr/bin/env node
-if (process.argv.includes("--version")) { console.log("0.80.6"); process.exit(0); }
+if (process.argv.includes("--version")) { console.log("0.84.1"); process.exit(0); }
 if (process.argv.includes("--help")) { console.log("--mode --session --append-system-prompt --skill --approve --no-approve"); process.exit(0); }
 process.exit(0);
 `);

@@ -109,6 +109,7 @@ export const SETTINGS_SECTIONS = [
   { id: "workspaces", label: "Workspaces", keywords: ["workspace", "folder", "default", "profile"] },
   { id: "models", label: "Models", keywords: ["model", "llm", "provider"] },
   { id: "runtime", label: "Runtime", keywords: ["processes", "pool", "idle", "generation"] },
+  { id: "search", label: "Search", keywords: ["web", "brave", "exa", "research", "provider", "api key"] },
   { id: "auth", label: "Auth", keywords: ["password", "login", "sessions", "logout", "security"] },
   { id: "general", label: "General", keywords: ["preferences", "default", "profile"] },
 ];

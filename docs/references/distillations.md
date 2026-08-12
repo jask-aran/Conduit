@@ -51,7 +51,7 @@ Add an entry through `$tacit-knowledge` after explicit approval or validated rep
 ### Verify RPC against the pinned Pi
 
 - **Type:** Gotcha.
-- **Rule:** Verify shared RPC behavior against the locally pinned `@earendil-works/pi-coding-agent` (`0.80.6`); for Pi research use DeepWiki against `earendil-works/pi`, retry corrected lookups, and treat upstream results as advisory context rather than the compatibility contract.
+- **Rule:** Verify shared RPC behavior against the locally pinned `@earendil-works/pi-coding-agent` (`0.84.1`); for Pi research use DeepWiki against `earendil-works/pi`, retry corrected lookups, and treat upstream results as advisory context rather than the compatibility contract.
 - **Scope:** Changes shared by Isolated Pi and Host Pi.
 - **Evidence:** The two-runtime boundary depends on the installed package contract, while upstream documentation describes a moving target.
 

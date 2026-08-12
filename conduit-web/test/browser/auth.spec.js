@@ -20,7 +20,7 @@ async function availablePort() {
 async function fakePi(root) {
   const conduitPi = path.join(root, "conduit-pi");
   await fs.writeFile(conduitPi, `#!/usr/bin/env node
-if (process.argv.includes("--version")) { console.log("0.80.6"); process.exit(0); }
+if (process.argv.includes("--version")) { console.log("0.84.1"); process.exit(0); }
 if (process.argv.includes("--help")) { console.log("--mode --session --append-system-prompt --skill --approve --no-approve"); process.exit(0); }
 process.exit(0);
 `);
@@ -89,7 +89,7 @@ const test = base.extend({ server: async ({}, use) => {
 test.beforeEach(async ({ page, server }) => {
   // Mock the SPA's API surface so the Solid shell loads quickly after login.
   await page.route("**/v0/templates", (route) => route.fulfill({ json: { templates: [{
-    id: "chat", label: "General", version: 1, defaultable: true, tools: ["read", "bash"],
+    id: "chat", label: "Assistant", version: 5, defaultable: true, tools: ["read", "bash", "edit", "write", "web_search", "fetch_content", "get_search_content", "source_check"],
   }], defaultTemplateId: "chat" } }));
   await page.route("**/v0/preferences", (route) => route.fulfill({ json: { defaultTemplateId: "chat" } }));
   await page.route("**/v0/workspaces/suggestions", (route) => route.fulfill({ json: { folders: [] } }));
@@ -97,7 +97,7 @@ test.beforeEach(async ({ page, server }) => {
   await page.route("**/v0/capabilities", (route) => route.fulfill({ json: { partialContinue: true, globalRuntime: "sse" } }));
   await page.route("**/v0/runtime", (route) => route.fulfill({ json: { type: "runtime_global_snapshot", processes: [], at: new Date().toISOString() } }));
   await page.route("**/v0/pi-installations", (route) => route.fulfill({ json: { installations: [
-    { id: "conduit-pinned", label: "Isolated Pi", version: "0.80.6", available: true },
+    { id: "conduit-pinned", label: "Isolated Pi", version: "0.84.1", available: true },
     { id: "host-pi", label: "Host Pi", version: "0.80.10", available: true },
   ] } }));
   await page.route("**/v0/projects", (route) => route.fulfill({ json: { projects: [{

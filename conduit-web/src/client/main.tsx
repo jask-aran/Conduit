@@ -24,7 +24,7 @@ import { createModelSettings } from "./state/model-settings";
 import { createRuntimeStore } from "./state/runtime";
 import "./styles.css";
 
-type SettingsSection = "general" | "ui" | "models" | "profiles" | "runtime" | "workspaces" | "auth";
+type SettingsSection = "general" | "ui" | "models" | "profiles" | "runtime" | "workspaces" | "search" | "auth";
 type WorkspaceView = "files" | "diff" | "artifacts" | "terminal";
 const WorkspacePanel = lazy(() => import("./workspace/workspace-panel"));
 const ProjectDashboard = lazy(() => import("./project/dashboard"));

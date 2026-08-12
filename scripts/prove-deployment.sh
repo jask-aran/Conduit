@@ -104,7 +104,7 @@ const workspace = await (await request("/v0/projects", {
 const installations = await (await request("/v0/pi-installations", {}, cookie)).json();
 const isolated = installations.installations.find((item) => item.id === "conduit-pinned");
 const host = installations.installations.find((item) => item.id === "host-pi");
-if (isolated?.version !== "0.80.6") throw new Error("Pinned Isolated Pi version is not 0.80.6");
+if (isolated?.version !== "0.84.1") throw new Error("Pinned Isolated Pi version is not 0.84.1");
 if (host?.available) throw new Error("Host Pi must not be available in the container");
 console.log(JSON.stringify({ cookie, chatId: chat.id, attachmentId, workspaceId: workspace.id, workspacePath: workspace.path, isolatedVersion: isolated.version, hostAvailable: host?.available || false }));
 ' "$PASSWORD"

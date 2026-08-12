@@ -1,7 +1,7 @@
 import {
-  AuthStorage,
   getAgentDir,
   ModelRegistry,
+  ModelRuntime,
   resolveModelScopeWithDiagnostics,
   SettingsManager,
 } from "@earendil-works/pi-coding-agent";
@@ -17,23 +17,46 @@ export class PiModelCatalog {
     settingsFactory = (cwd) => SettingsManager.create(cwd, agentDir, { projectTrusted: false }),
   } = {}) {
     this.agentDir = agentDir;
-    this.authStorage = authStorage || (modelRegistry ? null : AuthStorage.create(path.join(agentDir, "auth.json")));
-    this.modelRegistry = modelRegistry || ModelRegistry.create(this.authStorage, path.join(agentDir, "models.json"));
+    this.authFile = path.join(agentDir, "auth.json");
+    this.authStorage = authStorage || null;
+    this.modelRuntime = null;
+    this.modelRegistry = modelRegistry || null;
+    this.runtimePromise = modelRegistry
+      ? null
+      : ModelRuntime.create({
+        authPath: this.authFile,
+        modelsPath: path.join(agentDir, "models.json"),
+        refreshOnCreate: false,
+      });
     this.modelPatterns = modelPatterns;
     this.settingsFactory = settingsFactory;
   }
 
+  async ready() {
+    if (!this.runtimePromise) return this;
+    this.modelRuntime = await this.runtimePromise;
+    this.modelRegistry = new ModelRegistry(this.modelRuntime);
+    this.runtimePromise = null;
+    return this;
+  }
+
   async snapshot(cwd) {
+    await this.ready();
     const settings = this.settingsFactory(cwd);
     this.authStorage?.reload();
-    this.modelRegistry.refresh();
+    if (this.modelRuntime) await this.modelRuntime.refresh({ allowNetwork: false });
+    else await this.modelRegistry.refresh();
 
     const configuredModels = settings.getEnabledModels?.();
     const modelPatterns = Array.isArray(configuredModels) ? configuredModels : this.modelPatterns;
+    const modelSource = this.modelRuntime || this.modelRegistry;
     const scope = modelPatterns.length
-      ? await resolveModelScopeWithDiagnostics(modelPatterns, this.modelRegistry)
+      ? await resolveModelScopeWithDiagnostics(modelPatterns, modelSource)
       : { scopedModels: [], diagnostics: [] };
-    const availableEntries = this.modelRegistry.getAvailable().map((model) => ({ model }));
+    const availableModels = this.modelRuntime
+      ? this.modelRuntime.getAvailableSnapshot()
+      : this.modelRegistry.getAvailable();
+    const availableEntries = availableModels.map((model) => ({ model }));
     const entries = modelPatterns.length
       ? scope.scopedModels
       : availableEntries;

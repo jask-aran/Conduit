@@ -37,7 +37,7 @@ test("raw JSON uploads publish atomically through the durable chat route", async
   const freshSessionFile = path.join(root, "pi", "sessions", "future.jsonl");
   const conduitPi = path.join(root, "conduit-pi");
   await fs.writeFile(conduitPi, `#!/usr/bin/env node
-if (process.argv.includes("--version")) { console.log("0.80.6"); process.exit(0); }
+if (process.argv.includes("--version")) { console.log("0.84.1"); process.exit(0); }
 if (process.argv.includes("--help")) { console.log("--mode --session --append-system-prompt --skill --approve --no-approve"); process.exit(0); }
 const readline = require("node:readline");
 const input = readline.createInterface({ input: process.stdin });
@@ -110,7 +110,7 @@ exit 0
     const installations = await (await fetch(`${origin}/v0/pi-installations`)).json();
     const isolatedInstallation = installations.installations.find((item) => item.id === "conduit-pinned");
     const hostInstallation = installations.installations.find((item) => item.id === "host-pi");
-    assert.equal(isolatedInstallation.version, "0.80.6");
+    assert.equal(isolatedInstallation.version, "0.84.1");
     assert.equal(isolatedInstallation.executablePath, conduitPi);
     assert.equal(isolatedInstallation.agentHome.path, path.join(root, "pi"));
     assert.equal(isolatedInstallation.models.access, "managed");

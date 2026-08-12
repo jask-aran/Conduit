@@ -58,6 +58,7 @@ export function loadConfig(env = process.env) {
     sessionRegistryFile: absolute(env.CONDUIT_SESSION_REGISTRY_FILE || path.join(dataRoot, "sessions.json")),
     preferencesFile: absolute(env.CONDUIT_PREFERENCES_FILE || path.join(dataRoot, "preferences.json")),
     piAgentDir,
+    searchConfigFile: absolute(env.CONDUIT_SEARCH_CONFIG_FILE || path.join(piAgentDir, "web-search.json")),
     installations,
     defaultInstallationId: "conduit-pinned",
     bridgeSystemPrompt: path.join(templatesRoot, "conduit-workspace", "SYSTEM.md"),
