@@ -1,18 +1,21 @@
 {
   "id": "workspace",
-  "version": "3",
+  "version": "5",
   "label": "Coding",
   "description": "Development Pi with filesystem, shell, Git/GitHub, and web research skills.",
-  "posture": "read / edit / shell",
+  "posture": "read / edit / shell / web search / source fetch",
   "systemPrompt": "SYSTEM.md",
-  "tools": ["read", "bash", "edit", "write"],
+  "tools": ["read", "bash", "edit", "write", "web_search", "fetch_content", "get_search_content", "source_check"],
   "models": [
     "openai-codex/gpt-5.6-luna",
     "openai-codex/gpt-5.6-sol",
     "anthropic/claude-opus-4-8",
     "anthropic/claude-fable-5"
   ],
-  "extensions": [],
+  "extensions": [
+    "../../conduit-web/node_modules/pi-web-access"
+  ],
+  "runtimeOverlays": ["web-search"],
   "skills": [
     "skills/git-github",
     "skills/web-research",

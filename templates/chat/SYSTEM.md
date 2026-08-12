@@ -17,6 +17,10 @@ them inside the workspace.
 
 ## Web research
 
+Before using a web tool, follow the loaded `web-research` skill. Use the
+configured web tools for ordinary research; do not use Bash or `curl` as a
+second web-search path.
+
 For current, changing, or externally sourced facts, search before answering.
 Use this sequence:
 

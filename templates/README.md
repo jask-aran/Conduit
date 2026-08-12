@@ -46,8 +46,9 @@ Creating a Workspace chat immediately opens a draft with the app default profile
 unless Settings → Workspaces assigns that Workspace an explicit override.
 Host Pi is also available as a synthetic override while detected; failure clears
 that override back to global inheritance.
-The composer uses one profile selector. Ordinary profiles launch the
-bundled Isolated Pi with the private `data/pi` home; the synthetic **Host Pi**
+The composer uses one profile selector. Ordinary profiles launch the bundled
+Isolated Pi with the private `data/pi` home, with the selected profile's derived
+model-profile overlay selected when its web-search overlay is active; the synthetic **Host Pi**
 choice uses the host executable/home/resources plus the additive resources under
 `templates/conduit-workspace/`. Host Pi does not load an ordinary tracked
 profile, and its mandatory bridge remains hidden from profile selection. The
@@ -68,16 +69,20 @@ Paths resolve relative to the template directory:
 - `tools` — Pi `--tools` allowlist
 - `models` — fallback when Pi has no saved `enabledModels`
 - `extensions`, `skills`, `promptTemplates` — explicit resource paths
+- `runtimeOverlays` — optional server-owned runtime overlays
 
 Templates launch with `--no-approve` and ambient resources disabled. Treat tool
 lists and resources as trusted executable configuration.
 
-The Assistant profile explicitly loads the pinned `pi-web-access` extension.
-Its file tools and shell are Pi-native tools, guided by the active-working-
+The Assistant and Coding profiles explicitly load the pinned `pi-web-access`
+extension. Their file tools and shell are Pi-native tools, guided by the active-working-
 directory instruction in `SYSTEM.md`; this profile does not provide an
-OS-level workspace sandbox. Its web tools use OpenAI/Codex search when
-available, then the configured provider fallback chain. Conduit sets the
-extension workflow to `none` so research does not open Pi's curator UI.
+OS-level workspace sandbox. Conduit resolves a model profile for each
+web-search-enabled process: OpenAI and Codex models use OpenAI search followed
+by Brave, and other models use Brave. The derived routing file lives under
+`data/pi/model-profiles/`; Pi credentials, model state, and session files stay
+in the canonical `data/pi` directory. Conduit sets the extension workflow to
+`none` so research does not open Pi's curator UI.
 
 The Code Mode profile explicitly loads the pinned `pi-code-tool` extension. Its
 Python workspace mount is read-only, and its bridged `bash`, `edit`, and `write`

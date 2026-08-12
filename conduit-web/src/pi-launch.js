@@ -34,6 +34,8 @@ export function resolvePiLaunch({
   thinkingLevel = "",
   bridgeSystemPrompt,
   bridgeSkill,
+  runtimeAgentDir = "",
+  modelProfile = null,
 }) {
   if (!installation?.available || !installation.command) {
     const error = new Error(installation?.error || "Pi installation is unavailable");
@@ -59,6 +61,7 @@ export function resolvePiLaunch({
       runtime,
       binaryVersion: installation.version,
       trustPosture: "native_saved_trust",
+      modelProfile: null,
     };
   }
 
@@ -76,11 +79,12 @@ export function resolvePiLaunch({
       ...sessionArgs(chat.piSessionFile, model, thinkingLevel),
     ],
     cwd,
-    env: buildPiEnvironment(installation.agentDir, filteredEnvironment(installation.environment || process.env)),
+    env: buildPiEnvironment(runtimeAgentDir || installation.agentDir, filteredEnvironment(installation.environment || process.env)),
     sessionFile: chat.piSessionFile ? path.resolve(chat.piSessionFile) : null,
     runtime,
     binaryVersion: installation.version,
     trustPosture: "ignore_project_resources",
+    modelProfile,
   };
 }
 

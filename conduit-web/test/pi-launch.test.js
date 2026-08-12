@@ -47,6 +47,26 @@ test("Isolated Pi profile launch uses the pinned installation and isolated agent
   assert.ok(launch.args.includes("--session"));
 });
 
+test("isolated Pi launch can use a model-profile agent overlay", () => {
+  const launch = resolvePiLaunch({
+    chat: { runtime: { kind: "conduit_profile", installationId: "conduit-pinned" }, piSessionFile: null },
+    project,
+    installation: {
+      available: true,
+      command: "/opt/conduit/pi/0.84.1/pi",
+      commandArgs: [],
+      agentDir: "/var/lib/conduit/pi",
+    },
+    template,
+    models: ["openai/gpt"],
+    model: "openai/gpt",
+    runtimeAgentDir: "/var/lib/conduit/pi/model-profiles/openai-search",
+    modelProfile: { id: "openai-search", label: "OpenAI search", searchRouting: { providers: ["openai", "brave"], fallbackOn: ["network"] } },
+  });
+  assert.equal(launch.env.PI_CODING_AGENT_DIR, "/var/lib/conduit/pi/model-profiles/openai-search");
+  assert.equal(launch.modelProfile.id, "openai-search");
+});
+
 test("Host Pi launch uses host state, a draft model, and only the additive Conduit bridge", () => {
   const chat = {
     runtime: {

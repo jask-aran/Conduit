@@ -6,7 +6,7 @@ import { loadConfig } from "../src/config.js";
 test("default runtime paths are owned by the repository root", () => {
   const config = loadConfig({});
   assert.equal(config.piTemplate.id, "chat");
-  assert.equal(config.piTemplate.version, "6");
+  assert.equal(config.piTemplate.version, "8");
   assert.equal(config.piTemplate.label, "Assistant");
   assert.deepEqual(config.piTemplate.tools, ["read", "bash", "edit", "write", "web_search", "fetch_content", "get_search_content", "source_check"]);
   assert.deepEqual(config.piTemplate.models, [
@@ -32,6 +32,8 @@ test("default runtime paths are owned by the repository root", () => {
   assert.equal(config.remotesFile.endsWith(path.join("data", "remotes.json")), true);
   assert.equal(config.piAgentDir.endsWith(path.join("data", "pi")), true);
   assert.equal(config.searchConfigFile.endsWith(path.join("data", "pi", "web-search.json")), true);
+  assert.equal(config.modelProfilesFile.endsWith(path.join("templates", "model-profiles.json")), true);
+  assert.deepEqual(config.modelProfiles.profiles.map((profile) => profile.id), ["openai-search", "brave-search"]);
   assert.equal(config.installations.get("conduit-pinned").version, "0.84.1");
   assert.equal(path.isAbsolute(config.installations.get("conduit-pinned").command), true);
   assert.equal(config.enablePartialContinue, true);

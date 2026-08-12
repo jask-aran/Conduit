@@ -1,6 +1,8 @@
 import { resolveTemplate } from "../../config.js";
 import { chatView, isChatId } from "../../chat-store.js";
 import { stopSessionProcesses } from "../../session-operations.js";
+import { resolveModelProfile } from "../../model-profiles.js";
+import { usesWebSearchOverlay } from "../../model-profile-runtime.js";
 
 export function registerChatRoutes(app, {
   catalogFor,
@@ -8,6 +10,7 @@ export function registerChatRoutes(app, {
   config,
   defaultTemplate,
   findChatContext,
+  launchLiveSession,
   lifecycle,
   manager,
   modelCatalog,
@@ -175,8 +178,35 @@ export function registerChatRoutes(app, {
       };
       const resident = manager.getByChatId(context.chat.id);
       if (resident) {
-        if (spec && spec !== current.model) await manager.setModel(resident.id, spec);
-        if (thinkingLevel) await manager.setThinkingLevel(resident.id, thinkingLevel);
+        if (spec && spec !== current.model) {
+          const template = templateForChat(context.chat, context.project);
+          const runtime = context.chat.runtime || runtimeFor({ runtimeKind: "conduit_profile", template });
+          const profileForModel = (model) => runtime.kind === "conduit_profile" && usesWebSearchOverlay(template)
+            ? resolveModelProfile(config.modelProfiles, model || "unknown/unresolved")
+            : null;
+          const currentProfile = resident.modelProfile || profileForModel(current.model);
+          const targetProfile = profileForModel(spec);
+          if (currentProfile?.id !== targetProfile?.id) {
+            if (manager.isBusy(resident)) {
+              return response.status(409).json({
+                error: "model_profile_transition_busy",
+                message: "Finish the current response before changing to a model with different runtime settings.",
+              });
+            }
+            await manager.setModel(resident.id, spec);
+            await manager.stopAndWait(resident.id);
+            await launchLiveSession({
+              chatId: context.chat.id,
+              model: spec,
+              thinkingLevel,
+              forceModel: true,
+            });
+          } else {
+            await manager.setModel(resident.id, spec);
+          }
+        }
+        const activeResident = manager.getByChatId(context.chat.id);
+        if (thinkingLevel && activeResident) await manager.setThinkingLevel(activeResident.id, thinkingLevel);
       } else {
         if (context.chat.status !== "draft" || context.chat.piSessionFile) {
           return response.status(409).json({ error: "live_session_required" });
