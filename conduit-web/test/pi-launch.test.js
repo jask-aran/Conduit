@@ -20,7 +20,7 @@ test("Isolated Pi profile launch uses the pinned installation and isolated agent
     runtime: {
       kind: "conduit_profile",
       installationId: "conduit-pinned",
-      binaryVersion: "0.80.6",
+      binaryVersion: "0.84.1",
       profileId: "workspace",
       profileVersion: "2",
     },
@@ -31,7 +31,7 @@ test("Isolated Pi profile launch uses the pinned installation and isolated agent
     project,
     installation: {
       available: true,
-      command: "/opt/conduit/pi/0.80.6/pi",
+      command: "/opt/conduit/pi/0.84.1/pi",
       commandArgs: [],
       agentDir: "/var/lib/conduit/pi",
     },
@@ -39,7 +39,7 @@ test("Isolated Pi profile launch uses the pinned installation and isolated agent
     models: ["openai/gpt"],
     model: "openai/gpt",
   });
-  assert.equal(launch.command, "/opt/conduit/pi/0.80.6/pi");
+  assert.equal(launch.command, "/opt/conduit/pi/0.84.1/pi");
   assert.equal(launch.cwd, path.resolve(project.path));
   assert.equal(launch.env.PI_CODING_AGENT_DIR, "/var/lib/conduit/pi");
   assert.ok(launch.args.includes("--system-prompt"));

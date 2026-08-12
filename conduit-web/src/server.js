@@ -44,6 +44,8 @@ import { registerChatRoutes } from "./server/routes/chats.js";
 import { registerLiveSessionRoutes } from "./server/routes/live-sessions.js";
 import { registerProjectRoutes } from "./server/routes/projects.js";
 import { registerSessionRoutes } from "./server/routes/sessions.js";
+import { registerSearchRoutes } from "./server/routes/search.js";
+import { SearchSettingsStore } from "./search-settings.js";
 
 const config = loadConfig();
 const projects = new ProjectStore(config);
@@ -73,6 +75,8 @@ await registry.initialize(await projects.list());
 const attachments = new AttachmentStore(registry, { maxBytes: config.maxAttachmentBytes });
 const runtimeSettings = new RuntimeSettingsStore(config.runtimeSettingsFile, defaultsFromEnv(process.env));
 await runtimeSettings.load();
+const searchSettings = new SearchSettingsStore({ filePath: config.searchConfigFile, environment: process.env });
+await searchSettings.initialize();
 const knownTemplateIds = config.piTemplates
   .filter((template) => template.defaultable !== false)
   .map((template) => template.id);
@@ -114,12 +118,13 @@ manager.on("process_removed", ({ id, chatId }) => {
   runtimeHub.publishProcessRemoved(id, chatId);
 });
 const modelCatalog = new PiModelCatalog({ agentDir: config.piAgentDir, modelPatterns: config.piTemplate.models });
+await modelCatalog.ready();
 const piAuth = new PiAuthBroker({
-  authStorage: modelCatalog.authStorage,
-  modelRegistry: modelCatalog.modelRegistry,
+  modelRuntime: modelCatalog.modelRuntime,
+  authFile: modelCatalog.authFile,
   onCredentialsChanged: recycleIdleIsolatedPiProcesses,
 });
-const modelCatalogs = new Map();
+const modelCatalogs = new Map([[`isolated:${config.piTemplate.id}`, modelCatalog]]);
 const lifecycle = new ChatLifecycle();
 const app = express();
 const dist = process.env.CONDUIT_CLIENT_DIST
@@ -397,6 +402,11 @@ registerPiAuthRoutes(app, {
   detectHost: () => config.installations.detectHost(),
 });
 
+registerSearchRoutes(app, {
+  searchSettings,
+  onSettingsChanged: recycleIdleIsolatedPiProcesses,
+});
+
 registerPtyRoutes(app, { projects, terminals });
 
 registerProjectRoutes(app, {
@@ -509,6 +519,10 @@ app.use((error, _request, response, _next) => {
       "pty_resize_invalid",
       "pty_input_invalid",
       "pty_control_invalid",
+      "search_config_invalid",
+      "search_key_invalid",
+      "search_provider_locked",
+      "search_provider_unknown",
     ].includes(error.code)
     || error.message?.includes("Project names")) status = 400;
   response.status(status).json({

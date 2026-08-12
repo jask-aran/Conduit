@@ -30,10 +30,10 @@ const plainModel = {
 
 const templates = [{
   id: "chat",
-  label: "General",
-  version: 1,
+  label: "Assistant",
+  version: 5,
   defaultable: true,
-  tools: ["read", "write", "edit", "bash"],
+  tools: ["read", "write", "edit", "bash", "web_search", "fetch_content", "get_search_content", "source_check"],
 }, {
   id: "workspace",
   label: "Coding",
@@ -142,7 +142,7 @@ test.beforeEach(async ({ page }) => {
   });
   await page.route("**/v0/pi-installations", async (route) => {
     await route.fulfill({ json: { installations: [
-      { id: "conduit-pinned", label: "Isolated Pi", version: "0.80.6", available: true },
+      { id: "conduit-pinned", label: "Isolated Pi", version: "0.84.1", available: true },
       { id: "host-pi", label: "Host Pi", version: "0.80.10", available: true },
     ] } });
   });
@@ -1903,7 +1903,7 @@ test("renders a selected chat before optional startup data and loads workspace s
   await page.route("**/v0/pi-installations", async (route) => {
     await optionalGate;
     await route.fulfill({ json: { installations: [
-      { id: "conduit-pinned", label: "Isolated Pi", version: "0.80.6", available: true },
+      { id: "conduit-pinned", label: "Isolated Pi", version: "0.84.1", available: true },
       { id: "host-pi", label: "Host Pi", version: "0.80.10", available: true },
     ] } });
   });
@@ -2234,7 +2234,7 @@ test("workspace draft chooses Host Pi and automatically trusts project resources
       status: "draft",
       title: "New chat",
       templateId: body.templateId,
-      runtime: { kind: body.runtimeKind, installationId: "conduit-pinned", binaryVersion: "0.80.6", profileId: body.templateId },
+      runtime: { kind: body.runtimeKind, installationId: "conduit-pinned", binaryVersion: "0.84.1", profileId: body.templateId },
     } });
   });
   await page.route("**/v0/chats/550e8400-e29b-41d4-a716-446655440088", async (route) => {
@@ -2283,8 +2283,8 @@ test("workspace draft chooses Host Pi and automatically trusts project resources
     runtimeKind: "conduit_profile",
   });
   await expect(page.getByRole("dialog", { name: /New chat in/ })).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "Profile General" })).toBeVisible();
-  await page.getByRole("button", { name: "Profile General" }).click();
+  await expect(page.getByRole("button", { name: "Profile Assistant" })).toBeVisible();
+  await page.getByRole("button", { name: "Profile Assistant" }).click();
   const switchRequest = page.waitForRequest((candidate) => candidate.method() === "PATCH"
     && candidate.postDataJSON()?.runtimeKind === "native_pi");
   await page.getByRole("menuitemradio", { name: /Host Pi/ }).click();
@@ -2364,7 +2364,7 @@ test("Host Pi default falls back to global when launch becomes unavailable", asy
     && request.method() === "PATCH" && request.postDataJSON()?.runtimeKind === "conduit_profile");
   await page.getByRole("button", { name: "Send message" }).click();
   await Promise.all([clearDefault, switchRuntime]);
-  await expect(page.getByRole("button", { name: "Profile General" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Profile Assistant" })).toBeVisible();
   await expect(page.getByRole("textbox", { name: "Message Pi" })).toHaveValue("");
 });
 
@@ -3603,7 +3603,7 @@ test("host Pi re-detection immediately updates the Workspace profile menu", asyn
   await page.route("**/v0/projects", (route) => route.fulfill({ json: { projects: [...projects, workspace] } }));
   await page.unroute("**/v0/pi-installations");
   await page.route("**/v0/pi-installations", (route) => route.fulfill({ json: { installations: [
-    { id: "conduit-pinned", label: "Isolated Pi", version: "0.80.6", available: true },
+    { id: "conduit-pinned", label: "Isolated Pi", version: "0.84.1", available: true },
     { id: "host-pi", label: "Host Pi", version: null, available: false, error: "Host Pi was not found" },
   ] } }));
   await page.route("**/v0/pi-installations/host/detect", (route) => route.fulfill({ json: {
@@ -3704,16 +3704,16 @@ test("workspace dashboard is a direct routable operator surface", async ({ page 
   await expect(page.locator(".composer")).toHaveCount(0);
 
   await page.getByRole("button", { name: "Coding", exact: true }).click();
-  await page.getByRole("menuitemradio", { name: "General" }).click();
+  await page.getByRole("menuitemradio", { name: "Assistant" }).click();
   expect((await profilePatch).postDataJSON()).toEqual({ defaultTemplateId: "chat" });
-  await expect(page.getByRole("button", { name: "General", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Assistant", exact: true })).toBeVisible();
 
   // A slower initial dashboard response must not overwrite the confirmed
   // profile choice with its stale identity snapshot.
   releaseDashboard();
   await expect(page.getByText("agent/issue-40-project-dashboard")).toBeVisible();
   await expect(page.locator(".project-chat-row")).toContainText("The route and dashboard payload are wired.");
-  await expect(page.getByRole("button", { name: "General", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Assistant", exact: true })).toBeVisible();
   await expect(page.getByText("resident PTY")).toBeVisible();
   await expect(page.getByRole("button", { name: "Open command palette" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Copy Tailscale workspace link" })).toBeVisible();

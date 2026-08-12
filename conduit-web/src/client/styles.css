@@ -310,6 +310,20 @@ svg { stroke-width: 1.5; }
 .pi-auth-attempt h3, .pi-auth-attempt p { margin: 0; }
 .pi-auth-response, .pi-auth-options { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .pi-auth-response input { min-width: 0; flex: 1 1 220px; }
+.search-settings { display: grid; gap: 16px; }
+.search-settings-intro { margin: 0; color: var(--muted-foreground); line-height: 1.45; }
+.search-provider-actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.search-provider-actions > div { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
+.search-provider-status { color: var(--muted-foreground); font-size: 12px; }
+.search-provider-status[data-configured="true"] { color: var(--accent-cool); }
+.search-provider-list { display: grid; gap: 10px; }
+.search-provider-card { display: grid; grid-template-columns: minmax(0, 1fr) minmax(180px, 0.7fr); gap: 16px; align-items: center; padding: 14px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--card); }
+.search-provider-card h3 { display: flex; align-items: center; gap: 8px; margin: 0; }
+.search-provider-card h3 span { border: 1px solid var(--border); border-radius: 999px; padding: 2px 7px; color: var(--muted-foreground); font-size: 10px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; }
+.search-provider-card p { margin: 5px 0; color: var(--muted-foreground); font-size: 13px; }
+.search-provider-card a { color: var(--muted-foreground); font-size: 12px; }
+.search-provider-card[data-disabled] { opacity: .55; }
+.search-provider-card input:disabled { cursor: not-allowed; }
 .command-dialog { width: 100vw; height: 100dvh; margin: 0; }
 .command-shell { display: flex; flex-direction: column; width: min(640px, calc(100vw - 28px)); max-height: min(600px, calc(100dvh - 28px)); overflow: hidden; border: 1px solid var(--border); border-radius: 14px; background: var(--popover); box-shadow: 0 24px 80px rgb(0 0 0 / 42%); }
 .command-input-row { display: flex; align-items: center; gap: 8px; padding: 0 8px 0 13px; border-bottom: 1px solid var(--border); }
@@ -502,6 +516,9 @@ svg { stroke-width: 1.5; }
   .settings-rail h2 { display: none; }
   .settings-rail button { overflow: hidden; padding-inline: 5px; font-size: 11px; text-overflow: ellipsis; }
   .settings-content { padding: 14px; }
+  .search-provider-actions { align-items: flex-start; flex-direction: column; }
+  .search-provider-actions > div { justify-content: flex-start; }
+  .search-provider-card { grid-template-columns: 1fr; }
 }
 
 @media (prefers-reduced-motion: reduce) {

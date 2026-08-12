@@ -15,7 +15,7 @@ const projects = [{
 const model = { provider: "example", id: "reasoner", spec: "example/reasoner", label: "Reasoner", thinkingLevels: ["off", "medium", "high"] };
 const plainModel = { provider: "example", id: "plain", spec: "example/plain", label: "Plain", thinkingLevels: ["off"] };
 const templates = [
-  { id: "chat", label: "General", defaultable: true, tools: ["read", "write"] },
+  { id: "chat", label: "Assistant", version: 5, defaultable: true, tools: ["read", "write", "edit", "bash", "web_search", "fetch_content", "get_search_content", "source_check"] },
   { id: "workspace", label: "Coding", defaultable: true, tools: ["read", "write"] },
 ];
 
@@ -54,6 +54,13 @@ test.beforeEach(async ({ page }) => {
   await page.route("**/v0/projects", (route) => route.fulfill({ json: { projects } }));
   await page.route("**/v0/models?**", (route) => route.fulfill({ json: { models: [model, plainModel], defaultModel: model.spec, defaultThinkingLevel: "medium", requiresAuthentication: false } }));
   await page.route("**/v0/settings?**", (route) => route.fulfill({ json: { models: [model, plainModel], enabledModels: [model.spec, plainModel.spec], defaultModel: model.spec } }));
+  await page.route("**/v0/search/settings", (route) => route.fulfill({ json: {
+    workflow: "none",
+    providers: [
+      { id: "brave", label: "Brave Search", description: "Fallback", docsUrl: "https://example.test/brave", enabled: true, editable: true, configured: false, stored: false, source: null, removable: false },
+      { id: "exa", label: "Exa", description: "Neural search", docsUrl: "https://example.test/exa", enabled: false, editable: false, configured: false, stored: false, source: null, removable: false },
+    ],
+  } }));
   await page.route("**/v0/chats/*/models", (route) => route.fulfill({ json: {
     installationId: "conduit-pinned", runtimeKind: "conduit_profile", models: [model, plainModel],
     model: model.spec, thinkingLevel: "medium", defaultModel: model.spec, defaultThinkingLevel: "medium", requiresAuthentication: false,
@@ -106,6 +113,19 @@ test("drills into the Settings page and steps back with Escape", async ({ page }
   await expect(page.getByRole("option", { name: /^Go to…/ })).toBeVisible();
 
   await page.screenshot({ path: "/home/jask/.claude/jobs/a9046fd1/tmp/command-palette.png" });
+});
+
+test("opens the Search settings surface with Brave active and future providers disabled", async ({ page }) => {
+  await page.goto("/");
+  await openPalette(page);
+  await page.getByRole("option", { name: /^Settings…/ }).click();
+  await page.getByRole("option", { name: /^Search$/ }).click();
+
+  const settings = page.getByRole("dialog", { name: "Settings" });
+  await expect(settings.getByRole("tab", { name: "Search" })).toHaveAttribute("aria-selected", "true");
+  await expect(settings.getByLabel("Brave Search API key")).toBeVisible();
+  await expect(settings.getByLabel("Exa API key")).toBeDisabled();
+  await expect(settings.getByText("No Brave key configured")).toBeVisible();
 });
 
 test("keyboard navigation moves the active option and Escape closes root", async ({ page }) => {

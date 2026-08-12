@@ -6,9 +6,9 @@ import { loadConfig } from "../src/config.js";
 test("default runtime paths are owned by the repository root", () => {
   const config = loadConfig({});
   assert.equal(config.piTemplate.id, "chat");
-  assert.equal(config.piTemplate.version, "3");
-  assert.equal(config.piTemplate.label, "General");
-  assert.deepEqual(config.piTemplate.tools, ["read", "bash"]);
+  assert.equal(config.piTemplate.version, "6");
+  assert.equal(config.piTemplate.label, "Assistant");
+  assert.deepEqual(config.piTemplate.tools, ["read", "bash", "edit", "write", "web_search", "fetch_content", "get_search_content", "source_check"]);
   assert.deepEqual(config.piTemplate.models, [
     "openai-codex/gpt-5.6-luna",
     "openai-codex/gpt-5.6-sol",
@@ -18,8 +18,10 @@ test("default runtime paths are owned by the repository root", () => {
   assert.equal(config.piTemplate.templateFile.endsWith(path.join("templates", "chat", "template.json")), true);
   assert.ok(config.piTemplates.some((template) => template.id === "chat"));
   assert.ok(config.piTemplates.some((template) => template.id === "workspace"));
+  assert.ok(config.piTemplates.some((template) => template.id === "codemode"));
   assert.ok(config.piTemplates.some((template) => template.id === "runtime"));
   assert.equal(config.piTemplateById.get("workspace")?.label, "Coding");
+  assert.equal(config.piTemplateById.get("codemode")?.label, "Code Mode");
   assert.ok(config.piTemplateById.get("workspace")?.skills?.length >= 1);
   assert.ok(config.workspaceAllowlist.length >= 1);
   assert.equal(config.dataRoot.endsWith("data"), true);
@@ -29,7 +31,8 @@ test("default runtime paths are owned by the repository root", () => {
   assert.equal(config.preferencesFile.endsWith(path.join("data", "preferences.json")), true);
   assert.equal(config.remotesFile.endsWith(path.join("data", "remotes.json")), true);
   assert.equal(config.piAgentDir.endsWith(path.join("data", "pi")), true);
-  assert.equal(config.installations.get("conduit-pinned").version, "0.80.6");
+  assert.equal(config.searchConfigFile.endsWith(path.join("data", "pi", "web-search.json")), true);
+  assert.equal(config.installations.get("conduit-pinned").version, "0.84.1");
   assert.equal(path.isAbsolute(config.installations.get("conduit-pinned").command), true);
   assert.equal(config.enablePartialContinue, true);
   assert.equal(config.maxAttachmentBytes, 100 * 1024 * 1024);
@@ -52,6 +55,7 @@ test("one data root relocates every durable Conduit path", () => {
   assert.equal(config.remotesFile, path.join(dataRoot, "remotes.json"));
   assert.equal(config.authFile, path.join(dataRoot, "auth.json"));
   assert.equal(config.piAgentDir, path.join(dataRoot, "pi"));
+  assert.equal(config.searchConfigFile, path.join(dataRoot, "pi", "web-search.json"));
   assert.equal(config.release, "0123456789abcdef");
   assert.equal(loadConfig({ CONDUIT_MAX_ATTACHMENT_BYTES: "2048" }).maxAttachmentBytes, 2048);
   assert.equal(config.workspaceSuggestionRoot, path.resolve("/tmp/workspace-suggestions"));

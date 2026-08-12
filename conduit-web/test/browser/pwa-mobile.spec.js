@@ -27,10 +27,10 @@ const model = {
 
 const templates = [{
   id: "chat",
-  label: "General",
-  version: 1,
+  label: "Assistant",
+  version: 5,
   defaultable: true,
-  tools: ["read", "write", "edit", "bash"],
+  tools: ["read", "write", "edit", "bash", "web_search", "fetch_content", "get_search_content", "source_check"],
 }];
 
 const newChatId = "550e8400-e29b-41d4-a716-446655440099";

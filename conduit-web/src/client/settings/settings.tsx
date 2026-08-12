@@ -8,7 +8,7 @@ import { MARKDOWN_RENDERER_OPTIONS, type MarkdownRendererId } from "../chat/mark
 import type { Installation, ModelOption, Project, Template } from "../api/contracts";
 import type { ModelSettings } from "../state/model-settings";
 
-const sections = ["general", "ui", "models", "profiles", "runtime", "workspaces", "auth"] as const;
+const sections = ["general", "ui", "models", "profiles", "runtime", "workspaces", "search", "auth"] as const;
 type Section = typeof sections[number];
 const label = (section: Section) => section === "ui" ? "UI" : section[0]!.toUpperCase() + section.slice(1);
 
@@ -41,6 +41,24 @@ interface PiAuthAttempt {
   error: string | null;
   active: boolean;
   owned: boolean;
+}
+
+interface SearchProvider {
+  id: string;
+  label: string;
+  description: string;
+  docsUrl: string;
+  enabled: boolean;
+  editable: boolean;
+  configured: boolean;
+  stored: boolean;
+  source: "stored" | "environment" | null;
+  removable: boolean;
+}
+
+interface SearchSettings {
+  workflow: "none" | "managed";
+  providers: SearchProvider[];
 }
 
 const sameScope = (left: string[], right: string[]) => [...left].sort().join("\n") === [...right].sort().join("\n");
@@ -86,7 +104,13 @@ export function Settings(props: {
   const [authLoading, setAuthLoading] = createSignal(false);
   const [authError, setAuthError] = createSignal("");
   const [authUnavailable, setAuthUnavailable] = createSignal(false);
+  const [searchSettings, setSearchSettings] = createSignal<SearchSettings | null>(null);
+  const [searchStatus, setSearchStatus] = createSignal<"idle" | "loading" | "ready" | "error">("idle");
+  const [searchError, setSearchError] = createSignal("");
+  const [searchKey, setSearchKey] = createSignal("");
+  const [searchSaving, setSearchSaving] = createSignal(false);
   let runtimeRequest = 0;
+  let searchRequest = 0;
   let search!: HTMLInputElement;
   let returnFocus: HTMLElement | null = null;
   let wasOpen = false;
@@ -101,15 +125,16 @@ export function Settings(props: {
   createEffect(on(() => props.open, (open) => {
     if (open && !wasOpen) returnFocus = document.activeElement as HTMLElement | null;
     wasOpen = open;
-    if (!open) return;
+    if (!open) {
+      setApiKey("");
+      setAuthResponse("");
+      setSearchKey("");
+      return;
+    }
     const initial = props.initialSection || "models";
     setSection(initial);
     setWorkspaceId(props.initialWorkspaceId || props.projects.find((project) => project.kind === "workspace" || ["linked", "created", "cloned"].includes(project.origin || ""))?.id || null);
     setScopeEdited(false);
-    if (!open) {
-      setApiKey("");
-      setAuthResponse("");
-    }
     if (initial === "models") focusSearch();
   }));
 
@@ -226,6 +251,46 @@ export function Settings(props: {
     try { await api(`/v0/pi-auth/${encodeURIComponent(providerId)}`, { method: "DELETE" }); await loadPiAuth(); }
     catch (error) { setAuthError((error as Error).message); }
     finally { setAuthLoading(false); }
+  };
+
+  const loadSearchSettings = async () => {
+    const request = ++searchRequest;
+    setSearchStatus("loading");
+    setSearchError("");
+    try {
+      const loaded = await api<SearchSettings>("/v0/search/settings");
+      if (request !== searchRequest) return;
+      setSearchSettings(loaded);
+      setSearchStatus("ready");
+    } catch (error) {
+      if (request !== searchRequest) return;
+      setSearchError((error as Error).message);
+      setSearchStatus("error");
+    }
+  };
+  createEffect(() => { if (props.open && section() === "search") void loadSearchSettings(); });
+
+  const saveSearchKey = async () => {
+    const key = searchKey().trim();
+    if (!key) return;
+    setSearchSaving(true);
+    setSearchError("");
+    try {
+      await api<SearchSettings>("/v0/search/providers/brave", { method: "PUT", body: JSON.stringify({ key }) });
+      setSearchKey("");
+      await loadSearchSettings();
+    } catch (error) { setSearchError((error as Error).message); }
+    finally { setSearchSaving(false); }
+  };
+
+  const removeSearchKey = async () => {
+    setSearchSaving(true);
+    setSearchError("");
+    try {
+      await api("/v0/search/providers/brave", { method: "DELETE" });
+      await loadSearchSettings();
+    } catch (error) { setSearchError((error as Error).message); }
+    finally { setSearchSaving(false); }
   };
 
   const selectedModels = createMemo(() => props.models.allModels().filter((model) => scope().includes(model.spec)));
@@ -358,6 +423,26 @@ export function Settings(props: {
                 <option value="host-pi" disabled={!props.installations.find((item) => item.id === "host-pi")?.available}>Host Pi</option>
               </select></Field>
             </div>}</For></Show></Show>
+          </Show>
+          <Show when={section() === "search"}>
+            <Show when={searchStatus() === "ready" && searchSettings()} fallback={<Show when={searchStatus() === "error"} fallback={<div class="settings-loading"><Spinner /><span>Loading search settings…</span></div>}><div role="alert" class="settings-error"><span>{searchError() || "Search settings could not be loaded."}</span><Button variant="outline" size="sm" onClick={() => void loadSearchSettings()}>Retry</Button></div></Show>}>
+              <div class="search-settings">
+                <p class="search-settings-intro">Conduit uses OpenAI or Codex native search when the active provider supports it, then falls back to configured web providers. Search runs without Pi’s curator window.</p>
+                <FieldGroup>
+                  <Field>
+                    <FieldLabel for="brave-search-api-key">Brave Search API key</FieldLabel>
+                    <Input id="brave-search-api-key" type="password" autocomplete="off" value={searchKey()} onInput={(event) => setSearchKey(event.currentTarget.value)} placeholder={searchSettings()!.providers.find((provider) => provider.id === "brave")?.configured ? "A key is already configured" : "BSA_…"} onKeyDown={(event) => { if (event.key === "Enter") void saveSearchKey(); }} />
+                    <small>The key stays on this server in the Conduit-owned Pi configuration. It is never returned to the browser.</small>
+                  </Field>
+                  <div class="search-provider-actions">
+                    <span class="search-provider-status" data-configured={searchSettings()!.providers.find((provider) => provider.id === "brave")?.configured}>{searchSettings()!.providers.find((provider) => provider.id === "brave")?.source === "environment" ? "Using BRAVE_API_KEY from the server environment" : searchSettings()!.providers.find((provider) => provider.id === "brave")?.stored ? "Stored key active" : "No Brave key configured"}</span>
+                    <div><Button disabled={searchSaving() || !searchKey().trim()} onClick={() => void saveSearchKey()}>{searchSaving() ? <Spinner /> : null}Save key</Button><Show when={searchSettings()!.providers.find((provider) => provider.id === "brave")?.removable}><Button variant="outline" disabled={searchSaving()} onClick={() => void removeSearchKey()}>Remove stored key</Button></Show></div>
+                  </div>
+                </FieldGroup>
+                <Show when={searchError()}><p role="alert" class="settings-inline-error">{searchError()}</p></Show>
+                <div class="search-provider-list"><For each={searchSettings()!.providers.filter((provider) => !provider.enabled)}>{(provider) => <article class="search-provider-card" data-disabled="true"><div><h3>{provider.label}<span>Coming later</span></h3><p>{provider.description}</p><a href={provider.docsUrl} target="_blank" rel="noreferrer">Provider documentation</a></div><Input type="password" disabled placeholder="Configuration not enabled yet" aria-label={`${provider.label} API key`} /></article>}</For></div>
+              </div>
+            </Show>
           </Show>
           <Show when={section() === "auth"}>
             <div class="pi-auth-panel">

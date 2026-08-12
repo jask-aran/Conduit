@@ -1,0 +1,20 @@
+{
+  "id": "codemode",
+  "version": "1",
+  "label": "Code Mode",
+  "description": "Experimental Pi profile with a sandboxed Python code tool for multi-step work.",
+  "posture": "code mode",
+  "systemPrompt": "SYSTEM.md",
+  "tools": ["code"],
+  "models": [
+    "openai-codex/gpt-5.6-luna",
+    "openai-codex/gpt-5.6-sol",
+    "anthropic/claude-opus-4-8",
+    "anthropic/claude-fable-5"
+  ],
+  "extensions": [
+    "../../conduit-web/node_modules/pi-code-tool/extensions/index.js"
+  ],
+  "skills": [],
+  "promptTemplates": []
+}

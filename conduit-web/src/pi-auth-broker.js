@@ -1,4 +1,6 @@
 import crypto from "node:crypto";
+import fs from "node:fs/promises";
+import path from "node:path";
 
 const ATTEMPT_TTL_MS = 10 * 60 * 1000;
 const COMPLETED_ATTEMPT_TTL_MS = 60 * 1000;
@@ -13,6 +15,29 @@ function literalApiKey(value) {
   return value.replaceAll("$", () => "$$").replace(/^!/, "$!");
 }
 
+async function readAuthFile(file) {
+  try {
+    const raw = await fs.readFile(file, "utf8");
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+  } catch (error) {
+    if (error.code === "ENOENT") return {};
+    throw error;
+  }
+}
+
+async function writeAuthFile(file, data) {
+  await fs.mkdir(path.dirname(file), { recursive: true, mode: 0o700 });
+  const temporary = `${file}.${process.pid}.${crypto.randomUUID()}.tmp`;
+  try {
+    await fs.writeFile(temporary, JSON.stringify(data, null, 2), { encoding: "utf8", mode: 0o600 });
+    await fs.chmod(temporary, 0o600);
+    await fs.rename(temporary, file);
+  } finally {
+    await fs.rm(temporary, { force: true }).catch(() => {});
+  }
+}
+
 function attemptId() {
   return crypto.randomBytes(18).toString("base64url");
 }
@@ -22,15 +47,44 @@ function messageFor(errorValue) {
 }
 
 export class PiAuthBroker {
-  constructor({ authStorage, modelRegistry, onCredentialsChanged = async () => {}, now = () => Date.now() }) {
+  constructor({ authStorage, modelRegistry, modelRuntime = null, authFile = "", onCredentialsChanged = async () => {}, now = () => Date.now() }) {
     this.authStorage = authStorage;
     this.modelRegistry = modelRegistry;
+    this.modelRuntime = modelRuntime;
+    this.authFile = String(authFile || "").trim();
     this.onCredentialsChanged = onCredentialsChanged;
     this.now = now;
     this.attempt = null;
   }
 
   providers() {
+    if (this.modelRuntime) {
+      const providers = this.modelRuntime.getProviders()
+        .filter((provider) => provider.getModels().length > 0 || provider.auth?.oauth)
+        .map((provider) => {
+          const oauth = provider.auth?.oauth || null;
+          const status = this.modelRuntime.getProviderAuthStatus(provider.id);
+          const source = status.source === "environment"
+            ? "environment"
+            : status.source === "stored"
+              ? "stored"
+              : status.source === "runtime"
+                ? "runtime"
+                : status.configured ? "managed" : null;
+          return {
+            id: provider.id,
+            label: provider.name || provider.id,
+            oauth: Boolean(oauth),
+            usesCallbackServer: false,
+            auth: {
+              configured: status.configured === true,
+              source,
+              removable: source === "stored",
+            },
+          };
+        });
+      return providers.sort((left, right) => left.id.localeCompare(right.id));
+    }
     this.authStorage.reload();
     this.modelRegistry.refresh();
     const oauth = new Map(this.authStorage.getOAuthProviders().map((provider) => [provider.id, provider]));
@@ -80,8 +134,13 @@ export class PiAuthBroker {
     if (this.attempt?.state === "running" || this.attempt?.state === "waiting") {
       throw error("authentication_in_progress", "Another Pi authentication attempt is already in progress", 409);
     }
-    this.authStorage.reload();
-    const provider = this.authStorage.getOAuthProviders().find((item) => item.id === providerId);
+    let provider;
+    if (this.modelRuntime) {
+      provider = this.modelRuntime.getProvider(providerId)?.auth?.oauth;
+    } else {
+      this.authStorage.reload();
+      provider = this.authStorage.getOAuthProviders().find((item) => item.id === providerId);
+    }
     if (!provider) throw error("oauth_provider_unknown", "This provider does not support browser authentication");
     const attempt = {
       id: attemptId(),
@@ -159,7 +218,35 @@ export class PiAuthBroker {
       signal: attempt.controller.signal,
     };
     try {
-      await this.authStorage.login(attempt.providerId, callbacks);
+      if (this.modelRuntime) {
+        await this.modelRuntime.login(attempt.providerId, "oauth", {
+          signal: attempt.controller.signal,
+          prompt: (prompt) => this.waitForInput(attempt, {
+            type: prompt.type,
+            message: prompt.message,
+            placeholder: prompt.placeholder || "",
+            options: prompt.options?.map((option) => ({ id: option.id, label: option.label })),
+          }),
+          notify: (event) => {
+            if (event.type === "auth_url") {
+              attempt.authUrl = event.url;
+              attempt.instructions = event.instructions || "Complete sign-in in your browser, then paste the final redirect URL here.";
+              attempt.message = "Complete sign-in in your browser.";
+            } else if (event.type === "device_code") {
+              attempt.deviceCode = {
+                userCode: event.userCode,
+                verificationUri: event.verificationUri,
+                expiresInSeconds: event.expiresInSeconds || null,
+              };
+              attempt.message = "Open the verification page and enter the displayed code.";
+            } else if (event.type === "progress" || event.type === "info") {
+              attempt.message = event.message;
+            }
+          },
+        });
+      } else {
+        await this.authStorage.login(attempt.providerId, callbacks);
+      }
       if (this.attempt !== attempt) return;
       attempt.state = "completed";
       attempt.message = "Pi authentication completed.";
@@ -206,6 +293,18 @@ export class PiAuthBroker {
   }
 
   async setApiKey(providerId, key) {
+    if (this.modelRuntime) {
+      const provider = this.modelRuntime.getProvider(providerId);
+      if (!provider || !this.authFile) throw error("api_key_provider_unknown", "Choose a provider known to the isolated Pi runtime");
+      const value = String(key || "");
+      if (!value.trim()) throw error("api_key_required", "API key cannot be empty");
+      const auth = await readAuthFile(this.authFile);
+      auth[providerId] = { type: "api_key", key: literalApiKey(value) };
+      await writeAuthFile(this.authFile, auth);
+      await this.modelRuntime.refresh({ allowNetwork: false });
+      await this.onCredentialsChanged();
+      return;
+    }
     this.authStorage.reload();
     this.modelRegistry.refresh();
     const known = new Set(this.modelRegistry.getAll().map((model) => model.provider));
@@ -217,6 +316,16 @@ export class PiAuthBroker {
   }
 
   async remove(providerId) {
+    if (this.modelRuntime) {
+      if (!this.authFile) return false;
+      const auth = await readAuthFile(this.authFile);
+      if (!Object.hasOwn(auth, providerId)) return false;
+      delete auth[providerId];
+      await writeAuthFile(this.authFile, auth);
+      await this.modelRuntime.refresh({ allowNetwork: false });
+      await this.onCredentialsChanged();
+      return true;
+    }
     this.authStorage.reload();
     if (!this.authStorage.has(providerId)) return false;
     this.authStorage.logout(providerId);
