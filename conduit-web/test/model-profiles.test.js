@@ -20,7 +20,7 @@ test("repository model profiles route OpenAI models and other models to differen
     id: "brave-search",
     label: "Brave search",
     searchRouting: {
-      providers: ["brave"],
+      providers: ["brave", "exa", "parallel", "openai"],
       fallbackOn: ["transient", "quota", "network"],
     },
   });
