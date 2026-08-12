@@ -94,6 +94,7 @@ Tagged releases also require a short committed changelog at
 workflow checks this file before it builds or pushes the image, then uses it as
 the GitHub release body. Keep the file to 40 lines or fewer and describe the
 user-visible changes and any important deployment note.
+Push the annotated release tag (`git push origin <tag>`) to trigger the GHCR publish workflow.
 
 Deploying a packaged release is the same two-step flow:
 
