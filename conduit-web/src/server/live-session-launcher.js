@@ -2,6 +2,7 @@ import { ProjectTrustStore } from "@earendil-works/pi-coding-agent";
 import { isChatId } from "../chat-store.js";
 import { readSessionMetadata, validateSessionHeader } from "../session-store.js";
 import { resolvePiLaunch } from "../pi-launch.js";
+import { resolveThinkingLevel } from "../pi-model-catalog.js";
 import { publicModelProfile, resolveModelProfile } from "../model-profiles.js";
 import { usesWebSearchOverlay } from "../model-profile-runtime.js";
 
@@ -77,17 +78,26 @@ export function createLiveSessionLauncher({
     if (seedModel && !catalogView.models.some((item) => item.spec === seedModel)) {
       throw launchError("invalid_model", "The selected model is not available in this Pi profile");
     }
+    const selected = catalogView.models.find((item) => item.spec === seedModel);
+    const recoveringPersistedLevel = Boolean(persisted && !forceModel);
     if (seedThinkingLevel && seedModel) {
-      const selected = catalogView.models.find((item) => item.spec === seedModel);
-      if (selected && !selected.thinkingLevels.includes(seedThinkingLevel)) {
+      if (selected && !selected.thinkingLevels.includes(seedThinkingLevel) && !recoveringPersistedLevel) {
         throw launchError("invalid_thinking_level", "The selected thinking level is not available for this model");
       }
     }
 
+    const effectiveThinkingLevel = selected && recoveringPersistedLevel
+      ? resolveThinkingLevel(seedThinkingLevel, selected.thinkingLevels, catalogView.defaultThinkingLevel)
+      : seedThinkingLevel;
+
     const processModel = runtime.kind === "conduit_profile" ? seedModel || catalogView.defaultModel || "" : seedModel;
     const processThinkingLevel = runtime.kind === "conduit_profile"
-      ? seedThinkingLevel || catalogView.defaultThinkingLevel || ""
-      : seedThinkingLevel;
+      ? effectiveThinkingLevel || catalogView.defaultThinkingLevel || ""
+      : effectiveThinkingLevel;
+    const repairedThinkingLevel = recoveringPersistedLevel
+      && Boolean(processModel)
+      && Boolean(effectiveThinkingLevel)
+      && effectiveThinkingLevel !== seedThinkingLevel;
     let modelProfile = null;
     let runtimeAgentDir = installation.agentDir;
     if (runtime.kind === "conduit_profile" && usesWebSearchOverlay(template)) {
@@ -140,13 +150,19 @@ export function createLiveSessionLauncher({
       lifecycle.assertAvailable(context.chat.id, context.project.id);
       if (runtime.kind === "native_pi" && seedModel) {
         await manager.setModel(live.id, seedModel);
-        if (seedThinkingLevel) await manager.setThinkingLevel(live.id, seedThinkingLevel);
+        if (effectiveThinkingLevel) await manager.setThinkingLevel(live.id, effectiveThinkingLevel);
       }
       if (!live.sessionFile) throw launchError("invalid_session_mapping", "Pi did not report a session file", 409);
       const mapping = {
         templateId: template.id,
         templateVersion: template.version,
         runtime: { ...runtime },
+        ...(repairedThinkingLevel ? {
+          modelThinkingLevels: {
+            ...(context.chat.modelThinkingLevels || {}),
+            [processModel]: processThinkingLevel,
+          },
+        } : {}),
       };
       if (context.chat.status === "draft") {
         mapping.piSessionId = live.sessionId || null;

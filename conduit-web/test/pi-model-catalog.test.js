@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { PiModelCatalog } from "../src/pi-model-catalog.js";
+import { PiModelCatalog, resolveThinkingLevel } from "../src/pi-model-catalog.js";
+
+test("thinking level recovery keeps supported values and falls back to the current default", () => {
+  assert.equal(resolveThinkingLevel("max", ["medium", "max"], "medium"), "max");
+  assert.equal(resolveThinkingLevel("off", ["medium", "max"], "medium"), "medium");
+  assert.equal(resolveThinkingLevel("off", ["max"], "medium"), "max");
+});
 
 test("model catalog exposes Pi-native thinking levels and configured defaults", async () => {
   const models = [

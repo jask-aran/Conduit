@@ -985,6 +985,40 @@ test("creates a durable chat route and renders the primary surface", async ({ pa
   await expect(sendButton).toHaveAttribute("data-variant", "default");
 });
 
+test("shows one toast when an obsolete thinking level is recovered", async ({ page }) => {
+  const recoveryChat = { id: "session_recovery", projectId: "project_chat", status: "active", title: "Recovery chat" };
+  const recoveryModel = { ...model, thinkingLevels: ["medium", "high"] };
+  await page.unroute("**/v0/projects");
+  await page.route("**/v0/projects", (route) => route.fulfill({ json: { projects: [{ ...projects[0], sessions: [recoveryChat] }, projects[1]] } }));
+  await page.route("**/v0/chats/session_recovery", (route) => route.fulfill({ json: recoveryChat }));
+  await page.route("**/v0/sessions/session_recovery", (route) => route.fulfill({ json: {
+    ...recoveryChat,
+    model: recoveryModel.spec,
+    thinkingLevel: "off",
+    messages: [],
+    tools: [],
+    page: { before: null },
+  } }));
+  await page.unroute("**/v0/chats/*/models");
+  await page.route("**/v0/chats/*/models", (route) => route.fulfill({ json: {
+    installationId: "conduit-pinned",
+    runtimeKind: "conduit_profile",
+    models: [recoveryModel, plainModel],
+    model: recoveryModel.spec,
+    thinkingLevel: "medium",
+    defaultModel: recoveryModel.spec,
+    defaultThinkingLevel: "medium",
+    requiresAuthentication: false,
+    warnings: [],
+  } }));
+
+  await page.goto("/chat/session_recovery");
+  const recoveryToast = page.locator('[data-sonner-toast]').filter({ hasText: "Saved thinking level Off is no longer available. Using Medium." });
+  await expect(recoveryToast).toHaveCount(1);
+  await page.waitForTimeout(150);
+  await expect(recoveryToast).toHaveCount(1);
+});
+
 test("Workspace views use the nested palette page and terminal lives in the Workspace panel", async ({ page }, testInfo) => {
   const workspace = {
     id: "project_conduit",
@@ -2094,6 +2128,23 @@ test("error toasts can open a Runtime chat with safe diagnostics", async ({ page
       tools: ["read", "write", "edit", "bash"],
     }], defaultTemplateId: "chat" } });
   });
+  const diagnosticProjects = [{
+    ...projects[0],
+    sessions: [],
+  }, {
+    ...projects[1],
+    sessions: [{ id: "session_existing", projectId: "project_research", status: "active", title: "Existing chat" }],
+  }];
+  await page.unroute("**/v0/projects");
+  await page.route("**/v0/projects", (route) => route.fulfill({ json: { projects: diagnosticProjects } }));
+  await page.unroute("**/v0/chats/session_existing");
+  await page.route("**/v0/chats/session_existing", (route) => route.fulfill({ json: {
+    id: "session_existing", projectId: "project_research", status: "active", title: "Existing chat", model: model.spec, thinkingLevel: "medium",
+  } }));
+  await page.unroute("**/v0/sessions/session_existing");
+  await page.route("**/v0/sessions/session_existing", (route) => route.fulfill({ json: {
+    id: "session_existing", projectId: "project_research", status: "active", title: "Existing chat", model: model.spec, thinkingLevel: "medium", messages: [], tools: [], page: { before: null },
+  } }));
   await page.route("**/v0/sessions/session_existing/move", async (route) => {
     await route.fulfill({ status: 500, json: {
       error: "invalid_session_mapping",
@@ -2120,14 +2171,19 @@ test("error toasts can open a Runtime chat with safe diagnostics", async ({ page
   await page.goto("/chat/session_existing");
   await page.getByRole("button", { name: "Existing chat" }).click({ button: "right" });
   await page.getByRole("menuitem", { name: "Move to folder…" }).hover();
-  const research = page.getByRole("menuitemradio", { name: "Research" });
-  const researchBox = await research.boundingBox();
-  await page.mouse.move(researchBox.x + researchBox.width / 2, researchBox.y + researchBox.height / 2, { steps: 12 });
-  await research.click();
+  const chats = page.getByRole("menuitemradio", { name: "Chats" });
+  const chatsBox = await chats.boundingBox();
+  await page.mouse.move(chatsBox.x + chatsBox.width / 2, chatsBox.y + chatsBox.height / 2, { steps: 12 });
+  await chats.click();
 
   await expect(page.getByRole("button", { name: "Ask Runtime" })).toBeVisible();
+  const liveSessionRequest = page.waitForRequest((request) => {
+    if (!request.url().endsWith("/v0/live-sessions") || request.method() !== "POST") return false;
+    return request.postDataJSON()?.chatId === "runtime_chat";
+  });
   await page.getByRole("button", { name: "Ask Runtime" }).click();
   await expect(page).toHaveURL(/\/chat\/runtime_chat$/);
+  expect((await liveSessionRequest).postDataJSON().projectId).toBe("project_chat");
   await expect(page.locator(".chat-profile-posture")).toContainText("Runtime");
   await expect(page.getByRole("button", { name: "Profile Runtime" })).toBeDisabled();
   await expect.poll(() => page.evaluate(() => window.__runtimeChatCommands || [])).toContainEqual(expect.objectContaining({
