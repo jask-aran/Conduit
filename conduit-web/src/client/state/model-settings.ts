@@ -3,8 +3,9 @@ import { api, asList } from "../api/client";
 import type { ModelOption, ModelState } from "../api/contracts";
 
 type ErrorHandler = (error: unknown) => void;
+type ThinkingLevelRecoveryHandler = (details: { from: string; to: string }) => void;
 
-export function createModelSettings(onError: ErrorHandler) {
+export function createModelSettings(onError: ErrorHandler, onThinkingLevelRecovered: ThinkingLevelRecoveryHandler = () => {}) {
   const [allModels, setAllModels] = createSignal<ModelOption[]>([]);
   const [enabledModels, setEnabledModels] = createSignal<string[]>([]);
   const [models, setModels] = createSignal<ModelOption[]>([]);
@@ -20,6 +21,8 @@ export function createModelSettings(onError: ErrorHandler) {
   let activeProjectId = "";
   let activeChatId = "";
   let requestSequence = 0;
+  const pendingThinkingLevels = new Map<string, string>();
+  const notifiedRecoveryChats = new Set<string>();
 
   const applyChatSelection = (selection?: { model?: string; thinkingLevel?: string }) => {
     if (selection?.model) setModel(selection.model);
@@ -62,14 +65,21 @@ export function createModelSettings(onError: ErrorHandler) {
       const nextModels = asList<ModelOption>(catalog.models);
       const selected = nextModels.find((item) => item.spec === catalog.model);
       const levels = asList<string>(selected?.thinkingLevels);
+      const pendingThinkingLevel = pendingThinkingLevels.get(chatId);
       const rememberedLevels = catalog.modelThinkingLevels && typeof catalog.modelThinkingLevels === "object"
         ? catalog.modelThinkingLevels : {};
+      const nextEffort = levels.includes(catalog.thinkingLevel) ? catalog.thinkingLevel
+        : levels.includes(catalog.defaultThinkingLevel || "") ? catalog.defaultThinkingLevel!
+          : levels.includes("medium") ? "medium" : levels[0] || "off";
       setModels(nextModels);
       setModelThinkingLevels(rememberedLevels);
       setModel(catalog.model || nextModels[0]?.spec || "");
-      setEffort(levels.includes(catalog.thinkingLevel) ? catalog.thinkingLevel
-        : levels.includes(catalog.defaultThinkingLevel || "") ? catalog.defaultThinkingLevel!
-          : levels.includes("medium") ? "medium" : levels[0] || "off");
+      setEffort(nextEffort);
+      if (pendingThinkingLevel && !levels.includes(pendingThinkingLevel) && pendingThinkingLevel !== nextEffort && !notifiedRecoveryChats.has(chatId)) {
+        notifiedRecoveryChats.add(chatId);
+        onThinkingLevelRecovered({ from: pendingThinkingLevel, to: nextEffort });
+      }
+      pendingThinkingLevels.delete(chatId);
       setNotice(catalog.requiresAuthentication
         ? `Authenticate ${catalog.runtimeKind === "native_pi" ? "Host Pi" : "Isolated Pi"} to use models.`
         : "");
@@ -90,7 +100,11 @@ export function createModelSettings(onError: ErrorHandler) {
     const changedChat = activeChatId !== chatId;
     activeProjectId = projectId;
     activeChatId = chatId;
-    if (changedChat) setModelThinkingLevels({});
+    if (changedChat) {
+      setModelThinkingLevels({});
+      if (selection?.thinkingLevel) pendingThinkingLevels.set(chatId, selection.thinkingLevel);
+      else pendingThinkingLevels.delete(chatId);
+    }
     applyChatSelection(selection);
     if (changedProject) void reload(projectId);
     if (changedChat && shouldReloadChat) void reloadChat(chatId);

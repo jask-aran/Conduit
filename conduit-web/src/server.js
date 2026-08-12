@@ -6,7 +6,7 @@ import express from "express";
 import compression from "compression";
 import { WebSocketServer } from "ws";
 import { loadConfig, resolveTemplate } from "./config.js";
-import { PiModelCatalog } from "./pi-model-catalog.js";
+import { PiModelCatalog, resolveThinkingLevel } from "./pi-model-catalog.js";
 import { ProjectStore } from "./project-store.js";
 import { readSessionMetadata, readSessionPage } from "./session-store.js";
 import { PiManager } from "./pi-manager.js";
@@ -199,6 +199,8 @@ async function chatModelView(context) {
       outsideScope: true,
     }];
   }
+  const selectedModel = models.find((item) => item.spec === model);
+  if (selectedModel) thinkingLevel = resolveThinkingLevel(thinkingLevel, selectedModel.thinkingLevels, catalogView.defaultThinkingLevel);
   const modelProfile = runtime.kind === "conduit_profile" && usesWebSearchOverlay(template)
     ? publicModelProfile(resolveModelProfile(config.modelProfiles, model || "unknown/unresolved"))
     : null;

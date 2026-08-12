@@ -124,7 +124,13 @@ function App() {
   };
   const catalogue = createCatalogueStore();
   const runtime = createRuntimeStore();
-  const models = createModelSettings(showError);
+  const models = createModelSettings(showError, ({ from, to }) => {
+    const label = (level: string) => level ? level[0]!.toUpperCase() + level.slice(1) : "Off";
+    toast.info(`Saved thinking level ${label(from)} is no longer available. Using ${label(to)}.`, {
+      id: "thinking-level-recovery",
+      duration: 6_000,
+    });
+  });
   const attachments = createAttachments(showError, maxAttachmentBytes);
 
   const saveWorkspaceDefault = async (workspaceId: string, templateId: string | null) => {
@@ -241,21 +247,34 @@ function App() {
         method: "POST",
         body: JSON.stringify(profileId === "runtime" ? {} : hostDefault ? { projectId: project.id } : { projectId: project.id, templateId: profileId, runtimeKind: launch.runtimeKind || "conduit_profile" }),
       });
+      const ownerProject = profileId === "runtime"
+        ? catalogue.projects().find((item) => item.id === created.projectId)
+          || catalogue.projects().find((item) => item.slug === "chat")
+        : project;
+      if (!ownerProject) throw new Error("The Runtime chat project is not available");
 
       // Commit the visible transition only after the durable replacement exists.
       // initialize() first: it resets the previous chat's live socket, and the
       // URL must not advertise the new chat while a send could still target the old one.
       batch(() => {
-        chat.initialize({ ...created, templateId: created.templateId || profileId || undefined }, project);
+        chat.initialize({ ...created, templateId: created.templateId || profileId || undefined }, ownerProject);
         if (fromDashboard) history.pushState({}, "", `/chat/${created.id}`);
         else history.replaceState({}, "", `/chat/${created.id}`);
         setRouteKind("chat");
+        setRouteBootstrapError("");
+        setRouteBootstrap("ready");
       });
       // Show the new chat in the sidebar immediately instead of waiting for the
       // first server checkpoint refresh; drop the empty draft it replaced.
-      catalogue.setProjects((current) => current.map((item) => item.id === project.id
-        ? { ...item, sessions: [{ ...created, pinned: true }, ...item.sessions.filter((session) => session.id !== created.id && session.id !== replacedDraftId)] }
-        : item));
+      catalogue.setProjects((current) => current.map((item) => {
+        if (item.id === ownerProject.id) {
+          return { ...item, sessions: [{ ...created, pinned: true }, ...item.sessions.filter((session) => session.id !== created.id && session.id !== replacedDraftId)] };
+        }
+        if (item.id === project.id && item.id !== ownerProject.id && replacedDraftId) {
+          return { ...item, sessions: item.sessions.filter((session) => session.id !== replacedDraftId) };
+        }
+        return item;
+      }));
 
       if (replacedDraftId && replacedDraftId !== created.id) {
         try { await discardDraft(replacedDraftId); }
@@ -293,7 +312,11 @@ function App() {
     try {
       await chat.select(target, project, {
         history: "push",
-        onCommit: () => setRouteKind("chat"),
+        onCommit: () => {
+          setRouteKind("chat");
+          setRouteBootstrapError("");
+          setRouteBootstrap("ready");
+        },
       });
     }
     catch (error) { showError(error); return; }
@@ -317,6 +340,8 @@ function App() {
     chat.reset();
     catalogue.selectProject(target);
     setRouteKind("project");
+    setRouteBootstrapError("");
+    setRouteBootstrap("ready");
     setPanelOpen(false);
     if (historyMode === "push") history.pushState({}, "", projectPath(target));
     else if (historyMode === "replace") history.replaceState({}, "", projectPath(target));
@@ -654,7 +679,14 @@ function App() {
         if (!owner) owner = (await catalogue.refresh()).find((project) => project.sessions.some((item) => item.id === chatId));
         const target = owner?.sessions.find((item) => item.id === chatId);
         if (!owner || !target) throw new Error("Chat not found");
-        await chat.select(target, owner, { history: "none", onCommit: () => setRouteKind("chat") });
+        await chat.select(target, owner, {
+          history: "none",
+          onCommit: () => {
+            setRouteKind("chat");
+            setRouteBootstrapError("");
+            setRouteBootstrap("ready");
+          },
+        });
       })().catch((error) => showError(error));
     };
     window.addEventListener("popstate", onPopState);
@@ -699,7 +731,13 @@ function App() {
         chat.initialize(target, project, detail);
         setRouteKind("chat");
         setRouteBootstrap("ready");
-        if (target.status === "active") await chat.openLive(target.id, project.id);
+        if (target.status === "active") {
+          try {
+            await chat.openLive(target.id, project.id);
+          } catch (error) {
+            showError(error);
+          }
+        }
       } else if (initialProjectRouteId) {
         const project = projects.find((item) => item.id === initialProjectRouteId);
         if (!project) throw new Error("Project not found");

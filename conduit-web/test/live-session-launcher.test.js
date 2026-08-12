@@ -112,3 +112,83 @@ test("live session launcher selects and materializes the model profile before Pi
     await fs.rm(root, { recursive: true, force: true });
   }
 });
+
+test("live session launcher repairs an obsolete persisted thinking level", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-launcher-recovery-"));
+  const agentDir = path.join(root, "pi");
+  const workspace = path.join(root, "workspace");
+  const sessionFile = path.join(root, "sessions", "chat.jsonl");
+  await fs.mkdir(workspace, { recursive: true });
+  await fs.mkdir(path.dirname(sessionFile), { recursive: true });
+  await fs.writeFile(sessionFile, [
+    { type: "session", id: "session-recovery", cwd: workspace },
+    { type: "model_change", provider: "example", modelId: "reasoner" },
+    { type: "thinking_level_change", thinkingLevel: "off" },
+  ].map((entry) => JSON.stringify(entry)).join("\n") + "\n");
+
+  const chatId = "r".repeat(24);
+  const project = { id: "project_recovery", slug: "recovery", path: workspace };
+  const chat = {
+    id: chatId,
+    status: "active",
+    runtime: { kind: "conduit_profile", installationId: "conduit-pinned", profileId: "chat", profileVersion: "7" },
+    piSessionFile: sessionFile,
+    modelThinkingLevels: {},
+  };
+  const template = {
+    id: "chat",
+    version: "7",
+    systemPrompt: path.join(root, "SYSTEM.md"),
+    tools: ["read"],
+    models: ["example/reasoner"],
+    extensions: [],
+    skills: [],
+    promptTemplates: [],
+  };
+  const launchCalls = [];
+  const registryUpdates = [];
+  const live = { id: "live-recovery", status: "running", sessionFile, sessionId: "session-recovery" };
+  const manager = {
+    getByChatId: () => null,
+    createWithCapacity: async (options) => { launchCalls.push(options); return live; },
+    waitForSession: async () => {},
+    stopAndWait: async () => {},
+  };
+  const launcher = createLiveSessionLauncher({
+    catalogFor: () => ({
+      list: async () => ({
+        models: [{ spec: "example/reasoner", thinkingLevels: ["medium", "high", "max"] }],
+        defaultModel: "example/reasoner",
+        defaultThinkingLevel: "medium",
+      }),
+      getLaunchModels: () => [...template.models],
+    }),
+    config: {
+      bridgeSystemPrompt: path.join(root, "bridge-system.md"),
+      bridgeSkill: path.join(root, "bridge-skill.md"),
+      modelProfiles: {},
+      installations: { get: () => ({ id: "conduit-pinned", available: true, command: "/opt/conduit/pi", commandArgs: [], agentDir, version: "0.84.1" }) },
+    },
+    findChatContext: async () => ({ chat, project }),
+    lifecycle: { assertAvailable: () => {}, runLaunch: (_id, work) => work(), withProjects: (_ids, work) => work() },
+    manager,
+    modelProfileRuntime: { materialize: async () => ({ agentDir }) },
+    nativePreflight: async () => ({ available: true }),
+    registry: { update: async (id, mapping) => registryUpdates.push({ id, mapping }) },
+    runtimeFor: () => chat.runtime,
+    templateForChat: () => template,
+  });
+
+  try {
+    await assert.doesNotReject(() => launcher({ chatId }));
+    assert.equal(launchCalls[0].thinkingLevel, "medium");
+    assert.deepEqual(registryUpdates[0].mapping.modelThinkingLevels, { "example/reasoner": "medium" });
+    await assert.rejects(
+      () => launcher({ chatId, model: "example/reasoner", thinkingLevel: "off", forceModel: true }),
+      { code: "invalid_thinking_level" },
+    );
+    assert.equal(launchCalls.length, 1);
+  } finally {
+    await fs.rm(root, { recursive: true, force: true });
+  }
+});
