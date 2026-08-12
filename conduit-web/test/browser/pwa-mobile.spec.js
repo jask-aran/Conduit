@@ -95,7 +95,10 @@ test.beforeEach(async ({ page }) => {
 
   await page.route("**/v0/**", (route) => route.fulfill({ status: 200, json: {} }));
   await page.route("**/v0/templates", (route) => route.fulfill({ json: { templates, defaultTemplateId: "chat" } }));
-  await page.route("**/v0/workspaces/suggestions", (route) => route.fulfill({ json: { folders: [] } }));
+  await page.route("**/v0/workspaces/suggestions", (route) => route.fulfill({ json: {
+    root: "/home/user", allowlist: ["/home/user"], defaultRoot: "/home/user", defaultInputPath: "~",
+    suggestionRoot: "/home/user", modes: ["managed", "linked", "created", "cloned"], folders: [],
+  } }));
   await page.route("**/v0/capabilities", (route) => route.fulfill({ json: { partialContinue: true } }));
   await page.route("**/v0/pi-installations", (route) => route.fulfill({ json: { installations: [] } }));
   await page.route("**/v0/projects", (route) => route.fulfill({ json: { projects } }));

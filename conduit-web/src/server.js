@@ -16,7 +16,7 @@ import { RuntimeHub } from "./runtime-hub.js";
 import { defaultsFromEnv, RuntimeSettingsStore } from "./runtime-settings.js";
 import { PreferencesStore } from "./preferences-store.js";
 import { templatePublicView } from "../../scripts/pi-runtime.mjs";
-import { isPathInside, listDirectorySuggestions } from "./workspace-paths.js";
+import { formatWorkspacePath, isPathInside, listDirectorySuggestions } from "./workspace-paths.js";
 import { hasTrustRequiringProjectResources, ProjectTrustStore } from "@earendil-works/pi-coding-agent";
 import fs from "node:fs/promises";
 import { resolvePiLaunch } from "./pi-launch.js";
@@ -394,6 +394,7 @@ registerRuntimeRoutes(app, {
   attachments,
   config,
   currentMagicDnsOrigin,
+  formatWorkspacePath,
   isPathInside,
   isShuttingDown: () => shuttingDown,
   listDirectorySuggestions,

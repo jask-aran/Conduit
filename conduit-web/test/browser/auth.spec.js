@@ -92,7 +92,10 @@ test.beforeEach(async ({ page, server }) => {
     id: "chat", label: "Assistant", version: 5, defaultable: true, tools: ["read", "bash", "edit", "write", "web_search", "fetch_content", "get_search_content", "source_check"],
   }], defaultTemplateId: "chat" } }));
   await page.route("**/v0/preferences", (route) => route.fulfill({ json: { defaultTemplateId: "chat" } }));
-  await page.route("**/v0/workspaces/suggestions", (route) => route.fulfill({ json: { folders: [] } }));
+  await page.route("**/v0/workspaces/suggestions", (route) => route.fulfill({ json: {
+    root: "/home/user", allowlist: ["/home/user"], defaultRoot: "/home/user", defaultInputPath: "~",
+    suggestionRoot: "/home/user", modes: ["managed", "linked", "created", "cloned"], folders: [],
+  } }));
   await page.route("**/v0/runtime/settings", (route) => route.fulfill({ json: { maxLiveProcesses: 12, maxGeneratingProcesses: 2, idleProcessTtlMs: 120_000, liveCount: 0, generatingCount: 0 } }));
   await page.route("**/v0/capabilities", (route) => route.fulfill({ json: { partialContinue: true, globalRuntime: "sse" } }));
   await page.route("**/v0/runtime", (route) => route.fulfill({ json: { type: "runtime_global_snapshot", processes: [], at: new Date().toISOString() } }));
