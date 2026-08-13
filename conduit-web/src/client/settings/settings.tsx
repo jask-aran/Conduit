@@ -5,8 +5,9 @@ import { CheckIcon, SearchIcon } from "lucide-solid";
 import { Button, Field, FieldGroup, FieldLabel, Input, Spinner } from "@/components/primitives";
 import { api } from "../api/client";
 import { MARKDOWN_RENDERER_OPTIONS, type MarkdownRendererId } from "../chat/markdown-settings";
-import { formatMicrophoneError, listAudioInputDevices, testAudioInput as runAudioInputTest, type AudioInputDevice, type AudioInputTestResult } from "../chat/voice-audio";
+import { formatMicrophoneError, hasAudioSignal, listAudioInputDevices, MAX_AUDIO_INPUT_TEST_DURATION_MS, startAudioInputTest as beginAudioInputTest, type AudioInputDevice, type AudioInputTestResult, type AudioInputTestSession, } from "../chat/voice-audio";
 import { shortcutFromKeyboardEvent } from "../chat/voice-dictation";
+import { createVoiceWaveformController, VoiceWaveform } from "../chat/voice-waveform";
 import type { Installation, ModelOption, Project, Template } from "../api/contracts";
 import type { ModelSettings } from "../state/model-settings";
 import { MAX_SIDEBAR_CHAT_LIMIT, MIN_SIDEBAR_CHAT_LIMIT } from "../navigation/sidebar-preferences";
@@ -160,11 +161,15 @@ export function Settings(props: {
   const [audioInputError, setAudioInputError] = createSignal("");
   const [audioInputBusy, setAudioInputBusy] = createSignal(false);
   const [audioInputTest, setAudioInputTest] = createSignal<AudioInputTestResult | null>(null);
+  const [audioInputSignalDetected, setAudioInputSignalDetected] = createSignal(false);
+  const audioInputWaveform = createVoiceWaveformController();
+  let audioInputSession: AudioInputTestSession | null = null;
   let runtimeRequest = 0;
   let searchRequest = 0;
   let search!: HTMLInputElement;
   let returnFocus: HTMLElement | null = null;
   let wasOpen = false;
+  const stopAudioInputTest = () => audioInputSession?.stop();
   const focusSearch = () => requestAnimationFrame(() => requestAnimationFrame(() => search?.focus()));
   const dismissEscape = (event: KeyboardEvent) => {
     if (event.key !== "Escape") return;
@@ -181,11 +186,17 @@ export function Settings(props: {
     if (open && !wasOpen) returnFocus = document.activeElement as HTMLElement | null;
     wasOpen = open;
     if (!open) {
+      stopAudioInputTest();
+      audioInputSession = null;
+      setAudioInputBusy(false);
       setApiKey("");
       setAuthResponse("");
       setSearchKey("");
       setVoiceSecret("");
       setVoiceTestResult("");
+      audioInputWaveform.reset();
+      setAudioInputTest(null);
+      setAudioInputSignalDetected(false);
       return;
     }
     const initial = props.initialSection || "models";
@@ -194,6 +205,11 @@ export function Settings(props: {
     setScopeEdited(false);
     if (initial === "models") focusSearch();
   }));
+
+  onCleanup(() => {
+    audioInputSession?.stop();
+    audioInputSession = null;
+  });
 
   createEffect(() => {
     if (!props.open) return;
@@ -437,17 +453,35 @@ export function Settings(props: {
     finally { setVoiceBusy(false); }
   };
   const testAudioInput = async () => {
+    if (audioInputBusy()) return;
     setAudioInputBusy(true);
     setAudioInputError("");
     setAudioInputTest(null);
+    setAudioInputSignalDetected(false);
+    audioInputWaveform.reset();
+    let session: AudioInputTestSession | null = null;
     try {
-      const result = await runAudioInputTest(props.voiceSettings.inputDeviceId);
+      session = beginAudioInputTest(props.voiceSettings.inputDeviceId, {
+        maxDurationMs: MAX_AUDIO_INPUT_TEST_DURATION_MS,
+        onLevel: (level) => {
+          audioInputWaveform.push(level);
+          if (hasAudioSignal(level)) setAudioInputSignalDetected(true);
+        },
+      });
+      audioInputSession = session;
+      const result = await session.result;
+      if (audioInputSession !== session) return;
       setAudioInputTest(result);
       await loadAudioInputs();
       if (!result.signalDetected) setAudioInputError("No microphone signal detected. Check Chrome site settings and the selected input.");
     } catch (error) {
-      setAudioInputError(formatMicrophoneError(error));
-    } finally { setAudioInputBusy(false); }
+      if (audioInputSession === session) setAudioInputError(formatMicrophoneError(error));
+    } finally {
+      if (audioInputSession === session) {
+        audioInputSession = null;
+        setAudioInputBusy(false);
+      }
+    }
   };
   const removeVoiceCredential = async () => {
     setVoiceBusy(true);
@@ -627,7 +661,11 @@ export function Settings(props: {
                       <Show when={props.voiceSettings.inputDeviceId && !audioInputDevices().some((device) => device.deviceId === props.voiceSettings.inputDeviceId)}><option value={props.voiceSettings.inputDeviceId}>Selected microphone unavailable</option></Show>
                       <For each={audioInputDevices()}>{(device) => <option value={device.deviceId}>{device.label}</option>}</For>
                     </select><small>Chrome controls site permission. Choose the input that should feed dictation.</small></Field>
-                    <div class="voice-actions"><Button variant="outline" size="sm" disabled={audioInputBusy() || audioInputStatus() === "loading"} onClick={() => void loadAudioInputs()}>Refresh microphones</Button><Button variant="outline" size="sm" disabled={audioInputBusy()} onClick={() => void testAudioInput()}>{audioInputBusy() ? <Spinner /> : null}Test microphone</Button></div>
+                    <div class="voice-actions"><Button variant="outline" size="sm" disabled={audioInputBusy() || audioInputStatus() === "loading"} onClick={() => void loadAudioInputs()}>Refresh microphones</Button><Button variant="outline" size="sm" disabled={audioInputStatus() === "loading"} onClick={() => audioInputBusy() ? stopAudioInputTest() : void testAudioInput()}>{audioInputBusy() ? <><Spinner />Stop microphone test</> : "Test microphone"}</Button></div>
+                    <Show when={audioInputBusy() || audioInputTest()}>
+                      <VoiceWaveform class="settings-recorder-monitor" history={audioInputWaveform.history} level={audioInputWaveform.level} peak={audioInputWaveform.peak} state={audioInputBusy() ? "listening" : "stopped"} ariaLabel="Microphone input level" />
+                    </Show>
+                    <Show when={audioInputBusy() && audioInputSignalDetected()}><div class="voice-input-live-state" role="status">Signal detected · listening until you stop.</div></Show>
                     <Show when={audioInputStatus() === "error" && !audioInputError()}><p role="alert" class="settings-inline-error">Microphone list could not be loaded.</p></Show>
                     <Show when={audioInputTest()}>{(result) => <div class="voice-input-result" data-signal={result().signalDetected ? "detected" : "missing"}><strong>{result().signalDetected ? "Signal detected" : "No signal detected"}</strong><small>{result().label} · {result().sampleRate.toLocaleString()} Hz · peak {result().peak.toFixed(3)}</small></div>}</Show>
                     <Show when={audioInputError()}><p role="alert" class="settings-inline-error">{audioInputError()}</p></Show>

@@ -4433,10 +4433,14 @@ test("Ctrl+Shift+D captures in the page and buffers microphone audio until the s
   await page.keyboard.down("Shift");
   await page.keyboard.down("D");
   await expect(page.locator(".dictation-trigger")).toHaveAttribute("data-state", "active");
-  const waveform = page.getByRole("img", { name: "Microphone input level" });
+  const waveform = page.locator(".composer-status-waveform");
   await expect(waveform).toBeVisible();
-  await expect(waveform.locator(":scope > span")).toHaveCount(24);
-  await expect.poll(() => waveform.locator(":scope > span").evaluateAll((bars) => bars.filter((bar) => bar.getBoundingClientRect().width >= 1).length)).toBe(24);
+  await expect(waveform).toHaveAttribute("data-state", "listening");
+  await expect(waveform).toHaveAttribute("data-variant", "compact");
+  await expect(waveform.locator(".voice-waveform-bar")).toHaveCount(24);
+  await expect.poll(() => waveform.locator(".voice-waveform-bar").evaluateAll((bars) => bars.filter((bar) => bar.getBoundingClientRect().width >= 1).length)).toBe(24);
+  await expect(waveform.locator(".voice-waveform-peak")).toHaveCount(0);
+  await expect(page.locator(".composer-recorder-monitor")).toHaveCount(0);
   await expect.poll(() => page.evaluate(() => window.__voiceBinaryCount)).toBe(0);
   await expect.poll(() => page.evaluate(() => window.__voiceShortcutBubbled)).toBe(false);
 
@@ -4503,6 +4507,68 @@ test("silent microphone input does not insert a hallucinated transcript", async 
   await page.getByRole("button", { name: "Stop voice dictation" }).click();
   await expect(page.getByText("No microphone signal detected. Check Voice → Microphone and Chrome site settings.")).toBeVisible();
   await expect(composer).toHaveValue("");
+});
+
+test("Voice microphone test shows the shared live recorder monitor", async ({ page }) => {
+  await page.route("**/v0/voice/settings", async (route) => {
+    await route.fulfill({ json: {
+      mode: "off",
+      localModelId: "",
+      provider: "",
+      adapter: "",
+      model: "",
+      endpoint: "",
+      source: "stored",
+      locked: false,
+      adapters: [],
+      providers: [],
+      auth: { type: "none", headerName: "", configured: false, source: null, removable: false },
+      local: null,
+    } });
+  });
+  await page.addInitScript(() => {
+    class MockAnalyser {
+      fftSize = 2_048;
+      getFloatTimeDomainData(samples) { samples.fill(0.1); }
+      connect() {}
+      disconnect() {}
+    }
+    class MockAudioContext {
+      constructor() { this.state = "running"; this.sampleRate = 48_000; this.destination = {}; }
+      resume() { return Promise.resolve(); }
+      close() { this.state = "closed"; return Promise.resolve(); }
+      createMediaStreamSource() { return { connect() {}, disconnect() {} }; }
+      createAnalyser() { return new MockAnalyser(); }
+      createGain() { return { gain: { value: 0 }, connect() {}, disconnect() {} }; }
+    }
+    Object.defineProperty(window, "AudioContext", { configurable: true, value: MockAudioContext });
+    Object.defineProperty(navigator, "mediaDevices", { configurable: true, value: {
+      enumerateDevices: async () => [{ kind: "audioinput", deviceId: "mic-1", groupId: "group-1", label: "Desk microphone" }],
+      getUserMedia: async () => ({
+        getAudioTracks: () => [{ label: "Desk microphone", getSettings: () => ({ deviceId: "mic-1", sampleRate: 48_000, channelCount: 1 }) }],
+        getTracks: () => [{ stop() {} }],
+      }),
+    } });
+  });
+
+  await page.goto("/");
+  await page.keyboard.press("Control+,");
+  const dialog = page.getByRole("dialog", { name: "Settings" });
+  await dialog.getByRole("tab", { name: "Voice" }).click();
+  await dialog.getByRole("button", { name: "Test microphone" }).click();
+  const waveform = dialog.locator(".settings-recorder-monitor");
+  await expect(waveform).toBeVisible();
+  await expect(waveform).toHaveAttribute("data-state", "listening");
+  await expect(waveform.locator(".voice-waveform-bar")).toHaveCount(48);
+  await expect.poll(() => waveform.locator(".voice-waveform-peak").getAttribute("data-visible")).toBe("true");
+  await expect(dialog.getByRole("button", { name: "Stop microphone test" })).toBeVisible();
+  await page.waitForTimeout(1_700);
+  await expect(dialog.getByRole("button", { name: "Stop microphone test" })).toBeVisible();
+  await expect(dialog.getByText("Signal detected · listening until you stop.")).toBeVisible();
+  await dialog.getByRole("button", { name: "Stop microphone test" }).click();
+  await expect(waveform).toHaveAttribute("data-state", "stopped", { timeout: 4_000 });
+  await expect(dialog.getByText("Signal detected")).toBeVisible();
+  await expect(waveform).toContainText("Level");
 });
 
 test("stopping dictation releases a microphone stream that resolves after cancellation", async ({ page }) => {
