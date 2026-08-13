@@ -517,6 +517,7 @@ export function TerminalPane(props: { projectId: string }) {
       <div
         ref={host}
         class="terminal-canvas"
+        data-shortcut-exclusive="terminal"
         data-active={pty() ? "true" : "false"}
         data-renderer={rendererId()}
         onClick={() => focusActiveTerminal()}

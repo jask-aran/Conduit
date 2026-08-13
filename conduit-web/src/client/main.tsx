@@ -15,6 +15,7 @@ import { Composer } from "./chat/composer";
 import { HostUiRequests } from "./chat/host-ui-card";
 import { MARKDOWN_RENDERER_STORAGE_KEY, selectedMarkdownRenderer, type MarkdownRendererId } from "./chat/markdown-settings";
 import { Transcript } from "./chat/transcript";
+import { COMMAND_IDS, commandRegistry } from "./commands/command-registry";
 import { CommandMenu } from "./navigation/command-menu";
 import type { PaletteActions, PaletteContext } from "./palette/command-registry";
 import { bindVisualViewportShell, isMobileLayout, MOBILE_LAYOUT_QUERY, setMobileOverlayKind } from "./navigation/mobile-layout";
@@ -27,6 +28,8 @@ import { createAttachments, DEFAULT_MAX_ATTACHMENT_BYTES } from "./state/attachm
 import { createCatalogueStore } from "./state/catalogue";
 import { createModelSettings } from "./state/model-settings";
 import { createRuntimeStore } from "./state/runtime";
+import { browserShortcutEnvironmentProvider } from "./shortcuts/shortcut-environment";
+import { ShortcutManager } from "./shortcuts/shortcut-manager";
 import "./project/dashboard.css";
 import "./styles.css";
 
@@ -75,6 +78,10 @@ function ChatHeader(props: {
 }
 
 function App() {
+  const shortcutManager = new ShortcutManager({
+    commands: commandRegistry,
+    environment: browserShortcutEnvironmentProvider.detect(),
+  });
   const [templates, setTemplates] = createSignal<Template[]>([]);
   const [templatesLoading, setTemplatesLoading] = createSignal(true);
   const [installations, setInstallations] = createSignal<Installation[]>([]);
@@ -629,35 +636,44 @@ function App() {
     setChatProfile: (id) => void switchProfile(id),
   };
 
-  const keydown = (event: KeyboardEvent) => {
-    const key = event.key.toLowerCase();
-    if ((event.metaKey || event.ctrlKey) && !event.altKey && !event.shiftKey && key === "p") {
-      event.preventDefault();
-      openPalette("chat-search", "", true);
-      return;
-    }
-    if (event.defaultPrevented) return;
+  const dismissOpenLayer = (event: KeyboardEvent) => {
+    if (event.defaultPrevented || event.key !== "Escape") return;
+    const target = event.target instanceof Element ? event.target : null;
+    if (target?.closest("[data-shortcut-exclusive='terminal']")) return;
     if (event.key === "Escape" && !paletteOpen() && !settingsOpen()) {
       if (panelOpen()) { event.preventDefault(); togglePanel(); return; }
       if (mobileSidebarOpen()) { event.preventDefault(); setMobileSidebarOpen(false); return; }
     }
-    if (!(event.metaKey || event.ctrlKey) || event.altKey) return;
-    if (key === "k" && !event.shiftKey) {
-      event.preventDefault();
-      if (paletteOpen()) {
-        if (palettePage() !== "chat-search") setPaletteOpen(false);
-      } else openPalette(null);
-      return;
-    }
-    if (key === "o" && event.shiftKey) { event.preventDefault(); openPalette("chat-search", "", true); }
-    if (key === "c" && event.shiftKey) { event.preventDefault(); setMobileSidebarOpen(false); void createChat(); }
-    if (key === "b" && !event.shiftKey) { event.preventDefault(); runSidebar("toggle-sidebar"); }
-    if (key === "." && !event.shiftKey) { event.preventDefault(); togglePanel(); }
-    if (key === ",") { event.preventDefault(); openSettings("general"); }
   };
 
   onMount(() => {
-    window.addEventListener("keydown", keydown, { capture: true });
+    const releaseApplicationContext = shortcutManager.activateContext("application");
+    const releaseShortcutHandlers = [
+      shortcutManager.registerHandler(COMMAND_IDS.openCommandPalette, "application", () => {
+        if (paletteOpen()) setPaletteOpen(false);
+        else openPalette(null);
+      }, {
+        // Until Slice 4 moves chat-search bindings into the manager, its
+        // local Primary+K sequence must receive this event.
+        when: () => !(paletteOpen() && palettePage() === "chat-search"),
+      }),
+      shortcutManager.registerHandler(COMMAND_IDS.searchChats, "application", () => openPalette("chat-search", "", true)),
+      shortcutManager.registerHandler(COMMAND_IDS.openSettings, "application", () => openSettings("general")),
+      shortcutManager.registerHandler(COMMAND_IDS.newChat, "application", () => {
+        setMobileSidebarOpen(false);
+        void createChat();
+      }),
+      shortcutManager.registerHandler(COMMAND_IDS.toggleSidebar, "application", () => runSidebar("toggle-sidebar")),
+      shortcutManager.registerHandler(COMMAND_IDS.toggleWorkspacePanel, "application", togglePanel),
+    ];
+    const uninstallShortcuts = shortcutManager.install(window);
+    window.addEventListener("keydown", dismissOpenLayer, { capture: true });
+    onCleanup(() => {
+      window.removeEventListener("keydown", dismissOpenLayer, true);
+      uninstallShortcuts();
+      for (const release of releaseShortcutHandlers) release();
+      releaseApplicationContext();
+    });
     onCleanup(bindVisualViewportShell());
     const media = typeof matchMedia === "function" ? matchMedia(MOBILE_LAYOUT_QUERY) : null;
     const onViewportChange = () => {
@@ -768,7 +784,6 @@ function App() {
       showError(message);
     });
   });
-  onCleanup(() => window.removeEventListener("keydown", keydown, true));
 
   const dropHandlers = {
     onDragEnter: (event: DragEvent) => { if (!event.dataTransfer?.types.includes("Files")) return; event.preventDefault(); dragDepth += 1; setDropActive(true); },
@@ -825,7 +840,7 @@ function App() {
     </main>
     <Show when={Boolean(selectedProject()) && Boolean(workspacePanelScope())}><WorkspacePanel projectId={() => selectedProject()!.id} chatId={() => workspacePanelScope()!} open={panelOpen} requestedTab={workspaceViewRequest} onClose={togglePanel} /></Show>
     <CommandMenu open={paletteOpen()} onOpenChange={setPaletteOpen} onPageChange={setPalettePage} initialPage={palettePage()} initialQuery={paletteInitialQuery()} launchNonce={paletteNonce()} directLaunch={paletteDirectLaunch()}
-      context={paletteContext()} actions={paletteActions} models={models.models()} currentModel={models.model()} onChooseModel={(spec) => void models.chooseModel(spec)} />
+      context={paletteContext()} actions={paletteActions} models={models.models()} currentModel={models.model()} onChooseModel={(spec) => void models.chooseModel(spec)} shortcuts={shortcutManager} />
     <Settings open={settingsOpen()} initialSection={settingsSection()} initialWorkspaceId={settingsWorkspaceId()} onOpenChange={setSettingsOpen} models={models} templates={templates()} templatesLoading={templatesLoading()} defaultTemplateId={defaultTemplateId()} projects={catalogue.projects()} installations={installations()} installationsLoading={installationsLoading()} onInstallationsChange={setInstallations} onDefaultTemplateChange={saveDefaultTemplate} onWorkspaceDefaultChange={saveWorkspaceDefault} markdownRenderer={markdownRenderer()} onMarkdownRendererChange={switchMarkdownRenderer} sidebarChatLimit={sidebarChatLimit()} onSidebarChatLimitChange={switchSidebarChatLimit} />
   </>;
 }

@@ -96,6 +96,29 @@ test("browses grouped commands and models", async ({ page }) => {
   await expect(hints).toContainText("Esc");
 });
 
+test("browser-local overrides drive root dispatch and palette keycaps", async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem("conduit:shortcuts:v1", JSON.stringify({
+      version: 1,
+      overrides: {
+        "open-command-palette": [{
+          strokes: [{ code: "KeyJ", key: "J", modifiers: ["primary"] }],
+        }],
+        "new-chat": [{
+          strokes: [{ code: "KeyY", key: "Y", modifiers: ["primary", "shift"] }],
+        }],
+      },
+    }));
+  });
+  await page.goto("/");
+  await page.keyboard.press("Control+j");
+  const dialog = page.getByRole("dialog", { name: "Command Palette" });
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByRole("option", { name: /^New chat/ }).locator(".command-shortcut")).toHaveText("Ctrl Shift Y");
+  await page.keyboard.press("Control+j");
+  await expect(dialog).toHaveCount(0);
+});
+
 test("ranks search results and hides non-matches", async ({ page }) => {
   await page.goto("/");
   await openPalette(page);

@@ -14,6 +14,9 @@
  */
 
 import type { ChatSummary, Project, Template } from "../api/contracts";
+import {
+  COMMAND_IDS, getCommandDefinition,
+} from "../commands/command-registry.ts";
 
 export interface PaletteContext {
   chatId: string | null;
@@ -90,10 +93,10 @@ export interface PaletteCommand {
 export interface PaletteGroup { id: string; heading: string; }
 export interface PalettePage {
   id: string;
+  commandId: string;
   label: string;
   description: string;
   icon: string;
-  shortcut: string;
   keywords: string[];
   group: string;
   prefix: string;
@@ -123,236 +126,95 @@ export const SETTINGS_SECTIONS = [
   { id: "general", label: "General", keywords: ["preferences", "default", "profile"] },
 ];
 
+function palettePage(
+  id: string,
+  commandId: string,
+  details: Pick<PalettePage, "prefix" | "placeholder" | "heading">,
+): PalettePage {
+  const command = getCommandDefinition(commandId);
+  return {
+    id,
+    commandId,
+    label: command.label,
+    description: command.description,
+    icon: command.icon,
+    keywords: command.keywords,
+    group: command.group,
+    ...details,
+  };
+}
+
 /** Drill-down pages. Root browse shows a portal; page view shows children only. */
 export const PALETTE_PAGES: Record<string, PalettePage> = {
-  settings: {
-    id: "settings",
-    label: "Settings…",
-    description: "Configure models, runtime, and preferences",
-    icon: "settings",
-    shortcut: "⌘,",
-    keywords: ["preferences", "configure"],
-    group: "commands",
+  settings: palettePage("settings", COMMAND_IDS.openSettings, {
     prefix: "Settings ›",
     placeholder: "Search settings…",
     heading: "Settings",
-  },
-  "chat-search": {
-    id: "chat-search",
-    label: "Search chats…",
-    description: "Find and manage chats across folders and workspaces",
-    icon: "chat",
-    shortcut: "⌘P",
-    keywords: ["search", "find", "chat", "conversation", "folder", "workspace"],
-    group: "commands",
+  }),
+  "chat-search": palettePage("chat-search", COMMAND_IDS.searchChats, {
     prefix: "Search ›",
     placeholder: "Search chats and folders…",
     heading: "Chats",
-  },
-  workspace: {
-    id: "workspace",
-    label: "Workspace views…",
-    description: "Open files, source control, artifacts, or a terminal",
-    icon: "workspace-panel",
-    shortcut: "",
-    keywords: ["workspace", "files", "source control", "artifacts", "terminal", "shell"],
-    group: "commands",
+  }),
+  workspace: palettePage("workspace", COMMAND_IDS.openWorkspaceViews, {
     prefix: "Workspace ›",
     placeholder: "Search workspace views…",
     heading: "Workspace views",
-  },
+  }),
 };
 
 const hasChat = (context: PaletteContext) => Boolean(context.chatId);
 const isNamedFolder = (context: PaletteContext) => Boolean(context.project && context.project.slug !== "chat");
 
+interface PaletteCommandRuntime {
+  isAvailable: (context: PaletteContext) => boolean;
+  run: (actions: PaletteActions) => void;
+}
+
+const paletteCommandRuntime: Record<string, PaletteCommandRuntime> = {
+  [COMMAND_IDS.logout]: { isAvailable: () => true, run: (actions) => actions.logout() },
+  [COMMAND_IDS.newChat]: { isAvailable: () => true, run: (actions) => actions.newChat() },
+  [COMMAND_IDS.newFolder]: { isAvailable: () => true, run: (actions) => actions.newFolder() },
+  [COMMAND_IDS.newWorkspace]: { isAvailable: () => true, run: (actions) => actions.newWorkspace() },
+  [COMMAND_IDS.openRuntimeChat]: { isAvailable: () => true, run: (actions) => actions.openRuntimeChat() },
+  [COMMAND_IDS.attachFiles]: { isAvailable: hasChat, run: (actions) => actions.attach() },
+  [COMMAND_IDS.toggleSidebar]: { isAvailable: () => true, run: (actions) => actions.toggleSidebar() },
+  [COMMAND_IDS.toggleWorkspacePanel]: { isAvailable: hasChat, run: (actions) => actions.toggleWorkspacePanel() },
+  [COMMAND_IDS.copyTranscript]: { isAvailable: hasChat, run: (actions) => actions.copyTranscript() },
+  [COMMAND_IDS.renameChat]: { isAvailable: hasChat, run: (actions) => actions.rename() },
+  [COMMAND_IDS.moveChat]: { isAvailable: hasChat, run: (actions) => actions.move() },
+  [COMMAND_IDS.renameFolder]: { isAvailable: isNamedFolder, run: (actions) => actions.renameFolder() },
+  [COMMAND_IDS.stopResponse]: { isAvailable: (context) => context.streaming, run: (actions) => actions.stop() },
+  [COMMAND_IDS.regenerateResponse]: { isAvailable: (context) => Boolean(context.canRegenerate), run: (actions) => actions.regenerate() },
+  [COMMAND_IDS.continueResponse]: { isAvailable: (context) => context.canContinue, run: (actions) => actions.continue() },
+  [COMMAND_IDS.copyResponse]: { isAvailable: (context) => Boolean(context.canCopy), run: (actions) => actions.copy() },
+  [COMMAND_IDS.retryConnection]: {
+    isAvailable: (context) => Boolean(context.connectivity) && context.connectivity !== "online",
+    run: (actions) => actions.retryConnection(),
+  },
+  [COMMAND_IDS.reload]: { isAvailable: (context) => context.connectivity === "offline", run: (actions) => actions.reload() },
+  [COMMAND_IDS.deleteChat]: { isAvailable: hasChat, run: (actions) => actions.delete() },
+  [COMMAND_IDS.deleteFolder]: { isAvailable: isNamedFolder, run: (actions) => actions.deleteFolder() },
+};
+
+function stablePaletteCommand(commandId: string, runtime: PaletteCommandRuntime): PaletteCommand {
+  const command = getCommandDefinition(commandId);
+  return {
+    id: command.id,
+    group: command.group,
+    label: command.label,
+    description: command.description,
+    icon: command.icon,
+    keywords: command.keywords,
+    destructive: command.destructive,
+    isAvailable: runtime.isAvailable,
+    run: runtime.run,
+  };
+}
+
 /** Static palette actions. Prefer this list for one-shot app operations. */
-export const paletteCommands: PaletteCommand[] = [{
-  id: "logout",
-  group: "danger",
-  label: "Sign out",
-  description: "Ends this browser's Conduit session",
-  icon: "logout",
-  keywords: ["logout", "sign out", "session", "auth"],
-  isAvailable: () => true,
-  run: (actions) => actions.logout(),
-}, {
-  id: "new-chat",
-  group: "commands",
-  label: "New chat",
-  description: "Start a chat in the current folder",
-  icon: "new-chat",
-  keywords: ["create", "conversation"],
-  shortcut: "⌘⇧C",
-  isAvailable: () => true,
-  run: (actions) => actions.newChat(),
-}, {
-  id: "new-folder",
-  group: "commands",
-  label: "New folder",
-  description: "Create a managed working directory and chat scope",
-  icon: "new-folder",
-  keywords: ["project", "create", "directory", "folder"],
-  isAvailable: () => true,
-  run: (actions) => actions.newFolder(),
-}, {
-  id: "new-workspace",
-  group: "commands",
-  label: "New workspace",
-  description: "Link an existing directory or clone a repository",
-  icon: "new-folder",
-  keywords: ["project", "create", "directory", "workspace", "clone", "link"],
-  isAvailable: () => true,
-  run: (actions) => actions.newWorkspace?.(),
-}, {
-  id: "runtime-chat",
-  group: "commands",
-  label: "Open runtime chat",
-  description: "Admin chat for templates and Pi packages",
-  icon: "profile",
-  keywords: ["admin", "template", "plugin", "install", "runtime"],
-  isAvailable: () => true,
-  run: (actions) => actions.openRuntimeChat?.(),
-}, {
-  id: "attach",
-  group: "commands",
-  label: "Attach files",
-  description: "Upload files to this chat",
-  icon: "attach",
-  keywords: ["upload", "file"],
-  isAvailable: hasChat,
-  run: (actions) => actions.attach(),
-}, {
-  id: "toggle-sidebar",
-  group: "commands",
-  label: "Toggle sidebar",
-  description: "Show or hide the navigation sidebar",
-  icon: "sidebar",
-  keywords: ["panel", "nav", "menu"],
-  shortcut: "⌘B",
-  isAvailable: () => true,
-  run: (actions) => actions.toggleSidebar(),
-}, {
-  id: "toggle-workspace-panel",
-  group: "commands",
-  label: "Toggle workspace panel",
-  description: "Browse project files and working-tree changes",
-  icon: "workspace-panel",
-  keywords: ["files", "diff", "inspector", "right panel"],
-  shortcut: "⌘.",
-  isAvailable: hasChat,
-  run: (actions) => actions.toggleWorkspacePanel(),
-}, {
-  id: "copy-transcript",
-  group: "commands",
-  label: "Copy transcript",
-  description: "Copy the full chat transcript",
-  icon: "copy-transcript",
-  keywords: ["clipboard", "export", "full"],
-  isAvailable: hasChat,
-  run: (actions) => actions.copyTranscript(),
-}, {
-  id: "rename",
-  group: "commands",
-  label: "Rename chat",
-  description: "Change this chat's title",
-  icon: "rename",
-  keywords: ["title"],
-  isAvailable: hasChat,
-  run: (actions) => actions.rename(),
-}, {
-  id: "move",
-  group: "commands",
-  label: "Move chat",
-  description: "Move this chat to another folder",
-  icon: "move",
-  keywords: ["folder", "project"],
-  isAvailable: hasChat,
-  run: (actions) => actions.move(),
-}, {
-  id: "rename-folder",
-  group: "commands",
-  label: "Rename folder",
-  description: "Change the current folder's display name",
-  icon: "rename",
-  keywords: ["project", "title"],
-  isAvailable: isNamedFolder,
-  run: (actions) => actions.renameFolder(),
-}, {
-  id: "stop",
-  group: "commands",
-  label: "Stop response",
-  description: "Freeze and abort the current response",
-  icon: "stop",
-  keywords: ["abort", "cancel"],
-  isAvailable: (context) => context.streaming,
-  run: (actions) => actions.stop(),
-}, {
-  id: "regenerate",
-  group: "commands",
-  label: "Regenerate last response",
-  description: "Fork and ask the last question again",
-  icon: "regenerate",
-  keywords: ["retry"],
-  isAvailable: (context) => Boolean(context.canRegenerate),
-  run: (actions) => actions.regenerate(),
-}, {
-  id: "continue",
-  group: "commands",
-  label: "Continue stopped response",
-  description: "Experimentally continue the last partial answer",
-  icon: "continue",
-  keywords: ["resume"],
-  isAvailable: (context) => context.canContinue,
-  run: (actions) => actions.continue(),
-}, {
-  id: "copy",
-  group: "commands",
-  label: "Copy last response",
-  description: "Copy source Markdown",
-  icon: "copy",
-  keywords: ["clipboard", "markdown"],
-  isAvailable: (context) => Boolean(context.canCopy),
-  run: (actions) => actions.copy(),
-}, {
-  id: "retry-connection",
-  group: "commands",
-  label: "Retry connection",
-  description: "Reconnect to the Conduit server",
-  icon: "retry",
-  keywords: ["reconnect", "offline", "server"],
-  isAvailable: (context) => Boolean(context.connectivity) && context.connectivity !== "online",
-  run: (actions) => actions.retryConnection(),
-}, {
-  id: "reload",
-  group: "commands",
-  label: "Reload Conduit",
-  description: "Refresh the application",
-  icon: "reload",
-  keywords: ["refresh", "restart"],
-  isAvailable: (context) => context.connectivity === "offline",
-  run: (actions) => actions.reload(),
-}, {
-  id: "delete",
-  group: "danger",
-  label: "Delete chat",
-  description: "Permanently delete this chat and its files",
-  icon: "delete",
-  keywords: ["remove", "trash"],
-  destructive: true,
-  isAvailable: hasChat,
-  run: (actions) => actions.delete(),
-}, {
-  id: "delete-folder",
-  group: "danger",
-  label: "Delete folder",
-  description: "Permanently delete this folder and its chats",
-  icon: "delete",
-  keywords: ["remove", "trash", "project"],
-  destructive: true,
-  isAvailable: isNamedFolder,
-  run: (actions) => actions.deleteFolder(),
-}];
+export const paletteCommands: PaletteCommand[] = Object.entries(paletteCommandRuntime)
+  .map(([commandId, runtime]) => stablePaletteCommand(commandId, runtime));
 
 function settingsSectionCommands(context: PaletteContext): PaletteCommand[] {
   return SETTINGS_SECTIONS.map((section) => ({
@@ -543,7 +405,7 @@ function thinkingCommandLabel(level: string): string {
 
 function pagePortalCommands(): PaletteCommand[] {
   return Object.values(PALETTE_PAGES).map((page) => ({
-    id: `page:${page.id}`,
+    id: page.commandId,
     kind: "page",
     page: page.id,
     group: page.group || "commands",
@@ -551,7 +413,6 @@ function pagePortalCommands(): PaletteCommand[] {
     description: page.description,
     icon: page.icon,
     keywords: page.keywords || [],
-    shortcut: page.shortcut || null,
     searchValue: [page.label, page.description, ...(page.keywords || [])].join(" "),
     isAvailable: () => true,
     run: () => {},
