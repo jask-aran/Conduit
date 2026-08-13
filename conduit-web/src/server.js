@@ -35,6 +35,7 @@ import { buildProjectDashboard } from "./project-dashboard.js";
 import { PtyManager } from "./pty-manager.js";
 import { createLiveSessionStream } from "./server/live-session-stream.js";
 import { createTerminalStream } from "./server/terminal-stream.js";
+import { createDictationStream } from "./server/dictation-stream.js";
 import { registerAttachmentRoutes } from "./server/routes/attachments.js";
 import { registerAuthRoutes } from "./server/routes/auth.js";
 import { registerPiAuthRoutes } from "./server/routes/pi-auth.js";
@@ -553,6 +554,12 @@ app.use((error, _request, response, _next) => {
 const server = http.createServer(app);
 const wss = new WebSocketServer({ noServer: true });
 const terminalStream = createTerminalStream({ terminals, wss });
+const dictationStream = createDictationStream({
+  wss,
+  endpoint: config.dictation.endpoint,
+  apiKey: config.dictation.apiKey,
+  stopMessage: config.dictation.stopMessage,
+});
 const liveSessionStream = createLiveSessionStream({
   manager,
   wss,
@@ -568,7 +575,8 @@ server.on("upgrade", async (request, socket, head) => {
   const pathname = new URL(request.url, "http://localhost").pathname;
   const match = pathname.match(/^\/v0\/live-sessions\/([a-f0-9]{24})\/stream$/);
   const ptyMatch = pathname.match(/^\/v0\/ptys\/([a-f0-9-]{36})\/attach$/);
-  if ((!match || !manager.get(match[1])) && (!ptyMatch || !terminals.get(ptyMatch[1]))) return socket.destroy();
+  const dictationMatch = pathname === "/v0/dictation/stream";
+  if ((!match || !manager.get(match[1])) && (!ptyMatch || !terminals.get(ptyMatch[1])) && !dictationMatch) return socket.destroy();
   try {
     if (authStore.hasPassword()) {
       const context = await validateSession(authStore, request);
@@ -578,6 +586,7 @@ server.on("upgrade", async (request, socket, head) => {
     console.error("WebSocket session validation failed", error);
     return socket.destroy();
   }
+  if (dictationMatch) return dictationStream.handleUpgrade(request, socket, head);
   if (ptyMatch) return terminalStream.handleUpgrade(ptyMatch[1], request, socket, head);
   return liveSessionStream.handleUpgrade(match[1], request, socket, head);
 });

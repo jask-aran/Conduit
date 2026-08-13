@@ -70,6 +70,11 @@ export function loadConfig(env = process.env) {
     runtimeSettingsFile: absolute(env.CONDUIT_RUNTIME_SETTINGS_FILE || path.join(dataRoot, "runtime.json")),
     remotesFile: absolute(env.CONDUIT_REMOTES_FILE || path.join(dataRoot, "remotes.json")),
     authFile: absolute(env.CONDUIT_AUTH_FILE || path.join(dataRoot, "auth.json")),
+    dictation: {
+      endpoint: String(env.CONDUIT_PARAKEET_STREAM_URL || "").trim(),
+      apiKey: String(env.CONDUIT_PARAKEET_API_KEY || ""),
+      stopMessage: String(env.CONDUIT_PARAKEET_STOP_MESSAGE || ""),
+    },
     cloneTimeoutMs: boundedMilliseconds(env.CONDUIT_CLONE_TIMEOUT_MS, 120_000),
     maxAttachmentBytes: boundedBytes(env.CONDUIT_MAX_ATTACHMENT_BYTES, 100 * 1024 * 1024),
     allowInsecure: env.CONDUIT_ALLOW_INSECURE === "1",

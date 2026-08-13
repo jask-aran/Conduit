@@ -38,6 +38,12 @@ test("default runtime paths are owned by the repository root", () => {
   assert.equal(path.isAbsolute(config.installations.get("conduit-pinned").command), true);
   assert.equal(config.enablePartialContinue, true);
   assert.equal(config.maxAttachmentBytes, 100 * 1024 * 1024);
+  assert.deepEqual(config.dictation, { endpoint: "", apiKey: "", stopMessage: "" });
+  assert.deepEqual(loadConfig({ CONDUIT_PARAKEET_STREAM_URL: "ws://127.0.0.1:8000/ws", CONDUIT_PARAKEET_API_KEY: "secret", CONDUIT_PARAKEET_STOP_MESSAGE: '{"type":"stop"}' }).dictation, {
+    endpoint: "ws://127.0.0.1:8000/ws",
+    apiKey: "secret",
+    stopMessage: '{"type":"stop"}',
+  });
   assert.equal(loadConfig({ ENABLE_PARTIAL_CONTINUE: "false" }).enablePartialContinue, false);
 });
 
