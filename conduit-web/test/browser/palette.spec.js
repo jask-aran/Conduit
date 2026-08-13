@@ -183,13 +183,9 @@ test("keyboard navigation moves the active option and Escape closes root", async
   await expect(page.getByRole("dialog", { name: "Command Palette" })).toHaveCount(0);
 });
 
-test("Control-P opens direct chat search and Backspace stays inside the mode", async ({ page }) => {
-  await page.addInitScript(() => {
-    window.__printCalls = 0;
-    window.print = () => { window.__printCalls += 1; };
-  });
+test("Control-Shift-K toggles direct chat search and Backspace stays inside the mode", async ({ page }) => {
   await page.goto("/");
-  await page.keyboard.press("Control+p");
+  await page.keyboard.press("Control+Shift+k");
   const dialog = page.getByRole("dialog", { name: "Command Palette" });
   await expect(dialog).toBeVisible();
   await expect(dialog.getByText("Search ›")).toBeVisible();
@@ -203,13 +199,18 @@ test("Control-P opens direct chat search and Backspace stays inside the mode", a
   await expect(hints).toContainText(/⌘ K|Ctrl K/);
   await expect(hints).not.toContainText("⌘⇧");
   await expect(hints).not.toContainText("⌥⇧");
-  await expect.poll(() => page.evaluate(() => window.__printCalls)).toBe(0);
 
   await page.keyboard.press("Backspace");
   await expect(dialog.getByText("Search ›")).toBeVisible();
-  await page.keyboard.press("Escape");
+  await page.keyboard.press("Control+Shift+k");
   await expect(dialog).toHaveCount(0);
-  await page.keyboard.press("Control+Shift+o");
+  await page.keyboard.press("Control+Shift+k");
+  await expect(page.getByRole("dialog", { name: "Command Palette" }).getByText("Search ›")).toBeVisible();
+  await page.keyboard.press("Control+e");
+  await expect(dialog.getByText("1 selected")).toBeVisible();
+  await page.keyboard.press("Control+Shift+k");
+  await expect(dialog).toHaveCount(0);
+  await page.keyboard.press("Control+Shift+k");
   await expect(page.getByRole("dialog", { name: "Command Palette" }).getByText("Search ›")).toBeVisible();
   await page.keyboard.press("Escape");
 });
@@ -224,7 +225,7 @@ test("Tab enters the highlighted page and the footer toggles chat selection mode
   await expect(page.getByText("Settings ›")).toBeVisible();
 
   await page.keyboard.press("Escape");
-  await page.keyboard.press("Control+p");
+  await page.keyboard.press("Control+Shift+k");
   const dialog = page.getByRole("dialog", { name: "Command Palette" });
   const hints = dialog.getByRole("note", { name: "Keyboard shortcuts" });
   await hints.getByRole("button", { name: /Edit chats/ }).click();
@@ -261,7 +262,7 @@ test("Control-click enters edit mode and ordinary clicks toggle more chats", asy
     projects: [{ ...projects[0], sessions }, projects[1]],
   } }));
   await page.goto("/");
-  await page.keyboard.press("Control+p");
+  await page.keyboard.press("Control+Shift+k");
 
   const dialog = page.getByRole("dialog", { name: "Command Palette" });
   const input = dialog.getByRole("combobox", { name: "Search commands" });
@@ -310,7 +311,7 @@ test("edit footer buttons open bulk delete and move flows", async ({ page }) => 
     await route.fulfill({ json: {} });
   });
   await page.goto("/");
-  await page.keyboard.press("Control+p");
+  await page.keyboard.press("Control+Shift+k");
 
   const dialog = page.getByRole("dialog", { name: "Command Palette" });
   const hints = dialog.getByRole("note", { name: "Keyboard shortcuts" });
@@ -431,7 +432,7 @@ test("shortcut recording suppresses commands and updates chat-search hints immed
   await expect(editRow.getByRole("button", { name: /Replace Ctrl U/ })).toBeVisible();
 
   await settings.getByRole("button", { name: "Close" }).click();
-  await page.keyboard.press("Control+p");
+  await page.keyboard.press("Control+Shift+k");
   const palette = page.getByRole("dialog", { name: "Command Palette" });
   const hints = palette.getByRole("note", { name: "Keyboard shortcuts" });
   await expect(hints).toContainText("Ctrl U");
@@ -454,7 +455,7 @@ test("shortcut settings block overlaps, warn about browser ownership, and reset 
   await expect(recorder).toHaveCount(0);
 
   const searchRow = settings.locator(".shortcut-command").filter({ hasText: "Search chats…" });
-  await searchRow.getByRole("button", { name: /Replace Ctrl P/ }).click();
+  await searchRow.getByRole("button", { name: /Replace Ctrl Shift K/ }).click();
   recorder = searchRow.locator(".shortcut-recorder-capture");
   await recorder.dispatchEvent("keydown", { key: "p", code: "KeyP", ctrlKey: true });
   await expect(searchRow).toContainText("Print");
@@ -483,7 +484,7 @@ test("shortcut settings block overlaps, warn about browser ownership, and reset 
 
 test("chat edit mode leaves query text keys local and an expired prefix returns to typing", async ({ page }) => {
   await page.goto("/");
-  await page.keyboard.press("Control+p");
+  await page.keyboard.press("Control+Shift+k");
   const dialog = page.getByRole("dialog", { name: "Command Palette" });
   const input = dialog.getByRole("combobox", { name: "Search commands" });
   await input.fill("abc");
@@ -529,7 +530,7 @@ test("single-chat rename stays outside bulk selection mode", async ({ page }) =>
   });
 
   await page.goto("/");
-  await page.keyboard.press("Control+p");
+  await page.keyboard.press("Control+Shift+k");
   const hints = page.getByRole("note", { name: "Keyboard shortcuts" });
   await page.keyboard.press("Alt+r");
   await expect(page.getByText("1 selected")).toHaveCount(0);
@@ -573,7 +574,7 @@ test("single-chat move and delete shortcuts stay outside bulk selection mode", a
   });
 
   await page.goto("/");
-  await page.keyboard.press("Control+p");
+  await page.keyboard.press("Control+Shift+k");
   const hints = page.getByRole("note", { name: "Keyboard shortcuts" });
   await page.keyboard.press("Control+k");
   await page.keyboard.press("m");
@@ -605,7 +606,7 @@ test("single-chat move and delete shortcuts stay outside bulk selection mode", a
 
 test("chat actions have an app-owned chord fallback after browser shortcut collisions", async ({ page }) => {
   await page.goto("/");
-  await page.keyboard.press("Control+p");
+  await page.keyboard.press("Control+Shift+k");
   const dialog = page.getByRole("dialog", { name: "Command Palette" });
   await dialog.getByRole("combobox", { name: "Search commands" }).focus();
   await page.keyboard.press("Control+k");
@@ -619,7 +620,7 @@ test("chat actions have an app-owned chord fallback after browser shortcut colli
 
 test("chat deletion from selection mode requires confirmation", async ({ page }) => {
   await page.goto("/");
-  await page.keyboard.press("Control+p");
+  await page.keyboard.press("Control+Shift+k");
   await page.keyboard.press("Control+e");
   await page.keyboard.press("Delete");
   const confirmation = page.getByRole("alertdialog", { name: "Delete 1 chats?" });
@@ -673,7 +674,7 @@ test("opening a chat from search expands its collapsed parent folder", async ({ 
   await block.getByRole("button", { name: "Collapse chat list" }).click();
   await expect(block.getByRole("button", { name: "Research chat" })).toHaveCount(0);
 
-  await page.keyboard.press("Control+p");
+  await page.keyboard.press("Control+Shift+k");
   await page.getByRole("combobox", { name: "Search commands" }).fill("Research chat");
   await page.getByRole("option", { name: /Research chat/ }).click();
   await expect(page).toHaveURL(/\/chat\/session_research$/);

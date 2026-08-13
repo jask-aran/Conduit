@@ -1342,7 +1342,7 @@ test("long-press opens a sidebar context menu without navigating the chat", asyn
   await expect(menu).toHaveCount(0);
 });
 
-test("header search opens the command palette and the close control dismisses it", async ({ page }, testInfo) => {
+test("header command button opens the command palette and the close control dismisses it", async ({ page }, testInfo) => {
   await page.goto("/");
   await expect(page.locator(".palette-trigger")).toBeVisible();
   await page.locator(".palette-trigger").click();

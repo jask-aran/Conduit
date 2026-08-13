@@ -433,8 +433,8 @@ function filterAvailable(items: PaletteCommand[], context: PaletteContext): Pale
  */
 export function resolvePaletteCommands(context: PaletteContext, options: { page?: string | null } = {}): PaletteCommand[] {
   const requestedPage = options.page || null;
-  // `goto` remains a compatibility alias for older callers and the existing
-  // Cmd/Ctrl+Shift+O shortcut. It is not a visible page portal.
+  // `goto` remains a compatibility alias for older callers. It is not a
+  // visible page portal.
   const page = requestedPage === "goto" ? "chat-search" : requestedPage;
 
   if (page) {

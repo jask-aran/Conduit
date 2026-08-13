@@ -79,7 +79,7 @@ svg { stroke-width: 1.5; }
 
 .model-trigger { display: flex; min-width: 0; align-items: center; gap: 8px; border: 0; border-radius: var(--radius-md); background: transparent; color: inherit; }
 .chat-header [data-slot="button"] svg { width: 16px; height: 16px; }
-.palette-trigger { display: inline-flex; flex: none; }
+.palette-trigger, .search-trigger { display: inline-flex; flex: none; }
 .chat-header-actions { display: flex; margin-left: auto; flex: none; align-items: center; gap: 2px; }
 
 /* Inset panel: floats on the darker frame. The hairline is an inset ring, not a
