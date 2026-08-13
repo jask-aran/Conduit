@@ -9,6 +9,12 @@ class ConduitVoiceCaptureProcessor extends AudioWorkletProcessor {
   process(inputs) {
     const input = inputs[0]?.[0];
     if (!input?.length) return true;
+    let inputSum = 0;
+    let peak = 0;
+    for (const value of input) {
+      inputSum += value * value;
+      peak = Math.max(peak, Math.abs(value));
+    }
     const combined = new Float32Array(this.source.length + input.length);
     combined.set(this.source);
     combined.set(input, this.source.length);
@@ -27,7 +33,12 @@ class ConduitVoiceCaptureProcessor extends AudioWorkletProcessor {
     this.position -= consumed;
     if (samples.length) {
       const pcm = Int16Array.from(samples);
-      this.port.postMessage(pcm.buffer, [pcm.buffer]);
+      this.port.postMessage({
+        type: "pcm",
+        buffer: pcm.buffer,
+        rms: Math.sqrt(inputSum / input.length),
+        peak,
+      }, [pcm.buffer]);
     }
     return true;
   }

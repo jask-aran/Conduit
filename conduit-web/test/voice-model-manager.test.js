@@ -4,9 +4,27 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { VoiceModelManager } from "../src/server/voice-model-manager.js";
+import { LOCAL_VOICE_MODELS, VoiceModelManager } from "../src/server/voice-model-manager.js";
+import { getVoiceModelManifest } from "../src/server/voice-model-manifests.js";
 
 const sha256 = (value) => crypto.createHash("sha256").update(value).digest("hex");
+
+test("managed voice packages use reviewed immutable revisions, sizes, and SHA-256 pins", () => {
+  for (const model of LOCAL_VOICE_MODELS) {
+    for (const architecture of [{ release: "amd64", runtime: "x64" }, { release: "arm64", runtime: "aarch64" }]) {
+      const manifest = getVoiceModelManifest(model, architecture);
+      assert.equal(manifest.modelRevision, model.revision);
+      assert.ok(manifest.artifacts.length > 0);
+      for (const artifact of manifest.artifacts) {
+        assert.match(artifact.sha256, /^[a-f0-9]{64}$/);
+        assert.ok(Number.isInteger(artifact.size) && artifact.size > 0, `${model.id}/${artifact.name} needs an exact byte size`);
+        assert.match(artifact.url, /(?:resolve\/[a-f0-9]{40}|(?:releases\/download|raw)\/v[0-9.]+|raw\.githubusercontent\.com\/[^/]+\/[^/]+\/[a-f0-9]{40}\/)/);
+      }
+    }
+  }
+  const parakeet = getVoiceModelManifest(LOCAL_VOICE_MODELS.at(-1), { release: "amd64", runtime: "x64" });
+  assert.equal(parakeet.artifacts.find((artifact) => artifact.name === "parakeet-linux-amd64").sha256, "4eaa7123e49756dea7714db20b4ea36aa96f3ba50d7e1ccec7df2ccededcdf9b");
+});
 
 test("managed voice model requires license acceptance, verifies artifacts, reports progress, and uninstalls", async () => {
   const temporary = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-voice-model-"));

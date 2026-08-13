@@ -1,21 +1,31 @@
+import { audioInputConstraints, formatMicrophoneError, hasAudioSignal, type AudioSignalLevel } from "./voice-audio";
+
 export type VoiceDictationState = "idle" | "connecting" | "active" | "stopping" | "completed" | "failed";
 
-interface Completion {
+export interface VoiceDictationCompletion {
   text: string;
   final: boolean;
   finalWithinDeadline: boolean;
   settlementMs: number | null;
+  inputSignalDetected: boolean;
+  maxInputPeak: number;
 }
 
 interface VoiceDictationCallbacks {
   onState: (state: VoiceDictationState) => void;
   onPartial: (text: string) => void;
   onFinal: (text: string) => void;
-  onCompleted: (completion: Completion) => void;
+  onCompleted: (completion: VoiceDictationCompletion) => void;
+  onInputLevel?: (level: AudioSignalLevel) => void;
   onError: (error: Error) => void;
 }
 
+interface VoiceDictationOptions {
+  getInputDeviceId?: () => string;
+}
+
 const MAX_SOCKET_BUFFER_BYTES = 1024 * 1024;
+const MAX_PENDING_AUDIO_BYTES = 256 * 1024;
 
 function socketUrl() {
   const protocol = location.protocol === "https:" ? "wss:" : "ws:";
@@ -57,7 +67,7 @@ export function downsampleToPcm16(input: Float32Array, inputRate: number, output
   return new Pcm16Resampler(inputRate, outputRate).push(input);
 }
 
-export function createVoiceDictationClient(callbacks: VoiceDictationCallbacks) {
+export function createVoiceDictationClient(callbacks: VoiceDictationCallbacks, options: VoiceDictationOptions = {}) {
   let state: VoiceDictationState = "idle";
   let socket: WebSocket | null = null;
   let stream: MediaStream | null = null;
@@ -69,6 +79,12 @@ export function createVoiceDictationClient(callbacks: VoiceDictationCallbacks) {
   let explicitlyClosed = false;
   let fallbackTimer: number | null = null;
   let stopRequested = false;
+  let serverReady = false;
+  let capturePromise: Promise<void> | null = null;
+  let pendingAudio: ArrayBuffer[] = [];
+  let pendingAudioBytes = 0;
+  let inputSignalDetected = false;
+  let maxInputPeak = 0;
   const stoppedStreams = new WeakSet<MediaStream>();
 
   const setState = (next: VoiceDictationState) => {
@@ -110,6 +126,9 @@ export function createVoiceDictationClient(callbacks: VoiceDictationCallbacks) {
 
   const closeSocket = () => {
     explicitlyClosed = true;
+    serverReady = false;
+    pendingAudio = [];
+    pendingAudioBytes = 0;
     if (fallbackTimer !== null) window.clearTimeout(fallbackTimer);
     fallbackTimer = null;
     if (socket && socket.readyState < WebSocket.CLOSING) socket.close(1000, "Dictation complete");
@@ -125,13 +144,36 @@ export function createVoiceDictationClient(callbacks: VoiceDictationCallbacks) {
     callbacks.onError(error);
   };
 
-  const sendAudio = (buffer: ArrayBuffer) => {
-    if (state !== "active" || socket?.readyState !== WebSocket.OPEN) return;
-    if (socket.bufferedAmount > MAX_SOCKET_BUFFER_BYTES) {
+  const transmitAudio = (buffer: ArrayBuffer) => {
+    const currentSocket = socket;
+    if (!serverReady || !currentSocket || currentSocket.readyState !== WebSocket.OPEN) return;
+    if (currentSocket.bufferedAmount > MAX_SOCKET_BUFFER_BYTES) {
       fail(new Error("The server is not accepting microphone audio quickly enough"));
       return;
     }
-    socket.send(buffer);
+    currentSocket.send(buffer);
+  };
+
+  const flushPendingAudio = () => {
+    if (state !== "active" || !serverReady || !socket || socket.readyState !== WebSocket.OPEN) return;
+    const queued = pendingAudio;
+    pendingAudio = [];
+    pendingAudioBytes = 0;
+    queued.forEach(transmitAudio);
+  };
+
+  const sendAudio = (buffer: ArrayBuffer) => {
+    if (state !== "active") return;
+    if (serverReady && socket?.readyState === WebSocket.OPEN) {
+      transmitAudio(buffer);
+      return;
+    }
+    if (pendingAudioBytes + buffer.byteLength > MAX_PENDING_AUDIO_BYTES) {
+      fail(new Error("Voice dictation server did not become ready in time"));
+      return;
+    }
+    pendingAudio.push(buffer);
+    pendingAudioBytes += buffer.byteLength;
   };
 
   const startCapture = async () => {
@@ -140,7 +182,7 @@ export function createVoiceDictationClient(callbacks: VoiceDictationCallbacks) {
     const acquired = await requested;
     const context = audioContext;
     const current = () => permission === requested && !stopRequested && state === "connecting"
-      && audioContext === context && socket?.readyState === WebSocket.OPEN;
+      && audioContext === context;
     if (!context || !current()) return stopStream(acquired);
     stream = acquired;
     try {
@@ -155,7 +197,17 @@ export function createVoiceDictationClient(callbacks: VoiceDictationCallbacks) {
       processor = new AudioWorkletNode(context, "conduit-voice-capture", { numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [1] });
       silentGain = context.createGain();
       silentGain.gain.value = 0;
-      processor.port.onmessage = (event: MessageEvent<ArrayBuffer>) => sendAudio(event.data);
+      processor.port.onmessage = (event: MessageEvent<ArrayBuffer | { type: "pcm"; buffer: ArrayBuffer; rms: number; peak: number }>) => {
+        if (event.data && typeof event.data === "object" && "buffer" in event.data) {
+          const level = { rms: Number(event.data.rms) || 0, peak: Number(event.data.peak) || 0 };
+          inputSignalDetected ||= hasAudioSignal(level);
+          maxInputPeak = Math.max(maxInputPeak, level.peak);
+          callbacks.onInputLevel?.(level);
+          sendAudio(event.data.buffer);
+          return;
+        }
+        sendAudio(event.data);
+      };
       processor.onprocessorerror = () => fail(new Error("Microphone audio processing failed"));
       context.onstatechange = resumeContext;
       document.addEventListener("visibilitychange", resumeContext);
@@ -165,6 +217,7 @@ export function createVoiceDictationClient(callbacks: VoiceDictationCallbacks) {
       processor.connect(silentGain);
       silentGain.connect(context.destination);
       setState("active");
+      flushPendingAudio();
     } catch (error) {
       if (current()) throw error;
       stopCapture();
@@ -176,7 +229,7 @@ export function createVoiceDictationClient(callbacks: VoiceDictationCallbacks) {
     stopRequested = true;
     stopCapture();
     setState("stopping");
-    if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ type: "stop" }));
+    if (serverReady && socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ type: "stop" }));
     fallbackTimer = window.setTimeout(() => fail(new Error("Dictation finalisation timed out")), 16_000);
   };
 
@@ -191,11 +244,16 @@ export function createVoiceDictationClient(callbacks: VoiceDictationCallbacks) {
     }
     try {
       audioContext = new AudioContextConstructor();
-      const requested = navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
+      serverReady = false;
+      pendingAudio = [];
+      pendingAudioBytes = 0;
+      inputSignalDetected = false;
+      maxInputPeak = 0;
+      const requested = navigator.mediaDevices.getUserMedia(audioInputConstraints(options.getInputDeviceId?.() || ""));
       permission = requested;
       requested.then(
         (acquired) => { if (permission !== requested || stopRequested || state !== "connecting") stopStream(acquired); },
-        (error) => { if (permission === requested && !stopRequested) fail(error); },
+        (error) => { if (permission === requested && !stopRequested) fail(new Error(formatMicrophoneError(error))); },
       );
       socket = new WebSocket(socketUrl());
       socket.binaryType = "arraybuffer";
@@ -204,10 +262,14 @@ export function createVoiceDictationClient(callbacks: VoiceDictationCallbacks) {
         try {
           const message = JSON.parse(String(event.data));
           if (message.type === "ready") {
+            serverReady = true;
             if (stopRequested) socket?.send(JSON.stringify({ type: "stop" }));
-            else void startCapture().catch(fail);
-          } else if (message.type === "partial") callbacks.onPartial(String(message.text || ""));
-          else if (message.type === "final") callbacks.onFinal(String(message.text || ""));
+            else flushPendingAudio();
+          } else if (message.type === "partial") {
+            if (inputSignalDetected) callbacks.onPartial(String(message.text || ""));
+          } else if (message.type === "final") {
+            if (inputSignalDetected) callbacks.onFinal(String(message.text || ""));
+          }
           else if (message.type === "end_of_speech") stop();
           else if (message.type === "completed") {
             stopCapture();
@@ -218,6 +280,8 @@ export function createVoiceDictationClient(callbacks: VoiceDictationCallbacks) {
               final: message.final === true,
               finalWithinDeadline: message.finalWithinDeadline === true,
               settlementMs: Number.isFinite(message.settlementMs) ? Number(message.settlementMs) : null,
+              inputSignalDetected,
+              maxInputPeak,
             });
             closeSocket();
           } else if (message.type === "error") fail(new Error(String(message.message || "Voice dictation failed")));
@@ -227,6 +291,8 @@ export function createVoiceDictationClient(callbacks: VoiceDictationCallbacks) {
       socket.onclose = () => {
         if (!explicitlyClosed && !["completed", "failed"].includes(state)) fail(new Error("Voice dictation disconnected"));
       };
+      capturePromise = startCapture().finally(() => { capturePromise = null; });
+      void capturePromise.catch(fail);
     } catch (error) { fail(error); }
   };
 

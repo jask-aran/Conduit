@@ -120,6 +120,20 @@ Add an entry through `$tacit-knowledge` after explicit approval or validated rep
 - **Scope:** Chat-search and future command-palette keyboard actions in browser-hosted Conduit.
 - **Evidence:** Chrome consumed the single-chat delete chord and could consume it again after an escaped confirmation. Playwright clearing the search composer in edit mode also sent Delete and opened the bulk-delete dialog. The accepted palette tests cover the action prefix, focus restoration, filtered selection retention, and safe query clearing.
 
+### Capture voice shortcuts before browser handling
+
+- **Type:** Gotcha.
+- **Rule:** Handle the voice push-to-talk chord on `window` in the capture phase, prevent its default action, and stop propagation before starting capture; migrate the old `Super+D` default instead of leaving existing stored bindings to invoke the browser command.
+- **Scope:** Composer voice dictation keyboard handling.
+- **Evidence:** Chrome treated `Ctrl+Shift+D` as bookmark-all-tabs when the page handler ran in the bubble phase. `test/browser/app.spec.js` verifies the captured chord does not reach a document listener or open another tab.
+
+### Decouple microphone capture from ASR readiness
+
+- **Type:** Invariant.
+- **Rule:** Start browser microphone and `AudioWorklet` setup in parallel with the dictation WebSocket, buffer PCM within a fixed byte limit, and send no PCM until the server emits `ready`; use the browser input selector and signal test to diagnose device choice before trusting a transcript.
+- **Scope:** `voice-dictation-client.ts`, `voice-audio.ts`, and Settings → Voice.
+- **Evidence:** The measured one-second startup delay came from waiting for the server handshake before capture. The focused browser test proves capture and waveform state start before `ready`, queued audio stays off the socket, and PCM flushes after `ready`; the silent-input test prevents the short `you` hallucination.
+
 ### Preserve authored timelines when animations self-clean
 
 - **Type:** Invariant.

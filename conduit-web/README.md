@@ -217,9 +217,18 @@ Opening a persisted session restores JSONL state and does not pass model flags
 that could replace it.
 
 The composer also supports draft-only voice dictation. The on-screen microphone
-is a start/stop toggle and the configurable `Super+D` shortcut is push-to-talk.
-The browser captures 16 kHz mono PCM with an `AudioWorklet` and sends it only to
-authenticated `WS /v0/dictation/stream`. Settings → Voice can use managed
+is a start/stop toggle and the configurable `Ctrl+Shift+D` shortcut is
+push-to-talk. The shortcut is captured before page controls so Chrome does not
+consume the default chord as a bookmark command. Microphone capture starts in
+parallel with the voice connection, and the composer shows a live input-level
+waveform while it listens. The browser captures 16 kHz mono PCM with an
+`AudioWorklet` and sends it only to authenticated `WS /v0/dictation/stream`.
+Settings → Voice can select a browser
+microphone, refresh the device list, and run an input-level test before using
+dictation. Chrome site settings still control permission and the selected input
+must be available there. Conduit rejects a completed transcript when the
+capture stream reports no signal, which prevents silence from becoming a short
+hallucinated word. Settings → Voice can use managed
 Whisper Tiny English, Whisper Base, Whisper Small, or Parakeet TDT 0.6B v3,
 and has first-class provider/model profiles for OpenAI, Deepgram, and Groq.
 Remote None, Bearer, and custom API-key-header credentials are stored server-side in `data/voice.json`
@@ -231,10 +240,12 @@ one second of stop.
 
 Managed local setup is an explicit user action. Conduit downloads pinned q8
 Whisper ONNX artifacts or the pinned Parakeet/ONNX Runtime package into
-`data/voice/models`, verifies Hugging Face LFS SHA-256 or Git blob identities,
-displays progress, supports cancellation/retry, and keeps only one selected
-model resident. Whisper runs in the server through Transformers.js; Parakeet
-runs as one unprivileged loopback worker. File-upload providers and managed
+`data/voice/models`. A reviewed source manifest pins every artifact to an
+immutable revision or release URL, exact byte size, and SHA-256 digest. The
+installer verifies these digests, displays progress, supports cancellation and
+retry, and keeps only one selected model resident. Whisper runs in the server
+through Transformers.js; Parakeet runs as one unprivileged loopback worker.
+File-upload providers and managed
 Whisper buffer one bounded utterance in memory and transcribe it once after
 stop; live WebSocket adapters can provide provisional text during capture.
 Starting an installation also persists that local selection, but never occurs
@@ -477,6 +488,11 @@ opening a network listener. Conduit emits
 `ready`, `partial`, `final`, `end_of_speech`, `settlement_deadline`, `completed`,
 and `error`. `completed` includes `settlementMs` and `finalWithinDeadline`, and
 clients must never infer auto-send timing from browser clocks.
+
+The browser keeps the selected microphone ID in local settings and applies it
+as an exact `getUserMedia` device constraint. The input test measures the live
+stream for a short interval. A missing signal is reported in Settings → Voice
+and blocks transcript insertion for that utterance.
 
 The server limits concurrent dictation sessions, audio duration and bytes,
 frame/event sizes, WebSocket buffering, connect time, and finalisation time.
