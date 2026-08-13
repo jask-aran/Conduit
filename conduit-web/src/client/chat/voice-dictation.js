@@ -2,6 +2,8 @@ export const VOICE_DICTATION_STORAGE_KEY = "conduit:voice-dictation";
 export const DEFAULT_VOICE_DICTATION_SETTINGS = Object.freeze({ shortcut: "Ctrl+Shift+D", activation: "push_to_talk", autoSend: false, inputDeviceId: "" });
 const LEGACY_DEFAULT_SHORTCUT = "Super+D";
 
+export const NO_SIGNAL_ERROR_MIN_DURATION_MS = 5_000;
+
 const MODIFIER_ORDER = ["Super", "Ctrl", "Alt", "Shift"];
 
 function keyLabel(key) {
@@ -92,9 +94,11 @@ export function saveVoiceDictationSettings(settings, storage = globalThis.localS
   return normalized;
 }
 
-export function beginDictatedRange(text, cursor) {
-  const position = Math.max(0, Math.min(String(text).length, Number(cursor) || 0));
-  return { start: position, end: position };
+export function beginDictatedRange(text, cursor, selectionEnd = cursor) {
+  const length = String(text).length;
+  const start = Math.max(0, Math.min(length, Number(cursor) || 0));
+  const end = Math.max(start, Math.min(length, Number(selectionEnd) || 0));
+  return { start, end };
 }
 
 export function replaceDictatedRange(text, range, transcript) {
@@ -115,4 +119,14 @@ export function replaceDictatedRange(text, range, transcript) {
 
 export function shouldAutoSend({ enabled, final, finalWithinDeadline }) {
   return enabled === true && final === true && finalWithinDeadline === true;
+}
+
+export function shouldReportNoSignal({ inputSignalDetected, captureDurationMs }) {
+  return inputSignalDetected !== true && Number(captureDurationMs) >= NO_SIGNAL_ERROR_MIN_DURATION_MS;
+}
+
+export function audioTransferLost({ audioBytesSent, serverAudioBytes }) {
+  return Number.isFinite(audioBytesSent)
+    && Number.isFinite(serverAudioBytes)
+    && Number(serverAudioBytes) < Number(audioBytesSent);
 }

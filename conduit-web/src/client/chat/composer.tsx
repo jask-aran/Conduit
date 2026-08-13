@@ -20,7 +20,8 @@ import type { ModelSettings } from "../state/model-settings";
 import { AttachmentCards } from "./attachments";
 import { createVoiceDictationClient, type VoiceDictationState } from "./voice-dictation-client";
 import type { AudioSignalLevel } from "./voice-audio";
-import { beginDictatedRange, matchesShortcut, releasesShortcut, replaceDictatedRange, shouldAutoSend } from "./voice-dictation";
+import { toast } from "solid-sonner";
+import { audioTransferLost, beginDictatedRange, matchesShortcut, releasesShortcut, replaceDictatedRange, shouldAutoSend, shouldReportNoSignal } from "./voice-dictation";
 import { createVoiceWaveformController, VoiceWaveform } from "./voice-waveform";
 
 const thinkingLabel = (value: string) => value ? value[0]!.toUpperCase() + value.slice(1) : "Off";
@@ -43,6 +44,7 @@ export function Composer(props: {
   const [dictationState, setDictationState] = createSignal<VoiceDictationState>("idle");
   const [dictationError, setDictationError] = createSignal("");
   const [dictatedRange, setDictatedRange] = createSignal<{ start: number; end: number } | null>(null);
+  const [dictationSelectionOwned, setDictationSelectionOwned] = createSignal(false);
   const dictationWaveform = createVoiceWaveformController();
   let dictationCancelled = false;
   let pushToTalkActive = false;
@@ -83,10 +85,13 @@ export function Composer(props: {
   };
 
   const change = (value: string, manual = true) => {
-    if (manual && dictatedRange()) {
-      dictationCancelled = true;
-      setDictatedRange(null);
-      voiceClient.stop();
+    if (manual) {
+      setDictationSelectionOwned(false);
+      if (dictatedRange()) {
+        dictationCancelled = true;
+        setDictatedRange(null);
+        voiceClient.stop();
+      }
     }
     props.chat.setDraft(value);
     setSlashOpen(/^\/[^\s]*$/.test(value) && "/attach".startsWith(value));
@@ -99,6 +104,7 @@ export function Composer(props: {
     const next = replaceDictatedRange(props.chat.draft(), range, text);
     props.chat.setDraft(next.text);
     setDictatedRange(next.range);
+    setDictationSelectionOwned(true);
     queueMicrotask(() => {
       resize();
       input.focus({ preventScroll: true });
@@ -117,18 +123,36 @@ export function Composer(props: {
     onFinal: applyTranscript,
     onInputLevel: setInputLevel,
     onCompleted: (completion) => {
+      window.dispatchEvent(new CustomEvent("conduit:voice-dictation-metrics", { detail: completion }));
       if (!completion.inputSignalDetected) {
         setDictatedRange(null);
-        setDictationError("No microphone signal detected. Check Voice → Microphone and Chrome site settings.");
+        setDictationSelectionOwned(false);
+        if (shouldReportNoSignal(completion)) {
+          setDictationError(`No microphone signal detected after ${Math.max(1, Math.round(completion.captureDurationMs / 1000))}s (peak ${completion.maxInputPeak.toFixed(3)}). Check Voice → Microphone and Chrome site settings.`);
+        } else {
+          setDictationError("");
+        }
         return;
       }
       if (completion.text) applyTranscript(completion.text);
-      if (!dictationCancelled && shouldAutoSend({ enabled: props.voiceSettings.autoSend, ...completion }) && completion.text.trim()) {
+      if (completion.completionReason === "duration_limit") {
+        setDictationError("Dictation reached the server time limit. Start another dictation to continue.");
+      }
+      if (audioTransferLost(completion)) {
+        setDictationError(`Microphone audio was truncated before transcription (${completion.serverAudioBytes} of ${completion.audioBytesSent} bytes reached the server). Check the connection and try again.`);
+      }
+      if (!dictationCancelled && completion.completionReason !== "duration_limit" && shouldAutoSend({ enabled: props.voiceSettings.autoSend, ...completion }) && completion.text.trim()) {
         setDictatedRange(null);
         queueMicrotask(() => void props.chat.send());
       }
     },
-    onError: (error) => setDictationError(error.message),
+    onError: (error) => {
+      setDictationError(error.message);
+      const code = (error as Error & { code?: string }).code;
+      if (props.voiceSettings.inputDeviceId && ["NotFoundError", "OverconstrainedError"].includes(code || "")) {
+        toast.error("The selected microphone is no longer available. Choose another device and save Voice settings.");
+      }
+    },
   }, {
     getInputDeviceId: () => props.voiceSettings.inputDeviceId,
   });
@@ -138,7 +162,20 @@ export function Composer(props: {
     dictationCancelled = false;
     dictationWaveform.reset();
     setDictationError("");
-    setDictatedRange(beginDictatedRange(props.chat.draft(), input.selectionStart ?? props.chat.draft().length));
+    const draft = props.chat.draft();
+    const focused = document.activeElement === input;
+    const range = dictatedRange();
+    const selectionIsAutomatic = Boolean(
+      focused
+      && dictationSelectionOwned()
+      && range
+      && input.selectionStart === range.start
+      && input.selectionEnd === range.end,
+    );
+    const start = selectionIsAutomatic ? draft.length : focused ? input.selectionStart ?? draft.length : draft.length;
+    const end = selectionIsAutomatic ? start : focused ? input.selectionEnd ?? start : start;
+    setDictatedRange(beginDictatedRange(draft, start, end));
+    setDictationSelectionOwned(false);
     voiceClient.start();
   };
 
@@ -149,6 +186,7 @@ export function Composer(props: {
 
   const sendMessage = (mode?: "steer" | "follow_up") => {
     setDictatedRange(null);
+    setDictationSelectionOwned(false);
     setDictationError("");
     void props.chat.send(mode);
   };
@@ -170,6 +208,12 @@ export function Composer(props: {
       event.preventDefault();
       sendMessage("steer");
     }
+  };
+
+  const selectionChanged = () => {
+    const range = dictatedRange();
+    if (!range || (input.selectionStart === range.start && input.selectionEnd === range.end)) return;
+    setDictationSelectionOwned(false);
   };
 
   onMount(() => {
@@ -228,6 +272,7 @@ export function Composer(props: {
           value={props.chat.draft()}
           disabled={!props.serverOnline}
           onInput={(event) => change(event.currentTarget.value)}
+          onSelect={selectionChanged}
           onKeyDown={keydown}
         />
       </div>

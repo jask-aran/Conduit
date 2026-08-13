@@ -35,7 +35,6 @@ export function registerVoiceRoutes(app, { voiceSettings, voiceRuntime, voiceMod
     try {
       const modelId = String(request.body?.modelId || "");
       voiceModel.assertInstall({ modelId, licenseAccepted: request.body?.licenseAccepted === true });
-      await voiceSettings.selectLocalModel(modelId);
       voiceModel.startInstall({ modelId, licenseAccepted: request.body?.licenseAccepted === true });
       noStore(response);
       response.status(202).json(await settingsView());

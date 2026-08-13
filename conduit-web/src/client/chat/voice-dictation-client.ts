@@ -1,4 +1,4 @@
-import { audioInputConstraints, formatMicrophoneError, hasAudioSignal, type AudioSignalLevel } from "./voice-audio";
+import { audioInputConstraints, formatMicrophoneError, hasAudioSignal, isUnavailableAudioInputError, type AudioSignalLevel } from "./voice-audio";
 
 export type VoiceDictationState = "idle" | "connecting" | "active" | "stopping" | "completed" | "failed";
 
@@ -9,6 +9,14 @@ export interface VoiceDictationCompletion {
   settlementMs: number | null;
   inputSignalDetected: boolean;
   maxInputPeak: number;
+  captureDurationMs: number;
+  audioBytesSent: number;
+  serverAudioBytes: number | null;
+  serverAudioDurationMs: number | null;
+  completionReason: string | null;
+  adapter: string | null;
+  provider: string | null;
+  model: string | null;
 }
 
 interface VoiceDictationCallbacks {
@@ -85,6 +93,13 @@ export function createVoiceDictationClient(callbacks: VoiceDictationCallbacks, o
   let pendingAudioBytes = 0;
   let inputSignalDetected = false;
   let maxInputPeak = 0;
+  let captureStartedAt: number | null = null;
+  let captureStoppedAt: number | null = null;
+  let audioBytesSent = 0;
+  let captureDrainResolver: (() => void) | null = null;
+  let captureDrainTimer: number | null = null;
+  let drainingCapture = false;
+  let stopFrameSent = false;
   const stoppedStreams = new WeakSet<MediaStream>();
 
   const setState = (next: VoiceDictationState) => {
@@ -108,7 +123,18 @@ export function createVoiceDictationClient(callbacks: VoiceDictationCallbacks, o
     target.getTracks().forEach((track) => track.stop());
   };
 
+  const resolveCaptureDrain = () => {
+    if (captureDrainTimer !== null) window.clearTimeout(captureDrainTimer);
+    captureDrainTimer = null;
+    const resolve = captureDrainResolver;
+    captureDrainResolver = null;
+    resolve?.();
+  };
+
   const stopCapture = () => {
+    if (captureStartedAt !== null && captureStoppedAt === null) captureStoppedAt = performance.now();
+    resolveCaptureDrain();
+    drainingCapture = false;
     permission = null;
     removeResumeListeners();
     if (processor) processor.port.onmessage = null;
@@ -152,18 +178,30 @@ export function createVoiceDictationClient(callbacks: VoiceDictationCallbacks, o
       return;
     }
     currentSocket.send(buffer);
+    audioBytesSent += buffer.byteLength;
   };
 
-  const flushPendingAudio = () => {
-    if (state !== "active" || !serverReady || !socket || socket.readyState !== WebSocket.OPEN) return;
+  const drainPendingAudio = () => {
+    if (!serverReady || !socket || socket.readyState !== WebSocket.OPEN) return;
     const queued = pendingAudio;
     pendingAudio = [];
     pendingAudioBytes = 0;
     queued.forEach(transmitAudio);
   };
 
-  const sendAudio = (buffer: ArrayBuffer) => {
+  const flushPendingAudio = () => {
     if (state !== "active") return;
+    drainPendingAudio();
+  };
+
+  const sendStopFrame = () => {
+    if (stopFrameSent || !stopRequested || !serverReady || !socket || socket.readyState !== WebSocket.OPEN) return;
+    socket.send(JSON.stringify({ type: "stop", audioBytesSent }));
+    stopFrameSent = true;
+  };
+
+  const sendAudio = (buffer: ArrayBuffer) => {
+    if (state !== "active" && !(state === "stopping" && drainingCapture)) return;
     if (serverReady && socket?.readyState === WebSocket.OPEN) {
       transmitAudio(buffer);
       return;
@@ -197,8 +235,13 @@ export function createVoiceDictationClient(callbacks: VoiceDictationCallbacks, o
       processor = new AudioWorkletNode(context, "conduit-voice-capture", { numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [1] });
       silentGain = context.createGain();
       silentGain.gain.value = 0;
-      processor.port.onmessage = (event: MessageEvent<ArrayBuffer | { type: "pcm"; buffer: ArrayBuffer; rms: number; peak: number }>) => {
-        if (event.data && typeof event.data === "object" && "buffer" in event.data) {
+      processor.port.onmessage = (event: MessageEvent<ArrayBuffer | { type: string; buffer?: ArrayBuffer; rms?: number; peak?: number }>) => {
+        if (event.data && typeof event.data === "object" && "type" in event.data) {
+          if (event.data.type === "flush_complete") {
+            resolveCaptureDrain();
+            return;
+          }
+          if (event.data.type !== "pcm" || !event.data.buffer) return;
           const level = { rms: Number(event.data.rms) || 0, peak: Number(event.data.peak) || 0 };
           inputSignalDetected ||= hasAudioSignal(level);
           maxInputPeak = Math.max(maxInputPeak, level.peak);
@@ -206,7 +249,7 @@ export function createVoiceDictationClient(callbacks: VoiceDictationCallbacks, o
           sendAudio(event.data.buffer);
           return;
         }
-        sendAudio(event.data);
+        if (event.data instanceof ArrayBuffer) sendAudio(event.data);
       };
       processor.onprocessorerror = () => fail(new Error("Microphone audio processing failed"));
       context.onstatechange = resumeContext;
@@ -217,6 +260,8 @@ export function createVoiceDictationClient(callbacks: VoiceDictationCallbacks, o
       processor.connect(silentGain);
       silentGain.connect(context.destination);
       setState("active");
+      captureStartedAt = performance.now();
+      captureStoppedAt = null;
       flushPendingAudio();
     } catch (error) {
       if (current()) throw error;
@@ -227,9 +272,22 @@ export function createVoiceDictationClient(callbacks: VoiceDictationCallbacks, o
   const stop = () => {
     if (!["connecting", "active"].includes(state)) return;
     stopRequested = true;
-    stopCapture();
     setState("stopping");
-    if (serverReady && socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ type: "stop" }));
+    const drain = processor
+      ? (() => {
+        drainingCapture = true;
+        return new Promise<void>((resolve) => {
+          captureDrainResolver = resolve;
+          captureDrainTimer = window.setTimeout(resolveCaptureDrain, 250);
+          try { processor?.port.postMessage({ type: "flush" }); }
+          catch { resolveCaptureDrain(); }
+        }).finally(() => {
+          drainingCapture = false;
+          stopCapture();
+        });
+      })()
+      : Promise.resolve().then(stopCapture);
+    void drain.then(sendStopFrame);
     fallbackTimer = window.setTimeout(() => fail(new Error("Dictation finalisation timed out")), 16_000);
   };
 
@@ -245,15 +303,25 @@ export function createVoiceDictationClient(callbacks: VoiceDictationCallbacks, o
     try {
       audioContext = new AudioContextConstructor();
       serverReady = false;
+      stopFrameSent = false;
       pendingAudio = [];
       pendingAudioBytes = 0;
       inputSignalDetected = false;
       maxInputPeak = 0;
+      captureStartedAt = null;
+      captureStoppedAt = null;
+      audioBytesSent = 0;
       const requested = navigator.mediaDevices.getUserMedia(audioInputConstraints(options.getInputDeviceId?.() || ""));
       permission = requested;
       requested.then(
         (acquired) => { if (permission !== requested || stopRequested || state !== "connecting") stopStream(acquired); },
-        (error) => { if (permission === requested && !stopRequested) fail(new Error(formatMicrophoneError(error))); },
+        (error) => {
+          if (permission !== requested || stopRequested) return;
+          const formatted = new Error(formatMicrophoneError(error));
+          const code = error && typeof error === "object" && "name" in error ? String((error as { name?: unknown }).name || "") : "";
+          if (code) Object.assign(formatted, { code, unavailableDevice: isUnavailableAudioInputError(error) });
+          fail(formatted);
+        },
       );
       socket = new WebSocket(socketUrl());
       socket.binaryType = "arraybuffer";
@@ -263,18 +331,20 @@ export function createVoiceDictationClient(callbacks: VoiceDictationCallbacks, o
           const message = JSON.parse(String(event.data));
           if (message.type === "ready") {
             serverReady = true;
-            if (stopRequested) socket?.send(JSON.stringify({ type: "stop" }));
+            drainPendingAudio();
+            if (stopRequested && !drainingCapture) sendStopFrame();
             else flushPendingAudio();
           } else if (message.type === "partial") {
             if (inputSignalDetected) callbacks.onPartial(String(message.text || ""));
           } else if (message.type === "final") {
             if (inputSignalDetected) callbacks.onFinal(String(message.text || ""));
           }
-          else if (message.type === "end_of_speech") stop();
           else if (message.type === "completed") {
             stopCapture();
             if (fallbackTimer !== null) window.clearTimeout(fallbackTimer);
             setState("completed");
+            const serverAudioBytes = Number(message.audioBytes);
+            const serverAudioDurationMs = Number(message.audioDurationMs);
             callbacks.onCompleted({
               text: String(message.text || ""),
               final: message.final === true,
@@ -282,6 +352,14 @@ export function createVoiceDictationClient(callbacks: VoiceDictationCallbacks, o
               settlementMs: Number.isFinite(message.settlementMs) ? Number(message.settlementMs) : null,
               inputSignalDetected,
               maxInputPeak,
+              captureDurationMs: captureStartedAt === null ? 0 : Math.max(0, Math.round((captureStoppedAt ?? performance.now()) - captureStartedAt)),
+              audioBytesSent,
+              serverAudioBytes: Number.isFinite(serverAudioBytes) ? serverAudioBytes : null,
+              serverAudioDurationMs: Number.isFinite(serverAudioDurationMs) ? serverAudioDurationMs : null,
+              completionReason: typeof message.reason === "string" ? message.reason : null,
+              adapter: typeof message.adapter === "string" ? message.adapter : null,
+              provider: typeof message.provider === "string" ? message.provider : null,
+              model: typeof message.model === "string" ? message.model : null,
             });
             closeSocket();
           } else if (message.type === "error") fail(new Error(String(message.message || "Voice dictation failed")));
