@@ -12,6 +12,20 @@ export interface UploadAttachment extends Attachment {
   restored?: boolean;
 }
 
+export function filesFromDataTransfer(dataTransfer: DataTransfer | null): File[] {
+  if (!dataTransfer) return [];
+  const extracted: File[] = [];
+  const items = dataTransfer.items ? Array.from(dataTransfer.items) : [];
+  for (const item of items) {
+    if (item.kind !== "file") continue;
+    try {
+      const file = item.getAsFile();
+      if (file) extracted.push(file);
+    } catch {}
+  }
+  return extracted.length ? extracted : Array.from(dataTransfer.files || []);
+}
+
 const MAX_CONCURRENT_UPLOADS = 3;
 export const DEFAULT_MAX_ATTACHMENT_BYTES = 100 * 1024 * 1024;
 
@@ -89,7 +103,7 @@ export function createAttachments(
     }).map<UploadAttachment>((file) => {
       const objectUrl = file.type.startsWith("image/") ? URL.createObjectURL(file) : null;
       if (objectUrl) objectUrls.add(objectUrl);
-      return { id: crypto.randomUUID(), name: file.name, size: file.size, type: file.type, file, objectUrl, status: "queued", progress: 0, announced: false };
+      return { id: crypto.randomUUID(), name: file.name || "attachment", size: file.size, type: file.type, file, objectUrl, status: "queued", progress: 0, announced: false };
     });
     if (!additions.length) return;
     setItems((current) => [...current, ...additions]);

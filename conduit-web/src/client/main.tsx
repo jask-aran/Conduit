@@ -27,7 +27,7 @@ import { clampSidebarChatLimit, selectedSidebarChatLimit, SIDEBAR_CHAT_LIMIT_STO
 import { WorkspaceAppearanceEditor } from "./project/workspace-appearance-editor";
 import { Settings } from "./settings/settings";
 import { createActiveChat } from "./state/active-chat";
-import { createAttachments, DEFAULT_MAX_ATTACHMENT_BYTES } from "./state/attachments";
+import { createAttachments, DEFAULT_MAX_ATTACHMENT_BYTES, filesFromDataTransfer } from "./state/attachments";
 import { createCatalogueStore } from "./state/catalogue";
 import { createModelSettings } from "./state/model-settings";
 import { createRuntimeStore } from "./state/runtime";
@@ -801,7 +801,7 @@ function App() {
     onDragEnter: (event: DragEvent) => { if (!event.dataTransfer?.types.includes("Files")) return; event.preventDefault(); dragDepth += 1; setDropActive(true); },
     onDragOver: (event: DragEvent) => { if (event.dataTransfer?.types.includes("Files")) event.preventDefault(); },
     onDragLeave: (event: DragEvent) => { event.preventDefault(); dragDepth = Math.max(0, dragDepth - 1); if (!dragDepth) setDropActive(false); },
-    onDrop: (event: DragEvent) => { event.preventDefault(); dragDepth = 0; setDropActive(false); if (event.dataTransfer?.files) attachments.addFiles(event.dataTransfer.files); },
+    onDrop: (event: DragEvent) => { event.preventDefault(); dragDepth = 0; setDropActive(false); const files = filesFromDataTransfer(event.dataTransfer); if (files.length) attachments.addFiles(files); },
   };
 
   return <>

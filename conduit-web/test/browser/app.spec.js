@@ -3298,6 +3298,65 @@ test("uploads picker and dropped files through the same attachment surface", asy
   await expect(page.locator(".composer-wrap > .attachment-tray")).toHaveCount(0);
 });
 
+test("shared DataTransfer extraction preserves item-only and files-only attachment drops", async ({ page }) => {
+  const uploads = [];
+  await page.route("**/v0/chats/*/attachments/*?name=*", async (route) => {
+    const url = new URL(route.request().url());
+    const id = url.pathname.split("/").at(-1);
+    const name = url.searchParams.get("name");
+    uploads.push({ id, name, body: route.request().postDataBuffer()?.toString() });
+    await route.fulfill({ status: 201, json: { id, name, storedName: `${id}--${name}`, size: route.request().postDataBuffer()?.length || 0, type: name?.endsWith(".png") ? "image/png" : "text/plain" } });
+  });
+  await page.goto("/");
+  const dropTarget = page.locator(".chat-main");
+
+  await dropTarget.evaluate((target) => {
+    const first = new File(["first"], "first.txt", { type: "text/plain" });
+    const second = new File(["second"], "second.png", { type: "image/png" });
+    const event = new Event("drop", { bubbles: true, cancelable: true });
+    Object.defineProperty(event, "dataTransfer", { value: {
+      items: {
+        0: { kind: "file", getAsFile: () => first },
+        1: { kind: "file", getAsFile: () => second },
+        length: 2,
+      },
+      files: [],
+    } });
+    target.dispatchEvent(event);
+  });
+  await expect(page.getByText("first.txt", { exact: true })).toBeVisible();
+  await expect(page.getByText("second.png", { exact: true })).toBeVisible();
+  await expect.poll(() => uploads.map((item) => item.name)).toEqual(["first.txt", "second.png"]);
+  await expect.poll(() => page.locator(".attachment-tray .attachment-copy strong").allTextContents()).toEqual(["first.txt", "second.png"]);
+
+  await dropTarget.evaluate((target) => {
+    const fallback = new File(["fallback"], "fallback.txt", { type: "text/plain" });
+    const event = new Event("drop", { bubbles: true, cancelable: true });
+    Object.defineProperty(event, "dataTransfer", { value: {
+      items: {
+        0: { kind: "file", getAsFile: () => { throw new Error("clipboard item unavailable"); } },
+        length: 1,
+      },
+      files: [fallback],
+    } });
+    target.dispatchEvent(event);
+  });
+  await expect(page.getByText("fallback.txt", { exact: true })).toBeVisible();
+  await expect.poll(() => uploads.map((item) => item.name)).toEqual(["first.txt", "second.png", "fallback.txt"]);
+
+  await dropTarget.evaluate((target) => {
+    const unnamed = new File(["unnamed"], "", { type: "text/plain" });
+    const event = new Event("drop", { bubbles: true, cancelable: true });
+    Object.defineProperty(event, "dataTransfer", { value: {
+      items: { 0: { kind: "file", getAsFile: () => unnamed }, length: 1 },
+      files: [],
+    } });
+    target.dispatchEvent(event);
+  });
+  await expect(page.getByText("attachment", { exact: true })).toBeVisible();
+  await expect.poll(() => uploads.map((item) => item.name)).toEqual(["first.txt", "second.png", "fallback.txt", "attachment"]);
+});
+
 test("editing from history abandons the current attachment draft cleanly", async ({ page }, testInfo) => {
   await page.addInitScript(() => {
     let nextObjectUrl = 0;
