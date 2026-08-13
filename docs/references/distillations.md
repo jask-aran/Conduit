@@ -99,6 +99,13 @@ Add an entry through `$tacit-knowledge` after explicit approval or validated rep
 - **Scope:** `CommandHintBar` and future palette footer controls.
 - **Evidence:** The accepted `Edit chats` and `Done` controls established the convention; manual review then required the available `Delete` and `Move` controls to use the same white-label affordance.
 
+### Fill the mobile viewport without losing the palette frame
+
+- **Type:** Preference.
+- **Rule:** At the app’s mobile breakpoint, make command and search palettes fill the visual viewport inside a small, consistent inset. Keep the rounded border and shadow so the palette remains a dialog; do not leave a capped-height centered card on tall narrow screens or switch to a borderless full-screen route.
+- **Scope:** Root command palette and all first-class palette pages at widths up to 760px.
+- **Evidence:** Manual review at a 523px-wide tall viewport found the chat-search list capped at desktop height while the app had already entered its mobile layout.
+
 ### Keep browser-hosted shortcuts inside an app-owned path
 
 - **Type:** Gotcha.

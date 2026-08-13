@@ -501,6 +501,10 @@ existing selection behavior.
 
 I would not redesign the blue left-edge highlight in this slice. It is a broader selection/focus identity issue that affects the sidebar and other surfaces. The edit-mode work should only add discoverability and pointer input. A later visual pass can replace that treatment consistently across the application.
 
+Implementation status: complete as an explicit non-change. This stage did not
+alter `.command-option` focus or selected-row styling. The existing visual
+identity remains the later redesign boundary.
+
 ### 6. Verify the interaction contract
 
 Add browser coverage for:
@@ -516,6 +520,21 @@ Add browser coverage for:
 - Mobile footer layout and touch behavior.
 
 This keeps the change coherent: one mode model, one visible shortcut convention, and equivalent keyboard and mouse entry paths.
+
+Implementation status: complete in the current working tree. Desktop browser
+coverage exercises browse and mode-specific footer hints, clickable
+`Edit chats` and `Done`, Ctrl-click entry, ordinary multi-selection, filtered
+selection retention, direct bulk Delete and Move controls, confirmation, and
+the destination flow. Mobile coverage taps the same controls, verifies the
+footer has no horizontal overflow, confirms delete cancellation retains the
+selection, and completes a move through the touch path. Rename remains covered
+as a single-chat browse action under the corrected contract.
+
+Post-acceptance responsive correction: at the app mobile breakpoint
+(`max-width: 760px`), the root palette and chat-search page use the full visual
+viewport inside an 8px inset. The shell keeps its border, radius, and shadow,
+so it remains a dialog rather than becoming a separate full-screen route. This
+also overrides the desktop chat-search height cap on tall narrow screens.
 
 ### Keyboard contract correction from manual testing
 

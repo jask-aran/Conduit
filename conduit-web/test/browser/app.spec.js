@@ -1345,13 +1345,15 @@ test("header search opens the command palette and the close control dismisses it
   await page.locator(".palette-trigger").click();
   const palette = page.getByRole("dialog", { name: "Command Palette" });
   await expect(palette).toBeVisible();
-  if (testInfo.project.name === "mobile-chromium" || (page.viewportSize()?.width || 0) <= 480) {
+  if (testInfo.project.name === "mobile-chromium" || (page.viewportSize()?.width || 0) <= 760) {
     const [shellBox, viewport] = await Promise.all([
       palette.locator(".command-shell").boundingBox(),
       page.evaluate(() => ({ width: innerWidth, height: innerHeight })),
     ]);
-    expect(Math.abs(shellBox.width - viewport.width)).toBeLessThanOrEqual(2);
-    expect(Math.abs(shellBox.height - viewport.height)).toBeLessThanOrEqual(2);
+    expect(Math.abs(shellBox.x - 8)).toBeLessThanOrEqual(2);
+    expect(Math.abs(shellBox.y - 8)).toBeLessThanOrEqual(2);
+    expect(Math.abs(shellBox.width - (viewport.width - 16))).toBeLessThanOrEqual(2);
+    expect(Math.abs(shellBox.height - (viewport.height - 16))).toBeLessThanOrEqual(2);
   }
   await palette.getByRole("button", { name: "Close command palette" }).click();
   await expect(palette).toHaveCount(0);
@@ -3769,13 +3771,12 @@ test("global commands and slash suggestions preserve their intended focus models
   const palette = page.getByRole("dialog", { name: "Command Palette" });
   await expect(palette).toBeVisible();
   const [paletteBox, viewport] = await Promise.all([palette.locator(".command-shell").boundingBox(), page.evaluate(() => ({ width: innerWidth, height: innerHeight }))]);
-  // ≤480px: full-bleed shell. Wider viewports: centered card (2px epsilon for
-  // Mobile Chromium's fractional scrollbar gutter).
-  if (viewport.width <= 480 || testInfo.project.name === "mobile-chromium") {
-    expect(paletteBox.x).toBeLessThanOrEqual(2);
-    expect(paletteBox.y).toBeLessThanOrEqual(2);
-    expect(Math.abs(paletteBox.width - viewport.width)).toBeLessThanOrEqual(2);
-    expect(Math.abs(paletteBox.height - viewport.height)).toBeLessThanOrEqual(2);
+  // Mobile layout: viewport-filling shell inside the persistent dialog frame.
+  if (viewport.width <= 760 || testInfo.project.name === "mobile-chromium") {
+    expect(Math.abs(paletteBox.x - 8)).toBeLessThanOrEqual(2);
+    expect(Math.abs(paletteBox.y - 8)).toBeLessThanOrEqual(2);
+    expect(Math.abs(paletteBox.width - (viewport.width - 16))).toBeLessThanOrEqual(2);
+    expect(Math.abs(paletteBox.height - (viewport.height - 16))).toBeLessThanOrEqual(2);
   } else {
     expect(Math.abs(paletteBox.x + paletteBox.width / 2 - viewport.width / 2)).toBeLessThanOrEqual(2);
     expect(Math.abs(paletteBox.y + paletteBox.height / 2 - viewport.height / 2)).toBeLessThanOrEqual(2);
