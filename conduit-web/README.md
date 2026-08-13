@@ -63,9 +63,10 @@ searchable multi-model picker. Cmd/Ctrl+K opens the typed application command
 palette. Root lists concrete app actions and models; Settings…, Search chats…,
 and Workspace views… are drill-down pages with search prefixes
 (`Settings ›`, `Search ›`, `Workspace ›`) so sections, chats, and panel tabs do
-not flood the root list. Cmd/Ctrl+P opens Chat search directly when the browser
-delivers that key event. The legacy Cmd/Ctrl+Shift+O shortcut opens the same
-chat mode as a compatibility alias. Chat search accepts
+not flood the root list. Cmd/Ctrl+Shift+K toggles Chat search directly; on
+Firefox for Windows and Linux, the browser can claim that chord for Web
+Console, so Settings → Shortcuts reports the conflict and permits a local
+override. Chat search accepts
 `scope:chats`, `scope:all`, and quoted `in:<folder-or-workspace>` filters; View
 all chats pre-applies `scope:chats` in the same surface. Empty-query Backspace
 removes a filter before it can change palette level; Escape returns to the root

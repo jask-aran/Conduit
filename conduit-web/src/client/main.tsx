@@ -1,7 +1,9 @@
 /// <reference types="vite-plugin-pwa/client" />
 import { batch, createEffect, createMemo, createSignal, ErrorBoundary, lazy, onCleanup, onMount, Show } from "solid-js";
 import { render } from "solid-js/web";
-import { PanelLeftIcon, PanelRightIcon, SearchIcon, ShareIcon, TriangleAlertIcon } from "lucide-solid";
+import {
+  PanelLeftIcon, PanelRightIcon, SearchIcon, ShareIcon, TerminalIcon, TriangleAlertIcon,
+} from "lucide-solid";
 import { registerSW } from "virtual:pwa-register";
 import { Toaster, toast } from "solid-sonner";
 import "solid-sonner/styles.css";
@@ -50,6 +52,7 @@ function ChatHeader(props: {
   mobileSidebarOpen: boolean;
   onToggleMobileSidebar: () => void;
   onOpenPalette: () => void;
+  onOpenSearch: () => void;
   onTogglePanel: () => void;
   onShare: () => void;
   dashboard?: boolean;
@@ -68,7 +71,8 @@ function ChatHeader(props: {
     <nav aria-label="breadcrumb" class="chat-header-title"><span>{projectLabel()}</span><span class="breadcrumb-separator" aria-hidden="true" /><strong>{props.title}</strong></nav>
     <Show when={line()}><span class="chat-profile-posture" title={line()}>{line()}</span></Show>
     <div class="chat-header-actions">
-      <Button variant="ghost" size="icon-sm" class="palette-trigger" aria-label="Open command palette" title="Command palette" onClick={props.onOpenPalette}><SearchIcon /></Button>
+      <Button variant="ghost" size="icon-sm" class="search-trigger" aria-label="Search chats" title="Search chats" onClick={props.onOpenSearch}><SearchIcon /></Button>
+      <Button variant="ghost" size="icon-sm" class="palette-trigger" aria-label="Open command palette" title="Command palette" onClick={props.onOpenPalette}><TerminalIcon /></Button>
       <Button variant="ghost" size="icon-sm" aria-label={props.dashboard ? "Copy Tailscale workspace link" : "Copy Tailscale chat link"} title={props.dashboard ? "Copy Tailscale workspace link" : "Copy Tailscale chat link"} onClick={props.onShare}><ShareIcon /></Button>
       <Show when={!props.panelOpen}>
         <Button variant="ghost" size="icon-sm" aria-label="Toggle workspace panel" aria-expanded={false} onClick={props.onTogglePanel}><PanelRightIcon /></Button>
@@ -522,6 +526,13 @@ function App() {
     setPaletteNonce((value) => value + 1);
     setPaletteOpen(true);
   };
+  const toggleSearchPalette = () => {
+    if (paletteOpen() && palettePage() === "chat-search") {
+      setPaletteOpen(false);
+      return;
+    }
+    openPalette("chat-search", "", true);
+  };
   const togglePanel = () => {
     const next = !panelOpen();
     if (next && isMobileLayout()) setMobileSidebarOpen(false);
@@ -653,7 +664,7 @@ function App() {
         if (paletteOpen()) setPaletteOpen(false);
         else openPalette(null);
       }),
-      shortcutManager.registerHandler(COMMAND_IDS.searchChats, "application", () => openPalette("chat-search", "", true)),
+      shortcutManager.registerHandler(COMMAND_IDS.searchChats, "application", toggleSearchPalette),
       shortcutManager.registerHandler(COMMAND_IDS.openSettings, "application", () => openSettings("general")),
       shortcutManager.registerHandler(COMMAND_IDS.newChat, "application", () => {
         setMobileSidebarOpen(false);
@@ -816,7 +827,7 @@ function App() {
         </Show>
         <Show when={routeKind() === "project" && selectedProject()} fallback={<>
           <Show when={dropActive()}><div class="chat-drop-overlay"><div>Drop files to attach</div></div></Show>
-          <ChatHeader project={selectedProject()} title={chat.title()} profile={activeProfile()} runtime={chat.runtimeIdentity()} live={chat.live() as unknown as Record<string, unknown>} panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onOpenPalette={() => openPalette(null)} onTogglePanel={togglePanel} onShare={() => void shareChat()} />
+          <ChatHeader project={selectedProject()} title={chat.title()} profile={activeProfile()} runtime={chat.runtimeIdentity()} live={chat.live() as unknown as Record<string, unknown>} panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={() => void shareChat()} />
           <Show when={selectedProject()?.kind === "workspace" && [...runtime.processes().values()].some((process) => process.chatId !== catalogue.selectedId() && process.active)}><div class="workspace-warning"><TriangleAlertIcon /><div><strong>Another chat is working in this Workspace</strong><p>Both agents can edit the same files. Conduit does not lock the Workspace or create worktrees automatically.</p></div></div></Show>
           <div class="work-area">
             <section class="work-area-conversation" aria-label="Conversation">
@@ -826,7 +837,7 @@ function App() {
             </section>
           </div>
         </>}>
-          <ChatHeader project={selectedProject()} title="Dashboard" panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onOpenPalette={() => openPalette(null)} onTogglePanel={togglePanel} onShare={() => void shareProject()} dashboard />
+          <ChatHeader project={selectedProject()} title="Dashboard" panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={() => void shareProject()} dashboard />
           <ProjectDashboard project={selectedProject()!} templates={templates()} runtime={runtime}
             onNewChat={async (project) => { await createChat(project); }} onOpenChat={(target: DashboardChat, project) => openChat(target, project)}
             onRename={() => runSidebar("rename-folder")} onDelete={() => runSidebar("delete-project")}

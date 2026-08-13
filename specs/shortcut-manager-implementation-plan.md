@@ -468,3 +468,26 @@ The interfaces deliberately leave room for native and extension environment
 providers, plugin-contributed stable commands, and server-synced profiles. None
 of those future paths should be required to make the browser implementation
 coherent.
+
+## Default search launcher and header affordance
+
+Implementation status: complete.
+
+Replace the browser-owned Primary+P and Primary+Shift+O defaults for Search
+chats with one Primary+Shift+K binding. `Primary` resolves to Command on Apple
+platforms and Control elsewhere. The shortcut opens Chat search directly when
+another surface is active and closes the palette when Chat search is already
+open, including browse, edit, move, and rename states.
+
+Keep Primary+P available as a user-selected override with a Print warning.
+Record Firefox's Windows/Linux Primary+Shift+K Web Console ownership as a
+browser warning; Chrome's published shortcut table does not claim the chord.
+
+Add two adjacent top-bar controls. Search chats uses the Search icon. Command
+Palette uses the Terminal icon already associated with command execution in
+Conduit. Preserve separate accessible names and the existing icon-button
+dimensions on desktop and mobile.
+
+Update registry, toggle, context, header, settings, browser, and documentation
+coverage. Verify default keycaps, search open/close behavior, both header
+launchers, mobile layout, typecheck, focused tests, and build.

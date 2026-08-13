@@ -72,11 +72,11 @@ export const commandRegistry: ShortcutCommandDefinition[] = [
     group: "commands",
     icon: "chat",
     keywords: ["search", "find", "chat", "conversation", "folder", "workspace"],
-    contexts: ["application", "palette.root", "palette.page"],
-    defaultBindings: [
-      binding(stroke("KeyP", "P", ["primary"])),
-      binding(stroke("KeyO", "O", ["primary", "shift"])),
+    contexts: [
+      "application", "palette.root", "palette.page", "chat-search.browse",
+      "chat-search.edit", "chat-search.move", "chat-search.rename",
     ],
+    defaultBindings: [binding(stroke("KeyK", "K", ["primary", "shift"]))],
     palette: true,
   }),
   command({

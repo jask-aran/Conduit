@@ -53,6 +53,15 @@ export const BROWSER_SHORTCUT_CONFLICTS: BrowserShortcutConflictRecord[] = [
     binding: primary("KeyE", "E"),
   },
   {
+    id: "browser-firefox-web-console",
+    owner: "Firefox",
+    action: "Open Web Console",
+    kind: "browser",
+    browsers: ["firefox"],
+    platforms: ["windows", "linux", "chromeos"],
+    binding: primary("KeyK", "K", true),
+  },
+  {
     id: "browser-bookmarks",
     owner: "Browser",
     action: "Open bookmark manager",

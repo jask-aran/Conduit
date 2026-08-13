@@ -464,12 +464,16 @@ export function CommandMenu(props: {
       props.shortcuts.registerHandler(commandId, "palette.page", () =>
         openPalettePage(targetPage, commandId === COMMAND_IDS.searchChats))),
     props.shortcuts.registerHandler(COMMAND_IDS.toggleChatEdit, "chat-search.browse", toggleSelection),
+    props.shortcuts.registerHandler(COMMAND_IDS.searchChats, "chat-search.browse", close),
     props.shortcuts.registerHandler(COMMAND_IDS.renameHighlightedChat, "chat-search.browse", startRename),
     props.shortcuts.registerHandler(COMMAND_IDS.moveHighlightedChat, "chat-search.browse", moveHighlighted),
     props.shortcuts.registerHandler(COMMAND_IDS.deleteHighlightedChat, "chat-search.browse", requestActiveDelete),
     props.shortcuts.registerHandler(COMMAND_IDS.toggleChatEdit, "chat-search.edit", toggleSelection),
+    props.shortcuts.registerHandler(COMMAND_IDS.searchChats, "chat-search.edit", close),
     props.shortcuts.registerHandler(COMMAND_IDS.moveSelectedChats, "chat-search.edit", moveSelected),
     props.shortcuts.registerHandler(COMMAND_IDS.deleteSelectedChats, "chat-search.edit", requestDelete),
+    props.shortcuts.registerHandler(COMMAND_IDS.searchChats, "chat-search.move", close),
+    props.shortcuts.registerHandler(COMMAND_IDS.searchChats, "chat-search.rename", close),
   ];
   onCleanup(() => releaseShortcutHandlers.forEach((release) => release()));
 

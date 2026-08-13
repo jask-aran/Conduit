@@ -158,12 +158,25 @@ test.beforeEach(async ({ page }) => {
   }));
 });
 
-test("acceptance: header search opens palette; close control dismisses without a selection", async ({ page }, testInfo) => {
+test("acceptance: header launchers distinguish chat search from the command palette", async ({ page }, testInfo) => {
   await page.goto("/");
-  await expect(page.locator(".palette-trigger")).toBeVisible();
-  await page.locator(".palette-trigger").click();
-  const palette = page.getByRole("dialog", { name: "Command Palette" });
+  const searchTrigger = page.locator(".search-trigger");
+  const paletteTrigger = page.locator(".palette-trigger");
+  await expect(searchTrigger).toBeVisible();
+  await expect(paletteTrigger).toBeVisible();
+  await expect(searchTrigger.locator("svg.lucide-search")).toBeVisible();
+  await expect(paletteTrigger.locator("svg.lucide-terminal")).toBeVisible();
+
+  await searchTrigger.click();
+  let palette = page.getByRole("dialog", { name: "Command Palette" });
+  await expect(palette.getByText("Search ›")).toBeVisible();
+  await palette.getByRole("button", { name: "Close command palette" }).click();
+  await expect(palette).toHaveCount(0);
+
+  await paletteTrigger.click();
+  palette = page.getByRole("dialog", { name: "Command Palette" });
   await expect(palette).toBeVisible();
+  await expect(palette.getByText("Search ›")).toHaveCount(0);
   const hints = palette.getByRole("note", { name: "Keyboard shortcuts" });
   await expect(hints).toBeVisible();
   if (testInfo.project.name === "mobile-chromium" || (page.viewportSize()?.width || 0) <= 520) {

@@ -21,6 +21,7 @@ import {
 import { paletteStableCommandIds } from "../src/client/commands/command-registry.ts";
 
 const windowsChrome = { platform: "windows", browser: "chrome", displayMode: "browser-tab" };
+const windowsFirefox = { platform: "windows", browser: "firefox", displayMode: "browser-tab" };
 const macSafari = { platform: "macos", browser: "safari", displayMode: "browser-tab" };
 
 function keyEvent(key, code, options = {}) {
@@ -122,6 +123,10 @@ test("classifies known browser conflicts and exact Conduit context conflicts", (
   const spotlight = shortcutBinding(shortcutStroke("Space", "Space", ["primary"]));
   assert.equal(browserShortcutConflicts(spotlight, macSafari)[0]?.action, "Open Spotlight");
   assert.equal(browserShortcutConflicts(spotlight, windowsChrome).length, 0);
+  const searchChats = getCommandDefinition(COMMAND_IDS.searchChats).defaultBindings[0];
+  assert.equal(formatShortcutBinding(searchChats, windowsChrome), "Ctrl Shift K");
+  assert.equal(browserShortcutConflicts(searchChats, windowsChrome).length, 0);
+  assert.equal(browserShortcutConflicts(searchChats, windowsFirefox)[0]?.action, "Open Web Console");
 
   const candidate = shortcutBinding(shortcutStroke("KeyX", "X", ["primary"]));
   const commands = [{
