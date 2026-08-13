@@ -95,7 +95,7 @@ function App() {
   const [workspacePolicy, setWorkspacePolicy] = createSignal<WorkspacePolicy | null>(null);
   const [defaultTemplateId, setDefaultTemplateId] = createSignal("chat");
   const [voiceSettings, setVoiceSettings] = createSignal(loadVoiceDictationSettings());
-  const updateVoiceSettings = (next: { shortcut: string; autoSend: boolean }) => setVoiceSettings(saveVoiceDictationSettings(next));
+  const updateVoiceSettings = (next: { shortcut: string; autoSend: boolean; inputDeviceId: string }) => setVoiceSettings(saveVoiceDictationSettings(next));
   const [partialContinue, setPartialContinue] = createSignal(true);
   const [maxAttachmentBytes, setMaxAttachmentBytes] = createSignal(DEFAULT_MAX_ATTACHMENT_BYTES);
   const [markdownRenderer, setMarkdownRenderer] = createSignal<MarkdownRendererId>(selectedMarkdownRenderer());

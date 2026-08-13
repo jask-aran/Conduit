@@ -5,6 +5,7 @@ import { CheckIcon, SearchIcon } from "lucide-solid";
 import { Button, Field, FieldGroup, FieldLabel, Input, Spinner } from "@/components/primitives";
 import { api } from "../api/client";
 import { MARKDOWN_RENDERER_OPTIONS, type MarkdownRendererId } from "../chat/markdown-settings";
+import { formatMicrophoneError, listAudioInputDevices, testAudioInput as runAudioInputTest, type AudioInputDevice, type AudioInputTestResult } from "../chat/voice-audio";
 import { shortcutFromKeyboardEvent } from "../chat/voice-dictation";
 import type { Installation, ModelOption, Project, Template } from "../api/contracts";
 import type { ModelSettings } from "../state/model-settings";
@@ -117,8 +118,8 @@ export function Settings(props: {
   onWorkspaceDefaultChange: (id: string, templateId: string | null) => Promise<Project>;
   markdownRenderer: MarkdownRendererId;
   onMarkdownRendererChange: (renderer: MarkdownRendererId) => void;
-  voiceSettings: { shortcut: string; autoSend: boolean };
-  onVoiceSettingsChange: (settings: { shortcut: string; autoSend: boolean }) => void;
+  voiceSettings: { shortcut: string; autoSend: boolean; inputDeviceId: string };
+  onVoiceSettingsChange: (settings: { shortcut: string; autoSend: boolean; inputDeviceId: string }) => void;
   sidebarChatLimit: number;
   onSidebarChatLimitChange: (limit: number) => void;
   shortcuts: ShortcutManager;
@@ -154,6 +155,11 @@ export function Settings(props: {
   const [voiceBusy, setVoiceBusy] = createSignal(false);
   const [voiceLicenseAccepted, setVoiceLicenseAccepted] = createSignal(false);
   const [voiceTestResult, setVoiceTestResult] = createSignal("");
+  const [audioInputDevices, setAudioInputDevices] = createSignal<AudioInputDevice[]>([]);
+  const [audioInputStatus, setAudioInputStatus] = createSignal<"idle" | "loading" | "ready" | "error">("idle");
+  const [audioInputError, setAudioInputError] = createSignal("");
+  const [audioInputBusy, setAudioInputBusy] = createSignal(false);
+  const [audioInputTest, setAudioInputTest] = createSignal<AudioInputTestResult | null>(null);
   let runtimeRequest = 0;
   let searchRequest = 0;
   let search!: HTMLInputElement;
@@ -364,6 +370,21 @@ export function Settings(props: {
     if (!props.open || section() !== "voice") return;
     void loadVoiceSettings();
   });
+
+  const loadAudioInputs = async () => {
+    setAudioInputStatus("loading");
+    setAudioInputError("");
+    try {
+      setAudioInputDevices(await listAudioInputDevices());
+      setAudioInputStatus("ready");
+    } catch (error) {
+      setAudioInputError(formatMicrophoneError(error));
+      setAudioInputStatus("error");
+    }
+  };
+  createEffect(() => {
+    if (props.open && section() === "voice") void loadAudioInputs();
+  });
   createEffect(() => {
     if (!props.open || section() !== "voice" || !voiceServerSettings()?.local?.installingModelId) return;
     const timer = window.setInterval(() => void loadVoiceSettings({ quiet: true }), 750);
@@ -414,6 +435,19 @@ export function Settings(props: {
       await loadVoiceSettings({ quiet: true });
     } catch (error) { setVoiceError((error as Error).message); }
     finally { setVoiceBusy(false); }
+  };
+  const testAudioInput = async () => {
+    setAudioInputBusy(true);
+    setAudioInputError("");
+    setAudioInputTest(null);
+    try {
+      const result = await runAudioInputTest(props.voiceSettings.inputDeviceId);
+      setAudioInputTest(result);
+      await loadAudioInputs();
+      if (!result.signalDetected) setAudioInputError("No microphone signal detected. Check Chrome site settings and the selected input.");
+    } catch (error) {
+      setAudioInputError(formatMicrophoneError(error));
+    } finally { setAudioInputBusy(false); }
   };
   const removeVoiceCredential = async () => {
     setVoiceBusy(true);
@@ -587,6 +621,17 @@ export function Settings(props: {
               <div class="voice-settings">
                 <p class="search-settings-intro">Audio stays in memory and passes through authenticated Conduit. Cloud credentials remain server-side and are never returned to the browser.</p>
                 <FieldGroup>
+                  <div class="voice-input-test">
+                    <Field><FieldLabel for="voice-input-device">Microphone</FieldLabel><select id="voice-input-device" disabled={audioInputBusy()} value={props.voiceSettings.inputDeviceId} onChange={(event) => props.onVoiceSettingsChange({ ...props.voiceSettings, inputDeviceId: event.currentTarget.value })}>
+                      <option value="">System default microphone</option>
+                      <Show when={props.voiceSettings.inputDeviceId && !audioInputDevices().some((device) => device.deviceId === props.voiceSettings.inputDeviceId)}><option value={props.voiceSettings.inputDeviceId}>Selected microphone unavailable</option></Show>
+                      <For each={audioInputDevices()}>{(device) => <option value={device.deviceId}>{device.label}</option>}</For>
+                    </select><small>Chrome controls site permission. Choose the input that should feed dictation.</small></Field>
+                    <div class="voice-actions"><Button variant="outline" size="sm" disabled={audioInputBusy() || audioInputStatus() === "loading"} onClick={() => void loadAudioInputs()}>Refresh microphones</Button><Button variant="outline" size="sm" disabled={audioInputBusy()} onClick={() => void testAudioInput()}>{audioInputBusy() ? <Spinner /> : null}Test microphone</Button></div>
+                    <Show when={audioInputStatus() === "error" && !audioInputError()}><p role="alert" class="settings-inline-error">Microphone list could not be loaded.</p></Show>
+                    <Show when={audioInputTest()}>{(result) => <div class="voice-input-result" data-signal={result().signalDetected ? "detected" : "missing"}><strong>{result().signalDetected ? "Signal detected" : "No signal detected"}</strong><small>{result().label} · {result().sampleRate.toLocaleString()} Hz · peak {result().peak.toFixed(3)}</small></div>}</Show>
+                    <Show when={audioInputError()}><p role="alert" class="settings-inline-error">{audioInputError()}</p></Show>
+                  </div>
                   <Field><FieldLabel for="dictation-shortcut">Push-to-talk shortcut</FieldLabel><Input id="dictation-shortcut" value={props.voiceSettings.shortcut} readOnly onKeyDown={(event) => {
                     event.preventDefault();
                     event.stopPropagation();

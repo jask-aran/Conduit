@@ -36,20 +36,22 @@ test("Parakeet events normalize deltas, cumulative partials, finals, and errors"
 });
 
 test("voice shortcut capture and push-to-talk release use the configured chord", () => {
-  const pressed = { key: "d", metaKey: true, ctrlKey: false, altKey: false, shiftKey: false };
-  assert.equal(shortcutFromKeyboardEvent(pressed), "Super+D");
-  assert.equal(matchesShortcut(pressed, "Super+D"), true);
-  assert.equal(matchesShortcut({ ...pressed, metaKey: false }, "Super+D"), false);
-  assert.equal(releasesShortcut({ key: "d" }, "Super+D"), true);
-  assert.equal(releasesShortcut({ key: "Meta" }, "Super+D"), true);
+  const pressed = { key: "d", metaKey: false, ctrlKey: true, altKey: false, shiftKey: true };
+  assert.equal(shortcutFromKeyboardEvent(pressed), "Ctrl+Shift+D");
+  assert.equal(matchesShortcut(pressed, "Ctrl+Shift+D"), true);
+  assert.equal(matchesShortcut({ ...pressed, ctrlKey: false }, "Ctrl+Shift+D"), false);
+  assert.equal(releasesShortcut({ key: "d" }, "Ctrl+Shift+D"), true);
+  assert.equal(releasesShortcut({ key: "Control" }, "Ctrl+Shift+D"), true);
 });
 
 test("voice settings remain draft-only by default and auto-send only a timely final", () => {
   const values = new Map();
   const storage = { getItem: (key) => values.get(key) ?? null, setItem: (key, value) => values.set(key, value) };
-  assert.deepEqual(loadVoiceDictationSettings(storage), { shortcut: "Super+D", autoSend: false });
-  assert.deepEqual(saveVoiceDictationSettings({ shortcut: "Ctrl+Shift+V", autoSend: true }, storage), { shortcut: "Ctrl+Shift+V", autoSend: true });
-  assert.deepEqual(loadVoiceDictationSettings(storage), { shortcut: "Ctrl+Shift+V", autoSend: true });
+  assert.deepEqual(loadVoiceDictationSettings(storage), { shortcut: "Ctrl+Shift+D", autoSend: false, inputDeviceId: "" });
+  storage.setItem("conduit:voice-dictation", JSON.stringify({ shortcut: "Super+D" }));
+  assert.deepEqual(loadVoiceDictationSettings(storage), { shortcut: "Ctrl+Shift+D", autoSend: false, inputDeviceId: "" });
+  assert.deepEqual(saveVoiceDictationSettings({ shortcut: "Ctrl+Shift+V", autoSend: true, inputDeviceId: "mic-2" }, storage), { shortcut: "Ctrl+Shift+V", autoSend: true, inputDeviceId: "mic-2" });
+  assert.deepEqual(loadVoiceDictationSettings(storage), { shortcut: "Ctrl+Shift+V", autoSend: true, inputDeviceId: "mic-2" });
   assert.equal(shouldAutoSend({ enabled: true, final: true, finalWithinDeadline: true }), true);
   assert.equal(shouldAutoSend({ enabled: true, final: false, finalWithinDeadline: true }), false);
   assert.equal(shouldAutoSend({ enabled: true, final: true, finalWithinDeadline: false }), false);

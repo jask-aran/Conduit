@@ -233,8 +233,6 @@ svg { stroke-width: 1.5; }
 }
 .composer-input-shell { position: relative; min-height: 44px; }
 .composer textarea { display: block; width: 100%; min-height: 44px; max-height: 192px; resize: none; overflow-y: auto; border: 0; outline: 0; background: transparent; padding: 11px 12px 2px; color: inherit; line-height: 1.45; }
-.composer-highlight-layer { position: absolute; inset: 0; z-index: 1; min-height: 44px; max-height: 192px; overflow: hidden; pointer-events: none; padding: 11px 12px 2px; color: transparent; font: inherit; line-height: 1.45; overflow-wrap: break-word; white-space: pre-wrap; }
-.composer-highlight-layer mark { border-radius: 3px; background: color-mix(in oklch, var(--accent-cool), transparent 72%); color: transparent; box-shadow: 0 0 0 1px color-mix(in oklch, var(--accent-cool), transparent 82%); }
 .composer textarea:placeholder-shown { height: 44px !important; }
 .composer-actions { display: flex; min-height: 36px; align-items: center; justify-content: space-between; gap: 12px; padding: 2px 7px 7px 8px; }
 /* Composer chrome sits inside the 24px-radius glass bubble; compact squircles
@@ -256,6 +254,10 @@ svg { stroke-width: 1.5; }
 .composer-status-state::after { content: ""; position: absolute; top: 0; right: -9px; z-index: 1; border-block: 11px solid transparent; border-left: 9px solid color-mix(in oklch, var(--accent-cool), transparent 82%); }
 .composer-status-state + .composer-status-segment { padding-left: 20px; }
 .composer-status svg { width: 12px; height: 12px; }
+.composer-status-waveform { display: inline-flex; width: 64px; height: 22px; flex: 0 0 auto; box-sizing: border-box; align-items: center; justify-content: center; gap: 1px; padding: 0 6px; border-right: 1px solid color-mix(in oklch, var(--accent-cool), transparent 75%); }
+.composer-status-waveform span { width: auto; min-width: 1px; max-width: 2px; min-height: 2px; flex: 1 1 0; border-radius: 999px; background: var(--accent-cool); opacity: 0.88; transition: height 90ms ease-out; }
+.composer-status-waveform[data-state="connecting"] span { animation: dictation-wave-pulse 900ms ease-in-out infinite alternate; }
+@keyframes dictation-wave-pulse { from { opacity: 0.4; transform: scaleY(0.65); } to { opacity: 0.95; transform: scaleY(1); } }
 .slash-suggestions { position: absolute; left: 10px; bottom: 48px; z-index: 30; width: 260px; padding: 5px; border: 1px solid var(--border); border-radius: 10px; background: var(--popover); box-shadow: 0 12px 32px rgb(0 0 0 / 25%); }
 .slash-suggestions button { display: flex; width: 100%; flex-direction: column; border: 0; border-radius: 7px; background: var(--accent); padding: 8px; color: inherit; text-align: left; }
 .slash-suggestions span { color: var(--muted-foreground); font-size: 12px; }
@@ -332,6 +334,10 @@ svg { stroke-width: 1.5; }
 .dictation-auto-send span { display: flex; flex-direction: column; gap: 3px; }
 .dictation-auto-send small { color: var(--muted-foreground); }
 .voice-settings { display: grid; gap: 16px; }
+.voice-input-test { display: grid; gap: 10px; padding: 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--card); }
+.voice-input-result { display: grid; gap: 2px; border-left: 2px solid var(--accent-cool); background: var(--muted); padding: 8px 10px; }
+.voice-input-result[data-signal="missing"] { border-left-color: var(--destructive); }
+.voice-input-result small { color: var(--muted-foreground); }
 .voice-card { display: grid; gap: 13px; padding: 14px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--card); }
 .voice-card h3, .voice-card p { margin: 0; }
 .voice-card p, .voice-notice { color: var(--muted-foreground); line-height: 1.45; }
@@ -606,6 +612,7 @@ svg { stroke-width: 1.5; }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; }
+  .composer-status-waveform span { animation: none !important; transition: none !important; }
   /* The meteor field is an explicitly requested ambient effect; retain its
      supplied timeline without re-enabling motion elsewhere in Conduit. */
   .chat-meteors .solid-meteor { animation-duration: var(--meteor-duration) !important; }

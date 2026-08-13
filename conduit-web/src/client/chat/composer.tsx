@@ -19,10 +19,13 @@ import type { AttachmentsStore } from "../state/attachments";
 import type { ModelSettings } from "../state/model-settings";
 import { AttachmentCards } from "./attachments";
 import { createVoiceDictationClient, type VoiceDictationState } from "./voice-dictation-client";
+import type { AudioSignalLevel } from "./voice-audio";
 import { beginDictatedRange, matchesShortcut, releasesShortcut, replaceDictatedRange, shouldAutoSend } from "./voice-dictation";
 
 const thinkingLabel = (value: string) => value ? value[0]!.toUpperCase() + value.slice(1) : "Off";
 const SPINNING_ACTIVITY = new Set(["starting", "thinking", "responding", "using_tool", "retrying", "compacting", "stopping", "waiting_for_model"]);
+const WAVEFORM_SAMPLE_COUNT = 24;
+const WAVEFORM_SAMPLE_INTERVAL_MS = 70;
 
 export function Composer(props: {
   chat: ActiveChatStore;
@@ -31,24 +34,32 @@ export function Composer(props: {
   profiles: Template[];
   activeProfile?: Template | null;
   serverOnline: boolean;
-  voiceSettings: { shortcut: string; autoSend: boolean };
+  voiceSettings: { shortcut: string; autoSend: boolean; inputDeviceId: string };
   onChooseProfile: (id: string) => void;
   onOpenSettings: (section: string) => void;
   onOpenAttachments: () => void;
 }) {
   let input!: HTMLTextAreaElement;
-  let highlightLayer!: HTMLDivElement;
   const [slashOpen, setSlashOpen] = createSignal(false);
   const [dictationState, setDictationState] = createSignal<VoiceDictationState>("idle");
   const [dictationError, setDictationError] = createSignal("");
   const [dictatedRange, setDictatedRange] = createSignal<{ start: number; end: number } | null>(null);
+  const [dictationHistory, setDictationHistory] = createSignal<number[]>(Array(WAVEFORM_SAMPLE_COUNT).fill(0));
   let dictationCancelled = false;
   let pushToTalkActive = false;
+  let latestInputLevel = 0;
+  let lastWaveformSampleAt = 0;
+  let waveformFrame: number | null = null;
   const selectedModel = createMemo(() => props.models.models().find((item) => item.spec === props.models.model()));
   const levels = createMemo(() => selectedModel()?.thinkingLevels || ["off"]);
   const busy = createMemo(() => props.chat.streaming());
   const hasText = createMemo(() => Boolean(props.chat.draft().trim()));
   const dictating = createMemo(() => ["connecting", "active", "stopping"].includes(dictationState()));
+  const waveformBars = createMemo(() => {
+    const history = dictationHistory();
+    const baseline = dictationState() === "connecting" ? 0.14 : 0.05;
+    return history.map((level) => `${Math.round((baseline + level * 0.9) * 100)}%`);
+  });
   const canSend = createMemo(() => hasText() && props.serverOnline && props.chat.generation() !== "stopping" && !dictating());
   const activity = createMemo(() => props.chat.activity());
   const contextPercent = () => Math.round((props.chat.contextUsage()?.percent || 0) * (props.chat.contextUsage()?.percent && props.chat.contextUsage()!.percent! <= 1 ? 100 : 1));
@@ -59,12 +70,6 @@ export function Composer(props: {
     return `Context ${(usage.tokens || 0).toLocaleString()} / ${usage.contextWindow.toLocaleString()} · ${contextPercent()}%`;
   };
   const queueCount = createMemo(() => props.chat.queue().steering.length + props.chat.queue().followUp.length);
-  const highlight = createMemo(() => {
-    const range = dictatedRange();
-    const text = props.chat.draft();
-    if (!range) return null;
-    return { before: text.slice(0, range.start), dictated: text.slice(range.start, range.end), after: text.slice(range.end) };
-  });
   const dictationLabel = createMemo(() => {
     if (dictationState() === "completed" && !dictatedRange()) return "";
     if (dictationState() === "failed" && !dictationError()) return "";
@@ -78,17 +83,21 @@ export function Composer(props: {
     })[dictationState()];
   });
 
+  const setInputLevel = (level: AudioSignalLevel) => {
+    latestInputLevel = Math.min(1, Math.max(level.rms * 10, level.peak * 2.4));
+    if (waveformFrame !== null) return;
+    waveformFrame = window.requestAnimationFrame(() => {
+      waveformFrame = null;
+      const now = performance.now();
+      if (now - lastWaveformSampleAt < WAVEFORM_SAMPLE_INTERVAL_MS) return;
+      lastWaveformSampleAt = now;
+      setDictationHistory((history) => [...history.slice(-(WAVEFORM_SAMPLE_COUNT - 1)), latestInputLevel]);
+    });
+  };
+
   const resize = () => {
     input.style.height = "auto";
     input.style.height = `${Math.min(input.scrollHeight, 192)}px`;
-    if (highlightLayer) highlightLayer.style.height = input.style.height;
-  };
-
-  const syncHighlightScroll = () => {
-    if (highlightLayer) {
-      highlightLayer.scrollTop = input.scrollTop;
-      highlightLayer.scrollLeft = input.scrollLeft;
-    }
   };
 
   const change = (value: string, manual = true) => {
@@ -108,14 +117,30 @@ export function Composer(props: {
     const next = replaceDictatedRange(props.chat.draft(), range, text);
     props.chat.setDraft(next.text);
     setDictatedRange(next.range);
-    queueMicrotask(() => { resize(); input.setSelectionRange(next.range.end, next.range.end); });
+    queueMicrotask(() => {
+      resize();
+      input.focus({ preventScroll: true });
+      input.setSelectionRange(next.range.start, next.range.end);
+    });
   };
 
   const voiceClient = createVoiceDictationClient({
-    onState: setDictationState,
+    onState: (next) => {
+      setDictationState(next);
+      if (!["connecting", "active", "stopping"].includes(next)) {
+        lastWaveformSampleAt = 0;
+        setDictationHistory(Array(WAVEFORM_SAMPLE_COUNT).fill(0));
+      }
+    },
     onPartial: applyTranscript,
     onFinal: applyTranscript,
+    onInputLevel: setInputLevel,
     onCompleted: (completion) => {
+      if (!completion.inputSignalDetected) {
+        setDictatedRange(null);
+        setDictationError("No microphone signal detected. Check Voice → Microphone and Chrome site settings.");
+        return;
+      }
       if (completion.text) applyTranscript(completion.text);
       if (!dictationCancelled && shouldAutoSend({ enabled: props.voiceSettings.autoSend, ...completion }) && completion.text.trim()) {
         setDictatedRange(null);
@@ -123,11 +148,16 @@ export function Composer(props: {
       }
     },
     onError: (error) => setDictationError(error.message),
+  }, {
+    getInputDeviceId: () => props.voiceSettings.inputDeviceId,
   });
 
   const startDictation = () => {
     if (dictating()) return;
     dictationCancelled = false;
+    latestInputLevel = 0;
+    lastWaveformSampleAt = 0;
+    setDictationHistory(Array(WAVEFORM_SAMPLE_COUNT).fill(0));
     setDictationError("");
     setDictatedRange(beginDictatedRange(props.chat.draft(), input.selectionStart ?? props.chat.draft().length));
     voiceClient.start();
@@ -172,23 +202,28 @@ export function Composer(props: {
       if (event.repeat || event.defaultPrevented || document.querySelector('.settings-dialog[data-state="open"]')) return;
       if (!matchesShortcut(event, props.voiceSettings.shortcut)) return;
       event.preventDefault();
+      event.stopPropagation();
+      event.stopImmediatePropagation();
       pushToTalkActive = true;
       startDictation();
     };
     const voiceKeyUp = (event: KeyboardEvent) => {
       if (!pushToTalkActive || !releasesShortcut(event, props.voiceSettings.shortcut)) return;
       event.preventDefault();
+      event.stopPropagation();
+      event.stopImmediatePropagation();
       pushToTalkActive = false;
       voiceClient.stop();
     };
     const voiceToggle = () => toggleDictation();
-    window.addEventListener("keydown", voiceKeyDown);
-    window.addEventListener("keyup", voiceKeyUp);
+    window.addEventListener("keydown", voiceKeyDown, true);
+    window.addEventListener("keyup", voiceKeyUp, true);
     window.addEventListener("conduit:toggle-dictation", voiceToggle);
     onCleanup(() => {
-      window.removeEventListener("keydown", voiceKeyDown);
-      window.removeEventListener("keyup", voiceKeyUp);
+      window.removeEventListener("keydown", voiceKeyDown, true);
+      window.removeEventListener("keyup", voiceKeyUp, true);
       window.removeEventListener("conduit:toggle-dictation", voiceToggle);
+      if (waveformFrame !== null) window.cancelAnimationFrame(waveformFrame);
       voiceClient.dispose();
     });
   });
@@ -200,7 +235,6 @@ export function Composer(props: {
     </Show>
     <div class="composer">
       <div class="composer-input-shell">
-        <div ref={highlightLayer} class="composer-highlight-layer" aria-hidden="true"><Show when={highlight()}>{(parts) => <><span>{parts().before}</span><mark>{parts().dictated}</mark><span>{parts().after || "\u200b"}</span></>}</Show></div>
         <textarea
           ref={input}
           aria-label="Message Pi"
@@ -211,7 +245,6 @@ export function Composer(props: {
           disabled={!props.serverOnline}
           onInput={(event) => change(event.currentTarget.value)}
           onKeyDown={keydown}
-          onScroll={syncHighlightScroll}
         />
       </div>
       <Show when={slashOpen()}>
@@ -259,6 +292,11 @@ export function Composer(props: {
     </div>
     <Show when={dictationError()}><div class="composer-dictation-error" role="alert"><TriangleAlertIcon />{dictationError()}</div></Show>
     <div class="agent-activity composer-status" role="status" aria-live="polite">
+      <Show when={dictating()}>
+        <span class="composer-status-waveform" data-state={dictationState()} role="img" aria-label={dictationState() === "connecting" ? "Connecting microphone" : "Microphone input level"}>
+          <For each={waveformBars()}>{(height) => <span style={{ height }} />}</For>
+        </span>
+      </Show>
       <span class="composer-status-state">
         <Show when={dictationLabel()} fallback={<><Show when={SPINNING_ACTIVITY.has(activity()?.kind || "")}><Spinner /></Show><Show when={["request_failed", "runtime_failed"].includes(activity()?.kind || "")}><TriangleAlertIcon aria-hidden="true" /></Show>{activity()?.label || "Ready"}</>}>{dictationLabel()}</Show>
       </span>

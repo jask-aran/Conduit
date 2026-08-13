@@ -5,22 +5,10 @@ import net from "node:net";
 import path from "node:path";
 import { Readable, Transform } from "node:stream";
 import { pipeline as streamPipeline } from "node:stream/promises";
+import { getVoiceModelManifest, ONNXRUNTIME_VERSION } from "./voice-model-manifests.js";
 
-const PARAKEET_VERSION = "v0.8.0";
-const ONNXRUNTIME_VERSION = "1.25.1";
-const PARAKEET_MODEL_REVISION = "8f23f0c03c8761650bdb5b40aaf3e40d2c15f1ce";
 const MIB = 1024 * 1024;
-const PARAKEET_FILES = ["config.json", "vocab.txt", "nemo128.onnx", "encoder-model.int8.onnx", "decoder_joint-model.int8.onnx"];
-const WHISPER_FILES = [
-  "added_tokens.json", "config.json", "generation_config.json", "merges.txt", "normalizer.json", "preprocessor_config.json",
-  "special_tokens_map.json", "tokenizer.json", "tokenizer_config.json", "vocab.json",
-  "onnx/encoder_model_quantized.onnx", "onnx/decoder_model_merged_quantized.onnx",
-];
-const PARAKEET_SHA256 = Object.freeze({
-  x64: "1a0d435056272a49fbf41e1f6b62d1e1204c7fa62d1d9d90f6a645e079389d70",
-  arm64: "3fae4c85adbbc6cb1ad7f89ab30a0570c3d4804f1b6540f0ac7ce6097a517861",
-});
-const SILERO_SHA256 = "1a153a22f4509e292a94e67d6f9b85e8deb25b4988682b7e174c65279d8788e3";
+const PARAKEET_MODEL_REVISION = "8f23f0c03c8761650bdb5b40aaf3e40d2c15f1ce";
 
 export const LOCAL_VOICE_MODELS = Object.freeze([
   {
@@ -61,10 +49,6 @@ function requiredModel(modelId) {
   return model;
 }
 
-function shaFromDigest(value) {
-  return String(value || "").match(/^sha256:([a-f0-9]{64})$/i)?.[1]?.toLowerCase() || null;
-}
-
 async function availablePort() {
   return new Promise((resolve, reject) => {
     const server = net.createServer();
@@ -97,61 +81,7 @@ function architecture() {
   throw modelError("voice_model_platform", `Managed local voice models do not support ${process.arch}`, 409);
 }
 
-async function jsonResponse(fetchImpl, url, signal) {
-  const response = await fetchImpl(url, { signal, headers: { Accept: "application/json" } });
-  if (!response.ok) throw modelError("voice_model_download_failed", `Could not read package metadata (${response.status})`, 502);
-  return response.json();
-}
-
-async function parakeetManifest(fetchImpl, signal) {
-  const arch = architecture();
-  const [runtimeRelease, modelMetadata] = await Promise.all([
-    jsonResponse(fetchImpl, `https://api.github.com/repos/microsoft/onnxruntime/releases/tags/v${ONNXRUNTIME_VERSION}`, signal),
-    jsonResponse(fetchImpl, `https://huggingface.co/api/models/istupakov/parakeet-tdt-0.6b-v3-onnx/revision/${PARAKEET_MODEL_REVISION}?blobs=true`, signal),
-  ]);
-  const runtimeName = `onnxruntime-linux-${arch.runtime}-${ONNXRUNTIME_VERSION}.tgz`;
-  const runtimeAsset = runtimeRelease.assets?.find((asset) => asset.name === runtimeName);
-  const runtimeSha = shaFromDigest(runtimeAsset?.digest);
-  if (!runtimeAsset?.browser_download_url || !runtimeSha) throw modelError("voice_model_manifest_invalid", `ONNX Runtime ${ONNXRUNTIME_VERSION} does not publish a verifiable ${arch.runtime} package`, 502);
-  const siblingByName = new Map((modelMetadata.siblings || []).map((item) => [item.rfilename, item]));
-  const models = PARAKEET_FILES.map((name) => {
-    const metadata = siblingByName.get(name);
-    const sha256 = metadata?.lfs?.sha256 || metadata?.lfs?.oid?.replace(/^sha256:/, "") || null;
-    if (name.endsWith(".int8.onnx") && !sha256) throw modelError("voice_model_manifest_invalid", `The pinned model revision does not publish a checksum for ${name}`, 502);
-    return { name, relative: `models/${name}`, url: `https://huggingface.co/istupakov/parakeet-tdt-0.6b-v3-onnx/resolve/${PARAKEET_MODEL_REVISION}/${name}`, sha256, gitBlob: metadata?.blobId || null, size: Number(metadata?.lfs?.size || metadata?.size || 0) };
-  });
-  return {
-    version: PARAKEET_VERSION, modelRevision: PARAKEET_MODEL_REVISION, extractRuntime: true,
-    artifacts: [
-      { name: `parakeet-linux-${arch.release}`, relative: "bin/parakeet", url: `https://github.com/achetronic/parakeet/releases/download/${PARAKEET_VERSION}/parakeet-linux-${arch.release}`, sha256: PARAKEET_SHA256[arch.node], size: 3 * MIB },
-      { name: runtimeName, relative: "runtime.tgz", url: runtimeAsset.browser_download_url, sha256: runtimeSha, size: Number(runtimeAsset.size || 0) },
-      ...models,
-      { name: "silero_vad.onnx", relative: "models/silero_vad.onnx", url: "https://github.com/snakers4/silero-vad/raw/v6.2.1/src/silero_vad/data/silero_vad.onnx", sha256: SILERO_SHA256, size: 2 * MIB },
-    ],
-  };
-}
-
-async function whisperManifest(model, fetchImpl, signal) {
-  const metadata = await jsonResponse(fetchImpl, `https://huggingface.co/api/models/${model.repository}/revision/${model.revision}?blobs=true`, signal);
-  if (metadata.sha !== model.revision) throw modelError("voice_model_manifest_invalid", `Pinned metadata for ${model.label} did not resolve to the expected revision`, 502);
-  const siblingByName = new Map((metadata.siblings || []).map((item) => [item.rfilename, item]));
-  const artifacts = WHISPER_FILES.map((name) => {
-    const item = siblingByName.get(name);
-    if (!item) throw modelError("voice_model_manifest_invalid", `The pinned ${model.label} package is missing ${name}`, 502);
-    const sha256 = item.lfs?.sha256 || item.lfs?.oid?.replace(/^sha256:/, "") || null;
-    const gitBlob = item.blobId || null;
-    if (!sha256 && !gitBlob) throw modelError("voice_model_manifest_invalid", `The pinned ${model.label} package does not publish a checksum for ${name}`, 502);
-    return {
-      name, relative: name, size: Number(item.lfs?.size || item.size || 0), sha256, gitBlob,
-      url: `https://huggingface.co/${model.repository}/resolve/${model.revision}/${name}`,
-    };
-  });
-  return { version: "transformers.js-3.8.1", modelRevision: model.revision, artifacts };
-}
-
-async function packageManifest(model, fetchImpl, signal) {
-  return model.engine === "parakeet" ? parakeetManifest(fetchImpl, signal) : whisperManifest(model, fetchImpl, signal);
-}
+function packageManifest(model) { return getVoiceModelManifest(model, architecture()); }
 
 async function digestFile(filePath, algorithm = "sha256", size = 0) {
   const hash = crypto.createHash(algorithm);
