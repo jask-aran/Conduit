@@ -35,6 +35,11 @@ const templates = [{
 
 const newChatId = "550e8400-e29b-41d4-a716-446655440099";
 
+async function openApp(page) {
+  await page.goto("/");
+  await expect(page.getByRole("textbox", { name: "Message Pi" })).toBeVisible();
+}
+
 async function openSidebar(page, testInfo) {
   if (testInfo.project.name === "mobile-chromium") {
     await page.locator(".mobile-sidebar-trigger").click();
@@ -159,7 +164,7 @@ test.beforeEach(async ({ page }) => {
 });
 
 test("acceptance: header launchers distinguish chat search from the command palette", async ({ page }, testInfo) => {
-  await page.goto("/");
+  await openApp(page);
   const searchTrigger = page.locator(".search-trigger");
   const paletteTrigger = page.locator(".palette-trigger");
   await expect(searchTrigger).toBeVisible();
@@ -200,7 +205,7 @@ test("acceptance: header launchers distinguish chat search from the command pale
 test("acceptance: tall narrow command and chat palettes fill the inset mobile frame", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "desktop-chromium", "exact 523px responsive boundary");
   await page.setViewportSize({ width: 523, height: 1100 });
-  await page.goto("/");
+  await openApp(page);
   await page.locator(".palette-trigger").click();
   const palette = page.getByRole("dialog", { name: "Command Palette" });
   await expectInsetPalette(page, palette);
@@ -211,7 +216,7 @@ test("acceptance: tall narrow command and chat palettes fill the inset mobile fr
 
 test("acceptance: mobile chat edit footer stays bounded and supports touch actions", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "mobile-chromium", "touch palette actions");
-  await page.goto("/");
+  await openApp(page);
   await page.locator(".palette-trigger").tap();
   const palette = page.getByRole("dialog", { name: "Command Palette" });
   await palette.getByRole("option", { name: /^Search chats/ }).tap();
@@ -252,7 +257,7 @@ test("acceptance: mobile chat edit footer stays bounded and supports touch actio
 
 test("acceptance: mobile sidebar is a full-bleed exclusive overlay", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "mobile-chromium", "phone overlay chrome");
-  await page.goto("/");
+  await openApp(page);
   await page.locator(".mobile-sidebar-trigger").click();
   const sidebar = page.locator(".conduit-sidebar");
   const opening = await sampleTranslateX(page, ".conduit-sidebar");
@@ -272,7 +277,7 @@ test("acceptance: mobile sidebar is a full-bleed exclusive overlay", async ({ pa
 
 test("acceptance: mobile workspace is full-bleed and closes via panel X only", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "mobile-chromium", "phone overlay chrome");
-  await page.goto("/");
+  await openApp(page);
   await page.getByRole("button", { name: "Toggle workspace panel" }).click();
   const panel = page.getByRole("complementary", { name: "Workspace panel" });
   const opening = await sampleTranslateX(page, ".workspace-panel");
@@ -293,7 +298,7 @@ test("acceptance: mobile workspace is full-bleed and closes via panel X only", a
 
 test("acceptance: long-press sidebar chat opens a viewport-bounded menu without navigating", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "mobile-chromium", "touch long-press");
-  await page.goto("/");
+  await openApp(page);
   await openSidebar(page, testInfo);
   const chat = page.getByRole("button", { name: "Existing chat" });
   await expect(chat).toBeVisible();
@@ -321,7 +326,7 @@ test("acceptance: long-press sidebar chat opens a viewport-bounded menu without 
 
 test("acceptance: desktop keeps a docked sidebar and resizable workspace panel", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "desktop-chromium", "desktop layout");
-  await page.goto("/");
+  await openApp(page);
   const sidebar = page.locator('[data-slot="sidebar"]');
   await expect(sidebar).toHaveAttribute("data-state", "expanded");
   await expect(sidebar).not.toHaveCSS("position", "fixed");

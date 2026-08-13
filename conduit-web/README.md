@@ -220,15 +220,17 @@ The composer also supports draft-only voice dictation. The on-screen microphone
 is a start/stop toggle and the configurable `Ctrl+Shift+D` shortcut is
 push-to-talk. The shortcut is captured before page controls so Chrome does not
 consume the default chord as a bookmark command. Microphone capture starts in
-parallel with the voice connection, and the composer shows a live input-level
-waveform while it listens. The browser captures 16 kHz mono PCM with an
-`AudioWorklet` and sends it only to authenticated `WS /v0/dictation/stream`.
-Settings → Voice can select a browser
-microphone, refresh the device list, and run an input-level test before using
-dictation. Chrome site settings still control permission and the selected input
-must be available there. Conduit rejects a completed transcript when the
-capture stream reports no signal, which prevents silence from becoming a short
-hallucinated word. Settings → Voice can use managed
+parallel with the voice connection. The composer keeps a compact 24-bar,
+left-to-right history in the status line. Settings → Voice uses the same
+bounded bar renderer in a larger monitor with current level, peak hold, and
+recording state. The browser captures 16 kHz mono PCM with an `AudioWorklet`
+and sends it only to authenticated `WS /v0/dictation/stream`. Settings → Voice
+can select a browser microphone, refresh the device list, and run an in-memory
+input-level test until the user stops it; a 60-second safety cap prevents an
+abandoned test from running forever. Chrome site settings still control
+permission and the selected input must be available there. Conduit rejects a
+completed transcript when the capture stream reports no signal, which prevents
+silence from becoming a short hallucinated word. Settings → Voice can use managed
 Whisper Tiny English, Whisper Base, Whisper Small, or Parakeet TDT 0.6B v3,
 and has first-class provider/model profiles for OpenAI, Deepgram, and Groq.
 Remote None, Bearer, and custom API-key-header credentials are stored server-side in `data/voice.json`
@@ -491,8 +493,9 @@ clients must never infer auto-send timing from browser clocks.
 
 The browser keeps the selected microphone ID in local settings and applies it
 as an exact `getUserMedia` device constraint. The input test measures the live
-stream for a short interval. A missing signal is reported in Settings → Voice
-and blocks transcript insertion for that utterance.
+stream until the user stops it, with a 60-second safety cap. A missing signal is
+reported in Settings → Voice and blocks transcript insertion for that
+utterance.
 
 The server limits concurrent dictation sessions, audio duration and bytes,
 frame/event sizes, WebSocket buffering, connect time, and finalisation time.

@@ -62,31 +62,21 @@ Make local voice dictation reliable and easy to understand:
 - Added browser coverage for selection bounds, one-key deletion, and capture
   cleanup.
 
+### Shared waveform renderer and live microphone test
+
+- Generalized the status-line bar waveform into the shared `VoiceWaveform`
+  renderer with a configurable bar count and a bounded animation-frame sampling
+  controller.
+- Kept the composer at a compact 24-bar, left-to-right status-line history.
+- Reused the same bars in the larger Settings → Voice monitor with current
+  level, peak hold, and connecting/listening/stopped states.
+- Changed the Settings microphone test to run until the user presses Stop, with
+  a 60-second safety cap. The test remains in memory and does not upload audio.
+- Added reduced-motion rules and browser coverage for both waveform surfaces.
+
 ## Remaining build scope
 
-### 1. Widen the recorder monitor
-
-Replace the narrow status-line waveform with a full-width recorder monitor in
-the composer, between the text area and the action row. Reuse the same monitor
-in Settings → Voice so both surfaces use the same visual language. The narrow
-history remains the fallback status indicator.
-
-The monitor must show:
-
-- a left-to-right amplitude history, not only the latest level;
-- a visible quiet section before speech starts, so the user can see that
-  recording began before they spoke;
-- current gain or RMS level;
-- a peak-hold marker with a short decay or reset;
-- a clear connecting, listening, and stopped state;
-- a text label and accessible name for keyboard and screen-reader users.
-
-Keep the history bounded to a fixed number of samples. Update the display at
-animation-frame cadence, not once per audio worklet message. Respect reduced
-motion by removing transitions and pulse animation while retaining the live
-level and history.
-
-### 2. Add shortcut activation behaviour
+### 1. Add shortcut activation behaviour
 
 Add a persisted Voice → Activation behaviour setting with two values:
 
@@ -103,14 +93,10 @@ shortcut or unrelated voice options.
 Test both modes, including key repeat, modifier release, repeated toggle
 presses, settings reload, and the settings shortcut recorder.
 
-### 3. Make the microphone test a live recorder
+### 2. Add local microphone test playback
 
-Change the current fixed result-only test into an interactive in-memory test:
+Extend the interactive in-memory test with local playback:
 
-- start level sampling immediately when the user presses Test microphone;
-- show the shared time-series monitor while the test runs;
-- show current RMS or gain and peak hold;
-- allow the user to stop the test explicitly, with a safe maximum duration;
 - capture the test audio with `MediaRecorder` when the browser supports it;
 - show Play and Stop playback controls after capture;
 - keep the recording in browser memory only and revoke replaced object URLs;

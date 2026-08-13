@@ -1,5 +1,11 @@
 import { defineConfig, devices } from "@playwright/test";
 
+const reuseExistingServer = process.env.PLAYWRIGHT_REUSE_SERVER === "1"
+  ? true
+  : process.env.PLAYWRIGHT_REUSE_SERVER === "0"
+    ? false
+    : !process.env.CI;
+
 export default defineConfig({
   testDir: "./test/browser",
   timeout: 45_000,
@@ -24,6 +30,6 @@ export default defineConfig({
   webServer: {
     command: "npx vite --host 127.0.0.1 --port 4173",
     url: "http://127.0.0.1:4173",
-    reuseExistingServer: !process.env.CI,
+    reuseExistingServer,
   },
 });
