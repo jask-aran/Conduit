@@ -1,4 +1,4 @@
-import { createEffect, createMemo, createSignal, For, Show } from "solid-js";
+import { createEffect, createMemo, createSignal, For, onCleanup, Show } from "solid-js";
 import type { JSX } from "solid-js";
 import * as KAlertDialog from "@kobalte/core/alert-dialog";
 import * as KDialog from "@kobalte/core/dialog";
@@ -19,6 +19,7 @@ import {
   parseChatQuery, removeChatQueryFilter, resolveChatQueryScope, serializeChatQuery,
 } from "../palette/chat-query";
 import type { ChatQueryFilter } from "../palette/chat-query";
+import type { ShortcutManager } from "../shortcuts/shortcut-manager";
 import { CommandHintBar } from "./command-hint-bar";
 import type { CommandHintContext, CommandHintMode } from "./command-hint-bar";
 
@@ -104,6 +105,7 @@ export function CommandMenu(props: {
   models: ModelOption[];
   currentModel: string;
   onChooseModel: (spec: string) => void;
+  shortcuts: ShortcutManager;
   onPageChange?: (page: string | null) => void;
   details?: JSX.Element;
 }) {
@@ -118,6 +120,7 @@ export function CommandMenu(props: {
   const [actionPrefix, setActionPrefix] = createSignal(false);
   const [pendingDelete, setPendingDelete] = createSignal<ChatTarget[] | null>(null);
   const [deleteChoice, setDeleteChoice] = createSignal<"cancel" | "confirm">("cancel");
+  const [shortcutRevision, setShortcutRevision] = createSignal(0);
   let input!: HTMLInputElement;
   let listbox!: HTMLDivElement;
   let renameInput!: HTMLInputElement;
@@ -128,6 +131,8 @@ export function CommandMenu(props: {
   let lastLaunchNonce: number | undefined;
   let directMode = false;
 
+  onCleanup(props.shortcuts.subscribe(() => setShortcutRevision((value) => value + 1)));
+
   const focusInput = () => {
     queueMicrotask(() => {
       input?.focus();
@@ -136,6 +141,10 @@ export function CommandMenu(props: {
   };
 
   const pageMeta = createMemo(() => (page() ? PALETTE_PAGES[page()!] : null));
+  const commandShortcut = (command: PaletteCommand) => {
+    shortcutRevision();
+    return props.shortcuts.formatEffectiveBinding(command.id) || command.shortcut || null;
+  };
   const parsedQuery = createMemo(() => parseChatQuery(query()));
   const searching = createMemo(() => Boolean(parsedQuery().text));
   const chatPage = createMemo(() => page() === "chat-search");
@@ -565,7 +574,7 @@ export function CommandMenu(props: {
         <Show when={editing()}><small>Enter to save · Escape to cancel</small></Show>
       </span>
       <Show when={command.kind === "page"}><ChevronRightIcon class="command-chevron" /></Show>
-      <Show when={command.shortcut}><kbd class="command-shortcut">{command.shortcut}</kbd></Show>
+      <Show when={commandShortcut(command)}>{(shortcut) => <kbd class="command-shortcut">{shortcut()}</kbd>}</Show>
     </div>;
   };
 

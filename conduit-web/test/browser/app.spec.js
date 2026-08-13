@@ -1088,6 +1088,9 @@ test("the terminal renderer can use the xterm baseline over the same PTY transpo
   const canvas = page.locator(".terminal-canvas");
   await expect(canvas).toHaveAttribute("data-terminal-renderer", "xterm");
   await expect(canvas.locator(".xterm")).toBeVisible();
+  await canvas.click();
+  await page.keyboard.press(process.platform === "darwin" ? "Meta+K" : "Control+K");
+  await expect(page.getByRole("dialog", { name: "Command Palette" })).toHaveCount(0);
 });
 
 test("the terminal renderer can use Ghostty over the same PTY transport", async ({ page }) => {
