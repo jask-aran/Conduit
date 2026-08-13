@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createAsrNormalizer } from "../src/server/dictation-stream.js";
+import { createParakeetNormalizer } from "../src/server/dictation-stream.js";
 import {
   beginDictatedRange,
   loadVoiceDictationSettings,
@@ -21,7 +21,7 @@ test("dictation draft replacement preserves manual text and replaces provisional
 });
 
 test("Parakeet events normalize deltas, cumulative partials, finals, and errors", () => {
-  const normalizer = createAsrNormalizer();
+  const normalizer = createParakeetNormalizer();
   assert.deepEqual(normalizer.normalize(JSON.stringify({ type: "transcript.text.delta", delta: "hel" })), [{ type: "partial", text: "hel" }]);
   assert.deepEqual(normalizer.normalize(JSON.stringify({ type: "transcript.text.delta", delta: "lo" })), [{ type: "partial", text: "hello" }]);
   assert.deepEqual(normalizer.normalize(JSON.stringify({ type: "transcript.text.done", text: "hello" })), [{ type: "final", text: "hello" }]);
@@ -50,7 +50,16 @@ test("voice settings remain draft-only by default and auto-send only a timely fi
   assert.deepEqual(loadVoiceDictationSettings(storage), { shortcut: "Super+D", autoSend: false });
   assert.deepEqual(saveVoiceDictationSettings({ shortcut: "Ctrl+Shift+V", autoSend: true }, storage), { shortcut: "Ctrl+Shift+V", autoSend: true });
   assert.deepEqual(loadVoiceDictationSettings(storage), { shortcut: "Ctrl+Shift+V", autoSend: true });
-  assert.equal(shouldAutoSend({ enabled: true, final: true, stoppedAt: 10, completedAt: 1_010 }), true);
-  assert.equal(shouldAutoSend({ enabled: true, final: false, stoppedAt: 10, completedAt: 20 }), false);
-  assert.equal(shouldAutoSend({ enabled: true, final: true, stoppedAt: 10, completedAt: 1_011 }), false);
+  assert.equal(shouldAutoSend({ enabled: true, final: true, finalWithinDeadline: true }), true);
+  assert.equal(shouldAutoSend({ enabled: true, final: false, finalWithinDeadline: true }), false);
+  assert.equal(shouldAutoSend({ enabled: true, final: true, finalWithinDeadline: false }), false);
+});
+
+test("dictation adds word-boundary spacing once when inserted at a tight cursor", () => {
+  const partial = replaceDictatedRange("askplease", beginDictatedRange("askplease", 3), "Con");
+  assert.deepEqual(partial, { text: "ask Con please", range: { start: 3, end: 8 } });
+  assert.deepEqual(replaceDictatedRange(partial.text, partial.range, "Conduit"), {
+    text: "ask Conduit please",
+    range: { start: 3, end: 12 },
+  });
 });

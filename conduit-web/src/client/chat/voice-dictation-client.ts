@@ -3,8 +3,8 @@ export type VoiceDictationState = "idle" | "connecting" | "active" | "stopping" 
 interface Completion {
   text: string;
   final: boolean;
-  stoppedAt: number;
-  completedAt: number;
+  finalWithinDeadline: boolean;
+  settlementMs: number | null;
 }
 
 interface VoiceDictationCallbacks {
@@ -15,25 +15,46 @@ interface VoiceDictationCallbacks {
   onError: (error: Error) => void;
 }
 
+const MAX_SOCKET_BUFFER_BYTES = 1024 * 1024;
+
 function socketUrl() {
   const protocol = location.protocol === "https:" ? "wss:" : "ws:";
   return `${protocol}//${location.host}/v0/dictation/stream`;
 }
 
-export function downsampleToPcm16(input: Float32Array, inputRate: number, outputRate = 16_000) {
-  if (outputRate > inputRate) throw new Error("The microphone sample rate is below 16 kHz");
-  const ratio = inputRate / outputRate;
-  const length = Math.max(1, Math.floor(input.length / ratio));
-  const output = new Int16Array(length);
-  for (let index = 0; index < length; index += 1) {
-    const start = Math.floor(index * ratio);
-    const end = Math.max(start + 1, Math.min(input.length, Math.floor((index + 1) * ratio)));
-    let sum = 0;
-    for (let cursor = start; cursor < end; cursor += 1) sum += input[cursor] || 0;
-    const sample = Math.max(-1, Math.min(1, sum / (end - start)));
-    output[index] = sample < 0 ? sample * 0x8000 : sample * 0x7fff;
+export class Pcm16Resampler {
+  private pending = new Float32Array(0);
+  private position = 0;
+  private readonly ratio: number;
+
+  constructor(inputRate: number, outputRate = 16_000) {
+    if (outputRate > inputRate) throw new Error("The microphone sample rate is below 16 kHz");
+    this.ratio = inputRate / outputRate;
   }
-  return output;
+
+  push(input: Float32Array) {
+    const combined = new Float32Array(this.pending.length + input.length);
+    combined.set(this.pending);
+    combined.set(input, this.pending.length);
+    const values: number[] = [];
+    while (this.position + this.ratio <= combined.length) {
+      const start = Math.floor(this.position);
+      const end = Math.max(start + 1, Math.min(combined.length, Math.floor(this.position + this.ratio)));
+      let sum = 0;
+      for (let index = start; index < end; index += 1) sum += combined[index] || 0;
+      const sample = Math.max(-1, Math.min(1, sum / (end - start)));
+      values.push(sample < 0 ? sample * 0x8000 : sample * 0x7fff);
+      this.position += this.ratio;
+    }
+    const consumed = Math.floor(this.position);
+    this.pending = combined.slice(consumed);
+    this.position -= consumed;
+    return Int16Array.from(values);
+  }
+}
+
+export function downsampleToPcm16(input: Float32Array, inputRate: number, outputRate = 16_000) {
+  return new Pcm16Resampler(inputRate, outputRate).push(input);
 }
 
 export function createVoiceDictationClient(callbacks: VoiceDictationCallbacks) {
@@ -42,11 +63,10 @@ export function createVoiceDictationClient(callbacks: VoiceDictationCallbacks) {
   let stream: MediaStream | null = null;
   let audioContext: AudioContext | null = null;
   let source: MediaStreamAudioSourceNode | null = null;
-  let processor: ScriptProcessorNode | null = null;
+  let processor: AudioWorkletNode | null = null;
   let silentGain: GainNode | null = null;
   let permission: Promise<MediaStream> | null = null;
   let explicitlyClosed = false;
-  let stoppedAt = 0;
   let fallbackTimer: number | null = null;
   let stopRequested = false;
 
@@ -55,8 +75,19 @@ export function createVoiceDictationClient(callbacks: VoiceDictationCallbacks) {
     callbacks.onState(next);
   };
 
+  const resumeContext = () => {
+    if (audioContext?.state === "suspended") void audioContext.resume().catch(() => {});
+  };
+
+  const removeResumeListeners = () => {
+    document.removeEventListener("visibilitychange", resumeContext);
+    window.removeEventListener("pointerdown", resumeContext, true);
+    window.removeEventListener("touchend", resumeContext, true);
+  };
+
   const stopCapture = () => {
-    if (processor) processor.onaudioprocess = null;
+    removeResumeListeners();
+    if (processor) processor.port.onmessage = null;
     source?.disconnect();
     processor?.disconnect();
     silentGain?.disconnect();
@@ -86,20 +117,34 @@ export function createVoiceDictationClient(callbacks: VoiceDictationCallbacks) {
     callbacks.onError(error);
   };
 
+  const sendAudio = (buffer: ArrayBuffer) => {
+    if (state !== "active" || socket?.readyState !== WebSocket.OPEN) return;
+    if (socket.bufferedAmount > MAX_SOCKET_BUFFER_BYTES) {
+      fail(new Error("The server is not accepting microphone audio quickly enough"));
+      return;
+    }
+    socket.send(buffer);
+  };
+
   const startCapture = async () => {
     if (stopRequested || state !== "connecting") return;
     stream = await permission!;
     if (!audioContext || !socket || socket.readyState !== WebSocket.OPEN) return stopCapture();
+    if (!audioContext.audioWorklet || typeof AudioWorkletNode === "undefined") {
+      throw new Error("This browser does not support AudioWorklet voice capture");
+    }
+    await audioContext.audioWorklet.addModule("/voice-capture-worklet.js");
     await audioContext.resume();
     source = audioContext.createMediaStreamSource(stream);
-    processor = audioContext.createScriptProcessor(4096, 1, 1);
+    processor = new AudioWorkletNode(audioContext, "conduit-voice-capture", { numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [1] });
     silentGain = audioContext.createGain();
     silentGain.gain.value = 0;
-    processor.onaudioprocess = (event) => {
-      if (state !== "active" || socket?.readyState !== WebSocket.OPEN) return;
-      const pcm = downsampleToPcm16(event.inputBuffer.getChannelData(0), audioContext!.sampleRate);
-      socket.send(pcm.buffer);
-    };
+    processor.port.onmessage = (event: MessageEvent<ArrayBuffer>) => sendAudio(event.data);
+    processor.onprocessorerror = () => fail(new Error("Microphone audio processing failed"));
+    audioContext.onstatechange = resumeContext;
+    document.addEventListener("visibilitychange", resumeContext);
+    window.addEventListener("pointerdown", resumeContext, true);
+    window.addEventListener("touchend", resumeContext, true);
     source.connect(processor);
     processor.connect(silentGain);
     silentGain.connect(audioContext.destination);
@@ -109,18 +154,16 @@ export function createVoiceDictationClient(callbacks: VoiceDictationCallbacks) {
   const stop = () => {
     if (!["connecting", "active"].includes(state)) return;
     stopRequested = true;
-    stoppedAt = performance.now();
     stopCapture();
     setState("stopping");
     if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ type: "stop" }));
-    fallbackTimer = window.setTimeout(() => fail(new Error("Dictation finalisation timed out")), 1_150);
+    fallbackTimer = window.setTimeout(() => fail(new Error("Dictation finalisation timed out")), 16_000);
   };
 
   const start = () => {
     if (["connecting", "active", "stopping"].includes(state)) return;
     explicitlyClosed = false;
     stopRequested = false;
-    stoppedAt = 0;
     const AudioContextConstructor = window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
     if (!navigator.mediaDevices?.getUserMedia || !AudioContextConstructor) {
       fail(new Error("Voice capture is not supported by this browser"));
@@ -139,16 +182,19 @@ export function createVoiceDictationClient(callbacks: VoiceDictationCallbacks) {
           if (message.type === "ready") {
             if (stopRequested) socket?.send(JSON.stringify({ type: "stop" }));
             else void startCapture().catch(fail);
-          }
-          else if (message.type === "partial") callbacks.onPartial(String(message.text || ""));
+          } else if (message.type === "partial") callbacks.onPartial(String(message.text || ""));
           else if (message.type === "final") callbacks.onFinal(String(message.text || ""));
           else if (message.type === "end_of_speech") stop();
           else if (message.type === "completed") {
             stopCapture();
             if (fallbackTimer !== null) window.clearTimeout(fallbackTimer);
-            const completedAt = performance.now();
             setState("completed");
-            callbacks.onCompleted({ text: String(message.text || ""), final: message.final === true, stoppedAt: stoppedAt || completedAt, completedAt });
+            callbacks.onCompleted({
+              text: String(message.text || ""),
+              final: message.final === true,
+              finalWithinDeadline: message.finalWithinDeadline === true,
+              settlementMs: Number.isFinite(message.settlementMs) ? Number(message.settlementMs) : null,
+            });
             closeSocket();
           } else if (message.type === "error") fail(new Error(String(message.message || "Voice dictation failed")));
         } catch (error) { fail(error); }

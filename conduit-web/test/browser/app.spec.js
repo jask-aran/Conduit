@@ -4180,3 +4180,105 @@ test("project chevron expands independently and project name navigates", async (
     await expect(page.locator(".conduit-sidebar")).toHaveAttribute("data-mobile-open", "false");
   }
 });
+
+test("voice dictation replaces provisional text, preserves surrounding draft, and clears its highlight on manual edit", async ({ page }) => {
+  await page.addInitScript(() => {
+    class VoiceWebSocket extends EventTarget {
+      static OPEN = 1;
+      static CLOSING = 2;
+      constructor(url) {
+        super();
+        this.url = String(url);
+        this.readyState = 0;
+        this.bufferedAmount = 0;
+        queueMicrotask(() => {
+          this.readyState = VoiceWebSocket.OPEN;
+          this.dispatchEvent(new Event("open"));
+          if (this.url.includes("/v0/dictation/stream")) {
+            this.onmessage?.({ data: JSON.stringify({ type: "ready", sampleRate: 16000, encoding: "pcm_s16le" }) });
+            setTimeout(() => this.onmessage?.({ data: JSON.stringify({ type: "partial", text: "Con" }) }), 30);
+          }
+        });
+      }
+      send(payload) {
+        if (!this.url.includes("/v0/dictation/stream") || typeof payload !== "string") return;
+        if (JSON.parse(payload).type !== "stop") return;
+        setTimeout(() => {
+          this.onmessage?.({ data: JSON.stringify({ type: "final", text: "Conduit" }) });
+          this.onmessage?.({ data: JSON.stringify({ type: "completed", text: "Conduit", final: true, finalWithinDeadline: true, settlementMs: 24 }) });
+        }, 20);
+      }
+      close() { this.readyState = 3; this.dispatchEvent(new Event("close")); }
+    }
+    class MockAudioWorkletNode {
+      constructor() { this.port = { onmessage: null }; this.onprocessorerror = null; }
+      connect() {}
+      disconnect() {}
+    }
+    class MockAudioContext {
+      constructor() { this.state = "running"; this.sampleRate = 48000; this.destination = {}; this.audioWorklet = { addModule: async () => {} }; this.onstatechange = null; }
+      resume() { this.state = "running"; return Promise.resolve(); }
+      close() { this.state = "closed"; return Promise.resolve(); }
+      createMediaStreamSource() { return { connect() {}, disconnect() {} }; }
+      createGain() { return { gain: { value: 1 }, connect() {}, disconnect() {} }; }
+    }
+    Object.defineProperty(window, "WebSocket", { configurable: true, value: VoiceWebSocket });
+    Object.defineProperty(window, "AudioContext", { configurable: true, value: MockAudioContext });
+    Object.defineProperty(window, "AudioWorkletNode", { configurable: true, value: MockAudioWorkletNode });
+    Object.defineProperty(navigator, "mediaDevices", { configurable: true, value: { getUserMedia: async () => ({ getTracks: () => [{ stop() {} }] }) } });
+  });
+
+  await page.goto("/");
+  const composer = page.getByRole("textbox", { name: "Message Pi" });
+  await composer.fill("askplease");
+  await composer.evaluate((element) => element.setSelectionRange(3, 3));
+  await page.getByRole("button", { name: "Start voice dictation" }).click();
+  await expect(composer).toHaveValue("ask Con please");
+  await page.getByRole("button", { name: "Stop voice dictation" }).click();
+  await expect(composer).toHaveValue("ask Conduit please");
+  await expect(page.locator(".composer-highlight-layer mark")).toHaveText(" Conduit ");
+  await composer.fill("ask Conduit please!");
+  await expect(page.locator(".composer-highlight-layer mark")).toHaveCount(0);
+});
+
+test("Voice settings store a cloud credential through the redacted server API", async ({ page }) => {
+  let savedRequest = null;
+  const view = {
+    mode: "remote",
+    adapter: "parakeet_pcm_ws_v1",
+    endpoint: "wss://speech.example.com/ws",
+    source: "stored",
+    locked: false,
+    adapters: [
+      { id: "parakeet_pcm_ws_v1", label: "Parakeet live PCM WebSocket", transport: "websocket", description: "Streams signed PCM." },
+      { id: "openai_audio_sse_v1", label: "OpenAI-compatible audio upload", transport: "http", description: "Uploads one utterance." },
+    ],
+    auth: { type: "bearer", headerName: "Authorization", configured: false, source: null, removable: false },
+    local: { state: "not_installed", installed: false, running: false, version: "v0.8.0", modelRevision: "8f23f0c", precision: "int8", approximateBytes: 943718400, license: { id: "CC-BY-4.0", attribution: "NVIDIA Parakeet" }, progress: null, error: null },
+  };
+  await page.route("**/v0/voice/settings", async (route) => {
+    if (route.request().method() === "PUT") {
+      savedRequest = route.request().postDataJSON();
+      view.auth = { ...view.auth, configured: true, source: "stored", removable: true };
+    }
+    await route.fulfill({ json: view });
+  });
+
+  await page.goto("/");
+  await page.keyboard.press("Control+,");
+  const dialog = page.getByRole("dialog", { name: "Settings" });
+  await dialog.getByRole("tab", { name: "Voice" }).click();
+  await dialog.getByLabel("Endpoint URL").fill("wss://cloud.example.net/transcribe");
+  await dialog.getByLabel("Credential").fill("cloud-secret-value");
+  await dialog.getByRole("button", { name: "Save endpoint" }).click();
+  await expect.poll(() => savedRequest).not.toBeNull();
+  expect(savedRequest).toEqual({
+    mode: "remote",
+    adapter: "parakeet_pcm_ws_v1",
+    endpoint: "wss://cloud.example.net/transcribe",
+    auth: { type: "bearer", headerName: "Authorization", secret: "cloud-secret-value" },
+  });
+  await expect(dialog.getByLabel("Credential")).toHaveValue("");
+  await expect(dialog).not.toContainText("cloud-secret-value");
+  await expect(dialog.getByText("Stored securely by Conduit")).toBeVisible();
+});

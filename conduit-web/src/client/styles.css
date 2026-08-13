@@ -324,6 +324,18 @@ svg { stroke-width: 1.5; }
 .dictation-auto-send input { margin-top: 3px; accent-color: var(--primary); }
 .dictation-auto-send span { display: flex; flex-direction: column; gap: 3px; }
 .dictation-auto-send small { color: var(--muted-foreground); }
+.voice-settings { display: grid; gap: 16px; }
+.voice-card { display: grid; gap: 13px; padding: 14px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--card); }
+.voice-card h3, .voice-card p { margin: 0; }
+.voice-card p, .voice-notice { color: var(--muted-foreground); line-height: 1.45; }
+.voice-notice { border-left: 2px solid var(--accent-cool); background: var(--muted); padding: 9px 10px; font-size: 13px; }
+.voice-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.voice-model-status { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.voice-model-status span { color: var(--muted-foreground); font-size: 12px; text-transform: capitalize; }
+.voice-progress { display: grid; gap: 5px; }
+.voice-progress progress { width: 100%; accent-color: var(--primary); }
+.voice-progress small { overflow: hidden; color: var(--muted-foreground); text-overflow: ellipsis; white-space: nowrap; }
+.voice-test-success { margin: 0; color: var(--accent-cool); font-size: 13px; }
 .settings-cards, .installations { display: grid; gap: 10px; margin-top: 18px; }
 .settings-cards article, .installations article, .workspace-settings-card { padding: 14px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--card); }
 .settings-cards h3, .installations h3, .workspace-settings-card h3 { margin: 0; }

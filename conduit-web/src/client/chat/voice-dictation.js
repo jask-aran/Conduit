@@ -88,13 +88,18 @@ export function replaceDictatedRange(text, range, transcript) {
   const source = String(text);
   const start = Math.max(0, Math.min(source.length, range.start));
   const end = Math.max(start, Math.min(source.length, range.end));
-  const inserted = String(transcript || "");
+  const value = String(transcript || "").trim();
+  const before = source.slice(0, start);
+  const after = source.slice(end);
+  const leftSpace = value && /[\p{L}\p{N}]$/u.test(before) && /^[\p{L}\p{N}]/u.test(value) ? " " : "";
+  const rightSpace = value && /[\p{L}\p{N}]$/u.test(value) && /^[\p{L}\p{N}]/u.test(after) ? " " : "";
+  const inserted = `${leftSpace}${value}${rightSpace}`;
   return {
-    text: `${source.slice(0, start)}${inserted}${source.slice(end)}`,
+    text: `${before}${inserted}${after}`,
     range: { start, end: start + inserted.length },
   };
 }
 
-export function shouldAutoSend({ enabled, final, stoppedAt, completedAt }) {
-  return enabled === true && final === true && completedAt - stoppedAt <= 1_000;
+export function shouldAutoSend({ enabled, final, finalWithinDeadline }) {
+  return enabled === true && final === true && finalWithinDeadline === true;
 }
