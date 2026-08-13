@@ -117,6 +117,7 @@ export const PALETTE_GROUPS: PaletteGroup[] = [
  *  omitted (no Solid surface yet) to avoid a dead drill-down entry. */
 export const SETTINGS_SECTIONS = [
   { id: "ui", label: "UI", keywords: ["interface", "appearance", "renderer", "markdown", "sidebar", "chats"] },
+  { id: "shortcuts", label: "Shortcuts", keywords: ["keyboard", "keys", "bindings", "commands", "browser"] },
   { id: "profiles", label: "Profiles", keywords: ["template", "tools", "workspace", "general", "agent"] },
   { id: "workspaces", label: "Workspaces", keywords: ["workspace", "folder", "default", "profile"] },
   { id: "models", label: "Models", keywords: ["model", "llm", "provider"] },

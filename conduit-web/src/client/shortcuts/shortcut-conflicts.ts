@@ -17,7 +17,7 @@ export function browserShortcutConflicts(
   return BROWSER_SHORTCUT_CONFLICTS
     .filter((record) => applies(record.browsers, environment.browser)
       && applies(record.platforms, environment.platform)
-      && sameBinding(record.binding, binding))
+      && (sameBinding(record.binding, binding) || bindingStartsWith(binding, record.binding)))
     .map((record) => ({
       kind: record.kind,
       severity: "warning",

@@ -72,7 +72,7 @@ export const commandRegistry: ShortcutCommandDefinition[] = [
     group: "commands",
     icon: "chat",
     keywords: ["search", "find", "chat", "conversation", "folder", "workspace"],
-    contexts: ["application", "palette.root"],
+    contexts: ["application", "palette.root", "palette.page"],
     defaultBindings: [
       binding(stroke("KeyP", "P", ["primary"])),
       binding(stroke("KeyO", "O", ["primary", "shift"])),
@@ -86,7 +86,7 @@ export const commandRegistry: ShortcutCommandDefinition[] = [
     group: "commands",
     icon: "settings",
     keywords: ["preferences", "configure"],
-    contexts: ["application", "palette.root"],
+    contexts: ["application", "palette.root", "palette.page"],
     defaultBindings: [binding(stroke("Comma", ",", ["primary"]))],
     palette: true,
   }),
@@ -97,7 +97,7 @@ export const commandRegistry: ShortcutCommandDefinition[] = [
     group: "commands",
     icon: "workspace-panel",
     keywords: ["workspace", "files", "source control", "artifacts", "terminal", "shell"],
-    contexts: ["palette.root"],
+    contexts: ["palette.root", "palette.page"],
     palette: true,
   }),
   command({

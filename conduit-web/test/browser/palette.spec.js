@@ -80,6 +80,15 @@ async function openPalette(page) {
   await expect(page.getByRole("dialog", { name: "Command Palette" })).toBeVisible();
 }
 
+async function openShortcutsSettings(page) {
+  await openPalette(page);
+  await page.getByRole("option", { name: /^Settings…/ }).click();
+  await page.getByRole("option", { name: /^Shortcuts/ }).click();
+  const settings = page.getByRole("dialog", { name: "Settings" });
+  await expect(settings.getByRole("tab", { name: "Shortcuts" })).toHaveAttribute("aria-selected", "true");
+  return settings;
+}
+
 test("browses grouped commands and models", async ({ page }) => {
   await page.goto("/");
   await openPalette(page);
@@ -402,6 +411,101 @@ test("Settings UI exposes and persists the sidebar chat limit", async ({ page })
   await page.getByRole("option", { name: /^Settings…/ }).click();
   await page.getByRole("option", { name: /^UI$/ }).click();
   await expect(page.getByRole("dialog", { name: "Settings" }).getByLabel("Chats shown in sidebar")).toHaveValue("8");
+});
+
+test("shortcut recording suppresses commands and updates chat-search hints immediately", async ({ page }) => {
+  await page.goto("/");
+  const settings = await openShortcutsSettings(page);
+  const editRow = settings.locator(".shortcut-command").filter({ hasText: "Edit chats" });
+  await editRow.getByRole("button", { name: /Replace Ctrl E/ }).click();
+  const recorder = editRow.locator(".shortcut-recorder-capture");
+  await expect(recorder).toBeFocused();
+
+  // The command being replaced must be recorded, not executed.
+  await recorder.dispatchEvent("keydown", { key: "e", code: "KeyE", ctrlKey: true });
+  await expect(recorder).toContainText("Ctrl E");
+  await expect(settings).toBeVisible();
+  await recorder.dispatchEvent("keydown", { key: "Backspace", code: "Backspace" });
+  await recorder.dispatchEvent("keydown", { key: "u", code: "KeyU", ctrlKey: true });
+  await editRow.getByRole("button", { name: "Save shortcut" }).click();
+  await expect(editRow.getByRole("button", { name: /Replace Ctrl U/ })).toBeVisible();
+
+  await settings.getByRole("button", { name: "Close" }).click();
+  await page.keyboard.press("Control+p");
+  const palette = page.getByRole("dialog", { name: "Command Palette" });
+  const hints = palette.getByRole("note", { name: "Keyboard shortcuts" });
+  await expect(hints).toContainText("Ctrl U");
+  await expect(hints).not.toContainText("Ctrl E");
+  await page.keyboard.press("Control+u");
+  await expect(palette.getByText("1 selected")).toBeVisible();
+});
+
+test("shortcut settings block overlaps, warn about browser ownership, and reset safely", async ({ page }) => {
+  await page.goto("/");
+  const settings = await openShortcutsSettings(page);
+  const commandPaletteRow = settings.locator(".shortcut-command").filter({ hasText: "Open command palette" });
+  await commandPaletteRow.getByRole("button", { name: /Replace Ctrl K/ }).click();
+  let recorder = commandPaletteRow.locator(".shortcut-recorder-capture");
+  await recorder.dispatchEvent("keydown", { key: "b", code: "KeyB", ctrlKey: true });
+  await expect(commandPaletteRow).toContainText(/Toggle sidebar already uses this shortcut/);
+  await expect(commandPaletteRow.getByRole("button", { name: "Save shortcut" })).toBeDisabled();
+  await page.keyboard.press("Escape");
+  await expect(settings).toBeVisible();
+  await expect(recorder).toHaveCount(0);
+
+  const searchRow = settings.locator(".shortcut-command").filter({ hasText: "Search chats…" });
+  await searchRow.getByRole("button", { name: /Replace Ctrl P/ }).click();
+  recorder = searchRow.locator(".shortcut-recorder-capture");
+  await recorder.dispatchEvent("keydown", { key: "p", code: "KeyP", ctrlKey: true });
+  await expect(searchRow).toContainText("Print");
+  await recorder.dispatchEvent("keydown", { key: "Backspace", code: "Backspace" });
+  await recorder.dispatchEvent("keydown", { key: "d", code: "KeyD", ctrlKey: true, shiftKey: true });
+  await expect(searchRow).toContainText("Bookmark all tabs");
+  await searchRow.getByRole("button", { name: "Cancel" }).click();
+
+  const bulkMoveRow = settings.locator(".shortcut-command").filter({ hasText: "Move selected chats" });
+  await bulkMoveRow.getByRole("button", { name: /Replace M/ }).click();
+  recorder = bulkMoveRow.locator(".shortcut-recorder-capture");
+  await recorder.dispatchEvent("keydown", { key: "r", code: "KeyR", altKey: true });
+  await expect(bulkMoveRow).toContainText("separate context");
+  await expect(bulkMoveRow.getByRole("button", { name: "Save shortcut" })).toBeEnabled();
+  await bulkMoveRow.getByRole("button", { name: "Save shortcut" }).click();
+  await expect(bulkMoveRow).toContainText("Custom");
+  await settings.getByRole("button", { name: "Reset all" }).click();
+  await expect(bulkMoveRow.getByRole("button", { name: /Replace M/ })).toBeVisible();
+  await expect(bulkMoveRow.getByText("Custom")).toHaveCount(0);
+
+  const content = settings.locator(".settings-content");
+  expect(await content.evaluate((element) => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
+  await page.keyboard.press("Escape");
+  await expect(settings).toHaveCount(0);
+});
+
+test("chat edit mode leaves query text keys local and an expired prefix returns to typing", async ({ page }) => {
+  await page.goto("/");
+  await page.keyboard.press("Control+p");
+  const dialog = page.getByRole("dialog", { name: "Command Palette" });
+  const input = dialog.getByRole("combobox", { name: "Search commands" });
+  await input.fill("abc");
+  await page.keyboard.press("Control+e");
+  await input.focus();
+  await input.press("End");
+  await input.press("d");
+  await expect(input).toHaveValue("abcd");
+  await input.evaluate((element) => element.setSelectionRange(0, 0));
+  await input.press("Delete");
+  await expect(input).toHaveValue("bcd");
+  await expect(page.getByRole("alertdialog")).toHaveCount(0);
+
+  await page.keyboard.press("Control+e");
+  await input.fill("");
+  await input.focus();
+  await page.keyboard.press("Control+k");
+  await expect(dialog.getByRole("note", { name: "Keyboard shortcuts" })).toContainText("Cancel");
+  await page.waitForTimeout(1_650);
+  await page.keyboard.press("d");
+  await expect(input).toHaveValue("d");
+  await expect(page.getByRole("alertdialog")).toHaveCount(0);
 });
 
 test("single-chat rename stays outside bulk selection mode", async ({ page }) => {

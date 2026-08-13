@@ -19,7 +19,9 @@ import {
   parseChatQuery, removeChatQueryFilter, resolveChatQueryScope, serializeChatQuery,
 } from "../palette/chat-query";
 import type { ChatQueryFilter } from "../palette/chat-query";
+import { COMMAND_IDS, commandRegistry } from "../commands/command-registry";
 import type { ShortcutManager } from "../shortcuts/shortcut-manager";
+import type { ShortcutContext } from "../shortcuts/shortcut-types";
 import { CommandHintBar } from "./command-hint-bar";
 import type { CommandHintContext, CommandHintMode } from "./command-hint-bar";
 
@@ -117,7 +119,6 @@ export function CommandMenu(props: {
   const [moveMode, setMoveMode] = createSignal(false);
   const [editingId, setEditingId] = createSignal<string | null>(null);
   const [editingValue, setEditingValue] = createSignal("");
-  const [actionPrefix, setActionPrefix] = createSignal(false);
   const [pendingDelete, setPendingDelete] = createSignal<ChatTarget[] | null>(null);
   const [deleteChoice, setDeleteChoice] = createSignal<"cancel" | "confirm">("cancel");
   const [shortcutRevision, setShortcutRevision] = createSignal(0);
@@ -150,11 +151,16 @@ export function CommandMenu(props: {
   const chatPage = createMemo(() => page() === "chat-search");
   const chatScope = createMemo(() => resolveChatQueryScope(parsedQuery(), props.context.projects || []));
   const hintContext = createMemo<CommandHintContext>(() => chatPage() ? "chat" : "generic");
+  const pendingActionSequence = createMemo(() => {
+    shortcutRevision();
+    const pending = props.shortcuts.pendingSequence();
+    return pending?.context === "chat-search.browse" ? pending : null;
+  });
   const hintMode = createMemo<CommandHintMode>(() => {
     if (editingId()) return "rename";
     if (moveMode()) return "move";
     if (selectionMode()) return "edit";
-    if (actionPrefix()) return "action-prefix";
+    if (pendingActionSequence()) return "action-prefix";
     return "browse";
   });
 
@@ -166,7 +172,6 @@ export function CommandMenu(props: {
     setMoveMode(false);
     setEditingId(null);
     setEditingValue("");
-    setActionPrefix(false);
     setPendingDelete(null);
     directMode = false;
   };
@@ -183,7 +188,6 @@ export function CommandMenu(props: {
       setSelectedChatIds(new Set<string>());
       setMoveMode(false);
       setEditingId(null);
-      setActionPrefix(false);
       setPendingDelete(null);
       directMode = Boolean(props.directLaunch);
       lastLaunchNonce = props.launchNonce;
@@ -425,6 +429,72 @@ export function CommandMenu(props: {
     else enterSelection();
   };
 
+  const openPalettePage = (nextPage: string, direct = false) => {
+    setPage(nextPage);
+    setQuery("");
+    setMoveMode(false);
+    setSelectionMode(false);
+    setSelectedChatIds(new Set<string>());
+    directMode = direct;
+  };
+
+  const runPaletteShortcut = (commandId: string) => {
+    const command = commands().find((candidate) => candidate.id === commandId);
+    if (!command) return;
+    if (command.kind === "page" && command.page) {
+      openPalettePage(canonicalPage(command.page)!, command.id === COMMAND_IDS.searchChats);
+      return;
+    }
+    close();
+    requestAnimationFrame(() => command.run(props.actions));
+  };
+
+  const paletteRootCommandIds = commandRegistry
+    .filter((command) => command.contexts.includes("palette.root") && command.defaultBindings.length)
+    .map((command) => command.id);
+  const palettePageCommands = [
+    [COMMAND_IDS.searchChats, "chat-search"],
+    [COMMAND_IDS.openSettings, "settings"],
+    [COMMAND_IDS.openWorkspaceViews, "workspace"],
+  ] as const;
+  const releaseShortcutHandlers = [
+    ...paletteRootCommandIds.map((commandId) =>
+      props.shortcuts.registerHandler(commandId, "palette.root", () => runPaletteShortcut(commandId))),
+    ...palettePageCommands.map(([commandId, targetPage]) =>
+      props.shortcuts.registerHandler(commandId, "palette.page", () =>
+        openPalettePage(targetPage, commandId === COMMAND_IDS.searchChats))),
+    props.shortcuts.registerHandler(COMMAND_IDS.toggleChatEdit, "chat-search.browse", toggleSelection),
+    props.shortcuts.registerHandler(COMMAND_IDS.renameHighlightedChat, "chat-search.browse", startRename),
+    props.shortcuts.registerHandler(COMMAND_IDS.moveHighlightedChat, "chat-search.browse", moveHighlighted),
+    props.shortcuts.registerHandler(COMMAND_IDS.deleteHighlightedChat, "chat-search.browse", requestActiveDelete),
+    props.shortcuts.registerHandler(COMMAND_IDS.toggleChatEdit, "chat-search.edit", toggleSelection),
+    props.shortcuts.registerHandler(COMMAND_IDS.moveSelectedChats, "chat-search.edit", moveSelected),
+    props.shortcuts.registerHandler(COMMAND_IDS.deleteSelectedChats, "chat-search.edit", requestDelete),
+  ];
+  onCleanup(() => releaseShortcutHandlers.forEach((release) => release()));
+
+  createEffect(() => {
+    if (!props.open) return;
+    let context: ShortcutContext;
+    let exclusive = false;
+    if (pendingDelete()) {
+      context = "confirmation";
+      exclusive = true;
+    } else if (editingId()) {
+      context = "chat-search.rename";
+      exclusive = true;
+    } else if (moveMode()) {
+      context = "chat-search.move";
+      exclusive = true;
+    } else if (chatPage()) {
+      context = selectionMode() ? "chat-search.edit" : "chat-search.browse";
+    } else {
+      context = page() ? "palette.page" : "palette.root";
+    }
+    const release = props.shortcuts.activateContext(context, { exclusive });
+    onCleanup(release);
+  });
+
   const runRow = (row?: SelectableRow) => {
     if (!row) return;
     if (row.type === "model") { close(); requestAnimationFrame(() => props.onChooseModel(row.model.spec)); return; }
@@ -460,42 +530,12 @@ export function CommandMenu(props: {
 
   const keydown = (event: KeyboardEvent) => {
     const key = event.key.toLowerCase();
-    const primaryModifier = event.metaKey || event.ctrlKey;
-    if (actionPrefix()) {
-      if (event.key === "Escape") {
-        event.preventDefault(); event.stopPropagation(); setActionPrefix(false); return;
-      }
-      if (!primaryModifier && !event.altKey && !event.shiftKey && key === "d") {
-        event.preventDefault(); event.stopPropagation(); setActionPrefix(false); requestActiveDelete(); return;
-      }
-      if (!primaryModifier && !event.altKey && !event.shiftKey && key === "m") {
-        event.preventDefault(); event.stopPropagation(); setActionPrefix(false); moveHighlighted(); return;
-      }
-      if (!primaryModifier && !event.altKey && !event.shiftKey && key === "r") {
-        event.preventDefault(); event.stopPropagation(); setActionPrefix(false); startRename(); return;
-      }
-      setActionPrefix(false);
-    }
-    if (primaryModifier && !event.altKey && !event.shiftKey && key === "k" && chatPage()
-      && !selectionMode() && !moveMode() && !editingId()) {
-      event.preventDefault(); event.stopPropagation(); setActionPrefix(true); return;
-    }
-    if (primaryModifier && !event.altKey && !event.shiftKey && key === "e" && chatPage()) {
-      event.preventDefault(); event.stopPropagation(); toggleSelection(); return;
-    }
-    if (chatPage() && !selectionMode() && !moveMode() && !editingId()) {
-      if (event.altKey && !primaryModifier && !event.shiftKey && key === "r") {
-        event.preventDefault(); event.stopPropagation(); startRename(); return;
-      }
-    }
     // Unmodified selection actions belong to the result list. When the search
     // input owns the event, letters and Delete must edit the query instead.
     if (selectionMode() && event.currentTarget !== input
       && !event.metaKey && !event.ctrlKey && !event.altKey) {
       if (event.key === " ") { event.preventDefault(); const target = activeChat(); if (target) toggleChatSelection(target.chat.id); return; }
-      if (key === "m") { event.preventDefault(); moveSelected(); return; }
       if (key === "c") { event.preventDefault(); copySelected(); return; }
-      if (key === "d" || event.key === "Delete") { event.preventDefault(); requestDelete(); return; }
       if (key === "/") { event.preventDefault(); input?.focus(); return; }
     }
     if (event.key === "ArrowDown") { event.preventDefault(); move(1); return; }
@@ -511,7 +551,6 @@ export function CommandMenu(props: {
     if (event.key === "Escape") {
       event.preventDefault(); event.stopPropagation();
       if (editingId()) { setEditingId(null); return; }
-      if (actionPrefix()) { setActionPrefix(false); return; }
       if (moveMode()) { goBack(); return; }
       if (selectionMode()) { exitSelection(); return; }
       if (page() && !directMode) goBack(); else close();
@@ -635,6 +674,8 @@ export function CommandMenu(props: {
             <CommandHintBar
               context={hintContext()}
               mode={hintMode()}
+              pendingSequence={pendingActionSequence()}
+              shortcuts={props.shortcuts}
               onToggleEdit={toggleSelection}
               onDeleteSelected={() => requestDelete()}
               onMoveSelected={() => moveSelected()}

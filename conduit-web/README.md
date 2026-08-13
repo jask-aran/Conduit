@@ -63,9 +63,9 @@ searchable multi-model picker. Cmd/Ctrl+K opens the typed application command
 palette. Root lists concrete app actions and models; Settings…, Search chats…,
 and Workspace views… are drill-down pages with search prefixes
 (`Settings ›`, `Search ›`, `Workspace ›`) so sections, chats, and panel tabs do
-not flood the root list. Cmd/Ctrl+P opens Chat search directly and prevents the
-browser print shortcut while the page has focus. The legacy Cmd/Ctrl+Shift+O
-shortcut opens the same chat mode as a compatibility alias. Chat search accepts
+not flood the root list. Cmd/Ctrl+P opens Chat search directly when the browser
+delivers that key event. The legacy Cmd/Ctrl+Shift+O shortcut opens the same
+chat mode as a compatibility alias. Chat search accepts
 `scope:chats`, `scope:all`, and quoted `in:<folder-or-workspace>` filters; View
 all chats pre-applies `scope:chats` in the same surface. Empty-query Backspace
 removes a filter before it can change palette level; Escape returns to the root
@@ -73,17 +73,30 @@ palette or closes a direct launch. Tab enters a highlighted drill-down page.
 
 Chat search matches chat titles and their owning folder or Workspace. It shows
 creation dates, includes the current chat, and supports Cmd/Ctrl+E selection
-mode. Selection mode supports Space, R (rename), M (move), C (copy links), and
-D/Delete (confirmed delete). The sidebar's Chats group shows 20 rows by
-default; Settings → UI stores an integer limit from 5 to 100, and View all
-chats opens a Chats-scoped search for older rows. A folder or Workspace can
-remain collapsed even when it contains the active chat; Search chats remains
-the route to that session. Existing generation indicators stay unchanged.
-Search and management use the
+mode. Outside selection mode, Alt+R renames the highlighted chat and
+Cmd/Ctrl+K followed by R, M, or D renames, moves, or requests confirmed
+deletion. Selection mode supports Space, M (move), C (copy links), and
+D/Delete (confirmed delete); rename remains a single-chat action. The sidebar's
+Chats group shows 20 rows by default; Settings → UI stores an integer limit
+from 5 to 100, and View all chats opens a Chats-scoped search for older rows. A
+folder or Workspace can remain collapsed even when it contains the active
+chat; Search chats remains the route to that session. Existing generation
+indicators stay unchanged. Search and management use the
 same palette shell so later file, artifact, and host search domains can add
 rows and previews without a second dialog.
 
 Cmd/Ctrl+Shift+C starts a new chat.
+One stable client command registry owns shortcut labels, contexts, defaults,
+and palette projections. One capture-phase shortcut manager dispatches the
+highest active context, supports one- and two-stroke bindings, and excludes
+active terminal targets. Settings → Shortcuts stores browser-local overrides
+under `conduit:shortcuts:v1`; changes update dispatch and visible keycaps
+without a reload. The recorder blocks internal overlaps in the same context
+and permits reuse in separate contexts. It warns about known browser and
+system bindings, but it cannot detect a key that the browser or operating
+system consumes before the page receives it. Overrides are local to the
+current browser profile and are not server-synced.
+
 The composer slash Popover contains only `/attach`. A project-aware breadcrumb
 identifies where each chat belongs.
 

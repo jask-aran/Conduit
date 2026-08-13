@@ -5,17 +5,20 @@ import {
 } from "../src/client/commands/command-registry.ts";
 import {
   browserShortcutConflicts, conduitShortcutConflicts,
+  validateShortcutRegistry,
 } from "../src/client/shortcuts/shortcut-conflicts.ts";
 import {
   detectShortcutEnvironment, shortcutEnvironmentLabel,
 } from "../src/client/shortcuts/shortcut-environment.ts";
 import { ShortcutManager } from "../src/client/shortcuts/shortcut-manager.ts";
 import {
-  bindingIdentity, formatShortcutBinding, normalizeKeyboardEvent, shortcutBinding, shortcutStroke,
+  bindingIdentity, formatShortcutBinding, normalizeKeyboardEvent, normalizeStoredBinding,
+  shortcutBinding, shortcutStroke,
 } from "../src/client/shortcuts/shortcut-normalize.ts";
 import {
   parseShortcutOverrides, readShortcutOverrides, SHORTCUT_PREFERENCES_STORAGE_KEY,
 } from "../src/client/shortcuts/shortcut-preferences.ts";
+import { paletteStableCommandIds } from "../src/client/commands/command-registry.ts";
 
 const windowsChrome = { platform: "windows", browser: "chrome", displayMode: "browser-tab" };
 const macSafari = { platform: "macos", browser: "safari", displayMode: "browser-tab" };
@@ -109,7 +112,16 @@ test("classifies known browser conflicts and exact Conduit context conflicts", (
   const print = shortcutBinding(shortcutStroke("KeyP", "P", ["primary"]));
   const bookmarkAll = shortcutBinding(shortcutStroke("KeyD", "D", ["primary", "shift"]));
   assert.equal(browserShortcutConflicts(print, windowsChrome)[0]?.action, "Print");
+  const printSequence = shortcutBinding(
+    shortcutStroke("KeyP", "P", ["primary"]),
+    shortcutStroke("KeyX", "X"),
+  );
+  assert.equal(browserShortcutConflicts(printSequence, windowsChrome)[0]?.action, "Print");
   assert.equal(browserShortcutConflicts(bookmarkAll, windowsChrome)[0]?.action, "Bookmark all tabs");
+  assert.equal(browserShortcutConflicts(bookmarkAll, macSafari).length, 0);
+  const spotlight = shortcutBinding(shortcutStroke("Space", "Space", ["primary"]));
+  assert.equal(browserShortcutConflicts(spotlight, macSafari)[0]?.action, "Open Spotlight");
+  assert.equal(browserShortcutConflicts(spotlight, windowsChrome).length, 0);
 
   const candidate = shortcutBinding(shortcutStroke("KeyX", "X", ["primary"]));
   const commands = [{
@@ -212,15 +224,53 @@ test("clears an expired or unmatched sequence without consuming the second strok
   release();
 });
 
-test("registry IDs are unique and every default binding is structurally valid", () => {
+test("an exclusive recorder context blocks lower commands without consuming the recorder key", () => {
+  const manager = new ShortcutManager({
+    commands: commandRegistry,
+    environment: windowsChrome,
+    storage: null,
+  });
+  const ran = [];
+  const releaseApplication = manager.activateContext("application");
+  const releaseRecorder = manager.activateContext("shortcut-recorder", { exclusive: true });
+  manager.registerHandler(COMMAND_IDS.openCommandPalette, "application", () => ran.push("palette"));
+
+  const event = keyEvent("k", "KeyK", { ctrlKey: true });
+  assert.equal(manager.isContextActive("shortcut-recorder"), true);
+  assert.equal(manager.handleKeydown(event), false);
+  assert.deepEqual(ran, []);
+  assert.equal(event.prevented, false);
+
+  releaseRecorder();
+  assert.equal(manager.handleKeydown(keyEvent("k", "KeyK", { ctrlKey: true })), true);
+  assert.deepEqual(ran, ["palette"]);
+  releaseApplication();
+});
+
+test("registry IDs, palette projections, defaults, and contexts stay valid", () => {
   const ids = commandRegistry.map((command) => command.id);
   assert.equal(new Set(ids).size, ids.length);
   assert.equal(getCommandDefinition(COMMAND_IDS.searchChats).label, "Search chats…");
+  assert.deepEqual(validateShortcutRegistry(commandRegistry), []);
+  assert.ok(paletteStableCommandIds.length > 0);
+  for (const commandId of paletteStableCommandIds) {
+    assert.equal(getCommandDefinition(commandId).id, commandId);
+  }
   for (const command of commandRegistry) {
     assert.ok(command.contexts.length > 0, command.id);
     for (const binding of command.defaultBindings) {
       assert.ok(binding.strokes.length === 1 || binding.strokes.length === 2, command.id);
       for (const strokeValue of binding.strokes) assert.ok(strokeValue.code, command.id);
+      assert.deepEqual(normalizeStoredBinding(binding), binding, command.id);
+      assert.ok(formatShortcutBinding(binding, windowsChrome), command.id);
     }
   }
+});
+
+test("preference parsing fails open for malformed or future documents", () => {
+  assert.deepEqual(parseShortcutOverrides("{"), {});
+  assert.deepEqual(parseShortcutOverrides(JSON.stringify({ version: 2, overrides: {
+    "future.plugin-command": [],
+  } })), {});
+  assert.deepEqual(parseShortcutOverrides(JSON.stringify({ version: 1, overrides: [] })), {});
 });
