@@ -342,9 +342,8 @@ export function CommandMenu(props: {
       return next;
     });
   };
-  const enterSelection = () => {
+  const enterSelection = (target = highlightedChat()) => {
     if (!chatPage()) return;
-    const target = highlightedChat();
     if (target) setSelectedChatIds(new Set([target.chat.id]));
     setSelectionMode(true);
   };
@@ -420,6 +419,19 @@ export function CommandMenu(props: {
     requestAnimationFrame(() => command.run(props.actions));
   };
 
+  const runPointerRow = (row: SelectableRow, event: MouseEvent) => {
+    if (row.type === "command" && chatPage() && !selectionMode() && !moveMode() && !editingId()
+      && (event.ctrlKey || event.metaKey) && row.command.entity === "chat"
+      && row.command.chat && row.command.project) {
+      event.preventDefault();
+      event.stopPropagation();
+      setActive(row.index);
+      enterSelection({ chat: row.command.chat, project: row.command.project });
+      return;
+    }
+    runRow(row);
+  };
+
   const move = (delta: number) => {
     const count = selectable().length;
     if (!count) return;
@@ -456,9 +468,10 @@ export function CommandMenu(props: {
         event.preventDefault(); event.stopPropagation(); startRename(); return;
       }
     }
-    // Selection mode is modal. Keep its actions available even if the input
-    // still owns focus for one event while the listbox focus handoff settles.
-    if (selectionMode() && !event.metaKey && !event.ctrlKey && !event.altKey) {
+    // Unmodified selection actions belong to the result list. When the search
+    // input owns the event, letters and Delete must edit the query instead.
+    if (selectionMode() && event.currentTarget !== input
+      && !event.metaKey && !event.ctrlKey && !event.altKey) {
       if (event.key === " ") { event.preventDefault(); const target = activeChat(); if (target) toggleChatSelection(target.chat.id); return; }
       if (key === "m") { event.preventDefault(); moveSelected(); return; }
       if (key === "c") { event.preventDefault(); copySelected(); return; }
@@ -509,7 +522,7 @@ export function CommandMenu(props: {
       // Keep focus in the input or list so keyboard control survives a click.
       onMouseDown: (event: MouseEvent) => event.preventDefault(),
       onMouseMove: () => setActive(row.index),
-      onClick: () => runRow(row),
+      onClick: (event: MouseEvent) => runPointerRow(row, event),
     } as const;
     if (row.type === "model") {
       const Icon = icons.model!;

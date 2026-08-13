@@ -95,9 +95,9 @@ Add an entry through `$tacit-knowledge` after explicit approval or validated rep
 ### Keep browser-hosted shortcuts inside an app-owned path
 
 - **Type:** Gotcha.
-- **Rule:** Do not rely on browser-reserved `Ctrl/Cmd+Shift` or `Alt+Shift` chords for palette actions. Use the palette-scoped `Ctrl/Cmd+K` then action-key path, render platform-specific modifier labels, and restore palette input focus after a nested confirmation closes so the next chord remains app-owned.
+- **Rule:** Do not rely on browser-reserved `Ctrl/Cmd+Shift` or `Alt+Shift` chords for palette actions. Use the palette-scoped `Ctrl/Cmd+K` then action-key path, render platform-specific modifier labels, and restore palette input focus after a nested confirmation closes so the next chord remains app-owned. Handle unmodified bulk-action keys only while the results list owns the event; when the search composer owns it, letters and Delete must edit the query.
 - **Scope:** Chat-search and future command-palette keyboard actions in browser-hosted Conduit.
-- **Evidence:** Chrome consumed the single-chat delete chord and could consume it again after an escaped confirmation; the accepted palette tests cover `Ctrl/Cmd+K` then `D`, `M`, or `R` and focus restoration.
+- **Evidence:** Chrome consumed the single-chat delete chord and could consume it again after an escaped confirmation. Playwright clearing the search composer in edit mode also sent Delete and opened the bulk-delete dialog. The accepted palette tests cover the action prefix, focus restoration, filtered selection retention, and safe query clearing.
 
 ### Preserve authored timelines when animations self-clean
 
