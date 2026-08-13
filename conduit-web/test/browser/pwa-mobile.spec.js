@@ -153,6 +153,11 @@ test("acceptance: header search opens palette; close control dismisses without a
   await page.locator(".palette-trigger").click();
   const palette = page.getByRole("dialog", { name: "Command Palette" });
   await expect(palette).toBeVisible();
+  const hints = palette.getByRole("note", { name: "Keyboard shortcuts" });
+  await expect(hints).toBeVisible();
+  if (testInfo.project.name === "mobile-chromium" || (page.viewportSize()?.width || 0) <= 520) {
+    await expect(hints.getByText("More shortcuts", { exact: true })).toBeVisible();
+  }
   const shell = palette.locator(".command-shell");
   const [shellBox, viewport] = await Promise.all([
     shell.boundingBox(),

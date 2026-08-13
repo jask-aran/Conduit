@@ -4,6 +4,7 @@ import path from "node:path";
 import { SessionManager } from "@earendil-works/pi-coding-agent";
 import { parseAttachmentEnvelope } from "./attachment-envelope.js";
 import { CONTINUE_PROMPT, mergeContinuation } from "./continuation.js";
+import { isPathInside } from "./workspace-paths.js";
 
 export function sessionDirectoryFor(cwd, agentDir) {
   const resolvedCwd = path.resolve(cwd);
@@ -404,12 +405,23 @@ export async function removeSession(session) {
 
 /**
  * Returns every regular JSONL in this workspace's on-disk Pi fork family.
- * Parent paths outside the workspace session directory are deliberately not
+ * Parent paths outside the runtime session directory are deliberately not
  * followed: Conduit may only remove transcripts it owns for this project.
  */
-export async function sessionFamilyFiles(file, project, { sessionsDir = project.sessionsDir } = {}) {
+export async function sessionFamilyFiles(file, project, { sessionsDir = project.sessionsDir, allowedRoot = null } = {}) {
   const target = path.resolve(file);
   const directory = path.resolve(sessionsDir);
+  const expectedDirectoryName = path.basename(path.resolve(project.sessionsDir));
+  if (path.basename(directory) !== expectedDirectoryName) {
+    const error = new Error("Pi session mapping is outside the workspace session layout");
+    error.code = "invalid_session_mapping";
+    throw error;
+  }
+  if (allowedRoot && !isPathInside(directory, allowedRoot)) {
+    const error = new Error("Pi session mapping is outside the runtime installation directory");
+    error.code = "invalid_session_mapping";
+    throw error;
+  }
   if (path.dirname(target) !== directory) {
     const error = new Error("Pi session mapping is outside the runtime session directory");
     error.code = "invalid_session_mapping";

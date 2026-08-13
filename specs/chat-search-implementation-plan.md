@@ -395,3 +395,133 @@ edits in `conduit-web/src/client/chat/turn-trace.tsx` and related turn-row
 files now make the shared-tree typecheck fail because Solid's `Index` callback
 does not narrow `TraceSegment` before property access. Those files are outside
 this slice and remain untouched.
+
+## Additional stage: edit-mode discoverability and mouse ergonomics
+
+I would treat this as a focused “edit-mode discoverability” slice. I would not change the blue selection treatment yet; that belongs in the later visual identity update.
+
+### 1. Add a reusable shortcut footer
+
+Add a small footer directly below the palette shell. I would call the component `CommandHintBar` and the visual treatment a “shortcut footer”.
+
+It should be a stable convention for every palette mode:
+
+- Thin top border.
+- Same background as the palette.
+- Muted action labels.
+- Small, consistent `<kbd>` keycaps.
+- No bright accent color, large pills, or hover-only information.
+- Context-sensitive contents.
+
+Browse mode:
+
+```text
+Edit chats        ↑↓ Navigate   Enter Open   ⌘E Edit   Esc Close
+```
+
+Edit mode:
+
+```text
+Done              Click Select   Space Toggle   R Rename   More actions…
+```
+
+Rename and move modes would show their own short hints, such as `Enter Save` and `Esc Cancel`.
+
+The footer must not depend on hover. Hover can add a tooltip, but the important shortcuts must remain visible for keyboard, mouse, and touch users. On small screens, it should wrap or reduce to the primary actions plus a `More shortcuts` control.
+
+### 2. Add a visible mouse entry point
+
+Add an `Edit chats` button to the chat-search footer. It should:
+
+- Enter the existing selection mode.
+- Select the currently highlighted chat.
+- Preserve the current query and filter.
+- Move focus to the results list.
+- Change to `Done` while editing.
+
+This gives users a clear path without knowing `Ctrl/Cmd+E`.
+
+### 3. Add Ctrl/Cmd-click selection
+
+Mirror the sidebar behavior:
+
+- In normal search mode, Ctrl-click or Cmd-click on a chat enters edit mode.
+- The clicked chat becomes the first selected chat.
+- The click must not open the chat or change the URL.
+- Once edit mode is active, ordinary clicks on chat rows toggle their checkboxes.
+- The user can click several rows in sequence without holding a modifier.
+- A selected row remains selected when the query changes, as the current keyboard flow already supports.
+
+The implementation should use `event.ctrlKey || event.metaKey`, so this works on Windows/Linux and macOS.
+
+### 4. Make edit mode mouse-complete
+
+The current keyboard actions should remain, but mouse users should not need to memorise `R`, `M`, `C`, and `D`.
+
+Add a compact `More actions` menu in the footer:
+
+- One selection: Rename, Move, Copy link, Delete.
+- Multiple selections: Move, Copy links, Delete.
+- Rename is disabled for multiple selections.
+- Keep the existing confirmation dialog for deletion.
+- Keep failed selections after partial move/delete.
+
+The row checkboxes should remain visible and the selection count should stay prominent. `Done` exits edit mode and clears the temporary selection state without closing the search dialog.
+
+### 5. Leave the selection highlight alone for now
+
+I would not redesign the blue left-edge highlight in this slice. It is a broader selection/focus identity issue that affects the sidebar and other surfaces. The edit-mode work should only add discoverability and pointer input. A later visual pass can replace that treatment consistently across the application.
+
+### 6. Verify the interaction contract
+
+Add browser coverage for:
+
+- Footer hints in browse mode.
+- `Edit chats` entering selection mode.
+- `Done` leaving selection mode.
+- Ctrl/Cmd-click entering edit mode without navigation.
+- Normal clicks toggling several chats.
+- Filtered results retaining selection state.
+- Mouse action menu invoking rename, move, copy, and delete.
+- Footer changes for rename and move modes.
+- Mobile footer layout and touch behavior.
+
+This keeps the change coherent: one mode model, one visible shortcut convention, and equivalent keyboard and mouse entry paths.
+
+### Keyboard contract correction from manual testing
+
+The initial edit-mode footer contract is superseded for the action keys. Rename
+is a single-chat action, not a bulk-edit action. In browse mode, the highlighted
+chat can be renamed with `Alt+R` or `Ctrl/Cmd+Shift+R`, deleted with
+`Ctrl/Cmd+Shift+D` or `Alt+Shift+D`, and moved with `Ctrl/Cmd+Shift+M` or
+`Alt+Shift+M`. These shortcuts are handled only while the chat-search palette
+is open, so they do not become global application commands. The `Alt+Shift`
+aliases reduce the chance that Chrome consumes the primary `Ctrl/Cmd+Shift`
+chord. The existing delete confirmation remains in place. A failed action must
+leave the search surface usable for another try.
+
+`Ctrl/Cmd+E` is a toggle. The first press enters bulk selection mode and selects
+the highlighted chat. A second press exits bulk selection mode, clears the
+temporary selection, and returns focus to the query. `Escape` remains a cancel
+fallback. Bulk mode exposes selection, delete, and move as its primary actions;
+it must not offer rename. Existing copy-link handling remains compatible for
+now, but it is not part of the footer contract. The footer must show `D Delete`
+and `M Move`, plus the toggle and selection hints. The redundant
+`More actions…` label is removed from this mode. Move mode keeps its own
+`Enter Move`, `Esc Back`, and navigation hints.
+
+The footer browse hints must expose the three single-chat actions and the
+`Ctrl/Cmd+E` toggle. The browser may consume some `Ctrl/Cmd+Shift` chords
+before the page receives them, so `Alt+R` remains the explicit rename fallback;
+manual testing must record which chords Chrome delivers on each platform
+before we add any further aliases.
+
+Because Chrome can consume `Ctrl+Shift+D` as a browser command before the page
+receives the key event, chat search also provides an app-owned two-stroke
+fallback: press `Ctrl/Cmd+K` while the chat-search page is open, then press
+`D`, `M`, or `R` for delete, move, or rename. The palette stays open while
+this prefix is active and the footer replaces the normal hints with the three
+available action keys plus `Esc` to cancel. Cancelling a delete confirmation
+returns focus to the search field, so the next shortcut remains inside the
+palette. This fallback is scoped to chat search; `Ctrl/Cmd+K` keeps its normal
+open/close behavior on every other palette page.

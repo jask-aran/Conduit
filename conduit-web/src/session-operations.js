@@ -24,6 +24,11 @@ export function sessionDirectoryForChat(config, chat, project) {
   return installation ? sessionDirectoryFor(project.path, installation.agentDir) : project.sessionsDir;
 }
 
+export function sessionDirectoryRootForChat(config, chat) {
+  const installation = config.installations.get(chat.runtime?.installationId || "conduit-pinned");
+  return installation?.agentDir || null;
+}
+
 export async function findDeletableSession(registry, projectList, chat) {
   try { return await registry.find(projectList, chat.id); }
   catch (error) {
