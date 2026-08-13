@@ -536,6 +536,21 @@ viewport inside an 8px inset. The shell keeps its border, radius, and shadow,
 so it remains a dialog rather than becoming a separate full-screen route. This
 also overrides the desktop chat-search height cap on tall narrow screens.
 
+Post-acceptance focus and confirmation correction: closing the palette still
+restores focus to the control that opened it, and edit mode still moves focus
+to the chat list for immediate keyboard navigation. The restored sidebar
+control uses a quiet one-pixel inset focus line instead of the browser ring.
+The list uses the same quiet line while edit or move mode is active instead of
+the previous two-pixel focus outline. This explicit mode style avoids browser
+differences for focus that code moves between controls.
+
+The delete confirmation starts on Cancel. Left or Up selects Cancel; Right or
+Down selects Delete chats. Tab remains available and updates the same selected
+choice. Delete chats is an unfilled destructive outline while it is not
+selected and becomes a filled red button only when selected. Enter activates
+the focused choice. These styles are local to this confirmation and do not
+weaken focus treatment across unrelated controls.
+
 ### Keyboard contract correction from manual testing
 
 The initial edit-mode footer contract is superseded for the action keys. Rename

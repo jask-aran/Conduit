@@ -197,7 +197,9 @@ test("Tab enters the highlighted page and the footer toggles chat selection mode
   const hints = dialog.getByRole("note", { name: "Keyboard shortcuts" });
   await hints.getByRole("button", { name: /Edit chats/ }).click();
   await expect(page.getByText("1 selected")).toBeVisible();
-  await expect(dialog.getByRole("listbox", { name: "Chats" })).toBeFocused();
+  const chatList = dialog.getByRole("listbox", { name: "Chats" });
+  await expect(chatList).toBeFocused();
+  await expect(chatList).toHaveCSS("outline-style", "none");
   await expect(hints).toContainText("Done");
   await expect(hints).toContainText("Click");
   await expect(hints).toContainText("Space");
@@ -210,6 +212,8 @@ test("Tab enters the highlighted page and the footer toggles chat selection mode
   await expect(hints).toContainText("Rename");
   await page.keyboard.press("Control+e");
   await expect(page.getByText("1 selected")).toBeVisible();
+  await expect(chatList).toBeFocused();
+  await expect(chatList).toHaveCSS("box-shadow", /inset/);
   await page.keyboard.press("Control+e");
   await expect(page.getByText("1 selected")).toHaveCount(0);
   await page.keyboard.press("Escape");
@@ -317,7 +321,8 @@ test("sidebar View all opens a Chats-scoped search after the twenty-row limit", 
   await page.goto("/");
   const chatsGroup = page.locator(".sidebar-group").filter({ has: page.getByText("Chats", { exact: true }) }).first();
   await expect(chatsGroup.locator(".sidebar-chat")).toHaveCount(20);
-  await page.getByRole("button", { name: "View all chats" }).click();
+  const viewAll = page.getByRole("button", { name: "View all chats" });
+  await viewAll.click();
   const dialog = page.getByRole("dialog", { name: "Command Palette" });
   await expect(dialog.getByText("Search ›")).toBeVisible();
   await expect(dialog.getByRole("button", { name: "Remove Chats filter" })).toBeVisible();
@@ -337,7 +342,10 @@ test("sidebar View all opens a Chats-scoped search after the twenty-row limit", 
   await expect(dialog.getByRole("button", { name: "Remove Chats filter" })).toHaveCount(0);
   await expect(dialog.getByRole("option", { name: /Research chat/ })).toBeVisible();
   await dialog.getByRole("button", { name: "Close command palette" }).click();
-  await page.getByRole("button", { name: "View all chats" }).click();
+  await expect(viewAll).toBeFocused();
+  await expect(viewAll).toHaveCSS("outline-style", "none");
+  await expect(viewAll).toHaveCSS("box-shadow", /inset/);
+  await viewAll.click();
   const scopedDialog = page.getByRole("dialog", { name: "Command Palette" });
   await expect(scopedDialog.getByRole("button", { name: "Remove Chats filter" })).toBeVisible();
   await scopedDialog.getByRole("combobox", { name: "Search commands" }).fill("Many chat 23");
@@ -488,9 +496,20 @@ test("chat deletion from selection mode requires confirmation", async ({ page })
   await page.keyboard.press("Control+e");
   await page.keyboard.press("Delete");
   const confirmation = page.getByRole("alertdialog", { name: "Delete 1 chats?" });
+  const cancel = confirmation.getByRole("button", { name: "Cancel" });
+  const confirm = confirmation.getByRole("button", { name: "Delete chats" });
   await expect(confirmation).toBeVisible();
   await expect(confirmation).toContainText("permanently deletes");
-  await confirmation.getByRole("button", { name: "Delete chats" }).click();
+  await expect(cancel).toBeFocused();
+  await expect(confirm).toHaveAttribute("data-variant", "outline");
+  await page.keyboard.press("ArrowRight");
+  await expect(confirm).toBeFocused();
+  await expect(confirm).toHaveAttribute("data-variant", "destructive");
+  await page.keyboard.press("ArrowLeft");
+  await expect(cancel).toBeFocused();
+  await expect(confirm).toHaveAttribute("data-variant", "outline");
+  await page.keyboard.press("ArrowDown");
+  await page.keyboard.press("Enter");
   await expect(page.getByRole("dialog", { name: "Command Palette" })).toHaveCount(0);
 });
 
