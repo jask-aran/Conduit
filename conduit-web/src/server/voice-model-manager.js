@@ -100,8 +100,8 @@ async function spawnAndWait(command, args, options = {}) {
   });
 }
 
-async function extractRuntime(archive, destination) {
-  await spawnAndWait("tar", ["-xzf", archive, "-C", destination]);
+export async function extractRuntime(archive, destination) {
+  await spawnAndWait("tar", ["--no-same-owner", "--no-same-permissions", "-xzf", archive, "-C", destination]);
 }
 
 function architecture() {
