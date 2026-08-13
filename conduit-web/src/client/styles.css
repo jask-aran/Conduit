@@ -528,37 +528,27 @@ svg { stroke-width: 1.5; }
   .chat-profile-posture { display: none; }
   .settings-shell { width: calc(100vw - 24px); height: calc(100dvh - 24px); }
   .settings-rail { width: 132px; }
-  /* Palette stays a centered card on mid-width phones with larger hit targets. */
+  /* The mobile palette fills the visual viewport while keeping the inset frame
+     that distinguishes it from a separate full-screen route. */
   .command-dialog {
+    display: flex;
+    align-items: stretch;
+    justify-content: stretch;
     height: var(--app-height, 100dvh);
-    padding: 12px;
+    padding: 8px;
   }
-  .command-shell {
-    width: min(640px, calc(100vw - 24px));
-    max-height: calc(var(--app-height, 100dvh) - 24px);
+  .command-dialog .command-shell {
+    width: 100%;
+    height: 100%;
+    max-height: none;
   }
   .command-input { min-height: 52px; font-size: 16px; }
   .command-option { min-height: 44px; padding: 10px 12px; }
   .command-icon { width: 18px; height: 18px; }
 }
 
-/* Very narrow phones: full-bleed palette so the list is not a cramped card. */
+/* Very narrow phones retain the inset shell but use denser inner gutters. */
 @media (max-width: 480px) {
-  .command-dialog {
-    display: flex;
-    align-items: stretch;
-    justify-content: stretch;
-    padding: 0;
-    height: var(--app-height, 100dvh);
-  }
-  .command-shell {
-    width: 100%;
-    height: 100%;
-    max-height: none;
-    border: 0;
-    border-radius: 0;
-    box-shadow: none;
-  }
   .command-input-row { padding-inline: 14px; }
   .command-list { padding: 8px 10px calc(12px + env(safe-area-inset-bottom, 0px)); }
 }
