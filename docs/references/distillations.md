@@ -92,6 +92,13 @@ Add an entry through `$tacit-knowledge` after explicit approval or validated rep
 
 ## UI and component heuristics
 
+### Keep browser-hosted shortcuts inside an app-owned path
+
+- **Type:** Gotcha.
+- **Rule:** Do not rely on browser-reserved `Ctrl/Cmd+Shift` or `Alt+Shift` chords for palette actions. Use the palette-scoped `Ctrl/Cmd+K` then action-key path, render platform-specific modifier labels, and restore palette input focus after a nested confirmation closes so the next chord remains app-owned.
+- **Scope:** Chat-search and future command-palette keyboard actions in browser-hosted Conduit.
+- **Evidence:** Chrome consumed the single-chat delete chord and could consume it again after an escaped confirmation; the accepted palette tests cover `Ctrl/Cmd+K` then `D`, `M`, or `R` and focus restoration.
+
 ### Preserve authored timelines when animations self-clean
 
 - **Type:** Invariant.

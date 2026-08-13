@@ -441,6 +441,14 @@ Add an `Edit chats` button to the chat-search footer. It should:
 
 This gives users a clear path without knowing `Ctrl/Cmd+E`.
 
+Implementation status: complete in the current working tree. The `Ctrl/Cmd+E`
+keycap and `Edit chats` label form one outlined footer button. Clicking it
+selects the highlighted chat, preserves the query and filters, and moves focus
+to the results list. In edit mode, the same control reads `Done`; clicking it
+clears the temporary selection, keeps the dialog open, and returns focus to the
+search composer. Both pointer controls call the same selection toggle as the
+keyboard shortcut.
+
 ### 3. Add Ctrl/Cmd-click selection
 
 Mirror the sidebar behavior:
@@ -492,13 +500,12 @@ This keeps the change coherent: one mode model, one visible shortcut convention,
 
 The initial edit-mode footer contract is superseded for the action keys. Rename
 is a single-chat action, not a bulk-edit action. In browse mode, the highlighted
-chat can be renamed with `Alt+R` or `Ctrl/Cmd+Shift+R`, deleted with
-`Ctrl/Cmd+Shift+D` or `Alt+Shift+D`, and moved with `Ctrl/Cmd+Shift+M` or
-`Alt+Shift+M`. These shortcuts are handled only while the chat-search palette
-is open, so they do not become global application commands. The `Alt+Shift`
-aliases reduce the chance that Chrome consumes the primary `Ctrl/Cmd+Shift`
-chord. The existing delete confirmation remains in place. A failed action must
-leave the search surface usable for another try.
+chat can be renamed with `Alt+R` or `Ctrl/Cmd+K` followed by `R`, deleted with
+`Ctrl/Cmd+K` followed by `D`, and moved with `Ctrl/Cmd+K` followed by `M`.
+These shortcuts are handled only while the chat-search palette is open, so
+they do not become global application commands. The existing delete
+confirmation remains in place. A failed action must leave the search surface
+usable for another try.
 
 `Ctrl/Cmd+E` is a toggle. The first press enters bulk selection mode and selects
 the highlighted chat. A second press exits bulk selection mode, clears the
@@ -511,17 +518,23 @@ and `M Move`, plus the toggle and selection hints. The redundant
 `Enter Move`, `Esc Back`, and navigation hints.
 
 The footer browse hints must expose the three single-chat actions and the
-`Ctrl/Cmd+E` toggle. The browser may consume some `Ctrl/Cmd+Shift` chords
-before the page receives them, so `Alt+R` remains the explicit rename fallback;
-manual testing must record which chords Chrome delivers on each platform
-before we add any further aliases.
+`Ctrl/Cmd+E` toggle. It must not advertise browser-reserved or unreliable
+`Ctrl/Cmd+Shift` or `Alt+Shift` alternatives. `Alt+R` is the quick rename
+shortcut; the `Ctrl/Cmd+K` action prefix is the delete and move path and also
+provides a second rename path.
 
-Because Chrome can consume `Ctrl+Shift+D` as a browser command before the page
-receives the key event, chat search also provides an app-owned two-stroke
-fallback: press `Ctrl/Cmd+K` while the chat-search page is open, then press
-`D`, `M`, or `R` for delete, move, or rename. The palette stays open while
-this prefix is active and the footer replaces the normal hints with the three
-available action keys plus `Esc` to cancel. Cancelling a delete confirmation
-returns focus to the search field, so the next shortcut remains inside the
-palette. This fallback is scoped to chat search; `Ctrl/Cmd+K` keeps its normal
-open/close behavior on every other palette page.
+Render the primary modifier as `Ctrl` on Windows/Linux and `⌘` on Apple
+platforms. Render the quick-rename modifier as `Alt` or `⌥` with the same
+platform rule. The action behavior remains `event.ctrlKey || event.metaKey`;
+the label must match the user’s keyboard rather than expose a generic Super
+symbol.
+
+Chrome can consume `Ctrl+Shift+D` as a browser command before the page receives
+the key event, so chat search uses an app-owned two-stroke action path: press
+`Ctrl/Cmd+K` while the chat-search page is open, then press `D`, `M`, or `R` for
+delete, move, or rename. The palette stays open while this prefix is active
+and the footer replaces the normal hints with the three available action keys
+plus `Esc` to cancel. Cancelling a delete confirmation returns focus to the
+search field, so the next shortcut remains inside the palette. This action path
+is scoped to chat search; `Ctrl/Cmd+K` keeps its normal open/close behavior on
+every other palette page.

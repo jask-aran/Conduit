@@ -125,6 +125,13 @@ export function CommandMenu(props: {
   let lastLaunchNonce: number | undefined;
   let directMode = false;
 
+  const focusInput = () => {
+    queueMicrotask(() => {
+      input?.focus();
+      requestAnimationFrame(() => input?.focus());
+    });
+  };
+
   const pageMeta = createMemo(() => (page() ? PALETTE_PAGES[page()!] : null));
   const parsedQuery = createMemo(() => parseChatQuery(query()));
   const searching = createMemo(() => Boolean(parsedQuery().text));
@@ -168,7 +175,7 @@ export function CommandMenu(props: {
       setPendingDelete(null);
       directMode = Boolean(props.directLaunch);
       lastLaunchNonce = props.launchNonce;
-      queueMicrotask(() => input?.focus());
+      focusInput();
     }
     if (!props.open && wasOpen) resetTransient();
     wasOpen = props.open;
@@ -288,7 +295,7 @@ export function CommandMenu(props: {
   createEffect(() => {
     void query(); void page(); void moveMode();
     setActive(0);
-    if (props.open && !selectionMode() && !editingId()) queueMicrotask(() => input?.focus());
+    if (props.open && !selectionMode() && !editingId()) focusInput();
   });
   createEffect(() => {
     if (props.open) document.getElementById(optionId(active()))?.scrollIntoView({ block: "nearest" });
@@ -319,7 +326,7 @@ export function CommandMenu(props: {
   };
   const removeFilter = (index: number) => {
     setQuery(removeChatQueryFilter(parsedQuery(), index));
-    queueMicrotask(() => input?.focus());
+    focusInput();
   };
   const emptyMessage = () => {
     const scope = chatScope();
@@ -392,7 +399,7 @@ export function CommandMenu(props: {
     setSelectionMode(false);
     setSelectedChatIds(new Set<string>());
     if (moveMode()) { setMoveMode(false); setQuery(""); }
-    queueMicrotask(() => input?.focus());
+    focusInput();
   };
   const toggleSelection = () => {
     if (selectionMode()) exitSelection();
@@ -445,16 +452,8 @@ export function CommandMenu(props: {
       event.preventDefault(); event.stopPropagation(); toggleSelection(); return;
     }
     if (chatPage() && !selectionMode() && !moveMode() && !editingId()) {
-      const shiftedAction = event.shiftKey && ((primaryModifier && !event.altKey) || (event.altKey && !primaryModifier));
-      if ((event.altKey && !primaryModifier && !event.shiftKey && key === "r")
-        || (shiftedAction && key === "r")) {
+      if (event.altKey && !primaryModifier && !event.shiftKey && key === "r") {
         event.preventDefault(); event.stopPropagation(); startRename(); return;
-      }
-      if (shiftedAction && key === "d") {
-        event.preventDefault(); event.stopPropagation(); requestActiveDelete(); return;
-      }
-      if (shiftedAction && key === "m") {
-        event.preventDefault(); event.stopPropagation(); moveHighlighted(); return;
       }
     }
     // Selection mode is modal. Keep its actions available even if the input
@@ -551,6 +550,7 @@ export function CommandMenu(props: {
       <KDialog.Portal>
         <KDialog.Content
           class={`command-dialog${chatPage() ? " command-dialog-chat-search" : ""}`}
+          onOpenAutoFocus={(event) => { event.preventDefault(); focusInput(); }}
           onCloseAutoFocus={(event) => { event.preventDefault(); if (returnFocus?.isConnected) returnFocus.focus(); returnFocus = null; }}
           onPointerDown={(event) => { if (event.target === event.currentTarget) close(); }}
         >
@@ -599,7 +599,7 @@ export function CommandMenu(props: {
               <Show when={!selectable().length}><p class="command-empty">{emptyMessage()}</p></Show>
               <For each={rows()}>{renderRow}</For>
             </div>
-            <CommandHintBar context={hintContext()} mode={hintMode()} />
+            <CommandHintBar context={hintContext()} mode={hintMode()} onToggleEdit={toggleSelection} />
           </div>
           <Show when={props.details}>
             <aside class="command-detail-pane" aria-label="Search preview">{props.details}</aside>
@@ -610,19 +610,19 @@ export function CommandMenu(props: {
     <KAlertDialog.Root open={Boolean(pendingDelete())} onOpenChange={(open) => {
       if (!open) {
         setPendingDelete(null);
-        queueMicrotask(() => input?.focus());
+        focusInput();
       }
     }}>
       <KAlertDialog.Portal>
         <KAlertDialog.Content class="conduit-modal" onEscapeKeyDown={(event) => {
           event.preventDefault();
           setPendingDelete(null);
-          queueMicrotask(() => input?.focus());
+          focusInput();
         }}>
           <div class="conduit-modal-card">
             <KAlertDialog.Title>Delete {pendingDelete()?.length || 0} chats?</KAlertDialog.Title>
             <KAlertDialog.Description>This permanently deletes the selected Pi session transcripts and attached files.</KAlertDialog.Description>
-            <div class="dialog-actions"><Button variant="outline" onClick={() => { setPendingDelete(null); queueMicrotask(() => input?.focus()); }}>Cancel</Button><Button variant="destructive" onClick={() => void confirmDelete()}>Delete chats</Button></div>
+            <div class="dialog-actions"><Button variant="outline" onClick={() => { setPendingDelete(null); focusInput(); }}>Cancel</Button><Button variant="destructive" onClick={() => void confirmDelete()}>Delete chats</Button></div>
           </div>
         </KAlertDialog.Content>
       </KAlertDialog.Portal>
