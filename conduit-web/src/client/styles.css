@@ -227,12 +227,33 @@ svg { stroke-width: 1.5; }
   content: ""; position: absolute; inset: 0; z-index: 0; border-radius: inherit; pointer-events: none;
   background: radial-gradient(150% 72% at 50% -34%, oklch(1 0 0 / 12%), transparent 56%);
 }
-.composer textarea, .composer-actions { position: relative; z-index: 1; }
+.composer textarea, .composer-actions { position: relative; z-index: 2; }
 .composer:focus-within::before {
   background: linear-gradient(150deg, oklch(1 0 0 / 56%), oklch(0.72 0.045 246 / 26%) 38%, oklch(1 0 0 / 5%) 70%, oklch(1 0 0 / 26%));
 }
+.composer-input-shell { position: relative; min-height: 44px; }
 .composer textarea { display: block; width: 100%; min-height: 44px; max-height: 192px; resize: none; overflow-y: auto; border: 0; outline: 0; background: transparent; padding: 11px 12px 2px; color: inherit; line-height: 1.45; }
 .composer textarea:placeholder-shown { height: 44px !important; }
+.voice-waveform { display: grid; gap: 6px; width: 100%; box-sizing: border-box; padding: 9px 11px 7px; border: 1px solid color-mix(in oklch, var(--accent-cool), var(--border) 66%); border-radius: 12px; background: linear-gradient(180deg, color-mix(in oklch, var(--accent-cool), transparent 94%), color-mix(in oklch, var(--background), transparent 20%)); color: var(--muted-foreground); }
+.settings-recorder-monitor { margin-top: 2px; }
+.voice-waveform-header, .voice-waveform-readout, .voice-waveform-state, .voice-waveform-scale { display: flex; align-items: center; }
+.voice-waveform-header { justify-content: space-between; gap: 12px; min-height: 16px; font: 11px/1.2 ui-monospace, SFMono-Regular, Consolas, monospace; letter-spacing: 0.02em; }
+.voice-waveform-state { min-width: 0; gap: 6px; color: var(--foreground); }
+.voice-waveform-dot { width: 6px; height: 6px; flex: none; border-radius: 999px; background: var(--muted-foreground); }
+.voice-waveform-readout { flex: none; gap: 10px; color: var(--muted-foreground); }
+.voice-waveform-plot { position: relative; display: flex; height: 64px; align-items: end; gap: 2px; overflow: hidden; padding: 5px 3px; border: 1px solid color-mix(in oklch, var(--border), transparent 20%); border-radius: 8px; background: color-mix(in oklch, var(--background), transparent 32%); }
+.voice-waveform-gridline { position: absolute; right: 3px; left: 3px; height: 1px; background: color-mix(in oklch, var(--border), transparent 45%); pointer-events: none; }
+.voice-waveform-gridline-high { top: 25%; }
+.voice-waveform-gridline-low { bottom: 25%; }
+.voice-waveform-bar { z-index: 1; display: block; min-width: 1px; flex: 1 1 0; border-radius: 999px 999px 2px 2px; background: linear-gradient(180deg, var(--accent-cool), color-mix(in oklch, var(--accent-cool), var(--primary) 38%)); opacity: 0.82; transition: height 90ms ease-out, opacity 140ms ease; }
+.voice-waveform-peak { position: absolute; right: 3px; left: 3px; z-index: 2; height: 1px; border-top: 1px dashed color-mix(in oklch, var(--accent-cool), white 30%); opacity: 0; transition: bottom 120ms ease-out, opacity 120ms ease; pointer-events: none; }
+.voice-waveform-peak[data-visible="true"] { opacity: 0.95; }
+.voice-waveform-scale { justify-content: space-between; color: color-mix(in oklch, var(--muted-foreground), transparent 12%); font: 10px/1 ui-monospace, SFMono-Regular, Consolas, monospace; }
+.voice-waveform[data-state="connecting"] { border-color: color-mix(in oklch, var(--accent-cool), var(--border) 52%); }
+.voice-waveform[data-state="connecting"] .voice-waveform-dot { background: var(--accent-cool); animation: dictation-wave-pulse 900ms ease-in-out infinite alternate; }
+.voice-waveform[data-state="listening"] .voice-waveform-dot { background: oklch(0.72 0.17 145); box-shadow: 0 0 0 3px color-mix(in oklch, oklch(0.72 0.17 145), transparent 82%); }
+.voice-waveform[data-state="error"] { border-color: color-mix(in oklch, var(--destructive), var(--border) 48%); }
+.voice-waveform[data-state="error"] .voice-waveform-dot { background: var(--destructive); }
 .composer-actions { display: flex; min-height: 36px; align-items: center; justify-content: space-between; gap: 12px; padding: 2px 7px 7px 8px; }
 /* Composer chrome sits inside the 24px-radius glass bubble; compact squircles
    echo that geometry without competing with the outer silhouette. */
@@ -244,12 +265,20 @@ svg { stroke-width: 1.5; }
 .model-trigger:disabled { cursor: default; color: var(--muted-foreground); opacity: .62; }
 .model-trigger span { max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .model-trigger svg { width: 14px; height: 14px; }
+.dictation-trigger[data-state="active"] { box-shadow: 0 0 0 3px color-mix(in oklch, var(--accent-cool), transparent 78%); }
+.composer-dictation-error { display: flex; align-items: center; gap: 7px; margin-top: 6px; color: var(--destructive); font-size: 12px; }
+.composer-dictation-error svg { width: 14px; height: 14px; flex: none; }
 .composer-status { width: 100%; min-height: 22px; margin-top: 6px; overflow: hidden; border-radius: 5px; background: oklch(1 0 0 / 3%); font: 11px/22px ui-monospace, SFMono-Regular, Consolas, monospace; letter-spacing: 0.015em; }
 .composer-status-state, .composer-status-segment { display: inline-flex; height: 22px; align-items: center; gap: 6px; padding: 0 12px; white-space: nowrap; }
 .composer-status-state { position: relative; padding-left: 10px; background: color-mix(in oklch, var(--accent-cool), transparent 82%); color: var(--foreground); }
 .composer-status-state::after { content: ""; position: absolute; top: 0; right: -9px; z-index: 1; border-block: 11px solid transparent; border-left: 9px solid color-mix(in oklch, var(--accent-cool), transparent 82%); }
 .composer-status-state + .composer-status-segment { padding-left: 20px; }
 .composer-status svg { width: 12px; height: 12px; }
+.composer-status-waveform.voice-waveform { display: inline-flex; width: 64px; height: 22px; flex: 0 0 auto; box-sizing: border-box; align-items: center; justify-content: center; padding: 0 6px; border: 0; border-right: 1px solid color-mix(in oklch, var(--accent-cool), transparent 75%); border-radius: 0; background: transparent; }
+.composer-status-waveform .voice-waveform-plot { width: 100%; height: 100%; align-items: center; gap: 1px; padding: 0; border: 0; border-radius: 0; background: transparent; }
+.composer-status-waveform .voice-waveform-bar { max-width: 2px; min-height: 2px; background: var(--accent-cool); opacity: 0.88; transition: height 90ms ease-out; }
+.composer-status-waveform[data-state="connecting"] .voice-waveform-bar { animation: dictation-wave-pulse 900ms ease-in-out infinite alternate; }
+@keyframes dictation-wave-pulse { from { opacity: 0.4; transform: scaleY(0.65); } to { opacity: 0.95; transform: scaleY(1); } }
 .slash-suggestions { position: absolute; left: 10px; bottom: 48px; z-index: 30; width: 260px; padding: 5px; border: 1px solid var(--border); border-radius: 10px; background: var(--popover); box-shadow: 0 12px 32px rgb(0 0 0 / 25%); }
 .slash-suggestions button { display: flex; width: 100%; flex-direction: column; border: 0; border-radius: 7px; background: var(--accent); padding: 8px; color: inherit; text-align: left; }
 .slash-suggestions span { color: var(--muted-foreground); font-size: 12px; }
@@ -321,6 +350,39 @@ svg { stroke-width: 1.5; }
 .settings-error { border-color: color-mix(in srgb, var(--destructive) 45%, var(--border)); color: var(--destructive); }
 .settings-inline-error { margin: 0; color: var(--destructive); font-size: 13px; }
 .settings-actions { display: flex; align-items: center; justify-content: space-between; }
+.dictation-auto-send { display: flex; align-items: flex-start; gap: 10px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--card); padding: 12px; cursor: pointer; }
+.dictation-auto-send input { margin-top: 3px; accent-color: var(--primary); }
+.dictation-auto-send span { display: flex; flex-direction: column; gap: 3px; }
+.dictation-auto-send small { color: var(--muted-foreground); }
+.voice-settings { display: grid; gap: 16px; }
+.voice-input-test { display: grid; gap: 10px; padding: 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--card); }
+.voice-input-result { display: grid; gap: 2px; border-left: 2px solid var(--accent-cool); background: var(--muted); padding: 8px 10px; }
+.voice-input-result[data-signal="missing"] { border-left-color: var(--destructive); }
+.voice-input-result small { color: var(--muted-foreground); }
+.voice-input-live-state { border-left: 2px solid var(--accent-cool); background: color-mix(in oklch, var(--accent-cool), transparent 92%); padding: 8px 10px; color: var(--accent-cool); font-size: 13px; }
+.voice-input-playback { display: grid; gap: 8px; border-left: 2px solid var(--accent-cool); background: color-mix(in oklch, var(--accent-cool), transparent 94%); padding: 8px 10px; color: var(--muted-foreground); font-size: 13px; }
+.voice-input-playback-error { margin: 0; border-left: 2px solid var(--muted-foreground); background: var(--muted); padding: 8px 10px; color: var(--muted-foreground); font-size: 13px; }
+.voice-card { display: grid; gap: 13px; padding: 14px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--card); }
+.voice-card h3, .voice-card p { margin: 0; }
+.voice-card p, .voice-notice { color: var(--muted-foreground); line-height: 1.45; }
+.voice-model-grid { display: grid; gap: 8px; }
+.voice-model-option { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: start; gap: 10px; border: 1px solid var(--border); border-radius: var(--radius); padding: 11px; cursor: pointer; }
+.voice-model-option[data-current="true"] { border-color: color-mix(in oklch, var(--accent-cool), var(--border) 38%); background: color-mix(in oklch, var(--accent-cool), transparent 94%); }
+.voice-model-option input { margin-top: 3px; accent-color: var(--primary); }
+.voice-model-option span { display: grid; gap: 2px; }
+.voice-model-option small { color: var(--muted-foreground); }
+.voice-model-option em { color: var(--muted-foreground); font-size: 11px; font-style: normal; text-transform: capitalize; }
+.voice-model-option em[data-state="running"] { color: var(--accent-cool); }
+.voice-notice { border-left: 2px solid var(--accent-cool); background: var(--muted); padding: 9px 10px; font-size: 13px; }
+.voice-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.voice-settings-footer { display: flex; align-items: center; gap: 10px; border-top: 1px solid var(--border); padding-top: 14px; }
+.voice-save-success { color: var(--accent-cool); font-size: 13px; }
+.voice-model-status { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.voice-model-status span { color: var(--muted-foreground); font-size: 12px; text-transform: capitalize; }
+.voice-progress { display: grid; gap: 5px; }
+.voice-progress progress { width: 100%; accent-color: var(--primary); }
+.voice-progress small { overflow: hidden; color: var(--muted-foreground); text-overflow: ellipsis; white-space: nowrap; }
+.voice-test-success { margin: 0; color: var(--accent-cool); font-size: 13px; }
 .settings-cards, .installations { display: grid; gap: 10px; margin-top: 18px; }
 .settings-cards article, .installations article, .workspace-settings-card { padding: 14px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--card); }
 .settings-cards h3, .installations h3, .workspace-settings-card h3 { margin: 0; }
@@ -576,6 +638,7 @@ svg { stroke-width: 1.5; }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; }
+  .composer-status-waveform span, .voice-waveform * { animation: none !important; transition: none !important; }
   /* The meteor field is an explicitly requested ambient effect; retain its
      supplied timeline without re-enabling motion elsewhere in Conduit. */
   .chat-meteors .solid-meteor { animation-duration: var(--meteor-duration) !important; }
