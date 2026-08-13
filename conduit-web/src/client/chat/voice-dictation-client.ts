@@ -69,6 +69,7 @@ export function createVoiceDictationClient(callbacks: VoiceDictationCallbacks) {
   let explicitlyClosed = false;
   let fallbackTimer: number | null = null;
   let stopRequested = false;
+  const stoppedStreams = new WeakSet<MediaStream>();
 
   const setState = (next: VoiceDictationState) => {
     state = next;
@@ -85,13 +86,20 @@ export function createVoiceDictationClient(callbacks: VoiceDictationCallbacks) {
     window.removeEventListener("touchend", resumeContext, true);
   };
 
+  const stopStream = (target: MediaStream | null) => {
+    if (!target || stoppedStreams.has(target)) return;
+    stoppedStreams.add(target);
+    target.getTracks().forEach((track) => track.stop());
+  };
+
   const stopCapture = () => {
+    permission = null;
     removeResumeListeners();
     if (processor) processor.port.onmessage = null;
     source?.disconnect();
     processor?.disconnect();
     silentGain?.disconnect();
-    stream?.getTracks().forEach((track) => track.stop());
+    stopStream(stream);
     void audioContext?.close().catch(() => {});
     source = null;
     processor = null;
@@ -127,28 +135,40 @@ export function createVoiceDictationClient(callbacks: VoiceDictationCallbacks) {
   };
 
   const startCapture = async () => {
-    if (stopRequested || state !== "connecting") return;
-    stream = await permission!;
-    if (!audioContext || !socket || socket.readyState !== WebSocket.OPEN) return stopCapture();
-    if (!audioContext.audioWorklet || typeof AudioWorkletNode === "undefined") {
-      throw new Error("This browser does not support AudioWorklet voice capture");
+    const requested = permission;
+    if (!requested || stopRequested || state !== "connecting") return;
+    const acquired = await requested;
+    const context = audioContext;
+    const current = () => permission === requested && !stopRequested && state === "connecting"
+      && audioContext === context && socket?.readyState === WebSocket.OPEN;
+    if (!context || !current()) return stopStream(acquired);
+    stream = acquired;
+    try {
+      if (!context.audioWorklet || typeof AudioWorkletNode === "undefined") {
+        throw new Error("This browser does not support AudioWorklet voice capture");
+      }
+      await context.audioWorklet.addModule("/voice-capture-worklet.js");
+      if (!current()) return stopCapture();
+      await context.resume();
+      if (!current()) return stopCapture();
+      source = context.createMediaStreamSource(acquired);
+      processor = new AudioWorkletNode(context, "conduit-voice-capture", { numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [1] });
+      silentGain = context.createGain();
+      silentGain.gain.value = 0;
+      processor.port.onmessage = (event: MessageEvent<ArrayBuffer>) => sendAudio(event.data);
+      processor.onprocessorerror = () => fail(new Error("Microphone audio processing failed"));
+      context.onstatechange = resumeContext;
+      document.addEventListener("visibilitychange", resumeContext);
+      window.addEventListener("pointerdown", resumeContext, true);
+      window.addEventListener("touchend", resumeContext, true);
+      source.connect(processor);
+      processor.connect(silentGain);
+      silentGain.connect(context.destination);
+      setState("active");
+    } catch (error) {
+      if (current()) throw error;
+      stopCapture();
     }
-    await audioContext.audioWorklet.addModule("/voice-capture-worklet.js");
-    await audioContext.resume();
-    source = audioContext.createMediaStreamSource(stream);
-    processor = new AudioWorkletNode(audioContext, "conduit-voice-capture", { numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [1] });
-    silentGain = audioContext.createGain();
-    silentGain.gain.value = 0;
-    processor.port.onmessage = (event: MessageEvent<ArrayBuffer>) => sendAudio(event.data);
-    processor.onprocessorerror = () => fail(new Error("Microphone audio processing failed"));
-    audioContext.onstatechange = resumeContext;
-    document.addEventListener("visibilitychange", resumeContext);
-    window.addEventListener("pointerdown", resumeContext, true);
-    window.addEventListener("touchend", resumeContext, true);
-    source.connect(processor);
-    processor.connect(silentGain);
-    silentGain.connect(audioContext.destination);
-    setState("active");
   };
 
   const stop = () => {
@@ -171,8 +191,12 @@ export function createVoiceDictationClient(callbacks: VoiceDictationCallbacks) {
     }
     try {
       audioContext = new AudioContextConstructor();
-      permission = navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
-      permission.catch(fail);
+      const requested = navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
+      permission = requested;
+      requested.then(
+        (acquired) => { if (permission !== requested || stopRequested || state !== "connecting") stopStream(acquired); },
+        (error) => { if (permission === requested && !stopRequested) fail(error); },
+      );
       socket = new WebSocket(socketUrl());
       socket.binaryType = "arraybuffer";
       setState("connecting");

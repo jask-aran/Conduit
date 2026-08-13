@@ -133,10 +133,13 @@ export class VoiceRuntime {
       signal: AbortSignal.timeout(5_000),
       redirect: "error",
     });
-    if (config.provider !== "custom" && !response.ok) {
-      throw runtimeError("voice_credentials_rejected", `${config.provider} rejected the configured credential (${response.status})`, 502);
-    }
     if (response.status >= 500) throw runtimeError("voice_endpoint_unhealthy", `Voice endpoint returned ${response.status}`, 502);
+    if (!response.ok) {
+      const message = config.provider === "custom"
+        ? `The custom voice endpoint rejected its connection test (${response.status})`
+        : `${config.provider} rejected the configured credential (${response.status})`;
+      throw runtimeError(config.provider === "custom" ? "voice_endpoint_rejected" : "voice_credentials_rejected", message, 502);
+    }
     return { ok: true, mode: config.mode, adapter: config.adapter, status: response.status };
   }
 }

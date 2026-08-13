@@ -198,10 +198,11 @@ Whisper ONNX artifacts or the pinned Parakeet/ONNX Runtime package into
 `data/voice/models`, verifies Hugging Face LFS SHA-256 or Git blob identities,
 displays progress, supports cancellation/retry, and keeps only one selected
 model resident. Whisper runs in the server through Transformers.js; Parakeet
-runs as one unprivileged loopback worker. Bounded in-memory snapshots provide
-provisional text and one final request after stop. Starting an installation
-also persists that local selection, but never occurs without explicit license
-acceptance.
+runs as one unprivileged loopback worker. File-upload providers and managed
+Whisper buffer one bounded utterance in memory and transcribe it once after
+stop; live WebSocket adapters can provide provisional text during capture.
+Starting an installation also persists that local selection, but never occurs
+without explicit license acceptance.
 
 OpenAI defaults to `gpt-transcribe`, with GPT-4o mini/full transcription choices;
 Deepgram offers Nova-3 and Nova-2 with `Token` authentication and smart
@@ -432,8 +433,9 @@ and accepts only its documented partial/final/end/error JSON event vocabulary;
 the `openai_audio_sse_v1` adapter sends an in-memory WAV utterance and consumes
 JSON or `transcript.text.delta` / `transcript.text.done` SSE events; the
 `deepgram_audio_v1` adapter sends WAV audio and reads channel alternatives.
-The internal managed-Whisper adapter transcribes PCM snapshots without opening
-a network listener. Conduit emits
+Each file-upload adapter makes one finalization request per utterance. The
+internal managed-Whisper adapter transcribes one buffered PCM utterance without
+opening a network listener. Conduit emits
 `ready`, `partial`, `final`, `end_of_speech`, `settlement_deadline`, `completed`,
 and `error`. `completed` includes `settlementMs` and `finalWithinDeadline`, and
 clients must never infer auto-send timing from browser clocks.

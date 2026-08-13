@@ -4241,8 +4241,47 @@ test("voice dictation replaces provisional text, preserves surrounding draft, an
   await expect(page.locator(".composer-highlight-layer mark")).toHaveCount(0);
 });
 
-test("Voice settings store a cloud credential through the redacted server API", async ({ page }) => {
+test("stopping dictation releases a microphone stream that resolves after cancellation", async ({ page }) => {
+  await page.addInitScript(() => {
+    class VoiceWebSocket extends EventTarget {
+      static OPEN = 1;
+      static CLOSING = 2;
+      constructor() {
+        super();
+        this.readyState = 0;
+        this.bufferedAmount = 0;
+        queueMicrotask(() => { this.readyState = VoiceWebSocket.OPEN; this.dispatchEvent(new Event("open")); });
+      }
+      send(payload) {
+        if (typeof payload !== "string" || JSON.parse(payload).type !== "stop") return;
+        queueMicrotask(() => this.onmessage?.({ data: JSON.stringify({ type: "completed", text: "", final: false, finalWithinDeadline: false, settlementMs: 0 }) }));
+      }
+      close() { this.readyState = 3; this.dispatchEvent(new Event("close")); }
+    }
+    class MockAudioContext {
+      constructor() { this.state = "running"; }
+      close() { this.state = "closed"; return Promise.resolve(); }
+    }
+    let resolvePermission;
+    window.__voiceTrackStops = 0;
+    window.__resolveVoicePermission = () => resolvePermission?.({ getTracks: () => [{ stop: () => { window.__voiceTrackStops += 1; } }] });
+    Object.defineProperty(window, "WebSocket", { configurable: true, value: VoiceWebSocket });
+    Object.defineProperty(window, "AudioContext", { configurable: true, value: MockAudioContext });
+    Object.defineProperty(navigator, "mediaDevices", { configurable: true, value: {
+      getUserMedia: () => new Promise((resolve) => { resolvePermission = resolve; }),
+    } });
+  });
+
+  await page.goto("/");
+  await page.getByRole("button", { name: "Start voice dictation" }).click();
+  await page.getByRole("button", { name: "Stop voice dictation" }).click();
+  await page.evaluate(() => window.__resolveVoicePermission());
+  await expect.poll(() => page.evaluate(() => window.__voiceTrackStops)).toBe(1);
+});
+
+test("Voice credential tests persist the displayed provider before testing it", async ({ page }) => {
   let savedRequest = null;
+  let testRequests = 0;
   const view = {
     mode: "remote",
     localModelId: "parakeet-tdt-0.6b-v3-int8",
@@ -4272,14 +4311,19 @@ test("Voice settings store a cloud credential through the redacted server API", 
     }
     await route.fulfill({ json: view });
   });
+  await page.route("**/v0/voice/test", async (route) => {
+    testRequests += 1;
+    await route.fulfill({ json: { ok: true } });
+  });
 
   await page.goto("/");
   await page.keyboard.press("Control+,");
   const dialog = page.getByRole("dialog", { name: "Settings" });
   await dialog.getByRole("tab", { name: "Voice" }).click();
   await dialog.getByLabel("OpenAI API key").fill("cloud-secret-value");
-  await dialog.getByRole("button", { name: "Save provider" }).click();
+  await dialog.getByRole("button", { name: "Test credentials" }).click();
   await expect.poll(() => savedRequest).not.toBeNull();
+  await expect.poll(() => testRequests).toBe(1);
   expect(savedRequest).toEqual({
     mode: "remote",
     localModelId: "parakeet-tdt-0.6b-v3-int8",
@@ -4292,4 +4336,5 @@ test("Voice settings store a cloud credential through the redacted server API", 
   await expect(dialog.getByLabel("OpenAI API key")).toHaveValue("");
   await expect(dialog).not.toContainText("cloud-secret-value");
   await expect(dialog.getByText("Stored securely by Conduit")).toBeVisible();
+  await expect(dialog.getByText("Connection successful")).toBeVisible();
 });
