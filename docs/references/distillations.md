@@ -92,6 +92,34 @@ Add an entry through `$tacit-knowledge` after explicit approval or validated rep
 
 ## UI and component heuristics
 
+### Edit shortcuts inline and save explicitly
+
+- **Type:** Preference.
+- **Rule:** Keep shortcut customization in one searchable Settings list backed by the command registry. Expand one recorder inside its command row, show captured strokes and conflicts there, and require an explicit save; do not open a nested shortcut dialog or change a binding merely because a key reached the recorder.
+- **Scope:** Settings → Shortcuts and future command-registry configuration surfaces.
+- **Evidence:** The accepted shortcut-manager sprint established inline one- and two-stroke recording, browser warnings, overlap blocking, live keycap updates, and stacked mobile rows; manual review explicitly accepted the resulting Settings UI.
+
+### Distinguish palette actions from shortcut hints
+
+- **Type:** Preference.
+- **Rule:** In a palette shortcut footer, enclose an actionable keycap and label in one outlined button and render its label with the foreground color. Keep non-interactive shortcut labels muted. Apply the foreground treatment only when the control is available to click.
+- **Scope:** `CommandHintBar` and future palette footer controls.
+- **Evidence:** The accepted `Edit chats` and `Done` controls established the convention; manual review then required the available `Delete` and `Move` controls to use the same white-label affordance.
+
+### Fill the mobile viewport without losing the palette frame
+
+- **Type:** Preference.
+- **Rule:** At the app’s mobile breakpoint, make command and search palettes fill the visual viewport inside a small, consistent inset. Keep the rounded border and shadow so the palette remains a dialog; do not leave a capped-height centered card on tall narrow screens or switch to a borderless full-screen route.
+- **Scope:** Root command palette and all first-class palette pages at widths up to 760px.
+- **Evidence:** Manual review at a 523px-wide tall viewport found the chat-search list capped at desktop height while the app had already entered its mobile layout.
+
+### Keep browser-hosted shortcuts inside an app-owned path
+
+- **Type:** Gotcha.
+- **Rule:** Do not rely on browser-reserved `Ctrl/Cmd+Shift` or `Alt+Shift` chords for palette actions. Use the palette-scoped `Ctrl/Cmd+K` then action-key path, render platform-specific modifier labels, and restore palette input focus after a nested confirmation closes so the next chord remains app-owned. Handle unmodified bulk-action keys only while the results list owns the event; when the search composer owns it, letters and Delete must edit the query.
+- **Scope:** Chat-search and future command-palette keyboard actions in browser-hosted Conduit.
+- **Evidence:** Chrome consumed the single-chat delete chord and could consume it again after an escaped confirmation. Playwright clearing the search composer in edit mode also sent Delete and opened the bulk-delete dialog. The accepted palette tests cover the action prefix, focus restoration, filtered selection retention, and safe query clearing.
+
 ### Preserve authored timelines when animations self-clean
 
 - **Type:** Invariant.

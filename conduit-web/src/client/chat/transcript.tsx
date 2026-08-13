@@ -470,7 +470,7 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
         </Show>
         <Show when={empty()}><div class="empty-thread" data-slot="message-scroller-item"><div class="welcome"><h1>How can I help you today?</h1></div></div></Show>
         <For each={timeline}>{(item) => {
-          if (item.type === "trace") return <div data-slot="message-scroller-item"><TurnTrace trace={item.value} sessionId={props.chat.loadedId()} renderer={markdownRenderer()} /></div>;
+          if (item.type === "trace") return <div data-slot="message-scroller-item"><TurnTrace trace={item.value} sessionId={props.chat.loadedId()} renderer={markdownRenderer()} profileLabel={props.profileLabel} /></div>;
           const message = createMemo(() => item.value);
           const user = createMemo(() => message().role === "user");
           const failed = createMemo(() => !user() && message().stopReason === "error");

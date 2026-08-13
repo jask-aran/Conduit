@@ -12,6 +12,7 @@ import {
   findDeletableSession,
   moveRegisteredChat,
   sessionDirectoryForChat,
+  sessionDirectoryRootForChat,
   stopSessionFamilyProcesses,
   stopSessionProcesses,
 } from "../../session-operations.js";
@@ -142,7 +143,10 @@ export function registerSessionRoutes(app, {
         if (!context) return false;
         return lifecycle.withProjects([context.project.id], async () => {
           const session = await findDeletableSession(registry, await projects.list(), context.chat);
-          const sessionOptions = { sessionsDir: sessionDirectoryForChat(config, context.chat, context.project) };
+          const installationRoot = sessionDirectoryRootForChat(config, context.chat);
+          const sessionOptions = session && installationRoot
+            ? { sessionsDir: path.dirname(session.file), allowedRoot: installationRoot }
+            : { sessionsDir: sessionDirectoryForChat(config, context.chat, context.project) };
           const family = session ? await sessionFamilyFiles(session.file, context.project, sessionOptions) : [];
           await stopSessionFamilyProcesses(manager, context.chat, family);
           if (session) await removeSessionFamily(session.file, context.project, sessionOptions);

@@ -27,6 +27,12 @@
 .sidebar-group-action:hover { background: var(--sidebar-accent); opacity: 1; }
 .sidebar-group-action svg { width: 15px; height: 15px; }
 .sidebar-empty { padding: 3px 8px 5px; color: color-mix(in oklch, var(--sidebar-foreground), transparent 55%); font-size: 11px; }
+.sidebar-view-more { display: flex; width: 100%; min-height: 30px; align-items: center; gap: 8px; border: 0; border-radius: var(--radius-md); background: transparent; padding: 5px 8px; color: color-mix(in oklch, var(--sidebar-foreground), transparent 38%); font-size: 12px; text-align: left; }
+.sidebar-view-more:hover, .sidebar-view-more:focus-visible { background: var(--sidebar-accent); color: var(--sidebar-accent-foreground); }
+.sidebar-view-more:focus-visible { outline: none; box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--sidebar-ring), transparent 72%); }
+.sidebar-view-more svg { width: 15px; height: 15px; flex: none; }
+.sidebar-view-more span { min-width: 0; flex: 1; }
+.sidebar-view-more small { color: var(--muted-foreground); font-size: 11px; }
 .sidebar-chevron { color: var(--muted-foreground); transition: rotate 140ms ease; }
 .sidebar-project:has(.sidebar-project-toggle[aria-expanded="true"]) .sidebar-chevron { rotate: 90deg; }
 .sidebar-row, .sidebar-user { display: flex; min-width: 0; align-items: center; gap: 8px; border: 0; border-radius: var(--radius-md); background: transparent; color: inherit; }
