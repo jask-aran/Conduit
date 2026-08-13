@@ -135,9 +135,9 @@ text-required send contract or add image-only prompting.
 
 ### Filename and MIME rules
 
-1. Preserve `File.name` exactly when the browser supplies it. Windows Explorer
-   filenames therefore appear in the tray and in the server's sanitized stored
-   name.
+1. Use `File.name` when the browser supplies it. Windows Explorer filenames
+   therefore appear in the tray and in the upload request. The server remains
+   authoritative for sanitizing and truncating the stored name.
 2. Never expose or derive a local filesystem path from clipboard text.
 3. If a browser supplies an empty filename, display and upload it under the
    fallback name `attachment`. `addFiles` must apply this fallback to the
@@ -151,8 +151,10 @@ text-required send contract or add image-only prompting.
 5. The server continues to preview only PNG, JPEG, GIF, and WebP. Other files
    upload and download normally but remain icon cards unless a separate image
    format feature expands server MIME support.
-6. Clipboard files and dropped files are not recursively expanded. Folders,
-   shortcuts, URI strings, and arbitrary string clipboard items are ignored.
+6. Clipboard files and dropped files are not recursively expanded. Directory
+   entries and arbitrary string clipboard items are ignored. If a browser
+   exposes a Windows shortcut as a regular `File`, treat it as an ordinary file;
+   the web client does not perform OS-specific shortcut detection.
 
 ## Technical design
 
@@ -186,6 +188,11 @@ Keep `addFiles(files)` as the only function that turns files into upload state.
 The helper only extracts browser data; it does not validate size, create object
 URLs, start XHR, or display errors. That keeps picker, paste, and drop behaviour
 identical after ingestion.
+
+For tests that need a transfer shape not constructible through the native
+`DataTransfer` constructor, dispatch a cancelable DOM event and define a
+structural `clipboardData` or `dataTransfer` value with `items` and `files`.
+The production helper only relies on those documented members.
 
 ### Composer paste handler
 
@@ -243,6 +250,121 @@ This is deliberately a client ingress change, not a protocol change. Existing
 transcripts, attachment persistence, message rendering, and Pi profiles remain
 compatible.
 
+## Implementation slices
+
+### Slice 1 — Shared transfer extraction and drop normalization
+
+Status: **completed**.
+
+Implement the common `DataTransfer` extractor, apply the empty-name fallback in
+`addFiles`, and route the existing chat drop handler through the extractor. Do
+not add the composer paste handler in this slice.
+
+Files:
+
+- `conduit-web/src/client/state/attachments.ts`
+- `conduit-web/src/client/main.tsx`
+- `conduit-web/test/browser/app.spec.js`
+
+Acceptance:
+
+- item-first extraction preserves file order;
+- a transfer with no usable item files falls back to `dataTransfer.files`;
+- a throwing or null `getAsFile()` does not abort the other files;
+- an empty browser filename becomes `attachment` in the card and upload query;
+- picker and drop uploads still use one `attachments.addFiles(...)` path;
+- no composer paste or ordinary text-paste behavior changes.
+
+Focused check:
+
+```bash
+npm run test:browser -- test/browser/app.spec.js --project=desktop-chromium --workers=1 --grep "shared DataTransfer extraction"
+```
+
+Verification completed:
+
+- `npm run typecheck`
+- `npm run test:browser -- test/browser/app.spec.js --project=desktop-chromium --workers=1 --grep "uploads picker and dropped files|shared DataTransfer extraction"` — 2 passed
+- `npm run build`
+
+Manual smoke test:
+
+1. Drop one text file and one image into a chat. Confirm both cards appear and
+   upload as before.
+2. Use the paperclip picker. Confirm the picker still uploads and names the
+   file normally.
+3. Drop a file with an empty synthetic name only in automated coverage; the
+   visible fallback must be `attachment`.
+4. Paste ordinary text into the composer. Confirm slice 1 has not changed text
+   paste behavior.
+
+### Slice 2 — Composer file paste
+
+Status: **planned**.
+
+Add the textarea-scoped `onPaste` handler. File-bearing paste prevents the
+browser default and calls the shared `attachments.addFiles(...)` path. Text-only
+paste is not cancelled. Mixed clipboard content uploads files and suppresses
+the string representation. The handler must preserve draft text, caret,
+selection, voice-dictation ownership, and slash-menu state.
+
+Files:
+
+- `conduit-web/src/client/chat/composer.tsx`
+- `conduit-web/test/browser/app.spec.js`
+
+Automated coverage must assert both selection endpoints, upload order and
+names, file-only cancellation, mixed-content cancellation, and text-only
+non-cancellation. Use a real clipboard write plus `Control+V` where the browser
+project permits it; use a structural synthetic event for the `items`-only case.
+
+Focused check:
+
+```bash
+npm run test:browser -- test/browser/app.spec.js --project=desktop-chromium --workers=1 --grep "pastes files into the composer"
+```
+
+Manual smoke test:
+
+1. Type text, select part of it, and paste one file. Confirm the draft and
+   selection stay unchanged while the file uploads.
+2. Paste several Explorer files. Confirm order, names, progress, previews, and
+   remove controls.
+3. Copy ordinary text from Notepad and press Ctrl+V. Confirm it inserts text.
+4. Paste mixed file and text clipboard content. Confirm only files attach.
+5. Start dictation, leave its selection active, then paste a file. Confirm the
+   dictation selection is not cancelled or replaced.
+
+### Slice 3 — Documentation and browser acceptance
+
+Status: **planned**.
+
+Update `conduit-web/README.md`, run the project checks, and perform the real
+Windows acceptance pass. Record browser and version results in this plan. A
+synthetic Playwright test cannot replace Explorer clipboard evidence.
+
+Files:
+
+- `conduit-web/README.md`
+- `specs/clipboard-file-attachments-implementation-plan.md`
+
+Checks:
+
+```bash
+npm run typecheck
+npm run build
+npm test
+npm run test:browser -- test/browser/app.spec.js --project=desktop-chromium --workers=1 --grep "pastes files into the composer|shared DataTransfer extraction"
+```
+
+Manual smoke test:
+
+1. Run the Chrome, Edge, and Firefox Windows Explorer cases below.
+2. Confirm ordinary text paste, oversized-file rejection, removal during
+   upload, navigation cleanup, and unchanged drag/drop behavior.
+3. Record exact browser versions and whether files arrived through `items`,
+   `files`, or both.
+
 ## File-by-file implementation checklist
 
 ### `conduit-web/src/client/state/attachments.ts`
@@ -284,7 +406,8 @@ The test should:
    one PNG, and dispatch a cancelable `ClipboardEvent("paste")` on the
    `Message Pi` textarea.
 4. Assert that the paste event becomes `defaultPrevented`.
-5. Assert that the draft remains exactly `Review these files`.
+5. Assert that the draft remains exactly `Review these files` and that both
+   `selectionStart` and `selectionEnd` remain unchanged.
 6. Assert that both files appear in the existing attachment tray.
 7. Assert that both upload bodies and names reach the existing PUT route.
 8. Assert that the tray is above the composer and that the image receives the
@@ -295,13 +418,17 @@ The test should:
 9. Send the message and assert that both files appear under `Message
    attachments`, as the picker/drop test already does.
 10. Dispatch a text-only paste event and assert that no upload occurs and the
-    event is not prevented.
+    event is not prevented. Where the browser project permits clipboard
+    permissions, write text with `navigator.clipboard.writeText()` and press
+    `Control+V`, then assert that the text is inserted normally.
 11. Retain the existing picker and drop assertions; they prove those paths still
     use the same upload lifecycle.
 
-Add one focused case for a transfer where `items` contains the file but
-`files` is empty. This is the important difference between the shared helper
-and the current drop-only implementation.
+Add focused cases for an item-only transfer and a files-only fallback transfer.
+For item-only coverage, use a structural transfer on a cancelable event because
+adding a file to a native `DataTransfer` normally populates both collections.
+Also cover a file item whose `getAsFile()` throws, with a valid fallback file in
+`files`, so the error path is observable without a second production path.
 
 Because Node's test environment does not provide a native `DataTransfer`, this
 is browser coverage rather than a new Node unit test. If the helper is kept
@@ -370,7 +497,9 @@ need to be observed.
 - Paste, remove during upload, then navigate to another chat: the existing
   abort/delete/cleanup behaviour must hold.
 - Paste a folder or shortcut: no path string may enter the composer and the app
-  must not crash. No recursive folder upload is promised.
+  must not crash. No recursive folder upload is promised. If the browser
+  exposes a shortcut as a regular `File`, it may follow the ordinary upload
+  path because the web client does not perform OS-specific detection.
 - Drop the same three files: the existing overlay and upload behaviour must be
   unchanged.
 
@@ -408,7 +537,8 @@ file is cancelled so the browser cannot also insert its text representation.
 ## Non-goals
 
 - Reading the clipboard without a user paste action.
-- Uploading folders, directory trees, Windows shortcuts, or local paths.
+- Uploading folders, directory trees, or local paths; OS-specific shortcut
+  detection is also out of scope.
 - Adding a native Windows integration or Electron/Tauri bridge.
 - Supporting arbitrary image formats in server previews.
 - Changing attachment size limits, concurrency, persistence, or Pi protocol.
@@ -434,9 +564,8 @@ The implementation is accepted when all of the following are true:
    files from Explorer and pressing Ctrl+V.
 9. The README describes the resulting browser-dependent behaviour.
 10. `npm run typecheck`, `npm run build`, and `npm test` pass, and the focused
-    browser test passes under the project-prescribed Playwright command from
-    `docs/operations/testing.md`. `npm test` runs only the Node unit suite; the
-    synthetic paste coverage ships in `test/browser/app.spec.js` and is not
+    browser command in Slice 3 passes. `npm test` runs only the Node unit suite;
+    the synthetic paste coverage ships in `test/browser/app.spec.js` and is not
     native Windows evidence.
 
 ## Estimated implementation size
