@@ -1,13 +1,19 @@
 import assert from "node:assert/strict";
+import { spawn } from "node:child_process";
 import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { LOCAL_VOICE_MODELS, VoiceModelManager } from "../src/server/voice-model-manager.js";
+import { extractRuntime, LOCAL_VOICE_MODELS, VoiceModelManager } from "../src/server/voice-model-manager.js";
 import { getVoiceModelManifest } from "../src/server/voice-model-manifests.js";
 
 const sha256 = (value) => crypto.createHash("sha256").update(value).digest("hex");
+const runCommand = (command, args) => new Promise((resolve, reject) => {
+  const child = spawn(command, args, { stdio: "ignore" });
+  child.once("error", reject);
+  child.once("exit", (code, signal) => code === 0 ? resolve() : reject(new Error(`${command} exited with ${code ?? signal}`)));
+});
 
 test("managed voice packages use reviewed immutable revisions, sizes, and SHA-256 pins", () => {
   for (const model of LOCAL_VOICE_MODELS) {
@@ -133,6 +139,21 @@ test("managed voice model resumes a staged install after the process stops durin
     await first.stop();
     await fs.rm(temporary, { recursive: true, force: true });
   }
+});
+
+test("runtime extraction ignores archive ownership metadata", async () => {
+  const temporary = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-voice-runtime-"));
+  const source = path.join(temporary, "source", "onnxruntime-linux-x64-1.25.1", "lib");
+  const archive = path.join(temporary, "runtime.tgz");
+  const destination = path.join(temporary, "destination");
+  try {
+    await fs.mkdir(source, { recursive: true });
+    await fs.writeFile(path.join(source, "libonnxruntime.so"), "fake library");
+    await runCommand("tar", ["--owner=0", "--group=0", "-czf", archive, "-C", path.join(temporary, "source"), "onnxruntime-linux-x64-1.25.1"]);
+    await fs.mkdir(destination, { recursive: true });
+    await extractRuntime(archive, destination);
+    assert.equal(await fs.readFile(path.join(destination, "onnxruntime-linux-x64-1.25.1", "lib", "libonnxruntime.so"), "utf8"), "fake library");
+  } finally { await fs.rm(temporary, { recursive: true, force: true }); }
 });
 
 test("managed Whisper tiers install independently and transcribe through the embedded engine", async () => {

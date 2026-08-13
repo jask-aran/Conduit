@@ -416,6 +416,43 @@ Acceptance:
   variants skipped by the project harness
 - `git diff --check`
 
+## Current bug-fix slice — unprivileged runtime extraction
+
+Status: **completed**.
+
+The v0.4.6 recovery path exposed a second deployment boundary: the managed
+Parakeet runtime archive contains ownership and permission metadata, but the
+production container runs as UID 1000 with `CAP_CHOWN` removed. GNU tar
+therefore failed during extraction even though every downloaded artifact had
+the expected size and SHA-256 value.
+
+This slice:
+
+- extracts managed runtime archives with `--no-same-owner` and
+  `--no-same-permissions`;
+- adds a real archive regression with root ownership and restrictive mode
+  metadata;
+- documents the safe cleanup target for the incomplete v0.4.6 staging
+  directory and publishes the v0.4.7 deployment note.
+
+Acceptance:
+
+- a non-root extraction succeeds when the archive requests root ownership;
+- an interrupted Parakeet staging directory can be removed without touching
+  other models or Voice settings;
+- a fresh v0.4.7 Parakeet installation reaches activation instead of failing
+  in tar metadata restoration.
+
+### Verification completed
+
+- `node --test test/voice-model-manager.test.js` — 12 passed
+- `npm test` — 433 passed
+- `npm run typecheck` — passed
+- `npm run build` — passed, including bundle and PWA checks
+- `npm run test:browser:setpieces` — previous v0.4.6 acceptance set passed;
+  no browser code changed in this slice
+- `git diff --check`
+
 ## Manual acceptance record
 
 Status: **accepted for the current voice scope**.
