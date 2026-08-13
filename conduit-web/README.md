@@ -504,14 +504,22 @@ JSON or `transcript.text.delta` / `transcript.text.done` SSE events; the
 Each file-upload adapter makes one finalization request per utterance. The
 internal managed-Whisper adapter transcribes one buffered PCM utterance without
 opening a network listener. Conduit emits
-`ready`, `partial`, `final`, `end_of_speech`, `settlement_deadline`, `completed`,
-and `error`. `end_of_speech` is an upstream pause boundary; it does not stop
+`ready`, `partial`, `final`, `end_of_speech`, `finalizing`, `settlement_deadline`, `completed`,
+and `error`. `finalizing` announces the duration-aware server deadline before
+the selected adapter runs its final transcription pass. `end_of_speech` is an upstream pause boundary; it does not stop
 the browser session. The user stop or the five-minute limit finalizes the
 session. `completed` includes `settlementMs`, `finalWithinDeadline`,
 `reason`, `audioBytes`, `audioDurationMs`, and non-secret adapter/provider/model
 metadata; clients must never infer auto-send timing from browser clocks. The
 browser also emits `conduit:voice-dictation-metrics` with the completion
 diagnostics.
+
+Finalisation uses `max(base, recordedAudioSeconds × modelMultiplier)` and a
+ten-minute cap. The relaxed defaults are a 30-second base and a 12× fallback
+multiplier; the full-precision local Parakeet policy uses 18×. Deployments can
+adjust the base, cap, and fallback with
+`CONDUIT_VOICE_FINALIZATION_BASE_MS`, `CONDUIT_VOICE_FINALIZATION_MAX_MS`, and
+`CONDUIT_VOICE_FINALIZATION_DEFAULT_MULTIPLIER`.
 
 The browser keeps the selected microphone ID in local settings and applies it
 as an exact `getUserMedia` device constraint. The input test measures the live

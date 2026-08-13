@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { runInNewContext } from "node:vm";
-import { createParakeetNormalizer } from "../src/server/dictation-stream.js";
+import { calculateFinalizationTimeoutMs, createParakeetNormalizer } from "../src/server/dictation-stream.js";
 import {
   audioTransferLost,
   beginDictatedRange,
@@ -109,6 +109,14 @@ test("audio transfer diagnostics detect bytes lost before the server", () => {
   assert.equal(audioTransferLost({ audioBytesSent: 640, serverAudioBytes: 640 }), false);
   assert.equal(audioTransferLost({ audioBytesSent: 640, serverAudioBytes: 320 }), true);
   assert.equal(audioTransferLost({ audioBytesSent: 640, serverAudioBytes: null }), false);
+});
+
+test("finalization timeout scales with audio duration and model cost", () => {
+  const limits = { finalizationBaseMs: 30_000, finalizationMaxMs: 600_000, finalizationDefaultMultiplier: 12 };
+  assert.equal(calculateFinalizationTimeoutMs({ audioBytes: 64_000, model: "parakeet-tdt-0.6b-v3-fp32", limits }), 36_000);
+  assert.equal(calculateFinalizationTimeoutMs({ audioBytes: 64_000, model: "parakeet-tdt-0.6b-v3-int8", limits }), 30_000);
+  assert.equal(calculateFinalizationTimeoutMs({ audioBytes: 64_000, model: "unknown-model", limits }), 30_000);
+  assert.equal(calculateFinalizationTimeoutMs({ audioBytes: 32 * 60_000, model: "parakeet-tdt-0.6b-v3-fp32", limits }), 600_000);
 });
 
 test("capture worklet keeps audio across a pause and flushes its final residual", async () => {

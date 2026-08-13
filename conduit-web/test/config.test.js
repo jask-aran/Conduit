@@ -39,6 +39,9 @@ test("default runtime paths are owned by the repository root", () => {
   assert.equal(path.isAbsolute(config.installations.get("conduit-pinned").command), true);
   assert.equal(config.enablePartialContinue, true);
   assert.equal(config.maxAttachmentBytes, 100 * 1024 * 1024);
+  assert.equal(config.voiceFinalizationBaseMs, 30_000);
+  assert.equal(config.voiceFinalizationMaxMs, 600_000);
+  assert.equal(config.voiceFinalizationDefaultMultiplier, 12);
   assert.equal(config.voiceConfigFile.endsWith(path.join("data", "voice.json")), true);
   assert.equal(config.voiceModelRoot.endsWith(path.join("data", "voice", "models")), true);
   assert.equal(config.voiceRecordingsRoot.endsWith(path.join("data", "voice", "recordings")), true);
@@ -68,6 +71,21 @@ test("one data root relocates every durable Conduit path", () => {
   assert.equal(config.voiceRecordingsRoot, path.join(dataRoot, "voice", "recordings"));
   assert.equal(config.release, "0123456789abcdef");
   assert.equal(loadConfig({ CONDUIT_MAX_ATTACHMENT_BYTES: "2048" }).maxAttachmentBytes, 2048);
+  assert.equal(loadConfig({
+    CONDUIT_VOICE_FINALIZATION_BASE_MS: "45000",
+    CONDUIT_VOICE_FINALIZATION_MAX_MS: "900000",
+    CONDUIT_VOICE_FINALIZATION_DEFAULT_MULTIPLIER: "20",
+  }).voiceFinalizationBaseMs, 45_000);
+  assert.equal(loadConfig({
+    CONDUIT_VOICE_FINALIZATION_BASE_MS: "45000",
+    CONDUIT_VOICE_FINALIZATION_MAX_MS: "900000",
+    CONDUIT_VOICE_FINALIZATION_DEFAULT_MULTIPLIER: "20",
+  }).voiceFinalizationMaxMs, 900_000);
+  assert.equal(loadConfig({
+    CONDUIT_VOICE_FINALIZATION_BASE_MS: "45000",
+    CONDUIT_VOICE_FINALIZATION_MAX_MS: "900000",
+    CONDUIT_VOICE_FINALIZATION_DEFAULT_MULTIPLIER: "20",
+  }).voiceFinalizationDefaultMultiplier, 20);
   assert.equal(config.workspaceSuggestionRoot, path.resolve("/tmp/workspace-suggestions"));
   assert.equal(config.workspaceDefaultRoot, path.resolve("/tmp/workspace-suggestions"));
   assert.equal(loadConfig({

@@ -34,6 +34,8 @@ interface VoiceDictationOptions {
 
 const MAX_SOCKET_BUFFER_BYTES = 1024 * 1024;
 const MAX_PENDING_AUDIO_BYTES = 256 * 1024;
+const INITIAL_FINALIZATION_TIMEOUT_MS = 60_000;
+const FINALIZATION_NETWORK_GRACE_MS = 5_000;
 
 function socketUrl() {
   const protocol = location.protocol === "https:" ? "wss:" : "ws:";
@@ -200,6 +202,11 @@ export function createVoiceDictationClient(callbacks: VoiceDictationCallbacks, o
     stopFrameSent = true;
   };
 
+  const armFinalizationTimer = (timeoutMs: number) => {
+    if (fallbackTimer !== null) window.clearTimeout(fallbackTimer);
+    fallbackTimer = window.setTimeout(() => fail(new Error("Dictation finalisation timed out")), Math.max(1_000, timeoutMs + FINALIZATION_NETWORK_GRACE_MS));
+  };
+
   const sendAudio = (buffer: ArrayBuffer) => {
     if (state !== "active" && !(state === "stopping" && drainingCapture)) return;
     if (serverReady && socket?.readyState === WebSocket.OPEN) {
@@ -288,7 +295,7 @@ export function createVoiceDictationClient(callbacks: VoiceDictationCallbacks, o
       })()
       : Promise.resolve().then(stopCapture);
     void drain.then(sendStopFrame);
-    fallbackTimer = window.setTimeout(() => fail(new Error("Dictation finalisation timed out")), 16_000);
+    armFinalizationTimer(INITIAL_FINALIZATION_TIMEOUT_MS);
   };
 
   const start = () => {
@@ -334,6 +341,9 @@ export function createVoiceDictationClient(callbacks: VoiceDictationCallbacks, o
             drainPendingAudio();
             if (stopRequested && !drainingCapture) sendStopFrame();
             else flushPendingAudio();
+          } else if (message.type === "finalizing") {
+            const timeoutMs = Number(message.timeoutMs);
+            if (Number.isFinite(timeoutMs) && timeoutMs >= 1_000) armFinalizationTimer(timeoutMs);
           } else if (message.type === "partial") {
             if (inputSignalDetected) callbacks.onPartial(String(message.text || ""));
           } else if (message.type === "final") {
