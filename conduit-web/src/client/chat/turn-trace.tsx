@@ -1,10 +1,77 @@
 import { createSignal, Index, lazy, Show, Suspense } from "solid-js";
-import { BrainIcon, ChevronDownIcon } from "lucide-solid";
-import type { TurnTraceData } from "../turn-rows";
+import { BrainIcon, ChevronDownIcon, TriangleAlertIcon } from "lucide-solid";
+import type { Message } from "../api/contracts";
+import type { TraceSegment, TurnTraceData } from "../turn-rows";
 import { ToolCard } from "./tool-card";
 import type { MarkdownRendererId } from "./markdown-settings";
 
 const ChatMarkdown = lazy(() => import("./markdown").then((module) => ({ default: module.ChatMarkdown })));
+const fullDateTime = (value?: string) => {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return new Intl.DateTimeFormat([], {
+    year: "numeric",
+    month: "short",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    timeZoneName: "short",
+  }).format(date);
+};
+
+function TraceError(props: { message: Message; profileLabel?: string }) {
+  const message = () => props.message;
+  return <div class="turn-trace-error" data-message-id={message().id}>
+    <div class="turn-trace-error-heading">
+      <TriangleAlertIcon aria-hidden="true" />
+      <strong>Request failed</strong>
+      <Show when={message().timestamp}><time dateTime={message().timestamp}>{fullDateTime(message().timestamp)}</time></Show>
+    </div>
+    <div class="turn-trace-error-meta">
+      <Show when={message().model}><span>Model: {message().model}</span></Show>
+      <Show when={message().provider}><span>Provider: {message().provider}</span></Show>
+      <Show when={props.profileLabel}><span>Profile: {props.profileLabel}</span></Show>
+    </div>
+    <pre>{message().errorMessage || "The model request failed."}</pre>
+  </div>;
+}
+
+function TraceSegmentRow(props: {
+  segment: () => TraceSegment;
+  sessionId: string | null;
+  renderer?: MarkdownRendererId;
+  profileLabel?: string;
+}) {
+  const tool = () => {
+    const segment = props.segment();
+    return segment.kind === "tool" ? segment.tool : null;
+  };
+  const error = () => {
+    const segment = props.segment();
+    return segment.kind === "error" ? segment.message : null;
+  };
+  const text = () => {
+    const segment = props.segment();
+    return segment.kind === "thinking" || segment.kind === "narration" ? segment.text : "";
+  };
+  const live = () => {
+    const segment = props.segment();
+    return segment.kind === "thinking" || segment.kind === "narration" ? Boolean(segment.live) : false;
+  };
+  return <Show when={tool()} fallback={
+    <Show when={error()} fallback={
+      <div class="turn-trace-text" data-kind={props.segment().kind}>
+        <Suspense fallback={<div class="markdown-skeleton" />}><ChatMarkdown streaming={live()} renderer={props.renderer}>{text()}</ChatMarkdown></Suspense>
+      </div>
+    }>
+      {(message) => <TraceError message={message()} profileLabel={props.profileLabel} />}
+    </Show>
+  }>
+    {(item) => <ToolCard tool={item()} sessionId={props.sessionId} />}
+  </Show>;
+}
 
 /** Header line: anchored on the latest text (thinking or narration) so the
     preview doesn't flicker between tool names, with tool counters beside it —
@@ -16,6 +83,10 @@ function previewOf(trace: TurnTraceData): { text: string; counters: string } {
   let totalCalls = 0;
   for (const segment of trace.segments) {
     if (segment.kind === "tool") { totalCalls += 1; callsAfterText += 1; }
+    else if (segment.kind === "error") {
+      latestText = `Request failed · ${segment.message.errorMessage || "The model request failed."}`;
+      callsAfterText = 0;
+    }
     else { latestText = segment.text; callsAfterText = 0; }
   }
   const shown = callsAfterText || totalCalls;
@@ -28,7 +99,7 @@ function previewOf(trace: TurnTraceData): { text: string; counters: string } {
   return { text: clipped, counters };
 }
 
-export function TurnTrace(props: { trace: TurnTraceData; sessionId: string | null; renderer?: MarkdownRendererId }) {
+export function TurnTrace(props: { trace: TurnTraceData; sessionId: string | null; renderer?: MarkdownRendererId; profileLabel?: string }) {
   const [open, setOpen] = createSignal(false);
   return <div class="turn-trace" data-active={props.trace.active ? "true" : "false"}>
     <button type="button" class="turn-trace-header" aria-expanded={open()} onClick={() => setOpen(!open())}>
@@ -41,15 +112,9 @@ export function TurnTrace(props: { trace: TurnTraceData; sessionId: string | nul
     </button>
     <Show when={open()}>
       <div class="turn-trace-body">
-        <Index each={props.trace.segments}>{(segment) => {
-          const tool = () => { const value = segment(); return value.kind === "tool" ? value.tool : null; };
-          const text = () => { const value = segment(); return value.kind === "tool" ? "" : value.text; };
-          const live = () => { const value = segment(); return value.kind !== "tool" && Boolean(value.live); };
-          if (tool()) return <ToolCard tool={tool()!} sessionId={props.sessionId} />;
-          return <div class="turn-trace-text" data-kind={segment().kind}>
-            <Suspense fallback={<div class="markdown-skeleton" />}><ChatMarkdown streaming={live()} renderer={props.renderer}>{text()}</ChatMarkdown></Suspense>
-          </div>;
-        }}</Index>
+        <Index each={props.trace.segments}>{(segment) =>
+          <TraceSegmentRow segment={segment} sessionId={props.sessionId} renderer={props.renderer} profileLabel={props.profileLabel} />
+        }</Index>
       </div>
     </Show>
   </div>;
