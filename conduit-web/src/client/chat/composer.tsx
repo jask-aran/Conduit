@@ -15,6 +15,7 @@ import {
 } from "@/components/primitives";
 import type { Template } from "../api/contracts";
 import type { ActiveChatStore } from "../state/active-chat";
+import { filesFromDataTransfer } from "../state/attachments";
 import type { AttachmentsStore } from "../state/attachments";
 import type { ModelSettings } from "../state/model-settings";
 import { AttachmentCards } from "./attachments";
@@ -197,6 +198,13 @@ export function Composer(props: {
     queueMicrotask(() => input.focus());
   };
 
+  const paste = (event: ClipboardEvent) => {
+    const files = filesFromDataTransfer(event.clipboardData);
+    if (!files.length) return;
+    event.preventDefault();
+    props.attachments.addFiles(files);
+  };
+
   const keydown = (event: KeyboardEvent) => {
     if (event.key === "Escape" && slashOpen()) { event.preventDefault(); setSlashOpen(false); return; }
     if (event.key === "Enter" && slashOpen()) { event.preventDefault(); props.chat.setDraft(""); attach(); return; }
@@ -272,6 +280,7 @@ export function Composer(props: {
           value={props.chat.draft()}
           disabled={!props.serverOnline}
           onInput={(event) => change(event.currentTarget.value)}
+          onPaste={paste}
           onSelect={selectionChanged}
           onKeyDown={keydown}
         />

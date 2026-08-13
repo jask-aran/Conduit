@@ -88,6 +88,17 @@ test("dictation adds word-boundary spacing once when inserted at a tight cursor"
   });
 });
 
+test("dictation leaves a trailing space at the end of the draft", () => {
+  assert.deepEqual(replaceDictatedRange("hello", beginDictatedRange("hello", 5), "world"), {
+    text: "hello world ",
+    range: { start: 5, end: 12 },
+  });
+  assert.deepEqual(replaceDictatedRange("before selected after", beginDictatedRange("before selected after", 7, 15), "new"), {
+    text: "before new after",
+    range: { start: 7, end: 10 },
+  });
+});
+
 test("short silent stops are intentional while sustained silence is a microphone failure", () => {
   assert.equal(shouldReportNoSignal({ inputSignalDetected: false, captureDurationMs: 4_999 }), false);
   assert.equal(shouldReportNoSignal({ inputSignalDetected: false, captureDurationMs: 5_000 }), true);

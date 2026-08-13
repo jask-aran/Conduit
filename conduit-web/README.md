@@ -57,6 +57,9 @@ a hung abort terminates the process after 250 ms for clean resumption.
 
 The interface keeps uploaded Attachment cards above the bounded native
 textarea until send, then renders the same cards beneath their user message.
+The composer accepts files through the picker, chat-surface drag-and-drop, and
+Ctrl/Cmd+V when the browser exposes clipboard file items. Ordinary text paste
+remains text paste, and the configured server attachment limit still applies.
 Persisted image cards use the attachment preview route, including when restored
 for edit. The compact composer model menu remains separate from Settings'
 searchable multi-model picker. Cmd/Ctrl+K opens the typed application command
@@ -247,7 +250,8 @@ and has first-class provider/model profiles for OpenAI, Deepgram, and Groq.
 Remote None, Bearer, and custom API-key-header credentials are stored server-side in `data/voice.json`
 (mode `0600`) and are never returned to the browser. Environment configuration
 remains a locked deployment override. Provisional transcript text replaces one
-highlighted composer range in place, final text remains an editable draft, and
+highlighted composer range in place, leaves one trailing space after each
+non-empty dictation, final text remains an editable draft, and
 optional auto-send accepts only a server-confirmed final event settled within
 one second of stop.
 

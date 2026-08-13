@@ -109,7 +109,7 @@ export function replaceDictatedRange(text, range, transcript) {
   const before = source.slice(0, start);
   const after = source.slice(end);
   const leftSpace = value && /[\p{L}\p{N}]$/u.test(before) && /^[\p{L}\p{N}]/u.test(value) ? " " : "";
-  const rightSpace = value && /[\p{L}\p{N}]$/u.test(value) && /^[\p{L}\p{N}]/u.test(after) ? " " : "";
+  const rightSpace = value && !/^\s/u.test(after) ? " " : "";
   const inserted = `${leftSpace}${value}${rightSpace}`;
   return {
     text: `${before}${inserted}${after}`,
