@@ -217,9 +217,11 @@ Opening a persisted session restores JSONL state and does not pass model flags
 that could replace it.
 
 The composer also supports draft-only voice dictation. The on-screen microphone
-is a start/stop toggle and the configurable `Ctrl+Shift+D` shortcut is
-push-to-talk. The shortcut is captured before page controls so Chrome does not
-consume the default chord as a bookmark command. Microphone capture starts in
+is a start/stop toggle. The configurable `Ctrl+Shift+D` shortcut uses the
+selected Activation behaviour: Push to talk holds the recording, while Toggle
+starts and stops it with separate presses. The shortcut is captured before page
+controls so Chrome does not consume the default chord as a bookmark command.
+Microphone capture starts in
 parallel with the voice connection. The composer keeps a compact 24-bar,
 left-to-right history in the status line. Settings → Voice uses the same
 bounded bar renderer in a larger monitor with current level, peak hold, and

@@ -5,6 +5,7 @@ import {
   beginDictatedRange,
   loadVoiceDictationSettings,
   matchesShortcut,
+  normalizeActivation,
   releasesShortcut,
   replaceDictatedRange,
   saveVoiceDictationSettings,
@@ -47,11 +48,12 @@ test("voice shortcut capture and push-to-talk release use the configured chord",
 test("voice settings remain draft-only by default and auto-send only a timely final", () => {
   const values = new Map();
   const storage = { getItem: (key) => values.get(key) ?? null, setItem: (key, value) => values.set(key, value) };
-  assert.deepEqual(loadVoiceDictationSettings(storage), { shortcut: "Ctrl+Shift+D", autoSend: false, inputDeviceId: "" });
+  assert.deepEqual(loadVoiceDictationSettings(storage), { shortcut: "Ctrl+Shift+D", activation: "push_to_talk", autoSend: false, inputDeviceId: "" });
   storage.setItem("conduit:voice-dictation", JSON.stringify({ shortcut: "Super+D" }));
-  assert.deepEqual(loadVoiceDictationSettings(storage), { shortcut: "Ctrl+Shift+D", autoSend: false, inputDeviceId: "" });
-  assert.deepEqual(saveVoiceDictationSettings({ shortcut: "Ctrl+Shift+V", autoSend: true, inputDeviceId: "mic-2" }, storage), { shortcut: "Ctrl+Shift+V", autoSend: true, inputDeviceId: "mic-2" });
-  assert.deepEqual(loadVoiceDictationSettings(storage), { shortcut: "Ctrl+Shift+V", autoSend: true, inputDeviceId: "mic-2" });
+  assert.deepEqual(loadVoiceDictationSettings(storage), { shortcut: "Ctrl+Shift+D", activation: "push_to_talk", autoSend: false, inputDeviceId: "" });
+  assert.deepEqual(saveVoiceDictationSettings({ shortcut: "Ctrl+Shift+V", activation: "toggle", autoSend: true, inputDeviceId: "mic-2" }, storage), { shortcut: "Ctrl+Shift+V", activation: "toggle", autoSend: true, inputDeviceId: "mic-2" });
+  assert.deepEqual(loadVoiceDictationSettings(storage), { shortcut: "Ctrl+Shift+V", activation: "toggle", autoSend: true, inputDeviceId: "mic-2" });
+  assert.equal(normalizeActivation("unknown"), "push_to_talk");
   assert.equal(shouldAutoSend({ enabled: true, final: true, finalWithinDeadline: true }), true);
   assert.equal(shouldAutoSend({ enabled: true, final: false, finalWithinDeadline: true }), false);
   assert.equal(shouldAutoSend({ enabled: true, final: true, finalWithinDeadline: false }), false);

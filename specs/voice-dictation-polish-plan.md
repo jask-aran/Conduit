@@ -74,26 +74,18 @@ Make local voice dictation reliable and easy to understand:
   a 60-second safety cap. The test remains in memory and does not upload audio.
 - Added reduced-motion rules and browser coverage for both waveform surfaces.
 
+### Shortcut activation behaviour
+
+- Added the persisted Voice → Activation behaviour setting with `push_to_talk`
+  and `toggle` modes. Existing settings migrate to push-to-talk.
+- Kept the microphone button as a click-to-toggle control in both modes.
+- Captured the configured shortcut in the window capture phase in both modes;
+  key repeat does not retrigger Toggle, and modifier release does not stop it.
+- Added unit coverage for normalization and persistence.
+
 ## Remaining build scope
 
-### 1. Add shortcut activation behaviour
-
-Add a persisted Voice → Activation behaviour setting with two values:
-
-- `push_to_talk`: hold the configured shortcut to record and release it to
-  finalise;
-- `toggle`: press the shortcut once to start and again to stop, for hands-free
-  recording.
-
-The microphone button remains a click-to-toggle control in both modes. The
-setting changes shortcut behaviour, not the button's basic accessibility or
-label. Migrate old settings without changing a user's explicitly configured
-shortcut or unrelated voice options.
-
-Test both modes, including key repeat, modifier release, repeated toggle
-presses, settings reload, and the settings shortcut recorder.
-
-### 2. Add local microphone test playback
+### 1. Add local microphone test playback
 
 Extend the interactive in-memory test with local playback:
 

@@ -1,5 +1,5 @@
 export const VOICE_DICTATION_STORAGE_KEY = "conduit:voice-dictation";
-export const DEFAULT_VOICE_DICTATION_SETTINGS = Object.freeze({ shortcut: "Ctrl+Shift+D", autoSend: false, inputDeviceId: "" });
+export const DEFAULT_VOICE_DICTATION_SETTINGS = Object.freeze({ shortcut: "Ctrl+Shift+D", activation: "push_to_talk", autoSend: false, inputDeviceId: "" });
 const LEGACY_DEFAULT_SHORTCUT = "Super+D";
 
 const MODIFIER_ORDER = ["Super", "Ctrl", "Alt", "Shift"];
@@ -37,6 +37,10 @@ export function normalizeShortcut(value) {
   return [...MODIFIER_ORDER.filter((modifier) => modifiers.has(modifier)), keyLabel(rawKey)].join("+");
 }
 
+export function normalizeActivation(value) {
+  return value === "toggle" ? "toggle" : DEFAULT_VOICE_DICTATION_SETTINGS.activation;
+}
+
 function shortcutParts(shortcut) {
   const pieces = normalizeShortcut(shortcut).split("+");
   return { modifiers: new Set(pieces.slice(0, -1)), key: pieces.at(-1).toLowerCase() };
@@ -68,6 +72,7 @@ export function loadVoiceDictationSettings(storage = globalThis.localStorage) {
     const shortcut = normalizeShortcut(stored?.shortcut);
     return {
       shortcut: shortcut === LEGACY_DEFAULT_SHORTCUT ? DEFAULT_VOICE_DICTATION_SETTINGS.shortcut : shortcut,
+      activation: normalizeActivation(stored?.activation),
       autoSend: stored?.autoSend === true,
       inputDeviceId: typeof stored?.inputDeviceId === "string" ? stored.inputDeviceId : "",
     };
@@ -79,6 +84,7 @@ export function loadVoiceDictationSettings(storage = globalThis.localStorage) {
 export function saveVoiceDictationSettings(settings, storage = globalThis.localStorage) {
   const normalized = {
     shortcut: normalizeShortcut(settings.shortcut),
+    activation: normalizeActivation(settings.activation),
     autoSend: settings.autoSend === true,
     inputDeviceId: typeof settings.inputDeviceId === "string" ? settings.inputDeviceId : "",
   };
