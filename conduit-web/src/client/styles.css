@@ -368,6 +368,7 @@ svg { stroke-width: 1.5; }
 .command-hint-label { color: var(--muted-foreground); }
 .command-hint-primary .command-hint-item:first-child .command-hint-label { color: var(--foreground); font-weight: 550; }
 .command-hint-action { min-height: 28px; border: 1px solid color-mix(in oklch, var(--border), var(--foreground) 10%); border-radius: 6px; background: transparent; padding: 3px 7px 3px 4px; color: inherit; }
+.command-hint-action .command-hint-label { color: var(--foreground); font-weight: 550; }
 .command-hint-action:hover { border-color: color-mix(in oklch, var(--border), var(--foreground) 22%); background: var(--accent); }
 .command-hint-action:focus-visible { outline: 2px solid var(--ring); outline-offset: 1px; }
 .command-hint-key { display: inline-grid; min-width: 20px; height: 20px; place-items: center; border: 1px solid color-mix(in oklch, var(--border), var(--foreground) 12%); border-radius: 4px; background: var(--background); padding: 0 5px; color: var(--muted-foreground); font: 500 10px/1 ui-monospace, SFMono-Regular, Menlo, monospace; }
@@ -564,6 +565,7 @@ svg { stroke-width: 1.5; }
 
 @media (max-width: 520px) {
   .command-hint-bar { align-items: flex-start; gap: 8px; padding: 7px 10px; }
+  .command-hint-bar[data-mode="edit"] .command-hint-primary { width: 100%; flex: 1 1 100%; }
   .command-hint-secondary { display: none; }
   .command-hint-more { display: block; }
   .command-hint-more[open] { flex: 1; }

@@ -483,6 +483,20 @@ Add a compact `More actions` menu in the footer:
 
 The row checkboxes should remain visible and the selection count should stay prominent. `Done` exits edit mode and clears the temporary selection state without closing the search dialog.
 
+The later keyboard-contract correction supersedes the menu shape above. Bulk
+edit mode is limited to moving and deleting chats; rename stays a single-chat
+browse action, and the footer does not add `More actions` or copy controls.
+Render `D Delete` and `M Move` as direct enclosed buttons beside `Done`. They
+must call the same confirmed-delete and destination-picker paths as their
+keyboard equivalents.
+
+Implementation status: complete in the current working tree. The edit footer
+keeps all five edit hints visible and makes `Done`, `D Delete`, and `M Move`
+pointer controls. Delete opens the existing count-aware confirmation. Move
+opens the existing destination page and operates on every selected catalogue
+target. Rename remains absent from bulk mode, and partial failures retain the
+existing selection behavior.
+
 ### 5. Leave the selection highlight alone for now
 
 I would not redesign the blue left-edge highlight in this slice. It is a broader selection/focus identity issue that affects the sidebar and other surfaces. The edit-mode work should only add discoverability and pointer input. A later visual pass can replace that treatment consistently across the application.

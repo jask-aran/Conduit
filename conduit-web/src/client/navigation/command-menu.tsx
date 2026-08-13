@@ -612,7 +612,13 @@ export function CommandMenu(props: {
               <Show when={!selectable().length}><p class="command-empty">{emptyMessage()}</p></Show>
               <For each={rows()}>{renderRow}</For>
             </div>
-            <CommandHintBar context={hintContext()} mode={hintMode()} onToggleEdit={toggleSelection} />
+            <CommandHintBar
+              context={hintContext()}
+              mode={hintMode()}
+              onToggleEdit={toggleSelection}
+              onDeleteSelected={() => requestDelete()}
+              onMoveSelected={() => moveSelected()}
+            />
           </div>
           <Show when={props.details}>
             <aside class="command-detail-pane" aria-label="Search preview">{props.details}</aside>

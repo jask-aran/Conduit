@@ -257,6 +257,52 @@ test("Control-click enters edit mode and ordinary clicks toggle more chats", asy
   await expect(existing).not.toHaveAttribute("data-chat-selected", "true");
 });
 
+test("edit footer buttons open bulk delete and move flows", async ({ page }) => {
+  const sessions = [
+    { id: "session_existing", projectId: "project_chat", status: "active", title: "Existing chat", createdAt: "2026-08-13T02:00:00.000Z" },
+    { id: "session_second", projectId: "project_chat", status: "active", title: "Second chat", createdAt: "2026-08-13T01:00:00.000Z" },
+  ];
+  const moves = [];
+  await page.route("**/v0/projects", (route) => route.fulfill({ json: {
+    projects: [{ ...projects[0], sessions }, projects[1]],
+  } }));
+  await page.route("**/v0/sessions/*/move", async (route) => {
+    moves.push({
+      id: new URL(route.request().url()).pathname.split("/").at(-2),
+      ...route.request().postDataJSON(),
+    });
+    await route.fulfill({ json: {} });
+  });
+  await page.goto("/");
+  await page.keyboard.press("Control+p");
+
+  const dialog = page.getByRole("dialog", { name: "Command Palette" });
+  const hints = dialog.getByRole("note", { name: "Keyboard shortcuts" });
+  await dialog.getByRole("option", { name: /Second chat/ }).click({ modifiers: ["Control"] });
+  await dialog.getByRole("option", { name: /Existing chat/ }).click();
+  await expect(dialog.getByText("2 selected")).toBeVisible();
+  const actionLabelColors = await hints.locator(".command-hint-action .command-hint-label").evaluateAll(
+    (labels) => labels.map((label) => getComputedStyle(label).color),
+  );
+  expect(actionLabelColors).toHaveLength(3);
+  expect(new Set(actionLabelColors).size).toBe(1);
+
+  await hints.getByRole("button", { name: /Delete/ }).click();
+  const confirmation = page.getByRole("alertdialog", { name: "Delete 2 chats?" });
+  await expect(confirmation).toBeVisible();
+  await confirmation.getByRole("button", { name: "Cancel" }).click();
+  await expect(dialog.getByText("2 selected")).toBeVisible();
+
+  await hints.getByRole("button", { name: /Move/ }).click();
+  await expect(hints).toContainText("Back");
+  await dialog.getByRole("option", { name: /^Research/ }).click();
+  await expect.poll(() => moves.sort((left, right) => left.id.localeCompare(right.id))).toEqual([
+    { id: "session_existing", projectId: "project_research" },
+    { id: "session_second", projectId: "project_research" },
+  ]);
+  await expect(dialog).toHaveCount(0);
+});
+
 test("sidebar View all opens a Chats-scoped search after the twenty-row limit", async ({ page }) => {
   const sessions = Array.from({ length: 24 }, (_, index) => ({
     id: `session_many_${index}`,
