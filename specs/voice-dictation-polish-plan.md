@@ -372,6 +372,50 @@ fail an otherwise completed dictation.
 - `git diff --check`
 - local Conduit restarted and `/healthz` returned ready
 
+## Current bug-fix slice — managed model install recovery and Voice draft preservation
+
+Status: **completed**.
+
+An image replacement during a large managed-model download can stop the
+installer after the verified artifacts are written but before runtime
+activation. That interruption must remain recoverable and must not make the
+model permanently unusable. The settings client must also keep an unsaved
+`local` source selection visible while the install response and progress polls
+reflect the server's previously saved `off` value.
+
+This slice:
+
+- cancels and awaits an active model install during orderly server shutdown;
+- reuses verified staging files and rebuilds an incomplete extracted runtime
+  before activation;
+- reports a post-restart staging directory as `interrupted`, not as a durable
+  model error, and removes staging data when the model is uninstalled;
+- preserves the unsaved Voice server draft across the install response and
+  background progress polls;
+- adds server and browser regressions for interrupted activation and the
+  disappearing managed-model panel.
+
+Acceptance:
+
+- a process stop during runtime extraction can be followed by a new process
+  resuming and activating the same staged package;
+- a restart does not turn an interrupted install into a permanent error;
+- the local model panel remains visible while an unsaved local source is being
+  installed, even if the server still returns the saved `off` mode;
+- a completed or uninstalled model does not leave an active staging directory.
+
+### Verification completed
+
+- `node --test test/voice-model-manager.test.js` — 11 passed
+- focused managed-model browser coverage — 1 passed
+- `npm test` — 432 passed
+- `npm run typecheck` — passed
+- `npm run build` — passed, including bundle and PWA checks
+- `npm run test:browser:setpieces` — 8 desktop acceptance tests passed, 5
+  workspace tests passed, and 8 PWA/mobile acceptance tests passed; 6 mobile
+  variants skipped by the project harness
+- `git diff --check`
+
 ## Manual acceptance record
 
 Status: **accepted for the current voice scope**.
