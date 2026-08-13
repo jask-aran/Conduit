@@ -572,6 +572,11 @@ const dictationStream = createDictationStream({
   wss,
   voiceRuntime,
   recordingStore: voiceRecordingStore,
+  limits: {
+    finalizationBaseMs: config.voiceFinalizationBaseMs,
+    finalizationMaxMs: config.voiceFinalizationMaxMs,
+    finalizationDefaultMultiplier: config.voiceFinalizationDefaultMultiplier,
+  },
 });
 const liveSessionStream = createLiveSessionStream({
   manager,

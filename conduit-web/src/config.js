@@ -22,6 +22,11 @@ function boundedBytes(value, fallback) {
   return Number.isSafeInteger(parsed) && parsed >= 1 ? parsed : fallback;
 }
 
+function boundedMultiplier(value, fallback) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed >= 1 && parsed <= 120 ? parsed : fallback;
+}
+
 export function loadConfig(env = process.env) {
   const templatesRoot = absolute(env.CONDUIT_TEMPLATES_ROOT || path.join(repositoryRoot, "templates"));
   const defaultTemplateFile = env.CONDUIT_PI_TEMPLATE
@@ -78,6 +83,9 @@ export function loadConfig(env = process.env) {
     authFile: absolute(env.CONDUIT_AUTH_FILE || path.join(dataRoot, "auth.json")),
     cloneTimeoutMs: boundedMilliseconds(env.CONDUIT_CLONE_TIMEOUT_MS, 120_000),
     maxAttachmentBytes: boundedBytes(env.CONDUIT_MAX_ATTACHMENT_BYTES, 100 * 1024 * 1024),
+    voiceFinalizationBaseMs: boundedMilliseconds(env.CONDUIT_VOICE_FINALIZATION_BASE_MS, 30_000),
+    voiceFinalizationMaxMs: boundedMilliseconds(env.CONDUIT_VOICE_FINALIZATION_MAX_MS, 600_000),
+    voiceFinalizationDefaultMultiplier: boundedMultiplier(env.CONDUIT_VOICE_FINALIZATION_DEFAULT_MULTIPLIER, 12),
     allowInsecure: env.CONDUIT_ALLOW_INSECURE === "1",
     templatesRoot,
     workspaceAllowlist,

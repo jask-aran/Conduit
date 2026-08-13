@@ -8,9 +8,45 @@ const DEFAULT_LIMITS = Object.freeze({
   maxEventBytes: 64 * 1024,
   maxBufferedBytes: 1024 * 1024,
   finalDeadlineMs: 1_000,
-  finalTimeoutMs: 15_000,
+  finalizationBaseMs: 30_000,
+  finalizationMaxMs: 600_000,
+  finalizationDefaultMultiplier: 12,
   connectTimeoutMs: 5_000,
 });
+
+// Local full-precision models need much more CPU time than a remote streaming
+// adapter. Keep these policies here so a deployment can tune the defaults
+// through createDictationStream({ limits }) without changing the protocol.
+export const FINALIZATION_MODEL_MULTIPLIERS = Object.freeze({
+  "parakeet-tdt-0.6b-v3-fp32": 18,
+  "parakeet-tdt-0.6b-v3-int8": 10,
+  "whisper-large-v3-turbo-q8": 14,
+  "whisper-small-fp32": 14,
+  "whisper-small-q8": 10,
+  "whisper-base-fp32": 12,
+  "whisper-base-q8": 8,
+  "whisper-tiny-en-fp32": 10,
+  "whisper-tiny-en-q8": 6,
+});
+
+function finalizationMultiplier({ adapter, model }, limits) {
+  const exact = FINALIZATION_MODEL_MULTIPLIERS[String(model || "")];
+  if (Number.isFinite(exact)) return exact;
+  if (adapter === "parakeet_pcm_ws_v1") return 4;
+  return Number.isFinite(Number(limits.finalizationDefaultMultiplier))
+    ? Number(limits.finalizationDefaultMultiplier)
+    : DEFAULT_LIMITS.finalizationDefaultMultiplier;
+}
+
+export function calculateFinalizationTimeoutMs({ audioBytes = 0, adapter = null, model = null, limits = DEFAULT_LIMITS } = {}) {
+  const fixed = Number(limits.finalTimeoutMs);
+  if (Number.isFinite(fixed) && fixed >= 1_000) return Math.round(fixed);
+  const baseMs = Math.max(1_000, Number(limits.finalizationBaseMs) || DEFAULT_LIMITS.finalizationBaseMs);
+  const maxMs = Math.max(baseMs, Number(limits.finalizationMaxMs) || DEFAULT_LIMITS.finalizationMaxMs);
+  const audioDurationMs = Math.max(0, Number(audioBytes) || 0) / 32;
+  const estimate = Math.max(baseMs, audioDurationMs * finalizationMultiplier({ adapter, model }, limits));
+  return Math.min(maxMs, Math.ceil(estimate));
+}
 
 function dictationError(code, message, status = 400) {
   return Object.assign(new Error(message), { code, status });
@@ -344,7 +380,19 @@ export function createDictationStream({ wss, voiceRuntime, recordingStore = null
       stopReason = reason;
       stoppedAt = Date.now();
       stopFinalRevision = finalRevision;
-      finalTimer = setTimeout(() => fail(dictationError("dictation_final_timeout", "Voice dictation did not finalize in time", 504)), limits.finalTimeoutMs);
+      const finalizationTimeoutMs = calculateFinalizationTimeoutMs({
+        audioBytes,
+        adapter: runtimeMetadata.adapter,
+        model: runtimeMetadata.model,
+        limits,
+      });
+      send({
+        type: "finalizing",
+        timeoutMs: finalizationTimeoutMs,
+        audioDurationMs: Math.round(audioBytes / 32),
+        ...runtimeMetadata,
+      });
+      finalTimer = setTimeout(() => fail(dictationError("dictation_final_timeout", "Voice dictation did not finalize in time", 504)), finalizationTimeoutMs);
       finalTimer.unref?.();
       deadlineTimer = setTimeout(() => { deadlinePassed = true; send({ type: "settlement_deadline", deadlineMs: limits.finalDeadlineMs }); }, limits.finalDeadlineMs);
       deadlineTimer.unref?.();

@@ -122,6 +122,10 @@ test("authenticated Conduit dictation bridge keeps PCM flowing across a speech-e
     assert.equal((await next((event) => event.type === "partial")).text, "hello world");
     assert.equal(binaryBytes, 1_280);
     client.send(JSON.stringify({ type: "stop" }));
+    const finalizing = await next((event) => event.type === "finalizing");
+    assert.equal(finalizing.timeoutMs, 30_000);
+    assert.equal(finalizing.audioDurationMs, 40);
+    assert.equal(finalizing.adapter, "parakeet_pcm_ws_v1");
     assert.equal((await next((event) => event.type === "final")).text, "hello world");
     const completed = await next((event) => event.type === "completed");
     assert.equal(completed.text, "hello world");

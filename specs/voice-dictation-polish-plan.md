@@ -114,6 +114,10 @@ explicitly deferred.
   normal long dictation is not truncated. Keep the duration and byte ceilings
   aligned. Show a recovery message when the server still ends a session at a
   limit instead of ending silently.
+- Calculate the finalisation deadline from received audio duration and the
+  active model policy. Use relaxed model multipliers, announce the calculated
+  deadline to the browser, and allow deployment-level base, cap, and fallback
+  multiplier overrides.
 - Keep credentials out of diagnostics. Store transcript text only in the
   explicit bounded WAV/JSON archive added by the diagnostic slice below. Use
   the metadata to separate capture loss, server limits, finalisation delay, and
