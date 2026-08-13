@@ -81,6 +81,7 @@ test("managed voice model rejects a mismatched artifact without activating it", 
     }] }),
     fetchImpl: async () => new Response("unexpected"),
     runtimeExtractor: async () => {},
+    downloadRetries: 0,
   });
   try {
     await assert.rejects(manager.startInstall({ modelId, licenseAccepted: true }), { code: "voice_model_checksum" });
@@ -156,5 +157,138 @@ test("concurrent managed Whisper requests share startup and serialize inference"
     await manager.stop();
     assert.equal(disposals, 1);
     await fs.rm(temporary, { recursive: true, force: true });
+  }
+});
+
+test("install resumes an interrupted download from the partially written file", async () => {
+  const temporary = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-voice-resume-"));
+  const root = path.join(temporary, "voice", "models");
+  const modelId = "parakeet-tdt-0.6b-v3-int8";
+  const content = Buffer.from("0123456789abcdef");
+  const requests = [];
+  const manager = new VoiceModelManager({
+    root,
+    manifestResolver: async () => ({ version: "test", modelRevision: "pinned", artifacts: [{
+      name: "weights", relative: "models/encoder-model.int8.onnx", url: "https://packages.invalid/model",
+      size: content.length, sha256: sha256(content),
+    }] }),
+    fetchImpl: async (url, options = {}) => {
+      requests.push(options);
+      assert.equal(options.headers.Range, "bytes=8-");
+      return new Response(content.subarray(8), { status: 206, headers: { "Content-Range": "bytes 8-15/16" } });
+    },
+    runtimeExtractor: async () => {},
+    downloadRetries: 0,
+  });
+  try {
+    const staging = path.join(root, `.installing-${modelId}`, "models");
+    await fs.mkdir(staging, { recursive: true });
+    await fs.writeFile(path.join(staging, "encoder-model.int8.onnx.part"), content.subarray(0, 8));
+    await manager.startInstall({ modelId, licenseAccepted: true });
+    const installed = await fs.readFile(path.join(root, modelId, "models", "encoder-model.int8.onnx"));
+    assert.deepEqual(installed, content);
+    assert.equal(requests.length, 1);
+  } finally { await fs.rm(temporary, { recursive: true, force: true }); }
+});
+
+test("install retries transient download failures with backoff before failing", async () => {
+  const temporary = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-voice-retry-"));
+  const root = path.join(temporary, "voice", "models");
+  const modelId = "parakeet-tdt-0.6b-v3-int8";
+  const content = Buffer.from("retryable payload");
+  let attempts = 0;
+  const manager = new VoiceModelManager({
+    root,
+    manifestResolver: async () => ({ version: "test", modelRevision: "pinned", artifacts: [{
+      name: "weights", relative: "models/encoder-model.int8.onnx", url: "https://packages.invalid/model",
+      size: content.length, sha256: sha256(content),
+    }] }),
+    fetchImpl: async () => {
+      attempts += 1;
+      if (attempts < 3) throw new TypeError("fetch failed");
+      return new Response(content);
+    },
+    runtimeExtractor: async () => {},
+    downloadRetries: 3,
+    downloadRetryBaseMs: 5,
+  });
+  try {
+    await manager.startInstall({ modelId, licenseAccepted: true });
+    assert.equal(attempts, 3);
+    const installed = await fs.readFile(path.join(root, modelId, "models", "encoder-model.int8.onnx"));
+    assert.deepEqual(installed, content);
+  } finally { await fs.rm(temporary, { recursive: true, force: true }); }
+});
+
+test("install downloads artifacts concurrently up to a bounded limit", async () => {
+  const temporary = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-voice-parallel-"));
+  const root = path.join(temporary, "voice", "models");
+  const modelId = "whisper-tiny-en-q8";
+  const contents = new Map(["a", "b", "c", "d"].map((name) => [`https://packages.invalid/${name}`, Buffer.from(`payload ${name}`)]));
+  let active = 0;
+  let maximumActive = 0;
+  const fetched = [];
+  const manager = new VoiceModelManager({
+    root,
+    manifestResolver: async () => ({ version: "test", modelRevision: "pinned", artifacts: [...contents.keys()].map((url) => ({
+      name: url.slice(-1), relative: `models/${url.slice(-1)}.bin`, url,
+      size: contents.get(url).length, sha256: sha256(contents.get(url)),
+    })) }),
+    fetchImpl: async (url) => {
+      active += 1;
+      maximumActive = Math.max(maximumActive, active);
+      await new Promise((resolve) => setTimeout(resolve, 25));
+      active -= 1;
+      fetched.push(url);
+      return new Response(contents.get(url));
+    },
+    downloadRetries: 0,
+  });
+  try {
+    await manager.startInstall({ modelId, licenseAccepted: true });
+    assert.equal(fetched.length, 4);
+    assert.ok(maximumActive >= 2, `expected parallel downloads, saw ${maximumActive}`);
+    assert.ok(maximumActive <= 3, `expected bounded concurrency, saw ${maximumActive}`);
+  } finally { await fs.rm(temporary, { recursive: true, force: true }); }
+});
+
+test("full-precision Whisper models load with the fp32 precision", async () => {
+  const temporary = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-voice-whisper-fp32-"));
+  const root = path.join(temporary, "voice", "models");
+  const modelId = "whisper-small-fp32";
+  const content = Buffer.from('{"model_type":"whisper"}');
+  const loaded = [];
+  const transcriber = async () => ({ text: "full precision transcript" });
+  transcriber.dispose = async () => {};
+  const manager = new VoiceModelManager({
+    root,
+    manifestResolver: async () => ({ version: "test", modelRevision: "pinned", artifacts: [{
+      name: "config.json", relative: "config.json", url: "https://packages.invalid/config", size: content.length,
+      sha256: sha256(content), gitBlob: "0".repeat(40),
+    }] }),
+    fetchImpl: async () => new Response(content),
+    transformersLoader: async (modelPath, precision) => { loaded.push({ modelPath, precision }); return transcriber; },
+  });
+  try {
+    await manager.startInstall({ modelId, licenseAccepted: true });
+    assert.deepEqual(await manager.ensureRunning(modelId), { kind: "transcriber" });
+    assert.deepEqual(loaded, [{ modelPath: path.join(root, modelId), precision: "fp32" }]);
+    assert.equal(await manager.transcribe(modelId, Buffer.alloc(4)), "full precision transcript");
+  } finally { await manager.stop(); await fs.rm(temporary, { recursive: true, force: true }); }
+});
+
+test("CONDUIT_HF_ENDPOINT re-points managed model downloads at a mirror", () => {
+  const previous = process.env.CONDUIT_HF_ENDPOINT;
+  try {
+    process.env.CONDUIT_HF_ENDPOINT = "https://hf-mirror.invalid//";
+    for (const model of LOCAL_VOICE_MODELS) {
+      const manifest = getVoiceModelManifest(model, { release: "amd64", runtime: "x64" });
+      const huggingFaceArtifacts = manifest.artifacts.filter((artifact) => artifact.url.includes("/resolve/"));
+      assert.ok(huggingFaceArtifacts.length > 0, `${model.id} should fetch models from a mirror`);
+      assert.ok(huggingFaceArtifacts.every((artifact) => artifact.url.startsWith("https://hf-mirror.invalid/")), model.id);
+    }
+  } finally {
+    if (previous === undefined) delete process.env.CONDUIT_HF_ENDPOINT;
+    else process.env.CONDUIT_HF_ENDPOINT = previous;
   }
 });

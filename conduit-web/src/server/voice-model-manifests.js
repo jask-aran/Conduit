@@ -1,4 +1,8 @@
-const HUGGING_FACE = "https://huggingface.co";
+function huggingFaceBase() {
+  const endpoint = process.env.CONDUIT_HF_ENDPOINT;
+  return (endpoint || "https://huggingface.co").replace(/\/+$/, "");
+}
+
 const PARAKEET_REPOSITORY = "istupakov/parakeet-tdt-0.6b-v3-onnx";
 const PARAKEET_VERSION = "v0.8.0";
 const PARAKEET_REVISION = "8f23f0c03c8761650bdb5b40aaf3e40d2c15f1ce";
@@ -10,7 +14,13 @@ const WHISPER_FILES = Object.freeze([
   "onnx/encoder_model_quantized.onnx", "onnx/decoder_model_merged_quantized.onnx",
 ]);
 
-const WHISPER_MANIFESTS = Object.freeze({
+const WHISPER_FP32_FILES = Object.freeze([
+  "added_tokens.json", "config.json", "generation_config.json", "merges.txt", "normalizer.json", "preprocessor_config.json",
+  "special_tokens_map.json", "tokenizer.json", "tokenizer_config.json", "vocab.json",
+  "onnx/encoder_model.onnx", "onnx/decoder_model_merged.onnx",
+]);
+
+const WHISPER_Q8_MANIFESTS = Object.freeze({
   "whisper-tiny-en-q8": Object.freeze({
     repository: "onnx-community/whisper-tiny.en",
     revision: "2575352d61be1bf7225cf8f8b268a4678025fc58",
@@ -65,6 +75,56 @@ const WHISPER_MANIFESTS = Object.freeze({
       "onnx/decoder_model_merged_quantized.onnx": [156750845, "ec07c3cbb64172c39791e26ee870a65ac22b458c36722bfe2776b3dbf741e0c9"],
     }),
   }),
+  "whisper-large-v3-turbo-q8": Object.freeze({
+    repository: "onnx-community/whisper-large-v3-turbo",
+    revision: "360ebcde2559d60bb474678be3c1de9ef347d01a",
+    files: Object.freeze({
+      "added_tokens.json": [34648, "3c51f66c4c21f9e126970078f11ae77a78c74aee8df606ee9daba86e467108e0"],
+      "config.json": [1332, "35cd83669f75bc2867f3b3a4461850392d5e308cd6ea951c3700539883c28df1"],
+      "generation_config.json": [3897, "16f95291d2f47c944d3c2b19390bba7965666555c1ea2a0bdc850d1fab45612f"],
+      "merges.txt": [493869, "2df2990a395e35e8dfbc7511e08c12d56018d8d04691e0133e5d63b21e154dc6"],
+      "normalizer.json": [52666, "bf1c507dc8724ca9cf9903640dacfb69dae2f00edee4f21ceba106a7392f26dd"],
+      "preprocessor_config.json": [340, "7ccc62c6f2765af1f3b46c00c9b5894426835a05021c8b9c01eecb6dfb542711"],
+      "special_tokens_map.json": [2186, "baea4ea09372eb4fca86b4e4346139fd73cb807d5087e9de0948e971739c3e74"],
+      "tokenizer.json": [2480617, "6d8cbd7cd0d8d5815e478dac67b85a26bbe77c1f5e0c6d76d1ce2abc0e5f21ca"],
+      "tokenizer_config.json": [282843, "844b642c73a91359722f47b35705f7174686df33d252695d8572cf9ac03a6389"],
+      "vocab.json": [1036558, "e2aa043ef015641d363d8288e7c241c85e36a5c761fb303598e0710233344387"],
+      "onnx/encoder_model_quantized.onnx": [644822195, "d2f853dc3254fdc0079f55dd4433ea716ac98ec5574d3b475f288f2a77cebba9"],
+      "onnx/decoder_model_merged_quantized.onnx": [439936716, "61481bd3be3a445d5a4b9070e8f8b2c6cc4fbbbbdc9f0e7ed048a132b8b84e0d"],
+    }),
+  }),
+});
+
+function fullPrecisionEntry(base, encoder, decoder) {
+  return Object.freeze({
+    repository: base.repository,
+    revision: base.revision,
+    files: Object.freeze({
+      ...base.files,
+      "onnx/encoder_model.onnx": encoder,
+      "onnx/decoder_model_merged.onnx": decoder,
+    }),
+    fullPrecision: true,
+  });
+}
+
+const WHISPER_MANIFESTS = Object.freeze({
+  ...WHISPER_Q8_MANIFESTS,
+  "whisper-tiny-en-fp32": fullPrecisionEntry(
+    WHISPER_Q8_MANIFESTS["whisper-tiny-en-q8"],
+    [32904992, "8c361b9430a5ef6619ee64b7fe06c725df19f36d508cc8b847064b34a888a3fe"],
+    [118552291, "33581ce4a48f9a59dad036a3939a24f290e0756e05387b977fe6f613460b495e"],
+  ),
+  "whisper-base-fp32": fullPrecisionEntry(
+    WHISPER_Q8_MANIFESTS["whisper-base-q8"],
+    [82468078, "a9f3b752833b49e880dec91ee5b6d936112be7c3ea07c221024ba493439f46fe"],
+    [208521528, "514903744bb1b45803ec571af99b31110491c6f77b0a154825866995fb124b73"],
+  ),
+  "whisper-small-fp32": fullPrecisionEntry(
+    WHISPER_Q8_MANIFESTS["whisper-small-q8"],
+    [352825870, "b37cd6625dc36f9178ec7539a1876b9680ea26a910097e092be39dc766320c7b"],
+    [615324301, "6ed5e35feaba79ad2e89b368ddc7b4ddaa3c00b4c37a664375d3428a76fecc6a"],
+  ),
 });
 
 const PARAKEET_FILES = Object.freeze({
@@ -73,6 +133,15 @@ const PARAKEET_FILES = Object.freeze({
   "nemo128.onnx": [139764, "a9fde1486ebfcc08f328d75ad4610c67835fea58c73ba57e3209a6f6cf019e9f"],
   "encoder-model.int8.onnx": [652183999, "6139d2fa7e1b086097b277c7149725edbab89cc7c7ae64b23c741be4055aff09"],
   "decoder_joint-model.int8.onnx": [18202004, "eea7483ee3d1a30375daedc8ed83e3960c91b098812127a0d99d1c8977667a70"],
+});
+
+const PARAKEET_FP32_FILES = Object.freeze({
+  "config.json": PARAKEET_FILES["config.json"],
+  "vocab.txt": PARAKEET_FILES["vocab.txt"],
+  "nemo128.onnx": PARAKEET_FILES["nemo128.onnx"],
+  "encoder-model.onnx": [41770866, "98a74b21b4cc0017c1e7030319a4a96f4a9506e50f0708f3a516d02a77c96bb1"],
+  "encoder-model.onnx.data": [2435420160, "9a22d372c51455c34f13405da2520baefb7125bd16981397561423ed32d24f36"],
+  "decoder_joint-model.onnx": [72520893, "e978ddf6688527182c10fde2eb4b83068421648985ef23f7a86be732be8706c1"],
 });
 
 const PARAKEET_RUNTIME = Object.freeze({
@@ -112,12 +181,12 @@ function whisperManifest(model) {
   return {
     version: "transformers.js-3.8.1",
     modelRevision: definition.revision,
-    artifacts: WHISPER_FILES.map((name) => {
+    artifacts: (definition.fullPrecision ? WHISPER_FP32_FILES : WHISPER_FILES).map((name) => {
       const [size, sha256] = definition.files[name];
       return {
         name,
         relative: name,
-        url: `${HUGGING_FACE}/${definition.repository}/resolve/${definition.revision}/${name}`,
+        url: `${huggingFaceBase()}/${definition.repository}/resolve/${definition.revision}/${name}`,
         size,
         sha256,
       };
@@ -125,9 +194,10 @@ function whisperManifest(model) {
   };
 }
 
-function parakeetManifest(architecture) {
+function parakeetManifest(model, architecture) {
   const binary = PARAKEET_BINARY[architecture.release];
   const runtime = PARAKEET_RUNTIME[architecture.runtime];
+  const files = model.precision === "fp32" ? PARAKEET_FP32_FILES : PARAKEET_FILES;
   if (!binary || !runtime) throw manifestError(`No reviewed Parakeet package exists for ${architecture.release}`);
   return {
     version: PARAKEET_VERSION,
@@ -148,10 +218,10 @@ function parakeetManifest(architecture) {
         size: runtime.size,
         sha256: runtime.sha256,
       },
-      ...Object.entries(PARAKEET_FILES).map(([name, [size, sha256]]) => ({
+      ...Object.entries(files).map(([name, [size, sha256]]) => ({
         name,
         relative: `models/${name}`,
-        url: `${HUGGING_FACE}/${PARAKEET_REPOSITORY}/resolve/${PARAKEET_REVISION}/${name}`,
+        url: `${huggingFaceBase()}/${PARAKEET_REPOSITORY}/resolve/${PARAKEET_REVISION}/${name}`,
         size,
         sha256,
       })),
@@ -161,5 +231,5 @@ function parakeetManifest(architecture) {
 }
 
 export function getVoiceModelManifest(model, architecture) {
-  return model.engine === "parakeet" ? parakeetManifest(architecture) : whisperManifest(model);
+  return model.engine === "parakeet" ? parakeetManifest(model, architecture) : whisperManifest(model);
 }
