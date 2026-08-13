@@ -9,12 +9,14 @@ test("voice settings API stores endpoint authentication without returning the se
   try {
     const initial = await (await server.request("/v0/voice/settings")).json();
     assert.equal(initial.mode, "off");
-    assert.equal(initial.local.installed, false);
+    assert.equal(initial.local.models.every((model) => !model.installed), true);
+    assert.deepEqual(initial.providers.slice(0, 3).map((provider) => provider.id), ["openai", "deepgram", "groq"]);
 
     const response = await server.request("/v0/voice/settings", {
       method: "PUT",
       body: JSON.stringify({
         mode: "remote",
+        provider: "custom",
         adapter: "parakeet_pcm_ws_v1",
         endpoint: "wss://speech.example.com/ws",
         auth: { type: "bearer", secret: "voice-test-secret" },

@@ -4245,16 +4245,25 @@ test("Voice settings store a cloud credential through the redacted server API", 
   let savedRequest = null;
   const view = {
     mode: "remote",
-    adapter: "parakeet_pcm_ws_v1",
-    endpoint: "wss://speech.example.com/ws",
+    localModelId: "parakeet-tdt-0.6b-v3-int8",
+    provider: "openai",
+    adapter: "openai_audio_sse_v1",
+    model: "gpt-transcribe",
+    endpoint: "https://api.openai.com/v1/audio/transcriptions",
     source: "stored",
     locked: false,
     adapters: [
       { id: "parakeet_pcm_ws_v1", label: "Parakeet live PCM WebSocket", transport: "websocket", description: "Streams signed PCM." },
       { id: "openai_audio_sse_v1", label: "OpenAI-compatible audio upload", transport: "http", description: "Uploads one utterance." },
     ],
+    providers: [
+      { id: "openai", label: "OpenAI", adapter: "openai_audio_sse_v1", endpoint: "https://api.openai.com/v1/audio/transcriptions", authLabel: "OpenAI API key", models: [{ id: "gpt-transcribe", label: "GPT Transcribe", description: "Recommended." }] },
+      { id: "deepgram", label: "Deepgram", adapter: "deepgram_audio_v1", endpoint: "https://api.deepgram.com/v1/listen", authLabel: "Deepgram API key", models: [{ id: "nova-3", label: "Nova-3", description: "Recommended." }] },
+      { id: "groq", label: "Groq", adapter: "openai_audio_sse_v1", endpoint: "https://api.groq.com/openai/v1/audio/transcriptions", authLabel: "Groq API key", models: [{ id: "whisper-large-v3-turbo", label: "Whisper Large V3 Turbo", description: "Recommended." }] },
+      { id: "custom", label: "Custom endpoint", adapter: "openai_audio_sse_v1", endpoint: "", authLabel: "Endpoint credential", models: [] },
+    ],
     auth: { type: "bearer", headerName: "Authorization", configured: false, source: null, removable: false },
-    local: { state: "not_installed", installed: false, running: false, version: "v0.8.0", modelRevision: "8f23f0c", precision: "int8", approximateBytes: 943718400, license: { id: "CC-BY-4.0", attribution: "NVIDIA Parakeet" }, progress: null, error: null },
+    local: { installingModelId: null, activeModelId: null, progress: null, models: [{ id: "parakeet-tdt-0.6b-v3-int8", label: "Parakeet", engine: "parakeet", size: "large", languages: "English", description: "Accurate.", approximateBytes: 943718400, precision: "int8", license: { id: "CC-BY-4.0", attribution: "NVIDIA Parakeet" }, installed: false, running: false, state: "not_installed", error: null }] },
   };
   await page.route("**/v0/voice/settings", async (route) => {
     if (route.request().method() === "PUT") {
@@ -4268,17 +4277,19 @@ test("Voice settings store a cloud credential through the redacted server API", 
   await page.keyboard.press("Control+,");
   const dialog = page.getByRole("dialog", { name: "Settings" });
   await dialog.getByRole("tab", { name: "Voice" }).click();
-  await dialog.getByLabel("Endpoint URL").fill("wss://cloud.example.net/transcribe");
-  await dialog.getByLabel("Credential").fill("cloud-secret-value");
-  await dialog.getByRole("button", { name: "Save endpoint" }).click();
+  await dialog.getByLabel("OpenAI API key").fill("cloud-secret-value");
+  await dialog.getByRole("button", { name: "Save provider" }).click();
   await expect.poll(() => savedRequest).not.toBeNull();
   expect(savedRequest).toEqual({
     mode: "remote",
-    adapter: "parakeet_pcm_ws_v1",
-    endpoint: "wss://cloud.example.net/transcribe",
+    localModelId: "parakeet-tdt-0.6b-v3-int8",
+    provider: "openai",
+    adapter: "openai_audio_sse_v1",
+    model: "gpt-transcribe",
+    endpoint: "https://api.openai.com/v1/audio/transcriptions",
     auth: { type: "bearer", headerName: "Authorization", secret: "cloud-secret-value" },
   });
-  await expect(dialog.getByLabel("Credential")).toHaveValue("");
+  await expect(dialog.getByLabel("OpenAI API key")).toHaveValue("");
   await expect(dialog).not.toContainText("cloud-secret-value");
   await expect(dialog.getByText("Stored securely by Conduit")).toBeVisible();
 });

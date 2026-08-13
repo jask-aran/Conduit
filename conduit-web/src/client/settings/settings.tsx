@@ -64,11 +64,15 @@ interface SearchSettings {
 
 interface VoiceServerSettings {
   mode: "off" | "local" | "remote";
+  localModelId: string;
+  provider: string;
   adapter: string;
+  model: string;
   endpoint: string;
   source: "stored" | "environment";
   locked: boolean;
   adapters: { id: string; label: string; transport: "websocket" | "http"; description: string }[];
+  providers: { id: string; label: string; adapter: string; endpoint: string; authLabel: string; models: { id: string; label: string; description: string }[] }[];
   auth: {
     type: "none" | "bearer" | "header";
     headerName: string;
@@ -77,16 +81,13 @@ interface VoiceServerSettings {
     removable: boolean;
   };
   local: {
-    state: "not_installed" | "installing" | "ready" | "running" | "error";
-    installed: boolean;
-    running: boolean;
-    version: string;
-    modelRevision: string;
-    precision: string;
-    approximateBytes: number;
-    license: { id: string; attribution: string };
+    installingModelId: string | null;
+    activeModelId: string | null;
     progress: { phase: string; current: string; completedBytes: number; totalBytes: number } | null;
-    error: string | null;
+    models: {
+      id: string; label: string; engine: string; size: string; languages: string; description: string; approximateBytes: number; precision: string;
+      license: { id: string; attribution: string }; installed: boolean; running: boolean; state: "not_installed" | "installing" | "ready" | "running" | "error"; error: string | null;
+    }[];
   } | null;
 }
 
@@ -350,12 +351,14 @@ export function Settings(props: {
     void loadVoiceSettings();
   });
   createEffect(() => {
-    if (!props.open || section() !== "voice" || voiceServerSettings()?.local?.state !== "installing") return;
+    if (!props.open || section() !== "voice" || !voiceServerSettings()?.local?.installingModelId) return;
     const timer = window.setInterval(() => void loadVoiceSettings({ quiet: true }), 750);
     onCleanup(() => window.clearInterval(timer));
   });
 
   const updateVoiceServer = (patch: Partial<VoiceServerSettings>) => setVoiceServerSettings((current) => current ? { ...current, ...patch } : current);
+  const selectedVoiceProvider = createMemo(() => voiceServerSettings()?.providers.find((provider) => provider.id === voiceServerSettings()?.provider));
+  const selectedLocalVoiceModel = createMemo(() => voiceServerSettings()?.local?.models.find((model) => model.id === voiceServerSettings()?.localModelId));
   const saveVoiceServer = async () => {
     const settings = voiceServerSettings();
     if (!settings) return;
@@ -367,7 +370,10 @@ export function Settings(props: {
         method: "PUT",
         body: JSON.stringify({
           mode: settings.mode,
-          adapter: settings.mode === "local" ? "openai_audio_sse_v1" : settings.adapter,
+          localModelId: settings.localModelId,
+          provider: settings.provider,
+          adapter: settings.adapter,
+          model: settings.model,
           endpoint: settings.endpoint,
           auth: { type: settings.mode === "local" ? "none" : settings.auth.type, headerName: settings.auth.headerName, secret: voiceSecret() },
         }),
@@ -394,11 +400,11 @@ export function Settings(props: {
     catch (error) { setVoiceError((error as Error).message); }
     finally { setVoiceBusy(false); }
   };
-  const installVoiceModel = async () => {
+  const installVoiceModel = async (modelId: string) => {
     setVoiceBusy(true);
     setVoiceError("");
     try {
-      const loaded = await api<VoiceServerSettings>("/v0/voice/model/install", { method: "POST", body: JSON.stringify({ licenseAccepted: voiceLicenseAccepted() }) });
+      const loaded = await api<VoiceServerSettings>("/v0/voice/model/install", { method: "POST", body: JSON.stringify({ modelId, licenseAccepted: voiceLicenseAccepted() }) });
       setVoiceServerSettings(loaded);
     } catch (error) { setVoiceError((error as Error).message); }
     finally { setVoiceBusy(false); }
@@ -409,9 +415,9 @@ export function Settings(props: {
     catch (error) { setVoiceError((error as Error).message); }
     finally { setVoiceBusy(false); }
   };
-  const uninstallVoiceModel = async () => {
+  const uninstallVoiceModel = async (modelId: string) => {
     setVoiceBusy(true);
-    try { await api("/v0/voice/model", { method: "DELETE" }); await loadVoiceSettings({ quiet: true }); }
+    try { await api("/v0/voice/model", { method: "DELETE", body: JSON.stringify({ modelId }) }); await loadVoiceSettings({ quiet: true }); }
     catch (error) { setVoiceError((error as Error).message); }
     finally { setVoiceBusy(false); }
   };
@@ -563,7 +569,7 @@ export function Settings(props: {
                   <label class="dictation-auto-send"><input type="checkbox" checked={props.voiceSettings.autoSend} onChange={(event) => props.onVoiceSettingsChange({ ...props.voiceSettings, autoSend: event.currentTarget.checked })} /><span><strong>Auto-send timely final dictation</strong><small>Off by default. Conduit only submits a server-confirmed final transcript settled within one second.</small></span></label>
                   <Field><FieldLabel for="voice-mode">Transcription source</FieldLabel><select id="voice-mode" disabled={voiceServerSettings()!.locked || voiceBusy()} value={voiceServerSettings()!.mode} onChange={(event) => {
                     const mode = event.currentTarget.value as VoiceServerSettings["mode"];
-                    updateVoiceServer({ mode, ...(mode === "local" ? { adapter: "openai_audio_sse_v1" } : {}) });
+                    updateVoiceServer({ mode });
                   }}><option value="off">Off</option><option value="local">Managed local model</option><option value="remote">Cloud or remote endpoint</option></select></Field>
                 </FieldGroup>
 
@@ -571,27 +577,36 @@ export function Settings(props: {
 
                 <Show when={voiceServerSettings()!.mode === "remote"}>
                   <div class="voice-card">
-                    <h3>Remote endpoint</h3>
+                    <h3>Cloud transcription</h3>
                     <FieldGroup>
-                      <Field><FieldLabel for="voice-adapter">Protocol adapter</FieldLabel><select id="voice-adapter" disabled={voiceServerSettings()!.locked || voiceBusy()} value={voiceServerSettings()!.adapter} onChange={(event) => updateVoiceServer({ adapter: event.currentTarget.value })}><For each={voiceServerSettings()!.adapters}>{(adapter) => <option value={adapter.id}>{adapter.label}</option>}</For></select><small>{voiceServerSettings()!.adapters.find((adapter) => adapter.id === voiceServerSettings()!.adapter)?.description}</small></Field>
-                      <Field><FieldLabel for="voice-endpoint">Endpoint URL</FieldLabel><Input id="voice-endpoint" type="url" disabled={voiceServerSettings()!.locked || voiceBusy()} value={voiceServerSettings()!.endpoint} placeholder={voiceServerSettings()!.adapter === "parakeet_pcm_ws_v1" ? "wss://speech.example.com/ws" : "https://speech.example.com/v1/audio/transcriptions"} onInput={(event) => updateVoiceServer({ endpoint: event.currentTarget.value })} /><small>Remote endpoints require WSS or HTTPS. Query-string credentials and private network targets are rejected.</small></Field>
-                      <Field><FieldLabel for="voice-auth-type">Authentication</FieldLabel><select id="voice-auth-type" disabled={voiceServerSettings()!.locked || voiceBusy()} value={voiceServerSettings()!.auth.type} onChange={(event) => setVoiceServerSettings((current) => current ? { ...current, auth: { ...current.auth, type: event.currentTarget.value as VoiceServerSettings["auth"]["type"] } } : current)}><option value="none">None</option><option value="bearer">Bearer token</option><option value="header">API-key header</option></select></Field>
-                      <Show when={voiceServerSettings()!.auth.type === "header"}><Field><FieldLabel for="voice-auth-header">Header name</FieldLabel><Input id="voice-auth-header" disabled={voiceServerSettings()!.locked || voiceBusy()} value={voiceServerSettings()!.auth.headerName} onInput={(event) => setVoiceServerSettings((current) => current ? { ...current, auth: { ...current.auth, headerName: event.currentTarget.value } } : current)} /></Field></Show>
-                      <Show when={voiceServerSettings()!.auth.type !== "none"}><Field><FieldLabel for="voice-secret">Credential</FieldLabel><Input id="voice-secret" type="password" autocomplete="off" disabled={voiceServerSettings()!.locked || voiceBusy()} value={voiceSecret()} onInput={(event) => setVoiceSecret(event.currentTarget.value)} placeholder={voiceServerSettings()!.auth.configured ? "A credential is already stored" : "Enter credential"} /><small>{voiceServerSettings()!.auth.source === "environment" ? "Using the server environment" : voiceServerSettings()!.auth.configured ? "Stored securely by Conduit" : "Not configured"}</small></Field></Show>
+                      <Field><FieldLabel for="voice-provider">Provider</FieldLabel><select id="voice-provider" disabled={voiceServerSettings()!.locked || voiceBusy()} value={voiceServerSettings()!.provider} onChange={(event) => {
+                        const provider = voiceServerSettings()!.providers.find((candidate) => candidate.id === event.currentTarget.value)!;
+                        setVoiceSecret("");
+                        setVoiceServerSettings((current) => current ? { ...current, provider: provider.id, adapter: provider.adapter, endpoint: provider.endpoint, model: provider.models[0]?.id || "", auth: { ...current.auth, type: provider.id === "custom" ? current.auth.type : "bearer", configured: false, source: null, removable: false } } : current);
+                      }}><For each={voiceServerSettings()!.providers}>{(provider) => <option value={provider.id}>{provider.label}</option>}</For></select></Field>
+                      <Show when={selectedVoiceProvider()?.models.length}><Field><FieldLabel for="voice-cloud-model">Model</FieldLabel><select id="voice-cloud-model" disabled={voiceServerSettings()!.locked || voiceBusy()} value={voiceServerSettings()!.model} onChange={(event) => updateVoiceServer({ model: event.currentTarget.value })}><For each={selectedVoiceProvider()!.models}>{(model) => <option value={model.id}>{model.label}</option>}</For></select><small>{selectedVoiceProvider()!.models.find((model) => model.id === voiceServerSettings()!.model)?.description}</small></Field></Show>
+                      <Show when={voiceServerSettings()!.provider === "custom"}>
+                        <Field><FieldLabel for="voice-adapter">Protocol adapter</FieldLabel><select id="voice-adapter" disabled={voiceServerSettings()!.locked || voiceBusy()} value={voiceServerSettings()!.adapter} onChange={(event) => updateVoiceServer({ adapter: event.currentTarget.value })}><For each={voiceServerSettings()!.adapters}>{(adapter) => <option value={adapter.id}>{adapter.label}</option>}</For></select><small>{voiceServerSettings()!.adapters.find((adapter) => adapter.id === voiceServerSettings()!.adapter)?.description}</small></Field>
+                        <Field><FieldLabel for="voice-endpoint">Endpoint URL</FieldLabel><Input id="voice-endpoint" type="url" disabled={voiceServerSettings()!.locked || voiceBusy()} value={voiceServerSettings()!.endpoint} placeholder={voiceServerSettings()!.adapter === "parakeet_pcm_ws_v1" ? "wss://speech.example.com/ws" : "https://speech.example.com/v1/audio/transcriptions"} onInput={(event) => updateVoiceServer({ endpoint: event.currentTarget.value })} /><small>Custom UI endpoints require WSS or HTTPS and must resolve publicly. Administrators can configure private services through the environment.</small></Field>
+                        <Show when={voiceServerSettings()!.adapter !== "parakeet_pcm_ws_v1"}><Field><FieldLabel for="voice-custom-model">Model parameter</FieldLabel><Input id="voice-custom-model" value={voiceServerSettings()!.model} placeholder="Optional model ID" onInput={(event) => updateVoiceServer({ model: event.currentTarget.value })} /></Field></Show>
+                        <Field><FieldLabel for="voice-auth-type">Authentication</FieldLabel><select id="voice-auth-type" disabled={voiceServerSettings()!.locked || voiceBusy()} value={voiceServerSettings()!.auth.type} onChange={(event) => setVoiceServerSettings((current) => current ? { ...current, auth: { ...current.auth, type: event.currentTarget.value as VoiceServerSettings["auth"]["type"] } } : current)}><option value="none">None</option><option value="bearer">Bearer token</option><option value="header">API-key header</option></select></Field>
+                        <Show when={voiceServerSettings()!.auth.type === "header"}><Field><FieldLabel for="voice-auth-header">Header name</FieldLabel><Input id="voice-auth-header" disabled={voiceServerSettings()!.locked || voiceBusy()} value={voiceServerSettings()!.auth.headerName} onInput={(event) => setVoiceServerSettings((current) => current ? { ...current, auth: { ...current.auth, headerName: event.currentTarget.value } } : current)} /></Field></Show>
+                      </Show>
+                      <Show when={voiceServerSettings()!.provider !== "custom" || voiceServerSettings()!.auth.type !== "none"}><Field><FieldLabel for="voice-secret">{selectedVoiceProvider()?.authLabel || "Credential"}</FieldLabel><Input id="voice-secret" type="password" autocomplete="off" disabled={voiceServerSettings()!.locked || voiceBusy()} value={voiceSecret()} onInput={(event) => setVoiceSecret(event.currentTarget.value)} placeholder={voiceServerSettings()!.auth.configured ? "A credential is already stored" : "Enter credential"} /><small>{voiceServerSettings()!.auth.source === "environment" ? "Using the server environment" : voiceServerSettings()!.auth.configured ? "Stored securely by Conduit" : "Not configured"}</small></Field></Show>
                     </FieldGroup>
-                    <div class="voice-actions"><Button disabled={voiceServerSettings()!.locked || voiceBusy()} onClick={() => void saveVoiceServer()}>{voiceBusy() ? <Spinner /> : null}Save endpoint</Button><Button variant="outline" disabled={voiceBusy()} onClick={() => void testVoiceServer()}>Test connection</Button><Show when={voiceServerSettings()!.auth.removable}><Button variant="outline" disabled={voiceBusy()} onClick={() => void removeVoiceCredential()}>Remove credential</Button></Show></div>
+                    <div class="voice-actions"><Button disabled={voiceServerSettings()!.locked || voiceBusy()} onClick={() => void saveVoiceServer()}>{voiceBusy() ? <Spinner /> : null}Save provider</Button><Button variant="outline" disabled={voiceBusy()} onClick={() => void testVoiceServer()}>Test credentials</Button><Show when={voiceServerSettings()!.auth.removable}><Button variant="outline" disabled={voiceBusy()} onClick={() => void removeVoiceCredential()}>Remove credential</Button></Show></div>
                   </div>
                 </Show>
 
                 <Show when={voiceServerSettings()!.mode === "local"}>
                   <div class="voice-card">
-                    <h3>Managed Parakeet</h3>
-                    <p>Conduit downloads a pinned int8 Parakeet runtime and model into its data directory, verifies checksums, and runs one unprivileged local worker. Raw microphone audio is not persisted.</p>
-                    <div class="voice-model-status"><strong>{voiceServerSettings()!.local?.installed ? `${voiceServerSettings()!.local?.version} · ${voiceServerSettings()!.local?.precision}` : "Not installed"}</strong><span>{voiceServerSettings()!.local?.state.replaceAll("_", " ")}</span></div>
-                    <Show when={voiceServerSettings()!.local?.state === "installing" && voiceServerSettings()!.local?.progress}>{(progress) => <div class="voice-progress"><progress max={Math.max(1, progress().totalBytes)} value={progress().completedBytes} /><small>{progress().phase} · {progress().current || "preparing package"}</small></div>}</Show>
-                    <Show when={voiceServerSettings()!.local?.error}><p role="alert" class="settings-inline-error">{voiceServerSettings()!.local!.error}</p></Show>
-                    <Show when={!voiceServerSettings()!.local?.installed && voiceServerSettings()!.local?.state !== "installing"}><label class="dictation-auto-send"><input type="checkbox" checked={voiceLicenseAccepted()} onChange={(event) => setVoiceLicenseAccepted(event.currentTarget.checked)} /><span><strong>Accept {voiceServerSettings()!.local?.license.id}</strong><small>{voiceServerSettings()!.local?.license.attribution}. Download requires roughly 900 MiB.</small></span></label></Show>
-                    <div class="voice-actions"><Show when={voiceServerSettings()!.local?.state === "installing"} fallback={<Show when={voiceServerSettings()!.local?.installed} fallback={<Button disabled={voiceBusy() || !voiceLicenseAccepted()} onClick={() => void installVoiceModel()}>{voiceBusy() ? <Spinner /> : null}Install local model</Button>}><Button disabled={voiceBusy()} onClick={() => void saveVoiceServer()}>Use local model</Button><Button variant="outline" disabled={voiceBusy()} onClick={() => void testVoiceServer()}>Start and test</Button><Button variant="outline" disabled={voiceBusy()} onClick={() => void uninstallVoiceModel()}>Uninstall</Button></Show>}><Button variant="outline" disabled={voiceBusy()} onClick={() => void cancelVoiceInstall()}>Cancel installation</Button></Show></div>
+                    <h3>Managed local models</h3>
+                    <p>Choose a size tier. Conduit downloads pinned, checksum-verified artifacts and keeps only one model loaded at a time. Raw microphone audio is not persisted.</p>
+                    <div class="voice-model-grid"><For each={voiceServerSettings()!.local?.models}>{(model) => <label class="voice-model-option" data-current={model.id === voiceServerSettings()!.localModelId}><input type="radio" name="voice-local-model" checked={model.id === voiceServerSettings()!.localModelId} disabled={voiceBusy() || Boolean(voiceServerSettings()!.local?.installingModelId)} onChange={() => { updateVoiceServer({ localModelId: model.id }); setVoiceLicenseAccepted(false); }} /><span><strong>{model.label}</strong><small>{model.size} · {model.languages} · {Math.ceil(model.approximateBytes / 1024 / 1024)} MiB</small><small>{model.description}</small></span><em data-state={model.state}>{model.state.replaceAll("_", " ")}</em></label>}</For></div>
+                    <Show when={voiceServerSettings()!.local?.progress}>{(progress) => <div class="voice-progress"><progress max={Math.max(1, progress().totalBytes)} value={progress().completedBytes} /><small>{progress().phase} · {progress().current || "preparing package"}</small></div>}</Show>
+                    <Show when={selectedLocalVoiceModel()?.error}><p role="alert" class="settings-inline-error">{selectedLocalVoiceModel()!.error}</p></Show>
+                    <Show when={selectedLocalVoiceModel() && !selectedLocalVoiceModel()!.installed && !voiceServerSettings()!.local?.installingModelId}><label class="dictation-auto-send"><input type="checkbox" checked={voiceLicenseAccepted()} onChange={(event) => setVoiceLicenseAccepted(event.currentTarget.checked)} /><span><strong>Accept {selectedLocalVoiceModel()!.license.id}</strong><small>{selectedLocalVoiceModel()!.license.attribution}.</small></span></label></Show>
+                    <div class="voice-actions"><Show when={voiceServerSettings()!.local?.installingModelId} fallback={<Show when={selectedLocalVoiceModel()?.installed} fallback={<Button disabled={voiceBusy() || !voiceLicenseAccepted()} onClick={() => void installVoiceModel(voiceServerSettings()!.localModelId)}>{voiceBusy() ? <Spinner /> : null}Install selected model</Button>}><Button disabled={voiceBusy()} onClick={() => void saveVoiceServer()}>Use selected model</Button><Button variant="outline" disabled={voiceBusy()} onClick={() => void testVoiceServer()}>Start and test</Button><Button variant="outline" disabled={voiceBusy()} onClick={() => void uninstallVoiceModel(voiceServerSettings()!.localModelId)}>Uninstall</Button></Show>}><Button variant="outline" disabled={voiceBusy()} onClick={() => void cancelVoiceInstall()}>Cancel installation</Button></Show></div>
                   </div>
                 </Show>
 

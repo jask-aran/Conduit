@@ -33,7 +33,10 @@ export function registerVoiceRoutes(app, { voiceSettings, voiceRuntime, voiceMod
 
   app.post("/v0/voice/model/install", async (request, response, next) => {
     try {
-      voiceModel.startInstall({ licenseAccepted: request.body?.licenseAccepted === true });
+      const modelId = String(request.body?.modelId || "");
+      voiceModel.assertInstall({ modelId, licenseAccepted: request.body?.licenseAccepted === true });
+      await voiceSettings.selectLocalModel(modelId);
+      voiceModel.startInstall({ modelId, licenseAccepted: request.body?.licenseAccepted === true });
       noStore(response);
       response.status(202).json(await settingsView());
     } catch (error) { next(error); }
@@ -47,9 +50,9 @@ export function registerVoiceRoutes(app, { voiceSettings, voiceRuntime, voiceMod
     } catch (error) { next(error); }
   });
 
-  app.delete("/v0/voice/model", async (_request, response, next) => {
+  app.delete("/v0/voice/model", async (request, response, next) => {
     try {
-      const removed = await voiceModel.uninstall();
+      const removed = await voiceModel.uninstall(String(request.body?.modelId || ""));
       noStore(response);
       response.json({ removed, settings: await settingsView() });
     } catch (error) { next(error); }

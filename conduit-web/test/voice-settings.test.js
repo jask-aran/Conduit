@@ -19,6 +19,7 @@ test("VoiceSettingsStore persists redacted remote credentials with private file 
   try {
     await fixture.store.update({
       mode: "remote",
+      provider: "custom",
       adapter: "parakeet_pcm_ws_v1",
       endpoint: "wss://speech.example.com/ws",
       auth: { type: "header", headerName: "X-Speech-Key", secret: "top-secret" },
@@ -38,10 +39,37 @@ test("VoiceSettingsStore persists redacted remote credentials with private file 
 test("VoiceSettingsStore requires secure secret-free remote URLs", async () => {
   const fixture = await temporaryStore();
   try {
-    const base = { mode: "remote", adapter: "parakeet_pcm_ws_v1", auth: { type: "none" } };
+    const base = { mode: "remote", provider: "custom", adapter: "parakeet_pcm_ws_v1", auth: { type: "none" } };
     await assert.rejects(fixture.store.update({ ...base, endpoint: "ws://speech.example.com/ws" }), { code: "voice_endpoint_insecure" });
     await assert.rejects(fixture.store.update({ ...base, endpoint: "wss://user:secret@speech.example.com/ws" }), { code: "voice_endpoint_credentials" });
     await assert.rejects(fixture.store.update({ ...base, endpoint: "wss://speech.example.com/ws?api_key=secret" }), { code: "voice_endpoint_query" });
+  } finally { await fs.rm(fixture.root, { recursive: true, force: true }); }
+});
+
+test("first-class cloud providers pin endpoints, models, and credential scope", async () => {
+  const fixture = await temporaryStore();
+  try {
+    await fixture.store.update({
+      mode: "remote",
+      provider: "openai",
+      model: "gpt-transcribe",
+      endpoint: "https://attacker.invalid/ignored",
+      auth: { type: "none", secret: "openai-secret" },
+    });
+    const openai = await fixture.store.effective();
+    assert.equal(openai.endpoint, "https://api.openai.com/v1/audio/transcriptions");
+    assert.equal(openai.adapter, "openai_audio_sse_v1");
+    assert.equal(openai.auth.type, "bearer");
+    await assert.rejects(fixture.store.update({
+      mode: "remote", provider: "openai", model: "made-up", auth: { type: "bearer" },
+    }), { code: "voice_model_invalid" });
+    await assert.rejects(fixture.store.update({
+      mode: "remote", provider: "deepgram", model: "nova-3", auth: { type: "bearer" },
+    }), { code: "voice_secret_invalid" });
+    await fixture.store.selectLocalModel("whisper-base-q8");
+    const local = await fixture.store.effective();
+    assert.equal(local.mode, "local");
+    assert.equal(local.localModelId, "whisper-base-q8");
   } finally { await fs.rm(fixture.root, { recursive: true, force: true }); }
 });
 
@@ -64,6 +92,7 @@ test("VoiceRuntime rejects SSRF targets and builds custom authentication only se
 
   const settings = { effective: async () => ({
     mode: "remote",
+    provider: "custom",
     adapter: "parakeet_pcm_ws_v1",
     endpoint: "wss://speech.example.com/ws",
     auth: { type: "header", headerName: "X-Speech-Key", secret: "server-only" },
@@ -76,4 +105,35 @@ test("VoiceRuntime rejects SSRF targets and builds custom authentication only se
   const resolved = await runtime.resolve();
   assert.deepEqual(resolved.headers, { "X-Speech-Key": "server-only" });
   assert.equal(typeof resolved.lookup, "function");
+
+  const deepgram = new VoiceRuntime({
+    settings: { effective: async () => ({ mode: "remote", provider: "deepgram", adapter: "deepgram_audio_v1", model: "nova-3", endpoint: "https://api.deepgram.com/v1/listen", auth: { type: "bearer", secret: "deepgram-secret" }, allowPrivate: false }) },
+    modelManager: {},
+    lookup: async () => [{ address: "203.0.113.9", family: 4 }],
+  });
+  assert.deepEqual((await deepgram.resolve()).headers, { Authorization: "Token deepgram-secret" });
+});
+
+test("VoiceRuntime requires provider credential checks to succeed and keeps the managed model identity", async () => {
+  const providerRuntime = new VoiceRuntime({
+    settings: { effective: async () => ({
+      mode: "remote", provider: "openai", adapter: "openai_audio_sse_v1", model: "gpt-transcribe",
+      endpoint: "https://api.openai.com/v1/audio/transcriptions", auth: { type: "bearer", secret: "invalid" }, allowPrivate: false,
+    }) },
+    modelManager: {},
+    fetchImpl: async () => new Response("unauthorized", { status: 401 }),
+    lookup: async () => [{ address: "203.0.113.10", family: 4 }],
+  });
+  await assert.rejects(providerRuntime.test(), { code: "voice_credentials_rejected" });
+
+  let testedModel = "";
+  const localRuntime = new VoiceRuntime({
+    settings: { effective: async () => ({ mode: "local", localModelId: "parakeet-tdt-0.6b-v3-int8" }) },
+    modelManager: {
+      ensureRunning: async () => ({ kind: "http", origin: "http://127.0.0.1:9000" }),
+      test: async (modelId) => { testedModel = modelId; return { ok: true }; },
+    },
+  });
+  await localRuntime.test();
+  assert.equal(testedModel, "parakeet-tdt-0.6b-v3-int8");
 });

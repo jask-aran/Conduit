@@ -30,6 +30,7 @@
     "@earendil-works/pi-ai": "0.84.1",
     "@earendil-works/pi-coding-agent": "0.84.1",
     "@fontsource-variable/geist": "^5.2.9",
+    "@huggingface/transformers": "3.8.1",
     "@incremark/core": "1.0.2",
     "@jask-aran/solid-components": "0.1.2",
     "@kobalte/core": "0.13.12",
