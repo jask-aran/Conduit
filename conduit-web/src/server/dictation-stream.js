@@ -1,7 +1,20 @@
 import { WebSocket } from "ws";
 
-const MAX_AUDIO_FRAME_BYTES = 256 * 1024;
-const FINAL_SETTLE_MS = 1_000;
+const DEFAULT_LIMITS = Object.freeze({
+  maxSessions: 2,
+  maxDurationMs: 30_000,
+  maxAudioBytes: 16_000 * 2 * 30,
+  maxFrameBytes: 64 * 1024,
+  maxEventBytes: 64 * 1024,
+  maxBufferedBytes: 1024 * 1024,
+  finalDeadlineMs: 1_000,
+  finalTimeoutMs: 15_000,
+  connectTimeoutMs: 5_000,
+});
+
+function dictationError(code, message, status = 400) {
+  return Object.assign(new Error(message), { code, status });
+}
 
 function transcriptText(event) {
   return String(event?.text ?? event?.transcript ?? event?.result?.text ?? "").trim();
@@ -14,131 +27,289 @@ function joinTranscript(left, right) {
   return `${left}${/\s$/.test(left) || /^\s/.test(right) ? "" : " "}${right}`;
 }
 
-export function createAsrNormalizer() {
+export function createParakeetNormalizer() {
   let settled = "";
   let provisional = "";
   let hasFinal = false;
-
   const normalize = (raw) => {
     let event;
-    const source = Buffer.isBuffer(raw) ? raw.toString("utf8") : String(raw);
-    try { event = JSON.parse(source); }
-    catch {
-      const text = source.trim();
-      if (!text) return [];
-      settled = joinTranscript(settled, text);
-      provisional = "";
-      hasFinal = true;
-      return [{ type: "final", text: settled }];
-    }
-
+    try { event = JSON.parse(Buffer.isBuffer(raw) ? raw.toString("utf8") : String(raw)); }
+    catch { throw dictationError("asr_event_invalid", "The Parakeet endpoint returned a non-JSON event", 502); }
     const type = String(event.type || event.event || "").toLowerCase();
-    const text = transcriptText(event);
-    if (type.includes("error") || event.error) {
-      return [{ type: "error", code: event.code || "asr_error", message: String(event.message || event.error?.message || event.error || "Transcription failed") }];
+    if (type === "error" || event.error) {
+      return [{ type: "error", code: String(event.code || "asr_error"), message: String(event.message || event.error?.message || event.error || "Transcription failed") }];
     }
-
-    const final = event.final === true || event.is_final === true || event.speech_final === true
-      || type.includes("final") || type.includes("done");
-    const delta = String(event.delta ?? event.text_delta ?? "");
-    const partial = !final && (type.includes("partial") || type.includes("interim") || type.includes("delta") || Boolean(text));
     const events = [];
-    if (final) {
-      settled = joinTranscript(settled, text || provisional);
+    if (["partial", "transcript.partial", "transcript.text.delta"].includes(type)) {
+      provisional = type === "transcript.text.delta" ? `${provisional}${String(event.delta || "")}` : transcriptText(event);
+      events.push({ type: "partial", text: joinTranscript(settled, provisional) });
+    } else if (["final", "transcript.final", "transcript.text.done"].includes(type)) {
+      settled = joinTranscript(settled, transcriptText(event) || provisional);
       provisional = "";
       hasFinal = true;
       events.push({ type: "final", text: settled });
-    } else if (partial) {
-      provisional = delta ? `${provisional}${delta}` : text;
-      events.push({ type: "partial", text: joinTranscript(settled, provisional) });
+    } else if (!["end_of_speech", "utterance_end", "speech_end"].includes(type)) {
+      throw dictationError("asr_event_unknown", `The Parakeet endpoint returned an unsupported ${type || "untyped"} event`, 502);
     }
-    if (event.speech_final === true || event.end_of_speech === true || type.includes("end_of_speech") || type.includes("utterance_end")) {
+    if (event.speech_final === true || event.end_of_speech === true || ["end_of_speech", "utterance_end", "speech_end"].includes(type)) {
       events.push({ type: "end_of_speech" });
     }
     return events;
   };
+  return { normalize, text: () => joinTranscript(settled, provisional), hasFinal: () => hasFinal };
+}
 
+function wavBlob(chunks, byteLength) {
+  const header = Buffer.alloc(44);
+  header.write("RIFF", 0);
+  header.writeUInt32LE(36 + byteLength, 4);
+  header.write("WAVEfmt ", 8);
+  header.writeUInt32LE(16, 16);
+  header.writeUInt16LE(1, 20);
+  header.writeUInt16LE(1, 22);
+  header.writeUInt32LE(16_000, 24);
+  header.writeUInt32LE(32_000, 28);
+  header.writeUInt16LE(2, 32);
+  header.writeUInt16LE(16, 34);
+  header.write("data", 36);
+  header.writeUInt32LE(byteLength, 40);
+  return new Blob([header, ...chunks], { type: "audio/wav" });
+}
+
+async function readSse(response, emit, limits) {
+  if (!response.ok || !response.body) throw dictationError("asr_request_failed", `Voice endpoint returned ${response.status}`, 502);
+  const contentType = response.headers.get("content-type") || "";
+  if (!contentType.includes("text/event-stream")) {
+    const raw = await response.text();
+    if (Buffer.byteLength(raw) > limits.maxEventBytes) throw dictationError("asr_event_too_large", "Voice endpoint response is too large", 502);
+    const event = JSON.parse(raw);
+    emit({ type: "final", text: transcriptText(event) });
+    return;
+  }
+  const decoder = new TextDecoder();
+  const reader = response.body.getReader();
+  let pending = "";
+  let cumulative = "";
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    pending += decoder.decode(value, { stream: true });
+    if (Buffer.byteLength(pending) > limits.maxEventBytes) throw dictationError("asr_event_too_large", "Voice endpoint event is too large", 502);
+    const frames = pending.split(/\r?\n\r?\n/);
+    pending = frames.pop() || "";
+    for (const frame of frames) {
+      const data = frame.split(/\r?\n/).filter((line) => line.startsWith("data:")).map((line) => line.slice(5).trim()).join("\n");
+      if (!data || data === "[DONE]") continue;
+      const event = JSON.parse(data);
+      const type = String(event.type || "");
+      if (type === "transcript.text.delta") {
+        cumulative += String(event.delta || "");
+        emit({ type: "partial", text: cumulative });
+      } else if (type === "transcript.text.done") {
+        cumulative = transcriptText(event) || cumulative;
+        emit({ type: "final", text: cumulative });
+      } else if (type === "error" || event.error) {
+        emit({ type: "error", code: String(event.code || "asr_error"), message: String(event.message || event.error?.message || "Transcription failed") });
+      }
+    }
+  }
+}
+
+function createWebSocketAdapter(config, emit, limits, WebSocketImpl) {
+  const normalizer = createParakeetNormalizer();
+  let socket;
+  let connectTimer;
+  const opened = new Promise((resolve, reject) => {
+    socket = new WebSocketImpl(config.endpoint, { headers: config.headers, lookup: config.lookup, handshakeTimeout: limits.connectTimeoutMs });
+    connectTimer = setTimeout(() => reject(dictationError("dictation_connection_timeout", "Voice endpoint connection timed out", 504)), limits.connectTimeoutMs);
+    socket.once("open", () => { clearTimeout(connectTimer); emit({ type: "ready", sampleRate: 16_000, encoding: "pcm_s16le" }); resolve(); });
+    socket.on("message", (data) => {
+      try {
+        if (data.length > limits.maxEventBytes) throw dictationError("asr_event_too_large", "Voice endpoint event is too large", 502);
+        for (const event of normalizer.normalize(data)) emit(event);
+      } catch (error) { emit({ type: "error", code: error.code || "asr_event_invalid", message: error.message }); }
+    });
+    socket.once("error", reject);
+    socket.once("close", () => emit({ type: "adapter_closed", text: normalizer.text(), final: normalizer.hasFinal() }));
+  });
   return {
-    normalize,
-    text: () => joinTranscript(settled, provisional),
-    hasFinal: () => hasFinal,
+    opened,
+    write(data) {
+      if (socket?.readyState !== WebSocketImpl.OPEN) throw dictationError("dictation_not_ready", "Voice endpoint is not ready", 409);
+      if (socket.bufferedAmount > limits.maxBufferedBytes) throw dictationError("dictation_backpressure", "Voice endpoint is not accepting audio quickly enough", 429);
+      socket.send(data, { binary: true });
+    },
+    stop() {
+      if (socket?.readyState === WebSocketImpl.OPEN) socket.send(config.stopMessage || JSON.stringify({ type: "stop" }));
+    },
+    close() { clearTimeout(connectTimer); if (socket?.readyState < WebSocketImpl.CLOSING) socket.close(1000, "Dictation complete"); },
   };
 }
 
-export function createDictationStream({ wss, endpoint, apiKey = "", stopMessage = "", WebSocketImpl = WebSocket }) {
+function createHttpAdapter(config, emit, limits, fetchImpl) {
+  const chunks = [];
+  let byteLength = 0;
+  let transcribedBytes = 0;
+  let inFlight = null;
+  let stopped = false;
+  const controller = new AbortController();
+  const transcribe = async (final) => {
+    if (!byteLength || (!final && byteLength === transcribedBytes) || controller.signal.aborted) return;
+    const snapshot = chunks.map((chunk) => Buffer.from(chunk));
+    const snapshotBytes = byteLength;
+    const form = new FormData();
+    form.append("file", wavBlob(snapshot, snapshotBytes), "dictation.wav");
+    form.append("response_format", "json");
+    form.append("stream", "true");
+    const response = await fetchImpl(config.endpoint, { method: "POST", headers: config.headers, body: form, signal: controller.signal, redirect: "error" });
+    await readSse(response, (event) => {
+      if (!final && event.type === "final") emit({ type: "partial", text: event.text });
+      else emit(event);
+    }, limits);
+    transcribedBytes = snapshotBytes;
+  };
+  const interval = setInterval(() => {
+    if (stopped || inFlight || byteLength < 3_200) return;
+    inFlight = transcribe(false)
+      .catch((error) => { if (error.name !== "AbortError") emit({ type: "error", code: error.code || "asr_request_failed", message: error.message }); })
+      .finally(() => { inFlight = null; });
+  }, 750);
+  interval.unref?.();
+  queueMicrotask(() => emit({ type: "ready", sampleRate: 16_000, encoding: "pcm_s16le" }));
+  return {
+    opened: Promise.resolve(),
+    write(data) {
+      byteLength += data.length;
+      if (byteLength > limits.maxAudioBytes) throw dictationError("dictation_too_long", "Voice dictation reached the server audio limit", 413);
+      chunks.push(Buffer.from(data));
+    },
+    async stop() {
+      stopped = true;
+      clearInterval(interval);
+      try {
+        await inFlight;
+        await transcribe(true);
+        emit({ type: "adapter_closed", final: true });
+      } catch (error) {
+        if (error.name !== "AbortError") emit({ type: "error", code: error.code || "asr_request_failed", message: error.message });
+      }
+    },
+    close() { clearInterval(interval); controller.abort(); chunks.length = 0; },
+  };
+}
+
+export function createDictationStream({ wss, voiceRuntime, WebSocketImpl = WebSocket, fetchImpl = fetch, limits: limitOverrides = {} }) {
+  const limits = { ...DEFAULT_LIMITS, ...limitOverrides };
+  let activeSessions = 0;
   const handleUpgrade = (request, socket, head) => wss.handleUpgrade(request, socket, head, (client) => {
-    if (!endpoint) {
-      client.send(JSON.stringify({ type: "error", code: "dictation_not_configured", message: "Voice dictation is not configured on this Conduit server" }));
-      client.close(1011, "Voice dictation is not configured");
+    if (activeSessions >= limits.maxSessions) {
+      client.send(JSON.stringify({ type: "error", code: "dictation_capacity", message: "The Conduit server is already handling the maximum number of dictation sessions" }));
+      client.close(1013, "Dictation capacity reached");
       return;
     }
-
-    let upstream;
-    let settling = false;
+    activeSessions += 1;
+    let adapter;
     let completed = false;
-    let settleTimer = null;
-    const normalizer = createAsrNormalizer();
+    let stopping = false;
+    let stoppedAt = 0;
+    let finalText = "";
+    let hasFinal = false;
+    let finalRevision = 0;
+    let stopFinalRevision = 0;
+    let durationTimer;
+    let finalTimer;
+    let deadlineTimer;
+    let deadlinePassed = false;
+    let audioBytes = 0;
     const send = (event) => {
       if (client.readyState === client.OPEN) client.send(JSON.stringify(event));
     };
     const cleanup = () => {
-      if (settleTimer) clearTimeout(settleTimer);
-      settleTimer = null;
-      if (upstream?.readyState < WebSocketImpl.CLOSING) upstream.close();
+      clearTimeout(durationTimer);
+      clearTimeout(finalTimer);
+      clearTimeout(deadlineTimer);
+      adapter?.close();
+      adapter = null;
     };
-    const complete = (reason) => {
+    const complete = (reason, upstream = {}) => {
       if (completed) return;
       completed = true;
+      const completedAt = Date.now();
       cleanup();
-      send({ type: "completed", text: normalizer.text(), final: normalizer.hasFinal(), reason });
+      send({
+        type: "completed",
+        text: upstream.text || finalText,
+        final: upstream.final ?? hasFinal,
+        reason,
+        settlementMs: stoppedAt ? completedAt - stoppedAt : null,
+        finalWithinDeadline: Boolean(hasFinal && stoppedAt && !deadlinePassed),
+      });
     };
     const fail = (error) => {
       if (completed) return;
       completed = true;
       cleanup();
-      send({ type: "error", code: error.code || "dictation_connection_failed", message: error.message || "Voice dictation failed" });
+      send({ type: "error", code: error.code || "dictation_failed", message: error.message || "Voice dictation failed" });
     };
-    const settle = (reason) => {
-      if (settling || completed) return;
-      settling = true;
-      if (stopMessage && upstream?.readyState === WebSocketImpl.OPEN) upstream.send(stopMessage);
-      settleTimer = setTimeout(() => complete(reason), FINAL_SETTLE_MS);
-      settleTimer.unref?.();
+    const stop = (reason) => {
+      if (stopping || completed) return;
+      stopping = true;
+      stoppedAt = Date.now();
+      stopFinalRevision = finalRevision;
+      finalTimer = setTimeout(() => fail(dictationError("dictation_final_timeout", "Voice dictation did not finalize in time", 504)), limits.finalTimeoutMs);
+      finalTimer.unref?.();
+      deadlineTimer = setTimeout(() => { deadlinePassed = true; send({ type: "settlement_deadline", deadlineMs: limits.finalDeadlineMs }); }, limits.finalDeadlineMs);
+      deadlineTimer.unref?.();
+      Promise.resolve(adapter?.stop()).catch(fail);
+      if (reason === "end_of_speech" && hasFinal) complete(reason);
     };
-
-    try {
-      const headers = apiKey ? { Authorization: `Bearer ${apiKey}` } : undefined;
-      upstream = new WebSocketImpl(endpoint, { headers });
-      upstream.on("open", () => send({ type: "ready", sampleRate: 16_000, encoding: "pcm_s16le" }));
-      upstream.on("message", (data) => {
-        for (const event of normalizer.normalize(data)) {
-          send(event);
-          if (event.type === "error") fail(Object.assign(new Error(event.message), { code: event.code }));
-          if (event.type === "final" && settling) complete("final");
-          if (event.type === "end_of_speech") settle("end_of_speech");
-        }
-      });
-      upstream.on("error", fail);
-      upstream.on("close", () => {
-        if (!completed) complete(settling ? "stopped" : "upstream_closed");
-      });
-    } catch (error) { fail(error); }
-
-    client.on("message", (data, isBinary) => {
-      if (completed || settling) return;
-      if (isBinary) {
-        if (data.length > MAX_AUDIO_FRAME_BYTES) return fail(Object.assign(new Error("Audio frame is too large"), { code: "dictation_frame_too_large" }));
-        if (upstream?.readyState === WebSocketImpl.OPEN) upstream.send(data, { binary: true });
+    const emit = (event) => {
+      if (completed) return;
+      if (event.type === "partial") send({ type: "partial", text: String(event.text || "") });
+      else if (event.type === "final") {
+        finalText = String(event.text || "");
+        hasFinal = true;
+        finalRevision += 1;
+        send({ type: "final", text: finalText });
+        if (stopping && finalRevision > stopFinalRevision) complete("final");
+      } else if (event.type === "end_of_speech") { send(event); stop("end_of_speech"); }
+      else if (event.type === "adapter_closed") complete(stopping ? "stopped" : "upstream_closed", event);
+      else if (event.type === "error") fail(dictationError(event.code || "asr_error", event.message || "Voice dictation failed", 502));
+      else send(event);
+    };
+    (async () => {
+      const config = await voiceRuntime.resolve();
+      adapter = config.adapter === "parakeet_pcm_ws_v1"
+        ? createWebSocketAdapter(config, emit, limits, WebSocketImpl)
+        : createHttpAdapter(config, emit, limits, fetchImpl);
+      await adapter.opened;
+      if (stopping) {
+        await adapter.stop();
         return;
       }
+      durationTimer = setTimeout(() => stop("duration_limit"), limits.maxDurationMs);
+      durationTimer.unref?.();
+    })().catch(fail);
+
+    client.on("message", (data, isBinary) => {
+      if (completed || stopping) return;
       try {
+        if (isBinary) {
+          if (data.length > limits.maxFrameBytes) throw dictationError("dictation_frame_too_large", "Audio frame is too large", 413);
+          audioBytes += data.length;
+          if (audioBytes > limits.maxAudioBytes) throw dictationError("dictation_too_long", "Voice dictation reached the server audio limit", 413);
+          adapter?.write(data);
+          return;
+        }
         const command = JSON.parse(String(data));
-        if (command.type === "stop") settle("stopped");
-        else throw Object.assign(new Error("Unknown dictation control frame"), { code: "dictation_control_invalid" });
+        if (command.type !== "stop") throw dictationError("dictation_control_invalid", "Unknown dictation control frame");
+        stop("stopped");
       } catch (error) { fail(error); }
     });
-    client.on("close", cleanup);
+    client.once("close", () => {
+      if (!completed) { completed = true; cleanup(); }
+      activeSessions = Math.max(0, activeSessions - 1);
+    });
   });
-
-  return { handleUpgrade };
+  return { handleUpgrade, activeSessions: () => activeSessions };
 }

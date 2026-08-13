@@ -38,12 +38,8 @@ test("default runtime paths are owned by the repository root", () => {
   assert.equal(path.isAbsolute(config.installations.get("conduit-pinned").command), true);
   assert.equal(config.enablePartialContinue, true);
   assert.equal(config.maxAttachmentBytes, 100 * 1024 * 1024);
-  assert.deepEqual(config.dictation, { endpoint: "", apiKey: "", stopMessage: "" });
-  assert.deepEqual(loadConfig({ CONDUIT_PARAKEET_STREAM_URL: "ws://127.0.0.1:8000/ws", CONDUIT_PARAKEET_API_KEY: "secret", CONDUIT_PARAKEET_STOP_MESSAGE: '{"type":"stop"}' }).dictation, {
-    endpoint: "ws://127.0.0.1:8000/ws",
-    apiKey: "secret",
-    stopMessage: '{"type":"stop"}',
-  });
+  assert.equal(config.voiceConfigFile.endsWith(path.join("data", "voice.json")), true);
+  assert.equal(config.voiceModelRoot.endsWith(path.join("data", "voice", "parakeet")), true);
   assert.equal(loadConfig({ ENABLE_PARTIAL_CONTINUE: "false" }).enablePartialContinue, false);
 });
 
@@ -64,6 +60,8 @@ test("one data root relocates every durable Conduit path", () => {
   assert.equal(config.authFile, path.join(dataRoot, "auth.json"));
   assert.equal(config.piAgentDir, path.join(dataRoot, "pi"));
   assert.equal(config.searchConfigFile, path.join(dataRoot, "pi", "web-search.json"));
+  assert.equal(config.voiceConfigFile, path.join(dataRoot, "voice.json"));
+  assert.equal(config.voiceModelRoot, path.join(dataRoot, "voice", "parakeet"));
   assert.equal(config.release, "0123456789abcdef");
   assert.equal(loadConfig({ CONDUIT_MAX_ATTACHMENT_BYTES: "2048" }).maxAttachmentBytes, 2048);
   assert.equal(config.workspaceSuggestionRoot, path.resolve("/tmp/workspace-suggestions"));
