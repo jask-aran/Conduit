@@ -158,6 +158,35 @@ test("projects empty and partial assistant errors as highlighted message rows", 
   assert.equal(live[1]?.type === "message" && live[1].value.timestamp, "2026-08-12T09:48:47.341Z");
 });
 
+test("keeps a recovered assistant error inside the turn trace", () => {
+  const rows = buildTurnRows([
+    { id: "u1", role: "user", content: "Try this request" },
+    {
+      id: "m_error",
+      role: "assistant",
+      content: "",
+      blocks: [{ type: "thinking", thinking: "Retrying the provider request" }],
+      stopReason: "error",
+      errorMessage: "Temporary provider failure",
+      provider: "example-provider",
+      model: "example-model",
+      timestamp: "2026-08-12T09:48:47.341Z",
+    },
+    { id: "m_recovered", role: "assistant", content: "Recovered answer", stopReason: "stop" },
+  ], []);
+
+  assert.deepEqual(rows.map((row) => row.type), ["message", "trace", "message"]);
+  const trace = rows[1];
+  assert.equal(trace?.type, "trace");
+  if (trace?.type !== "trace") return;
+  assert.deepEqual(trace.value.segments.map((segment) => segment.kind), ["thinking", "error"]);
+  const error = trace.value.segments[1];
+  assert.equal(error?.kind, "error");
+  assert.equal(error?.kind === "error" && error.message.errorMessage, "Temporary provider failure");
+  assert.equal(rows.some((row) => row.type === "message" && row.value.errorMessage === "Temporary provider failure"), false);
+  assert.equal(rows[2]?.type === "message" && rows[2].value.content, "Recovered answer");
+});
+
 test("does not expose a transient assistant error as terminal while Pi retries", () => {
   const rows = buildTurnRows([
     { id: "u1", role: "user", content: "Try this request" },

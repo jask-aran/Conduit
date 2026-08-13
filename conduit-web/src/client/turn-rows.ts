@@ -53,6 +53,7 @@ export interface LiveGenerationChange {
 export type TraceSegment =
   | { kind: "thinking"; id: string; text: string; live?: boolean }
   | { kind: "narration"; id: string; text: string; live?: boolean }
+  | { kind: "error"; id: string; message: Message }
   | { kind: "tool"; id: string; tool: ToolItem };
 
 export interface TurnTraceData {
@@ -335,17 +336,23 @@ export function buildTurnRows(
       const claimed = new Set<string>();
       const toolById = new Map(tools.map((tool) => [tool.id, tool]));
       const bubble = [...turn.assistants].reverse().find((assistant) => assistant.stopReason !== "toolUse");
-      const answerAssistants = turn.assistants.filter((assistant) => assistant.stopReason !== "toolUse");
+      const finalAssistant = turn.assistants.at(-1) || null;
+      const bubbleIsFinalAssistant = bubble != null && bubble === finalAssistant;
+      const answerAssistants = turn.assistants.filter((assistant) => assistant.stopReason !== "toolUse"
+        && !(assistant.stopReason === "error" && assistant !== finalAssistant));
       const answerIndex = bubble ? Math.max(0, answerAssistants.indexOf(bubble)) : 0;
       for (const assistant of turn.assistants) {
         const thinking = thinkingOf(assistant);
         if (thinking) segments.push({ kind: "thinking", id: `thinking:${assistant.id}`, text: thinking });
-        if (assistant !== bubble && String(assistant.content || "").trim()) {
+        if ((!bubbleIsFinalAssistant || assistant !== bubble) && String(assistant.content || "").trim()) {
           segments.push({ kind: "narration", id: `narration:${assistant.id}`, text: String(assistant.content) });
         }
         for (const id of toolCallIdsOf(assistant)) {
           const tool = toolById.get(id);
           if (tool && !claimed.has(id)) { claimed.add(id); segments.push({ kind: "tool", id: `tool:${id}`, tool }); }
+        }
+        if (assistant.stopReason === "error" && assistant !== finalAssistant) {
+          segments.push({ kind: "error", id: `error:${assistant.id}`, message: assistant });
         }
       }
       for (const tool of turn.leftoverTools) {
@@ -353,7 +360,7 @@ export function buildTurnRows(
       }
       if (segments.length > 0) rows.push({ key: `trace:${turn.userMessage ? messageKey(turn.userMessage) : messageKey(turn.assistants[0]!)}`, type: "trace", value: { active: false, segments } });
       const text = String(bubble?.content || "").trim();
-      if (bubble && (text || (bubble.stopReason === "error" && bubble.errorMessage))) {
+      if (bubble && (text || (bubbleIsFinalAssistant && bubble.stopReason === "error"))) {
         const displayKey = answerDisplayKey(turn.userMessage, answerIndex, `message:${messageKey(bubble)}`);
         rows.push({ key: displayKey, displayKey, type: "message", value: bubble, index: messages.indexOf(bubble) });
       }
