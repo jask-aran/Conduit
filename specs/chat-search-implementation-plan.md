@@ -462,6 +462,13 @@ Mirror the sidebar behavior:
 
 The implementation should use `event.ctrlKey || event.metaKey`, so this works on Windows/Linux and macOS.
 
+Implementation status: complete in the current working tree. In chat-search
+browse mode, Ctrl-click or Cmd-click sets the clicked row as the active row,
+enters the existing bulk selection mode, and selects that chat without running
+its navigation command. Once edit mode is active, the existing ordinary-click
+path toggles each chat. Selected IDs remain catalogue-backed when a query hides
+their rows and reappear selected when the query is cleared.
+
 ### 4. Make edit mode mouse-complete
 
 The current keyboard actions should remain, but mouse users should not need to memorise `R`, `M`, `C`, and `D`.

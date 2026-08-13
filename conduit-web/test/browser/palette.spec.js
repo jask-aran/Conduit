@@ -216,6 +216,47 @@ test("Tab enters the highlighted page and the footer toggles chat selection mode
   await expect(page.getByRole("dialog", { name: "Command Palette" })).toHaveCount(0);
 });
 
+test("Control-click enters edit mode and ordinary clicks toggle more chats", async ({ page }) => {
+  const sessions = [
+    { id: "session_existing", projectId: "project_chat", status: "active", title: "Existing chat", createdAt: "2026-08-13T02:00:00.000Z" },
+    { id: "session_second", projectId: "project_chat", status: "active", title: "Second chat", createdAt: "2026-08-13T01:00:00.000Z" },
+  ];
+  await page.route("**/v0/projects", (route) => route.fulfill({ json: {
+    projects: [{ ...projects[0], sessions }, projects[1]],
+  } }));
+  await page.goto("/");
+  await page.keyboard.press("Control+p");
+
+  const dialog = page.getByRole("dialog", { name: "Command Palette" });
+  const input = dialog.getByRole("combobox", { name: "Search commands" });
+  const existing = dialog.getByRole("option", { name: /Existing chat/ });
+  const second = dialog.getByRole("option", { name: /Second chat/ });
+  const initialUrl = page.url();
+
+  await second.click({ modifiers: ["Control"] });
+  await expect(dialog.getByText("1 selected")).toBeVisible();
+  await expect(second).toHaveAttribute("data-chat-selected", "true");
+  await expect(dialog.getByRole("listbox", { name: "Chats" })).toBeFocused();
+  expect(page.url()).toBe(initialUrl);
+
+  await existing.click();
+  await expect(dialog.getByText("2 selected")).toBeVisible();
+  await expect(existing).toHaveAttribute("data-chat-selected", "true");
+  expect(page.url()).toBe(initialUrl);
+
+  await input.fill("Second");
+  await expect(existing).toHaveCount(0);
+  await expect(dialog.getByText("2 selected")).toBeVisible();
+  await input.fill("");
+  await expect(page.getByRole("alertdialog", { name: /Delete/ })).toHaveCount(0);
+  await expect(existing).toHaveAttribute("data-chat-selected", "true");
+  await expect(second).toHaveAttribute("data-chat-selected", "true");
+
+  await existing.click();
+  await expect(dialog.getByText("1 selected")).toBeVisible();
+  await expect(existing).not.toHaveAttribute("data-chat-selected", "true");
+});
+
 test("sidebar View all opens a Chats-scoped search after the twenty-row limit", async ({ page }) => {
   const sessions = Array.from({ length: 24 }, (_, index) => ({
     id: `session_many_${index}`,
