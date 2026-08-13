@@ -57,6 +57,8 @@ Make local voice dictation reliable and easy to understand:
 - Removed the mirrored `composer-highlight-layer`.
 - Select the dictated range in the real textarea and focus it when a partial or
   final transcript arrives.
+- Leave one trailing space after each non-empty dictated insertion so the next
+  typed or dictated text remains separated.
 - Let one Backspace delete the native selection and enter the existing manual
   edit cancellation path.
 - Added browser coverage for selection bounds, one-key deletion, and capture
@@ -366,13 +368,32 @@ fail an otherwise completed dictation.
 - `git diff --check`
 - local Conduit restarted and `/healthz` returned ready
 
-## Remaining build scope
+## Manual acceptance record
+
+Status: **accepted for the current voice scope**.
+
+On 2026-08-13, the user reported matching manual acceptance passes in Chrome
+and Firefox, including the clipboard file-paste flow and the voice features.
+Browser versions, operating-system version, and device identifiers were not
+recorded. This is user-reported validation; it does not replace the automated
+checks listed above.
+
+No active voice implementation slice remains in this document. The only open
+item is the explicitly deferred provider comparison below.
+
+## Remaining deferred scope
 
 ### 1. Provider-specific pause and accuracy testing
+
+Status: **deferred**.
 
 Compare local Parakeet, OpenAI, Groq, and remote provider behavior after the
 capture and pause lifecycle surfaces are stable. Use the completion byte
 diagnostics to separate transport loss from model accuracy.
+
+This is the only remaining voice-dictation implementation scope in this
+document. It stays deferred until provider credentials and a comparison plan
+are available.
 
 ## Implementation seams
 
@@ -457,68 +478,24 @@ Manual smoke test:
 - The monitor draws a bounded amplitude envelope rather than raw PCM. This
   keeps the UI responsive and avoids retaining unbounded test audio data.
 
-## Next slice — Local Parakeet continuous live transcription
+## Abandoned slice — Local Parakeet continuous live transcription
 
-Status: **planned — implementation-ready**. The underlying pause-resilient slice
-is already committed, so no work below rebuilds it. This slice wires the managed
-Parakeet to its streaming WebSocket adapter and streams live partials.
+Status: **abandoned after transport investigation**.
 
-**Prerequisites (already implemented — do not rebuild).**
+The earlier plan assumed that the managed `achetronic/parakeet` worker exposed
+a local PCM WebSocket path. It does not. The pinned `v0.8.0` binary exposes an
+HTTP transcription endpoint and long-audio chunking flags, but no WebSocket or
+live-input endpoint. Its `stream=true` option returns SSE deltas only after the
+complete audio file is uploaded. See the upstream [Parakeet API reference](https://github.com/achetronic/parakeet#streaming).
 
-- 300 s session caps in `voice-runtime.js` / `dictation-stream.js`
-  (`maxDurationMs: 300_000`, `maxAudioBytes: 16_000 * 2 * 300`) replace the old
-  30 s caps that force-stopped dictation mid-session.
-- Pause-resilient capture: stop-before-ready + final-PCM drain, multiple `done`
-  retention, byte-mismatch recovery, and `mergeTranscript` at every accumulation
-  point (HTTP SSE, adapter, and normalizer) so live text never doubles.
-- Completion diagnostics surfaced in the composer: `completionReason`,
-  `duration_limit` on over-limit stops, `audioBytesSent`/`serverAudioBytes`
-  byte accounting.
-- `end_of_speech` is informational (server `dictation-stream.js`, client
-  self-stop removed). This slice consumes that behavior — it does not implement
-  its own EOS policy; streaming may simply keep emitting until explicit stop.
+A direct local probe confirmed the contract: the worker registered
+`POST /v1/audio/transcriptions`, accepted a complete WAV, and then returned
+`transcript.text.delta` and `transcript.text.done` SSE events. The current
+`openai_audio_sse_v1` route in `voice-runtime.js` and `dictation-stream.js` is
+therefore correct for local Parakeet. It remains final-only during capture.
 
-**Goal.** Let the locally managed `achetronic/parakeet` stream **live partials**
-during dictation instead of showing text only at the end. Parakeet TDT is
-streaming-native and only the `parakeet_pcm_ws_v1` adapter emits partial text;
-snapshot backends (local Whisper, OpenAI-compatible, Deepgram) must continue to
-produce a single final transcript — partials are a property of the adapter,
-never synthesized.
-
-**Changes.**
-
-1. In `voice-runtime.js`, the local Parakeet branch returns
-   `{ adapter: "parakeet_pcm_ws_v1", endpoint: ws://127.0.0.1:<port><path>,
-   stopMessage: "" }` instead of routing through snapshot HTTP
-   `openai_audio_sse_v1`. Probe the WS path at startup (modeled on
-   `VoiceRuntime.test()`), falling back to `openai_audio_sse_v1` when the
-   handshake fails.
-2. Mark `parakeet_pcm_ws_v1` as `streaming: true` in `VOICE_ADAPTERS`
-   (`voice-settings.js`) and reflect the capability in Settings copy. Adapters
-   without the flag never request partials.
-3. Add the single-worker capacity guard: a second concurrent local Parakeet
-   session is rejected with `dictation_capacity` while the managed worker is
-   held.
-4. Stream adapter partial deltas through the existing `mergeTranscript`
-   accumulation and surface them in the composer as the session proceeds.
-5. Tests: adapter capability flag, WS partial delta flow, fallback on
-   handshake failure, and `dictation_capacity` for a second local session.
-
-**Acceptance.**
-
-- Dictating locally shows text appearing continuously while speaking, not only
-  on stop.
-- Snapshot backends still emit exactly one final transcript; no partials.
-- A second concurrent local Parakeet session is rejected with
-  `dictation_capacity`.
-- Over-limit and EOS behavior matches the pause-resilient slice
-  (`duration_limit`, informational `end_of_speech`).
-
-**Tests.** Use the stream-shape and no-doubling fixtures already in
-`voice-stream-api.test.js` and `voice-dictation.test.js`, plus the new adapter
-capability and fallback coverage above.
-
-**Risks.** The achetronic WS path is streaming-capable by source review but not
-yet exercised locally end-to-end; the HTTP fallback keeps dictation functional
-if the handshake probe fails. No audio is persisted by this slice; the explicit
-bounded capture archive remains the only disk writer.
+Do not add a local `parakeet_pcm_ws_v1` handshake, fallback path, or capacity
+guard. That adapter remains available for separately configured remote
+WebSocket providers. True local live transcription would require a new local
+streaming runtime or a separate rolling-snapshot design, neither of which is
+planned in this voice sprint.

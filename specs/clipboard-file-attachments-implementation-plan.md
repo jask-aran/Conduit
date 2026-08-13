@@ -300,7 +300,7 @@ Manual smoke test:
 
 ### Slice 2 — Composer file paste
 
-Status: **planned**.
+Status: **completed**.
 
 Add the textarea-scoped `onPaste` handler. File-bearing paste prevents the
 browser default and calls the shared `attachments.addFiles(...)` path. Text-only
@@ -324,6 +324,19 @@ Focused check:
 npm run test:browser -- test/browser/app.spec.js --project=desktop-chromium --workers=1 --grep "pastes files into the composer"
 ```
 
+Verification completed:
+
+- `npm run typecheck` — passed.
+- `npm run test:browser -- test/browser/app.spec.js --project=desktop-chromium --workers=1 --grep "uploads picker and dropped files|shared DataTransfer extraction|pastes files into the composer|voice dictation keeps capturing"` — 4 passed.
+- `npm run build` — passed. Bundle checks reported 174992 B initial JS gzip,
+  22545 B initial CSS gzip, and 185187 B largest lazy JS gzip.
+
+The composer now intercepts only file-bearing paste events. It uploads files
+through the shared attachment store, leaves text-only paste native, suppresses
+string content in mixed clipboard payloads, and does not call the draft change
+handler. The voice regression confirms that a file paste preserves the active
+dictated range for one-Backspace removal.
+
 Manual smoke test:
 
 1. Type text, select part of it, and paste one file. Confirm the draft and
@@ -337,7 +350,7 @@ Manual smoke test:
 
 ### Slice 3 — Documentation and browser acceptance
 
-Status: **planned**.
+Status: **completed**.
 
 Update `conduit-web/README.md`, run the project checks, and perform the real
 Windows acceptance pass. Record browser and version results in this plan. A
@@ -357,13 +370,23 @@ npm test
 npm run test:browser -- test/browser/app.spec.js --project=desktop-chromium --workers=1 --grep "pastes files into the composer|shared DataTransfer extraction"
 ```
 
-Manual smoke test:
+Verification completed:
 
-1. Run the Chrome, Edge, and Firefox Windows Explorer cases below.
-2. Confirm ordinary text paste, oversized-file rejection, removal during
-   upload, navigation cleanup, and unchanged drag/drop behavior.
-3. Record exact browser versions and whether files arrived through `items`,
-   `files`, or both.
+- `npm run typecheck` — passed.
+- `npm run build` — passed.
+- `npm test` — 429 passed on an isolated rerun. A concurrent first run did not
+  reproduce one `workspace inspection shares active overview work and defers
+  patch commands` assertion failure (`2 !== 1`).
+- `npm run test:browser -- test/browser/app.spec.js --project=desktop-chromium --workers=1 --grep "pastes files into the composer|shared DataTransfer extraction"` — 2 passed.
+- `git diff --check` — passed.
+
+Manual acceptance record:
+
+1. On 2026-08-13, the user reported the file-handling smoke test passed in
+   Chrome, Edge, and Firefox, including the same Windows clipboard workflow.
+2. The user also validated the voice features in Chrome and Firefox.
+3. Browser versions and whether each browser exposed `items`, `files`, or both
+   were not recorded.
 
 ## File-by-file implementation checklist
 

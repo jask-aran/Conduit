@@ -3357,6 +3357,62 @@ test("shared DataTransfer extraction preserves item-only and files-only attachme
   await expect.poll(() => uploads.map((item) => item.name)).toEqual(["first.txt", "second.png", "fallback.txt", "attachment"]);
 });
 
+test("pastes files into the composer without changing draft text or selection", async ({ page }) => {
+  const uploads = [];
+  await page.route("**/v0/chats/*/attachments/*?name=*", async (route) => {
+    const url = new URL(route.request().url());
+    const id = url.pathname.split("/").at(-1);
+    const name = url.searchParams.get("name");
+    uploads.push({ id, name });
+    await route.fulfill({ status: 201, json: { id, name, storedName: `${id}--${name}`, size: route.request().postDataBuffer()?.length || 0, type: "image/png" } });
+  });
+  await page.goto("/");
+  const composer = page.getByRole("textbox", { name: "Message Pi" });
+  await composer.fill("Review these files");
+  await composer.evaluate((element) => { element.focus(); element.setSelectionRange(7, 12); });
+
+  const filePaste = await composer.evaluate((element) => {
+    const file = new File(["pasted"], "pasted.png", { type: "image/png" });
+    const event = new Event("paste", { bubbles: true, cancelable: true });
+    Object.defineProperty(event, "clipboardData", { value: {
+      items: {
+        0: { kind: "string", type: "text/plain" },
+        1: { kind: "file", getAsFile: () => file },
+        length: 2,
+      },
+      files: [file],
+    } });
+    const dispatchResult = element.dispatchEvent(event);
+    return {
+      dispatchResult,
+      defaultPrevented: event.defaultPrevented,
+      value: element.value,
+      selection: [element.selectionStart, element.selectionEnd],
+    };
+  });
+  expect(filePaste).toEqual({ dispatchResult: false, defaultPrevented: true, value: "Review these files", selection: [7, 12] });
+  await expect(page.getByText("pasted.png", { exact: true })).toBeVisible();
+  await expect.poll(() => uploads.map((item) => item.name)).toEqual(["pasted.png"]);
+  await expect.poll(() => composer.evaluate((element) => [element.selectionStart, element.selectionEnd])).toEqual([7, 12]);
+
+  const textEvent = await composer.evaluate((element) => {
+    const event = new Event("paste", { bubbles: true, cancelable: true });
+    Object.defineProperty(event, "clipboardData", { value: {
+      items: { 0: { kind: "string", type: "text/plain" }, length: 1 },
+      files: [],
+    } });
+    const dispatchResult = element.dispatchEvent(event);
+    return { dispatchResult, defaultPrevented: event.defaultPrevented, value: element.value, selection: [element.selectionStart, element.selectionEnd] };
+  });
+  expect(textEvent).toEqual({ dispatchResult: true, defaultPrevented: false, value: "Review these files", selection: [7, 12] });
+  await page.context().grantPermissions(["clipboard-read", "clipboard-write"], { origin: new URL(page.url()).origin });
+  await composer.evaluate((element) => { element.focus(); element.setSelectionRange(element.value.length, element.value.length); });
+  await page.evaluate(() => navigator.clipboard.writeText(" + text"));
+  await composer.press("Control+V");
+  await expect(composer).toHaveValue("Review these files + text");
+  expect(await page.evaluate(() => document.querySelectorAll(".attachment-card").length)).toBe(1);
+});
+
 test("editing from history abandons the current attachment draft cleanly", async ({ page }, testInfo) => {
   await page.addInitScript(() => {
     let nextObjectUrl = 0;
@@ -4351,6 +4407,21 @@ test("project chevron expands independently and project name navigates", async (
 });
 
 test("voice dictation keeps capturing after a speech-end pause and preserves native selection editing", async ({ page }) => {
+  await page.route("**/v0/chats/*/attachments/*?name=*", async (route) => {
+    const url = new URL(route.request().url());
+    const id = url.pathname.split("/").at(-1);
+    const name = url.searchParams.get("name");
+    await route.fulfill({
+      status: 201,
+      json: {
+        id,
+        name,
+        storedName: `${id}--${name}`,
+        size: route.request().postDataBuffer()?.length || 0,
+        type: "text/plain",
+      },
+    });
+  });
   await page.addInitScript(() => {
     class VoiceWebSocket extends EventTarget {
       static OPEN = 1;
@@ -4442,12 +4513,12 @@ test("voice dictation keeps capturing after a speech-end pause and preserves nat
   await page.keyboard.down("Control");
   await page.keyboard.down("Shift");
   await page.keyboard.down("D");
-  await expect(composer).toHaveValue("ask Conduit please Con");
+  await expect(composer).toHaveValue("ask Conduit please Con ");
   await page.keyboard.up("D");
   await page.keyboard.up("Shift");
   await page.keyboard.up("Control");
-  await expect(composer).toHaveValue("ask Conduit please Conduit");
-  await expect.poll(() => composer.evaluate((element) => [element.selectionStart, element.selectionEnd])).toEqual([18, 26]);
+  await expect(composer).toHaveValue("ask Conduit please Conduit ");
+  await expect.poll(() => composer.evaluate((element) => [element.selectionStart, element.selectionEnd])).toEqual([18, 27]);
   await composer.press("Backspace");
   await expect(composer).toHaveValue("ask Conduit please");
   await expect.poll(() => composer.evaluate((element) => [element.selectionStart, element.selectionEnd])).toEqual([18, 18]);
@@ -4467,9 +4538,31 @@ test("voice dictation keeps capturing after a speech-end pause and preserves nat
   await expect.poll(() => composer.evaluate((element) => [element.selectionStart, element.selectionEnd])).toEqual([3, 3]);
   await composer.fill("append");
   await page.getByRole("button", { name: "Start voice dictation" }).click();
-  await expect(composer).toHaveValue("append Con");
+  await expect(composer).toHaveValue("append Con ");
   await page.getByRole("button", { name: "Stop voice dictation" }).click();
-  await expect(composer).toHaveValue("append Conduit");
+  await expect(composer).toHaveValue("append Conduit ");
+  const selectionBeforeFilePaste = await composer.evaluate((element) => [element.selectionStart, element.selectionEnd]);
+  expect(selectionBeforeFilePaste).toEqual([6, 15]);
+  const filePaste = await composer.evaluate((element) => {
+    const file = new File(["voice paste"], "voice-paste.txt", { type: "text/plain" });
+    const event = new Event("paste", { bubbles: true, cancelable: true });
+    Object.defineProperty(event, "clipboardData", { value: {
+      items: { 0: { kind: "file", getAsFile: () => file }, length: 1 },
+      files: [file],
+    } });
+    const dispatchResult = element.dispatchEvent(event);
+    return {
+      dispatchResult,
+      defaultPrevented: event.defaultPrevented,
+      value: element.value,
+      selection: [element.selectionStart, element.selectionEnd],
+    };
+  });
+  expect(filePaste).toEqual({ dispatchResult: false, defaultPrevented: true, value: "append Conduit ", selection: selectionBeforeFilePaste });
+  await expect(page.getByText("voice-paste.txt", { exact: true })).toBeVisible();
+  await expect.poll(() => composer.evaluate((element) => [element.selectionStart, element.selectionEnd])).toEqual(selectionBeforeFilePaste);
+  await composer.press("Backspace");
+  await expect(composer).toHaveValue("append");
   await expect(page.getByRole("button", { name: "Start voice dictation" })).toBeVisible();
 });
 
@@ -4572,7 +4665,7 @@ test("Ctrl+Shift+D captures in the page and buffers microphone audio until the s
   await expect.poll(() => page.evaluate(() => window.__voiceBinaryCount)).toBe(2);
   await expect.poll(() => page.evaluate(() => window.__voiceFrameKinds)).toEqual(["audio", "audio", "stop"]);
   await expect.poll(() => page.evaluate(() => window.__voiceStopFrame)).toEqual({ type: "stop", audioBytesSent: 4 });
-  await expect(page.getByRole("textbox", { name: "Message Pi" })).toHaveValue("buffered");
+  await expect(page.getByRole("textbox", { name: "Message Pi" })).toHaveValue("buffered ");
   await expect.poll(() => page.evaluate(() => ({ reason: window.__voiceMetrics?.completionReason, sent: window.__voiceMetrics?.audioBytesSent, provider: window.__voiceMetrics?.provider, model: window.__voiceMetrics?.model }))).toEqual({ reason: "stopped", sent: 4, provider: "test", model: "test" });
 });
 
@@ -4647,7 +4740,7 @@ test("Toggle activation starts and stops on separate shortcut presses", async ({
   await expect.poll(() => page.evaluate(() => window.__toggleShortcutBubbled)).toBe(false);
   await pressShortcut();
   await expect(trigger).toHaveAttribute("data-state", "completed");
-  await expect(composer).toHaveValue("toggle");
+  await expect(composer).toHaveValue("toggle ");
 });
 
 test("silent microphone input does not insert a hallucinated transcript", async ({ page }) => {
