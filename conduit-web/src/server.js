@@ -35,6 +35,10 @@ import { buildProjectDashboard } from "./project-dashboard.js";
 import { PtyManager } from "./pty-manager.js";
 import { createLiveSessionStream } from "./server/live-session-stream.js";
 import { createTerminalStream } from "./server/terminal-stream.js";
+import { createDictationStream } from "./server/dictation-stream.js";
+import { VoiceRuntime } from "./server/voice-runtime.js";
+import { VoiceModelManager } from "./server/voice-model-manager.js";
+import { VoiceRecordingStore } from "./server/voice-recording-store.js";
 import { registerAttachmentRoutes } from "./server/routes/attachments.js";
 import { registerAuthRoutes } from "./server/routes/auth.js";
 import { registerPiAuthRoutes } from "./server/routes/pi-auth.js";
@@ -45,7 +49,9 @@ import { registerLiveSessionRoutes } from "./server/routes/live-sessions.js";
 import { registerProjectRoutes } from "./server/routes/projects.js";
 import { registerSessionRoutes } from "./server/routes/sessions.js";
 import { registerSearchRoutes } from "./server/routes/search.js";
+import { registerVoiceRoutes } from "./server/routes/voice.js";
 import { SearchSettingsStore } from "./search-settings.js";
+import { VoiceSettingsStore } from "./voice-settings.js";
 import { ModelProfileRuntime, usesWebSearchOverlay } from "./model-profile-runtime.js";
 import { publicModelProfile, resolveModelProfile } from "./model-profiles.js";
 
@@ -79,6 +85,11 @@ const runtimeSettings = new RuntimeSettingsStore(config.runtimeSettingsFile, def
 await runtimeSettings.load();
 const searchSettings = new SearchSettingsStore({ filePath: config.searchConfigFile, environment: process.env });
 await searchSettings.initialize();
+const voiceSettings = new VoiceSettingsStore({ filePath: config.voiceConfigFile, environment: process.env });
+await voiceSettings.initialize();
+const voiceModel = new VoiceModelManager({ root: config.voiceModelRoot });
+const voiceRecordingStore = new VoiceRecordingStore({ root: config.voiceRecordingsRoot });
+const voiceRuntime = new VoiceRuntime({ settings: voiceSettings, modelManager: voiceModel });
 const modelProfileRuntime = new ModelProfileRuntime({
   agentDir: config.piAgentDir,
   searchConfigFile: config.searchConfigFile,
@@ -419,6 +430,7 @@ registerSearchRoutes(app, {
   searchSettings,
   onSettingsChanged: recycleIdleIsolatedPiProcesses,
 });
+registerVoiceRoutes(app, { voiceSettings, voiceRuntime, voiceModel });
 
 registerPtyRoutes(app, { projects, terminals });
 
@@ -556,6 +568,16 @@ app.use((error, _request, response, _next) => {
 const server = http.createServer(app);
 const wss = new WebSocketServer({ noServer: true });
 const terminalStream = createTerminalStream({ terminals, wss });
+const dictationStream = createDictationStream({
+  wss,
+  voiceRuntime,
+  recordingStore: voiceRecordingStore,
+  limits: {
+    finalizationBaseMs: config.voiceFinalizationBaseMs,
+    finalizationMaxMs: config.voiceFinalizationMaxMs,
+    finalizationDefaultMultiplier: config.voiceFinalizationDefaultMultiplier,
+  },
+});
 const liveSessionStream = createLiveSessionStream({
   manager,
   wss,
@@ -571,7 +593,8 @@ server.on("upgrade", async (request, socket, head) => {
   const pathname = new URL(request.url, "http://localhost").pathname;
   const match = pathname.match(/^\/v0\/live-sessions\/([a-f0-9]{24})\/stream$/);
   const ptyMatch = pathname.match(/^\/v0\/ptys\/([a-f0-9-]{36})\/attach$/);
-  if ((!match || !manager.get(match[1])) && (!ptyMatch || !terminals.get(ptyMatch[1]))) return socket.destroy();
+  const dictationMatch = pathname === "/v0/dictation/stream";
+  if ((!match || !manager.get(match[1])) && (!ptyMatch || !terminals.get(ptyMatch[1])) && !dictationMatch) return socket.destroy();
   try {
     if (authStore.hasPassword()) {
       const context = await validateSession(authStore, request);
@@ -581,6 +604,7 @@ server.on("upgrade", async (request, socket, head) => {
     console.error("WebSocket session validation failed", error);
     return socket.destroy();
   }
+  if (dictationMatch) return dictationStream.handleUpgrade(request, socket, head);
   if (ptyMatch) return terminalStream.handleUpgrade(ptyMatch[1], request, socket, head);
   return liveSessionStream.handleUpgrade(match[1], request, socket, head);
 });
@@ -595,6 +619,7 @@ async function shutdown(signal) {
   server.closeIdleConnections?.();
   const stoppedProcesses = await manager.shutdown();
   await terminals.stopAll();
+  await voiceModel.stop();
   server.closeAllConnections?.();
   await closed;
   console.log(`Conduit stopped ${stoppedProcesses} Pi process${stoppedProcesses === 1 ? "" : "es"}`);

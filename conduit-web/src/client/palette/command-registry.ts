@@ -41,6 +41,7 @@ export interface PaletteActions {
   newWorkspace: () => void;
   openRuntimeChat: () => void;
   attach: () => void;
+  toggleDictation: () => void;
   toggleSidebar: () => void;
   toggleWorkspacePanel: () => void;
   openWorkspaceView: (view: "files" | "diff" | "artifacts" | "terminal") => void;
@@ -179,6 +180,7 @@ const paletteCommandRuntime: Record<string, PaletteCommandRuntime> = {
   [COMMAND_IDS.newWorkspace]: { isAvailable: () => true, run: (actions) => actions.newWorkspace() },
   [COMMAND_IDS.openRuntimeChat]: { isAvailable: () => true, run: (actions) => actions.openRuntimeChat() },
   [COMMAND_IDS.attachFiles]: { isAvailable: hasChat, run: (actions) => actions.attach() },
+  [COMMAND_IDS.toggleDictation]: { isAvailable: hasChat, run: (actions) => actions.toggleDictation() },
   [COMMAND_IDS.toggleSidebar]: { isAvailable: () => true, run: (actions) => actions.toggleSidebar() },
   [COMMAND_IDS.toggleWorkspacePanel]: { isAvailable: hasChat, run: (actions) => actions.toggleWorkspacePanel() },
   [COMMAND_IDS.copyTranscript]: { isAvailable: hasChat, run: (actions) => actions.copyTranscript() },

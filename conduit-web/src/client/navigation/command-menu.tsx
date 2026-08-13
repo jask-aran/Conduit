@@ -4,7 +4,7 @@ import * as KAlertDialog from "@kobalte/core/alert-dialog";
 import * as KDialog from "@kobalte/core/dialog";
 import {
   ArrowLeftIcon, BrainIcon, CheckIcon, ChevronRightIcon, CopyIcon, FileInputIcon, FilePlus2Icon,
-  FolderIcon, FolderInputIcon, FolderPlusIcon, LayersIcon, LogOutIcon, MessageSquareIcon,
+  FolderIcon, FolderInputIcon, FolderPlusIcon, LayersIcon, LogOutIcon, MessageSquareIcon, MicIcon,
   MessageSquarePlusIcon, PanelLeftIcon, PanelRightIcon, PencilIcon, PlayIcon, RefreshCwIcon, SettingsIcon,
   SlashIcon, SlidersHorizontalIcon, SquareIcon, TerminalIcon, Trash2Icon, XIcon,
 } from "lucide-solid";
@@ -29,6 +29,7 @@ const icons: Record<string, (props: { class?: string }) => JSX.Element> = {
   "new-chat": MessageSquarePlusIcon,
   "new-folder": FolderPlusIcon,
   attach: FilePlus2Icon,
+  microphone: MicIcon,
   settings: SettingsIcon,
   model: SlidersHorizontalIcon,
   profile: LayersIcon,
