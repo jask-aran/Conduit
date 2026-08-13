@@ -220,6 +220,9 @@ export class VoiceModelManager {
     this.port = null;
     this.transcriber = null;
     this.activeModelId = null;
+    this.startPromise = null;
+    this.startingModelId = null;
+    this.transcriptionTail = Promise.resolve();
     this.lastErrors = new Map();
     this.progress = { phase: "idle", current: "", completedBytes: 0, totalBytes: 0 };
   }
@@ -318,14 +321,41 @@ export class VoiceModelManager {
     this.lastErrors.delete(model.id);
   }
 
-  async ensureRunning(modelId) {
-    const model = requiredModel(modelId);
+  activeRuntime(model) {
     if (this.activeModelId === model.id) {
       if (model.engine === "parakeet" && this.child && this.port) return { kind: "http", origin: `http://127.0.0.1:${this.port}` };
       if (model.engine === "transformers-whisper" && this.transcriber) return { kind: "transcriber" };
     }
+    return null;
+  }
+
+  async ensureRunning(modelId) {
+    const model = requiredModel(modelId);
+    let active = this.activeRuntime(model);
+    if (active) return active;
+    while (this.startPromise) {
+      const pending = this.startPromise;
+      const pendingModelId = this.startingModelId;
+      try { await pending; }
+      catch (error) { if (pendingModelId === model.id) throw error; }
+      active = this.activeRuntime(model);
+      if (active) return active;
+    }
+    const startPromise = this.startRuntime(model);
+    this.startPromise = startPromise;
+    this.startingModelId = model.id;
+    try { return await startPromise; }
+    finally {
+      if (this.startPromise === startPromise) {
+        this.startPromise = null;
+        this.startingModelId = null;
+      }
+    }
+  }
+
+  async startRuntime(model) {
     if (!await this.installedManifest(model.id)) throw modelError("voice_model_not_installed", `Install ${model.label} from Voice settings first`, 409);
-    await this.stop();
+    await this.stopActive();
     if (model.engine === "transformers-whisper") {
       this.transcriber = await this.transformersLoader(this.modelRoot(model.id));
       this.activeModelId = model.id;
@@ -352,7 +382,7 @@ export class VoiceModelManager {
       } catch {}
       await new Promise((resolve) => setTimeout(resolve, 150));
     }
-    await this.stop();
+    await this.stopActive();
     throw modelError("voice_model_start_timeout", "Managed Parakeet did not become healthy in time", 504);
   }
 
@@ -360,7 +390,10 @@ export class VoiceModelManager {
     const model = requiredModel(modelId);
     if (model.engine !== "transformers-whisper") throw modelError("voice_model_engine", `${model.label} does not use the embedded transcription engine`, 409);
     await this.ensureRunning(model.id);
-    const output = await this.transcriber(pcmFloat32(Buffer.from(pcm)), { chunk_length_s: 30, stride_length_s: 2 });
+    const transcriber = this.transcriber;
+    const task = this.transcriptionTail.then(() => transcriber(pcmFloat32(Buffer.from(pcm)), { chunk_length_s: 30, stride_length_s: 2 }));
+    this.transcriptionTail = task.then(() => undefined, () => undefined);
+    const output = await task;
     return String(output?.text || "").trim();
   }
 
@@ -375,9 +408,17 @@ export class VoiceModelManager {
   }
 
   async stop() {
+    const startup = this.startPromise;
+    if (startup) await startup.catch(() => {});
+    await this.stopActive();
+  }
+
+  async stopActive() {
     const child = this.child;
     const transcriber = this.transcriber;
     this.child = null; this.port = null; this.transcriber = null; this.activeModelId = null;
+    await this.transcriptionTail.catch(() => {});
+    this.transcriptionTail = Promise.resolve();
     if (transcriber?.dispose) await transcriber.dispose().catch(() => {});
     if (!child || child.exitCode != null) return;
     child.kill("SIGTERM");
@@ -390,7 +431,7 @@ export class VoiceModelManager {
   async uninstall(modelId) {
     const model = requiredModel(modelId);
     if (this.installingModelId === model.id) throw modelError("voice_model_installing", "Cancel the model installation before uninstalling", 409);
-    if (this.activeModelId === model.id) await this.stop();
+    if (this.activeModelId === model.id || this.startingModelId === model.id) await this.stop();
     const removed = Boolean(await this.installedManifest(model.id));
     await fs.rm(this.modelRoot(model.id), { recursive: true, force: true });
     this.lastErrors.delete(model.id);

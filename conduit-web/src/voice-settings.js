@@ -10,8 +10,8 @@ export const DEFAULT_LOCAL_VOICE_MODEL = "parakeet-tdt-0.6b-v3-int8";
 
 export const VOICE_ADAPTERS = Object.freeze([
   { id: "parakeet_pcm_ws_v1", label: "Live PCM WebSocket", transport: "websocket", description: "Streams 16 kHz signed PCM and expects explicit partial/final JSON events." },
-  { id: "openai_audio_sse_v1", label: "OpenAI-compatible audio upload", transport: "http", description: "Uploads an in-memory WAV file and accepts JSON or transcript SSE events." },
-  { id: "deepgram_audio_v1", label: "Deepgram prerecorded audio", transport: "http", description: "Uploads an in-memory WAV body and reads Deepgram channel alternatives." },
+  { id: "openai_audio_sse_v1", label: "OpenAI-compatible audio upload", transport: "http", description: "Uploads one in-memory WAV after stop and accepts JSON or transcript SSE events." },
+  { id: "deepgram_audio_v1", label: "Deepgram prerecorded audio", transport: "http", description: "Uploads one in-memory WAV after stop and reads Deepgram channel alternatives." },
 ]);
 
 export const VOICE_PROVIDERS = Object.freeze([
@@ -121,13 +121,18 @@ function storedConfig(config) {
   const profile = PROVIDER_BY_ID.get(provider);
   const adapter = provider === "custom" && ADAPTER_IDS.has(config.adapter) ? config.adapter : profile.adapter;
   const authType = AUTH_TYPES.has(config.auth?.type) ? config.auth.type : "none";
+  const headerName = authType === "bearer"
+    ? "Authorization"
+    : authType === "header"
+      ? normalizeHeaderName(config.auth?.headerName)
+      : "X-API-Key";
   return {
     mode,
     localModelId: String(config.localModelId || DEFAULT_LOCAL_VOICE_MODEL),
     provider, adapter,
     model: typeof config.model === "string" ? config.model : profile.models[0]?.id || "",
     endpoint: typeof config.endpoint === "string" ? config.endpoint : profile.endpoint,
-    auth: { type: authType, headerName: authType === "bearer" ? "Authorization" : normalizeHeaderName(config.auth?.headerName), secret: typeof config.auth?.secret === "string" ? config.auth.secret : "" },
+    auth: { type: authType, headerName, secret: typeof config.auth?.secret === "string" ? config.auth.secret : "" },
     source: "stored", allowPrivate: false,
   };
 }
@@ -167,33 +172,31 @@ export class VoiceSettingsStore {
     if (!isObject(input)) throw voiceError("voice_settings_invalid", "Voice settings must be an object");
     const mode = String(input.mode || "");
     if (!MODES.has(mode)) throw voiceError("voice_mode_invalid", "Voice mode must be off, local, or remote");
+    const localModelId = String(input.localModelId || DEFAULT_LOCAL_VOICE_MODEL);
+    const current = await readJson(this.filePath);
+    if (mode !== "remote") {
+      await writeJson(this.filePath, { ...current, mode, localModelId });
+      return this.publicView();
+    }
     const provider = PROVIDER_BY_ID.has(input.provider) ? String(input.provider) : "custom";
     const profile = PROVIDER_BY_ID.get(provider);
     const adapter = provider === "custom" ? String(input.adapter || "") : profile.adapter;
     if (!ADAPTER_IDS.has(adapter)) throw voiceError("voice_adapter_invalid", "Unknown voice endpoint adapter");
-    const localModelId = String(input.localModelId || DEFAULT_LOCAL_VOICE_MODEL);
-    const current = await readJson(this.filePath);
     const sameCredentialScope = provider === (current.provider || "custom")
       && String(input.auth?.type || "none") === String(current.auth?.type || "none")
       && String(input.auth?.headerName || "X-API-Key") === String(current.auth?.headerName || "X-API-Key");
     const previousSecret = sameCredentialScope && typeof current.auth?.secret === "string" ? current.auth.secret : "";
     const secret = typeof input.auth?.secret === "string" && input.auth.secret.trim() ? normalizeSecret(input.auth.secret) : previousSecret;
-    let endpoint = "";
-    let model = "";
-    let authType = "none";
-    let headerName = "Authorization";
-    if (mode === "remote") {
-      endpoint = provider === "custom" ? normalizeRemoteVoiceEndpoint(input.endpoint) : profile.endpoint;
-      model = provider === "custom" ? String(input.model || "").trim() : String(input.model || profile.models[0]?.id || "");
-      if (provider !== "custom" && !profile.models.some((candidate) => candidate.id === model)) throw voiceError("voice_model_invalid", `Choose a supported ${profile.label} transcription model`);
-      authType = provider === "custom" ? String(input.auth?.type || "none") : "bearer";
-      if (!AUTH_TYPES.has(authType)) throw voiceError("voice_auth_invalid", "Unknown voice endpoint authentication type");
-      headerName = authType === "bearer" ? "Authorization" : normalizeHeaderName(input.auth?.headerName);
-      const protocol = new URL(endpoint).protocol;
-      if (adapter === "parakeet_pcm_ws_v1" && protocol !== "wss:") throw voiceError("voice_endpoint_protocol", "The live PCM adapter requires a WSS endpoint");
-      if (adapter !== "parakeet_pcm_ws_v1" && protocol !== "https:") throw voiceError("voice_endpoint_protocol", "Audio upload adapters require an HTTPS endpoint");
-      if (authType !== "none" && !secret) throw voiceError("voice_secret_invalid", `Enter a credential for ${profile.label}`);
-    }
+    const endpoint = provider === "custom" ? normalizeRemoteVoiceEndpoint(input.endpoint) : profile.endpoint;
+    const model = provider === "custom" ? String(input.model || "").trim() : String(input.model || profile.models[0]?.id || "");
+    if (provider !== "custom" && !profile.models.some((candidate) => candidate.id === model)) throw voiceError("voice_model_invalid", `Choose a supported ${profile.label} transcription model`);
+    const authType = provider === "custom" ? String(input.auth?.type || "none") : "bearer";
+    if (!AUTH_TYPES.has(authType)) throw voiceError("voice_auth_invalid", "Unknown voice endpoint authentication type");
+    const headerName = authType === "bearer" ? "Authorization" : authType === "header" ? normalizeHeaderName(input.auth?.headerName) : "X-API-Key";
+    const protocol = new URL(endpoint).protocol;
+    if (adapter === "parakeet_pcm_ws_v1" && protocol !== "wss:") throw voiceError("voice_endpoint_protocol", "The live PCM adapter requires a WSS endpoint");
+    if (adapter !== "parakeet_pcm_ws_v1" && protocol !== "https:") throw voiceError("voice_endpoint_protocol", "Audio upload adapters require an HTTPS endpoint");
+    if (authType !== "none" && !secret) throw voiceError("voice_secret_invalid", `Enter a credential for ${profile.label}`);
     await writeJson(this.filePath, {
       mode, localModelId, provider, adapter, model, endpoint,
       auth: { type: authType, headerName, ...(authType !== "none" && secret ? { secret } : {}) },

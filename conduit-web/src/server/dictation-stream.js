@@ -149,12 +149,9 @@ function createWebSocketAdapter(config, emit, limits, WebSocketImpl) {
 export function createHttpAdapter(config, emit, limits, fetchImpl) {
   const chunks = [];
   let byteLength = 0;
-  let transcribedBytes = 0;
-  let inFlight = null;
-  let stopped = false;
   const controller = new AbortController();
-  const transcribe = async (final) => {
-    if (!byteLength || (!final && byteLength === transcribedBytes) || controller.signal.aborted) return;
+  const transcribe = async () => {
+    if (!byteLength || controller.signal.aborted) return { final: false, text: "" };
     const snapshot = chunks.map((chunk) => Buffer.from(chunk));
     const snapshotBytes = byteLength;
     const form = new FormData();
@@ -163,19 +160,14 @@ export function createHttpAdapter(config, emit, limits, fetchImpl) {
     if (config.model) form.append("model", config.model);
     if (config.provider !== "groq") form.append("stream", "true");
     const response = await fetchImpl(config.endpoint, { method: "POST", headers: config.headers, body: form, signal: controller.signal, redirect: "error" });
+    let final = false;
+    let text = "";
     await readSse(response, (event) => {
-      if (!final && event.type === "final") emit({ type: "partial", text: event.text });
-      else emit(event);
+      if (event.type === "final") { final = true; text = String(event.text || ""); }
+      emit(event);
     }, limits);
-    transcribedBytes = snapshotBytes;
+    return { final, text };
   };
-  const interval = setInterval(() => {
-    if (stopped || inFlight || byteLength < 3_200) return;
-    inFlight = transcribe(false)
-      .catch((error) => { if (error.name !== "AbortError") emit({ type: "error", code: error.code || "asr_request_failed", message: error.message }); })
-      .finally(() => { inFlight = null; });
-  }, 750);
-  interval.unref?.();
   queueMicrotask(() => emit({ type: "ready", sampleRate: 16_000, encoding: "pcm_s16le" }));
   return {
     opened: Promise.resolve(),
@@ -185,40 +177,27 @@ export function createHttpAdapter(config, emit, limits, fetchImpl) {
       chunks.push(Buffer.from(data));
     },
     async stop() {
-      stopped = true;
-      clearInterval(interval);
       try {
-        await inFlight;
-        await transcribe(true);
-        emit({ type: "adapter_closed", final: true });
+        const result = await transcribe();
+        emit({ type: "adapter_closed", ...result });
       } catch (error) {
         if (error.name !== "AbortError") emit({ type: "error", code: error.code || "asr_request_failed", message: error.message });
       }
     },
-    close() { clearInterval(interval); controller.abort(); chunks.length = 0; },
+    close() { controller.abort(); chunks.length = 0; },
   };
 }
 
-function createSnapshotAdapter(config, emit, limits, transcribe) {
+function createSnapshotAdapter(emit, limits, transcribe) {
   const chunks = [];
   let byteLength = 0;
-  let transcribedBytes = 0;
-  let inFlight = null;
-  let stopped = false;
-  const run = async (final) => {
-    if (!byteLength || (!final && byteLength === transcribedBytes)) return;
+  const run = async () => {
+    if (!byteLength) return { final: false, text: "" };
     const snapshot = Buffer.concat(chunks.map((chunk) => Buffer.from(chunk)), byteLength);
     const text = String(await transcribe(snapshot) || "").trim();
-    transcribedBytes = snapshot.length;
-    if (text) emit({ type: final ? "final" : "partial", text });
+    if (text) emit({ type: "final", text });
+    return { final: Boolean(text), text };
   };
-  const interval = setInterval(() => {
-    if (stopped || inFlight || byteLength < 3_200) return;
-    inFlight = run(false)
-      .catch((error) => emit({ type: "error", code: error.code || "asr_request_failed", message: error.message }))
-      .finally(() => { inFlight = null; });
-  }, 750);
-  interval.unref?.();
   queueMicrotask(() => emit({ type: "ready", sampleRate: 16_000, encoding: "pcm_s16le" }));
   return {
     opened: Promise.resolve(),
@@ -228,20 +207,17 @@ function createSnapshotAdapter(config, emit, limits, transcribe) {
       chunks.push(Buffer.from(data));
     },
     async stop() {
-      stopped = true;
-      clearInterval(interval);
       try {
-        await inFlight;
-        await run(true);
-        emit({ type: "adapter_closed", final: true });
+        const result = await run();
+        emit({ type: "adapter_closed", ...result });
       } catch (error) { emit({ type: "error", code: error.code || "asr_request_failed", message: error.message }); }
     },
-    close() { clearInterval(interval); chunks.length = 0; },
+    close() { chunks.length = 0; },
   };
 }
 
 export function createDeepgramAdapter(config, emit, limits, fetchImpl) {
-  return createSnapshotAdapter(config, emit, limits, async (pcm) => {
+  return createSnapshotAdapter(emit, limits, async (pcm) => {
     const endpoint = new URL(config.endpoint);
     endpoint.searchParams.set("model", config.model || "nova-3");
     endpoint.searchParams.set("smart_format", "true");
@@ -344,7 +320,7 @@ export function createDictationStream({ wss, voiceRuntime, WebSocketImpl = WebSo
         : config.adapter === "deepgram_audio_v1"
           ? createDeepgramAdapter(config, emit, limits, fetchImpl)
           : config.adapter === "managed_transformers_v1"
-            ? createSnapshotAdapter(config, emit, limits, config.transcribe)
+            ? createSnapshotAdapter(emit, limits, config.transcribe)
             : createHttpAdapter(config, emit, limits, fetchImpl);
       await adapter.opened;
       if (stopping) {

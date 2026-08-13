@@ -359,6 +359,23 @@ export function Settings(props: {
   const updateVoiceServer = (patch: Partial<VoiceServerSettings>) => setVoiceServerSettings((current) => current ? { ...current, ...patch } : current);
   const selectedVoiceProvider = createMemo(() => voiceServerSettings()?.providers.find((provider) => provider.id === voiceServerSettings()?.provider));
   const selectedLocalVoiceModel = createMemo(() => voiceServerSettings()?.local?.models.find((model) => model.id === voiceServerSettings()?.localModelId));
+  const persistVoiceServer = async (settings: VoiceServerSettings) => {
+    const saved = await api<VoiceServerSettings>("/v0/voice/settings", {
+      method: "PUT",
+      body: JSON.stringify({
+        mode: settings.mode,
+        localModelId: settings.localModelId,
+        provider: settings.provider,
+        adapter: settings.adapter,
+        model: settings.model,
+        endpoint: settings.endpoint,
+        auth: { type: settings.auth.type, headerName: settings.auth.headerName, secret: voiceSecret() },
+      }),
+    });
+    setVoiceSecret("");
+    setVoiceServerSettings(saved);
+    return saved;
+  };
   const saveVoiceServer = async () => {
     const settings = voiceServerSettings();
     if (!settings) return;
@@ -366,28 +383,18 @@ export function Settings(props: {
     setVoiceError("");
     setVoiceTestResult("");
     try {
-      const saved = await api<VoiceServerSettings>("/v0/voice/settings", {
-        method: "PUT",
-        body: JSON.stringify({
-          mode: settings.mode,
-          localModelId: settings.localModelId,
-          provider: settings.provider,
-          adapter: settings.adapter,
-          model: settings.model,
-          endpoint: settings.endpoint,
-          auth: { type: settings.mode === "local" ? "none" : settings.auth.type, headerName: settings.auth.headerName, secret: voiceSecret() },
-        }),
-      });
-      setVoiceSecret("");
-      setVoiceServerSettings(saved);
+      await persistVoiceServer(settings);
     } catch (error) { setVoiceError((error as Error).message); }
     finally { setVoiceBusy(false); }
   };
   const testVoiceServer = async () => {
+    const settings = voiceServerSettings();
+    if (!settings) return;
     setVoiceBusy(true);
     setVoiceError("");
     setVoiceTestResult("");
     try {
+      if (!settings.locked) await persistVoiceServer(settings);
       await api("/v0/voice/test", { method: "POST", body: "{}" });
       setVoiceTestResult("Connection successful");
       await loadVoiceSettings({ quiet: true });

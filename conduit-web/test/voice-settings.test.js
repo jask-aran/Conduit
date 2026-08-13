@@ -73,6 +73,47 @@ test("first-class cloud providers pin endpoints, models, and credential scope", 
   } finally { await fs.rm(fixture.root, { recursive: true, force: true }); }
 });
 
+test("local and off modes round-trip without deleting the saved cloud provider", async () => {
+  const fixture = await temporaryStore();
+  try {
+    await fixture.store.update({
+      mode: "remote", provider: "openai", model: "gpt-transcribe",
+      auth: { type: "bearer", headerName: "Authorization", secret: "openai-secret" },
+    });
+    await fixture.store.update({ mode: "local", localModelId: "whisper-tiny-en-q8" });
+    let view = await fixture.store.publicView();
+    assert.equal(view.mode, "local");
+    assert.equal(view.localModelId, "whisper-tiny-en-q8");
+    assert.equal(view.auth.configured, true);
+    await fixture.store.update({ mode: "off", localModelId: "whisper-tiny-en-q8" });
+    view = await fixture.store.publicView();
+    assert.equal(view.mode, "off");
+    assert.equal(view.auth.configured, true);
+    await fixture.store.update({
+      mode: "remote", provider: "openai", model: "gpt-4o-mini-transcribe",
+      auth: { type: "bearer", headerName: "Authorization" },
+    });
+    assert.equal((await fixture.store.effective()).auth.secret, "openai-secret");
+  } finally { await fs.rm(fixture.root, { recursive: true, force: true }); }
+});
+
+test("none authentication ignores stale Authorization header metadata", async () => {
+  const fixture = await temporaryStore();
+  try {
+    await fs.writeFile(fixture.filePath, JSON.stringify({
+      mode: "off", provider: "custom", adapter: "openai_audio_sse_v1", auth: { type: "none", headerName: "Authorization" },
+    }));
+    const view = await fixture.store.publicView();
+    assert.equal(view.auth.type, "none");
+    assert.equal(view.auth.headerName, "X-API-Key");
+    await fixture.store.update({
+      mode: "remote", provider: "custom", adapter: "openai_audio_sse_v1", endpoint: "https://speech.example.com/transcribe",
+      auth: { type: "none", headerName: "Authorization" },
+    });
+    assert.equal((await fixture.store.publicView()).auth.type, "none");
+  } finally { await fs.rm(fixture.root, { recursive: true, force: true }); }
+});
+
 test("environment voice settings stay locked and preserve local deployment compatibility", async () => {
   const fixture = await temporaryStore({ CONDUIT_PARAKEET_STREAM_URL: "ws://127.0.0.1:8000/ws", CONDUIT_PARAKEET_API_KEY: "environment-secret" });
   try {
@@ -125,6 +166,17 @@ test("VoiceRuntime requires provider credential checks to succeed and keeps the 
     lookup: async () => [{ address: "203.0.113.10", family: 4 }],
   });
   await assert.rejects(providerRuntime.test(), { code: "voice_credentials_rejected" });
+
+  const customRuntime = new VoiceRuntime({
+    settings: { effective: async () => ({
+      mode: "remote", provider: "custom", adapter: "openai_audio_sse_v1", model: "",
+      endpoint: "https://speech.example.com/transcribe", auth: { type: "bearer", secret: "invalid" }, allowPrivate: false,
+    }) },
+    modelManager: {},
+    fetchImpl: async () => new Response("unauthorized", { status: 401 }),
+    lookup: async () => [{ address: "203.0.113.11", family: 4 }],
+  });
+  await assert.rejects(customRuntime.test(), { code: "voice_endpoint_rejected" });
 
   let testedModel = "";
   const localRuntime = new VoiceRuntime({

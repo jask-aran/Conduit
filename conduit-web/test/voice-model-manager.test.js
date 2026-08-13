@@ -101,3 +101,42 @@ test("managed Whisper tiers install independently and transcribe through the emb
     assert.equal((await manager.publicView()).activeModelId, modelId);
   } finally { await manager.stop(); await fs.rm(temporary, { recursive: true, force: true }); }
 });
+
+test("concurrent managed Whisper requests share startup and serialize inference", async () => {
+  const temporary = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-voice-whisper-concurrent-"));
+  const root = path.join(temporary, "voice", "models");
+  const modelId = "whisper-tiny-en-q8";
+  await fs.mkdir(path.join(root, modelId), { recursive: true });
+  await fs.writeFile(path.join(root, modelId, "manifest.json"), JSON.stringify({ modelId }));
+  let loads = 0;
+  let disposals = 0;
+  let activeInferences = 0;
+  let maximumInferences = 0;
+  const manager = new VoiceModelManager({
+    root,
+    transformersLoader: async () => {
+      loads += 1;
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      const transcriber = async () => {
+        activeInferences += 1;
+        maximumInferences = Math.max(maximumInferences, activeInferences);
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        activeInferences -= 1;
+        return { text: "shared transcript" };
+      };
+      transcriber.dispose = async () => { disposals += 1; };
+      return transcriber;
+    },
+  });
+  try {
+    const runtimes = await Promise.all([manager.ensureRunning(modelId), manager.ensureRunning(modelId)]);
+    assert.deepEqual(runtimes, [{ kind: "transcriber" }, { kind: "transcriber" }]);
+    assert.equal(loads, 1);
+    assert.deepEqual(await Promise.all([manager.transcribe(modelId, Buffer.alloc(4)), manager.transcribe(modelId, Buffer.alloc(4))]), ["shared transcript", "shared transcript"]);
+    assert.equal(maximumInferences, 1);
+  } finally {
+    await manager.stop();
+    assert.equal(disposals, 1);
+    await fs.rm(temporary, { recursive: true, force: true });
+  }
+});
