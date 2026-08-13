@@ -146,7 +146,7 @@ function createWebSocketAdapter(config, emit, limits, WebSocketImpl) {
   };
 }
 
-function createHttpAdapter(config, emit, limits, fetchImpl) {
+export function createHttpAdapter(config, emit, limits, fetchImpl) {
   const chunks = [];
   let byteLength = 0;
   let transcribedBytes = 0;
@@ -160,7 +160,8 @@ function createHttpAdapter(config, emit, limits, fetchImpl) {
     const form = new FormData();
     form.append("file", wavBlob(snapshot, snapshotBytes), "dictation.wav");
     form.append("response_format", "json");
-    form.append("stream", "true");
+    if (config.model) form.append("model", config.model);
+    if (config.provider !== "groq") form.append("stream", "true");
     const response = await fetchImpl(config.endpoint, { method: "POST", headers: config.headers, body: form, signal: controller.signal, redirect: "error" });
     await readSse(response, (event) => {
       if (!final && event.type === "final") emit({ type: "partial", text: event.text });
@@ -196,6 +197,65 @@ function createHttpAdapter(config, emit, limits, fetchImpl) {
     },
     close() { clearInterval(interval); controller.abort(); chunks.length = 0; },
   };
+}
+
+function createSnapshotAdapter(config, emit, limits, transcribe) {
+  const chunks = [];
+  let byteLength = 0;
+  let transcribedBytes = 0;
+  let inFlight = null;
+  let stopped = false;
+  const run = async (final) => {
+    if (!byteLength || (!final && byteLength === transcribedBytes)) return;
+    const snapshot = Buffer.concat(chunks.map((chunk) => Buffer.from(chunk)), byteLength);
+    const text = String(await transcribe(snapshot) || "").trim();
+    transcribedBytes = snapshot.length;
+    if (text) emit({ type: final ? "final" : "partial", text });
+  };
+  const interval = setInterval(() => {
+    if (stopped || inFlight || byteLength < 3_200) return;
+    inFlight = run(false)
+      .catch((error) => emit({ type: "error", code: error.code || "asr_request_failed", message: error.message }))
+      .finally(() => { inFlight = null; });
+  }, 750);
+  interval.unref?.();
+  queueMicrotask(() => emit({ type: "ready", sampleRate: 16_000, encoding: "pcm_s16le" }));
+  return {
+    opened: Promise.resolve(),
+    write(data) {
+      byteLength += data.length;
+      if (byteLength > limits.maxAudioBytes) throw dictationError("dictation_too_long", "Voice dictation reached the server audio limit", 413);
+      chunks.push(Buffer.from(data));
+    },
+    async stop() {
+      stopped = true;
+      clearInterval(interval);
+      try {
+        await inFlight;
+        await run(true);
+        emit({ type: "adapter_closed", final: true });
+      } catch (error) { emit({ type: "error", code: error.code || "asr_request_failed", message: error.message }); }
+    },
+    close() { clearInterval(interval); chunks.length = 0; },
+  };
+}
+
+export function createDeepgramAdapter(config, emit, limits, fetchImpl) {
+  return createSnapshotAdapter(config, emit, limits, async (pcm) => {
+    const endpoint = new URL(config.endpoint);
+    endpoint.searchParams.set("model", config.model || "nova-3");
+    endpoint.searchParams.set("smart_format", "true");
+    const response = await fetchImpl(endpoint, {
+      method: "POST",
+      headers: { ...config.headers, "Content-Type": "audio/wav" },
+      body: wavBlob([pcm], pcm.length),
+      signal: AbortSignal.timeout(15_000),
+      redirect: "error",
+    });
+    if (!response.ok) throw dictationError("asr_request_failed", `Deepgram returned ${response.status}`, 502);
+    const result = await response.json();
+    return result?.results?.channels?.[0]?.alternatives?.[0]?.transcript || "";
+  });
 }
 
 export function createDictationStream({ wss, voiceRuntime, WebSocketImpl = WebSocket, fetchImpl = fetch, limits: limitOverrides = {} }) {
@@ -281,7 +341,11 @@ export function createDictationStream({ wss, voiceRuntime, WebSocketImpl = WebSo
       const config = await voiceRuntime.resolve();
       adapter = config.adapter === "parakeet_pcm_ws_v1"
         ? createWebSocketAdapter(config, emit, limits, WebSocketImpl)
-        : createHttpAdapter(config, emit, limits, fetchImpl);
+        : config.adapter === "deepgram_audio_v1"
+          ? createDeepgramAdapter(config, emit, limits, fetchImpl)
+          : config.adapter === "managed_transformers_v1"
+            ? createSnapshotAdapter(config, emit, limits, config.transcribe)
+            : createHttpAdapter(config, emit, limits, fetchImpl);
       await adapter.opened;
       if (stopping) {
         await adapter.stop();

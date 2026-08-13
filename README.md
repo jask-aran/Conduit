@@ -23,8 +23,8 @@ environments.
   model-aware web search. Local installations can also use Host Pi.
 - Streamed Markdown, code, math, and tables, plus a command palette and PWA
   support.
-- Push-to-talk and toggle-based voice dictation through a managed local
-  Parakeet model or a securely authenticated remote speech endpoint.
+- Push-to-talk and toggle-based voice dictation through managed local Whisper
+  and Parakeet tiers or first-class OpenAI, Deepgram, and Groq providers.
 - A Docker deployment with automatic HTTPS and persistent data and Workspace
   mounts.
 

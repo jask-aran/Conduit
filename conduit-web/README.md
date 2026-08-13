@@ -183,22 +183,32 @@ that could replace it.
 The composer also supports draft-only voice dictation. The on-screen microphone
 is a start/stop toggle and the configurable `Super+D` shortcut is push-to-talk.
 The browser captures 16 kHz mono PCM with an `AudioWorklet` and sends it only to
-authenticated `WS /v0/dictation/stream`. Settings → Voice can use a managed
-local Parakeet model or a named remote protocol adapter. Remote None, Bearer,
-and custom API-key-header credentials are stored server-side in `data/voice.json`
+authenticated `WS /v0/dictation/stream`. Settings → Voice can use managed
+Whisper Tiny English, Whisper Base, Whisper Small, or Parakeet TDT 0.6B v3,
+and has first-class provider/model profiles for OpenAI, Deepgram, and Groq.
+Remote None, Bearer, and custom API-key-header credentials are stored server-side in `data/voice.json`
 (mode `0600`) and are never returned to the browser. Environment configuration
 remains a locked deployment override. Provisional transcript text replaces one
 highlighted composer range in place, final text remains an editable draft, and
 optional auto-send accepts only a server-confirmed final event settled within
 one second of stop.
 
-Managed local setup is an explicit user action. Conduit downloads pinned Linux
-Parakeet, ONNX Runtime, and int8 model artifacts into `data/voice/parakeet`,
-checks their published SHA-256 metadata, displays progress, supports
-cancellation/retry, and runs one unprivileged loopback worker. The managed
-OpenAI-compatible adapter keeps the utterance in memory and sends bounded
-snapshots while capture is active for provisional text, then sends one final
-snapshot after stop. Switching modes never installs a model implicitly.
+Managed local setup is an explicit user action. Conduit downloads pinned q8
+Whisper ONNX artifacts or the pinned Parakeet/ONNX Runtime package into
+`data/voice/models`, verifies Hugging Face LFS SHA-256 or Git blob identities,
+displays progress, supports cancellation/retry, and keeps only one selected
+model resident. Whisper runs in the server through Transformers.js; Parakeet
+runs as one unprivileged loopback worker. Bounded in-memory snapshots provide
+provisional text and one final request after stop. Starting an installation
+also persists that local selection, but never occurs without explicit license
+acceptance.
+
+OpenAI defaults to `gpt-transcribe`, with GPT-4o mini/full transcription choices;
+Deepgram offers Nova-3 and Nova-2 with `Token` authentication and smart
+formatting; Groq offers Whisper Large V3 Turbo and Large V3. Provider endpoints,
+auth schemes, model fields, streaming behavior, and response parsing are owned
+by their profiles. The custom profile retains WSS/HTTPS adapter and header
+configuration for other services.
 
 ## Runtime API
 
@@ -337,7 +347,7 @@ starting, and browser-attached processes remain resident.
 - `POST /v0/voice/test` tests the effective endpoint without disclosing its
   credential; `DELETE /v0/voice/credential` removes a stored remote secret
 - `POST /v0/voice/model/install`, `POST /v0/voice/model/cancel`, and
-  `DELETE /v0/voice/model` manage the pinned local Parakeet package
+  `DELETE /v0/voice/model` manage independently installed local model tiers
 
 ## Global runtime channel
 
@@ -419,8 +429,11 @@ binary frames are signed 16-bit little-endian mono PCM at 16 kHz. The only
 browser control frame is `{ "type": "stop" }`. The
 `parakeet_pcm_ws_v1` adapter forwards binary PCM, sends an explicit stop control,
 and accepts only its documented partial/final/end/error JSON event vocabulary;
-the `openai_audio_sse_v1` adapter sends one in-memory WAV utterance and consumes
-`transcript.text.delta` / `transcript.text.done` SSE events. Conduit emits
+the `openai_audio_sse_v1` adapter sends an in-memory WAV utterance and consumes
+JSON or `transcript.text.delta` / `transcript.text.done` SSE events; the
+`deepgram_audio_v1` adapter sends WAV audio and reads channel alternatives.
+The internal managed-Whisper adapter transcribes PCM snapshots without opening
+a network listener. Conduit emits
 `ready`, `partial`, `final`, `end_of_speech`, `settlement_deadline`, `completed`,
 and `error`. `completed` includes `settlementMs` and `finalWithinDeadline`, and
 clients must never infer auto-send timing from browser clocks.

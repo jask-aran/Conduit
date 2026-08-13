@@ -117,7 +117,7 @@ export async function startConduitHarness({ env = {} } = {}) {
       CONDUIT_AUTH_FILE: path.join(root, "auth.json"),
       CONDUIT_REMOTES_FILE: path.join(root, "remotes.json"),
       CONDUIT_VOICE_CONFIG_FILE: path.join(root, "voice.json"),
-      CONDUIT_VOICE_MODEL_ROOT: path.join(root, "voice-model"),
+      CONDUIT_VOICE_MODEL_ROOT: path.join(root, "voice-models"),
       CONDUIT_PI_AGENT_DIR: path.join(root, "pi"),
       CONDUIT_PI_COMMAND: conduitPi,
       CONDUIT_NATIVE_PI_COMMAND: nativePi,

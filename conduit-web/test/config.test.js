@@ -39,7 +39,7 @@ test("default runtime paths are owned by the repository root", () => {
   assert.equal(config.enablePartialContinue, true);
   assert.equal(config.maxAttachmentBytes, 100 * 1024 * 1024);
   assert.equal(config.voiceConfigFile.endsWith(path.join("data", "voice.json")), true);
-  assert.equal(config.voiceModelRoot.endsWith(path.join("data", "voice", "parakeet")), true);
+  assert.equal(config.voiceModelRoot.endsWith(path.join("data", "voice", "models")), true);
   assert.equal(loadConfig({ ENABLE_PARTIAL_CONTINUE: "false" }).enablePartialContinue, false);
 });
 
@@ -61,7 +61,7 @@ test("one data root relocates every durable Conduit path", () => {
   assert.equal(config.piAgentDir, path.join(dataRoot, "pi"));
   assert.equal(config.searchConfigFile, path.join(dataRoot, "pi", "web-search.json"));
   assert.equal(config.voiceConfigFile, path.join(dataRoot, "voice.json"));
-  assert.equal(config.voiceModelRoot, path.join(dataRoot, "voice", "parakeet"));
+  assert.equal(config.voiceModelRoot, path.join(dataRoot, "voice", "models"));
   assert.equal(config.release, "0123456789abcdef");
   assert.equal(loadConfig({ CONDUIT_MAX_ATTACHMENT_BYTES: "2048" }).maxAttachmentBytes, 2048);
   assert.equal(config.workspaceSuggestionRoot, path.resolve("/tmp/workspace-suggestions"));

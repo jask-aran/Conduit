@@ -328,6 +328,14 @@ svg { stroke-width: 1.5; }
 .voice-card { display: grid; gap: 13px; padding: 14px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--card); }
 .voice-card h3, .voice-card p { margin: 0; }
 .voice-card p, .voice-notice { color: var(--muted-foreground); line-height: 1.45; }
+.voice-model-grid { display: grid; gap: 8px; }
+.voice-model-option { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: start; gap: 10px; border: 1px solid var(--border); border-radius: var(--radius); padding: 11px; cursor: pointer; }
+.voice-model-option[data-current="true"] { border-color: color-mix(in oklch, var(--accent-cool), var(--border) 38%); background: color-mix(in oklch, var(--accent-cool), transparent 94%); }
+.voice-model-option input { margin-top: 3px; accent-color: var(--primary); }
+.voice-model-option span { display: grid; gap: 2px; }
+.voice-model-option small { color: var(--muted-foreground); }
+.voice-model-option em { color: var(--muted-foreground); font-size: 11px; font-style: normal; text-transform: capitalize; }
+.voice-model-option em[data-state="running"] { color: var(--accent-cool); }
 .voice-notice { border-left: 2px solid var(--accent-cool); background: var(--muted); padding: 9px 10px; font-size: 13px; }
 .voice-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .voice-model-status { display: flex; align-items: center; justify-content: space-between; gap: 12px; }

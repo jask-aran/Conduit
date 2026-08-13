@@ -36,6 +36,7 @@ async function publicAddresses(hostname, lookup = dns.lookup) {
 }
 
 function requestHeaders(config) {
+  if (config.provider === "deepgram") return { Authorization: `Token ${config.auth.secret}` };
   if (config.auth.type === "bearer") return { Authorization: `Bearer ${config.auth.secret}` };
   if (config.auth.type === "header") return { [config.auth.headerName]: config.auth.secret };
   return {};
@@ -62,11 +63,24 @@ export class VoiceRuntime {
     const config = await this.settings.effective();
     if (config.mode === "off") throw runtimeError("dictation_not_configured", "Voice dictation is disabled", 409);
     if (config.mode === "local") {
-      const origin = await this.modelManager.ensureRunning();
+      const local = await this.modelManager.ensureRunning(config.localModelId);
+      if (local.kind === "transcriber") {
+        return {
+          mode: "local",
+          adapter: "managed_transformers_v1",
+          provider: "local",
+          localModelId: config.localModelId,
+          model: config.localModelId,
+          transcribe: (pcm) => this.modelManager.transcribe(config.localModelId, pcm),
+        };
+      }
       return {
         mode: "local",
         adapter: "openai_audio_sse_v1",
-        endpoint: `${origin}/v1/audio/transcriptions`,
+        provider: "local",
+        localModelId: config.localModelId,
+        model: "",
+        endpoint: `${local.origin}/v1/audio/transcriptions`,
         headers: {},
         allowPrivate: true,
       };
@@ -75,7 +89,9 @@ export class VoiceRuntime {
     const addresses = config.allowPrivate ? [] : await publicAddresses(endpoint.hostname, this.lookup);
     return {
       mode: "remote",
+      provider: config.provider,
       adapter: config.adapter,
+      model: config.model,
       endpoint: endpoint.toString(),
       headers: requestHeaders(config),
       stopMessage: config.stopMessage || "",
@@ -85,7 +101,7 @@ export class VoiceRuntime {
 
   async test() {
     const config = await this.resolve();
-    if (config.mode === "local") return this.modelManager.test();
+    if (config.mode === "local") return this.modelManager.test(config.localModelId);
     if (config.adapter === "parakeet_pcm_ws_v1") {
       return new Promise((resolve, reject) => {
         const socket = new WebSocket(config.endpoint, { headers: config.headers, lookup: config.lookup, handshakeTimeout: 5_000 });
@@ -104,12 +120,22 @@ export class VoiceRuntime {
         });
       });
     }
-    const response = await this.fetchImpl(config.endpoint, {
-      method: "OPTIONS",
+    const testEndpoint = config.provider === "openai"
+      ? `https://api.openai.com/v1/models/${encodeURIComponent(config.model)}`
+      : config.provider === "groq"
+        ? `https://api.groq.com/openai/v1/models/${encodeURIComponent(config.model)}`
+        : config.provider === "deepgram"
+          ? "https://api.deepgram.com/v1/projects"
+          : config.endpoint;
+    const response = await this.fetchImpl(testEndpoint, {
+      method: config.provider === "custom" ? "OPTIONS" : "GET",
       headers: config.headers,
       signal: AbortSignal.timeout(5_000),
       redirect: "error",
     });
+    if (config.provider !== "custom" && !response.ok) {
+      throw runtimeError("voice_credentials_rejected", `${config.provider} rejected the configured credential (${response.status})`, 502);
+    }
     if (response.status >= 500) throw runtimeError("voice_endpoint_unhealthy", `Voice endpoint returned ${response.status}`, 502);
     return { ok: true, mode: config.mode, adapter: config.adapter, status: response.status };
   }
