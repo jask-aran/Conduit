@@ -18,9 +18,21 @@ export const LOCAL_VOICE_MODELS = Object.freeze([
     license: { id: "MIT", attribution: "OpenAI Whisper and the ONNX Community conversion" },
   },
   {
+    id: "whisper-tiny-en-fp32", label: "Whisper Tiny English (fp32)", engine: "transformers-whisper", size: "tiny", languages: "English",
+    description: "Full-precision Tiny tier for CPU-light accuracy comparisons.", approximateBytes: 155 * MIB, minimumFreeBytes: 256 * MIB,
+    repository: "onnx-community/whisper-tiny.en", revision: "2575352d61be1bf7225cf8f8b268a4678025fc58", precision: "fp32",
+    license: { id: "MIT", attribution: "OpenAI Whisper and the ONNX Community conversion" },
+  },
+  {
     id: "whisper-base-q8", label: "Whisper Base", engine: "transformers-whisper", size: "small", languages: "Multilingual",
     description: "Balanced multilingual model for modest CPU and memory budgets.", approximateBytes: 86 * MIB, minimumFreeBytes: 192 * MIB,
     repository: "onnx-community/whisper-base", revision: "1846881b6b3a3024392c1eea3ad983695bc23925", precision: "q8",
+    license: { id: "MIT", attribution: "OpenAI Whisper and the ONNX Community conversion" },
+  },
+  {
+    id: "whisper-base-fp32", label: "Whisper Base (fp32)", engine: "transformers-whisper", size: "small", languages: "Multilingual",
+    description: "Full-precision Base tier for multilingual accuracy comparisons.", approximateBytes: 288 * MIB, minimumFreeBytes: 512 * MIB,
+    repository: "onnx-community/whisper-base", revision: "1846881b6b3a3024392c1eea3ad983695bc23925", precision: "fp32",
     license: { id: "MIT", attribution: "OpenAI Whisper and the ONNX Community conversion" },
   },
   {
@@ -30,9 +42,27 @@ export const LOCAL_VOICE_MODELS = Object.freeze([
     license: { id: "MIT", attribution: "OpenAI Whisper and the ONNX Community conversion" },
   },
   {
+    id: "whisper-small-fp32", label: "Whisper Small (fp32)", engine: "transformers-whisper", size: "medium", languages: "Multilingual",
+    description: "Full-precision Whisper Small tier for maximum embedded accuracy.", approximateBytes: 936 * MIB, minimumFreeBytes: 1536 * MIB,
+    repository: "onnx-community/whisper-small", revision: "36050c46d777d46dc4b5f43f6d90574fc38f8732", precision: "fp32",
+    license: { id: "MIT", attribution: "OpenAI Whisper and the ONNX Community conversion" },
+  },
+  {
+    id: "whisper-large-v3-turbo-q8", label: "Whisper Large v3 Turbo", engine: "transformers-whisper", size: "large", languages: "Multilingual",
+    description: "The most accurate embedded Whisper tier with fast turbo decoding for live dictation.", approximateBytes: 1040 * MIB, minimumFreeBytes: 1536 * MIB,
+    repository: "onnx-community/whisper-large-v3-turbo", revision: "360ebcde2559d60bb474678be3c1de9ef347d01a", precision: "q8",
+    license: { id: "MIT", attribution: "OpenAI Whisper and the ONNX Community conversion" },
+  },
+  {
     id: "parakeet-tdt-0.6b-v3-int8", label: "Parakeet TDT 0.6B v3", engine: "parakeet", size: "large", languages: "English",
     description: "Highest-quality managed English option; optimized ONNX int8 runtime.", approximateBytes: 900 * MIB, minimumFreeBytes: 900 * MIB,
     revision: PARAKEET_MODEL_REVISION, precision: "int8",
+    license: { id: "CC-BY-4.0", attribution: "NVIDIA Parakeet TDT 0.6B v3 and the istupakov ONNX conversion" },
+  },
+  {
+    id: "parakeet-tdt-0.6b-v3-fp32", label: "Parakeet TDT 0.6B v3 (fp32)", engine: "parakeet", size: "large", languages: "English",
+    description: "Highest-accuracy managed English option; full-precision ONNX runtime.", approximateBytes: 2480 * MIB, minimumFreeBytes: 3584 * MIB,
+    revision: PARAKEET_MODEL_REVISION, precision: "fp32",
     license: { id: "CC-BY-4.0", attribution: "NVIDIA Parakeet TDT 0.6B v3 and the istupakov ONNX conversion" },
   },
 ]);
@@ -99,34 +129,98 @@ async function verifiedExisting(artifact, destination) {
   } catch (error) { if (error.code === "ENOENT") return false; throw error; }
 }
 
-async function download(fetchImpl, artifact, destination, signal, onBytes) {
-  if (await verifiedExisting(artifact, destination)) return { resumed: true };
-  await fs.mkdir(path.dirname(destination), { recursive: true, mode: 0o700 });
-  const temporary = `${destination}.part`;
-  await fs.rm(temporary, { force: true });
-  const response = await fetchImpl(artifact.url, { signal, redirect: "follow" });
-  if (!response.ok || !response.body) throw modelError("voice_model_download_failed", `Could not download ${artifact.name} (${response.status})`, 502);
-  const sha256 = crypto.createHash("sha256");
-  const gitBlob = crypto.createHash("sha1");
-  gitBlob.update(`blob ${artifact.size}\0`);
-  const counter = new Transform({ transform(chunk, _encoding, callback) { sha256.update(chunk); gitBlob.update(chunk); onBytes(chunk.length); callback(null, chunk); } });
-  const file = await fs.open(temporary, "w", 0o600);
+const DOWNLOAD_RETRIES = 3;
+const DOWNLOAD_RETRY_BASE_MS = 1_000;
+
+async function hashFile(filePath, hash) {
+  const handle = await fs.open(filePath, "r");
+  try {
+    for await (const chunk of handle.createReadStream()) hash.update(chunk);
+  } finally { await handle.close(); }
+}
+
+async function downloadAttempt(fetchImpl, artifact, temporary, signal, onBytes) {
+  let partialBytes = 0;
+  try { partialBytes = (await fs.stat(temporary)).size; } catch (error) { if (error.code !== "ENOENT") throw error; }
+  if (partialBytes > 0) {
+    const sha256 = crypto.createHash("sha256");
+    await hashFile(temporary, sha256);
+    if (artifact.sha256 && sha256.digest("hex") === artifact.sha256) return { resumed: true };
+    if (!artifact.sha256) {
+      const gitBlob = crypto.createHash("sha1");
+      gitBlob.update(`blob ${artifact.size}\0`);
+      await hashFile(temporary, gitBlob);
+      if (partialBytes === Number(artifact.size) && gitBlob.digest("hex") === artifact.gitBlob) return { resumed: true };
+    }
+  }
+  if (partialBytes > 0 && partialBytes >= Number(artifact.size)) {
+    await fs.rm(temporary, { force: true });
+    partialBytes = 0;
+  }
+  const sha256 = artifact.sha256 ? crypto.createHash("sha256") : null;
+  const gitBlob = artifact.sha256 ? null : crypto.createHash("sha1");
+  if (gitBlob) gitBlob.update(`blob ${artifact.size}\0`);
+  if (partialBytes > 0) {
+    await hashFile(temporary, sha256);
+    if (gitBlob) await hashFile(temporary, gitBlob);
+  }
+  const headers = partialBytes > 0 ? { Range: `bytes=${partialBytes}-` } : undefined;
+  const response = await fetchImpl(artifact.url, { signal, redirect: "follow", headers });
+  if (!response.ok || !response.body) {
+    const error = modelError("voice_model_download_failed", `Could not download ${artifact.name} (${response.status})`, 502);
+    error.status = response.status;
+    throw error;
+  }
+  if (response.status !== 206 && partialBytes > 0) {
+    partialBytes = 0;
+    await fs.rm(temporary, { force: true });
+  }
+  const counter = new Transform({
+    transform(chunk, _encoding, callback) {
+      if (sha256) sha256.update(chunk);
+      if (gitBlob) gitBlob.update(chunk);
+      onBytes(chunk.length);
+      callback(null, chunk);
+    },
+  });
+  const file = await fs.open(temporary, partialBytes > 0 ? "a" : "w", 0o600);
   try { await streamPipeline(Readable.fromWeb(response.body), counter, file.createWriteStream()); }
   finally { await file.close().catch(() => {}); }
   const verified = artifact.sha256
     ? sha256.digest("hex") === artifact.sha256
-    : !artifact.gitBlob || gitBlob.digest("hex") === artifact.gitBlob;
+    : gitBlob.digest("hex") === artifact.gitBlob;
   if (!verified) {
     await fs.rm(temporary, { force: true });
     throw modelError("voice_model_checksum", `Checksum verification failed for ${artifact.name}`, 502);
   }
-  await fs.rename(temporary, destination);
-  return { resumed: false };
+  return { resumed: partialBytes > 0 };
 }
 
-async function defaultTransformersLoader(modelPath) {
+async function download(fetchImpl, artifact, destination, signal, onBytes, { retries = DOWNLOAD_RETRIES, retryBaseMs = DOWNLOAD_RETRY_BASE_MS } = {}) {
+  if (await verifiedExisting(artifact, destination)) return { resumed: true };
+  await fs.mkdir(path.dirname(destination), { recursive: true, mode: 0o700 });
+  const temporary = `${destination}.part`;
+  let attempt = 0;
+  while (true) {
+    try {
+      const result = await downloadAttempt(fetchImpl, artifact, temporary, signal, onBytes);
+      await fs.rename(temporary, destination);
+      return result;
+    } catch (error) {
+      if (error?.name === "AbortError") throw error;
+      if (error?.status === 403 || error?.status === 404) throw error;
+      if (error?.code === "voice_model_checksum" || error?.status === 416) await fs.rm(temporary, { force: true }).catch(() => {});
+      attempt += 1;
+      if (attempt >= retries) throw error;
+      if (signal?.aborted) throw new DOMException("Installation cancelled", "AbortError");
+      await new Promise((resolve) => setTimeout(resolve, retryBaseMs * 2 ** (attempt - 1) + Math.floor(Math.random() * 250)));
+    }
+  }
+}
+
+async function defaultTransformersLoader(modelPath, precision = "q8") {
   const { pipeline } = await import("@huggingface/transformers");
-  return pipeline("automatic-speech-recognition", modelPath, { dtype: "q8", local_files_only: true });
+  return pipeline("automatic-speech-recognition", modelPath, { dtype: precision === "fp32" ? "fp32" : "q8", local_files_only: true });
 }
 
 function pcmFloat32(buffer) {
@@ -136,13 +230,16 @@ function pcmFloat32(buffer) {
 }
 
 export class VoiceModelManager {
-  constructor({ root, fetchImpl = fetch, manifestResolver = packageManifest, runtimeExtractor = extractRuntime, transformersLoader = defaultTransformersLoader } = {}) {
+  constructor({ root, fetchImpl = fetch, manifestResolver = packageManifest, runtimeExtractor = extractRuntime, transformersLoader = defaultTransformersLoader, downloadRetries = DOWNLOAD_RETRIES, downloadRetryBaseMs = DOWNLOAD_RETRY_BASE_MS, downloadConcurrency = 3 } = {}) {
     if (!root) throw new Error("VoiceModelManager requires a root directory");
     this.root = path.resolve(root);
     this.fetchImpl = fetchImpl;
     this.manifestResolver = manifestResolver;
     this.runtimeExtractor = runtimeExtractor;
     this.transformersLoader = transformersLoader;
+    this.downloadRetries = downloadRetries;
+    this.downloadRetryBaseMs = downloadRetryBaseMs;
+    this.downloadConcurrency = downloadConcurrency;
     this.installController = null;
     this.installPromise = null;
     this.installingModelId = null;
@@ -223,15 +320,23 @@ export class VoiceModelManager {
     this.progress.totalBytes = manifest.artifacts.reduce((sum, artifact) => sum + Number(artifact.size || 0), 0);
     const staging = this.stagingRoot(model.id);
     await fs.mkdir(staging, { recursive: true, mode: 0o700 });
-    const verified = [];
-    for (const artifact of manifest.artifacts) {
-      if (signal.aborted) throw new DOMException("Installation cancelled", "AbortError");
-      this.progress.phase = "downloading";
-      this.progress.current = artifact.name;
-      const result = await download(this.fetchImpl, artifact, path.join(staging, artifact.relative), signal, (bytes) => { this.progress.completedBytes += bytes; });
-      verified.push({ ...artifact, url: undefined });
-      if (result.resumed) this.progress.completedBytes += Number(artifact.size || 0);
-    }
+    const verified = new Array(manifest.artifacts.length);
+    let nextArtifact = 0;
+    const workers = Array.from({ length: Math.min(this.downloadConcurrency, manifest.artifacts.length) }, async () => {
+      while (true) {
+        if (signal.aborted) throw new DOMException("Installation cancelled", "AbortError");
+        const index = nextArtifact;
+        nextArtifact += 1;
+        if (index >= manifest.artifacts.length) return;
+        const artifact = manifest.artifacts[index];
+        this.progress.phase = "downloading";
+        this.progress.current = artifact.name;
+        const result = await download(this.fetchImpl, artifact, path.join(staging, artifact.relative), signal, (bytes) => { this.progress.completedBytes += bytes; }, { retries: this.downloadRetries, retryBaseMs: this.downloadRetryBaseMs });
+        verified[index] = { ...artifact, url: undefined };
+        if (result.resumed) this.progress.completedBytes += Number(artifact.size || 0);
+      }
+    });
+    await Promise.all(workers);
     if (manifest.extractRuntime) {
       this.progress.phase = "extracting";
       const archive = path.join(staging, "runtime.tgz");
@@ -287,7 +392,7 @@ export class VoiceModelManager {
     if (!await this.installedManifest(model.id)) throw modelError("voice_model_not_installed", `Install ${model.label} from Voice settings first`, 409);
     await this.stopActive();
     if (model.engine === "transformers-whisper") {
-      this.transcriber = await this.transformersLoader(this.modelRoot(model.id));
+      this.transcriber = await this.transformersLoader(this.modelRoot(model.id), model.precision || "q8");
       this.activeModelId = model.id;
       return { kind: "transcriber" };
     }
