@@ -269,20 +269,26 @@ export class VoiceModelManager {
     catch (error) { if (error.code === "ENOENT") return null; throw error; }
   }
 
+  async hasStaging(modelId) {
+    try { return (await fs.stat(this.stagingRoot(modelId))).isDirectory(); }
+    catch (error) { if (error.code === "ENOENT") return false; throw error; }
+  }
+
   async publicView() {
     return {
       installingModelId: this.installingModelId,
       progress: this.installPromise ? { ...this.progress } : null,
       activeModelId: this.activeModelId,
       models: await Promise.all(LOCAL_VOICE_MODELS.map(async (model) => {
-        const manifest = await this.installedManifest(model.id);
+        const [manifest, staged] = await Promise.all([this.installedManifest(model.id), this.hasStaging(model.id)]);
         return {
           ...model,
           repository: undefined,
           revision: model.revision,
           installed: Boolean(manifest),
+          staged,
           running: this.activeModelId === model.id,
-          state: this.installingModelId === model.id ? "installing" : this.activeModelId === model.id ? "running" : manifest ? "ready" : this.lastErrors.has(model.id) ? "error" : "not_installed",
+          state: this.installingModelId === model.id ? "installing" : this.activeModelId === model.id ? "running" : manifest ? "ready" : this.lastErrors.has(model.id) ? "error" : staged ? "interrupted" : "not_installed",
           error: this.lastErrors.get(model.id) || null,
         };
       })),
@@ -340,8 +346,9 @@ export class VoiceModelManager {
     if (manifest.extractRuntime) {
       this.progress.phase = "extracting";
       const archive = path.join(staging, "runtime.tgz");
-      await this.runtimeExtractor(archive, staging);
       const runtimeDirectory = path.join(staging, `onnxruntime-linux-${architecture().runtime}-${ONNXRUNTIME_VERSION}`);
+      await fs.rm(runtimeDirectory, { recursive: true, force: true });
+      await this.runtimeExtractor(archive, staging);
       await fs.rm(path.join(staging, "runtime"), { recursive: true, force: true });
       await fs.rename(runtimeDirectory, path.join(staging, "runtime"));
       await fs.rm(archive, { force: true });
@@ -443,6 +450,11 @@ export class VoiceModelManager {
   }
 
   async stop() {
+    const installation = this.installPromise;
+    if (installation) {
+      this.cancelInstall();
+      await installation.catch(() => {});
+    }
     const startup = this.startPromise;
     if (startup) await startup.catch(() => {});
     await this.stopActive();
@@ -469,6 +481,7 @@ export class VoiceModelManager {
     if (this.activeModelId === model.id || this.startingModelId === model.id) await this.stop();
     const removed = Boolean(await this.installedManifest(model.id));
     await fs.rm(this.modelRoot(model.id), { recursive: true, force: true });
+    await fs.rm(this.stagingRoot(model.id), { recursive: true, force: true });
     this.lastErrors.delete(model.id);
     return removed;
   }

@@ -4930,6 +4930,69 @@ test("Voice microphone test shows the shared live recorder monitor", async ({ pa
   await expect.poll(() => page.evaluate(() => window.__voiceRevokedUrls.length)).toBeGreaterThan(0);
 });
 
+test("managed model installation preserves the unsaved local source during server polling", async ({ page }) => {
+  const modelId = "parakeet-tdt-0.6b-v3-int8";
+  const model = {
+    id: modelId,
+    label: "Parakeet TDT 0.6B v3",
+    engine: "parakeet",
+    size: "large",
+    languages: "English",
+    description: "Accurate.",
+    approximateBytes: 943718400,
+    precision: "int8",
+    license: { id: "CC-BY-4.0", attribution: "NVIDIA Parakeet" },
+    installed: false,
+    staged: false,
+    running: false,
+    state: "not_installed",
+    error: null,
+  };
+  let installationStarted = false;
+  const view = (mode, installingModelId = null, state = "not_installed", error = null) => ({
+    mode,
+    localModelId: modelId,
+    provider: "",
+    adapter: "",
+    model: "",
+    endpoint: "",
+    source: "stored",
+    locked: false,
+    adapters: [],
+    providers: [],
+    auth: { type: "none", headerName: "", configured: false, source: null, removable: false },
+    local: {
+      installingModelId,
+      activeModelId: null,
+      progress: installingModelId ? { phase: "downloading", current: "parakeet", completedBytes: 10, totalBytes: 100 } : null,
+      models: [{ ...model, state, error, staged: state === "interrupted" }],
+    },
+  });
+  await page.route("**/v0/voice/settings", async (route) => {
+    if (route.request().method() === "PUT") return route.fulfill({ json: view("local") });
+    if (installationStarted) return route.fulfill({ json: view("off", null, "error", "Installation interrupted; retry to resume.") });
+    await route.fulfill({ json: view("off") });
+  });
+  await page.route("**/v0/voice/model/install", async (route) => {
+    installationStarted = true;
+    await route.fulfill({ status: 202, json: view("off", modelId, "installing") });
+  });
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, "mediaDevices", { configurable: true, value: { enumerateDevices: async () => [] } });
+  });
+
+  await page.goto("/");
+  await page.keyboard.press("Control+,");
+  const dialog = page.getByRole("dialog", { name: "Settings" });
+  await dialog.getByRole("tab", { name: "Voice" }).click();
+  await dialog.locator("#voice-mode").selectOption("local");
+  await expect(dialog.getByRole("heading", { name: "Managed local models" })).toBeVisible();
+  await dialog.getByLabel("Accept CC-BY-4.0").check();
+  await dialog.getByRole("button", { name: "Install selected model" }).click();
+  await expect(dialog.getByRole("heading", { name: "Managed local models" })).toBeVisible();
+  await expect(dialog.getByText("Installation interrupted; retry to resume.")).toBeVisible({ timeout: 3_000 });
+});
+
 test("stopping dictation releases a microphone stream that resolves after cancellation", async ({ page }) => {
   await page.addInitScript(() => {
     class VoiceWebSocket extends EventTarget {

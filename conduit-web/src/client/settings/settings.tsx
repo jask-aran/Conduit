@@ -93,7 +93,7 @@ interface VoiceServerSettings {
     progress: { phase: string; current: string; completedBytes: number; totalBytes: number } | null;
     models: {
       id: string; label: string; engine: string; size: string; languages: string; description: string; approximateBytes: number; precision: string;
-      license: { id: string; attribution: string }; installed: boolean; running: boolean; state: "not_installed" | "installing" | "ready" | "running" | "error"; error: string | null;
+      license: { id: string; attribution: string }; installed: boolean; staged: boolean; running: boolean; state: "not_installed" | "installing" | "ready" | "running" | "error" | "interrupted"; error: string | null;
     }[];
   } | null;
 }
@@ -103,6 +103,18 @@ const sameRuntime = (left: RuntimeSettings | null, right: RuntimeSettings | null
   && left.maxLiveProcesses === right.maxLiveProcesses
   && left.maxGeneratingProcesses === right.maxGeneratingProcesses
   && left.idleProcessTtlMs === right.idleProcessTtlMs);
+const preserveVoiceServerDraft = (loaded: VoiceServerSettings, previous: VoiceServerSettings, preserveDraft: boolean): VoiceServerSettings => ({
+  ...loaded,
+  localModelId: previous.localModelId,
+  ...(preserveDraft ? {
+    mode: previous.mode,
+    provider: previous.provider,
+    adapter: previous.adapter,
+    model: previous.model,
+    endpoint: previous.endpoint,
+    auth: previous.auth,
+  } : {}),
+});
 
 export function Settings(props: {
   open: boolean;
@@ -435,7 +447,7 @@ export function Settings(props: {
     try {
       const loaded = await api<VoiceServerSettings>("/v0/voice/settings");
       const previous = voiceServerSettings();
-      setVoiceServerSettings(preserveLocalSelection && previous ? { ...loaded, localModelId: previous.localModelId } : loaded);
+      setVoiceServerSettings(preserveLocalSelection && previous ? preserveVoiceServerDraft(loaded, previous, voiceServerEdited()) : loaded);
       if (!preserveLocalSelection) setVoiceServerEdited(false);
       setVoiceStatus("ready");
     } catch (error) {
@@ -583,7 +595,7 @@ export function Settings(props: {
     setVoiceError("");
     try {
       const loaded = await api<VoiceServerSettings>("/v0/voice/model/install", { method: "POST", body: JSON.stringify({ modelId, licenseAccepted: voiceLicenseAccepted() }) });
-      setVoiceServerSettings((current) => current ? { ...loaded, localModelId: current.localModelId } : loaded);
+      setVoiceServerSettings((current) => current ? preserveVoiceServerDraft(loaded, current, voiceServerEdited()) : loaded);
     } catch (error) { setVoiceError((error as Error).message); }
     finally { setVoiceBusy(false); }
   };

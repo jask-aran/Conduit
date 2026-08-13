@@ -89,6 +89,52 @@ test("managed voice model rejects a mismatched artifact without activating it", 
   } finally { await fs.rm(temporary, { recursive: true, force: true }); }
 });
 
+test("managed voice model resumes a staged install after the process stops during runtime extraction", async () => {
+  const temporary = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-voice-recover-"));
+  const root = path.join(temporary, "voice", "models");
+  const modelId = "parakeet-tdt-0.6b-v3-int8";
+  const binary = Buffer.from("fake parakeet executable");
+  const runtime = Buffer.from("fake runtime archive");
+  const artifacts = [
+    { name: "parakeet", relative: "bin/parakeet", url: "https://packages.invalid/parakeet", size: binary.length, sha256: sha256(binary) },
+    { name: "runtime", relative: "runtime.tgz", url: "https://packages.invalid/runtime", size: runtime.length, sha256: sha256(runtime) },
+  ];
+  let extractionAttempts = 0;
+  const createManager = () => new VoiceModelManager({
+    root,
+    manifestResolver: async () => ({ version: "test", modelRevision: "pinned", extractRuntime: true, artifacts }),
+    fetchImpl: async (url) => new Response(url.endsWith("/parakeet") ? binary : runtime),
+    runtimeExtractor: async (_archive, staging) => {
+      extractionAttempts += 1;
+      const directory = path.join(staging, "onnxruntime-linux-x64-1.25.1", "lib");
+      await fs.mkdir(directory, { recursive: true });
+      await fs.writeFile(path.join(directory, "libonnxruntime.so"), "fake library");
+      if (extractionAttempts === 1) throw new Error("simulated process stop");
+    },
+    downloadRetries: 0,
+  });
+  const first = createManager();
+  try {
+    await assert.rejects(first.startInstall({ modelId, licenseAccepted: true }), { message: "simulated process stop" });
+    assert.equal((await first.publicView()).models.find((model) => model.id === modelId).state, "error");
+    assert.equal((await first.publicView()).models.find((model) => model.id === modelId).staged, true);
+
+    const second = createManager();
+    try {
+      await second.startInstall({ modelId, licenseAccepted: true });
+      const recovered = (await second.publicView()).models.find((model) => model.id === modelId);
+      assert.equal(recovered.state, "ready");
+      assert.equal(recovered.installed, true);
+      assert.equal(recovered.staged, false);
+      assert.equal(extractionAttempts, 2);
+      assert.equal(await fs.access(path.join(root, modelId, "runtime", "lib", "libonnxruntime.so")).then(() => true), true);
+    } finally { await second.stop(); }
+  } finally {
+    await first.stop();
+    await fs.rm(temporary, { recursive: true, force: true });
+  }
+});
+
 test("managed Whisper tiers install independently and transcribe through the embedded engine", async () => {
   const temporary = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-voice-whisper-"));
   const root = path.join(temporary, "voice", "models");
