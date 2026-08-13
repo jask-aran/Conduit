@@ -327,6 +327,13 @@ commands. It cannot depend on a terminal's later `stopPropagation()`.
 
 ## Slice 4: Migrate palette contexts and generated hints
 
+Implementation status: complete in the current working tree. Palette root,
+page, chat-browse, chat-edit, move, rename, and confirmation states now activate
+manager contexts. Chat actions and Primary+K sequences dispatch through
+registered command handlers. The footer derives command keycaps and valid
+prefix completions from effective bindings, while fixed list navigation and
+text editing remain component-owned.
+
 Register palette handlers when their states are active:
 
 - Root and page commands in the palette contexts.
@@ -357,6 +364,12 @@ boundary through context ownership and editable-target policy. Do not put
 unmodified bulk actions in the application context.
 
 ## Slice 5: Build Settings → Shortcuts
+
+Implementation status: complete in the current working tree. Settings now has
+a searchable Shortcuts section with grouped command rows, effective and custom
+bindings, an inline one- or two-stroke recorder, explicit save and cancel,
+clear and reset controls, live internal and browser conflict feedback, recorder
+focus ownership, screen-reader status, and stacked mobile rows.
 
 Add `shortcuts` to the Settings section registry and command-palette Settings
 page. Implement the section as a focused component rather than extending the
@@ -393,6 +406,15 @@ unscoped document listener with the shortcut context or make it defer when the
 recorder owns the event.
 
 ## Slice 6: Verification, migration safety, and documentation
+
+Implementation status: complete in the current working tree. Pure coverage now
+checks registry projections, default normalization and conflicts, environment
+records, migration failure, unknown IDs, context priority, sequences, and
+recorder exclusivity. Browser coverage exercises live rebinding and footer
+updates, recorder suppression and Escape behavior, browser warnings, overlap
+blocking, disjoint reuse, resets, query ownership, sequence timeout, and
+responsive overflow. `conduit-web/README.md` records the registry, context,
+persistence, browser-boundary, and current chat-management contracts.
 
 Pure tests:
 

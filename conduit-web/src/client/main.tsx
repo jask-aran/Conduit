@@ -35,7 +35,7 @@ import "./styles.css";
 
 if (import.meta.env.PROD) registerSW({ immediate: true });
 
-type SettingsSection = "general" | "ui" | "models" | "profiles" | "runtime" | "workspaces" | "search" | "auth";
+type SettingsSection = "general" | "ui" | "shortcuts" | "models" | "profiles" | "runtime" | "workspaces" | "search" | "auth";
 type WorkspaceView = "files" | "diff" | "artifacts" | "terminal";
 const WorkspacePanel = lazy(() => import("./workspace/workspace-panel"));
 const ProjectDashboard = lazy(() => import("./project/dashboard"));
@@ -652,10 +652,6 @@ function App() {
       shortcutManager.registerHandler(COMMAND_IDS.openCommandPalette, "application", () => {
         if (paletteOpen()) setPaletteOpen(false);
         else openPalette(null);
-      }, {
-        // Until Slice 4 moves chat-search bindings into the manager, its
-        // local Primary+K sequence must receive this event.
-        when: () => !(paletteOpen() && palettePage() === "chat-search"),
       }),
       shortcutManager.registerHandler(COMMAND_IDS.searchChats, "application", () => openPalette("chat-search", "", true)),
       shortcutManager.registerHandler(COMMAND_IDS.openSettings, "application", () => openSettings("general")),
@@ -841,7 +837,7 @@ function App() {
     <Show when={Boolean(selectedProject()) && Boolean(workspacePanelScope())}><WorkspacePanel projectId={() => selectedProject()!.id} chatId={() => workspacePanelScope()!} open={panelOpen} requestedTab={workspaceViewRequest} onClose={togglePanel} /></Show>
     <CommandMenu open={paletteOpen()} onOpenChange={setPaletteOpen} onPageChange={setPalettePage} initialPage={palettePage()} initialQuery={paletteInitialQuery()} launchNonce={paletteNonce()} directLaunch={paletteDirectLaunch()}
       context={paletteContext()} actions={paletteActions} models={models.models()} currentModel={models.model()} onChooseModel={(spec) => void models.chooseModel(spec)} shortcuts={shortcutManager} />
-    <Settings open={settingsOpen()} initialSection={settingsSection()} initialWorkspaceId={settingsWorkspaceId()} onOpenChange={setSettingsOpen} models={models} templates={templates()} templatesLoading={templatesLoading()} defaultTemplateId={defaultTemplateId()} projects={catalogue.projects()} installations={installations()} installationsLoading={installationsLoading()} onInstallationsChange={setInstallations} onDefaultTemplateChange={saveDefaultTemplate} onWorkspaceDefaultChange={saveWorkspaceDefault} markdownRenderer={markdownRenderer()} onMarkdownRendererChange={switchMarkdownRenderer} sidebarChatLimit={sidebarChatLimit()} onSidebarChatLimitChange={switchSidebarChatLimit} />
+    <Settings open={settingsOpen()} initialSection={settingsSection()} initialWorkspaceId={settingsWorkspaceId()} onOpenChange={setSettingsOpen} models={models} templates={templates()} templatesLoading={templatesLoading()} defaultTemplateId={defaultTemplateId()} projects={catalogue.projects()} installations={installations()} installationsLoading={installationsLoading()} onInstallationsChange={setInstallations} onDefaultTemplateChange={saveDefaultTemplate} onWorkspaceDefaultChange={saveWorkspaceDefault} markdownRenderer={markdownRenderer()} onMarkdownRendererChange={switchMarkdownRenderer} sidebarChatLimit={sidebarChatLimit()} onSidebarChatLimitChange={switchSidebarChatLimit} shortcuts={shortcutManager} />
   </>;
 }
 

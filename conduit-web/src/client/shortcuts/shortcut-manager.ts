@@ -1,5 +1,5 @@
 import {
-  formatShortcutBinding, isPrintableUnmodifiedStroke, normalizeKeyboardEvent, sameStroke,
+  formatShortcutBinding, normalizeKeyboardEvent, sameStroke,
 } from "./shortcut-normalize.ts";
 import { validateShortcutRegistry } from "./shortcut-conflicts.ts";
 import {
@@ -20,6 +20,8 @@ import {
 const DEFAULT_SEQUENCE_TIMEOUT_MS = 1500;
 
 export interface ShortcutContextOptions {
+  exclusive?: boolean;
+  onEscape?: () => void;
   ownsEditableTarget?: boolean;
   priority?: number;
 }
@@ -196,6 +198,10 @@ export class ShortcutManager {
     return pending;
   }
 
+  isContextActive(context: ShortcutContext): boolean {
+    return [...this.activeContexts.values()].some((active) => active.context === context);
+  }
+
   subscribe(listener: () => void): () => void {
     this.listeners.add(listener);
     return () => { this.listeners.delete(listener); };
@@ -236,6 +242,15 @@ export class ShortcutManager {
     }
 
     const contexts = this.orderedActiveContexts();
+    if (event.key === "Escape") {
+      const escapeOwner = contexts.find((active) => active.options.onEscape);
+      if (escapeOwner?.options.onEscape) {
+        event.preventDefault();
+        event.stopPropagation();
+        escapeOwner.options.onEscape();
+        return true;
+      }
+    }
     for (const active of contexts) {
       const matches = this.matchesForContext(active.context)
         .filter((match) => sameStroke(match.binding.strokes[0], stroke)
@@ -258,6 +273,7 @@ export class ShortcutManager {
         this.emit();
         return true;
       }
+      if (active.options.exclusive) return false;
     }
     return false;
   };
@@ -303,7 +319,7 @@ export class ShortcutManager {
     command: ShortcutCommandDefinition,
   ): boolean {
     if (event.repeat && !command.allowRepeat) return false;
-    if (isEditableTarget(event.target) && isPrintableUnmodifiedStroke(stroke) && !active.options.ownsEditableTarget) return false;
+    if (isEditableTarget(event.target) && stroke.modifiers.length === 0 && !active.options.ownsEditableTarget) return false;
     return true;
   }
 

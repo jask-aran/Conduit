@@ -8,8 +8,10 @@ import { MARKDOWN_RENDERER_OPTIONS, type MarkdownRendererId } from "../chat/mark
 import type { Installation, ModelOption, Project, Template } from "../api/contracts";
 import type { ModelSettings } from "../state/model-settings";
 import { MAX_SIDEBAR_CHAT_LIMIT, MIN_SIDEBAR_CHAT_LIMIT } from "../navigation/sidebar-preferences";
+import type { ShortcutManager } from "../shortcuts/shortcut-manager";
+import { ShortcutsSettings } from "./shortcuts-settings";
 
-const sections = ["general", "ui", "models", "profiles", "runtime", "workspaces", "search", "auth"] as const;
+const sections = ["general", "ui", "shortcuts", "models", "profiles", "runtime", "workspaces", "search", "auth"] as const;
 type Section = typeof sections[number];
 const label = (section: Section) => section === "ui" ? "UI" : section[0]!.toUpperCase() + section.slice(1);
 
@@ -87,6 +89,7 @@ export function Settings(props: {
   onMarkdownRendererChange: (renderer: MarkdownRendererId) => void;
   sidebarChatLimit: number;
   onSidebarChatLimitChange: (limit: number) => void;
+  shortcuts: ShortcutManager;
 }) {
   const [section, setSection] = createSignal<Section>(props.initialSection || "models");
   const [scope, setScope] = createSignal<string[]>([]);
@@ -120,6 +123,10 @@ export function Settings(props: {
   const focusSearch = () => requestAnimationFrame(() => requestAnimationFrame(() => search?.focus()));
   const dismissEscape = (event: KeyboardEvent) => {
     if (event.key !== "Escape") return;
+    if (props.shortcuts.isContextActive("shortcut-recorder")) {
+      event.preventDefault();
+      return;
+    }
     event.preventDefault();
     event.stopPropagation();
     props.onOpenChange(false);
@@ -143,8 +150,12 @@ export function Settings(props: {
 
   createEffect(() => {
     if (!props.open) return;
+    const releaseSettingsContext = props.shortcuts.activateContext("settings");
     document.addEventListener("keydown", dismissEscape, true);
-    onCleanup(() => document.removeEventListener("keydown", dismissEscape, true));
+    onCleanup(() => {
+      releaseSettingsContext();
+      document.removeEventListener("keydown", dismissEscape, true);
+    });
   });
 
   // Remote model settings remain authoritative until the user actually edits.
@@ -376,6 +387,7 @@ export function Settings(props: {
               </Field>
             </FieldGroup>
           </Show>
+          <Show when={section() === "shortcuts"}><ShortcutsSettings manager={props.shortcuts} /></Show>
           <Show when={props.open && section() === "models"}>
             <div class="model-scope">
               <Show when={props.models.settingsError()}><div role="alert" class="settings-error"><span>{props.models.settingsError()}</span><Button variant="outline" size="sm" onClick={() => void props.models.reload()}>Retry</Button></div></Show>

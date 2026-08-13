@@ -92,6 +92,13 @@ Add an entry through `$tacit-knowledge` after explicit approval or validated rep
 
 ## UI and component heuristics
 
+### Edit shortcuts inline and save explicitly
+
+- **Type:** Preference.
+- **Rule:** Keep shortcut customization in one searchable Settings list backed by the command registry. Expand one recorder inside its command row, show captured strokes and conflicts there, and require an explicit save; do not open a nested shortcut dialog or change a binding merely because a key reached the recorder.
+- **Scope:** Settings → Shortcuts and future command-registry configuration surfaces.
+- **Evidence:** The accepted shortcut-manager sprint established inline one- and two-stroke recording, browser warnings, overlap blocking, live keycap updates, and stacked mobile rows; manual review explicitly accepted the resulting Settings UI.
+
 ### Distinguish palette actions from shortcut hints
 
 - **Type:** Preference.
