@@ -359,7 +359,8 @@ svg { stroke-width: 1.5; }
 .command-close svg { width: 16px; height: 16px; }
 .command-selection-count { flex: none; color: var(--muted-foreground); font-size: 12px; white-space: nowrap; }
 .command-list { min-height: 0; flex: 1; overflow-y: auto; padding: 7px; scrollbar-width: thin; }
-.command-list:focus-visible { outline: 2px solid var(--ring); outline-offset: -2px; }
+.command-list:focus-visible { outline: none; }
+.command-list[data-mode-focus] { box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--ring), transparent 72%); }
 .command-hint-bar { display: flex; min-width: 0; min-height: 36px; align-items: center; gap: 10px; border-top: 1px solid var(--border); background: var(--popover); padding: 7px 12px; color: var(--muted-foreground); font-size: 11px; }
 .command-hint-items { display: flex; min-width: 0; flex-wrap: wrap; align-items: center; gap: 6px 12px; }
 .command-hint-primary { flex: none; }
@@ -402,6 +403,9 @@ svg { stroke-width: 1.5; }
 .command-rename-input { min-width: 0; width: 100%; border: 1px solid var(--ring); border-radius: 5px; outline: 0; background: var(--background); padding: 2px 5px; color: inherit; font: inherit; }
 .command-detail-pane { width: min(320px, calc(100vw - 28px)); max-height: min(600px, calc(100dvh - 28px)); overflow: auto; border: 1px solid var(--border); border-left: 0; border-radius: 0 14px 14px 0; background: var(--popover); padding: 16px; }
 .dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
+.delete-dialog-choice:focus-visible { box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--ring), transparent 55%); }
+.delete-dialog-choice[data-selected="true"][data-variant="outline"] { background: var(--accent); color: var(--accent-foreground); }
+.delete-dialog-confirm[data-variant="outline"] { border-color: color-mix(in oklch, var(--destructive), var(--border) 58%); background: transparent; color: var(--destructive); }
 .palette-move-list { display: flex; flex-direction: column; gap: 2px; max-height: 320px; overflow-y: auto; margin-top: 12px; }
 .palette-move-option { width: 100%; justify-content: flex-start; gap: 10px; }
 

@@ -117,9 +117,12 @@ export function CommandMenu(props: {
   const [editingValue, setEditingValue] = createSignal("");
   const [actionPrefix, setActionPrefix] = createSignal(false);
   const [pendingDelete, setPendingDelete] = createSignal<ChatTarget[] | null>(null);
+  const [deleteChoice, setDeleteChoice] = createSignal<"cancel" | "confirm">("cancel");
   let input!: HTMLInputElement;
   let listbox!: HTMLDivElement;
   let renameInput!: HTMLInputElement;
+  let deleteCancelButton!: HTMLButtonElement;
+  let deleteConfirmButton!: HTMLButtonElement;
   let returnFocus: HTMLElement | null = null;
   let wasOpen = false;
   let lastLaunchNonce: number | undefined;
@@ -363,7 +366,15 @@ export function CommandMenu(props: {
     if (saved) setEditingId(null);
   };
   const copySelected = () => { if (selectedTargets().length) void props.actions.copyChatLinks(selectedTargets()); };
-  const requestDelete = (targets = selectedTargets()) => { if (targets.length) setPendingDelete(targets); };
+  const selectDeleteChoice = (choice: "cancel" | "confirm") => {
+    setDeleteChoice(choice);
+    queueMicrotask(() => (choice === "confirm" ? deleteConfirmButton : deleteCancelButton)?.focus());
+  };
+  const requestDelete = (targets = selectedTargets()) => {
+    if (!targets.length) return;
+    setDeleteChoice("cancel");
+    setPendingDelete(targets);
+  };
   const requestActiveDelete = () => {
     const target = highlightedChat();
     if (target) requestDelete([target]);
@@ -608,7 +619,7 @@ export function CommandMenu(props: {
                 <XIcon />
               </Button>
             </div>
-            <div id="command-listbox" ref={listbox} role="listbox" aria-label={chatPage() ? "Chats" : "Commands"} class="command-list" tabIndex={selectionMode() || moveMode() ? 0 : -1} onKeyDown={keydown}>
+            <div id="command-listbox" ref={listbox} role="listbox" aria-label={chatPage() ? "Chats" : "Commands"} class="command-list" data-mode-focus={selectionMode() || moveMode() || undefined} tabIndex={selectionMode() || moveMode() ? 0 : -1} onKeyDown={keydown}>
               <Show when={!selectable().length}><p class="command-empty">{emptyMessage()}</p></Show>
               <For each={rows()}>{renderRow}</For>
             </div>
@@ -633,15 +644,48 @@ export function CommandMenu(props: {
       }
     }}>
       <KAlertDialog.Portal>
-        <KAlertDialog.Content class="conduit-modal" onEscapeKeyDown={(event) => {
-          event.preventDefault();
-          setPendingDelete(null);
-          focusInput();
-        }}>
+        <KAlertDialog.Content
+          class="conduit-modal"
+          onOpenAutoFocus={(event) => {
+            event.preventDefault();
+            selectDeleteChoice("cancel");
+          }}
+          onEscapeKeyDown={(event) => {
+            event.preventDefault();
+            setPendingDelete(null);
+            focusInput();
+          }}
+          onKeyDown={(event) => {
+            if (event.key === "ArrowLeft" || event.key === "ArrowUp") {
+              event.preventDefault();
+              selectDeleteChoice("cancel");
+            } else if (event.key === "ArrowRight" || event.key === "ArrowDown") {
+              event.preventDefault();
+              selectDeleteChoice("confirm");
+            }
+          }}
+        >
           <div class="conduit-modal-card">
             <KAlertDialog.Title>Delete {pendingDelete()?.length || 0} chats?</KAlertDialog.Title>
             <KAlertDialog.Description>This permanently deletes the selected Pi session transcripts and attached files.</KAlertDialog.Description>
-            <div class="dialog-actions"><Button variant="outline" onClick={() => { setPendingDelete(null); focusInput(); }}>Cancel</Button><Button variant="destructive" onClick={() => void confirmDelete()}>Delete chats</Button></div>
+            <div class="dialog-actions">
+              <Button
+                ref={deleteCancelButton}
+                class="delete-dialog-choice"
+                variant="outline"
+                data-selected={deleteChoice() === "cancel"}
+                onFocus={() => setDeleteChoice("cancel")}
+                onClick={() => { setPendingDelete(null); focusInput(); }}
+              >Cancel</Button>
+              <Button
+                ref={deleteConfirmButton}
+                class="delete-dialog-choice delete-dialog-confirm"
+                variant={deleteChoice() === "confirm" ? "destructive" : "outline"}
+                data-selected={deleteChoice() === "confirm"}
+                onFocus={() => setDeleteChoice("confirm")}
+                onClick={() => void confirmDelete()}
+              >Delete chats</Button>
+            </div>
           </div>
         </KAlertDialog.Content>
       </KAlertDialog.Portal>
