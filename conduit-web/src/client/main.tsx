@@ -642,7 +642,13 @@ function App() {
       if (mobileSidebarOpen()) { event.preventDefault(); setMobileSidebarOpen(false); return; }
     }
     if (!(event.metaKey || event.ctrlKey) || event.altKey) return;
-    if (key === "k" && !event.shiftKey) { event.preventDefault(); if (paletteOpen()) setPaletteOpen(false); else openPalette(null); }
+    if (key === "k" && !event.shiftKey) {
+      event.preventDefault();
+      if (paletteOpen()) {
+        if (palettePage() !== "chat-search") setPaletteOpen(false);
+      } else openPalette(null);
+      return;
+    }
     if (key === "o" && event.shiftKey) { event.preventDefault(); openPalette("chat-search", "", true); }
     if (key === "c" && event.shiftKey) { event.preventDefault(); setMobileSidebarOpen(false); void createChat(); }
     if (key === "b" && !event.shiftKey) { event.preventDefault(); runSidebar("toggle-sidebar"); }
@@ -818,7 +824,7 @@ function App() {
       </Show>
     </main>
     <Show when={Boolean(selectedProject()) && Boolean(workspacePanelScope())}><WorkspacePanel projectId={() => selectedProject()!.id} chatId={() => workspacePanelScope()!} open={panelOpen} requestedTab={workspaceViewRequest} onClose={togglePanel} /></Show>
-    <CommandMenu open={paletteOpen()} onOpenChange={setPaletteOpen} initialPage={palettePage()} initialQuery={paletteInitialQuery()} launchNonce={paletteNonce()} directLaunch={paletteDirectLaunch()}
+    <CommandMenu open={paletteOpen()} onOpenChange={setPaletteOpen} onPageChange={setPalettePage} initialPage={palettePage()} initialQuery={paletteInitialQuery()} launchNonce={paletteNonce()} directLaunch={paletteDirectLaunch()}
       context={paletteContext()} actions={paletteActions} models={models.models()} currentModel={models.model()} onChooseModel={(spec) => void models.chooseModel(spec)} />
     <Settings open={settingsOpen()} initialSection={settingsSection()} initialWorkspaceId={settingsWorkspaceId()} onOpenChange={setSettingsOpen} models={models} templates={templates()} templatesLoading={templatesLoading()} defaultTemplateId={defaultTemplateId()} projects={catalogue.projects()} installations={installations()} installationsLoading={installationsLoading()} onInstallationsChange={setInstallations} onDefaultTemplateChange={saveDefaultTemplate} onWorkspaceDefaultChange={saveWorkspaceDefault} markdownRenderer={markdownRenderer()} onMarkdownRendererChange={switchMarkdownRenderer} sidebarChatLimit={sidebarChatLimit()} onSidebarChatLimitChange={switchSidebarChatLimit} />
   </>;

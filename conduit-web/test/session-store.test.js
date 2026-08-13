@@ -286,6 +286,25 @@ test("deletes a Pi fork family without touching unrelated session trees", async 
   await fs.rm(root, { recursive: true, force: true });
 });
 
+test("deletes profile-overlay sessions only under the installation root", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-profile-session-family-test-"));
+  const projectPath = path.join(root, "project");
+  const installationRoot = path.join(root, "pi");
+  const profileAgentDir = path.join(installationRoot, "model-profiles", "search");
+  const sessionsDir = sessionDirectoryFor(projectPath, profileAgentDir);
+  const project = { id: "project_profile", slug: "profile", path: projectPath, sessionsDir };
+  await fs.mkdir(sessionsDir, { recursive: true });
+  const file = path.join(sessionsDir, "profile-session.jsonl");
+  await fs.writeFile(file, `${JSON.stringify({ type: "session", id: "profile-session", timestamp: "2026-01-01T00:00:00Z", cwd: projectPath })}\n`);
+
+  assert.deepEqual(await sessionFamilyFiles(file, project, { sessionsDir, allowedRoot: installationRoot }), [file]);
+  await assert.rejects(
+    sessionFamilyFiles(file, project, { sessionsDir, allowedRoot: path.join(root, "other") }),
+    { code: "invalid_session_mapping" },
+  );
+  await fs.rm(root, { recursive: true, force: true });
+});
+
 test("discoverSessions keeps creation order after rename updates mtime", async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-session-order-test-"));
   const projectPath = path.join(root, "project");

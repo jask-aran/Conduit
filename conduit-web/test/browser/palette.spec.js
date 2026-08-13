@@ -89,6 +89,11 @@ test("browses grouped commands and models", async ({ page }) => {
   await expect(page.getByText("Danger zone", { exact: true })).toBeVisible();
   // Models loaded into context appear grouped by provider.
   await expect(page.getByRole("option", { name: /Reasoner/ })).toBeVisible();
+  const hints = page.getByRole("note", { name: "Keyboard shortcuts" });
+  await expect(hints).toBeVisible();
+  await expect(hints).toContainText("Navigate");
+  await expect(hints).toContainText("Open");
+  await expect(hints).toContainText("Esc");
 });
 
 test("ranks search results and hides non-matches", async ({ page }) => {
@@ -157,6 +162,12 @@ test("Control-P opens direct chat search and Backspace stays inside the mode", a
   await expect(dialog).toBeVisible();
   await expect(dialog.getByText("Search ›")).toBeVisible();
   await expect(dialog.getByRole("option", { name: /Existing chat/ })).toBeVisible();
+  const hints = dialog.getByRole("note", { name: "Keyboard shortcuts" });
+  await expect(hints).toContainText("Edit chats");
+  await expect(hints).toContainText("⌘E");
+  await expect(hints).toContainText("Rename");
+  await expect(hints).toContainText("Delete");
+  await expect(hints).toContainText("Move");
   await expect.poll(() => page.evaluate(() => window.__printCalls)).toBe(0);
 
   await page.keyboard.press("Backspace");
@@ -168,7 +179,7 @@ test("Control-P opens direct chat search and Backspace stays inside the mode", a
   await page.keyboard.press("Escape");
 });
 
-test("Tab enters the highlighted page and Ctrl-E starts chat selection mode", async ({ page }) => {
+test("Tab enters the highlighted page and Ctrl-E toggles chat selection mode", async ({ page }) => {
   await page.goto("/");
   await openPalette(page);
   const input = page.getByRole("combobox", { name: "Search commands" });
@@ -181,8 +192,18 @@ test("Tab enters the highlighted page and Ctrl-E starts chat selection mode", as
   await page.keyboard.press("Control+p");
   await page.keyboard.press("Control+e");
   await expect(page.getByText("1 selected")).toBeVisible();
-  await page.keyboard.press("Escape");
+  const hints = page.getByRole("note", { name: "Keyboard shortcuts" });
+  await expect(hints).toContainText("Done");
+  await expect(hints).toContainText("Click");
+  await expect(hints).toContainText("Space");
+  await expect(hints).toContainText("Delete");
+  await expect(hints).toContainText("Move");
+  await expect(hints).not.toContainText("Rename");
+  await page.keyboard.press("Control+e");
   await expect(page.getByText("1 selected")).toHaveCount(0);
+  await expect(hints).toContainText("Rename");
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("dialog", { name: "Command Palette" })).toHaveCount(0);
 });
 
 test("sidebar View all opens a Chats-scoped search after the twenty-row limit", async ({ page }) => {
@@ -245,7 +266,7 @@ test("Settings UI exposes and persists the sidebar chat limit", async ({ page })
   await expect(page.getByRole("dialog", { name: "Settings" }).getByLabel("Chats shown in sidebar")).toHaveValue("8");
 });
 
-test("chat selection mode supports rename, copy links, and move destinations", async ({ page }) => {
+test("single-chat rename stays outside bulk selection mode", async ({ page }) => {
   await page.addInitScript(() => {
     Object.defineProperty(navigator, "clipboard", {
       configurable: true,
@@ -267,23 +288,90 @@ test("chat selection mode supports rename, copy links, and move destinations", a
 
   await page.goto("/");
   await page.keyboard.press("Control+p");
-  await page.keyboard.press("Control+e");
-  await expect(page.getByText("1 selected")).toBeVisible();
-  await page.keyboard.press("r");
+  const hints = page.getByRole("note", { name: "Keyboard shortcuts" });
+  await page.keyboard.press("Alt+r");
+  await expect(page.getByText("1 selected")).toHaveCount(0);
   const rename = page.getByRole("textbox", { name: "Rename Existing chat" });
   await expect(rename).toBeVisible();
+  await expect(hints).toContainText("Save");
+  await expect(hints).toContainText("Cancel");
   await rename.fill("Renamed chat");
   await rename.press("Enter");
   await expect.poll(() => renames).toEqual([{ name: "Renamed chat" }]);
+  await expect(hints).toContainText("Edit chats");
+  await page.keyboard.press("Control+Shift+r");
+  await expect(rename).toBeVisible();
+  await rename.press("Escape");
+
+  await page.keyboard.press("Control+e");
+  await expect(page.getByText("1 selected")).toBeVisible();
+  await expect(hints).toContainText("Done");
+  await expect(hints).toContainText("Delete");
+  await expect(hints).toContainText("Move");
+  await expect(hints).not.toContainText("Rename");
 
   await page.locator(".command-list").focus();
   await page.keyboard.press("c");
   await expect.poll(() => page.evaluate(() => window.__copiedChatLinks)).toBe("https://conduit.example/chat/session_existing");
   await page.keyboard.press("m");
+  await expect(hints).toContainText("Move");
+  await expect(hints).toContainText("Back");
   await expect(page.getByRole("option", { name: /^Research/ })).toBeVisible();
   await page.getByRole("option", { name: /^Research/ }).click();
   await expect.poll(() => moves).toEqual([{ projectId: "project_research" }]);
   await expect(page.getByRole("dialog", { name: "Command Palette" })).toHaveCount(0);
+});
+
+test("single-chat move and delete shortcuts stay outside bulk selection mode", async ({ page }) => {
+  const moves = [];
+  await page.route("**/v0/sessions/session_existing/move", async (route) => {
+    moves.push(route.request().postDataJSON());
+    await route.fulfill({ json: {} });
+  });
+
+  await page.goto("/");
+  await page.keyboard.press("Control+p");
+  const hints = page.getByRole("note", { name: "Keyboard shortcuts" });
+  await page.keyboard.press("Control+Shift+m");
+  await expect(page.getByText("1 selected")).toHaveCount(0);
+  await expect(hints).toContainText("Move");
+  await expect(hints).toContainText("Back");
+  await page.getByRole("option", { name: /^Research/ }).click();
+  await expect.poll(() => moves).toEqual([{ projectId: "project_research" }]);
+
+  await page.locator(".palette-trigger").click();
+  const dialog = page.getByRole("dialog", { name: "Command Palette" });
+  await expect(dialog).toBeVisible();
+  await dialog.getByRole("option", { name: /^Search chats/ }).click();
+  await expect(dialog.getByText("Search ›")).toBeVisible();
+  await page.keyboard.press("Control+Shift+d");
+  const confirmation = page.getByRole("alertdialog", { name: "Delete 1 chats?" });
+  await expect(confirmation).toBeVisible();
+  await expect(page.getByText("1 selected")).toHaveCount(0);
+  await page.keyboard.press("Escape");
+  await expect(dialog.getByRole("combobox", { name: "Search commands" })).toBeFocused();
+  await page.keyboard.press("Control+Shift+d");
+  await expect(confirmation).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(dialog.getByRole("combobox", { name: "Search commands" })).toBeFocused();
+  await page.keyboard.press("Alt+Shift+d");
+  await expect(confirmation).toBeVisible();
+  await confirmation.getByRole("button", { name: "Cancel" }).click();
+  await expect(page.getByRole("note", { name: "Keyboard shortcuts" })).toContainText("Rename");
+});
+
+test("chat actions have an app-owned chord fallback after browser shortcut collisions", async ({ page }) => {
+  await page.goto("/");
+  await page.keyboard.press("Control+p");
+  const dialog = page.getByRole("dialog", { name: "Command Palette" });
+  await dialog.getByRole("combobox", { name: "Search commands" }).focus();
+  await page.keyboard.press("Control+k");
+  await expect(dialog.getByRole("note", { name: "Keyboard shortcuts" })).toContainText("Cancel");
+  await page.keyboard.press("d");
+  const confirmation = page.getByRole("alertdialog", { name: "Delete 1 chats?" });
+  await expect(confirmation).toBeVisible();
+  await confirmation.getByRole("button", { name: "Cancel" }).click();
+  await expect(dialog.getByRole("combobox", { name: "Search commands" })).toBeFocused();
 });
 
 test("chat deletion from selection mode requires confirmation", async ({ page }) => {
