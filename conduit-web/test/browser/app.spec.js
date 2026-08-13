@@ -4451,6 +4451,80 @@ test("Ctrl+Shift+D captures in the page and buffers microphone audio until the s
   await page.keyboard.up("Control");
 });
 
+test("Toggle activation starts and stops on separate shortcut presses", async ({ page }) => {
+  await page.addInitScript(() => {
+    document.addEventListener("keydown", (event) => {
+      if (event.key.toLowerCase() === "d" && event.ctrlKey && event.shiftKey) window.__toggleShortcutBubbled = true;
+    });
+    window.__toggleShortcutBubbled = false;
+    class VoiceWebSocket extends EventTarget {
+      static OPEN = 1;
+      static CLOSING = 2;
+      constructor() {
+        super();
+        this.readyState = 0;
+        this.bufferedAmount = 0;
+        queueMicrotask(() => { this.readyState = VoiceWebSocket.OPEN; this.dispatchEvent(new Event("open")); this.onmessage?.({ data: JSON.stringify({ type: "ready", sampleRate: 16_000, encoding: "pcm_s16le" }) }); });
+      }
+      send(payload) {
+        if (typeof payload !== "string" || JSON.parse(payload).type !== "stop") return;
+        queueMicrotask(() => this.onmessage?.({ data: JSON.stringify({ type: "completed", text: "toggle", final: true, finalWithinDeadline: true, settlementMs: 4 }) }));
+      }
+      close() { this.readyState = 3; this.dispatchEvent(new Event("close")); }
+    }
+    class MockAudioWorkletNode {
+      constructor() {
+        let handler = null;
+        this.port = {};
+        Object.defineProperty(this.port, "onmessage", {
+          get: () => handler,
+          set: (next) => {
+            handler = next;
+            if (handler) queueMicrotask(() => handler({ data: { type: "pcm", buffer: new ArrayBuffer(2), rms: 0.1, peak: 0.2 } }));
+          },
+        });
+        this.onprocessorerror = null;
+      }
+      connect() {}
+      disconnect() {}
+    }
+    class MockAudioContext {
+      constructor() { this.state = "running"; this.sampleRate = 48_000; this.destination = {}; this.audioWorklet = { addModule: async () => {} }; this.onstatechange = null; }
+      resume() { this.state = "running"; return Promise.resolve(); }
+      close() { this.state = "closed"; return Promise.resolve(); }
+      createMediaStreamSource() { return { connect() {}, disconnect() {} }; }
+      createGain() { return { gain: { value: 1 }, connect() {}, disconnect() {} }; }
+    }
+    Object.defineProperty(window, "WebSocket", { configurable: true, value: VoiceWebSocket });
+    Object.defineProperty(window, "AudioContext", { configurable: true, value: MockAudioContext });
+    Object.defineProperty(window, "AudioWorkletNode", { configurable: true, value: MockAudioWorkletNode });
+    localStorage.setItem("conduit:voice-dictation", JSON.stringify({ shortcut: "Ctrl+Shift+D", activation: "toggle", autoSend: false, inputDeviceId: "" }));
+    Object.defineProperty(navigator, "mediaDevices", { configurable: true, value: { getUserMedia: async () => ({ getTracks: () => [{ stop() {} }] }) } });
+  });
+
+  await page.goto("/");
+  const composer = page.getByRole("textbox", { name: "Message Pi" });
+  const trigger = page.locator(".dictation-trigger");
+  await composer.focus();
+  const pressShortcut = async () => {
+    await page.keyboard.down("Control");
+    await page.keyboard.down("Shift");
+    await page.keyboard.down("D");
+    await page.keyboard.up("D");
+    await page.keyboard.up("Shift");
+    await page.keyboard.up("Control");
+  };
+
+  await pressShortcut();
+  await expect(trigger).toHaveAttribute("data-state", "active");
+  await page.evaluate(() => window.dispatchEvent(new KeyboardEvent("keydown", { key: "d", ctrlKey: true, shiftKey: true, bubbles: true, cancelable: true, repeat: true })));
+  await expect(trigger).toHaveAttribute("data-state", "active");
+  await expect.poll(() => page.evaluate(() => window.__toggleShortcutBubbled)).toBe(false);
+  await pressShortcut();
+  await expect(trigger).toHaveAttribute("data-state", "completed");
+  await expect(composer).toHaveValue("toggle");
+});
+
 test("silent microphone input does not insert a hallucinated transcript", async ({ page }) => {
   await page.addInitScript(() => {
     class VoiceWebSocket extends EventTarget {
@@ -4555,6 +4629,10 @@ test("Voice microphone test shows the shared live recorder monitor", async ({ pa
   await page.keyboard.press("Control+,");
   const dialog = page.getByRole("dialog", { name: "Settings" });
   await dialog.getByRole("tab", { name: "Voice" }).click();
+  const activation = dialog.locator("#dictation-activation");
+  await expect(activation).toHaveValue("push_to_talk");
+  await activation.selectOption("toggle");
+  await expect(activation).toHaveValue("toggle");
   await dialog.getByRole("button", { name: "Test microphone" }).click();
   const waveform = dialog.locator(".settings-recorder-monitor");
   await expect(waveform).toBeVisible();

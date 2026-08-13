@@ -119,8 +119,8 @@ export function Settings(props: {
   onWorkspaceDefaultChange: (id: string, templateId: string | null) => Promise<Project>;
   markdownRenderer: MarkdownRendererId;
   onMarkdownRendererChange: (renderer: MarkdownRendererId) => void;
-  voiceSettings: { shortcut: string; autoSend: boolean; inputDeviceId: string };
-  onVoiceSettingsChange: (settings: { shortcut: string; autoSend: boolean; inputDeviceId: string }) => void;
+  voiceSettings: { shortcut: string; activation: "push_to_talk" | "toggle"; autoSend: boolean; inputDeviceId: string };
+  onVoiceSettingsChange: (settings: { shortcut: string; activation: "push_to_talk" | "toggle"; autoSend: boolean; inputDeviceId: string }) => void;
   sidebarChatLimit: number;
   onSidebarChatLimitChange: (limit: number) => void;
   shortcuts: ShortcutManager;
@@ -670,12 +670,16 @@ export function Settings(props: {
                     <Show when={audioInputTest()}>{(result) => <div class="voice-input-result" data-signal={result().signalDetected ? "detected" : "missing"}><strong>{result().signalDetected ? "Signal detected" : "No signal detected"}</strong><small>{result().label} · {result().sampleRate.toLocaleString()} Hz · peak {result().peak.toFixed(3)}</small></div>}</Show>
                     <Show when={audioInputError()}><p role="alert" class="settings-inline-error">{audioInputError()}</p></Show>
                   </div>
-                  <Field><FieldLabel for="dictation-shortcut">Push-to-talk shortcut</FieldLabel><Input id="dictation-shortcut" value={props.voiceSettings.shortcut} readOnly onKeyDown={(event) => {
+                  <Field><FieldLabel for="dictation-shortcut">Dictation shortcut</FieldLabel><Input id="dictation-shortcut" value={props.voiceSettings.shortcut} readOnly onKeyDown={(event) => {
                     event.preventDefault();
                     event.stopPropagation();
                     const shortcut = shortcutFromKeyboardEvent(event);
                     if (shortcut) props.onVoiceSettingsChange({ ...props.voiceSettings, shortcut });
                   }} /><small>Focus the field and press a shortcut. The microphone button remains a start/stop toggle.</small></Field>
+                  <Field><FieldLabel for="dictation-activation">Activation behaviour</FieldLabel><select id="dictation-activation" value={props.voiceSettings.activation} onChange={(event) => props.onVoiceSettingsChange({ ...props.voiceSettings, activation: event.currentTarget.value as "push_to_talk" | "toggle" })}>
+                    <option value="push_to_talk">Push to talk (hold)</option>
+                    <option value="toggle">Toggle (press)</option>
+                  </select><small>{props.voiceSettings.activation === "toggle" ? "Press the shortcut once to start and again to stop." : "Hold the shortcut while you speak. Release it to stop."}</small></Field>
                   <label class="dictation-auto-send"><input type="checkbox" checked={props.voiceSettings.autoSend} onChange={(event) => props.onVoiceSettingsChange({ ...props.voiceSettings, autoSend: event.currentTarget.checked })} /><span><strong>Auto-send timely final dictation</strong><small>Off by default. Conduit only submits a server-confirmed final transcript settled within one second.</small></span></label>
                   <Field><FieldLabel for="voice-mode">Transcription source</FieldLabel><select id="voice-mode" disabled={voiceServerSettings()!.locked || voiceBusy()} value={voiceServerSettings()!.mode} onChange={(event) => {
                     const mode = event.currentTarget.value as VoiceServerSettings["mode"];

@@ -33,7 +33,7 @@ export function Composer(props: {
   profiles: Template[];
   activeProfile?: Template | null;
   serverOnline: boolean;
-  voiceSettings: { shortcut: string; autoSend: boolean; inputDeviceId: string };
+  voiceSettings: { shortcut: string; activation: "push_to_talk" | "toggle"; autoSend: boolean; inputDeviceId: string };
   onChooseProfile: (id: string) => void;
   onOpenSettings: (section: string) => void;
   onOpenAttachments: () => void;
@@ -178,15 +178,21 @@ export function Composer(props: {
       queueMicrotask(resize);
     });
     const voiceKeyDown = (event: KeyboardEvent) => {
-      if (event.repeat || event.defaultPrevented || document.querySelector('.settings-dialog[data-state="open"]')) return;
+      if (event.defaultPrevented || document.querySelector('.settings-dialog[data-state="open"]')) return;
       if (!matchesShortcut(event, props.voiceSettings.shortcut)) return;
       event.preventDefault();
       event.stopPropagation();
       event.stopImmediatePropagation();
+      if (event.repeat) return;
+      if (props.voiceSettings.activation === "toggle") {
+        toggleDictation();
+        return;
+      }
       pushToTalkActive = true;
       startDictation();
     };
     const voiceKeyUp = (event: KeyboardEvent) => {
+      if (props.voiceSettings.activation !== "push_to_talk") return;
       if (!pushToTalkActive || !releasesShortcut(event, props.voiceSettings.shortcut)) return;
       event.preventDefault();
       event.stopPropagation();
