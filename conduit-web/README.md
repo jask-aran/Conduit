@@ -180,6 +180,16 @@ sent through correlated RPC and saved as that installation's next-chat default.
 Opening a persisted session restores JSONL state and does not pass model flags
 that could replace it.
 
+The composer also supports draft-only voice dictation. The on-screen microphone
+is a start/stop toggle and the configurable `Super+D` shortcut is push-to-talk.
+The browser captures 16 kHz mono PCM and sends it only to authenticated
+`WS /v0/dictation/stream`; Conduit proxies the stream to the server-only
+`CONDUIT_PARAKEET_STREAM_URL`. `CONDUIT_PARAKEET_API_KEY` and the optional
+`CONDUIT_PARAKEET_STOP_MESSAGE` never reach the browser. Provisional transcript
+text replaces one highlighted composer range in place, final text remains an
+editable draft, and optional auto-send accepts only a final event settled within
+one second of stop.
+
 ## Runtime API
 
 ### Auth
@@ -385,6 +395,17 @@ Client commands:
 
 Any other object is forwarded verbatim to Pi's RPC stdin. A failed command
 produces `client_error` with `code` and `message`.
+
+## Voice dictation protocol
+
+`WS /v0/dictation/stream` is authenticated like every other upgrade. Browser
+binary frames are signed 16-bit little-endian mono PCM at 16 kHz. The only
+browser control frame is `{ "type": "stop" }`. Conduit emits `ready`, `partial`,
+`final`, `end_of_speech`, `completed`, and `error` JSON events after normalizing
+the configured Parakeet service's event vocabulary. `completed.final` is true
+only when the ASR service produced a final result; clients must never auto-send
+provisional text. Raw audio is forwarded in memory and is not persisted or
+written to Pi JSONL.
 
 ## Workspace terminal protocol
 

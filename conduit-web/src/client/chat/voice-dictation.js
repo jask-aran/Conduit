@@ -1,0 +1,100 @@
+export const VOICE_DICTATION_STORAGE_KEY = "conduit:voice-dictation";
+export const DEFAULT_VOICE_DICTATION_SETTINGS = Object.freeze({ shortcut: "Super+D", autoSend: false });
+
+const MODIFIER_ORDER = ["Super", "Ctrl", "Alt", "Shift"];
+
+function keyLabel(key) {
+  if (key === " ") return "Space";
+  if (key === "Escape") return "Esc";
+  if (key.length === 1) return key.toUpperCase();
+  return key[0]?.toUpperCase() + key.slice(1);
+}
+
+export function shortcutFromKeyboardEvent(event) {
+  if (["Meta", "Control", "Alt", "Shift"].includes(event.key)) return null;
+  const modifiers = [];
+  if (event.metaKey) modifiers.push("Super");
+  if (event.ctrlKey) modifiers.push("Ctrl");
+  if (event.altKey) modifiers.push("Alt");
+  if (event.shiftKey) modifiers.push("Shift");
+  if (!modifiers.some((modifier) => modifier !== "Shift")) return null;
+  return [...modifiers, keyLabel(event.key)].join("+");
+}
+
+export function normalizeShortcut(value) {
+  const pieces = String(value || "").split("+").map((piece) => piece.trim()).filter(Boolean);
+  if (pieces.length < 2) return DEFAULT_VOICE_DICTATION_SETTINGS.shortcut;
+  const rawKey = pieces.at(-1);
+  const aliases = new Map([
+    ["meta", "Super"], ["cmd", "Super"], ["command", "Super"], ["super", "Super"],
+    ["control", "Ctrl"], ["ctrl", "Ctrl"], ["alt", "Alt"], ["option", "Alt"], ["shift", "Shift"],
+  ]);
+  const modifiers = new Set(pieces.slice(0, -1).map((piece) => aliases.get(piece.toLowerCase())).filter(Boolean));
+  if (!modifiers.size || ![...modifiers].some((modifier) => modifier !== "Shift") || !rawKey) {
+    return DEFAULT_VOICE_DICTATION_SETTINGS.shortcut;
+  }
+  return [...MODIFIER_ORDER.filter((modifier) => modifiers.has(modifier)), keyLabel(rawKey)].join("+");
+}
+
+function shortcutParts(shortcut) {
+  const pieces = normalizeShortcut(shortcut).split("+");
+  return { modifiers: new Set(pieces.slice(0, -1)), key: pieces.at(-1).toLowerCase() };
+}
+
+export function matchesShortcut(event, shortcut) {
+  const parts = shortcutParts(shortcut);
+  const key = keyLabel(event.key).toLowerCase();
+  return key === parts.key
+    && event.metaKey === parts.modifiers.has("Super")
+    && event.ctrlKey === parts.modifiers.has("Ctrl")
+    && event.altKey === parts.modifiers.has("Alt")
+    && event.shiftKey === parts.modifiers.has("Shift");
+}
+
+export function releasesShortcut(event, shortcut) {
+  const parts = shortcutParts(shortcut);
+  const released = keyLabel(event.key).toLowerCase();
+  if (released === parts.key) return true;
+  return (released === "meta" && parts.modifiers.has("Super"))
+    || (released === "control" && parts.modifiers.has("Ctrl"))
+    || (released === "alt" && parts.modifiers.has("Alt"))
+    || (released === "shift" && parts.modifiers.has("Shift"));
+}
+
+export function loadVoiceDictationSettings(storage = globalThis.localStorage) {
+  try {
+    const stored = JSON.parse(storage?.getItem(VOICE_DICTATION_STORAGE_KEY) || "null");
+    return {
+      shortcut: normalizeShortcut(stored?.shortcut),
+      autoSend: stored?.autoSend === true,
+    };
+  } catch {
+    return { ...DEFAULT_VOICE_DICTATION_SETTINGS };
+  }
+}
+
+export function saveVoiceDictationSettings(settings, storage = globalThis.localStorage) {
+  const normalized = { shortcut: normalizeShortcut(settings.shortcut), autoSend: settings.autoSend === true };
+  storage?.setItem(VOICE_DICTATION_STORAGE_KEY, JSON.stringify(normalized));
+  return normalized;
+}
+
+export function beginDictatedRange(text, cursor) {
+  const position = Math.max(0, Math.min(String(text).length, Number(cursor) || 0));
+  return { start: position, end: position };
+}
+
+export function replaceDictatedRange(text, range, transcript) {
+  const source = String(text);
+  const start = Math.max(0, Math.min(source.length, range.start));
+  const end = Math.max(start, Math.min(source.length, range.end));
+  const inserted = String(transcript || "");
+  return {
+    text: `${source.slice(0, start)}${inserted}${source.slice(end)}`,
+    range: { start, end: start + inserted.length },
+  };
+}
+
+export function shouldAutoSend({ enabled, final, stoppedAt, completedAt }) {
+  return enabled === true && final === true && completedAt - stoppedAt <= 1_000;
+}

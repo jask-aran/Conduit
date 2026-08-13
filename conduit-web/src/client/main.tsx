@@ -14,6 +14,7 @@ import { createErrorDiagnostic, formatRuntimeDiagnosticPrompt, type ErrorDiagnos
 import { Composer } from "./chat/composer";
 import { HostUiRequests } from "./chat/host-ui-card";
 import { MARKDOWN_RENDERER_STORAGE_KEY, selectedMarkdownRenderer, type MarkdownRendererId } from "./chat/markdown-settings";
+import { loadVoiceDictationSettings, saveVoiceDictationSettings } from "./chat/voice-dictation";
 import { Transcript } from "./chat/transcript";
 import { CommandMenu } from "./navigation/command-menu";
 import type { PaletteActions, PaletteContext } from "./palette/command-registry";
@@ -78,6 +79,8 @@ function App() {
   const [installationsLoading, setInstallationsLoading] = createSignal(true);
   const [workspaceSuggestions, setWorkspaceSuggestions] = createSignal<WorkspaceSuggestion[]>([]);
   const [defaultTemplateId, setDefaultTemplateId] = createSignal("chat");
+  const [voiceSettings, setVoiceSettings] = createSignal(loadVoiceDictationSettings());
+  const updateVoiceSettings = (next: { shortcut: string; autoSend: boolean }) => setVoiceSettings(saveVoiceDictationSettings(next));
   const [partialContinue, setPartialContinue] = createSignal(true);
   const [maxAttachmentBytes, setMaxAttachmentBytes] = createSignal(DEFAULT_MAX_ATTACHMENT_BYTES);
   const [markdownRenderer, setMarkdownRenderer] = createSignal<MarkdownRendererId>(selectedMarkdownRenderer());
@@ -523,6 +526,7 @@ function App() {
     newWorkspace: () => runSidebar("new-workspace"),
     openRuntimeChat: () => void createChat(undefined, { templateId: "runtime" }),
     attach: () => attachFileInput?.click(),
+    toggleDictation: () => window.dispatchEvent(new Event("conduit:toggle-dictation")),
     toggleSidebar: () => runSidebar("toggle-sidebar"),
     toggleWorkspacePanel: togglePanel,
     openWorkspaceView,
@@ -699,7 +703,7 @@ function App() {
             <section class="work-area-conversation" aria-label="Conversation">
               <Transcript chat={chat} partialContinue={partialContinue()} markdownRenderer={markdownRenderer()} profileLabel={activeProfile()?.label || activeProfile()?.id || chat.templateId() || undefined} />
               <div class="composer-stack"><HostUiRequests requests={chat.hostUiRequests()} onRespond={chat.respondHostUi} />
-                <Composer chat={chat} attachments={attachments} models={models} profiles={profiles()} activeProfile={activeProfile()} serverOnline={runtime.connectivity() === "online"} onChooseProfile={(id) => void switchProfile(id)} onOpenSettings={openSettings} onOpenAttachments={() => attachFileInput?.click()} /></div>
+                <Composer chat={chat} attachments={attachments} models={models} profiles={profiles()} activeProfile={activeProfile()} serverOnline={runtime.connectivity() === "online"} voiceSettings={voiceSettings()} onChooseProfile={(id) => void switchProfile(id)} onOpenSettings={openSettings} onOpenAttachments={() => attachFileInput?.click()} /></div>
             </section>
           </div>
         </>}>
@@ -714,7 +718,7 @@ function App() {
     <Show when={Boolean(selectedProject()) && Boolean(workspacePanelScope())}><WorkspacePanel projectId={() => selectedProject()!.id} chatId={() => workspacePanelScope()!} open={panelOpen} requestedTab={workspaceViewRequest} onClose={togglePanel} /></Show>
     <CommandMenu open={paletteOpen()} onOpenChange={setPaletteOpen} initialPage={palettePage()} launchNonce={paletteNonce()}
       context={paletteContext()} actions={paletteActions} models={models.models()} currentModel={models.model()} onChooseModel={(spec) => void models.chooseModel(spec)} />
-    <Settings open={settingsOpen()} initialSection={settingsSection()} initialWorkspaceId={settingsWorkspaceId()} onOpenChange={setSettingsOpen} models={models} templates={templates()} templatesLoading={templatesLoading()} defaultTemplateId={defaultTemplateId()} projects={catalogue.projects()} installations={installations()} installationsLoading={installationsLoading()} onInstallationsChange={setInstallations} onDefaultTemplateChange={saveDefaultTemplate} onWorkspaceDefaultChange={saveWorkspaceDefault} markdownRenderer={markdownRenderer()} onMarkdownRendererChange={switchMarkdownRenderer} />
+    <Settings open={settingsOpen()} initialSection={settingsSection()} initialWorkspaceId={settingsWorkspaceId()} onOpenChange={setSettingsOpen} models={models} templates={templates()} templatesLoading={templatesLoading()} defaultTemplateId={defaultTemplateId()} projects={catalogue.projects()} installations={installations()} installationsLoading={installationsLoading()} onInstallationsChange={setInstallations} onDefaultTemplateChange={saveDefaultTemplate} onWorkspaceDefaultChange={saveWorkspaceDefault} markdownRenderer={markdownRenderer()} onMarkdownRendererChange={switchMarkdownRenderer} voiceSettings={voiceSettings()} onVoiceSettingsChange={updateVoiceSettings} />
   </>;
 }
 

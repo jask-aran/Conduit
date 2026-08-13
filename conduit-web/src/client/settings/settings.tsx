@@ -5,6 +5,7 @@ import { CheckIcon, SearchIcon } from "lucide-solid";
 import { Button, Field, FieldGroup, FieldLabel, Input, Spinner } from "@/components/primitives";
 import { api } from "../api/client";
 import { MARKDOWN_RENDERER_OPTIONS, type MarkdownRendererId } from "../chat/markdown-settings";
+import { shortcutFromKeyboardEvent } from "../chat/voice-dictation";
 import type { Installation, ModelOption, Project, Template } from "../api/contracts";
 import type { ModelSettings } from "../state/model-settings";
 
@@ -84,6 +85,8 @@ export function Settings(props: {
   onWorkspaceDefaultChange: (id: string, templateId: string | null) => Promise<Project>;
   markdownRenderer: MarkdownRendererId;
   onMarkdownRendererChange: (renderer: MarkdownRendererId) => void;
+  voiceSettings: { shortcut: string; autoSend: boolean };
+  onVoiceSettingsChange: (settings: { shortcut: string; autoSend: boolean }) => void;
 }) {
   const [section, setSection] = createSignal<Section>(props.initialSection || "models");
   const [scope, setScope] = createSignal<string[]>([]);
@@ -356,7 +359,16 @@ export function Settings(props: {
         </nav>
         <main class="settings-content">
           <header><h2>{label(section())}</h2><Button variant="ghost" size="icon-sm" aria-label="Close" onClick={() => props.onOpenChange(false)}>×</Button></header>
-          <Show when={section() === "general"}><Show when={!props.templatesLoading} fallback={<div class="settings-loading"><Spinner /><span>Loading profiles…</span></div>}><FieldGroup><Field><FieldLabel for="default-profile">Default profile</FieldLabel><select id="default-profile" value={props.defaultTemplateId} onChange={(event) => void props.onDefaultTemplateChange(event.currentTarget.value)}><For each={props.templates.filter((item) => item.defaultable !== false)}>{(item) => <option value={item.id}>{item.label}</option>}</For></select></Field></FieldGroup></Show></Show>
+          <Show when={section() === "general"}><Show when={!props.templatesLoading} fallback={<div class="settings-loading"><Spinner /><span>Loading profiles…</span></div>}><FieldGroup>
+            <Field><FieldLabel for="default-profile">Default profile</FieldLabel><select id="default-profile" value={props.defaultTemplateId} onChange={(event) => void props.onDefaultTemplateChange(event.currentTarget.value)}><For each={props.templates.filter((item) => item.defaultable !== false)}>{(item) => <option value={item.id}>{item.label}</option>}</For></select></Field>
+            <Field><FieldLabel for="dictation-shortcut">Voice push-to-talk shortcut</FieldLabel><Input id="dictation-shortcut" value={props.voiceSettings.shortcut} readOnly onKeyDown={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              const shortcut = shortcutFromKeyboardEvent(event);
+              if (shortcut) props.onVoiceSettingsChange({ ...props.voiceSettings, shortcut });
+            }} /><small>Focus the field and press a shortcut. The on-screen microphone remains a start/stop toggle.</small></Field>
+            <label class="dictation-auto-send"><input type="checkbox" checked={props.voiceSettings.autoSend} onChange={(event) => props.onVoiceSettingsChange({ ...props.voiceSettings, autoSend: event.currentTarget.checked })} /><span><strong>Auto-send final dictation</strong><small>Off by default. Partial transcript text is never submitted.</small></span></label>
+          </FieldGroup></Show></Show>
           <Show when={section() === "ui"}>
             <FieldGroup>
               <Field>

@@ -37,6 +37,7 @@ export interface PaletteActions {
   newWorkspace: () => void;
   openRuntimeChat: () => void;
   attach: () => void;
+  toggleDictation: () => void;
   toggleSidebar: () => void;
   toggleWorkspacePanel: () => void;
   openWorkspaceView: (view: "files" | "diff" | "artifacts" | "terminal") => void;
@@ -213,6 +214,15 @@ export const paletteCommands: PaletteCommand[] = [{
   keywords: ["upload", "file"],
   isAvailable: hasChat,
   run: (actions) => actions.attach(),
+}, {
+  id: "voice-dictation",
+  group: "commands",
+  label: "Toggle voice dictation",
+  description: "Start or stop dictation in the composer",
+  icon: "microphone",
+  keywords: ["voice", "microphone", "speech", "push to talk", "transcribe"],
+  isAvailable: hasChat,
+  run: (actions) => actions.toggleDictation(),
 }, {
   id: "toggle-sidebar",
   group: "commands",

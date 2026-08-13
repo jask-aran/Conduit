@@ -221,11 +221,14 @@ svg { stroke-width: 1.5; }
   content: ""; position: absolute; inset: 0; z-index: 0; border-radius: inherit; pointer-events: none;
   background: radial-gradient(150% 72% at 50% -34%, oklch(1 0 0 / 12%), transparent 56%);
 }
-.composer textarea, .composer-actions { position: relative; z-index: 1; }
+.composer textarea, .composer-actions { position: relative; z-index: 2; }
 .composer:focus-within::before {
   background: linear-gradient(150deg, oklch(1 0 0 / 56%), oklch(0.72 0.045 246 / 26%) 38%, oklch(1 0 0 / 5%) 70%, oklch(1 0 0 / 26%));
 }
+.composer-input-shell { position: relative; min-height: 44px; }
 .composer textarea { display: block; width: 100%; min-height: 44px; max-height: 192px; resize: none; overflow-y: auto; border: 0; outline: 0; background: transparent; padding: 11px 12px 2px; color: inherit; line-height: 1.45; }
+.composer-highlight-layer { position: absolute; inset: 0; z-index: 1; min-height: 44px; max-height: 192px; overflow: hidden; pointer-events: none; padding: 11px 12px 2px; color: transparent; font: inherit; line-height: 1.45; overflow-wrap: break-word; white-space: pre-wrap; }
+.composer-highlight-layer mark { border-radius: 3px; background: color-mix(in oklch, var(--accent-cool), transparent 72%); color: transparent; box-shadow: 0 0 0 1px color-mix(in oklch, var(--accent-cool), transparent 82%); }
 .composer textarea:placeholder-shown { height: 44px !important; }
 .composer-actions { display: flex; min-height: 36px; align-items: center; justify-content: space-between; gap: 12px; padding: 2px 7px 7px 8px; }
 /* Composer chrome sits inside the 24px-radius glass bubble; compact squircles
@@ -238,6 +241,9 @@ svg { stroke-width: 1.5; }
 .model-trigger:disabled { cursor: default; color: var(--muted-foreground); opacity: .62; }
 .model-trigger span { max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .model-trigger svg { width: 14px; height: 14px; }
+.dictation-trigger[data-state="active"] { box-shadow: 0 0 0 3px color-mix(in oklch, var(--accent-cool), transparent 78%); }
+.composer-dictation-error { display: flex; align-items: center; gap: 7px; margin-top: 6px; color: var(--destructive); font-size: 12px; }
+.composer-dictation-error svg { width: 14px; height: 14px; flex: none; }
 .composer-status { width: 100%; min-height: 22px; margin-top: 6px; overflow: hidden; border-radius: 5px; background: oklch(1 0 0 / 3%); font: 11px/22px ui-monospace, SFMono-Regular, Consolas, monospace; letter-spacing: 0.015em; }
 .composer-status-state, .composer-status-segment { display: inline-flex; height: 22px; align-items: center; gap: 6px; padding: 0 12px; white-space: nowrap; }
 .composer-status-state { position: relative; padding-left: 10px; background: color-mix(in oklch, var(--accent-cool), transparent 82%); color: var(--foreground); }
@@ -314,6 +320,10 @@ svg { stroke-width: 1.5; }
 .settings-error { border-color: color-mix(in srgb, var(--destructive) 45%, var(--border)); color: var(--destructive); }
 .settings-inline-error { margin: 0; color: var(--destructive); font-size: 13px; }
 .settings-actions { display: flex; align-items: center; justify-content: space-between; }
+.dictation-auto-send { display: flex; align-items: flex-start; gap: 10px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--card); padding: 12px; cursor: pointer; }
+.dictation-auto-send input { margin-top: 3px; accent-color: var(--primary); }
+.dictation-auto-send span { display: flex; flex-direction: column; gap: 3px; }
+.dictation-auto-send small { color: var(--muted-foreground); }
 .settings-cards, .installations { display: grid; gap: 10px; margin-top: 18px; }
 .settings-cards article, .installations article, .workspace-settings-card { padding: 14px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--card); }
 .settings-cards h3, .installations h3, .workspace-settings-card h3 { margin: 0; }
