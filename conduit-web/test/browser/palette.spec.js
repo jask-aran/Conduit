@@ -164,10 +164,13 @@ test("Control-P opens direct chat search and Backspace stays inside the mode", a
   await expect(dialog.getByRole("option", { name: /Existing chat/ })).toBeVisible();
   const hints = dialog.getByRole("note", { name: "Keyboard shortcuts" });
   await expect(hints).toContainText("Edit chats");
-  await expect(hints).toContainText("⌘E");
+  await expect(hints).toContainText(/⌘ E|Ctrl E/);
   await expect(hints).toContainText("Rename");
   await expect(hints).toContainText("Delete");
   await expect(hints).toContainText("Move");
+  await expect(hints).toContainText(/⌘ K|Ctrl K/);
+  await expect(hints).not.toContainText("⌘⇧");
+  await expect(hints).not.toContainText("⌥⇧");
   await expect.poll(() => page.evaluate(() => window.__printCalls)).toBe(0);
 
   await page.keyboard.press("Backspace");
@@ -179,7 +182,7 @@ test("Control-P opens direct chat search and Backspace stays inside the mode", a
   await page.keyboard.press("Escape");
 });
 
-test("Tab enters the highlighted page and Ctrl-E toggles chat selection mode", async ({ page }) => {
+test("Tab enters the highlighted page and the footer toggles chat selection mode", async ({ page }) => {
   await page.goto("/");
   await openPalette(page);
   const input = page.getByRole("combobox", { name: "Search commands" });
@@ -190,18 +193,25 @@ test("Tab enters the highlighted page and Ctrl-E toggles chat selection mode", a
 
   await page.keyboard.press("Escape");
   await page.keyboard.press("Control+p");
-  await page.keyboard.press("Control+e");
+  const dialog = page.getByRole("dialog", { name: "Command Palette" });
+  const hints = dialog.getByRole("note", { name: "Keyboard shortcuts" });
+  await hints.getByRole("button", { name: /Edit chats/ }).click();
   await expect(page.getByText("1 selected")).toBeVisible();
-  const hints = page.getByRole("note", { name: "Keyboard shortcuts" });
+  await expect(dialog.getByRole("listbox", { name: "Chats" })).toBeFocused();
   await expect(hints).toContainText("Done");
   await expect(hints).toContainText("Click");
   await expect(hints).toContainText("Space");
   await expect(hints).toContainText("Delete");
   await expect(hints).toContainText("Move");
   await expect(hints).not.toContainText("Rename");
+  await hints.getByRole("button", { name: /Done/ }).click();
+  await expect(page.getByText("1 selected")).toHaveCount(0);
+  await expect(dialog.getByRole("combobox", { name: "Search commands" })).toBeFocused();
+  await expect(hints).toContainText("Rename");
+  await page.keyboard.press("Control+e");
+  await expect(page.getByText("1 selected")).toBeVisible();
   await page.keyboard.press("Control+e");
   await expect(page.getByText("1 selected")).toHaveCount(0);
-  await expect(hints).toContainText("Rename");
   await page.keyboard.press("Escape");
   await expect(page.getByRole("dialog", { name: "Command Palette" })).toHaveCount(0);
 });
@@ -224,8 +234,18 @@ test("sidebar View all opens a Chats-scoped search after the twenty-row limit", 
   const dialog = page.getByRole("dialog", { name: "Command Palette" });
   await expect(dialog.getByText("Search ›")).toBeVisible();
   await expect(dialog.getByRole("button", { name: "Remove Chats filter" })).toBeVisible();
-  await expect(dialog.getByRole("option", { name: /Research chat/ })).toHaveCount(0);
   const input = dialog.getByRole("combobox", { name: "Search commands" });
+  await expect(input).toBeFocused();
+  await input.press("ArrowDown");
+  await expect(input).toHaveAttribute("aria-activedescendant", /command-option-\d+/);
+  const hints = dialog.getByRole("note", { name: "Keyboard shortcuts" });
+  await hints.getByRole("button", { name: /Edit chats/ }).click();
+  await expect(dialog.getByText("1 selected")).toBeVisible();
+  await expect(dialog.getByRole("button", { name: "Remove Chats filter" })).toBeVisible();
+  await hints.getByRole("button", { name: /Done/ }).click();
+  await expect(input).toBeFocused();
+  await expect(dialog.getByRole("button", { name: "Remove Chats filter" })).toBeVisible();
+  await expect(dialog.getByRole("option", { name: /Research chat/ })).toHaveCount(0);
   await input.press("Backspace");
   await expect(dialog.getByRole("button", { name: "Remove Chats filter" })).toHaveCount(0);
   await expect(dialog.getByRole("option", { name: /Research chat/ })).toBeVisible();
@@ -299,7 +319,8 @@ test("single-chat rename stays outside bulk selection mode", async ({ page }) =>
   await rename.press("Enter");
   await expect.poll(() => renames).toEqual([{ name: "Renamed chat" }]);
   await expect(hints).toContainText("Edit chats");
-  await page.keyboard.press("Control+Shift+r");
+  await page.keyboard.press("Control+k");
+  await page.keyboard.press("r");
   await expect(rename).toBeVisible();
   await rename.press("Escape");
 
@@ -332,7 +353,8 @@ test("single-chat move and delete shortcuts stay outside bulk selection mode", a
   await page.goto("/");
   await page.keyboard.press("Control+p");
   const hints = page.getByRole("note", { name: "Keyboard shortcuts" });
-  await page.keyboard.press("Control+Shift+m");
+  await page.keyboard.press("Control+k");
+  await page.keyboard.press("m");
   await expect(page.getByText("1 selected")).toHaveCount(0);
   await expect(hints).toContainText("Move");
   await expect(hints).toContainText("Back");
@@ -344,19 +366,18 @@ test("single-chat move and delete shortcuts stay outside bulk selection mode", a
   await expect(dialog).toBeVisible();
   await dialog.getByRole("option", { name: /^Search chats/ }).click();
   await expect(dialog.getByText("Search ›")).toBeVisible();
-  await page.keyboard.press("Control+Shift+d");
+  await page.keyboard.press("Control+k");
+  await page.keyboard.press("d");
   const confirmation = page.getByRole("alertdialog", { name: "Delete 1 chats?" });
   await expect(confirmation).toBeVisible();
   await expect(page.getByText("1 selected")).toHaveCount(0);
   await page.keyboard.press("Escape");
   await expect(dialog.getByRole("combobox", { name: "Search commands" })).toBeFocused();
-  await page.keyboard.press("Control+Shift+d");
+  await page.keyboard.press("Control+k");
+  await page.keyboard.press("d");
   await expect(confirmation).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(dialog.getByRole("combobox", { name: "Search commands" })).toBeFocused();
-  await page.keyboard.press("Alt+Shift+d");
-  await expect(confirmation).toBeVisible();
-  await confirmation.getByRole("button", { name: "Cancel" }).click();
   await expect(page.getByRole("note", { name: "Keyboard shortcuts" })).toContainText("Rename");
 });
 

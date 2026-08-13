@@ -8,12 +8,17 @@ type Hint = {
   keys?: string[];
 };
 
+const primaryModifier = typeof navigator !== "undefined" && /Mac|iPhone|iPad|iPod/.test(navigator.platform || navigator.userAgent)
+  ? "⌘"
+  : "Ctrl";
+const alternateModifier = primaryModifier === "⌘" ? "⌥" : "Alt";
+
 const browseHints: Record<CommandHintContext, Hint[]> = {
   chat: [
-    { label: "Edit chats", keys: ["⌘E"] },
-    { label: "Rename", keys: ["⌥R", "⌘⇧R", "⌘K R"] },
-    { label: "Delete", keys: ["⌘⇧D", "⌥⇧D", "⌘K D"] },
-    { label: "Move", keys: ["⌘⇧M", "⌥⇧M", "⌘K M"] },
+    { label: "Edit chats", keys: [`${primaryModifier} E`] },
+    { label: "Rename", keys: [`${alternateModifier} R`, `${primaryModifier} K R`] },
+    { label: "Delete", keys: [`${primaryModifier} K D`] },
+    { label: "Move", keys: [`${primaryModifier} K M`] },
     { label: "Navigate", keys: ["↑", "↓"] },
     { label: "Open", keys: ["Enter"] },
     { label: "Close", keys: ["Esc"] },
@@ -33,7 +38,7 @@ const hintsFor = (context: CommandHintContext, mode: CommandHintMode): Hint[] =>
     { label: "Cancel", keys: ["Esc"] },
   ];
   if (mode === "edit") return [
-    { label: "Done", keys: ["⌘E"] },
+    { label: "Done", keys: [`${primaryModifier} E`] },
     { label: "Select", keys: ["Click"] },
     { label: "Toggle", keys: ["Space"] },
     { label: "Delete", keys: ["D"] },
@@ -51,21 +56,41 @@ const hintsFor = (context: CommandHintContext, mode: CommandHintMode): Hint[] =>
   return browseHints[context];
 };
 
-function HintItem(props: { hint: Hint }) {
-  return <span class="command-hint-item">
+function HintContents(props: { hint: Hint }) {
+  return <>
     <For each={props.hint.keys || []}>{(key) => <kbd class="command-hint-key">{key}</kbd>}</For>
     <span class="command-hint-label">{props.hint.label}</span>
-  </span>;
+  </>;
 }
 
-export function CommandHintBar(props: { context: CommandHintContext; mode: CommandHintMode }) {
+function HintItem(props: { hint: Hint; onClick?: () => void }) {
+  return <Show
+    when={props.onClick}
+    fallback={<span class="command-hint-item"><HintContents hint={props.hint} /></span>}
+  >
+    <button type="button" class="command-hint-item command-hint-action" onClick={() => props.onClick?.()}>
+      <HintContents hint={props.hint} />
+    </button>
+  </Show>;
+}
+
+export function CommandHintBar(props: {
+  context: CommandHintContext;
+  mode: CommandHintMode;
+  onToggleEdit?: () => void;
+}) {
   const hints = () => hintsFor(props.context, props.mode);
   const primaryCount = () => props.mode === "action-prefix" ? 4 : props.mode === "edit" ? 4 : props.mode === "browse" && props.context === "chat" ? 3 : 2;
   const primary = () => hints().slice(0, primaryCount());
   const secondary = () => hints().slice(primary().length);
+  const editAction = (hint: Hint) => props.context === "chat"
+    && (props.mode === "browse" || props.mode === "edit")
+    && (hint.label === "Edit chats" || hint.label === "Done")
+    ? props.onToggleEdit
+    : undefined;
   return <div class="command-hint-bar" role="note" aria-label="Keyboard shortcuts" data-mode={props.mode}>
     <div class="command-hint-items command-hint-primary">
-      <For each={primary()}>{(hint) => <HintItem hint={hint} />}</For>
+      <For each={primary()}>{(hint) => <HintItem hint={hint} onClick={editAction(hint)} />}</For>
     </div>
     <div class="command-hint-items command-hint-secondary">
       <For each={secondary()}>{(hint) => <HintItem hint={hint} />}</For>
