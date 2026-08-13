@@ -30,7 +30,7 @@ import "./styles.css";
 
 if (import.meta.env.PROD) registerSW({ immediate: true });
 
-type SettingsSection = "general" | "ui" | "models" | "profiles" | "runtime" | "workspaces" | "search" | "auth";
+type SettingsSection = "general" | "ui" | "models" | "profiles" | "runtime" | "workspaces" | "voice" | "search" | "auth";
 type WorkspaceView = "files" | "diff" | "artifacts" | "terminal";
 const WorkspacePanel = lazy(() => import("./workspace/workspace-panel"));
 const ProjectDashboard = lazy(() => import("./project/dashboard"));
