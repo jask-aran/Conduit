@@ -23,8 +23,8 @@ environments.
   model-aware web search. Local installations can also use Host Pi.
 - Streamed Markdown, code, math, and tables, plus a command palette and PWA
   support.
-- Push-to-talk and toggle-based voice dictation through a server-configured
-  local Parakeet streaming service.
+- Push-to-talk and toggle-based voice dictation through a managed local
+  Parakeet model or a securely authenticated remote speech endpoint.
 - A Docker deployment with automatic HTTPS and persistent data and Workspace
   mounts.
 

@@ -36,6 +36,8 @@ import { PtyManager } from "./pty-manager.js";
 import { createLiveSessionStream } from "./server/live-session-stream.js";
 import { createTerminalStream } from "./server/terminal-stream.js";
 import { createDictationStream } from "./server/dictation-stream.js";
+import { VoiceRuntime } from "./server/voice-runtime.js";
+import { VoiceModelManager } from "./server/voice-model-manager.js";
 import { registerAttachmentRoutes } from "./server/routes/attachments.js";
 import { registerAuthRoutes } from "./server/routes/auth.js";
 import { registerPiAuthRoutes } from "./server/routes/pi-auth.js";
@@ -46,7 +48,9 @@ import { registerLiveSessionRoutes } from "./server/routes/live-sessions.js";
 import { registerProjectRoutes } from "./server/routes/projects.js";
 import { registerSessionRoutes } from "./server/routes/sessions.js";
 import { registerSearchRoutes } from "./server/routes/search.js";
+import { registerVoiceRoutes } from "./server/routes/voice.js";
 import { SearchSettingsStore } from "./search-settings.js";
+import { VoiceSettingsStore } from "./voice-settings.js";
 import { ModelProfileRuntime, usesWebSearchOverlay } from "./model-profile-runtime.js";
 import { publicModelProfile, resolveModelProfile } from "./model-profiles.js";
 
@@ -80,6 +84,10 @@ const runtimeSettings = new RuntimeSettingsStore(config.runtimeSettingsFile, def
 await runtimeSettings.load();
 const searchSettings = new SearchSettingsStore({ filePath: config.searchConfigFile, environment: process.env });
 await searchSettings.initialize();
+const voiceSettings = new VoiceSettingsStore({ filePath: config.voiceConfigFile, environment: process.env });
+await voiceSettings.initialize();
+const voiceModel = new VoiceModelManager({ root: config.voiceModelRoot });
+const voiceRuntime = new VoiceRuntime({ settings: voiceSettings, modelManager: voiceModel });
 const modelProfileRuntime = new ModelProfileRuntime({
   agentDir: config.piAgentDir,
   searchConfigFile: config.searchConfigFile,
@@ -417,6 +425,7 @@ registerSearchRoutes(app, {
   searchSettings,
   onSettingsChanged: recycleIdleIsolatedPiProcesses,
 });
+registerVoiceRoutes(app, { voiceSettings, voiceRuntime, voiceModel });
 
 registerPtyRoutes(app, { projects, terminals });
 
@@ -556,9 +565,7 @@ const wss = new WebSocketServer({ noServer: true });
 const terminalStream = createTerminalStream({ terminals, wss });
 const dictationStream = createDictationStream({
   wss,
-  endpoint: config.dictation.endpoint,
-  apiKey: config.dictation.apiKey,
-  stopMessage: config.dictation.stopMessage,
+  voiceRuntime,
 });
 const liveSessionStream = createLiveSessionStream({
   manager,
@@ -601,6 +608,7 @@ async function shutdown(signal) {
   server.closeIdleConnections?.();
   const stoppedProcesses = await manager.shutdown();
   await terminals.stopAll();
+  await voiceModel.stop();
   server.closeAllConnections?.();
   await closed;
   console.log(`Conduit stopped ${stoppedProcesses} Pi process${stoppedProcesses === 1 ? "" : "es"}`);

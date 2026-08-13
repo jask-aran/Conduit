@@ -182,13 +182,23 @@ that could replace it.
 
 The composer also supports draft-only voice dictation. The on-screen microphone
 is a start/stop toggle and the configurable `Super+D` shortcut is push-to-talk.
-The browser captures 16 kHz mono PCM and sends it only to authenticated
-`WS /v0/dictation/stream`; Conduit proxies the stream to the server-only
-`CONDUIT_PARAKEET_STREAM_URL`. `CONDUIT_PARAKEET_API_KEY` and the optional
-`CONDUIT_PARAKEET_STOP_MESSAGE` never reach the browser. Provisional transcript
-text replaces one highlighted composer range in place, final text remains an
-editable draft, and optional auto-send accepts only a final event settled within
+The browser captures 16 kHz mono PCM with an `AudioWorklet` and sends it only to
+authenticated `WS /v0/dictation/stream`. Settings → Voice can use a managed
+local Parakeet model or a named remote protocol adapter. Remote None, Bearer,
+and custom API-key-header credentials are stored server-side in `data/voice.json`
+(mode `0600`) and are never returned to the browser. Environment configuration
+remains a locked deployment override. Provisional transcript text replaces one
+highlighted composer range in place, final text remains an editable draft, and
+optional auto-send accepts only a server-confirmed final event settled within
 one second of stop.
+
+Managed local setup is an explicit user action. Conduit downloads pinned Linux
+Parakeet, ONNX Runtime, and int8 model artifacts into `data/voice/parakeet`,
+checks their published SHA-256 metadata, displays progress, supports
+cancellation/retry, and runs one unprivileged loopback worker. The managed
+OpenAI-compatible adapter keeps the utterance in memory and sends bounded
+snapshots while capture is active for provisional text, then sends one final
+snapshot after stop. Switching modes never installs a model implicitly.
 
 ## Runtime API
 
@@ -322,6 +332,12 @@ starting, and browser-attached processes remain resident.
 - `GET /v0/runtime` returns the current global live-process snapshot
 - `GET /v0/runtime/stream` (SSE) pushes snapshot-first global process updates
 - `GET /v0/runtime/settings` and `PATCH /v0/runtime/settings` read/update max warm processes, max concurrent generations, and idle reclaim TTL (`data/runtime.json`, env defaults)
+- `GET|PUT /v0/voice/settings` reads or updates the redacted voice source,
+  named adapter, endpoint, and authentication policy
+- `POST /v0/voice/test` tests the effective endpoint without disclosing its
+  credential; `DELETE /v0/voice/credential` removes a stored remote secret
+- `POST /v0/voice/model/install`, `POST /v0/voice/model/cancel`, and
+  `DELETE /v0/voice/model` manage the pinned local Parakeet package
 
 ## Global runtime channel
 
@@ -400,12 +416,21 @@ produces `client_error` with `code` and `message`.
 
 `WS /v0/dictation/stream` is authenticated like every other upgrade. Browser
 binary frames are signed 16-bit little-endian mono PCM at 16 kHz. The only
-browser control frame is `{ "type": "stop" }`. Conduit emits `ready`, `partial`,
-`final`, `end_of_speech`, `completed`, and `error` JSON events after normalizing
-the configured Parakeet service's event vocabulary. `completed.final` is true
-only when the ASR service produced a final result; clients must never auto-send
-provisional text. Raw audio is forwarded in memory and is not persisted or
-written to Pi JSONL.
+browser control frame is `{ "type": "stop" }`. The
+`parakeet_pcm_ws_v1` adapter forwards binary PCM, sends an explicit stop control,
+and accepts only its documented partial/final/end/error JSON event vocabulary;
+the `openai_audio_sse_v1` adapter sends one in-memory WAV utterance and consumes
+`transcript.text.delta` / `transcript.text.done` SSE events. Conduit emits
+`ready`, `partial`, `final`, `end_of_speech`, `settlement_deadline`, `completed`,
+and `error`. `completed` includes `settlementMs` and `finalWithinDeadline`, and
+clients must never infer auto-send timing from browser clocks.
+
+The server limits concurrent dictation sessions, audio duration and bytes,
+frame/event sizes, WebSocket buffering, connect time, and finalisation time.
+Settings-created remote endpoints require WSS/HTTPS, reject URL credentials and
+query strings, resolve only to public addresses, and pin the checked address for
+WebSocket connection setup. Raw audio remains in memory and is never persisted
+or written to Pi JSONL.
 
 ## Workspace terminal protocol
 
