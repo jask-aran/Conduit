@@ -4291,7 +4291,7 @@ test("project chevron expands independently and project name navigates", async (
   }
 });
 
-test("voice dictation selects its transcript in the composer and Backspace cancels it", async ({ page }) => {
+test("voice dictation keeps capturing after a speech-end pause and preserves native selection editing", async ({ page }) => {
   await page.addInitScript(() => {
     class VoiceWebSocket extends EventTarget {
       static OPEN = 1;
@@ -4311,11 +4311,20 @@ test("voice dictation selects its transcript in the composer and Backspace cance
         });
       }
       send(payload) {
-        if (!this.url.includes("/v0/dictation/stream") || typeof payload !== "string") return;
+        if (!this.url.includes("/v0/dictation/stream")) return;
+        if (payload instanceof ArrayBuffer) {
+          window.__voiceAudioFrames = (window.__voiceAudioFrames || 0) + 1;
+          if (!this.endOfSpeechSent) {
+            this.endOfSpeechSent = true;
+            queueMicrotask(() => this.onmessage?.({ data: JSON.stringify({ type: "end_of_speech" }) }));
+          }
+          return;
+        }
+        if (typeof payload !== "string") return;
         if (JSON.parse(payload).type !== "stop") return;
         setTimeout(() => {
           this.onmessage?.({ data: JSON.stringify({ type: "final", text: "Conduit" }) });
-          this.onmessage?.({ data: JSON.stringify({ type: "completed", text: "Conduit", final: true, finalWithinDeadline: true, settlementMs: 24 }) });
+          this.onmessage?.({ data: JSON.stringify({ type: "completed", text: "Conduit", final: true, finalWithinDeadline: true, settlementMs: 24, audioBytes: 2 }) });
         }, 20);
       }
       close() { this.readyState = 3; this.dispatchEvent(new Event("close")); }
@@ -4328,7 +4337,10 @@ test("voice dictation selects its transcript in the composer and Backspace cance
           get: () => handler,
           set: (next) => {
             handler = next;
-            if (handler) queueMicrotask(() => handler({ data: { type: "pcm", buffer: new ArrayBuffer(2), rms: 0.1, peak: 0.2 } }));
+            if (handler) {
+              queueMicrotask(() => handler({ data: { type: "pcm", buffer: new ArrayBuffer(2), rms: 0.1, peak: 0.2 } }));
+              setTimeout(() => handler?.({ data: { type: "pcm", buffer: new ArrayBuffer(2), rms: 0.1, peak: 0.2 } }), 100);
+            }
           },
         });
         this.onprocessorerror = null;
@@ -4346,6 +4358,7 @@ test("voice dictation selects its transcript in the composer and Backspace cance
     Object.defineProperty(window, "WebSocket", { configurable: true, value: VoiceWebSocket });
     Object.defineProperty(window, "AudioContext", { configurable: true, value: MockAudioContext });
     Object.defineProperty(window, "AudioWorkletNode", { configurable: true, value: MockAudioWorkletNode });
+    window.__voiceAudioFrames = 0;
     localStorage.setItem("conduit:voice-dictation", JSON.stringify({ shortcut: "Super+D", autoSend: false, inputDeviceId: "mic-2" }));
     Object.defineProperty(window, "__voiceConstraints", { configurable: true, value: null, writable: true });
     Object.defineProperty(navigator, "mediaDevices", { configurable: true, value: { getUserMedia: async (constraints) => { window.__voiceConstraints = constraints; return { getTracks: () => [{ stop() {} }] }; } } });
@@ -4355,15 +4368,49 @@ test("voice dictation selects its transcript in the composer and Backspace cance
   const composer = page.getByRole("textbox", { name: "Message Pi" });
   await composer.fill("askplease");
   await composer.evaluate((element) => element.setSelectionRange(3, 3));
-  await page.getByRole("button", { name: "Start voice dictation" }).click();
+  await page.keyboard.down("Control");
+  await page.keyboard.down("Shift");
+  await page.keyboard.down("D");
   await expect.poll(() => page.evaluate(() => window.__voiceConstraints.audio.deviceId)).toEqual({ exact: "mic-2" });
   await expect(composer).toHaveValue("ask Con please");
-  await page.getByRole("button", { name: "Stop voice dictation" }).click();
+  await expect.poll(() => page.evaluate(() => window.__voiceAudioFrames)).toBe(2);
+  await page.keyboard.up("D");
+  await page.keyboard.up("Shift");
+  await page.keyboard.up("Control");
+  await expect(composer).toHaveValue("ask Conduit please");
+  await expect(page.getByText(/Microphone audio was truncated/)).toBeVisible();
+  await expect.poll(() => composer.evaluate((element) => [element.selectionStart, element.selectionEnd])).toEqual([3, 12]);
+  await page.keyboard.down("Control");
+  await page.keyboard.down("Shift");
+  await page.keyboard.down("D");
+  await expect(composer).toHaveValue("ask Conduit please Con");
+  await page.keyboard.up("D");
+  await page.keyboard.up("Shift");
+  await page.keyboard.up("Control");
+  await expect(composer).toHaveValue("ask Conduit please Conduit");
+  await expect.poll(() => composer.evaluate((element) => [element.selectionStart, element.selectionEnd])).toEqual([18, 26]);
+  await composer.press("Backspace");
+  await expect(composer).toHaveValue("ask Conduit please");
+  await expect.poll(() => composer.evaluate((element) => [element.selectionStart, element.selectionEnd])).toEqual([18, 18]);
+  await composer.fill("askplease");
+  await composer.evaluate((element) => element.setSelectionRange(3, 3));
+  await page.keyboard.down("Control");
+  await page.keyboard.down("Shift");
+  await page.keyboard.down("D");
+  await expect(composer).toHaveValue("ask Con please");
+  await page.keyboard.up("D");
+  await page.keyboard.up("Shift");
+  await page.keyboard.up("Control");
   await expect(composer).toHaveValue("ask Conduit please");
   await expect.poll(() => composer.evaluate((element) => [element.selectionStart, element.selectionEnd])).toEqual([3, 12]);
   await composer.press("Backspace");
   await expect(composer).toHaveValue("askplease");
   await expect.poll(() => composer.evaluate((element) => [element.selectionStart, element.selectionEnd])).toEqual([3, 3]);
+  await composer.fill("append");
+  await page.getByRole("button", { name: "Start voice dictation" }).click();
+  await expect(composer).toHaveValue("append Con");
+  await page.getByRole("button", { name: "Stop voice dictation" }).click();
+  await expect(composer).toHaveValue("append Conduit");
   await expect(page.getByRole("button", { name: "Start voice dictation" })).toBeVisible();
 });
 
@@ -4374,6 +4421,10 @@ test("Ctrl+Shift+D captures in the page and buffers microphone audio until the s
     });
     window.__voiceShortcutBubbled = false;
     window.__voiceBinaryCount = 0;
+    window.__voiceFrameKinds = [];
+    window.__voiceStopFrame = null;
+    window.__voiceMetrics = null;
+    window.addEventListener("conduit:voice-dictation-metrics", (event) => { window.__voiceMetrics = event.detail; });
     class VoiceWebSocket extends EventTarget {
       static OPEN = 1;
       static CLOSING = 2;
@@ -4388,10 +4439,13 @@ test("Ctrl+Shift+D captures in the page and buffers microphone audio until the s
       send(payload) {
         if (payload instanceof ArrayBuffer) {
           window.__voiceBinaryCount += 1;
+          window.__voiceFrameKinds.push("audio");
           return;
         }
         if (typeof payload !== "string" || JSON.parse(payload).type !== "stop") return;
-        queueMicrotask(() => this.onmessage?.({ data: JSON.stringify({ type: "completed", text: "", final: false, finalWithinDeadline: false, settlementMs: 0 }) }));
+        window.__voiceStopFrame = JSON.parse(payload);
+        window.__voiceFrameKinds.push("stop");
+        queueMicrotask(() => this.onmessage?.({ data: JSON.stringify({ type: "completed", text: "buffered", final: true, finalWithinDeadline: true, settlementMs: 0, reason: "stopped", audioBytes: 4, audioDurationMs: 0, adapter: "test", provider: "test", model: "test" }) }));
       }
       close() { this.readyState = 3; this.dispatchEvent(new Event("close")); }
     }
@@ -4407,6 +4461,13 @@ test("Ctrl+Shift+D captures in the page and buffers microphone audio until the s
             if (handler) queueMicrotask(() => handler({ data: { type: "pcm", buffer: new ArrayBuffer(2), rms: 0.1, peak: 0.2 } }));
           },
         });
+        this.port.postMessage = (message) => {
+          if (message?.type !== "flush") return;
+          queueMicrotask(() => {
+            handler?.({ data: { type: "pcm", buffer: new ArrayBuffer(2), rms: 0.2, peak: 0.3 } });
+            handler?.({ data: { type: "flush_complete" } });
+          });
+        };
         this.onprocessorerror = null;
       }
       connect() {}
@@ -4444,11 +4505,16 @@ test("Ctrl+Shift+D captures in the page and buffers microphone audio until the s
   await expect.poll(() => page.evaluate(() => window.__voiceBinaryCount)).toBe(0);
   await expect.poll(() => page.evaluate(() => window.__voiceShortcutBubbled)).toBe(false);
 
-  await page.evaluate(() => window.__releaseVoiceReady());
-  await expect.poll(() => page.evaluate(() => window.__voiceBinaryCount)).toBeGreaterThan(0);
   await page.keyboard.up("D");
   await page.keyboard.up("Shift");
   await page.keyboard.up("Control");
+  await expect(page.locator(".dictation-trigger")).toHaveAttribute("data-state", "stopping");
+  await page.evaluate(() => window.__releaseVoiceReady());
+  await expect.poll(() => page.evaluate(() => window.__voiceBinaryCount)).toBe(2);
+  await expect.poll(() => page.evaluate(() => window.__voiceFrameKinds)).toEqual(["audio", "audio", "stop"]);
+  await expect.poll(() => page.evaluate(() => window.__voiceStopFrame)).toEqual({ type: "stop", audioBytesSent: 4 });
+  await expect(page.getByRole("textbox", { name: "Message Pi" })).toHaveValue("buffered");
+  await expect.poll(() => page.evaluate(() => ({ reason: window.__voiceMetrics?.completionReason, sent: window.__voiceMetrics?.audioBytesSent, provider: window.__voiceMetrics?.provider, model: window.__voiceMetrics?.model }))).toEqual({ reason: "stopped", sent: 4, provider: "test", model: "test" });
 });
 
 test("Toggle activation starts and stops on separate shortcut presses", async ({ page }) => {
@@ -4579,7 +4645,7 @@ test("silent microphone input does not insert a hallucinated transcript", async 
   const composer = page.getByRole("textbox", { name: "Message Pi" });
   await page.getByRole("button", { name: "Start voice dictation" }).click();
   await page.getByRole("button", { name: "Stop voice dictation" }).click();
-  await expect(page.getByText("No microphone signal detected. Check Voice → Microphone and Chrome site settings.")).toBeVisible();
+  await expect(page.getByText(/No microphone signal detected/)).toHaveCount(0);
   await expect(composer).toHaveValue("");
 });
 
@@ -4615,13 +4681,44 @@ test("Voice microphone test shows the shared live recorder monitor", async ({ pa
       createAnalyser() { return new MockAnalyser(); }
       createGain() { return { gain: { value: 0 }, connect() {}, disconnect() {} }; }
     }
+    class MockMediaRecorder {
+      static isTypeSupported(type) { return type === "audio/webm;codecs=opus"; }
+      constructor(stream, options = {}) { this.stream = stream; this.mimeType = options.mimeType || "audio/webm"; this.state = "inactive"; this.ondataavailable = null; this.onstop = null; this.onerror = null; }
+      start() { this.state = "recording"; }
+      stop() {
+        if (this.state === "inactive") return;
+        window.__voiceRecorderStoppedAt = performance.now();
+        this.state = "inactive";
+        this.ondataavailable?.({ data: new Blob(["mock microphone recording"], { type: this.mimeType }) });
+        this.onstop?.();
+      }
+    }
+    class MockAudio {
+      constructor(url) { this.url = url; this.onended = null; }
+      play() { return Promise.resolve(); }
+      pause() {}
+      load() {}
+      removeAttribute() {}
+    }
     Object.defineProperty(window, "AudioContext", { configurable: true, value: MockAudioContext });
+    Object.defineProperty(window, "MediaRecorder", { configurable: true, writable: true, value: MockMediaRecorder });
+    Object.defineProperty(window, "Audio", { configurable: true, value: MockAudio });
+    window.__voiceCreatedUrls = [];
+    window.__voiceRevokedUrls = [];
+    Object.defineProperty(window, "__voiceInputConstraints", { configurable: true, value: null, writable: true });
+    const createObjectUrl = URL.createObjectURL.bind(URL);
+    URL.createObjectURL = (blob) => { const url = createObjectUrl(blob); window.__voiceCreatedUrls.push(url); return url; };
+    const revokeObjectUrl = URL.revokeObjectURL.bind(URL);
+    URL.revokeObjectURL = (url) => { window.__voiceRevokedUrls.push(url); revokeObjectUrl(url); };
     Object.defineProperty(navigator, "mediaDevices", { configurable: true, value: {
       enumerateDevices: async () => [{ kind: "audioinput", deviceId: "mic-1", groupId: "group-1", label: "Desk microphone" }],
-      getUserMedia: async () => ({
-        getAudioTracks: () => [{ label: "Desk microphone", getSettings: () => ({ deviceId: "mic-1", sampleRate: 48_000, channelCount: 1 }) }],
-        getTracks: () => [{ stop() {} }],
-      }),
+      getUserMedia: async (constraints) => {
+        window.__voiceInputConstraints = constraints;
+        return {
+          getAudioTracks: () => [{ label: "Desk microphone", getSettings: () => ({ deviceId: "mic-1", sampleRate: 48_000, channelCount: 1 }) }],
+          getTracks: () => [{ stop() {} }],
+        };
+      },
     } });
   });
 
@@ -4633,7 +4730,21 @@ test("Voice microphone test shows the shared live recorder monitor", async ({ pa
   await expect(activation).toHaveValue("push_to_talk");
   await activation.selectOption("toggle");
   await expect(activation).toHaveValue("toggle");
+  await dialog.locator("#voice-input-device").selectOption("mic-1");
+  await expect.poll(() => page.evaluate(() => localStorage.getItem("conduit:voice-dictation") || "")).toBe("");
+  await dialog.getByRole("button", { name: "Save Voice settings" }).click();
+  await expect(dialog.getByText("Saved", { exact: true })).toBeVisible();
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem("conduit:voice-dictation") || "{}").activation)).toBe("toggle");
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem("conduit:voice-dictation") || "{}").inputDeviceId)).toBe("mic-1");
+  await page.keyboard.press("Escape");
+  await expect(dialog).toBeHidden();
+  await page.reload();
+  await page.keyboard.press("Control+,");
+  await expect(dialog).toBeVisible();
+  await dialog.getByRole("tab", { name: "Voice" }).click();
+  await expect(dialog.locator("#voice-input-device")).toHaveValue("mic-1");
   await dialog.getByRole("button", { name: "Test microphone" }).click();
+  await expect.poll(() => page.evaluate(() => window.__voiceInputConstraints.audio.deviceId)).toEqual({ exact: "mic-1" });
   const waveform = dialog.locator(".settings-recorder-monitor");
   await expect(waveform).toBeVisible();
   await expect(waveform).toHaveAttribute("data-state", "listening");
@@ -4643,10 +4754,28 @@ test("Voice microphone test shows the shared live recorder monitor", async ({ pa
   await page.waitForTimeout(1_700);
   await expect(dialog.getByRole("button", { name: "Stop microphone test" })).toBeVisible();
   await expect(dialog.getByText("Signal detected · listening until you stop.")).toBeVisible();
+  await page.evaluate(() => { window.__voiceStopRequestedAt = performance.now(); });
   await dialog.getByRole("button", { name: "Stop microphone test" }).click();
   await expect(waveform).toHaveAttribute("data-state", "stopped", { timeout: 4_000 });
+  await expect.poll(() => page.evaluate(() => (window.__voiceRecorderStoppedAt || 0) - (window.__voiceStopRequestedAt || 0))).toBeGreaterThanOrEqual(100);
   await expect(dialog.getByText("Signal detected")).toBeVisible();
   await expect(waveform).toContainText("Level");
+  await expect(dialog.getByRole("button", { name: "Play test recording" })).toBeVisible();
+  await dialog.getByRole("button", { name: "Play test recording" }).click();
+  await expect(dialog.getByRole("button", { name: "Playing test recording…" })).toBeVisible();
+  await expect(dialog.getByRole("button", { name: "Stop playback" })).toBeEnabled();
+  await dialog.getByRole("button", { name: "Stop playback" }).click();
+  await expect(dialog.getByRole("button", { name: "Play test recording" })).toBeVisible();
+  const firstRecordingUrl = await page.evaluate(() => window.__voiceCreatedUrls.at(-1));
+  await page.evaluate(() => Object.defineProperty(window, "MediaRecorder", { configurable: true, writable: true, value: undefined }));
+  await dialog.getByRole("button", { name: "Test microphone" }).click();
+  await expect.poll(() => page.evaluate((url) => window.__voiceRevokedUrls.includes(url), firstRecordingUrl)).toBe(true);
+  await dialog.getByRole("button", { name: "Stop microphone test" }).click();
+  await expect(dialog.getByText("Playback is unavailable in this browser. Live microphone testing still works.")).toBeVisible();
+  await expect(dialog.getByRole("button", { name: "Play test recording" })).toHaveCount(0);
+  await page.keyboard.press("Escape");
+  await expect(dialog).toBeHidden();
+  await expect.poll(() => page.evaluate(() => window.__voiceRevokedUrls.length)).toBeGreaterThan(0);
 });
 
 test("stopping dictation releases a microphone stream that resolves after cancellation", async ({ page }) => {

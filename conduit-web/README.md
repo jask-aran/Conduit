@@ -229,10 +229,19 @@ recording state. The browser captures 16 kHz mono PCM with an `AudioWorklet`
 and sends it only to authenticated `WS /v0/dictation/stream`. Settings → Voice
 can select a browser microphone, refresh the device list, and run an in-memory
 input-level test until the user stops it; a 60-second safety cap prevents an
-abandoned test from running forever. Chrome site settings still control
-permission and the selected input must be available there. Conduit rejects a
-completed transcript when the capture stream reports no signal, which prevents
-silence from becoming a short hallucinated word. Settings → Voice can use managed
+abandoned test from running forever. When the browser supports a playable
+`MediaRecorder` format, the stopped test also exposes local Play and Stop
+controls. The recording stays in browser memory, is never uploaded, and is
+released when replaced or when Settings closes. Browsers without a playable
+recorder still provide the live level test and show why playback is unavailable.
+Chrome site settings still control permission. The selected input must be
+available there. Voice shortcut,
+activation, auto-send, microphone, transcription source, and model changes stay
+in a draft until **Save Voice settings**. A selected microphone remains stored
+until capture reports that it is unavailable; Conduit then shows a recovery
+toast without silently changing the device. Conduit ignores a no-signal
+completion from a short intentional stop, and reports sustained silence only
+after five seconds. Settings → Voice can use managed
 Whisper Tiny English, Whisper Base, Whisper Small, or Parakeet TDT 0.6B v3,
 and has first-class provider/model profiles for OpenAI, Deepgram, and Groq.
 Remote None, Bearer, and custom API-key-header credentials are stored server-side in `data/voice.json`
@@ -252,7 +261,8 @@ through Transformers.js; Parakeet runs as one unprivileged loopback worker.
 File-upload providers and managed
 Whisper buffer one bounded utterance in memory and transcribe it once after
 stop; live WebSocket adapters can provide provisional text during capture.
-Starting an installation also persists that local selection, but never occurs
+Installing a model is separate from selecting the active model. The selected
+model is persisted with **Save Voice settings**, and installation never occurs
 without explicit license acceptance.
 
 OpenAI defaults to `gpt-transcribe`, with GPT-4o mini/full transcription choices;
@@ -479,8 +489,9 @@ produces `client_error` with `code` and `message`.
 ## Voice dictation protocol
 
 `WS /v0/dictation/stream` is authenticated like every other upgrade. Browser
-binary frames are signed 16-bit little-endian mono PCM at 16 kHz. The only
-browser control frame is `{ "type": "stop" }`. The
+binary frames are signed 16-bit little-endian mono PCM at 16 kHz. The browser
+stop control is `{ "type": "stop" }`; it may include the optional numeric
+`audioBytesSent` diagnostic field. The
 `parakeet_pcm_ws_v1` adapter forwards binary PCM, sends an explicit stop control,
 and accepts only its documented partial/final/end/error JSON event vocabulary;
 the `openai_audio_sse_v1` adapter sends an in-memory WAV utterance and consumes
@@ -490,21 +501,33 @@ Each file-upload adapter makes one finalization request per utterance. The
 internal managed-Whisper adapter transcribes one buffered PCM utterance without
 opening a network listener. Conduit emits
 `ready`, `partial`, `final`, `end_of_speech`, `settlement_deadline`, `completed`,
-and `error`. `completed` includes `settlementMs` and `finalWithinDeadline`, and
-clients must never infer auto-send timing from browser clocks.
+and `error`. `end_of_speech` is an upstream pause boundary; it does not stop
+the browser session. The user stop or the five-minute limit finalizes the
+session. `completed` includes `settlementMs`, `finalWithinDeadline`,
+`reason`, `audioBytes`, `audioDurationMs`, and non-secret adapter/provider/model
+metadata; clients must never infer auto-send timing from browser clocks. The
+browser also emits `conduit:voice-dictation-metrics` with the completion
+diagnostics.
 
 The browser keeps the selected microphone ID in local settings and applies it
 as an exact `getUserMedia` device constraint. The input test measures the live
 stream until the user stops it, with a 60-second safety cap. A missing signal is
 reported in Settings → Voice and blocks transcript insertion for that
-utterance.
+utterance. Dictation sessions accept up to five minutes and the client surfaces
+the completion reason when the server reaches that limit.
+
+Successful dictations with at least one second of server-received PCM and
+non-empty transcript output are retained under `data/voice/recordings` as
+timestamped WAV/JSON diagnostic pairs. The archive keeps the latest 20 pairs;
+the JSON sidecar contains non-secret completion, provider, model, and byte
+metadata. Settings microphone tests remain browser-local and are not archived.
 
 The server limits concurrent dictation sessions, audio duration and bytes,
 frame/event sizes, WebSocket buffering, connect time, and finalisation time.
 Settings-created remote endpoints require WSS/HTTPS, reject URL credentials and
 query strings, resolve only to public addresses, and pin the checked address for
-WebSocket connection setup. Raw audio remains in memory and is never persisted
-or written to Pi JSONL.
+WebSocket connection setup. Diagnostic WAV files use a private data directory
+and do not contain credentials or Pi JSONL content.
 
 ## Workspace terminal protocol
 

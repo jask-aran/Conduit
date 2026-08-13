@@ -68,6 +68,7 @@ export function loadConfig(env = process.env) {
     searchConfigFile: absolute(env.CONDUIT_SEARCH_CONFIG_FILE || path.join(piAgentDir, "web-search.json")),
     voiceConfigFile: absolute(env.CONDUIT_VOICE_CONFIG_FILE || path.join(dataRoot, "voice.json")),
     voiceModelRoot: absolute(env.CONDUIT_VOICE_MODEL_ROOT || path.join(dataRoot, "voice", "models")),
+    voiceRecordingsRoot: absolute(env.CONDUIT_VOICE_RECORDINGS_ROOT || path.join(dataRoot, "voice", "recordings")),
     installations,
     defaultInstallationId: "conduit-pinned",
     bridgeSystemPrompt: path.join(templatesRoot, "conduit-workspace", "SYSTEM.md"),

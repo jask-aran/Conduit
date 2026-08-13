@@ -295,7 +295,7 @@ export class VoiceModelManager {
     const modelRoot = this.modelRoot(model.id);
     const binary = path.join(modelRoot, "bin/parakeet");
     const runtimeLibrary = path.join(modelRoot, "runtime/lib/libonnxruntime.so");
-    const child = spawn(binary, ["-port", String(port), "-models", path.join(modelRoot, "models"), "-workers", "1", "-ffmpeg=false"], {
+    const child = spawn(binary, ["-long-audio", "-port", String(port), "-models", path.join(modelRoot, "models"), "-workers", "1", "-ffmpeg=false"], {
       stdio: ["ignore", "ignore", "pipe"],
       env: { ...process.env, ONNXRUNTIME_LIB: runtimeLibrary, LD_LIBRARY_PATH: path.dirname(runtimeLibrary) },
     });

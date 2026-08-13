@@ -38,6 +38,7 @@ import { createTerminalStream } from "./server/terminal-stream.js";
 import { createDictationStream } from "./server/dictation-stream.js";
 import { VoiceRuntime } from "./server/voice-runtime.js";
 import { VoiceModelManager } from "./server/voice-model-manager.js";
+import { VoiceRecordingStore } from "./server/voice-recording-store.js";
 import { registerAttachmentRoutes } from "./server/routes/attachments.js";
 import { registerAuthRoutes } from "./server/routes/auth.js";
 import { registerPiAuthRoutes } from "./server/routes/pi-auth.js";
@@ -87,6 +88,7 @@ await searchSettings.initialize();
 const voiceSettings = new VoiceSettingsStore({ filePath: config.voiceConfigFile, environment: process.env });
 await voiceSettings.initialize();
 const voiceModel = new VoiceModelManager({ root: config.voiceModelRoot });
+const voiceRecordingStore = new VoiceRecordingStore({ root: config.voiceRecordingsRoot });
 const voiceRuntime = new VoiceRuntime({ settings: voiceSettings, modelManager: voiceModel });
 const modelProfileRuntime = new ModelProfileRuntime({
   agentDir: config.piAgentDir,
@@ -569,6 +571,7 @@ const terminalStream = createTerminalStream({ terminals, wss });
 const dictationStream = createDictationStream({
   wss,
   voiceRuntime,
+  recordingStore: voiceRecordingStore,
 });
 const liveSessionStream = createLiveSessionStream({
   manager,

@@ -2,10 +2,11 @@ import { createEffect, createMemo, createSignal, For, on, onCleanup, Show } from
 import { Combobox as KCombobox } from "@kobalte/core/combobox";
 import * as KDialog from "@kobalte/core/dialog";
 import { CheckIcon, SearchIcon } from "lucide-solid";
+import { toast } from "solid-sonner";
 import { Button, Field, FieldGroup, FieldLabel, Input, Spinner } from "@/components/primitives";
 import { api } from "../api/client";
 import { MARKDOWN_RENDERER_OPTIONS, type MarkdownRendererId } from "../chat/markdown-settings";
-import { formatMicrophoneError, hasAudioSignal, listAudioInputDevices, MAX_AUDIO_INPUT_TEST_DURATION_MS, startAudioInputTest as beginAudioInputTest, type AudioInputDevice, type AudioInputTestResult, type AudioInputTestSession, } from "../chat/voice-audio";
+import { formatMicrophoneError, hasAudioSignal, isUnavailableAudioInputError, listAudioInputDevices, MAX_AUDIO_INPUT_TEST_DURATION_MS, revokeAudioInputRecording, startAudioInputTest as beginAudioInputTest, type AudioInputDevice, type AudioInputTestResult, type AudioInputTestSession, } from "../chat/voice-audio";
 import { shortcutFromKeyboardEvent } from "../chat/voice-dictation";
 import { createVoiceWaveformController, VoiceWaveform } from "../chat/voice-waveform";
 import type { Installation, ModelOption, Project, Template } from "../api/contracts";
@@ -17,6 +18,7 @@ import { ShortcutsSettings } from "./shortcuts-settings";
 const sections = ["general", "ui", "shortcuts", "models", "profiles", "runtime", "workspaces", "voice", "search", "auth"] as const;
 type Section = typeof sections[number];
 const label = (section: Section) => section === "ui" ? "UI" : section[0]!.toUpperCase() + section.slice(1);
+type VoiceDictationSettings = { shortcut: string; activation: "push_to_talk" | "toggle"; autoSend: boolean; inputDeviceId: string };
 
 interface RuntimeSettings {
   maxLiveProcesses: number;
@@ -119,8 +121,8 @@ export function Settings(props: {
   onWorkspaceDefaultChange: (id: string, templateId: string | null) => Promise<Project>;
   markdownRenderer: MarkdownRendererId;
   onMarkdownRendererChange: (renderer: MarkdownRendererId) => void;
-  voiceSettings: { shortcut: string; activation: "push_to_talk" | "toggle"; autoSend: boolean; inputDeviceId: string };
-  onVoiceSettingsChange: (settings: { shortcut: string; activation: "push_to_talk" | "toggle"; autoSend: boolean; inputDeviceId: string }) => void;
+  voiceSettings: VoiceDictationSettings;
+  onVoiceSettingsSave: (settings: VoiceDictationSettings) => void;
   sidebarChatLimit: number;
   onSidebarChatLimitChange: (limit: number) => void;
   shortcuts: ShortcutManager;
@@ -156,19 +158,72 @@ export function Settings(props: {
   const [voiceBusy, setVoiceBusy] = createSignal(false);
   const [voiceLicenseAccepted, setVoiceLicenseAccepted] = createSignal(false);
   const [voiceTestResult, setVoiceTestResult] = createSignal("");
+  const [voiceDraft, setVoiceDraft] = createSignal<VoiceDictationSettings>({ ...props.voiceSettings });
+  const [voiceSettingsSaved, setVoiceSettingsSaved] = createSignal(false);
+  const [voiceServerEdited, setVoiceServerEdited] = createSignal(false);
   const [audioInputDevices, setAudioInputDevices] = createSignal<AudioInputDevice[]>([]);
   const [audioInputStatus, setAudioInputStatus] = createSignal<"idle" | "loading" | "ready" | "error">("idle");
   const [audioInputError, setAudioInputError] = createSignal("");
   const [audioInputBusy, setAudioInputBusy] = createSignal(false);
   const [audioInputTest, setAudioInputTest] = createSignal<AudioInputTestResult | null>(null);
   const [audioInputSignalDetected, setAudioInputSignalDetected] = createSignal(false);
+  const [audioInputPlayback, setAudioInputPlayback] = createSignal(false);
   const audioInputWaveform = createVoiceWaveformController();
   let audioInputSession: AudioInputTestSession | null = null;
+  let playbackAudio: HTMLAudioElement | null = null;
   let runtimeRequest = 0;
   let searchRequest = 0;
   let search!: HTMLInputElement;
+  let voiceInputSelect!: HTMLSelectElement;
   let returnFocus: HTMLElement | null = null;
   let wasOpen = false;
+  const stopAudioInputPlayback = () => {
+    const audio = playbackAudio;
+    playbackAudio = null;
+    setAudioInputPlayback(false);
+    if (!audio) return;
+    audio.onended = null;
+    audio.pause();
+    audio.currentTime = 0;
+    audio.removeAttribute("src");
+    audio.load();
+  };
+  const clearAudioInputTest = () => {
+    stopAudioInputPlayback();
+    revokeAudioInputRecording(audioInputTest()?.recording);
+    setAudioInputTest(null);
+  };
+  const playAudioInputTest = async () => {
+    const recording = audioInputTest()?.recording;
+    if (!recording) return;
+    stopAudioInputPlayback();
+    let audio: HTMLAudioElement;
+    try { audio = new Audio(recording.url); }
+    catch {
+      toast.error("The microphone test recording could not be played.");
+      return;
+    }
+    playbackAudio = audio;
+    audio.onended = () => {
+      if (playbackAudio !== audio) return;
+      playbackAudio = null;
+      setAudioInputPlayback(false);
+      audio.removeAttribute("src");
+      audio.load();
+    };
+    setAudioInputPlayback(true);
+    try {
+      await audio.play();
+    } catch {
+      if (playbackAudio === audio) {
+        playbackAudio = null;
+        setAudioInputPlayback(false);
+      }
+      audio.removeAttribute("src");
+      audio.load();
+      toast.error("The microphone test recording could not be played.");
+    }
+  };
   const stopAudioInputTest = () => audioInputSession?.stop();
   const focusSearch = () => requestAnimationFrame(() => requestAnimationFrame(() => search?.focus()));
   const dismissEscape = (event: KeyboardEvent) => {
@@ -186,7 +241,7 @@ export function Settings(props: {
     if (open && !wasOpen) returnFocus = document.activeElement as HTMLElement | null;
     wasOpen = open;
     if (!open) {
-      stopAudioInputTest();
+      audioInputSession?.dispose();
       audioInputSession = null;
       setAudioInputBusy(false);
       setApiKey("");
@@ -194,11 +249,14 @@ export function Settings(props: {
       setSearchKey("");
       setVoiceSecret("");
       setVoiceTestResult("");
+      setVoiceSettingsSaved(false);
       audioInputWaveform.reset();
-      setAudioInputTest(null);
+      clearAudioInputTest();
       setAudioInputSignalDetected(false);
       return;
     }
+    setVoiceDraft({ ...props.voiceSettings });
+    setVoiceSettingsSaved(false);
     const initial = props.initialSection || "models";
     setSection(initial);
     setWorkspaceId(props.initialWorkspaceId || props.projects.find((project) => project.kind === "workspace" || ["linked", "created", "cloned"].includes(project.origin || ""))?.id || null);
@@ -207,8 +265,9 @@ export function Settings(props: {
   }));
 
   onCleanup(() => {
-    audioInputSession?.stop();
+    audioInputSession?.dispose();
     audioInputSession = null;
+    clearAudioInputTest();
   });
 
   createEffect(() => {
@@ -370,12 +429,14 @@ export function Settings(props: {
     finally { setSearchSaving(false); }
   };
 
-  const loadVoiceSettings = async ({ quiet = false } = {}) => {
+  const loadVoiceSettings = async ({ quiet = false, preserveLocalSelection = false } = {}) => {
     if (!quiet) setVoiceStatus("loading");
     setVoiceError("");
     try {
       const loaded = await api<VoiceServerSettings>("/v0/voice/settings");
-      setVoiceServerSettings(loaded);
+      const previous = voiceServerSettings();
+      setVoiceServerSettings(preserveLocalSelection && previous ? { ...loaded, localModelId: previous.localModelId } : loaded);
+      if (!preserveLocalSelection) setVoiceServerEdited(false);
       setVoiceStatus("ready");
     } catch (error) {
       setVoiceError((error as Error).message);
@@ -402,12 +463,26 @@ export function Settings(props: {
     if (props.open && section() === "voice") void loadAudioInputs();
   });
   createEffect(() => {
+    const selectedDeviceId = voiceDraft().inputDeviceId;
+    audioInputDevices();
+    if (voiceInputSelect && audioInputStatus() === "ready") voiceInputSelect.value = selectedDeviceId;
+  });
+  createEffect(() => {
     if (!props.open || section() !== "voice" || !voiceServerSettings()?.local?.installingModelId) return;
-    const timer = window.setInterval(() => void loadVoiceSettings({ quiet: true }), 750);
+    const timer = window.setInterval(() => void loadVoiceSettings({ quiet: true, preserveLocalSelection: true }), 750);
     onCleanup(() => window.clearInterval(timer));
   });
 
-  const updateVoiceServer = (patch: Partial<VoiceServerSettings>) => setVoiceServerSettings((current) => current ? { ...current, ...patch } : current);
+  const updateVoiceDraft = (patch: Partial<VoiceDictationSettings>) => {
+    setVoiceDraft((current) => ({ ...current, ...patch }));
+    setVoiceSettingsSaved(false);
+  };
+  const editVoiceServer = (update: (current: VoiceServerSettings) => VoiceServerSettings) => {
+    setVoiceServerSettings((current) => current ? update(current) : current);
+    setVoiceServerEdited(true);
+    setVoiceSettingsSaved(false);
+  };
+  const updateVoiceServer = (patch: Partial<VoiceServerSettings>) => editVoiceServer((current) => ({ ...current, ...patch }));
   const selectedVoiceProvider = createMemo(() => voiceServerSettings()?.providers.find((provider) => provider.id === voiceServerSettings()?.provider));
   const selectedLocalVoiceModel = createMemo(() => voiceServerSettings()?.local?.models.find((model) => model.id === voiceServerSettings()?.localModelId));
   const persistVoiceServer = async (settings: VoiceServerSettings) => {
@@ -425,17 +500,24 @@ export function Settings(props: {
     });
     setVoiceSecret("");
     setVoiceServerSettings(saved);
+    setVoiceServerEdited(false);
     return saved;
   };
-  const saveVoiceServer = async () => {
+  const saveVoiceSettings = async () => {
     const settings = voiceServerSettings();
     if (!settings) return;
     setVoiceBusy(true);
     setVoiceError("");
     setVoiceTestResult("");
     try {
-      await persistVoiceServer(settings);
-    } catch (error) { setVoiceError((error as Error).message); }
+      if (!settings.locked) await persistVoiceServer(settings);
+      props.onVoiceSettingsSave(voiceDraft());
+      setVoiceSettingsSaved(true);
+      toast.success("Voice settings saved");
+    } catch (error) {
+      setVoiceError((error as Error).message);
+      toast.error((error as Error).message);
+    }
     finally { setVoiceBusy(false); }
   };
   const testVoiceServer = async () => {
@@ -445,7 +527,7 @@ export function Settings(props: {
     setVoiceError("");
     setVoiceTestResult("");
     try {
-      if (!settings.locked) await persistVoiceServer(settings);
+      if (voiceServerEdited()) throw new Error("Save Voice settings before testing the transcription connection.");
       await api("/v0/voice/test", { method: "POST", body: "{}" });
       setVoiceTestResult("Connection successful");
       await loadVoiceSettings({ quiet: true });
@@ -456,12 +538,13 @@ export function Settings(props: {
     if (audioInputBusy()) return;
     setAudioInputBusy(true);
     setAudioInputError("");
-    setAudioInputTest(null);
+    clearAudioInputTest();
     setAudioInputSignalDetected(false);
     audioInputWaveform.reset();
+    const selectedDeviceId = voiceDraft().inputDeviceId;
     let session: AudioInputTestSession | null = null;
     try {
-      session = beginAudioInputTest(props.voiceSettings.inputDeviceId, {
+      session = beginAudioInputTest(selectedDeviceId, {
         maxDurationMs: MAX_AUDIO_INPUT_TEST_DURATION_MS,
         onLevel: (level) => {
           audioInputWaveform.push(level);
@@ -475,7 +558,13 @@ export function Settings(props: {
       await loadAudioInputs();
       if (!result.signalDetected) setAudioInputError("No microphone signal detected. Check Chrome site settings and the selected input.");
     } catch (error) {
-      if (audioInputSession === session) setAudioInputError(formatMicrophoneError(error));
+      if (audioInputSession === session) {
+        const message = formatMicrophoneError(error);
+        setAudioInputError(message);
+        if (selectedDeviceId && isUnavailableAudioInputError(error)) {
+          toast.error("The selected microphone is no longer available. Choose another device and save Voice settings.");
+        }
+      }
     } finally {
       if (audioInputSession === session) {
         audioInputSession = null;
@@ -494,7 +583,7 @@ export function Settings(props: {
     setVoiceError("");
     try {
       const loaded = await api<VoiceServerSettings>("/v0/voice/model/install", { method: "POST", body: JSON.stringify({ modelId, licenseAccepted: voiceLicenseAccepted() }) });
-      setVoiceServerSettings(loaded);
+      setVoiceServerSettings((current) => current ? { ...loaded, localModelId: current.localModelId } : loaded);
     } catch (error) { setVoiceError((error as Error).message); }
     finally { setVoiceBusy(false); }
   };
@@ -656,9 +745,9 @@ export function Settings(props: {
                 <p class="search-settings-intro">Audio stays in memory and passes through authenticated Conduit. Cloud credentials remain server-side and are never returned to the browser.</p>
                 <FieldGroup>
                   <div class="voice-input-test">
-                    <Field><FieldLabel for="voice-input-device">Microphone</FieldLabel><select id="voice-input-device" disabled={audioInputBusy()} value={props.voiceSettings.inputDeviceId} onChange={(event) => props.onVoiceSettingsChange({ ...props.voiceSettings, inputDeviceId: event.currentTarget.value })}>
+                    <Field><FieldLabel for="voice-input-device">Microphone</FieldLabel><select ref={voiceInputSelect} id="voice-input-device" disabled={audioInputBusy()} value={voiceDraft().inputDeviceId} onChange={(event) => updateVoiceDraft({ inputDeviceId: event.currentTarget.value })}>
                       <option value="">System default microphone</option>
-                      <Show when={props.voiceSettings.inputDeviceId && !audioInputDevices().some((device) => device.deviceId === props.voiceSettings.inputDeviceId)}><option value={props.voiceSettings.inputDeviceId}>Selected microphone unavailable</option></Show>
+                      <Show when={voiceDraft().inputDeviceId && !audioInputDevices().some((device) => device.deviceId === voiceDraft().inputDeviceId)}><option value={voiceDraft().inputDeviceId}>Selected microphone unavailable</option></Show>
                       <For each={audioInputDevices()}>{(device) => <option value={device.deviceId}>{device.label}</option>}</For>
                     </select><small>Chrome controls site permission. Choose the input that should feed dictation.</small></Field>
                     <div class="voice-actions"><Button variant="outline" size="sm" disabled={audioInputBusy() || audioInputStatus() === "loading"} onClick={() => void loadAudioInputs()}>Refresh microphones</Button><Button variant="outline" size="sm" disabled={audioInputStatus() === "loading"} onClick={() => audioInputBusy() ? stopAudioInputTest() : void testAudioInput()}>{audioInputBusy() ? <><Spinner />Stop microphone test</> : "Test microphone"}</Button></div>
@@ -668,19 +757,29 @@ export function Settings(props: {
                     <Show when={audioInputBusy() && audioInputSignalDetected()}><div class="voice-input-live-state" role="status">Signal detected · listening until you stop.</div></Show>
                     <Show when={audioInputStatus() === "error" && !audioInputError()}><p role="alert" class="settings-inline-error">Microphone list could not be loaded.</p></Show>
                     <Show when={audioInputTest()}>{(result) => <div class="voice-input-result" data-signal={result().signalDetected ? "detected" : "missing"}><strong>{result().signalDetected ? "Signal detected" : "No signal detected"}</strong><small>{result().label} · {result().sampleRate.toLocaleString()} Hz · peak {result().peak.toFixed(3)}</small></div>}</Show>
+                    <Show when={audioInputTest()?.recording}>
+                      <div class="voice-input-playback">
+                        <span>Test recording kept in browser memory.</span>
+                        <div class="voice-actions">
+                          <Button variant="outline" size="sm" disabled={audioInputPlayback()} onClick={() => void playAudioInputTest()}>{audioInputPlayback() ? "Playing test recording…" : "Play test recording"}</Button>
+                          <Button variant="outline" size="sm" disabled={!audioInputPlayback()} onClick={stopAudioInputPlayback}>Stop playback</Button>
+                        </div>
+                      </div>
+                    </Show>
+                    <Show when={audioInputTest()?.recordingError}><p role="status" class="voice-input-playback-error">{audioInputTest()?.recordingError}</p></Show>
                     <Show when={audioInputError()}><p role="alert" class="settings-inline-error">{audioInputError()}</p></Show>
                   </div>
-                  <Field><FieldLabel for="dictation-shortcut">Dictation shortcut</FieldLabel><Input id="dictation-shortcut" value={props.voiceSettings.shortcut} readOnly onKeyDown={(event) => {
+                  <Field><FieldLabel for="dictation-shortcut">Dictation shortcut</FieldLabel><Input id="dictation-shortcut" value={voiceDraft().shortcut} readOnly onKeyDown={(event) => {
                     event.preventDefault();
                     event.stopPropagation();
                     const shortcut = shortcutFromKeyboardEvent(event);
-                    if (shortcut) props.onVoiceSettingsChange({ ...props.voiceSettings, shortcut });
+                    if (shortcut) updateVoiceDraft({ shortcut });
                   }} /><small>Focus the field and press a shortcut. The microphone button remains a start/stop toggle.</small></Field>
-                  <Field><FieldLabel for="dictation-activation">Activation behaviour</FieldLabel><select id="dictation-activation" value={props.voiceSettings.activation} onChange={(event) => props.onVoiceSettingsChange({ ...props.voiceSettings, activation: event.currentTarget.value as "push_to_talk" | "toggle" })}>
+                  <Field><FieldLabel for="dictation-activation">Activation behaviour</FieldLabel><select id="dictation-activation" value={voiceDraft().activation} onChange={(event) => updateVoiceDraft({ activation: event.currentTarget.value as "push_to_talk" | "toggle" })}>
                     <option value="push_to_talk">Push to talk (hold)</option>
                     <option value="toggle">Toggle (press)</option>
-                  </select><small>{props.voiceSettings.activation === "toggle" ? "Press the shortcut once to start and again to stop." : "Hold the shortcut while you speak. Release it to stop."}</small></Field>
-                  <label class="dictation-auto-send"><input type="checkbox" checked={props.voiceSettings.autoSend} onChange={(event) => props.onVoiceSettingsChange({ ...props.voiceSettings, autoSend: event.currentTarget.checked })} /><span><strong>Auto-send timely final dictation</strong><small>Off by default. Conduit only submits a server-confirmed final transcript settled within one second.</small></span></label>
+                  </select><small>{voiceDraft().activation === "toggle" ? "Press the shortcut once to start and again to stop." : "Hold the shortcut while you speak. Release it to stop."}</small></Field>
+                  <label class="dictation-auto-send"><input type="checkbox" checked={voiceDraft().autoSend} onChange={(event) => updateVoiceDraft({ autoSend: event.currentTarget.checked })} /><span><strong>Auto-send timely final dictation</strong><small>Off by default. Conduit only submits a server-confirmed final transcript settled within one second.</small></span></label>
                   <Field><FieldLabel for="voice-mode">Transcription source</FieldLabel><select id="voice-mode" disabled={voiceServerSettings()!.locked || voiceBusy()} value={voiceServerSettings()!.mode} onChange={(event) => {
                     const mode = event.currentTarget.value as VoiceServerSettings["mode"];
                     updateVoiceServer({ mode });
@@ -696,19 +795,19 @@ export function Settings(props: {
                       <Field><FieldLabel for="voice-provider">Provider</FieldLabel><select id="voice-provider" disabled={voiceServerSettings()!.locked || voiceBusy()} value={voiceServerSettings()!.provider} onChange={(event) => {
                         const provider = voiceServerSettings()!.providers.find((candidate) => candidate.id === event.currentTarget.value)!;
                         setVoiceSecret("");
-                        setVoiceServerSettings((current) => current ? { ...current, provider: provider.id, adapter: provider.adapter, endpoint: provider.endpoint, model: provider.models[0]?.id || "", auth: { ...current.auth, type: provider.id === "custom" ? current.auth.type : "bearer", configured: false, source: null, removable: false } } : current);
+                        editVoiceServer((current) => ({ ...current, provider: provider.id, adapter: provider.adapter, endpoint: provider.endpoint, model: provider.models[0]?.id || "", auth: { ...current.auth, type: provider.id === "custom" ? current.auth.type : "bearer", configured: false, source: null, removable: false } }));
                       }}><For each={voiceServerSettings()!.providers}>{(provider) => <option value={provider.id}>{provider.label}</option>}</For></select></Field>
                       <Show when={selectedVoiceProvider()?.models.length}><Field><FieldLabel for="voice-cloud-model">Model</FieldLabel><select id="voice-cloud-model" disabled={voiceServerSettings()!.locked || voiceBusy()} value={voiceServerSettings()!.model} onChange={(event) => updateVoiceServer({ model: event.currentTarget.value })}><For each={selectedVoiceProvider()!.models}>{(model) => <option value={model.id}>{model.label}</option>}</For></select><small>{selectedVoiceProvider()!.models.find((model) => model.id === voiceServerSettings()!.model)?.description}</small></Field></Show>
                       <Show when={voiceServerSettings()!.provider === "custom"}>
                         <Field><FieldLabel for="voice-adapter">Protocol adapter</FieldLabel><select id="voice-adapter" disabled={voiceServerSettings()!.locked || voiceBusy()} value={voiceServerSettings()!.adapter} onChange={(event) => updateVoiceServer({ adapter: event.currentTarget.value })}><For each={voiceServerSettings()!.adapters}>{(adapter) => <option value={adapter.id}>{adapter.label}</option>}</For></select><small>{voiceServerSettings()!.adapters.find((adapter) => adapter.id === voiceServerSettings()!.adapter)?.description}</small></Field>
                         <Field><FieldLabel for="voice-endpoint">Endpoint URL</FieldLabel><Input id="voice-endpoint" type="url" disabled={voiceServerSettings()!.locked || voiceBusy()} value={voiceServerSettings()!.endpoint} placeholder={voiceServerSettings()!.adapter === "parakeet_pcm_ws_v1" ? "wss://speech.example.com/ws" : "https://speech.example.com/v1/audio/transcriptions"} onInput={(event) => updateVoiceServer({ endpoint: event.currentTarget.value })} /><small>Custom UI endpoints require WSS or HTTPS and must resolve publicly. Administrators can configure private services through the environment.</small></Field>
                         <Show when={voiceServerSettings()!.adapter !== "parakeet_pcm_ws_v1"}><Field><FieldLabel for="voice-custom-model">Model parameter</FieldLabel><Input id="voice-custom-model" value={voiceServerSettings()!.model} placeholder="Optional model ID" onInput={(event) => updateVoiceServer({ model: event.currentTarget.value })} /></Field></Show>
-                        <Field><FieldLabel for="voice-auth-type">Authentication</FieldLabel><select id="voice-auth-type" disabled={voiceServerSettings()!.locked || voiceBusy()} value={voiceServerSettings()!.auth.type} onChange={(event) => setVoiceServerSettings((current) => current ? { ...current, auth: { ...current.auth, type: event.currentTarget.value as VoiceServerSettings["auth"]["type"] } } : current)}><option value="none">None</option><option value="bearer">Bearer token</option><option value="header">API-key header</option></select></Field>
-                        <Show when={voiceServerSettings()!.auth.type === "header"}><Field><FieldLabel for="voice-auth-header">Header name</FieldLabel><Input id="voice-auth-header" disabled={voiceServerSettings()!.locked || voiceBusy()} value={voiceServerSettings()!.auth.headerName} onInput={(event) => setVoiceServerSettings((current) => current ? { ...current, auth: { ...current.auth, headerName: event.currentTarget.value } } : current)} /></Field></Show>
+                      <Field><FieldLabel for="voice-auth-type">Authentication</FieldLabel><select id="voice-auth-type" disabled={voiceServerSettings()!.locked || voiceBusy()} value={voiceServerSettings()!.auth.type} onChange={(event) => editVoiceServer((current) => ({ ...current, auth: { ...current.auth, type: event.currentTarget.value as VoiceServerSettings["auth"]["type"] } }))}><option value="none">None</option><option value="bearer">Bearer token</option><option value="header">API-key header</option></select></Field>
+                      <Show when={voiceServerSettings()!.auth.type === "header"}><Field><FieldLabel for="voice-auth-header">Header name</FieldLabel><Input id="voice-auth-header" disabled={voiceServerSettings()!.locked || voiceBusy()} value={voiceServerSettings()!.auth.headerName} onInput={(event) => editVoiceServer((current) => ({ ...current, auth: { ...current.auth, headerName: event.currentTarget.value } }))} /></Field></Show>
                       </Show>
-                      <Show when={voiceServerSettings()!.provider !== "custom" || voiceServerSettings()!.auth.type !== "none"}><Field><FieldLabel for="voice-secret">{selectedVoiceProvider()?.authLabel || "Credential"}</FieldLabel><Input id="voice-secret" type="password" autocomplete="off" disabled={voiceServerSettings()!.locked || voiceBusy()} value={voiceSecret()} onInput={(event) => setVoiceSecret(event.currentTarget.value)} placeholder={voiceServerSettings()!.auth.configured ? "A credential is already stored" : "Enter credential"} /><small>{voiceServerSettings()!.auth.source === "environment" ? "Using the server environment" : voiceServerSettings()!.auth.configured ? "Stored securely by Conduit" : "Not configured"}</small></Field></Show>
+                      <Show when={voiceServerSettings()!.provider !== "custom" || voiceServerSettings()!.auth.type !== "none"}><Field><FieldLabel for="voice-secret">{selectedVoiceProvider()?.authLabel || "Credential"}</FieldLabel><Input id="voice-secret" type="password" autocomplete="off" disabled={voiceServerSettings()!.locked || voiceBusy()} value={voiceSecret()} onInput={(event) => { setVoiceSecret(event.currentTarget.value); setVoiceServerEdited(true); setVoiceSettingsSaved(false); }} placeholder={voiceServerSettings()!.auth.configured ? "A credential is already stored" : "Enter credential"} /><small>{voiceServerSettings()!.auth.source === "environment" ? "Using the server environment" : voiceServerSettings()!.auth.configured ? "Stored securely by Conduit" : "Not configured"}</small></Field></Show>
                     </FieldGroup>
-                    <div class="voice-actions"><Button disabled={voiceServerSettings()!.locked || voiceBusy()} onClick={() => void saveVoiceServer()}>{voiceBusy() ? <Spinner /> : null}Save provider</Button><Button variant="outline" disabled={voiceBusy()} onClick={() => void testVoiceServer()}>Test credentials</Button><Show when={voiceServerSettings()!.auth.removable}><Button variant="outline" disabled={voiceBusy()} onClick={() => void removeVoiceCredential()}>Remove credential</Button></Show></div>
+                    <div class="voice-actions"><Button variant="outline" disabled={voiceBusy() || voiceServerEdited()} onClick={() => void testVoiceServer()}>Test credentials</Button><Show when={voiceServerSettings()!.auth.removable}><Button variant="outline" disabled={voiceBusy()} onClick={() => void removeVoiceCredential()}>Remove credential</Button></Show></div>
                   </div>
                 </Show>
 
@@ -720,11 +819,11 @@ export function Settings(props: {
                     <Show when={voiceServerSettings()!.local?.progress}>{(progress) => <div class="voice-progress"><progress max={Math.max(1, progress().totalBytes)} value={progress().completedBytes} /><small>{progress().phase} · {progress().current || "preparing package"}</small></div>}</Show>
                     <Show when={selectedLocalVoiceModel()?.error}><p role="alert" class="settings-inline-error">{selectedLocalVoiceModel()!.error}</p></Show>
                     <Show when={selectedLocalVoiceModel() && !selectedLocalVoiceModel()!.installed && !voiceServerSettings()!.local?.installingModelId}><label class="dictation-auto-send"><input type="checkbox" checked={voiceLicenseAccepted()} onChange={(event) => setVoiceLicenseAccepted(event.currentTarget.checked)} /><span><strong>Accept {selectedLocalVoiceModel()!.license.id}</strong><small>{selectedLocalVoiceModel()!.license.attribution}.</small></span></label></Show>
-                    <div class="voice-actions"><Show when={voiceServerSettings()!.local?.installingModelId} fallback={<Show when={selectedLocalVoiceModel()?.installed} fallback={<Button disabled={voiceBusy() || !voiceLicenseAccepted()} onClick={() => void installVoiceModel(voiceServerSettings()!.localModelId)}>{voiceBusy() ? <Spinner /> : null}Install selected model</Button>}><Button disabled={voiceBusy()} onClick={() => void saveVoiceServer()}>Use selected model</Button><Button variant="outline" disabled={voiceBusy()} onClick={() => void testVoiceServer()}>Start and test</Button><Button variant="outline" disabled={voiceBusy()} onClick={() => void uninstallVoiceModel(voiceServerSettings()!.localModelId)}>Uninstall</Button></Show>}><Button variant="outline" disabled={voiceBusy()} onClick={() => void cancelVoiceInstall()}>Cancel installation</Button></Show></div>
+                    <div class="voice-actions"><Show when={voiceServerSettings()!.local?.installingModelId} fallback={<Show when={selectedLocalVoiceModel()?.installed} fallback={<Button disabled={voiceBusy() || !voiceLicenseAccepted()} onClick={() => void installVoiceModel(voiceServerSettings()!.localModelId)}>{voiceBusy() ? <Spinner /> : null}Install selected model</Button>}><Button variant="outline" disabled={voiceBusy()} onClick={() => void uninstallVoiceModel(voiceServerSettings()!.localModelId)}>Uninstall</Button></Show>}><Button variant="outline" disabled={voiceBusy()} onClick={() => void cancelVoiceInstall()}>Cancel installation</Button></Show></div>
                   </div>
                 </Show>
 
-                <Show when={voiceServerSettings()!.mode === "off"}><div class="voice-actions"><Button disabled={voiceServerSettings()!.locked || voiceBusy()} onClick={() => void saveVoiceServer()}>Save</Button></div></Show>
+                <div class="voice-settings-footer"><Button disabled={voiceBusy()} onClick={() => void saveVoiceSettings()}>{voiceBusy() ? <Spinner /> : null}Save Voice settings</Button><Show when={voiceSettingsSaved()}><span class="voice-save-success" role="status">Saved</span></Show></div>
                 <Show when={voiceTestResult()}><p role="status" class="voice-test-success">{voiceTestResult()}</p></Show>
                 <Show when={voiceError()}><p role="alert" class="settings-inline-error">{voiceError()}</p></Show>
               </div>
