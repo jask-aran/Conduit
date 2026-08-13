@@ -78,19 +78,24 @@ export function CommandHintBar(props: {
   context: CommandHintContext;
   mode: CommandHintMode;
   onToggleEdit?: () => void;
+  onDeleteSelected?: () => void;
+  onMoveSelected?: () => void;
 }) {
   const hints = () => hintsFor(props.context, props.mode);
-  const primaryCount = () => props.mode === "action-prefix" ? 4 : props.mode === "edit" ? 4 : props.mode === "browse" && props.context === "chat" ? 3 : 2;
+  const primaryCount = () => props.mode === "action-prefix" ? 4 : props.mode === "edit" ? 5 : props.mode === "browse" && props.context === "chat" ? 3 : 2;
   const primary = () => hints().slice(0, primaryCount());
   const secondary = () => hints().slice(primary().length);
-  const editAction = (hint: Hint) => props.context === "chat"
-    && (props.mode === "browse" || props.mode === "edit")
-    && (hint.label === "Edit chats" || hint.label === "Done")
-    ? props.onToggleEdit
-    : undefined;
+  const hintAction = (hint: Hint) => {
+    if (props.context !== "chat") return undefined;
+    if ((props.mode === "browse" || props.mode === "edit")
+      && (hint.label === "Edit chats" || hint.label === "Done")) return props.onToggleEdit;
+    if (props.mode === "edit" && hint.label === "Delete") return props.onDeleteSelected;
+    if (props.mode === "edit" && hint.label === "Move") return props.onMoveSelected;
+    return undefined;
+  };
   return <div class="command-hint-bar" role="note" aria-label="Keyboard shortcuts" data-mode={props.mode}>
     <div class="command-hint-items command-hint-primary">
-      <For each={primary()}>{(hint) => <HintItem hint={hint} onClick={editAction(hint)} />}</For>
+      <For each={primary()}>{(hint) => <HintItem hint={hint} onClick={hintAction(hint)} />}</For>
     </div>
     <div class="command-hint-items command-hint-secondary">
       <For each={secondary()}>{(hint) => <HintItem hint={hint} />}</For>

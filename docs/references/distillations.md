@@ -92,6 +92,13 @@ Add an entry through `$tacit-knowledge` after explicit approval or validated rep
 
 ## UI and component heuristics
 
+### Distinguish palette actions from shortcut hints
+
+- **Type:** Preference.
+- **Rule:** In a palette shortcut footer, enclose an actionable keycap and label in one outlined button and render its label with the foreground color. Keep non-interactive shortcut labels muted. Apply the foreground treatment only when the control is available to click.
+- **Scope:** `CommandHintBar` and future palette footer controls.
+- **Evidence:** The accepted `Edit chats` and `Done` controls established the convention; manual review then required the available `Delete` and `Move` controls to use the same white-label affordance.
+
 ### Keep browser-hosted shortcuts inside an app-owned path
 
 - **Type:** Gotcha.
