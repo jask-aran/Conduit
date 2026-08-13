@@ -42,6 +42,15 @@ const templates = [{
   tools: ["read", "write", "edit", "bash"],
 }];
 
+const nativeWorkspaceSuggestions = {
+  root: "/home/user",
+  allowlist: ["/home/user"],
+  defaultRoot: "/home/user",
+  defaultInputPath: "~",
+  suggestionRoot: "/home/user",
+  modes: ["managed", "linked", "created", "cloned"],
+};
+
 const unhandledApiRequests = new WeakMap();
 
 async function openSidebar(page, testInfo) {
@@ -115,7 +124,7 @@ test.beforeEach(async ({ page }) => {
     await route.fulfill({ json: { templates, defaultTemplateId: "chat" } });
   });
   await page.route("**/v0/workspaces/suggestions", async (route) => {
-    await route.fulfill({ json: { folders: [] } });
+    await route.fulfill({ json: { ...nativeWorkspaceSuggestions, folders: [] } });
   });
   await page.route("**/v0/preferences", async (route) => {
     const body = route.request().postDataJSON?.() || {};
@@ -976,6 +985,40 @@ test("creates a durable chat route and renders the primary surface", async ({ pa
   await expect(sendButton).toHaveAttribute("data-variant", "default");
 });
 
+test("shows one toast when an obsolete thinking level is recovered", async ({ page }) => {
+  const recoveryChat = { id: "session_recovery", projectId: "project_chat", status: "active", title: "Recovery chat" };
+  const recoveryModel = { ...model, thinkingLevels: ["medium", "high"] };
+  await page.unroute("**/v0/projects");
+  await page.route("**/v0/projects", (route) => route.fulfill({ json: { projects: [{ ...projects[0], sessions: [recoveryChat] }, projects[1]] } }));
+  await page.route("**/v0/chats/session_recovery", (route) => route.fulfill({ json: recoveryChat }));
+  await page.route("**/v0/sessions/session_recovery", (route) => route.fulfill({ json: {
+    ...recoveryChat,
+    model: recoveryModel.spec,
+    thinkingLevel: "off",
+    messages: [],
+    tools: [],
+    page: { before: null },
+  } }));
+  await page.unroute("**/v0/chats/*/models");
+  await page.route("**/v0/chats/*/models", (route) => route.fulfill({ json: {
+    installationId: "conduit-pinned",
+    runtimeKind: "conduit_profile",
+    models: [recoveryModel, plainModel],
+    model: recoveryModel.spec,
+    thinkingLevel: "medium",
+    defaultModel: recoveryModel.spec,
+    defaultThinkingLevel: "medium",
+    requiresAuthentication: false,
+    warnings: [],
+  } }));
+
+  await page.goto("/chat/session_recovery");
+  const recoveryToast = page.locator('[data-sonner-toast]').filter({ hasText: "Saved thinking level Off is no longer available. Using Medium." });
+  await expect(recoveryToast).toHaveCount(1);
+  await page.waitForTimeout(150);
+  await expect(recoveryToast).toHaveCount(1);
+});
+
 test("Workspace views use the nested palette page and terminal lives in the Workspace panel", async ({ page }, testInfo) => {
   const workspace = {
     id: "project_conduit",
@@ -1045,6 +1088,9 @@ test("the terminal renderer can use the xterm baseline over the same PTY transpo
   const canvas = page.locator(".terminal-canvas");
   await expect(canvas).toHaveAttribute("data-terminal-renderer", "xterm");
   await expect(canvas.locator(".xterm")).toBeVisible();
+  await canvas.click();
+  await page.keyboard.press(process.platform === "darwin" ? "Meta+K" : "Control+K");
+  await expect(page.getByRole("dialog", { name: "Command Palette" })).toHaveCount(0);
 });
 
 test("the terminal renderer can use Ghostty over the same PTY transport", async ({ page }) => {
@@ -1296,19 +1342,21 @@ test("long-press opens a sidebar context menu without navigating the chat", asyn
   await expect(menu).toHaveCount(0);
 });
 
-test("header search opens the command palette and the close control dismisses it", async ({ page }, testInfo) => {
+test("header command button opens the command palette and the close control dismisses it", async ({ page }, testInfo) => {
   await page.goto("/");
   await expect(page.locator(".palette-trigger")).toBeVisible();
   await page.locator(".palette-trigger").click();
   const palette = page.getByRole("dialog", { name: "Command Palette" });
   await expect(palette).toBeVisible();
-  if (testInfo.project.name === "mobile-chromium" || (page.viewportSize()?.width || 0) <= 480) {
+  if (testInfo.project.name === "mobile-chromium" || (page.viewportSize()?.width || 0) <= 760) {
     const [shellBox, viewport] = await Promise.all([
       palette.locator(".command-shell").boundingBox(),
       page.evaluate(() => ({ width: innerWidth, height: innerHeight })),
     ]);
-    expect(Math.abs(shellBox.width - viewport.width)).toBeLessThanOrEqual(2);
-    expect(Math.abs(shellBox.height - viewport.height)).toBeLessThanOrEqual(2);
+    expect(Math.abs(shellBox.x - 8)).toBeLessThanOrEqual(2);
+    expect(Math.abs(shellBox.y - 8)).toBeLessThanOrEqual(2);
+    expect(Math.abs(shellBox.width - (viewport.width - 16))).toBeLessThanOrEqual(2);
+    expect(Math.abs(shellBox.height - (viewport.height - 16))).toBeLessThanOrEqual(2);
   }
   await palette.getByRole("button", { name: "Close command palette" }).click();
   await expect(palette).toHaveCount(0);
@@ -1885,6 +1933,28 @@ test("cold-loads a viewport-filling thread pinned to the true bottom after Markd
   expect(worstDistanceFromBottom).toBeLessThanOrEqual(32);
 });
 
+test("uses the container workspace namespace for defaults and suggestions", async ({ page }, testInfo) => {
+  await page.unroute("**/v0/workspaces/suggestions");
+  await page.route("**/v0/workspaces/suggestions", (route) => route.fulfill({ json: {
+    root: "/workspaces",
+    allowlist: ["/workspaces"],
+    defaultRoot: "/workspaces",
+    defaultInputPath: "/workspaces",
+    suggestionRoot: "/workspaces",
+    modes: ["managed", "linked", "created", "cloned"],
+    folders: [{ name: "existing-repo", path: "/workspaces/existing-repo", displayPath: "/workspaces/existing-repo" }],
+  } }));
+  await page.goto("/");
+  await openSidebar(page, testInfo);
+  await page.getByRole("button", { name: "New workspace" }).click();
+  const dialog = page.getByRole("dialog", { name: "Add workspace" });
+  await expect(dialog.getByLabel("Existing folder")).toHaveAttribute("placeholder", "/workspaces/existing-folder");
+  await dialog.getByRole("radio", { name: /Create folder/ }).click();
+  await expect(dialog.getByLabel("Parent directory")).toHaveValue("/workspaces");
+  await expect(dialog.getByText(/New folders and clones start in \/workspaces/)).toBeVisible();
+  await expect(dialog.locator("#workspace-path-suggestions option[value='/workspaces/existing-repo']")).toHaveCount(1);
+});
+
 test("renders a selected chat before optional startup data and loads workspace suggestions on demand", async ({ page }, testInfo) => {
   let releaseOptional;
   const optionalGate = new Promise((resolve) => { releaseOptional = resolve; });
@@ -1910,7 +1980,7 @@ test("renders a selected chat before optional startup data and loads workspace s
   let suggestionRequests = 0;
   await page.route("**/v0/workspaces/suggestions", async (route) => {
     suggestionRequests += 1;
-    await route.fulfill({ json: { folders: [] } });
+    await route.fulfill({ json: { ...nativeWorkspaceSuggestions, folders: [] } });
   });
 
   await page.goto("/chat/session_existing");
@@ -2063,6 +2133,23 @@ test("error toasts can open a Runtime chat with safe diagnostics", async ({ page
       tools: ["read", "write", "edit", "bash"],
     }], defaultTemplateId: "chat" } });
   });
+  const diagnosticProjects = [{
+    ...projects[0],
+    sessions: [],
+  }, {
+    ...projects[1],
+    sessions: [{ id: "session_existing", projectId: "project_research", status: "active", title: "Existing chat" }],
+  }];
+  await page.unroute("**/v0/projects");
+  await page.route("**/v0/projects", (route) => route.fulfill({ json: { projects: diagnosticProjects } }));
+  await page.unroute("**/v0/chats/session_existing");
+  await page.route("**/v0/chats/session_existing", (route) => route.fulfill({ json: {
+    id: "session_existing", projectId: "project_research", status: "active", title: "Existing chat", model: model.spec, thinkingLevel: "medium",
+  } }));
+  await page.unroute("**/v0/sessions/session_existing");
+  await page.route("**/v0/sessions/session_existing", (route) => route.fulfill({ json: {
+    id: "session_existing", projectId: "project_research", status: "active", title: "Existing chat", model: model.spec, thinkingLevel: "medium", messages: [], tools: [], page: { before: null },
+  } }));
   await page.route("**/v0/sessions/session_existing/move", async (route) => {
     await route.fulfill({ status: 500, json: {
       error: "invalid_session_mapping",
@@ -2089,14 +2176,19 @@ test("error toasts can open a Runtime chat with safe diagnostics", async ({ page
   await page.goto("/chat/session_existing");
   await page.getByRole("button", { name: "Existing chat" }).click({ button: "right" });
   await page.getByRole("menuitem", { name: "Move to folder…" }).hover();
-  const research = page.getByRole("menuitemradio", { name: "Research" });
-  const researchBox = await research.boundingBox();
-  await page.mouse.move(researchBox.x + researchBox.width / 2, researchBox.y + researchBox.height / 2, { steps: 12 });
-  await research.click();
+  const chats = page.getByRole("menuitemradio", { name: "Chats" });
+  const chatsBox = await chats.boundingBox();
+  await page.mouse.move(chatsBox.x + chatsBox.width / 2, chatsBox.y + chatsBox.height / 2, { steps: 12 });
+  await chats.click();
 
   await expect(page.getByRole("button", { name: "Ask Runtime" })).toBeVisible();
+  const liveSessionRequest = page.waitForRequest((request) => {
+    if (!request.url().endsWith("/v0/live-sessions") || request.method() !== "POST") return false;
+    return request.postDataJSON()?.chatId === "runtime_chat";
+  });
   await page.getByRole("button", { name: "Ask Runtime" }).click();
   await expect(page).toHaveURL(/\/chat\/runtime_chat$/);
+  expect((await liveSessionRequest).postDataJSON().projectId).toBe("project_chat");
   await expect(page.locator(".chat-profile-posture")).toContainText("Runtime");
   await expect(page.getByRole("button", { name: "Profile Runtime" })).toBeDisabled();
   await expect.poll(() => page.evaluate(() => window.__runtimeChatCommands || [])).toContainEqual(expect.objectContaining({
@@ -2427,16 +2519,35 @@ test("opens a targeted Workspace settings card from its context menu", async ({ 
     origin: "linked",
     path: "/home/user/JaskFish",
     defaultTemplateId: null,
+    workspaceAppearance: { mode: "icon", value: "boxes", color: "mauve" },
     sessions: [],
   };
   await page.unroute("**/v0/projects");
   await page.route("**/v0/projects", (route) => route.fulfill({ json: { projects: [...projects, workspace] } }));
   await page.route("**/v0/projects/project_workspace", async (route) => {
     const body = route.request().postDataJSON();
-    await route.fulfill({ json: { ...workspace, defaultTemplateId: body.defaultTemplateId } });
+    await route.fulfill({ json: {
+      ...workspace,
+      defaultTemplateId: Object.hasOwn(body, "defaultTemplateId") ? body.defaultTemplateId : workspace.defaultTemplateId,
+      workspaceAppearance: Object.hasOwn(body, "workspaceAppearance") ? body.workspaceAppearance : workspace.workspaceAppearance,
+    } });
   });
   await page.goto("/");
   await openSidebar(page, testInfo);
+  await page.getByRole("button", { name: "JaskFish" }).click({ button: "right" });
+  await page.getByRole("menuitem", { name: "Identity", exact: true }).click();
+  const identity = page.getByRole("dialog", { name: "Workspace identity" });
+  await expect(identity.locator('[data-workspace-appearance="editor"]')).toBeVisible();
+  await identity.getByRole("button", { name: "Browse icons" }).click();
+  await identity.getByRole("radio", { name: "Atom" }).click();
+  const appearanceRequest = page.waitForRequest((request) => request.url().endsWith("/v0/projects/project_workspace")
+    && request.method() === "PATCH" && request.postDataJSON()?.workspaceAppearance);
+  await identity.getByRole("button", { name: "Save identity" }).click();
+  expect((await appearanceRequest).postDataJSON()).toEqual({ workspaceAppearance: { mode: "icon", value: "atom", color: "mauve" } });
+  await expect(identity).toBeHidden();
+  await openSidebar(page, testInfo);
+  await expect(page.getByRole("button", { name: "JaskFish" }).locator(".workspace-glyph")).toHaveAttribute("data-value", "atom");
+
   await page.getByRole("button", { name: "JaskFish" }).click({ button: "right" });
   await page.getByRole("menuitem", { name: "Workspace settings" }).click();
   const settings = page.getByRole("dialog", { name: "Settings" });
@@ -3663,13 +3774,12 @@ test("global commands and slash suggestions preserve their intended focus models
   const palette = page.getByRole("dialog", { name: "Command Palette" });
   await expect(palette).toBeVisible();
   const [paletteBox, viewport] = await Promise.all([palette.locator(".command-shell").boundingBox(), page.evaluate(() => ({ width: innerWidth, height: innerHeight }))]);
-  // ≤480px: full-bleed shell. Wider viewports: centered card (2px epsilon for
-  // Mobile Chromium's fractional scrollbar gutter).
-  if (viewport.width <= 480 || testInfo.project.name === "mobile-chromium") {
-    expect(paletteBox.x).toBeLessThanOrEqual(2);
-    expect(paletteBox.y).toBeLessThanOrEqual(2);
-    expect(Math.abs(paletteBox.width - viewport.width)).toBeLessThanOrEqual(2);
-    expect(Math.abs(paletteBox.height - viewport.height)).toBeLessThanOrEqual(2);
+  // Mobile layout: viewport-filling shell inside the persistent dialog frame.
+  if (viewport.width <= 760 || testInfo.project.name === "mobile-chromium") {
+    expect(Math.abs(paletteBox.x - 8)).toBeLessThanOrEqual(2);
+    expect(Math.abs(paletteBox.y - 8)).toBeLessThanOrEqual(2);
+    expect(Math.abs(paletteBox.width - (viewport.width - 16))).toBeLessThanOrEqual(2);
+    expect(Math.abs(paletteBox.height - (viewport.height - 16))).toBeLessThanOrEqual(2);
   } else {
     expect(Math.abs(paletteBox.x + paletteBox.width / 2 - viewport.width / 2)).toBeLessThanOrEqual(2);
     expect(Math.abs(paletteBox.y + paletteBox.height / 2 - viewport.height / 2)).toBeLessThanOrEqual(2);

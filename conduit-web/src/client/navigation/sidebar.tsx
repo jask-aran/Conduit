@@ -11,8 +11,10 @@ import {
   MessageSquareIcon,
   MessageSquarePlusIcon,
   PanelLeftIcon,
+  PaletteIcon,
   PencilIcon,
   PlusIcon,
+  SearchIcon,
   Settings2Icon,
   TerminalIcon,
   Trash2Icon,
@@ -45,7 +47,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/primitives";
-import type { ChatSummary, Project, RuntimeProcess, WorkspaceSuggestion } from "../api/contracts";
+import type { ChatSummary, Project, RuntimeProcess, WorkspacePolicy, WorkspaceSuggestion } from "../api/contracts";
 import { api } from "../api/client";
 import { WorkspaceGlyph } from "../project/workspace-appearance";
 import type { RuntimeStore } from "../state/runtime";
@@ -108,6 +110,7 @@ export function Sidebar(props: {
   runtime: RuntimeStore;
   connectivity: string;
   workspaceSuggestions: WorkspaceSuggestion[];
+  workspacePolicy: WorkspacePolicy | null;
   onWorkspaceSuggestionsNeeded: () => void;
   onNewChat: (project: Project) => Promise<void>;
   onOpenChat: (chat: ChatSummary, project: Project) => Promise<void>;
@@ -124,8 +127,10 @@ export function Sidebar(props: {
   onDeleteChats: (targets: ChatTarget[]) => Promise<string[]>;
   onDeleteProject: (project: Project) => Promise<void>;
   onOpenTerminal: (chat: ChatSummary, project: Project) => void;
+  onOpenWorkspaceIdentity: (project: Project) => void;
   onOpenSettings: (section?: string, workspaceId?: string | null) => void;
-  onOpenPalette: () => void;
+  onOpenPalette: (page?: string | null, initialQuery?: string | null) => void;
+  chatLimit: number;
   mobileOpen: boolean;
   onMobileOpenChange: (open: boolean) => void;
   command?: { type: string; nonce: number } | null;
@@ -253,6 +258,7 @@ export function Sidebar(props: {
   const [renameValue, setRenameValue] = createSignal("");
   const [deleting, setDeleting] = createSignal<DeleteTarget | null>(null);
   const [moving, setMoving] = createSignal<{ chat: ChatSummary; project: Project } | null>(null);
+  let appliedDefaultWorkspacePath = "";
   let handledCommandNonce: number | null = null;
 
   const currentProject = () => props.projects.find((item) => item.sessions.some((chat) => chat.id === props.selectedId))
@@ -292,6 +298,22 @@ export function Sidebar(props: {
     const available = new Set(props.projects.flatMap((project) => project.sessions.map((chat) => chat.id)));
     const retained = [...selectedChatIds()].filter((id) => available.has(id));
     if (retained.length !== selectedChatIds().size) setSelectedChatIds(new Set(retained));
+  });
+  createEffect(() => {
+    const selectedId = props.selectedId;
+    if (!selectedId) return;
+    const owner = props.projects.find((project) => project.sessions.some((chat) => chat.id === selectedId));
+    if (!owner) return;
+    setCollapsedProjectIds((current) => {
+      if (!current.has(owner.id)) return current;
+      const next = new Set(current);
+      next.delete(owner.id);
+      return next;
+    });
+    queueMicrotask(() => {
+      const row = document.querySelector<HTMLElement>(`[data-chat-id="${CSS.escape(selectedId)}"]`);
+      row?.scrollIntoView({ block: "nearest" });
+    });
   });
   createEffect(() => {
     const open = props.mobileOpen;
@@ -370,8 +392,18 @@ export function Sidebar(props: {
     setNewKind(kind);
   };
   const selectWorkspaceMode = (next: WorkspaceMode) => {
+    if (next === "linked" && path().trim() === appliedDefaultWorkspacePath) {
+      setPath("");
+      appliedDefaultWorkspacePath = "";
+    }
     setMode(next);
-    if ((next === "created" || next === "cloned") && !path().trim()) setPath("~");
+    if ((next === "created" || next === "cloned") && !path().trim()) {
+      const defaultPath = props.workspacePolicy?.defaultInputPath;
+      if (defaultPath) {
+        setPath(defaultPath);
+        appliedDefaultWorkspacePath = defaultPath;
+      }
+    }
   };
   const closeNewDialog = () => {
     if (submitting()) return;
@@ -384,6 +416,31 @@ export function Sidebar(props: {
     setCloneDirectoryName("");
     setWorkspacePreview(null);
     setPreviewError("");
+    appliedDefaultWorkspacePath = "";
+  };
+
+  createEffect(() => {
+    const defaultPath = props.workspacePolicy?.defaultInputPath;
+    if (newKind() !== "workspace" || !defaultPath || !["created", "cloned"].includes(mode()) || path().trim()) return;
+    setPath(defaultPath);
+    appliedDefaultWorkspacePath = defaultPath;
+  });
+
+  const workspacePathDescription = () => {
+    const policy = props.workspacePolicy;
+    if (!policy) return "Allowed workspace locations are loading.";
+    const roots = policy.allowlist.join(", ");
+    if (!roots) return "No workspace location is configured for this Conduit instance.";
+    if (mode() === "linked") return `Choose an existing folder under: ${roots}.`;
+    if (policy.defaultInputPath) return `New folders and clones start in ${policy.defaultInputPath}. Allowed locations: ${roots}.`;
+    return `Choose a parent folder under: ${roots}.`;
+  };
+
+  const workspacePathPlaceholder = () => {
+    const policy = props.workspacePolicy;
+    const root = policy?.defaultInputPath || policy?.allowlist[0];
+    if (root) return mode() === "linked" ? `${root.replace(/\/$/, "")}/existing-folder` : root;
+    return mode() === "linked" ? "an allowed folder" : "an allowed parent directory";
   };
 
   const previewKey = () => `${mode()}\0${path().trim()}\0${directoryName().trim()}`;
@@ -494,6 +551,7 @@ export function Sidebar(props: {
     <ContextMenuTrigger
       as="button"
       class="sidebar-row sidebar-chat"
+      data-chat-id={menuProps.chat.id}
       aria-current={props.selectedId === menuProps.chat.id ? "page" : undefined}
       aria-label={`${menuProps.chat.title || "New chat"}${selected() ? ", selected" : ""}`}
       data-selected={selected() ? "true" : undefined}
@@ -588,6 +646,7 @@ export function Sidebar(props: {
             <ContextMenuGroup>
               <ContextMenuItem onSelect={() => startNewChat(blockProps.project)}><MessageSquarePlusIcon />New chat</ContextMenuItem>
               <ContextMenuItem onSelect={() => requestRenameProject(blockProps.project)}><PencilIcon />Rename {blockProps.workspace ? "workspace" : "folder"}</ContextMenuItem>
+              <Show when={blockProps.workspace}><ContextMenuItem onSelect={() => { closeMobile(); props.onOpenWorkspaceIdentity(blockProps.project); }}><PaletteIcon />Identity</ContextMenuItem></Show>
               <Show when={blockProps.workspace}><ContextMenuItem onSelect={() => props.onOpenSettings("workspaces", blockProps.project.id)}><Settings2Icon />Workspace settings</ContextMenuItem></Show>
               <ContextMenuSub>
                 <ContextMenuSubTrigger disabled={!blockProps.project.sessions.length}><FolderInputIcon />Move chats to…</ContextMenuSubTrigger>
@@ -614,23 +673,39 @@ export function Sidebar(props: {
     </div>;
   };
 
-  const Group = (groupProps: { label: string; projects: Project[]; chatRoot?: Project; workspace?: boolean; emptyLabel?: string; onAdd?: () => void; addLabel?: string }) => <section class="sidebar-group">
-    <div class="sidebar-group-header">
-      <div data-sidebar="group-label">{groupProps.label}</div>
-      <Show when={groupProps.onAdd}>
-        <button class="sidebar-group-action" aria-label={groupProps.addLabel} title={groupProps.addLabel} onClick={groupProps.onAdd}>
-          {groupProps.label === "Chats" ? <PlusIcon /> : <FolderPlusIcon />}
-        </button>
+  const Group = (groupProps: { label: string; projects: Project[]; chatRoot?: Project; workspace?: boolean; emptyLabel?: string; onAdd?: () => void; addLabel?: string }) => {
+    const allChats = () => groupProps.chatRoot?.sessions.filter((chat) => chat.status !== "draft" || chat.id !== props.selectedId || chat.pinned || Boolean(props.runtime.getProcess(chat.id))) || [];
+    const visibleChats = () => {
+      const chats = allChats();
+      if (chats.length <= props.chatLimit) return chats;
+      const selected = chats.find((chat) => chat.id === props.selectedId);
+      const first = chats.slice(0, Math.max(0, props.chatLimit));
+      if (!selected || first.some((chat) => chat.id === selected.id)) return first;
+      return [...first.slice(0, Math.max(0, props.chatLimit - 1)), selected];
+    };
+    const moreChats = () => Math.max(0, allChats().length - visibleChats().length);
+    return <section class="sidebar-group">
+      <div class="sidebar-group-header">
+        <div data-sidebar="group-label">{groupProps.label}</div>
+        <Show when={groupProps.onAdd}>
+          <button class="sidebar-group-action" aria-label={groupProps.addLabel} title={groupProps.addLabel} onClick={groupProps.onAdd}>
+            {groupProps.label === "Chats" ? <PlusIcon /> : <FolderPlusIcon />}
+          </button>
+        </Show>
+      </div>
+      <Show when={groupProps.chatRoot}>
+        <For each={visibleChats()}>{(chat) => <ChatMenu chat={chat} project={groupProps.chatRoot!} />}</For>
+        <Show when={moreChats() > 0}>
+          <button type="button" class="sidebar-view-more" onClick={() => props.onOpenPalette("chat-search", "scope:chats ")}>
+            <SearchIcon /><span>View all chats</span><small>{moreChats()} more</small>
+          </button>
+        </Show>
+        <Show when={!allChats().length}><div class="sidebar-empty">No chats</div></Show>
       </Show>
-    </div>
-    <Show when={groupProps.chatRoot}>
-      {/* Hide the transient auto-created draft while it's selected; keep
-          explicitly created (pinned) drafts and any chat with a live process. */}
-      <For each={groupProps.chatRoot!.sessions.filter((chat) => chat.status !== "draft" || chat.id !== props.selectedId || chat.pinned || Boolean(props.runtime.getProcess(chat.id)))}>{(chat) => <ChatMenu chat={chat} project={groupProps.chatRoot!} />}</For>
-    </Show>
-    <For each={groupProps.projects}>{(project) => <ProjectBlock project={project} workspace={groupProps.workspace} />}</For>
-    <Show when={!groupProps.chatRoot && !groupProps.projects.length && groupProps.emptyLabel}><div class="sidebar-empty">{groupProps.emptyLabel}</div></Show>
-  </section>;
+      <For each={groupProps.projects}>{(project) => <ProjectBlock project={project} workspace={groupProps.workspace} />}</For>
+      <Show when={!groupProps.chatRoot && !groupProps.projects.length && groupProps.emptyLabel}><div class="sidebar-empty">{groupProps.emptyLabel}</div></Show>
+    </section>;
+  };
 
   const connectionLabel = () => props.connectivity === "online" ? "Server connected" : props.connectivity === "offline" ? "Server unavailable" : props.connectivity === "reconnecting" ? "Reconnecting" : "Connecting";
   const connectionTone = () => props.connectivity === "online" ? "success" : props.connectivity === "offline" ? "danger" : props.connectivity === "reconnecting" ? "warn" : "muted";
@@ -710,7 +785,7 @@ export function Sidebar(props: {
         </div></Show>
         <Show when={mode() === "cloned"}><Field><FieldLabel for="folder-clone">GitHub repository or Git URL</FieldLabel><Input id="folder-clone" value={cloneUrl()} disabled={submitting()} placeholder="react/react or https://github.com/org/repo.git" onInput={(event) => setCloneUrl(event.currentTarget.value)} /></Field></Show>
         <Field><FieldLabel for="folder-name">{mode() === "managed" ? "Display name" : "Display name (optional)"}</FieldLabel><Input id="folder-name" value={name()} disabled={submitting()} placeholder={mode() === "managed" ? "Research" : "My project"} onInput={(event) => setName(event.currentTarget.value)} /></Field>
-        <Show when={mode() === "linked" || mode() === "created" || mode() === "cloned"}><Field><FieldLabel for="folder-path">{mode() === "cloned" || mode() === "created" ? "Parent directory" : "Existing folder"}</FieldLabel><Input id="folder-path" value={path()} disabled={submitting()} list="workspace-path-suggestions" placeholder={mode() === "linked" ? "~/code/my-repo" : "~/code"} onInput={(event) => setPath(event.currentTarget.value)} /><datalist id="workspace-path-suggestions"><For each={props.workspaceSuggestions}>{(item) => <option value={item.displayPath || item.path} label={item.name} />}</For></datalist></Field></Show>
+        <Show when={mode() === "linked" || mode() === "created" || mode() === "cloned"}><Field><FieldLabel for="folder-path">{mode() === "cloned" || mode() === "created" ? "Parent directory" : "Existing folder"}</FieldLabel><Input id="folder-path" value={path()} disabled={submitting()} list="workspace-path-suggestions" placeholder={workspacePathPlaceholder()} onInput={(event) => { appliedDefaultWorkspacePath = ""; setPath(event.currentTarget.value); }} /><datalist id="workspace-path-suggestions"><For each={props.workspaceSuggestions}>{(item) => <option value={item.displayPath || item.path} label={item.name} />}</For></datalist></Field><p class="workspace-path-hint" role="note">{workspacePathDescription()}</p></Show>
         <Show when={mode() === "created"}><Field><FieldLabel for="workspace-directory-name">New folder name</FieldLabel><Input id="workspace-directory-name" value={directoryName()} disabled={submitting()} placeholder="my-project" onInput={(event) => setDirectoryName(event.currentTarget.value)} /></Field></Show>
         <Show when={mode() === "cloned"}><Field><FieldLabel for="clone-directory-name">Folder name (optional)</FieldLabel><Input id="clone-directory-name" value={cloneDirectoryName()} disabled={submitting()} placeholder="Defaults to the repository name" onInput={(event) => setCloneDirectoryName(event.currentTarget.value)} /></Field></Show>
         <Show when={workspacePreview()}>{(preview) => <div class="workspace-path-preview"><strong>{preview().path}</strong><small>{preview().ownership}</small></div>}</Show>

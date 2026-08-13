@@ -1,36 +1,44 @@
 /// <reference types="vite-plugin-pwa/client" />
 import { batch, createEffect, createMemo, createSignal, ErrorBoundary, lazy, onCleanup, onMount, Show } from "solid-js";
 import { render } from "solid-js/web";
-import { PanelLeftIcon, PanelRightIcon, SearchIcon, ShareIcon, TriangleAlertIcon } from "lucide-solid";
+import {
+  PanelLeftIcon, PanelRightIcon, SearchIcon, ShareIcon, TerminalIcon, TriangleAlertIcon,
+} from "lucide-solid";
 import { registerSW } from "virtual:pwa-register";
 import { Toaster, toast } from "solid-sonner";
 import "solid-sonner/styles.css";
 import { DefaultMeteorShower } from "@jask-aran/solid-components/meteor-shower";
 import "@jask-aran/solid-components/meteor-shower.css";
-import { Button, Spinner } from "@/components/primitives";
+import { Button, Dialog, DialogContent, Spinner } from "@/components/primitives";
 import { api, asList, pathChatId, pathProjectId, projectPath } from "./api/client";
-import type { ChatSummary, DashboardChat, Installation, Project, RuntimeIdentity, Template, TranscriptDetail, WorkspaceAppearance, WorkspaceSuggestion } from "./api/contracts";
+import type { ChatSummary, DashboardChat, Installation, Project, RuntimeIdentity, Template, TranscriptDetail, WorkspaceAppearance, WorkspacePolicy, WorkspaceSuggestion, WorkspaceSuggestionsPayload } from "./api/contracts";
 import { createErrorDiagnostic, formatRuntimeDiagnosticPrompt, type ErrorDiagnostic, type ErrorDiagnosticContext } from "./error-diagnostics";
 import { Composer } from "./chat/composer";
 import { HostUiRequests } from "./chat/host-ui-card";
 import { MARKDOWN_RENDERER_STORAGE_KEY, selectedMarkdownRenderer, type MarkdownRendererId } from "./chat/markdown-settings";
 import { loadVoiceDictationSettings, saveVoiceDictationSettings } from "./chat/voice-dictation";
 import { Transcript } from "./chat/transcript";
+import { COMMAND_IDS, commandRegistry } from "./commands/command-registry";
 import { CommandMenu } from "./navigation/command-menu";
 import type { PaletteActions, PaletteContext } from "./palette/command-registry";
 import { bindVisualViewportShell, isMobileLayout, MOBILE_LAYOUT_QUERY, setMobileOverlayKind } from "./navigation/mobile-layout";
 import { Sidebar } from "./navigation/sidebar";
+import { clampSidebarChatLimit, selectedSidebarChatLimit, SIDEBAR_CHAT_LIMIT_STORAGE_KEY } from "./navigation/sidebar-preferences";
+import { WorkspaceAppearanceEditor } from "./project/workspace-appearance-editor";
 import { Settings } from "./settings/settings";
 import { createActiveChat } from "./state/active-chat";
 import { createAttachments, DEFAULT_MAX_ATTACHMENT_BYTES } from "./state/attachments";
 import { createCatalogueStore } from "./state/catalogue";
 import { createModelSettings } from "./state/model-settings";
 import { createRuntimeStore } from "./state/runtime";
+import { browserShortcutEnvironmentProvider } from "./shortcuts/shortcut-environment";
+import { ShortcutManager } from "./shortcuts/shortcut-manager";
+import "./project/dashboard.css";
 import "./styles.css";
 
 if (import.meta.env.PROD) registerSW({ immediate: true });
 
-type SettingsSection = "general" | "ui" | "models" | "profiles" | "runtime" | "workspaces" | "voice" | "search" | "auth";
+type SettingsSection = "general" | "ui" | "shortcuts" | "models" | "profiles" | "runtime" | "workspaces" | "voice" | "search" | "auth";
 type WorkspaceView = "files" | "diff" | "artifacts" | "terminal";
 const WorkspacePanel = lazy(() => import("./workspace/workspace-panel"));
 const ProjectDashboard = lazy(() => import("./project/dashboard"));
@@ -45,6 +53,7 @@ function ChatHeader(props: {
   mobileSidebarOpen: boolean;
   onToggleMobileSidebar: () => void;
   onOpenPalette: () => void;
+  onOpenSearch: () => void;
   onTogglePanel: () => void;
   onShare: () => void;
   dashboard?: boolean;
@@ -63,7 +72,8 @@ function ChatHeader(props: {
     <nav aria-label="breadcrumb" class="chat-header-title"><span>{projectLabel()}</span><span class="breadcrumb-separator" aria-hidden="true" /><strong>{props.title}</strong></nav>
     <Show when={line()}><span class="chat-profile-posture" title={line()}>{line()}</span></Show>
     <div class="chat-header-actions">
-      <Button variant="ghost" size="icon-sm" class="palette-trigger" aria-label="Open command palette" title="Command palette" onClick={props.onOpenPalette}><SearchIcon /></Button>
+      <Button variant="ghost" size="icon-sm" class="search-trigger" aria-label="Search chats" title="Search chats" onClick={props.onOpenSearch}><SearchIcon /></Button>
+      <Button variant="ghost" size="icon-sm" class="palette-trigger" aria-label="Open command palette" title="Command palette" onClick={props.onOpenPalette}><TerminalIcon /></Button>
       <Button variant="ghost" size="icon-sm" aria-label={props.dashboard ? "Copy Tailscale workspace link" : "Copy Tailscale chat link"} title={props.dashboard ? "Copy Tailscale workspace link" : "Copy Tailscale chat link"} onClick={props.onShare}><ShareIcon /></Button>
       <Show when={!props.panelOpen}>
         <Button variant="ghost" size="icon-sm" aria-label="Toggle workspace panel" aria-expanded={false} onClick={props.onTogglePanel}><PanelRightIcon /></Button>
@@ -73,22 +83,32 @@ function ChatHeader(props: {
 }
 
 function App() {
+  const shortcutManager = new ShortcutManager({
+    commands: commandRegistry,
+    environment: browserShortcutEnvironmentProvider.detect(),
+  });
   const [templates, setTemplates] = createSignal<Template[]>([]);
   const [templatesLoading, setTemplatesLoading] = createSignal(true);
   const [installations, setInstallations] = createSignal<Installation[]>([]);
   const [installationsLoading, setInstallationsLoading] = createSignal(true);
   const [workspaceSuggestions, setWorkspaceSuggestions] = createSignal<WorkspaceSuggestion[]>([]);
+  const [workspacePolicy, setWorkspacePolicy] = createSignal<WorkspacePolicy | null>(null);
   const [defaultTemplateId, setDefaultTemplateId] = createSignal("chat");
   const [voiceSettings, setVoiceSettings] = createSignal(loadVoiceDictationSettings());
   const updateVoiceSettings = (next: { shortcut: string; autoSend: boolean }) => setVoiceSettings(saveVoiceDictationSettings(next));
   const [partialContinue, setPartialContinue] = createSignal(true);
   const [maxAttachmentBytes, setMaxAttachmentBytes] = createSignal(DEFAULT_MAX_ATTACHMENT_BYTES);
   const [markdownRenderer, setMarkdownRenderer] = createSignal<MarkdownRendererId>(selectedMarkdownRenderer());
+  const [sidebarChatLimit, setSidebarChatLimit] = createSignal(selectedSidebarChatLimit());
   const [settingsOpen, setSettingsOpen] = createSignal(false);
   const [settingsSection, setSettingsSection] = createSignal<SettingsSection>("models");
   const [settingsWorkspaceId, setSettingsWorkspaceId] = createSignal<string | null>(null);
+  const [workspaceIdentityId, setWorkspaceIdentityId] = createSignal<string | null>(null);
+  const [workspaceIdentitySaving, setWorkspaceIdentitySaving] = createSignal(false);
   const [paletteOpen, setPaletteOpen] = createSignal(false);
   const [palettePage, setPalettePage] = createSignal<string | null>(null);
+  const [paletteDirectLaunch, setPaletteDirectLaunch] = createSignal(false);
+  const [paletteInitialQuery, setPaletteInitialQuery] = createSignal("");
   const [paletteNonce, setPaletteNonce] = createSignal(0);
   const [sidebarCommand, setSidebarCommand] = createSignal<{ type: string; nonce: number } | null>(null);
   const [dropActive, setDropActive] = createSignal(false);
@@ -118,7 +138,13 @@ function App() {
   };
   const catalogue = createCatalogueStore();
   const runtime = createRuntimeStore();
-  const models = createModelSettings(showError);
+  const models = createModelSettings(showError, ({ from, to }) => {
+    const label = (level: string) => level ? level[0]!.toUpperCase() + level.slice(1) : "Off";
+    toast.info(`Saved thinking level ${label(from)} is no longer available. Using ${label(to)}.`, {
+      id: "thinking-level-recovery",
+      duration: 6_000,
+    });
+  });
   const attachments = createAttachments(showError, maxAttachmentBytes);
 
   const saveWorkspaceDefault = async (workspaceId: string, templateId: string | null) => {
@@ -131,6 +157,28 @@ function App() {
     const saved = await api<Project>(`/v0/projects/${encodeURIComponent(workspaceId)}`, { method: "PATCH", body: JSON.stringify({ workspaceAppearance }) });
     catalogue.setProjects((current) => current.map((project) => project.id === workspaceId ? { ...project, ...saved, sessions: project.sessions } : project));
     return saved;
+  };
+
+  const workspaceIdentityProject = createMemo(() => {
+    const id = workspaceIdentityId();
+    return id ? catalogue.projects().find((project) => project.id === id) : undefined;
+  });
+  const openWorkspaceIdentity = (project: Project) => setWorkspaceIdentityId(project.id);
+  const closeWorkspaceIdentity = () => {
+    if (!workspaceIdentitySaving()) setWorkspaceIdentityId(null);
+  };
+  const saveWorkspaceIdentity = async (appearance: WorkspaceAppearance) => {
+    const project = workspaceIdentityProject();
+    if (!project || workspaceIdentitySaving()) return;
+    setWorkspaceIdentitySaving(true);
+    try {
+      await saveWorkspaceAppearance(project.id, appearance);
+      setWorkspaceIdentityId(null);
+    } catch (error) {
+      showError(error);
+    } finally {
+      setWorkspaceIdentitySaving(false);
+    }
   };
 
   const chat = createActiveChat({ catalogue, runtime, models, attachments, onError: showError, defaultTemplateId, saveWorkspaceDefault });
@@ -213,21 +261,34 @@ function App() {
         method: "POST",
         body: JSON.stringify(profileId === "runtime" ? {} : hostDefault ? { projectId: project.id } : { projectId: project.id, templateId: profileId, runtimeKind: launch.runtimeKind || "conduit_profile" }),
       });
+      const ownerProject = profileId === "runtime"
+        ? catalogue.projects().find((item) => item.id === created.projectId)
+          || catalogue.projects().find((item) => item.slug === "chat")
+        : project;
+      if (!ownerProject) throw new Error("The Runtime chat project is not available");
 
       // Commit the visible transition only after the durable replacement exists.
       // initialize() first: it resets the previous chat's live socket, and the
       // URL must not advertise the new chat while a send could still target the old one.
       batch(() => {
-        chat.initialize({ ...created, templateId: created.templateId || profileId || undefined }, project);
+        chat.initialize({ ...created, templateId: created.templateId || profileId || undefined }, ownerProject);
         if (fromDashboard) history.pushState({}, "", `/chat/${created.id}`);
         else history.replaceState({}, "", `/chat/${created.id}`);
         setRouteKind("chat");
+        setRouteBootstrapError("");
+        setRouteBootstrap("ready");
       });
       // Show the new chat in the sidebar immediately instead of waiting for the
       // first server checkpoint refresh; drop the empty draft it replaced.
-      catalogue.setProjects((current) => current.map((item) => item.id === project.id
-        ? { ...item, sessions: [{ ...created, pinned: true }, ...item.sessions.filter((session) => session.id !== created.id && session.id !== replacedDraftId)] }
-        : item));
+      catalogue.setProjects((current) => current.map((item) => {
+        if (item.id === ownerProject.id) {
+          return { ...item, sessions: [{ ...created, pinned: true }, ...item.sessions.filter((session) => session.id !== created.id && session.id !== replacedDraftId)] };
+        }
+        if (item.id === project.id && item.id !== ownerProject.id && replacedDraftId) {
+          return { ...item, sessions: item.sessions.filter((session) => session.id !== replacedDraftId) };
+        }
+        return item;
+      }));
 
       if (replacedDraftId && replacedDraftId !== created.id) {
         try { await discardDraft(replacedDraftId); }
@@ -265,7 +326,11 @@ function App() {
     try {
       await chat.select(target, project, {
         history: "push",
-        onCommit: () => setRouteKind("chat"),
+        onCommit: () => {
+          setRouteKind("chat");
+          setRouteBootstrapError("");
+          setRouteBootstrap("ready");
+        },
       });
     }
     catch (error) { showError(error); return; }
@@ -289,6 +354,8 @@ function App() {
     chat.reset();
     catalogue.selectProject(target);
     setRouteKind("project");
+    setRouteBootstrapError("");
+    setRouteBootstrap("ready");
     setPanelOpen(false);
     if (historyMode === "push") history.pushState({}, "", projectPath(target));
     else if (historyMode === "replace") history.replaceState({}, "", projectPath(target));
@@ -445,12 +512,30 @@ function App() {
     setMarkdownRenderer(next);
     localStorage.setItem(MARKDOWN_RENDERER_STORAGE_KEY, next);
   };
+  const switchSidebarChatLimit = (next: number) => {
+    const value = clampSidebarChatLimit(next);
+    setSidebarChatLimit(value);
+    localStorage.setItem(SIDEBAR_CHAT_LIMIT_STORAGE_KEY, String(value));
+  };
   const saveDefaultTemplate = async (id: string) => {
     const saved = await api<{ defaultTemplateId: string }>("/v0/preferences", { method: "PATCH", body: JSON.stringify({ defaultTemplateId: id }) });
     setDefaultTemplateId(saved.defaultTemplateId || id);
     return saved;
   };
-  const openPalette = (page: string | null = null) => { setPalettePage(page); setPaletteNonce((value) => value + 1); setPaletteOpen(true); };
+  const openPalette = (page: string | null = null, initialQuery = "", direct = false) => {
+    setPalettePage(page);
+    setPaletteInitialQuery(initialQuery);
+    setPaletteDirectLaunch(direct);
+    setPaletteNonce((value) => value + 1);
+    setPaletteOpen(true);
+  };
+  const toggleSearchPalette = () => {
+    if (paletteOpen() && palettePage() === "chat-search") {
+      setPaletteOpen(false);
+      return;
+    }
+    openPalette("chat-search", "", true);
+  };
   const togglePanel = () => {
     const next = !panelOpen();
     if (next && isMobileLayout()) setMobileSidebarOpen(false);
@@ -485,9 +570,21 @@ function App() {
   const runSidebar = (type: string) => setSidebarCommand({ type, nonce: Date.now() });
   const loadWorkspaceSuggestions = () => {
     if (workspaceSuggestionsRequest) return workspaceSuggestionsRequest;
-    workspaceSuggestionsRequest = api<{ folders: WorkspaceSuggestion[] }>("/v0/workspaces/suggestions")
-      .then((payload) => { setWorkspaceSuggestions(asList<WorkspaceSuggestion>(payload.folders)); })
-      .catch(() => { setWorkspaceSuggestions([]); });
+    workspaceSuggestionsRequest = api<WorkspaceSuggestionsPayload>("/v0/workspaces/suggestions")
+      .then((payload) => {
+        setWorkspaceSuggestions(asList<WorkspaceSuggestion>(payload.folders));
+        setWorkspacePolicy({
+          allowlist: asList<string>(payload.allowlist),
+          defaultRoot: payload.defaultRoot || null,
+          defaultInputPath: payload.defaultInputPath || null,
+          suggestionRoot: String(payload.suggestionRoot || payload.root || ""),
+          modes: asList<string>(payload.modes),
+        });
+      })
+      .catch(() => {
+        setWorkspaceSuggestions([]);
+        setWorkspacePolicy(null);
+      });
     return workspaceSuggestionsRequest;
   };
 
@@ -545,29 +642,49 @@ function App() {
     settings: (section) => openSettings(section),
     workspaceSettings: (id) => openSettings("workspaces", id),
     openChat: (session, project) => { setMobileSidebarOpen(false); void openChat(session, project); },
+    renameChat,
+    moveChats,
+    copyChatLinks,
+    deleteChats,
     chooseModel: (spec) => void models.chooseModel(spec),
     chooseEffort: (level) => void models.chooseEffort(level),
     setChatProfile: (id) => void switchProfile(id),
   };
 
-  const keydown = (event: KeyboardEvent) => {
-    if (event.defaultPrevented) return;
+  const dismissOpenLayer = (event: KeyboardEvent) => {
+    if (event.defaultPrevented || event.key !== "Escape") return;
+    const target = event.target instanceof Element ? event.target : null;
+    if (target?.closest("[data-shortcut-exclusive='terminal']")) return;
     if (event.key === "Escape" && !paletteOpen() && !settingsOpen()) {
       if (panelOpen()) { event.preventDefault(); togglePanel(); return; }
       if (mobileSidebarOpen()) { event.preventDefault(); setMobileSidebarOpen(false); return; }
     }
-    if (!(event.metaKey || event.ctrlKey) || event.altKey) return;
-    const key = event.key.toLowerCase();
-    if (key === "k" && !event.shiftKey) { event.preventDefault(); if (paletteOpen()) setPaletteOpen(false); else openPalette(null); }
-    if (key === "o" && event.shiftKey) { event.preventDefault(); openPalette("goto"); }
-    if (key === "c" && event.shiftKey) { event.preventDefault(); setMobileSidebarOpen(false); void createChat(); }
-    if (key === "b" && !event.shiftKey) { event.preventDefault(); runSidebar("toggle-sidebar"); }
-    if (key === "." && !event.shiftKey) { event.preventDefault(); togglePanel(); }
-    if (key === ",") { event.preventDefault(); openSettings("general"); }
   };
 
   onMount(() => {
-    window.addEventListener("keydown", keydown);
+    const releaseApplicationContext = shortcutManager.activateContext("application");
+    const releaseShortcutHandlers = [
+      shortcutManager.registerHandler(COMMAND_IDS.openCommandPalette, "application", () => {
+        if (paletteOpen()) setPaletteOpen(false);
+        else openPalette(null);
+      }),
+      shortcutManager.registerHandler(COMMAND_IDS.searchChats, "application", toggleSearchPalette),
+      shortcutManager.registerHandler(COMMAND_IDS.openSettings, "application", () => openSettings("general")),
+      shortcutManager.registerHandler(COMMAND_IDS.newChat, "application", () => {
+        setMobileSidebarOpen(false);
+        void createChat();
+      }),
+      shortcutManager.registerHandler(COMMAND_IDS.toggleSidebar, "application", () => runSidebar("toggle-sidebar")),
+      shortcutManager.registerHandler(COMMAND_IDS.toggleWorkspacePanel, "application", togglePanel),
+    ];
+    const uninstallShortcuts = shortcutManager.install(window);
+    window.addEventListener("keydown", dismissOpenLayer, { capture: true });
+    onCleanup(() => {
+      window.removeEventListener("keydown", dismissOpenLayer, true);
+      uninstallShortcuts();
+      for (const release of releaseShortcutHandlers) release();
+      releaseApplicationContext();
+    });
     onCleanup(bindVisualViewportShell());
     const media = typeof matchMedia === "function" ? matchMedia(MOBILE_LAYOUT_QUERY) : null;
     const onViewportChange = () => {
@@ -595,7 +712,14 @@ function App() {
         if (!owner) owner = (await catalogue.refresh()).find((project) => project.sessions.some((item) => item.id === chatId));
         const target = owner?.sessions.find((item) => item.id === chatId);
         if (!owner || !target) throw new Error("Chat not found");
-        await chat.select(target, owner, { history: "none", onCommit: () => setRouteKind("chat") });
+        await chat.select(target, owner, {
+          history: "none",
+          onCommit: () => {
+            setRouteKind("chat");
+            setRouteBootstrapError("");
+            setRouteBootstrap("ready");
+          },
+        });
       })().catch((error) => showError(error));
     };
     window.addEventListener("popstate", onPopState);
@@ -640,7 +764,13 @@ function App() {
         chat.initialize(target, project, detail);
         setRouteKind("chat");
         setRouteBootstrap("ready");
-        if (target.status === "active") await chat.openLive(target.id, project.id);
+        if (target.status === "active") {
+          try {
+            await chat.openLive(target.id, project.id);
+          } catch (error) {
+            showError(error);
+          }
+        }
       } else if (initialProjectRouteId) {
         const project = projects.find((item) => item.id === initialProjectRouteId);
         if (!project) throw new Error("Project not found");
@@ -665,7 +795,6 @@ function App() {
       showError(message);
     });
   });
-  onCleanup(() => window.removeEventListener("keydown", keydown));
 
   const dropHandlers = {
     onDragEnter: (event: DragEvent) => { if (!event.dataTransfer?.types.includes("Files")) return; event.preventDefault(); dragDepth += 1; setDropActive(true); },
@@ -677,15 +806,20 @@ function App() {
   return <>
     <Toaster richColors />
     <input ref={attachFileInput} type="file" multiple hidden aria-hidden="true" onChange={(event) => { if (event.currentTarget.files) attachments.addFiles(event.currentTarget.files); event.currentTarget.value = ""; }} />
-    <Sidebar projects={catalogue.projects()} projectId={catalogue.projectId()} selectedId={catalogue.selectedId()} runtime={runtime}
-      connectivity={runtime.connectivity()} workspaceSuggestions={workspaceSuggestions()} command={sidebarCommand()}
+    <Dialog open={Boolean(workspaceIdentityProject())} onOpenChange={(open) => { if (!open) closeWorkspaceIdentity(); }}>
+      <DialogContent class="workspace-appearance-dialog" title="Workspace identity" description="Choose a short mark or a Lucide icon, then choose a preset or custom color.">
+        <Show when={workspaceIdentityProject()}>{(project) => <WorkspaceAppearanceEditor compact value={project().workspaceAppearance} saving={workspaceIdentitySaving()} onSave={(appearance) => void saveWorkspaceIdentity(appearance)} />}</Show>
+      </DialogContent>
+    </Dialog>
+    <Sidebar projects={catalogue.projects()} projectId={catalogue.projectId()} selectedId={catalogue.selectedId()} runtime={runtime} chatLimit={sidebarChatLimit()}
+      connectivity={runtime.connectivity()} workspaceSuggestions={workspaceSuggestions()} workspacePolicy={workspacePolicy()} command={sidebarCommand()}
       mobileOpen={mobileSidebarOpen()} onMobileOpenChange={setMobileSidebar}
       onWorkspaceSuggestionsNeeded={() => void loadWorkspaceSuggestions()}
       onNewChat={async (project) => { await createChat(project); }} onOpenChat={openChat} onOpenProject={openProject} onAddProject={addProject} onRenameChat={renameChat} onRenameProject={renameProject}
       onMoveChat={moveChat} onMoveChats={moveChats} onMoveProjectChats={moveProjectChats} onCopyTranscript={copyTranscript} onCopyChatLinks={copyChatLinks}
       onDeleteChat={deleteChat} onDeleteChats={deleteChats} onDeleteProject={deleteProject}
       onOpenTerminal={(target, project) => { void openChat(target, project).then(() => openWorkspaceView("terminal")); }}
-      onOpenSettings={openSettings} onOpenPalette={() => openPalette(null)} />
+      onOpenWorkspaceIdentity={openWorkspaceIdentity} onOpenSettings={openSettings} onOpenPalette={(page, initialQuery) => openPalette(page || null, initialQuery || "", page === "chat-search")} />
     <main data-slot="sidebar-inset" class={`chat-main${routeKind() === "chat" && emptyChat() ? " chat-main-empty" : ""}`} {...(routeKind() === "chat" ? dropHandlers : {})}>
       <Show when={routeBootstrap() === "ready"} fallback={<div class="chat-bootstrap" role={routeBootstrap() === "error" ? "alert" : "status"}>{routeBootstrap() === "error"
         ? routeBootstrapError() || (routeKind() === "project" ? "This project could not be loaded." : "This chat could not be loaded.")
@@ -697,7 +831,7 @@ function App() {
         </Show>
         <Show when={routeKind() === "project" && selectedProject()} fallback={<>
           <Show when={dropActive()}><div class="chat-drop-overlay"><div>Drop files to attach</div></div></Show>
-          <ChatHeader project={selectedProject()} title={chat.title()} profile={activeProfile()} runtime={chat.runtimeIdentity()} live={chat.live() as unknown as Record<string, unknown>} panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onOpenPalette={() => openPalette(null)} onTogglePanel={togglePanel} onShare={() => void shareChat()} />
+          <ChatHeader project={selectedProject()} title={chat.title()} profile={activeProfile()} runtime={chat.runtimeIdentity()} live={chat.live() as unknown as Record<string, unknown>} panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={() => void shareChat()} />
           <Show when={selectedProject()?.kind === "workspace" && [...runtime.processes().values()].some((process) => process.chatId !== catalogue.selectedId() && process.active)}><div class="workspace-warning"><TriangleAlertIcon /><div><strong>Another chat is working in this Workspace</strong><p>Both agents can edit the same files. Conduit does not lock the Workspace or create worktrees automatically.</p></div></div></Show>
           <div class="work-area">
             <section class="work-area-conversation" aria-label="Conversation">
@@ -707,7 +841,7 @@ function App() {
             </section>
           </div>
         </>}>
-          <ChatHeader project={selectedProject()} title="Dashboard" panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onOpenPalette={() => openPalette(null)} onTogglePanel={togglePanel} onShare={() => void shareProject()} dashboard />
+          <ChatHeader project={selectedProject()} title="Dashboard" panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={() => void shareProject()} dashboard />
           <ProjectDashboard project={selectedProject()!} templates={templates()} runtime={runtime}
             onNewChat={async (project) => { await createChat(project); }} onOpenChat={(target: DashboardChat, project) => openChat(target, project)}
             onRename={() => runSidebar("rename-folder")} onDelete={() => runSidebar("delete-project")}
@@ -716,9 +850,9 @@ function App() {
       </Show>
     </main>
     <Show when={Boolean(selectedProject()) && Boolean(workspacePanelScope())}><WorkspacePanel projectId={() => selectedProject()!.id} chatId={() => workspacePanelScope()!} open={panelOpen} requestedTab={workspaceViewRequest} onClose={togglePanel} /></Show>
-    <CommandMenu open={paletteOpen()} onOpenChange={setPaletteOpen} initialPage={palettePage()} launchNonce={paletteNonce()}
-      context={paletteContext()} actions={paletteActions} models={models.models()} currentModel={models.model()} onChooseModel={(spec) => void models.chooseModel(spec)} />
-    <Settings open={settingsOpen()} initialSection={settingsSection()} initialWorkspaceId={settingsWorkspaceId()} onOpenChange={setSettingsOpen} models={models} templates={templates()} templatesLoading={templatesLoading()} defaultTemplateId={defaultTemplateId()} projects={catalogue.projects()} installations={installations()} installationsLoading={installationsLoading()} onInstallationsChange={setInstallations} onDefaultTemplateChange={saveDefaultTemplate} onWorkspaceDefaultChange={saveWorkspaceDefault} markdownRenderer={markdownRenderer()} onMarkdownRendererChange={switchMarkdownRenderer} voiceSettings={voiceSettings()} onVoiceSettingsChange={updateVoiceSettings} />
+    <CommandMenu open={paletteOpen()} onOpenChange={setPaletteOpen} onPageChange={setPalettePage} initialPage={palettePage()} initialQuery={paletteInitialQuery()} launchNonce={paletteNonce()} directLaunch={paletteDirectLaunch()}
+      context={paletteContext()} actions={paletteActions} models={models.models()} currentModel={models.model()} onChooseModel={(spec) => void models.chooseModel(spec)} shortcuts={shortcutManager} />
+    <Settings open={settingsOpen()} initialSection={settingsSection()} initialWorkspaceId={settingsWorkspaceId()} onOpenChange={setSettingsOpen} models={models} templates={templates()} templatesLoading={templatesLoading()} defaultTemplateId={defaultTemplateId()} projects={catalogue.projects()} installations={installations()} installationsLoading={installationsLoading()} onInstallationsChange={setInstallations} onDefaultTemplateChange={saveDefaultTemplate} onWorkspaceDefaultChange={saveWorkspaceDefault} markdownRenderer={markdownRenderer()} onMarkdownRendererChange={switchMarkdownRenderer} voiceSettings={voiceSettings()} onVoiceSettingsChange={updateVoiceSettings} sidebarChatLimit={sidebarChatLimit()} onSidebarChatLimitChange={switchSidebarChatLimit} shortcuts={shortcutManager} />
   </>;
 }
 

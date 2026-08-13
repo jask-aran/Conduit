@@ -15,6 +15,7 @@ test("production image is pinned, unprivileged, read-only compatible, and self-c
   assert.match(dockerfile, /^USER node$/m);
   assert.match(dockerfile, /^STOPSIGNAL SIGTERM$/m);
   assert.match(dockerfile, /^HEALTHCHECK /m);
+  assert.match(dockerfile, /CONDUIT_WORKSPACE_DEFAULT_ROOT=\/workspaces/);
   assert.doesNotMatch(dockerfile, /:latest/);
 });
 
@@ -29,6 +30,7 @@ test("Compose pulls GHCR by default and mounts the complete durable contract", a
   assert.match(compose, /target: \/workspaces/);
   assert.match(compose, /CONDUIT_DATA_ROOT: \/data/);
   assert.match(compose, /CONDUIT_WORKSPACE_ALLOWLIST: \/workspaces/);
+  assert.match(compose, /CONDUIT_WORKSPACE_DEFAULT_ROOT: .*\/workspaces/);
   assert.match(compose, /expose:\n\s+- "4310"/);
   assert.match(compose, /caddy:/);
   assert.match(compose, /"80:80"/);

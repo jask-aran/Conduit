@@ -27,8 +27,12 @@ root is the supported backup and restore contract.
 Workspace contents live under `/workspaces`. Persisted workspace catalogue
 paths use that container namespace rather than machine-specific host paths, so
 the catalogue remains valid when both mounts are restored on another machine.
-The default allowlist exposes only `/workspaces`; Conduit-owned chat files are
-handled by their reserved project and cannot be registered as Workspaces.
+The default allowlist and default parent for new Workspaces expose only
+`/workspaces`; Conduit-owned chat files are handled by their reserved project
+and cannot be registered as Workspaces. `CONDUIT_WORKSPACE_DEFAULT_ROOT` is a
+container path, not the host path in `CONDUIT_WORKSPACES_DIR`. Set it to a
+directory under `/workspaces` when you want a narrower default. The directory
+must already exist and remain inside the allowlist.
 
 Docker layers, npm caches, built client output, `/tmp`, logs emitted to stdout,
 and stopped process memory are rebuildable. No live Pi process can be migrated;
@@ -57,6 +61,18 @@ data location, the host user is not the intended file owner, or a different
 loopback port is needed. Secrets are not environment variables: the password
 hash, browser sessions, and Isolated Pi provider credentials remain inside the
 mounted `/data` root.
+
+The Workspace dialog shows `/workspaces` for container deployments and uses
+`~` only for a native Conduit home. Users cannot widen the allowlist in the
+browser. An operator can change the default parent in `.env`, then restart the
+deployment:
+
+```dotenv
+CONDUIT_WORKSPACE_DEFAULT_ROOT=/workspaces/projects
+```
+
+Create `/workspaces/projects` under the host directory mounted at
+`CONDUIT_WORKSPACES_DIR` before using that setting.
 
 Useful operations:
 

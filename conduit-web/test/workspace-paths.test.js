@@ -6,6 +6,7 @@ import test from "node:test";
 import {
   assertAllowedPath,
   assertSafeWorkspaceRoot,
+  formatWorkspacePath,
   isPathInside,
   listDirectorySuggestions,
   parseAllowlist,
@@ -19,6 +20,12 @@ test("parseAllowlist expands home and de-duplicates", () => {
     parseAllowlist("~/code:/home/user/code,/tmp/work", { home }),
     ["/home/user/code", "/tmp/work"],
   );
+});
+
+test("formatWorkspacePath preserves native home aliases and container paths", () => {
+  assert.equal(formatWorkspacePath("/home/user", "/home/user"), "~");
+  assert.equal(formatWorkspacePath("/home/user/code/repo", "/home/user"), "~/code/repo");
+  assert.equal(formatWorkspacePath("/workspaces/repo", "/home/user"), "/workspaces/repo");
 });
 
 test("assertAllowedPath rejects paths outside the allowlist", () => {

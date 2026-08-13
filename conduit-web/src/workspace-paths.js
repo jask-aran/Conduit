@@ -29,6 +29,16 @@ export function isPathInside(candidate, root) {
   return Boolean(relative) && !relative.startsWith("..") && !path.isAbsolute(relative);
 }
 
+export function formatWorkspacePath(candidate, home = os.homedir()) {
+  const resolved = path.resolve(candidate);
+  const resolvedHome = path.resolve(home);
+  if (resolved === resolvedHome) return "~";
+  if (isPathInside(resolved, resolvedHome)) {
+    return `~/${path.relative(resolvedHome, resolved).split(path.sep).join("/")}`;
+  }
+  return resolved;
+}
+
 export function assertAllowedPath(candidate, allowlist, label = "path") {
   const expanded = expandHome(String(candidate || ""));
   if (!path.isAbsolute(expanded)) {
@@ -38,7 +48,8 @@ export function assertAllowedPath(candidate, allowlist, label = "path") {
   }
   const resolved = path.resolve(expanded);
   if (!allowlist.some((root) => isPathInside(resolved, root))) {
-    const error = new Error(`${label} is outside the workspace allowlist`);
+    const allowedRoots = allowlist.length ? ` Use a path under ${allowlist.join(", ")}.` : " No workspace locations are configured.";
+    const error = new Error(`${label} is outside the workspace allowlist.${allowedRoots}`);
     error.code = "path_not_allowed";
     error.path = resolved;
     error.allowlist = [...allowlist];

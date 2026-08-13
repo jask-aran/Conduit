@@ -60,11 +60,44 @@ textarea until send, then renders the same cards beneath their user message.
 Persisted image cards use the attachment preview route, including when restored
 for edit. The compact composer model menu remains separate from Settings'
 searchable multi-model picker. Cmd/Ctrl+K opens the typed application command
-palette. Root lists concrete app actions and models; Settings…, Go to…, and
-Workspace views… are drill-down pages with search prefixes
-(`Settings ›`, `Go to ›`, `Workspace ›`) so sections, chats, and panel tabs do
-not flood the root list.
-Cmd/Ctrl+Shift+O opens Go to mode directly; Cmd/Ctrl+Shift+C starts a new chat.
+palette. Root lists concrete app actions and models; Settings…, Search chats…,
+and Workspace views… are drill-down pages with search prefixes
+(`Settings ›`, `Search ›`, `Workspace ›`) so sections, chats, and panel tabs do
+not flood the root list. Cmd/Ctrl+Shift+K toggles Chat search directly; on
+Firefox for Windows and Linux, the browser can claim that chord for Web
+Console, so Settings → Shortcuts reports the conflict and permits a local
+override. Chat search accepts
+`scope:chats`, `scope:all`, and quoted `in:<folder-or-workspace>` filters; View
+all chats pre-applies `scope:chats` in the same surface. Empty-query Backspace
+removes a filter before it can change palette level; Escape returns to the root
+palette or closes a direct launch. Tab enters a highlighted drill-down page.
+
+Chat search matches chat titles and their owning folder or Workspace. It shows
+creation dates, includes the current chat, and supports Cmd/Ctrl+E selection
+mode. Outside selection mode, Alt+R renames the highlighted chat and
+Cmd/Ctrl+K followed by R, M, or D renames, moves, or requests confirmed
+deletion. Selection mode supports Space, M (move), C (copy links), and
+D/Delete (confirmed delete); rename remains a single-chat action. The sidebar's
+Chats group shows 20 rows by default; Settings → UI stores an integer limit
+from 5 to 100, and View all chats opens a Chats-scoped search for older rows. A
+folder or Workspace can remain collapsed even when it contains the active
+chat; Search chats remains the route to that session. Existing generation
+indicators stay unchanged. Search and management use the
+same palette shell so later file, artifact, and host search domains can add
+rows and previews without a second dialog.
+
+Cmd/Ctrl+Shift+C starts a new chat.
+One stable client command registry owns shortcut labels, contexts, defaults,
+and palette projections. One capture-phase shortcut manager dispatches the
+highest active context, supports one- and two-stroke bindings, and excludes
+active terminal targets. Settings → Shortcuts stores browser-local overrides
+under `conduit:shortcuts:v1`; changes update dispatch and visible keycaps
+without a reload. The recorder blocks internal overlaps in the same context
+and permits reuse in separate contexts. It warns about known browser and
+system bindings, but it cannot detect a key that the browser or operating
+system consumes before the page receives it. Overrides are local to the
+current browser profile and are not server-synced.
+
 The composer slash Popover contains only `/attach`. A project-aware breadcrumb
 identifies where each chat belongs.
 
@@ -141,7 +174,10 @@ artifact rather than a copied renderer.
 
 The concrete icon-collapsible sidebar separates first-class Chats, Projects,
 and Workspaces. Draft chats stay out of navigation until their first message
-creates a session. Kobalte provides accessible menu and context-menu behavior;
+creates a session. The Chats group is bounded to a user-selected recent window
+and provides a palette-backed View all chats action; selecting a chat from the
+palette expands its collapsed owning folder and scrolls it into view. Kobalte
+provides accessible menu and context-menu behavior;
 the surrounding sidebar, composer, transcript, command palette, and Settings
 surfaces are direct Solid components rather than a copied component catalogue.
 Transcript history loads automatically as the reader approaches the top and
@@ -305,8 +341,10 @@ starting, and browser-attached processes remain resident.
 - `GET /v0/projects/:id/file?path=…` returns a size-capped text preview
 - `GET /v0/projects/:id/diff` returns bounded Git status; `?patch=1&reuse=1` reuses the short-lived status inspection and additionally returns staged/unstaged unified diff after the patch disclosure opens
 - `POST /v0/projects/:id/move-sessions`
-- `GET /v0/workspaces/policy` returns the server-owned linked-workspace roots
-- `GET /v0/workspaces/suggestions` returns visible direct folders under `~/`
+- `GET /v0/workspaces/policy` returns the server-owned allowlist, default
+  Workspace parent, and input-safe default path
+- `GET /v0/workspaces/suggestions` returns visible direct folders under the
+  configured suggestion root, using `~` only for paths under the native home
 - `GET /v0/workspaces/:id/native-preflight` reports derived host trust/resource status
 - `GET /v0/pi-installations` lists safe installation/version status
 - `POST /v0/pi-installations/host/detect` re-detects the host Pi executable

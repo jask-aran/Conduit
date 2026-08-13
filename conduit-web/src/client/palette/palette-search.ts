@@ -120,6 +120,7 @@ interface MatchableCommand {
   description?: string;
   destructive?: boolean;
   group?: string;
+  chat?: { createdAt?: string };
 }
 
 interface MatchableModel {
@@ -200,6 +201,9 @@ export function rankPaletteResults<C extends MatchableCommand, M extends Matchab
 
   rows.sort((left, right) => {
     if (right.score !== left.score) return right.score - left.score;
+    const leftCreated = left.command?.chat?.createdAt || "";
+    const rightCreated = right.command?.chat?.createdAt || "";
+    if (leftCreated !== rightCreated && (leftCreated || rightCreated)) return rightCreated.localeCompare(leftCreated);
     const leftLabel = left.command?.label || left.model?.label || "";
     const rightLabel = right.command?.label || right.model?.label || "";
     return leftLabel.localeCompare(rightLabel);

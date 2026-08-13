@@ -6,6 +6,7 @@ import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
+import { sessionDirectoryFor } from "../src/session-store.js";
 
 async function availablePort() {
   return new Promise((resolve, reject) => {
@@ -34,7 +35,7 @@ test("raw JSON uploads publish atomically through the durable chat route", async
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-server-api-"));
   const port = await availablePort();
   const origin = `http://127.0.0.1:${port}`;
-  const freshSessionFile = path.join(root, "pi", "sessions", "future.jsonl");
+  const freshSessionFile = path.join(sessionDirectoryFor(path.join(root, "files"), path.join(root, "pi", "model-profiles", "brave-search")), "future.jsonl");
   const conduitPi = path.join(root, "conduit-pi");
   await fs.writeFile(conduitPi, `#!/usr/bin/env node
 if (process.argv.includes("--version")) { console.log("0.84.1"); process.exit(0); }
@@ -71,6 +72,8 @@ exit 0
   await fs.chmod(fakeGit, 0o755);
   const workspace = path.join(root, "workspace");
   const workspaceParent = path.join(root, "workspace-parent");
+  const home = path.join(root, "home");
+  await fs.mkdir(home);
   await fs.mkdir(workspace);
   await fs.mkdir(workspaceParent);
   const child = spawn(process.execPath, ["src/server.js"], {
@@ -78,7 +81,7 @@ exit 0
     stdio: ["ignore", "pipe", "pipe"],
     env: {
       ...process.env,
-      HOME: root,
+      HOME: home,
       CONDUIT_HOST: "127.0.0.1",
       CONDUIT_PORT: String(port),
       CONDUIT_FILES_ROOT: path.join(root, "files"),
@@ -91,6 +94,8 @@ exit 0
       CONDUIT_NATIVE_PI_COMMAND: nativePi,
       CONDUIT_NATIVE_PI_AGENT_DIR: path.join(root, "native-agent"),
       CONDUIT_WORKSPACE_ALLOWLIST: root,
+      CONDUIT_WORKSPACE_DEFAULT_ROOT: workspaceParent,
+      CONDUIT_WORKSPACE_SUGGESTION_ROOT: workspaceParent,
       PATH: `${fakeGitDirectory}:${process.env.PATH}`,
       FAKE_GIT_MARKER: fakeGitMarker,
     },
@@ -98,6 +103,18 @@ exit 0
 
   try {
     await waitForServer(origin, child);
+    const workspacePolicy = await fetch(`${origin}/v0/workspaces/policy`).then((response) => response.json());
+    assert.deepEqual(workspacePolicy.defaultRoot, workspaceParent);
+    assert.deepEqual(workspacePolicy.defaultInputPath, workspaceParent);
+    assert.deepEqual(workspacePolicy.suggestionRoot, workspaceParent);
+    await fs.mkdir(path.join(workspaceParent, "existing-repo"));
+    const workspaceSuggestions = await fetch(`${origin}/v0/workspaces/suggestions`).then((response) => response.json());
+    assert.equal(workspaceSuggestions.defaultInputPath, workspaceParent);
+    assert.deepEqual(workspaceSuggestions.folders, [{
+      name: "existing-repo",
+      path: path.join(workspaceParent, "existing-repo"),
+      displayPath: path.join(workspaceParent, "existing-repo"),
+    }]);
     const templatesResponse = await fetch(`${origin}/v0/templates`);
     assert.equal(templatesResponse.status, 200);
     const templateCatalog = await templatesResponse.json();
@@ -487,6 +504,15 @@ exit 0
     assert.equal(imageDeleted.status, 204);
     const listed = await fetch(`${origin}/v0/chats/${chat.id}/attachments`).then((response) => response.json());
     assert.deepEqual(listed.attachments, []);
+
+    const projectsPayload = await fetch(`${origin}/v0/projects`).then((response) => response.json());
+    const chatProject = projectsPayload.projects.find((item) => item.id === chat.projectId);
+    assert.ok(chatProject);
+    await fs.mkdir(path.dirname(freshSessionFile), { recursive: true });
+    await fs.writeFile(freshSessionFile, `${JSON.stringify({ type: "session", id: "future-session", cwd: chatProject.path })}\n`);
+    const deletedChat = await fetch(`${origin}/v0/sessions/${chat.id}`, { method: "DELETE" });
+    assert.equal(deletedChat.status, 204);
+    await assert.rejects(fs.access(freshSessionFile), { code: "ENOENT" });
   } finally {
     if (child.exitCode == null) {
       child.kill("SIGTERM");

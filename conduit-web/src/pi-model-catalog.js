@@ -8,6 +8,17 @@ import {
 import { clampThinkingLevel, getSupportedThinkingLevels } from "@earendil-works/pi-ai";
 import path from "node:path";
 
+export function resolveThinkingLevel(level, supportedLevels = [], fallbackLevel = "") {
+  const levels = Array.isArray(supportedLevels)
+    ? supportedLevels.filter((item) => typeof item === "string" && item.trim())
+    : [];
+  if (!levels.length) return "";
+  const requested = typeof level === "string" ? level.trim() : "";
+  if (requested && levels.includes(requested)) return requested;
+  const fallback = typeof fallbackLevel === "string" ? fallbackLevel.trim() : "";
+  return fallback && levels.includes(fallback) ? fallback : levels[0];
+}
+
 export class PiModelCatalog {
   constructor({
     agentDir = getAgentDir(),

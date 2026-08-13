@@ -53,6 +53,7 @@ ENV NODE_ENV=production \
     CONDUIT_CLIENT_DIST=/app/conduit-web/dist \
     CONDUIT_TEMPLATES_ROOT=/app/templates \
     CONDUIT_WORKSPACE_ALLOWLIST=/workspaces \
+    CONDUIT_WORKSPACE_DEFAULT_ROOT=/workspaces \
     CONDUIT_WORKSPACE_SUGGESTION_ROOT=/workspaces \
     CONDUIT_RELEASE=${CONDUIT_RELEASE}
 

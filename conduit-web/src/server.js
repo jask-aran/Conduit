@@ -6,7 +6,7 @@ import express from "express";
 import compression from "compression";
 import { WebSocketServer } from "ws";
 import { loadConfig, resolveTemplate } from "./config.js";
-import { PiModelCatalog } from "./pi-model-catalog.js";
+import { PiModelCatalog, resolveThinkingLevel } from "./pi-model-catalog.js";
 import { ProjectStore } from "./project-store.js";
 import { readSessionMetadata, readSessionPage } from "./session-store.js";
 import { PiManager } from "./pi-manager.js";
@@ -16,7 +16,7 @@ import { RuntimeHub } from "./runtime-hub.js";
 import { defaultsFromEnv, RuntimeSettingsStore } from "./runtime-settings.js";
 import { PreferencesStore } from "./preferences-store.js";
 import { templatePublicView } from "../../scripts/pi-runtime.mjs";
-import { isPathInside, listDirectorySuggestions } from "./workspace-paths.js";
+import { formatWorkspacePath, isPathInside, listDirectorySuggestions } from "./workspace-paths.js";
 import { hasTrustRequiringProjectResources, ProjectTrustStore } from "@earendil-works/pi-coding-agent";
 import fs from "node:fs/promises";
 import { resolvePiLaunch } from "./pi-launch.js";
@@ -208,6 +208,8 @@ async function chatModelView(context) {
       outsideScope: true,
     }];
   }
+  const selectedModel = models.find((item) => item.spec === model);
+  if (selectedModel) thinkingLevel = resolveThinkingLevel(thinkingLevel, selectedModel.thinkingLevels, catalogView.defaultThinkingLevel);
   const modelProfile = runtime.kind === "conduit_profile" && usesWebSearchOverlay(template)
     ? publicModelProfile(resolveModelProfile(config.modelProfiles, model || "unknown/unresolved"))
     : null;
@@ -403,6 +405,7 @@ registerRuntimeRoutes(app, {
   attachments,
   config,
   currentMagicDnsOrigin,
+  formatWorkspacePath,
   isPathInside,
   isShuttingDown: () => shuttingDown,
   listDirectorySuggestions,

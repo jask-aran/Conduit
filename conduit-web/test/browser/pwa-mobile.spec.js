@@ -59,6 +59,17 @@ async function sampleTranslateX(page, selector, count = 8) {
   }), { selector, count });
 }
 
+async function expectInsetPalette(page, palette, inset = 8) {
+  const [shellBox, viewport] = await Promise.all([
+    palette.locator(".command-shell").boundingBox(),
+    page.evaluate(() => ({ width: innerWidth, height: innerHeight })),
+  ]);
+  expect(Math.abs(shellBox.x - inset)).toBeLessThanOrEqual(2);
+  expect(Math.abs(shellBox.y - inset)).toBeLessThanOrEqual(2);
+  expect(Math.abs(shellBox.width - (viewport.width - inset * 2))).toBeLessThanOrEqual(2);
+  expect(Math.abs(shellBox.height - (viewport.height - inset * 2))).toBeLessThanOrEqual(2);
+}
+
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => {
     class IdleWebSocket extends EventTarget {
@@ -95,7 +106,10 @@ test.beforeEach(async ({ page }) => {
 
   await page.route("**/v0/**", (route) => route.fulfill({ status: 200, json: {} }));
   await page.route("**/v0/templates", (route) => route.fulfill({ json: { templates, defaultTemplateId: "chat" } }));
-  await page.route("**/v0/workspaces/suggestions", (route) => route.fulfill({ json: { folders: [] } }));
+  await page.route("**/v0/workspaces/suggestions", (route) => route.fulfill({ json: {
+    root: "/home/user", allowlist: ["/home/user"], defaultRoot: "/home/user", defaultInputPath: "~",
+    suggestionRoot: "/home/user", modes: ["managed", "linked", "created", "cloned"], folders: [],
+  } }));
   await page.route("**/v0/capabilities", (route) => route.fulfill({ json: { partialContinue: true } }));
   await page.route("**/v0/pi-installations", (route) => route.fulfill({ json: { installations: [] } }));
   await page.route("**/v0/projects", (route) => route.fulfill({ json: { projects } }));
@@ -144,27 +158,95 @@ test.beforeEach(async ({ page }) => {
   }));
 });
 
-test("acceptance: header search opens palette; close control dismisses without a selection", async ({ page }, testInfo) => {
+test("acceptance: header launchers distinguish chat search from the command palette", async ({ page }, testInfo) => {
   await page.goto("/");
-  await expect(page.locator(".palette-trigger")).toBeVisible();
-  await page.locator(".palette-trigger").click();
-  const palette = page.getByRole("dialog", { name: "Command Palette" });
+  const searchTrigger = page.locator(".search-trigger");
+  const paletteTrigger = page.locator(".palette-trigger");
+  await expect(searchTrigger).toBeVisible();
+  await expect(paletteTrigger).toBeVisible();
+  await expect(searchTrigger.locator("svg.lucide-search")).toBeVisible();
+  await expect(paletteTrigger.locator("svg.lucide-terminal")).toBeVisible();
+
+  await searchTrigger.click();
+  let palette = page.getByRole("dialog", { name: "Command Palette" });
+  await expect(palette.getByText("Search ›")).toBeVisible();
+  await palette.getByRole("button", { name: "Close command palette" }).click();
+  await expect(palette).toHaveCount(0);
+
+  await paletteTrigger.click();
+  palette = page.getByRole("dialog", { name: "Command Palette" });
   await expect(palette).toBeVisible();
+  await expect(palette.getByText("Search ›")).toHaveCount(0);
+  const hints = palette.getByRole("note", { name: "Keyboard shortcuts" });
+  await expect(hints).toBeVisible();
+  if (testInfo.project.name === "mobile-chromium" || (page.viewportSize()?.width || 0) <= 520) {
+    await expect(hints.getByText("More shortcuts", { exact: true })).toBeVisible();
+  }
   const shell = palette.locator(".command-shell");
   const [shellBox, viewport] = await Promise.all([
     shell.boundingBox(),
     page.evaluate(() => ({ width: innerWidth, height: innerHeight })),
   ]);
-  if (testInfo.project.name === "mobile-chromium" || viewport.width <= 480) {
-    expect(shellBox.x).toBeLessThanOrEqual(2);
-    expect(shellBox.y).toBeLessThanOrEqual(2);
-    expect(Math.abs(shellBox.width - viewport.width)).toBeLessThanOrEqual(2);
-    expect(Math.abs(shellBox.height - viewport.height)).toBeLessThanOrEqual(2);
+  if (testInfo.project.name === "mobile-chromium" || viewport.width <= 760) {
+    await expectInsetPalette(page, palette);
   } else {
     expect(Math.abs(shellBox.x + shellBox.width / 2 - viewport.width / 2)).toBeLessThanOrEqual(2);
     expect(Math.abs(shellBox.y + shellBox.height / 2 - viewport.height / 2)).toBeLessThanOrEqual(2);
   }
   await palette.getByRole("button", { name: "Close command palette" }).click();
+  await expect(palette).toHaveCount(0);
+});
+
+test("acceptance: tall narrow command and chat palettes fill the inset mobile frame", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop-chromium", "exact 523px responsive boundary");
+  await page.setViewportSize({ width: 523, height: 1100 });
+  await page.goto("/");
+  await page.locator(".palette-trigger").click();
+  const palette = page.getByRole("dialog", { name: "Command Palette" });
+  await expectInsetPalette(page, palette);
+  await palette.getByRole("option", { name: /^Search chats/ }).click();
+  await expect(palette.getByText("Search ›")).toBeVisible();
+  await expectInsetPalette(page, palette);
+});
+
+test("acceptance: mobile chat edit footer stays bounded and supports touch actions", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "mobile-chromium", "touch palette actions");
+  await page.goto("/");
+  await page.locator(".palette-trigger").tap();
+  const palette = page.getByRole("dialog", { name: "Command Palette" });
+  await palette.getByRole("option", { name: /^Search chats/ }).tap();
+
+  const hints = palette.getByRole("note", { name: "Keyboard shortcuts" });
+  await hints.getByRole("button", { name: /Edit chats/ }).tap();
+  await expect(palette.getByText("1 selected")).toBeVisible();
+  const done = hints.getByRole("button", { name: /Done/ });
+  const remove = hints.getByRole("button", { name: /Delete/ });
+  const move = hints.getByRole("button", { name: /Move/ });
+  await expect(done).toBeVisible();
+  await expect(remove).toBeVisible();
+  await expect(move).toBeVisible();
+
+  const footerSize = await hints.evaluate((footer) => ({
+    clientWidth: footer.clientWidth,
+    scrollWidth: footer.scrollWidth,
+  }));
+  expect(footerSize.scrollWidth).toBeLessThanOrEqual(footerSize.clientWidth + 1);
+  const viewport = page.viewportSize();
+  for (const action of [done, remove, move]) {
+    const box = await action.boundingBox();
+    expect(box.x).toBeGreaterThanOrEqual(-1);
+    expect(box.x + box.width).toBeLessThanOrEqual(viewport.width + 1);
+  }
+
+  await remove.tap();
+  const confirmation = page.getByRole("alertdialog", { name: "Delete 1 chats?" });
+  await expect(confirmation).toBeVisible();
+  await confirmation.getByRole("button", { name: "Cancel" }).tap();
+  await expect(palette.getByText("1 selected")).toBeVisible();
+
+  await move.tap();
+  await expect(hints).toContainText("Back");
+  await palette.getByRole("option", { name: /^Research/ }).tap();
   await expect(palette).toHaveCount(0);
 });
 
