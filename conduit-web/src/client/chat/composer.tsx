@@ -1,4 +1,4 @@
-import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show } from "solid-js";
+import { createEffect, createMemo, createSignal, For, lazy, onCleanup, onMount, Show } from "solid-js";
 import { ArrowUpIcon, ChevronDownIcon, MicIcon, PaperclipIcon, SquareIcon, TriangleAlertIcon, WaypointsIcon } from "lucide-solid";
 import {
   Button,
@@ -28,6 +28,7 @@ import { createVoiceWaveformController, VoiceWaveform, type VoiceWaveformControl
 
 const thinkingLabel = (value: string) => value ? value[0]!.toUpperCase() + value.slice(1) : "Off";
 export const SPINNING_ACTIVITY = new Set(["starting", "thinking", "responding", "using_tool", "retrying", "compacting", "stopping", "waiting_for_model"]);
+const MobileComposerOptions = lazy(() => import("./mobile-composer-options"));
 
 export interface ComposerStatus {
   dictationState: () => VoiceDictationState;
@@ -291,6 +292,7 @@ export function Composer(props: {
       <div class="composer-queue"><span>Queued messages</span><Button variant="ghost" size="sm" onClick={props.chat.clearQueue}>Restore to draft</Button></div>
     </Show>
     <div class="composer">
+      <MobileComposerOptions composer={props} />
       <div class="composer-input-shell">
         <textarea
           ref={input}
@@ -314,32 +316,36 @@ export function Composer(props: {
       <div class="composer-actions">
         <div class="composer-actions-left">
           <Button variant={dictationState() === "active" ? "default" : "ghost"} size="icon-sm" class="dictation-trigger" data-state={dictationState()} aria-label={dictating() ? "Stop voice dictation" : "Start voice dictation"} aria-pressed={dictating()} title={`Voice dictation (${props.voiceSettings.shortcut})`} disabled={!props.serverOnline || dictationState() === "stopping"} onClick={toggleDictation}><Show when={["connecting", "stopping"].includes(dictationState())} fallback={<Show when={dictationState() === "active"} fallback={<MicIcon />}><SquareIcon /></Show>}><Spinner /></Show></Button>
-          <Button variant="ghost" size="icon-sm" aria-label={`Attach files${props.attachments.items().length ? ` (${props.attachments.items().length})` : ""}`} disabled={!props.serverOnline} onClick={attach}><PaperclipIcon /></Button>
-          <Menu>
-            <MenuTrigger class="model-trigger" aria-label={`${selectedModel()?.label || props.models.model() || "Model"} ${props.models.effort() || "off"}`} disabled={!props.serverOnline}>
-              <span>{selectedModel()?.label || props.models.model() || "Model"}</span><span class="text-muted-foreground">{props.models.effort() || "off"}</span><ChevronDownIcon />
-            </MenuTrigger>
-            <MenuContent class="w-72">
-              <MenuGroup><MenuLabel>Model</MenuLabel>
-                <Show when={props.models.notice()}><div class="px-2 pb-2 text-xs text-muted-foreground">{props.models.notice()}</div></Show>
-                <MenuRadioGroup value={props.models.model()} onChange={(value) => void props.models.chooseModel(value)}>
-                  <For each={props.models.models()}>{(item) => <MenuRadioItem value={item.spec}><span class="truncate">{item.label}</span><span class="ml-auto text-xs text-muted-foreground">{item.provider}</span></MenuRadioItem>}</For>
-                </MenuRadioGroup>
-              </MenuGroup>
-              <MenuSeparator />
-              <MenuGroup><MenuLabel>Thinking</MenuLabel><MenuRadioGroup value={props.models.effort()} onChange={(value) => void props.models.chooseEffort(value)}>
-                <For each={levels()}>{(level) => <MenuRadioItem value={level}>{thinkingLabel(level)}</MenuRadioItem>}</For>
-              </MenuRadioGroup></MenuGroup>
-              <MenuSeparator /><MenuItem onSelect={() => props.onOpenSettings("models")}>Manage models…</MenuItem>
-            </MenuContent>
-          </Menu>
-          <Show when={props.profiles.length}>
-            <Menu><MenuTrigger class="model-trigger" aria-label={`Profile ${props.activeProfile?.label || "General"}`} disabled={!props.serverOnline || props.chat.status() !== "draft"}><span>{props.activeProfile?.label || "Profile"}</span><ChevronDownIcon /></MenuTrigger>
-              <MenuContent class="w-72"><MenuGroup><MenuLabel>Profile</MenuLabel>
-                <Show when={props.chat.status() !== "draft"}><div class="px-2 pb-2 text-xs text-muted-foreground">Locked for this chat after the first message.</div></Show>
-                <MenuRadioGroup value={props.activeProfile?.id || ""} onChange={props.onChooseProfile}><For each={props.profiles}>{(item) => <MenuRadioItem value={item.id} disabled={props.chat.status() !== "draft" || item.disabled}>{item.label}</MenuRadioItem>}</For></MenuRadioGroup>
-              </MenuGroup><MenuSeparator /><MenuItem onSelect={() => props.onOpenSettings("profiles")}>Manage profiles…</MenuItem></MenuContent>
+          <Button class="composer-desktop-attachment" variant="ghost" size="icon-sm" aria-label={`Attach files${props.attachments.items().length ? ` (${props.attachments.items().length})` : ""}`} disabled={!props.serverOnline} onClick={attach}><PaperclipIcon /></Button>
+          <div class="composer-desktop-setting">
+            <Menu>
+              <MenuTrigger class="model-trigger" aria-label={`${selectedModel()?.label || props.models.model() || "Model"} ${props.models.effort() || "off"}`} disabled={!props.serverOnline}>
+                <span>{selectedModel()?.label || props.models.model() || "Model"}</span><span class="text-muted-foreground">{props.models.effort() || "off"}</span><ChevronDownIcon />
+              </MenuTrigger>
+              <MenuContent class="w-72">
+                <MenuGroup><MenuLabel>Model</MenuLabel>
+                  <Show when={props.models.notice()}><div class="px-2 pb-2 text-xs text-muted-foreground">{props.models.notice()}</div></Show>
+                  <MenuRadioGroup value={props.models.model()} onChange={(value) => void props.models.chooseModel(value)}>
+                    <For each={props.models.models()}>{(item) => <MenuRadioItem value={item.spec}><span class="truncate">{item.label}</span><span class="ml-auto text-xs text-muted-foreground">{item.provider}</span></MenuRadioItem>}</For>
+                  </MenuRadioGroup>
+                </MenuGroup>
+                <MenuSeparator />
+                <MenuGroup><MenuLabel>Thinking</MenuLabel><MenuRadioGroup value={props.models.effort()} onChange={(value) => void props.models.chooseEffort(value)}>
+                  <For each={levels()}>{(level) => <MenuRadioItem value={level}>{thinkingLabel(level)}</MenuRadioItem>}</For>
+                </MenuRadioGroup></MenuGroup>
+                <MenuSeparator /><MenuItem onSelect={() => props.onOpenSettings("models")}>Manage models…</MenuItem>
+              </MenuContent>
             </Menu>
+          </div>
+          <Show when={props.profiles.length}>
+            <div class="composer-desktop-setting">
+              <Menu><MenuTrigger class="model-trigger" aria-label={`Profile ${props.activeProfile?.label || "General"}`} disabled={!props.serverOnline || props.chat.status() !== "draft"}><span>{props.activeProfile?.label || "Profile"}</span><ChevronDownIcon /></MenuTrigger>
+                <MenuContent class="w-72"><MenuGroup><MenuLabel>Profile</MenuLabel>
+                  <Show when={props.chat.status() !== "draft"}><div class="px-2 pb-2 text-xs text-muted-foreground">Locked for this chat after the first message.</div></Show>
+                  <MenuRadioGroup value={props.activeProfile?.id || ""} onChange={props.onChooseProfile}><For each={props.profiles}>{(item) => <MenuRadioItem value={item.id} disabled={props.chat.status() !== "draft" || item.disabled}>{item.label}</MenuRadioItem>}</For></MenuRadioGroup>
+                </MenuGroup><MenuSeparator /><MenuItem onSelect={() => props.onOpenSettings("profiles")}>Manage profiles…</MenuItem></MenuContent>
+              </Menu>
+            </div>
           </Show>
         </div>
         <div class="composer-actions-right">
