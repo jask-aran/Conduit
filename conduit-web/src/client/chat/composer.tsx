@@ -35,6 +35,7 @@ export interface ComposerStatus {
   dictationState: () => VoiceDictationState;
   dictationLabel: () => string;
   dictationError: () => string;
+  micSilent: () => boolean;
   dictating: () => boolean;
   recorderMonitorState: () => "connecting" | "listening" | "stopped";
   waveform: VoiceWaveformController;
@@ -58,6 +59,7 @@ export function Composer(props: {
   const [slashOpen, setSlashOpen] = createSignal(false);
   const [dictationState, setDictationState] = createSignal<VoiceDictationState>("idle");
   const [dictationError, setDictationError] = createSignal("");
+  const [micSilent, setMicSilent] = createSignal(false);
   const [dictatedRange, setDictatedRange] = createSignal<{ start: number; end: number } | null>(null);
   const [dictationSelectionOwned, setDictationSelectionOwned] = createSignal(false);
   const dictationWaveform = createVoiceWaveformController();
@@ -96,6 +98,7 @@ export function Composer(props: {
     dictationState,
     dictationLabel,
     dictationError,
+    micSilent,
     dictating,
     recorderMonitorState,
     waveform: dictationWaveform,
@@ -154,11 +157,13 @@ export function Composer(props: {
       setDictationState(next);
       if (!["connecting", "active", "stopping"].includes(next)) {
         dictationWaveform.reset();
+        setMicSilent(false);
       }
     },
     onPartial: applyTranscript,
     onFinal: applyTranscript,
     onInputLevel: setInputLevel,
+    onInputWarning: (warning) => setMicSilent(warning?.kind === "mic_silent"),
     onCompleted: (completion) => {
       window.dispatchEvent(new CustomEvent("conduit:voice-dictation-metrics", { detail: completion }));
       if (!completion.inputSignalDetected) {
@@ -390,6 +395,7 @@ export function Composer(props: {
       </div>
       <Show when={contextDetail()}><span class="composer-status-metrics">{contextDetail()}</span></Show>
       <Show when={queueCount()}><span class="composer-status-queue">Queue {queueCount()}</span></Show>
+      <Show when={dictating() && micSilent()}><span class="composer-status-warning" role="alert"><TriangleAlertIcon />No microphone signal — check the mic</span></Show>
     </div>
   </div>;
 }

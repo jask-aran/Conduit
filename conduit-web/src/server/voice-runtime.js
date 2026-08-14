@@ -1,6 +1,5 @@
 import dns from "node:dns/promises";
 import net from "node:net";
-import { WebSocket } from "ws";
 
 function runtimeError(code, message, status = 400) {
   return Object.assign(new Error(message), { code, status });
@@ -59,6 +58,14 @@ export class VoiceRuntime {
     this.lookup = lookup;
   }
 
+  pin() {
+    this.modelManager?.pin?.();
+  }
+
+  unpin() {
+    this.modelManager?.unpin?.();
+  }
+
   async resolve() {
     const config = await this.settings.effective();
     if (config.mode === "off") throw runtimeError("dictation_not_configured", "Voice dictation is disabled", 409);
@@ -94,7 +101,6 @@ export class VoiceRuntime {
       model: config.model,
       endpoint: endpoint.toString(),
       headers: requestHeaders(config),
-      stopMessage: config.stopMessage || "",
       lookup: addresses.length ? pinnedLookup(addresses) : undefined,
     };
   }
@@ -102,24 +108,6 @@ export class VoiceRuntime {
   async test() {
     const config = await this.resolve();
     if (config.mode === "local") return this.modelManager.test(config.localModelId);
-    if (config.adapter === "parakeet_pcm_ws_v1") {
-      return new Promise((resolve, reject) => {
-        const socket = new WebSocket(config.endpoint, { headers: config.headers, lookup: config.lookup, handshakeTimeout: 5_000 });
-        const timer = setTimeout(() => {
-          socket.terminate();
-          reject(runtimeError("voice_endpoint_timeout", "Voice endpoint connection timed out", 504));
-        }, 5_000);
-        socket.once("open", () => {
-          clearTimeout(timer);
-          socket.close(1000, "Connection test");
-          resolve({ ok: true, mode: config.mode, adapter: config.adapter });
-        });
-        socket.once("error", (error) => {
-          clearTimeout(timer);
-          reject(runtimeError("voice_endpoint_unreachable", `Could not connect to the voice endpoint: ${error.message}`, 502));
-        });
-      });
-    }
     const testEndpoint = config.provider === "openai"
       ? `https://api.openai.com/v1/models/${encodeURIComponent(config.model)}`
       : config.provider === "groq"

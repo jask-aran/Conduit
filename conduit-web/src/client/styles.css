@@ -290,6 +290,8 @@ svg { stroke-width: 1.5; }
 .composer-status { display: flex; width: 100%; min-height: 22px; flex-wrap: wrap; align-items: stretch; margin-top: 6px; overflow: hidden; border-radius: 5px; background: oklch(1 0 0 / 3%); font: 11px/18px ui-monospace, SFMono-Regular, Consolas, monospace; letter-spacing: 0.015em; }
 .composer-status-leading { display: inline-flex; height: 22px; flex: 0 0 auto; align-items: center; }
 .composer-status-state, .composer-status-queue { display: inline-flex; height: 22px; align-items: center; gap: 6px; padding: 0 12px; white-space: nowrap; }
+.composer-status-warning { display: inline-flex; height: 22px; align-items: center; gap: 6px; padding: 0 12px; white-space: nowrap; color: var(--destructive); font-size: 12px; }
+.composer-status-warning svg { width: 13px; height: 13px; flex: none; }
 .composer-status-state { position: relative; padding-left: 10px; background: color-mix(in oklch, var(--accent-cool), transparent 82%); color: var(--foreground); }
 .composer-status-state::after { content: ""; position: absolute; top: 0; right: -9px; z-index: 1; border-block: 11px solid transparent; border-left: 9px solid color-mix(in oklch, var(--accent-cool), transparent 82%); }
 .composer-status-metrics { min-width: 0; flex: 1 1 280px; align-self: stretch; padding: 2px 12px; overflow-wrap: anywhere; white-space: normal; }

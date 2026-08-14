@@ -8,8 +8,6 @@ import { pipeline as streamPipeline } from "node:stream/promises";
 import { getVoiceModelManifest, ONNXRUNTIME_VERSION } from "./voice-model-manifests.js";
 
 const MIB = 1024 * 1024;
-const PARAKEET_MODEL_REVISION = "8f23f0c03c8761650bdb5b40aaf3e40d2c15f1ce";
-
 export const LOCAL_VOICE_MODELS = Object.freeze([
   {
     id: "whisper-tiny-en-q8", label: "Whisper Tiny English", engine: "transformers-whisper", size: "tiny", languages: "English",
@@ -54,15 +52,27 @@ export const LOCAL_VOICE_MODELS = Object.freeze([
     license: { id: "MIT", attribution: "OpenAI Whisper and the ONNX Community conversion" },
   },
   {
-    id: "parakeet-tdt-0.6b-v3-int8", label: "Parakeet TDT 0.6B v3", engine: "parakeet", size: "large", languages: "English",
-    description: "Highest-quality managed English option; optimized ONNX int8 runtime.", approximateBytes: 900 * MIB, minimumFreeBytes: 900 * MIB,
-    revision: PARAKEET_MODEL_REVISION, precision: "int8",
+    id: "parakeet-tdt-0.6b-v2-int8", label: "Parakeet TDT 0.6B v2", engine: "parakeet", size: "large", languages: "English",
+    description: "English-only Parakeet; slightly more accurate than v3 on English, same CPU int8 runtime.", approximateBytes: 650 * MIB, minimumFreeBytes: 900 * MIB,
+    repository: "istupakov/parakeet-tdt-0.6b-v2-onnx", revision: "0bbb45a3365852604aef28b538a8f066f4ccaa85", precision: "int8",
+    license: { id: "CC-BY-4.0", attribution: "NVIDIA Parakeet TDT 0.6B v2 and the istupakov ONNX conversion" },
+  },
+  {
+    id: "parakeet-tdt-0.6b-v2-fp32", label: "Parakeet TDT 0.6B v2 (fp32)", engine: "parakeet", size: "large", languages: "English",
+    description: "English-only full-precision Parakeet for accuracy comparisons.", approximateBytes: 2440 * MIB, minimumFreeBytes: 3584 * MIB,
+    repository: "istupakov/parakeet-tdt-0.6b-v2-onnx", revision: "0bbb45a3365852604aef28b538a8f066f4ccaa85", precision: "fp32",
+    license: { id: "CC-BY-4.0", attribution: "NVIDIA Parakeet TDT 0.6B v2 and the istupakov ONNX conversion" },
+  },
+  {
+    id: "parakeet-tdt-0.6b-v3-int8", label: "Parakeet TDT 0.6B v3", engine: "parakeet", size: "large", languages: "25 European",
+    description: "Multilingual Parakeet covering English plus 24 other European languages; optimized ONNX int8 runtime.", approximateBytes: 900 * MIB, minimumFreeBytes: 900 * MIB,
+    repository: "istupakov/parakeet-tdt-0.6b-v3-onnx", revision: "8f23f0c03c8761650bdb5b40aaf3e40d2c15f1ce", precision: "int8",
     license: { id: "CC-BY-4.0", attribution: "NVIDIA Parakeet TDT 0.6B v3 and the istupakov ONNX conversion" },
   },
   {
-    id: "parakeet-tdt-0.6b-v3-fp32", label: "Parakeet TDT 0.6B v3 (fp32)", engine: "parakeet", size: "large", languages: "English",
-    description: "Highest-accuracy managed English option; full-precision ONNX runtime.", approximateBytes: 2480 * MIB, minimumFreeBytes: 3584 * MIB,
-    revision: PARAKEET_MODEL_REVISION, precision: "fp32",
+    id: "parakeet-tdt-0.6b-v3-fp32", label: "Parakeet TDT 0.6B v3 (fp32)", engine: "parakeet", size: "large", languages: "25 European",
+    description: "Full-precision multilingual Parakeet for accuracy comparisons.", approximateBytes: 2480 * MIB, minimumFreeBytes: 3584 * MIB,
+    repository: "istupakov/parakeet-tdt-0.6b-v3-onnx", revision: "8f23f0c03c8761650bdb5b40aaf3e40d2c15f1ce", precision: "fp32",
     license: { id: "CC-BY-4.0", attribution: "NVIDIA Parakeet TDT 0.6B v3 and the istupakov ONNX conversion" },
   },
 ]);
@@ -229,8 +239,10 @@ function pcmFloat32(buffer) {
   return samples;
 }
 
+export const DEFAULT_VOICE_MODEL_IDLE_TTL_MS = 5 * 60 * 1000;
+
 export class VoiceModelManager {
-  constructor({ root, fetchImpl = fetch, manifestResolver = packageManifest, runtimeExtractor = extractRuntime, transformersLoader = defaultTransformersLoader, downloadRetries = DOWNLOAD_RETRIES, downloadRetryBaseMs = DOWNLOAD_RETRY_BASE_MS, downloadConcurrency = 3 } = {}) {
+  constructor({ root, fetchImpl = fetch, manifestResolver = packageManifest, runtimeExtractor = extractRuntime, transformersLoader = defaultTransformersLoader, downloadRetries = DOWNLOAD_RETRIES, downloadRetryBaseMs = DOWNLOAD_RETRY_BASE_MS, downloadConcurrency = 3, idleTtlMs = DEFAULT_VOICE_MODEL_IDLE_TTL_MS } = {}) {
     if (!root) throw new Error("VoiceModelManager requires a root directory");
     this.root = path.resolve(root);
     this.fetchImpl = fetchImpl;
@@ -240,6 +252,9 @@ export class VoiceModelManager {
     this.downloadRetries = downloadRetries;
     this.downloadRetryBaseMs = downloadRetryBaseMs;
     this.downloadConcurrency = downloadConcurrency;
+    this.idleTtlMs = Number.isFinite(Number(idleTtlMs)) ? Math.max(0, Number(idleTtlMs)) : DEFAULT_VOICE_MODEL_IDLE_TTL_MS;
+    this.idleTimer = null;
+    this.pinCount = 0;
     this.installController = null;
     this.installPromise = null;
     this.installingModelId = null;
@@ -252,6 +267,33 @@ export class VoiceModelManager {
     this.transcriptionTail = Promise.resolve();
     this.lastErrors = new Map();
     this.progress = { phase: "idle", current: "", completedBytes: 0, totalBytes: 0 };
+  }
+
+  clearIdleTimer() {
+    if (this.idleTimer) clearTimeout(this.idleTimer);
+    this.idleTimer = null;
+  }
+
+  armIdleTimer() {
+    this.clearIdleTimer();
+    if (this.idleTtlMs <= 0 || this.pinCount > 0 || this.startPromise) return;
+    if (!this.activeModelId && !this.child && !this.transcriber) return;
+    this.idleTimer = setTimeout(() => {
+      this.idleTimer = null;
+      if (this.pinCount > 0 || this.startPromise) return;
+      void this.stopActive().catch(() => {});
+    }, this.idleTtlMs);
+    this.idleTimer.unref?.();
+  }
+
+  pin() {
+    this.pinCount += 1;
+    this.clearIdleTimer();
+  }
+
+  unpin() {
+    this.pinCount = Math.max(0, this.pinCount - 1);
+    if (this.pinCount === 0) this.armIdleTimer();
   }
 
   modelRoot(modelId) { return path.join(this.root, modelId); }
@@ -374,20 +416,29 @@ export class VoiceModelManager {
   async ensureRunning(modelId) {
     const model = requiredModel(modelId);
     let active = this.activeRuntime(model);
-    if (active) return active;
+    if (active) {
+      this.armIdleTimer();
+      return active;
+    }
     while (this.startPromise) {
       const pending = this.startPromise;
       const pendingModelId = this.startingModelId;
       try { await pending; }
       catch (error) { if (pendingModelId === model.id) throw error; }
       active = this.activeRuntime(model);
-      if (active) return active;
+      if (active) {
+        this.armIdleTimer();
+        return active;
+      }
     }
     const startPromise = this.startRuntime(model);
     this.startPromise = startPromise;
     this.startingModelId = model.id;
-    try { return await startPromise; }
-    finally {
+    try {
+      const runtime = await startPromise;
+      this.armIdleTimer();
+      return runtime;
+    } finally {
       if (this.startPromise === startPromise) {
         this.startPromise = null;
         this.startingModelId = null;
@@ -461,6 +512,7 @@ export class VoiceModelManager {
   }
 
   async stopActive() {
+    this.clearIdleTimer();
     const child = this.child;
     const transcriber = this.transcriber;
     this.child = null; this.port = null; this.transcriber = null; this.activeModelId = null;

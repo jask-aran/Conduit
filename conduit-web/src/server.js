@@ -85,7 +85,7 @@ const runtimeSettings = new RuntimeSettingsStore(config.runtimeSettingsFile, def
 await runtimeSettings.load();
 const searchSettings = new SearchSettingsStore({ filePath: config.searchConfigFile, environment: process.env });
 await searchSettings.initialize();
-const voiceSettings = new VoiceSettingsStore({ filePath: config.voiceConfigFile, environment: process.env });
+const voiceSettings = new VoiceSettingsStore({ filePath: config.voiceConfigFile });
 await voiceSettings.initialize();
 const voiceModel = new VoiceModelManager({ root: config.voiceModelRoot });
 const voiceRecordingStore = new VoiceRecordingStore({ root: config.voiceRecordingsRoot });

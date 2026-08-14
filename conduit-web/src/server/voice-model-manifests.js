@@ -3,9 +3,7 @@ function huggingFaceBase() {
   return (endpoint || "https://huggingface.co").replace(/\/+$/, "");
 }
 
-const PARAKEET_REPOSITORY = "istupakov/parakeet-tdt-0.6b-v3-onnx";
 const PARAKEET_VERSION = "v0.8.0";
-const PARAKEET_REVISION = "8f23f0c03c8761650bdb5b40aaf3e40d2c15f1ce";
 export const ONNXRUNTIME_VERSION = "1.25.1";
 
 const WHISPER_FILES = Object.freeze([
@@ -127,7 +125,7 @@ const WHISPER_MANIFESTS = Object.freeze({
   ),
 });
 
-const PARAKEET_FILES = Object.freeze({
+const PARAKEET_V3_INT8_FILES = Object.freeze({
   "config.json": [97, "666903c76b9798caf2c210afd4f6cd60b08a8dbf9800ec8d7a3bc0d2148ac466"],
   "vocab.txt": [93939, "d58544679ea4bc6ac563d1f545eb7d474bd6cfa467f0a6e2c1dc1c7d37e3c35d"],
   "nemo128.onnx": [139764, "a9fde1486ebfcc08f328d75ad4610c67835fea58c73ba57e3209a6f6cf019e9f"],
@@ -135,13 +133,53 @@ const PARAKEET_FILES = Object.freeze({
   "decoder_joint-model.int8.onnx": [18202004, "eea7483ee3d1a30375daedc8ed83e3960c91b098812127a0d99d1c8977667a70"],
 });
 
-const PARAKEET_FP32_FILES = Object.freeze({
-  "config.json": PARAKEET_FILES["config.json"],
-  "vocab.txt": PARAKEET_FILES["vocab.txt"],
-  "nemo128.onnx": PARAKEET_FILES["nemo128.onnx"],
+const PARAKEET_V3_FP32_FILES = Object.freeze({
+  "config.json": PARAKEET_V3_INT8_FILES["config.json"],
+  "vocab.txt": PARAKEET_V3_INT8_FILES["vocab.txt"],
+  "nemo128.onnx": PARAKEET_V3_INT8_FILES["nemo128.onnx"],
   "encoder-model.onnx": [41770866, "98a74b21b4cc0017c1e7030319a4a96f4a9506e50f0708f3a516d02a77c96bb1"],
   "encoder-model.onnx.data": [2435420160, "9a22d372c51455c34f13405da2520baefb7125bd16981397561423ed32d24f36"],
   "decoder_joint-model.onnx": [72520893, "e978ddf6688527182c10fde2eb4b83068421648985ef23f7a86be732be8706c1"],
+});
+
+const PARAKEET_V2_INT8_FILES = Object.freeze({
+  "config.json": [97, "666903c76b9798caf2c210afd4f6cd60b08a8dbf9800ec8d7a3bc0d2148ac466"],
+  "vocab.txt": [9384, "ec182b70dd42113aff6c5372c75cac58c952443eb22322f57bbd7f53977d497d"],
+  "nemo128.onnx": [139764, "a9fde1486ebfcc08f328d75ad4610c67835fea58c73ba57e3209a6f6cf019e9f"],
+  "encoder-model.int8.onnx": [652184014, "3e0581fda6ab843888b51e56d7ee78b6d5bc3237ec113af1f732d1d5286aa155"],
+  "decoder_joint-model.int8.onnx": [8998286, "a449f49acd68979d418651dd2dcb737cc0f1bf0225e009e29ee326354edbf7d3"],
+});
+
+const PARAKEET_V2_FP32_FILES = Object.freeze({
+  "config.json": PARAKEET_V2_INT8_FILES["config.json"],
+  "vocab.txt": PARAKEET_V2_INT8_FILES["vocab.txt"],
+  "nemo128.onnx": PARAKEET_V2_INT8_FILES["nemo128.onnx"],
+  "encoder-model.onnx": [41770866, "3987bcd28175d829d12888a996a84e8f62a0e374d9ffd640662c1515adc679d3"],
+  "encoder-model.onnx.data": [2435420160, "4dab7362d4874d85965045b1e41b2d61dd2cc0fb25671a7f6b3dc47bf120cc41"],
+  "decoder_joint-model.onnx": [35792059, "cbb52a07bd70ab5b67f8439d4b3cd8704b18467b4430bcacb5adabe154b8d191"],
+});
+
+const PARAKEET_PACKAGES = Object.freeze({
+  "parakeet-tdt-0.6b-v3-int8": Object.freeze({
+    repository: "istupakov/parakeet-tdt-0.6b-v3-onnx",
+    revision: "8f23f0c03c8761650bdb5b40aaf3e40d2c15f1ce",
+    files: PARAKEET_V3_INT8_FILES,
+  }),
+  "parakeet-tdt-0.6b-v3-fp32": Object.freeze({
+    repository: "istupakov/parakeet-tdt-0.6b-v3-onnx",
+    revision: "8f23f0c03c8761650bdb5b40aaf3e40d2c15f1ce",
+    files: PARAKEET_V3_FP32_FILES,
+  }),
+  "parakeet-tdt-0.6b-v2-int8": Object.freeze({
+    repository: "istupakov/parakeet-tdt-0.6b-v2-onnx",
+    revision: "0bbb45a3365852604aef28b538a8f066f4ccaa85",
+    files: PARAKEET_V2_INT8_FILES,
+  }),
+  "parakeet-tdt-0.6b-v2-fp32": Object.freeze({
+    repository: "istupakov/parakeet-tdt-0.6b-v2-onnx",
+    revision: "0bbb45a3365852604aef28b538a8f066f4ccaa85",
+    files: PARAKEET_V2_FP32_FILES,
+  }),
 });
 
 const PARAKEET_RUNTIME = Object.freeze({
@@ -195,13 +233,16 @@ function whisperManifest(model) {
 }
 
 function parakeetManifest(model, architecture) {
+  const pack = PARAKEET_PACKAGES[model.id];
   const binary = PARAKEET_BINARY[architecture.release];
   const runtime = PARAKEET_RUNTIME[architecture.runtime];
-  const files = model.precision === "fp32" ? PARAKEET_FP32_FILES : PARAKEET_FILES;
+  if (!pack || pack.repository !== model.repository || pack.revision !== model.revision) {
+    throw manifestError(`No reviewed artifact manifest exists for ${model.label}`);
+  }
   if (!binary || !runtime) throw manifestError(`No reviewed Parakeet package exists for ${architecture.release}`);
   return {
     version: PARAKEET_VERSION,
-    modelRevision: PARAKEET_REVISION,
+    modelRevision: pack.revision,
     extractRuntime: true,
     artifacts: [
       {
@@ -218,10 +259,10 @@ function parakeetManifest(model, architecture) {
         size: runtime.size,
         sha256: runtime.sha256,
       },
-      ...Object.entries(files).map(([name, [size, sha256]]) => ({
+      ...Object.entries(pack.files).map(([name, [size, sha256]]) => ({
         name,
         relative: `models/${name}`,
-        url: `${huggingFaceBase()}/${PARAKEET_REPOSITORY}/resolve/${PARAKEET_REVISION}/${name}`,
+        url: `${huggingFaceBase()}/${pack.repository}/resolve/${pack.revision}/${name}`,
         size,
         sha256,
       })),

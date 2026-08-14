@@ -1,23 +1,21 @@
-import { WebSocket } from "ws";
-
 const DEFAULT_LIMITS = Object.freeze({
   maxSessions: 2,
   maxDurationMs: 300_000,
   maxAudioBytes: 16_000 * 2 * 300,
   maxFrameBytes: 64 * 1024,
   maxEventBytes: 64 * 1024,
-  maxBufferedBytes: 1024 * 1024,
   finalDeadlineMs: 1_000,
   finalizationBaseMs: 30_000,
   finalizationMaxMs: 600_000,
   finalizationDefaultMultiplier: 12,
-  connectTimeoutMs: 5_000,
 });
 
 // Local full-precision models need much more CPU time than a remote streaming
 // adapter. Keep these policies here so a deployment can tune the defaults
 // through createDictationStream({ limits }) without changing the protocol.
 export const FINALIZATION_MODEL_MULTIPLIERS = Object.freeze({
+  "parakeet-tdt-0.6b-v2-fp32": 18,
+  "parakeet-tdt-0.6b-v2-int8": 10,
   "parakeet-tdt-0.6b-v3-fp32": 18,
   "parakeet-tdt-0.6b-v3-int8": 10,
   "whisper-large-v3-turbo-q8": 14,
@@ -32,7 +30,6 @@ export const FINALIZATION_MODEL_MULTIPLIERS = Object.freeze({
 function finalizationMultiplier({ adapter, model }, limits) {
   const exact = FINALIZATION_MODEL_MULTIPLIERS[String(model || "")];
   if (Number.isFinite(exact)) return exact;
-  if (adapter === "parakeet_pcm_ws_v1") return 4;
   return Number.isFinite(Number(limits.finalizationDefaultMultiplier))
     ? Number(limits.finalizationDefaultMultiplier)
     : DEFAULT_LIMITS.finalizationDefaultMultiplier;
@@ -63,6 +60,15 @@ function joinTranscript(left, right) {
   return `${left}${/\s$/.test(left) || /^\s/.test(right) ? "" : " "}${right}`;
 }
 
+// Append two texts verbatim. Unlike joinTranscript this never deduplicates:
+// segment transcripts are distinct utterances, so a sentence spoken twice must
+// appear twice even when the model transcribes both segments identically.
+function appendText(left, right) {
+  if (!left) return right;
+  if (!right) return left;
+  return `${left}${/\s$/.test(left) || /^\s/.test(right) ? "" : " "}${right}`;
+}
+
 // Merge an incoming finalized transcript into the accumulated text. Endpoints
 // stream token deltas that differ from their final text only by whitespace
 // (the local Parakeet runtime emits word-boundary tokens with a leading space
@@ -81,36 +87,77 @@ function mergeTranscript(left, right) {
   return joinTranscript(left, right);
 }
 
-export function createParakeetNormalizer() {
-  let settled = "";
-  let provisional = "";
-  let hasFinal = false;
-  const normalize = (raw) => {
-    let event;
-    try { event = JSON.parse(Buffer.isBuffer(raw) ? raw.toString("utf8") : String(raw)); }
-    catch { throw dictationError("asr_event_invalid", "The Parakeet endpoint returned a non-JSON event", 502); }
-    const type = String(event.type || event.event || "").toLowerCase();
-    if (type === "error" || event.error) {
-      return [{ type: "error", code: String(event.code || "asr_error"), message: String(event.message || event.error?.message || event.error || "Transcription failed") }];
+// Batch ASR models hallucinate over long mid-utterance silence: the local
+// Parakeet TDT fills a 2s+ pause with invented text and drops the speech that
+// follows. Split the buffered PCM at long silent runs before transcription so
+// each segment is a self-contained utterance, then join the segment texts.
+const SEGMENT_WINDOW_SAMPLES = 160; // 10ms at 16 kHz
+const SEGMENT_SILENCE_RMS = 0.008; // -42 dBFS
+const SEGMENT_SILENCE_MS = 2_000;
+const SEGMENT_MIN_SEGMENT_MS = 500;
+const SEGMENT_MAX_SEGMENTS = 16;
+const SEGMENT_MERGE_ACTIVE_MS = 150;
+
+export function splitSilence(pcm, byteLength, options = {}) {
+  const sampleCount = Math.max(0, Math.floor(byteLength / 2));
+  const windowSamples = Number.isFinite(options.windowSamples) ? options.windowSamples : SEGMENT_WINDOW_SAMPLES;
+  const silenceRms = Number.isFinite(options.silenceRms) ? options.silenceRms : SEGMENT_SILENCE_RMS;
+  const silenceSamples = Math.max(1, Math.round((Number.isFinite(options.silenceMs) ? options.silenceMs : SEGMENT_SILENCE_MS) / 1_000 * 16_000));
+  const minSegmentSamples = Math.max(1, Math.round((Number.isFinite(options.minSegmentMs) ? options.minSegmentMs : SEGMENT_MIN_SEGMENT_MS) / 1_000 * 16_000));
+  const maxSegments = Math.max(2, Number.isFinite(options.maxSegments) ? options.maxSegments : SEGMENT_MAX_SEGMENTS);
+  const windows = Math.ceil(sampleCount / windowSamples);
+  const silent = new Array(windows);
+  for (let windowIndex = 0; windowIndex < windows; windowIndex += 1) {
+    const start = windowIndex * windowSamples;
+    const end = Math.min(sampleCount, start + windowSamples);
+    let sum = 0;
+    for (let index = start; index < end; index += 1) {
+      const value = pcm.readInt16LE(index * 2) / 32768;
+      sum += value * value;
     }
-    const events = [];
-    if (["partial", "transcript.partial", "transcript.text.delta"].includes(type)) {
-      provisional = type === "transcript.text.delta" ? `${provisional}${String(event.delta || "")}` : transcriptText(event);
-      events.push({ type: "partial", text: joinTranscript(settled, provisional) });
-    } else if (["final", "transcript.final", "transcript.text.done"].includes(type)) {
-      settled = mergeTranscript(settled, transcriptText(event) || provisional);
-      provisional = "";
-      hasFinal = true;
-      events.push({ type: "final", text: settled });
-    } else if (!["end_of_speech", "utterance_end", "speech_end"].includes(type)) {
-      throw dictationError("asr_event_unknown", `The Parakeet endpoint returned an unsupported ${type || "untyped"} event`, 502);
+    silent[windowIndex] = Math.sqrt(sum / (end - start)) < silenceRms;
+  }
+  // Collect silent runs; brief active blips (e.g. a click inside the pause)
+  // merge into the surrounding run.
+  const mergeWindows = Math.max(1, Math.round(SEGMENT_MERGE_ACTIVE_MS / 1_000 * 16_000 / windowSamples));
+  const runs = [];
+  let runStartWindow = -1;
+  let activeWindowCount = 0;
+  for (let windowIndex = 0; windowIndex <= windows; windowIndex += 1) {
+    const isSilent = windowIndex < windows && silent[windowIndex];
+    if (isSilent) {
+      if (runStartWindow < 0) {
+        runStartWindow = windowIndex;
+        activeWindowCount = 0;
+      }
+    } else {
+      activeWindowCount += 1;
+      if (runStartWindow >= 0 && activeWindowCount >= mergeWindows) {
+        const runEndWindow = windowIndex - activeWindowCount + 1;
+        const durationSamples = (runEndWindow - runStartWindow) * windowSamples;
+        if (durationSamples >= silenceSamples) runs.push([runStartWindow * windowSamples, Math.min(sampleCount, runEndWindow * windowSamples)]);
+        runStartWindow = -1;
+        activeWindowCount = 0;
+      }
     }
-    if (event.speech_final === true || event.end_of_speech === true || ["end_of_speech", "utterance_end", "speech_end"].includes(type)) {
-      events.push({ type: "end_of_speech" });
-    }
-    return events;
-  };
-  return { normalize, text: () => joinTranscript(settled, provisional), hasFinal: () => hasFinal };
+  }
+  if (runStartWindow >= 0 && (windows - runStartWindow) * windowSamples >= silenceSamples) {
+    runs.push([runStartWindow * windowSamples, sampleCount]);
+  }
+  if (!runs.length) return [[0, sampleCount]];
+  if (runs.length > maxSegments - 1) {
+    runs.sort((left, right) => (right[1] - right[0]) - (left[1] - left[0]));
+    runs.length = maxSegments - 1;
+  }
+  runs.sort((left, right) => left[0] - right[0]);
+  const segments = [];
+  let cursor = 0;
+  for (const [runStart, runEnd] of runs) {
+    if (runStart - cursor >= minSegmentSamples) segments.push([cursor, runStart]);
+    cursor = runEnd;
+  }
+  if (sampleCount - cursor >= minSegmentSamples) segments.push([cursor, sampleCount]);
+  return segments;
 }
 
 function wavBlob(chunks, byteLength) {
@@ -172,57 +219,44 @@ async function readSse(response, emit, limits) {
   if (pending.trim()) processFrame(pending);
 }
 
-function createWebSocketAdapter(config, emit, limits, WebSocketImpl) {
-  const normalizer = createParakeetNormalizer();
-  let socket;
-  let connectTimer;
-  const opened = new Promise((resolve, reject) => {
-    socket = new WebSocketImpl(config.endpoint, { headers: config.headers, lookup: config.lookup, handshakeTimeout: limits.connectTimeoutMs });
-    connectTimer = setTimeout(() => reject(dictationError("dictation_connection_timeout", "Voice endpoint connection timed out", 504)), limits.connectTimeoutMs);
-    socket.once("open", () => { clearTimeout(connectTimer); emit({ type: "ready", sampleRate: 16_000, encoding: "pcm_s16le" }); resolve(); });
-    socket.on("message", (data) => {
-      try {
-        if (data.length > limits.maxEventBytes) throw dictationError("asr_event_too_large", "Voice endpoint event is too large", 502);
-        for (const event of normalizer.normalize(data)) emit(event);
-      } catch (error) { emit({ type: "error", code: error.code || "asr_event_invalid", message: error.message }); }
-    });
-    socket.once("error", reject);
-    socket.once("close", () => emit({ type: "adapter_closed", text: normalizer.text(), final: normalizer.hasFinal() }));
-  });
-  return {
-    opened,
-    write(data) {
-      if (socket?.readyState !== WebSocketImpl.OPEN) throw dictationError("dictation_not_ready", "Voice endpoint is not ready", 409);
-      if (socket.bufferedAmount > limits.maxBufferedBytes) throw dictationError("dictation_backpressure", "Voice endpoint is not accepting audio quickly enough", 429);
-      socket.send(data, { binary: true });
-    },
-    stop() {
-      if (socket?.readyState === WebSocketImpl.OPEN) socket.send(config.stopMessage || JSON.stringify({ type: "stop" }));
-    },
-    close() { clearTimeout(connectTimer); if (socket?.readyState < WebSocketImpl.CLOSING) socket.close(1000, "Dictation complete"); },
-  };
-}
-
 export function createHttpAdapter(config, emit, limits, fetchImpl) {
   const chunks = [];
   let byteLength = 0;
   const controller = new AbortController();
   const transcribe = async () => {
     if (!byteLength || controller.signal.aborted) return { final: false, text: "" };
-    const snapshot = chunks.map((chunk) => Buffer.from(chunk));
-    const snapshotBytes = byteLength;
-    const form = new FormData();
-    form.append("file", wavBlob(snapshot, snapshotBytes), "dictation.wav");
-    form.append("response_format", "json");
-    if (config.model) form.append("model", config.model);
-    if (config.provider !== "groq") form.append("stream", "true");
-    const response = await fetchImpl(config.endpoint, { method: "POST", headers: config.headers, body: form, signal: controller.signal, redirect: "error" });
+    const pcm = Buffer.concat(chunks.map((chunk) => Buffer.from(chunk)), byteLength);
+    const segments = splitSilence(pcm, byteLength, limits);
     let final = false;
     let text = "";
-    await readSse(response, (event) => {
-      if (event.type === "final") { final = true; text = mergeTranscript(text, String(event.text || "")); }
-      emit(event);
-    }, limits);
+    for (let index = 0; index < segments.length; index += 1) {
+      const [startSample, endSample] = segments[index];
+      const segmentBytes = (endSample - startSample) * 2;
+      const segmentChunks = segments.length > 1 ? [pcm.subarray(startSample * 2, endSample * 2)] : [pcm];
+      const prefix = text;
+      let segmentText = "";
+      const form = new FormData();
+      form.append("file", wavBlob(segmentChunks, segmentBytes), `dictation-${index + 1}.wav`);
+      form.append("response_format", "json");
+      if (config.model) form.append("model", config.model);
+      if (config.provider !== "groq") form.append("stream", "true");
+      const response = await fetchImpl(config.endpoint, { method: "POST", headers: config.headers, body: form, signal: controller.signal, redirect: "error" });
+      await readSse(response, (event) => {
+        if (event.type === "final") {
+          final = true;
+          // Finals within one response are cumulative snapshots of that
+          // segment, so they merge extension-aware; the completed segments
+          // ahead of this one are distinct utterances and append verbatim.
+          segmentText = mergeTranscript(segmentText, String(event.text || ""));
+          emit({ type: "final", text: appendText(prefix, segmentText) });
+        } else if (event.type === "partial") {
+          // Partials stay cumulative snapshots of the whole utterance: prefix
+          // the joined text of the completed segments ahead of this one.
+          emit({ type: "partial", text: appendText(prefix, String(event.text || "")) });
+        } else emit(event);
+      }, limits);
+      text = appendText(text, segmentText);
+    }
     return { final, text };
   };
   queueMicrotask(() => emit({ type: "ready", sampleRate: 16_000, encoding: "pcm_s16le" }));
@@ -251,7 +285,13 @@ function createSnapshotAdapter(emit, limits, transcribe) {
   const run = async () => {
     if (!byteLength) return { final: false, text: "" };
     const snapshot = Buffer.concat(chunks.map((chunk) => Buffer.from(chunk)), byteLength);
-    const text = String(await transcribe(snapshot) || "").trim();
+    const segments = splitSilence(snapshot, byteLength, limits);
+    let text = "";
+    for (const [startSample, endSample] of segments) {
+      const piece = segments.length > 1 ? snapshot.subarray(startSample * 2, endSample * 2) : snapshot;
+      const pieceText = String(await transcribe(piece) || "").trim();
+      if (pieceText) text = appendText(text, pieceText);
+    }
     if (text) emit({ type: "final", text });
     return { final: Boolean(text), text };
   };
@@ -291,7 +331,7 @@ export function createDeepgramAdapter(config, emit, limits, fetchImpl) {
   });
 }
 
-export function createDictationStream({ wss, voiceRuntime, recordingStore = null, WebSocketImpl = WebSocket, fetchImpl = fetch, limits: limitOverrides = {} }) {
+export function createDictationStream({ wss, voiceRuntime, recordingStore = null, fetchImpl = fetch, limits: limitOverrides = {} }) {
   const limits = { ...DEFAULT_LIMITS, ...limitOverrides };
   let activeSessions = 0;
   const handleUpgrade = (request, socket, head) => wss.handleUpgrade(request, socket, head, (client) => {
@@ -301,14 +341,16 @@ export function createDictationStream({ wss, voiceRuntime, recordingStore = null
       return;
     }
     activeSessions += 1;
-    let adapter;
+    voiceRuntime.pin?.();
+    let adapter = null;
+    let adapterReady = false;
+    let settleAdapter;
+    const adapterAvailable = new Promise((resolve) => { settleAdapter = resolve; });
     let completed = false;
     let stopping = false;
     let stoppedAt = 0;
     let finalText = "";
     let hasFinal = false;
-    let finalRevision = 0;
-    let stopFinalRevision = 0;
     let durationTimer;
     let finalTimer;
     let deadlineTimer;
@@ -316,6 +358,7 @@ export function createDictationStream({ wss, voiceRuntime, recordingStore = null
     let audioBytes = 0;
     let clientAudioBytes = null;
     const audioChunks = [];
+    const pendingPcm = [];
     let transcriptObserved = false;
     let stopReason = null;
     let runtimeMetadata = { adapter: null, provider: null, model: null };
@@ -326,8 +369,10 @@ export function createDictationStream({ wss, voiceRuntime, recordingStore = null
       clearTimeout(durationTimer);
       clearTimeout(finalTimer);
       clearTimeout(deadlineTimer);
+      pendingPcm.length = 0;
       adapter?.close();
       adapter = null;
+      adapterReady = false;
     };
     const complete = async (reason, upstream = {}) => {
       if (completed) return;
@@ -374,32 +419,49 @@ export function createDictationStream({ wss, voiceRuntime, recordingStore = null
       cleanup();
       send({ type: "error", code: error.code || "dictation_failed", message: error.message || "Voice dictation failed" });
     };
+    const acceptAudio = (data) => {
+      if (data.length > limits.maxFrameBytes) throw dictationError("dictation_frame_too_large", "Audio frame is too large", 413);
+      audioBytes += data.length;
+      if (audioBytes > limits.maxAudioBytes) throw dictationError("dictation_too_long", "Voice dictation reached the server audio limit", 413);
+      const copy = Buffer.from(data);
+      audioChunks.push(copy);
+      if (adapterReady && adapter) adapter.write(copy);
+      else pendingPcm.push(copy);
+    };
     const stop = (reason) => {
       if (stopping || completed) return;
       stopping = true;
       stopReason = reason;
       stoppedAt = Date.now();
-      stopFinalRevision = finalRevision;
-      const finalizationTimeoutMs = calculateFinalizationTimeoutMs({
-        audioBytes,
-        adapter: runtimeMetadata.adapter,
-        model: runtimeMetadata.model,
-        limits,
-      });
-      send({
-        type: "finalizing",
-        timeoutMs: finalizationTimeoutMs,
-        audioDurationMs: Math.round(audioBytes / 32),
-        ...runtimeMetadata,
-      });
-      finalTimer = setTimeout(() => fail(dictationError("dictation_final_timeout", "Voice dictation did not finalize in time", 504)), finalizationTimeoutMs);
-      finalTimer.unref?.();
-      deadlineTimer = setTimeout(() => { deadlinePassed = true; send({ type: "settlement_deadline", deadlineMs: limits.finalDeadlineMs }); }, limits.finalDeadlineMs);
-      deadlineTimer.unref?.();
-      Promise.resolve(adapter?.stop()).catch(fail);
+      void (async () => {
+        try {
+          const current = adapter || await adapterAvailable;
+          if (!current || completed) return;
+          const finalizationTimeoutMs = calculateFinalizationTimeoutMs({
+            audioBytes,
+            adapter: runtimeMetadata.adapter,
+            model: runtimeMetadata.model,
+            limits,
+          });
+          send({
+            type: "finalizing",
+            timeoutMs: finalizationTimeoutMs,
+            audioDurationMs: Math.round(audioBytes / 32),
+            ...runtimeMetadata,
+          });
+          finalTimer = setTimeout(() => fail(dictationError("dictation_final_timeout", "Voice dictation did not finalize in time", 504)), finalizationTimeoutMs);
+          finalTimer.unref?.();
+          deadlineTimer = setTimeout(() => { deadlinePassed = true; send({ type: "settlement_deadline", deadlineMs: limits.finalDeadlineMs }); }, limits.finalDeadlineMs);
+          deadlineTimer.unref?.();
+          await current.stop();
+        } catch (error) { fail(error); }
+      })();
     };
     const emit = (event) => {
       if (completed) return;
+      // Session already advertised readiness so the browser can stream PCM while
+      // the local model cold-starts; ignore the adapter's own ready event.
+      if (event.type === "ready") return;
       if (event.type === "partial") {
         const text = String(event.text || "");
         if (text.trim()) transcriptObserved = true;
@@ -409,46 +471,56 @@ export function createDictationStream({ wss, voiceRuntime, recordingStore = null
         finalText = String(event.text || "");
         if (finalText.trim()) transcriptObserved = true;
         hasFinal = true;
-        finalRevision += 1;
         send({ type: "final", text: finalText });
-        if (stopping && finalRevision > stopFinalRevision) complete(stopReason || "final");
-      } else if (event.type === "end_of_speech") send(event);
-      else if (event.type === "adapter_closed") complete(stopping ? stopReason || "stopped" : "upstream_closed", event);
+        // Completion waits for adapter_closed: segmented transcriptions emit
+        // one final per utterance, so completing on the first final would drop
+        // every later segment.
+      } else if (event.type === "adapter_closed") complete(stopping ? stopReason || "stopped" : "upstream_closed", event);
       else if (event.type === "error") fail(dictationError(event.code || "asr_error", event.message || "Voice dictation failed", 502));
       else send(event);
     };
+    // Accept PCM immediately. Cold model load continues in the background; the
+    // server retains frames until the adapter is attached, then drains them.
+    send({ type: "ready", sampleRate: 16_000, encoding: "pcm_s16le" });
+    durationTimer = setTimeout(() => stop("duration_limit"), limits.maxDurationMs);
+    durationTimer.unref?.();
     (async () => {
       const config = await voiceRuntime.resolve();
+      if (completed) {
+        settleAdapter(null);
+        return;
+      }
       runtimeMetadata = {
         adapter: typeof config.adapter === "string" ? config.adapter : null,
         provider: typeof config.provider === "string" ? config.provider : null,
         model: typeof config.model === "string" && config.model ? config.model : typeof config.localModelId === "string" ? config.localModelId : null,
       };
-      adapter = config.adapter === "parakeet_pcm_ws_v1"
-        ? createWebSocketAdapter(config, emit, limits, WebSocketImpl)
-        : config.adapter === "deepgram_audio_v1"
-          ? createDeepgramAdapter(config, emit, limits, fetchImpl)
-          : config.adapter === "managed_transformers_v1"
-            ? createSnapshotAdapter(emit, limits, config.transcribe)
-            : createHttpAdapter(config, emit, limits, fetchImpl);
-      await adapter.opened;
-      if (stopping) {
-        await adapter.stop();
+      const next = config.adapter === "deepgram_audio_v1"
+        ? createDeepgramAdapter(config, emit, limits, fetchImpl)
+        : config.adapter === "managed_transformers_v1"
+          ? createSnapshotAdapter(emit, limits, config.transcribe)
+          : createHttpAdapter(config, emit, limits, fetchImpl);
+      await next.opened;
+      if (completed) {
+        next.close();
+        settleAdapter(null);
         return;
       }
-      durationTimer = setTimeout(() => stop("duration_limit"), limits.maxDurationMs);
-      durationTimer.unref?.();
-    })().catch(fail);
+      adapter = next;
+      for (const chunk of pendingPcm) adapter.write(chunk);
+      pendingPcm.length = 0;
+      adapterReady = true;
+      settleAdapter(adapter);
+    })().catch((error) => {
+      settleAdapter(null);
+      fail(error);
+    });
 
     client.on("message", (data, isBinary) => {
       if (completed || stopping) return;
       try {
         if (isBinary) {
-          if (data.length > limits.maxFrameBytes) throw dictationError("dictation_frame_too_large", "Audio frame is too large", 413);
-          audioBytes += data.length;
-          if (audioBytes > limits.maxAudioBytes) throw dictationError("dictation_too_long", "Voice dictation reached the server audio limit", 413);
-          audioChunks.push(Buffer.from(data));
-          adapter?.write(data);
+          acceptAudio(data);
           return;
         }
         const command = JSON.parse(String(data));
@@ -462,7 +534,9 @@ export function createDictationStream({ wss, voiceRuntime, recordingStore = null
     });
     client.once("close", () => {
       if (!completed) { completed = true; cleanup(); }
+      settleAdapter(null);
       activeSessions = Math.max(0, activeSessions - 1);
+      voiceRuntime.unpin?.();
     });
   });
   return { handleUpgrade, activeSessions: () => activeSessions };

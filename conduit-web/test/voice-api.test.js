@@ -17,8 +17,8 @@ test("voice settings API stores endpoint authentication without returning the se
       body: JSON.stringify({
         mode: "remote",
         provider: "custom",
-        adapter: "parakeet_pcm_ws_v1",
-        endpoint: "wss://speech.example.com/ws",
+        adapter: "openai_audio_sse_v1",
+        endpoint: "https://speech.example.com/v1/audio/transcriptions",
         auth: { type: "bearer", secret: "voice-test-secret" },
       }),
     });

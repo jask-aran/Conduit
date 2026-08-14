@@ -2,6 +2,10 @@ import { audioInputConstraints, formatMicrophoneError, hasAudioSignal, isUnavail
 
 export type VoiceDictationState = "idle" | "connecting" | "active" | "stopping" | "completed" | "failed";
 
+export interface VoiceInputWarning {
+  kind: "mic_silent";
+}
+
 export interface VoiceDictationCompletion {
   text: string;
   final: boolean;
@@ -25,6 +29,7 @@ interface VoiceDictationCallbacks {
   onFinal: (text: string) => void;
   onCompleted: (completion: VoiceDictationCompletion) => void;
   onInputLevel?: (level: AudioSignalLevel) => void;
+  onInputWarning?: (warning: VoiceInputWarning | null) => void;
   onError: (error: Error) => void;
 }
 
@@ -33,7 +38,9 @@ interface VoiceDictationOptions {
 }
 
 const MAX_SOCKET_BUFFER_BYTES = 1024 * 1024;
-const MAX_PENDING_AUDIO_BYTES = 256 * 1024;
+// Safety net only: the server now emits ready on accept and retains PCM while
+// the model cold-starts. Keep enough headroom for a slow first WebSocket frame.
+const MAX_PENDING_AUDIO_BYTES = 2 * 1024 * 1024;
 const INITIAL_FINALIZATION_TIMEOUT_MS = 60_000;
 const FINALIZATION_NETWORK_GRACE_MS = 5_000;
 
@@ -98,6 +105,7 @@ export function createVoiceDictationClient(callbacks: VoiceDictationCallbacks, o
   let captureStartedAt: number | null = null;
   let captureStoppedAt: number | null = null;
   let audioBytesSent = 0;
+  let micSilentActive = false;
   let captureDrainResolver: (() => void) | null = null;
   let captureDrainTimer: number | null = null;
   let drainingCapture = false;
@@ -248,8 +256,17 @@ export function createVoiceDictationClient(callbacks: VoiceDictationCallbacks, o
             resolveCaptureDrain();
             return;
           }
+          if (event.data.type === "mic_silent") {
+            micSilentActive = true;
+            callbacks.onInputWarning?.({ kind: "mic_silent" });
+            return;
+          }
           if (event.data.type !== "pcm" || !event.data.buffer) return;
           const level = { rms: Number(event.data.rms) || 0, peak: Number(event.data.peak) || 0 };
+          if (micSilentActive && level.peak > 0) {
+            micSilentActive = false;
+            callbacks.onInputWarning?.(null);
+          }
           inputSignalDetected ||= hasAudioSignal(level);
           maxInputPeak = Math.max(maxInputPeak, level.peak);
           callbacks.onInputLevel?.(level);
@@ -318,6 +335,7 @@ export function createVoiceDictationClient(callbacks: VoiceDictationCallbacks, o
       captureStartedAt = null;
       captureStoppedAt = null;
       audioBytesSent = 0;
+      micSilentActive = false;
       const requested = navigator.mediaDevices.getUserMedia(audioInputConstraints(options.getInputDeviceId?.() || ""));
       permission = requested;
       requested.then(
