@@ -335,7 +335,12 @@ test("acceptance: mobile composer is one row with Plus-owned message options", a
   await expect(page.locator(".composer-desktop-setting")).toHaveCount(2);
   for (const setting of await page.locator(".composer-desktop-setting").all()) await expect(setting).toBeHidden();
 
+  await input.focus();
+  await page.evaluate(() => {
+    if (window.visualViewport) Object.defineProperty(window.visualViewport, "height", { configurable: true, value: innerHeight - 300 });
+  });
   await page.getByRole("button", { name: "Message options" }).tap();
+  await expect(input).toBeFocused();
   const menu = page.locator('[data-slot="menu-content"].composer-options-menu');
   await expect(menu).toBeVisible();
   const [menuBox, viewport] = await Promise.all([

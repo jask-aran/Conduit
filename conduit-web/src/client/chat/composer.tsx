@@ -25,6 +25,7 @@ import type { AudioSignalLevel } from "./voice-audio";
 import { toast } from "solid-sonner";
 import { audioTransferLost, beginDictatedRange, matchesShortcut, releasesShortcut, replaceDictatedRange, shouldAutoSend, shouldReportNoSignal } from "./voice-dictation";
 import { createVoiceWaveformController, VoiceWaveform, type VoiceWaveformController } from "./voice-waveform";
+import { isMobileLayout } from "../navigation/mobile-layout";
 
 const thinkingLabel = (value: string) => value ? value[0]!.toUpperCase() + value.slice(1) : "Off";
 export const SPINNING_ACTIVITY = new Set(["starting", "thinking", "responding", "using_tool", "retrying", "compacting", "stopping", "waiting_for_model"]);
@@ -62,6 +63,8 @@ export function Composer(props: {
   const dictationWaveform = createVoiceWaveformController();
   let dictationCancelled = false;
   let pushToTalkActive = false;
+  let dictationRestoreFocus = true;
+  let pendingDictationLaunch: { inputFocused: boolean; keyboardOpen: boolean } | null = null;
   const selectedModel = createMemo(() => props.models.models().find((item) => item.spec === props.models.model()));
   const levels = createMemo(() => selectedModel()?.thinkingLevels || ["off"]);
   const busy = createMemo(() => props.chat.streaming());
@@ -105,6 +108,19 @@ export function Composer(props: {
     input.style.height = `${Math.min(input.scrollHeight, 192)}px`;
   };
 
+  const keyboardWasOpen = (inputFocused: boolean) => {
+    if (!isMobileLayout()) return true;
+    if (!inputFocused) return false;
+    const viewport = window.visualViewport;
+    return viewport ? window.innerHeight - viewport.height > 120 : true;
+  };
+
+  const captureDictationLaunch = () => {
+    if (dictating()) return;
+    const inputFocused = document.activeElement === input;
+    pendingDictationLaunch = { inputFocused, keyboardOpen: keyboardWasOpen(inputFocused) };
+  };
+
   const change = (value: string, manual = true) => {
     if (manual) {
       setDictationSelectionOwned(false);
@@ -128,7 +144,7 @@ export function Composer(props: {
     setDictationSelectionOwned(true);
     queueMicrotask(() => {
       resize();
-      input.focus({ preventScroll: true });
+      if (dictationRestoreFocus) input.focus({ preventScroll: true });
       input.setSelectionRange(next.range.start, next.range.end);
     });
   };
@@ -184,7 +200,12 @@ export function Composer(props: {
     dictationWaveform.reset();
     setDictationError("");
     const draft = props.chat.draft();
-    const focused = document.activeElement === input;
+    const launch = pendingDictationLaunch;
+    pendingDictationLaunch = null;
+    const focused = launch?.inputFocused ?? document.activeElement === input;
+    dictationRestoreFocus = !isMobileLayout()
+      ? true
+      : (launch?.keyboardOpen ?? keyboardWasOpen(focused));
     const range = dictatedRange();
     const selectionIsAutomatic = Boolean(
       focused
@@ -317,7 +338,7 @@ export function Composer(props: {
       </Show>
       <div class="composer-actions">
         <div class="composer-actions-left">
-          <Button variant={dictationState() === "active" ? "default" : "ghost"} size="icon-sm" class="dictation-trigger" data-state={dictationState()} aria-label={dictating() ? "Stop voice dictation" : "Start voice dictation"} aria-pressed={dictating()} title={`Voice dictation (${props.voiceSettings.shortcut})`} disabled={!props.serverOnline || dictationState() === "stopping"} onClick={toggleDictation}><Show when={["connecting", "stopping"].includes(dictationState())} fallback={<Show when={dictationState() === "active"} fallback={<MicIcon />}><SquareIcon /></Show>}><Spinner /></Show></Button>
+          <Button variant={dictationState() === "active" ? "default" : "ghost"} size="icon-sm" class="dictation-trigger" data-state={dictationState()} aria-label={dictating() ? "Stop voice dictation" : "Start voice dictation"} aria-pressed={dictating()} title={`Voice dictation (${props.voiceSettings.shortcut})`} disabled={!props.serverOnline || dictationState() === "stopping"} onPointerDown={captureDictationLaunch} onClick={toggleDictation}><Show when={["connecting", "stopping"].includes(dictationState())} fallback={<Show when={dictationState() === "active"} fallback={<MicIcon />}><SquareIcon /></Show>}><Spinner /></Show></Button>
           <Button class="composer-desktop-attachment" variant="ghost" size="icon-sm" aria-label={`Attach files${props.attachments.items().length ? ` (${props.attachments.items().length})` : ""}`} disabled={!props.serverOnline} onClick={attach}><PaperclipIcon /></Button>
           <div class="composer-desktop-setting">
             <Menu>
