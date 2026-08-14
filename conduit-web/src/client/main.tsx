@@ -124,7 +124,9 @@ function ChatHeader(props: {
           <Show when={dictating()} fallback={<span class="chat-status-icon" aria-hidden="true"><Show when={statusFailure()} fallback={<Show when={statusBusy()} fallback={<span class="chat-status-dot" />}><Spinner /></Show>}><TriangleAlertIcon /></Show></span>}>
               <VoiceWaveform class="chat-status-waveform" history={waveformHistory} level={waveformLevel} peak={waveformPeak} state={waveformState()} variant="compact" barCount={16} ariaLabel="Microphone input level" />
           </Show>
-          <span class="chat-status-label">{statusLabel()}</span>
+          <Show when={!dictating()}>
+            <span class="chat-status-label">{statusLabel()}</span>
+          </Show>
           <ChevronDownIcon class="chat-status-chevron" aria-hidden="true" />
         </Button>
       </Show>
