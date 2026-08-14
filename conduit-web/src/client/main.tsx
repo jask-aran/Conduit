@@ -122,7 +122,7 @@ function ChatHeader(props: {
       <Show when={!props.dashboard && props.chat}>
         <Button ref={statusTrigger} variant="ghost" size="sm" class="chat-status-trigger" data-state={statusTone()} aria-label={`Runtime status: ${statusLabel()}. Open runtime details`} aria-live="polite" aria-expanded={statusOpen()} aria-haspopup="dialog" onClick={() => setStatusOpen(true)}>
           <Show when={dictating()} fallback={<span class="chat-status-icon" aria-hidden="true"><Show when={statusFailure()} fallback={<Show when={statusBusy()} fallback={<span class="chat-status-dot" />}><Spinner /></Show>}><TriangleAlertIcon /></Show></span>}>
-              <VoiceWaveform class="chat-status-waveform" history={waveformHistory} level={waveformLevel} peak={waveformPeak} state={waveformState()} variant="compact" barCount={16} ariaLabel="Microphone input level" />
+              <VoiceWaveform class="chat-status-waveform" history={waveformHistory} level={waveformLevel} peak={waveformPeak} state={waveformState()} variant="compact" barDensity={3.5} ariaLabel="Microphone input level" />
           </Show>
           <Show when={!dictating()}>
             <span class="chat-status-label">{statusLabel()}</span>
@@ -166,7 +166,7 @@ function ChatHeader(props: {
               <span class="mobile-status-sheet-state-kind">{statusKind()}</span>
             </div>
             <Show when={dictating()}>
-              <VoiceWaveform class="mobile-status-sheet-waveform" history={waveformHistory} level={waveformLevel} peak={waveformPeak} state={waveformState()} variant="compact" barCount={24} ariaLabel="Microphone input level" />
+              <VoiceWaveform class="mobile-status-sheet-waveform" history={waveformHistory} level={waveformLevel} peak={waveformPeak} state={waveformState()} variant="compact" barDensity={3.5} ariaLabel="Microphone input level" />
             </Show>
             <dl class="mobile-status-facts">
               <div><dt>Connection</dt><dd>{connectionLabel()}</dd></div>

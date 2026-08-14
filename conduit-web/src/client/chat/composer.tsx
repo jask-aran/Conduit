@@ -353,7 +353,7 @@ export function Composer(props: {
     <div class="agent-activity composer-status" role="status" aria-live="polite">
       <div class="composer-status-leading">
         <Show when={dictating()}>
-          <VoiceWaveform class="composer-status-waveform" history={dictationWaveform.history} level={dictationWaveform.level} peak={dictationWaveform.peak} state={recorderMonitorState()} variant="compact" barCount={24} ariaLabel={dictationState() === "connecting" ? "Connecting microphone" : "Microphone input level"} />
+          <VoiceWaveform class="composer-status-waveform" history={dictationWaveform.history} level={dictationWaveform.level} peak={dictationWaveform.peak} state={recorderMonitorState()} variant="compact" barDensity={3.5} ariaLabel={dictationState() === "connecting" ? "Connecting microphone" : "Microphone input level"} />
         </Show>
         <span class="composer-status-state">
           <Show when={dictationLabel()} fallback={<><Show when={SPINNING_ACTIVITY.has(activity()?.kind || "")}><Spinner /></Show><Show when={["request_failed", "runtime_failed"].includes(activity()?.kind || "")}><TriangleAlertIcon aria-hidden="true" /></Show>{activity()?.label || "Ready"}</>}>{dictationLabel()}</Show>
