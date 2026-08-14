@@ -2,9 +2,16 @@
 
 ## Status
 
-Proposed design specification. This document defines the agreed mobile
-composition for the main chat surface. It does not authorize implementation
-until the current overlapping worktree changes are accounted for.
+Design and implementation handoff. This document defines the agreed mobile
+composition for the main chat surface and divides it into reviewable slices.
+
+## Document location
+
+The document is named `mobile-chat-surface-design.md` and lives at
+`docs/architecture/mobile-chat-surface-design.md`. The repository does not
+currently have a `docs/specs/` directory. This architecture document is the
+implementation specification until the repository adopts a separate specs
+directory.
 
 ## Purpose
 
@@ -443,6 +450,225 @@ Reuse:
 
 Do not duplicate context calculations or introduce a second source of chat,
 runtime, model, profile, or transcript state.
+
+## Implementation slices
+
+Implement the mobile redesign in the following order. Each slice has one
+observable product boundary and one manual review checkpoint. Do not start the
+next slice until the current slice has passed its checks and the user has
+tested it on a phone.
+
+### Slice 0 — Baseline checkpoint
+
+This is a measurement step, not a product change. Record the current behavior
+at `320 × 568`, `390 × 844`, and one landscape viewport. Check an empty chat, a
+long transcript, an active response, the software keyboard, the Sidebar, and
+the Workspace drawer. Capture screenshots for comparison.
+
+No files change and no commit is created. The baseline establishes whether a
+later regression belongs to the redesign or already existed.
+
+### Slice 1 — Full-bleed mobile shell
+
+Make the mobile chat surface fill the device viewport and respect top and
+bottom safe areas. Keep the current header controls, transcript presentation,
+composer controls, drawers, and status line unchanged.
+
+Owned seams:
+
+- `conduit-web/src/client/styles.css`;
+- `conduit-web/src/client/navigation/mobile-layout.ts` only if the viewport
+  binding needs a narrow correction;
+- the existing mobile browser geometry test.
+
+Done means the desktop inset frame disappears only at the mobile breakpoint,
+the transcript is not hidden behind the composer, the keyboard keeps the
+composer visible, and Sidebar or Workspace overlays still cover the correct
+viewport.
+
+Manual checkpoint: verify empty and populated chats with the keyboard open and
+closed at the baseline viewports. Stop for mobile notes.
+
+Suggested commit: `mobile: add full-bleed mobile shell`.
+
+### Slice 2 — Mobile top bar and chat menu
+
+Replace the mobile breadcrumb title with the compact top bar:
+
+```text
+[Sidebar] [status slot] [Search] [Command palette] [More]
+```
+
+Search and Command palette remain permanent controls. More opens the
+chat-specific menu with the title, folder or Workspace, runtime identity,
+Workspace panel, Share, Rename, and Delete. The title appears only inside that
+menu.
+
+This slice may use a temporary static status slot. It must not yet move the
+full status and context presentation out of the composer; that is Slice 3.
+
+Owned seams:
+
+- `conduit-web/src/client/main.tsx`;
+- `conduit-web/src/client/styles.css`;
+- existing menu primitives and mobile browser tests as needed.
+
+Done means the mobile bar has no title or breadcrumb, every permanent control
+has a `44px` target, More is viewport-bounded, and all moved chat actions still
+perform their existing behavior.
+
+Manual checkpoint: open and close Search, Command palette, More, Share,
+Workspace, Rename, and Delete on a phone. Confirm that opening More never
+navigates to another chat. Stop for mobile notes.
+
+Suggested commit: `mobile: simplify chat header`.
+
+### Slice 3 — Live status rail and context sheet
+
+Move the current activity state, dictation waveform, queue count, and selected
+context metrics from the permanent composer status block into the top-bar
+status control.
+
+The collapsed rail shows only the current state. Tapping it opens the
+top-anchored detail sheet with the complete existing context formatter,
+including tokens, window, cache, cost, session totals, queue, connection, and
+waveform details.
+
+Owned seams:
+
+- `conduit-web/src/client/main.tsx`;
+- `conduit-web/src/client/chat/composer.tsx`;
+- `conduit-web/src/client/chat/context-metrics.ts` only if a presentation
+  seam is needed;
+- `conduit-web/src/client/styles.css`;
+- focused status and context metric tests.
+
+Done means the composer no longer reserves a permanent status block, the top
+bar reflects live runtime and dictation state, and the detail sheet uses the
+same values and formatting as the current status line. Opening the sheet must
+not alter transcript scroll position.
+
+Manual checkpoint: test Ready, Thinking, tool activity, failure, dictation,
+queue count, unknown metrics, and a long full-metrics sheet. Stop for mobile
+notes.
+
+Suggested commit: `mobile: move runtime status to header`.
+
+### Slice 4 — One-row composer and Plus menu
+
+Reduce the collapsed composer to:
+
+```text
+[Plus] [Message Pi…] [Voice] [Send]
+```
+
+Plus replaces the paperclip and opens the message-options menu. The first-level
+rows are Attach files, Model and effort, and Profile. Model and effort open one
+combined sheet. Future message-scoped actions such as Add skill and Add plugin
+use this same menu.
+
+Keep busy-state behavior intact. Stop, Steer, Send follow-up, dictation, and
+queue actions may temporarily add controls inside the same row, but do not
+restore a permanent model/profile/status row.
+
+Owned seams:
+
+- `conduit-web/src/client/chat/composer.tsx`;
+- `conduit-web/src/client/main.tsx` for menu ownership and existing callbacks;
+- `conduit-web/src/client/styles.css`;
+- `conduit-web/test/browser/pwa-mobile.spec.js`;
+- focused composer, model, profile, attachment, and dictation tests.
+
+Done means the empty collapsed composer is one row, Attach files remains
+discoverable, Model and effort are reachable in two taps from the row, Profile
+remains available under its draft-only lock rule, and no message-level setting
+appears as a chip above the composer.
+
+Manual checkpoint: test empty and drafted input, model changes, effort changes,
+profile selection and locking, attachments, voice dictation, Stop, Steer, and
+queued follow-up. Check the composer with the keyboard open. Stop for mobile
+notes.
+
+Suggested commit: `mobile: add compact composer options`.
+
+### Slice 5 — Transcript presentation
+
+Apply the mobile reading layout after the shell and composer heights are
+stable. Remove remaining desktop spacing from the transcript, use the full
+readable width, tune assistant and user message geometry, and reduce ambient
+meteor interference.
+
+Preserve transcript state and behavior. Do not change history ownership,
+streaming reconciliation, Markdown parsing, table layout, or tail-follow.
+Keep message actions accessible in this slice; do not introduce gesture-only
+actions without a separate decision.
+
+Owned seams:
+
+- `conduit-web/src/client/styles.css`;
+- `conduit-web/src/client/chat/markdown.css`;
+- `conduit-web/src/client/chat/transcript.tsx` only where a public presentation
+  seam is required;
+- mobile transcript browser fixtures.
+
+Done means assistant content is readable at phone width, user bubbles remain
+distinct, controls are not clipped, and the latest-response and scroll-to-latest
+actions remain usable.
+
+Manual checkpoint: test short and long messages, code, tables, math, tool
+traces, failed responses, history loading, streaming output, and manual scroll
+away from the tail. Stop for mobile notes.
+
+Suggested commit: `mobile: refine transcript layout`.
+
+### Slice 6 — Overlay, keyboard, and regression hardening
+
+Harden the completed composition across system Back, focus restoration, safe
+areas, reduced motion, drawer stacking, keyboard transitions, narrow widths,
+landscape, and installed-PWA behavior. Add or finish public browser coverage
+for the accepted geometry and interaction seams.
+
+Owned seams:
+
+- `conduit-web/src/client/navigation/mobile-layout.ts`;
+- `conduit-web/src/client/main.tsx`;
+- `conduit-web/src/client/styles.css`;
+- `conduit-web/test/browser/pwa-mobile.spec.js`;
+- any focused helper tests required by the observed failures.
+
+Done means all acceptance criteria in this document pass at the listed
+viewports and the final mobile review has no unresolved regression.
+
+Manual checkpoint: run the complete mobile matrix, then stop. This is the
+handoff point for implementation follow-ups rather than permission to begin a
+new redesign.
+
+Suggested commit: `mobile: harden mobile interaction`.
+
+## Slice execution protocol
+
+When the user requests a slice, implement only that numbered slice. Do not
+quietly pull work forward from a later slice. If a later dependency blocks the
+requested slice, stop and report the dependency.
+
+After each slice:
+
+1. Run the narrowest relevant tests, then `npm run typecheck` and
+   `npm run build` when the slice changes client code.
+2. Restart the managed app with
+   `bash .devcontainer/start-conduit.sh restart` after the build completes.
+3. Check `curl -fsS http://127.0.0.1:4310/healthz`.
+4. Run the relevant authenticated mobile browser check and save screenshots
+   under `/tmp`.
+5. Commit the slice as one coherent local commit.
+6. Report the commit, changed behavior, checks, screenshot paths, and known
+   risk.
+7. Stop and wait for the user's phone test and notes before starting the next
+   slice.
+
+Do not push slice commits unless the user asks. A corrective change caused by
+the user's checkpoint notes belongs to the current slice until that slice is
+accepted.
 
 ## Acceptance criteria
 
