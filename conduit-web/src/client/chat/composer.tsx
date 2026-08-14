@@ -24,10 +24,19 @@ import { createVoiceDictationClient, type VoiceDictationState } from "./voice-di
 import type { AudioSignalLevel } from "./voice-audio";
 import { toast } from "solid-sonner";
 import { audioTransferLost, beginDictatedRange, matchesShortcut, releasesShortcut, replaceDictatedRange, shouldAutoSend, shouldReportNoSignal } from "./voice-dictation";
-import { createVoiceWaveformController, VoiceWaveform } from "./voice-waveform";
+import { createVoiceWaveformController, VoiceWaveform, type VoiceWaveformController } from "./voice-waveform";
 
 const thinkingLabel = (value: string) => value ? value[0]!.toUpperCase() + value.slice(1) : "Off";
-const SPINNING_ACTIVITY = new Set(["starting", "thinking", "responding", "using_tool", "retrying", "compacting", "stopping", "waiting_for_model"]);
+export const SPINNING_ACTIVITY = new Set(["starting", "thinking", "responding", "using_tool", "retrying", "compacting", "stopping", "waiting_for_model"]);
+
+export interface ComposerStatus {
+  dictationState: () => VoiceDictationState;
+  dictationLabel: () => string;
+  dictationError: () => string;
+  dictating: () => boolean;
+  recorderMonitorState: () => "connecting" | "listening" | "stopped";
+  waveform: VoiceWaveformController;
+}
 
 export function Composer(props: {
   chat: ActiveChatStore;
@@ -41,6 +50,7 @@ export function Composer(props: {
   onChooseProfile: (id: string) => void;
   onOpenSettings: (section: string) => void;
   onOpenAttachments: () => void;
+  onStatusChange?: (status: ComposerStatus | null) => void;
 }) {
   let input!: HTMLTextAreaElement;
   const [slashOpen, setSlashOpen] = createSignal(false);
@@ -78,6 +88,14 @@ export function Composer(props: {
       idle: "",
     })[dictationState()];
   });
+  const composerStatus: ComposerStatus = {
+    dictationState,
+    dictationLabel,
+    dictationError,
+    dictating,
+    recorderMonitorState,
+    waveform: dictationWaveform,
+  };
 
   const setInputLevel = (level: AudioSignalLevel) => dictationWaveform.push(level);
 
@@ -226,6 +244,7 @@ export function Composer(props: {
   };
 
   onMount(() => {
+    props.onStatusChange?.(composerStatus);
     createEffect(() => {
       props.chat.draft();
       queueMicrotask(resize);
@@ -258,6 +277,7 @@ export function Composer(props: {
     window.addEventListener("keyup", voiceKeyUp, true);
     window.addEventListener("conduit:toggle-dictation", voiceToggle);
     onCleanup(() => {
+      props.onStatusChange?.(null);
       window.removeEventListener("keydown", voiceKeyDown, true);
       window.removeEventListener("keyup", voiceKeyUp, true);
       window.removeEventListener("conduit:toggle-dictation", voiceToggle);

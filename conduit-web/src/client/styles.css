@@ -91,6 +91,19 @@ svg { stroke-width: 1.5; }
 .chat-header-title span, .chat-header-title strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .breadcrumb-separator::before { content: "/"; }
 .chat-profile-posture { max-width: min(420px, 42vw); min-width: 0; overflow: hidden; color: var(--muted-foreground); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.chat-status-trigger { display: none; }
+.chat-status-trigger[data-state="error"] { color: color-mix(in oklch, var(--destructive), var(--foreground) 25%); }
+.chat-status-trigger[data-state="listening"], .chat-status-trigger[data-state="active"] { color: var(--accent-cool); }
+.chat-status-icon { display: inline-flex; width: 16px; height: 16px; flex: 0 0 16px; align-items: center; justify-content: center; }
+.chat-status-icon svg { width: 15px; height: 15px; }
+.chat-status-dot { width: 7px; height: 7px; border-radius: 999px; background: var(--accent-cool); box-shadow: 0 0 0 3px color-mix(in oklch, var(--accent-cool), transparent 84%); }
+.chat-status-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 11px/1.2 ui-monospace, SFMono-Regular, Consolas, monospace; }
+.chat-status-chevron { width: 14px; height: 14px; flex: 0 0 14px; color: var(--muted-foreground); }
+.chat-status-waveform.voice-waveform { display: inline-flex; width: 54px; height: 24px; flex: 0 0 54px; box-sizing: border-box; align-items: center; justify-content: center; padding: 0 4px; border: 0; border-radius: 0; background: transparent; }
+.chat-status-waveform .voice-waveform-header, .chat-status-waveform .voice-waveform-readout, .chat-status-waveform .voice-waveform-scale { display: none; }
+.chat-status-waveform .voice-waveform-plot { width: 100%; height: 100%; align-items: center; gap: 1px; padding: 0; border: 0; border-radius: 0; background: transparent; }
+.chat-status-waveform .voice-waveform-bar { max-width: 2px; min-height: 2px; background: var(--accent-cool); opacity: 0.88; }
+.chat-status-waveform .voice-waveform-gridline, .chat-status-waveform .voice-waveform-peak { display: none; }
 .chat-header-more { display: none; }
 .chat-header-more svg { width: 16px; height: 16px; }
 .chat-header-menu-title { display: block; max-width: 100%; overflow-wrap: anywhere; color: var(--foreground); font-size: 14px; font-weight: 600; }
@@ -284,6 +297,7 @@ svg { stroke-width: 1.5; }
 .composer-status-waveform .voice-waveform-plot { width: 100%; height: 100%; align-items: center; gap: 1px; padding: 0; border: 0; border-radius: 0; background: transparent; }
 .composer-status-waveform .voice-waveform-bar { max-width: 2px; min-height: 2px; background: var(--accent-cool); opacity: 0.88; transition: height 90ms ease-out; }
 .composer-status-waveform[data-state="connecting"] .voice-waveform-bar { animation: dictation-wave-pulse 900ms ease-in-out infinite alternate; }
+.mobile-status-sheet { display: none; }
 @keyframes dictation-wave-pulse { from { opacity: 0.4; transform: scaleY(0.65); } to { opacity: 0.95; transform: scaleY(1); } }
 .slash-suggestions { position: absolute; left: 10px; bottom: 48px; z-index: 30; width: 260px; padding: 5px; border: 1px solid var(--border); border-radius: 10px; background: var(--popover); box-shadow: 0 12px 32px rgb(0 0 0 / 25%); }
 .slash-suggestions button { display: flex; width: 100%; flex-direction: column; border: 0; border-radius: 7px; background: var(--accent); padding: 8px; color: inherit; text-align: left; }
@@ -611,6 +625,70 @@ svg { stroke-width: 1.5; }
   .chat-header-title { display: none; }
   .chat-profile-posture { display: none; }
   .chat-header-desktop-action { display: none !important; }
+  .chat-status-trigger {
+    display: inline-flex;
+    min-width: 0;
+    min-height: 44px;
+    flex: 1 1 auto;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 7px;
+    overflow: hidden;
+    border-radius: 11px;
+    background: color-mix(in oklch, var(--card), transparent 22%);
+    padding: 0 10px;
+    color: var(--muted-foreground);
+    text-align: left;
+  }
+  .chat-status-trigger:hover { background: var(--accent); color: var(--foreground); }
+  .chat-status-trigger[data-state="ready"] { color: var(--muted-foreground); }
+  .chat-status-trigger[data-state="error"] { background: color-mix(in oklch, var(--destructive), transparent 91%); }
+  .chat-status-trigger[data-state="listening"], .chat-status-trigger[data-state="active"] { background: color-mix(in oklch, var(--accent-cool), transparent 89%); }
+  .chat-status-trigger:focus-visible { outline: 2px solid var(--ring); outline-offset: 1px; }
+  .mobile-status-sheet {
+    position: fixed !important;
+    top: calc(60px + env(safe-area-inset-top, 0px) + 8px) !important;
+    right: 12px !important;
+    bottom: auto !important;
+    left: 12px !important;
+    width: auto !important;
+    max-width: none !important;
+    max-height: calc(var(--app-height, 100dvh) - 76px - env(safe-area-inset-top, 0px));
+    min-height: 0;
+    display: flex !important;
+    flex-direction: column;
+    gap: 12px;
+    overflow: hidden;
+    transform: none !important;
+    translate: 0 0 !important;
+    --tw-translate-x: 0px !important;
+    --tw-translate-y: 0px !important;
+    border-color: color-mix(in oklch, var(--accent-cool), var(--border) 70%);
+    border-radius: 14px;
+    background: var(--popover);
+    padding: 14px;
+    box-shadow: 0 20px 60px rgb(0 0 0 / 40%);
+  }
+  .mobile-status-sheet > [data-slot="dialog-title"] { margin: 0; padding-right: 34px; font-size: 15px; }
+  .mobile-status-sheet > [data-slot="dialog-close"], .mobile-status-sheet > button { top: 10px; right: 10px; width: 36px; height: 36px; }
+  .mobile-status-sheet-scroll { min-height: 0; display: grid; gap: 12px; overflow-y: auto; padding-right: 2px; scrollbar-color: color-mix(in oklch, var(--foreground), transparent 72%) transparent; scrollbar-width: thin; }
+  .mobile-status-sheet-state { display: flex; min-height: 42px; align-items: center; justify-content: space-between; gap: 12px; border-radius: 10px; background: color-mix(in oklch, var(--accent-cool), transparent 91%); padding: 9px 11px; }
+  .mobile-status-sheet-state-label { min-width: 0; overflow: hidden; color: var(--foreground); font-size: 14px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+  .mobile-status-sheet-state-kind { flex: none; color: var(--muted-foreground); font: 10px/1.2 ui-monospace, SFMono-Regular, Consolas, monospace; text-transform: uppercase; letter-spacing: .07em; }
+  .mobile-status-sheet-state.mobile-status-tone-active, .mobile-status-sheet-state.mobile-status-tone-listening { background: color-mix(in oklch, var(--accent-cool), transparent 88%); }
+  .mobile-status-sheet-state.mobile-status-tone-error { background: color-mix(in oklch, var(--destructive), transparent 90%); color: var(--destructive); }
+  .mobile-status-facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin: 0; }
+  .mobile-status-facts > div { min-width: 0; border: 1px solid var(--border); border-radius: 9px; background: color-mix(in oklch, var(--background), transparent 20%); padding: 8px 9px; }
+  .mobile-status-facts dt { color: var(--muted-foreground); font: 10px/1.2 ui-monospace, SFMono-Regular, Consolas, monospace; text-transform: uppercase; letter-spacing: .05em; }
+  .mobile-status-facts dd { min-width: 0; margin: 4px 0 0; overflow: hidden; color: var(--foreground); font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
+  .mobile-status-context { display: grid; gap: 6px; border-top: 1px solid var(--border); padding-top: 11px; }
+  .mobile-status-context h3 { margin: 0; color: var(--muted-foreground); font: 10px/1.2 ui-monospace, SFMono-Regular, Consolas, monospace; text-transform: uppercase; letter-spacing: .06em; }
+  .mobile-status-context-values { overflow-wrap: anywhere; color: var(--foreground); font: 11px/1.55 ui-monospace, SFMono-Regular, Consolas, monospace; }
+  .mobile-status-sheet-waveform.voice-waveform { width: 100%; height: 34px; padding: 0 4px; border: 0; border-radius: 0; background: transparent; }
+  .mobile-status-sheet-waveform .voice-waveform-header, .mobile-status-sheet-waveform .voice-waveform-readout, .mobile-status-sheet-waveform .voice-waveform-scale { display: none; }
+  .mobile-status-sheet-waveform .voice-waveform-plot { height: 100%; border-radius: 7px; }
+  .mobile-status-error { margin: 0; color: var(--destructive); font-size: 12px; line-height: 1.45; }
+  .composer-status { display: none; }
   .chat-header > .mobile-sidebar-trigger,
   .chat-header-actions > [data-slot="button"],
   .chat-header-actions > .chat-header-more {
