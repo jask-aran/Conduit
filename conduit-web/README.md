@@ -225,8 +225,8 @@ selected Activation behaviour: Push to talk holds the recording, while Toggle
 starts and stops it with separate presses. The shortcut is captured before page
 controls so Chrome does not consume the default chord as a bookmark command.
 Microphone capture starts in
-parallel with the voice connection. The composer keeps a compact 24-bar,
-left-to-right history in the status line. Settings → Voice uses the same
+parallel with the voice connection. The composer keeps a compact,
+width-responsive left-to-right history in the status line. Settings → Voice uses the same
 bounded bar renderer in a larger monitor with current level, peak hold, and
 recording state. The browser captures 16 kHz mono PCM with an `AudioWorklet`
 and sends it only to authenticated `WS /v0/dictation/stream`. Settings → Voice

@@ -17,13 +17,17 @@ export interface VoiceWaveformController {
 }
 
 const clamp = (value: number) => Math.min(1, Math.max(0, Number.isFinite(value) ? value : 0));
+const VOICE_LEVEL_RMS_GAIN = 4;
+const VOICE_LEVEL_PEAK_GAIN = 1.6;
+const VOICE_PEAK_RMS_GAIN = 3.2;
+const VOICE_PEAK_GAIN = 1.6;
 
 export function normalizeVoiceLevel(level: AudioSignalLevel) {
-  return clamp(Math.max(level.rms * 10, level.peak * 2.4));
+  return clamp(Math.max(level.rms * VOICE_LEVEL_RMS_GAIN, level.peak * VOICE_LEVEL_PEAK_GAIN));
 }
 
 export function normalizeVoicePeak(level: AudioSignalLevel) {
-  return clamp(Math.max(level.peak * 2.4, level.rms * 8));
+  return clamp(Math.max(level.peak * VOICE_PEAK_GAIN, level.rms * VOICE_PEAK_RMS_GAIN));
 }
 
 const emptyHistory = (sampleCount: number) => Array.from({ length: sampleCount }, () => 0);
