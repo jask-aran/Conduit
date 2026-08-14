@@ -277,6 +277,41 @@ test("acceptance: mobile header hides identity and groups chat actions in More",
   await expect(page.getByRole("complementary", { name: "Workspace panel" })).toBeHidden();
 });
 
+test("acceptance: mobile runtime status moves out of the composer and opens a bounded detail sheet", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "mobile-chromium", "phone runtime status rail");
+  await openApp(page);
+
+  const status = page.getByRole("button", { name: /Runtime status:/ });
+  await expect(status).toBeVisible();
+  await expect(status).toContainText("Ready");
+  await expect(page.locator(".composer-status")).toBeHidden();
+  const [statusBox, composerBox] = await Promise.all([
+    status.boundingBox(),
+    page.locator(".composer").boundingBox(),
+  ]);
+  expect(statusBox.height).toBeGreaterThanOrEqual(44);
+  expect(composerBox.height).toBeLessThan(180);
+
+  await status.tap();
+  const sheet = page.getByRole("dialog", { name: "Runtime status" });
+  await expect(sheet).toBeVisible();
+  await expect(sheet.getByText("Context metrics", { exact: true })).toBeVisible();
+  await expect(sheet).toContainText("Connected");
+  await expect(sheet).toContainText("No context metrics available yet.");
+  const [sheetBox, viewport] = await Promise.all([
+    sheet.boundingBox(),
+    page.evaluate(() => ({ width: innerWidth, height: innerHeight })),
+  ]);
+  expect(sheetBox.x).toBeGreaterThanOrEqual(0);
+  expect(sheetBox.y).toBeGreaterThanOrEqual(0);
+  expect(sheetBox.width).toBeLessThanOrEqual(viewport.width - 24);
+  expect(sheetBox.height).toBeLessThanOrEqual(viewport.height - 24);
+
+  await page.keyboard.press("Escape");
+  await expect(sheet).toHaveCount(0);
+  await expect(status).toBeFocused();
+});
+
 test("acceptance: tall narrow command and chat palettes fill the inset mobile frame", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "desktop-chromium", "exact 523px responsive boundary");
   await page.setViewportSize({ width: 523, height: 1100 });
