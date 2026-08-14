@@ -296,9 +296,11 @@ export function Composer(props: {
       <div class="composer-input-shell">
         <textarea
           ref={input}
+          rows={1}
           aria-label="Message Pi"
           aria-expanded={slashOpen()}
           aria-controls={slashOpen() ? "slash-suggestions" : undefined}
+          data-has-text={hasText() ? "true" : "false"}
           placeholder={props.serverOnline ? "Send a message..." : "Server unavailable"}
           value={props.chat.draft()}
           disabled={!props.serverOnline}

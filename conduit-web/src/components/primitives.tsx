@@ -93,10 +93,10 @@ export function MenuContent(props: ParentProps<{ class?: string }>) {
 export function MenuItem(props: ParentProps<{ class?: string; disabled?: boolean; variant?: "destructive"; onSelect?: () => void; textValue?: string }>) {
   return <KMenu.Item disabled={props.disabled} onSelect={props.onSelect} textValue={props.textValue} data-variant={props.variant} class={cn(menuItemClass, props.class)}>{props.children}</KMenu.Item>;
 }
-export function MenuRadioItem(props: ParentProps<{ class?: string; value: string; disabled?: boolean }>) {
-  /* Kobalte defaults radio items to closeOnSelect=false; Conduit menus are
-     single-choice pickers, so a selection commits and closes (main parity). */
-  return <KMenu.RadioItem value={props.value} disabled={props.disabled} closeOnSelect={true} class={cn(menuItemClass, "pl-8", props.class)}><KMenu.ItemIndicator class="absolute left-2">✓</KMenu.ItemIndicator>{props.children}</KMenu.RadioItem>;
+export function MenuRadioItem(props: ParentProps<{ class?: string; value: string; disabled?: boolean; closeOnSelect?: boolean }>) {
+  /* Conduit menus close after a selection by default; persistent pickers can
+     opt out so the user can change several values before clicking away. */
+  return <KMenu.RadioItem value={props.value} disabled={props.disabled} closeOnSelect={props.closeOnSelect ?? true} class={cn(menuItemClass, "pl-8", props.class)}><KMenu.ItemIndicator class="absolute left-2">✓</KMenu.ItemIndicator>{props.children}</KMenu.RadioItem>;
 }
 export function MenuLabel(props: ParentProps<{ class?: string }>) { return <KMenu.GroupLabel class={cn("px-1.5 py-1.5 text-xs font-medium text-muted-foreground", props.class)}>{props.children}</KMenu.GroupLabel>; }
 export function MenuSeparator() { return <KMenu.Separator class="-mx-1 my-1 h-px bg-border" />; }

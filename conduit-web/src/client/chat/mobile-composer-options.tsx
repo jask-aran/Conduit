@@ -52,14 +52,14 @@ export function MobileComposerOptions(props: {
                 <MenuLabel class="composer-options-label">Model</MenuLabel>
                 <Show when={composer.models.notice()}><div class="composer-option-note">{composer.models.notice()}</div></Show>
                 <MenuRadioGroup value={composer.models.model()} onChange={(value) => void composer.models.chooseModel(value)}>
-                  <For each={composer.models.models()}>{(item) => <MenuRadioItem value={item.spec}><span class="truncate">{item.label}</span><span class="ml-auto text-xs text-muted-foreground">{item.provider}</span></MenuRadioItem>}</For>
+                  <For each={composer.models.models()}>{(item) => <MenuRadioItem value={item.spec} closeOnSelect={false}><span class="truncate">{item.label}</span><span class="ml-auto text-xs text-muted-foreground">{item.provider}</span></MenuRadioItem>}</For>
                 </MenuRadioGroup>
               </MenuGroup>
               <MenuSeparator />
               <MenuGroup>
                 <MenuLabel class="composer-options-label">Thinking</MenuLabel>
                 <MenuRadioGroup value={composer.models.effort()} onChange={(value) => void composer.models.chooseEffort(value)}>
-                  <For each={levels()}>{(level) => <MenuRadioItem value={level}>{thinkingLabel(level)}</MenuRadioItem>}</For>
+                  <For each={levels()}>{(level) => <MenuRadioItem value={level} closeOnSelect={false}>{thinkingLabel(level)}</MenuRadioItem>}</For>
                 </MenuRadioGroup>
               </MenuGroup>
               <MenuSeparator />
