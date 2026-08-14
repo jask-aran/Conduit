@@ -6,6 +6,7 @@ import { toast } from "solid-sonner";
 import { Button, Field, FieldGroup, FieldLabel, Input, Spinner } from "@/components/primitives";
 import { api } from "../api/client";
 import { MARKDOWN_RENDERER_OPTIONS, type MarkdownRendererId } from "../chat/markdown-settings";
+import { CONTEXT_METRIC_GROUPS, CONTEXT_METRIC_OPTIONS, CONTEXT_METRIC_PRESETS, contextMetricPreset, metricsForContextMetricPreset, type ContextMetricId, type ContextMetricPresetId } from "../chat/context-metrics";
 import { formatMicrophoneError, hasAudioSignal, isUnavailableAudioInputError, listAudioInputDevices, MAX_AUDIO_INPUT_TEST_DURATION_MS, revokeAudioInputRecording, startAudioInputTest as beginAudioInputTest, type AudioInputDevice, type AudioInputTestResult, type AudioInputTestSession, } from "../chat/voice-audio";
 import { shortcutFromKeyboardEvent } from "../chat/voice-dictation";
 import { createVoiceWaveformController, VoiceWaveform } from "../chat/voice-waveform";
@@ -137,6 +138,8 @@ export function Settings(props: {
   onVoiceSettingsSave: (settings: VoiceDictationSettings) => void;
   sidebarChatLimit: number;
   onSidebarChatLimitChange: (limit: number) => void;
+  contextMetrics: ContextMetricId[];
+  onContextMetricsChange: (metrics: ContextMetricId[]) => void;
   shortcuts: ShortcutManager;
 }) {
   const [section, setSection] = createSignal<Section>(props.initialSection || "models");
@@ -638,6 +641,10 @@ export function Settings(props: {
     return props.templates.find((item) => item.id === id)?.label || `Inherit global (${props.templates.find((item) => item.id === props.defaultTemplateId)?.label || "General"})`;
   };
   const saveWorkspace = async (workspace: Project, templateId: string | null) => props.onWorkspaceDefaultChange(workspace.id, templateId);
+  const toggleContextMetric = (id: ContextMetricId, enabled: boolean) => {
+    const next = enabled ? [...props.contextMetrics, id] : props.contextMetrics.filter((current) => current !== id);
+    props.onContextMetricsChange(next);
+  };
 
   const redetect = async () => {
     setDetecting(true);
@@ -691,6 +698,30 @@ export function Settings(props: {
                 <FieldLabel for="sidebar-chat-limit">Chats shown in sidebar</FieldLabel>
                 <Input id="sidebar-chat-limit" type="number" min={MIN_SIDEBAR_CHAT_LIMIT} max={MAX_SIDEBAR_CHAT_LIMIT} step="1" value={props.sidebarChatLimit} onChange={(event) => props.onSidebarChatLimitChange(Number(event.currentTarget.value))} onBlur={(event) => props.onSidebarChatLimitChange(Number(event.currentTarget.value))} />
                 <small>Show this many recent chats in the Chats group. Use View all chats to search older chats.</small>
+              </Field>
+              <Field>
+                <FieldLabel>Composer context metrics</FieldLabel>
+                <Field>
+                  <FieldLabel for="context-metric-preset">Preset</FieldLabel>
+                  <select id="context-metric-preset" aria-label="Composer context metric preset" value={contextMetricPreset(props.contextMetrics)} onChange={(event) => {
+                    const value = event.currentTarget.value as ContextMetricPresetId | "custom";
+                    if (value !== "custom") props.onContextMetricsChange(metricsForContextMetricPreset(value));
+                  }}>
+                    <option value="custom">Custom</option>
+                    <For each={CONTEXT_METRIC_PRESETS}>{(preset) => <option value={preset.id}>{preset.label}</option>}</For>
+                  </select>
+                  <small><For each={CONTEXT_METRIC_PRESETS.filter((preset) => preset.id === contextMetricPreset(props.contextMetrics))}>{(preset) => preset.description}</For></small>
+                </Field>
+                <div class="flex flex-col gap-2" role="group" aria-label="Composer context metrics">
+                  <For each={CONTEXT_METRIC_GROUPS}>{(group) => <fieldset class="flex flex-col gap-2">
+                    <legend class="text-sm font-medium">{group.label}</legend>
+                    <For each={CONTEXT_METRIC_OPTIONS.filter((option) => option.group === group.id)}>{(option) => <label class="flex items-start gap-2 text-sm">
+                      <input type="checkbox" aria-label={option.label} checked={props.contextMetrics.includes(option.id)} onChange={(event) => toggleContextMetric(option.id, event.currentTarget.checked)} />
+                      <span class="flex flex-col"><strong>{option.label}</strong><small>{option.description}</small></span>
+                    </label>}</For>
+                  </fieldset>}</For>
+                </div>
+                <small>Choose a preset or adjust individual measures. Manual changes use Custom. The line keeps canonical order and wraps when needed.</small>
               </Field>
             </FieldGroup>
           </Show>

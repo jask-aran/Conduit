@@ -14,6 +14,7 @@ import { api, asList, pathChatId, pathProjectId, projectPath } from "./api/clien
 import type { ChatSummary, DashboardChat, Installation, Project, RuntimeIdentity, Template, TranscriptDetail, WorkspaceAppearance, WorkspacePolicy, WorkspaceSuggestion, WorkspaceSuggestionsPayload } from "./api/contracts";
 import { createErrorDiagnostic, formatRuntimeDiagnosticPrompt, type ErrorDiagnostic, type ErrorDiagnosticContext } from "./error-diagnostics";
 import { Composer } from "./chat/composer";
+import { saveContextMetrics, selectedContextMetrics, type ContextMetricId } from "./chat/context-metrics";
 import { HostUiRequests } from "./chat/host-ui-card";
 import { MARKDOWN_RENDERER_STORAGE_KEY, selectedMarkdownRenderer, type MarkdownRendererId } from "./chat/markdown-settings";
 import { loadVoiceDictationSettings, saveVoiceDictationSettings } from "./chat/voice-dictation";
@@ -101,6 +102,7 @@ function App() {
   const [maxAttachmentBytes, setMaxAttachmentBytes] = createSignal(DEFAULT_MAX_ATTACHMENT_BYTES);
   const [markdownRenderer, setMarkdownRenderer] = createSignal<MarkdownRendererId>(selectedMarkdownRenderer());
   const [sidebarChatLimit, setSidebarChatLimit] = createSignal(selectedSidebarChatLimit());
+  const [contextMetrics, setContextMetrics] = createSignal<ContextMetricId[]>(selectedContextMetrics());
   const [settingsOpen, setSettingsOpen] = createSignal(false);
   const [settingsSection, setSettingsSection] = createSignal<SettingsSection>("models");
   const [settingsWorkspaceId, setSettingsWorkspaceId] = createSignal<string | null>(null);
@@ -518,6 +520,7 @@ function App() {
     setSidebarChatLimit(value);
     localStorage.setItem(SIDEBAR_CHAT_LIMIT_STORAGE_KEY, String(value));
   };
+  const switchContextMetrics = (next: ContextMetricId[]) => setContextMetrics(saveContextMetrics(next));
   const saveDefaultTemplate = async (id: string) => {
     const saved = await api<{ defaultTemplateId: string }>("/v0/preferences", { method: "PATCH", body: JSON.stringify({ defaultTemplateId: id }) });
     setDefaultTemplateId(saved.defaultTemplateId || id);
@@ -838,7 +841,7 @@ function App() {
             <section class="work-area-conversation" aria-label="Conversation">
               <Transcript chat={chat} partialContinue={partialContinue()} markdownRenderer={markdownRenderer()} profileLabel={activeProfile()?.label || activeProfile()?.id || chat.templateId() || undefined} />
               <div class="composer-stack"><HostUiRequests requests={chat.hostUiRequests()} onRespond={chat.respondHostUi} />
-                <Composer chat={chat} attachments={attachments} models={models} profiles={profiles()} activeProfile={activeProfile()} serverOnline={runtime.connectivity() === "online"} voiceSettings={voiceSettings()} onChooseProfile={(id) => void switchProfile(id)} onOpenSettings={openSettings} onOpenAttachments={() => attachFileInput?.click()} /></div>
+                <Composer chat={chat} attachments={attachments} models={models} profiles={profiles()} activeProfile={activeProfile()} serverOnline={runtime.connectivity() === "online"} voiceSettings={voiceSettings()} contextMetrics={contextMetrics} onChooseProfile={(id) => void switchProfile(id)} onOpenSettings={openSettings} onOpenAttachments={() => attachFileInput?.click()} /></div>
             </section>
           </div>
         </>}>
@@ -853,7 +856,7 @@ function App() {
     <Show when={Boolean(selectedProject()) && Boolean(workspacePanelScope())}><WorkspacePanel projectId={() => selectedProject()!.id} chatId={() => workspacePanelScope()!} open={panelOpen} requestedTab={workspaceViewRequest} onClose={togglePanel} /></Show>
     <CommandMenu open={paletteOpen()} onOpenChange={setPaletteOpen} onPageChange={setPalettePage} initialPage={palettePage()} initialQuery={paletteInitialQuery()} launchNonce={paletteNonce()} directLaunch={paletteDirectLaunch()}
       context={paletteContext()} actions={paletteActions} models={models.models()} currentModel={models.model()} onChooseModel={(spec) => void models.chooseModel(spec)} shortcuts={shortcutManager} />
-                <Settings open={settingsOpen()} initialSection={settingsSection()} initialWorkspaceId={settingsWorkspaceId()} onOpenChange={setSettingsOpen} models={models} templates={templates()} templatesLoading={templatesLoading()} defaultTemplateId={defaultTemplateId()} projects={catalogue.projects()} installations={installations()} installationsLoading={installationsLoading()} onInstallationsChange={setInstallations} onDefaultTemplateChange={saveDefaultTemplate} onWorkspaceDefaultChange={saveWorkspaceDefault} markdownRenderer={markdownRenderer()} onMarkdownRendererChange={switchMarkdownRenderer} voiceSettings={voiceSettings()} onVoiceSettingsSave={updateVoiceSettings} sidebarChatLimit={sidebarChatLimit()} onSidebarChatLimitChange={switchSidebarChatLimit} shortcuts={shortcutManager} />
+                <Settings open={settingsOpen()} initialSection={settingsSection()} initialWorkspaceId={settingsWorkspaceId()} onOpenChange={setSettingsOpen} models={models} templates={templates()} templatesLoading={templatesLoading()} defaultTemplateId={defaultTemplateId()} projects={catalogue.projects()} installations={installations()} installationsLoading={installationsLoading()} onInstallationsChange={setInstallations} onDefaultTemplateChange={saveDefaultTemplate} onWorkspaceDefaultChange={saveWorkspaceDefault} markdownRenderer={markdownRenderer()} onMarkdownRendererChange={switchMarkdownRenderer} voiceSettings={voiceSettings()} onVoiceSettingsSave={updateVoiceSettings} sidebarChatLimit={sidebarChatLimit()} onSidebarChatLimitChange={switchSidebarChatLimit} contextMetrics={contextMetrics()} onContextMetricsChange={switchContextMetrics} shortcuts={shortcutManager} />
   </>;
 }
 

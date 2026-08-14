@@ -224,13 +224,58 @@ export interface Installation {
 export type ProcessState = "absent" | "starting" | "ready" | "failed";
 export type GenerationState = "idle" | "submitting" | "active" | "running" | "stopping" | "failed";
 
+export interface UsageCost {
+  input?: number | null;
+  output?: number | null;
+  cacheRead?: number | null;
+  cacheWrite?: number | null;
+  total?: number | null;
+}
+
+export interface RequestUsage {
+  input?: number | null;
+  output?: number | null;
+  cacheRead?: number | null;
+  cacheWrite?: number | null;
+  cacheWrite1h?: number | null;
+  reasoning?: number | null;
+  totalTokens?: number | null;
+  cost?: UsageCost | null;
+}
+
+export interface SessionTokenUsage {
+  input: number;
+  output: number;
+  cacheRead: number;
+  cacheWrite: number;
+  total: number;
+}
+
+export interface SessionStats {
+  userMessages: number;
+  assistantMessages: number;
+  toolCalls: number;
+  toolResults: number;
+  totalMessages: number;
+  tokens: SessionTokenUsage;
+  cost: number;
+}
+
+export interface CacheStats {
+  eligibleTokens: number;
+  cacheHits: number;
+  cacheMissedTokens: number;
+  eligibleRequests: number;
+  eligibleHitRate: number | null;
+}
+
 export interface ContextUsage {
-  tokens?: number;
-  used?: number;
-  contextWindow?: number;
-  limit?: number;
-  percent?: number;
-  lastRequestUsage?: Record<string, unknown>;
+  tokens?: number | null;
+  used?: number | null;
+  contextWindow?: number | null;
+  limit?: number | null;
+  percent?: number | null;
+  lastRequestUsage?: RequestUsage | null;
 }
 
 export interface RuntimeActivity { kind: string; label: string; }
@@ -265,6 +310,8 @@ export interface RuntimeProcess {
   active?: boolean;
   stopping?: boolean;
   contextUsage?: ContextUsage;
+  sessionStats?: SessionStats | null;
+  cacheStats?: CacheStats | null;
   queue?: QueueState;
   hostUiRequests?: HostUiRequest[];
   compacting?: boolean;
@@ -278,6 +325,8 @@ export interface LiveRecord {
   streamUrl?: string;
   runtime?: RuntimeIdentity;
   contextUsage?: ContextUsage;
+  sessionStats?: SessionStats | null;
+  cacheStats?: CacheStats | null;
   binaryVersion?: string;
   trustPosture?: string;
   sessionFile?: string;

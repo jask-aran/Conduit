@@ -428,6 +428,7 @@ live process view, then low-frequency `runtime_process` and
 Each public process view includes safe client-facing fields only: `id`,
 `chatId`, `projectId`, `status`, `active`, `activity`, `activityDetail`,
 `stopping`, queue lengths via `queue`, `hostUiRequests`, `contextUsage`,
+`sessionStats`, and cumulative derived `cacheStats`,
 `runtime`, `binaryVersion`, `trustPosture`, `updatedAt`, and `clientCount`. The durable Conduit chat id is the public row
 key; the live process id is disposable.
 
@@ -447,8 +448,35 @@ remain on disk and resume on the next open.
 
 Context usage is synthesized by Conduit: after `agent_end` / `compaction_end`
 (and on selected-chat reconnect) the server calls Pi `get_session_stats` and
-emits a Conduit `context_usage` event. Null tokens/percent mean unknown, not
-zero.
+emits a Conduit `context_usage` event. The event carries current context usage,
+the latest assistant request usage, cumulative session statistics, and
+cumulative derived cache statistics. Null tokens/percent mean unknown, not
+zero. Session statistics include message and tool counts, input/output/cache
+token totals, and cumulative cost.
+
+`cacheStats` is derived from successive assistant request usage records. For
+each eligible pair, Conduit sets prompt tokens to input plus cache-read plus
+cache-write tokens, eligible tokens to the lower prompt total, and cache hits
+to the lower cache-read and eligible totals. The cumulative eligible hit rate
+is the sum of cache hits divided by the sum of eligible tokens. Compaction and
+branch summaries break the request-to-request eligibility link; cumulative
+totals remain.
+
+The composer can display these values as independent browser-local metrics.
+The default `Compact` preset shows core context usage, the latest request's
+input/output/cache fields, cumulative session totals, cost, and eligible cache
+hit rate. `Full` enables every measure. `Cache diagnostics` focuses on current
+and cumulative cache-read, uncached, eligible, hit, and missed measures.
+Changing one checkbox switches the selector to `Custom`; all selections remain
+browser-local.
+
+The complete metric catalogue includes:
+context tokens, window size, used and remaining percentages, latest request
+token/cache/reasoning/cost fields, cumulative session token and cost fields,
+message counts, tool counts, cumulative cache-eligible tokens/hits/misses and
+eligible hit rate, and derived cache-read or uncached-input percentages.
+Derived values are display calculations only; Pi remains the source of token
+and cost values.
 
 ## Live session protocol
 
@@ -567,7 +595,8 @@ connections.
 Server events. When a generation is open, connect first sends one
 `generation_resume` containing the complete current reduced generation and its
 last applied sequence. It then sends `runtime_state` containing the session
-view plus `hostUiRequests`, `queue`, and `contextUsage` when known. Structured
+view plus `hostUiRequests`, `queue`, `contextUsage`, and `sessionStats` when
+known. Structured
 events are independent of the capped diagnostic event ring.
 Delivery coalesces same-block deltas briefly per socket and flushes before
 message, tool, stop, error, and settlement boundaries. A socket above the
@@ -590,7 +619,7 @@ Conduit-origin events thereafter:
 | `generation_retry_started` / `generation_retry_ended` / `generation_turn_ended` | `generationId`, `seq`, retry fields | Retry-aware lifecycle that does not settle the generation during a retry gap |
 | `generation_failed` | `generationId`, `seq`, `error` | Terminal structured runtime failure |
 | `generation_stopped` | `generationId`, `seq`, `status`, `processTerminated` | Stop completed; late output was gated |
-| `context_usage` | `contextUsage` | Synthesized context window usage (nullable tokens/percent) |
+| `context_usage` | `contextUsage`, `sessionStats` | Synthesized context window usage, latest request usage, and cumulative Pi statistics (nullable context tokens/percent) |
 | `extension_ui_resolved` | `requestId` | A host-UI request was answered |
 | `session_checkpoint` | `chat` | Registry row checkpointed after a completed response |
 | `history_forked` | `chat` | The chat advanced to a forked native session |

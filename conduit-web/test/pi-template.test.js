@@ -625,7 +625,16 @@ test("process view exposes chatId, activity, and host UI for global runtime", as
         type: "response",
         command: "get_session_stats",
         success: true,
-        data: { contextUsage: { tokens: 1000, contextWindow: 128000, percent: 78 } },
+        data: {
+          userMessages: 2,
+          assistantMessages: 2,
+          toolCalls: 1,
+          toolResults: 1,
+          totalMessages: 5,
+          tokens: { input: 100, output: 40, cacheRead: 20, cacheWrite: 10, total: 170 },
+          cost: 0.123,
+          contextUsage: { tokens: 1000, contextWindow: 128000, percent: 78 },
+        },
       })}\n`));
     }
   });
@@ -646,7 +655,108 @@ test("process view exposes chatId, activity, and host UI for global runtime", as
   assert.equal(record.contextUsage.contextWindow, 128000);
   assert.equal(record.contextUsage.tokens, 1000);
   assert.equal(record.contextUsage.percent, 78);
+  assert.deepEqual(record.sessionStats, {
+    userMessages: 2,
+    assistantMessages: 2,
+    toolCalls: 1,
+    toolResults: 1,
+    totalMessages: 5,
+    tokens: { input: 100, output: 40, cacheRead: 20, cacheWrite: 10, total: 170 },
+    cost: 0.123,
+  });
+  assert.deepEqual(manager.view(record).sessionStats, record.sessionStats);
   assert.ok(record.events.some((event) => event.type === "context_usage"));
+  assert.deepEqual(record.events.findLast((event) => event.type === "context_usage").sessionStats, record.sessionStats);
+});
+
+test("captures the complete latest assistant usage breakdown", () => {
+  const { child, record } = rpcFixture(() => {});
+  child.stdout.write(`${JSON.stringify({
+    type: "message_end",
+    message: {
+      role: "assistant",
+      usage: {
+        input: 100,
+        output: 40,
+        cacheRead: 20,
+        cacheWrite: 10,
+        cacheWrite1h: 4,
+        reasoning: 12,
+        totalTokens: 170,
+        cost: { input: 0.01, output: 0.02, cacheRead: 0.003, cacheWrite: 0.004, total: 0.037 },
+      },
+    },
+  })}\n`);
+  assert.deepEqual(record.contextUsage.lastRequestUsage, {
+    input: 100,
+    output: 40,
+    cacheRead: 20,
+    cacheWrite: 10,
+    cacheWrite1h: 4,
+    reasoning: 12,
+    totalTokens: 170,
+    cost: { input: 0.01, output: 0.02, cacheRead: 0.003, cacheWrite: 0.004, total: 0.037 },
+  });
+});
+
+test("computes cumulative eligible cache-hit rate from successive requests", () => {
+  const { manager, child, record } = rpcFixture(() => {});
+  const sendAssistant = (usage) => child.stdout.write(`${JSON.stringify({
+    type: "message_end",
+    message: { role: "assistant", usage },
+  })}\n`);
+
+  sendAssistant({ input: 100, cacheRead: 20, cacheWrite: 10 });
+  sendAssistant({ input: 120, cacheRead: 100, cacheWrite: 0 });
+  sendAssistant({ input: 50, cacheRead: 80, cacheWrite: 20 });
+
+  assert.deepEqual(record.cacheStats, {
+    eligibleTokens: 280,
+    cacheHits: 180,
+    cacheMissedTokens: 100,
+    eligibleRequests: 2,
+    eligibleHitRate: 180 / 280,
+  });
+  assert.deepEqual(manager.view(record).cacheStats, record.cacheStats);
+
+  child.stdout.write(`${JSON.stringify({ type: "compaction_start" })}\n`);
+  sendAssistant({ input: 100, cacheRead: 50, cacheWrite: 0 });
+  assert.equal(record.cacheStats.eligibleRequests, 2);
+});
+
+test("restores cumulative eligible cache-hit rate from the persisted Pi session", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "conduit-cache-stats-"));
+  const sessionFile = path.join(root, "session.jsonl");
+  fs.writeFileSync(sessionFile, [
+    { type: "session", version: 3, id: "session-cache-stats", timestamp: new Date().toISOString(), cwd: root },
+    { type: "message", id: "assistant-1", parentId: null, timestamp: new Date().toISOString(), message: { role: "assistant", usage: { input: 100, cacheRead: 20, cacheWrite: 10 } } },
+    { type: "message", id: "assistant-2", parentId: "assistant-1", timestamp: new Date().toISOString(), message: { role: "assistant", usage: { input: 120, cacheRead: 100, cacheWrite: 0 } } },
+  ].map((entry) => JSON.stringify(entry)).join("\n") + "\n");
+  const child = new EventEmitter();
+  child.stdout = new PassThrough();
+  child.stderr = new PassThrough();
+  child.stdin = { write() {} };
+  child.kill = () => true;
+  const manager = new PiManager({
+    agentDir: root,
+    spawnImpl: () => child,
+    template: { id: "test", version: "1", models: [], tools: [], extensions: [], skills: [], promptTemplates: [] },
+  });
+  const record = manager.create({
+    project: { id: "project_test", slug: "test", path: root, sessionsDir: root },
+    chatId: "chat-cache-stats",
+    sessionFile,
+  });
+
+  assert.deepEqual(record.cacheStats, {
+    eligibleTokens: 130,
+    cacheHits: 100,
+    cacheMissedTokens: 30,
+    eligibleRequests: 1,
+    eligibleHitRate: 100 / 130,
+  });
+  assert.equal(record.cachePreviousPromptTokens, 220);
+  fs.rmSync(root, { recursive: true, force: true });
 });
 
 test("tool and compaction events update coarse activity and publish state", () => {
