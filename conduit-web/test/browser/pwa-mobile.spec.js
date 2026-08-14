@@ -233,6 +233,50 @@ test("acceptance: header launchers distinguish chat search from the command pale
   await expect(palette).toHaveCount(0);
 });
 
+test("acceptance: mobile header hides identity and groups chat actions in More", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "mobile-chromium", "phone header chrome");
+  await openApp(page);
+
+  await expect(page.locator(".chat-header-title")).toBeHidden();
+  await expect(page.locator(".chat-profile-posture")).toBeHidden();
+  const controls = [".mobile-sidebar-trigger", ".search-trigger", ".palette-trigger", ".chat-header-more"];
+  for (const selector of controls) {
+    const control = page.locator(selector);
+    await expect(control).toBeVisible();
+    const box = await control.boundingBox();
+    expect(box.width).toBeGreaterThanOrEqual(44);
+    expect(box.height).toBeGreaterThanOrEqual(44);
+  }
+
+  const more = page.getByRole("button", { name: "More chat options" });
+  await more.tap();
+  const menu = page.locator('[data-slot="menu-content"].chat-header-menu');
+  await expect(menu).toBeVisible();
+  await expect(menu.locator(".chat-header-menu-title")).toHaveText("New chat");
+  await expect(menu.locator(".chat-header-menu-meta")).toContainText("Chats");
+  for (const label of ["Workspace panel", "Share", "Rename", "Delete"]) {
+    await expect(menu.getByRole("menuitem", { name: label, exact: true })).toBeVisible();
+  }
+  const [menuBox, viewport] = await Promise.all([
+    menu.boundingBox(),
+    page.evaluate(() => ({ width: innerWidth, height: innerHeight })),
+  ]);
+  expect(menuBox.x).toBeGreaterThanOrEqual(-2);
+  expect(menuBox.y).toBeGreaterThanOrEqual(-2);
+  expect(menuBox.x + menuBox.width).toBeLessThanOrEqual(viewport.width + 2);
+  expect(menuBox.y + menuBox.height).toBeLessThanOrEqual(viewport.height + 2);
+  const beforeUrl = page.url();
+  await page.keyboard.press("Escape");
+  await expect(menu).toHaveCount(0);
+
+  await more.tap();
+  await menu.getByRole("menuitem", { name: "Workspace panel", exact: true }).tap();
+  await expect(page.getByRole("complementary", { name: "Workspace panel" })).toBeVisible();
+  await expect(page).toHaveURL(beforeUrl);
+  await page.getByRole("button", { name: "Close workspace panel" }).tap();
+  await expect(page.getByRole("complementary", { name: "Workspace panel" })).toBeHidden();
+});
+
 test("acceptance: tall narrow command and chat palettes fill the inset mobile frame", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "desktop-chromium", "exact 523px responsive boundary");
   await page.setViewportSize({ width: 523, height: 1100 });
@@ -309,7 +353,8 @@ test("acceptance: mobile sidebar is a full-bleed exclusive overlay", async ({ pa
 test("acceptance: mobile workspace is full-bleed and closes via panel X only", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "mobile-chromium", "phone overlay chrome");
   await openApp(page);
-  await page.getByRole("button", { name: "Toggle workspace panel" }).click();
+  await page.getByRole("button", { name: "More chat options" }).tap();
+  await page.locator('[data-slot="menu-content"].chat-header-menu').getByRole("menuitem", { name: "Workspace panel", exact: true }).tap();
   const panel = page.getByRole("complementary", { name: "Workspace panel" });
   const opening = await sampleTranslateX(page, ".workspace-panel");
   await expect(panel).toBeVisible();
@@ -322,7 +367,7 @@ test("acceptance: mobile workspace is full-bleed and closes via panel X only", a
   await page.getByRole("button", { name: "Close workspace panel" }).click();
   const closing = await sampleTranslateX(page, ".workspace-panel");
   await expect(panel).toBeHidden();
-  await expect(page.getByRole("button", { name: "Toggle workspace panel" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "More chat options" })).toBeVisible();
   expect(new Set(closing.map((value) => Math.round(value))).size).toBeGreaterThan(2);
   expect(closing.every((value, index) => index === 0 || value >= closing[index - 1] - 0.5)).toBe(true);
 });

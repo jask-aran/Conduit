@@ -2,14 +2,14 @@
 import { batch, createEffect, createMemo, createSignal, ErrorBoundary, lazy, onCleanup, onMount, Show } from "solid-js";
 import { render } from "solid-js/web";
 import {
-  PanelLeftIcon, PanelRightIcon, SearchIcon, ShareIcon, TerminalIcon, TriangleAlertIcon,
+  EllipsisIcon, PanelLeftIcon, PanelRightIcon, PencilIcon, SearchIcon, ShareIcon, TerminalIcon, Trash2Icon, TriangleAlertIcon,
 } from "lucide-solid";
 import { registerSW } from "virtual:pwa-register";
 import { Toaster, toast } from "solid-sonner";
 import "solid-sonner/styles.css";
 import { DefaultMeteorShower } from "@jask-aran/solid-components/meteor-shower";
 import "@jask-aran/solid-components/meteor-shower.css";
-import { Button, Dialog, DialogContent, Spinner } from "@/components/primitives";
+import { Button, Dialog, DialogContent, Menu, MenuContent, MenuGroup, MenuItem, MenuLabel, MenuSeparator, MenuTrigger, Spinner } from "@/components/primitives";
 import { api, asList, pathChatId, pathProjectId, projectPath } from "./api/client";
 import type { ChatSummary, DashboardChat, Installation, Project, RuntimeIdentity, Template, TranscriptDetail, WorkspaceAppearance, WorkspacePolicy, WorkspaceSuggestion, WorkspaceSuggestionsPayload } from "./api/contracts";
 import { createErrorDiagnostic, formatRuntimeDiagnosticPrompt, type ErrorDiagnostic, type ErrorDiagnosticContext } from "./error-diagnostics";
@@ -58,15 +58,18 @@ function ChatHeader(props: {
   onOpenSearch: () => void;
   onTogglePanel: () => void;
   onShare: () => void;
+  onRename?: () => void;
+  onDelete?: () => void;
   dashboard?: boolean;
 }) {
   const projectLabel = () => props.project?.slug === "chat" ? "Chats" : props.project?.slug || props.project?.name || "Chats";
-  const runtimeLabel = () => props.runtime?.kind === "native_pi" ? "Host Pi" : "Isolated Pi";
+  const runtimeLabel = () => !props.runtime ? null : props.runtime.kind === "native_pi" ? "Host Pi" : "Isolated Pi";
   const profileLabel = () => props.runtime?.kind === "native_pi" ? null : props.profile?.label || props.profile?.id;
   const posture = () => props.runtime?.kind === "native_pi"
     ? props.live?.trustPosture === "native_saved_trust" ? "project resources trusted" : "project trust pending"
     : props.profile?.posture || props.profile?.tools?.join(" / ");
   const line = () => props.dashboard ? "" : [runtimeLabel(), props.live?.binaryVersion || props.runtime?.binaryVersion ? `Pi ${props.live?.binaryVersion || props.runtime?.binaryVersion}` : null, profileLabel(), projectLabel() !== "Chats" ? projectLabel() : null, posture()].filter(Boolean).join(" · ");
+  const menuLine = () => [projectLabel(), runtimeLabel(), props.live?.binaryVersion || props.runtime?.binaryVersion ? `Pi ${props.live?.binaryVersion || props.runtime?.binaryVersion}` : null, profileLabel(), posture()].filter(Boolean).join(" · ");
   return <header class="chat-header">
     <Show when={!props.mobileSidebarOpen}>
       <Button variant="ghost" size="icon-sm" class="mobile-sidebar-trigger" data-mobile-open="false" aria-label="Toggle Sidebar" aria-expanded={false} onClick={props.onToggleMobileSidebar}><PanelLeftIcon /></Button>
@@ -76,10 +79,28 @@ function ChatHeader(props: {
     <div class="chat-header-actions">
       <Button variant="ghost" size="icon-sm" class="search-trigger" aria-label="Search chats" title="Search chats" onClick={props.onOpenSearch}><SearchIcon /></Button>
       <Button variant="ghost" size="icon-sm" class="palette-trigger" aria-label="Open command palette" title="Command palette" onClick={props.onOpenPalette}><TerminalIcon /></Button>
-      <Button variant="ghost" size="icon-sm" aria-label={props.dashboard ? "Copy Tailscale workspace link" : "Copy Tailscale chat link"} title={props.dashboard ? "Copy Tailscale workspace link" : "Copy Tailscale chat link"} onClick={props.onShare}><ShareIcon /></Button>
+      <Button variant="ghost" size="icon-sm" class="chat-header-desktop-action" aria-label={props.dashboard ? "Copy Tailscale workspace link" : "Copy Tailscale chat link"} title={props.dashboard ? "Copy Tailscale workspace link" : "Copy Tailscale chat link"} onClick={props.onShare}><ShareIcon /></Button>
       <Show when={!props.panelOpen}>
-        <Button variant="ghost" size="icon-sm" aria-label="Toggle workspace panel" aria-expanded={false} onClick={props.onTogglePanel}><PanelRightIcon /></Button>
+        <Button variant="ghost" size="icon-sm" class="chat-header-desktop-action" aria-label="Toggle workspace panel" aria-expanded={false} onClick={props.onTogglePanel}><PanelRightIcon /></Button>
       </Show>
+      <Menu>
+        <MenuTrigger class="chat-header-more" aria-label="More chat options" title="More chat options"><EllipsisIcon /></MenuTrigger>
+        <MenuContent class="chat-header-menu">
+          <MenuGroup>
+            <MenuLabel class="chat-header-menu-title">{props.title}</MenuLabel>
+            <MenuLabel class="chat-header-menu-meta">{menuLine()}</MenuLabel>
+          </MenuGroup>
+          <MenuSeparator />
+          <MenuItem onSelect={props.onTogglePanel}><PanelRightIcon />Workspace panel</MenuItem>
+          <MenuItem onSelect={props.onShare}><ShareIcon />Share</MenuItem>
+          <Show when={props.onRename}>
+            <MenuItem onSelect={() => props.onRename?.()}><PencilIcon />{props.dashboard ? "Rename workspace" : "Rename"}</MenuItem>
+          </Show>
+          <Show when={props.onDelete}>
+            <MenuItem variant="destructive" onSelect={() => props.onDelete?.()}><Trash2Icon />{props.dashboard ? "Delete workspace" : "Delete"}</MenuItem>
+          </Show>
+        </MenuContent>
+      </Menu>
     </div>
   </header>;
 }
@@ -835,7 +856,7 @@ function App() {
         </Show>
         <Show when={routeKind() === "project" && selectedProject()} fallback={<>
           <Show when={dropActive()}><div class="chat-drop-overlay"><div>Drop files to attach</div></div></Show>
-          <ChatHeader project={selectedProject()} title={chat.title()} profile={activeProfile()} runtime={chat.runtimeIdentity()} live={chat.live() as unknown as Record<string, unknown>} panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={() => void shareChat()} />
+          <ChatHeader project={selectedProject()} title={chat.title()} profile={activeProfile()} runtime={chat.runtimeIdentity()} live={chat.live() as unknown as Record<string, unknown>} panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={() => void shareChat()} onRename={() => runSidebar("rename-chat")} onDelete={() => runSidebar("delete-chat")} />
           <Show when={selectedProject()?.kind === "workspace" && [...runtime.processes().values()].some((process) => process.chatId !== catalogue.selectedId() && process.active)}><div class="workspace-warning"><TriangleAlertIcon /><div><strong>Another chat is working in this Workspace</strong><p>Both agents can edit the same files. Conduit does not lock the Workspace or create worktrees automatically.</p></div></div></Show>
           <div class="work-area">
             <section class="work-area-conversation" aria-label="Conversation">
@@ -845,7 +866,7 @@ function App() {
             </section>
           </div>
         </>}>
-          <ChatHeader project={selectedProject()} title="Dashboard" panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={() => void shareProject()} dashboard />
+          <ChatHeader project={selectedProject()} title="Dashboard" panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={() => void shareProject()} onRename={() => runSidebar("rename-folder")} onDelete={() => runSidebar("delete-project")} dashboard />
           <ProjectDashboard project={selectedProject()!} templates={templates()} runtime={runtime}
             onNewChat={async (project) => { await createChat(project); }} onOpenChat={(target: DashboardChat, project) => openChat(target, project)}
             onRename={() => runSidebar("rename-folder")} onDelete={() => runSidebar("delete-project")}

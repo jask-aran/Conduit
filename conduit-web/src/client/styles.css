@@ -91,6 +91,10 @@ svg { stroke-width: 1.5; }
 .chat-header-title span, .chat-header-title strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .breadcrumb-separator::before { content: "/"; }
 .chat-profile-posture { max-width: min(420px, 42vw); min-width: 0; overflow: hidden; color: var(--muted-foreground); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.chat-header-more { display: none; }
+.chat-header-more svg { width: 16px; height: 16px; }
+.chat-header-menu-title { display: block; max-width: 100%; overflow-wrap: anywhere; color: var(--foreground); font-size: 14px; font-weight: 600; }
+.chat-header-menu-meta { display: block; max-width: 100%; overflow-wrap: anywhere; line-height: 1.35; }
 .workspace-warning { position: relative; z-index: 2; display: flex; width: min(760px, calc(100% - 48px)); gap: 10px; margin: 8px auto; padding: 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--card); }
 .workspace-warning svg { width: 18px; flex: none; }
 .workspace-warning p { margin: 3px 0 0; color: var(--muted-foreground); font-size: 13px; }
@@ -599,12 +603,31 @@ svg { stroke-width: 1.5; }
   .tool-card { margin-left: 0; }
   .response-actions { opacity: 1; }
   .chat-header {
-    height: calc(56px + env(safe-area-inset-top, 0px));
-    min-height: 56px;
+    height: calc(60px + env(safe-area-inset-top, 0px));
+    min-height: 60px;
     padding: calc(8px + env(safe-area-inset-top, 0px)) 10px 8px;
     gap: 6px;
   }
+  .chat-header-title { display: none; }
   .chat-profile-posture { display: none; }
+  .chat-header-desktop-action { display: none !important; }
+  .chat-header > .mobile-sidebar-trigger,
+  .chat-header-actions > [data-slot="button"],
+  .chat-header-actions > .chat-header-more {
+    width: 44px;
+    min-width: 44px;
+    height: 44px;
+    min-height: 44px;
+  }
+  .chat-header-more { display: inline-flex; flex: none; align-items: center; justify-content: center; border: 0; border-radius: var(--radius-md); background: transparent; color: inherit; }
+  .chat-header-more:hover { background: var(--accent); }
+  .chat-header-menu {
+    width: min(20rem, calc(100vw - 16px));
+    max-width: calc(100vw - 16px);
+    max-height: calc(var(--app-height, 100dvh) - 16px);
+    overflow-y: auto;
+  }
+  [data-slot="menu-content"].chat-header-menu [role="menuitem"] { min-height: 44px; padding: 10px 12px; font-size: 15px; }
   .settings-shell { width: calc(100vw - 24px); height: calc(100dvh - 24px); }
   .settings-rail { width: 132px; }
   /* The mobile palette fills the visual viewport while keeping the inset frame
