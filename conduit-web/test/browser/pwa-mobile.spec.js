@@ -319,6 +319,15 @@ test("acceptance: mobile composer is one row with Plus-owned message options", a
   const composer = page.locator(".composer");
   const composerBox = await composer.boundingBox();
   expect(composerBox.height).toBeLessThanOrEqual(72);
+  const input = page.getByRole("textbox", { name: "Message Pi" });
+  await expect(input).toHaveAttribute("data-has-text", "false");
+  await input.fill("Hello");
+  await expect(input).toHaveAttribute("data-has-text", "true");
+  await expect(input).toHaveCSS("padding-top", "11px");
+  const filledComposerBox = await composer.boundingBox();
+  expect(filledComposerBox.height).toBeLessThanOrEqual(52);
+  await input.fill("");
+  await expect(input).toHaveAttribute("data-has-text", "false");
   await expect(page.locator(".composer-plus-trigger")).toBeVisible();
   await expect(page.locator(".dictation-trigger")).toBeVisible();
   await expect(page.getByRole("button", { name: "Send message" })).toBeVisible();
@@ -348,8 +357,13 @@ test("acceptance: mobile composer is one row with Plus-owned message options", a
   await expect(modelSubmenu.getByText("Model", { exact: true })).toBeVisible();
   await expect(modelSubmenu.getByText("Thinking", { exact: true })).toBeVisible();
   await expect(modelSubmenu.getByRole("menuitemradio").first()).toBeVisible();
+  await modelSubmenu.getByRole("menuitemradio").first().tap();
+  await expect(modelSubmenu).toBeVisible();
+  await modelSubmenu.getByRole("menuitemradio", { name: "High" }).tap();
+  await expect(modelSubmenu).toBeVisible();
 
-  await page.keyboard.press("Escape");
+  await page.mouse.click(200, 220);
+  await expect(modelSubmenu).toBeHidden();
   await page.getByRole("button", { name: "Message options" }).tap();
   await page.locator('[data-slot="menu-content"].composer-options-menu').getByRole("menuitem", { name: /^Profile/ }).tap();
   const profileSubmenu = page.locator('[data-slot="menu-content"].composer-profile-menu');

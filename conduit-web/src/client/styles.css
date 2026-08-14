@@ -708,6 +708,7 @@ svg { stroke-width: 1.5; }
   .composer-input-shell { min-width: 0; min-height: 44px; flex: 1 1 auto; align-self: center; order: 2; }
   .composer textarea { min-height: 44px; padding: 0 4px; line-height: 1.35; }
   .composer textarea:placeholder-shown { padding-block: 0; line-height: 44px; }
+  .composer textarea[data-has-text="true"] { padding: 11px 4px 9px; line-height: 1.35; }
   .composer-actions { min-width: 0; min-height: 44px; flex: 0 0 auto; align-self: center; order: 3; gap: 2px; padding: 0 4px 0 2px; }
   .composer-actions-left, .composer-actions-right { gap: 2px; }
   .composer-actions [data-slot="button"] { width: 40px; height: 40px; border-radius: 12px; }
