@@ -48,12 +48,12 @@ It does not cover:
 
 1. The transcript owns the viewport. Permanent chrome uses only the height
    required for immediate actions.
-2. Global actions stay visible. Chat-specific identity, configuration, and
-   management live in one overflow menu.
+2. Global actions stay visible. Chat-specific identity and management live in
+   the overflow menu. Message-level configuration lives in the Plus menu.
 3. The top bar does not show the chat title. Live agent state occupies that
    space instead.
-4. The collapsed composer is one row. Model, profile, and telemetry controls do
-   not appear inside it.
+4. The collapsed composer is one row. Message-level settings stay one tap away
+   from a single Plus menu, without becoming permanent chips or controls.
 5. Detail appears on demand. The current context metrics remain available
    through the status control without remaining visible below the composer.
 6. Existing chat behavior stays intact unless this specification explicitly
@@ -80,7 +80,7 @@ eight-pixel outer margin, rounded outer frame, or inset ring.
 │ Copy   Retry                        │
 │                                     │
 ├─────────────────────────────────────┤
-│ [Attach] [ Message Pi… ] [Voice] [↑]│
+│ [+] [ Message Pi…       ] [◉] [↑]  │
 │ bottom safe area                    │
 └─────────────────────────────────────┘
 ```
@@ -209,7 +209,7 @@ The sheet:
 ## Chat overflow menu
 
 The More button opens a viewport-bounded menu or compact top sheet. It contains
-chat-specific identity, configuration, navigation, and management.
+chat-specific identity, navigation, and management.
 
 The menu begins with a non-interactive identity block:
 
@@ -219,17 +219,12 @@ The menu begins with a non-interactive identity block:
 
 The chat title appears nowhere else in the mobile top bar.
 
-The menu then provides:
+The menu then provides chat-specific actions:
 
-1. **Model** — shows the current model and thinking level and opens the existing
-   model choices in a nested sheet.
-2. **Profile** — shows the current profile and opens the existing profile
-   choices while the chat is a draft. After the first message, it remains
-   visible as locked context or is disabled with a clear locked description.
-3. **Open Workspace panel** — appears when the current surface supports it.
-4. **Share chat** — uses the existing share behavior.
-5. **Rename** — uses the existing chat rename behavior.
-6. **Delete** — remains visually separated and requires the existing
+1. **Open Workspace panel** — appears when the current surface supports it.
+2. **Share chat** — uses the existing share behavior.
+3. **Rename** — uses the existing chat rename behavior.
+4. **Delete** — remains visually separated and requires the existing
    confirmation.
 
 Unavailable actions are omitted when they do not apply. Disabled actions must
@@ -273,14 +268,11 @@ layout, streaming reconciliation, and tail-follow behavior remain unchanged.
 The collapsed composer contains one row:
 
 ```text
-[Attach files] [Flexible single-line input] [Voice dictation] [Primary action]
+[Plus] [Flexible single-line input] [Voice dictation] [Primary action]
 ```
 
 It does not contain:
 
-- Model;
-- Thinking;
-- Profile;
 - the permanent status line;
 - context metrics;
 - a second action row.
@@ -290,8 +282,34 @@ height is approximately `52px`, excluding
 `env(safe-area-inset-bottom)`. The composer stack uses small horizontal gutters
 and no unnecessary vertical padding.
 
-Attach, Voice, and the primary action have at least `44px` touch targets. The
-input takes all remaining width.
+Plus, Voice, and the primary action have at least `44px` touch targets. The
+input takes all remaining width. Plus is labelled `Message options`, not
+`Attach files`.
+
+### Plus menu
+
+Plus opens an anchored action menu or compact sheet. It is the single home for
+message-level settings and future message-scoped additions. It must not add
+chips above the composer or increase the collapsed composer height.
+
+The first-level actions are:
+
+1. **Model and effort** — opens one combined sheet containing the model list
+   and thinking-level choices. This is reachable in two taps from the
+   composer: Plus, then Model and effort.
+2. **Profile** — opens the existing profile choices. It remains available while
+   the chat is a draft and shows its locked state after the first message.
+3. **Attach files** — preserves the existing picker and attachment behavior.
+
+The menu is intentionally extensible. Future message-level actions such as
+**Add skill**, **Add plugin**, tool posture, or other prompt settings belong in
+this menu. They should be added as first-level rows or grouped under a clear
+section, not as permanent composer controls.
+
+The current model and profile can appear as secondary values on their menu rows,
+but no value chip remains visible when the menu is closed. Model and effort are
+one combined entry so the user does not need to open separate menus for related
+runtime choices.
 
 ### Input expansion
 
@@ -311,13 +329,13 @@ semantics.
 
 | Runtime state | Draft state | Visible actions |
 | --- | --- | --- |
-| Idle | Empty | Attach, Voice, disabled Send |
-| Idle | Has text | Attach, Voice, Send |
-| Submitting | Any | Attach, Voice, submitting indicator |
-| Generating | Empty | Attach, Voice, Stop |
-| Generating | Has text | Attach, Voice, Stop, Steer, Send follow-up |
-| Stopping | Any | Attach, Voice, stopping indicator |
-| Dictating | Any | Attach, Stop dictation, disabled Send |
+| Idle | Empty | Plus, Voice, disabled Send |
+| Idle | Has text | Plus, Voice, Send |
+| Submitting | Any | Plus, Voice, submitting indicator |
+| Generating | Empty | Plus, Voice, Stop |
+| Generating | Has text | Plus, Voice, Stop, Steer, Send follow-up |
+| Stopping | Any | Plus, Voice, stopping indicator |
+| Dictating | Any | Plus, Stop dictation, disabled Send |
 
 Busy-state actions can temporarily reduce the input width, but they must stay
 inside the same row. This specification does not replace them with the proposed
@@ -398,7 +416,9 @@ Likely scope:
   - status-detail-sheet ownership.
 - `conduit-web/src/client/chat/composer.tsx`
   - mobile one-row composition;
-  - removal of mobile model, profile, and status chrome;
+  - Plus message-options menu for model/effort, profile, attachments, and
+    future message-scoped actions;
+  - removal of permanent mobile model, profile, and status chrome;
   - preservation of busy and dictation states.
 - `conduit-web/src/client/chat/transcript.tsx`
   - no state-model change expected;
@@ -444,6 +464,12 @@ runtime, model, profile, or transcript state.
 - More shows the full title and applicable chat-specific actions.
 - Model and Profile can be inspected and changed under the same rules as
   desktop.
+- Model and effort are reachable from the collapsed composer in two taps or
+  fewer: Plus, then Model and effort.
+- Profile is reachable from the collapsed composer through Plus, with its
+  existing draft-only lock rule.
+- Attach files remains available through Plus.
+- Future message-level actions have one defined extension point in Plus.
 - The status control reflects live runtime and dictation state.
 - The status sheet displays every selected context metric and updates live.
 - Send, stop, steer, follow-up queueing, attachment, and dictation behavior
@@ -501,6 +527,8 @@ The following ideas remain deliberately outside the first implementation:
 
 - replace busy-state composer buttons with a context-aware steering or queueing
   control;
+- decide whether chat-specific model/profile shortcuts should also appear in
+  More after observing Plus-menu usage;
 - define gesture-only message actions;
 - add native Camera, Photos, and Files choices through Capacitor;
 - change the status sheet into a persistent remote-control panel;
