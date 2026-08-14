@@ -1,4 +1,9 @@
 import { For, Show } from "solid-js";
+// Kobalte's public dropdown-menu entrypoint does not expose this hook, but its
+// menu content uses the same context. The compiled chunk keeps the context
+// identity shared with the public component.
+// @ts-expect-error Kobalte does not publish declarations for this internal chunk.
+import { useMenuContext } from "../../../node_modules/@kobalte/core/dist/chunk/L544S5A4.jsx";
 import type { FocusOutsideEvent } from "@kobalte/core";
 import { PaperclipIcon, PlusIcon, SlidersHorizontalIcon, UserRoundIcon } from "lucide-solid";
 import {
@@ -13,7 +18,6 @@ import {
   MenuSub,
   MenuSubContent,
   MenuSubTrigger,
-  MenuTrigger,
 } from "@/components/primitives";
 import type { Template } from "../api/contracts";
 import type { ActiveChatStore } from "../state/active-chat";
@@ -41,6 +45,9 @@ export function MobileComposerOptions(props: {
   let keyboardOpenBeforeOpen = false;
 
   const captureComposerFocus = () => {
+    if (composerFocusBeforeOpen) {
+      return;
+    }
     const active = document.activeElement;
     if (!(active instanceof HTMLTextAreaElement) || active.getAttribute("aria-label") !== "Message Pi") {
       composerFocusBeforeOpen = null;
@@ -56,11 +63,9 @@ export function MobileComposerOptions(props: {
     event.preventDefault();
     const target = composerFocusBeforeOpen;
     const restore = keyboardOpenBeforeOpen;
-
     composerFocusBeforeOpen = null;
     keyboardOpenBeforeOpen = false;
-    if (!target || !restore) return;
-    window.setTimeout(() => target.isConnected && target.focus({ preventScroll: true }), 0);
+    if (restore && target?.isConnected) target.focus({ preventScroll: true });
   };
 
   const keepComposerFocusInsideMenu = (event: FocusOutsideEvent) => {
@@ -70,15 +75,10 @@ export function MobileComposerOptions(props: {
 
   return <div class="composer-mobile-plus">
     <Menu modal={false}>
-      <MenuTrigger
-        class="composer-plus-trigger"
-        aria-label="Message options"
-        title="Message options"
-        disabled={!composer.serverOnline}
-        onPointerDown={(event) => { captureComposerFocus(); event.preventDefault(); }}
-        onTouchStart={captureComposerFocus}
-        onClick={(event) => event.preventDefault()}
-      ><PlusIcon /></MenuTrigger>
+      <MobileComposerPlusTrigger
+        serverOnline={composer.serverOnline}
+        captureComposerFocus={captureComposerFocus}
+      />
       <MenuContent class="composer-options-menu" onOpenAutoFocus={preserveComposerFocus} onFocusOutside={keepComposerFocusInsideMenu}>
         <MenuGroup>
           <MenuLabel class="composer-options-label">Message options</MenuLabel>
@@ -130,6 +130,26 @@ export function MobileComposerOptions(props: {
       </MenuContent>
     </Menu>
   </div>;
+}
+
+function MobileComposerPlusTrigger(props: {
+  serverOnline: boolean;
+  captureComposerFocus: () => void;
+}) {
+  const menu = useMenuContext();
+
+  return <button
+    type="button"
+    class="composer-plus-trigger"
+    aria-label="Message options"
+    title="Message options"
+    aria-haspopup="menu"
+    aria-expanded={menu.isOpen()}
+    disabled={!props.serverOnline}
+    onPointerDown={(event) => { props.captureComposerFocus(); event.preventDefault(); }}
+    onTouchStart={props.captureComposerFocus}
+    onClick={(event) => { event.preventDefault(); menu.toggle(false); }}
+  ><PlusIcon /></button>;
 }
 
 export default MobileComposerOptions;
