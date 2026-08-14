@@ -1,4 +1,4 @@
-import { For, Show } from "solid-js";
+import { For, Show, createUniqueId, onCleanup } from "solid-js";
 // Kobalte's public dropdown-menu entrypoint does not expose this hook, but its
 // menu content uses the same context. The compiled chunk keeps the context
 // identity shared with the public component.
@@ -137,14 +137,19 @@ function MobileComposerPlusTrigger(props: {
   captureComposerFocus: () => void;
 }) {
   const menu = useMenuContext();
+  const triggerId = `composer-plus-${createUniqueId()}`;
+  onCleanup(menu.registerTriggerId(triggerId));
 
   return <button
     type="button"
+    ref={menu.setTriggerRef}
+    id={triggerId}
     class="composer-plus-trigger"
     aria-label="Message options"
     title="Message options"
-    aria-haspopup="menu"
+    aria-haspopup="true"
     aria-expanded={menu.isOpen()}
+    aria-controls={menu.isOpen() ? menu.contentId() : undefined}
     disabled={!props.serverOnline}
     onPointerDown={(event) => { props.captureComposerFocus(); event.preventDefault(); }}
     onTouchStart={props.captureComposerFocus}
