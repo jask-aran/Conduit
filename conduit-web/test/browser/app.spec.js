@@ -4680,7 +4680,8 @@ test("Ctrl+Shift+D captures in the page and buffers microphone audio until the s
   const [waveformBox, statusBox] = await Promise.all([waveform.boundingBox(), isMobile ? page.locator(".chat-status-trigger").boundingBox() : page.locator(".composer-status-state").boundingBox()]);
   expect(waveformBox).not.toBeNull();
   expect(statusBox).not.toBeNull();
-  if (!isMobile) expect(statusBox.x).toBeGreaterThanOrEqual(waveformBox.x + waveformBox.width - 1);
+  if (isMobile) expect(waveformBox.width).toBeGreaterThan(120);
+  else expect(statusBox.x).toBeGreaterThanOrEqual(waveformBox.x + waveformBox.width - 1);
   const expectedBarCount = isMobile ? 16 : 24;
   await expect(waveform.locator(".voice-waveform-bar")).toHaveCount(expectedBarCount);
   await expect.poll(() => waveform.locator(".voice-waveform-bar").evaluateAll((bars) => bars.filter((bar) => bar.getBoundingClientRect().width >= 1).length)).toBe(expectedBarCount);
