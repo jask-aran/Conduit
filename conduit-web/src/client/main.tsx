@@ -180,6 +180,9 @@ function ChatHeader(props: {
             <Show when={props.composerStatus?.dictationError()}>
               <p class="mobile-status-error" role="alert">{props.composerStatus?.dictationError()}</p>
             </Show>
+            <Show when={props.composerStatus?.micSilent()}>
+              <p class="mobile-status-error" role="alert">No microphone signal — check the mic or speak up</p>
+            </Show>
           </div>
         </DialogContent>
       </Dialog>

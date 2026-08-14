@@ -4464,10 +4464,6 @@ test("voice dictation keeps capturing after a speech-end pause and preserves nat
         if (!this.url.includes("/v0/dictation/stream")) return;
         if (payload instanceof ArrayBuffer) {
           window.__voiceAudioFrames = (window.__voiceAudioFrames || 0) + 1;
-          if (!this.endOfSpeechSent) {
-            this.endOfSpeechSent = true;
-            queueMicrotask(() => this.onmessage?.({ data: JSON.stringify({ type: "end_of_speech" }) }));
-          }
           return;
         }
         if (typeof payload !== "string") return;
@@ -4849,7 +4845,6 @@ test("Voice microphone test shows the shared live recorder monitor", async ({ pa
       model: "",
       endpoint: "",
       source: "stored",
-      locked: false,
       adapters: [],
       providers: [],
       auth: { type: "none", headerName: "", configured: false, source: null, removable: false },
@@ -4995,7 +4990,6 @@ test("managed model installation preserves the unsaved local source during serve
     model: "",
     endpoint: "",
     source: "stored",
-    locked: false,
     adapters: [],
     providers: [],
     auth: { type: "none", headerName: "", configured: false, source: null, removable: false },
@@ -5080,9 +5074,7 @@ test("Voice credential tests persist the displayed provider before testing it", 
     model: "gpt-transcribe",
     endpoint: "https://api.openai.com/v1/audio/transcriptions",
     source: "stored",
-    locked: false,
     adapters: [
-      { id: "parakeet_pcm_ws_v1", label: "Parakeet live PCM WebSocket", transport: "websocket", description: "Streams signed PCM." },
       { id: "openai_audio_sse_v1", label: "OpenAI-compatible audio upload", transport: "http", description: "Uploads one utterance." },
     ],
     providers: [

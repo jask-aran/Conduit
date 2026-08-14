@@ -367,18 +367,26 @@ test("acceptance: mobile composer is one row with Plus-owned message options", a
   await expect(input).toBeFocused();
 
   await menu.getByRole("menuitem", { name: /^Model/ }).tap();
-  const modelSubmenu = page.locator('[data-slot="menu-content"].composer-model-menu');
-  await expect(modelSubmenu).toBeVisible();
+  const modelPanel = menu.locator(".composer-model-menu");
+  await expect(modelPanel).toBeVisible();
+  await expect(menu).toBeVisible();
   await expect(input).toBeFocused();
-  const modelSubmenuBox = await modelSubmenu.boundingBox();
-  expect(modelSubmenuBox.x).toBeGreaterThanOrEqual(0);
-  expect(modelSubmenuBox.x + modelSubmenuBox.width).toBeLessThanOrEqual(viewport.width + 1);
-  expect(modelSubmenuBox.y + modelSubmenuBox.height).toBeLessThanOrEqual(viewport.height + 1);
-  await expect(modelSubmenu.getByText("Model", { exact: true })).toBeVisible();
-  await expect(modelSubmenu.getByText("Thinking", { exact: true })).toHaveCount(0);
-  await expect(modelSubmenu.getByRole("menuitemradio").first()).toBeVisible();
-  await modelSubmenu.getByRole("menuitemradio").first().tap();
-  await expect(modelSubmenu).toHaveCount(0);
+  const modelPanelBox = await modelPanel.boundingBox();
+  expect(modelPanelBox.x).toBeGreaterThanOrEqual(0);
+  expect(modelPanelBox.x + modelPanelBox.width).toBeLessThanOrEqual(viewport.width + 1);
+  expect(modelPanelBox.y + modelPanelBox.height).toBeLessThanOrEqual(viewport.height + 1);
+  await expect(modelPanel.getByText("Model", { exact: true })).toBeVisible();
+  await expect(modelPanel.getByText("Thinking", { exact: true })).toHaveCount(0);
+  await expect(modelPanel.getByRole("menuitemradio").first()).toBeVisible();
+  await modelPanel.getByRole("menuitem", { name: "Message options" }).tap();
+  await expect(modelPanel).toHaveCount(0);
+  await expect(menu).toBeVisible();
+  await expect(input).toBeFocused();
+
+  await menu.getByRole("menuitem", { name: /^Model/ }).tap();
+  await expect(modelPanel).toBeVisible();
+  await modelPanel.getByRole("menuitemradio").first().tap();
+  await expect(modelPanel).toHaveCount(0);
   await expect(menu).toBeVisible();
   await expect(input).toBeFocused();
   await menu.getByRole("menuitemradio", { name: "High" }).tap();
@@ -386,10 +394,25 @@ test("acceptance: mobile composer is one row with Plus-owned message options", a
   await expect(input).toBeFocused();
 
   await menu.getByRole("menuitem", { name: /^Profile/ }).tap();
-  const profileSubmenu = page.locator('[data-slot="menu-content"].composer-profile-menu');
-  await expect(profileSubmenu).toBeVisible();
+  const profilePanel = menu.locator(".composer-profile-menu");
+  await expect(profilePanel).toBeVisible();
   await expect(input).toBeFocused();
-  await expect(profileSubmenu.getByRole("menuitemradio", { name: "Assistant" })).toBeVisible();
+  await expect(profilePanel.getByRole("menuitemradio", { name: "Assistant" })).toBeVisible();
+  await profilePanel.getByRole("menuitemradio", { name: "Assistant" }).tap();
+  await expect(profilePanel).toHaveCount(0);
+  await expect(menu).toBeVisible();
+  await expect(input).toBeFocused();
+
+  await menu.getByRole("menuitem", { name: /^Model/ }).tap();
+  await expect(modelPanel).toBeVisible();
+  await page.getByRole("button", { name: "Message options" }).tap();
+  await expect(menu).toHaveCount(0);
+  await expect(input).toBeFocused();
+  await page.getByRole("button", { name: "Message options" }).tap();
+  await expect(menu).toBeVisible();
+  await expect(modelPanel).toHaveCount(0);
+  await expect(menu.getByRole("menuitem", { name: /^Model/ })).toBeVisible();
+  await expect(input).toBeFocused();
 });
 
 test("acceptance: tall narrow command and chat palettes fill the inset mobile frame", async ({ page }, testInfo) => {

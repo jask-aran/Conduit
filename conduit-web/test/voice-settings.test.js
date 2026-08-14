@@ -6,10 +6,10 @@ import test from "node:test";
 import { VoiceRuntime, isPrivateAddress } from "../src/server/voice-runtime.js";
 import { VoiceSettingsStore } from "../src/voice-settings.js";
 
-async function temporaryStore(environment = {}) {
+async function temporaryStore() {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-voice-settings-"));
   const filePath = path.join(root, "voice.json");
-  const store = new VoiceSettingsStore({ filePath, environment });
+  const store = new VoiceSettingsStore({ filePath });
   await store.initialize();
   return { root, filePath, store };
 }
@@ -20,8 +20,8 @@ test("VoiceSettingsStore persists redacted remote credentials with private file 
     await fixture.store.update({
       mode: "remote",
       provider: "custom",
-      adapter: "parakeet_pcm_ws_v1",
-      endpoint: "wss://speech.example.com/ws",
+      adapter: "openai_audio_sse_v1",
+      endpoint: "https://speech.example.com/v1/audio/transcriptions",
       auth: { type: "header", headerName: "X-Speech-Key", secret: "top-secret" },
     });
     const stored = JSON.parse(await fs.readFile(fixture.filePath, "utf8"));
@@ -39,10 +39,10 @@ test("VoiceSettingsStore persists redacted remote credentials with private file 
 test("VoiceSettingsStore requires secure secret-free remote URLs", async () => {
   const fixture = await temporaryStore();
   try {
-    const base = { mode: "remote", provider: "custom", adapter: "parakeet_pcm_ws_v1", auth: { type: "none" } };
-    await assert.rejects(fixture.store.update({ ...base, endpoint: "ws://speech.example.com/ws" }), { code: "voice_endpoint_insecure" });
-    await assert.rejects(fixture.store.update({ ...base, endpoint: "wss://user:secret@speech.example.com/ws" }), { code: "voice_endpoint_credentials" });
-    await assert.rejects(fixture.store.update({ ...base, endpoint: "wss://speech.example.com/ws?api_key=secret" }), { code: "voice_endpoint_query" });
+    const base = { mode: "remote", provider: "custom", adapter: "openai_audio_sse_v1", auth: { type: "none" } };
+    await assert.rejects(fixture.store.update({ ...base, endpoint: "ws://speech.example.com/v1/audio/transcriptions" }), { code: "voice_endpoint_insecure" });
+    await assert.rejects(fixture.store.update({ ...base, endpoint: "https://user:secret@speech.example.com/v1/audio/transcriptions" }), { code: "voice_endpoint_credentials" });
+    await assert.rejects(fixture.store.update({ ...base, endpoint: "https://speech.example.com/v1/audio/transcriptions?api_key=secret" }), { code: "voice_endpoint_query" });
   } finally { await fs.rm(fixture.root, { recursive: true, force: true }); }
 });
 
@@ -114,17 +114,6 @@ test("none authentication ignores stale Authorization header metadata", async ()
   } finally { await fs.rm(fixture.root, { recursive: true, force: true }); }
 });
 
-test("environment voice settings stay locked and preserve local deployment compatibility", async () => {
-  const fixture = await temporaryStore({ CONDUIT_PARAKEET_STREAM_URL: "ws://127.0.0.1:8000/ws", CONDUIT_PARAKEET_API_KEY: "environment-secret" });
-  try {
-    const view = await fixture.store.publicView();
-    assert.equal(view.locked, true);
-    assert.equal(view.auth.source, "environment");
-    assert.equal(JSON.stringify(view).includes("environment-secret"), false);
-    await assert.rejects(fixture.store.update({ mode: "off", adapter: "parakeet_pcm_ws_v1", auth: { type: "none" } }), { code: "voice_settings_locked" });
-  } finally { await fs.rm(fixture.root, { recursive: true, force: true }); }
-});
-
 test("VoiceRuntime rejects SSRF targets and builds custom authentication only server-side", async () => {
   assert.equal(isPrivateAddress("127.0.0.1"), true);
   assert.equal(isPrivateAddress("169.254.169.254"), true);
@@ -134,8 +123,8 @@ test("VoiceRuntime rejects SSRF targets and builds custom authentication only se
   const settings = { effective: async () => ({
     mode: "remote",
     provider: "custom",
-    adapter: "parakeet_pcm_ws_v1",
-    endpoint: "wss://speech.example.com/ws",
+    adapter: "openai_audio_sse_v1",
+    endpoint: "https://speech.example.com/v1/audio/transcriptions",
     auth: { type: "header", headerName: "X-Speech-Key", secret: "server-only" },
     allowPrivate: false,
   }) };

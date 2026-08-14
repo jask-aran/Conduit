@@ -9,7 +9,6 @@ const HEADER_NAME = /^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/;
 export const DEFAULT_LOCAL_VOICE_MODEL = "parakeet-tdt-0.6b-v3-int8";
 
 export const VOICE_ADAPTERS = Object.freeze([
-  { id: "parakeet_pcm_ws_v1", label: "Live PCM WebSocket", transport: "websocket", description: "Streams 16 kHz signed PCM and expects explicit partial/final JSON events." },
   { id: "openai_audio_sse_v1", label: "OpenAI-compatible audio upload", transport: "http", description: "Uploads one in-memory WAV after stop and accepts JSON or transcript SSE events." },
   { id: "deepgram_audio_v1", label: "Deepgram prerecorded audio", transport: "http", description: "Uploads one in-memory WAV after stop and reads Deepgram channel alternatives." },
 ]);
@@ -103,18 +102,6 @@ async function writeJson(filePath, value) {
   } finally { await fs.rm(temporary, { force: true }).catch(() => {}); }
 }
 
-function environmentConfig(environment) {
-  const endpoint = String(environment.CONDUIT_PARAKEET_STREAM_URL || "").trim();
-  if (!endpoint) return null;
-  return {
-    mode: "remote", localModelId: DEFAULT_LOCAL_VOICE_MODEL, provider: "custom",
-    adapter: String(environment.CONDUIT_VOICE_ADAPTER || "parakeet_pcm_ws_v1").trim(),
-    model: String(environment.CONDUIT_VOICE_MODEL || "").trim(), endpoint,
-    auth: { type: environment.CONDUIT_PARAKEET_API_KEY ? "bearer" : "none", headerName: "Authorization", secret: String(environment.CONDUIT_PARAKEET_API_KEY || "") },
-    stopMessage: String(environment.CONDUIT_PARAKEET_STOP_MESSAGE || ""), source: "environment", allowPrivate: true,
-  };
-}
-
 function storedConfig(config) {
   const mode = MODES.has(config.mode) ? config.mode : "off";
   const provider = PROVIDER_BY_ID.has(config.provider) ? config.provider : "custom";
@@ -138,10 +125,9 @@ function storedConfig(config) {
 }
 
 export class VoiceSettingsStore {
-  constructor({ filePath, environment = process.env } = {}) {
+  constructor({ filePath }) {
     if (!filePath) throw new Error("VoiceSettingsStore requires a file path");
     this.filePath = path.resolve(filePath);
-    this.environment = environment;
   }
 
   async initialize() {
@@ -153,7 +139,7 @@ export class VoiceSettingsStore {
   }
 
   async effective() {
-    return environmentConfig(this.environment) || storedConfig(await readJson(this.filePath));
+    return storedConfig(await readJson(this.filePath));
   }
 
   async publicView({ local = null } = {}) {
@@ -161,14 +147,13 @@ export class VoiceSettingsStore {
     const configured = Boolean(effective.auth.secret);
     return {
       mode: effective.mode, localModelId: effective.localModelId, provider: effective.provider, adapter: effective.adapter, model: effective.model,
-      endpoint: effective.endpoint, source: effective.source, locked: effective.source === "environment", adapters: VOICE_ADAPTERS, providers: VOICE_PROVIDERS,
+      endpoint: effective.endpoint, source: effective.source, adapters: VOICE_ADAPTERS, providers: VOICE_PROVIDERS,
       auth: { type: effective.auth.type, headerName: effective.auth.headerName, configured, source: configured ? effective.source : null, removable: configured && effective.source === "stored" },
       local,
     };
   }
 
   async update(input) {
-    if (environmentConfig(this.environment)) throw voiceError("voice_settings_locked", "Voice settings are managed by the server environment", 409);
     if (!isObject(input)) throw voiceError("voice_settings_invalid", "Voice settings must be an object");
     const mode = String(input.mode || "");
     if (!MODES.has(mode)) throw voiceError("voice_mode_invalid", "Voice mode must be off, local, or remote");
@@ -194,8 +179,7 @@ export class VoiceSettingsStore {
     if (!AUTH_TYPES.has(authType)) throw voiceError("voice_auth_invalid", "Unknown voice endpoint authentication type");
     const headerName = authType === "bearer" ? "Authorization" : authType === "header" ? normalizeHeaderName(input.auth?.headerName) : "X-API-Key";
     const protocol = new URL(endpoint).protocol;
-    if (adapter === "parakeet_pcm_ws_v1" && protocol !== "wss:") throw voiceError("voice_endpoint_protocol", "The live PCM adapter requires a WSS endpoint");
-    if (adapter !== "parakeet_pcm_ws_v1" && protocol !== "https:") throw voiceError("voice_endpoint_protocol", "Audio upload adapters require an HTTPS endpoint");
+    if (protocol !== "https:") throw voiceError("voice_endpoint_protocol", "Audio upload adapters require an HTTPS endpoint");
     if (authType !== "none" && !secret) throw voiceError("voice_secret_invalid", `Enter a credential for ${profile.label}`);
     await writeJson(this.filePath, {
       mode, localModelId, provider, adapter, model, endpoint,
@@ -205,7 +189,6 @@ export class VoiceSettingsStore {
   }
 
   async removeCredential() {
-    if (environmentConfig(this.environment)) throw voiceError("voice_settings_locked", "Voice settings are managed by the server environment", 409);
     const config = await readJson(this.filePath);
     const removed = Boolean(config.auth?.secret);
     if (isObject(config.auth)) delete config.auth.secret;
@@ -214,7 +197,6 @@ export class VoiceSettingsStore {
   }
 
   async selectLocalModel(localModelId) {
-    if (environmentConfig(this.environment)) throw voiceError("voice_settings_locked", "Voice settings are managed by the server environment", 409);
     const config = await readJson(this.filePath);
     await writeJson(this.filePath, { ...config, mode: "local", localModelId: String(localModelId) });
     return this.publicView();

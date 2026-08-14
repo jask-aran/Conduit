@@ -77,15 +77,14 @@ interface VoiceServerSettings {
   adapter: string;
   model: string;
   endpoint: string;
-  source: "stored" | "environment";
-  locked: boolean;
-  adapters: { id: string; label: string; transport: "websocket" | "http"; description: string }[];
+  source: "stored";
+  adapters: { id: string; label: string; transport: "http"; description: string }[];
   providers: { id: string; label: string; adapter: string; endpoint: string; authLabel: string; models: { id: string; label: string; description: string }[] }[];
   auth: {
     type: "none" | "bearer" | "header";
     headerName: string;
     configured: boolean;
-    source: "stored" | "environment" | null;
+    source: "stored" | null;
     removable: boolean;
   };
   local: {
@@ -525,7 +524,7 @@ export function Settings(props: {
     setVoiceError("");
     setVoiceTestResult("");
     try {
-      if (!settings.locked) await persistVoiceServer(settings);
+      await persistVoiceServer(settings);
       props.onVoiceSettingsSave(voiceDraft());
       setVoiceSettingsSaved(true);
       toast.success("Voice settings saved");
@@ -823,32 +822,30 @@ export function Settings(props: {
                     <option value="toggle">Toggle (press)</option>
                   </select><small>{voiceDraft().activation === "toggle" ? "Press the shortcut once to start and again to stop." : "Hold the shortcut while you speak. Release it to stop."}</small></Field>
                   <label class="dictation-auto-send"><input type="checkbox" checked={voiceDraft().autoSend} onChange={(event) => updateVoiceDraft({ autoSend: event.currentTarget.checked })} /><span><strong>Auto-send timely final dictation</strong><small>Off by default. Conduit only submits a server-confirmed final transcript settled within one second.</small></span></label>
-                  <Field><FieldLabel for="voice-mode">Transcription source</FieldLabel><select id="voice-mode" disabled={voiceServerSettings()!.locked || voiceBusy()} value={voiceServerSettings()!.mode} onChange={(event) => {
+                  <Field><FieldLabel for="voice-mode">Transcription source</FieldLabel><select id="voice-mode" disabled={voiceBusy()} value={voiceServerSettings()!.mode} onChange={(event) => {
                     const mode = event.currentTarget.value as VoiceServerSettings["mode"];
                     updateVoiceServer({ mode });
                   }}><option value="off">Off</option><option value="local">Managed local model</option><option value="remote">Cloud or remote endpoint</option></select></Field>
                 </FieldGroup>
 
-                <Show when={voiceServerSettings()!.locked}><div class="voice-notice">Using <code>CONDUIT_PARAKEET_STREAM_URL</code> from the server environment. Endpoint and credentials are locked here.</div></Show>
-
                 <Show when={voiceServerSettings()!.mode === "remote"}>
                   <div class="voice-card">
                     <h3>Cloud transcription</h3>
                     <FieldGroup>
-                      <Field><FieldLabel for="voice-provider">Provider</FieldLabel><select id="voice-provider" disabled={voiceServerSettings()!.locked || voiceBusy()} value={voiceServerSettings()!.provider} onChange={(event) => {
+                      <Field><FieldLabel for="voice-provider">Provider</FieldLabel><select id="voice-provider" disabled={voiceBusy()} value={voiceServerSettings()!.provider} onChange={(event) => {
                         const provider = voiceServerSettings()!.providers.find((candidate) => candidate.id === event.currentTarget.value)!;
                         setVoiceSecret("");
                         editVoiceServer((current) => ({ ...current, provider: provider.id, adapter: provider.adapter, endpoint: provider.endpoint, model: provider.models[0]?.id || "", auth: { ...current.auth, type: provider.id === "custom" ? current.auth.type : "bearer", configured: false, source: null, removable: false } }));
                       }}><For each={voiceServerSettings()!.providers}>{(provider) => <option value={provider.id}>{provider.label}</option>}</For></select></Field>
-                      <Show when={selectedVoiceProvider()?.models.length}><Field><FieldLabel for="voice-cloud-model">Model</FieldLabel><select id="voice-cloud-model" disabled={voiceServerSettings()!.locked || voiceBusy()} value={voiceServerSettings()!.model} onChange={(event) => updateVoiceServer({ model: event.currentTarget.value })}><For each={selectedVoiceProvider()!.models}>{(model) => <option value={model.id}>{model.label}</option>}</For></select><small>{selectedVoiceProvider()!.models.find((model) => model.id === voiceServerSettings()!.model)?.description}</small></Field></Show>
+                      <Show when={selectedVoiceProvider()?.models.length}><Field><FieldLabel for="voice-cloud-model">Model</FieldLabel><select id="voice-cloud-model" disabled={voiceBusy()} value={voiceServerSettings()!.model} onChange={(event) => updateVoiceServer({ model: event.currentTarget.value })}><For each={selectedVoiceProvider()!.models}>{(model) => <option value={model.id}>{model.label}</option>}</For></select><small>{selectedVoiceProvider()!.models.find((model) => model.id === voiceServerSettings()!.model)?.description}</small></Field></Show>
                       <Show when={voiceServerSettings()!.provider === "custom"}>
-                        <Field><FieldLabel for="voice-adapter">Protocol adapter</FieldLabel><select id="voice-adapter" disabled={voiceServerSettings()!.locked || voiceBusy()} value={voiceServerSettings()!.adapter} onChange={(event) => updateVoiceServer({ adapter: event.currentTarget.value })}><For each={voiceServerSettings()!.adapters}>{(adapter) => <option value={adapter.id}>{adapter.label}</option>}</For></select><small>{voiceServerSettings()!.adapters.find((adapter) => adapter.id === voiceServerSettings()!.adapter)?.description}</small></Field>
-                        <Field><FieldLabel for="voice-endpoint">Endpoint URL</FieldLabel><Input id="voice-endpoint" type="url" disabled={voiceServerSettings()!.locked || voiceBusy()} value={voiceServerSettings()!.endpoint} placeholder={voiceServerSettings()!.adapter === "parakeet_pcm_ws_v1" ? "wss://speech.example.com/ws" : "https://speech.example.com/v1/audio/transcriptions"} onInput={(event) => updateVoiceServer({ endpoint: event.currentTarget.value })} /><small>Custom UI endpoints require WSS or HTTPS and must resolve publicly. Administrators can configure private services through the environment.</small></Field>
-                        <Show when={voiceServerSettings()!.adapter !== "parakeet_pcm_ws_v1"}><Field><FieldLabel for="voice-custom-model">Model parameter</FieldLabel><Input id="voice-custom-model" value={voiceServerSettings()!.model} placeholder="Optional model ID" onInput={(event) => updateVoiceServer({ model: event.currentTarget.value })} /></Field></Show>
-                      <Field><FieldLabel for="voice-auth-type">Authentication</FieldLabel><select id="voice-auth-type" disabled={voiceServerSettings()!.locked || voiceBusy()} value={voiceServerSettings()!.auth.type} onChange={(event) => editVoiceServer((current) => ({ ...current, auth: { ...current.auth, type: event.currentTarget.value as VoiceServerSettings["auth"]["type"] } }))}><option value="none">None</option><option value="bearer">Bearer token</option><option value="header">API-key header</option></select></Field>
-                      <Show when={voiceServerSettings()!.auth.type === "header"}><Field><FieldLabel for="voice-auth-header">Header name</FieldLabel><Input id="voice-auth-header" disabled={voiceServerSettings()!.locked || voiceBusy()} value={voiceServerSettings()!.auth.headerName} onInput={(event) => editVoiceServer((current) => ({ ...current, auth: { ...current.auth, headerName: event.currentTarget.value } }))} /></Field></Show>
+                        <Field><FieldLabel for="voice-adapter">Protocol adapter</FieldLabel><select id="voice-adapter" disabled={voiceBusy()} value={voiceServerSettings()!.adapter} onChange={(event) => updateVoiceServer({ adapter: event.currentTarget.value })}><For each={voiceServerSettings()!.adapters}>{(adapter) => <option value={adapter.id}>{adapter.label}</option>}</For></select><small>{voiceServerSettings()!.adapters.find((adapter) => adapter.id === voiceServerSettings()!.adapter)?.description}</small></Field>
+                        <Field><FieldLabel for="voice-endpoint">Endpoint URL</FieldLabel><Input id="voice-endpoint" type="url" disabled={voiceBusy()} value={voiceServerSettings()!.endpoint} placeholder="https://speech.example.com/v1/audio/transcriptions" onInput={(event) => updateVoiceServer({ endpoint: event.currentTarget.value })} /><small>Custom endpoints must resolve publicly and use HTTPS.</small></Field>
+                        <Field><FieldLabel for="voice-custom-model">Model parameter</FieldLabel><Input id="voice-custom-model" value={voiceServerSettings()!.model} placeholder="Optional model ID" onInput={(event) => updateVoiceServer({ model: event.currentTarget.value })} /></Field>
+                      <Field><FieldLabel for="voice-auth-type">Authentication</FieldLabel><select id="voice-auth-type" disabled={voiceBusy()} value={voiceServerSettings()!.auth.type} onChange={(event) => editVoiceServer((current) => ({ ...current, auth: { ...current.auth, type: event.currentTarget.value as VoiceServerSettings["auth"]["type"] } }))}><option value="none">None</option><option value="bearer">Bearer token</option><option value="header">API-key header</option></select></Field>
+                      <Show when={voiceServerSettings()!.auth.type === "header"}><Field><FieldLabel for="voice-auth-header">Header name</FieldLabel><Input id="voice-auth-header" disabled={voiceBusy()} value={voiceServerSettings()!.auth.headerName} onInput={(event) => editVoiceServer((current) => ({ ...current, auth: { ...current.auth, headerName: event.currentTarget.value } }))} /></Field></Show>
                       </Show>
-                      <Show when={voiceServerSettings()!.provider !== "custom" || voiceServerSettings()!.auth.type !== "none"}><Field><FieldLabel for="voice-secret">{selectedVoiceProvider()?.authLabel || "Credential"}</FieldLabel><Input id="voice-secret" type="password" autocomplete="off" disabled={voiceServerSettings()!.locked || voiceBusy()} value={voiceSecret()} onInput={(event) => { setVoiceSecret(event.currentTarget.value); setVoiceServerEdited(true); setVoiceSettingsSaved(false); }} placeholder={voiceServerSettings()!.auth.configured ? "A credential is already stored" : "Enter credential"} /><small>{voiceServerSettings()!.auth.source === "environment" ? "Using the server environment" : voiceServerSettings()!.auth.configured ? "Stored securely by Conduit" : "Not configured"}</small></Field></Show>
+                      <Show when={voiceServerSettings()!.provider !== "custom" || voiceServerSettings()!.auth.type !== "none"}><Field><FieldLabel for="voice-secret">{selectedVoiceProvider()?.authLabel || "Credential"}</FieldLabel><Input id="voice-secret" type="password" autocomplete="off" disabled={voiceBusy()} value={voiceSecret()} onInput={(event) => { setVoiceSecret(event.currentTarget.value); setVoiceServerEdited(true); setVoiceSettingsSaved(false); }} placeholder={voiceServerSettings()!.auth.configured ? "A credential is already stored" : "Enter credential"} /><small>{voiceServerSettings()!.auth.configured ? "Stored securely by Conduit" : "Not configured"}</small></Field></Show>
                     </FieldGroup>
                     <div class="voice-actions"><Button variant="outline" disabled={voiceBusy() || voiceServerEdited()} onClick={() => void testVoiceServer()}>Test credentials</Button><Show when={voiceServerSettings()!.auth.removable}><Button variant="outline" disabled={voiceBusy()} onClick={() => void removeVoiceCredential()}>Remove credential</Button></Show></div>
                   </div>

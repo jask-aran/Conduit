@@ -30,6 +30,11 @@ test("managed voice packages use reviewed immutable revisions, sizes, and SHA-25
   }
   const parakeet = getVoiceModelManifest(LOCAL_VOICE_MODELS.at(-1), { release: "amd64", runtime: "x64" });
   assert.equal(parakeet.artifacts.find((artifact) => artifact.name === "parakeet-linux-amd64").sha256, "4eaa7123e49756dea7714db20b4ea36aa96f3ba50d7e1ccec7df2ccededcdf9b");
+  const v2 = getVoiceModelManifest(LOCAL_VOICE_MODELS.find((model) => model.id === "parakeet-tdt-0.6b-v2-int8"), { release: "amd64", runtime: "x64" });
+  assert.equal(v2.modelRevision, "0bbb45a3365852604aef28b538a8f066f4ccaa85");
+  assert.ok(v2.artifacts.some((artifact) => artifact.url.includes("istupakov/parakeet-tdt-0.6b-v2-onnx/resolve/0bbb45a3365852604aef28b538a8f066f4ccaa85/encoder-model.int8.onnx")));
+  assert.equal(v2.artifacts.find((artifact) => artifact.name === "encoder-model.int8.onnx").sha256, "3e0581fda6ab843888b51e56d7ee78b6d5bc3237ec113af1f732d1d5286aa155");
+  assert.notEqual(v2.artifacts.find((artifact) => artifact.name === "vocab.txt").sha256, parakeet.artifacts.find((artifact) => artifact.name === "vocab.txt").sha256);
 });
 
 test("managed voice model requires license acceptance, verifies artifacts, reports progress, and uninstalls", async () => {
@@ -317,6 +322,71 @@ test("install downloads artifacts concurrently up to a bounded limit", async () 
     assert.ok(maximumActive >= 2, `expected parallel downloads, saw ${maximumActive}`);
     assert.ok(maximumActive <= 3, `expected bounded concurrency, saw ${maximumActive}`);
   } finally { await fs.rm(temporary, { recursive: true, force: true }); }
+});
+
+test("managed models stay warm briefly then unload after the idle TTL", async () => {
+  const temporary = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-voice-idle-"));
+  const root = path.join(temporary, "voice", "models");
+  const modelId = "whisper-tiny-en-q8";
+  await fs.mkdir(path.join(root, modelId), { recursive: true });
+  await fs.writeFile(path.join(root, modelId, "manifest.json"), JSON.stringify({ modelId }));
+  let loads = 0;
+  let disposals = 0;
+  const manager = new VoiceModelManager({
+    root,
+    idleTtlMs: 40,
+    transformersLoader: async () => {
+      loads += 1;
+      const transcriber = async () => ({ text: "idle transcript" });
+      transcriber.dispose = async () => { disposals += 1; };
+      return transcriber;
+    },
+  });
+  try {
+    await manager.ensureRunning(modelId);
+    assert.equal(loads, 1);
+    await manager.ensureRunning(modelId);
+    assert.equal(loads, 1);
+    await new Promise((resolve) => setTimeout(resolve, 80));
+    assert.equal(disposals, 1);
+    await manager.ensureRunning(modelId);
+    assert.equal(loads, 2);
+  } finally {
+    await manager.stop();
+    await fs.rm(temporary, { recursive: true, force: true });
+  }
+});
+
+test("pinned managed models do not unload while a dictation session is open", async () => {
+  const temporary = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-voice-pin-"));
+  const root = path.join(temporary, "voice", "models");
+  const modelId = "whisper-tiny-en-q8";
+  await fs.mkdir(path.join(root, modelId), { recursive: true });
+  await fs.writeFile(path.join(root, modelId, "manifest.json"), JSON.stringify({ modelId }));
+  let disposals = 0;
+  const manager = new VoiceModelManager({
+    root,
+    idleTtlMs: 30,
+    transformersLoader: async () => {
+      const transcriber = async () => ({ text: "pinned transcript" });
+      transcriber.dispose = async () => { disposals += 1; };
+      return transcriber;
+    },
+  });
+  try {
+    manager.pin();
+    await manager.ensureRunning(modelId);
+    await new Promise((resolve) => setTimeout(resolve, 60));
+    assert.equal(disposals, 0);
+    assert.equal(manager.activeModelId, modelId);
+    manager.unpin();
+    await new Promise((resolve) => setTimeout(resolve, 60));
+    assert.equal(disposals, 1);
+    assert.equal(manager.activeModelId, null);
+  } finally {
+    await manager.stop();
+    await fs.rm(temporary, { recursive: true, force: true });
+  }
 });
 
 test("full-precision Whisper models load with the fp32 precision", async () => {

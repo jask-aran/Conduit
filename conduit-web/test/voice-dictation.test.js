@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { runInNewContext } from "node:vm";
-import { calculateFinalizationTimeoutMs, createParakeetNormalizer } from "../src/server/dictation-stream.js";
+import { calculateFinalizationTimeoutMs } from "../src/server/dictation-stream.js";
 import {
   audioTransferLost,
   beginDictatedRange,
@@ -31,29 +31,6 @@ test("dictation range preserves a native textarea selection", () => {
     text: "before new after",
     range: { start: 7, end: 10 },
   });
-});
-
-test("Parakeet normalizer does not duplicate a whitespace-normalized final", () => {
-  const normalizer = createParakeetNormalizer();
-  assert.deepEqual(normalizer.normalize(JSON.stringify({ type: "transcript.text.delta", delta: " This" })), [{ type: "partial", text: " This" }]);
-  assert.deepEqual(normalizer.normalize(JSON.stringify({ type: "transcript.text.delta", delta: " is a long pause test" })), [{ type: "partial", text: " This is a long pause test" }]);
-  assert.deepEqual(normalizer.normalize(JSON.stringify({ type: "transcript.text.done", text: "This is a long pause test" })), [{ type: "final", text: "This is a long pause test" }]);
-  assert.equal(normalizer.text(), "This is a long pause test");
-});
-
-test("Parakeet events normalize deltas, cumulative partials, finals, and errors", () => {
-  const normalizer = createParakeetNormalizer();
-  assert.deepEqual(normalizer.normalize(JSON.stringify({ type: "transcript.text.delta", delta: "hel" })), [{ type: "partial", text: "hel" }]);
-  assert.deepEqual(normalizer.normalize(JSON.stringify({ type: "transcript.text.delta", delta: "lo" })), [{ type: "partial", text: "hello" }]);
-  assert.deepEqual(normalizer.normalize(JSON.stringify({ type: "transcript.text.done", text: "hello" })), [{ type: "final", text: "hello" }]);
-  assert.deepEqual(normalizer.normalize(JSON.stringify({ type: "partial", text: "next wor" })), [{ type: "partial", text: "hello next wor" }]);
-  assert.deepEqual(normalizer.normalize(JSON.stringify({ type: "final", text: "next words", speech_final: true })), [
-    { type: "final", text: "hello next words" },
-    { type: "end_of_speech" },
-  ]);
-  assert.equal(normalizer.text(), "hello next words");
-  assert.equal(normalizer.hasFinal(), true);
-  assert.deepEqual(normalizer.normalize(JSON.stringify({ type: "error", message: "model unavailable" })), [{ type: "error", code: "asr_error", message: "model unavailable" }]);
 });
 
 test("voice shortcut capture and push-to-talk release use the configured chord", () => {
@@ -115,21 +92,40 @@ test("finalization timeout scales with audio duration and model cost", () => {
   const limits = { finalizationBaseMs: 30_000, finalizationMaxMs: 600_000, finalizationDefaultMultiplier: 12 };
   assert.equal(calculateFinalizationTimeoutMs({ audioBytes: 64_000, model: "parakeet-tdt-0.6b-v3-fp32", limits }), 36_000);
   assert.equal(calculateFinalizationTimeoutMs({ audioBytes: 64_000, model: "parakeet-tdt-0.6b-v3-int8", limits }), 30_000);
+  assert.equal(calculateFinalizationTimeoutMs({ audioBytes: 64_000, model: "parakeet-tdt-0.6b-v2-int8", limits }), 30_000);
   assert.equal(calculateFinalizationTimeoutMs({ audioBytes: 64_000, model: "unknown-model", limits }), 30_000);
   assert.equal(calculateFinalizationTimeoutMs({ audioBytes: 32 * 60_000, model: "parakeet-tdt-0.6b-v3-fp32", limits }), 600_000);
 });
 
-test("capture worklet keeps audio across a pause and flushes its final residual", async () => {
-  const source = await readFile(new URL("../public/voice-capture-worklet.js", import.meta.url), "utf8");
+const WORKLET_SOURCE = await readFile(new URL("../public/voice-capture-worklet.js", import.meta.url), "utf8");
+
+function loadCaptureWorklet() {
   const messages = [];
   let Processor;
-  runInNewContext(source, {
+  runInNewContext(WORKLET_SOURCE, {
     AudioWorkletProcessor: class {
       constructor() { this.port = { postMessage: (message) => messages.push(message) }; }
     },
     registerProcessor: (_name, value) => { Processor = value; },
     sampleRate: 48_000,
   });
+  return { messages, Processor };
+}
+
+function pcmSignal(message) {
+  if (message.type !== "pcm") return null;
+  const samples = new Int16Array(message.buffer);
+  let sum = 0;
+  let peak = 0;
+  for (const value of samples) {
+    sum += value * value;
+    peak = Math.max(peak, Math.abs(value));
+  }
+  return { rms: Math.sqrt(sum / samples.length) / 32768, peak: peak / 32768 };
+}
+
+test("capture worklet keeps audio across a pause and flushes its final residual", () => {
+  const { messages, Processor } = loadCaptureWorklet();
   const processor = new Processor();
   processor.process([[Float32Array.from({ length: 96 }, () => 0.4)]]);
   for (let index = 0; index < 120; index += 1) processor.process([[new Float32Array(128)]]);
@@ -140,4 +136,54 @@ test("capture worklet keeps audio across a pause and flushes its final residual"
   assert.ok(beforeFlush > 120);
   assert.equal(afterFlush, beforeFlush + 1);
   assert.deepEqual(messages.slice(-2).map((message) => message.type), ["pcm", "flush_complete"]);
+});
+
+test("capture worklet normalizes quiet speech toward a healthy level without clipping", () => {
+  const { messages, Processor } = loadCaptureWorklet();
+  const processor = new Processor();
+  const quiet = Float32Array.from({ length: 128 }, () => 0.015);
+  for (let index = 0; index < 400; index += 1) processor.process([[quiet]]);
+  const pcm = messages.filter((message) => message.type === "pcm");
+  assert.ok(pcm.length >= 400);
+  const first = pcmSignal(pcm[0]);
+  const last = pcmSignal(pcm[pcm.length - 1]);
+  assert.ok(first.rms < 0.03, "quiet input starts near its raw level");
+  assert.ok(last.rms > 0.05 && last.rms < 0.2, `quiet speech converges toward -20 dBFS (got ${last.rms.toFixed(3)})`);
+  assert.ok(last.rms > first.rms * 4, "quiet speech is amplified several times");
+  assert.equal(pcm.some((message) => pcmSignal(message).peak >= 1), false);
+});
+
+test("capture worklet ducks loud input and holds gain across digital silence", () => {
+  const { messages, Processor } = loadCaptureWorklet();
+  const processor = new Processor();
+  const loud = Float32Array.from({ length: 128 }, () => 0.9);
+  for (let index = 0; index < 300; index += 1) processor.process([[loud]]);
+  const loudPcm = messages.filter((message) => message.type === "pcm");
+  assert.ok(pcmSignal(loudPcm[0]).rms > 0.5);
+  const ducked = pcmSignal(loudPcm[loudPcm.length - 1]);
+  assert.ok(ducked.rms < 0.3 && ducked.rms > 0.05, `loud input ducks toward the target (got ${ducked.rms.toFixed(3)})`);
+  assert.equal(loudPcm.some((message) => pcmSignal(message).peak >= 1), false);
+  const probe = () => {
+    const settled = Float32Array.from({ length: 128 }, () => 0.4);
+    const before = messages.filter((message) => message.type === "pcm").length;
+    processor.process([[settled]]);
+    const posted = messages.filter((message) => message.type === "pcm").slice(before);
+    return pcmSignal(posted[0]).rms;
+  };
+  const beforeSilence = probe();
+  for (let index = 0; index < 600; index += 1) processor.process([[new Float32Array(128)]]);
+  const afterSilence = probe();
+  assert.ok(Math.abs(afterSilence - beforeSilence) / beforeSilence < 0.5, "digital silence does not pump the gain");
+});
+
+test("capture worklet reports sustained exact-zero input as a silent microphone", () => {
+  const { messages, Processor } = loadCaptureWorklet();
+  const processor = new Processor();
+  for (let index = 0; index < 40; index += 1) processor.process([[new Float32Array(128)]]);
+  assert.equal(messages.filter((message) => message.type === "mic_silent").length, 0, "short zero runs do not warn");
+  for (let index = 0; index < 260; index += 1) processor.process([[new Float32Array(128)]]);
+  assert.equal(messages.filter((message) => message.type === "mic_silent").length, 1, "sustained zero input warns once");
+  processor.process([[Float32Array.from({ length: 128 }, () => 0.1)]]);
+  for (let index = 0; index < 260; index += 1) processor.process([[new Float32Array(128)]]);
+  assert.equal(messages.filter((message) => message.type === "mic_silent").length, 2, "signal re-arms the warning");
 });

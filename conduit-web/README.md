@@ -245,7 +245,7 @@ until capture reports that it is unavailable; Conduit then shows a recovery
 toast without silently changing the device. Conduit ignores a no-signal
 completion from a short intentional stop, and reports sustained silence only
 after five seconds. Settings → Voice can use managed
-Whisper Tiny English, Whisper Base, Whisper Small, or Parakeet TDT 0.6B v3,
+Whisper Tiny English, Whisper Base, Whisper Small, Parakeet TDT 0.6B v2, or Parakeet TDT 0.6B v3,
 and has first-class provider/model profiles for OpenAI, Deepgram, and Groq.
 Remote None, Bearer, and custom API-key-header credentials are stored server-side in `data/voice.json`
 (mode `0600`) and are never returned to the browser. Environment configuration
@@ -523,24 +523,26 @@ produces `client_error` with `code` and `message`.
 `WS /v0/dictation/stream` is authenticated like every other upgrade. Browser
 binary frames are signed 16-bit little-endian mono PCM at 16 kHz. The browser
 stop control is `{ "type": "stop" }`; it may include the optional numeric
-`audioBytesSent` diagnostic field. The
-`parakeet_pcm_ws_v1` adapter forwards binary PCM, sends an explicit stop control,
-and accepts only its documented partial/final/end/error JSON event vocabulary;
-the `openai_audio_sse_v1` adapter sends an in-memory WAV utterance and consumes
+`audioBytesSent` diagnostic field. Upstream adapters are file-upload based: the
+`openai_audio_sse_v1` adapter sends an in-memory WAV utterance and consumes
 JSON or `transcript.text.delta` / `transcript.text.done` SSE events; the
 `deepgram_audio_v1` adapter sends WAV audio and reads channel alternatives.
-Each file-upload adapter makes one finalization request per utterance. The
-internal managed-Whisper adapter transcribes one buffered PCM utterance without
-opening a network listener. Conduit emits
-`ready`, `partial`, `final`, `end_of_speech`, `finalizing`, `settlement_deadline`, `completed`,
+Each adapter makes one finalization request per utterance, or one request per
+utterance segment when the recording contains a silent run of at least two
+seconds: batch ASR models hallucinate over long mid-utterance silence, so the
+server splits buffered PCM at silent runs before transcription and joins the
+segment texts. Managed local
+models transcribe one buffered PCM utterance without opening a network
+listener; the managed Parakeet runtime serves the OpenAI-compatible upload
+endpoint on loopback. Conduit emits
+`ready`, `partial`, `final`, `finalizing`, `settlement_deadline`, `completed`,
 and `error`. `finalizing` announces the duration-aware server deadline before
-the selected adapter runs its final transcription pass. `end_of_speech` is an upstream pause boundary; it does not stop
-the browser session. The user stop or the five-minute limit finalizes the
-session. `completed` includes `settlementMs`, `finalWithinDeadline`,
-`reason`, `audioBytes`, `audioDurationMs`, and non-secret adapter/provider/model
-metadata; clients must never infer auto-send timing from browser clocks. The
-browser also emits `conduit:voice-dictation-metrics` with the completion
-diagnostics.
+the selected adapter runs its final transcription pass. The user stop or the
+five-minute limit finalizes the session. `completed` includes `settlementMs`,
+`finalWithinDeadline`, `reason`, `audioBytes`, `audioDurationMs`, and
+non-secret adapter/provider/model metadata; clients must never infer auto-send
+timing from browser clocks. The browser also emits
+`conduit:voice-dictation-metrics` with the completion diagnostics.
 
 Finalisation uses `max(base, recordedAudioSeconds × modelMultiplier)` and a
 ten-minute cap. The relaxed defaults are a 30-second base and a 12× fallback
@@ -564,9 +566,9 @@ metadata. Settings microphone tests remain browser-local and are not archived.
 
 The server limits concurrent dictation sessions, audio duration and bytes,
 frame/event sizes, WebSocket buffering, connect time, and finalisation time.
-Settings-created remote endpoints require WSS/HTTPS, reject URL credentials and
+Settings-created remote endpoints require HTTPS, reject URL credentials and
 query strings, resolve only to public addresses, and pin the checked address for
-WebSocket connection setup. Diagnostic WAV files use a private data directory
+connection setup. Diagnostic WAV files use a private data directory
 and do not contain credentials or Pi JSONL content.
 
 ## Workspace terminal protocol
