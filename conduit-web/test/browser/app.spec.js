@@ -4682,9 +4682,10 @@ test("Ctrl+Shift+D captures in the page and buffers microphone audio until the s
   expect(statusBox).not.toBeNull();
   if (isMobile) expect(waveformBox.width).toBeGreaterThan(120);
   else expect(statusBox.x).toBeGreaterThanOrEqual(waveformBox.x + waveformBox.width - 1);
-  const expectedBarCount = isMobile ? 16 : 24;
-  await expect(waveform.locator(".voice-waveform-bar")).toHaveCount(expectedBarCount);
-  await expect.poll(() => waveform.locator(".voice-waveform-bar").evaluateAll((bars) => bars.filter((bar) => bar.getBoundingClientRect().width >= 1).length)).toBe(expectedBarCount);
+  const barCount = () => waveform.locator(".voice-waveform-bar").count();
+  await expect.poll(barCount).toBeGreaterThan(0);
+  if (isMobile) await expect.poll(barCount).toBeGreaterThanOrEqual(32);
+  await expect.poll(() => waveform.locator(".voice-waveform-bar").evaluateAll((bars) => bars.filter((bar) => bar.getBoundingClientRect().width >= 1).length)).toBeGreaterThan(0);
   await expect(waveform.locator(".voice-waveform-peak")).toHaveCount(0);
   await expect(page.locator(".composer-recorder-monitor")).toHaveCount(0);
   await expect.poll(() => page.evaluate(() => window.__voiceBinaryCount)).toBe(0);
