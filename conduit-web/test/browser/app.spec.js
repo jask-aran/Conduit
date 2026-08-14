@@ -4586,7 +4586,7 @@ test("voice dictation keeps capturing after a speech-end pause and preserves nat
   await expect(page.getByRole("button", { name: "Start voice dictation" })).toBeVisible();
 });
 
-test("Ctrl+Shift+D captures in the page and buffers microphone audio until the server is ready", async ({ page }) => {
+test("Ctrl+Shift+D captures in the page and buffers microphone audio until the server is ready", async ({ page }, testInfo) => {
   await page.addInitScript(() => {
     document.addEventListener("keydown", (event) => {
       if (event.key.toLowerCase() === "d" && event.ctrlKey && event.shiftKey) window.__voiceShortcutBubbled = true;
@@ -4666,17 +4666,24 @@ test("Ctrl+Shift+D captures in the page and buffers microphone audio until the s
   await page.keyboard.down("Shift");
   await page.keyboard.down("D");
   await expect(page.locator(".dictation-trigger")).toHaveAttribute("data-state", "active");
-  const waveform = page.locator(".composer-status-waveform");
+  const isMobile = testInfo.project.name === "mobile-chromium";
+  const waveform = page.locator(isMobile ? ".chat-status-waveform" : ".composer-status-waveform");
   await expect(waveform).toBeVisible();
   await expect(waveform).toHaveAttribute("data-state", "listening");
   await expect(waveform).toHaveAttribute("data-variant", "compact");
-  await expect(page.locator(".composer-status-state")).toContainText("Listening…");
-  const [waveformBox, statusBox] = await Promise.all([waveform.boundingBox(), page.locator(".composer-status-state").boundingBox()]);
+  if (isMobile) {
+    await expect(page.locator(".chat-status-label")).toHaveCount(0);
+    await expect(page.getByRole("button", { name: /Runtime status: Listening…/ })).toBeVisible();
+  } else {
+    await expect(page.locator(".composer-status-state")).toContainText("Listening…");
+  }
+  const [waveformBox, statusBox] = await Promise.all([waveform.boundingBox(), isMobile ? page.locator(".chat-status-trigger").boundingBox() : page.locator(".composer-status-state").boundingBox()]);
   expect(waveformBox).not.toBeNull();
   expect(statusBox).not.toBeNull();
-  expect(statusBox.x).toBeGreaterThanOrEqual(waveformBox.x + waveformBox.width - 1);
-  await expect(waveform.locator(".voice-waveform-bar")).toHaveCount(24);
-  await expect.poll(() => waveform.locator(".voice-waveform-bar").evaluateAll((bars) => bars.filter((bar) => bar.getBoundingClientRect().width >= 1).length)).toBe(24);
+  if (!isMobile) expect(statusBox.x).toBeGreaterThanOrEqual(waveformBox.x + waveformBox.width - 1);
+  const expectedBarCount = isMobile ? 16 : 24;
+  await expect(waveform.locator(".voice-waveform-bar")).toHaveCount(expectedBarCount);
+  await expect.poll(() => waveform.locator(".voice-waveform-bar").evaluateAll((bars) => bars.filter((bar) => bar.getBoundingClientRect().width >= 1).length)).toBe(expectedBarCount);
   await expect(waveform.locator(".voice-waveform-peak")).toHaveCount(0);
   await expect(page.locator(".composer-recorder-monitor")).toHaveCount(0);
   await expect.poll(() => page.evaluate(() => window.__voiceBinaryCount)).toBe(0);
