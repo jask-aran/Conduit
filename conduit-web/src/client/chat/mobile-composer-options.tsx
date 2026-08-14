@@ -1,4 +1,5 @@
 import { For, Show } from "solid-js";
+import type { FocusOutsideEvent } from "@kobalte/core";
 import { PaperclipIcon, PlusIcon, SlidersHorizontalIcon, UserRoundIcon } from "lucide-solid";
 import {
   Menu,
@@ -36,11 +37,49 @@ export function MobileComposerOptions(props: {
   const selectedModel = () => composer.models.models().find((item) => item.spec === composer.models.model());
   const levels = () => selectedModel()?.thinkingLevels || ["off"];
   const profileLocked = () => composer.chat.status() !== "draft";
+  let composerFocusBeforeOpen: HTMLTextAreaElement | null = null;
+  let keyboardOpenBeforeOpen = false;
+
+  const captureComposerFocus = () => {
+    const active = document.activeElement;
+    if (!(active instanceof HTMLTextAreaElement) || active.getAttribute("aria-label") !== "Message Pi") {
+      composerFocusBeforeOpen = null;
+      keyboardOpenBeforeOpen = false;
+      return;
+    }
+    composerFocusBeforeOpen = active;
+    const viewport = window.visualViewport;
+    keyboardOpenBeforeOpen = !viewport || window.innerHeight - viewport.height > 120;
+  };
+
+  const preserveComposerFocus = (event: Event) => {
+    event.preventDefault();
+    const target = composerFocusBeforeOpen;
+    const restore = keyboardOpenBeforeOpen;
+
+    composerFocusBeforeOpen = null;
+    keyboardOpenBeforeOpen = false;
+    if (!target || !restore) return;
+    window.setTimeout(() => target.isConnected && target.focus({ preventScroll: true }), 0);
+  };
+
+  const keepComposerFocusInsideMenu = (event: FocusOutsideEvent) => {
+    const target = event.detail.originalEvent.target;
+    if (target instanceof HTMLTextAreaElement && target.getAttribute("aria-label") === "Message Pi") event.preventDefault();
+  };
 
   return <div class="composer-mobile-plus">
-    <Menu>
-      <MenuTrigger class="composer-plus-trigger" aria-label="Message options" title="Message options" disabled={!composer.serverOnline}><PlusIcon /></MenuTrigger>
-      <MenuContent class="composer-options-menu">
+    <Menu modal={false}>
+      <MenuTrigger
+        class="composer-plus-trigger"
+        aria-label="Message options"
+        title="Message options"
+        disabled={!composer.serverOnline}
+        onPointerDown={(event) => { captureComposerFocus(); event.preventDefault(); }}
+        onTouchStart={captureComposerFocus}
+        onClick={(event) => event.preventDefault()}
+      ><PlusIcon /></MenuTrigger>
+      <MenuContent class="composer-options-menu" onOpenAutoFocus={preserveComposerFocus} onFocusOutside={keepComposerFocusInsideMenu}>
         <MenuGroup>
           <MenuLabel class="composer-options-label">Message options</MenuLabel>
           <MenuSub>

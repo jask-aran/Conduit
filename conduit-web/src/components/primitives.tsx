@@ -1,4 +1,5 @@
 import type { JSX, ParentProps } from "solid-js";
+import type { FocusOutsideEvent } from "@kobalte/core";
 import { Show, splitProps } from "solid-js";
 import * as KDialog from "@kobalte/core/dialog";
 import { DropdownMenu as KMenu } from "@kobalte/core/dropdown-menu";
@@ -87,8 +88,8 @@ export const MenuGroup = KMenu.Group;
 export const MenuRadioGroup = KMenu.RadioGroup;
 export const MenuSub = KMenu.Sub;
 
-export function MenuContent(props: ParentProps<{ class?: string }>) {
-  return <KMenu.Portal><KMenu.Content data-slot="menu-content" class={cn(menuContentClass, props.class)}>{props.children}</KMenu.Content></KMenu.Portal>;
+export function MenuContent(props: ParentProps<{ class?: string; onOpenAutoFocus?: (event: Event) => void; onFocusOutside?: (event: FocusOutsideEvent) => void }>) {
+  return <KMenu.Portal><KMenu.Content data-slot="menu-content" onOpenAutoFocus={props.onOpenAutoFocus} onFocusOutside={props.onFocusOutside} class={cn(menuContentClass, props.class)}>{props.children}</KMenu.Content></KMenu.Portal>;
 }
 export function MenuItem(props: ParentProps<{ class?: string; disabled?: boolean; variant?: "destructive"; onSelect?: () => void; textValue?: string }>) {
   return <KMenu.Item disabled={props.disabled} onSelect={props.onSelect} textValue={props.textValue} data-variant={props.variant} class={cn(menuItemClass, props.class)}>{props.children}</KMenu.Item>;

@@ -4426,7 +4426,7 @@ test("project chevron expands independently and project name navigates", async (
   }
 });
 
-test("voice dictation keeps capturing after a speech-end pause and preserves native selection editing", async ({ page }) => {
+test("voice dictation keeps capturing after a speech-end pause and preserves native selection editing", async ({ page }, testInfo) => {
   await page.route("**/v0/chats/*/attachments/*?name=*", async (route) => {
     const url = new URL(route.request().url());
     const id = url.pathname.split("/").at(-1);
@@ -4557,10 +4557,13 @@ test("voice dictation keeps capturing after a speech-end pause and preserves nat
   await expect(composer).toHaveValue("askplease");
   await expect.poll(() => composer.evaluate((element) => [element.selectionStart, element.selectionEnd])).toEqual([3, 3]);
   await composer.fill("append");
-  await page.getByRole("button", { name: "Start voice dictation" }).click();
+  const startVoice = page.getByRole("button", { name: "Start voice dictation" });
+  if (testInfo.project.name === "mobile-chromium") await composer.blur();
+  await startVoice.click();
   await expect(composer).toHaveValue("append Con ");
   await page.getByRole("button", { name: "Stop voice dictation" }).click();
   await expect(composer).toHaveValue("append Conduit ");
+  if (testInfo.project.name === "mobile-chromium") await expect(composer).not.toBeFocused();
   const selectionBeforeFilePaste = await composer.evaluate((element) => [element.selectionStart, element.selectionEnd]);
   expect(selectionBeforeFilePaste).toEqual([6, 15]);
   const filePaste = await composer.evaluate((element) => {
