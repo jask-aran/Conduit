@@ -329,23 +329,32 @@ test("acceptance: mobile composer is one row with Plus-owned message options", a
   await page.getByRole("button", { name: "Message options" }).tap();
   const menu = page.locator('[data-slot="menu-content"].composer-options-menu');
   await expect(menu).toBeVisible();
+  const [menuBox, viewport] = await Promise.all([
+    menu.boundingBox(),
+    page.evaluate(() => ({ width: innerWidth, height: innerHeight })),
+  ]);
+  expect(menuBox.width).toBeLessThan(viewport.width - 80);
   for (const label of ["Model and effort", "Profile", "Attach files"]) {
     await expect(menu.getByRole("menuitem", { name: new RegExp(`^${label}`) })).toBeVisible();
   }
 
   await menu.getByRole("menuitem", { name: /^Model and effort/ }).tap();
-  const modelSheet = page.getByRole("dialog", { name: "Model and effort" });
-  await expect(modelSheet).toBeVisible();
-  await expect(modelSheet.getByRole("radiogroup", { name: "MODEL" })).toBeVisible();
-  await expect(modelSheet.getByRole("radiogroup", { name: "THINKING" })).toBeVisible();
-  await modelSheet.getByRole("button", { name: "Close model and effort" }).tap();
-  await expect(modelSheet).toHaveCount(0);
+  const modelSubmenu = page.locator('[data-slot="menu-content"].composer-model-menu');
+  await expect(modelSubmenu).toBeVisible();
+  const modelSubmenuBox = await modelSubmenu.boundingBox();
+  expect(modelSubmenuBox.x).toBeGreaterThanOrEqual(0);
+  expect(modelSubmenuBox.x + modelSubmenuBox.width).toBeLessThanOrEqual(viewport.width + 1);
+  expect(modelSubmenuBox.y + modelSubmenuBox.height).toBeLessThanOrEqual(viewport.height + 1);
+  await expect(modelSubmenu.getByText("Model", { exact: true })).toBeVisible();
+  await expect(modelSubmenu.getByText("Thinking", { exact: true })).toBeVisible();
+  await expect(modelSubmenu.getByRole("menuitemradio").first()).toBeVisible();
 
+  await page.keyboard.press("Escape");
   await page.getByRole("button", { name: "Message options" }).tap();
   await page.locator('[data-slot="menu-content"].composer-options-menu').getByRole("menuitem", { name: /^Profile/ }).tap();
-  const profileSheet = page.getByRole("dialog", { name: "Profile" });
-  await expect(profileSheet).toBeVisible();
-  await expect(profileSheet.getByRole("radio", { name: "Assistant" })).toBeVisible();
+  const profileSubmenu = page.locator('[data-slot="menu-content"].composer-profile-menu');
+  await expect(profileSubmenu).toBeVisible();
+  await expect(profileSubmenu.getByRole("menuitemradio", { name: "Assistant" })).toBeVisible();
 });
 
 test("acceptance: tall narrow command and chat palettes fill the inset mobile frame", async ({ page }, testInfo) => {
