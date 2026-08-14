@@ -75,6 +75,37 @@ async function expectInsetPalette(page, palette, inset = 8) {
   expect(Math.abs(shellBox.height - (viewport.height - inset * 2))).toBeLessThanOrEqual(2);
 }
 
+test("acceptance: mobile chat shell fills the visual viewport", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "mobile-chromium", "phone shell geometry");
+  await openApp(page);
+
+  const shell = page.locator("main.chat-main");
+  const transcript = page.locator(".message-scroller-viewport");
+  const composer = page.locator(".composer-stack");
+  const [shellBox, transcriptBox, composerBox, viewport, styles] = await Promise.all([
+    shell.boundingBox(),
+    transcript.boundingBox(),
+    composer.boundingBox(),
+    page.evaluate(() => ({ width: innerWidth, height: innerHeight, visualWidth: visualViewport?.width, visualHeight: visualViewport?.height })),
+    shell.evaluate((element) => {
+      const computed = getComputedStyle(element);
+      return { margin: computed.margin, borderRadius: computed.borderRadius, boxShadow: computed.boxShadow };
+    }),
+  ]);
+
+  expect(Math.abs(shellBox.x)).toBeLessThanOrEqual(1);
+  expect(Math.abs(shellBox.y)).toBeLessThanOrEqual(1);
+  expect(Math.abs(shellBox.width - viewport.width)).toBeLessThanOrEqual(1);
+  expect(Math.abs(shellBox.height - viewport.height)).toBeLessThanOrEqual(1);
+  expect(Math.abs(shellBox.width - viewport.visualWidth)).toBeLessThanOrEqual(1);
+  expect(Math.abs(shellBox.height - viewport.visualHeight)).toBeLessThanOrEqual(1);
+  expect(styles).toEqual({ margin: "0px", borderRadius: "0px", boxShadow: "none" });
+
+  expect(transcriptBox.y).toBeGreaterThanOrEqual(shellBox.y - 1);
+  expect(transcriptBox.y + transcriptBox.height).toBeLessThanOrEqual(composerBox.y + 1);
+  expect(composerBox.y + composerBox.height).toBeLessThanOrEqual(shellBox.y + shellBox.height + 1);
+});
+
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => {
     class IdleWebSocket extends EventTarget {

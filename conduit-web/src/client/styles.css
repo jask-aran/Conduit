@@ -537,11 +537,17 @@ svg { stroke-width: 1.5; }
     right: 0;
     width: 100%;
   }
-  /* Equal frame gutters once the docked desktop sidebar is gone. */
+  /* The phone shell owns the full visual viewport. Desktop's inset frame
+     disappears here; safe-area padding belongs to the controls that touch
+     each edge. */
   .chat-main {
-    margin: 8px;
-    height: calc(var(--app-height, 100dvh) - 16px);
-    max-height: calc(var(--app-height, 100dvh) - 16px);
+    width: 100%;
+    min-height: 0;
+    margin: 0;
+    height: var(--app-height, 100dvh);
+    max-height: var(--app-height, 100dvh);
+    border-radius: 0;
+    box-shadow: none;
   }
   .thread { width: 100%; padding: 40px 16px 20px; }
   .composer-stack {
@@ -592,7 +598,12 @@ svg { stroke-width: 1.5; }
   }
   .tool-card { margin-left: 0; }
   .response-actions { opacity: 1; }
-  .chat-header { padding: 8px 10px; gap: 6px; }
+  .chat-header {
+    height: calc(56px + env(safe-area-inset-top, 0px));
+    min-height: 56px;
+    padding: calc(8px + env(safe-area-inset-top, 0px)) 10px 8px;
+    gap: 6px;
+  }
   .chat-profile-posture { display: none; }
   .settings-shell { width: calc(100vw - 24px); height: calc(100dvh - 24px); }
   .settings-rail { width: 132px; }
