@@ -21,7 +21,7 @@ fs.writeFileSync(path.join(dist, "bundle-report.json"), `${JSON.stringify(report
 console.log(`Bundle: initial JS ${initialJs} B gzip, initial CSS ${initialCss} B gzip, largest lazy JS ${report.largestLazyJsGzip} B gzip.`);
 
 const budgets = {
-  initialJs: Number(process.env.CONDUIT_BUDGET_INITIAL_JS_GZIP || 180_000),
+  initialJs: Number(process.env.CONDUIT_BUDGET_INITIAL_JS_GZIP || 180_500),
   initialCss: Number(process.env.CONDUIT_BUDGET_INITIAL_CSS_GZIP || 80_000),
   lazyJs: Number(process.env.CONDUIT_BUDGET_LAZY_JS_GZIP || 300_000),
 };

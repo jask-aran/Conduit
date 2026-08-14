@@ -249,6 +249,7 @@ svg { stroke-width: 1.5; }
 .composer:focus-within::before {
   background: linear-gradient(150deg, oklch(1 0 0 / 56%), oklch(0.72 0.045 246 / 26%) 38%, oklch(1 0 0 / 5%) 70%, oklch(1 0 0 / 26%));
 }
+.composer-mobile-plus { display: none; }
 .composer-input-shell { position: relative; min-height: 44px; }
 .composer textarea { display: block; width: 100%; min-height: 44px; max-height: 192px; resize: none; overflow-y: auto; border: 0; outline: 0; background: transparent; padding: 11px 12px 2px; color: inherit; line-height: 1.45; }
 .composer textarea:placeholder-shown { height: 44px !important; }
@@ -283,6 +284,8 @@ svg { stroke-width: 1.5; }
 .model-trigger:disabled { cursor: default; color: var(--muted-foreground); opacity: .62; }
 .model-trigger span { max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .model-trigger svg { width: 14px; height: 14px; }
+.composer-option-value { min-width: 0; margin-left: auto; overflow: hidden; color: var(--muted-foreground); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.mobile-composer-options-sheet { display: none; }
 .dictation-trigger[data-state="active"] { box-shadow: 0 0 0 3px color-mix(in oklch, var(--accent-cool), transparent 78%); }
 .composer-dictation-error { display: flex; align-items: center; gap: 7px; margin-top: 6px; color: var(--destructive); font-size: 12px; }
 .composer-dictation-error svg { width: 14px; height: 14px; flex: none; }
@@ -696,6 +699,35 @@ svg { stroke-width: 1.5; }
   .mobile-status-sheet-waveform .voice-waveform-plot { height: 100%; border-radius: 7px; }
   .mobile-status-error { margin: 0; color: var(--destructive); font-size: 12px; line-height: 1.45; }
   .composer-status { display: none; }
+  /* The collapsed mobile composer is one row. Text can grow when it wraps;
+     the action rail stays aligned with its lower edge. */
+  .composer { display: flex; min-height: 52px; align-items: flex-end; border-radius: 20px; }
+  .composer-mobile-plus { display: flex; flex: 0 0 auto; align-self: flex-end; align-items: center; padding: 4px 0 8px 7px; }
+  .composer-plus-trigger { display: inline-flex; width: 36px; height: 36px; align-items: center; justify-content: center; border: 0; border-radius: 12px; background: transparent; color: var(--muted-foreground); }
+  .composer-plus-trigger:hover { background: var(--accent); color: var(--foreground); }
+  .composer-plus-trigger svg { width: 19px; height: 19px; }
+  .composer-input-shell { min-width: 0; min-height: 44px; flex: 1 1 auto; order: 2; }
+  .composer textarea { min-height: 44px; padding: 10px 4px 8px; line-height: 1.45; }
+  .composer-actions { min-width: 0; min-height: 44px; flex: 0 0 auto; order: 3; gap: 2px; padding: 4px 7px 8px 2px; }
+  .composer-actions-left, .composer-actions-right { gap: 2px; }
+  .composer-actions [data-slot="button"] { width: 36px; height: 36px; border-radius: 12px; }
+  .composer-actions [data-slot="button"] svg { width: 18px; height: 18px; }
+  .composer-desktop-attachment, .composer-desktop-setting { display: none; }
+  .composer-option-value { max-width: 44%; }
+  .composer-options-menu { width: min(21rem, calc(100vw - 16px)); max-width: calc(100vw - 16px); }
+  .composer-options-menu [role="menuitem"] { min-height: 44px; padding: 10px 11px; gap: 9px; font-size: 14px; }
+  .mobile-composer-options-sheet { position: fixed !important; right: 12px !important; bottom: calc(12px + env(safe-area-inset-bottom, 0px)) !important; left: 12px !important; width: auto !important; max-width: none !important; max-height: calc(var(--app-height, 100dvh) - 24px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)); display: flex !important; flex-direction: column; gap: 12px; overflow: hidden; transform: none !important; translate: 0 0 !important; --tw-translate-x: 0px !important; --tw-translate-y: 0px !important; border-color: color-mix(in oklch, var(--accent-cool), var(--border) 70%); border-radius: 16px; background: var(--popover); padding: 14px; box-shadow: 0 20px 60px rgb(0 0 0 / 40%); }
+  .mobile-composer-options-sheet > [data-slot="dialog-title"] { margin: 0; padding-right: 34px; font-size: 16px; }
+  .mobile-composer-options-sheet > [data-slot="dialog-close"], .mobile-composer-options-sheet > button { top: 10px; right: 10px; width: 36px; height: 36px; }
+  .mobile-composer-options-scroll { min-height: 0; display: grid; gap: 16px; overflow-y: auto; padding-right: 2px; }
+  .composer-option-section { display: grid; gap: 7px; }
+  .composer-option-section h3 { margin: 0; color: var(--muted-foreground); font: 10px/1.2 ui-monospace, SFMono-Regular, Consolas, monospace; text-transform: uppercase; letter-spacing: .06em; }
+  .composer-option-note { margin: 0; color: var(--muted-foreground); font-size: 12px; line-height: 1.45; }
+  .composer-option-list { display: grid; gap: 5px; }
+  .composer-option-choice { width: 100%; min-height: 42px; justify-content: flex-start; border: 1px solid transparent; padding: 9px 11px; text-align: left; }
+  .composer-option-choice[data-variant="outline"] { border-color: color-mix(in oklch, var(--accent-cool), var(--border) 45%); background: color-mix(in oklch, var(--accent-cool), transparent 88%); }
+  .composer-option-choice-meta { margin-left: auto; color: var(--muted-foreground); font-size: 11px; }
+  .composer-sheet-manage { justify-content: flex-start; padding-inline: 11px; color: var(--muted-foreground); }
   .chat-header > .mobile-sidebar-trigger,
   .chat-header-actions > [data-slot="button"],
   .chat-header-actions > .chat-header-more {

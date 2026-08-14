@@ -312,6 +312,42 @@ test("acceptance: mobile runtime status moves out of the composer and opens a bo
   await expect(status).toBeFocused();
 });
 
+test("acceptance: mobile composer is one row with Plus-owned message options", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "mobile-chromium", "phone composer options");
+  await openApp(page);
+
+  const composer = page.locator(".composer");
+  const composerBox = await composer.boundingBox();
+  expect(composerBox.height).toBeLessThanOrEqual(72);
+  await expect(page.locator(".composer-plus-trigger")).toBeVisible();
+  await expect(page.locator(".dictation-trigger")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Send message" })).toBeVisible();
+  await expect(page.locator(".composer-desktop-attachment")).toBeHidden();
+  await expect(page.locator(".composer-desktop-setting")).toHaveCount(2);
+  for (const setting of await page.locator(".composer-desktop-setting").all()) await expect(setting).toBeHidden();
+
+  await page.getByRole("button", { name: "Message options" }).tap();
+  const menu = page.locator('[data-slot="menu-content"].composer-options-menu');
+  await expect(menu).toBeVisible();
+  for (const label of ["Model and effort", "Profile", "Attach files"]) {
+    await expect(menu.getByRole("menuitem", { name: new RegExp(`^${label}`) })).toBeVisible();
+  }
+
+  await menu.getByRole("menuitem", { name: /^Model and effort/ }).tap();
+  const modelSheet = page.getByRole("dialog", { name: "Model and effort" });
+  await expect(modelSheet).toBeVisible();
+  await expect(modelSheet.getByRole("radiogroup", { name: "MODEL" })).toBeVisible();
+  await expect(modelSheet.getByRole("radiogroup", { name: "THINKING" })).toBeVisible();
+  await modelSheet.getByRole("button", { name: "Close model and effort" }).tap();
+  await expect(modelSheet).toHaveCount(0);
+
+  await page.getByRole("button", { name: "Message options" }).tap();
+  await page.locator('[data-slot="menu-content"].composer-options-menu').getByRole("menuitem", { name: /^Profile/ }).tap();
+  const profileSheet = page.getByRole("dialog", { name: "Profile" });
+  await expect(profileSheet).toBeVisible();
+  await expect(profileSheet.getByRole("radio", { name: "Assistant" })).toBeVisible();
+});
+
 test("acceptance: tall narrow command and chat palettes fill the inset mobile frame", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "desktop-chromium", "exact 523px responsive boundary");
   await page.setViewportSize({ width: 523, height: 1100 });
