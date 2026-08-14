@@ -351,31 +351,44 @@ test("acceptance: mobile composer is one row with Plus-owned message options", a
   expect(menuBox.width).toBeLessThan(viewport.width - 80);
   expect(Math.abs(menuBox.x - plusBox.x)).toBeLessThan(16);
   expect(menuBox.y).toBeLessThanOrEqual(plusBox.y + 2);
-  for (const label of ["Model and effort", "Profile", "Attach files"]) {
+  for (const label of ["Model", "Profile", "Attach files"]) {
     await expect(menu.getByRole("menuitem", { name: new RegExp(`^${label}`) })).toBeVisible();
   }
+  await expect(menu.getByText("Effort", { exact: true })).toBeVisible();
+  for (const level of ["Off", "Medium", "High"]) {
+    await expect(menu.getByRole("menuitemradio", { name: level })).toBeVisible();
+  }
 
-  await menu.getByRole("menuitem", { name: /^Model and effort/ }).tap();
+  await page.getByRole("button", { name: "Message options" }).tap();
+  await expect(menu).toHaveCount(0);
+  await expect(input).toBeFocused();
+  await page.getByRole("button", { name: "Message options" }).tap();
+  await expect(menu).toBeVisible();
+  await expect(input).toBeFocused();
+
+  await menu.getByRole("menuitem", { name: /^Model/ }).tap();
   const modelSubmenu = page.locator('[data-slot="menu-content"].composer-model-menu');
   await expect(modelSubmenu).toBeVisible();
+  await expect(input).toBeFocused();
   const modelSubmenuBox = await modelSubmenu.boundingBox();
   expect(modelSubmenuBox.x).toBeGreaterThanOrEqual(0);
   expect(modelSubmenuBox.x + modelSubmenuBox.width).toBeLessThanOrEqual(viewport.width + 1);
   expect(modelSubmenuBox.y + modelSubmenuBox.height).toBeLessThanOrEqual(viewport.height + 1);
   await expect(modelSubmenu.getByText("Model", { exact: true })).toBeVisible();
-  await expect(modelSubmenu.getByText("Thinking", { exact: true })).toBeVisible();
+  await expect(modelSubmenu.getByText("Thinking", { exact: true })).toHaveCount(0);
   await expect(modelSubmenu.getByRole("menuitemradio").first()).toBeVisible();
   await modelSubmenu.getByRole("menuitemradio").first().tap();
-  await expect(modelSubmenu).toBeVisible();
-  await modelSubmenu.getByRole("menuitemradio", { name: "High" }).tap();
-  await expect(modelSubmenu).toBeVisible();
+  await expect(modelSubmenu).toHaveCount(0);
+  await expect(menu).toBeVisible();
+  await expect(input).toBeFocused();
+  await menu.getByRole("menuitemradio", { name: "High" }).tap();
+  await expect(menu).toBeVisible();
+  await expect(input).toBeFocused();
 
-  await page.mouse.click(200, 220);
-  await expect(modelSubmenu).toBeHidden();
-  await page.getByRole("button", { name: "Message options" }).tap();
-  await page.locator('[data-slot="menu-content"].composer-options-menu').getByRole("menuitem", { name: /^Profile/ }).tap();
+  await menu.getByRole("menuitem", { name: /^Profile/ }).tap();
   const profileSubmenu = page.locator('[data-slot="menu-content"].composer-profile-menu');
   await expect(profileSubmenu).toBeVisible();
+  await expect(input).toBeFocused();
   await expect(profileSubmenu.getByRole("menuitemradio", { name: "Assistant" })).toBeVisible();
 });
 
