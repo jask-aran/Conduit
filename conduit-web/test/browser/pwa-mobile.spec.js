@@ -343,11 +343,14 @@ test("acceptance: mobile composer is one row with Plus-owned message options", a
   await expect(input).toBeFocused();
   const menu = page.locator('[data-slot="menu-content"].composer-options-menu');
   await expect(menu).toBeVisible();
-  const [menuBox, viewport] = await Promise.all([
+  const [menuBox, plusBox, viewport] = await Promise.all([
     menu.boundingBox(),
+    page.locator(".composer-plus-trigger").boundingBox(),
     page.evaluate(() => ({ width: innerWidth, height: innerHeight })),
   ]);
   expect(menuBox.width).toBeLessThan(viewport.width - 80);
+  expect(Math.abs(menuBox.x - plusBox.x)).toBeLessThan(16);
+  expect(menuBox.y).toBeLessThanOrEqual(plusBox.y + 2);
   for (const label of ["Model and effort", "Profile", "Attach files"]) {
     await expect(menu.getByRole("menuitem", { name: new RegExp(`^${label}`) })).toBeVisible();
   }
