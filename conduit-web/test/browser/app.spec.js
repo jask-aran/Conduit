@@ -3934,6 +3934,26 @@ test("global commands and slash suggestions preserve their intended focus models
   await expect(markdownRenderer).toHaveValue("incremark-synthetic");
   await markdownRenderer.selectOption("incremark-typewriter");
   await expect(page.locator(".transcript")).toHaveAttribute("data-markdown-renderer", "incremark-typewriter");
+  const contextMetrics = settingsDialog.getByRole("group", { name: "Composer context metrics" });
+  const metricPreset = settingsDialog.getByRole("combobox", { name: "Composer context metric preset" });
+  await expect(metricPreset).toHaveValue("compact");
+  await expect(contextMetrics.getByRole("checkbox")).toHaveCount(36);
+  await expect(contextMetrics.locator("input[type=checkbox]:checked")).toHaveCount(14);
+  for (const label of ["Context tokens used", "Context percent remaining", "Last input tokens", "Session total cost", "Session eligible cache-hit percent"]) {
+    await expect(contextMetrics.getByRole("checkbox", { name: label })).toBeChecked();
+  }
+  await metricPreset.selectOption("cacheDiagnostics");
+  await expect(contextMetrics.locator("input[type=checkbox]:checked")).toHaveCount(19);
+  await metricPreset.selectOption("full");
+  await expect(metricPreset).toHaveValue("full");
+  await expect(contextMetrics.locator("input[type=checkbox]:checked")).toHaveCount(36);
+  await contextMetrics.getByRole("checkbox", { name: "Tool results" }).uncheck();
+  await expect(contextMetrics.getByRole("checkbox", { name: "Tool results" })).not.toBeChecked();
+  await expect(metricPreset).toHaveValue("custom");
+  await expect.poll(() => page.evaluate(() => {
+    const value = JSON.parse(localStorage.getItem("conduit:context-metrics") || "[]");
+    return { count: value.length, hasToolResults: value.includes("toolResults") };
+  })).toEqual({ count: 35, hasToolResults: false });
   await page.keyboard.press("Escape");
 
   // Runtime is reached by drilling into Settings, then searching within the page.
@@ -4650,6 +4670,11 @@ test("Ctrl+Shift+D captures in the page and buffers microphone audio until the s
   await expect(waveform).toBeVisible();
   await expect(waveform).toHaveAttribute("data-state", "listening");
   await expect(waveform).toHaveAttribute("data-variant", "compact");
+  await expect(page.locator(".composer-status-state")).toContainText("Listening…");
+  const [waveformBox, statusBox] = await Promise.all([waveform.boundingBox(), page.locator(".composer-status-state").boundingBox()]);
+  expect(waveformBox).not.toBeNull();
+  expect(statusBox).not.toBeNull();
+  expect(statusBox.x).toBeGreaterThanOrEqual(waveformBox.x + waveformBox.width - 1);
   await expect(waveform.locator(".voice-waveform-bar")).toHaveCount(24);
   await expect.poll(() => waveform.locator(".voice-waveform-bar").evaluateAll((bars) => bars.filter((bar) => bar.getBoundingClientRect().width >= 1).length)).toBe(24);
   await expect(waveform.locator(".voice-waveform-peak")).toHaveCount(0);

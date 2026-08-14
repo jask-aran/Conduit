@@ -26,11 +26,32 @@ test("normalizes host UI events into the client discriminated union", () => {
 test("normalizes runtime state without a legacy event replay", () => {
   const event = normalizeLiveEvent({
     type: "runtime_state",
-    session: { active: true, generation: { id: "g1", closed: false }, queue: { steering: ["now"] } },
+    session: {
+      active: true,
+      generation: { id: "g1", closed: false },
+      queue: { steering: ["now"] },
+      sessionStats: { userMessages: 1, assistantMessages: 1, toolCalls: 0, toolResults: 0, totalMessages: 2, tokens: { input: 10, output: 5, cacheRead: 0, cacheWrite: 0, total: 15 }, cost: 0.01 },
+      cacheStats: { eligibleTokens: 100, cacheHits: 80, cacheMissedTokens: 20, eligibleRequests: 1, eligibleHitRate: 0.8 },
+    },
   });
   assert.equal(event.type, "runtime_state");
   assert.equal(event.session.generation.id, "g1");
   assert.deepEqual(event.session.queue, { steering: ["now"], followUp: [] });
+  assert.equal(event.session.sessionStats.tokens.total, 15);
+  assert.equal(event.session.cacheStats.eligibleHitRate, 0.8);
+});
+
+test("normalizes aggregate session stats on context usage updates", () => {
+  const event = normalizeLiveEvent({
+    type: "context_usage",
+    contextUsage: { tokens: null, contextWindow: 128000, percent: null },
+    sessionStats: { userMessages: 2, assistantMessages: 2, toolCalls: 1, toolResults: 1, totalMessages: 5, tokens: { input: 100, output: 40, cacheRead: 20, cacheWrite: 10, total: 170 }, cost: 0.123 },
+    cacheStats: { eligibleTokens: 500, cacheHits: 450, cacheMissedTokens: 50, eligibleRequests: 4, eligibleHitRate: 0.9 },
+  });
+  assert.equal(event.type, "context_usage");
+  assert.equal(event.contextUsage.tokens, null);
+  assert.equal(event.sessionStats.toolCalls, 1);
+  assert.equal(event.cacheStats.eligibleTokens, 500);
 });
 
 test("preserves a checkpoint's durable chat title", () => {

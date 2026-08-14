@@ -1,4 +1,4 @@
-import type { ContextUsage, HostUiRequest, QueueState, RetryState } from "./contracts";
+import type { CacheStats, ContextUsage, HostUiRequest, QueueState, RetryState, SessionStats } from "./contracts";
 import type { ProtocolMessage, ToolLifecycleEvent } from "../timeline-order";
 
 type UnknownRecord = Record<string, unknown>;
@@ -11,6 +11,8 @@ export interface GenerationHandle {
 
 export interface SessionSnapshot {
   contextUsage: ContextUsage | null;
+  sessionStats: SessionStats | null;
+  cacheStats: CacheStats | null;
   queue: QueueState | null;
   hostUiRequests: HostUiRequest[] | null;
   compacting: boolean | null;
@@ -50,13 +52,15 @@ export interface RuntimeStateEvent extends EventBase {
   type: "runtime_state";
   session: SessionSnapshot;
   contextUsage: ContextUsage | null;
+  sessionStats: SessionStats | null;
+  cacheStats: CacheStats | null;
   queue: QueueState | null;
   hostUiRequests: HostUiRequest[] | null;
 }
 
 export type LiveEvent = EventBase & (
   | RuntimeStateEvent
-  | { type: "context_usage"; contextUsage: ContextUsage | null }
+  | { type: "context_usage"; contextUsage: ContextUsage | null; sessionStats: SessionStats | null; cacheStats: CacheStats | null }
   | { type: "compaction_start" | "compaction_end" | "auto_retry_end" }
   | { type: "auto_retry_start"; retry: RetryState }
   | { type: "queue_update"; queue: QueueState }
@@ -87,6 +91,8 @@ export function isStructuredGenerationEvent(event: LiveEvent): event is Structur
     && typeof (event as Partial<StructuredGenerationEvent>).seq === "number";
 }
 const contextUsage = (value: unknown): ContextUsage | null => Object.keys(record(value)).length ? record(value) as ContextUsage : null;
+const sessionStats = (value: unknown): SessionStats | null => Object.keys(record(value)).length ? record(value) as unknown as SessionStats : null;
+const cacheStats = (value: unknown): CacheStats | null => Object.keys(record(value)).length ? record(value) as unknown as CacheStats : null;
 const queue = (value: unknown): QueueState | null => {
   const source = record(value);
   if (!Object.keys(source).length) return null;
@@ -134,6 +140,8 @@ function sessionSnapshot(value: unknown): SessionSnapshot {
   const requests = source.hostUiRequests === undefined ? null : list(source.hostUiRequests).map(normalizeHostUiRequest).filter((item): item is HostUiRequest => Boolean(item));
   return {
     contextUsage: contextUsage(source.contextUsage),
+    sessionStats: sessionStats(source.sessionStats),
+    cacheStats: cacheStats(source.cacheStats),
     queue: queue(source.queue),
     hostUiRequests: requests,
     compacting: source.compacting == null ? null : Boolean(source.compacting),
@@ -167,9 +175,9 @@ export function normalizeLiveEvent(value: unknown): LiveEvent {
   switch (sourceType) {
     case "runtime_state": {
       const requests = source.hostUiRequests === undefined ? null : list(source.hostUiRequests).map(normalizeHostUiRequest).filter((item): item is HostUiRequest => Boolean(item));
-      return { type: "runtime_state", generationId, session: sessionSnapshot(source.session), contextUsage: contextUsage(source.contextUsage), queue: queue(source.queue), hostUiRequests: requests };
+      return { type: "runtime_state", generationId, session: sessionSnapshot(source.session), contextUsage: contextUsage(source.contextUsage), sessionStats: sessionStats(source.sessionStats), cacheStats: cacheStats(source.cacheStats), queue: queue(source.queue), hostUiRequests: requests };
     }
-    case "context_usage": return { type: "context_usage", generationId, contextUsage: contextUsage(source.contextUsage) };
+    case "context_usage": return { type: "context_usage", generationId, contextUsage: contextUsage(source.contextUsage), sessionStats: sessionStats(source.sessionStats), cacheStats: cacheStats(source.cacheStats) };
     case "compaction_start": return { type: "compaction_start", generationId };
     case "compaction_end": return { type: "compaction_end", generationId };
     case "auto_retry_start": return { type: "auto_retry_start", generationId, retry: retry(source) || {} };

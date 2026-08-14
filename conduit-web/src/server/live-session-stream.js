@@ -115,6 +115,8 @@ export function createLiveSessionStream({
       hostUiRequests: record.hostUiRequests || [],
       queue: record.queue || { steering: [], followUp: [] },
       contextUsage: record.contextUsage || null,
+      sessionStats: record.sessionStats || null,
+      cacheStats: record.cacheStats || null,
     }));
     if (record.lastCheckpoint) ws.send(JSON.stringify(record.lastCheckpoint));
     ws.on("message", (data) => {
