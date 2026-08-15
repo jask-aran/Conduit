@@ -1,7 +1,7 @@
 # Voice dictation pipeline overhaul plan
 
-Status: **WP4A implementation complete and awaiting manual approval. WP0,
-WP1, WP2, and WP3 approved.**
+Status: **WP4B implementation complete and awaiting manual approval. WP0,
+WP1, WP2, WP3, and WP4A approved.**
 
 This document defines the active voice-dictation work. Git history preserves
 the completed polish sprint, its test counts, and its manual acceptance
@@ -62,9 +62,9 @@ The central design is:
   final word in the composer; the newest Q8 sidecar recorded 135 packets at
   approximately 50 packets per second, matching client/server PCM bytes, a
   cold runtime preparation interval, and a valid unclipped WAV.
-- **Work package 4A — implementation complete and awaiting approval.** Conduit
+- **Work package 4A — complete and approved.** Conduit
   now observes the pinned Silero VAD on a copy of the complete accepted PCM.
-  The existing RMS heuristic remains authoritative for ASR. Sidecars record
+  Its accepted observation policy became the input to WP4B. Sidecars record
   Silero frame probabilities, model verification, CPU deployment posture,
   entry/exit thresholds, onset and exit frames, 240 ms pre-roll, 320 ms
   hangover, 240 ms trailing padding, maximum-region closure, and proposed
@@ -73,11 +73,18 @@ The central design is:
 - Fresh local voice settings now default to `whisper-tiny-en-q8` through the
   embedded Transformers backend. An existing saved model selection is not
   changed.
-- **Work packages 4B–11 — not started.** Package 6A has not started, so
+- **Work package 4B — implementation complete and awaiting manual approval.**
+  The live batch path now waits for the server-side Silero observation, submits
+  its padded ranges, retains short ranges, and merges any excess regions into
+  a bounded tail with an explicit diagnostic. The complete accepted PCM still
+  goes to the archive. Silence-only sessions submit no PCM to ASR. The
+  adapters retain an explicit external-policy path for a future runtime with
+  a verified segmentation contract; current runtimes use server-side Silero.
+- **Work packages 5–11 — not started.** Package 6A has not started, so
   `transcribe.cpp` and the Unified English Q8 model are not the active backend.
 
-WP3 manual approval is recorded below. WP4A awaits the manual comparison test
-below and does not authorize WP4B.
+WP3 and WP4A manual approval are recorded below. WP4B awaits the handoff test
+below and does not authorize WP5.
 
 ## Deviations from the proposed plan
 
@@ -110,12 +117,20 @@ below and does not authorize WP4B.
   WebSocket backpressure limit still fails directly when recovery is not
   possible. The client makes a copy only for packets held before the socket
   becomes ready, then returns the transferred worklet buffer.
-- WP4A keeps the VAD implementation and model verification separate from the
-  transcription adapter. The pinned Silero artifact is reused from the
-  reviewed managed voice package and is also added to new Whisper manifests;
-  existing installations can use any verified copy under the voice model root.
-  No new settings control or lockfile dependency was added. Silero remains
-  observation-only until WP4B is approved.
+- WP4A kept the VAD implementation and model verification separate from the
+  transcription adapter. WP4B now supplies the selected Silero ranges to the
+  batch adapters at Stop. The pinned artifact is reused from the reviewed
+  managed voice package and is also added to new Whisper manifests; existing
+  installations can use any verified copy under the voice model root. No new
+  settings control or lockfile dependency was added.
+- The exported adapters retain an RMS split only when called without an explicit
+  session segmentation object. The authenticated dictation path always passes
+  the server-side Silero selection. This keeps direct adapter compatibility
+  tests stable while removing `splitSilence` from the live path.
+- The current runtime resolver declares only `batch`, so WP4B does not guess
+  identifiers for future streaming modes. The adapters retain an explicit
+  `external_policy` option for a later runtime package after its segmentation
+  capability is verified.
 - The WP0–WP4A technical review actioned V01–V16, V18, and V19. V17 is a
   deliberate scope deferral: moving Silero to an independent shared owner
   requires its own install, readiness, migration, and uninstall lifecycle and
@@ -552,7 +567,18 @@ artifact was verified at 2,327,524 bytes with SHA-256
 licence, CPU execution, and an unprivileged server process. Focused VAD,
 dictation-stream, model-manager, and capture tests pass. A real development
 record produced high speech probabilities and two padded regions around a
-synthetic ten-second pause. Manual mobile acceptance is pending.
+synthetic ten-second pause. The user then accepted WP4A after mobile tests;
+the complete short-word and pause-separated behaviors were retained for WP4B.
+
+WP4B implementation verification record (2026-08-15): the live batch path now
+waits for the server-side Silero result before final inference. Focused tests
+cover silence-only no-submit behavior, padded multi-region submission, valid
+speech shorter than 500 ms, and bounded tail merging above the segment cap.
+The full Node suite passed 477 tests. Typecheck passed. The production build
+passed with 183,484 B initial JS gzip, 24,412 B initial CSS gzip, and 185,186 B
+largest lazy JS gzip. The browser set-piece suite passed 13 tests and skipped
+11 project-matrix cases; the voice-focused browser suite passed 5 tests and
+skipped 1. Manual handoff testing remains pending.
 
 ### Work package 4A — observe Silero boundaries
 

@@ -16,6 +16,8 @@ export const SILERO_VAD_POLICY = Object.freeze({
   maxRegionMs: 30_000,
 });
 
+export const SILERO_MAX_SEGMENTS = 16;
+
 const SILERO_STATE_SIZE = 2 * 128;
 const MODEL_FILE = SILERO_VAD_ARTIFACT.name;
 
@@ -183,6 +185,93 @@ function normalizeRegionBoundaries(regions) {
     next.durationMs = Math.round((next.endSample - next.startSample) / 16);
   }
   return regions;
+}
+
+function sampleValue(value, sampleCount, fallback) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return fallback;
+  return Math.min(sampleCount, Math.max(0, Math.round(number)));
+}
+
+function mergeSelectedRanges(ranges) {
+  const merged = [];
+  for (const range of ranges) {
+    const previous = merged.at(-1);
+    if (!previous || range.startSample > previous.endSample) {
+      merged.push({ ...range, regionIndices: [range.regionIndex] });
+      continue;
+    }
+    previous.endSample = Math.max(previous.endSample, range.endSample);
+    previous.regionIndices.push(range.regionIndex);
+    previous.speechSamples += range.speechSamples;
+  }
+  return merged;
+}
+
+export function selectSileroVadRanges(observation, sampleCount, { maxSegments = SILERO_MAX_SEGMENTS } = {}) {
+  const safeSampleCount = Math.max(0, Math.floor(Number(sampleCount) || 0));
+  const safeMaxSegments = Math.max(1, Math.trunc(Number(maxSegments) || SILERO_MAX_SEGMENTS));
+  const sourceRegions = Array.isArray(observation?.regions) ? observation.regions : [];
+  const ranges = sourceRegions.map((region, regionIndex) => {
+    const startSample = sampleValue(
+      region?.submittedStartSample ?? region?.paddedStartSample ?? region?.startSample,
+      safeSampleCount,
+      0,
+    );
+    const endSample = sampleValue(
+      region?.submittedEndSample ?? region?.paddedEndSample ?? region?.endSample,
+      safeSampleCount,
+      0,
+    );
+    const speechStartSample = sampleValue(region?.speechStartSample, safeSampleCount, startSample);
+    const speechEndSample = sampleValue(region?.speechEndSample, safeSampleCount, endSample);
+    return {
+      startSample,
+      endSample,
+      regionIndex,
+      speechSamples: Math.max(0, speechEndSample - speechStartSample),
+    };
+  }).filter((range) => range.endSample > range.startSample)
+    .sort((left, right) => left.startSample - right.startSample || left.endSample - right.endSample);
+  const merged = mergeSelectedRanges(ranges);
+  const normalizedRegionCount = merged.length;
+  const available = observation?.available === true;
+  let selected = available ? merged : [];
+  let guardAction = "none";
+  if (available && selected.length > safeMaxSegments) {
+    const head = selected.slice(0, safeMaxSegments - 1);
+    const tail = selected.slice(safeMaxSegments - 1);
+    selected = [
+      ...head,
+      {
+        startSample: tail[0].startSample,
+        endSample: tail.at(-1).endSample,
+        regionIndices: tail.flatMap((range) => range.regionIndices),
+        speechSamples: tail.reduce((sum, range) => sum + range.speechSamples, 0),
+      },
+    ];
+    guardAction = "merged_tail";
+  }
+  const status = available ? (selected.length ? "speech" : "silence") : observation?.status || "unavailable";
+  return {
+    source: "silero_authoritative",
+    available,
+    status,
+    segments: selected.map((range) => [range.startSample, range.endSample]),
+    regionIndices: selected.map((range) => range.regionIndices),
+    speechSamples: selected.reduce((sum, range) => sum + range.speechSamples, 0),
+    sourceRegionCount: sourceRegions.length,
+    normalizedRegionCount,
+    segmentGuard: {
+      maxSegments: safeMaxSegments,
+      sourceRegionCount: sourceRegions.length,
+      normalizedRegionCount,
+      submittedSegmentCount: selected.length,
+      overflowed: normalizedRegionCount > safeMaxSegments,
+      action: guardAction,
+    },
+    policy: observation?.policy || null,
+  };
 }
 
 export function proposeSileroRegions(frames, sampleCount, overrides = {}) {
