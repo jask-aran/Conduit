@@ -79,6 +79,11 @@ export class VoiceRuntime {
     return this.modelManager.observeVoiceActivity(pcm);
   }
 
+  beginVoiceActivity() {
+    if (typeof this.modelManager?.beginVoiceActivity !== "function") return null;
+    return this.modelManager.beginVoiceActivity();
+  }
+
   async resolve() {
     const config = await this.settings.effective();
     if (config.mode === "off") throw runtimeError("dictation_not_configured", "Voice dictation is disabled", 409);

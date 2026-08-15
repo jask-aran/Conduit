@@ -116,6 +116,66 @@ async function startDictationBridge({ upstreamPort, recordingStore = null, resol
   return { bridge, origin: `ws://127.0.0.1:${bridge.address().port}`, resolveCount: () => resolveCount };
 }
 
+async function startProgressiveBridge({ transcribe, regionsAtFinish, limits = {}, resolveDelayMs = 0 }) {
+  const wss = new WebSocketServer({ noServer: true });
+  let sampleCount = 0;
+  let firstRegionCommitted = false;
+  const voiceRuntime = {
+    pin() {},
+    unpin() {},
+    beginVoiceActivity() {
+      return {
+        push(pcm) {
+          sampleCount += Math.floor(pcm.length / 2);
+          if (!firstRegionCommitted && sampleCount >= 1_024) {
+            firstRegionCommitted = true;
+            return Promise.resolve([{
+              regionIndex: 0,
+              submittedStartSample: 0,
+              submittedEndSample: 1_024,
+              startSample: 0,
+              endSample: 1_024,
+              closureReason: "silence",
+            }]);
+          }
+          return Promise.resolve([]);
+        },
+        finish() {
+          return Promise.resolve({
+            type: "silero_vad_observation",
+            available: true,
+            status: "observed",
+            policy: { sampleRate: 16_000, frameSamples: 512, preRollMs: 0, hangoverMs: 0, trailingPaddingMs: 0 },
+            regions: regionsAtFinish(sampleCount),
+            frames: [],
+            summary: { regionCount: 2, speechFrameCount: 2, maxProbability: 1, meanProbability: 1 },
+          });
+        },
+        cancel() {},
+      };
+    },
+    resolve: async () => {
+      if (resolveDelayMs > 0) await new Promise((resolve) => setTimeout(resolve, resolveDelayMs));
+      return {
+        mode: "local",
+        inferenceMode: "batch",
+        adapter: "managed_transformers_v1",
+        provider: "local",
+        model: "test-progressive-model",
+        precision: "q8",
+        backend: "test",
+        transcribe,
+      };
+    },
+  };
+  const stream = createDictationStream({ wss, voiceRuntime, limits });
+  const bridge = createServer();
+  bridge.on("upgrade", (request, socket, head) => stream.handleUpgrade(request, socket, head));
+  bridge.listen(0, "127.0.0.1");
+  await listen(bridge);
+  return { bridge, origin: `ws://127.0.0.1:${bridge.address().port}` };
+}
+
 test("HTTP snapshot adapters retain pause-separated final transcript segments", async () => {
   const events = [];
   const adapter = createHttpAdapter(
@@ -242,6 +302,98 @@ test("dictation accepts PCM during cold resolve and includes it after stop", asy
     await new Promise((resolve) => setTimeout(resolve, 25));
     await new Promise((resolve) => bridge.close(resolve));
     await new Promise((resolve) => upstream.close(resolve));
+  }
+});
+
+test("progressive local batch publishes an ordered segment before Stop and appends the tail once", async () => {
+  const { bridge, origin } = await startProgressiveBridge({
+    transcribe: async (pcm) => pcm[0] === 1 ? "first phrase" : "second phrase",
+    regionsAtFinish: (sampleCount) => [
+      { regionIndex: 0, submittedStartSample: 0, submittedEndSample: 1_024 },
+      { regionIndex: 1, submittedStartSample: 1_024, submittedEndSample: sampleCount },
+    ],
+  });
+  const client = new WebSocket(`${origin}/dictation`);
+  const next = messageQueue(client);
+  try {
+    await new Promise((resolve, reject) => { client.once("open", resolve); client.once("error", reject); });
+    await next((event) => event.type === "ready");
+    await next((event) => event.type === "runtime_ready");
+    client.send(Buffer.alloc(2_048, 1), { binary: true });
+    const first = await next((event) => event.type === "final", 5_000);
+    assert.equal(first.text, "first phrase");
+    assert.deepEqual(first.segment, { sequence: 0, startSample: 0, endSample: 1_024 });
+    client.send(Buffer.alloc(2_048, 2), { binary: true });
+    client.send(JSON.stringify({ type: "stop", audioBytesSent: 4_096 }));
+    const completed = await next((event) => event.type === "completed", 5_000);
+    assert.equal(completed.text, "first phrase second phrase");
+    assert.equal(completed.diagnostics.server.inference.progressiveBatch.committedSegments, 2);
+    assert.equal(completed.diagnostics.server.inference.progressiveBatch.failedSequences.length, 0);
+  } finally {
+    client.terminate();
+    await new Promise((resolve) => setTimeout(resolve, 25));
+    await new Promise((resolve) => bridge.close(resolve));
+  }
+});
+
+test("progressive local batch keeps PCM sent during model startup", async () => {
+  const { bridge, origin } = await startProgressiveBridge({
+    resolveDelayMs: 75,
+    transcribe: async (pcm) => pcm[0] === 1 ? "cold first phrase" : "second phrase",
+    regionsAtFinish: (sampleCount) => [
+      { regionIndex: 0, submittedStartSample: 0, submittedEndSample: 1_024 },
+      { regionIndex: 1, submittedStartSample: 1_024, submittedEndSample: sampleCount },
+    ],
+  });
+  const client = new WebSocket(`${origin}/dictation`);
+  const next = messageQueue(client);
+  try {
+    await new Promise((resolve, reject) => { client.once("open", resolve); client.once("error", reject); });
+    await next((event) => event.type === "ready");
+    client.send(Buffer.alloc(2_048, 1), { binary: true });
+    const first = await next((event) => event.type === "final", 5_000);
+    assert.equal(first.text, "cold first phrase");
+    client.send(JSON.stringify({ type: "stop", audioBytesSent: 2_048 }));
+    const completed = await next((event) => event.type === "completed", 5_000);
+    assert.equal(completed.text, "cold first phrase");
+    assert.equal(completed.audioBytes, 2_048);
+  } finally {
+    client.terminate();
+    await new Promise((resolve) => setTimeout(resolve, 25));
+    await new Promise((resolve) => bridge.close(resolve));
+  }
+});
+
+test("progressive batch retains successful segments when a later range fails", async () => {
+  const { bridge, origin } = await startProgressiveBridge({
+    transcribe: async (pcm) => {
+      if (pcm[0] === 2) throw Object.assign(new Error("second range failed"), { code: "test_range_failed" });
+      return "first phrase";
+    },
+    regionsAtFinish: (sampleCount) => [
+      { regionIndex: 0, submittedStartSample: 0, submittedEndSample: 1_024 },
+      { regionIndex: 1, submittedStartSample: 1_024, submittedEndSample: sampleCount },
+    ],
+  });
+  const client = new WebSocket(`${origin}/dictation`);
+  const next = messageQueue(client);
+  try {
+    await new Promise((resolve, reject) => { client.once("open", resolve); client.once("error", reject); });
+    await next((event) => event.type === "ready");
+    await next((event) => event.type === "runtime_ready");
+    client.send(Buffer.alloc(2_048, 1), { binary: true });
+    await next((event) => event.type === "final", 5_000);
+    client.send(Buffer.alloc(2_048, 2), { binary: true });
+    client.send(JSON.stringify({ type: "stop", audioBytesSent: 4_096 }));
+    const failure = await next((event) => event.type === "segment_error", 5_000);
+    assert.equal(failure.sequence, 1);
+    const completed = await next((event) => event.type === "completed", 5_000);
+    assert.equal(completed.text, "first phrase");
+    assert.deepEqual(completed.diagnostics.server.inference.progressiveBatch.failedSequences, [1]);
+  } finally {
+    client.terminate();
+    await new Promise((resolve) => setTimeout(resolve, 25));
+    await new Promise((resolve) => bridge.close(resolve));
   }
 });
 

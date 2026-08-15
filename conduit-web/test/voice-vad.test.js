@@ -181,6 +181,42 @@ test("Silero observation reports unavailable without changing the transcription 
   }
 });
 
+test("progressive Silero streams return only closed regions before Stop", async () => {
+  class FakeTensor {
+    constructor(_type, data) { this.data = data; }
+  }
+  let call = 0;
+  const probabilities = [
+    ...Array(2).fill(0.01),
+    ...Array(4).fill(0.92),
+    ...Array(10).fill(0.01),
+    ...Array(3).fill(0.88),
+  ];
+  const vad = new SileroVad({ root: "/tmp/conduit-vad-stream-test" });
+  vad.load = async () => ({
+    ort: { Tensor: FakeTensor },
+    session: {
+      run: async () => ({ stateN: { data: new Float32Array(256) }, output: { data: [probabilities[call++] || 0.01] } }),
+    },
+    verification: { size: 1, sha256: "a" },
+    source: "test",
+  });
+  const stream = vad.createStream();
+  const frame = () => Buffer.alloc(512 * 2, 100);
+  const first = await stream.push(Buffer.concat(Array.from({ length: 6 }, frame)));
+  assert.deepEqual(first, []);
+  const closed = await stream.push(Buffer.concat(Array.from({ length: 10 }, frame)));
+  assert.equal(closed.length, 1);
+  assert.equal(closed[0].regionIndex, 0);
+  assert.equal(closed[0].closureReason, "silence");
+  assert.deepEqual(await stream.push(Buffer.concat(Array.from({ length: 3 }, frame))), []);
+  const final = await stream.finish();
+  assert.equal(final.available, true);
+  assert.equal(final.regions.length, 2);
+  assert.equal(final.frames.length, 19);
+  assert.equal(final.regions[1].closureReason, "end_of_stream");
+});
+
 test("installed Silero artifact produces auditable probabilities and no regions for digital silence", async (t) => {
   const root = path.resolve("../data/voice/models");
   try {
