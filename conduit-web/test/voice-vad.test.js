@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
-import { proposeSileroRegions, SILERO_VAD_POLICY, SileroVad, VoiceVadObservationQueue } from "../src/server/voice-vad.js";
+import { proposeSileroRegions, selectSileroVadRanges, SILERO_VAD_POLICY, SileroVad, VoiceVadObservationQueue } from "../src/server/voice-vad.js";
 
 function framesFor(parts) {
   const frames = [];
@@ -97,6 +97,53 @@ test("Silero policy preserves explicit zero values and bounds long false-positiv
   assert.equal(result.policy.trailingPaddingMs, 0);
   assert.ok(result.regions.length >= 2);
   assert.equal(result.regions[0].closureReason, "maximum_duration");
+});
+
+test("authoritative Silero selection keeps short speech ranges", () => {
+  const result = selectSileroVadRanges({
+    available: true,
+    status: "observed",
+    regions: [{
+      submittedStartSample: 1_000,
+      submittedEndSample: 7_000,
+      speechStartSample: 3_000,
+      speechEndSample: 4_000,
+    }],
+  }, 16_000);
+  assert.deepEqual(result.segments, [[1_000, 7_000]]);
+  assert.equal(result.speechSamples, 1_000);
+  assert.equal(result.status, "speech");
+  assert.equal(result.segmentGuard.overflowed, false);
+});
+
+test("unavailable Silero selection submits no ranges", () => {
+  const result = selectSileroVadRanges({
+    available: false,
+    status: "unavailable",
+    regions: [{ submittedStartSample: 0, submittedEndSample: 4_000 }],
+  }, 16_000);
+  assert.deepEqual(result.segments, []);
+  assert.equal(result.status, "unavailable");
+  assert.equal(result.segmentGuard.submittedSegmentCount, 0);
+});
+
+test("authoritative Silero selection merges overflow into a bounded tail", () => {
+  const regions = Array.from({ length: 18 }, (_value, index) => ({
+    submittedStartSample: index * 2_000,
+    submittedEndSample: index * 2_000 + 1_000,
+    speechStartSample: index * 2_000,
+    speechEndSample: index * 2_000 + 500,
+  }));
+  const result = selectSileroVadRanges({ available: true, status: "observed", regions }, 40_000, { maxSegments: 4 });
+  assert.deepEqual(result.segments, [
+    [0, 1_000],
+    [2_000, 3_000],
+    [4_000, 5_000],
+    [6_000, 35_000],
+  ]);
+  assert.deepEqual(result.regionIndices.at(-1), Array.from({ length: 15 }, (_value, index) => index + 3));
+  assert.equal(result.segmentGuard.action, "merged_tail");
+  assert.equal(result.segmentGuard.submittedSegmentCount, 4);
 });
 
 test("Silero observation queue bounds capacity and times out observation-only work", async () => {

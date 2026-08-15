@@ -141,6 +141,13 @@ Add an entry through `$tacit-knowledge` after explicit approval or validated rep
 - **Scope:** `voice-dictation-client.ts`, `voice-audio.ts`, and Settings → Voice.
 - **Evidence:** The measured one-second startup delay came from waiting for the server handshake before capture. The focused browser test proves capture and waveform state start before `ready`, queued audio stays off the socket, and PCM flushes after `ready`; the silent-input test prevents the short `you` hallucination.
 
+### Keep authoritative VAD decisions server-side
+
+- **Type:** Invariant.
+- **Rule:** At Stop, wait for the server Silero result and submit only its selected padded ranges to batch ASR. Retain valid ranges shorter than 500 ms, merge overflow into a bounded tail, keep the complete accepted PCM in the archive, and do not fall back to RMS segmentation in the authenticated path.
+- **Scope:** `dictation-stream.js` finalization, voice diagnostics, and archived voice sidecars.
+- **Evidence:** WP4B focused tests cover silence-only no-submit behavior, short-range submission, padded multi-region ordering, and segment-cap tail preservation; the full Node suite passed 477 tests at the accepted checkpoint.
+
 ### Preserve authored timelines when animations self-clean
 
 - **Type:** Invariant.

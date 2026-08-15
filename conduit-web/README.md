@@ -235,12 +235,16 @@ bounded bar renderer in a larger monitor with current level, peak hold, and
 recording state. The browser captures 16 kHz mono PCM with an `AudioWorklet`
 and sends it in 20 ms, 320-sample packets only to authenticated
 `WS /v0/dictation/stream`; Stop flushes one final partial packet when needed.
-Conduit also runs the pinned Silero VAD as a shadow observer at Stop when a
-verified artifact is installed. This observation does not change the PCM or
-transcript path. Recording sidecars retain the complete WAV, frame speech
-probabilities, the current RMS heuristic boundaries, and padded Silero sample
-ranges for comparison. Exact-zero input is reported as a digital-silence or
-device-stall diagnostic; it is not treated as authoritative speech VAD.
+At Stop, Conduit runs the pinned Silero VAD when a verified artifact is
+installed. For batch adapters, Silero is authoritative: browser activity only
+drives the UI, and Conduit submits Silero's padded sample ranges. Short valid
+ranges are retained, and a bounded overflow merges the remaining tail and
+records that action. Silence-only captures submit no PCM to ASR. The complete
+WAV remains the archive source, and sidecars retain frame probabilities,
+selected ranges, source-region mapping, and the segment guard. The adapters
+also have an explicit external-policy path for a future runtime with a
+verified segmentation contract; current runtimes use server-side Silero.
+Exact-zero input remains a digital-silence or device-stall diagnostic.
 Settings → Voice
 can select a browser microphone, refresh the device list, and run an in-memory
 input-level test until the user stops it; a 60-second safety cap prevents an
@@ -576,8 +580,10 @@ microphone stream was reused. The diagnostics also include first/last server
 PCM, runtime preparation, inference queue/start/finish, partial/final,
 completion-send, archive, and bounded VAD queue/execution timing.
 The client event record includes digital-silence device-stall notifications.
-The server record includes the RMS heuristic and, when available, the shadow
-Silero frame probabilities and padded sample ranges.
+The server record includes Silero frame probabilities, selected padded sample
+ranges, source-region mapping, and any segment-guard action. Direct adapter
+calls without a session selection retain the legacy RMS split for compatibility;
+the authenticated dictation path always supplies its server-side VAD decision.
 Raw device identifiers, credentials, and transcript bodies are not diagnostic
 fields or structured log fields. The current runtime reports its execution path
 and records an unavailable compute backend as `null` until the runtime exposes

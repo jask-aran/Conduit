@@ -39,8 +39,9 @@ async function waitForRecordings(root, expectedPairs = 1) {
   while (Date.now() < deadline) {
     try {
       const files = await fs.readdir(root);
-      if (files.filter((file) => file.endsWith(".wav")).length >= expectedPairs
-        && files.filter((file) => file.endsWith(".json")).length >= expectedPairs) return files;
+      const published = files.filter((file) => !file.startsWith(".pending-"));
+      if (published.filter((file) => file.endsWith(".wav")).length >= expectedPairs
+        && published.filter((file) => file.endsWith(".json")).length >= expectedPairs) return files;
     } catch (error) {
       if (error.code !== "ENOENT") throw error;
     }
@@ -65,12 +66,33 @@ async function startUpstream(frames) {
 async function startDictationBridge({ upstreamPort, recordingStore = null, resolveDelayMs = 0, pins = null, observeVoiceActivity = null }) {
   const wss = new WebSocketServer({ noServer: true });
   let resolveCount = 0;
+  const observe = typeof observeVoiceActivity === "function"
+    ? observeVoiceActivity
+    : async (pcm) => {
+      const sampleCount = Math.floor(pcm.length / 2);
+      return {
+        type: "silero_vad_observation",
+        available: true,
+        status: "observed",
+        policy: { sampleRate: 16_000, frameSamples: 512, preRollMs: 0, hangoverMs: 0, trailingPaddingMs: 0 },
+        regions: [{
+          startSample: 0,
+          endSample: sampleCount,
+          submittedStartSample: 0,
+          submittedEndSample: sampleCount,
+          speechStartSample: 0,
+          speechEndSample: sampleCount,
+        }],
+        frames: [],
+        summary: { regionCount: 1, speechFrameCount: 1, maxProbability: 1, meanProbability: 1 },
+      };
+    };
   const stream = createDictationStream({
     wss,
     voiceRuntime: {
       pin: () => { if (pins) pins.count += 1; },
       unpin: () => { if (pins) pins.count = Math.max(0, pins.count - 1); },
-      ...(typeof observeVoiceActivity === "function" ? { observeVoiceActivity } : {}),
+      observeVoiceActivity: observe,
       resolve: async () => {
         resolveCount += 1;
         if (resolveDelayMs > 0) await new Promise((resolve) => setTimeout(resolve, resolveDelayMs));
@@ -436,6 +458,51 @@ test("dictation stores server PCM when transcription returns no text", async () 
   }
 });
 
+test("authoritative Silero keeps silence-only PCM out of ASR", async () => {
+  let upstreamRequests = 0;
+  const upstream = createServer((request, response) => {
+    upstreamRequests += 1;
+    request.resume();
+    request.on("end", () => {
+      response.writeHead(200, { "content-type": "text/event-stream" });
+      response.end();
+    });
+  });
+  upstream.listen(0, "127.0.0.1");
+  await listen(upstream);
+  const { bridge, origin } = await startDictationBridge({
+    upstreamPort: upstream.address().port,
+    observeVoiceActivity: async (pcm) => ({
+      type: "silero_vad_observation",
+      available: true,
+      status: "observed",
+      sampleCount: pcm.length / 2,
+      regions: [],
+      frames: [],
+      summary: { regionCount: 0, speechFrameCount: 0, maxProbability: 0.01, meanProbability: 0.001 },
+    }),
+  });
+  const client = new WebSocket(`${origin}/dictation`);
+  const next = messageQueue(client);
+  try {
+    await new Promise((resolve, reject) => { client.once("open", resolve); client.once("error", reject); });
+    await next((event) => event.type === "ready");
+    client.send(Buffer.alloc(32_000), { binary: true });
+    client.send(JSON.stringify({ type: "stop", audioBytesSent: 32_000 }));
+    const completed = await next((event) => event.type === "completed");
+    assert.equal(completed.text, "");
+    assert.equal(completed.speech.detector, "silero_vad");
+    assert.equal(completed.speech.detected, false);
+    assert.equal(completed.diagnostics.server.inference.segmentCount, 0);
+    assert.equal(upstreamRequests, 0);
+  } finally {
+    client.terminate();
+    await new Promise((resolve) => setTimeout(resolve, 25));
+    await new Promise((resolve) => bridge.close(resolve));
+    await new Promise((resolve) => upstream.close(resolve));
+  }
+});
+
 function pcmWith(parts) {
   return Buffer.concat(parts.map(({ samples, level }) => {
     const buffer = Buffer.alloc(samples * 2);
@@ -444,7 +511,7 @@ function pcmWith(parts) {
   }));
 }
 
-test("shadow Silero observation archives proposed ranges without changing the heuristic ASR path", async () => {
+test("authoritative Silero observation submits its padded ranges", async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-voice-vad-shadow-"));
   const recordingsRoot = path.join(root, "recordings");
   const observation = {
@@ -500,8 +567,8 @@ test("shadow Silero observation archives proposed ranges without changing the he
     assert.equal(completed.text, "before after");
     assert.equal(upstreamRequests, 2);
     assert.deepEqual(completed.diagnostics.server.inference.boundaries, [
-      { index: 0, startSample: 0, endSample: 16_000, startMs: 0, endMs: 1_000, durationMs: 1_000 },
-      { index: 1, startSample: 56_000, endSample: 72_000, startMs: 3_500, endMs: 4_500, durationMs: 1_000 },
+      { index: 0, startSample: 0, endSample: 19_840, startMs: 0, endMs: 1_240, durationMs: 1_240, vadRegionIndices: [0] },
+      { index: 1, startSample: 52_160, endSample: 72_000, startMs: 3_260, endMs: 4_500, durationMs: 1_240, vadRegionIndices: [1] },
     ]);
     assert.deepEqual(completed.diagnostics.server.inference.sileroObservation.regions, observation.regions);
     const files = await waitForRecordings(recordingsRoot);
@@ -514,6 +581,56 @@ test("shadow Silero observation archives proposed ranges without changing the he
     await new Promise((resolve) => bridge.close(resolve));
     await new Promise((resolve) => upstream.close(resolve));
     await fs.rm(root, { recursive: true, force: true });
+  }
+});
+
+test("authoritative Silero submits a valid speech range shorter than 500 ms", async () => {
+  const bodies = [];
+  const upstream = createServer((request, response) => {
+    const chunks = [];
+    request.on("data", (chunk) => chunks.push(chunk));
+    request.on("end", () => {
+      bodies.push(Buffer.concat(chunks));
+      response.writeHead(200, { "content-type": "text/event-stream" });
+      response.end("event: transcript.text.done\ndata: {\"type\":\"transcript.text.done\",\"text\":\"short word\"}\n\n");
+    });
+  });
+  upstream.listen(0, "127.0.0.1");
+  await listen(upstream);
+  const audio = pcmWith([{ samples: 8_000, level: 0 }, { samples: 8_000, level: 0.1 }]);
+  const { bridge, origin } = await startDictationBridge({
+    upstreamPort: upstream.address().port,
+    observeVoiceActivity: async () => ({
+      type: "silero_vad_observation",
+      available: true,
+      status: "observed",
+      regions: [{
+        submittedStartSample: 15_000,
+        submittedEndSample: 16_200,
+        speechStartSample: 15_200,
+        speechEndSample: 16_000,
+      }],
+      frames: [],
+      summary: { regionCount: 1, speechFrameCount: 2, maxProbability: 0.99, meanProbability: 0.8 },
+    }),
+  });
+  const client = new WebSocket(`${origin}/dictation`);
+  const next = messageQueue(client);
+  try {
+    await new Promise((resolve, reject) => { client.once("open", resolve); client.once("error", reject); });
+    await next((event) => event.type === "ready");
+    for (let offset = 0; offset < audio.length; offset += 5_120) client.send(audio.subarray(offset, offset + 5_120), { binary: true });
+    client.send(JSON.stringify({ type: "stop", audioBytesSent: audio.length }));
+    const completed = await next((event) => event.type === "completed");
+    assert.equal(completed.text, "short word");
+    assert.equal(bodies.length, 1);
+    assert.equal(bodies[0].readUInt32LE(bodies[0].indexOf("RIFF") + 40), 2_000);
+    assert.equal(completed.diagnostics.server.inference.boundaries[0].durationMs, 63);
+  } finally {
+    client.terminate();
+    await new Promise((resolve) => setTimeout(resolve, 25));
+    await new Promise((resolve) => bridge.close(resolve));
+    await new Promise((resolve) => upstream.close(resolve));
   }
 });
 
@@ -622,7 +739,20 @@ test("dictation bridge joins multi-segment transcripts into one completed text",
   });
   upstream.listen(0, "127.0.0.1");
   await listen(upstream);
-  const { bridge, origin } = await startDictationBridge({ upstreamPort: upstream.address().port });
+  const { bridge, origin } = await startDictationBridge({
+    upstreamPort: upstream.address().port,
+    observeVoiceActivity: async () => ({
+      type: "silero_vad_observation",
+      available: true,
+      status: "observed",
+      regions: [
+        { submittedStartSample: 0, submittedEndSample: 16_000, speechStartSample: 0, speechEndSample: 16_000 },
+        { submittedStartSample: 56_000, submittedEndSample: 72_000, speechStartSample: 56_000, speechEndSample: 72_000 },
+      ],
+      frames: [],
+      summary: { regionCount: 2, speechFrameCount: 2, maxProbability: 1, meanProbability: 1 },
+    }),
+  });
   const client = new WebSocket(`${origin}/dictation`);
   const next = messageQueue(client);
   try {

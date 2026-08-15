@@ -1,4 +1,5 @@
 import { performance } from "node:perf_hooks";
+import { selectSileroVadRanges } from "./voice-vad.js";
 
 const DEFAULT_LIMITS = Object.freeze({
   maxSessions: 2,
@@ -10,6 +11,7 @@ const DEFAULT_LIMITS = Object.freeze({
   finalizationBaseMs: 30_000,
   finalizationMaxMs: 600_000,
   finalizationDefaultMultiplier: 12,
+  maxSegments: 16,
 });
 
 // Local full-precision models need much more CPU time than a remote streaming
@@ -388,6 +390,65 @@ function recordAnalysis(diagnostics, analysis, durationMs) {
   if (!diagnostics.analysis) diagnostics.analysis = analysis;
 }
 
+function gapsForSegments(segments, sampleCount) {
+  const gaps = [];
+  let cursor = 0;
+  for (const [startSample, endSample] of segments) {
+    if (startSample > cursor) gaps.push([cursor, startSample]);
+    cursor = Math.max(cursor, endSample);
+  }
+  if (cursor < sampleCount) gaps.push([cursor, sampleCount]);
+  return gaps;
+}
+
+function authoritativeAnalysis(selection, sampleCount) {
+  const segments = Array.isArray(selection?.segments) ? selection.segments : [];
+  const silentRuns = selection?.available ? gapsForSegments(segments, sampleCount) : [];
+  return {
+    source: "silero_authoritative",
+    available: selection?.available === true,
+    status: selection?.status || "unavailable",
+    sampleCount,
+    segments,
+    regionIndices: Array.isArray(selection?.regionIndices) ? selection.regionIndices : [],
+    speechSamples: Math.max(0, Number(selection?.speechSamples) || 0),
+    silentSamples: silentRuns.reduce((total, [startSample, endSample]) => total + endSample - startSample, 0),
+    silenceRuns: silentRuns,
+    windowSamples: Number(selection?.policy?.frameSamples) || 512,
+    silenceRms: null,
+    silenceMs: null,
+    minSegmentMs: 0,
+    maxSegments: selection?.segmentGuard?.maxSegments || 16,
+    sourceRegionCount: selection?.sourceRegionCount || 0,
+    normalizedRegionCount: selection?.normalizedRegionCount || 0,
+    segmentGuard: selection?.segmentGuard || null,
+    policy: selection?.policy || null,
+  };
+}
+
+function externalAnalysis(pcmSampleCount) {
+  return {
+    source: "external_policy",
+    available: true,
+    status: "bypassed",
+    sampleCount: pcmSampleCount,
+    segments: [[0, pcmSampleCount]],
+    regionIndices: [],
+    speechSamples: pcmSampleCount,
+    silentSamples: 0,
+    silenceRuns: [],
+    windowSamples: null,
+    silenceRms: null,
+    silenceMs: null,
+    minSegmentMs: 0,
+    maxSegments: null,
+    sourceRegionCount: null,
+    normalizedRegionCount: null,
+    segmentGuard: null,
+    policy: null,
+  };
+}
+
 function markInferenceStart(diagnostics) {
   if (diagnostics.inferenceStartedAt !== null) return;
   diagnostics.inferenceQueuedAt ||= performance.now();
@@ -403,6 +464,17 @@ function markInferenceComplete(diagnostics) {
 }
 
 function speechDecision(diagnostics) {
+  if (diagnostics.analysis?.source === "silero_authoritative") {
+    return {
+      detector: "silero_vad",
+      detected: diagnostics.analysis.segments.length > 0,
+      available: diagnostics.analysis.available,
+      status: diagnostics.analysis.status,
+    };
+  }
+  if (diagnostics.analysis?.source === "external_policy") {
+    return { detector: "external_policy", detected: true, available: true, status: "bypassed" };
+  }
   if (!diagnostics.signal.sampleCount) return { detector: "unclassified", detected: false };
   if (diagnostics.signal.peak === 0) return { detector: "digital_zero", detected: false };
   return { detector: "unclassified", detected: true };
@@ -419,6 +491,7 @@ function serializeServerDiagnostics(diagnostics) {
     startMs: Math.round(startSample / 16),
     endMs: Math.round(endSample / 16),
     durationMs: Math.round((endSample - startSample) / 16),
+    vadRegionIndices: analysis?.regionIndices?.[index] || null,
   }));
   const silentBoundaries = silenceRuns.map(([startSample, endSample], index) => ({
     index,
@@ -428,7 +501,9 @@ function serializeServerDiagnostics(diagnostics) {
     endMs: Math.round(endSample / 16),
     durationMs: Math.round((endSample - startSample) / 16),
   }));
-  const speechSamples = analysis ? Math.max(0, analysis.sampleCount - analysis.silentSamples) : 0;
+  const speechSamples = analysis?.source === "silero_authoritative"
+    ? analysis.speechSamples
+    : analysis ? Math.max(0, analysis.sampleCount - analysis.silentSamples) : 0;
   const submittedSegmentSamples = segments.reduce((total, [start, end]) => total + end - start, 0);
   return {
     schemaVersion: DIAGNOSTIC_SCHEMA_VERSION,
@@ -491,16 +566,27 @@ function serializeServerDiagnostics(diagnostics) {
       boundaries: segmentBoundaries,
       silenceRuns: silentBoundaries,
       sileroObservation: diagnostics.vadObservation,
-      vadPolicy: {
-        type: "rms_threshold",
-        windowMs: analysis ? analysis.windowSamples / 16 : SEGMENT_WINDOW_SAMPLES / 16,
-        silenceRms: analysis?.silenceRms ?? SEGMENT_SILENCE_RMS,
-        silenceMs: analysis?.silenceMs ?? SEGMENT_SILENCE_MS,
-        minSegmentMs: analysis?.minSegmentMs ?? SEGMENT_MIN_SEGMENT_MS,
-        mergeActiveMs: SEGMENT_MERGE_ACTIVE_MS,
-        maxSegments: analysis?.maxSegments ?? SEGMENT_MAX_SEGMENTS,
-        speechPaddingMs: 0,
-      },
+      segmentGuard: analysis?.segmentGuard || null,
+      vadPolicy: analysis?.source === "silero_authoritative"
+        ? {
+          type: "silero_authoritative",
+          ...(analysis.policy || {}),
+          maxSegments: analysis.maxSegments,
+          sourceRegionCount: analysis.sourceRegionCount,
+          normalizedRegionCount: analysis.normalizedRegionCount,
+        }
+        : analysis?.source === "external_policy"
+          ? { type: "external_policy" }
+          : {
+            type: "rms_threshold",
+            windowMs: analysis ? analysis.windowSamples / 16 : SEGMENT_WINDOW_SAMPLES / 16,
+            silenceRms: analysis?.silenceRms ?? SEGMENT_SILENCE_RMS,
+            silenceMs: analysis?.silenceMs ?? SEGMENT_SILENCE_MS,
+            minSegmentMs: analysis?.minSegmentMs ?? SEGMENT_MIN_SEGMENT_MS,
+            mergeActiveMs: SEGMENT_MERGE_ACTIVE_MS,
+            maxSegments: analysis?.maxSegments ?? SEGMENT_MAX_SEGMENTS,
+            speechPaddingMs: 0,
+          },
     },
   };
 }
@@ -587,24 +673,46 @@ async function readSse(response, emit, limits) {
   if (pending.trim()) processFrame(pending);
 }
 
+function resolveInferenceAnalysis(pcm, byteLength, segmentation, limits, diagnostics) {
+  if (segmentation?.mode === "silero_authoritative") {
+    const analysis = segmentation.analysis || authoritativeAnalysis(
+      {
+        available: true,
+        status: "speech",
+        segments: segmentation.segments,
+      },
+      Math.floor(byteLength / 2),
+    );
+    if (diagnostics) diagnostics.analysis = analysis;
+    return analysis;
+  }
+  if (segmentation?.mode === "external_policy") {
+    const analysis = externalAnalysis(Math.floor(byteLength / 2));
+    if (diagnostics) diagnostics.analysis = analysis;
+    return analysis;
+  }
+  const preprocessingStartedAt = performance.now();
+  const analysis = analyzeSilence(pcm, byteLength, limits);
+  if (diagnostics) recordAnalysis(diagnostics, analysis, performance.now() - preprocessingStartedAt);
+  return analysis;
+}
+
 export function createHttpAdapter(config, emit, limits, fetchImpl, diagnostics = null) {
   const chunks = [];
   let byteLength = 0;
   const controller = new AbortController();
-  const transcribe = async () => {
+  const transcribe = async ({ segmentation = null } = {}) => {
     if (!byteLength || controller.signal.aborted) return { final: false, text: "" };
     if (diagnostics) markInferenceQueued(diagnostics);
     const pcm = Buffer.concat(chunks, byteLength);
-    const preprocessingStartedAt = performance.now();
-    const analysis = analyzeSilence(pcm, byteLength, limits);
-    if (diagnostics) recordAnalysis(diagnostics, analysis, performance.now() - preprocessingStartedAt);
+    const analysis = resolveInferenceAnalysis(pcm, byteLength, segmentation, limits, diagnostics);
     const segments = analysis.segments;
     let final = false;
     let text = "";
     for (let index = 0; index < segments.length; index += 1) {
       const [startSample, endSample] = segments[index];
       const segmentBytes = (endSample - startSample) * 2;
-      const segmentChunks = segments.length > 1 ? [pcm.subarray(startSample * 2, endSample * 2)] : [pcm];
+      const segmentChunks = [pcm.subarray(startSample * 2, endSample * 2)];
       const prefix = text;
       let segmentText = "";
       const form = new FormData();
@@ -641,9 +749,9 @@ export function createHttpAdapter(config, emit, limits, fetchImpl, diagnostics =
       if (byteLength > limits.maxAudioBytes) throw dictationError("dictation_too_long", "Voice dictation reached the server audio limit", 413);
       chunks.push(Buffer.isBuffer(data) ? data : Buffer.from(data));
     },
-    async stop() {
+    async stop(options = {}) {
       try {
-        const result = await transcribe();
+        const result = await transcribe(options);
         emit({ type: "adapter_closed", ...result });
       } catch (error) {
         if (error.name !== "AbortError") emit({ type: "error", code: error.code || "asr_request_failed", message: error.message });
@@ -656,17 +764,15 @@ export function createHttpAdapter(config, emit, limits, fetchImpl, diagnostics =
 function createSnapshotAdapter(emit, limits, transcribe, diagnostics = null) {
   const chunks = [];
   let byteLength = 0;
-  const run = async () => {
+  const run = async ({ segmentation = null } = {}) => {
     if (!byteLength) return { final: false, text: "" };
     if (diagnostics) markInferenceQueued(diagnostics);
     const snapshot = Buffer.concat(chunks, byteLength);
-    const preprocessingStartedAt = performance.now();
-    const analysis = analyzeSilence(snapshot, byteLength, limits);
-    if (diagnostics) recordAnalysis(diagnostics, analysis, performance.now() - preprocessingStartedAt);
+    const analysis = resolveInferenceAnalysis(snapshot, byteLength, segmentation, limits, diagnostics);
     const segments = analysis.segments;
     let text = "";
     for (const [startSample, endSample] of segments) {
-      const piece = segments.length > 1 ? snapshot.subarray(startSample * 2, endSample * 2) : snapshot;
+      const piece = snapshot.subarray(startSample * 2, endSample * 2);
       if (diagnostics) markInferenceStart(diagnostics);
       const pieceText = String(await transcribe(piece) || "").trim();
       if (pieceText) text = appendText(text, pieceText);
@@ -683,9 +789,9 @@ function createSnapshotAdapter(emit, limits, transcribe, diagnostics = null) {
       if (byteLength > limits.maxAudioBytes) throw dictationError("dictation_too_long", "Voice dictation reached the server audio limit", 413);
       chunks.push(Buffer.isBuffer(data) ? data : Buffer.from(data));
     },
-    async stop() {
+    async stop(options = {}) {
       try {
-        const result = await run();
+        const result = await run(options);
         emit({ type: "adapter_closed", ...result });
       } catch (error) { emit({ type: "error", code: error.code || "asr_request_failed", message: error.message }); }
     },
@@ -771,6 +877,12 @@ export function createDictationStream({ wss, voiceRuntime, recordingStore = null
       client: diagnostics.client,
       server: serializeServerDiagnostics(diagnostics),
     });
+    const setAuthoritativeVadAnalysis = (observation) => {
+      const sampleCount = Math.floor(audioBytes / 2);
+      const selection = selectSileroVadRanges(observation, sampleCount, { maxSegments: limits.maxSegments });
+      diagnostics.analysis = authoritativeAnalysis(selection, sampleCount);
+      return selection;
+    };
     const freezeAcceptedPcm = () => {
       if (!finalPcm) finalPcm = Buffer.from(pcmAccumulator.view());
       return finalPcm;
@@ -842,6 +954,7 @@ export function createDictationStream({ wss, voiceRuntime, recordingStore = null
           regions: [],
           frames: [],
         };
+        setAuthoritativeVadAnalysis(diagnostics.vadObservation);
         vadObservationPromise = Promise.resolve(diagnostics.vadObservation);
         return vadObservationPromise;
       }
@@ -860,6 +973,7 @@ export function createDictationStream({ wss, voiceRuntime, recordingStore = null
             regions: [],
             frames: [],
           };
+          setAuthoritativeVadAnalysis(diagnostics.vadObservation);
           return diagnostics.vadObservation;
         })
         .catch((error) => {
@@ -874,6 +988,7 @@ export function createDictationStream({ wss, voiceRuntime, recordingStore = null
             regions: [],
             frames: [],
           };
+          setAuthoritativeVadAnalysis(diagnostics.vadObservation);
           return diagnostics.vadObservation;
         });
       return vadObservationPromise;
@@ -974,12 +1089,13 @@ export function createDictationStream({ wss, voiceRuntime, recordingStore = null
       stopReason = reason;
       stoppedAt = Date.now();
       diagnostics.stopAt = performance.now();
-      startVadObservation();
+      const vadPromise = startVadObservation();
       void (async () => {
         try {
           if (!adapter) send({ type: "waiting_for_transcription" });
           const current = adapter || await adapterAvailable;
           if (!current || completed) return;
+          await vadPromise;
           const finalizationTimeoutMs = calculateFinalizationTimeoutMs({
             audioBytes,
             adapter: runtimeMetadata.adapter,
@@ -996,7 +1112,12 @@ export function createDictationStream({ wss, voiceRuntime, recordingStore = null
           finalTimer.unref?.();
           deadlineTimer = setTimeout(() => { deadlinePassed = true; send({ type: "settlement_deadline", deadlineMs: limits.finalDeadlineMs }); }, limits.finalDeadlineMs);
           deadlineTimer.unref?.();
-          await current.stop();
+          const segmentation = {
+            mode: "silero_authoritative",
+            segments: diagnostics.analysis?.segments || [],
+            analysis: diagnostics.analysis,
+          };
+          await current.stop({ segmentation });
         } catch (error) { fail(error); }
       })();
     };
