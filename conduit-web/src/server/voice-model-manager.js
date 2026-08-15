@@ -6,6 +6,7 @@ import path from "node:path";
 import { Readable, Transform } from "node:stream";
 import { pipeline as streamPipeline } from "node:stream/promises";
 import { getVoiceModelManifest, ONNXRUNTIME_VERSION } from "./voice-model-manifests.js";
+import { SileroVad, VoiceVadObservationQueue } from "./voice-vad.js";
 
 const MIB = 1024 * 1024;
 export const LOCAL_VOICE_MODELS = Object.freeze([
@@ -242,7 +243,7 @@ function pcmFloat32(buffer) {
 export const DEFAULT_VOICE_MODEL_IDLE_TTL_MS = 5 * 60 * 1000;
 
 export class VoiceModelManager {
-  constructor({ root, fetchImpl = fetch, manifestResolver = packageManifest, runtimeExtractor = extractRuntime, transformersLoader = defaultTransformersLoader, downloadRetries = DOWNLOAD_RETRIES, downloadRetryBaseMs = DOWNLOAD_RETRY_BASE_MS, downloadConcurrency = 3, idleTtlMs = DEFAULT_VOICE_MODEL_IDLE_TTL_MS } = {}) {
+  constructor({ root, fetchImpl = fetch, manifestResolver = packageManifest, runtimeExtractor = extractRuntime, transformersLoader = defaultTransformersLoader, downloadRetries = DOWNLOAD_RETRIES, downloadRetryBaseMs = DOWNLOAD_RETRY_BASE_MS, downloadConcurrency = 3, idleTtlMs = DEFAULT_VOICE_MODEL_IDLE_TTL_MS, vad = null, vadModelPath = null, vadSessionFactory = undefined } = {}) {
     if (!root) throw new Error("VoiceModelManager requires a root directory");
     this.root = path.resolve(root);
     this.fetchImpl = fetchImpl;
@@ -267,6 +268,8 @@ export class VoiceModelManager {
     this.transcriptionTail = Promise.resolve();
     this.lastErrors = new Map();
     this.progress = { phase: "idle", current: "", completedBytes: 0, totalBytes: 0 };
+    this.vad = vad || new SileroVad({ root: this.root, modelPath: vadModelPath, sessionFactory: vadSessionFactory });
+    this.vadQueue = new VoiceVadObservationQueue({ observer: (pcm, options) => this.vad.observe(pcm, options) });
   }
 
   clearIdleTimer() {
@@ -490,6 +493,10 @@ export class VoiceModelManager {
     return String(output?.text || "").trim();
   }
 
+  async observeVoiceActivity(pcm) {
+    return this.vadQueue.enqueue(pcm);
+  }
+
   async test(modelId) {
     const model = requiredModel(modelId);
     const resolved = await this.ensureRunning(model.id);
@@ -509,6 +516,8 @@ export class VoiceModelManager {
     const startup = this.startPromise;
     if (startup) await startup.catch(() => {});
     await this.stopActive();
+    this.vadQueue.stop();
+    await this.vad?.stop?.();
   }
 
   async stopActive() {

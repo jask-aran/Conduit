@@ -34,6 +34,21 @@ function messageQueue(socket) {
   };
 }
 
+async function waitForRecordings(root, expectedPairs = 1) {
+  const deadline = Date.now() + 2_000;
+  while (Date.now() < deadline) {
+    try {
+      const files = await fs.readdir(root);
+      if (files.filter((file) => file.endsWith(".wav")).length >= expectedPairs
+        && files.filter((file) => file.endsWith(".json")).length >= expectedPairs) return files;
+    } catch (error) {
+      if (error.code !== "ENOENT") throw error;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  return fs.readdir(root);
+}
+
 async function startUpstream(frames) {
   const server = createServer((request, response) => {
     response.writeHead(200, { "content-type": "text/event-stream" });
@@ -47,7 +62,7 @@ async function startUpstream(frames) {
   return server;
 }
 
-async function startDictationBridge({ upstreamPort, recordingStore = null, resolveDelayMs = 0, pins = null }) {
+async function startDictationBridge({ upstreamPort, recordingStore = null, resolveDelayMs = 0, pins = null, observeVoiceActivity = null }) {
   const wss = new WebSocketServer({ noServer: true });
   let resolveCount = 0;
   const stream = createDictationStream({
@@ -55,6 +70,7 @@ async function startDictationBridge({ upstreamPort, recordingStore = null, resol
     voiceRuntime: {
       pin: () => { if (pins) pins.count += 1; },
       unpin: () => { if (pins) pins.count = Math.max(0, pins.count - 1); },
+      ...(typeof observeVoiceActivity === "function" ? { observeVoiceActivity } : {}),
       resolve: async () => {
         resolveCount += 1;
         if (resolveDelayMs > 0) await new Promise((resolve) => setTimeout(resolve, resolveDelayMs));
@@ -188,6 +204,10 @@ test("dictation accepts PCM during cold resolve and includes it after stop", asy
     client.send(Buffer.alloc(1_280, 7), { binary: true });
     client.send(Buffer.alloc(640, 8), { binary: true });
     client.send(JSON.stringify({ type: "stop", audioBytesSent: 1_920 }));
+    const waiting = await next((event) => event.type === "waiting_for_transcription");
+    assert.equal(waiting.type, "waiting_for_transcription");
+    const runtimeReady = await next((event) => event.type === "runtime_ready");
+    assert.equal(runtimeReady.inferenceMode, "batch");
     const completed = await next((event) => event.type === "completed", 5_000);
     assert.equal(completed.text, "cold start audio");
     assert.equal(completed.audioBytes, 1_920);
@@ -203,10 +223,50 @@ test("dictation accepts PCM during cold resolve and includes it after stop", asy
   }
 });
 
-test("dictation surfaces resolve failures after early ready", async () => {
+test("slow archive settlement does not delay completed transcript delivery", async () => {
+  const upstream = await startUpstream([
+    { event: "transcript.text.done", data: { type: "transcript.text.done", text: "archive is asynchronous" } },
+  ]);
+  let archiveFinished = false;
+  const recordingStore = {
+    async save(options) {
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      archiveFinished = true;
+      return { id: "slow-archive", ...options };
+    },
+    async updateMetadata() {},
+  };
+  const { bridge, origin } = await startDictationBridge({ upstreamPort: upstream.address().port, recordingStore });
+  const client = new WebSocket(`${origin}/dictation`);
+  const next = messageQueue(client);
+  try {
+    await new Promise((resolve, reject) => { client.once("open", resolve); client.once("error", reject); });
+    await next((event) => event.type === "ready");
+    client.send(Buffer.alloc(32_000, 7), { binary: true });
+    const startedAt = Date.now();
+    client.send(JSON.stringify({ type: "stop", audioBytesSent: 32_000 }));
+    const completed = await next((event) => event.type === "completed");
+    assert.equal(completed.text, "archive is asynchronous");
+    assert.ok(Date.now() - startedAt < 150);
+    assert.equal(archiveFinished, false);
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    assert.equal(archiveFinished, true);
+  } finally {
+    client.terminate();
+    await new Promise((resolve) => setTimeout(resolve, 25));
+    await new Promise((resolve) => bridge.close(resolve));
+    await new Promise((resolve) => upstream.close(resolve));
+  }
+});
+
+test("dictation surfaces resolve failures after early ready and archives received PCM", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-voice-stream-failure-"));
+  const recordingsRoot = path.join(root, "recordings");
+  const recordingStore = new VoiceRecordingStore({ root: recordingsRoot });
   const wss = new WebSocketServer({ noServer: true });
   const stream = createDictationStream({
     wss,
+    recordingStore,
     voiceRuntime: {
       resolve: async () => {
         await new Promise((resolve) => setTimeout(resolve, 20));
@@ -227,10 +287,21 @@ test("dictation surfaces resolve failures after early ready", async () => {
     const error = await next((event) => event.type === "error");
     assert.equal(error.code, "voice_model_not_installed");
     assert.match(error.message, /Install the model first/);
+    await new Promise((resolve) => setTimeout(resolve, 25));
+    const files = await waitForRecordings(recordingsRoot);
+    assert.equal(files.filter((file) => file.endsWith(".wav")).length, 1);
+    assert.equal(files.filter((file) => file.endsWith(".json")).length, 1);
+    const metadataFile = files.find((file) => file.endsWith(".json"));
+    const metadata = JSON.parse(await fs.readFile(path.join(recordingsRoot, metadataFile), "utf8"));
+    assert.equal(metadata.transcriptionStatus, "failed");
+    assert.equal(metadata.transcriptionError, "Install the model first");
+    assert.equal(metadata.serverAudioBytes, 320);
+    assert.equal((await fs.stat(path.join(recordingsRoot, metadata.audioFile))).size, 44 + 320);
   } finally {
     client.terminate();
     await new Promise((resolve) => setTimeout(resolve, 25));
     await new Promise((resolve) => bridge.close(resolve));
+    await fs.rm(root, { recursive: true, force: true });
   }
 });
 
@@ -256,29 +327,106 @@ test("successful dictation stores the server PCM with transcript diagnostics", a
     await next((event) => event.type === "ready");
     client.send(audible(4_000), { binary: true });
     client.send(audible(8_000), { binary: true });
-    client.send(JSON.stringify({ type: "stop", audioBytesSent: 32_000 }));
+    client.send(JSON.stringify({
+      type: "stop",
+      audioBytesSent: 32_000,
+      clientDiagnostics: {
+        schemaVersion: 5,
+        events: { firstWorkletPcmMs: 12, firstWebSocketSendMs: 14, stopRequestedMs: 30 },
+        durations: { captureStartupMs: 12, stopToFinalMs: 8 },
+        transport: { packetCount: 2, pcmBytes: 32_000, maxWebSocketBufferedBytes: 128 },
+        capture: {
+          profile: "raw",
+          sourceSampleRate: 48_000,
+          processingSampleRate: 16_000,
+          requestedConstraints: { audio: { deviceId: { exact: "mic-secret" } } },
+          effectiveTrackSettings: { deviceId: "mic-secret", groupId: "group-secret", sampleRate: 48_000 },
+          resampler: { method: "windowed-sinc-fir", inputSampleRate: 48_000, outputSampleRate: 16_000 },
+          preProcessing: { rms: 0.2, peak: 0.4, clipping: false, clippedSamples: 0, bands: { low: 0.1, mid: 0.05, high: 0.01 } },
+          postProcessing: { rms: 0.2, peak: 0.4, clipping: false, clippedSamples: 0, bands: { low: 0.08, mid: 0.04, high: 0.01 } },
+          workletGain: { current: 1, minimum: 1, maximum: 1 },
+        },
+      },
+    }));
     const completed = await next((event) => event.type === "completed");
     assert.equal(completed.text, "long pause test");
     assert.equal(completed.audioBytes, 32_000);
     assert.equal(completed.audioDurationMs, 1_000);
+    assert.equal(completed.inferenceMode, "batch");
+    assert.equal(completed.backend, "unreported");
+    assert.equal(completed.diagnostics.server.schemaVersion, 5);
+    assert.equal(completed.diagnostics.server.transport.packetCount, 2);
+    assert.equal(completed.diagnostics.server.inference.segmentCount, 1);
+    const finalClientDiagnostics = JSON.parse(JSON.stringify(completed.diagnostics.client));
+    finalClientDiagnostics.events.finalEventMs = 123;
+    finalClientDiagnostics.durations.stopToFinalMs = 8;
+    client.send(JSON.stringify({ type: "client_diagnostics", clientDiagnostics: finalClientDiagnostics }));
+    assert.equal((await next((event) => event.type === "client_diagnostics_ack")).accepted, true);
 
-    const files = await fs.readdir(recordingsRoot);
+    const files = await waitForRecordings(recordingsRoot);
     assert.equal(files.filter((file) => file.endsWith(".wav")).length, 1);
     assert.equal(files.filter((file) => file.endsWith(".json")).length, 1);
     const metadataFile = files.find((file) => file.endsWith(".json"));
     const metadata = JSON.parse(await fs.readFile(path.join(recordingsRoot, metadataFile), "utf8"));
+    assert.equal(metadata.schemaVersion, 2);
     assert.equal(metadata.transcript, "long pause test");
+    assert.equal(metadata.transcriptStatus, "non_empty");
+    assert.equal(metadata.transcriptObserved, true);
     assert.equal(metadata.completionReason, "stopped");
     assert.equal(metadata.clientAudioBytes, 32_000);
     assert.equal(metadata.serverAudioBytes, 32_000);
     assert.equal(metadata.serverAudioDurationMs, 1_000);
+    assert.equal(metadata.diagnostics.client.events.finalEventMs, 123);
+    assert.equal(metadata.diagnostics.client.durations.stopToFinalMs, 8);
     assert.equal(metadata.provider, "custom");
     assert.equal(metadata.adapter, "openai_audio_sse_v1");
+    assert.equal(metadata.diagnostics.client.capture.requestedConstraints.audio.deviceId.exact, "[redacted]");
+    assert.equal(metadata.diagnostics.client.capture.effectiveTrackSettings.deviceId, "[redacted]");
+    assert.equal(metadata.diagnostics.client.capture.effectiveTrackSettings.groupId, "[redacted]");
+    assert.equal(metadata.diagnostics.client.capture.profile, "raw");
+    assert.equal(metadata.diagnostics.client.capture.resampler.method, "windowed-sinc-fir");
+    assert.equal(metadata.diagnostics.client.capture.postProcessing.bands, null);
+    assert.equal(typeof metadata.diagnostics.server.durations.archiveMs, "number");
+    assert.equal(JSON.stringify(metadata).includes("mic-secret"), false);
     assert.equal(metadata.audioFile, metadataFile.replace(/\.json$/, ".wav"));
     const wav = await fs.readFile(path.join(recordingsRoot, metadata.audioFile));
     assert.equal(wav.length, 44 + 32_000);
     assert.equal(wav.readInt16LE(44), 4_000);
     assert.equal(wav.readInt16LE(44 + 16_000), 8_000);
+  } finally {
+    client.terminate();
+    await new Promise((resolve) => setTimeout(resolve, 25));
+    await new Promise((resolve) => bridge.close(resolve));
+    await new Promise((resolve) => upstream.close(resolve));
+    await fs.rm(root, { recursive: true, force: true });
+  }
+});
+
+test("dictation stores server PCM when transcription returns no text", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-voice-stream-empty-"));
+  const recordingsRoot = path.join(root, "recordings");
+  const upstream = await startUpstream([]);
+  const recordingStore = new VoiceRecordingStore({ root: recordingsRoot });
+  const { bridge, origin } = await startDictationBridge({ upstreamPort: upstream.address().port, recordingStore });
+  const client = new WebSocket(`${origin}/dictation`);
+  const next = messageQueue(client);
+  try {
+    await new Promise((resolve, reject) => { client.once("open", resolve); client.once("error", reject); });
+    await next((event) => event.type === "ready");
+    client.send(Buffer.alloc(32_000, 11), { binary: true });
+    client.send(JSON.stringify({ type: "stop", audioBytesSent: 32_000 }));
+    const completed = await next((event) => event.type === "completed");
+    assert.equal(completed.text, "");
+    assert.equal(completed.audioBytes, 32_000);
+    const files = await waitForRecordings(recordingsRoot);
+    assert.equal(files.filter((file) => file.endsWith(".wav")).length, 1);
+    assert.equal(files.filter((file) => file.endsWith(".json")).length, 1);
+    const metadataFile = files.find((file) => file.endsWith(".json"));
+    const metadata = JSON.parse(await fs.readFile(path.join(recordingsRoot, metadataFile), "utf8"));
+    assert.equal(metadata.transcript, "");
+    assert.equal(metadata.transcriptStatus, "empty");
+    assert.equal(metadata.transcriptObserved, false);
+    assert.equal((await fs.stat(path.join(recordingsRoot, metadata.audioFile))).size, 44 + 32_000);
   } finally {
     client.terminate();
     await new Promise((resolve) => setTimeout(resolve, 25));
@@ -295,6 +443,79 @@ function pcmWith(parts) {
     return buffer;
   }));
 }
+
+test("shadow Silero observation archives proposed ranges without changing the heuristic ASR path", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-voice-vad-shadow-"));
+  const recordingsRoot = path.join(root, "recordings");
+  const observation = {
+    type: "silero_vad_observation",
+    available: true,
+    status: "observed",
+    model: { name: "silero_vad.onnx", revision: "test", sha256: "a".repeat(64), license: "MIT" },
+    deployment: { executionProvider: "cpu", unprivileged: true },
+    policy: { sampleRate: 16_000, frameSamples: 512, threshold: 0.5, preRollMs: 240, hangoverMs: 320, trailingPaddingMs: 240 },
+    sampleCount: 72_000,
+    frameCount: 141,
+    frames: [],
+    regions: [
+      { startSample: 0, endSample: 19_840, speechStartSample: 3_840, speechEndSample: 16_000 },
+      { startSample: 52_160, endSample: 72_000, speechStartSample: 56_000, speechEndSample: 68_160 },
+    ],
+    summary: { regionCount: 2, speechFrameCount: 50, maxProbability: 0.99, meanProbability: 0.32 },
+  };
+  const audio = pcmWith([
+    { samples: 16_000, level: 0.1 },
+    { samples: 40_000, level: 0 },
+    { samples: 16_000, level: 0.1 },
+  ]);
+  let upstreamRequests = 0;
+  const upstream = createServer((request, response) => {
+    request.resume();
+    request.on("end", () => {
+      upstreamRequests += 1;
+      const text = upstreamRequests === 1 ? "before" : "after";
+      response.writeHead(200, { "content-type": "text/event-stream" });
+      response.end(`event: transcript.text.done\ndata: ${JSON.stringify({ type: "transcript.text.done", text })}\n\n`);
+    });
+  });
+  upstream.listen(0, "127.0.0.1");
+  await listen(upstream);
+  const recordingStore = new VoiceRecordingStore({ root: recordingsRoot });
+  const { bridge, origin } = await startDictationBridge({
+    upstreamPort: upstream.address().port,
+    recordingStore,
+    observeVoiceActivity: async (pcm) => {
+      assert.equal(pcm.length, audio.length);
+      return observation;
+    },
+  });
+  const client = new WebSocket(`${origin}/dictation`);
+  const next = messageQueue(client);
+  try {
+    await new Promise((resolve, reject) => { client.once("open", resolve); client.once("error", reject); });
+    await next((event) => event.type === "ready");
+    for (let offset = 0; offset < audio.length; offset += 5_120) client.send(audio.subarray(offset, offset + 5_120), { binary: true });
+    client.send(JSON.stringify({ type: "stop", audioBytesSent: audio.length }));
+    const completed = await next((event) => event.type === "completed");
+    assert.equal(completed.text, "before after");
+    assert.equal(upstreamRequests, 2);
+    assert.deepEqual(completed.diagnostics.server.inference.boundaries, [
+      { index: 0, startSample: 0, endSample: 16_000, startMs: 0, endMs: 1_000, durationMs: 1_000 },
+      { index: 1, startSample: 56_000, endSample: 72_000, startMs: 3_500, endMs: 4_500, durationMs: 1_000 },
+    ]);
+    assert.deepEqual(completed.diagnostics.server.inference.sileroObservation.regions, observation.regions);
+    const files = await waitForRecordings(recordingsRoot);
+    const metadataFile = files.find((file) => file.endsWith(".json"));
+    const metadata = JSON.parse(await fs.readFile(path.join(recordingsRoot, metadataFile), "utf8"));
+    assert.deepEqual(metadata.diagnostics.server.inference.sileroObservation.regions, observation.regions);
+  } finally {
+    client.terminate();
+    await new Promise((resolve) => setTimeout(resolve, 25));
+    await new Promise((resolve) => bridge.close(resolve));
+    await new Promise((resolve) => upstream.close(resolve));
+    await fs.rm(root, { recursive: true, force: true });
+  }
+});
 
 test("splitSilence keeps recordings without a long pause as one segment", () => {
   const pcm = pcmWith([{ samples: 8_000, level: 0.1 }, { samples: 4_000, level: 0 }]);

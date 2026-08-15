@@ -6,7 +6,7 @@ const MAX_SECRET_LENGTH = 16 * 1024;
 const MAX_ENDPOINT_LENGTH = 2 * 1024;
 const HEADER_NAME = /^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/;
 
-export const DEFAULT_LOCAL_VOICE_MODEL = "parakeet-tdt-0.6b-v3-int8";
+export const DEFAULT_LOCAL_VOICE_MODEL = "whisper-tiny-en-q8";
 
 export const VOICE_ADAPTERS = Object.freeze([
   { id: "openai_audio_sse_v1", label: "OpenAI-compatible audio upload", transport: "http", description: "Uploads one in-memory WAV after stop and accepts JSON or transcript SSE events." },

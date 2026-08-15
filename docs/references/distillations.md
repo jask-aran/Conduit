@@ -127,6 +127,13 @@ Add an entry through `$tacit-knowledge` after explicit approval or validated rep
 - **Scope:** Composer voice dictation keyboard handling.
 - **Evidence:** Chrome treated `Ctrl+Shift+D` as bookmark-all-tabs when the page handler ran in the bubble phase. `test/browser/app.spec.js` verifies the captured chord does not reach a document listener or open another tab.
 
+### Keep mobile touch activation semantics explicit
+
+- **Type:** Gotcha.
+- **Rule:** Do not infer mobile push-to-talk behavior from the saved activation setting. The composer microphone button currently calls `toggleDictation()` for every tap; only the keyboard shortcut path handles push-to-talk keydown and keyup. A future touch push-to-talk control must implement press and release explicitly.
+- **Scope:** Mobile composer voice controls and future native-sized touch targets.
+- **Evidence:** `composer.tsx` routes the microphone button through `toggleDictation()` while its window key handlers branch on `push_to_talk`; the user accepted WP3 on mobile with this limitation deferred.
+
 ### Decouple microphone capture from ASR readiness
 
 - **Type:** Invariant.

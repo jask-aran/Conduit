@@ -1,5 +1,5 @@
 export const VOICE_DICTATION_STORAGE_KEY = "conduit:voice-dictation";
-export const DEFAULT_VOICE_DICTATION_SETTINGS = Object.freeze({ shortcut: "Ctrl+Shift+D", activation: "push_to_talk", autoSend: false, inputDeviceId: "" });
+export const DEFAULT_VOICE_DICTATION_SETTINGS = Object.freeze({ shortcut: "Ctrl+Shift+D", activation: "push_to_talk", autoSend: false, inputDeviceId: "", captureProfile: "raw", warmMicrophone: false });
 const LEGACY_DEFAULT_SHORTCUT = "Super+D";
 
 export const NO_SIGNAL_ERROR_MIN_DURATION_MS = 5_000;
@@ -77,6 +77,8 @@ export function loadVoiceDictationSettings(storage = globalThis.localStorage) {
       activation: normalizeActivation(stored?.activation),
       autoSend: stored?.autoSend === true,
       inputDeviceId: typeof stored?.inputDeviceId === "string" ? stored.inputDeviceId : "",
+      captureProfile: stored?.captureProfile === "processed" ? "processed" : "raw",
+      warmMicrophone: stored?.warmMicrophone === true,
     };
   } catch {
     return { ...DEFAULT_VOICE_DICTATION_SETTINGS };
@@ -89,6 +91,8 @@ export function saveVoiceDictationSettings(settings, storage = globalThis.localS
     activation: normalizeActivation(settings.activation),
     autoSend: settings.autoSend === true,
     inputDeviceId: typeof settings.inputDeviceId === "string" ? settings.inputDeviceId : "",
+    captureProfile: settings.captureProfile === "processed" ? "processed" : "raw",
+    warmMicrophone: settings.warmMicrophone === true,
   };
   storage?.setItem(VOICE_DICTATION_STORAGE_KEY, JSON.stringify(normalized));
   return normalized;

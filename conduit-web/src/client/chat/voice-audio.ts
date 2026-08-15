@@ -28,6 +28,7 @@ export interface AudioInputTestResult extends AudioSignalLevel {
 export interface AudioInputTestOptions {
   onLevel?: (level: AudioSignalLevel) => void;
   maxDurationMs?: number;
+  profile?: VoiceCaptureProfile;
 }
 
 export interface AudioInputTestSession {
@@ -41,6 +42,13 @@ export const MIN_AUDIO_SIGNAL_PEAK = 0.01;
 export const MAX_AUDIO_INPUT_TEST_DURATION_MS = 60_000;
 export const AUDIO_INPUT_TEST_STOP_GRACE_MS = 150;
 export const AUDIO_INPUT_PLAYBACK_UNSUPPORTED_MESSAGE = "Playback is unavailable in this browser. Live microphone testing still works.";
+export const VOICE_CAPTURE_PROFILES = ["raw", "processed"] as const;
+export type VoiceCaptureProfile = typeof VOICE_CAPTURE_PROFILES[number];
+export const DEFAULT_VOICE_CAPTURE_PROFILE: VoiceCaptureProfile = "raw";
+
+export function normalizeVoiceCaptureProfile(value: unknown): VoiceCaptureProfile {
+  return value === "processed" ? "processed" : DEFAULT_VOICE_CAPTURE_PROFILE;
+}
 
 export function hasAudioSignal(level: AudioSignalLevel) {
   return level.rms >= MIN_AUDIO_SIGNAL_RMS || level.peak >= MIN_AUDIO_SIGNAL_PEAK;
@@ -56,12 +64,14 @@ export function revokeAudioInputRecording(recording: AudioInputTestRecording | n
   URL.revokeObjectURL(recording.url);
 }
 
-export function audioInputConstraints(deviceId = ""): MediaStreamConstraints {
+export function audioInputConstraints(deviceId = "", profile: VoiceCaptureProfile = DEFAULT_VOICE_CAPTURE_PROFILE): MediaStreamConstraints {
+  const captureProfile = normalizeVoiceCaptureProfile(profile);
+  const processed = captureProfile === "processed";
   const audio: MediaTrackConstraints = {
     channelCount: { ideal: 1 },
-    echoCancellation: true,
-    noiseSuppression: true,
-    autoGainControl: true,
+    echoCancellation: { ideal: processed },
+    noiseSuppression: { ideal: processed },
+    autoGainControl: { ideal: processed },
   };
   if (deviceId) audio.deviceId = { exact: deviceId };
   return { audio, video: false };
@@ -215,7 +225,7 @@ export function startAudioInputTest(deviceId = "", options: AudioInputTestOption
       return recorderStopPromise;
     };
     try {
-      stream = await mediaDevices().getUserMedia(audioInputConstraints(deviceId));
+      stream = await mediaDevices().getUserMedia(audioInputConstraints(deviceId, options.profile));
       track = stream.getAudioTracks()[0] || null;
       const recorderSetup = startMediaRecorder(stream);
       if ("error" in recorderSetup) {

@@ -4592,8 +4592,12 @@ test("Ctrl+Shift+D captures in the page and buffers microphone audio until the s
     });
     window.__voiceShortcutBubbled = false;
     window.__voiceBinaryCount = 0;
+    window.__voiceAudioLengths = [];
+    window.__voiceReturnedBufferCount = 0;
     window.__voiceFrameKinds = [];
     window.__voiceStopFrame = null;
+    window.__voicePcmHandler = null;
+    window.__releaseVoicePcm = () => window.__voicePcmHandler?.({ data: { type: "pcm", buffer: new ArrayBuffer(640), rms: 0.1, peak: 0.2, sampleCount: 320 } });
     window.__voiceMetrics = null;
     window.addEventListener("conduit:voice-dictation-metrics", (event) => { window.__voiceMetrics = event.detail; });
     class VoiceWebSocket extends EventTarget {
@@ -4610,13 +4614,14 @@ test("Ctrl+Shift+D captures in the page and buffers microphone audio until the s
       send(payload) {
         if (payload instanceof ArrayBuffer) {
           window.__voiceBinaryCount += 1;
+          window.__voiceAudioLengths.push(payload.byteLength);
           window.__voiceFrameKinds.push("audio");
           return;
         }
         if (typeof payload !== "string" || JSON.parse(payload).type !== "stop") return;
         window.__voiceStopFrame = JSON.parse(payload);
         window.__voiceFrameKinds.push("stop");
-        queueMicrotask(() => this.onmessage?.({ data: JSON.stringify({ type: "completed", text: "buffered", final: true, finalWithinDeadline: true, settlementMs: 0, reason: "stopped", audioBytes: 4, audioDurationMs: 0, adapter: "test", provider: "test", model: "test" }) }));
+        queueMicrotask(() => this.onmessage?.({ data: JSON.stringify({ type: "completed", text: "buffered", final: true, finalWithinDeadline: true, settlementMs: 0, reason: "stopped", audioBytes: 1_280, audioDurationMs: 40, adapter: "test", provider: "test", model: "test" }) }));
       }
       close() { this.readyState = 3; this.dispatchEvent(new Event("close")); }
     }
@@ -4628,14 +4633,18 @@ test("Ctrl+Shift+D captures in the page and buffers microphone audio until the s
         Object.defineProperty(this.port, "onmessage", {
           get: () => handler,
           set: (next) => {
-            handler = next;
-            if (handler) queueMicrotask(() => handler({ data: { type: "pcm", buffer: new ArrayBuffer(2), rms: 0.1, peak: 0.2 } }));
+          handler = next;
+            if (handler) window.__voicePcmHandler = handler;
           },
         });
         this.port.postMessage = (message) => {
+          if (message?.type === "return_buffer") {
+            window.__voiceReturnedBufferCount += 1;
+            return;
+          }
           if (message?.type !== "flush") return;
           queueMicrotask(() => {
-            handler?.({ data: { type: "pcm", buffer: new ArrayBuffer(2), rms: 0.2, peak: 0.3 } });
+            handler?.({ data: { type: "pcm", buffer: new ArrayBuffer(640), rms: 0.2, peak: 0.3, sampleCount: 320 } });
             handler?.({ data: { type: "flush_complete" } });
           });
         };
@@ -4664,17 +4673,25 @@ test("Ctrl+Shift+D captures in the page and buffers microphone audio until the s
   await page.keyboard.down("Control");
   await page.keyboard.down("Shift");
   await page.keyboard.down("D");
-  await expect(page.locator(".dictation-trigger")).toHaveAttribute("data-state", "active");
+  const trigger = page.locator(".dictation-trigger");
   const isMobile = testInfo.project.name === "mobile-chromium";
+  await expect.poll(() => page.evaluate(() => Boolean(window.__voicePcmHandler))).toBe(true);
+  await expect(trigger).toHaveAttribute("data-state", "starting");
+  await expect(page.locator(".composer-status-state")).toContainText("Preparing microphone…");
+  const startingWaveform = page.locator(isMobile ? ".chat-status-waveform" : ".composer-status-waveform");
+  await expect(startingWaveform).toHaveCount(0);
+  await expect.poll(() => page.evaluate(() => window.__voiceBinaryCount)).toBe(0);
+  await page.evaluate(() => window.__releaseVoicePcm());
+  await expect(trigger).toHaveAttribute("data-state", "listening");
   const waveform = page.locator(isMobile ? ".chat-status-waveform" : ".composer-status-waveform");
   await expect(waveform).toBeVisible();
   await expect(waveform).toHaveAttribute("data-state", "listening");
   await expect(waveform).toHaveAttribute("data-variant", "compact");
   if (isMobile) {
     await expect(page.locator(".chat-status-label")).toHaveCount(0);
-    await expect(page.getByRole("button", { name: /Runtime status: Listening…/ })).toBeVisible();
+    await expect(page.getByRole("button", { name: /Runtime status: Recording · preparing transcription…/ })).toBeVisible();
   } else {
-    await expect(page.locator(".composer-status-state")).toContainText("Listening…");
+    await expect(page.locator(".composer-status-state")).toContainText("Recording · preparing transcription…");
   }
   const [waveformBox, statusBox] = await Promise.all([waveform.boundingBox(), isMobile ? page.locator(".chat-status-trigger").boundingBox() : page.locator(".composer-status-state").boundingBox()]);
   expect(waveformBox).not.toBeNull();
@@ -4694,13 +4711,32 @@ test("Ctrl+Shift+D captures in the page and buffers microphone audio until the s
   await page.keyboard.up("D");
   await page.keyboard.up("Shift");
   await page.keyboard.up("Control");
-  await expect(page.locator(".dictation-trigger")).toHaveAttribute("data-state", "stopping");
+  await expect(page.locator(".dictation-trigger")).toHaveAttribute("data-state", "finishing");
   await page.evaluate(() => window.__releaseVoiceReady());
   await expect.poll(() => page.evaluate(() => window.__voiceBinaryCount)).toBe(2);
+  await expect.poll(() => page.evaluate(() => window.__voiceAudioLengths)).toEqual([640, 640]);
+  await expect.poll(() => page.evaluate(() => window.__voiceReturnedBufferCount)).toBe(2);
   await expect.poll(() => page.evaluate(() => window.__voiceFrameKinds)).toEqual(["audio", "audio", "stop"]);
-  await expect.poll(() => page.evaluate(() => window.__voiceStopFrame)).toEqual({ type: "stop", audioBytesSent: 4 });
+  await expect.poll(() => page.evaluate(() => ({
+    type: window.__voiceStopFrame?.type,
+    audioBytesSent: window.__voiceStopFrame?.audioBytesSent,
+    diagnostics: window.__voiceStopFrame?.clientDiagnostics,
+  }))).toMatchObject({
+    type: "stop",
+    audioBytesSent: 1_280,
+    diagnostics: {
+      schemaVersion: 5,
+      clock: "performance.now",
+      transport: { packetCount: 2, pcmBytes: 1_280 },
+      capture: {
+        profile: "raw",
+        sourceSampleRate: 48000,
+        requestedConstraints: { audio: { echoCancellation: { ideal: false }, noiseSuppression: { ideal: false }, autoGainControl: { ideal: false } } },
+      },
+    },
+  });
   await expect(page.getByRole("textbox", { name: "Message Pi" })).toHaveValue("buffered ");
-  await expect.poll(() => page.evaluate(() => ({ reason: window.__voiceMetrics?.completionReason, sent: window.__voiceMetrics?.audioBytesSent, provider: window.__voiceMetrics?.provider, model: window.__voiceMetrics?.model }))).toEqual({ reason: "stopped", sent: 4, provider: "test", model: "test" });
+  await expect.poll(() => page.evaluate(() => ({ reason: window.__voiceMetrics?.completionReason, sent: window.__voiceMetrics?.audioBytesSent, provider: window.__voiceMetrics?.provider, model: window.__voiceMetrics?.model }))).toEqual({ reason: "stopped", sent: 1_280, provider: "test", model: "test" });
 });
 
 test("Toggle activation starts and stops on separate shortcut presses", async ({ page }) => {
@@ -4768,13 +4804,159 @@ test("Toggle activation starts and stops on separate shortcut presses", async ({
   };
 
   await pressShortcut();
-  await expect(trigger).toHaveAttribute("data-state", "active");
+  await expect(trigger).toHaveAttribute("data-state", "listening");
   await page.evaluate(() => window.dispatchEvent(new KeyboardEvent("keydown", { key: "d", ctrlKey: true, shiftKey: true, bubbles: true, cancelable: true, repeat: true })));
-  await expect(trigger).toHaveAttribute("data-state", "active");
+  await expect(trigger).toHaveAttribute("data-state", "listening");
   await expect.poll(() => page.evaluate(() => window.__toggleShortcutBubbled)).toBe(false);
   await pressShortcut();
   await expect(trigger).toHaveAttribute("data-state", "completed");
   await expect(composer).toHaveValue("toggle ");
+});
+
+test("healthy audio resources are reused between dictation sessions", async ({ page }) => {
+  await page.addInitScript(() => {
+    window.__voiceContextCount = 0;
+    window.__voiceWorkletLoadCount = 0;
+    window.__voicePermissionCount = 0;
+    class VoiceWebSocket extends EventTarget {
+      static OPEN = 1;
+      static CLOSING = 2;
+      constructor() {
+        super();
+        this.readyState = VoiceWebSocket.OPEN;
+        this.bufferedAmount = 0;
+        queueMicrotask(() => this.onmessage?.({ data: JSON.stringify({ type: "ready", sampleRate: 16_000, encoding: "pcm_s16le" }) }));
+      }
+      send(payload) {
+        if (typeof payload !== "string" || JSON.parse(payload).type !== "stop") return;
+        queueMicrotask(() => this.onmessage?.({ data: JSON.stringify({ type: "completed", text: "reuse", final: true, finalWithinDeadline: true, settlementMs: 1 }) }));
+      }
+      close() { this.readyState = 3; this.dispatchEvent(new Event("close")); }
+    }
+    class MockAudioWorkletNode {
+      constructor() {
+        let handler = null;
+        this.port = { postMessage: (message) => {
+          if (message?.type !== "flush") return;
+          const track = window.__voiceTrack;
+          if (track) {
+            track.readyState = "ended";
+            track.dispatchEvent(new Event("ended"));
+          }
+          queueMicrotask(() => handler?.({ data: { type: "flush_complete" } }));
+        } };
+        Object.defineProperty(this.port, "onmessage", {
+          get: () => handler,
+          set: (next) => {
+            handler = next;
+            if (handler) queueMicrotask(() => handler({ data: { type: "pcm", buffer: new ArrayBuffer(2), rms: 0.1, peak: 0.2 } }));
+          },
+        });
+        this.onprocessorerror = null;
+      }
+      connect() {}
+      disconnect() {}
+    }
+    class MockAudioContext {
+      constructor() { window.__voiceContextCount += 1; this.state = "running"; this.sampleRate = 48_000; this.destination = {}; this.audioWorklet = { addModule: async () => { window.__voiceWorkletLoadCount += 1; } }; this.onstatechange = null; }
+      resume() { this.state = "running"; return Promise.resolve(); }
+      close() { this.state = "closed"; return Promise.resolve(); }
+      createMediaStreamSource() { return { connect() {}, disconnect() {} }; }
+      createGain() { return { gain: { value: 1 }, connect() {}, disconnect() {} }; }
+    }
+    Object.defineProperty(window, "WebSocket", { configurable: true, value: VoiceWebSocket });
+    Object.defineProperty(window, "AudioContext", { configurable: true, value: MockAudioContext });
+    Object.defineProperty(window, "AudioWorkletNode", { configurable: true, value: MockAudioWorkletNode });
+    Object.defineProperty(navigator, "mediaDevices", { configurable: true, value: { getUserMedia: async () => {
+      window.__voicePermissionCount += 1;
+      const track = new EventTarget();
+      track.readyState = "live";
+      track.stop = () => { track.readyState = "ended"; track.dispatchEvent(new Event("ended")); };
+      window.__voiceTrack = track;
+      return { getAudioTracks: () => [track], getTracks: () => [track] };
+    } } });
+    localStorage.setItem("conduit:voice-dictation", JSON.stringify({ shortcut: "Ctrl+Shift+D", activation: "toggle", autoSend: false, inputDeviceId: "", warmMicrophone: false }));
+  });
+
+  await page.goto("/");
+  const trigger = page.locator(".dictation-trigger");
+  const composer = page.getByRole("textbox", { name: "Message Pi" });
+  await trigger.click();
+  await expect(trigger).toHaveAttribute("data-state", "listening");
+  await trigger.click();
+  await expect(trigger).toHaveAttribute("data-state", "completed");
+  await trigger.click();
+  await expect(trigger).toHaveAttribute("data-state", "listening");
+  await trigger.click();
+  await expect(trigger).toHaveAttribute("data-state", "completed");
+  await expect(composer).toHaveValue("reuse reuse ");
+  await expect.poll(() => page.evaluate(() => ({ contexts: window.__voiceContextCount, worklets: window.__voiceWorkletLoadCount, permissions: window.__voicePermissionCount }))).toEqual({ contexts: 1, worklets: 1, permissions: 2 });
+});
+
+test("mobile dictation appends when the composer is not focused", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "mobile-chromium", "Mobile-only regression test");
+  await page.addInitScript(() => {
+    class VoiceWebSocket extends EventTarget {
+      static OPEN = 1;
+      static CLOSING = 2;
+      constructor() {
+        super();
+        this.readyState = VoiceWebSocket.OPEN;
+        this.bufferedAmount = 0;
+        queueMicrotask(() => this.dispatchEvent(new Event("open")));
+        queueMicrotask(() => this.onmessage?.({ data: JSON.stringify({ type: "ready", sampleRate: 16_000, encoding: "pcm_s16le" }) }));
+      }
+      send(payload) {
+        if (payload instanceof ArrayBuffer) return;
+        if (JSON.parse(payload).type !== "stop") return;
+        queueMicrotask(() => this.onmessage?.({ data: JSON.stringify({ type: "completed", text: "mobile voice", final: true, finalWithinDeadline: true, settlementMs: 4 }) }));
+      }
+      close() { this.readyState = 3; this.dispatchEvent(new Event("close")); }
+    }
+    class MockAudioWorkletNode {
+      constructor() {
+        let handler = null;
+        this.port = {};
+        Object.defineProperty(this.port, "onmessage", {
+          get: () => handler,
+          set: (next) => {
+            handler = next;
+            if (handler) queueMicrotask(() => handler({ data: { type: "pcm", buffer: new ArrayBuffer(2), rms: 0.1, peak: 0.2 } }));
+          },
+        });
+        this.port.postMessage = (message) => {
+          if (message?.type === "flush") queueMicrotask(() => handler?.({ data: { type: "flush_complete" } }));
+        };
+        this.onprocessorerror = null;
+      }
+      connect() {}
+      disconnect() {}
+    }
+    class MockAudioContext {
+      constructor() { this.state = "running"; this.sampleRate = 48_000; this.destination = {}; this.audioWorklet = { addModule: async () => {} }; this.onstatechange = null; }
+      resume() { this.state = "running"; return Promise.resolve(); }
+      close() { this.state = "closed"; return Promise.resolve(); }
+      createMediaStreamSource() { return { connect() {}, disconnect() {} }; }
+      createGain() { return { gain: { value: 1 }, connect() {}, disconnect() {} }; }
+    }
+    Object.defineProperty(window, "WebSocket", { configurable: true, value: VoiceWebSocket });
+    Object.defineProperty(window, "AudioContext", { configurable: true, value: MockAudioContext });
+    Object.defineProperty(window, "AudioWorkletNode", { configurable: true, value: MockAudioWorkletNode });
+    Object.defineProperty(navigator, "mediaDevices", { configurable: true, value: { getUserMedia: async () => ({ getTracks: () => [{ stop() {} }] }) } });
+    localStorage.setItem("conduit:voice-dictation", JSON.stringify({ shortcut: "Ctrl+Shift+D", activation: "toggle", autoSend: false, inputDeviceId: "" }));
+  });
+
+  await page.goto("/");
+  const composer = page.getByRole("textbox", { name: "Message Pi" });
+  const trigger = page.locator(".dictation-trigger");
+  await composer.fill("");
+  await trigger.focus();
+  await expect(composer).not.toBeFocused();
+  await trigger.click();
+  await expect(trigger).toHaveAttribute("data-state", "listening");
+  await trigger.click();
+  await expect(trigger).toHaveAttribute("data-state", "completed");
+  await expect(composer).toHaveValue("mobile voice ");
 });
 
 test("silent microphone input does not insert a hallucinated transcript", async ({ page }) => {
@@ -4794,7 +4976,7 @@ test("silent microphone input does not insert a hallucinated transcript", async 
       }
       send(payload) {
         if (typeof payload !== "string" || JSON.parse(payload).type !== "stop") return;
-        queueMicrotask(() => this.onmessage?.({ data: JSON.stringify({ type: "completed", text: "you", final: true, finalWithinDeadline: true, settlementMs: 4 }) }));
+        queueMicrotask(() => this.onmessage?.({ data: JSON.stringify({ type: "completed", text: "you", final: true, finalWithinDeadline: true, settlementMs: 4, speech: { detector: "digital_zero", detected: false } }) }));
       }
       close() { this.readyState = 3; this.dispatchEvent(new Event("close")); }
     }
@@ -4832,6 +5014,65 @@ test("silent microphone input does not insert a hallucinated transcript", async 
   await page.getByRole("button", { name: "Start voice dictation" }).click();
   await page.getByRole("button", { name: "Stop voice dictation" }).click();
   await expect(page.getByText(/No microphone signal detected/)).toHaveCount(0);
+  await expect(composer).toHaveValue("");
+});
+
+test("empty transcription results do not report a successful dictation", async ({ page }) => {
+  await page.addInitScript(() => {
+    class VoiceWebSocket extends EventTarget {
+      static OPEN = 1;
+      constructor(url) {
+        super();
+        this.url = String(url);
+        this.readyState = 0;
+        this.bufferedAmount = 0;
+        queueMicrotask(() => {
+          this.readyState = VoiceWebSocket.OPEN;
+          this.dispatchEvent(new Event("open"));
+          this.onmessage?.({ data: JSON.stringify({ type: "ready", sampleRate: 16000, encoding: "pcm_s16le" }) });
+        });
+      }
+      send(payload) {
+        if (typeof payload !== "string" || JSON.parse(payload).type !== "stop") return;
+        queueMicrotask(() => this.onmessage?.({ data: JSON.stringify({ type: "completed", text: "", final: false, finalWithinDeadline: true, settlementMs: 4, audioBytes: 32_000, audioDurationMs: 1_000, reason: "stopped" }) }));
+      }
+      close() { this.readyState = 3; this.dispatchEvent(new Event("close")); }
+    }
+    class MockAudioWorkletNode {
+      constructor() {
+        let handler = null;
+        this.port = {};
+        Object.defineProperty(this.port, "onmessage", {
+          get: () => handler,
+          set: (next) => {
+            handler = next;
+            if (handler) queueMicrotask(() => handler({ data: { type: "pcm", buffer: new ArrayBuffer(2), rms: 0.1, peak: 0.2 } }));
+          },
+        });
+        this.onprocessorerror = null;
+      }
+      connect() {}
+      disconnect() {}
+    }
+    class MockAudioContext {
+      constructor() { this.state = "running"; this.sampleRate = 48000; this.destination = {}; this.audioWorklet = { addModule: async () => {} }; this.onstatechange = null; }
+      resume() { this.state = "running"; return Promise.resolve(); }
+      close() { this.state = "closed"; return Promise.resolve(); }
+      createMediaStreamSource() { return { connect() {}, disconnect() {} }; }
+      createGain() { return { gain: { value: 1 }, connect() {}, disconnect() {} }; }
+    }
+    Object.defineProperty(window, "WebSocket", { configurable: true, value: VoiceWebSocket });
+    Object.defineProperty(window, "AudioContext", { configurable: true, value: MockAudioContext });
+    Object.defineProperty(window, "AudioWorkletNode", { configurable: true, value: MockAudioWorkletNode });
+    Object.defineProperty(navigator, "mediaDevices", { configurable: true, value: { getUserMedia: async () => ({ getTracks: () => [{ stop() {} }] }) } });
+  });
+
+  await page.goto("/");
+  const composer = page.getByRole("textbox", { name: "Message Pi" });
+  await page.getByRole("button", { name: "Start voice dictation" }).click();
+  await page.getByRole("button", { name: "Stop voice dictation" }).click();
+  await expect(page.getByRole("alert").filter({ hasText: "No transcript returned" })).toBeVisible();
+  await expect(page.getByText("Dictation added to draft")).toHaveCount(0);
   await expect(composer).toHaveValue("");
 });
 
@@ -4912,15 +5153,24 @@ test("Voice microphone test shows the shared live recorder monitor", async ({ pa
   const dialog = page.getByRole("dialog", { name: "Settings" });
   await dialog.getByRole("tab", { name: "Voice" }).click();
   const activation = dialog.locator("#dictation-activation");
+  const captureProfile = dialog.locator("#voice-capture-profile");
+  const warmMicrophone = dialog.locator("#voice-warm-microphone");
   await expect(activation).toHaveValue("push_to_talk");
+  await expect(captureProfile).toHaveValue("raw");
+  await expect(warmMicrophone).not.toBeChecked();
   await activation.selectOption("toggle");
   await expect(activation).toHaveValue("toggle");
+  await captureProfile.selectOption("processed");
+  await expect(captureProfile).toHaveValue("processed");
+  await warmMicrophone.check();
   await dialog.locator("#voice-input-device").selectOption("mic-1");
   await expect.poll(() => page.evaluate(() => localStorage.getItem("conduit:voice-dictation") || "")).toBe("");
   await dialog.getByRole("button", { name: "Save Voice settings" }).click();
   await expect(dialog.getByText("Saved", { exact: true })).toBeVisible();
   await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem("conduit:voice-dictation") || "{}").activation)).toBe("toggle");
   await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem("conduit:voice-dictation") || "{}").inputDeviceId)).toBe("mic-1");
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem("conduit:voice-dictation") || "{}").captureProfile)).toBe("processed");
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem("conduit:voice-dictation") || "{}").warmMicrophone)).toBe(true);
   await page.keyboard.press("Escape");
   await expect(dialog).toBeHidden();
   await page.reload();
@@ -4928,8 +5178,15 @@ test("Voice microphone test shows the shared live recorder monitor", async ({ pa
   await expect(dialog).toBeVisible();
   await dialog.getByRole("tab", { name: "Voice" }).click();
   await expect(dialog.locator("#voice-input-device")).toHaveValue("mic-1");
+  await expect(dialog.locator("#voice-capture-profile")).toHaveValue("processed");
+  await expect(dialog.locator("#voice-warm-microphone")).toBeChecked();
   await dialog.getByRole("button", { name: "Test microphone" }).click();
-  await expect.poll(() => page.evaluate(() => window.__voiceInputConstraints.audio.deviceId)).toEqual({ exact: "mic-1" });
+  await expect.poll(() => page.evaluate(() => window.__voiceInputConstraints.audio)).toMatchObject({
+    deviceId: { exact: "mic-1" },
+    echoCancellation: { ideal: true },
+    noiseSuppression: { ideal: true },
+    autoGainControl: { ideal: true },
+  });
   const waveform = dialog.locator(".settings-recorder-monitor");
   await expect(waveform).toBeVisible();
   await expect(waveform).toHaveAttribute("data-state", "listening");

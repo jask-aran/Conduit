@@ -200,11 +200,14 @@ const PARAKEET_BINARY = Object.freeze({
   arm64: Object.freeze({ size: 6338344, sha256: "70413b539fae9c7951ead0c069a155f84dc485276281aebbcbc38812ea921882" }),
 });
 
-const SILERO = Object.freeze({
+export const SILERO_VAD_ARTIFACT = Object.freeze({
   name: "silero_vad.onnx",
   url: "https://raw.githubusercontent.com/snakers4/silero-vad/7e30209a3e901f9842f81b225f3e93d8199902b1/src/silero_vad/data/silero_vad.onnx",
   size: 2327524,
   sha256: "1a153a22f4509e292a94e67d6f9b85e8deb25b4988682b7e174c65279d8788e3",
+  revision: "7e30209a3e901f9842f81b225f3e93d8199902b1",
+  license: "MIT",
+  attribution: "Silero Team",
 });
 
 function manifestError(message) {
@@ -219,7 +222,8 @@ function whisperManifest(model) {
   return {
     version: "transformers.js-3.8.1",
     modelRevision: definition.revision,
-    artifacts: (definition.fullPrecision ? WHISPER_FP32_FILES : WHISPER_FILES).map((name) => {
+    artifacts: [
+      ...(definition.fullPrecision ? WHISPER_FP32_FILES : WHISPER_FILES).map((name) => {
       const [size, sha256] = definition.files[name];
       return {
         name,
@@ -228,7 +232,9 @@ function whisperManifest(model) {
         size,
         sha256,
       };
-    }),
+      }),
+      { ...SILERO_VAD_ARTIFACT, relative: "models/silero_vad.onnx" },
+    ],
   };
 }
 
@@ -266,7 +272,7 @@ function parakeetManifest(model, architecture) {
         size,
         sha256,
       })),
-      { ...SILERO, relative: "models/silero_vad.onnx" },
+      { ...SILERO_VAD_ARTIFACT, relative: "models/silero_vad.onnx" },
     ],
   };
 }

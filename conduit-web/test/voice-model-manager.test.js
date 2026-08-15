@@ -35,6 +35,8 @@ test("managed voice packages use reviewed immutable revisions, sizes, and SHA-25
   assert.ok(v2.artifacts.some((artifact) => artifact.url.includes("istupakov/parakeet-tdt-0.6b-v2-onnx/resolve/0bbb45a3365852604aef28b538a8f066f4ccaa85/encoder-model.int8.onnx")));
   assert.equal(v2.artifacts.find((artifact) => artifact.name === "encoder-model.int8.onnx").sha256, "3e0581fda6ab843888b51e56d7ee78b6d5bc3237ec113af1f732d1d5286aa155");
   assert.notEqual(v2.artifacts.find((artifact) => artifact.name === "vocab.txt").sha256, parakeet.artifacts.find((artifact) => artifact.name === "vocab.txt").sha256);
+  const whisper = getVoiceModelManifest(LOCAL_VOICE_MODELS[0], { release: "amd64", runtime: "x64" });
+  assert.equal(whisper.artifacts.find((artifact) => artifact.name === "silero_vad.onnx").sha256, "1a153a22f4509e292a94e67d6f9b85e8deb25b4988682b7e174c65279d8788e3");
 });
 
 test("managed voice model requires license acceptance, verifies artifacts, reports progress, and uninstalls", async () => {
