@@ -41,6 +41,14 @@ function requestHeaders(config) {
   return {};
 }
 
+function modelPrecision(modelId) {
+  const value = String(modelId || "");
+  if (value.endsWith("-fp32")) return "fp32";
+  if (value.endsWith("-int8")) return "int8";
+  if (value.endsWith("-q8")) return "q8";
+  return null;
+}
+
 function pinnedLookup(addresses) {
   return (_hostname, options, callback) => {
     const family = typeof options === "number" ? options : options?.family;
@@ -66,6 +74,11 @@ export class VoiceRuntime {
     this.modelManager?.unpin?.();
   }
 
+  async observeVoiceActivity(pcm) {
+    if (typeof this.modelManager?.observeVoiceActivity !== "function") return null;
+    return this.modelManager.observeVoiceActivity(pcm);
+  }
+
   async resolve() {
     const config = await this.settings.effective();
     if (config.mode === "off") throw runtimeError("dictation_not_configured", "Voice dictation is disabled", 409);
@@ -74,19 +87,27 @@ export class VoiceRuntime {
       if (local.kind === "transcriber") {
         return {
           mode: "local",
+          inferenceMode: "batch",
           adapter: "managed_transformers_v1",
           provider: "local",
           localModelId: config.localModelId,
           model: config.localModelId,
+          precision: modelPrecision(config.localModelId),
+          backend: "embedded_transformers",
+          computeBackend: null,
           transcribe: (pcm) => this.modelManager.transcribe(config.localModelId, pcm),
         };
       }
       return {
         mode: "local",
+        inferenceMode: "batch",
         adapter: "openai_audio_sse_v1",
         provider: "local",
         localModelId: config.localModelId,
         model: "",
+        precision: modelPrecision(config.localModelId),
+        backend: "loopback_parakeet",
+        computeBackend: null,
         endpoint: `${local.origin}/v1/audio/transcriptions`,
         headers: {},
         allowPrivate: true,
@@ -96,9 +117,13 @@ export class VoiceRuntime {
     const addresses = config.allowPrivate ? [] : await publicAddresses(endpoint.hostname, this.lookup);
     return {
       mode: "remote",
+      inferenceMode: "batch",
       provider: config.provider,
       adapter: config.adapter,
       model: config.model,
+      precision: null,
+      backend: "remote_provider",
+      computeBackend: null,
       endpoint: endpoint.toString(),
       headers: requestHeaders(config),
       lookup: addresses.length ? pinnedLookup(addresses) : undefined,

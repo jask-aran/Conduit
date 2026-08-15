@@ -1,3 +1,5 @@
+import { performance } from "node:perf_hooks";
+
 const DEFAULT_LIMITS = Object.freeze({
   maxSessions: 2,
   maxDurationMs: 300_000,
@@ -97,8 +99,38 @@ const SEGMENT_SILENCE_MS = 2_000;
 const SEGMENT_MIN_SEGMENT_MS = 500;
 const SEGMENT_MAX_SEGMENTS = 16;
 const SEGMENT_MERGE_ACTIVE_MS = 150;
+const DIAGNOSTIC_SCHEMA_VERSION = 5;
+const MAX_CLIENT_DIAGNOSTIC_BYTES = 32 * 1024;
 
-export function splitSilence(pcm, byteLength, options = {}) {
+function elapsed(start, end) {
+  if (!Number.isFinite(start) || !Number.isFinite(end)) return null;
+  return Math.max(0, Math.round(end - start));
+}
+
+function boundedNumber(value, { minimum = 0, maximum = 900_000, fallback = null } = {}) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return fallback;
+  return Math.min(maximum, Math.max(minimum, number));
+}
+
+function boundedInteger(value, { minimum = 0, maximum = 10_000_000, fallback = 0 } = {}) {
+  const number = boundedNumber(value, { minimum, maximum, fallback: null });
+  return number === null ? fallback : Math.round(number);
+}
+
+function isRecord(value) {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function precisionFor(model) {
+  const value = String(model || "");
+  if (value.endsWith("-fp32")) return "fp32";
+  if (value.endsWith("-int8")) return "int8";
+  if (value.endsWith("-q8")) return "q8";
+  return null;
+}
+
+export function analyzeSilence(pcm, byteLength, options = {}) {
   const sampleCount = Math.max(0, Math.floor(byteLength / 2));
   const windowSamples = Number.isFinite(options.windowSamples) ? options.windowSamples : SEGMENT_WINDOW_SAMPLES;
   const silenceRms = Number.isFinite(options.silenceRms) ? options.silenceRms : SEGMENT_SILENCE_RMS;
@@ -107,6 +139,7 @@ export function splitSilence(pcm, byteLength, options = {}) {
   const maxSegments = Math.max(2, Number.isFinite(options.maxSegments) ? options.maxSegments : SEGMENT_MAX_SEGMENTS);
   const windows = Math.ceil(sampleCount / windowSamples);
   const silent = new Array(windows);
+  let silentSamples = 0;
   for (let windowIndex = 0; windowIndex < windows; windowIndex += 1) {
     const start = windowIndex * windowSamples;
     const end = Math.min(sampleCount, start + windowSamples);
@@ -116,6 +149,7 @@ export function splitSilence(pcm, byteLength, options = {}) {
       sum += value * value;
     }
     silent[windowIndex] = Math.sqrt(sum / (end - start)) < silenceRms;
+    if (silent[windowIndex]) silentSamples += end - start;
   }
   // Collect silent runs; brief active blips (e.g. a click inside the pause)
   // merge into the surrounding run.
@@ -144,7 +178,19 @@ export function splitSilence(pcm, byteLength, options = {}) {
   if (runStartWindow >= 0 && (windows - runStartWindow) * windowSamples >= silenceSamples) {
     runs.push([runStartWindow * windowSamples, sampleCount]);
   }
-  if (!runs.length) return [[0, sampleCount]];
+  if (!runs.length) {
+    return {
+      segments: [[0, sampleCount]],
+      silenceRuns: [],
+      sampleCount,
+      silentSamples,
+      windowSamples,
+      silenceRms,
+      silenceMs: silenceSamples / 16,
+      minSegmentMs: minSegmentSamples / 16,
+      maxSegments,
+    };
+  }
   if (runs.length > maxSegments - 1) {
     runs.sort((left, right) => (right[1] - right[0]) - (left[1] - left[0]));
     runs.length = maxSegments - 1;
@@ -157,7 +203,306 @@ export function splitSilence(pcm, byteLength, options = {}) {
     cursor = runEnd;
   }
   if (sampleCount - cursor >= minSegmentSamples) segments.push([cursor, sampleCount]);
-  return segments;
+  return {
+    segments,
+    silenceRuns: runs,
+    sampleCount,
+    silentSamples,
+    windowSamples,
+    silenceRms,
+    silenceMs: silenceSamples / 16,
+    minSegmentMs: minSegmentSamples / 16,
+    maxSegments,
+  };
+}
+
+export function splitSilence(pcm, byteLength, options = {}) {
+  return analyzeSilence(pcm, byteLength, options).segments;
+}
+
+function createSignalAccumulator() {
+  return { sumSquares: 0, sampleCount: 0, peak: 0, clippedSamples: 0 };
+}
+
+function addPcmSignal(accumulator, data) {
+  for (let offset = 0; offset + 1 < data.length; offset += 2) {
+    const sample = data.readInt16LE(offset);
+    const value = sample / 32768;
+    accumulator.sumSquares += value * value;
+    accumulator.sampleCount += 1;
+    accumulator.peak = Math.max(accumulator.peak, Math.abs(value));
+    if (sample === 32767 || sample === -32768 || value >= 1 || value <= -1) accumulator.clippedSamples += 1;
+  }
+}
+
+function serializeSignal(accumulator) {
+  return {
+    rms: accumulator.sampleCount ? Math.sqrt(accumulator.sumSquares / accumulator.sampleCount) : 0,
+    peak: accumulator.peak,
+    clipping: accumulator.clippedSamples > 0,
+    clippedSamples: accumulator.clippedSamples,
+    bands: null,
+  };
+}
+
+function sanitizeAudioMetadata(value, key = "", depth = 0) {
+  if ((key === "deviceId" || key === "groupId") && value && typeof value === "object" && !Array.isArray(value)) {
+    return Object.fromEntries(Object.keys(value).slice(0, 8).map((childKey) => [childKey, "[redacted]"]));
+  }
+  if (key === "deviceId" || key === "groupId") return "[redacted]";
+  if (depth > 3) return null;
+  if (Array.isArray(value)) return value.slice(0, 16).map((item) => sanitizeAudioMetadata(item, key, depth + 1));
+  if (isRecord(value)) {
+    return Object.fromEntries(Object.entries(value).slice(0, 32).map(([childKey, childValue]) => [
+      childKey,
+      sanitizeAudioMetadata(childValue, childKey, depth + 1),
+    ]));
+  }
+  if (typeof value === "string") return value.slice(0, 128);
+  if (typeof value === "number") return Number.isFinite(value) ? value : null;
+  if (typeof value === "boolean" || value === null) return value;
+  return null;
+}
+
+function safeAudioMetadata(value) {
+  const result = sanitizeAudioMetadata(value);
+  return isRecord(result) ? result : {};
+}
+
+function sanitizeSignal(value) {
+  const source = isRecord(value) ? value : {};
+  return {
+    rms: boundedNumber(source.rms, { maximum: 2, fallback: 0 }),
+    peak: boundedNumber(source.peak, { maximum: 2, fallback: 0 }),
+    clipping: source.clipping === true,
+    clippedSamples: boundedInteger(source.clippedSamples, { maximum: 10_000_000 }),
+    bands: null,
+  };
+}
+
+function sanitizeClientDiagnostics(value) {
+  if (!isRecord(value)) return null;
+  try {
+    if (Buffer.byteLength(JSON.stringify(value), "utf8") > MAX_CLIENT_DIAGNOSTIC_BYTES) return null;
+  } catch {
+    return null;
+  }
+  const events = isRecord(value.events) ? value.events : {};
+  const durations = isRecord(value.durations) ? value.durations : {};
+  const transport = isRecord(value.transport) ? value.transport : {};
+  const capture = isRecord(value.capture) ? value.capture : {};
+  const gain = isRecord(capture.workletGain) ? capture.workletGain : {};
+  return {
+    schemaVersion: DIAGNOSTIC_SCHEMA_VERSION,
+    clock: "performance.now",
+    events: {
+      shortcutAcceptedMs: boundedNumber(events.shortcutAcceptedMs, { maximum: 900_000, fallback: 0 }),
+      digitalSilenceCount: boundedInteger(events.digitalSilenceCount, { maximum: 10_000 }),
+      microphoneRequestStartMs: boundedNumber(events.microphoneRequestStartMs),
+      microphoneRequestResolvedMs: boundedNumber(events.microphoneRequestResolvedMs),
+      workletConnectedMs: boundedNumber(events.workletConnectedMs),
+      firstWorkletPcmMs: boundedNumber(events.firstWorkletPcmMs),
+      firstWebSocketSendMs: boundedNumber(events.firstWebSocketSendMs),
+      stopRequestedMs: boundedNumber(events.stopRequestedMs),
+      finalEventMs: boundedNumber(events.finalEventMs),
+    },
+    durations: {
+      captureStartupMs: boundedNumber(durations.captureStartupMs),
+      microphoneRequestMs: boundedNumber(durations.microphoneRequestMs),
+      workletSetupMs: boundedNumber(durations.workletSetupMs),
+      transportStartupMs: boundedNumber(durations.transportStartupMs),
+      captureDurationMs: boundedNumber(durations.captureDurationMs),
+      stopToFinalMs: boundedNumber(durations.stopToFinalMs),
+    },
+    transport: {
+      packetCount: boundedInteger(transport.packetCount, { maximum: 1_000_000 }),
+      pcmBytes: boundedInteger(transport.pcmBytes, { maximum: DEFAULT_LIMITS.maxAudioBytes }),
+      maxWebSocketBufferedBytes: boundedInteger(transport.maxWebSocketBufferedBytes, { maximum: 16 * 1024 * 1024 }),
+    },
+    capture: {
+      microphoneReused: capture.microphoneReused === true,
+      profile: value.capture?.profile === "processed" ? "processed" : "raw",
+      sourceSampleRate: boundedNumber(capture.sourceSampleRate, { maximum: 384_000 }),
+      processingSampleRate: boundedNumber(capture.processingSampleRate, { maximum: 384_000 }),
+      requestedConstraints: safeAudioMetadata(capture.requestedConstraints),
+      effectiveTrackSettings: safeAudioMetadata(capture.effectiveTrackSettings),
+      resampler: {
+        method: typeof capture.resampler?.method === "string" ? capture.resampler.method.slice(0, 64) : null,
+        inputSampleRate: boundedNumber(capture.resampler?.inputSampleRate, { maximum: 384_000 }),
+        outputSampleRate: boundedNumber(capture.resampler?.outputSampleRate, { maximum: 384_000, fallback: 16_000 }),
+      },
+      preProcessing: sanitizeSignal(capture.preProcessing),
+      postProcessing: sanitizeSignal(capture.postProcessing),
+      workletGain: {
+        current: boundedNumber(gain.current, { maximum: 100 }),
+        minimum: boundedNumber(gain.minimum, { maximum: 100 }),
+        maximum: boundedNumber(gain.maximum, { maximum: 100 }),
+      },
+    },
+  };
+}
+
+function createServerDiagnostics() {
+  return {
+    startedAt: performance.now(),
+    firstServerPcmAt: null,
+    lastServerPcmAt: null,
+    runtimeReadyAt: null,
+    stopAt: null,
+    firstPartialAt: null,
+    firstSegmentFinalAt: null,
+    firstUsableTextAt: null,
+    sessionFinalAt: null,
+    completionSentAt: null,
+    archiveStartedAt: null,
+    archiveCompletedAt: null,
+    archiveMs: null,
+    preprocessingMs: 0,
+    inferenceQueuedAt: null,
+    inferenceStartedAt: null,
+    inferenceCompletedAt: null,
+    vadQueuedAt: null,
+    vadStartedAt: null,
+    vadCompletedAt: null,
+    client: null,
+    transport: {
+      packetCount: 0,
+      pcmBytes: 0,
+      clientAudioBytes: null,
+    },
+    signal: createSignalAccumulator(),
+    runtime: {
+      inferenceMode: "batch",
+      model: null,
+      precision: null,
+      backend: "unreported",
+      computeBackend: null,
+    },
+    analysis: null,
+    vadObservation: null,
+  };
+}
+
+function recordAnalysis(diagnostics, analysis, durationMs) {
+  diagnostics.preprocessingMs += durationMs;
+  if (!diagnostics.analysis) diagnostics.analysis = analysis;
+}
+
+function markInferenceStart(diagnostics) {
+  if (diagnostics.inferenceStartedAt !== null) return;
+  diagnostics.inferenceQueuedAt ||= performance.now();
+  diagnostics.inferenceStartedAt = performance.now();
+}
+
+function markInferenceQueued(diagnostics) {
+  diagnostics.inferenceQueuedAt ||= performance.now();
+}
+
+function markInferenceComplete(diagnostics) {
+  diagnostics.inferenceCompletedAt ||= performance.now();
+}
+
+function speechDecision(diagnostics) {
+  if (!diagnostics.signal.sampleCount) return { detector: "unclassified", detected: false };
+  if (diagnostics.signal.peak === 0) return { detector: "digital_zero", detected: false };
+  return { detector: "unclassified", detected: true };
+}
+
+function serializeServerDiagnostics(diagnostics) {
+  const analysis = diagnostics.analysis;
+  const segments = analysis?.segments || [];
+  const silenceRuns = analysis?.silenceRuns || [];
+  const segmentBoundaries = segments.map(([startSample, endSample], index) => ({
+    index,
+    startSample,
+    endSample,
+    startMs: Math.round(startSample / 16),
+    endMs: Math.round(endSample / 16),
+    durationMs: Math.round((endSample - startSample) / 16),
+  }));
+  const silentBoundaries = silenceRuns.map(([startSample, endSample], index) => ({
+    index,
+    startSample,
+    endSample,
+    startMs: Math.round(startSample / 16),
+    endMs: Math.round(endSample / 16),
+    durationMs: Math.round((endSample - startSample) / 16),
+  }));
+  const speechSamples = analysis ? Math.max(0, analysis.sampleCount - analysis.silentSamples) : 0;
+  const submittedSegmentSamples = segments.reduce((total, [start, end]) => total + end - start, 0);
+  return {
+    schemaVersion: DIAGNOSTIC_SCHEMA_VERSION,
+    clock: "performance.now",
+    events: {
+      sessionStartMs: 0,
+      firstServerPcmMs: elapsed(diagnostics.startedAt, diagnostics.firstServerPcmAt),
+      lastServerPcmMs: elapsed(diagnostics.startedAt, diagnostics.lastServerPcmAt),
+      runtimeReadyMs: elapsed(diagnostics.startedAt, diagnostics.runtimeReadyAt),
+      stopMs: elapsed(diagnostics.startedAt, diagnostics.stopAt),
+      firstPartialMs: elapsed(diagnostics.startedAt, diagnostics.firstPartialAt),
+      firstSegmentFinalMs: elapsed(diagnostics.startedAt, diagnostics.firstSegmentFinalAt),
+      sessionFinalMs: elapsed(diagnostics.startedAt, diagnostics.sessionFinalAt),
+      completionSentMs: elapsed(diagnostics.startedAt, diagnostics.completionSentAt),
+      inferenceQueuedMs: elapsed(diagnostics.startedAt, diagnostics.inferenceQueuedAt),
+      inferenceStartedMs: elapsed(diagnostics.startedAt, diagnostics.inferenceStartedAt),
+      firstUsableTextMs: elapsed(diagnostics.startedAt, diagnostics.firstUsableTextAt),
+      inferenceCompletedMs: elapsed(diagnostics.startedAt, diagnostics.inferenceCompletedAt),
+      vadQueuedMs: elapsed(diagnostics.startedAt, diagnostics.vadQueuedAt),
+      vadStartedMs: elapsed(diagnostics.startedAt, diagnostics.vadStartedAt),
+      vadCompletedMs: elapsed(diagnostics.startedAt, diagnostics.vadCompletedAt),
+      archiveStartMs: elapsed(diagnostics.startedAt, diagnostics.archiveStartedAt),
+      archiveCompletedMs: elapsed(diagnostics.startedAt, diagnostics.archiveCompletedAt),
+    },
+    durations: {
+      runtimePreparationMs: elapsed(diagnostics.startedAt, diagnostics.runtimeReadyAt),
+      preprocessingMs: Math.max(0, Math.round(diagnostics.preprocessingMs)),
+      runtimeWaitAfterStopMs: elapsed(diagnostics.stopAt, diagnostics.runtimeReadyAt),
+      queueDelayMs: elapsed(diagnostics.inferenceQueuedAt, diagnostics.inferenceStartedAt),
+      stopToInferenceStartMs: elapsed(diagnostics.stopAt, diagnostics.inferenceStartedAt),
+      firstTextInferenceMs: elapsed(diagnostics.inferenceStartedAt, diagnostics.firstUsableTextAt),
+      inferenceDelayMs: elapsed(diagnostics.inferenceStartedAt, diagnostics.firstUsableTextAt),
+      inferenceTotalMs: elapsed(diagnostics.inferenceStartedAt, diagnostics.inferenceCompletedAt),
+      userSettlementMs: elapsed(diagnostics.stopAt, diagnostics.completionSentAt),
+      settlementDelayMs: elapsed(diagnostics.stopAt, diagnostics.completionSentAt),
+      vadQueueMs: elapsed(diagnostics.vadQueuedAt, diagnostics.vadStartedAt),
+      vadExecutionMs: elapsed(diagnostics.vadStartedAt, diagnostics.vadCompletedAt),
+      archiveExecutionMs: elapsed(diagnostics.archiveStartedAt, diagnostics.archiveCompletedAt),
+      archiveMs: diagnostics.archiveMs === null ? null : Math.max(0, Math.round(diagnostics.archiveMs)),
+    },
+    transport: {
+      packetCount: diagnostics.transport.packetCount,
+      pcmBytes: diagnostics.transport.pcmBytes,
+      clientAudioBytes: diagnostics.transport.clientAudioBytes,
+      audioDurationMs: Math.round(diagnostics.transport.pcmBytes / 32),
+    },
+    signal: {
+      serverPcm: serializeSignal(diagnostics.signal),
+    },
+    inference: {
+      inferenceMode: diagnostics.runtime.inferenceMode,
+      model: diagnostics.runtime.model,
+      precision: diagnostics.runtime.precision,
+      backend: diagnostics.runtime.backend,
+      computeBackend: diagnostics.runtime.computeBackend,
+      segmentCount: segments.length,
+      speechDurationMs: Math.round(speechSamples / 16),
+      silenceDurationMs: analysis ? Math.round(analysis.silentSamples / 16) : 0,
+      submittedSegmentDurationMs: Math.round(submittedSegmentSamples / 16),
+      boundaries: segmentBoundaries,
+      silenceRuns: silentBoundaries,
+      sileroObservation: diagnostics.vadObservation,
+      vadPolicy: {
+        type: "rms_threshold",
+        windowMs: analysis ? analysis.windowSamples / 16 : SEGMENT_WINDOW_SAMPLES / 16,
+        silenceRms: analysis?.silenceRms ?? SEGMENT_SILENCE_RMS,
+        silenceMs: analysis?.silenceMs ?? SEGMENT_SILENCE_MS,
+        minSegmentMs: analysis?.minSegmentMs ?? SEGMENT_MIN_SEGMENT_MS,
+        mergeActiveMs: SEGMENT_MERGE_ACTIVE_MS,
+        maxSegments: analysis?.maxSegments ?? SEGMENT_MAX_SEGMENTS,
+        speechPaddingMs: 0,
+      },
+    },
+  };
 }
 
 function wavBlob(chunks, byteLength) {
@@ -175,6 +520,29 @@ function wavBlob(chunks, byteLength) {
   header.write("data", 36);
   header.writeUInt32LE(byteLength, 40);
   return new Blob([header, ...chunks], { type: "audio/wav" });
+}
+
+class PcmAccumulator {
+  constructor(maxBytes) {
+    this.maxBytes = maxBytes;
+    this.buffer = null;
+    this.byteLength = 0;
+  }
+
+  append(data) {
+    const chunk = Buffer.isBuffer(data) ? data : Buffer.from(data);
+    const nextLength = this.byteLength + chunk.length;
+    if (nextLength > this.maxBytes) throw dictationError("dictation_too_long", "Voice dictation reached the server audio limit", 413);
+    if (!this.buffer) this.buffer = Buffer.allocUnsafe(this.maxBytes);
+    const start = this.byteLength;
+    chunk.copy(this.buffer, start);
+    this.byteLength = nextLength;
+    return this.buffer.subarray(start, nextLength);
+  }
+
+  view() {
+    return this.buffer ? this.buffer.subarray(0, this.byteLength) : Buffer.alloc(0);
+  }
 }
 
 async function readSse(response, emit, limits) {
@@ -219,14 +587,18 @@ async function readSse(response, emit, limits) {
   if (pending.trim()) processFrame(pending);
 }
 
-export function createHttpAdapter(config, emit, limits, fetchImpl) {
+export function createHttpAdapter(config, emit, limits, fetchImpl, diagnostics = null) {
   const chunks = [];
   let byteLength = 0;
   const controller = new AbortController();
   const transcribe = async () => {
     if (!byteLength || controller.signal.aborted) return { final: false, text: "" };
-    const pcm = Buffer.concat(chunks.map((chunk) => Buffer.from(chunk)), byteLength);
-    const segments = splitSilence(pcm, byteLength, limits);
+    if (diagnostics) markInferenceQueued(diagnostics);
+    const pcm = Buffer.concat(chunks, byteLength);
+    const preprocessingStartedAt = performance.now();
+    const analysis = analyzeSilence(pcm, byteLength, limits);
+    if (diagnostics) recordAnalysis(diagnostics, analysis, performance.now() - preprocessingStartedAt);
+    const segments = analysis.segments;
     let final = false;
     let text = "";
     for (let index = 0; index < segments.length; index += 1) {
@@ -240,6 +612,7 @@ export function createHttpAdapter(config, emit, limits, fetchImpl) {
       form.append("response_format", "json");
       if (config.model) form.append("model", config.model);
       if (config.provider !== "groq") form.append("stream", "true");
+      if (diagnostics) markInferenceStart(diagnostics);
       const response = await fetchImpl(config.endpoint, { method: "POST", headers: config.headers, body: form, signal: controller.signal, redirect: "error" });
       await readSse(response, (event) => {
         if (event.type === "final") {
@@ -257,6 +630,7 @@ export function createHttpAdapter(config, emit, limits, fetchImpl) {
       }, limits);
       text = appendText(text, segmentText);
     }
+    if (diagnostics) markInferenceComplete(diagnostics);
     return { final, text };
   };
   queueMicrotask(() => emit({ type: "ready", sampleRate: 16_000, encoding: "pcm_s16le" }));
@@ -265,7 +639,7 @@ export function createHttpAdapter(config, emit, limits, fetchImpl) {
     write(data) {
       byteLength += data.length;
       if (byteLength > limits.maxAudioBytes) throw dictationError("dictation_too_long", "Voice dictation reached the server audio limit", 413);
-      chunks.push(Buffer.from(data));
+      chunks.push(Buffer.isBuffer(data) ? data : Buffer.from(data));
     },
     async stop() {
       try {
@@ -279,20 +653,26 @@ export function createHttpAdapter(config, emit, limits, fetchImpl) {
   };
 }
 
-function createSnapshotAdapter(emit, limits, transcribe) {
+function createSnapshotAdapter(emit, limits, transcribe, diagnostics = null) {
   const chunks = [];
   let byteLength = 0;
   const run = async () => {
     if (!byteLength) return { final: false, text: "" };
-    const snapshot = Buffer.concat(chunks.map((chunk) => Buffer.from(chunk)), byteLength);
-    const segments = splitSilence(snapshot, byteLength, limits);
+    if (diagnostics) markInferenceQueued(diagnostics);
+    const snapshot = Buffer.concat(chunks, byteLength);
+    const preprocessingStartedAt = performance.now();
+    const analysis = analyzeSilence(snapshot, byteLength, limits);
+    if (diagnostics) recordAnalysis(diagnostics, analysis, performance.now() - preprocessingStartedAt);
+    const segments = analysis.segments;
     let text = "";
     for (const [startSample, endSample] of segments) {
       const piece = segments.length > 1 ? snapshot.subarray(startSample * 2, endSample * 2) : snapshot;
+      if (diagnostics) markInferenceStart(diagnostics);
       const pieceText = String(await transcribe(piece) || "").trim();
       if (pieceText) text = appendText(text, pieceText);
     }
     if (text) emit({ type: "final", text });
+    if (diagnostics) markInferenceComplete(diagnostics);
     return { final: Boolean(text), text };
   };
   queueMicrotask(() => emit({ type: "ready", sampleRate: 16_000, encoding: "pcm_s16le" }));
@@ -301,7 +681,7 @@ function createSnapshotAdapter(emit, limits, transcribe) {
     write(data) {
       byteLength += data.length;
       if (byteLength > limits.maxAudioBytes) throw dictationError("dictation_too_long", "Voice dictation reached the server audio limit", 413);
-      chunks.push(Buffer.from(data));
+      chunks.push(Buffer.isBuffer(data) ? data : Buffer.from(data));
     },
     async stop() {
       try {
@@ -313,7 +693,7 @@ function createSnapshotAdapter(emit, limits, transcribe) {
   };
 }
 
-export function createDeepgramAdapter(config, emit, limits, fetchImpl) {
+export function createDeepgramAdapter(config, emit, limits, fetchImpl, diagnostics = null) {
   return createSnapshotAdapter(emit, limits, async (pcm) => {
     const endpoint = new URL(config.endpoint);
     endpoint.searchParams.set("model", config.model || "nova-3");
@@ -328,7 +708,7 @@ export function createDeepgramAdapter(config, emit, limits, fetchImpl) {
     if (!response.ok) throw dictationError("asr_request_failed", `Deepgram returned ${response.status}`, 502);
     const result = await response.json();
     return result?.results?.channels?.[0]?.alternatives?.[0]?.transcript || "";
-  });
+  }, diagnostics);
 }
 
 export function createDictationStream({ wss, voiceRuntime, recordingStore = null, fetchImpl = fetch, limits: limitOverrides = {} }) {
@@ -357,11 +737,25 @@ export function createDictationStream({ wss, voiceRuntime, recordingStore = null
     let deadlinePassed = false;
     let audioBytes = 0;
     let clientAudioBytes = null;
-    const audioChunks = [];
-    const pendingPcm = [];
+    const pcmAccumulator = new PcmAccumulator(limits.maxAudioBytes);
     let transcriptObserved = false;
     let stopReason = null;
-    let runtimeMetadata = { adapter: null, provider: null, model: null };
+    let savedRecord = null;
+    let archivePromise = null;
+    let vadObservationPromise = null;
+    let finalPcm = null;
+    let metadataUpdateTail = Promise.resolve();
+    const SHORT_FAILURE_AUDIO_BYTES = 1;
+    const diagnostics = createServerDiagnostics();
+    let runtimeMetadata = {
+      adapter: null,
+      provider: null,
+      model: null,
+      inferenceMode: "batch",
+      precision: null,
+      backend: "unreported",
+      computeBackend: null,
+    };
     const send = (event) => {
       if (client.readyState === client.OPEN) client.send(JSON.stringify(event));
     };
@@ -369,38 +763,146 @@ export function createDictationStream({ wss, voiceRuntime, recordingStore = null
       clearTimeout(durationTimer);
       clearTimeout(finalTimer);
       clearTimeout(deadlineTimer);
-      pendingPcm.length = 0;
       adapter?.close();
       adapter = null;
       adapterReady = false;
     };
-    const complete = async (reason, upstream = {}) => {
+    const diagnosticsPayload = () => ({
+      client: diagnostics.client,
+      server: serializeServerDiagnostics(diagnostics),
+    });
+    const freezeAcceptedPcm = () => {
+      if (!finalPcm) finalPcm = Buffer.from(pcmAccumulator.view());
+      return finalPcm;
+    };
+    const archiveRecording = (reason, error = null, transcript = "", updates = {}) => {
+      if (!recordingStore || audioBytes <= 0) return Promise.resolve(null);
+      if (savedRecord) return Promise.resolve(savedRecord);
+      if (archivePromise) return archivePromise;
+      const archiveStartedAt = performance.now();
+      diagnostics.archiveStartedAt ||= archiveStartedAt;
+      const text = String(transcript || "").trim();
+      const options = {
+        audioChunks: [freezeAcceptedPcm()],
+        audioBytes,
+        transcript: text,
+        allowEmptyTranscript: true,
+        allowShortAudio: Boolean(error && audioBytes >= SHORT_FAILURE_AUDIO_BYTES),
+        metadata: {
+          transcriptObserved,
+          transcriptStatus: text ? "non_empty" : "empty",
+          completionReason: reason,
+          final: updates.final ?? false,
+          finalWithinDeadline: updates.finalWithinDeadline ?? false,
+          settlementMs: stoppedAt ? Date.now() - stoppedAt : null,
+          clientAudioBytes,
+          serverAudioBytes: audioBytes,
+          serverAudioDurationMs: Math.round(audioBytes / 32),
+          transcriptionStatus: error ? "failed" : "completed",
+          ...(error ? { transcriptionError: error.message || "Voice transcription failed" } : {}),
+          diagnostics: diagnosticsPayload(),
+          ...runtimeMetadata,
+          ...updates,
+        },
+      };
+      const persist = typeof recordingStore.enqueue === "function"
+        ? recordingStore.enqueue(options)
+        : recordingStore.save(options);
+      archivePromise = Promise.resolve(persist).then((record) => {
+        savedRecord = record;
+        return record;
+      }).catch((archiveError) => {
+        console.error(`Voice diagnostic recording failed: ${archiveError.message}`);
+        return null;
+      }).finally(() => {
+        diagnostics.archiveCompletedAt = performance.now();
+        diagnostics.archiveMs = Math.max(0, Math.round(performance.now() - archiveStartedAt));
+      });
+      return archivePromise;
+    };
+    const updateSavedRecording = (updates = {}) => {
+      metadataUpdateTail = metadataUpdateTail.then(async () => {
+        const record = await archivePromise;
+        if (!record || typeof recordingStore?.updateMetadata !== "function") return;
+        try {
+          await recordingStore.updateMetadata(record, updates);
+        } catch (error) {
+          console.error(`Voice diagnostic metadata update failed: ${error.message}`);
+        }
+      });
+      return metadataUpdateTail;
+    };
+    const startVadObservation = () => {
+      if (vadObservationPromise || audioBytes <= 0) return vadObservationPromise;
+      if (typeof voiceRuntime.observeVoiceActivity !== "function") {
+        diagnostics.vadObservation = {
+          type: "silero_vad_observation",
+          available: false,
+          status: "not_configured",
+          regions: [],
+          frames: [],
+        };
+        vadObservationPromise = Promise.resolve(diagnostics.vadObservation);
+        return vadObservationPromise;
+      }
+      diagnostics.vadQueuedAt ||= performance.now();
+      const pcm = freezeAcceptedPcm();
+      vadObservationPromise = Promise.resolve()
+        .then(() => voiceRuntime.observeVoiceActivity(pcm))
+        .then((observation) => {
+          const queue = observation?.queue;
+          diagnostics.vadStartedAt = queue?.startedAt ?? performance.now();
+          diagnostics.vadCompletedAt = queue?.completedAt ?? performance.now();
+          diagnostics.vadObservation = observation || {
+            type: "silero_vad_observation",
+            available: false,
+            status: "not_configured",
+            regions: [],
+            frames: [],
+          };
+          return diagnostics.vadObservation;
+        })
+        .catch((error) => {
+          diagnostics.vadStartedAt ||= performance.now();
+          diagnostics.vadCompletedAt = performance.now();
+          diagnostics.vadObservation = {
+            type: "silero_vad_observation",
+            available: false,
+            status: "error",
+            errorCode: error.code || "voice_vad_unavailable",
+            error: error.message || "Silero VAD observation failed",
+            regions: [],
+            frames: [],
+          };
+          return diagnostics.vadObservation;
+        });
+      return vadObservationPromise;
+    };
+    const complete = (reason, upstream = {}) => {
       if (completed) return;
       completed = true;
       const completedAt = Date.now();
+      diagnostics.sessionFinalAt ||= performance.now();
       cleanup();
       const transcript = String(upstream.text || finalText || "").trim();
-      if (recordingStore && transcriptObserved && transcript) {
-        try {
-          await recordingStore.save({
-            audioChunks,
-            audioBytes,
-            transcript,
-            metadata: {
-              completionReason: reason,
-              final: upstream.final ?? hasFinal,
-              finalWithinDeadline: Boolean(hasFinal && stoppedAt && !deadlinePassed),
-              settlementMs: stoppedAt ? completedAt - stoppedAt : null,
-              clientAudioBytes,
-              serverAudioBytes: audioBytes,
-              serverAudioDurationMs: Math.round(audioBytes / 32),
-              ...runtimeMetadata,
-            },
-          });
-        } catch (error) {
-          console.error(`Voice diagnostic recording failed: ${error.message}`);
-        }
-      }
+      const finalUpdates = {
+        transcript,
+        transcriptStatus: transcript ? "non_empty" : "empty",
+        transcriptObserved,
+        completionReason: reason,
+        final: upstream.final ?? hasFinal,
+        finalWithinDeadline: Boolean(hasFinal && stoppedAt && !deadlinePassed),
+        settlementMs: stoppedAt ? completedAt - stoppedAt : null,
+        clientAudioBytes,
+        serverAudioBytes: audioBytes,
+        serverAudioDurationMs: Math.round(audioBytes / 32),
+        transcriptionStatus: "completed",
+        ...runtimeMetadata,
+      };
+      startVadObservation();
+      const archive = archiveRecording(reason, null, transcript, finalUpdates);
+      diagnostics.completionSentAt = performance.now();
+      const finalDiagnostics = diagnosticsPayload();
       send({
         type: "completed",
         text: upstream.text || finalText,
@@ -410,31 +912,72 @@ export function createDictationStream({ wss, voiceRuntime, recordingStore = null
         finalWithinDeadline: Boolean(hasFinal && stoppedAt && !deadlinePassed),
         audioBytes,
         audioDurationMs: Math.round(audioBytes / 32),
+        speech: speechDecision(diagnostics),
+        diagnostics: finalDiagnostics,
         ...runtimeMetadata,
       });
+      void Promise.all([archive, vadObservationPromise]).then(() => updateSavedRecording({
+        ...finalUpdates,
+        diagnostics: diagnosticsPayload(),
+      })).then(() => {
+        console.info(JSON.stringify({ type: "conduit.voice-dictation-diagnostic", diagnostics: diagnosticsPayload() }));
+      });
+    };
+    const updateClientDiagnostics = async (value) => {
+      const clientDiagnostics = sanitizeClientDiagnostics(value);
+      if (!clientDiagnostics) {
+        send({ type: "client_diagnostics_ack", accepted: false });
+        return;
+      }
+      diagnostics.client = clientDiagnostics;
+      diagnostics.transport.clientAudioBytes = clientAudioBytes ?? clientDiagnostics.transport.pcmBytes ?? null;
+      if (completed && archivePromise) {
+        await archivePromise;
+        await updateSavedRecording({ diagnostics: diagnosticsPayload() });
+      }
+      console.info(JSON.stringify({ type: "conduit.voice-dictation-diagnostic", diagnostics: diagnosticsPayload() }));
+      send({ type: "client_diagnostics_ack", accepted: true });
     };
     const fail = (error) => {
       if (completed) return;
       completed = true;
+      diagnostics.sessionFinalAt ||= performance.now();
       cleanup();
-      send({ type: "error", code: error.code || "dictation_failed", message: error.message || "Voice dictation failed" });
+      const failure = error instanceof Error ? error : new Error(String(error || "Voice dictation failed"));
+      startVadObservation();
+      const archive = archiveRecording("failed", failure);
+      diagnostics.completionSentAt = performance.now();
+      send({ type: "error", code: failure.code || "dictation_failed", message: failure.message });
+      void Promise.all([archive, vadObservationPromise]).then(() => updateSavedRecording({
+        transcriptionStatus: "failed",
+        transcriptionError: failure.message,
+        completionReason: "failed",
+        diagnostics: diagnosticsPayload(),
+        ...runtimeMetadata,
+      }));
     };
     const acceptAudio = (data) => {
       if (data.length > limits.maxFrameBytes) throw dictationError("dictation_frame_too_large", "Audio frame is too large", 413);
-      audioBytes += data.length;
-      if (audioBytes > limits.maxAudioBytes) throw dictationError("dictation_too_long", "Voice dictation reached the server audio limit", 413);
-      const copy = Buffer.from(data);
-      audioChunks.push(copy);
-      if (adapterReady && adapter) adapter.write(copy);
-      else pendingPcm.push(copy);
+      const chunk = pcmAccumulator.append(data);
+      audioBytes = pcmAccumulator.byteLength;
+      const receivedAt = performance.now();
+      if (diagnostics.firstServerPcmAt === null) diagnostics.firstServerPcmAt = receivedAt;
+      diagnostics.lastServerPcmAt = receivedAt;
+      diagnostics.transport.packetCount += 1;
+      diagnostics.transport.pcmBytes = audioBytes;
+      addPcmSignal(diagnostics.signal, chunk);
+      if (adapterReady && adapter) adapter.write(chunk);
     };
     const stop = (reason) => {
       if (stopping || completed) return;
       stopping = true;
       stopReason = reason;
       stoppedAt = Date.now();
+      diagnostics.stopAt = performance.now();
+      startVadObservation();
       void (async () => {
         try {
+          if (!adapter) send({ type: "waiting_for_transcription" });
           const current = adapter || await adapterAvailable;
           if (!current || completed) return;
           const finalizationTimeoutMs = calculateFinalizationTimeoutMs({
@@ -464,12 +1007,20 @@ export function createDictationStream({ wss, voiceRuntime, recordingStore = null
       if (event.type === "ready") return;
       if (event.type === "partial") {
         const text = String(event.text || "");
-        if (text.trim()) transcriptObserved = true;
+        if (text.trim()) {
+          transcriptObserved = true;
+          diagnostics.firstPartialAt ||= performance.now();
+          diagnostics.firstUsableTextAt ||= performance.now();
+        }
         send({ type: "partial", text });
       }
       else if (event.type === "final") {
         finalText = String(event.text || "");
-        if (finalText.trim()) transcriptObserved = true;
+        if (finalText.trim()) {
+          transcriptObserved = true;
+          diagnostics.firstSegmentFinalAt ||= performance.now();
+          diagnostics.firstUsableTextAt ||= performance.now();
+        }
         hasFinal = true;
         send({ type: "final", text: finalText });
         // Completion waits for adapter_closed: segmented transcriptions emit
@@ -490,16 +1041,32 @@ export function createDictationStream({ wss, voiceRuntime, recordingStore = null
         settleAdapter(null);
         return;
       }
+      const resolvedModel = typeof config.model === "string" && config.model
+        ? config.model
+        : typeof config.localModelId === "string"
+          ? config.localModelId
+          : null;
       runtimeMetadata = {
         adapter: typeof config.adapter === "string" ? config.adapter : null,
         provider: typeof config.provider === "string" ? config.provider : null,
-        model: typeof config.model === "string" && config.model ? config.model : typeof config.localModelId === "string" ? config.localModelId : null,
+        model: resolvedModel,
+        inferenceMode: typeof config.inferenceMode === "string" ? config.inferenceMode : "batch",
+        precision: typeof config.precision === "string" ? config.precision : precisionFor(resolvedModel),
+        backend: typeof config.backend === "string" ? config.backend : "unreported",
+        computeBackend: typeof config.computeBackend === "string" ? config.computeBackend : null,
+      };
+      diagnostics.runtime = {
+        inferenceMode: runtimeMetadata.inferenceMode,
+        model: runtimeMetadata.model,
+        precision: runtimeMetadata.precision,
+        backend: runtimeMetadata.backend,
+        computeBackend: runtimeMetadata.computeBackend,
       };
       const next = config.adapter === "deepgram_audio_v1"
-        ? createDeepgramAdapter(config, emit, limits, fetchImpl)
+        ? createDeepgramAdapter(config, emit, limits, fetchImpl, diagnostics)
         : config.adapter === "managed_transformers_v1"
-          ? createSnapshotAdapter(emit, limits, config.transcribe)
-          : createHttpAdapter(config, emit, limits, fetchImpl);
+          ? createSnapshotAdapter(emit, limits, config.transcribe, diagnostics)
+          : createHttpAdapter(config, emit, limits, fetchImpl, diagnostics);
       await next.opened;
       if (completed) {
         next.close();
@@ -507,9 +1074,10 @@ export function createDictationStream({ wss, voiceRuntime, recordingStore = null
         return;
       }
       adapter = next;
-      for (const chunk of pendingPcm) adapter.write(chunk);
-      pendingPcm.length = 0;
+      if (pcmAccumulator.byteLength > 0) adapter.write(pcmAccumulator.view());
       adapterReady = true;
+      diagnostics.runtimeReadyAt = performance.now();
+      send({ type: "runtime_ready", ...runtimeMetadata });
       settleAdapter(adapter);
     })().catch((error) => {
       settleAdapter(null);
@@ -517,23 +1085,44 @@ export function createDictationStream({ wss, voiceRuntime, recordingStore = null
     });
 
     client.on("message", (data, isBinary) => {
-      if (completed || stopping) return;
       try {
         if (isBinary) {
+          if (completed || stopping) return;
           acceptAudio(data);
           return;
         }
         const command = JSON.parse(String(data));
+        if (command.type === "client_diagnostics") {
+          if (completed) void updateClientDiagnostics(command.clientDiagnostics ?? command.diagnostics).catch((error) => {
+            console.error(`Voice diagnostic completion metadata update failed: ${error.message}`);
+            send({ type: "client_diagnostics_ack", accepted: false });
+          });
+          return;
+        }
+        if (completed || stopping) return;
         if (command.type !== "stop") throw dictationError("dictation_control_invalid", "Unknown dictation control frame");
         const reportedAudioBytes = Number(command.audioBytesSent);
         clientAudioBytes = Number.isFinite(reportedAudioBytes) && reportedAudioBytes >= 0
           ? Math.trunc(reportedAudioBytes)
           : null;
+        diagnostics.client = sanitizeClientDiagnostics(command.clientDiagnostics ?? command.diagnostics);
+        diagnostics.transport.clientAudioBytes = clientAudioBytes ?? diagnostics.client?.transport.pcmBytes ?? null;
         stop("stopped");
       } catch (error) { fail(error); }
     });
     client.once("close", () => {
-      if (!completed) { completed = true; cleanup(); }
+      if (!completed) {
+        completed = true;
+        diagnostics.sessionFinalAt ||= performance.now();
+        cleanup();
+        startVadObservation();
+        const archive = archiveRecording("client_disconnected");
+        void Promise.all([archive, vadObservationPromise]).then(() => updateSavedRecording({
+          completionReason: "client_disconnected",
+          diagnostics: diagnosticsPayload(),
+          ...runtimeMetadata,
+        }));
+      }
       settleAdapter(null);
       activeSessions = Math.max(0, activeSessions - 1);
       voiceRuntime.unpin?.();

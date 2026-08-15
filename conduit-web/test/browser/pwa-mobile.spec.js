@@ -254,7 +254,7 @@ test("acceptance: mobile header hides identity and groups chat actions in More",
   await expect(menu).toBeVisible();
   await expect(menu.locator(".chat-header-menu-title")).toHaveText("New chat");
   await expect(menu.locator(".chat-header-menu-meta")).toContainText("Chats");
-  for (const label of ["Workspace panel", "Share", "Rename", "Delete"]) {
+  for (const label of ["Update app", "Workspace panel", "Share", "Rename", "Delete"]) {
     await expect(menu.getByRole("menuitem", { name: label, exact: true })).toBeVisible();
   }
   const [menuBox, viewport] = await Promise.all([
@@ -275,6 +275,30 @@ test("acceptance: mobile header hides identity and groups chat actions in More",
   await expect(page).toHaveURL(beforeUrl);
   await page.getByRole("button", { name: "Close workspace panel" }).tap();
   await expect(page.getByRole("complementary", { name: "Workspace panel" })).toBeHidden();
+});
+
+test("acceptance: update app checks the service worker before reloading", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "mobile-chromium", "phone app update control");
+  await openApp(page);
+
+  const result = await page.evaluate(async () => {
+    const updateCalls = [];
+    const registration = {
+      installing: null,
+      waiting: null,
+      update: async () => { updateCalls.push("update"); },
+    };
+    Object.defineProperty(navigator.serviceWorker, "getRegistration", {
+      configurable: true,
+      value: async () => registration,
+    });
+    const { forcePwaUpdate } = await import("/src/client/pwa-update.ts");
+    let reloads = 0;
+    await forcePwaUpdate(() => { reloads += 1; });
+    return { updateCalls, reloads };
+  });
+
+  expect(result).toEqual({ updateCalls: ["update"], reloads: 1 });
 });
 
 test("acceptance: mobile runtime status moves out of the composer and opens a bounded detail sheet", async ({ page }, testInfo) => {

@@ -107,6 +107,9 @@ svg { stroke-width: 1.5; }
 .chat-status-waveform .voice-waveform-gridline, .chat-status-waveform .voice-waveform-peak { display: none; }
 .chat-header-more { display: none; }
 .chat-header-more svg { width: 16px; height: 16px; }
+.pwa-update-icon-active { animation: pwa-update-spin .8s linear infinite; }
+@keyframes pwa-update-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .pwa-update-icon-active { animation: none; } }
 .chat-header-menu-title { display: block; max-width: 100%; overflow-wrap: anywhere; color: var(--foreground); font-size: 14px; font-weight: 600; }
 .chat-header-menu-meta { display: block; max-width: 100%; overflow-wrap: anywhere; line-height: 1.35; }
 .workspace-warning { position: relative; z-index: 2; display: flex; width: min(760px, calc(100% - 48px)); gap: 10px; margin: 8px auto; padding: 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--card); }

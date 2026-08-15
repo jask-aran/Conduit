@@ -1,4 +1,4 @@
-import { createEffect, createMemo, createSignal, For, on, onCleanup, Show } from "solid-js";
+import { createEffect, createMemo, createSignal, For, on, onCleanup, onMount, Show } from "solid-js";
 import { Combobox as KCombobox } from "@kobalte/core/combobox";
 import * as KDialog from "@kobalte/core/dialog";
 import { CheckIcon, SearchIcon } from "lucide-solid";
@@ -9,6 +9,7 @@ import { MARKDOWN_RENDERER_OPTIONS, type MarkdownRendererId } from "../chat/mark
 import { CONTEXT_METRIC_GROUPS, CONTEXT_METRIC_OPTIONS, CONTEXT_METRIC_PRESETS, contextMetricPreset, metricsForContextMetricPreset, type ContextMetricId, type ContextMetricPresetId } from "../chat/context-metrics";
 import { formatMicrophoneError, hasAudioSignal, isUnavailableAudioInputError, listAudioInputDevices, MAX_AUDIO_INPUT_TEST_DURATION_MS, revokeAudioInputRecording, startAudioInputTest as beginAudioInputTest, type AudioInputDevice, type AudioInputTestResult, type AudioInputTestSession, } from "../chat/voice-audio";
 import { shortcutFromKeyboardEvent } from "../chat/voice-dictation";
+import { isWarmMicrophoneActive, stopWarmMicrophone } from "../chat/voice-dictation-client";
 import { createVoiceWaveformController, VoiceWaveform } from "../chat/voice-waveform";
 import type { Installation, ModelOption, Project, Template } from "../api/contracts";
 import type { ModelSettings } from "../state/model-settings";
@@ -19,7 +20,7 @@ import { ShortcutsSettings } from "./shortcuts-settings";
 const sections = ["general", "ui", "shortcuts", "models", "profiles", "runtime", "workspaces", "voice", "search", "auth"] as const;
 type Section = typeof sections[number];
 const label = (section: Section) => section === "ui" ? "UI" : section[0]!.toUpperCase() + section.slice(1);
-type VoiceDictationSettings = { shortcut: string; activation: "push_to_talk" | "toggle"; autoSend: boolean; inputDeviceId: string };
+type VoiceDictationSettings = { shortcut: string; activation: "push_to_talk" | "toggle"; autoSend: boolean; inputDeviceId: string; captureProfile: "raw" | "processed"; warmMicrophone: boolean };
 
 interface RuntimeSettings {
   maxLiveProcesses: number;
@@ -174,6 +175,7 @@ export function Settings(props: {
   const [voiceTestResult, setVoiceTestResult] = createSignal("");
   const [voiceDraft, setVoiceDraft] = createSignal<VoiceDictationSettings>({ ...props.voiceSettings });
   const [voiceSettingsSaved, setVoiceSettingsSaved] = createSignal(false);
+  const [warmMicrophoneActive, setWarmMicrophoneActive] = createSignal(isWarmMicrophoneActive());
   const [voiceServerEdited, setVoiceServerEdited] = createSignal(false);
   const [audioInputDevices, setAudioInputDevices] = createSignal<AudioInputDevice[]>([]);
   const [audioInputStatus, setAudioInputStatus] = createSignal<"idle" | "loading" | "ready" | "error">("idle");
@@ -282,6 +284,14 @@ export function Settings(props: {
     audioInputSession?.dispose();
     audioInputSession = null;
     clearAudioInputTest();
+  });
+
+  onMount(() => {
+    const onWarmMicrophoneState = (event: Event) => {
+      setWarmMicrophoneActive((event as CustomEvent<{ active?: boolean }>).detail?.active === true);
+    };
+    window.addEventListener("conduit:warm-microphone-state", onWarmMicrophoneState);
+    onCleanup(() => window.removeEventListener("conduit:warm-microphone-state", onWarmMicrophoneState));
   });
 
   createEffect(() => {
@@ -488,6 +498,7 @@ export function Settings(props: {
   });
 
   const updateVoiceDraft = (patch: Partial<VoiceDictationSettings>) => {
+    if (patch.warmMicrophone === false) stopWarmMicrophone();
     setVoiceDraft((current) => ({ ...current, ...patch }));
     setVoiceSettingsSaved(false);
   };
@@ -559,6 +570,7 @@ export function Settings(props: {
     let session: AudioInputTestSession | null = null;
     try {
       session = beginAudioInputTest(selectedDeviceId, {
+        profile: voiceDraft().captureProfile,
         maxDurationMs: MAX_AUDIO_INPUT_TEST_DURATION_MS,
         onLevel: (level) => {
           audioInputWaveform.push(level);
@@ -792,6 +804,10 @@ export function Settings(props: {
                       <Show when={voiceDraft().inputDeviceId && !audioInputDevices().some((device) => device.deviceId === voiceDraft().inputDeviceId)}><option value={voiceDraft().inputDeviceId}>Selected microphone unavailable</option></Show>
                       <For each={audioInputDevices()}>{(device) => <option value={device.deviceId}>{device.label}</option>}</For>
                     </select><small>Chrome controls site permission. Choose the input that should feed dictation.</small></Field>
+                    <Field><FieldLabel for="voice-capture-profile">Capture profile</FieldLabel><select id="voice-capture-profile" disabled={audioInputBusy()} value={voiceDraft().captureProfile} onChange={(event) => updateVoiceDraft({ captureProfile: event.currentTarget.value as "raw" | "processed" })}>
+                      <option value="raw">Raw candidate (browser AGC off)</option>
+                      <option value="processed">Processed browser profile (browser AGC on)</option>
+                    </select><small>Both profiles keep echo cancellation and noise suppression requested. Raw disables browser automatic gain and Conduit never adds adaptive ASR gain.</small></Field>
                     <div class="voice-actions"><Button variant="outline" size="sm" disabled={audioInputBusy() || audioInputStatus() === "loading"} onClick={() => void loadAudioInputs()}>Refresh microphones</Button><Button variant="outline" size="sm" disabled={audioInputStatus() === "loading"} onClick={() => audioInputBusy() ? stopAudioInputTest() : void testAudioInput()}>{audioInputBusy() ? <><Spinner />Stop microphone test</> : "Test microphone"}</Button></div>
                     <Show when={audioInputBusy() || audioInputTest()}>
                       <VoiceWaveform class="settings-recorder-monitor" history={audioInputWaveform.history} level={audioInputWaveform.level} peak={audioInputWaveform.peak} state={audioInputBusy() ? "listening" : "stopped"} ariaLabel="Microphone input level" />
@@ -822,6 +838,10 @@ export function Settings(props: {
                     <option value="toggle">Toggle (press)</option>
                   </select><small>{voiceDraft().activation === "toggle" ? "Press the shortcut once to start and again to stop." : "Hold the shortcut while you speak. Release it to stop."}</small></Field>
                   <label class="dictation-auto-send"><input type="checkbox" checked={voiceDraft().autoSend} onChange={(event) => updateVoiceDraft({ autoSend: event.currentTarget.checked })} /><span><strong>Auto-send timely final dictation</strong><small>Off by default. Conduit only submits a server-confirmed final transcript settled within one second.</small></span></label>
+                  <label class="dictation-auto-send"><input id="voice-warm-microphone" type="checkbox" checked={voiceDraft().warmMicrophone} onChange={(event) => updateVoiceDraft({ warmMicrophone: event.currentTarget.checked })} /><span><strong>Keep microphone warm between dictations</strong><small>Off by default. When enabled, Chrome keeps the microphone active after a dictation so the next one can start faster. Save this setting before use.</small></span></label>
+                  <Show when={warmMicrophoneActive()} fallback={<Show when={voiceDraft().warmMicrophone}><p class="voice-input-live-state" role="status">Warm microphone retention is enabled for the next dictation.</p></Show>}>
+                    <div class="voice-input-live-state" role="status">Microphone remains active between dictations.<Button variant="outline" size="sm" onClick={stopWarmMicrophone}>Stop warm microphone</Button></div>
+                  </Show>
                   <Field><FieldLabel for="voice-mode">Transcription source</FieldLabel><select id="voice-mode" disabled={voiceBusy()} value={voiceServerSettings()!.mode} onChange={(event) => {
                     const mode = event.currentTarget.value as VoiceServerSettings["mode"];
                     updateVoiceServer({ mode });

@@ -225,11 +225,23 @@ selected Activation behaviour: Push to talk holds the recording, while Toggle
 starts and stops it with separate presses. The shortcut is captured before page
 controls so Chrome does not consume the default chord as a bookmark command.
 Microphone capture starts in
-parallel with the voice connection. The composer keeps a compact,
+parallel with the voice connection. The composer shows Preparing microphone
+until the first PCM packet exists, then shows Recording, Finishing capture,
+Waiting for transcription engine when needed, and Transcribing as the session
+advances. A healthy AudioContext and cached worklet are reused between
+sessions. The composer keeps a compact,
 width-responsive left-to-right history in the status line. Settings → Voice uses the same
 bounded bar renderer in a larger monitor with current level, peak hold, and
 recording state. The browser captures 16 kHz mono PCM with an `AudioWorklet`
-and sends it only to authenticated `WS /v0/dictation/stream`. Settings → Voice
+and sends it in 20 ms, 320-sample packets only to authenticated
+`WS /v0/dictation/stream`; Stop flushes one final partial packet when needed.
+Conduit also runs the pinned Silero VAD as a shadow observer at Stop when a
+verified artifact is installed. This observation does not change the PCM or
+transcript path. Recording sidecars retain the complete WAV, frame speech
+probabilities, the current RMS heuristic boundaries, and padded Silero sample
+ranges for comparison. Exact-zero input is reported as a digital-silence or
+device-stall diagnostic; it is not treated as authoritative speech VAD.
+Settings → Voice
 can select a browser microphone, refresh the device list, and run an in-memory
 input-level test until the user stops it; a 60-second safety cap prevents an
 abandoned test from running forever. When the browser supports a playable
@@ -239,12 +251,14 @@ released when replaced or when Settings closes. Browsers without a playable
 recorder still provide the live level test and show why playback is unavailable.
 Chrome site settings still control permission. The selected input must be
 available there. Voice shortcut,
-activation, auto-send, microphone, transcription source, and model changes stay
+activation, auto-send, microphone, warm-microphone retention, transcription source, and model changes stay
 in a draft until **Save Voice settings**. A selected microphone remains stored
 until capture reports that it is unavailable; Conduit then shows a recovery
 toast without silently changing the device. Conduit ignores a no-signal
 completion from a short intentional stop, and reports sustained silence only
-after five seconds. Settings → Voice can use managed
+after five seconds. Warm microphone retention is off by default; when enabled,
+Settings shows the active state and a direct Stop warm microphone control.
+Settings → Voice can use managed
 Whisper Tiny English, Whisper Base, Whisper Small, Parakeet TDT 0.6B v2, or Parakeet TDT 0.6B v3,
 and has first-class provider/model profiles for OpenAI, Deepgram, and Groq.
 Remote None, Bearer, and custom API-key-header credentials are stored server-side in `data/voice.json`
@@ -521,9 +535,13 @@ produces `client_error` with `code` and `message`.
 ## Voice dictation protocol
 
 `WS /v0/dictation/stream` is authenticated like every other upgrade. Browser
-binary frames are signed 16-bit little-endian mono PCM at 16 kHz. The browser
+binary frames are signed 16-bit little-endian mono PCM at 16 kHz. The normal
+packet is 320 samples (640 bytes, 20 ms); the final frame can be shorter. The browser
 stop control is `{ "type": "stop" }`; it may include the optional numeric
-`audioBytesSent` diagnostic field. Upstream adapters are file-upload based: the
+`audioBytesSent` field and bounded `clientDiagnostics` metadata. After the server
+sends `completed`, the browser sends one bounded `{ "type": "client_diagnostics" }`
+frame with its final-event timing; the server acknowledges it and updates the
+matching JSON sidecar. Upstream adapters are file-upload based: the
 `openai_audio_sse_v1` adapter sends an in-memory WAV utterance and consumes
 JSON or `transcript.text.delta` / `transcript.text.done` SSE events; the
 `deepgram_audio_v1` adapter sends WAV audio and reads channel alternatives.
@@ -544,6 +562,27 @@ non-secret adapter/provider/model metadata; clients must never infer auto-send
 timing from browser clocks. The browser also emits
 `conduit:voice-dictation-metrics` with the completion diagnostics.
 
+Completion diagnostics use schema version 5. Client timings use the browser's
+monotonic `performance.now()` clock and server timings use the server's own
+monotonic clock; the two clocks must not be subtracted. The bounded sidecar and
+metrics event include shortcut-to-first-PCM capture startup, microphone and
+worklet setup, first WebSocket send, packet and byte counts, socket buffering,
+redacted requested/effective audio settings, the selected raw or processed
+capture profile, source and processing sample rates, resampler method, and
+pre/post-worklet RMS/peak/clipping. Live capture does not calculate spectral
+energy. Conduit does not apply adaptive ASR gain; the recorded worklet gain is
+therefore an identity value. Capture diagnostics also state whether the
+microphone stream was reused. The diagnostics also include first/last server
+PCM, runtime preparation, inference queue/start/finish, partial/final,
+completion-send, archive, and bounded VAD queue/execution timing.
+The client event record includes digital-silence device-stall notifications.
+The server record includes the RMS heuristic and, when available, the shadow
+Silero frame probabilities and padded sample ranges.
+Raw device identifiers, credentials, and transcript bodies are not diagnostic
+fields or structured log fields. The current runtime reports its execution path
+and records an unavailable compute backend as `null` until the runtime exposes
+that fact.
+
 Finalisation uses `max(base, recordedAudioSeconds × modelMultiplier)` and a
 ten-minute cap. The relaxed defaults are a 30-second base and a 12× fallback
 multiplier; the full-precision local Parakeet policy uses 18×. Deployments can
@@ -551,20 +590,34 @@ adjust the base, cap, and fallback with
 `CONDUIT_VOICE_FINALIZATION_BASE_MS`, `CONDUIT_VOICE_FINALIZATION_MAX_MS`, and
 `CONDUIT_VOICE_FINALIZATION_DEFAULT_MULTIPLIER`.
 
-The browser keeps the selected microphone ID in local settings and applies it
-as an exact `getUserMedia` device constraint. The input test measures the live
-stream until the user stops it, with a 60-second safety cap. A missing signal is
-reported in Settings → Voice and blocks transcript insertion for that
-utterance. Dictation sessions accept up to five minutes and the client surfaces
-the completion reason when the server reaches that limit.
+The browser keeps the selected microphone ID and capture profile in local
+settings and applies the microphone ID as an exact `getUserMedia` device
+constraint. The raw candidate profile requests echo cancellation, noise
+suppression, and browser automatic gain control off. The processed profile
+requests all three features on for devices that need speaker-echo handling.
+The browser reports the effective track settings separately from those
+requests. Both profiles use the same unamplified ASR PCM path.
+Conduit requests a 16 kHz `AudioContext`; when the browser keeps another source
+rate, the capture worklet uses a windowed-sinc FIR resampler and records the
+effective rates and method. The input test uses the selected profile, measures
+the live stream until the user stops it, and has a 60-second safety cap. A
+missing signal is reported in Settings → Voice. It blocks only an empty
+completion; a non-empty server transcript is retained even when browser level
+meters are quiet. Dictation sessions accept up to five minutes and the client
+surfaces the completion reason when the server reaches that limit.
 
-Successful dictations with at least one second of server-received PCM and
-non-empty transcript output are retained under `data/voice/recordings` as
-timestamped WAV/JSON diagnostic pairs. The archive keeps the latest 20 pairs;
-the JSON sidecar contains non-secret completion, provider, model, and byte
+Dictations with at least one second of server-received PCM are retained under
+`data/voice/recordings` as timestamped WAV/JSON diagnostic pairs, including
+sessions where the transcription service returns no text. Empty results have
+an empty `transcript` and `transcriptStatus: "empty"` in the sidecar. The
+archive keeps the latest 20 standard pairs and a separate bounded quota of
+four short failure recordings; short sessions do not evict normal recordings.
+The JSON sidecar contains non-secret completion, provider, model, and byte
 metadata. Settings microphone tests remain browser-local and are not archived.
 
-The server limits concurrent dictation sessions, audio duration and bytes,
+The server owns one bounded PCM accumulator per active session and shares its
+views with the selected adapter and archive; batch adapters materialise one
+contiguous buffer only at Stop. The server limits concurrent dictation sessions, audio duration and bytes,
 frame/event sizes, WebSocket buffering, connect time, and finalisation time.
 Settings-created remote endpoints require HTTPS, reject URL credentials and
 query strings, resolve only to public addresses, and pin the checked address for
@@ -650,6 +703,11 @@ Production builds (`npm run build` via `vite-plugin-pwa`) emit:
 Add to Home Screen. The plugin injects manifest link and service-worker
 registration into the production HTML only; Vite dev does not register a
 worker, so installability is a production property.
+
+To force an installed app to check for a new shell, open any chat's More chat
+options menu and select `Update app`. Conduit asks the active service worker to
+update, waits for a new worker to take control when needed, and reloads the
+current chat.
 
 The service worker precaches static shell assets (`js`/`css`/`html`/`svg`/
 `png`/`ico`/`woff2`). It does **not** add runtime caching for `/v0`,

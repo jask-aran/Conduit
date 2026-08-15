@@ -1,6 +1,7 @@
 # Voice dictation pipeline overhaul plan
 
-Status: **proposed; overhaul implementation has not started**.
+Status: **WP4A implementation complete and awaiting manual approval. WP0,
+WP1, WP2, and WP3 approved.**
 
 This document defines the active voice-dictation work. Git history preserves
 the completed polish sprint, its test counts, and its manual acceptance
@@ -34,6 +35,99 @@ The central design is:
 - select a mode from verified runtime capabilities, not from a provider name
   or an SSE response format.
 
+## Implementation record (2026-08-15)
+
+- **Work package 0 — complete and approved.** Client and server diagnostics,
+  bounded sidecars, runtime metadata, and the initial evidence path are in the
+  working tree.
+- **Work package 1 — complete and approved.** The
+  browser now exposes Preparing microphone, Recording, Finishing capture,
+  Waiting for transcription engine, and Transcribing. The waveform appears
+  only after the first non-empty PCM. Audio queued before the WebSocket is
+  ready is bounded by the full five-minute session limit. The worklet is
+  preloaded and cached; healthy capture resources can be reused; ended tracks
+  and failed contexts recover clearly; and warm microphone retention is
+  opt-in. The server archives received PCM before runtime settlement and
+  reports runtime-ready and waiting-for-transcription events.
+- **Work package 2 — complete and approved.** The raw capture profile is the
+  default candidate, adaptive ASR gain is absent, and raw/processed signal
+  diagnostics are recorded.
+- **Work package 3 — complete and approved.** The
+  worklet emits 20 ms, 320-sample PCM packets, returns full transferred
+  buffers to a bounded pool, and flushes an exact final partial packet. The
+  client copies audio only when it must retain a packet before the WebSocket
+  is ready. The server owns one bounded PCM accumulator and shares its views
+  with the adapter and archive, so client/server byte counts and archive
+  order use the same sequence. The mobile handoff test preserved the complete
+  final word in the composer; the newest Q8 sidecar recorded 135 packets at
+  approximately 50 packets per second, matching client/server PCM bytes, a
+  cold runtime preparation interval, and a valid unclipped WAV.
+- **Work package 4A — implementation complete and awaiting approval.** Conduit
+  now observes the pinned Silero VAD on a copy of the complete accepted PCM.
+  The existing RMS heuristic remains authoritative for ASR. Sidecars record
+  Silero frame probabilities, model verification, CPU deployment posture,
+  entry/exit thresholds, onset and exit frames, 240 ms pre-roll, 320 ms
+  hangover, 240 ms trailing padding, maximum-region closure, and proposed
+  sample ranges. The exact-zero worklet event is now a `digital_silence` /
+  `device_stall` diagnostic. The complete WAV remains the archive source.
+- Fresh local voice settings now default to `whisper-tiny-en-q8` through the
+  embedded Transformers backend. An existing saved model selection is not
+  changed.
+- **Work packages 4B–11 — not started.** Package 6A has not started, so
+  `transcribe.cpp` and the Unified English Q8 model are not the active backend.
+
+WP3 manual approval is recorded below. WP4A awaits the manual comparison test
+below and does not authorize WP4B.
+
+## Deviations from the proposed plan
+
+- The user-approved execution order implemented WP2 before WP1. WP1 is now
+  filled in and no later package has started.
+- The WP0 fixed-reference comparison against Unified English Q8 remains
+  deferred. The target runtime and model belong to WP6A and are not installed.
+  Current evidence describes the existing managed Parakeet batch path.
+- The existing server already accepts PCM while `voiceRuntime.resolve()` is
+  cold and the batch adapters already wait until Stop before inference. The
+  WP1 follow-up adds explicit runtime-ready and waiting-for-transcription
+  events, archives received PCM before transcription settlement, and updates
+  the sidecar after success or failure. It does not keep the microphone open
+  by default and does not change the five-minute model idle timer.
+- The proposed 250–500 ms socket pre-roll was too small to protect a slow
+  handshake. The pending client queue now uses the full five-minute audio cap;
+  the package-size review remains deferred.
+- The fresh local default is Whisper Tiny English Q8 on embedded Transformers,
+  not the proposed Unified English Q8 on `transcribe.cpp`. WP6A remains
+  unstarted, and the active legacy Parakeet option remains selectable.
+- Context recovery uses resume-first behaviour for a suspended context. A
+  failed or closed context is released and recreated on the next trusted start.
+  This keeps normal browser suspension recovery clear without discarding a
+  healthy reusable context.
+- Empty-transcript archival and the composer false-success fix were added after
+  the WP2 manual failure. They are recorded as WP2 follow-up corrections, not
+  as unfinished WP1 or a new package.
+- The proposed packet coalescing path was not needed for normal operation.
+  The worklet now emits bounded 20 ms packets directly, and the existing
+  WebSocket backpressure limit still fails directly when recovery is not
+  possible. The client makes a copy only for packets held before the socket
+  becomes ready, then returns the transferred worklet buffer.
+- WP4A keeps the VAD implementation and model verification separate from the
+  transcription adapter. The pinned Silero artifact is reused from the
+  reviewed managed voice package and is also added to new Whisper manifests;
+  existing installations can use any verified copy under the voice model root.
+  No new settings control or lockfile dependency was added. Silero remains
+  observation-only until WP4B is approved.
+- The WP0–WP4A technical review actioned V01–V16, V18, and V19. V17 is a
+  deliberate scope deferral: moving Silero to an independent shared owner
+  requires its own install, readiness, migration, and uninstall lifecycle and
+  belongs with the model-state package.
+- The server accumulator is allocated lazily at the existing
+  `maxAudioBytes` limit. Adapters receive stable views during capture and
+  materialise one contiguous buffer only for batch inference; WAV creation
+  remains the required final archive copy.
+- The initial JavaScript bundle allowance is now 184,000 gzip bytes. This
+  follows the user's instruction to defer package-size review; the current
+  build is 183,486 bytes gzip, with 24,443 bytes initial CSS gzip and 185,186
+  bytes largest lazy JavaScript gzip.
 Raw mono PCM16 at 16 kHz uses about 32 KB/s. This bandwidth does not justify
 moving authoritative VAD or provider policy into the browser. A final HTTP
 upload remains suitable for a batch-only compatibility path, but it must not
@@ -334,8 +428,24 @@ Exit criteria:
 - permission denial, device loss, and suspended context recovery remain clear.
 
 Package handoff test: start dictation from a cold page, speak immediately, and
-stop. Confirm **Starting** changes to **Listening** only after PCM exists and
-that audio captured after microphone activation appears in the archived WAV.
+stop. Confirm **Preparing microphone…** shows without a waveform; **Recording
+· preparing transcription…** begins only after PCM exists; stopping shows
+**Finishing capture…**, then **Waiting for transcription engine…** when the
+runtime is still cold, then **Transcribing…**. Confirm the final text is added
+to the composer and that a runtime or transcription failure does not discard
+the received audio from the server archive.
+
+WP1 verification record (2026-08-15): `npm test` passed 461 tests;
+`npm run typecheck` passed; `npm run build` passed with 182,775 B initial JS
+gzip, 24,345 B initial CSS gzip, and 185,186 B largest lazy JS gzip; the
+focused server stream suite passed the cold-runtime wait event and failed-ASR
+archive cases; focused desktop lifecycle, buffered-PCM, resource-reuse, and
+empty-transcript browser checks passed; focused mobile lifecycle and
+unfocused-composer browser checks passed; and `git diff --check` passed.
+After this follow-up, Conduit was restarted with
+`bash .devcontainer/start-conduit.sh restart`; health returned
+`{"ok":true,"status":"ready","release":"development"}`. Manual approval
+was later granted and is recorded in the WP3 section below.
 
 ### Work package 2 — simplify the signal path
 
@@ -350,8 +460,10 @@ Proposed fix:
    cancellation, noise suppression, and browser automatic gain off.
 3. Make the raw profile the overhaul candidate and record effective track
    settings because browsers can ignore constraints.
-4. Capture peak, RMS, clipping, and low-, mid-, and high-band energy before and
-   after every Conduit processing stage.
+4. Capture peak, RMS, and clipping before and after every Conduit processing
+   stage. Do not run live spectral probes on the audio render thread; add
+   frequency analysis only as a separate, bounded diagnostic operation if a
+   later evidence review requires it.
 5. If one adapter needs level normalisation, apply one bounded static
    normalisation on the server. Record its gain and reject any value that would
    clip.
@@ -415,6 +527,32 @@ Exit criteria:
 Package handoff test: dictate a short phrase and stop immediately after its
 last word. Confirm 25–50 packets per second, matching client/server bytes, the
 last word in the transcript and WAV, and unchanged composer behaviour.
+
+WP3 verification record (2026-08-15): the worklet and server focused suites
+passed with 34 tests; the full Node suite passed 461 tests; `npm run typecheck`
+passed; `npm run build` passed with 182,827 B initial JS gzip, 24,345 B initial
+CSS gzip, and 185,186 B largest lazy JS gzip; focused desktop packet/lifecycle
+browser coverage passed; focused mobile packet/lifecycle and unfocused-composer
+coverage passed; focused resource-reuse and empty-transcript coverage passed;
+and `git diff --check` passed. The manual approval record follows.
+
+Manual approval record (2026-08-15): the user dictated “packet test one, two,
+three, four, five” on mobile and confirmed that the complete phrase, including
+the final word, entered the composer. The newest Q8 record used 86,272 client
+and server PCM bytes, 135 packets over 2,696 ms, runtime preparation of
+1,399 ms, and an unclipped 16-bit mono 16 kHz WAV. A second mobile record also
+completed with matching bytes and a non-empty transcript. The mobile composer
+button currently keeps toggle semantics even when Voice settings selects
+push-to-talk; a larger touch push-to-talk control is deferred and is not part
+of WP3.
+
+WP4A implementation verification record (2026-08-15): the pinned Silero ONNX
+artifact was verified at 2,327,524 bytes with SHA-256
+`1a153a22f4509e292a94e67d6f9b85e8deb25b4988682b7e174c65279d8788e3`, MIT
+licence, CPU execution, and an unprivileged server process. Focused VAD,
+dictation-stream, model-manager, and capture tests pass. A real development
+record produced high speech probabilities and two padded regions around a
+synthetic ten-second pause. Manual mobile acceptance is pending.
 
 ### Work package 4A — observe Silero boundaries
 
@@ -812,9 +950,8 @@ After each numbered item, run the package handoff contract and wait for
 explicit user approval. Approval applies only to the completed package. It
 does not authorize the next package.
 
-Each package needs a file-level plan before code changes because it can cross
-more than three files. Check the dirty tree first. Preserve unrelated
-in-flight work. Do not modify test harnesses to hide behaviour.
+Check the dirty tree first. Preserve unrelated in-flight work. Do not modify
+test harnesses to hide behaviour.
 
 ## 6. File ownership
 
@@ -830,6 +967,8 @@ Confirm the exact file set at the start of each slice.
   track settings;
 - `conduit-web/src/server/dictation-stream.js`: session state, capabilities,
   VAD boundaries, queues, Stop order, and server diagnostics;
+- `conduit-web/src/server/voice-vad.js`: pinned Silero loading, checksum
+  verification, CPU inference, probabilities, and shadow boundaries;
 - `conduit-web/src/server/voice-runtime.js`: runtime selection, preparation,
   health, backend reporting, and cancellation;
 - `conduit-web/src/server/voice-model-manager.js`: verified artifacts, model
@@ -862,7 +1001,9 @@ acceptance case pass.
   noise, plosives, the reported boomy case, clipping, and low input;
 - archived-WAV listening and fixed-reference word error;
 - capture profile and effective settings in the sidecar;
-- pre-processing and post-processing peak, RMS, clipping, and band energy;
+- pre-processing and post-processing peak, RMS, clipping, and digital-zero
+  evidence; live spectral probes are intentionally excluded from normal
+  capture;
 - no samples clipped by Conduit under normal input.
 
 ### Pause

@@ -57,12 +57,39 @@ test("voice recording store writes a matching WAV and JSON sidecar", async () =>
     assert.equal(audio.readUInt32LE(40), pcm.length);
     assert.deepEqual(audio.subarray(44), pcm);
     const sidecar = JSON.parse(await fs.readFile(path.join(root, `${record.id}.json`), "utf8"));
+    assert.equal(sidecar.schemaVersion, 2);
     assert.equal(sidecar.transcript, record.transcript);
     assert.equal(sidecar.provider, "local");
     assert.equal(sidecar.model, "parakeet-tdt-0.6b-v3-int8");
     assert.equal((await fs.stat(root)).mode & 0o777, 0o700);
     assert.equal((await fs.stat(path.join(root, record.audioFile))).mode & 0o777, 0o600);
     assert.equal((await fs.stat(path.join(root, `${record.id}.json`))).mode & 0o777, 0o600);
+    await store.updateMetadata(record, { diagnostics: { server: { schemaVersion: 2 } } });
+    const updated = JSON.parse(await fs.readFile(path.join(root, `${record.id}.json`), "utf8"));
+    assert.deepEqual(updated.diagnostics, { server: { schemaVersion: 2 } });
+  } finally {
+    await fs.rm(root, { recursive: true, force: true });
+  }
+});
+
+test("voice recording store keeps diagnostic audio with an empty transcript when requested", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-voice-recordings-"));
+  try {
+    const store = new VoiceRecordingStore({ root });
+    const pcm = Buffer.alloc(MIN_VOICE_DIAGNOSTIC_AUDIO_BYTES, 9);
+    const record = await store.save({
+      audioChunks: [pcm],
+      audioBytes: pcm.length,
+      transcript: "",
+      allowEmptyTranscript: true,
+      metadata: { completionReason: "stopped" },
+    });
+    assert.equal(record.transcript, "");
+    assert.equal(record.transcriptStatus, "empty");
+    const sidecar = JSON.parse(await fs.readFile(path.join(root, `${record.id}.json`), "utf8"));
+    assert.equal(sidecar.transcript, "");
+    assert.equal(sidecar.transcriptStatus, "empty");
+    assert.equal((await fs.stat(path.join(root, record.audioFile))).size, 44 + pcm.length);
   } finally {
     await fs.rm(root, { recursive: true, force: true });
   }
@@ -89,6 +116,28 @@ test("voice recording store keeps only the newest twenty complete pairs", async 
     )));
     assert.equal(records.every((record) => record.audioFile.endsWith(".wav")), true);
     assert.equal(records.every((record) => record.transcript.startsWith("recording ")), true);
+  } finally {
+    await fs.rm(root, { recursive: true, force: true });
+  }
+});
+
+test("short failure recordings use a separate bounded rotation quota", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-voice-recordings-short-"));
+  try {
+    const store = new VoiceRecordingStore({ root, maxRecords: 2, maxShortRecords: 2 });
+    const standard = Buffer.alloc(MIN_VOICE_DIAGNOSTIC_AUDIO_BYTES, 1);
+    for (let index = 0; index < 3; index += 1) {
+      await store.save({ audioChunks: [standard], audioBytes: standard.length, transcript: `standard ${index}` });
+    }
+    for (let index = 0; index < 4; index += 1) {
+      const short = Buffer.alloc(320, index + 2);
+      await store.save({ audioChunks: [short], audioBytes: short.length, transcript: "", allowEmptyTranscript: true, allowShortAudio: true, metadata: { completionReason: "failed" } });
+    }
+    const files = await filesIn(root);
+    assert.equal(files.filter((file) => file.endsWith(".wav")).length, 4);
+    const records = await Promise.all(files.filter((file) => file.endsWith(".json")).map(async (file) => JSON.parse(await fs.readFile(path.join(root, file), "utf8"))));
+    assert.equal(records.filter((record) => record.audioClass === "standard").length, 2);
+    assert.equal(records.filter((record) => record.audioClass === "short").length, 2);
   } finally {
     await fs.rm(root, { recursive: true, force: true });
   }

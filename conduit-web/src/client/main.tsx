@@ -2,7 +2,7 @@
 import { batch, createEffect, createMemo, createSignal, ErrorBoundary, lazy, onCleanup, onMount, Show } from "solid-js";
 import { render } from "solid-js/web";
 import {
-  ChevronDownIcon, EllipsisIcon, PanelLeftIcon, PanelRightIcon, PencilIcon, SearchIcon, ShareIcon, TerminalIcon, Trash2Icon, TriangleAlertIcon,
+  ChevronDownIcon, EllipsisIcon, PanelLeftIcon, PanelRightIcon, PencilIcon, RefreshCwIcon, SearchIcon, ShareIcon, TerminalIcon, Trash2Icon, TriangleAlertIcon,
 } from "lucide-solid";
 import { registerSW } from "virtual:pwa-register";
 import { Toaster, toast } from "solid-sonner";
@@ -33,16 +33,18 @@ import { createCatalogueStore } from "./state/catalogue";
 import { createModelSettings } from "./state/model-settings";
 import { createRuntimeStore } from "./state/runtime";
 import { VoiceWaveform } from "./chat/voice-waveform";
+import { preloadVoiceCaptureWorklet } from "./chat/voice-dictation-client";
+import { forcePwaUpdate, rememberPwaRegistration } from "./pwa-update";
 import { browserShortcutEnvironmentProvider } from "./shortcuts/shortcut-environment";
 import { ShortcutManager } from "./shortcuts/shortcut-manager";
 import "./project/dashboard.css";
 import "./styles.css";
 
-if (import.meta.env.PROD) registerSW({ immediate: true });
+if (import.meta.env.PROD) registerSW({ immediate: true, onRegisteredSW: (_url, registration) => rememberPwaRegistration(registration) });
 
 type SettingsSection = "general" | "ui" | "shortcuts" | "models" | "profiles" | "runtime" | "workspaces" | "voice" | "search" | "auth";
 type WorkspaceView = "files" | "diff" | "artifacts" | "terminal";
-type VoiceDictationSettings = { shortcut: string; activation: "push_to_talk" | "toggle"; autoSend: boolean; inputDeviceId: string };
+type VoiceDictationSettings = { shortcut: string; activation: "push_to_talk" | "toggle"; autoSend: boolean; inputDeviceId: string; captureProfile: "raw" | "processed"; warmMicrophone: boolean };
 const WorkspacePanel = lazy(() => import("./workspace/workspace-panel"));
 const ProjectDashboard = lazy(() => import("./project/dashboard"));
 
@@ -65,6 +67,8 @@ function ChatHeader(props: {
   onShare: () => void;
   onRename?: () => void;
   onDelete?: () => void;
+  onUpdatePwa: () => void;
+  pwaUpdating: () => boolean;
   dashboard?: boolean;
 }) {
   const [statusOpen, setStatusOpen] = createSignal(false);
@@ -89,6 +93,7 @@ function ChatHeader(props: {
   const queueCount = () => props.chat ? props.chat.queue().steering.length + props.chat.queue().followUp.length : 0;
   const dictationLabel = () => props.composerStatus?.dictationLabel() || "";
   const dictating = () => Boolean(props.composerStatus?.dictating());
+  const recording = () => Boolean(props.composerStatus?.recording());
   const statusLabel = () => {
     const currentDictation = dictationLabel();
     if (currentDictation) return currentDictation;
@@ -102,7 +107,7 @@ function ChatHeader(props: {
   const statusKind = () => activity()?.kind || (props.connectivity === "offline" ? "runtime_failed" : "idle");
   const statusBusy = () => dictating() || SPINNING_ACTIVITY.has(statusKind()) || ["connecting", "reconnecting"].includes(props.connectivity || "");
   const statusFailure = () => props.connectivity === "offline" || ["request_failed", "runtime_failed"].includes(statusKind());
-  const statusTone = () => statusFailure() ? "error" : dictating() ? "listening" : statusBusy() ? "active" : "ready";
+  const statusTone = () => statusFailure() ? "error" : recording() ? "listening" : dictating() ? "active" : statusBusy() ? "active" : "ready";
   const connectionLabel = () => ({ connecting: "Connecting", online: "Connected", reconnecting: "Reconnecting", offline: "Offline" }[props.connectivity || "offline"] || "Unknown");
   const closeStatus = (open: boolean) => {
     setStatusOpen(open);
@@ -121,11 +126,8 @@ function ChatHeader(props: {
       <Show when={line()}><span class="chat-profile-posture" title={line()}>{line()}</span></Show>
       <Show when={!props.dashboard && props.chat}>
         <Button ref={statusTrigger} variant="ghost" size="sm" class="chat-status-trigger" data-state={statusTone()} aria-label={`Runtime status: ${statusLabel()}. Open runtime details`} aria-live="polite" aria-expanded={statusOpen()} aria-haspopup="dialog" onClick={() => setStatusOpen(true)}>
-          <Show when={dictating()} fallback={<span class="chat-status-icon" aria-hidden="true"><Show when={statusFailure()} fallback={<Show when={statusBusy()} fallback={<span class="chat-status-dot" />}><Spinner /></Show>}><TriangleAlertIcon /></Show></span>}>
-              <VoiceWaveform class="chat-status-waveform" history={waveformHistory} level={waveformLevel} peak={waveformPeak} state={waveformState()} variant="compact" barDensity={3.5} ariaLabel="Microphone input level" />
-          </Show>
-          <Show when={!dictating()}>
-            <span class="chat-status-label">{statusLabel()}</span>
+          <Show when={recording()} fallback={<span class="chat-status-label">{statusLabel()}</span>}>
+            <VoiceWaveform class="chat-status-waveform" history={waveformHistory} level={waveformLevel} peak={waveformPeak} state={waveformState()} variant="compact" barDensity={3.5} ariaLabel="Microphone input level" />
           </Show>
           <ChevronDownIcon class="chat-status-chevron" aria-hidden="true" />
         </Button>
@@ -145,6 +147,10 @@ function ChatHeader(props: {
               <MenuLabel class="chat-header-menu-meta">{menuLine()}</MenuLabel>
             </MenuGroup>
             <MenuSeparator />
+            <Show when={!props.dashboard}>
+              <MenuItem disabled={props.pwaUpdating()} onSelect={props.onUpdatePwa}><RefreshCwIcon class={props.pwaUpdating() ? "pwa-update-icon pwa-update-icon-active" : "pwa-update-icon"} />{props.pwaUpdating() ? "Updating app…" : "Update app"}</MenuItem>
+              <MenuSeparator />
+            </Show>
             <MenuItem onSelect={props.onTogglePanel}><PanelRightIcon />Workspace panel</MenuItem>
             <MenuItem onSelect={props.onShare}><ShareIcon />Share</MenuItem>
             <Show when={props.onRename}>
@@ -165,7 +171,7 @@ function ChatHeader(props: {
               <span class="mobile-status-sheet-state-label">{statusLabel()}</span>
               <span class="mobile-status-sheet-state-kind">{statusKind()}</span>
             </div>
-            <Show when={dictating()}>
+            <Show when={recording()}>
               <VoiceWaveform class="mobile-status-sheet-waveform" history={waveformHistory} level={waveformLevel} peak={waveformPeak} state={waveformState()} variant="compact" barDensity={3.5} ariaLabel="Microphone input level" />
             </Show>
             <dl class="mobile-status-facts">
@@ -244,6 +250,17 @@ function App() {
       duration: 12_000,
       action: { label: "Ask Runtime", onClick: () => void askRuntimeForError(diagnostic) },
     });
+  };
+  const [pwaUpdating, setPwaUpdating] = createSignal(false);
+  const runPwaUpdate = async () => {
+    if (pwaUpdating()) return;
+    setPwaUpdating(true);
+    try {
+      await forcePwaUpdate();
+    } catch (error) {
+      setPwaUpdating(false);
+      toast.error("Could not update the app", { description: error instanceof Error ? error.message : "Reload Conduit and try again." });
+    }
   };
   const catalogue = createCatalogueStore();
   const runtime = createRuntimeStore();
@@ -773,6 +790,7 @@ function App() {
   };
 
   onMount(() => {
+    void preloadVoiceCaptureWorklet().catch(() => {});
     const releaseApplicationContext = shortcutManager.activateContext("application");
     const releaseShortcutHandlers = [
       shortcutManager.registerHandler(COMMAND_IDS.openCommandPalette, "application", () => {
@@ -942,7 +960,7 @@ function App() {
         </Show>
         <Show when={routeKind() === "project" && selectedProject()} fallback={<>
           <Show when={dropActive()}><div class="chat-drop-overlay"><div>Drop files to attach</div></div></Show>
-          <ChatHeader project={selectedProject()} title={chat.title()} profile={activeProfile()} runtime={chat.runtimeIdentity()} live={chat.live() as unknown as Record<string, unknown>} chat={chat} contextMetrics={contextMetrics} composerStatus={composerStatus()} connectivity={runtime.connectivity()} panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={() => void shareChat()} onRename={() => runSidebar("rename-chat")} onDelete={() => runSidebar("delete-chat")} />
+          <ChatHeader project={selectedProject()} title={chat.title()} profile={activeProfile()} runtime={chat.runtimeIdentity()} live={chat.live() as unknown as Record<string, unknown>} chat={chat} contextMetrics={contextMetrics} composerStatus={composerStatus()} connectivity={runtime.connectivity()} panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={() => void shareChat()} onRename={() => runSidebar("rename-chat")} onDelete={() => runSidebar("delete-chat")} onUpdatePwa={() => void runPwaUpdate()} pwaUpdating={pwaUpdating} />
           <Show when={selectedProject()?.kind === "workspace" && [...runtime.processes().values()].some((process) => process.chatId !== catalogue.selectedId() && process.active)}><div class="workspace-warning"><TriangleAlertIcon /><div><strong>Another chat is working in this Workspace</strong><p>Both agents can edit the same files. Conduit does not lock the Workspace or create worktrees automatically.</p></div></div></Show>
           <div class="work-area">
             <section class="work-area-conversation" aria-label="Conversation">
@@ -952,7 +970,7 @@ function App() {
             </section>
           </div>
         </>}>
-          <ChatHeader project={selectedProject()} title="Dashboard" panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={() => void shareProject()} onRename={() => runSidebar("rename-folder")} onDelete={() => runSidebar("delete-project")} dashboard />
+          <ChatHeader project={selectedProject()} title="Dashboard" panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={() => void shareProject()} onRename={() => runSidebar("rename-folder")} onDelete={() => runSidebar("delete-project")} onUpdatePwa={() => void runPwaUpdate()} pwaUpdating={pwaUpdating} dashboard />
           <ProjectDashboard project={selectedProject()!} templates={templates()} runtime={runtime}
             onNewChat={async (project) => { await createChat(project); }} onOpenChat={(target: DashboardChat, project) => openChat(target, project)}
             onRename={() => runSidebar("rename-folder")} onDelete={() => runSidebar("delete-project")}
