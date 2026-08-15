@@ -550,10 +550,194 @@ export class SileroVad {
     }
   }
 
+  createStream() {
+    return new SileroVadStream(this);
+  }
+
   async stop() {
     const runtime = this.runtime;
     this.runtime = null;
     this.loadPromise = null;
     if (runtime?.session?.release) await runtime.session.release().catch(() => {});
+  }
+}
+
+export class SileroVadStream {
+  constructor(vad) {
+    this.vad = vad;
+    this.policy = vad.policy;
+    this.runtime = null;
+    this.sampleRate = null;
+    this.state = new Float32Array(SILERO_STATE_SIZE);
+    this.context = new Float32Array(this.policy.contextSamples);
+    this.pending = Buffer.alloc(0);
+    this.frames = [];
+    this.closedRegions = [];
+    this.sampleCount = 0;
+    this.processedSamples = 0;
+    this.regionStartFrame = -1;
+    this.lastActiveFrame = -1;
+    this.silentFrameCount = 0;
+    this.silenceStartFrame = -1;
+    this.emittedRegionCount = 0;
+    this.finished = false;
+  }
+
+  async load() {
+    if (!this.runtime) {
+      this.runtime = await this.vad.load();
+      this.sampleRate = new this.runtime.ort.Tensor("int64", BigInt64Array.from([16_000n]), []);
+    }
+    return this.runtime;
+  }
+
+  async processFrame(buffer, sampleCount) {
+    const runtime = await this.load();
+    const input = new Float32Array(this.policy.contextSamples + this.policy.frameSamples);
+    input.set(this.context);
+    for (let sample = 0; sample < sampleCount; sample += 1) {
+      input[this.policy.contextSamples + sample] = buffer.readInt16LE(sample * 2) / 32768;
+    }
+    const result = await runtime.session.run({
+      input: new runtime.ort.Tensor("float32", input, [1, input.length]),
+      state: new runtime.ort.Tensor("float32", this.state, [2, 1, 128]),
+      sr: this.sampleRate,
+    });
+    const nextState = result.stateN?.data;
+    if (!nextState || nextState.length !== this.state.length) {
+      throw vadError("voice_vad_runtime_output", "The Silero VAD runtime returned an invalid recurrent state");
+    }
+    this.state.set(nextState);
+    this.context = input.slice(-this.policy.contextSamples);
+    const startSample = this.processedSamples;
+    this.processedSamples += sampleCount;
+    this.frames.push({
+      startSample,
+      endSample: this.processedSamples,
+      probability: roundedProbability(result.output?.data?.[0]),
+    });
+    this.updateBoundaryState(this.frames.length - 1);
+  }
+
+  closeRegion({ exitDecisionFrame = null, closureReason = "end_of_stream" } = {}) {
+    if (this.regionStartFrame < 0 || this.lastActiveFrame < this.regionStartFrame) return;
+    this.closedRegions.push(regionFromFrames(this.frames, this.regionStartFrame, this.lastActiveFrame, this.processedSamples, this.policy, {
+      exitDecisionFrame,
+      silenceStartFrame: this.silenceStartFrame,
+      closureReason,
+    }));
+    this.regionStartFrame = -1;
+    this.lastActiveFrame = -1;
+    this.silentFrameCount = 0;
+    this.silenceStartFrame = -1;
+  }
+
+  updateBoundaryState(index) {
+    const probability = this.frames[index].probability;
+    const hangoverFrames = Math.ceil(this.policy.hangoverMs * this.policy.sampleRate / 1_000 / this.policy.frameSamples);
+    const maxRegionFrames = Math.max(1, Math.ceil(this.policy.maxRegionMs * this.policy.sampleRate / 1_000 / this.policy.frameSamples));
+    if (this.regionStartFrame < 0) {
+      if (probability >= this.policy.entryThreshold) {
+        this.regionStartFrame = index;
+        this.lastActiveFrame = index;
+      }
+      return;
+    }
+    if (probability >= this.policy.exitThreshold) {
+      this.lastActiveFrame = index;
+      this.silentFrameCount = 0;
+      this.silenceStartFrame = -1;
+      if (index - this.regionStartFrame + 1 >= maxRegionFrames) {
+        this.closeRegion({ exitDecisionFrame: index, closureReason: "maximum_duration" });
+      }
+      return;
+    }
+    if (this.silenceStartFrame < 0) this.silenceStartFrame = index;
+    this.silentFrameCount += 1;
+    if (this.silentFrameCount >= Math.max(1, hangoverFrames)) {
+      this.closeRegion({ exitDecisionFrame: index, closureReason: "silence" });
+    }
+  }
+
+  async processPending(final = false) {
+    while (this.pending.length >= this.policy.frameSamples * 2) {
+      const frame = this.pending.subarray(0, this.policy.frameSamples * 2);
+      await this.processFrame(frame, this.policy.frameSamples);
+      this.pending = this.pending.subarray(this.policy.frameSamples * 2);
+    }
+    if (final && this.pending.length >= 2) {
+      const sampleCount = Math.floor(this.pending.length / 2);
+      await this.processFrame(this.pending, sampleCount);
+      this.pending = Buffer.alloc(0);
+    }
+  }
+
+  readyRegions() {
+    const regions = this.closedRegions.slice(this.emittedRegionCount).map((region, offset) => ({
+      ...region,
+      regionIndex: this.emittedRegionCount + offset,
+    }));
+    this.emittedRegionCount = this.closedRegions.length;
+    return regions;
+  }
+
+  async push(pcm) {
+    if (this.finished) throw vadError("voice_vad_stream_closed", "The Silero VAD stream is already closed");
+    const buffer = Buffer.isBuffer(pcm) ? pcm : Buffer.from(pcm || []);
+    if (buffer.length) {
+      this.pending = this.pending.length ? Buffer.concat([this.pending, buffer]) : Buffer.from(buffer);
+      this.sampleCount += Math.floor(buffer.length / 2);
+    }
+    await this.processPending(false);
+    return this.readyRegions();
+  }
+
+  observation() {
+    const proposed = proposeSileroRegions(this.frames, this.sampleCount, this.policy);
+    const runtime = this.runtime;
+    return {
+      type: "silero_vad_observation",
+      available: true,
+      status: "observed",
+      model: runtime ? {
+        name: MODEL_FILE,
+        revision: SILERO_VAD_ARTIFACT.revision,
+        size: runtime.verification.size,
+        sha256: runtime.verification.sha256,
+        license: SILERO_VAD_ARTIFACT.license,
+        attribution: SILERO_VAD_ARTIFACT.attribution,
+        source: runtime.source,
+      } : null,
+      deployment: deploymentInfo(),
+      policy: proposed.policy,
+      sampleCount: this.sampleCount,
+      frameCount: this.frames.length,
+      frames: this.frames,
+      regions: proposed.regions,
+      summary: {
+        regionCount: proposed.regionCount,
+        speechFrameCount: proposed.speechFrameCount,
+        maxProbability: proposed.maxProbability,
+        meanProbability: proposed.meanProbability,
+      },
+    };
+  }
+
+  async finish() {
+    if (this.finished) return this.observation();
+    this.finished = true;
+    if (!this.sampleCount) return unavailableObservation({ status: "empty", sampleCount: 0, policy: this.policy });
+    try {
+      await this.processPending(true);
+      const observation = this.observation();
+      return observation;
+    } catch (error) {
+      return unavailableObservation({ sampleCount: this.sampleCount, error, policy: this.policy });
+    }
+  }
+
+  cancel() {
+    this.finished = true;
+    this.pending = Buffer.alloc(0);
   }
 }

@@ -266,10 +266,18 @@ export class VoiceModelManager {
     this.startPromise = null;
     this.startingModelId = null;
     this.transcriptionTail = Promise.resolve();
+    this.vadStreamTail = Promise.resolve();
+    this.vadStreams = new Set();
     this.lastErrors = new Map();
     this.progress = { phase: "idle", current: "", completedBytes: 0, totalBytes: 0 };
     this.vad = vad || new SileroVad({ root: this.root, modelPath: vadModelPath, sessionFactory: vadSessionFactory });
-    this.vadQueue = new VoiceVadObservationQueue({ observer: (pcm, options) => this.vad.observe(pcm, options) });
+    this.vadQueue = new VoiceVadObservationQueue({ observer: (pcm, options) => this.scheduleVad(() => this.vad.observe(pcm, options)) });
+  }
+
+  scheduleVad(operation) {
+    const task = this.vadStreamTail.then(operation, operation);
+    this.vadStreamTail = task.then(() => undefined, () => undefined);
+    return task;
   }
 
   clearIdleTimer() {
@@ -497,6 +505,18 @@ export class VoiceModelManager {
     return this.vadQueue.enqueue(pcm);
   }
 
+  beginVoiceActivity() {
+    if (typeof this.vad?.createStream !== "function") return null;
+    const stream = this.vad.createStream();
+    const wrapper = {
+      push: (pcm) => this.scheduleVad(() => stream.push(pcm)),
+      finish: () => this.scheduleVad(() => stream.finish()).finally(() => this.vadStreams.delete(wrapper)),
+      cancel: () => this.scheduleVad(() => stream.cancel?.()).finally(() => this.vadStreams.delete(wrapper)),
+    };
+    this.vadStreams.add(wrapper);
+    return wrapper;
+  }
+
   async test(modelId) {
     const model = requiredModel(modelId);
     const resolved = await this.ensureRunning(model.id);
@@ -516,6 +536,10 @@ export class VoiceModelManager {
     const startup = this.startPromise;
     if (startup) await startup.catch(() => {});
     await this.stopActive();
+    for (const stream of this.vadStreams) await stream.cancel?.().catch(() => {});
+    this.vadStreams.clear();
+    await this.vadStreamTail.catch(() => {});
+    this.vadStreamTail = Promise.resolve();
     this.vadQueue.stop();
     await this.vad?.stop?.();
   }

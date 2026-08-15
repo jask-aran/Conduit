@@ -235,15 +235,19 @@ bounded bar renderer in a larger monitor with current level, peak hold, and
 recording state. The browser captures 16 kHz mono PCM with an `AudioWorklet`
 and sends it in 20 ms, 320-sample packets only to authenticated
 `WS /v0/dictation/stream`; Stop flushes one final partial packet when needed.
-At Stop, Conduit runs the pinned Silero VAD when a verified artifact is
-installed. For batch adapters, Silero is authoritative: browser activity only
-drives the UI, and Conduit submits Silero's padded sample ranges. Short valid
-ranges are retained, and a bounded overflow merges the remaining tail and
-records that action. Silence-only captures submit no PCM to ASR. The complete
-WAV remains the archive source, and sidecars retain frame probabilities,
-selected ranges, source-region mapping, and the segment guard. The adapters
-also have an explicit external-policy path for a future runtime with a
-verified segmentation contract; current runtimes use server-side Silero.
+Conduit runs the pinned Silero VAD when a verified artifact is installed. For
+batch adapters, Silero is authoritative: browser activity only drives the UI,
+and Conduit submits Silero's padded sample ranges. Local batch adapters use an
+incremental VAD session to queue closed ranges during capture and emit stable
+ordered finals before Stop; Stop flushes the final range. Remote providers and
+adapters without that local range capability use the same Silero ranges at
+Stop. Short valid ranges are retained, and a bounded overflow merges the
+remaining tail and records that action. Silence-only captures submit no PCM to
+ASR. The complete WAV remains the archive source, and sidecars retain frame
+probabilities, selected ranges, source-region mapping, progressive sequence
+status, and the segment guard. The adapters also have an explicit
+external-policy path for a future runtime with a verified segmentation
+contract; current runtimes use server-side Silero.
 Exact-zero input remains a digital-silence or device-stall diagnostic.
 Settings → Voice
 can select a browser microphone, refresh the device list, and run an in-memory
@@ -280,9 +284,10 @@ immutable revision or release URL, exact byte size, and SHA-256 digest. The
 installer verifies these digests, displays progress, supports cancellation and
 retry, and keeps only one selected model resident. Whisper runs in the server
 through Transformers.js; Parakeet runs as one unprivileged loopback worker.
-File-upload providers and managed
-Whisper buffer one bounded utterance in memory and transcribe it once after
-stop; live WebSocket adapters can provide provisional text during capture.
+File-upload providers buffer one bounded utterance in memory and transcribe it
+after Stop. Installed local batch models can instead use the bounded
+progressive range path during capture; this is not stateful streaming and does
+not run for remote providers.
 Installing a model is separate from selecting the active model. The selected
 model is persisted with **Save Voice settings**, and installation never occurs
 without explicit license acceptance.
@@ -550,16 +555,16 @@ matching JSON sidecar. Upstream adapters are file-upload based: the
 JSON or `transcript.text.delta` / `transcript.text.done` SSE events; the
 `deepgram_audio_v1` adapter sends WAV audio and reads channel alternatives.
 Each adapter makes one finalization request per utterance, or one request per
-utterance segment when the recording contains a silent run of at least two
-seconds: batch ASR models hallucinate over long mid-utterance silence, so the
-server splits buffered PCM at silent runs before transcription and joins the
-segment texts. Managed local
-models transcribe one buffered PCM utterance without opening a network
-listener; the managed Parakeet runtime serves the OpenAI-compatible upload
-endpoint on loopback. Conduit emits
-`ready`, `partial`, `final`, `finalizing`, `settlement_deadline`, `completed`,
-and `error`. `finalizing` announces the duration-aware server deadline before
-the selected adapter runs its final transcription pass. The user stop or the
+Silero-selected range. Batch ASR models avoid long mid-utterance silence by
+using those ranges and joining their texts. Managed local models can submit
+closed ranges during capture through the bounded progressive path; the managed
+Parakeet runtime still serves the OpenAI-compatible upload endpoint on
+loopback. Conduit emits
+`ready`, `partial`, `final`, `finalizing`, `segment_error`,
+`settlement_deadline`, `completed`, and `error`. Progressive `final` events
+contain cumulative text and optional sequence/sample metadata. `finalizing`
+announces the duration-aware server deadline before the selected adapter
+completes its final range or whole-session pass. The user stop or the
 five-minute limit finalizes the session. `completed` includes `settlementMs`,
 `finalWithinDeadline`, `reason`, `audioBytes`, `audioDurationMs`, and
 non-secret adapter/provider/model metadata; clients must never infer auto-send

@@ -73,6 +73,23 @@ function appendText(left, right) {
   return `${left}${/\s$/.test(left) || /^\s/.test(right) ? "" : " "}${right}`;
 }
 
+function appendProgressiveSegment(left, right, overlapSamples = 0) {
+  if (!left) return right;
+  if (!right) return left;
+  if (!(Number(overlapSamples) > 0)) return appendText(left, right);
+  const leftWords = String(left).trim().split(/\s+/);
+  const rightWords = String(right).trim().split(/\s+/);
+  const normalizeWord = (word) => word.toLocaleLowerCase().replace(/[^\p{L}\p{N}]+/gu, "");
+  const maximum = Math.min(3, leftWords.length, rightWords.length);
+  for (let count = maximum; count >= 1; count -= 1) {
+    const suffix = leftWords.slice(-count).map(normalizeWord).join(" ");
+    const prefix = rightWords.slice(0, count).map(normalizeWord).join(" ");
+    if (!suffix || suffix !== prefix) continue;
+    return appendText(left, rightWords.slice(count).join(" "));
+  }
+  return appendText(left, right);
+}
+
 // Merge an incoming finalized transcript into the accumulated text. Endpoints
 // stream token deltas that differ from their final text only by whitespace
 // (the local Parakeet runtime emits word-boundary tokens with a leading space
@@ -375,6 +392,7 @@ function createServerDiagnostics() {
     signal: createSignalAccumulator(),
     runtime: {
       inferenceMode: "batch",
+      mode: null,
       model: null,
       precision: null,
       backend: "unreported",
@@ -382,6 +400,16 @@ function createServerDiagnostics() {
     },
     analysis: null,
     vadObservation: null,
+    progressive: {
+      enabled: false,
+      committedSegments: 0,
+      completedSegments: 0,
+      failedSequences: [],
+      heldTailRegions: 0,
+      vadError: null,
+      fallback: false,
+      segments: [],
+    },
   };
 }
 
@@ -555,6 +583,7 @@ function serializeServerDiagnostics(diagnostics) {
     },
     inference: {
       inferenceMode: diagnostics.runtime.inferenceMode,
+      mode: diagnostics.runtime.mode,
       model: diagnostics.runtime.model,
       precision: diagnostics.runtime.precision,
       backend: diagnostics.runtime.backend,
@@ -567,6 +596,7 @@ function serializeServerDiagnostics(diagnostics) {
       silenceRuns: silentBoundaries,
       sileroObservation: diagnostics.vadObservation,
       segmentGuard: analysis?.segmentGuard || null,
+      progressiveBatch: diagnostics.progressive,
       vadPolicy: analysis?.source === "silero_authoritative"
         ? {
           type: "silero_authoritative",
@@ -701,6 +731,35 @@ export function createHttpAdapter(config, emit, limits, fetchImpl, diagnostics =
   const chunks = [];
   let byteLength = 0;
   const controller = new AbortController();
+  const snapshot = () => Buffer.concat(chunks, byteLength);
+  const transcribeRange = async ({ startSample = 0, endSample = 0 } = {}) => {
+    if (!byteLength || controller.signal.aborted) return "";
+    const pcm = snapshot();
+    const start = Math.max(0, Math.min(Math.floor(startSample), Math.floor(byteLength / 2)));
+    const end = Math.max(start, Math.min(Math.floor(endSample), Math.floor(byteLength / 2)));
+    if (end <= start) return "";
+    const piece = pcm.subarray(start * 2, end * 2);
+    const form = new FormData();
+    form.append("file", wavBlob([piece], piece.length), `dictation-${start}-${end}.wav`);
+    form.append("response_format", "json");
+    if (config.model) form.append("model", config.model);
+    if (config.provider !== "groq") form.append("stream", "true");
+    let text = "";
+    if (diagnostics) {
+      markInferenceQueued(diagnostics);
+      markInferenceStart(diagnostics);
+    }
+    try {
+      const response = await fetchImpl(config.endpoint, { method: "POST", headers: config.headers, body: form, signal: controller.signal, redirect: "error" });
+      await readSse(response, (event) => {
+        if (event.type === "final") text = mergeTranscript(text, String(event.text || ""));
+        else if (event.type === "partial" && !text) text = String(event.text || "");
+      }, limits);
+      return text.trim();
+    } finally {
+      if (diagnostics) markInferenceComplete(diagnostics);
+    }
+  };
   const transcribe = async ({ segmentation = null } = {}) => {
     if (!byteLength || controller.signal.aborted) return { final: false, text: "" };
     if (diagnostics) markInferenceQueued(diagnostics);
@@ -751,12 +810,17 @@ export function createHttpAdapter(config, emit, limits, fetchImpl, diagnostics =
     },
     async stop(options = {}) {
       try {
+        if (options.progressive) {
+          emit({ type: "adapter_closed", final: Boolean(options.text), text: String(options.text || "") });
+          return;
+        }
         const result = await transcribe(options);
         emit({ type: "adapter_closed", ...result });
       } catch (error) {
         if (error.name !== "AbortError") emit({ type: "error", code: error.code || "asr_request_failed", message: error.message });
       }
     },
+    transcribeRange,
     close() { controller.abort(); chunks.length = 0; },
   };
 }
@@ -764,6 +828,23 @@ export function createHttpAdapter(config, emit, limits, fetchImpl, diagnostics =
 function createSnapshotAdapter(emit, limits, transcribe, diagnostics = null) {
   const chunks = [];
   let byteLength = 0;
+  const snapshot = () => Buffer.concat(chunks, byteLength);
+  const transcribeRange = async ({ startSample = 0, endSample = 0 } = {}) => {
+    if (!byteLength) return "";
+    const pcm = snapshot();
+    const start = Math.max(0, Math.min(Math.floor(startSample), Math.floor(byteLength / 2)));
+    const end = Math.max(start, Math.min(Math.floor(endSample), Math.floor(byteLength / 2)));
+    if (end <= start) return "";
+    if (diagnostics) {
+      markInferenceQueued(diagnostics);
+      markInferenceStart(diagnostics);
+    }
+    try {
+      return String(await transcribe(pcm.subarray(start * 2, end * 2)) || "").trim();
+    } finally {
+      if (diagnostics) markInferenceComplete(diagnostics);
+    }
+  };
   const run = async ({ segmentation = null } = {}) => {
     if (!byteLength) return { final: false, text: "" };
     if (diagnostics) markInferenceQueued(diagnostics);
@@ -791,10 +872,15 @@ function createSnapshotAdapter(emit, limits, transcribe, diagnostics = null) {
     },
     async stop(options = {}) {
       try {
+        if (options.progressive) {
+          emit({ type: "adapter_closed", final: Boolean(options.text), text: String(options.text || "") });
+          return;
+        }
         const result = await run(options);
         emit({ type: "adapter_closed", ...result });
       } catch (error) { emit({ type: "error", code: error.code || "asr_request_failed", message: error.message }); }
     },
+    transcribeRange,
     close() { chunks.length = 0; },
   };
 }
@@ -849,11 +935,29 @@ export function createDictationStream({ wss, voiceRuntime, recordingStore = null
     let savedRecord = null;
     let archivePromise = null;
     let vadObservationPromise = null;
+    let settleRuntimeConfig;
+    let runtimeConfigSettled = false;
+    const runtimeConfigReady = new Promise((resolve) => { settleRuntimeConfig = resolve; });
     let finalPcm = null;
     let metadataUpdateTail = Promise.resolve();
+    let progressiveVad = null;
+    let progressiveEnabled = false;
+    let progressiveVadTail = Promise.resolve();
+    let progressiveInferenceTail = Promise.resolve();
+    let progressiveVadError = null;
+    const progressiveSeenRegions = new Set();
+    const progressiveResults = new Map();
+    const progressiveFailures = new Map();
+    let progressiveNextSequence = 0;
+    let progressiveHeadCount = 0;
+    let progressiveTailRange = null;
+    let progressiveNextPublish = 0;
+    let progressiveText = "";
+    let progressiveLastRangeEnd = 0;
     const SHORT_FAILURE_AUDIO_BYTES = 1;
     const diagnostics = createServerDiagnostics();
     let runtimeMetadata = {
+      mode: null,
       adapter: null,
       provider: null,
       model: null,
@@ -861,6 +965,7 @@ export function createDictationStream({ wss, voiceRuntime, recordingStore = null
       precision: null,
       backend: "unreported",
       computeBackend: null,
+      progressiveBatch: false,
     };
     const send = (event) => {
       if (client.readyState === client.OPEN) client.send(JSON.stringify(event));
@@ -882,6 +987,172 @@ export function createDictationStream({ wss, voiceRuntime, recordingStore = null
       const selection = selectSileroVadRanges(observation, sampleCount, { maxSegments: limits.maxSegments });
       diagnostics.analysis = authoritativeAnalysis(selection, sampleCount);
       return selection;
+    };
+    const publishProgressiveResults = () => {
+      while (progressiveResults.has(progressiveNextPublish) || progressiveFailures.has(progressiveNextPublish)) {
+        const sequence = progressiveNextPublish;
+        const result = progressiveResults.get(sequence);
+        if (result?.text) {
+          progressiveText = appendProgressiveSegment(progressiveText, result.text, result.range.overlapSamples);
+          emit({
+            type: "final",
+            text: progressiveText,
+            segment: {
+              sequence,
+              startSample: result.range.startSample,
+              endSample: result.range.endSample,
+            },
+          });
+        }
+        progressiveNextPublish += 1;
+      }
+    };
+    const queueProgressiveRange = (range) => {
+      if (!adapter?.transcribeRange) {
+        progressiveFailures.set(range.sequence, { code: "progressive_adapter_unavailable", message: "The batch adapter cannot transcribe a progressive range" });
+        publishProgressiveResults();
+        return;
+      }
+      const diagnosticSegment = {
+        sequence: range.sequence,
+        regionIndex: range.regionIndex ?? null,
+        regionIndices: range.regionIndices || [range.regionIndex],
+        startSample: range.startSample,
+        endSample: range.endSample,
+        overlapSamples: range.overlapSamples,
+        status: "queued",
+      };
+      diagnostics.progressive.segments.push(diagnosticSegment);
+      diagnostics.progressive.committedSegments += 1;
+      const task = progressiveInferenceTail.then(async () => {
+        try {
+          const text = String(await adapter.transcribeRange(range) || "").trim();
+          progressiveResults.set(range.sequence, { text, range });
+          diagnosticSegment.status = "completed";
+          diagnosticSegment.textLength = text.length;
+          diagnostics.progressive.completedSegments += 1;
+        } catch (error) {
+          const failure = {
+            code: error?.code || "progressive_segment_failed",
+            message: error?.message || "Progressive batch segment failed",
+          };
+          diagnosticSegment.status = "failed";
+          diagnosticSegment.errorCode = failure.code;
+          progressiveFailures.set(range.sequence, failure);
+          diagnostics.progressive.failedSequences.push(range.sequence);
+          send({ type: "segment_error", sequence: range.sequence, code: failure.code, message: failure.message });
+        }
+        publishProgressiveResults();
+      });
+      progressiveInferenceTail = task.then(() => undefined, () => undefined);
+    };
+    const progressiveRange = (region) => {
+      const sampleCount = Math.floor(audioBytes / 2);
+      const startSample = Math.max(0, Math.min(sampleCount, Math.floor(Number(region.submittedStartSample ?? region.startSample) || 0)));
+      const endSample = Math.max(startSample, Math.min(sampleCount, Math.floor(Number(region.submittedEndSample ?? region.endSample) || 0)));
+      const overlapSamples = Math.min(3_840, Math.max(0, progressiveLastRangeEnd - startSample));
+      progressiveLastRangeEnd = Math.max(progressiveLastRangeEnd, endSample);
+      return {
+        sequence: progressiveNextSequence++,
+        regionIndex: region.regionIndex,
+        startSample,
+        endSample,
+        overlapSamples,
+        closureReason: region.closureReason || "end_of_stream",
+      };
+    };
+    const handleProgressiveRegions = (regions) => {
+      if (!progressiveEnabled) return;
+      for (const source of regions || []) {
+        const regionIndex = Number(source.regionIndex);
+        if (!Number.isInteger(regionIndex) || progressiveSeenRegions.has(regionIndex)) continue;
+        progressiveSeenRegions.add(regionIndex);
+        const range = progressiveRange(source);
+        if (range.endSample <= range.startSample) continue;
+        if (progressiveHeadCount < Math.max(0, limits.maxSegments - 1)) {
+          progressiveHeadCount += 1;
+          queueProgressiveRange(range);
+          continue;
+        }
+        if (!progressiveTailRange) {
+          progressiveTailRange = { ...range, sequences: [range.sequence], regionIndices: [regionIndex] };
+        } else {
+          progressiveTailRange.startSample = Math.min(progressiveTailRange.startSample, range.startSample);
+          progressiveTailRange.endSample = Math.max(progressiveTailRange.endSample, range.endSample);
+          progressiveTailRange.overlapSamples = Math.max(progressiveTailRange.overlapSamples, range.overlapSamples);
+          progressiveTailRange.sequences.push(range.sequence);
+          progressiveTailRange.regionIndices.push(regionIndex);
+        }
+      }
+      diagnostics.progressive.heldTailRegions = progressiveTailRange?.regionIndices.length || 0;
+    };
+    const queueProgressivePcm = (chunk) => {
+      if (!progressiveEnabled || !progressiveVad || !chunk?.length) return;
+      const buffered = Buffer.from(chunk);
+      const task = progressiveVadTail.then(() => {
+        if (progressiveVadError) return [];
+        return progressiveVad.push(buffered);
+      });
+      const handled = task.then((regions) => {
+        handleProgressiveRegions(regions);
+        return regions;
+      });
+      progressiveVadTail = handled.then(() => undefined, (error) => {
+        progressiveVadError ||= error;
+        return undefined;
+      });
+      void handled.catch((error) => {
+        progressiveVadError ||= error;
+        diagnostics.progressive.vadError = error?.message || "Progressive VAD failed";
+      });
+    };
+    const finishProgressiveVad = async () => {
+      if (!progressiveEnabled || !progressiveVad) return null;
+      let observation = null;
+      try {
+        await progressiveVadTail;
+        if (!progressiveVadError) {
+          observation = await progressiveVad.finish();
+          handleProgressiveRegions((observation?.regions || []).map((region, regionIndex) => ({ ...region, regionIndex })));
+        }
+      } catch (error) {
+        progressiveVadError ||= error;
+        diagnostics.progressive.vadError = error?.message || "Progressive VAD failed";
+      }
+      if ((progressiveVadError || observation?.available !== true) && typeof voiceRuntime.observeVoiceActivity === "function") {
+        diagnostics.progressive.fallback = true;
+        await progressiveInferenceTail;
+        progressiveEnabled = false;
+        runtimeMetadata.progressiveBatch = false;
+        progressiveTailRange = null;
+        diagnostics.progressive.heldTailRegions = 0;
+        observation = await voiceRuntime.observeVoiceActivity(freezeAcceptedPcm());
+        return observation;
+      }
+      if (progressiveTailRange) {
+        const tail = progressiveTailRange;
+        progressiveTailRange = null;
+        diagnostics.progressive.heldTailRegions = 0;
+        queueProgressiveRange(tail);
+      }
+      await progressiveInferenceTail;
+      return observation;
+    };
+    const activateProgressiveBatch = (config, next) => {
+      if (config?.mode !== "local" || config?.inferenceMode !== "batch" || typeof next?.transcribeRange !== "function") return;
+      if (typeof voiceRuntime.beginVoiceActivity !== "function") return;
+      let stream;
+      try { stream = voiceRuntime.beginVoiceActivity(); }
+      catch (error) {
+        diagnostics.progressive.vadError = error?.message || "Progressive VAD could not start";
+        return;
+      }
+      if (!stream) return;
+      progressiveVad = stream;
+      progressiveEnabled = true;
+      runtimeMetadata.progressiveBatch = true;
+      diagnostics.progressive.enabled = true;
+      queueProgressivePcm(pcmAccumulator.view());
     };
     const freezeAcceptedPcm = () => {
       if (!finalPcm) finalPcm = Buffer.from(pcmAccumulator.view());
@@ -945,28 +1216,27 @@ export function createDictationStream({ wss, voiceRuntime, recordingStore = null
       return metadataUpdateTail;
     };
     const startVadObservation = () => {
-      if (vadObservationPromise || audioBytes <= 0) return vadObservationPromise;
-      if (typeof voiceRuntime.observeVoiceActivity !== "function") {
-        diagnostics.vadObservation = {
-          type: "silero_vad_observation",
-          available: false,
-          status: "not_configured",
-          regions: [],
-          frames: [],
-        };
-        setAuthoritativeVadAnalysis(diagnostics.vadObservation);
-        vadObservationPromise = Promise.resolve(diagnostics.vadObservation);
-        return vadObservationPromise;
-      }
-      diagnostics.vadQueuedAt ||= performance.now();
-      const pcm = freezeAcceptedPcm();
-      vadObservationPromise = Promise.resolve()
-        .then(() => voiceRuntime.observeVoiceActivity(pcm))
-        .then((observation) => {
-          const queue = observation?.queue;
-          diagnostics.vadStartedAt = queue?.startedAt ?? performance.now();
-          diagnostics.vadCompletedAt = queue?.completedAt ?? performance.now();
+      if (vadObservationPromise) return vadObservationPromise;
+      vadObservationPromise = runtimeConfigReady.then(async () => {
+        if (audioBytes <= 0) return null;
+        diagnostics.vadQueuedAt ||= performance.now();
+        if (progressiveEnabled) {
+          const startedAt = performance.now();
+          const observation = await finishProgressiveVad();
+          diagnostics.vadStartedAt = startedAt;
+          diagnostics.vadCompletedAt = performance.now();
           diagnostics.vadObservation = observation || {
+            type: "silero_vad_observation",
+            available: false,
+            status: progressiveVadError ? "error" : "not_configured",
+            regions: [],
+            frames: [],
+          };
+          setAuthoritativeVadAnalysis(diagnostics.vadObservation);
+          return diagnostics.vadObservation;
+        }
+        if (typeof voiceRuntime.observeVoiceActivity !== "function") {
+          diagnostics.vadObservation = {
             type: "silero_vad_observation",
             available: false,
             status: "not_configured",
@@ -975,22 +1245,36 @@ export function createDictationStream({ wss, voiceRuntime, recordingStore = null
           };
           setAuthoritativeVadAnalysis(diagnostics.vadObservation);
           return diagnostics.vadObservation;
-        })
-        .catch((error) => {
-          diagnostics.vadStartedAt ||= performance.now();
-          diagnostics.vadCompletedAt = performance.now();
-          diagnostics.vadObservation = {
-            type: "silero_vad_observation",
-            available: false,
-            status: "error",
-            errorCode: error.code || "voice_vad_unavailable",
-            error: error.message || "Silero VAD observation failed",
-            regions: [],
-            frames: [],
-          };
-          setAuthoritativeVadAnalysis(diagnostics.vadObservation);
-          return diagnostics.vadObservation;
-        });
+        }
+        const pcm = freezeAcceptedPcm();
+        const observation = await voiceRuntime.observeVoiceActivity(pcm);
+        const queue = observation?.queue;
+        diagnostics.vadStartedAt = queue?.startedAt ?? performance.now();
+        diagnostics.vadCompletedAt = queue?.completedAt ?? performance.now();
+        diagnostics.vadObservation = observation || {
+          type: "silero_vad_observation",
+          available: false,
+          status: "not_configured",
+          regions: [],
+          frames: [],
+        };
+        setAuthoritativeVadAnalysis(diagnostics.vadObservation);
+        return diagnostics.vadObservation;
+      }).catch((error) => {
+        diagnostics.vadStartedAt ||= performance.now();
+        diagnostics.vadCompletedAt = performance.now();
+        diagnostics.vadObservation = {
+          type: "silero_vad_observation",
+          available: false,
+          status: "error",
+          errorCode: error.code || "voice_vad_unavailable",
+          error: error.message || "Silero VAD observation failed",
+          regions: [],
+          frames: [],
+        };
+        setAuthoritativeVadAnalysis(diagnostics.vadObservation);
+        return diagnostics.vadObservation;
+      });
       return vadObservationPromise;
     };
     const complete = (reason, upstream = {}) => {
@@ -1082,6 +1366,7 @@ export function createDictationStream({ wss, voiceRuntime, recordingStore = null
       diagnostics.transport.pcmBytes = audioBytes;
       addPcmSignal(diagnostics.signal, chunk);
       if (adapterReady && adapter) adapter.write(chunk);
+      queueProgressivePcm(chunk);
     };
     const stop = (reason) => {
       if (stopping || completed) return;
@@ -1095,7 +1380,6 @@ export function createDictationStream({ wss, voiceRuntime, recordingStore = null
           if (!adapter) send({ type: "waiting_for_transcription" });
           const current = adapter || await adapterAvailable;
           if (!current || completed) return;
-          await vadPromise;
           const finalizationTimeoutMs = calculateFinalizationTimeoutMs({
             audioBytes,
             adapter: runtimeMetadata.adapter,
@@ -1112,12 +1396,18 @@ export function createDictationStream({ wss, voiceRuntime, recordingStore = null
           finalTimer.unref?.();
           deadlineTimer = setTimeout(() => { deadlinePassed = true; send({ type: "settlement_deadline", deadlineMs: limits.finalDeadlineMs }); }, limits.finalDeadlineMs);
           deadlineTimer.unref?.();
+          await vadPromise;
+          if (completed) return;
           const segmentation = {
             mode: "silero_authoritative",
             segments: diagnostics.analysis?.segments || [],
             analysis: diagnostics.analysis,
           };
-          await current.stop({ segmentation });
+          await current.stop({
+            segmentation,
+            progressive: progressiveEnabled,
+            text: progressiveText,
+          });
         } catch (error) { fail(error); }
       })();
     };
@@ -1143,7 +1433,7 @@ export function createDictationStream({ wss, voiceRuntime, recordingStore = null
           diagnostics.firstUsableTextAt ||= performance.now();
         }
         hasFinal = true;
-        send({ type: "final", text: finalText });
+        send({ type: "final", text: finalText, ...(event.segment ? { segment: event.segment } : {}) });
         // Completion waits for adapter_closed: segmented transcriptions emit
         // one final per utterance, so completing on the first final would drop
         // every later segment.
@@ -1160,6 +1450,10 @@ export function createDictationStream({ wss, voiceRuntime, recordingStore = null
       const config = await voiceRuntime.resolve();
       if (completed) {
         settleAdapter(null);
+        if (!runtimeConfigSettled) {
+          runtimeConfigSettled = true;
+          settleRuntimeConfig(config);
+        }
         return;
       }
       const resolvedModel = typeof config.model === "string" && config.model
@@ -1168,6 +1462,7 @@ export function createDictationStream({ wss, voiceRuntime, recordingStore = null
           ? config.localModelId
           : null;
       runtimeMetadata = {
+        mode: config.mode === "local" || config.mode === "remote" ? config.mode : null,
         adapter: typeof config.adapter === "string" ? config.adapter : null,
         provider: typeof config.provider === "string" ? config.provider : null,
         model: resolvedModel,
@@ -1175,8 +1470,10 @@ export function createDictationStream({ wss, voiceRuntime, recordingStore = null
         precision: typeof config.precision === "string" ? config.precision : precisionFor(resolvedModel),
         backend: typeof config.backend === "string" ? config.backend : "unreported",
         computeBackend: typeof config.computeBackend === "string" ? config.computeBackend : null,
+        progressiveBatch: false,
       };
       diagnostics.runtime = {
+        mode: runtimeMetadata.mode,
         inferenceMode: runtimeMetadata.inferenceMode,
         model: runtimeMetadata.model,
         precision: runtimeMetadata.precision,
@@ -1197,11 +1494,20 @@ export function createDictationStream({ wss, voiceRuntime, recordingStore = null
       adapter = next;
       if (pcmAccumulator.byteLength > 0) adapter.write(pcmAccumulator.view());
       adapterReady = true;
+      activateProgressiveBatch(config, next);
       diagnostics.runtimeReadyAt = performance.now();
       send({ type: "runtime_ready", ...runtimeMetadata });
       settleAdapter(adapter);
+      if (!runtimeConfigSettled) {
+        runtimeConfigSettled = true;
+        settleRuntimeConfig(config);
+      }
     })().catch((error) => {
       settleAdapter(null);
+      if (!runtimeConfigSettled) {
+        runtimeConfigSettled = true;
+        settleRuntimeConfig(null);
+      }
       fail(error);
     });
 

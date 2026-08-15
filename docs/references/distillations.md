@@ -144,9 +144,9 @@ Add an entry through `$tacit-knowledge` after explicit approval or validated rep
 ### Keep authoritative VAD decisions server-side
 
 - **Type:** Invariant.
-- **Rule:** At Stop, wait for the server Silero result and submit only its selected padded ranges to batch ASR. Retain valid ranges shorter than 500 ms, merge overflow into a bounded tail, keep the complete accepted PCM in the archive, and do not fall back to RMS segmentation in the authenticated path.
-- **Scope:** `dictation-stream.js` finalization, voice diagnostics, and archived voice sidecars.
-- **Evidence:** WP4B focused tests cover silence-only no-submit behavior, short-range submission, padded multi-region ordering, and segment-cap tail preservation; the full Node suite passed 477 tests at the accepted checkpoint.
+- **Rule:** Keep Silero authoritative in Conduit. For local batch adapters, process closed ranges incrementally and flush the final result at Stop; for remote or compatibility adapters, wait until Stop. Submit only selected padded ranges, retain short speech, merge overflow into a bounded tail, keep complete accepted PCM in the archive, and never restore RMS segmentation to the authenticated path.
+- **Scope:** `dictation-stream.js`, `voice-vad.js` incremental sessions, voice diagnostics, and archived voice sidecars.
+- **Evidence:** WP4B focused tests cover silence-only no-submit behavior, short-range submission, padded multi-region ordering, and segment-cap tail preservation. WP5 focused tests cover a stable final before Stop, ordered tail append, and failed-range retention. The accepted sidecar `2026-08-15T14-18-07-767Z-739d2241-3737-4005-aced-e24764c69dea.json` records a Silero positive at 0.89368 during silence and Parakeet's `Mm-hmm.` hallucination; treat this as a false-positive/noise-quality issue, not permission to move VAD into the browser. The approved WP5 sidecar `2026-08-15T15-32-21-828Z-ee4f2317-0d3c-4816-9e09-516a9cd758c6.json` confirms 49,240 ms of archived mono PCM16, 9 of 9 progressive ranges completed, no fallback, and a first segment final at 3,878 ms.
 
 ### Preserve authored timelines when animations self-clean
 

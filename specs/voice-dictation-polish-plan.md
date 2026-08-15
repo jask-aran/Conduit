@@ -1,7 +1,7 @@
 # Voice dictation pipeline overhaul plan
 
-Status: **WP4B implementation complete and awaiting manual approval. WP0,
-WP1, WP2, WP3, and WP4A approved.**
+Status: **WP5 complete and approved. WP0, WP1, WP2, WP3, WP4A, and WP4B
+approved. WP6–WP11 have not started.**
 
 This document defines the active voice-dictation work. Git history preserves
 the completed polish sprint, its test counts, and its manual acceptance
@@ -73,18 +73,31 @@ The central design is:
 - Fresh local voice settings now default to `whisper-tiny-en-q8` through the
   embedded Transformers backend. An existing saved model selection is not
   changed.
-- **Work package 4B — implementation complete and awaiting manual approval.**
+- **Work package 4B — complete and approved.**
   The live batch path now waits for the server-side Silero observation, submits
   its padded ranges, retains short ranges, and merges any excess regions into
   a bounded tail with an explicit diagnostic. The complete accepted PCM still
   goes to the archive. Silence-only sessions submit no PCM to ASR. The
   adapters retain an explicit external-policy path for a future runtime with
   a verified segmentation contract; current runtimes use server-side Silero.
-- **Work packages 5–11 — not started.** Package 6A has not started, so
+  The user accepted WP4B after mobile testing and recorded one follow-up:
+  low-level ambient noise produced a Silero positive and Parakeet returned
+  `Mm-hmm.` during silence. This is a false-positive/noise rejection issue,
+  not an accepted-audio loss, and remains deferred to later audio/VAD quality
+  work.
+- **Work package 5 — complete and approved.**
+  Local batch adapters now use an incremental Silero stream to commit closed
+  ranges during capture, queue bounded range inference without blocking PCM,
+  emit ordered cumulative segment finals, retain successful ranges when one
+  fails, and flush the final VAD tail at Stop. The progressive coordinator
+  reserves one bounded tail slot, records sequence/sample diagnostics, and
+  falls back to whole-session batch when progressive VAD cannot complete.
+  Remote providers and future stateful streaming remain outside this fallback.
+- **Work packages 6–11 — not started.** Package 6A has not started, so
   `transcribe.cpp` and the Unified English Q8 model are not the active backend.
 
-WP3 and WP4A manual approval are recorded below. WP4B awaits the handoff test
-below and does not authorize WP5.
+WP3, WP4A, WP4B, and WP5 manual approval are recorded below. WP5 approval does
+not authorize WP6A.
 
 ## Deviations from the proposed plan
 
@@ -131,6 +144,16 @@ below and does not authorize WP5.
   identifiers for future streaming modes. The adapters retain an explicit
   `external_policy` option for a later runtime package after its segmentation
   capability is verified.
+- WP5 uses progressive batch only for a resolved local `batch` runtime whose
+  adapter exposes a bounded range-transcription operation. Remote providers
+  remain Stop-time batch, and no speculative stateful-streaming capability was
+  added. The existing `final` wire event carries cumulative text plus optional
+  sequence/sample metadata, so the existing composer contract remains stable.
+- WP5 uses one incrementally processed Silero session per VAD execution owner
+  and serialises VAD work across sessions. Capture does not await VAD or ASR;
+  only Stop waits for the final VAD tail and unfinished fallback inference.
+  The incremental path keeps the full frame audit for the final sidecar but
+  avoids rescanning the complete frame history after every PCM packet.
 - The WP0–WP4A technical review actioned V01–V16, V18, and V19. V17 is a
   deliberate scope deferral: moving Silero to an independent shared owner
   requires its own install, readiness, migration, and uninstall lifecycle and
@@ -578,7 +601,30 @@ The full Node suite passed 477 tests. Typecheck passed. The production build
 passed with 183,484 B initial JS gzip, 24,412 B initial CSS gzip, and 185,186 B
 largest lazy JS gzip. The browser set-piece suite passed 13 tests and skipped
 11 project-matrix cases; the voice-focused browser suite passed 5 tests and
-skipped 1. Manual handoff testing remains pending.
+skipped 1. The user accepted WP4B after mobile testing. The accepted follow-up
+is the sidecar
+`2026-08-15T14-18-07-767Z-739d2241-3737-4005-aced-e24764c69dea.json`: a
+low-level ambient event reached Silero with maximum probability about 0.894
+and Parakeet returned `Mm-hmm.` while the user was silent. This is recorded as
+a false-positive/noise rejection issue for later quality work.
+
+WP5 implementation verification record (2026-08-16): focused VAD and
+dictation-stream tests cover incremental closed-region delivery, a stable
+final before Stop, ordered tail append, successful-result retention after a
+failed range, and sequence/sample diagnostics. The full Node suite passed 482
+tests. Typecheck passed. The production build passed with 183,484 B initial JS
+gzip, 24,412 B initial CSS gzip, and 185,186 B largest lazy JS gzip. The
+browser set-piece suite passed 13 tests and skipped 11 project-matrix cases;
+the voice-focused browser suite passed 11 tests and skipped 1.
+
+WP5 manual approval record (2026-08-16): the user tested local
+`whisper-tiny-en-q8` with a 49,240 ms dictation. The WAV is mono PCM16 at
+16 kHz with 1,575,680 PCM bytes; the sidecar reports the same PCM size and
+duration. Progressive batch was enabled, all 9 committed ranges completed,
+no range failed, no VAD fallback occurred, and the first segment final arrived
+at 3,878 ms. The transcript entered the composer in order and the user
+accepted WP5. The sidecar is
+`2026-08-15T15-32-21-828Z-ee4f2317-0d3c-4816-9e09-516a9cd758c6.json`.
 
 ### Work package 4A — observe Silero boundaries
 
