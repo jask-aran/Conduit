@@ -825,7 +825,7 @@ export function createHttpAdapter(config, emit, limits, fetchImpl, diagnostics =
   };
 }
 
-function createSnapshotAdapter(emit, limits, transcribe, diagnostics = null) {
+function createSnapshotAdapter(emit, limits, transcribe, diagnostics = null, { progressive = true, useSegmentation = true } = {}) {
   const chunks = [];
   let byteLength = 0;
   const snapshot = () => Buffer.concat(chunks, byteLength);
@@ -849,7 +849,9 @@ function createSnapshotAdapter(emit, limits, transcribe, diagnostics = null) {
     if (!byteLength) return { final: false, text: "" };
     if (diagnostics) markInferenceQueued(diagnostics);
     const snapshot = Buffer.concat(chunks, byteLength);
-    const analysis = resolveInferenceAnalysis(snapshot, byteLength, segmentation, limits, diagnostics);
+    const analysis = useSegmentation
+      ? resolveInferenceAnalysis(snapshot, byteLength, segmentation, limits, diagnostics)
+      : { segments: [[0, Math.floor(byteLength / 2)]] };
     const segments = analysis.segments;
     let text = "";
     for (const [startSample, endSample] of segments) {
@@ -880,7 +882,7 @@ function createSnapshotAdapter(emit, limits, transcribe, diagnostics = null) {
         emit({ type: "adapter_closed", ...result });
       } catch (error) { emit({ type: "error", code: error.code || "asr_request_failed", message: error.message }); }
     },
-    transcribeRange,
+    ...(progressive ? { transcribeRange } : {}),
     close() { chunks.length = 0; },
   };
 }
@@ -965,6 +967,8 @@ export function createDictationStream({ wss, voiceRuntime, recordingStore = null
       precision: null,
       backend: "unreported",
       computeBackend: null,
+      capabilities: null,
+      native: null,
       progressiveBatch: false,
     };
     const send = (event) => {
@@ -1470,6 +1474,8 @@ export function createDictationStream({ wss, voiceRuntime, recordingStore = null
         precision: typeof config.precision === "string" ? config.precision : precisionFor(resolvedModel),
         backend: typeof config.backend === "string" ? config.backend : "unreported",
         computeBackend: typeof config.computeBackend === "string" ? config.computeBackend : null,
+        capabilities: config.capabilities && typeof config.capabilities === "object" ? config.capabilities : null,
+        native: config.native && typeof config.native === "object" ? config.native : null,
         progressiveBatch: false,
       };
       diagnostics.runtime = {
@@ -1479,9 +1485,13 @@ export function createDictationStream({ wss, voiceRuntime, recordingStore = null
         precision: runtimeMetadata.precision,
         backend: runtimeMetadata.backend,
         computeBackend: runtimeMetadata.computeBackend,
+        capabilities: runtimeMetadata.capabilities,
+        native: runtimeMetadata.native,
       };
       const next = config.adapter === "deepgram_audio_v1"
         ? createDeepgramAdapter(config, emit, limits, fetchImpl, diagnostics)
+        : config.adapter === "transcribe_cpp_batch_v1"
+          ? createSnapshotAdapter(emit, limits, config.transcribe, diagnostics, { progressive: false, useSegmentation: false })
         : config.adapter === "managed_transformers_v1"
           ? createSnapshotAdapter(emit, limits, config.transcribe, diagnostics)
           : createHttpAdapter(config, emit, limits, fetchImpl, diagnostics);

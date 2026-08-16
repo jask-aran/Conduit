@@ -267,7 +267,7 @@ completion from a short intentional stop, and reports sustained silence only
 after five seconds. Warm microphone retention is off by default; when enabled,
 Settings shows the active state and a direct Stop warm microphone control.
 Settings → Voice can use managed
-Whisper Tiny English, Whisper Base, Whisper Small, Parakeet TDT 0.6B v2, or Parakeet TDT 0.6B v3,
+Whisper Tiny English, Whisper Base, Whisper Small, Parakeet Unified English Q8, Parakeet TDT 0.6B v2, or Parakeet TDT 0.6B v3,
 and has first-class provider/model profiles for OpenAI, Deepgram, and Groq.
 Remote None, Bearer, and custom API-key-header credentials are stored server-side in `data/voice.json`
 (mode `0600`) and are never returned to the browser. Environment configuration
@@ -278,16 +278,20 @@ optional auto-send accepts only a server-confirmed final event settled within
 one second of stop.
 
 Managed local setup is an explicit user action. Conduit downloads pinned q8
-Whisper ONNX artifacts or the pinned Parakeet/ONNX Runtime package into
-`data/voice/models`. A reviewed source manifest pins every artifact to an
-immutable revision or release URL, exact byte size, and SHA-256 digest. The
-installer verifies these digests, displays progress, supports cancellation and
-retry, and keeps only one selected model resident. Whisper runs in the server
-through Transformers.js; Parakeet runs as one unprivileged loopback worker.
-File-upload providers buffer one bounded utterance in memory and transcribe it
-after Stop. Installed local batch models can instead use the bounded
-progressive range path during capture; this is not stateful streaming and does
-not run for remote providers.
+Whisper ONNX artifacts, the pinned Parakeet/ONNX Runtime package, or the
+Unified English Q8 GGUF into `data/voice/models`. A reviewed source manifest
+pins every model artifact to an immutable revision or release URL, exact byte
+size, and SHA-256 digest. The installer verifies these digests, displays
+progress, supports cancellation and retry, and keeps only one selected model
+resident. Whisper runs in the server through Transformers.js; legacy Parakeet
+runs as one unprivileged loopback worker; Unified English Q8 uses the pinned
+`transcribe-cpp@0.1.3` Node binding and its locked Linux CPU/Vulkan native
+package. The binding verifies its ABI contract and reports the actual compute
+backend. Unified English Q8 runs one reusable complete-PCM batch session and
+does not use progressive fallback. File-upload providers buffer one bounded
+utterance in memory and transcribe it after Stop. Other installed local batch
+models can use the bounded progressive range path during capture; this is not
+stateful streaming and does not run for remote providers.
 Installing a model is separate from selecting the active model. The selected
 model is persisted with **Save Voice settings**, and installation never occurs
 without explicit license acceptance.

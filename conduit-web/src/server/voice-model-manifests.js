@@ -5,6 +5,33 @@ function huggingFaceBase() {
 
 const PARAKEET_VERSION = "v0.8.0";
 export const ONNXRUNTIME_VERSION = "1.25.1";
+export const TRANSCRIBE_CPP_VERSION = "0.1.3";
+export const TRANSCRIBE_CPP_RUNTIME = Object.freeze({
+  package: "transcribe-cpp",
+  version: TRANSCRIBE_CPP_VERSION,
+  headerHash: "86b16dd97ad1cb58",
+  platforms: Object.freeze({
+    "linux-x64-cpu-vulkan": Object.freeze({
+      package: "@transcribe-cpp/linux-x64-cpu-vulkan",
+      release: "transcribe-native-0.1.3-linux-x86_64-cpu-vulkan.tar.gz",
+      size: 29703996,
+      sha256: "5e150c7862748d33dc2f559a38274bcb46d06ba63f8f5d1247f8196569e02797",
+    }),
+    "linux-arm64-cpu-vulkan": Object.freeze({
+      package: "@transcribe-cpp/linux-arm64-cpu-vulkan",
+      release: "transcribe-native-0.1.3-linux-aarch64-cpu-vulkan.tar.gz",
+      size: 26134718,
+      sha256: "ba003aed1c4edb86d2c6b44eb5c0386b21b939505c139d8b58afc80439866f65",
+    }),
+  }),
+});
+
+const TRANSCRIBE_CPP_MODEL_FILE = "parakeet-unified-en-0.6b-Q8_0.gguf";
+const TRANSCRIBE_CPP_MODEL_REPOSITORY = "handy-computer/parakeet-unified-en-0.6b-gguf";
+const TRANSCRIBE_CPP_MODEL_REVISION = "7e948f21b7bdbac698d3318db9d350f1096f3b6c";
+const TRANSCRIBE_CPP_SOURCE_REVISION = "d4ac9928f3bf238223ff0779c06b8149bf8ac4e1";
+const TRANSCRIBE_CPP_MODEL_SIZE = 731357568;
+const TRANSCRIBE_CPP_MODEL_SHA256 = "4b50b6dd862bf6e346929aaf4f5eaacec003bfa3f56462d6c874b41ef2f38795";
 
 const WHISPER_FILES = Object.freeze([
   "added_tokens.json", "config.json", "generation_config.json", "merges.txt", "normalizer.json", "preprocessor_config.json",
@@ -277,6 +304,27 @@ function parakeetManifest(model, architecture) {
   };
 }
 
+function transcribeCppManifest(model) {
+  if (model.repository !== TRANSCRIBE_CPP_MODEL_REPOSITORY || model.revision !== TRANSCRIBE_CPP_MODEL_REVISION || model.sourceRevision !== TRANSCRIBE_CPP_SOURCE_REVISION) {
+    throw manifestError(`No reviewed transcribe.cpp manifest exists for ${model.label}`);
+  }
+  return {
+    version: `transcribe-cpp-${TRANSCRIBE_CPP_VERSION}`,
+    modelRevision: model.revision,
+    sourceRevision: model.sourceRevision,
+    runtime: TRANSCRIBE_CPP_RUNTIME,
+    artifacts: [{
+      name: TRANSCRIBE_CPP_MODEL_FILE,
+      relative: TRANSCRIBE_CPP_MODEL_FILE,
+      url: `${huggingFaceBase()}/${TRANSCRIBE_CPP_MODEL_REPOSITORY}/resolve/${TRANSCRIBE_CPP_MODEL_REVISION}/${TRANSCRIBE_CPP_MODEL_FILE}`,
+      size: TRANSCRIBE_CPP_MODEL_SIZE,
+      sha256: TRANSCRIBE_CPP_MODEL_SHA256,
+    }],
+  };
+}
+
 export function getVoiceModelManifest(model, architecture) {
-  return model.engine === "parakeet" ? parakeetManifest(model, architecture) : whisperManifest(model);
+  if (model.engine === "parakeet") return parakeetManifest(model, architecture);
+  if (model.engine === "transcribe-cpp") return transcribeCppManifest(model);
+  return whisperManifest(model);
 }

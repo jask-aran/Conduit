@@ -93,13 +93,15 @@ export class VoiceRuntime {
         return {
           mode: "local",
           inferenceMode: "batch",
-          adapter: "managed_transformers_v1",
+          adapter: local.adapter || "managed_transformers_v1",
           provider: "local",
           localModelId: config.localModelId,
           model: config.localModelId,
           precision: modelPrecision(config.localModelId),
-          backend: "embedded_transformers",
-          computeBackend: null,
+          backend: local.backend || "embedded_transformers",
+          computeBackend: local.computeBackend || null,
+          capabilities: local.capabilities || null,
+          native: local.native || null,
           transcribe: (pcm) => this.modelManager.transcribe(config.localModelId, pcm),
         };
       }

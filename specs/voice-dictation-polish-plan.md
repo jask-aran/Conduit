@@ -1,7 +1,7 @@
 # Voice dictation pipeline overhaul plan
 
-Status: **WP5 complete and approved. WP0, WP1, WP2, WP3, WP4A, and WP4B
-approved. WP6–WP11 have not started.**
+Status: **WP6A implementation complete and awaiting manual approval. WP0,
+WP1, WP2, WP3, WP4A, WP4B, and WP5 approved. WP6B–WP11 have not started.**
 
 This document defines the active voice-dictation work. Git history preserves
 the completed polish sprint, its test counts, and its manual acceptance
@@ -93,11 +93,19 @@ The central design is:
   reserves one bounded tail slot, records sequence/sample diagnostics, and
   falls back to whole-session batch when progressive VAD cannot complete.
   Remote providers and future stateful streaming remain outside this fallback.
-- **Work packages 6–11 — not started.** Package 6A has not started, so
-  `transcribe.cpp` and the Unified English Q8 model are not the active backend.
+- **Work package 6A — implementation complete and awaiting manual approval.**
+  The pinned `transcribe-cpp@0.1.3` Node binding and its Linux CPU/Vulkan
+  optional packages are in the lockfile. Settings can install and select the
+  pinned `parakeet-unified-en-0.6b-Q8_0.gguf` artifact. Conduit loads one
+  reusable batch session, converts the accepted PCM16 to one 16 kHz mono
+  float32 buffer, reports the native ABI and actual compute backend, and keeps
+  the legacy models selectable. Unified English uses complete-session batch;
+  it does not use the WP5 progressive range path or claim live partials.
+- **Work packages 6B–11 — not started.** Stateful live transcription remains
+  outside this package.
 
-WP3, WP4A, WP4B, and WP5 manual approval are recorded below. WP5 approval does
-not authorize WP6A.
+WP3, WP4A, WP4B, and WP5 manual approval are recorded below. WP6A awaits the
+handoff test below and does not authorize WP6B.
 
 ## Deviations from the proposed plan
 
@@ -154,6 +162,20 @@ not authorize WP6A.
   only Stop waits for the final VAD tail and unfinished fallback inference.
   The incremental path keeps the full frame audit for the final sidecar but
   avoids rescanning the complete frame history after every PCM packet.
+- WP6A pins the published `transcribe-cpp@0.1.3` release instead of the
+  unreleased repository head. Its Linux x64 and arm64 CPU/Vulkan packages are
+  resolved as optional lockfile dependencies and their native loader verifies
+  the ABI contract. The current host exposes CPU only; Vulkan execution needs
+  a separate production-GPU verification and CUDA is not included.
+- WP6A downloads the GGUF from the immutable
+  `handy-computer/parakeet-unified-en-0.6b-gguf` revision
+  `7e948f21b7bdbac698d3318db9d350f1096f3b6c`, while retaining the upstream
+  source model revision `d4ac9928f3bf238223ff0779c06b8149bf8ac4e1` in the
+  manifest. The exact artifact is 731,357,568 bytes with SHA-256
+  `4b50b6dd862bf6e346929aaf4f5eaacec003bfa3f56462d6c874b41ef2f38795`.
+- WP6A keeps Silero as an audit-only Conduit component for the complete batch
+  path. It does not split or resubmit the PCM to progressive batch, so the
+  Unified model receives one reusable complete-session buffer.
 - The WP0–WP4A technical review actioned V01–V16, V18, and V19. V17 is a
   deliberate scope deferral: moving Silero to an independent shared owner
   requires its own install, readiness, migration, and uninstall lifecycle and
@@ -164,7 +186,7 @@ not authorize WP6A.
   remains the required final archive copy.
 - The initial JavaScript bundle allowance is now 184,000 gzip bytes. This
   follows the user's instruction to defer package-size review; the current
-  build is 183,486 bytes gzip, with 24,443 bytes initial CSS gzip and 185,186
+  build is 183,529 bytes gzip, with 24,412 bytes initial CSS gzip and 185,187
   bytes largest lazy JavaScript gzip.
 Raw mono PCM16 at 16 kHz uses about 32 KB/s. This bandwidth does not justify
 moving authoritative VAD or provider policy into the browser. A final HTTP
@@ -625,6 +647,25 @@ no range failed, no VAD fallback occurred, and the first segment final arrived
 at 3,878 ms. The transcript entered the composer in order and the user
 accepted WP5. The sidecar is
 `2026-08-15T15-32-21-828Z-ee4f2317-0d3c-4816-9e09-516a9cd758c6.json`.
+
+WP6A implementation verification record (2026-08-16): `transcribe-cpp@0.1.3`
+was installed with its locked native packages. The pinned Unified English Q8
+model was installed through the managed installer and its artifact checksum
+passed. The full Node suite passed 485 tests. Typecheck passed. The production
+build passed with 183,529 B initial JS gzip, 24,412 B initial CSS gzip, and
+185,187 B largest lazy JS gzip. A real native smoke test loaded the reusable
+batch session, reported `transcribe-cpp` version `0.1.3`, ABI header hash
+`86b16dd97ad1cb58`, and CPU compute, then transcribed the first 4 seconds of
+the approved WP5 WAV as `First phrase is stable.`. The current host reports no
+Vulkan backend; production-GPU Vulkan verification remains a handoff risk.
+After the build, Conduit was restarted with the managed restart command and
+`GET /healthz` returned `{"ok":true,"status":"ready","release":"development"}`.
+The browser voice suite then passed 11 tests with 1 expected skip. The passed
+cases included desktop and mobile dictation, unfocused-composer insertion,
+silent-microphone handling, and empty-transcription error handling. Manual
+WP6A testing remains pending. The native smoke test and browser suite prove
+the installed CPU path; they do not prove Vulkan execution on the production
+GPU host.
 
 ### Work package 4A — observe Silero boundaries
 

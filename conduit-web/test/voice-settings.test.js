@@ -178,3 +178,27 @@ test("VoiceRuntime requires provider credential checks to succeed and keeps the 
   await localRuntime.test();
   assert.equal(testedModel, "parakeet-tdt-0.6b-v3-int8");
 });
+
+test("VoiceRuntime exposes the transcribe.cpp batch capability and actual compute backend", async () => {
+  const runtime = new VoiceRuntime({
+    settings: { effective: async () => ({ mode: "local", localModelId: "parakeet-unified-en-0.6b-q8" }) },
+    modelManager: {
+      ensureRunning: async () => ({
+        kind: "transcriber",
+        adapter: "transcribe_cpp_batch_v1",
+        backend: "transcribe_cpp",
+        computeBackend: "cpu",
+        capabilities: { language: "en", inferenceMode: "batch", partials: false, externalVad: false, precision: "q8", memory: { modelBytes: 731357568 } },
+        native: { package: "transcribe-cpp", version: "0.1.3", headerHash: "86b16dd97ad1cb58" },
+      }),
+      transcribe: async () => "unused",
+    },
+  });
+  const resolved = await runtime.resolve();
+  assert.equal(resolved.adapter, "transcribe_cpp_batch_v1");
+  assert.equal(resolved.backend, "transcribe_cpp");
+  assert.equal(resolved.computeBackend, "cpu");
+  assert.equal(resolved.capabilities.partials, false);
+  assert.equal(resolved.capabilities.externalVad, false);
+  assert.equal(resolved.native.headerHash, "86b16dd97ad1cb58");
+});

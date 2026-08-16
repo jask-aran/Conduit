@@ -63,7 +63,7 @@ async function startUpstream(frames) {
   return server;
 }
 
-async function startDictationBridge({ upstreamPort, recordingStore = null, resolveDelayMs = 0, pins = null, observeVoiceActivity = null }) {
+async function startDictationBridge({ upstreamPort, recordingStore = null, resolveDelayMs = 0, pins = null, observeVoiceActivity = null, runtimeConfig = null }) {
   const wss = new WebSocketServer({ noServer: true });
   let resolveCount = 0;
   const observe = typeof observeVoiceActivity === "function"
@@ -96,7 +96,7 @@ async function startDictationBridge({ upstreamPort, recordingStore = null, resol
       resolve: async () => {
         resolveCount += 1;
         if (resolveDelayMs > 0) await new Promise((resolve) => setTimeout(resolve, resolveDelayMs));
-        return {
+        return runtimeConfig || {
           mode: "remote",
           provider: "custom",
           adapter: "openai_audio_sse_v1",
@@ -297,6 +297,51 @@ test("dictation accepts PCM during cold resolve and includes it after stop", asy
     client.close();
     await new Promise((resolve) => client.once("close", resolve));
     assert.equal(pins.count, 0);
+  } finally {
+    client.terminate();
+    await new Promise((resolve) => setTimeout(resolve, 25));
+    await new Promise((resolve) => bridge.close(resolve));
+    await new Promise((resolve) => upstream.close(resolve));
+  }
+});
+
+test("Unified English batch adapter transcribes the complete PCM once and does not use progressive fallback", async () => {
+  const upstream = await startUpstream([]);
+  const calls = [];
+  const { bridge, origin } = await startDictationBridge({
+    upstreamPort: upstream.address().port,
+    runtimeConfig: {
+      mode: "local",
+      inferenceMode: "batch",
+      adapter: "transcribe_cpp_batch_v1",
+      provider: "local",
+      model: "parakeet-unified-en-0.6b-q8",
+      precision: "q8",
+      backend: "transcribe_cpp",
+      computeBackend: "cpu",
+      capabilities: { language: "en", inferenceMode: "batch", partials: false, externalVad: false, precision: "q8", memory: { modelBytes: 731357568 } },
+      native: { package: "transcribe-cpp", version: "0.1.3", headerHash: "86b16dd97ad1cb58" },
+      transcribe: async (pcm) => { calls.push(Buffer.from(pcm)); return "complete unified batch"; },
+    },
+  });
+  const client = new WebSocket(`${origin}/dictation`);
+  const next = messageQueue(client);
+  try {
+    await new Promise((resolve, reject) => { client.once("open", resolve); client.once("error", reject); });
+    await next((event) => event.type === "ready");
+    await next((event) => event.type === "runtime_ready");
+    client.send(Buffer.alloc(2_048, 1), { binary: true });
+    client.send(Buffer.alloc(2_048, 2), { binary: true });
+    client.send(JSON.stringify({ type: "stop", audioBytesSent: 4_096 }));
+    const completed = await next((event) => event.type === "completed");
+    assert.equal(completed.text, "complete unified batch");
+    assert.equal(completed.adapter, "transcribe_cpp_batch_v1");
+    assert.equal(completed.backend, "transcribe_cpp");
+    assert.equal(completed.computeBackend, "cpu");
+    assert.equal(completed.progressiveBatch, false);
+    assert.equal(completed.capabilities.externalVad, false);
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].length, 4_096);
   } finally {
     client.terminate();
     await new Promise((resolve) => setTimeout(resolve, 25));
