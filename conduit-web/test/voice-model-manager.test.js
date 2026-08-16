@@ -5,7 +5,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { extractRuntime, LOCAL_VOICE_MODELS, VoiceModelManager } from "../src/server/voice-model-manager.js";
+import { DEFAULT_TRANSCRIBE_CPP_STREAM, extractRuntime, LOCAL_VOICE_MODELS, VoiceModelManager } from "../src/server/voice-model-manager.js";
 import { getVoiceModelManifest, TRANSCRIBE_CPP_RUNTIME } from "../src/server/voice-model-manifests.js";
 
 const sha256 = (value) => crypto.createHash("sha256").update(value).digest("hex");
@@ -275,6 +275,18 @@ test("Unified English Q8 uses one reusable transcribe.cpp session and exposes st
     assert.equal(disposals, 1);
     await fs.rm(temporary, { recursive: true, force: true });
   }
+});
+
+test("Unified English Live selects the measured sustained CPU profile", () => {
+  assert.deepEqual(DEFAULT_TRANSCRIBE_CPP_STREAM, {
+    family: "parakeet_buffered",
+    leftMs: 5_600,
+    chunkMs: 560,
+    rightMs: 560,
+    latencyMs: 1_120,
+    commitPolicy: "stable_prefix",
+    stablePrefixAgreementN: 3,
+  });
 });
 
 test("concurrent managed Whisper requests share startup and serialize inference", async () => {

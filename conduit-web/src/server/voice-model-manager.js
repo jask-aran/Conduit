@@ -244,9 +244,9 @@ async function defaultTransformersLoader(modelPath, precision = "q8") {
 export const DEFAULT_TRANSCRIBE_CPP_STREAM = Object.freeze({
   family: "parakeet_buffered",
   leftMs: 5_600,
-  chunkMs: 160,
-  rightMs: 320,
-  latencyMs: 480,
+  chunkMs: 560,
+  rightMs: 560,
+  latencyMs: 1_120,
   commitPolicy: "stable_prefix",
   stablePrefixAgreementN: 3,
 });

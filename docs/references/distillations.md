@@ -148,6 +148,21 @@ Add an entry through `$tacit-knowledge` after explicit approval or validated rep
 - **Scope:** `dictation-stream.js`, `voice-vad.js` incremental sessions, voice diagnostics, and archived voice sidecars.
 - **Evidence:** WP4B focused tests cover silence-only no-submit behavior, short-range submission, padded multi-region ordering, and segment-cap tail preservation. WP5 focused tests cover a stable final before Stop, ordered tail append, and failed-range retention. The accepted sidecar `2026-08-15T14-18-07-767Z-739d2241-3737-4005-aced-e24764c69dea.json` records a Silero positive at 0.89368 during silence and Parakeet's `Mm-hmm.` hallucination; treat this as a false-positive/noise-quality issue, not permission to move VAD into the browser. The approved WP5 sidecar `2026-08-15T15-32-21-828Z-ee4f2317-0d3c-4816-9e09-516a9cd758c6.json` confirms 49,240 ms of archived mono PCM16, 9 of 9 progressive ranges completed, no fallback, and a first segment final at 3,878 ms.
 
+### Amortize buffered Parakeet streaming before lowering latency
+
+- **Type:** Gotcha.
+- **Rule:** For `transcribe_cpp_stream_v1` on a CPU host, use a supported
+  `parakeet_buffered` profile with a chunk large enough to amortize the
+  sliding-window encoder work. Keep the 20 ms transport packets and 160 ms
+  server feed quantum independent from that profile. Do not blame the model
+  size alone when a low-latency profile falls behind.
+- **Scope:** Unified English Q8 Live through `transcribe.cpp`.
+- **Evidence:** WP7 recorded a 5,020 ms queue and `live_queue_overflow` with
+  the 480 ms profile on the 13,340 ms reference WAV. The same model and input
+  held the paced adapter queue to 500 ms and drained to 0 ms with the supported
+  1,120 ms profile. The focused Stop-drain and overflow tests preserve the
+  scheduler and failure boundary.
+
 ### Preserve authored timelines when animations self-clean
 
 - **Type:** Invariant.

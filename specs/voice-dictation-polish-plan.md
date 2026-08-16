@@ -1,7 +1,7 @@
 # Voice dictation pipeline overhaul plan
 
-Status: **WP6B complete and approved with a latency follow-up. WP0, WP1, WP2,
-WP3, WP4A, WP4B, WP5, and WP6A approved. WP7–WP12 have not started.**
+Status: **WP7 complete and checkpointed on 2026-08-17. WP0, WP1, WP2, WP3,
+WP4A, WP4B, WP5, and WP6A approved. WP8–WP12 have not started.**
 
 This document defines the active voice-dictation work. Git history preserves
 the completed polish sprint, its test counts, and its manual acceptance
@@ -130,6 +130,18 @@ compiled compute backends, actual compute backend, and resource cost.
   recorded and falls back to the WP5 batch path without running both paths in
   parallel. The complete accepted PCM remains the archive source, and Silero
   remains a separate Conduit observation and fallback-range component.
+- **Work package 7 — complete and checkpointed (2026-08-17).** The live
+  adapter now copies packets into one bounded queue and drains them through one
+  worker. It coalesces eight 20 ms packets into one 160 ms native feed, keeps
+  accepted, submitted, committed, and optional processed cursors separate, and
+  reports the server queue and native buffer as separate lag layers. The queue
+  limit is 5,000 ms. Pre-stable overflow uses the existing batch fallback from
+  sample zero; post-stable overflow fails visibly and preserves the WAV. Stop
+  closes input, drains the queue, finalises once, and emits one terminal result.
+  The current CPU Live profile is the existing 1,120 ms profile
+  (`5,600/560/560` ms left/chunk/right). The model selection, browser packets,
+  archive source, and all other runtimes remain unchanged. The checkpoint
+  evidence and deferred accuracy work are recorded below.
 - **Four-runtime direction — recorded, not yet implemented.** The user wants
   all four local runtime tracks retained and iterated until their speed,
   accuracy, pause behaviour, resource use, and feedback are acceptable.
@@ -139,10 +151,10 @@ compiled compute backends, actual compute backend, and resource cost.
   behaviour of `achetronic/parakeet`, but wants its progressive batching verified
   and improved rather than replacing that runtime. `transcribe-rs` is not yet
   integrated; WP10 is the dedicated package for that fourth runtime.
-- **Work packages 7–12 — not started.**
+- **Work packages 8–12 — not started.**
 
-WP3, WP4A, WP4B, WP5, WP6A, and WP6B manual approval are recorded below. WP7
-owns the recorded live-latency follow-up.
+WP3, WP4A, WP4B, WP5, WP6A, WP6B manual approval, and the WP7 checkpoint are
+recorded below. WP7 owns the recorded live-latency follow-up.
 
 ## Deviations from the proposed plan
 
@@ -201,8 +213,10 @@ owns the recorded live-latency follow-up.
   keeps `transcribe_cpp_batch_fallback_v1` private to stream-start fallback.
   The selected Node binding accepts `parakeet_buffered` for Unified English;
   the plain `parakeet` family is not accepted by this model. The 480 ms
-  profile was selected from smoke comparisons of the four practical profiles,
-  not from a new WER corpus. Silero remains outside the native stream session.
+  profile was the initial choice from smoke comparisons of the four practical
+  profiles, not from a new WER corpus. WP7 changed the current CPU Live choice
+  to the existing 1,120 ms profile after the bounded-backlog measurements
+  below. Silero remains outside the native stream session.
 - WP5 uses progressive batch only for a resolved local `batch` runtime whose
   adapter exposes a bounded range-transcription operation. Remote providers
   remain Stop-time batch, and no speculative stateful-streaming capability was
@@ -1111,6 +1125,102 @@ of a browser defect.
 server, confirm `/healthz`, report both queue layers and final-word evidence,
 then wait for user testing and approval.
 
+#### WP7 checkpoint evidence — 2026-08-17
+
+WP7 is checkpointed complete. The user tested the changed Live path and
+reported that it keeps up. The user also reported high perceived WER. Accuracy
+work is deferred; WP7 establishes the backlog boundary and does not add a WER
+corpus.
+
+**Cause established.** The model was not the only cause of the backlog. The
+`transcribe.cpp` Parakeet Unified buffered stream re-runs the encoder over a
+sliding `[left | chunk | right]` window for each native feed. Small chunks
+therefore repeat the large left context at a high rate. The official
+[`transcribe.cpp` Unified documentation](https://github.com/handy-computer/transcribe.cpp/blob/main/docs/models/parakeet-unified-en-0.6b.md)
+lists the supported `(left, chunk, right)` choices. The 480 ms profile was too
+expensive for this CPU host; the Q8 model itself can run faster than real time
+when a larger supported chunk amortises the overlapping encoder work.
+
+**First failing live evidence.** The latest user recording before the profile
+change was `2026-08-16T22-16-44-148Z-6a3eb516-2ae5-43c5-8cdd-da94be52e19c.json`.
+Safe sidecar values were:
+
+- 13,340 ms accepted audio and 426,880 server PCM bytes;
+- 160 ms feed quantum, 52 native feed calls, and 160 ms mean audio per call;
+- `acceptedThroughSample=213440`, `submittedThroughSample=133120`, and
+  `committedThroughSample=133120`;
+- 5,020 ms maximum server queue and 1,760 ms maximum native buffer;
+- `completionReason=failed`, `overflow.code=live_queue_overflow`, and
+  `overflow.stableText=true`.
+
+The 160 ms scheduler was therefore correct after the Stop-drain correction,
+but native processing still fell behind. The post-stable overflow was visible
+and the accepted WAV was preserved, as required by WP7.
+
+**Native CPU benchmark.** The same WAV and pinned
+`parakeet-unified-en-0.6b-q8` GGUF were run through `transcribe-cpp@0.1.3`,
+with actual backend `cpu`, version commit `a94e021`, and header hash
+`86b16dd97ad1cb58`. With the 480 ms profile, 13,340 ms of audio required
+21,456.45 ms in the profile replay, with 0.631x real-time throughput, 251.59
+ms mean time per 160 ms feed, 330.34 ms p95 feed time, and 1,760 ms maximum
+native buffer. A direct 160 ms feed run measured 269.372 ms mean, 315.952 ms
+p50, 349.812 ms p95, 379.837 ms maximum, and 0.590x real-time throughput.
+
+The supported-profile sweep on the same input was:
+
+| Profile | Left / chunk / right | Total native replay | Throughput | Maximum native buffer |
+| --- | ---: | ---: | ---: | ---: |
+| 160 ms | 5,600 / 80 / 80 ms | 40,562.99 ms | 0.331x | 1,760 ms |
+| 480 ms | 5,600 / 160 / 320 ms | 21,456.45 ms | 0.631x | 1,760 ms |
+| 1,120 ms | 5,600 / 560 / 560 ms | 6,593.49 ms | 2.139x | 2,080 ms |
+| 2,080 ms | 5,600 / 1,040 / 1,040 ms | 4,042.21 ms | 3.666x | 3,040 ms |
+
+The 1,120 ms profile is the current choice because it is the first measured
+profile that stays faster than real time while keeping lower lookahead than
+the 2,080 ms option. The 80 ms, 480 ms, and 2,080 ms profiles remain in the
+supported-profile list for later profile work.
+
+**Paced server-adapter replay.** The last WAV was replayed as 667 real-time
+20 ms packets through `createTranscribeCppStreamAdapter` with the 1,120 ms
+profile. The native model and binding were real; the browser and authenticated
+WebSocket were not used for this programmatic replay. Evidence was:
+
+- 13,340 ms audio, 13,320.12 ms capture pacing, and 13,680.23 ms total replay;
+- 500 ms maximum server queue, 0 ms final server queue, and 2,080 ms maximum
+  native buffer;
+- 0.27 ms adapter Stop-drain time and approximately 360 ms from the last
+  packet to total settlement;
+- 84 native feed calls with 158.810 ms mean audio per call;
+- `acceptedThroughSample`, `submittedThroughSample`, and
+  `committedThroughSample` all equal to 213,440;
+- no overflow, with `partial`, `final`, and `adapter_closed` terminal
+  evidence.
+
+The total replay wall time includes the 13,340 ms real-time capture schedule.
+The queue result, final zero queue, complete sample cursors, and short
+post-capture settlement are the relevant sustained-throughput evidence.
+
+**Regression and package checks.** The focused manager and stream tests passed
+46/46. The full Node suite passed 496/496. `npm run typecheck`, `npm run
+build`, and `git diff --check` passed. The build transformed 2,200 modules and
+reported `bundle.initial_js_gzip_bytes=184415`,
+`bundle.initial_css_gzip_bytes=24994`, and
+`bundle.largest_lazy_js_gzip_bytes=185186`. The existing Vite warning about
+chunks over 500 kB remains. The managed server was restarted through
+`.devcontainer/start-conduit.sh restart` and `GET /healthz` returned
+`{"ok":true,"status":"ready","release":"development"}`.
+
+**Remaining evidence and risks.** The 60-second continuous-speech scenario,
+ten-second pause scenario, and immediate-Stop microphone scenario were not
+rerun after the profile change. The focused tests cover the forced feed stall,
+queue overflow, Stop drain, fallback, and terminal-result contracts. The user
+manual run confirms pace but reports poor accuracy. No fixed WER corpus was run
+for WP7. WSL overhead is a plausible contributor because all CPU measurements
+ran inside WSL, but no native Windows or Vulkan comparison was made. The
+1,120 ms profile adds visible lookahead compared with the former 480 ms choice.
+Future accuracy tuning, WSL/native comparison, and further profile optimisation
+remain deferred.
+
 ### Work package 8 — add the canonical local execution contract
 
 **Behavioural change:** every existing local choice resolves to one validated
@@ -1673,12 +1783,11 @@ then wait for user approval.
 
 Run the remaining packages in this order:
 
-1. WP7 — bounded `transcribe.cpp` live backlog.
-2. WP8 — canonical local execution contract.
-3. WP9 — Conduit-owned scheduling and transcript truth.
-4. WP10 — `transcribe-rs` ONNX backend.
-5. WP11 — final Voice settings experience.
-6. WP12 — asynchronous archive settlement.
+1. WP8 — canonical local execution contract.
+2. WP9 — Conduit-owned scheduling and transcript truth.
+3. WP10 — `transcribe-rs` ONNX backend.
+4. WP11 — final Voice settings experience.
+5. WP12 — asynchronous archive settlement.
 
 Each package must leave the product functional. Do not start the next package
 until the user approves the current handoff.
