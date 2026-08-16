@@ -9,7 +9,7 @@ function observeControllerChange(serviceWorker: ServiceWorkerContainer) {
   let timer: number | undefined;
   let finishObservation: (() => void) | undefined;
   let stopped = false;
-  const changed = new Promise<void>((resolve) => {
+  const changed = new Promise<void>((resolve, reject) => {
     const finish = () => {
       if (stopped) return;
       stopped = true;
@@ -18,7 +18,12 @@ function observeControllerChange(serviceWorker: ServiceWorkerContainer) {
       resolve();
     };
     serviceWorker.addEventListener("controllerchange", finish, { once: true });
-    timer = window.setTimeout(finish, 5_000);
+    timer = window.setTimeout(() => {
+      if (stopped) return;
+      stopped = true;
+      serviceWorker.removeEventListener("controllerchange", finish);
+      reject(new Error("The app update did not activate within 60 seconds."));
+    }, 60_000);
     finishObservation = finish;
   });
   return {
