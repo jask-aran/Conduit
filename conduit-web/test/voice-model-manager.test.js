@@ -6,7 +6,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { extractRuntime, LOCAL_VOICE_MODELS, VoiceModelManager } from "../src/server/voice-model-manager.js";
-import { getVoiceModelManifest } from "../src/server/voice-model-manifests.js";
+import { getVoiceModelManifest, TRANSCRIBE_CPP_RUNTIME } from "../src/server/voice-model-manifests.js";
 
 const sha256 = (value) => crypto.createHash("sha256").update(value).digest("hex");
 const runCommand = (command, args) => new Promise((resolve, reject) => {
@@ -37,6 +37,12 @@ test("managed voice packages use reviewed immutable revisions, sizes, and SHA-25
   assert.notEqual(v2.artifacts.find((artifact) => artifact.name === "vocab.txt").sha256, parakeet.artifacts.find((artifact) => artifact.name === "vocab.txt").sha256);
   const whisper = getVoiceModelManifest(LOCAL_VOICE_MODELS[0], { release: "amd64", runtime: "x64" });
   assert.equal(whisper.artifacts.find((artifact) => artifact.name === "silero_vad.onnx").sha256, "1a153a22f4509e292a94e67d6f9b85e8deb25b4988682b7e174c65279d8788e3");
+  const unified = getVoiceModelManifest(LOCAL_VOICE_MODELS.find((model) => model.id === "parakeet-unified-en-0.6b-q8"), { release: "amd64", runtime: "x64" });
+  assert.equal(unified.artifacts[0].name, "parakeet-unified-en-0.6b-Q8_0.gguf");
+  assert.equal(unified.artifacts[0].size, 731357568);
+  assert.equal(unified.artifacts[0].sha256, "4b50b6dd862bf6e346929aaf4f5eaacec003bfa3f56462d6c874b41ef2f38795");
+  assert.equal(unified.sourceRevision, "d4ac9928f3bf238223ff0779c06b8149bf8ac4e1");
+  assert.deepEqual(unified.runtime, TRANSCRIBE_CPP_RUNTIME);
 });
 
 test("managed voice model requires license acceptance, verifies artifacts, reports progress, and uninstalls", async () => {
@@ -193,6 +199,66 @@ test("managed Whisper tiers install independently and transcribe through the emb
     assert.equal(loadedPath, path.join(root, modelId));
     assert.equal((await manager.publicView()).activeModelId, modelId);
   } finally { await manager.stop(); await fs.rm(temporary, { recursive: true, force: true }); }
+});
+
+test("Unified English Q8 uses one reusable transcribe.cpp batch session and reports its backend", async () => {
+  const temporary = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-voice-unified-"));
+  const root = path.join(temporary, "voice", "models");
+  const modelId = "parakeet-unified-en-0.6b-q8";
+  const content = Buffer.from("fake gguf model");
+  let loadedPath = "";
+  let loadedDefinition = null;
+  let activeInferences = 0;
+  let maximumInferences = 0;
+  let disposals = 0;
+  const runtime = {
+    backend: "cpu",
+    computeBackend: "cpu",
+    capabilities: { language: "en", inferenceMode: "batch", partials: false, externalVad: false, precision: "q8", memory: { modelBytes: 731357568 } },
+    native: { package: "transcribe-cpp", version: "0.1.3", headerHash: "86b16dd97ad1cb58" },
+    async transcribe(audio) {
+      assert.equal(audio instanceof Float32Array, true);
+      activeInferences += 1;
+      maximumInferences = Math.max(maximumInferences, activeInferences);
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      activeInferences -= 1;
+      return { text: "unified transcript" };
+    },
+    dispose() { disposals += 1; },
+  };
+  const manager = new VoiceModelManager({
+    root,
+    manifestResolver: async () => ({ version: "transcribe-cpp-0.1.3", modelRevision: "pinned", sourceRevision: "source-pinned", runtime: TRANSCRIBE_CPP_RUNTIME, artifacts: [{
+      name: "parakeet-unified-en-0.6b-Q8_0.gguf", relative: "parakeet-unified-en-0.6b-Q8_0.gguf", url: "https://packages.invalid/unified", size: content.length,
+      sha256: sha256(content),
+    }] }),
+    fetchImpl: async () => new Response(content),
+    transcribeCppLoader: async (modelPath, definition) => {
+      loadedPath = modelPath;
+      loadedDefinition = definition;
+      return runtime;
+    },
+  });
+  try {
+    await manager.startInstall({ modelId, licenseAccepted: true });
+    const [first, second] = await Promise.all([manager.transcribe(modelId, Buffer.alloc(4)), manager.transcribe(modelId, Buffer.alloc(4))]);
+    assert.deepEqual([first, second], ["unified transcript", "unified transcript"]);
+    assert.equal(maximumInferences, 1);
+    assert.equal(loadedPath, path.join(root, modelId, "parakeet-unified-en-0.6b-Q8_0.gguf"));
+    assert.equal(loadedDefinition.id, modelId);
+    assert.deepEqual(await manager.ensureRunning(modelId), {
+      kind: "transcriber",
+      adapter: "transcribe_cpp_batch_v1",
+      backend: "transcribe_cpp",
+      computeBackend: "cpu",
+      capabilities: runtime.capabilities,
+      native: runtime.native,
+    });
+  } finally {
+    await manager.stop();
+    assert.equal(disposals, 1);
+    await fs.rm(temporary, { recursive: true, force: true });
+  }
 });
 
 test("concurrent managed Whisper requests share startup and serialize inference", async () => {

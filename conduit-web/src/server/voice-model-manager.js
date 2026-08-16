@@ -5,7 +5,7 @@ import net from "node:net";
 import path from "node:path";
 import { Readable, Transform } from "node:stream";
 import { pipeline as streamPipeline } from "node:stream/promises";
-import { getVoiceModelManifest, ONNXRUNTIME_VERSION } from "./voice-model-manifests.js";
+import { getVoiceModelManifest, ONNXRUNTIME_VERSION, TRANSCRIBE_CPP_RUNTIME } from "./voice-model-manifests.js";
 import { SileroVad, VoiceVadObservationQueue } from "./voice-vad.js";
 
 const MIB = 1024 * 1024;
@@ -51,6 +51,13 @@ export const LOCAL_VOICE_MODELS = Object.freeze([
     description: "The most accurate embedded Whisper tier with fast turbo decoding for live dictation.", approximateBytes: 1040 * MIB, minimumFreeBytes: 1536 * MIB,
     repository: "onnx-community/whisper-large-v3-turbo", revision: "360ebcde2559d60bb474678be3c1de9ef347d01a", precision: "q8",
     license: { id: "MIT", attribution: "OpenAI Whisper and the ONNX Community conversion" },
+  },
+  {
+    id: "parakeet-unified-en-0.6b-q8", label: "Parakeet Unified English Q8", engine: "transcribe-cpp", size: "large", languages: "English",
+    description: "English-only Unified Parakeet Q8 batch model through the verified transcribe.cpp runtime.", approximateBytes: 731357568, minimumFreeBytes: 1024 * MIB,
+    repository: "handy-computer/parakeet-unified-en-0.6b-gguf", revision: "7e948f21b7bdbac698d3318db9d350f1096f3b6c", sourceRevision: "d4ac9928f3bf238223ff0779c06b8149bf8ac4e1",
+    modelFile: "parakeet-unified-en-0.6b-Q8_0.gguf", runtimeVersion: TRANSCRIBE_CPP_RUNTIME.version, precision: "q8",
+    license: { id: "CC-BY-4.0", attribution: "NVIDIA Parakeet Unified English and the Handy transcribe.cpp port" },
   },
   {
     id: "parakeet-tdt-0.6b-v2-int8", label: "Parakeet TDT 0.6B v2", engine: "parakeet", size: "large", languages: "English",
@@ -234,6 +241,43 @@ async function defaultTransformersLoader(modelPath, precision = "q8") {
   return pipeline("automatic-speech-recognition", modelPath, { dtype: precision === "fp32" ? "fp32" : "q8", local_files_only: true });
 }
 
+async function defaultTranscribeCppLoader(modelPath, modelDefinition) {
+  const native = await import("transcribe-cpp");
+  const version = native.version();
+  const availableBackends = native.getAvailableBackends();
+  const model = await native.TranscribeModel.load(modelPath, { backend: "auto" });
+  const session = model.createSession();
+  const device = model.device || {};
+  return {
+    backend: String(model.backend || device.kind || "unknown"),
+    computeBackend: String(device.kind || model.backend || "unknown"),
+    capabilities: {
+      language: "en",
+      inferenceMode: "batch",
+      partials: false,
+      externalVad: false,
+      precision: modelDefinition?.precision || "q8",
+      memory: {
+        modelBytes: modelDefinition?.approximateBytes || null,
+        totalBytes: Number.isFinite(Number(device.memoryTotal)) ? Number(device.memoryTotal) : null,
+        freeBytes: Number.isFinite(Number(device.memoryFree)) ? Number(device.memoryFree) : null,
+      },
+    },
+    native: {
+      package: "transcribe-cpp",
+      version: version.version,
+      commit: version.commit,
+      headerHash: version.headerHash,
+      availableBackends: availableBackends.map((backend) => ({ kind: backend.kind, name: backend.name, deviceType: backend.deviceType })),
+    },
+    transcribe: (pcm) => session.run(pcm),
+    dispose() {
+      session.dispose();
+      model.dispose();
+    },
+  };
+}
+
 function pcmFloat32(buffer) {
   const samples = new Float32Array(Math.floor(buffer.length / 2));
   for (let index = 0; index < samples.length; index += 1) samples[index] = buffer.readInt16LE(index * 2) / 32768;
@@ -243,13 +287,14 @@ function pcmFloat32(buffer) {
 export const DEFAULT_VOICE_MODEL_IDLE_TTL_MS = 5 * 60 * 1000;
 
 export class VoiceModelManager {
-  constructor({ root, fetchImpl = fetch, manifestResolver = packageManifest, runtimeExtractor = extractRuntime, transformersLoader = defaultTransformersLoader, downloadRetries = DOWNLOAD_RETRIES, downloadRetryBaseMs = DOWNLOAD_RETRY_BASE_MS, downloadConcurrency = 3, idleTtlMs = DEFAULT_VOICE_MODEL_IDLE_TTL_MS, vad = null, vadModelPath = null, vadSessionFactory = undefined } = {}) {
+  constructor({ root, fetchImpl = fetch, manifestResolver = packageManifest, runtimeExtractor = extractRuntime, transformersLoader = defaultTransformersLoader, transcribeCppLoader = defaultTranscribeCppLoader, downloadRetries = DOWNLOAD_RETRIES, downloadRetryBaseMs = DOWNLOAD_RETRY_BASE_MS, downloadConcurrency = 3, idleTtlMs = DEFAULT_VOICE_MODEL_IDLE_TTL_MS, vad = null, vadModelPath = null, vadSessionFactory = undefined } = {}) {
     if (!root) throw new Error("VoiceModelManager requires a root directory");
     this.root = path.resolve(root);
     this.fetchImpl = fetchImpl;
     this.manifestResolver = manifestResolver;
     this.runtimeExtractor = runtimeExtractor;
     this.transformersLoader = transformersLoader;
+    this.transcribeCppLoader = transcribeCppLoader;
     this.downloadRetries = downloadRetries;
     this.downloadRetryBaseMs = downloadRetryBaseMs;
     this.downloadConcurrency = downloadConcurrency;
@@ -420,6 +465,7 @@ export class VoiceModelManager {
     if (this.activeModelId === model.id) {
       if (model.engine === "parakeet" && this.child && this.port) return { kind: "http", origin: `http://127.0.0.1:${this.port}` };
       if (model.engine === "transformers-whisper" && this.transcriber) return { kind: "transcriber" };
+      if (model.engine === "transcribe-cpp" && this.transcriber) return this.transcribeCppDescriptor(this.transcriber, model);
     }
     return null;
   }
@@ -465,6 +511,12 @@ export class VoiceModelManager {
       this.activeModelId = model.id;
       return { kind: "transcriber" };
     }
+    if (model.engine === "transcribe-cpp") {
+      const runtime = await this.transcribeCppLoader(path.join(this.modelRoot(model.id), model.modelFile), model);
+      this.transcriber = runtime;
+      this.activeModelId = model.id;
+      return this.transcribeCppDescriptor(runtime, model);
+    }
     const port = await availablePort();
     const modelRoot = this.modelRoot(model.id);
     const binary = path.join(modelRoot, "bin/parakeet");
@@ -492,10 +544,12 @@ export class VoiceModelManager {
 
   async transcribe(modelId, pcm) {
     const model = requiredModel(modelId);
-    if (model.engine !== "transformers-whisper") throw modelError("voice_model_engine", `${model.label} does not use the embedded transcription engine`, 409);
+    if (model.engine !== "transformers-whisper" && model.engine !== "transcribe-cpp") throw modelError("voice_model_engine", `${model.label} does not use the embedded transcription engine`, 409);
     await this.ensureRunning(model.id);
     const transcriber = this.transcriber;
-    const task = this.transcriptionTail.then(() => transcriber(pcmFloat32(Buffer.from(pcm)), { chunk_length_s: 30, stride_length_s: 2 }));
+    const task = this.transcriptionTail.then(() => model.engine === "transcribe-cpp"
+      ? transcriber.transcribe(pcmFloat32(Buffer.from(pcm)))
+      : transcriber(pcmFloat32(Buffer.from(pcm)), { chunk_length_s: 30, stride_length_s: 2 }));
     this.transcriptionTail = task.then(() => undefined, () => undefined);
     const output = await task;
     return String(output?.text || "").trim();
@@ -527,6 +581,24 @@ export class VoiceModelManager {
     return { ok: true, mode: "local", modelId: model.id };
   }
 
+  transcribeCppDescriptor(runtime, model) {
+    return {
+      kind: "transcriber",
+      adapter: "transcribe_cpp_batch_v1",
+      backend: "transcribe_cpp",
+      computeBackend: runtime.computeBackend || runtime.backend || null,
+      capabilities: runtime.capabilities || {
+        language: model.languages === "English" ? "en" : null,
+        inferenceMode: "batch",
+        partials: false,
+        externalVad: false,
+        precision: model.precision || null,
+        memory: { modelBytes: model.approximateBytes || null },
+      },
+      native: runtime.native || null,
+    };
+  }
+
   async stop() {
     const installation = this.installPromise;
     if (installation) {
@@ -551,7 +623,7 @@ export class VoiceModelManager {
     this.child = null; this.port = null; this.transcriber = null; this.activeModelId = null;
     await this.transcriptionTail.catch(() => {});
     this.transcriptionTail = Promise.resolve();
-    if (transcriber?.dispose) await transcriber.dispose().catch(() => {});
+    if (typeof transcriber?.dispose === "function") await Promise.resolve().then(() => transcriber.dispose()).catch(() => {});
     if (!child || child.exitCode != null) return;
     child.kill("SIGTERM");
     await new Promise((resolve) => {
