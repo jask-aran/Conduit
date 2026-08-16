@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { WebSocket, WebSocketServer } from "ws";
-import { createDictationStream, createDeepgramAdapter, createHttpAdapter, splitSilence } from "../src/server/dictation-stream.js";
+import { createDictationStream, createDeepgramAdapter, createHttpAdapter, createTranscribeCppStreamAdapter, splitSilence } from "../src/server/dictation-stream.js";
 import { VoiceRecordingStore } from "../src/server/voice-recording-store.js";
 
 function listen(server) {
@@ -63,7 +63,7 @@ async function startUpstream(frames) {
   return server;
 }
 
-async function startDictationBridge({ upstreamPort, recordingStore = null, resolveDelayMs = 0, pins = null, observeVoiceActivity = null, beginVoiceActivity = null, runtimeConfig = null }) {
+async function startDictationBridge({ upstreamPort, recordingStore = null, resolveDelayMs = 0, pins = null, observeVoiceActivity = null, beginVoiceActivity = null, runtimeConfig = null, limits = {} }) {
   const wss = new WebSocketServer({ noServer: true });
   let resolveCount = 0;
   const observe = typeof observeVoiceActivity === "function"
@@ -109,6 +109,7 @@ async function startDictationBridge({ upstreamPort, recordingStore = null, resol
       },
     },
     recordingStore,
+    limits,
   });
   const bridge = createServer();
   bridge.on("upgrade", (request, socket, head) => stream.handleUpgrade(request, socket, head));
@@ -351,7 +352,7 @@ test("Unified English batch adapter transcribes the complete PCM once and does n
   }
 });
 
-test("Unified English stream adapter feeds PCM once, exposes revisions, and stays open across silence", async () => {
+test("Unified English stream adapter coalesces PCM, exposes revisions, and stays open across silence", async () => {
   const upstream = await startUpstream([]);
   const feedSizes = [];
   let snapshot = { full: "", committed: "", tentative: "" };
@@ -411,9 +412,7 @@ test("Unified English stream adapter feeds PCM once, exposes revisions, and stay
   try {
     await new Promise((resolve, reject) => { client.once("open", resolve); client.once("error", reject); });
     await next((event) => event.type === "ready");
-    client.send(Buffer.alloc(640, 1), { binary: true });
-    client.send(Buffer.alloc(640), { binary: true });
-    client.send(Buffer.alloc(640), { binary: true });
+    for (let index = 0; index < 24; index += 1) client.send(Buffer.alloc(640, index === 0 ? 1 : 0), { binary: true });
     const runtimeReady = await next((event) => event.type === "runtime_ready");
     assert.equal(runtimeReady.adapter, "transcribe_cpp_stream_v1");
     assert.equal(runtimeReady.inferenceMode, "streaming");
@@ -429,7 +428,7 @@ test("Unified English stream adapter feeds PCM once, exposes revisions, and stay
     assert.equal(third.text, "First phrase follows");
     assert.equal(third.stableText, "First phrase follows");
     assert.equal(third.tentativeText, "");
-    client.send(JSON.stringify({ type: "stop", audioBytesSent: 1_920 }));
+    client.send(JSON.stringify({ type: "stop", audioBytesSent: 15_360 }));
     const completed = await next((event) => event.type === "completed");
     assert.equal(completed.text, "First phrase follows");
     assert.equal(completed.adapter, "transcribe_cpp_stream_v1");
@@ -438,13 +437,89 @@ test("Unified English stream adapter feeds PCM once, exposes revisions, and stay
     assert.equal(completed.capabilities.partials, true);
     assert.equal(completed.diagnostics.server.inference.streaming.feedCount, 3);
     assert.equal(completed.diagnostics.server.inference.streaming.profile.latencyMs, 480);
-    assert.deepEqual(feedSizes, [320, 320, 320]);
+    assert.equal(completed.diagnostics.server.inference.streaming.profile.feedQuantumMs, 160);
+    assert.equal(completed.diagnostics.server.inference.streaming.acceptedThroughSample, 7_680);
+    assert.equal(completed.diagnostics.server.inference.streaming.submittedThroughSample, 7_680);
+    assert.equal(completed.diagnostics.server.inference.streaming.committedThroughSample, 7_680);
+    assert.equal(completed.diagnostics.server.inference.streaming.processedThroughSample, null);
+    assert.equal(completed.diagnostics.server.inference.streaming.serverQueuedAudioMs, 0);
+    assert.equal(completed.diagnostics.server.inference.streaming.totalInferenceLagMs, 0);
+    assert.deepEqual(feedSizes, [2_560, 2_560, 2_560]);
   } finally {
     client.terminate();
     await new Promise((resolve) => setTimeout(resolve, 25));
     await new Promise((resolve) => bridge.close(resolve));
     await new Promise((resolve) => upstream.close(resolve));
   }
+});
+
+test("transcribe.cpp feed worker does not make write await native inference and flushes its tail", async () => {
+  const feedSizes = [];
+  let feedStarted = false;
+  let inFlight = 0;
+  let maximumInFlight = 0;
+  const nativeStream = {
+    get text() { return { full: "", committed: "", tentative: "" }; },
+    async feed(pcm) {
+      feedStarted = true;
+      inFlight += 1;
+      maximumInFlight = Math.max(maximumInFlight, inFlight);
+      feedSizes.push(pcm.length);
+      await new Promise((resolve) => setTimeout(resolve, 30));
+      inFlight -= 1;
+      return { resultChanged: false, revision: feedSizes.length, audioCommittedMs: 0, bufferedMs: 0 };
+    },
+    async finalize() { return { resultChanged: false, isFinal: true, revision: feedSizes.length, audioCommittedMs: 0, bufferedMs: 0 }; },
+    reset() {},
+  };
+  const events = [];
+  const adapter = createTranscribeCppStreamAdapter(
+    (event) => events.push(event),
+    {},
+    async () => nativeStream,
+    null,
+    { family: "parakeet_buffered", chunkMs: 160 },
+  );
+  await adapter.opened;
+  for (let index = 0; index < 16; index += 1) adapter.write(Buffer.alloc(640, index));
+  assert.equal(feedStarted, false);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(feedStarted, true);
+  await adapter.stop();
+  assert.deepEqual(feedSizes, [2_560, 2_560]);
+  assert.equal(maximumInFlight, 1);
+  assert.equal(events.at(-1).type, "adapter_closed");
+});
+
+test("transcribe.cpp Stop drains a queued backlog in native quanta", async () => {
+  const feedSizes = [];
+  let releaseFirstFeed;
+  const firstFeed = new Promise((resolve) => { releaseFirstFeed = resolve; });
+  const nativeStream = {
+    get text() { return { full: "", committed: "", tentative: "" }; },
+    async feed(pcm) {
+      feedSizes.push(pcm.length);
+      if (feedSizes.length === 1) await firstFeed;
+      return { resultChanged: false, revision: feedSizes.length, audioCommittedMs: 0, bufferedMs: 0 };
+    },
+    async finalize() { return { resultChanged: false, isFinal: true, revision: feedSizes.length, audioCommittedMs: 0, bufferedMs: 0 }; },
+    reset() {},
+  };
+  const adapter = createTranscribeCppStreamAdapter(
+    () => {},
+    {},
+    async () => nativeStream,
+    null,
+    { family: "parakeet_buffered", chunkMs: 160 },
+  );
+  await adapter.opened;
+  for (let index = 0; index < 32; index += 1) adapter.write(Buffer.alloc(640, index));
+  const stopped = adapter.stop();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(feedSizes, [2_560]);
+  releaseFirstFeed();
+  await stopped;
+  assert.deepEqual(feedSizes, [2_560, 2_560, 2_560, 2_560]);
 });
 
 test("OpenAI live StreamPort feeds session PCM and finalizes like Unified English", async () => {
@@ -570,6 +645,83 @@ test("Unified English stream startup failure falls back before consuming session
   } finally {
     client.terminate();
     await new Promise((resolve) => setTimeout(resolve, 25));
+    await new Promise((resolve) => bridge.close(resolve));
+    await new Promise((resolve) => upstream.close(resolve));
+  }
+});
+
+test("Unified English live queue overflow falls back from sample zero without a second native path", async () => {
+  const upstream = await startUpstream([]);
+  const transcribed = [];
+  let feedStarted = 0;
+  let resetCount = 0;
+  let finalizeCount = 0;
+  const nativeStream = {
+    get text() { return { full: "", committed: "", tentative: "" }; },
+    async feed() {
+      feedStarted += 1;
+      await new Promise((resolve) => setTimeout(resolve, 250));
+      return { resultChanged: false, revision: feedStarted, audioCommittedMs: 0, bufferedMs: 0 };
+    },
+    async finalize() {
+      finalizeCount += 1;
+      return { resultChanged: false, isFinal: true, revision: feedStarted, audioCommittedMs: 0, bufferedMs: 0 };
+    },
+    reset() { resetCount += 1; },
+  };
+  const { bridge, origin } = await startDictationBridge({
+    upstreamPort: upstream.address().port,
+    limits: { liveQueueLimitMs: 300 },
+    runtimeConfig: {
+      mode: "local",
+      inferenceMode: "streaming",
+      adapter: "transcribe_cpp_stream_v1",
+      provider: "local",
+      model: "parakeet-unified-en-0.6b-q8",
+      precision: "q8",
+      backend: "transcribe_cpp",
+      computeBackend: "cpu",
+      capabilities: { language: "en", inferenceMode: "streaming", partials: true, externalVad: false, precision: "q8", streaming: { family: "parakeet_buffered", chunkMs: 160, latencyMs: 480 } },
+      streaming: { family: "parakeet_buffered", chunkMs: 160, latencyMs: 480 },
+      stream: async () => nativeStream,
+      transcribe: async (pcm) => {
+        transcribed.push(Buffer.from(pcm));
+        return "batch after overflow";
+      },
+    },
+  });
+  const client = new WebSocket(`${origin}/dictation`);
+  const next = messageQueue(client);
+  try {
+    await new Promise((resolve, reject) => { client.once("open", resolve); client.once("error", reject); });
+    await next((event) => event.type === "ready");
+    await next((event) => event.type === "runtime_ready");
+    for (let index = 0; index < 8; index += 1) client.send(Buffer.alloc(640, index + 1), { binary: true });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    for (let index = 8; index < 24; index += 1) client.send(Buffer.alloc(640, index + 1), { binary: true });
+    const fallback = await next((event) => event.type === "stream_fallback", 5_000);
+    assert.equal(fallback.reason, "live_queue_overflow");
+    assert.equal(fallback.replay, "from_zero");
+    client.send(JSON.stringify({ type: "stop", audioBytesSent: 15_360 }));
+    const completed = await next((event) => event.type === "completed", 5_000);
+    assert.equal(completed.text, "batch after overflow");
+    assert.equal(completed.adapter, "transcribe_cpp_batch_fallback_v1");
+    assert.deepEqual(completed.streamFallback, {
+      from: "transcribe_cpp_stream_v1",
+      reason: "live_queue_overflow",
+      replay: "from_zero",
+      replaySample: 0,
+    });
+    assert.equal(completed.audioBytes, 15_360);
+    assert.equal(transcribed.length, 1);
+    assert.equal(transcribed[0].length, 15_360);
+    assert.equal(completed.diagnostics.server.inference.streaming.overflow.code, "live_queue_overflow");
+    assert.ok(feedStarted >= 1);
+    assert.ok(resetCount >= 1);
+    assert.equal(finalizeCount, 0);
+  } finally {
+    client.terminate();
+    await new Promise((resolve) => setTimeout(resolve, 300));
     await new Promise((resolve) => bridge.close(resolve));
     await new Promise((resolve) => upstream.close(resolve));
   }

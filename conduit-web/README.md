@@ -564,12 +564,26 @@ matching JSON sidecar. File-upload adapters (`openai_audio_sse_v1`,
 PCM packet is upsampled to 24 kHz and appended to a Realtime transcription
 session; `partial` / `final` events include `stableText`, `tentativeText`,
 and `revision`. Unified English Q8 uses `transcribe_cpp_stream_v1` the same
-way with native float32 packets, plus `audioCommittedMs` and `bufferedMs`. A stream-start failure is reported in `streamFallback` and can
-select `transcribe_cpp_batch_fallback_v1` with the WP5 progressive path.
+way with native float32 packets, plus `audioCommittedMs` and `bufferedMs`.
+Conduit copies incoming packets into one bounded server queue, coalesces eight
+20 ms packets into one 160 ms native feed, and allows only one native `feed()`
+call at a time. The queue limit is 5,000 ms. The stream reports
+`serverQueuedAudioMs`, `runtimeBufferedAudioMs`, `totalInferenceLagMs`,
+`acceptedThroughSample`, `submittedThroughSample`, `committedThroughSample`,
+and `processedThroughSample` (null unless the binding reports an exact
+processed cursor). A queue overflow before stable text emits
+`stream_fallback` and replays the complete accepted PCM through
+`transcribe_cpp_batch_fallback_v1` from sample zero. An overflow after stable
+text emits `error` and preserves the accepted PCM for the archive. A
+stream-start failure is reported in `streamFallback` and can also select
+`transcribe_cpp_batch_fallback_v1` with the WP5 progressive path.
+The current CPU Live profile uses 5.6 s left context, a 560 ms chunk, and
+560 ms right context for 1.12 s lookahead. The other supported Unified English
+profiles remain available to later profile selection work.
 Other managed local models can submit closed ranges during capture through the
 bounded progressive path; the managed legacy Parakeet runtime still serves
 the OpenAI-compatible upload endpoint on loopback. Conduit emits
-`ready`, `partial`, `final`, `finalizing`, `segment_error`,
+`ready`, `partial`, `final`, `stream_fallback`, `finalizing`, `segment_error`,
 `settlement_deadline`, `completed`, and `error`. Progressive `final` events
 contain cumulative text and optional sequence/sample metadata. `finalizing`
 announces the duration-aware server deadline before the selected adapter
