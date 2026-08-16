@@ -63,7 +63,7 @@ async function startUpstream(frames) {
   return server;
 }
 
-async function startDictationBridge({ upstreamPort, recordingStore = null, resolveDelayMs = 0, pins = null, observeVoiceActivity = null, runtimeConfig = null }) {
+async function startDictationBridge({ upstreamPort, recordingStore = null, resolveDelayMs = 0, pins = null, observeVoiceActivity = null, beginVoiceActivity = null, runtimeConfig = null }) {
   const wss = new WebSocketServer({ noServer: true });
   let resolveCount = 0;
   const observe = typeof observeVoiceActivity === "function"
@@ -93,6 +93,7 @@ async function startDictationBridge({ upstreamPort, recordingStore = null, resol
       pin: () => { if (pins) pins.count += 1; },
       unpin: () => { if (pins) pins.count = Math.max(0, pins.count - 1); },
       observeVoiceActivity: observe,
+      beginVoiceActivity: typeof beginVoiceActivity === "function" ? beginVoiceActivity : undefined,
       resolve: async () => {
         resolveCount += 1;
         if (resolveDelayMs > 0) await new Promise((resolve) => setTimeout(resolve, resolveDelayMs));
@@ -342,6 +343,230 @@ test("Unified English batch adapter transcribes the complete PCM once and does n
     assert.equal(completed.capabilities.externalVad, false);
     assert.equal(calls.length, 1);
     assert.equal(calls[0].length, 4_096);
+  } finally {
+    client.terminate();
+    await new Promise((resolve) => setTimeout(resolve, 25));
+    await new Promise((resolve) => bridge.close(resolve));
+    await new Promise((resolve) => upstream.close(resolve));
+  }
+});
+
+test("Unified English stream adapter feeds PCM once, exposes revisions, and stays open across silence", async () => {
+  const upstream = await startUpstream([]);
+  const feedSizes = [];
+  let snapshot = { full: "", committed: "", tentative: "" };
+  let revision = 0;
+  const nativeStream = {
+    get text() { return snapshot; },
+    async feed(pcm) {
+      feedSizes.push(pcm.length);
+      revision += 1;
+      if (revision === 1) snapshot = { full: "First", committed: "First", tentative: "" };
+      else if (revision === 2) snapshot = { full: "First phrase", committed: "First", tentative: " phrase" };
+      else snapshot = { full: "First phrase follows", committed: "First phrase follows", tentative: "" };
+      return { resultChanged: true, revision, audioCommittedMs: revision * 160, bufferedMs: 0 };
+    },
+    async finalize() {
+      snapshot = { full: "First phrase follows", committed: "First phrase follows", tentative: "" };
+      revision += 1;
+      return { resultChanged: true, isFinal: true, revision, audioCommittedMs: 480, bufferedMs: 0 };
+    },
+    reset() {},
+  };
+  const { bridge, origin } = await startDictationBridge({
+    upstreamPort: upstream.address().port,
+    resolveDelayMs: 25,
+    runtimeConfig: {
+      mode: "local",
+      inferenceMode: "streaming",
+      adapter: "transcribe_cpp_stream_v1",
+      provider: "local",
+      model: "parakeet-unified-en-0.6b-q8",
+      precision: "q8",
+      backend: "transcribe_cpp",
+      computeBackend: "cpu",
+      capabilities: {
+        language: "en",
+        inferenceMode: "streaming",
+        partials: true,
+        externalVad: false,
+        precision: "q8",
+        memory: { modelBytes: 731357568 },
+        streaming: { family: "parakeet_buffered", leftMs: 5_600, chunkMs: 160, rightMs: 320, latencyMs: 480, commitPolicy: "stable_prefix", stablePrefixAgreementN: 3 },
+      },
+      streaming: { family: "parakeet_buffered", leftMs: 5_600, chunkMs: 160, rightMs: 320, latencyMs: 480, commitPolicy: "stable_prefix", stablePrefixAgreementN: 3 },
+      native: { package: "transcribe-cpp", version: "0.1.3", headerHash: "86b16dd97ad1cb58" },
+      stream: async (options) => {
+        assert.deepEqual(options, {
+          family: { kind: "parakeet_buffered", leftMs: 5_600, chunkMs: 160, rightMs: 320 },
+          commitPolicy: "stable_prefix",
+          stablePrefixAgreementN: 3,
+        });
+        return nativeStream;
+      },
+    },
+  });
+  const client = new WebSocket(`${origin}/dictation`);
+  const next = messageQueue(client);
+  try {
+    await new Promise((resolve, reject) => { client.once("open", resolve); client.once("error", reject); });
+    await next((event) => event.type === "ready");
+    client.send(Buffer.alloc(640, 1), { binary: true });
+    client.send(Buffer.alloc(640), { binary: true });
+    client.send(Buffer.alloc(640), { binary: true });
+    const runtimeReady = await next((event) => event.type === "runtime_ready");
+    assert.equal(runtimeReady.adapter, "transcribe_cpp_stream_v1");
+    assert.equal(runtimeReady.inferenceMode, "streaming");
+    const first = await next((event) => event.type === "partial");
+    assert.equal(first.text, "First");
+    assert.equal(first.stableText, "First");
+    assert.equal(first.tentativeText, "");
+    const second = await next((event) => event.type === "partial");
+    assert.equal(second.text, "First phrase");
+    assert.equal(second.stableText, "First");
+    assert.equal(second.tentativeText, "phrase");
+    const third = await next((event) => event.type === "partial");
+    assert.equal(third.text, "First phrase follows");
+    assert.equal(third.stableText, "First phrase follows");
+    assert.equal(third.tentativeText, "");
+    client.send(JSON.stringify({ type: "stop", audioBytesSent: 1_920 }));
+    const completed = await next((event) => event.type === "completed");
+    assert.equal(completed.text, "First phrase follows");
+    assert.equal(completed.adapter, "transcribe_cpp_stream_v1");
+    assert.equal(completed.inferenceMode, "streaming");
+    assert.equal(completed.progressiveBatch, false);
+    assert.equal(completed.capabilities.partials, true);
+    assert.equal(completed.diagnostics.server.inference.streaming.feedCount, 3);
+    assert.equal(completed.diagnostics.server.inference.streaming.profile.latencyMs, 480);
+    assert.deepEqual(feedSizes, [320, 320, 320]);
+  } finally {
+    client.terminate();
+    await new Promise((resolve) => setTimeout(resolve, 25));
+    await new Promise((resolve) => bridge.close(resolve));
+    await new Promise((resolve) => upstream.close(resolve));
+  }
+});
+
+test("OpenAI live StreamPort feeds session PCM and finalizes like Unified English", async () => {
+  const appended = [];
+  const upstream = await startUpstream([]);
+  const { bridge, origin } = await startDictationBridge({
+    upstreamPort: upstream.address().port,
+    runtimeConfig: {
+      mode: "remote",
+      inferenceMode: "streaming",
+      adapter: "openai_realtime_stream_v1",
+      provider: "openai",
+      model: "gpt-live-transcribe",
+      backend: "openai_realtime",
+      capabilities: { language: "en", inferenceMode: "streaming", partials: true },
+      stream: async () => ({
+        onDelta(handler) { this.delta = handler; },
+        onCompleted(handler) { this.completed = handler; },
+        async append(pcm) {
+          appended.push(pcm.length);
+          if (appended.length === 1) this.delta?.("Live");
+        },
+        async commit() {
+          this.completed?.("Live phrase");
+          return "Live phrase";
+        },
+        close() {},
+      }),
+    },
+  });
+  const client = new WebSocket(`${origin}/dictation`);
+  const next = messageQueue(client);
+  try {
+    await new Promise((resolve, reject) => { client.once("open", resolve); client.once("error", reject); });
+    await next((event) => event.type === "ready");
+    client.send(Buffer.alloc(640, 1), { binary: true });
+    const runtimeReady = await next((event) => event.type === "runtime_ready");
+    assert.equal(runtimeReady.adapter, "openai_realtime_stream_v1");
+    assert.equal(runtimeReady.inferenceMode, "streaming");
+    const partial = await next((event) => event.type === "partial");
+    assert.equal(partial.tentativeText, "Live");
+    client.send(JSON.stringify({ type: "stop", audioBytesSent: 640 }));
+    const completed = await next((event) => event.type === "completed");
+    assert.equal(completed.text, "Live phrase");
+    assert.equal(completed.adapter, "openai_realtime_stream_v1");
+    assert.deepEqual(appended, [960]);
+  } finally {
+    client.terminate();
+    await new Promise((resolve) => setTimeout(resolve, 25));
+    await new Promise((resolve) => bridge.close(resolve));
+    await new Promise((resolve) => upstream.close(resolve));
+  }
+});
+
+test("Unified English stream startup failure falls back before consuming session PCM", async () => {
+  const upstream = await startUpstream([]);
+  let streamAttempts = 0;
+  let progressiveStarts = 0;
+  let progressivePcmBytes = 0;
+  const transcribed = [];
+  const { bridge, origin } = await startDictationBridge({
+    upstreamPort: upstream.address().port,
+    beginVoiceActivity: () => {
+      progressiveStarts += 1;
+      return {
+        push(pcm) {
+          progressivePcmBytes += pcm.length;
+          return Promise.resolve([]);
+        },
+        finish() {
+          return Promise.resolve({
+            type: "silero_vad_observation",
+            available: true,
+            status: "observed",
+            regions: [{ regionIndex: 0, startSample: 0, endSample: progressivePcmBytes / 2, submittedStartSample: 0, submittedEndSample: progressivePcmBytes / 2 }],
+            frames: [],
+            summary: { regionCount: 1, speechFrameCount: 1, maxProbability: 1, meanProbability: 1 },
+          });
+        },
+        cancel() {},
+      };
+    },
+    runtimeConfig: {
+      mode: "local",
+      inferenceMode: "streaming",
+      adapter: "transcribe_cpp_stream_v1",
+      provider: "local",
+      model: "parakeet-unified-en-0.6b-q8",
+      precision: "q8",
+      backend: "transcribe_cpp",
+      computeBackend: "cpu",
+      capabilities: { language: "en", inferenceMode: "streaming", partials: true, externalVad: false, precision: "q8", streaming: { family: "parakeet_buffered", leftMs: 5_600, chunkMs: 160, rightMs: 320, latencyMs: 480 } },
+      streaming: { family: "parakeet_buffered", leftMs: 5_600, chunkMs: 160, rightMs: 320, latencyMs: 480 },
+      stream: async () => {
+        streamAttempts += 1;
+        throw Object.assign(new Error("stream unavailable"), { code: "test_stream_unavailable" });
+      },
+      transcribe: async (pcm) => {
+        transcribed.push(pcm);
+        return "batch fallback";
+      },
+    },
+  });
+  const client = new WebSocket(`${origin}/dictation`);
+  const next = messageQueue(client);
+  try {
+    await new Promise((resolve, reject) => { client.once("open", resolve); client.once("error", reject); });
+    await next((event) => event.type === "ready");
+    const runtimeReady = await next((event) => event.type === "runtime_ready");
+    assert.equal(runtimeReady.adapter, "transcribe_cpp_batch_fallback_v1");
+    assert.equal(runtimeReady.progressiveBatch, true);
+    client.send(Buffer.alloc(4_096, 3), { binary: true });
+    client.send(JSON.stringify({ type: "stop", audioBytesSent: 4_096 }));
+    const completed = await next((event) => event.type === "completed");
+    assert.equal(completed.text, "batch fallback");
+    assert.equal(completed.progressiveBatch, true);
+    assert.deepEqual(completed.streamFallback, { from: "transcribe_cpp_stream_v1", reason: "test_stream_unavailable" });
+    assert.equal(streamAttempts, 1);
+    assert.equal(progressiveStarts, 1);
+    assert.equal(progressivePcmBytes, 4_096);
+    assert.equal(transcribed.length, 1);
+    assert.equal(transcribed[0].length, 4_096);
   } finally {
     client.terminate();
     await new Promise((resolve) => setTimeout(resolve, 25));
@@ -737,9 +962,8 @@ test("authoritative Silero observation submits its padded ranges", async () => {
     request.resume();
     request.on("end", () => {
       upstreamRequests += 1;
-      const text = upstreamRequests === 1 ? "before" : "after";
       response.writeHead(200, { "content-type": "text/event-stream" });
-      response.end(`event: transcript.text.done\ndata: ${JSON.stringify({ type: "transcript.text.done", text })}\n\n`);
+      response.end(`event: transcript.text.done\ndata: ${JSON.stringify({ type: "transcript.text.done", text: "before after" })}\n\n`);
     });
   });
   upstream.listen(0, "127.0.0.1");
@@ -762,7 +986,7 @@ test("authoritative Silero observation submits its padded ranges", async () => {
     client.send(JSON.stringify({ type: "stop", audioBytesSent: audio.length }));
     const completed = await next((event) => event.type === "completed");
     assert.equal(completed.text, "before after");
-    assert.equal(upstreamRequests, 2);
+    assert.equal(upstreamRequests, 1);
     assert.deepEqual(completed.diagnostics.server.inference.boundaries, [
       { index: 0, startSample: 0, endSample: 19_840, startMs: 0, endMs: 1_240, durationMs: 1_240, vadRegionIndices: [0] },
       { index: 1, startSample: 52_160, endSample: 72_000, startMs: 3_260, endMs: 4_500, durationMs: 1_240, vadRegionIndices: [1] },
@@ -877,17 +1101,16 @@ test("splitSilence caps the number of segments", () => {
   assert.equal(segments.length, 4);
 });
 
-test("HTTP adapters split long pauses into separate transcription requests", async () => {
+test("HTTP adapters upload one WAV at Stop", async () => {
   const requestBodies = [];
   const upstream = createServer((request, response) => {
     const chunks = [];
     request.on("data", (chunk) => chunks.push(chunk));
     request.on("end", () => {
       requestBodies.push(Buffer.concat(chunks));
-      const first = requestBodies.length === 1;
       response.writeHead(200, { "content-type": "text/event-stream" });
-      response.write(`event: transcript.text.delta\ndata: ${JSON.stringify({ type: "transcript.text.delta", delta: first ? "before the pause." : " after" })}\n\n`);
-      response.write(`event: transcript.text.done\ndata: ${JSON.stringify({ type: "transcript.text.done", text: first ? "before the pause." : "after the pause." })}\n\n`);
+      response.write(`event: transcript.text.delta\ndata: ${JSON.stringify({ type: "transcript.text.delta", delta: "before the pause." })}\n\n`);
+      response.write(`event: transcript.text.done\ndata: ${JSON.stringify({ type: "transcript.text.done", text: "before the pause. after the pause." })}\n\n`);
       response.end();
     });
   });
@@ -895,7 +1118,7 @@ test("HTTP adapters split long pauses into separate transcription requests", asy
   await listen(upstream);
   const events = [];
   const adapter = createHttpAdapter(
-    { endpoint: `http://127.0.0.1:${upstream.address().port}/v1/audio/transcriptions`, provider: "local", headers: {} },
+    { endpoint: `http://127.0.0.1:${upstream.address().port}/v1/audio/transcriptions`, provider: "openai", headers: {} },
     (event) => events.push(event),
     { maxAudioBytes: 1_000_000, maxEventBytes: 64 * 1024 },
     fetch,
@@ -903,17 +1126,13 @@ test("HTTP adapters split long pauses into separate transcription requests", asy
   try {
     adapter.write(pcmWith([{ samples: 16_000, level: 0.1 }, { samples: 40_000, level: 0 }, { samples: 16_000, level: 0.1 }]));
     await adapter.stop();
-    assert.equal(requestBodies.length, 2);
-    const wavSizes = requestBodies.map((body) => body.readUInt32LE(body.indexOf("RIFF") + 40));
-    assert.deepEqual(wavSizes, [32_000, 32_000], "each request carries one utterance of PCM");
-    assert.ok(requestBodies[0].readInt16LE(requestBodies[0].indexOf("RIFF") + 44) > 3_000, "first request carries the first utterance");
-    assert.ok(requestBodies[1].readInt16LE(requestBodies[1].indexOf("RIFF") + 44) > 3_000, "second request carries the second utterance");
+    assert.equal(requestBodies.length, 1);
+    const wavSize = requestBodies[0].readUInt32LE(requestBodies[0].indexOf("RIFF") + 40);
+    assert.equal(wavSize, 72_000 * 2);
     assert.deepEqual(events.filter((event) => event.type === "partial").map((event) => event.text), [
       "before the pause.",
-      "before the pause. after",
     ]);
     assert.deepEqual(events.filter((event) => event.type === "final").map((event) => event.text), [
-      "before the pause.",
       "before the pause. after the pause.",
     ]);
     assert.equal(events.find((event) => event.type === "adapter_closed").text, "before the pause. after the pause.");
@@ -928,9 +1147,8 @@ test("dictation bridge joins multi-segment transcripts into one completed text",
     request.resume();
     request.on("end", () => {
       requestCount.value += 1;
-      const first = requestCount.value === 1;
       response.writeHead(200, { "content-type": "text/event-stream" });
-      response.write(`event: transcript.text.done\ndata: ${JSON.stringify({ type: "transcript.text.done", text: first ? "first sentence." : "second sentence." })}\n\n`);
+      response.write(`event: transcript.text.done\ndata: ${JSON.stringify({ type: "transcript.text.done", text: "first sentence. second sentence." })}\n\n`);
       response.end();
     });
   });
@@ -966,11 +1184,12 @@ test("dictation bridge joins multi-segment transcripts into one completed text",
         assert.equal(event.final, true);
         assert.equal(event.text, "first sentence. second sentence.");
         assert.equal(event.audioBytes, 72_000 * 2);
+        assert.equal(requestCount.value, 1);
         break;
       }
       finals.push(event.text);
     }
-    assert.deepEqual(finals, ["first sentence.", "first sentence. second sentence."]);
+    assert.deepEqual(finals, ["first sentence. second sentence."]);
   } finally {
     client.terminate();
     await new Promise((resolve) => setTimeout(resolve, 25));
@@ -997,12 +1216,11 @@ test("HTTP adapters keep identical repeated segments instead of deduplicating", 
   );
   adapter.write(pcmWith([{ samples: 16_000, level: 0.1 }, { samples: 40_000, level: 0 }, { samples: 16_000, level: 0.1 }]));
   await adapter.stop();
-  assert.equal(requests, 2);
+  assert.equal(requests, 1);
   assert.deepEqual(events.filter((event) => event.type === "final").map((event) => event.text), [
     "repeat me",
-    "repeat me repeat me",
   ]);
-  assert.equal(events.find((event) => event.type === "adapter_closed").text, "repeat me repeat me");
+  assert.equal(events.find((event) => event.type === "adapter_closed").text, "repeat me");
 });
 
 test("snapshot adapters split long pauses and join segment transcripts", async () => {
@@ -1021,6 +1239,6 @@ test("snapshot adapters split long pauses and join segment transcripts", async (
   );
   adapter.write(pcmWith([{ samples: 16_000, level: 0.1 }, { samples: 40_000, level: 0 }, { samples: 16_000, level: 0.1 }]));
   await adapter.stop();
-  assert.deepEqual(bodies, [32_000, 32_000]);
-  assert.deepEqual(events.filter((event) => event.type === "final").map((event) => event.text), ["first utterance second utterance"]);
+  assert.deepEqual(bodies, [144_000]);
+  assert.deepEqual(events.filter((event) => event.type === "final").map((event) => event.text), ["first utterance"]);
 });

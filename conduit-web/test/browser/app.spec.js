@@ -5220,6 +5220,94 @@ test("Voice microphone test shows the shared live recorder monitor", async ({ pa
   await expect.poll(() => page.evaluate(() => window.__voiceRevokedUrls.length)).toBeGreaterThan(0);
 });
 
+test("voice model picker exposes backend capabilities in a compact switcher", async ({ page }) => {
+  const models = [
+    {
+      id: "parakeet-unified-en-0.6b-q8",
+      label: "Parakeet Unified English Q8",
+      engine: "transcribe-cpp",
+      size: "large",
+      languages: "English",
+      description: "Verified native runtime.",
+      approximateBytes: 1_000_000_000,
+      precision: "q8",
+      license: { id: "CC-BY-4.0", attribution: "NVIDIA NeMo" },
+      installed: true,
+      staged: false,
+      running: true,
+      state: "running",
+      error: null,
+    },
+    {
+      id: "whisper-tiny-en-q8",
+      label: "Whisper Tiny English",
+      engine: "transformers-whisper",
+      size: "tiny",
+      languages: "English",
+      description: "Smallest and fastest option.",
+      approximateBytes: 80_000_000,
+      precision: "q8",
+      license: { id: "MIT", attribution: "OpenAI Whisper" },
+      installed: true,
+      staged: false,
+      running: false,
+      state: "ready",
+      error: null,
+    },
+    {
+      id: "parakeet-tdt-0.6b-v3-int8",
+      label: "Parakeet TDT 0.6B v3",
+      engine: "parakeet",
+      size: "large",
+      languages: "25 European",
+      description: "Legacy batch model.",
+      approximateBytes: 900_000_000,
+      precision: "int8",
+      license: { id: "CC-BY-4.0", attribution: "NVIDIA Parakeet" },
+      installed: false,
+      staged: false,
+      running: false,
+      state: "not_installed",
+      error: null,
+    },
+  ];
+  const view = {
+    mode: "local",
+    localModelId: models[0].id,
+    provider: "",
+    adapter: "",
+    model: "",
+    endpoint: "",
+    source: "stored",
+    adapters: [],
+    providers: [],
+    auth: { type: "none", headerName: "", configured: false, source: null, removable: false },
+    local: { installingModelId: null, activeModelId: models[0].id, progress: null, models },
+  };
+  await page.route("**/v0/voice/settings", async (route) => route.fulfill({ json: view }));
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, "mediaDevices", { configurable: true, value: { enumerateDevices: async () => [] } });
+  });
+
+  await page.goto("/");
+  await page.keyboard.press("Control+,");
+  const dialog = page.getByRole("dialog", { name: "Settings" });
+  await dialog.getByRole("tab", { name: "Voice" }).click();
+  await expect(dialog.locator("#voice-local-model-quick")).toHaveValue(models[0].id);
+  await expect(dialog.locator('[data-backend="transcribe.cpp"]')).toHaveCount(1);
+  await expect(dialog.getByText("Live streaming", { exact: true })).toBeVisible();
+  await expect(dialog.getByText("Live partials", { exact: true }).first()).toBeVisible();
+  await expect(dialog.getByText("Stable commits", { exact: true }).first()).toBeVisible();
+  await expect(dialog.getByText("Progressive batch", { exact: true })).toBeVisible();
+  await expect(dialog.getByText("Stop-time batch", { exact: true })).toBeVisible();
+  await dialog.locator("#voice-local-model-quick").selectOption(models[1].id);
+  await expect(dialog.locator("#voice-local-model-quick")).toHaveValue(models[1].id);
+  await expect(dialog.getByText("Unsaved", { exact: true })).toBeVisible();
+  await expect(dialog.locator(`[data-model-id="${models[1].id}"][data-current="true"]`)).toHaveCount(1);
+  const columns = await dialog.locator(".voice-model-grid").evaluate((element) => getComputedStyle(element).gridTemplateColumns.split(" ").length);
+  expect(columns).toBe(page.viewportSize().width <= 520 ? 1 : 2);
+});
+
 test("managed model installation preserves the unsaved local source during server polling", async ({ page }) => {
   const modelId = "parakeet-tdt-0.6b-v3-int8";
   const model = {

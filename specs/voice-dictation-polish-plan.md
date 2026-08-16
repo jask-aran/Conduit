@@ -1,7 +1,7 @@
 # Voice dictation pipeline overhaul plan
 
-Status: **WP6A implementation complete and awaiting manual approval. WP0,
-WP1, WP2, WP3, WP4A, WP4B, and WP5 approved. WP6B–WP11 have not started.**
+Status: **WP6B complete and approved with a latency follow-up. WP0, WP1, WP2,
+WP3, WP4A, WP4B, WP5, and WP6A approved. WP7–WP12 have not started.**
 
 This document defines the active voice-dictation work. Git history preserves
 the completed polish sprint, its test counts, and its manual acceptance
@@ -30,10 +30,27 @@ The central design is:
   packetisation, levels, and a bounded pre-roll;
 - make Conduit responsible for session state, authoritative PCM ownership,
   VAD, segment order, backpressure, runtime selection, and transcript events;
-- support whole-session batch, pause-delimited progressive batch, and true
-  stateful streaming as explicit inference modes;
-- select a mode from verified runtime capabilities, not from a provider name
-  or an SSE response format.
+- expose After Stop, During pauses, and Live as explicit execution choices;
+- implement After Stop and During pauses through a common batch port and Live
+  through a verified persistent stream port;
+- select a valid model, artifact, runtime, execution, and segmentation tuple
+  from catalogue data, not from a provider name or SSE response format.
+
+The local runtime strategy is model-specific. Conduit will retain these four
+tracks rather than treat one runtime as the universal target:
+
+- Transformers.js for Whisper ONNX models and progressive Silero range batch;
+- `transcribe.cpp` for the Unified English GGUF model and verified stateful
+  streaming, with bounded batch fallback;
+- the `achetronic/parakeet` ONNX loopback worker for Parakeet TDT models,
+  including a dedicated evaluation of progressive range batching;
+- `transcribe-rs` as a candidate Parakeet ONNX/ONNX Runtime track, with live
+  behaviour enabled only after its model and streaming contract are verified
+  in Conduit.
+
+An ONNX or GGUF artifact does not determine the hardware backend. Each runtime
+must report its model format, execution scheduler, segmentation provider,
+compiled compute backends, actual compute backend, and resource cost.
 
 ## Implementation record (2026-08-15)
 
@@ -93,7 +110,7 @@ The central design is:
   reserves one bounded tail slot, records sequence/sample diagnostics, and
   falls back to whole-session batch when progressive VAD cannot complete.
   Remote providers and future stateful streaming remain outside this fallback.
-- **Work package 6A — implementation complete and awaiting manual approval.**
+- **Work package 6A — complete and approved.**
   The pinned `transcribe-cpp@0.1.3` Node binding and its Linux CPU/Vulkan
   optional packages are in the lockfile. Settings can install and select the
   pinned `parakeet-unified-en-0.6b-Q8_0.gguf` artifact. Conduit loads one
@@ -101,19 +118,40 @@ The central design is:
   float32 buffer, reports the native ABI and actual compute backend, and keeps
   the legacy models selectable. Unified English uses complete-session batch;
   it does not use the WP5 progressive range path or claim live partials.
-- **Work packages 6B–11 — not started.** Stateful live transcription remains
-  outside this package.
+- **Work package 6B — complete and approved with a latency follow-up.**
+  Unified English now opens one `transcribe.cpp` stateful session per
+  dictation and feeds each accepted 20 ms PCM packet once as 16 kHz mono
+  float32. The selected `parakeet_buffered` profile is 480 ms latency with a
+  5.6 s left context, 160 ms chunk, and 320 ms right context; the 80 ms
+  profile is excluded. Stable-prefix agreement is three updates. The stream
+  emits cumulative text with separate stable and tentative fields, revision
+  number, committed-audio time, and buffered time. Stop finalizes the same
+  session after the last packet. A stream-open failure before capture is
+  recorded and falls back to the WP5 batch path without running both paths in
+  parallel. The complete accepted PCM remains the archive source, and Silero
+  remains a separate Conduit observation and fallback-range component.
+- **Four-runtime direction — recorded, not yet implemented.** The user wants
+  all four local runtime tracks retained and iterated until their speed,
+  accuracy, pause behaviour, resource use, and feedback are acceptable.
+  Current user evidence makes Whisper progressive batching the best interaction
+  baseline: a Silero-closed range often completes during a thinking pause,
+  before the next phrase starts. The user also prefers the accuracy and general
+  behaviour of `achetronic/parakeet`, but wants its progressive batching verified
+  and improved rather than replacing that runtime. `transcribe-rs` is not yet
+  integrated; WP10 is the dedicated package for that fourth runtime.
+- **Work packages 7–12 — not started.**
 
-WP3, WP4A, WP4B, and WP5 manual approval are recorded below. WP6A awaits the
-handoff test below and does not authorize WP6B.
+WP3, WP4A, WP4B, WP5, WP6A, and WP6B manual approval are recorded below. WP7
+owns the recorded live-latency follow-up.
 
 ## Deviations from the proposed plan
 
 - The user-approved execution order implemented WP2 before WP1. WP1 is now
   filled in and no later package has started.
 - The WP0 fixed-reference comparison against Unified English Q8 remains
-  deferred. The target runtime and model belong to WP6A and are not installed.
-  Current evidence describes the existing managed Parakeet batch path.
+  deferred. WP6A installed the target runtime and model, but no fixed WER
+  corpus was added; current evidence is native smoke output and live-path
+  diagnostics.
 - The existing server already accepts PCM while `voiceRuntime.resolve()` is
   cold and the batch adapters already wait until Stop before inference. The
   WP1 follow-up adds explicit runtime-ready and waiting-for-transcription
@@ -123,9 +161,18 @@ handoff test below and does not authorize WP6B.
 - The proposed 250–500 ms socket pre-roll was too small to protect a slow
   handshake. The pending client queue now uses the full five-minute audio cap;
   the package-size review remains deferred.
-- The fresh local default is Whisper Tiny English Q8 on embedded Transformers,
-  not the proposed Unified English Q8 on `transcribe.cpp`. WP6A remains
-  unstarted, and the active legacy Parakeet option remains selectable.
+- The fresh local default remains Whisper Tiny English Q8 on embedded
+  Transformers, not Unified English Q8 on `transcribe.cpp`. WP6A and WP6B do
+  not change the saved default, and the legacy model options remain
+  selectable.
+- The original one-way convergence toward Unified English Q8 and later removal
+  of `achetronic/parakeet` is superseded. Retain every useful runtime. The user
+  can change the default when the relevant profile is available; default
+  selection and runtime removal are not work packages.
+- `transcribe-rs` is promoted from a candidate to an explicit WP10 integration
+  package. It is not installed, selected, or described as live-capable until
+  its model support, artifact packaging, hardware reporting, and streaming or
+  batch contract are implemented and verified.
 - Context recovery uses resume-first behaviour for a suspended context. A
   failed or closed context is released and recreated on the next trusted start.
   This keeps normal browser suspension recovery clear without discarding a
@@ -147,11 +194,15 @@ handoff test below and does not authorize WP6B.
 - The exported adapters retain an RMS split only when called without an explicit
   session segmentation object. The authenticated dictation path always passes
   the server-side Silero selection. This keeps direct adapter compatibility
-  tests stable while removing `splitSilence` from the live path.
-- The current runtime resolver declares only `batch`, so WP4B does not guess
-  identifiers for future streaming modes. The adapters retain an explicit
-  `external_policy` option for a later runtime package after its segmentation
-  capability is verified.
+  tests stable while removing `splitSilence` from the live path. WP11A can add
+  a new explicit Conduit heuristic after measurement; it does not restore this
+  compatibility split or make RMS a silent fallback.
+- WP6B adds the verified `transcribe_cpp_stream_v1` runtime identifier and
+  keeps `transcribe_cpp_batch_fallback_v1` private to stream-start fallback.
+  The selected Node binding accepts `parakeet_buffered` for Unified English;
+  the plain `parakeet` family is not accepted by this model. The 480 ms
+  profile was selected from smoke comparisons of the four practical profiles,
+  not from a new WER corpus. Silero remains outside the native stream session.
 - WP5 uses progressive batch only for a resolved local `batch` runtime whose
   adapter exposes a bounded range-transcription operation. Remote providers
   remain Stop-time batch, and no speculative stateful-streaming capability was
@@ -173,9 +224,11 @@ handoff test below and does not authorize WP6B.
   source model revision `d4ac9928f3bf238223ff0779c06b8149bf8ac4e1` in the
   manifest. The exact artifact is 731,357,568 bytes with SHA-256
   `4b50b6dd862bf6e346929aaf4f5eaacec003bfa3f56462d6c874b41ef2f38795`.
-- WP6A keeps Silero as an audit-only Conduit component for the complete batch
-  path. It does not split or resubmit the PCM to progressive batch, so the
-  Unified model receives one reusable complete-session buffer.
+- WP6A used Silero as an audit-only component for complete-session batch.
+  WP6B keeps the complete PCM archive and Silero observation separate from the
+  native stream. Only a verified stream-start failure changes to the WP5
+  progressive batch adapter; normal Unified streaming does not submit the
+  same PCM to progressive batch.
 - The WP0–WP4A technical review actioned V01–V16, V18, and V19. V17 is a
   deliberate scope deferral: moving Silero to an independent shared owner
   requires its own install, readiness, migration, and uninstall lifecycle and
@@ -374,7 +427,7 @@ server timestamp.
 ### Execution rule
 
 Implement one work package or named subsection at a time, in the order listed
-in section 5. Do not begin the next unit in the same agent turn. At the end of
+in section 6. Do not begin the next unit in the same agent turn. At the end of
 the unit, run the handoff contract below, notify the user that the package is
 ready to test, and wait for explicit approval.
 
@@ -662,10 +715,41 @@ After the build, Conduit was restarted with the managed restart command and
 `GET /healthz` returned `{"ok":true,"status":"ready","release":"development"}`.
 The browser voice suite then passed 11 tests with 1 expected skip. The passed
 cases included desktop and mobile dictation, unfocused-composer insertion,
-silent-microphone handling, and empty-transcription error handling. Manual
-WP6A testing remains pending. The native smoke test and browser suite prove
-the installed CPU path; they do not prove Vulkan execution on the production
-GPU host.
+silent-microphone handling, and empty-transcription error handling. The user
+approved WP6A after manual testing. The native smoke test and browser suite
+prove the installed CPU path; they do not prove Vulkan execution on the
+production GPU host.
+
+WP6B implementation verification record (2026-08-16): the native model
+reports `supportsStreaming: true` and accepts `parakeet_buffered`; its plain
+`parakeet` family is not accepted. Smoke comparison opened all four practical
+profiles (160 ms, 480 ms, 1.12 s, and 2.08 s) and produced the same fixed
+phrase. The 480 ms profile was selected as the default because it gives a
+shorter practical commit interval without using the excluded 80 ms profile.
+The stream adapter feeds one float32 packet per accepted PCM packet, including
+packets retained during cold model startup, exposes stable and tentative text,
+finalizes on Stop, and preserves the complete WAV. Startup fallback is covered
+before any session PCM is consumed by the batch adapter. Typecheck passed; the
+focused model-manager, settings, and stream suites passed 15, 8, and 26 tests.
+The full Node suite passed 487 tests on the clean rerun. An earlier concurrent
+run reported `dictation stores server PCM when transcription returns no text`
+as the only failure; its focused rerun and the full rerun passed. The
+production build passed with 183,532 B initial JS gzip, 24,412 B initial CSS
+gzip, and 185,186 B largest lazy JS gzip. After the managed restart,
+`GET /healthz` returned `{"ok":true,"status":"ready","release":"development"}`.
+The browser set-piece suite passed 13 tests and skipped 11 project-matrix
+cases; the voice-focused suite passed 11 tests and skipped 1 expected case.
+WP6B manual approval record (2026-08-16): the user confirmed that Unified
+English text appeared before Stop during the live dictation test. The latest
+Unified sidecar used `transcribe_cpp_stream_v1`, preserved two ordered phrases,
+recorded 14 revisions, used no stream fallback, and matched client, server,
+and WAV PCM bytes. The previous Transformers batch model also completed with
+non-empty text and a matching audio pair after the model selection was saved.
+The user reported that live text sometimes fell several seconds behind and
+arrived slowly. The Unified sidecars recorded maximum buffered audio of 5,420
+ms and 9,272 ms in the tested sessions. WP6B is accepted for functional live
+transcription; stream latency remains a follow-up risk and is not treated as a
+silent audio-loss failure.
 
 ### Work package 4A — observe Silero boundaries
 
@@ -737,11 +821,12 @@ another short word. Confirm both words appear in order, the session stays
 active until explicit Stop, and diagnostics show Silero supplied the submitted
 ranges.
 
-### Work package 5 — retain progressive batch as a fallback
+### Work package 5 — retain progressive batch for batch-capable runtimes
 
-Purpose: provide a bounded fallback for installed offline models, streaming
-startup failure, and cut-over rollback. Progressive batch is not the primary
-Unified English architecture.
+Purpose: provide bounded progressive batch for installed offline models and
+stream-start fallback. For Transformers.js and the legacy Parakeet worker,
+progressive batch is a supported primary mode while that runtime is selected;
+for Unified English it remains a fallback only.
 
 Proposed fix:
 
@@ -870,329 +955,828 @@ phrases with a ten-second pause. Confirm tentative text appears during speech,
 committed text stays stable, both phrases survive, the session stops only on
 explicit Stop, and the previous batch model still works.
 
-### Work package 7 — make adapter behaviour explicit
 
-Cause: current adapter names do not state when inference starts, whether text
-can change, who owns VAD, or whether audio input is stateful.
 
-Proposed fix:
 
-1. Define one lifecycle: open, accept PCM, accept a committed boundary where
-   supported, stop, cancel, and close.
-2. Declare whole-session batch, fallback progressive batch, or stateful
-   streaming.
-3. Declare Conduit Silero VAD, runtime VAD, or no VAD. The selected
-   `transcribe.cpp` Parakeet path declares Conduit Silero VAD.
-4. Declare revisionable partials or stable-only output.
-5. Declare audio limits, packet requirements, capacity, and cancellation.
-6. Validate model and adapter compatibility before capture.
-7. Normalise output into revisionable partial, sequenced segment final,
-   session final, and bounded diagnostic or error events. For
-   `transcribe.cpp`, map tentative text to the revisionable partial and
-   committed text to stable output.
-8. Keep one authoritative session state machine in `dictation-stream.js`.
-9. Do not infer input streaming from an SSE response.
-10. Keep legacy adapters available until package 11. Mark them as legacy
-    without changing the saved default.
 
-Use this state flow:
 
-`opening → capturing → draining → finalising → completed`
 
-Cancellation and failure can leave any active state. Make transitions
-idempotent because Stop, socket close, runtime error, and timeout can race.
+## 5. Target architecture from work package 7 onward
 
-Exit criteria:
+The remaining work must produce one Conduit-owned dictation system. Runtime
+adapters execute inference. They do not own capture, accepted PCM, range
+selection, transcript merging, fallback, or archive policy.
 
-- capability data explains each adapter without reading its code;
-- a partial can revise only its active region;
-- a partial cannot overwrite stable segments;
-- Stop flushes PCM, VAD, inference queues, and runtime finalisation in order;
-- cancellation releases every runtime slot.
+### Terms and ownership
 
-Package handoff test: exercise Stop during speech, Stop during silence, socket
-close during capture, and cancel during inference. Confirm each session reaches
-one terminal state, stable text never regresses, capacity is released, and a
-new dictation can start immediately.
+- **Model** identifies the acoustic model, such as
+  `parakeet-unified-en-0.6b`.
+- **Artifact** identifies immutable model files. Format, precision, revision,
+  byte size, checksum, and licence identify an artifact.
+- **Runtime** identifies the executable implementation, such as
+  Transformers.js, `transcribe.cpp`, `achetronic/parakeet`, or
+  `transcribe-rs`. Its stable ID must not contain a version.
+- **Backend path** identifies one compatible artifact and runtime pair. Port
+  capability belongs to this pair.
+- **Execution profile** identifies one valid backend path, execution mode,
+  segmentation policy, output contract, resource policy, and fallback.
+- **Behaviour** is the user-visible time at which text appears:
+  **After Stop**, **During pauses**, or **Live**.
 
-### Work package 8 — decouple archive settlement
+Use this ownership model:
 
-Cause: archive disk work can extend the user-visible lifecycle.
+```text
+Browser                 Conduit session                     Runtime adapter
+capture ── PCM ──► accepted PCM timeline
+                   archive ownership
+                   segmentation: none | heuristic | Silero
+                   scheduler: Stop | Eager | Live
+                   transcript normalizer
+                                             ├── BatchPort.transcribe(pcm)
+                                             └── StreamPort.open/feed/finalize
+```
 
-Proposed fix:
+The browser sends ordered 16 kHz mono PCM and control messages over the
+authenticated dictation WebSocket. Browser code can resample, assemble
+packets, show levels, and retain bounded pre-ready audio. It must not run
+model-specific VAD, select inference ranges, merge text, or know the active
+native runtime.
 
-1. Freeze final PCM and sidecar metadata when the transcript becomes final.
-2. Send session-final and completed events before awaiting archive disk work.
-3. Queue a bounded server-owned archive task and drain it during orderly
-   shutdown.
-4. Keep atomic pair writes and 20-pair rotation.
-5. Record archive duration and failure separately.
-6. Keep immutable PCM alive until the archive task owns it.
+Every supported local backend path must expose `BatchPort`. This makes
+**After Stop** a Conduit guarantee. **During pauses** is the Eager scheduler
+over `BatchPort`; Silero or the explicit heuristic closes each range. **Live**
+requires a verified persistent `StreamPort`. Never run Live and Eager over the
+same PCM.
 
-Exit criteria:
+Capability belongs to the exact backend path. Parakeet is not globally
+streaming or batch-only. Unified English Q8 GGUF currently streams through
+`transcribe.cpp`. Current ONNX Parakeet through `transcribe-rs` is a batch
+target. A later runtime version can add a Live profile only after that exact
+artifact and adapter pass the StreamPort contract.
 
-- disk latency does not extend settlement;
-- orderly shutdown drains accepted archive work;
-- archive failures remain visible but non-fatal;
-- incomplete pairs never appear valid.
+Local and Cloud settings share an interaction grammar, not a catalogue.
+Local choices use the versioned local catalogue, installation state, and
+`localSelection`. Cloud choices keep the existing provider, adapter, model,
+endpoint, and credential fields. Cloud choices must never enter the local
+catalogue, `localSelection`, local install state, or local runtime state.
 
-Package handoff test: perform one successful dictation while archive storage is
-healthy and one with an induced archive-write failure through the existing
-test seam. Confirm successful text completes before disk settlement, the
-healthy pair is valid, and archive failure does not fail dictation.
+The remaining work has six packages. Each package delivers one complete
+product change. There is no separate benchmark, default-selection, or
+runtime-retirement package. Run focused regression evidence in the package
+that changes a path. The user can choose a default when that choice becomes
+available. Retain all current runtimes unless a later instruction names one
+for removal.
 
-### Work package 9 — make model state clear
+### Work package 7 — bound the current `transcribe.cpp` live backlog
 
-Proposed fix:
+**Behavioural change:** Unified English Live consumes audio at or above capture
+rate. Long dictation does not accumulate multi-second native-feed lag.
 
-1. Show model language, batch/progressive/live mode, precision, backend, and
-   warm state in Voice settings.
-2. Explain that FP32 uses more resources without a guaranteed useful accuracy
-   gain.
-3. Recommend a measured default for the deployment.
-4. Keep credentials and advanced runtime controls separate from normal
-   microphone and shortcut controls.
-5. Preserve saved-draft behaviour during install and progress polls.
-6. Explain when the selected model cannot provide live mode and offer a
-   compatible installed mode or model.
-7. Report cold start separately from utterance speed.
-8. Add an explicit model-preload choice and show cold, loading, warm, and
-   failed states.
+The current adapter schedules one native `feed()` for each nominal 20 ms
+browser packet. One promise tail represents packet acceptance, JavaScript
+submission, and native processing. WP6B sidecars recorded 5,420 ms and
+9,272 ms of buffered audio. These values prove that the path streams, but not
+that it stays real-time.
 
-Exit criteria:
+**Required implementation:**
 
-- the UI never presents an offline model as live;
-- visible precision and backend match diagnostics;
-- fallback is visible;
-- install recovery and unprivileged activation remain unchanged.
+1. Keep browser packets and archive PCM unchanged. Change only the
+   server-to-runtime feed scheduler.
+2. Preserve the current session input method name. If
+   `dictation-stream.js` currently calls `write()`, make `write()` enqueue PCM.
+   Do not add `acceptPcm()` as a second public input path. A private queue
+   helper can use either name.
+3. Give the `transcribe.cpp` stream adapter one bounded PCM queue and one feed
+   worker. The input method copies or transfers each packet into the queue and
+   returns without waiting for native inference.
+4. Coalesce adjacent packets into a verified native feed quantum. Determine
+   the quantum from the binding contract or compare fixed multiples of 20 ms.
+   Record the selected value. Do not invent a binding option.
+5. Allow one native `feed()` call at a time. Preserve every sample and its
+   order.
+6. Track these cursors:
+   `acceptedThroughSample`, `submittedThroughSample`, and
+   `committedThroughSample`. Track `processedThroughSample` only if the native
+   binding reports an exact processed cursor. A resolved `feed()` call proves
+   submission completion; it does not prove acoustic consumption unless the
+   binding states that contract.
+7. Report separate lag values:
 
-Package handoff test: select each installed local model in turn. Confirm that
-Voice settings show its real language scope, batch/progressive/live mode,
-precision, actual backend, warm state, and fallback before saving. Reload and
-confirm only the saved selection persists.
+   ```text
+   serverQueuedAudioMs =
+     acceptedThroughSample - submittedThroughSample
 
-### Work package 10 — make Unified English Q8 the default
+   runtimeBufferedAudioMs =
+     value reported by the native stream
 
-Purpose: change the English default only after packages 0–9 have left both the
-new and legacy paths functional.
+   totalInferenceLagMs =
+     serverQueuedAudioMs + runtimeBufferedAudioMs
+   ```
 
-Proposed fix:
+   Convert sample differences at 16 kHz. If the runtime does not report its
+   buffered duration, set that field and total lag to `null`. Never label a
+   feed return as `consumedThroughSample`.
+8. Set a 5,000 ms server-queue limit during this package. Before stable text,
+   an overflow closes the live adapter and starts the existing batch fallback
+   from sample zero. Record `live_queue_overflow`. After stable text, fail
+   visibly and preserve the WAV until WP9 supplies checkpoint fallback. Never
+   run both paths at once.
+9. Stop in this order: close input, enqueue final PCM, drain the server queue,
+   call native finalise once, normalize terminal text, and dispose the stream.
+10. Cancel rejects input, discards queued runtime work, calls the verified
+    cancel or disposal operation, releases capacity, and preserves accepted
+    PCM for the configured archive policy.
+11. Record feed quantum, feed-call count, mean audio per call, maximum server
+    queue, maximum native buffer, all available cursors, overflow, and Stop
+    drain duration.
 
-1. Make Unified English Q8 through `transcribe.cpp` the default for new English
-   local dictation settings.
-2. Preserve an existing explicit user model selection. Do not silently replace
-   a saved multilingual or remote choice.
-3. For an old default that was never explicitly selected, migrate to Unified
-   English Q8 only after its verified artifacts are installed.
-4. If installation, model load, stream start, or backend binding fails, keep
-   captured PCM and use the package 5 progressive fallback or the legacy saved
-   model. Report which path completed the session.
-5. Keep `achetronic/parakeet`, its ONNX models, and its adapter available for a
-   bounded rollback window.
-6. Record the cut-over start date, rollback-window end condition, and adoption
-   diagnostics. Do not remove legacy artifacts in this package.
+**Completion evidence:**
 
-Exit criteria:
+- Run continuous speech for 60 seconds. The server queue must not grow
+  monotonically and must remain below 1,000 ms on the approved host.
+- After speech ends, the server queue must return below 250 ms within two
+  seconds.
+- Run a ten-second pause, immediate Stop during speech, and a forced feed
+  stall. Confirm final words, matching WAV bytes, one terminal result, and
+  visible fallback or failure.
+- If the host cannot keep this profile faster than real time, keep the same
+  model available as **After Stop** and mark Live unavailable on that host.
 
-- new English local settings select Unified English Q8;
-- explicit saved choices do not change;
-- first-run install and preload states are clear;
-- one failed stream can complete through a visible fallback without losing
-  accepted PCM;
-- rollback to the legacy model requires only a settings change;
-- all accepted composer and microphone behaviour remains functional.
+**Expected scope:** `src/server/dictation-stream.js`,
+`src/server/voice-runtime.js`, focused stream coverage, diagnostics, and the
+runtime protocol documentation. Do not change browser capture without evidence
+of a browser defect.
 
-Package handoff test: use a fresh Voice settings state and confirm Unified
-English Q8 becomes the English default. Complete one live dictation, force one
-stream-start failure through the existing failure seam, confirm visible
-fallback text, then select the legacy model and confirm rollback works.
+**Handoff:** run focused checks and the production build. Restart the managed
+server, confirm `/healthz`, report both queue layers and final-word evidence,
+then wait for user testing and approval.
 
-### Work package 11 — retire the legacy upload runtime
+### Work package 8 — add the canonical local execution contract
 
-Purpose: remove the old runtime only after the user approves package 10 and
-the bounded rollback window ends.
+**Behavioural change:** every existing local choice resolves to one validated
+execution profile and runs through explicit runtime ports. Existing users keep
+their selected model and behaviour. A missing install remains selected and can
+be installed later.
 
-Proposed fix:
+This package combines catalogue, persistence, migration, backend ports, and
+lifecycle. These parts form one contract and must not exist as independent
+sources of truth.
 
-1. Confirm that no supported saved setting, installed-model record, or active
-   session still requires `achetronic/parakeet`.
-2. Migrate or reject stale legacy selections with a direct recovery message.
-3. Remove the managed `achetronic/parakeet` binary, its bundled ONNX Runtime,
-   legacy ONNX Parakeet manifests, and the local HTTP upload adapter path.
-4. Remove runtime flags, health checks, model metadata, settings controls, and
-   documentation that exist only for that path.
-5. Keep generic batch and progressive adapters required by other installed or
-   remote models.
-6. Preserve checksum, unprivileged extraction, cancellation, archive, and
-   session-limit invariants.
+#### Static catalogue
 
-Exit criteria:
+Create `src/server/voice-execution-catalog.js` as the only static source of
+local model, artifact, runtime, backend-path, profile, and migration
+definitions.
 
-- no production path starts the legacy binary or loads its ONNX artifacts;
-- current settings migrate without a crash or silent model change;
-- Unified English live, progressive fallback, and any retained generic batch
-  mode remain functional;
-- installation state contains no orphaned active legacy artifact;
-- current documentation describes only supported runtime behaviour.
+```ts
+type VoiceRuntimeDefinition = {
+  id: string;
+  adapterKind:
+    | "transformers_js"
+    | "transcribe_cpp"
+    | "parakeet_loopback"
+    | "transcribe_rs";
+  version: string;
+  compiledComputeBackends: string[];
+};
 
-Package handoff test: restart from a profile that previously selected the
-legacy model. Confirm the recovery message and migration, then complete one
-live Unified English dictation, one forced progressive fallback, uninstall and
-reinstall the managed model, and restart again.
+type VoiceBackendPathDefinition = {
+  id: string;
+  artifactId: string;
+  runtimeId: string;
+  ports: { batch: boolean; stream: boolean };
+};
 
-## 5. Execution order
+type VoiceExecutionProfile = {
+  schemaVersion: 1;
+  id: string;
+  modelId: string;
+  artifactId: string;
+  runtimeId: string;
+  backendPathId: string;
+  execution: "stop" | "eager" | "live";
+  segmentation: "none" | "silero" | "heuristic";
+  output: {
+    tentative: boolean;
+    stableSegments: boolean;
+    sampleTimestamps: boolean;
+  };
+  resourcePolicy: {
+    preload: "supported" | "required" | "unsupported";
+    serialInference: boolean;
+    maximumSessionMs: number;
+    maximumQueuedAudioMs: number | null;
+  };
+  fallback: null | {
+    profileId: string;
+    allowed:
+      | "before_output"
+      | "after_tentative"
+      | "after_stable_checkpoint";
+    replay: "from_zero" | "from_committed_sample";
+  };
+};
+```
 
-Run the packages in this exact order:
+Stable IDs describe semantics. Use `runtimeId: "transcribe-cpp"`, not
+`"transcribe-cpp-0.1.3"`. Store `version: "0.1.3"` in the runtime definition
+and report the loaded build version in dynamic status and sidecars. A routine
+runtime update must not invalidate saved settings.
 
-1. Work package 0 — evidence and diagnostics.
-2. Work package 1 — capture startup.
-3. Work package 2 — clean signal path.
-4. Work package 3 — packet and buffer efficiency.
-5. Work package 4A — Silero observation.
-6. Work package 4B — authoritative Silero VAD.
-7. Work package 5 — progressive batch fallback.
-8. Work package 6A — `transcribe.cpp` packaging and batch inference.
-9. Work package 6B — stateful live transcription.
-10. Work package 7 — adapter and lifecycle hardening.
-11. Work package 8 — archive settlement.
-12. Work package 9 — model-state presentation.
-13. Work package 10 — Unified English default cut-over.
-14. Work package 11 — legacy runtime removal.
+Validate the catalogue at startup. Reject duplicate or missing references,
+artifact/model mismatch, artifact/runtime mismatch, cyclic fallback,
+unsupported enum values, local paths without BatchPort, Live without
+StreamPort, Stop or Eager without BatchPort, Eager with `none`, Stop or Live
+with segmentation, and Live without a bounded queue.
 
-After each numbered item, run the package handoff contract and wait for
-explicit user approval. Approval applies only to the completed package. It
-does not authorize the next package.
+Generate an After Stop profile for every BatchPort path. Add Eager only for a
+path that can preserve short-range accuracy and capture responsiveness. Add
+Live only for a persistent StreamPort. Represent current Transformers.js,
+legacy Parakeet loopback, and `transcribe.cpp` paths. WP10 adds
+`transcribe-rs`.
 
-Check the dirty tree first. Preserve unrelated in-flight work. Do not modify
-test harnesses to hide behaviour.
+Keep dynamic state separate:
 
-## 6. File ownership
+```ts
+type VoiceBackendPathStatus = {
+  backendPathId: string;
+  installable: boolean;
+  operational: boolean;
+  blockedReason: string | null;
+  artifactState: "absent" | "installing" | "installed" | "failed";
+  runtimeState: "cold" | "loading" | "warm" | "busy" | "failed";
+  requestedComputeBackend: string | null;
+  actualComputeBackend: string | null;
+  loadedRuntimeVersion: string | null;
+  lastErrorCode: string | null;
+};
+```
 
-Confirm the exact file set at the start of each slice.
+Use these distinct states:
 
-- `conduit-web/src/client/chat/composer.tsx`: shortcut timestamp, lifecycle
-  state, and ordered partial/stable text;
-- `conduit-web/src/client/chat/voice-dictation-client.ts`: capture lifecycle,
-  pre-roll, packets, backpressure, and client diagnostics;
-- `conduit-web/public/voice-capture-worklet.js`: resampling, PCM accumulator,
-  packets, raw levels, and final drain;
-- `conduit-web/src/client/chat/voice-audio.ts`: capture profiles and effective
-  track settings;
-- `conduit-web/src/server/dictation-stream.js`: session state, capabilities,
-  VAD boundaries, queues, Stop order, and server diagnostics;
-- `conduit-web/src/server/voice-vad.js`: pinned Silero loading, checksum
-  verification, CPU inference, probabilities, and shadow boundaries;
-- `conduit-web/src/server/voice-runtime.js`: runtime selection, preparation,
-  health, backend reporting, and cancellation;
-- `conduit-web/src/server/voice-model-manager.js`: verified artifacts, model
-  metadata, activation, and preload;
-- `conduit-web/src/server/voice-recording-store.js`: immutable archive input,
-  sidecar metadata, background tasks, and shutdown drain;
-- `conduit-web/src/server/voice-settings.js`: validated inference-mode and
-  model-capability settings;
-- `conduit-web/src/client/settings/settings.tsx`: capability, precision,
-  backend, warm state, and capture profile;
-- `conduit-web/README.md`: input/output streaming contract, privacy, limits,
-  and diagnostics.
+- **structurally valid:** the tuple resolves to one catalogue profile;
+- **installable:** required files can be installed on this host;
+- **operational now:** files and runtime are ready enough to open a session;
+- **permanently blocked:** this host cannot install or run the path.
 
-Follow the existing testing contract during implementation. Add focused
-coverage beside affected modules. Do not change the harness to make an
-acceptance case pass.
+The settings API can save a structurally valid, installable profile while its
+artifact is absent. Capture then returns a specific unavailable error until
+installation completes. Reject invalid, incompatible, or permanently blocked
+profiles. Do not use “unavailable” to mean all four states.
 
-## 7. Acceptance matrix
+#### Saved local selection
 
-### Capture
+Persist one complete tuple:
 
-- shortcut startup, permission prompt, denied permission, saved microphone,
-  unavailable saved microphone, suspended audio context, and rapid Start/Stop;
-- Chrome and Firefox at effective 44.1 kHz and 48 kHz where devices allow;
-- first PCM timestamp and visible **Listening** state agree.
+```json
+{
+  "voiceConfigVersion": 2,
+  "mode": "local",
+  "localSelectionOrigin": "explicit",
+  "localSelection": {
+    "modelId": "parakeet-unified-en-0.6b",
+    "artifactId": "parakeet-unified-en-0.6b-q8-gguf",
+    "runtimeId": "transcribe-cpp",
+    "execution": "live",
+    "segmentation": "none"
+  }
+}
+```
 
-### Signal
+Allowed origins are `default`, `explicit`, and `migrated_explicit`. Any user
+Save sets `explicit`. Treat a legacy saved selection as
+`migrated_explicit` unless the stored data proves that it was an untouched
+default. This prevents a future default change from overwriting a user choice.
 
-- close microphone, quiet laptop microphone, speaker echo, fan noise, keyboard
-  noise, plosives, the reported boomy case, clipping, and low input;
-- archived-WAV listening and fixed-reference word error;
-- capture profile and effective settings in the sidecar;
-- pre-processing and post-processing peak, RMS, clipping, and digital-zero
-  evidence; live spectral probes are intentionally excluded from normal
-  capture;
-- no samples clipped by Conduit under normal input.
+Inject the catalogue into `VoiceSettingsStore`. Do not copy validation rules
+into the store or client. Define an explicit legacy `localModelId` migration
+map. Migrate atomically, preserve remote credentials and unrelated settings,
+and return `voice_profile_recovery_required` for an unknown choice. A
+catalogue replacement uses an explicit `supersededByProfileId`; never match
+labels.
 
-### Pause
+`PUT /v0/voice/settings` accepts `localSelection`, resolves exactly one
+profile, and returns the normalized tuple and `resolvedProfileId`. Keep
+`localModelId` input for one old client version only when the mapping is
+unambiguous. An absent artifact does not erase or replace the saved tuple.
 
-- ten-second and 30-second pauses;
-- short words near each boundary;
-- more than 16 speech regions;
-- silence-only and non-speech transients;
-- immediate Stop during speech and trailing silence.
+#### Runtime ports and lifecycle
 
-### Performance
+Create `src/server/voice-runtime-adapters.js`. Resolve ports from
+`profile.backendPathId`, not `profile.runtimeId`. The backend path owns the
+artifact/runtime compatibility and its ports.
 
-- cold and warm runtime;
-- current upload runtime as the migration baseline;
-- Unified English Q8 on VPS CPU and production Vulkan;
-- CUDA only after a separately approved and pinned package exists;
-- first PCM, first server PCM, first segment, first partial, Stop-to-final,
-  real-time factor, packet rate, peak memory, and queue depth.
+```ts
+type BatchPort = {
+  transcribe(input: {
+    pcm16: Buffer;
+    operationId: string;
+    sequence: number;
+    startSample: number;
+    endSample: number;
+    signal: AbortSignal;
+  }): Promise<BatchResult>;
+};
 
-### Lifecycle
+type StreamPort = {
+  open(input: StreamOpenInput): Promise<void>;
+  feed(input: {
+    pcm16: Buffer;
+    startSample: number;
+    endSample: number;
+  }): Promise<StreamFeedReceipt>;
+  finalize(input: { endSample: number }): Promise<StreamFinalResult>;
+  cancel(reason: string): Promise<void>;
+};
+```
 
-- socket close during capture;
-- Stop with queued or active inference;
-- runtime failure after earlier stable segments;
-- five-minute timeout;
-- shutdown with queued archive work;
-- model uninstall or device change between sessions.
+Adapters contain runtime-specific calls only. They cannot select a scheduler,
+segment PCM, merge text, choose fallback, or archive audio.
 
-### Text
+Freeze the resolved profile when a dictation opens. A settings change affects
+the next session. Use one `AbortController` per session and one runtime lease.
+Release the lease once after completion, failure, cancellation, socket close,
+timeout, or shutdown. Ignore late responses by session ID and operation ID.
 
-- cumulative and segment-style finals;
-- revisionable partials;
-- repeated words across acoustic overlap;
-- punctuation at segment boundaries;
-- composer selection, Backspace cancellation, and auto-send.
+Preserve separate artifact, runtime, and session state machines. Continue to
+accept bounded PCM while a cold runtime loads. Record frozen profile,
+catalogue version, artifact, stable runtime ID, loaded runtime version,
+backend path, execution, segmentation, and actual compute backend.
 
-The overhaul passes only when diagnostics explain each failure class. A fast
-happy path does not compensate for unowned PCM, tail loss, or an invisible CPU
+Extend `GET /v0/voice/settings` with the local catalogue and statuses. Keep
+remote provider definitions outside it. Existing user-visible dictation
+behaviour must remain unchanged in this package.
+
+**Completion evidence:**
+
+- Invalid catalogue fixtures fail with exact errors.
+- Each legacy setting migrates to the same runtime and behaviour.
+- A valid absent artifact can be saved and installed later.
+- Invalid, incompatible, and permanently blocked tuples cannot reach capture.
+- Each current local path runs through the port declared by its backend path.
+- Stop, cancellation, socket close, runtime failure, and settings changes
+  release one lease and produce one terminal state.
+
+**Expected scope:** `src/server/voice-execution-catalog.js`,
+`src/server/voice-runtime-adapters.js`, `src/server/voice-runtime.js`,
+`src/server/voice-model-manager.js`, `src/server/voice-model-manifests.js`,
+`src/server/dictation-stream.js`, `src/server/routes/voice.js`,
+`src/voice-settings.js`, client API types, focused coverage, and README
+contracts.
+
+**Handoff:** run each current local path before and after migration, plus the
+invalid and absent-artifact cases. Run focused checks and the production
+build. Restart, confirm `/healthz`, provide one redacted settings response and
+sidecar, then wait for user approval.
+
+### Work package 9 — make Conduit own scheduling and transcript truth
+
+**Behavioural change:** After Stop, During pauses, and Live use one session
+engine. All modes preserve the complete accepted PCM and produce one ordered
+transcript. Safe fallback starts only at a proven sample checkpoint.
+
+#### Schedulers
+
+- **Stop:** retain all PCM. At Stop, pass one immutable whole-session buffer
+  to BatchPort. Map a non-empty result to one stable segment with
+  `sequence: 0`, `fromSample: 0`, and
+  `throughSample: acceptedThroughSample`, then derive session final. An empty
+  result emits the existing empty-transcription error and no stable segment.
+- **Eager:** pass each completed segmentation range to BatchPort with absolute
+  sample positions and increasing sequence. Stop flushes the open tail. The
+  port does not know which provider closed a range.
+- **Live:** feed every accepted sample once and in order to StreamPort. Stop
+  drains queued PCM and finalizes the same stream. Live uses
+  `segmentation: "none"` for scheduling.
+
+#### Shared segmentation
+
+Move Silero readiness into one Conduit-owned shared component. ASR install or
+uninstall cannot install, remove, or reset Silero. Give each Eager session its
+own state while sharing the immutable model instance where supported.
+
+Expose `silero` and `heuristic` through one `SegmentationProvider` contract.
+The heuristic operates on an analysis copy. It cannot change inference or
+archive PCM. Use frame RMS in dBFS, a noise floor updated only outside speech,
+separate entry and exit margins, onset confirmation, 200–300 ms pre-roll,
+600–1,000 ms exit and trailing policy, hangover, and a maximum open range.
+Never use exact zero as speech evidence.
+
+As part of this package, create a small versioned segmentation calibration
+manifest from fixed quiet, boomy, fan, keyboard, short-word, and pause
+recordings. Use it to select exact heuristic margins and retain it for later
+regressions. This is implementation input, not a separate evaluation package.
+Do not copy thresholds from the removed `splitSilence` path.
+
+Never discard a short detected range only because of duration. Submit it or
+merge uncertain activity into an adjacent range. Apply range-count and
+session guards to both providers. On exhaustion, merge the remaining timeline
+into a bounded tail or use declared fallback. Never omit the tail.
+
+#### Transcript events and watermarks
+
+Normalize runtime output to:
+
+```ts
+type TentativeRegionEvent = {
+  type: "tentative_region";
+  sessionId: string;
+  regionId: string;
+  revision: number;
+  text: string;
+  fromSample: number;
+  throughSample: number;
+};
+
+type StableSegmentEvent = {
+  type: "stable_segment";
+  sessionId: string;
+  segmentId: string;
+  sequence: number;
+  text: string;
+  fromSample: number;
+  throughSample: number;
+};
+
+type SessionFinalEvent = {
+  type: "session_final";
+  sessionId: string;
+  text: string;
+  committedThroughSample: number;
+};
+```
+
+A tentative region accepts only a higher revision for the same region. A
+stable segment is append-only and idempotent by segment ID. Stable sequence
+and sample coverage increase. A reused ID with different content is an error.
+When stable output covers tentative output, remove the covered tentative text.
+A runtime final cannot replace the transcript with an unrelated string.
+
+Keep the accepted partial/final WebSocket wire and composer behaviour. Add
+optional IDs, revisions, sequence, and sample positions only where the client
+needs idempotence. The server derives the session final and inserts it once.
+
+Track:
+
+- `acceptedThroughSample`: Conduit retained the PCM;
+- `submittedThroughSample`: Conduit handed PCM to the runtime;
+- `processedThroughSample`: optional exact runtime report;
+- `committedThroughSample`: stable text represents the PCM;
+- `archiveOwnedThroughSample`: the archive queue owns the immutable PCM.
+
+All watermarks increase and cannot exceed accepted PCM. Do not use one
+“consumed” watermark for submission and native processing.
+
+#### Fallback
+
+Before output, a failed path can replay from zero. After tentative output, it
+can discard that tentative region and replay from zero. After stable output,
+fallback is valid only when the stable event has an exact
+`throughSample`. Start from that checkpoint, with bounded acoustic overlap if
+needed. Never change stable text. If no exact checkpoint exists, fail visibly
+and preserve the archive. Never run primary and fallback over the same PCM at
+the same time.
+
+Record source and fallback profiles, trigger, replay sample, discarded
+tentative revisions, stable checkpoint, overlap, duplicate-boundary handling,
+and completing profile.
+
+#### Regression evidence
+
+For text comparisons, lowercase and collapse whitespace. Ignore punctuation
+except in named punctuation cases. Report per-utterance and aggregate WER.
+For a changed audio or segmentation path, aggregate WER can be no more than
+one absolute percentage point worse than the common `af4f55e` corpus unless
+the user accepts a stated trade-off. Missing post-silence speech, missing tail
+speech, stable-text regression, duplicate stable text, or unowned PCM is
+always a failure, regardless of aggregate WER.
+
+Run quiet and boomy speech, short boundary words, silence-only input,
+ten-second and 30-second pauses, more than 16 ranges, immediate Stop, repeated
+event IDs, cancellation, and failures before tentative, after tentative, and
+after a stable checkpoint. Confirm final text, sample ownership, original WAV
+bytes, and one terminal result.
+
+**Expected scope:** `src/server/dictation-stream.js`,
+`src/server/voice-segmentation.js`, `src/server/voice-vad.js`,
+`src/server/voice-runtime-adapters.js`, catalogue profiles, WebSocket schema,
+sidecars, focused coverage, a small calibration manifest, and README
+diagnostics.
+
+**Handoff:** run focused checks and the production build. Restart, confirm
+`/healthz`, report the pause and fallback cases, then wait for user approval.
+
+### Work package 10 — add `transcribe-rs` as an ONNX backend
+
+**Behavioural change:** supported Parakeet ONNX artifacts can run through a
+managed `transcribe-rs` backend. The initial profile provides **During pauses**
+and **After Stop**. Add **Live** only if the integrated version supplies the
+full StreamPort contract.
+
+Handy currently separates the runtimes. Unified English GGUF streams through
+`transcribe.cpp`. Its ONNX Parakeet path uses `transcribe-rs` batch inference.
+The current reference `transcribe-rs` Parakeet implementation reports
+`supports_streaming: false`. This is a fact about that implementation, not
+about all Parakeet models.
+
+Before pinning, verify the current Handy manifest, manager, catalogue, and
+`transcribe-rs` Parakeet source. Record the exact crate version, licence,
+registry checksum, Rust toolchain, ONNX Runtime linkage, target architecture,
+artifact revision, file sizes, SHA-256 values, and licence. Dependency and
+lockfile changes require the package's explicit start instruction.
+
+Run a long-lived unprivileged Rust worker over private child-process pipes.
+Use a versioned length-prefixed protocol. Each frame starts with two
+little-endian `uint32` values: JSON-header bytes and binary-payload bytes.
+Reject oversized declarations before allocation. Standard output carries
+frames only; standard error carries bounded logs.
+
+Implement `hello`, `load`, `transcribe_range`, `cancel`, `unload`, `health`,
+and `shutdown`. Each response echoes request and session IDs. `hello` reports
+worker and crate versions, compiled ORT providers, adapters, ports, sample
+format, and request limits. `load` reports requested and actual providers.
+`transcribe_range` accepts 16 kHz mono PCM and absolute range metadata,
+converts to the crate input once inside the worker, and returns text plus only
+verified timestamps.
+
+Run one inference operation at a time until the pinned runtime proves safe
+parallelism within the resource limit. Cancellation makes late output
+non-authoritative even when ORT cannot interrupt its current call. A crash
+fails the active operation and leaves accepted PCM eligible for the WP9
 fallback.
 
-## 8. Risks and approval gates
+Register stable runtime ID `transcribe-rs`, its loaded version, ONNX artifact,
+backend path, dynamic status, Stop profile, and verified Eager profiles. Do
+not change the saved default.
 
-### Risks and non-goals
+Do not publish Live because repeated range calls are not streaming. A later
+version must expose persistent open, ordered feed with processing or buffer
+receipts, revisionable and stable text, finalization, reset, and cancellation.
+If it does, add stream worker commands, implement StreamPort, pass WP7 and WP9
+contracts, and add a separate Live profile without removing batch profiles.
 
-- The browser cannot capture before microphone permission and device
-  activation. Only an explicit warm-microphone mode can remove most of that
-  delay.
-- Browser audio constraints are requests. Effective track settings are the
-  evidence.
-- VAD can clip speech. Pre-roll, trailing padding, original PCM, and boundary
-  diagnostics are mandatory.
-- Progressive batch is an offline and rollback fallback, not the primary live
-  path.
-- Rolling full-audio snapshots are not an accepted live design.
-- Vulkan requires verification in the production container with its device and
-  driver. CUDA is not part of the first cut-over.
-- Paid-provider accuracy comparison is out of scope.
-- The overhaul does not redesign the composer, shortcut, microphone playback
-  test, retention policy, or managed-install security model.
-- The overhaul does not remove checksums, unprivileged extraction, bounded
-  queues, byte limits, or authenticated transport.
+**Completion evidence:** install and run without root; reject wrong protocol
+versions, oversized frames, unknown sessions, and duplicate request IDs; keep
+capture responsive during load and inference; preserve speech across
+ten-second and 30-second pauses; recover from crash and cancellation; report
+compiled, requested, and actual ORT providers separately; and keep existing
+runtimes selectable.
 
-### Additional cut-over gates
+**Expected scope:** a reviewed Rust package under `conduit-web/native/`,
+native packaging, manifests, catalogue, model manager, runtime adapter,
+focused native and server coverage, authorized lockfiles, and operations
+documentation.
 
-The package approval rule in section 5 applies after every package. These
-packages also require an explicit decision about their wider effect:
+**Handoff:** run During pauses and After Stop, force crash and cancellation,
+and confirm Unified English still streams through `transcribe.cpp`. Run native
+checks, focused server checks, and the production build. Restart, confirm
+`/healthz`, then wait for user approval.
 
-1. Package 4A approval must accept the observed Silero boundary policy before
-   package 4B can control submitted PCM.
-2. Starting package 6A must authorize the native dependency and lockfile
-   changes plus the pinned Unified English Q8 download manifest.
-3. Package 10 approval must accept Unified English Q8 as the new default after
-   CPU, Vulkan, streaming text, pause, clipping, and word-error gates pass.
-4. Starting package 11 must confirm the rollback window has ended and
-   authorize removal of the old runtime and installed legacy artifacts.
+### Work package 11 — replace the Voice settings experience
 
-These gates prevent a runtime replacement from hiding current capture and
-signal defects. They also prevent a successful development GPU run from
-becoming an unverified production deployment.
+**Behavioural change:** the Voice page presents one clear path from input to
+source, model, artifact, backend, and timing. It shows enough machine identity
+to explain what runs without exposing scheduler internals.
+
+Use one column:
+
+1. **Input:** microphone, signal test, shortcut, and activation.
+2. **Transcription source:** Off, This machine, or Cloud.
+3. The selected source's guided choices.
+4. Closed **Advanced:** capture profile, auto-send, warm microphone, and pause
+   detection when relevant.
+5. One Save action and one dirty state for all voice drafts.
+
+#### This machine
+
+Show one row per semantic model family. Do not list one model again for each
+artifact, runtime, or behaviour. Expand only the selected family.
+
+Within the row, show in order:
+
+1. **Precision / artifact:** precision, format, approximate size, language,
+   licence, and install state.
+2. **Runs with:** compatible runtime rows for that exact artifact. Show
+   runtime label, artifact format, compiled compute backends, and install
+   state. After load, show a quiet line with loaded runtime version and actual
+   compute backend.
+3. **When to transcribe:** only profiles for the exact backend path:
+   - **Live:** “Text appears while you speak and may revise.”
+   - **During pauses:** “Each pause commits a phrase.”
+   - **After Stop:** “Nothing appears until you stop.”
+
+Every BatchPort row shows After Stop. Show During pauses only for an Eager
+profile. Show Live only for StreamPort. A precision change lists only
+compatible backends. A backend change retains timing if valid; otherwise use
+that row's declared recommended choice and mark the draft unsaved. This is a
+UI draft choice, not a global default migration.
+
+Keep Install, Cancel, and Uninstall inside the selected family. One artifact
+install can enable more than one profile. A structurally valid absent artifact
+can remain selected. State why capture is unavailable and offer Install.
+Never silently replace it.
+
+Put **Pause detection: Silero / Heuristic** in Advanced only when During
+pauses is selected. Each choice selects a valid profile; the client cannot
+mutate profile fields.
+
+Do not show feed quantum, queue limits, transcript overlap, stable-prefix
+count, or native latency profiles in the normal form. Do not infer capability
+from `model.engine` or `voiceModelPresentation()`. Render catalogue and status
+facts. Distinguish compiled, requested, and actual compute.
+
+#### Cloud
+
+Cloud uses the same interaction grammar but its existing persistence:
+provider, model, adapter, endpoint, and credential.
+
+Choose Provider, then its model, then one backend row with transport and
+credential state, then When to transcribe. Existing HTTPS upload cells show
+After Stop. The existing OpenAI Realtime cell shows Live. Do not offer During
+pauses to a remote upload or Live to a path without the verified stream
+adapter. Keep Custom endpoint as an advanced Cloud backend.
+
+Cloud models do not appear under local families. Local artifacts do not show
+Cloud credentials. Do not write Cloud choices into `localSelection`.
+
+Put credential entry, Test, and Remove beside the selected provider. One
+provider credential can enable its models. Polling install, runtime, or test
+status must not erase an unsaved draft.
+
+#### General UI rules
+
+Remove both current duplicate model presentations and replace them with this
+single flow. Correct privacy copy: microphone-test playback remains in the
+browser; server dictation can retain configured diagnostic WAV/JSON pairs.
+Maintain visible focus, readable selected-state contrast, full labels, and
+existing minimum target sizes.
+
+On mobile and installed PWA, keep all content within the viewport. Do not add
+horizontal scrolling. Keep the Save action reachable without rendering every
+model as an expanded card.
+
+Any user Save sets `localSelectionOrigin: "explicit"` for local mode. A
+missing saved profile remains visible with Install, Retry, or Choose another.
+The profile ID in the final sidecar must match the choice shown in settings.
+
+The user can choose the fresh-install default during this package. Apply that
+choice only to new settings and records with
+`localSelectionOrigin: "default"`. Preserve `explicit` and
+`migrated_explicit` choices. Do not block the package on a comparison
+committee, and do not silently install a large artifact.
+
+**Completion evidence:** inspect desktop and installed-PWA mobile; change
+source, family, artifact, backend, timing, pause detection, input, and
+credential; Save and reload; test one absent artifact and one failed runtime;
+confirm one model list, truthful state, no invalid tuple, no horizontal
+overflow, and no serious contrast failure. Dictate once through each
+available timing mode and compare the saved choice with its sidecar.
+
+**Expected scope:** `src/client/settings/settings.tsx`,
+`src/client/styles.css`, voice API types, settings defaults if the user chooses
+one, focused settings coverage, and README settings and privacy text.
+
+**Handoff:** run focused checks and the production build. Restart, confirm
+`/healthz`, present the page on desktop and installed-PWA mobile, then wait for
+user approval.
+
+### Work package 12 — decouple archive settlement
+
+**Behavioural change:** successful transcript completion no longer waits for
+diagnostic WAV/JSON writes.
+
+After inference and transcript finalization, freeze PCM and sidecar metadata
+and transfer them to a bounded server archive queue. Set
+`archiveOwnedThroughSample` only after the queue owns the immutable buffer.
+Emit session final without waiting for disk.
+
+Keep atomic pair writes, current retention count, byte limits, permissions,
+and rotation. Record queue delay, write duration, path, rotation, and failure
+separately. Archive failure cannot change transcript text or repeat auto-send.
+Drain accepted work during orderly shutdown with a bounded deadline. Never
+expose an incomplete WAV/JSON pair as valid.
+
+**Completion evidence:** run normal dictation, a delayed write, a failed
+write, and shutdown with queued work. Confirm prompt composer insertion,
+immutable PCM ownership, matching healthy pairs, non-fatal visible failure,
+and bounded shutdown.
+
+**Expected scope:** `src/server/voice-recording-store.js`,
+`src/server/dictation-stream.js`, shutdown wiring, focused archive coverage,
+and retention documentation.
+
+**Handoff:** run focused checks and the production build. Restart, confirm
+`/healthz`, report transcript settlement separately from archive settlement,
+then wait for user approval.
+
+## 6. Execution order and handoff contract
+
+Run the remaining packages in this order:
+
+1. WP7 — bounded `transcribe.cpp` live backlog.
+2. WP8 — canonical local execution contract.
+3. WP9 — Conduit-owned scheduling and transcript truth.
+4. WP10 — `transcribe-rs` ONNX backend.
+5. WP11 — final Voice settings experience.
+6. WP12 — asynchronous archive settlement.
+
+Each package must leave the product functional. Do not start the next package
+until the user approves the current handoff.
+
+At the end of each package:
+
+1. Review the package diff and preserve unrelated work.
+2. Run focused checks for the changed contract, typecheck, and production
+   build. Report skipped checks.
+3. Run the package's manual scenarios and retain their diagnostics.
+4. Restart through `.devcontainer/start-conduit.sh restart`.
+5. Confirm `GET /healthz` reports ready.
+6. Report changed behaviour, files, exact results, measured values, and risk.
+7. Notify the user for testing and wait for approval.
+
+Do not change a test harness to hide behaviour. A package can add focused
+coverage beside the changed module.
+
+## 7. File ownership
+
+- `src/client/chat/voice-dictation-client.ts`: capture lifecycle, bounded
+  pre-ready PCM, packets, backpressure, and client diagnostics.
+- `public/voice-capture-worklet.js`: resampling, packet assembly, levels, and
+  final drain.
+- `src/server/dictation-stream.js`: session state, accepted PCM, schedulers,
+  watermarks, transcript truth, fallback, Stop, and diagnostics.
+- `src/server/voice-vad.js`: Silero model loading and probabilities.
+- `src/server/voice-segmentation.js`: session segmentation state, heuristic,
+  range events, guards, and flush.
+- `src/server/voice-execution-catalog.js`: models, artifacts, runtimes,
+  backend paths, profiles, migration, fallback graph, and validation.
+- `src/server/voice-runtime-adapters.js`: BatchPort and StreamPort
+  implementations.
+- `src/server/voice-runtime.js`: frozen profile resolution, leases, health,
+  compute reporting, and cancellation.
+- `src/server/voice-model-manager.js`: artifacts, runtime and worker state,
+  activation, and preload.
+- `src/server/voice-model-manifests.js`: immutable sources, checksums, limits,
+  and licences.
+- `src/server/voice-recording-store.js`: archive queue, atomic pairs,
+  retention, and shutdown drain.
+- `src/voice-settings.js`: versioned local tuple, selection origin, Cloud
+  fields, migration, and validation.
+- `src/server/routes/voice.js`: catalogue, status, settings, credentials, and
+  managed artifact operations.
+- `src/client/settings/settings.tsx`: guided selection, installation,
+  credentials, dynamic state, dirty state, and capture controls.
+- `conduit-web/native/`: reviewed `transcribe-rs` worker and build metadata
+  after WP10 only.
+- `conduit-web/README.md`: protocol, settings, privacy, limits, diagnostics,
+  and operations.
+
+Confirm the exact files at the start of each package. Follow existing module
+patterns. Do not perform unrelated cleanup.
+
+## 8. Acceptance matrix
+
+Every changed path must retain:
+
+- shortcut startup, rapid Start/Stop, saved microphone recovery, and bounded
+  capture during cold runtime load;
+- byte-identical client, server, and valid WAV sample counts;
+- quiet, boomy, fan, keyboard, short-word, silence-only, clipping, and low
+  input diagnostics;
+- ten-second and 30-second pauses, more than 16 speech ranges, and trailing
+  speech at Stop;
+- one terminal event under socket close, cancellation, timeout, worker crash,
+  runtime failure, and shutdown;
+- stable text under repeated IDs, out-of-order revisions, acoustic overlap,
+  and each permitted fallback point;
+- static catalogue capability separate from install and runtime status;
+- compiled, requested, and actual compute backend as distinct facts;
+- one valid settings selection on desktop and installed-PWA mobile, with
+  visible recovery and no horizontal overflow.
+
+Use the common `af4f55e` English recordings only for paths that change audio,
+segmentation, or inference. Normalize case and whitespace, report
+per-utterance and aggregate WER, and apply the WP9 regression rule. Do not
+create a separate evaluation milestone or compare paid providers.
+
+## 9. Risks and decisions
+
+- Browser capture cannot precede microphone permission and device activation.
+- Audio constraints are requests. Effective track settings are evidence.
+- VAD can clip speech. Keep pre-roll, trailing padding, original PCM, and
+  boundary diagnostics.
+- A model name, file format, packet transport, or SSE response does not prove
+  streaming. Only a verified StreamPort can advertise Live.
+- Compiled, requested, and actual compute backends can differ. Silent CPU
+  fallback is a defect.
+- The native workers add supply-chain and IPC boundaries. Pin versions,
+  checksums, frame limits, logs, cancellation, and crash recovery.
+- Do not remove checksums, unprivileged extraction, authentication, bounded
+  queues, byte limits, or archive permissions.
+- Do not redesign the composer, shortcut, microphone playback test, or
+  retention count in these packages.
+
+Starting WP10 authorizes only the dependency, lockfile, worker, packaging, and
+artifact changes named in that package. Default selection is a user decision
+during WP11, not a gate on building the architecture. Retain all runtimes and
+profiles unless the user later gives an explicit removal instruction.

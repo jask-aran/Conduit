@@ -1,4 +1,6 @@
 import { performance } from "node:perf_hooks";
+import { WebSocket } from "ws";
+import { OPENAI_LIVE_ADAPTER, OPENAI_LIVE_MODEL } from "../voice-settings.js";
 import { selectSileroVadRanges } from "./voice-vad.js";
 
 const DEFAULT_LIMITS = Object.freeze({
@@ -400,6 +402,18 @@ function createServerDiagnostics() {
     },
     analysis: null,
     vadObservation: null,
+    streaming: {
+      enabled: false,
+      family: null,
+      profile: null,
+      feedCount: 0,
+      revisionCount: 0,
+      firstCommittedAt: null,
+      firstTentativeAt: null,
+      lastRevision: null,
+      maxBufferedMs: 0,
+      fallback: null,
+    },
     progressive: {
       enabled: false,
       committedSegments: 0,
@@ -510,6 +524,13 @@ function speechDecision(diagnostics) {
 
 function serializeServerDiagnostics(diagnostics) {
   const analysis = diagnostics.analysis;
+  const streaming = {
+    ...(diagnostics.streaming || {}),
+    firstCommittedMs: elapsed(diagnostics.startedAt, diagnostics.streaming?.firstCommittedAt),
+    firstTentativeMs: elapsed(diagnostics.startedAt, diagnostics.streaming?.firstTentativeAt),
+  };
+  delete streaming.firstCommittedAt;
+  delete streaming.firstTentativeAt;
   const segments = analysis?.segments || [];
   const silenceRuns = analysis?.silenceRuns || [];
   const segmentBoundaries = segments.map(([startSample, endSample], index) => ({
@@ -617,6 +638,7 @@ function serializeServerDiagnostics(diagnostics) {
             maxSegments: analysis?.maxSegments ?? SEGMENT_MAX_SEGMENTS,
             speechPaddingMs: 0,
           },
+      streaming,
     },
   };
 }
@@ -636,6 +658,12 @@ function wavBlob(chunks, byteLength) {
   header.write("data", 36);
   header.writeUInt32LE(byteLength, 40);
   return new Blob([header, ...chunks], { type: "audio/wav" });
+}
+
+function pcmFloat32(buffer) {
+  const samples = new Float32Array(Math.floor(buffer.length / 2));
+  for (let index = 0; index < samples.length; index += 1) samples[index] = buffer.readInt16LE(index * 2) / 32768;
+  return samples;
 }
 
 class PcmAccumulator {
@@ -727,78 +755,51 @@ function resolveInferenceAnalysis(pcm, byteLength, segmentation, limits, diagnos
   return analysis;
 }
 
+function remoteSpeechRanges(pcm, byteLength, segmentation, limits, diagnostics) {
+  const analysis = resolveInferenceAnalysis(pcm, byteLength, segmentation, limits, diagnostics);
+  if (!analysis.segments?.length) return { analysis, pcm: Buffer.alloc(0), byteLength: 0 };
+  let start = analysis.segments[0][0];
+  let end = analysis.segments[0][1];
+  for (const [rangeStart, rangeEnd] of analysis.segments) {
+    start = Math.min(start, rangeStart);
+    end = Math.max(end, rangeEnd);
+  }
+  return { analysis, pcm: pcm.subarray(start * 2, end * 2), byteLength: (end - start) * 2 };
+}
+
 export function createHttpAdapter(config, emit, limits, fetchImpl, diagnostics = null) {
   const chunks = [];
   let byteLength = 0;
   const controller = new AbortController();
-  const snapshot = () => Buffer.concat(chunks, byteLength);
-  const transcribeRange = async ({ startSample = 0, endSample = 0 } = {}) => {
-    if (!byteLength || controller.signal.aborted) return "";
-    const pcm = snapshot();
-    const start = Math.max(0, Math.min(Math.floor(startSample), Math.floor(byteLength / 2)));
-    const end = Math.max(start, Math.min(Math.floor(endSample), Math.floor(byteLength / 2)));
-    if (end <= start) return "";
-    const piece = pcm.subarray(start * 2, end * 2);
+  const upload = async (pcm) => {
+    if (!pcm.length || controller.signal.aborted) return { final: false, text: "" };
     const form = new FormData();
-    form.append("file", wavBlob([piece], piece.length), `dictation-${start}-${end}.wav`);
+    form.append("file", wavBlob([pcm], pcm.length), "dictation.wav");
     form.append("response_format", "json");
     if (config.model) form.append("model", config.model);
     if (config.provider !== "groq") form.append("stream", "true");
+    if (diagnostics) markInferenceStart(diagnostics);
+    const response = await fetchImpl(config.endpoint, { method: "POST", headers: { "User-Agent": "ConduitVoice/1.0", ...config.headers }, body: form, signal: controller.signal, redirect: "error" });
     let text = "";
-    if (diagnostics) {
-      markInferenceQueued(diagnostics);
-      markInferenceStart(diagnostics);
-    }
-    try {
-      const response = await fetchImpl(config.endpoint, { method: "POST", headers: config.headers, body: form, signal: controller.signal, redirect: "error" });
-      await readSse(response, (event) => {
-        if (event.type === "final") text = mergeTranscript(text, String(event.text || ""));
-        else if (event.type === "partial" && !text) text = String(event.text || "");
-      }, limits);
-      return text.trim();
-    } finally {
-      if (diagnostics) markInferenceComplete(diagnostics);
-    }
+    await readSse(response, (event) => {
+      if (event.type === "final") {
+        text = mergeTranscript(text, String(event.text || ""));
+        emit({ type: "final", text });
+      } else if (event.type === "partial") {
+        emit({ type: "partial", text: String(event.text || "") });
+      } else emit(event);
+    }, limits);
+    return { final: Boolean(text), text };
   };
   const transcribe = async ({ segmentation = null } = {}) => {
     if (!byteLength || controller.signal.aborted) return { final: false, text: "" };
     if (diagnostics) markInferenceQueued(diagnostics);
-    const pcm = Buffer.concat(chunks, byteLength);
-    const analysis = resolveInferenceAnalysis(pcm, byteLength, segmentation, limits, diagnostics);
-    const segments = analysis.segments;
-    let final = false;
-    let text = "";
-    for (let index = 0; index < segments.length; index += 1) {
-      const [startSample, endSample] = segments[index];
-      const segmentBytes = (endSample - startSample) * 2;
-      const segmentChunks = [pcm.subarray(startSample * 2, endSample * 2)];
-      const prefix = text;
-      let segmentText = "";
-      const form = new FormData();
-      form.append("file", wavBlob(segmentChunks, segmentBytes), `dictation-${index + 1}.wav`);
-      form.append("response_format", "json");
-      if (config.model) form.append("model", config.model);
-      if (config.provider !== "groq") form.append("stream", "true");
-      if (diagnostics) markInferenceStart(diagnostics);
-      const response = await fetchImpl(config.endpoint, { method: "POST", headers: config.headers, body: form, signal: controller.signal, redirect: "error" });
-      await readSse(response, (event) => {
-        if (event.type === "final") {
-          final = true;
-          // Finals within one response are cumulative snapshots of that
-          // segment, so they merge extension-aware; the completed segments
-          // ahead of this one are distinct utterances and append verbatim.
-          segmentText = mergeTranscript(segmentText, String(event.text || ""));
-          emit({ type: "final", text: appendText(prefix, segmentText) });
-        } else if (event.type === "partial") {
-          // Partials stay cumulative snapshots of the whole utterance: prefix
-          // the joined text of the completed segments ahead of this one.
-          emit({ type: "partial", text: appendText(prefix, String(event.text || "")) });
-        } else emit(event);
-      }, limits);
-      text = appendText(text, segmentText);
+    const selected = remoteSpeechRanges(Buffer.concat(chunks, byteLength), byteLength, segmentation, limits, diagnostics);
+    try {
+      return await upload(selected.pcm);
+    } finally {
+      if (diagnostics) markInferenceComplete(diagnostics);
     }
-    if (diagnostics) markInferenceComplete(diagnostics);
-    return { final, text };
   };
   queueMicrotask(() => emit({ type: "ready", sampleRate: 16_000, encoding: "pcm_s16le" }));
   return {
@@ -820,7 +821,6 @@ export function createHttpAdapter(config, emit, limits, fetchImpl, diagnostics =
         if (error.name !== "AbortError") emit({ type: "error", code: error.code || "asr_request_failed", message: error.message });
       }
     },
-    transcribeRange,
     close() { controller.abort(); chunks.length = 0; },
   };
 }
@@ -887,6 +887,357 @@ function createSnapshotAdapter(emit, limits, transcribe, diagnostics = null, { p
   };
 }
 
+function streamOptions(streaming = {}) {
+  const family = String(streaming.family || "parakeet_buffered");
+  const familyOptions = { kind: family };
+  for (const [key, value] of [["leftMs", streaming.leftMs], ["chunkMs", streaming.chunkMs], ["rightMs", streaming.rightMs]]) {
+    if (Number.isFinite(Number(value))) familyOptions[key] = Number(value);
+  }
+  return {
+    family: familyOptions,
+    commitPolicy: streaming.commitPolicy || "stable_prefix",
+    ...(Number.isFinite(Number(streaming.stablePrefixAgreementN))
+      ? { stablePrefixAgreementN: Number(streaming.stablePrefixAgreementN) }
+      : {}),
+  };
+}
+
+export function upsamplePcm16kTo24k(pcm16) {
+  const source = Buffer.isBuffer(pcm16) ? pcm16 : Buffer.from(pcm16);
+  const inputSamples = Math.floor(source.length / 2);
+  if (!inputSamples) return Buffer.alloc(0);
+  const outputSamples = Math.round(inputSamples * 1.5);
+  const output = Buffer.allocUnsafe(outputSamples * 2);
+  for (let index = 0; index < outputSamples; index += 1) {
+    const sourceIndex = index / 1.5;
+    const left = Math.min(inputSamples - 1, Math.floor(sourceIndex));
+    const right = Math.min(inputSamples - 1, left + 1);
+    const fraction = sourceIndex - left;
+    const mixed = source.readInt16LE(left * 2) * (1 - fraction) + source.readInt16LE(right * 2) * fraction;
+    output.writeInt16LE(Math.max(-32768, Math.min(32767, Math.round(mixed))), index * 2);
+  }
+  return output;
+}
+
+export function createOpenaiRealtimeStreamAdapter(emit, _limits, openStream, diagnostics = null) {
+  let session = null;
+  let closed = false;
+  let feedError = null;
+  let errorReported = false;
+  let feedTail = Promise.resolve();
+  let committed = "";
+  let tentative = "";
+  let revision = 0;
+
+  const opened = Promise.resolve().then(async () => {
+    if (typeof openStream !== "function") throw dictationError("voice_stream_unsupported", "The selected voice model does not expose stateful streaming", 409);
+    session = await openStream();
+    if (!session || typeof session.append !== "function" || typeof session.commit !== "function") {
+      throw dictationError("voice_stream_invalid", "The selected voice model returned an invalid streaming session", 502);
+    }
+    if (diagnostics) {
+      diagnostics.streaming.enabled = true;
+      diagnostics.streaming.family = "openai_realtime";
+      diagnostics.streaming.profile = { model: OPENAI_LIVE_MODEL, inputRate: 24_000, delay: "low" };
+    }
+    return session;
+  });
+
+  const reportError = (error) => {
+    if (errorReported) return;
+    errorReported = true;
+    emit({ type: "error", code: error?.code || "voice_stream_failed", message: error?.message || "Stateful voice transcription failed" });
+  };
+
+  const publish = (terminal = false) => {
+    const full = `${committed}${committed && tentative ? " " : ""}${tentative}`.replace(/\s+/g, " ").trim();
+    revision += 1;
+    if (diagnostics) {
+      diagnostics.streaming.lastRevision = revision;
+      diagnostics.streaming.revisionCount = revision;
+      if (committed.trim() && diagnostics.streaming.firstCommittedAt === null) diagnostics.streaming.firstCommittedAt = performance.now();
+      if (tentative.trim() && diagnostics.streaming.firstTentativeAt === null) diagnostics.streaming.firstTentativeAt = performance.now();
+    }
+    emit({
+      type: terminal ? "final" : "partial",
+      text: full,
+      stableText: committed.trim(),
+      tentativeText: tentative.trim(),
+      revision,
+    });
+    return full;
+  };
+
+  const attach = (live) => {
+    live.onDelta?.((delta) => {
+      tentative = `${tentative}${delta}`;
+      publish();
+    });
+    live.onCompleted?.((transcript) => {
+      const next = String(transcript || tentative).trim();
+      committed = committed ? `${committed} ${next}`.trim() : next;
+      tentative = "";
+      publish();
+    });
+  };
+
+  return {
+    opened: opened.then((live) => {
+      attach(live);
+      return live;
+    }),
+    write(data) {
+      const copy = Buffer.from(data);
+      const task = feedTail.then(async () => {
+        const live = await opened;
+        if (closed || feedError) return;
+        if (diagnostics) {
+          markInferenceQueued(diagnostics);
+          markInferenceStart(diagnostics);
+          diagnostics.streaming.feedCount += 1;
+        }
+        await live.append(upsamplePcm16kTo24k(copy));
+      });
+      feedTail = task.catch((error) => {
+        feedError ||= error;
+        reportError(error);
+      });
+    },
+    async stop() {
+      await opened;
+      await feedTail;
+      if (feedError) throw feedError;
+      if (closed || !session) return;
+      if (diagnostics) {
+        markInferenceQueued(diagnostics);
+        markInferenceStart(diagnostics);
+      }
+      const transcript = await session.commit();
+      if (!committed && transcript) committed = String(transcript).trim();
+      tentative = "";
+      if (diagnostics) markInferenceComplete(diagnostics);
+      const text = publish(true);
+      emit({ type: "adapter_closed", final: Boolean(text), text, stableText: committed.trim(), tentativeText: "" });
+    },
+    close() {
+      closed = true;
+      try { session?.close?.(); }
+      catch (error) { reportError(error); }
+      session = null;
+    },
+  };
+}
+
+export function openOpenaiRealtimeStream({ url, headers, model = OPENAI_LIVE_MODEL, WebSocketImpl = WebSocket, openTimeoutMs = 8_000, commitTimeoutMs = 20_000 } = {}) {
+  if (!url) throw dictationError("voice_stream_unsupported", "OpenAI live transcription requires a realtime endpoint", 409);
+  const socket = new WebSocketImpl(url, { headers: { "User-Agent": "ConduitVoice/1.0", ...headers } });
+  let deltaHandler = null;
+  let completedHandler = null;
+  let ready = false;
+  let closed = false;
+  let lastCompleted = "";
+  let settleReady;
+  let failReady;
+  const readyPromise = new Promise((resolve, reject) => {
+    settleReady = resolve;
+    failReady = reject;
+  });
+  const pendingCompletions = [];
+
+  const handleMessage = (raw) => {
+    let event;
+    try { event = JSON.parse(String(raw)); }
+    catch { return; }
+    const type = String(event?.type || "");
+    if (type === "error") {
+      const error = dictationError("voice_stream_failed", event.error?.message || "OpenAI live transcription failed", 502);
+      if (!ready) failReady(error);
+      else pendingCompletions.splice(0).forEach((item) => item.reject(error));
+      return;
+    }
+    if ((type === "session.updated" || type === "session.created" || type === "transcription_session.updated" || type === "transcription_session.created") && !ready) {
+      ready = true;
+      settleReady();
+      return;
+    }
+    if (type === "conversation.item.input_audio_transcription.delta") {
+      deltaHandler?.(String(event.delta || ""));
+      return;
+    }
+    if (type === "conversation.item.input_audio_transcription.completed") {
+      lastCompleted = String(event.transcript || "");
+      completedHandler?.(lastCompleted);
+      const waiter = pendingCompletions.shift();
+      if (waiter) waiter.resolve(lastCompleted);
+    }
+  };
+
+  socket.on("message", handleMessage);
+  socket.once("error", (error) => {
+    const failed = dictationError("voice_stream_failed", error?.message || "OpenAI live transcription failed", 502);
+    if (!ready) failReady(failed);
+  });
+  socket.once("close", () => {
+    closed = true;
+    if (!ready) failReady(dictationError("voice_stream_failed", "OpenAI live transcription closed before it was ready", 502));
+  });
+  socket.once("open", () => {
+    socket.send(JSON.stringify({
+      type: "session.update",
+      session: {
+        type: "transcription",
+        audio: {
+          input: {
+            format: { type: "audio/pcm", rate: 24_000 },
+            transcription: { model, languages: ["en"], delay: "low" },
+            turn_detection: null,
+          },
+        },
+      },
+    }));
+  });
+
+  const waitReady = Promise.race([
+    readyPromise,
+    new Promise((_, reject) => setTimeout(() => reject(dictationError("voice_stream_failed", "OpenAI live transcription did not become ready", 504)), openTimeoutMs)),
+  ]);
+
+  return waitReady.then(() => ({
+    onDelta(handler) { deltaHandler = handler; },
+    onCompleted(handler) { completedHandler = handler; },
+    async append(pcm24) {
+      if (closed || socket.readyState !== socket.OPEN) throw dictationError("voice_stream_failed", "OpenAI live transcription is not connected", 502);
+      socket.send(JSON.stringify({
+        type: "input_audio_buffer.append",
+        audio: Buffer.from(pcm24).toString("base64"),
+      }));
+    },
+    async commit() {
+      if (closed || socket.readyState !== socket.OPEN) return lastCompleted;
+      const completed = new Promise((resolve, reject) => {
+        pendingCompletions.push({ resolve, reject });
+      });
+      socket.send(JSON.stringify({ type: "input_audio_buffer.commit" }));
+      return Promise.race([
+        completed,
+        new Promise((resolve) => setTimeout(() => resolve(lastCompleted), commitTimeoutMs)),
+      ]);
+    },
+    close() {
+      closed = true;
+      try { socket.close(); } catch {}
+    },
+  }));
+}
+
+export function createTranscribeCppStreamAdapter(emit, _limits, openStream, diagnostics = null, streaming = {}) {
+  let nativeStream = null;
+  let closed = false;
+  let feedError = null;
+  let errorReported = false;
+  let feedTail = Promise.resolve();
+  let lastText = "";
+  const options = streamOptions(streaming);
+  const configuration = {
+    family: options.family.kind,
+    leftMs: options.family.leftMs ?? null,
+    chunkMs: options.family.chunkMs ?? null,
+    rightMs: options.family.rightMs ?? null,
+    latencyMs: Number.isFinite(Number(streaming.latencyMs)) ? Number(streaming.latencyMs) : null,
+    commitPolicy: options.commitPolicy,
+    stablePrefixAgreementN: options.stablePrefixAgreementN ?? null,
+  };
+
+  const opened = Promise.resolve().then(async () => {
+    if (typeof openStream !== "function") throw dictationError("voice_stream_unsupported", "The selected voice model does not expose stateful streaming", 409);
+    nativeStream = await openStream(options);
+    if (!nativeStream || typeof nativeStream.feed !== "function" || typeof nativeStream.finalize !== "function") {
+      throw dictationError("voice_stream_invalid", "The selected voice model returned an invalid streaming session", 502);
+    }
+    if (diagnostics) {
+      diagnostics.streaming.enabled = true;
+      diagnostics.streaming.family = configuration.family;
+      diagnostics.streaming.profile = { ...configuration };
+    }
+    return nativeStream;
+  });
+
+  const reportError = (error) => {
+    if (errorReported) return;
+    errorReported = true;
+    emit({ type: "error", code: error?.code || "voice_stream_failed", message: error?.message || "Stateful voice transcription failed" });
+  };
+
+  const publish = (update, terminal = false) => {
+    if (!nativeStream) return "";
+    const snapshot = nativeStream.text || {};
+    const committed = String(snapshot.committed || "");
+    const tentative = String(snapshot.tentative || "");
+    const full = String(snapshot.full || `${committed}${tentative}`).trim();
+    const revision = Number.isFinite(Number(update?.revision)) ? Number(update.revision) : null;
+    if (diagnostics) {
+      diagnostics.streaming.lastRevision = revision;
+      diagnostics.streaming.revisionCount = Math.max(diagnostics.streaming.revisionCount, revision ?? 0);
+      diagnostics.streaming.maxBufferedMs = Math.max(diagnostics.streaming.maxBufferedMs, Number(update?.bufferedMs) || 0);
+      if (committed.trim() && diagnostics.streaming.firstCommittedAt === null) diagnostics.streaming.firstCommittedAt = performance.now();
+      if (tentative.trim() && diagnostics.streaming.firstTentativeAt === null) diagnostics.streaming.firstTentativeAt = performance.now();
+    }
+    if (full !== lastText || terminal) {
+      emit({
+        type: terminal ? "final" : "partial",
+        text: full,
+        stableText: committed.trim(),
+        tentativeText: tentative.trim(),
+        revision,
+        audioCommittedMs: Number(update?.audioCommittedMs) || 0,
+        bufferedMs: Number(update?.bufferedMs) || 0,
+      });
+      lastText = full;
+    }
+    return full;
+  };
+
+  const feed = (data) => {
+    const copy = Buffer.from(data);
+    const task = feedTail.then(async () => {
+      await opened;
+      if (closed || feedError) return;
+      if (diagnostics) markInferenceQueued(diagnostics);
+      if (diagnostics) markInferenceStart(diagnostics);
+      const update = await nativeStream.feed(pcmFloat32(copy));
+      if (diagnostics) diagnostics.streaming.feedCount += 1;
+      publish(update);
+    });
+    feedTail = task.catch((error) => {
+      feedError ||= error;
+      reportError(error);
+    });
+  };
+
+  return {
+    opened,
+    write(data) { feed(data); },
+    async stop() {
+      await opened;
+      await feedTail;
+      if (feedError) throw feedError;
+      if (closed || !nativeStream) return;
+      if (diagnostics) markInferenceQueued(diagnostics);
+      if (diagnostics) markInferenceStart(diagnostics);
+      const update = await nativeStream.finalize();
+      if (diagnostics) markInferenceComplete(diagnostics);
+      const text = publish(update, true);
+      emit({ type: "adapter_closed", final: Boolean(text), text, stableText: String(nativeStream.text?.committed || "").trim(), tentativeText: "" });
+    },
+    close() {
+      closed = true;
+      try { nativeStream?.reset?.(); }
+      catch (error) { reportError(error); }
+      nativeStream = null;
+    },
+  };
+}
+
 export function createDeepgramAdapter(config, emit, limits, fetchImpl, diagnostics = null) {
   return createSnapshotAdapter(emit, limits, async (pcm) => {
     const endpoint = new URL(config.endpoint);
@@ -894,7 +1245,7 @@ export function createDeepgramAdapter(config, emit, limits, fetchImpl, diagnosti
     endpoint.searchParams.set("smart_format", "true");
     const response = await fetchImpl(endpoint, {
       method: "POST",
-      headers: { ...config.headers, "Content-Type": "audio/wav" },
+      headers: { "User-Agent": "ConduitVoice/1.0", ...config.headers, "Content-Type": "audio/wav" },
       body: wavBlob([pcm], pcm.length),
       signal: AbortSignal.timeout(15_000),
       redirect: "error",
@@ -902,7 +1253,7 @@ export function createDeepgramAdapter(config, emit, limits, fetchImpl, diagnosti
     if (!response.ok) throw dictationError("asr_request_failed", `Deepgram returned ${response.status}`, 502);
     const result = await response.json();
     return result?.results?.channels?.[0]?.alternatives?.[0]?.transcript || "";
-  }, diagnostics);
+  }, diagnostics, { progressive: false, useSegmentation: false });
 }
 
 export function createDictationStream({ wss, voiceRuntime, recordingStore = null, fetchImpl = fetch, limits: limitOverrides = {} }) {
@@ -918,6 +1269,7 @@ export function createDictationStream({ wss, voiceRuntime, recordingStore = null
     voiceRuntime.pin?.();
     let adapter = null;
     let adapterReady = false;
+    let pendingStreamChunks = [];
     let settleAdapter;
     const adapterAvailable = new Promise((resolve) => { settleAdapter = resolve; });
     let completed = false;
@@ -970,6 +1322,7 @@ export function createDictationStream({ wss, voiceRuntime, recordingStore = null
       capabilities: null,
       native: null,
       progressiveBatch: false,
+      streamFallback: null,
     };
     const send = (event) => {
       if (client.readyState === client.OPEN) client.send(JSON.stringify(event));
@@ -1370,6 +1723,7 @@ export function createDictationStream({ wss, voiceRuntime, recordingStore = null
       diagnostics.transport.pcmBytes = audioBytes;
       addPcmSignal(diagnostics.signal, chunk);
       if (adapterReady && adapter) adapter.write(chunk);
+      else pendingStreamChunks.push(chunk);
       queueProgressivePcm(chunk);
     };
     const stop = (reason) => {
@@ -1427,7 +1781,15 @@ export function createDictationStream({ wss, voiceRuntime, recordingStore = null
           diagnostics.firstPartialAt ||= performance.now();
           diagnostics.firstUsableTextAt ||= performance.now();
         }
-        send({ type: "partial", text });
+        send({
+          type: "partial",
+          text,
+          ...(typeof event.stableText === "string" ? { stableText: event.stableText } : {}),
+          ...(typeof event.tentativeText === "string" ? { tentativeText: event.tentativeText } : {}),
+          ...(Number.isFinite(Number(event.revision)) ? { revision: Number(event.revision) } : {}),
+          ...(Number.isFinite(Number(event.audioCommittedMs)) ? { audioCommittedMs: Number(event.audioCommittedMs) } : {}),
+          ...(Number.isFinite(Number(event.bufferedMs)) ? { bufferedMs: Number(event.bufferedMs) } : {}),
+        });
       }
       else if (event.type === "final") {
         finalText = String(event.text || "");
@@ -1437,7 +1799,16 @@ export function createDictationStream({ wss, voiceRuntime, recordingStore = null
           diagnostics.firstUsableTextAt ||= performance.now();
         }
         hasFinal = true;
-        send({ type: "final", text: finalText, ...(event.segment ? { segment: event.segment } : {}) });
+        send({
+          type: "final",
+          text: finalText,
+          ...(event.segment ? { segment: event.segment } : {}),
+          ...(typeof event.stableText === "string" ? { stableText: event.stableText } : {}),
+          ...(typeof event.tentativeText === "string" ? { tentativeText: event.tentativeText } : {}),
+          ...(Number.isFinite(Number(event.revision)) ? { revision: Number(event.revision) } : {}),
+          ...(Number.isFinite(Number(event.audioCommittedMs)) ? { audioCommittedMs: Number(event.audioCommittedMs) } : {}),
+          ...(Number.isFinite(Number(event.bufferedMs)) ? { bufferedMs: Number(event.bufferedMs) } : {}),
+        });
         // Completion waits for adapter_closed: segmented transcriptions emit
         // one final per utterance, so completing on the first final would drop
         // every later segment.
@@ -1477,6 +1848,7 @@ export function createDictationStream({ wss, voiceRuntime, recordingStore = null
         capabilities: config.capabilities && typeof config.capabilities === "object" ? config.capabilities : null,
         native: config.native && typeof config.native === "object" ? config.native : null,
         progressiveBatch: false,
+        streamFallback: null,
       };
       diagnostics.runtime = {
         mode: runtimeMetadata.mode,
@@ -1487,14 +1859,61 @@ export function createDictationStream({ wss, voiceRuntime, recordingStore = null
         computeBackend: runtimeMetadata.computeBackend,
         capabilities: runtimeMetadata.capabilities,
         native: runtimeMetadata.native,
+        streamFallback: runtimeMetadata.streamFallback,
       };
-      const next = config.adapter === "deepgram_audio_v1"
-        ? createDeepgramAdapter(config, emit, limits, fetchImpl, diagnostics)
-        : config.adapter === "transcribe_cpp_batch_v1"
-          ? createSnapshotAdapter(emit, limits, config.transcribe, diagnostics, { progressive: false, useSegmentation: false })
-        : config.adapter === "managed_transformers_v1"
-          ? createSnapshotAdapter(emit, limits, config.transcribe, diagnostics)
-          : createHttpAdapter(config, emit, limits, fetchImpl, diagnostics);
+      const updateRuntimeDiagnostics = () => {
+        diagnostics.runtime = {
+          mode: runtimeMetadata.mode,
+          inferenceMode: runtimeMetadata.inferenceMode,
+          model: runtimeMetadata.model,
+          precision: runtimeMetadata.precision,
+          backend: runtimeMetadata.backend,
+          computeBackend: runtimeMetadata.computeBackend,
+          capabilities: runtimeMetadata.capabilities,
+          native: runtimeMetadata.native,
+          streamFallback: runtimeMetadata.streamFallback,
+        };
+      };
+      let next;
+      if (config.adapter === "transcribe_cpp_stream_v1") {
+        next = createTranscribeCppStreamAdapter(emit, limits, config.stream, diagnostics, config.streaming || config.capabilities?.streaming || {});
+        try {
+          await next.opened;
+        } catch (error) {
+          next.close();
+          if (typeof config.transcribe !== "function") throw error;
+          runtimeMetadata = {
+            ...runtimeMetadata,
+            adapter: "transcribe_cpp_batch_fallback_v1",
+            inferenceMode: "batch",
+            capabilities: {
+              ...(runtimeMetadata.capabilities || {}),
+              inferenceMode: "batch",
+              partials: false,
+              streaming: null,
+              fallback: "wp5_progressive_batch",
+            },
+            streamFallback: {
+              from: "transcribe_cpp_stream_v1",
+              reason: error?.code || "voice_stream_open_failed",
+            },
+          };
+          diagnostics.streaming.fallback = runtimeMetadata.streamFallback;
+          updateRuntimeDiagnostics();
+          next = createSnapshotAdapter(emit, limits, config.transcribe, diagnostics);
+        }
+      } else if (config.adapter === OPENAI_LIVE_ADAPTER) {
+        next = createOpenaiRealtimeStreamAdapter(emit, limits, config.stream, diagnostics);
+        await next.opened;
+      } else if (config.adapter === "deepgram_audio_v1") {
+        next = createDeepgramAdapter(config, emit, limits, fetchImpl, diagnostics);
+      } else if (config.adapter === "transcribe_cpp_batch_v1") {
+        next = createSnapshotAdapter(emit, limits, config.transcribe, diagnostics, { progressive: false, useSegmentation: false });
+      } else if (config.adapter === "managed_transformers_v1") {
+        next = createSnapshotAdapter(emit, limits, config.transcribe, diagnostics);
+      } else {
+        next = createHttpAdapter(config, emit, limits, fetchImpl, diagnostics);
+      }
       await next.opened;
       if (completed) {
         next.close();
@@ -1502,9 +1921,19 @@ export function createDictationStream({ wss, voiceRuntime, recordingStore = null
         return;
       }
       adapter = next;
-      if (pcmAccumulator.byteLength > 0) adapter.write(pcmAccumulator.view());
+      if (runtimeMetadata.adapter === "transcribe_cpp_stream_v1" || runtimeMetadata.adapter === OPENAI_LIVE_ADAPTER) {
+        for (const chunk of pendingStreamChunks) adapter.write(chunk);
+      } else if (pcmAccumulator.byteLength > 0) {
+        adapter.write(pcmAccumulator.view());
+      }
+      pendingStreamChunks = [];
       adapterReady = true;
-      activateProgressiveBatch(config, next);
+      activateProgressiveBatch(
+        runtimeMetadata.adapter === "transcribe_cpp_batch_fallback_v1"
+          ? { ...config, inferenceMode: "batch" }
+          : config,
+        next,
+      );
       diagnostics.runtimeReadyAt = performance.now();
       send({ type: "runtime_ready", ...runtimeMetadata });
       settleAdapter(adapter);

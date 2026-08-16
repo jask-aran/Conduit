@@ -241,6 +241,16 @@ async function defaultTransformersLoader(modelPath, precision = "q8") {
   return pipeline("automatic-speech-recognition", modelPath, { dtype: precision === "fp32" ? "fp32" : "q8", local_files_only: true });
 }
 
+export const DEFAULT_TRANSCRIBE_CPP_STREAM = Object.freeze({
+  family: "parakeet_buffered",
+  leftMs: 5_600,
+  chunkMs: 160,
+  rightMs: 320,
+  latencyMs: 480,
+  commitPolicy: "stable_prefix",
+  stablePrefixAgreementN: 3,
+});
+
 async function defaultTranscribeCppLoader(modelPath, modelDefinition) {
   const native = await import("transcribe-cpp");
   const version = native.version();
@@ -248,13 +258,16 @@ async function defaultTranscribeCppLoader(modelPath, modelDefinition) {
   const model = await native.TranscribeModel.load(modelPath, { backend: "auto" });
   const session = model.createSession();
   const device = model.device || {};
+  const supportsStreaming = model.capabilities?.supportsStreaming === true
+    && model.accepts({ kind: "parakeet_buffered" });
   return {
+    adapter: supportsStreaming ? "transcribe_cpp_stream_v1" : "transcribe_cpp_batch_v1",
     backend: String(model.backend || device.kind || "unknown"),
     computeBackend: String(device.kind || model.backend || "unknown"),
     capabilities: {
       language: "en",
-      inferenceMode: "batch",
-      partials: false,
+      inferenceMode: supportsStreaming ? "streaming" : "batch",
+      partials: supportsStreaming,
       externalVad: false,
       precision: modelDefinition?.precision || "q8",
       memory: {
@@ -262,6 +275,21 @@ async function defaultTranscribeCppLoader(modelPath, modelDefinition) {
         totalBytes: Number.isFinite(Number(device.memoryTotal)) ? Number(device.memoryTotal) : null,
         freeBytes: Number.isFinite(Number(device.memoryFree)) ? Number(device.memoryFree) : null,
       },
+      streaming: supportsStreaming ? {
+        family: DEFAULT_TRANSCRIBE_CPP_STREAM.family,
+        leftMs: DEFAULT_TRANSCRIBE_CPP_STREAM.leftMs,
+        chunkMs: DEFAULT_TRANSCRIBE_CPP_STREAM.chunkMs,
+        rightMs: DEFAULT_TRANSCRIBE_CPP_STREAM.rightMs,
+        latencyMs: DEFAULT_TRANSCRIBE_CPP_STREAM.latencyMs,
+        commitPolicy: DEFAULT_TRANSCRIBE_CPP_STREAM.commitPolicy,
+        stablePrefixAgreementN: DEFAULT_TRANSCRIBE_CPP_STREAM.stablePrefixAgreementN,
+        supportedProfiles: [
+          { latencyMs: 160, chunkMs: 80, rightMs: 80 },
+          { latencyMs: 480, chunkMs: 160, rightMs: 320 },
+          { latencyMs: 1_120, chunkMs: 560, rightMs: 560 },
+          { latencyMs: 2_080, chunkMs: 1_040, rightMs: 1_040 },
+        ],
+      } : null,
     },
     native: {
       package: "transcribe-cpp",
@@ -271,6 +299,7 @@ async function defaultTranscribeCppLoader(modelPath, modelDefinition) {
       availableBackends: availableBackends.map((backend) => ({ kind: backend.kind, name: backend.name, deviceType: backend.deviceType })),
     },
     transcribe: (pcm) => session.run(pcm),
+    stream: supportsStreaming ? (options = {}) => session.stream(options) : null,
     dispose() {
       session.dispose();
       model.dispose();
@@ -555,6 +584,14 @@ export class VoiceModelManager {
     return String(output?.text || "").trim();
   }
 
+  async stream(modelId, options = {}) {
+    const model = requiredModel(modelId);
+    if (model.engine !== "transcribe-cpp") throw modelError("voice_model_engine", `${model.label} does not use the embedded streaming engine`, 409);
+    await this.ensureRunning(model.id);
+    if (typeof this.transcriber?.stream !== "function") throw modelError("voice_model_streaming", `${model.label} does not support stateful streaming`, 409);
+    return this.transcriber.stream(options);
+  }
+
   async observeVoiceActivity(pcm) {
     return this.vadQueue.enqueue(pcm);
   }
@@ -584,7 +621,7 @@ export class VoiceModelManager {
   transcribeCppDescriptor(runtime, model) {
     return {
       kind: "transcriber",
-      adapter: "transcribe_cpp_batch_v1",
+      adapter: runtime.adapter || (typeof runtime.stream === "function" ? "transcribe_cpp_stream_v1" : "transcribe_cpp_batch_v1"),
       backend: "transcribe_cpp",
       computeBackend: runtime.computeBackend || runtime.backend || null,
       capabilities: runtime.capabilities || {

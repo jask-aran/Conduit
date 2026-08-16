@@ -60,9 +60,10 @@ test("first-class cloud providers pin endpoints, models, and credential scope", 
     assert.equal(openai.endpoint, "https://api.openai.com/v1/audio/transcriptions");
     assert.equal(openai.adapter, "openai_audio_sse_v1");
     assert.equal(openai.auth.type, "bearer");
-    await assert.rejects(fixture.store.update({
+    await fixture.store.update({
       mode: "remote", provider: "openai", model: "made-up", auth: { type: "bearer" },
-    }), { code: "voice_model_invalid" });
+    });
+    assert.equal((await fixture.store.effective()).model, "gpt-transcribe");
     await assert.rejects(fixture.store.update({
       mode: "remote", provider: "deepgram", model: "nova-3", auth: { type: "bearer" },
     }), { code: "voice_secret_invalid" });
@@ -90,10 +91,32 @@ test("local and off modes round-trip without deleting the saved cloud provider",
     assert.equal(view.mode, "off");
     assert.equal(view.auth.configured, true);
     await fixture.store.update({
-      mode: "remote", provider: "openai", model: "gpt-4o-mini-transcribe",
+      mode: "remote", provider: "openai", model: "gpt-live-transcribe",
       auth: { type: "bearer", headerName: "Authorization" },
     });
+    const live = await fixture.store.effective();
+    assert.equal(live.model, "gpt-live-transcribe");
+    assert.equal(live.adapter, "openai_realtime_stream_v1");
+    assert.equal(live.auth.secret, "openai-secret");
+    await fixture.store.update({
+      mode: "remote", provider: "openai", model: "gpt-4o-transcribe",
+      auth: { type: "bearer" },
+    });
+    const migrated = await fixture.store.effective();
+    assert.equal(migrated.model, "gpt-transcribe");
+    assert.equal(migrated.adapter, "openai_audio_sse_v1");
+    await fixture.store.update({
+      mode: "remote", provider: "groq", model: "whisper-large-v3-turbo",
+      auth: { type: "bearer", secret: "groq-secret" },
+    });
+    const groq = await fixture.store.effective();
+    assert.equal(groq.provider, "groq");
+    assert.equal(groq.auth.secret, "groq-secret");
+    await fixture.store.update({ mode: "remote", provider: "openai", model: "gpt-transcribe", auth: { type: "bearer" } });
     assert.equal((await fixture.store.effective()).auth.secret, "openai-secret");
+    view = await fixture.store.publicView();
+    assert.equal(view.providers.find((provider) => provider.id === "openai").configured, true);
+    assert.equal(view.providers.find((provider) => provider.id === "groq").configured, true);
   } finally { await fs.rm(fixture.root, { recursive: true, force: true }); }
 });
 
@@ -179,26 +202,30 @@ test("VoiceRuntime requires provider credential checks to succeed and keeps the 
   assert.equal(testedModel, "parakeet-tdt-0.6b-v3-int8");
 });
 
-test("VoiceRuntime exposes the transcribe.cpp batch capability and actual compute backend", async () => {
+test("VoiceRuntime exposes the transcribe.cpp streaming capability and actual compute backend", async () => {
   const runtime = new VoiceRuntime({
     settings: { effective: async () => ({ mode: "local", localModelId: "parakeet-unified-en-0.6b-q8" }) },
     modelManager: {
       ensureRunning: async () => ({
         kind: "transcriber",
-        adapter: "transcribe_cpp_batch_v1",
+        adapter: "transcribe_cpp_stream_v1",
         backend: "transcribe_cpp",
         computeBackend: "cpu",
-        capabilities: { language: "en", inferenceMode: "batch", partials: false, externalVad: false, precision: "q8", memory: { modelBytes: 731357568 } },
+        capabilities: { language: "en", inferenceMode: "streaming", partials: true, externalVad: false, precision: "q8", memory: { modelBytes: 731357568 }, streaming: { family: "parakeet_buffered", latencyMs: 480 } },
         native: { package: "transcribe-cpp", version: "0.1.3", headerHash: "86b16dd97ad1cb58" },
       }),
       transcribe: async () => "unused",
+      stream: async () => ({ state: "active" }),
     },
   });
   const resolved = await runtime.resolve();
-  assert.equal(resolved.adapter, "transcribe_cpp_batch_v1");
+  assert.equal(resolved.adapter, "transcribe_cpp_stream_v1");
+  assert.equal(resolved.inferenceMode, "streaming");
   assert.equal(resolved.backend, "transcribe_cpp");
   assert.equal(resolved.computeBackend, "cpu");
-  assert.equal(resolved.capabilities.partials, false);
+  assert.equal(resolved.capabilities.partials, true);
   assert.equal(resolved.capabilities.externalVad, false);
+  assert.equal(resolved.streaming.latencyMs, 480);
+  assert.equal(typeof resolved.stream, "function");
   assert.equal(resolved.native.headerHash, "86b16dd97ad1cb58");
 });
