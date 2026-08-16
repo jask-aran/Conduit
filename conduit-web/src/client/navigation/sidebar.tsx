@@ -719,7 +719,7 @@ export function Sidebar(props: {
     <Show when={props.mobileOpen}>
       <button type="button" class="mobile-panel-backdrop" data-mobile-backdrop="sidebar" data-for="sidebar" aria-label="Dismiss sidebar" onClick={closeMobile} />
     </Show>
-    <aside ref={sidebarRoot} data-slot="sidebar" data-state={collapsed() ? "collapsed" : "expanded"} data-visual-state={visualCollapsed() ? "collapsed" : "expanded"} data-mobile-open={props.mobileOpen} class="conduit-sidebar" style={{ width: phoneLayout() ? undefined : `${shellWidth()}px` }} aria-hidden={phoneLayout() && !props.mobileOpen ? true : undefined} inert={phoneLayout() && !props.mobileOpen ? true : undefined}>
+    <aside ref={sidebarRoot} data-slot="sidebar" data-state={phoneLayout() ? "expanded" : collapsed() ? "collapsed" : "expanded"} data-visual-state={phoneLayout() ? "expanded" : visualCollapsed() ? "collapsed" : "expanded"} data-mobile-open={props.mobileOpen} class="conduit-sidebar" style={{ width: phoneLayout() ? undefined : `${shellWidth()}px` }} aria-hidden={phoneLayout() && !props.mobileOpen ? true : undefined} inert={phoneLayout() && !props.mobileOpen ? true : undefined}>
       <div ref={sidebarSurface} data-slot="sidebar-container" class="sidebar-container">
         <div data-sidebar="header">
           <Button variant="ghost" size="icon-sm" data-sidebar="trigger" aria-label="Toggle Sidebar" aria-expanded={isMobileLayout() ? props.mobileOpen : !collapsed()} onClick={onSidebarTrigger}><PanelLeftIcon /></Button>
