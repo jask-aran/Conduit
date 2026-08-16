@@ -24,7 +24,7 @@ const budgets = {
   // Voice diagnostics and the capture lifecycle add bounded client behaviour.
   // Revisit this allowance in the planned performance review instead of
   // hiding evidence behind a size cap.
-  initialJs: Number(process.env.CONDUIT_BUDGET_INITIAL_JS_GZIP || 184_000),
+  initialJs: Number(process.env.CONDUIT_BUDGET_INITIAL_JS_GZIP || 185_000),
   initialCss: Number(process.env.CONDUIT_BUDGET_INITIAL_CSS_GZIP || 80_000),
   lazyJs: Number(process.env.CONDUIT_BUDGET_LAZY_JS_GZIP || 300_000),
 };

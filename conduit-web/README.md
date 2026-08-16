@@ -287,8 +287,12 @@ resident. Whisper runs in the server through Transformers.js; legacy Parakeet
 runs as one unprivileged loopback worker; Unified English Q8 uses the pinned
 `transcribe-cpp@0.1.3` Node binding and its locked Linux CPU/Vulkan native
 package. The binding verifies its ABI contract and reports the actual compute
-backend. Unified English Q8 runs one reusable complete-PCM batch session and
-does not use progressive fallback. File-upload providers buffer one bounded
+backend. Unified English Q8 uses one `parakeet_buffered` stateful session per
+dictation, with a 480 ms profile (5.6 s left context, 160 ms chunk, and 320 ms
+right context) and stable-prefix commits. It emits stable and tentative text
+while capture continues. If stream startup fails before useful text, Conduit
+records the failure and uses the bounded WP5 progressive batch fallback. It
+does not run both paths in parallel. File-upload providers buffer one bounded
 utterance in memory and transcribe it after Stop. Other installed local batch
 models can use the bounded progressive range path during capture; this is not
 stateful streaming and does not run for remote providers.
@@ -296,7 +300,7 @@ Installing a model is separate from selecting the active model. The selected
 model is persisted with **Save Voice settings**, and installation never occurs
 without explicit license acceptance.
 
-OpenAI defaults to `gpt-transcribe`, with GPT-4o mini/full transcription choices;
+OpenAI offers `gpt-transcribe` for Stop-time file upload and `gpt-live-transcribe` for live PCM through the same dictation WebSocket. GPT-4o file models are not listed.
 Deepgram offers Nova-3 and Nova-2 with `Token` authentication and smart
 formatting; Groq offers Whisper Large V3 Turbo and Large V3. Provider endpoints,
 auth schemes, model fields, streaming behavior, and response parsing are owned
@@ -554,16 +558,17 @@ stop control is `{ "type": "stop" }`; it may include the optional numeric
 `audioBytesSent` field and bounded `clientDiagnostics` metadata. After the server
 sends `completed`, the browser sends one bounded `{ "type": "client_diagnostics" }`
 frame with its final-event timing; the server acknowledges it and updates the
-matching JSON sidecar. Upstream adapters are file-upload based: the
-`openai_audio_sse_v1` adapter sends an in-memory WAV utterance and consumes
-JSON or `transcript.text.delta` / `transcript.text.done` SSE events; the
-`deepgram_audio_v1` adapter sends WAV audio and reads channel alternatives.
-Each adapter makes one finalization request per utterance, or one request per
-Silero-selected range. Batch ASR models avoid long mid-utterance silence by
-using those ranges and joining their texts. Managed local models can submit
-closed ranges during capture through the bounded progressive path; the managed
-Parakeet runtime still serves the OpenAI-compatible upload endpoint on
-loopback. Conduit emits
+matching JSON sidecar. File-upload adapters (`openai_audio_sse_v1`,
+`deepgram_audio_v1`) send one in-memory WAV after Stop. OpenAI
+`gpt-live-transcribe` uses `openai_realtime_stream_v1`: each accepted 16 kHz
+PCM packet is upsampled to 24 kHz and appended to a Realtime transcription
+session; `partial` / `final` events include `stableText`, `tentativeText`,
+and `revision`. Unified English Q8 uses `transcribe_cpp_stream_v1` the same
+way with native float32 packets, plus `audioCommittedMs` and `bufferedMs`. A stream-start failure is reported in `streamFallback` and can
+select `transcribe_cpp_batch_fallback_v1` with the WP5 progressive path.
+Other managed local models can submit closed ranges during capture through the
+bounded progressive path; the managed legacy Parakeet runtime still serves
+the OpenAI-compatible upload endpoint on loopback. Conduit emits
 `ready`, `partial`, `final`, `finalizing`, `segment_error`,
 `settlement_deadline`, `completed`, and `error`. Progressive `final` events
 contain cumulative text and optional sequence/sample metadata. `finalizing`

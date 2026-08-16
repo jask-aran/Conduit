@@ -1,5 +1,7 @@
 import dns from "node:dns/promises";
 import net from "node:net";
+import { OPENAI_LIVE_ADAPTER, OPENAI_LIVE_MODEL, openaiAdapterFor } from "../voice-settings.js";
+import { openOpenaiRealtimeStream } from "./dictation-stream.js";
 
 function runtimeError(code, message, status = 400) {
   return Object.assign(new Error(message), { code, status });
@@ -92,7 +94,7 @@ export class VoiceRuntime {
       if (local.kind === "transcriber") {
         return {
           mode: "local",
-          inferenceMode: "batch",
+          inferenceMode: local.capabilities?.inferenceMode || "batch",
           adapter: local.adapter || "managed_transformers_v1",
           provider: "local",
           localModelId: config.localModelId,
@@ -101,8 +103,12 @@ export class VoiceRuntime {
           backend: local.backend || "embedded_transformers",
           computeBackend: local.computeBackend || null,
           capabilities: local.capabilities || null,
+          streaming: local.capabilities?.streaming || null,
           native: local.native || null,
           transcribe: (pcm) => this.modelManager.transcribe(config.localModelId, pcm),
+          stream: local.adapter === "transcribe_cpp_stream_v1" && typeof this.modelManager.stream === "function"
+            ? (options) => this.modelManager.stream(config.localModelId, options)
+            : null,
         };
       }
       return {
@@ -120,13 +126,30 @@ export class VoiceRuntime {
         allowPrivate: true,
       };
     }
+    const adapter = config.provider === "openai" ? openaiAdapterFor(config.model) : config.adapter;
+    if (adapter === OPENAI_LIVE_ADAPTER) {
+      return {
+        mode: "remote",
+        inferenceMode: "streaming",
+        provider: config.provider,
+        adapter,
+        model: OPENAI_LIVE_MODEL,
+        precision: null,
+        backend: "openai_realtime",
+        computeBackend: null,
+        endpoint: "wss://api.openai.com/v1/realtime?intent=transcription",
+        headers: requestHeaders(config),
+        capabilities: { language: "en", inferenceMode: "streaming", partials: true, externalVad: false, streaming: { family: "openai_realtime", delay: "low" } },
+        stream: (options = {}) => this.openOpenaiLive(config, options),
+      };
+    }
     const endpoint = new URL(config.endpoint);
     const addresses = config.allowPrivate ? [] : await publicAddresses(endpoint.hostname, this.lookup);
     return {
       mode: "remote",
       inferenceMode: "batch",
       provider: config.provider,
-      adapter: config.adapter,
+      adapter,
       model: config.model,
       precision: null,
       backend: "remote_provider",
@@ -135,6 +158,15 @@ export class VoiceRuntime {
       headers: requestHeaders(config),
       lookup: addresses.length ? pinnedLookup(addresses) : undefined,
     };
+  }
+
+  openOpenaiLive(config, options = {}) {
+    const opener = options.openStream || openOpenaiRealtimeStream;
+    return opener({
+      url: options.url || "wss://api.openai.com/v1/realtime?intent=transcription",
+      headers: requestHeaders(config),
+      model: OPENAI_LIVE_MODEL,
+    });
   }
 
   async test() {
@@ -149,7 +181,7 @@ export class VoiceRuntime {
           : config.endpoint;
     const response = await this.fetchImpl(testEndpoint, {
       method: config.provider === "custom" ? "OPTIONS" : "GET",
-      headers: config.headers,
+      headers: { "User-Agent": "ConduitVoice/1.0", ...config.headers },
       signal: AbortSignal.timeout(5_000),
       redirect: "error",
     });

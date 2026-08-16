@@ -8,8 +8,13 @@ const HEADER_NAME = /^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/;
 
 export const DEFAULT_LOCAL_VOICE_MODEL = "whisper-tiny-en-q8";
 
+export const OPENAI_LIVE_MODEL = "gpt-live-transcribe";
+export const OPENAI_FILE_MODEL = "gpt-transcribe";
+export const OPENAI_LIVE_ADAPTER = "openai_realtime_stream_v1";
+
 export const VOICE_ADAPTERS = Object.freeze([
   { id: "openai_audio_sse_v1", label: "OpenAI-compatible audio upload", transport: "http", description: "Uploads one in-memory WAV after stop and accepts JSON or transcript SSE events." },
+  { id: OPENAI_LIVE_ADAPTER, label: "OpenAI realtime transcription", transport: "ws", description: "Feeds live PCM into gpt-live-transcribe and maps deltas to Conduit partials." },
   { id: "deepgram_audio_v1", label: "Deepgram prerecorded audio", transport: "http", description: "Uploads one in-memory WAV after stop and reads Deepgram channel alternatives." },
 ]);
 
@@ -17,9 +22,8 @@ export const VOICE_PROVIDERS = Object.freeze([
   {
     id: "openai", label: "OpenAI", adapter: "openai_audio_sse_v1", endpoint: "https://api.openai.com/v1/audio/transcriptions", authLabel: "OpenAI API key",
     models: [
-      { id: "gpt-transcribe", label: "GPT Transcribe", description: "Recommended general-purpose transcription model." },
-      { id: "gpt-4o-mini-transcribe", label: "GPT-4o mini Transcribe", description: "Lower-cost, lower-latency transcription." },
-      { id: "gpt-4o-transcribe", label: "GPT-4o Transcribe", description: "High-quality multilingual transcription." },
+      { id: OPENAI_FILE_MODEL, label: "GPT Transcribe", description: "Stop-time file transcription. Text appears after you stop." },
+      { id: OPENAI_LIVE_MODEL, label: "GPT Live Transcribe", description: "Live transcription while you speak." },
     ],
   },
   {
@@ -102,24 +106,58 @@ async function writeJson(filePath, value) {
   } finally { await fs.rm(temporary, { force: true }).catch(() => {}); }
 }
 
+function credentialRecord(value) {
+  if (!isObject(value)) return null;
+  const type = AUTH_TYPES.has(value.type) ? value.type : "none";
+  const headerName = type === "bearer"
+    ? "Authorization"
+    : type === "header"
+      ? normalizeHeaderName(value.headerName)
+      : "X-API-Key";
+  const secret = typeof value.secret === "string" ? value.secret : "";
+  return { type, headerName, secret };
+}
+
+function storedCredentials(config) {
+  const credentials = {};
+  if (isObject(config.credentials)) {
+    for (const [provider, value] of Object.entries(config.credentials)) {
+      if (!PROVIDER_BY_ID.has(provider)) continue;
+      const record = credentialRecord(value);
+      if (record) credentials[provider] = record;
+    }
+  }
+  const provider = PROVIDER_BY_ID.has(config.provider) ? config.provider : "custom";
+  const legacy = credentialRecord(config.auth);
+  if (legacy && (legacy.secret || !credentials[provider])) credentials[provider] = { ...credentials[provider], ...legacy, secret: legacy.secret || credentials[provider]?.secret || "" };
+  return credentials;
+}
+
+export function openaiAdapterFor(model) {
+  return model === OPENAI_LIVE_MODEL ? OPENAI_LIVE_ADAPTER : "openai_audio_sse_v1";
+}
+
 function storedConfig(config) {
   const mode = MODES.has(config.mode) ? config.mode : "off";
   const provider = PROVIDER_BY_ID.has(config.provider) ? config.provider : "custom";
   const profile = PROVIDER_BY_ID.get(provider);
-  const adapter = provider === "custom" && ADAPTER_IDS.has(config.adapter) ? config.adapter : profile.adapter;
-  const authType = AUTH_TYPES.has(config.auth?.type) ? config.auth.type : "none";
-  const headerName = authType === "bearer"
-    ? "Authorization"
-    : authType === "header"
-      ? normalizeHeaderName(config.auth?.headerName)
-      : "X-API-Key";
+  const credentials = storedCredentials(config);
+  const auth = credentials[provider] || { type: "none", headerName: "X-API-Key", secret: "" };
+  let model = typeof config.model === "string" ? config.model : profile.models[0]?.id || "";
+  if (provider === "openai" && !profile.models.some((candidate) => candidate.id === model)) model = OPENAI_FILE_MODEL;
+  const adapter = provider === "custom" && ADAPTER_IDS.has(config.adapter)
+    ? config.adapter
+    : provider === "openai"
+      ? openaiAdapterFor(model)
+      : profile.adapter;
   return {
     mode,
     localModelId: String(config.localModelId || DEFAULT_LOCAL_VOICE_MODEL),
     provider, adapter,
-    model: typeof config.model === "string" ? config.model : profile.models[0]?.id || "",
+    model,
     endpoint: typeof config.endpoint === "string" ? config.endpoint : profile.endpoint,
-    auth: { type: authType, headerName, secret: typeof config.auth?.secret === "string" ? config.auth.secret : "" },
+    auth,
+    credentials,
     source: "stored", allowPrivate: false,
   };
 }
@@ -147,7 +185,8 @@ export class VoiceSettingsStore {
     const configured = Boolean(effective.auth.secret);
     return {
       mode: effective.mode, localModelId: effective.localModelId, provider: effective.provider, adapter: effective.adapter, model: effective.model,
-      endpoint: effective.endpoint, source: effective.source, adapters: VOICE_ADAPTERS, providers: VOICE_PROVIDERS,
+      endpoint: effective.endpoint, source: effective.source, adapters: VOICE_ADAPTERS,
+      providers: VOICE_PROVIDERS.map((provider) => ({ ...provider, configured: Boolean(effective.credentials[provider.id]?.secret) })),
       auth: { type: effective.auth.type, headerName: effective.auth.headerName, configured, source: configured ? effective.source : null, removable: configured && effective.source === "stored" },
       local,
     };
@@ -159,40 +198,49 @@ export class VoiceSettingsStore {
     if (!MODES.has(mode)) throw voiceError("voice_mode_invalid", "Voice mode must be off, local, or remote");
     const localModelId = String(input.localModelId || DEFAULT_LOCAL_VOICE_MODEL);
     const current = await readJson(this.filePath);
+    const credentials = storedCredentials(current);
     if (mode !== "remote") {
-      await writeJson(this.filePath, { ...current, mode, localModelId });
+      await writeJson(this.filePath, { ...current, mode, localModelId, credentials });
       return this.publicView();
     }
     const provider = PROVIDER_BY_ID.has(input.provider) ? String(input.provider) : "custom";
     const profile = PROVIDER_BY_ID.get(provider);
-    const adapter = provider === "custom" ? String(input.adapter || "") : profile.adapter;
+    let model = provider === "custom" ? String(input.model || "").trim() : String(input.model || profile.models[0]?.id || "");
+    if (provider !== "custom" && !profile.models.some((candidate) => candidate.id === model)) {
+      if (provider === "openai") model = OPENAI_FILE_MODEL;
+      else throw voiceError("voice_model_invalid", `Choose a supported ${profile.label} transcription model`);
+    }
+    const adapter = provider === "custom"
+      ? String(input.adapter || "")
+      : provider === "openai"
+        ? openaiAdapterFor(model)
+        : profile.adapter;
     if (!ADAPTER_IDS.has(adapter)) throw voiceError("voice_adapter_invalid", "Unknown voice endpoint adapter");
-    const sameCredentialScope = provider === (current.provider || "custom")
-      && String(input.auth?.type || "none") === String(current.auth?.type || "none")
-      && String(input.auth?.headerName || "X-API-Key") === String(current.auth?.headerName || "X-API-Key");
-    const previousSecret = sameCredentialScope && typeof current.auth?.secret === "string" ? current.auth.secret : "";
-    const secret = typeof input.auth?.secret === "string" && input.auth.secret.trim() ? normalizeSecret(input.auth.secret) : previousSecret;
+    const previous = credentials[provider] || {};
+    const secret = typeof input.auth?.secret === "string" && input.auth.secret.trim() ? normalizeSecret(input.auth.secret) : previous.secret || "";
     const endpoint = provider === "custom" ? normalizeRemoteVoiceEndpoint(input.endpoint) : profile.endpoint;
-    const model = provider === "custom" ? String(input.model || "").trim() : String(input.model || profile.models[0]?.id || "");
-    if (provider !== "custom" && !profile.models.some((candidate) => candidate.id === model)) throw voiceError("voice_model_invalid", `Choose a supported ${profile.label} transcription model`);
     const authType = provider === "custom" ? String(input.auth?.type || "none") : "bearer";
     if (!AUTH_TYPES.has(authType)) throw voiceError("voice_auth_invalid", "Unknown voice endpoint authentication type");
     const headerName = authType === "bearer" ? "Authorization" : authType === "header" ? normalizeHeaderName(input.auth?.headerName) : "X-API-Key";
     const protocol = new URL(endpoint).protocol;
-    if (protocol !== "https:") throw voiceError("voice_endpoint_protocol", "Audio upload adapters require an HTTPS endpoint");
+    if (adapter !== OPENAI_LIVE_ADAPTER && protocol !== "https:") throw voiceError("voice_endpoint_protocol", "Audio upload adapters require an HTTPS endpoint");
     if (authType !== "none" && !secret) throw voiceError("voice_secret_invalid", `Enter a credential for ${profile.label}`);
+    const auth = { type: authType, headerName, ...(authType !== "none" && secret ? { secret } : {}) };
+    credentials[provider] = { type: authType, headerName, secret };
     await writeJson(this.filePath, {
-      mode, localModelId, provider, adapter, model, endpoint,
-      auth: { type: authType, headerName, ...(authType !== "none" && secret ? { secret } : {}) },
+      mode, localModelId, provider, adapter, model, endpoint, auth, credentials,
     });
     return this.publicView();
   }
 
   async removeCredential() {
     const config = await readJson(this.filePath);
-    const removed = Boolean(config.auth?.secret);
+    const provider = PROVIDER_BY_ID.has(config.provider) ? config.provider : "custom";
+    const credentials = storedCredentials(config);
+    const removed = Boolean(config.auth?.secret || credentials[provider]?.secret);
     if (isObject(config.auth)) delete config.auth.secret;
-    if (removed) await writeJson(this.filePath, config);
+    if (credentials[provider]) delete credentials[provider].secret;
+    if (removed) await writeJson(this.filePath, { ...config, credentials });
     return removed;
   }
 

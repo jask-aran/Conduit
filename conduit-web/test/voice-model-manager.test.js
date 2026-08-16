@@ -201,7 +201,7 @@ test("managed Whisper tiers install independently and transcribe through the emb
   } finally { await manager.stop(); await fs.rm(temporary, { recursive: true, force: true }); }
 });
 
-test("Unified English Q8 uses one reusable transcribe.cpp batch session and reports its backend", async () => {
+test("Unified English Q8 uses one reusable transcribe.cpp session and exposes streaming", async () => {
   const temporary = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-voice-unified-"));
   const root = path.join(temporary, "voice", "models");
   const modelId = "parakeet-unified-en-0.6b-q8";
@@ -211,10 +211,20 @@ test("Unified English Q8 uses one reusable transcribe.cpp batch session and repo
   let activeInferences = 0;
   let maximumInferences = 0;
   let disposals = 0;
+  let requestedStreamOptions = null;
   const runtime = {
     backend: "cpu",
     computeBackend: "cpu",
-    capabilities: { language: "en", inferenceMode: "batch", partials: false, externalVad: false, precision: "q8", memory: { modelBytes: 731357568 } },
+    adapter: "transcribe_cpp_stream_v1",
+    capabilities: {
+      language: "en",
+      inferenceMode: "streaming",
+      partials: true,
+      externalVad: false,
+      precision: "q8",
+      memory: { modelBytes: 731357568 },
+      streaming: { family: "parakeet_buffered", leftMs: 5_600, chunkMs: 160, rightMs: 320, latencyMs: 480, commitPolicy: "stable_prefix", stablePrefixAgreementN: 3 },
+    },
     native: { package: "transcribe-cpp", version: "0.1.3", headerHash: "86b16dd97ad1cb58" },
     async transcribe(audio) {
       assert.equal(audio instanceof Float32Array, true);
@@ -223,6 +233,10 @@ test("Unified English Q8 uses one reusable transcribe.cpp batch session and repo
       await new Promise((resolve) => setTimeout(resolve, 10));
       activeInferences -= 1;
       return { text: "unified transcript" };
+    },
+    async stream(options) {
+      requestedStreamOptions = options;
+      return { state: "active" };
     },
     dispose() { disposals += 1; },
   };
@@ -246,9 +260,11 @@ test("Unified English Q8 uses one reusable transcribe.cpp batch session and repo
     assert.equal(maximumInferences, 1);
     assert.equal(loadedPath, path.join(root, modelId, "parakeet-unified-en-0.6b-Q8_0.gguf"));
     assert.equal(loadedDefinition.id, modelId);
+    assert.deepEqual(await manager.stream(modelId, { family: { kind: "parakeet_buffered", leftMs: 5_600, chunkMs: 160, rightMs: 320 } }), { state: "active" });
+    assert.deepEqual(requestedStreamOptions, { family: { kind: "parakeet_buffered", leftMs: 5_600, chunkMs: 160, rightMs: 320 } });
     assert.deepEqual(await manager.ensureRunning(modelId), {
       kind: "transcriber",
-      adapter: "transcribe_cpp_batch_v1",
+      adapter: "transcribe_cpp_stream_v1",
       backend: "transcribe_cpp",
       computeBackend: "cpu",
       capabilities: runtime.capabilities,
