@@ -47,22 +47,25 @@ test("voice settings API accepts a valid absent-artifact execution tuple", async
   try {
     const initial = await (await server.request("/v0/voice/settings")).json();
     const profile = initial.local.catalogue.profiles.find((candidate) => candidate.execution === "live");
+    const selection = {
+      modelId: profile.modelId,
+      artifactId: profile.artifactId,
+      runtimeId: profile.runtimeId,
+      execution: profile.execution,
+      segmentation: profile.segmentation,
+    };
     const response = await server.request("/v0/voice/settings", {
       method: "PUT",
       body: JSON.stringify({
         mode: "local",
-        localSelection: {
-          modelId: profile.modelId,
-          artifactId: profile.artifactId,
-          runtimeId: profile.runtimeId,
-          execution: profile.execution,
-          segmentation: profile.segmentation,
-        },
+        localSelection: selection,
       }),
     });
     assert.equal(response.status, 200);
     const saved = await response.json();
     assert.equal(saved.mode, "local");
+    assert.deepEqual(saved.localSelection, selection);
+    assert.equal(saved.localModelId, initial.local.catalogue.artifacts.find((artifact) => artifact.id === profile.artifactId).legacyModelId);
     assert.equal(saved.resolvedProfileId, profile.id);
     assert.equal(saved.local.backendPaths.find((path) => path.backendPathId === profile.backendPathId).artifactState, "absent");
   } finally { await server.stop(); }

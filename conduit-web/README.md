@@ -264,6 +264,17 @@ toast without silently changing the device. Conduit ignores a no-signal
 completion from a short intentional stop, and reports sustained silence only
 after five seconds. Warm microphone retention is off by default; when enabled,
 Settings shows the active state and a direct Stop warm microphone control.
+The page presents Transcription source before the selected local or Cloud path.
+Local settings show one semantic model family at a time, then the compatible
+runtime, precision or variant, and valid batching profiles. Variant choices
+show truthful install state; the selected path reports requested and actual
+compute state. During pauses is labelled with its catalogue detector, such as
+Silero or Silence detection, rather than hiding pause selection in Advanced.
+Capture profile, shortcut, activation, auto-send, and warm microphone stay
+inside one closed Advanced section. Cloud settings show the selected transport
+and its fixed timing;
+OpenAI model selection updates between the HTTPS upload and WebSocket live
+adapters before Save.
 Settings → Voice can use managed
 Whisper Tiny English, Whisper Base, Whisper Small, Parakeet Unified English Q8, Parakeet TDT 0.6B v2, or Parakeet TDT 0.6B v3,
 and has first-class provider/model profiles for OpenAI, Deepgram, and Groq.

@@ -148,6 +148,13 @@ Add an entry through `$tacit-knowledge` after explicit approval or validated rep
 - **Scope:** `dictation-stream.js`, `voice-vad.js` incremental sessions, voice diagnostics, and archived voice sidecars.
 - **Evidence:** WP4B focused tests cover silence-only no-submit behavior, short-range submission, padded multi-region ordering, and segment-cap tail preservation. WP5 focused tests cover a stable final before Stop, ordered tail append, and failed-range retention. The accepted sidecar `2026-08-15T14-18-07-767Z-739d2241-3737-4005-aced-e24764c69dea.json` records a Silero positive at 0.89368 during silence and Parakeet's `Mm-hmm.` hallucination; treat this as a false-positive/noise-quality issue, not permission to move VAD into the browser. The approved WP5 sidecar `2026-08-15T15-32-21-828Z-ee4f2317-0d3c-4816-9e09-516a9cd758c6.json` confirms 49,240 ms of archived mono PCM16, 9 of 9 progressive ranges completed, no fallback, and a first segment final at 3,878 ms.
 
+### Keep local voice selection through installation polling
+
+- **Type:** Gotcha.
+- **Rule:** During managed model installation polling, preserve the current local selection and invalidate settings GET responses that overlap a Save; never let a stale poll response replace the selected tuple with the legacy default profile.
+- **Scope:** `Settings` voice settings load/save and managed model installation refreshes.
+- **Evidence:** Desktop and mobile regression coverage now simulates Save followed by a stale Whisper response and keeps the selected Parakeet `transcribe-rs` profile. The full browser voice slice passed 8/8 and the full suite passed 522/522.
+
 ### Amortize buffered Parakeet streaming before lowering latency
 
 - **Type:** Gotcha.

@@ -1869,8 +1869,7 @@ Use one column:
 1. **Input:** microphone, signal test, shortcut, and activation.
 2. **Transcription source:** Off, This machine, or Cloud.
 3. The selected source's guided choices.
-4. Closed **Advanced:** capture profile, auto-send, warm microphone, and pause
-   detection when relevant.
+4. Closed **Advanced:** capture profile, auto-send, and warm microphone.
 5. One Save action and one dirty state for all voice drafts.
 
 #### This machine
@@ -1878,17 +1877,19 @@ Use one column:
 Show one row per semantic model family. Do not list one model again for each
 artifact, runtime, or behaviour. Expand only the selected family.
 
-Within the row, show in order:
+Within the row, show the choices in this order:
 
-1. **Precision / artifact:** precision, format, approximate size, language,
-   licence, and install state.
-2. **Runs with:** compatible runtime rows for that exact artifact. Show
-   runtime label, artifact format, compiled compute backends, and install
-   state. After load, show a quiet line with loaded runtime version and actual
-   compute backend.
-3. **When to transcribe:** only profiles for the exact backend path:
+1. **Runtime:** compatible runtime choices for the family. Show the runtime
+   label, model format, compiled compute backends, and valid ports.
+2. **Precision / variant:** only artifacts or variants compatible with the
+   selected runtime. Show precision, format, approximate size, language,
+   licence, and install state in each option. An artifact can be shared by
+   more than one backend path; do not present a duplicate model choice only
+   because its runtime differs.
+3. **Batching:** only profiles for the exact selected artifact and runtime:
    - **Live:** “Text appears while you speak and may revise.”
-   - **During pauses:** “Each pause commits a phrase.”
+   - **During pauses · Silero:** “Each pause commits a phrase.”
+   - **During pauses · Silence detection:** “Each pause commits a phrase.”
    - **After Stop:** “Nothing appears until you stop.”
 
 Every BatchPort row shows After Stop. Show During pauses only for an Eager
@@ -1902,9 +1903,9 @@ install can enable more than one profile. A structurally valid absent artifact
 can remain selected. State why capture is unavailable and offer Install.
 Never silently replace it.
 
-Put **Pause detection: Silero / Heuristic** in Advanced only when During
-pauses is selected. Each choice selects a valid profile; the client cannot
-mutate profile fields.
+Pause detection is part of the Batching choice, not Advanced. Render the
+detector name from the exact profile (`Silero` or `Silence detection`) and
+select the complete profile. The client cannot mutate profile fields.
 
 Do not show feed quantum, queue limits, transcript overlap, stable-prefix
 count, or native latency profiles in the normal form. Do not infer capability
