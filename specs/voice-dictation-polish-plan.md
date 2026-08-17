@@ -1,8 +1,8 @@
 # Voice dictation pipeline overhaul plan
 
-Status: **WP7 complete and checkpointed on 2026-08-17. WP0, WP1, WP2, WP3,
+Status: **WP10 complete and checkpointed on 2026-08-17. WP0, WP1, WP2, WP3,
 WP4A, WP4B, WP5, WP6A, and WP8 approved. WP9 complete and checkpointed on
-2026-08-17. WP10–WP12 have not started.**
+2026-08-17. WP11 and WP12 have not started.**
 
 This document defines the active voice-dictation work. Git history preserves
 the completed polish sprint, its test counts, and its manual acceptance
@@ -150,12 +150,13 @@ compiled compute backends, actual compute backend, and resource cost.
   baseline: a Silero-closed range often completes during a thinking pause,
   before the next phrase starts. The user also prefers the accuracy and general
   behaviour of `achetronic/parakeet`, but wants its progressive batching verified
-  and improved rather than replacing that runtime. `transcribe-rs` is not yet
-  integrated; WP10 is the dedicated package for that fourth runtime.
-- **Work packages 8–12 — not started.**
+  and improved rather than replacing that runtime. `transcribe-rs` is now
+  integrated as the fourth runtime; the user may choose its default later.
+- **Work package 8 is approved. Work packages 11–12 have not started.** WP9
+  and WP10 are complete and checkpointed.
 
-WP3, WP4A, WP4B, WP5, WP6A, WP6B manual approval, and the WP7 checkpoint are
-recorded below. WP7 owns the recorded live-latency follow-up.
+WP3, WP4A, WP4B, WP5, WP6A, WP6B manual approval, and the WP7–WP10 checkpoints
+are recorded below. WP7 owns the recorded live-latency follow-up.
 
 ## Deviations from the proposed plan
 
@@ -182,10 +183,10 @@ recorded below. WP7 owns the recorded live-latency follow-up.
   of `achetronic/parakeet` is superseded. Retain every useful runtime. The user
   can change the default when the relevant profile is available; default
   selection and runtime removal are not work packages.
-- `transcribe-rs` is promoted from a candidate to an explicit WP10 integration
-  package. It is not installed, selected, or described as live-capable until
-  its model support, artifact packaging, hardware reporting, and streaming or
-  batch contract are implemented and verified.
+- `transcribe-rs` was promoted from a candidate to the explicit WP10
+  integration package. It now has a managed batch worker, immutable model and
+  dependency records, provider reporting, and no Live profile because the
+  pinned implementation does not provide a persistent StreamPort.
 - Context recovery uses resume-first behaviour for a suspended context. A
   failed or closed context is released and recreated on the next trusted start.
   This keeps normal browser suspension recovery clear without discarding a
@@ -1758,6 +1759,104 @@ documentation.
 and confirm Unified English still streams through `transcribe.cpp`. Run native
 checks, focused server checks, and the production build. Restart, confirm
 `/healthz`, then wait for user approval.
+
+#### WP10 implementation checkpoint — 2026-08-17
+
+WP10 is complete. Conduit now exposes four managed Parakeet ONNX backend paths
+through stable runtime ID `transcribe-rs`. Each path has After Stop and Silero
+During pauses profiles. None has Live. The existing loopback Parakeet paths,
+Transformers.js paths, Unified English `transcribe.cpp` paths, and saved
+default remain unchanged.
+
+**Dependency record.** Before pinning, the current Handy manifest, model
+manager, catalogue, and `transcribe-rs` Parakeet source were checked. Handy
+pins `transcribe-rs` 0.3.8 with the ONNX feature. Its Parakeet implementation
+reports `supports_streaming: false` and returns batch segment timestamps. The
+worker therefore uses `transcribe-rs` 0.3.8, MIT, registry checksum
+`b231bc9bd1b20be89583a49c3885dfa7d7323299564ee78eddf83db04f2b337b`. It uses
+`ort` 2.0.0-rc.12, MIT OR Apache-2.0, registry checksum
+`d7de3af33d24a745ffb8fab904b13478438d1cd52868e6f17735ef6e1f8bf133`, with
+bundled ONNX Runtime 1.24.2 statically linked by the default prebuilt path.
+The verified toolchain is `rustc 1.88.0 (6b00bc388 2025-06-23)`. The verified
+target is `x86_64-unknown-linux-gnu`; the worker compiles CPU only. The exact
+dependency graph is in
+`conduit-web/native/transcribe-rs-worker/Cargo.lock`.
+
+The Parakeet package records remain in
+`conduit-web/src/server/voice-model-manifests.js`. They use CC-BY-4.0 with the
+existing NVIDIA and istupakov attributions. The exact ONNX records are:
+
+| Package | Revision | Encoder files | Decoder file | Licence |
+| --- | --- | --- | --- | --- |
+| v2 int8 | `0bbb45a3365852604aef28b538a8f066f4ccaa85` | `encoder-model.int8.onnx`: 652,184,014 bytes, `3e0581fda6ab843888b51e56d7ee78b6d5bc3237ec113af1f732d1d5286aa155` | `decoder_joint-model.int8.onnx`: 8,998,286 bytes, `a449f49acd68979d418651dd2dcb737cc0f1bf0225e009e29ee326354edbf7d3` | CC-BY-4.0 |
+| v2 fp32 | `0bbb45a3365852604aef28b538a8f066f4ccaa85` | `encoder-model.onnx`: 41,770,866 bytes, `3987bcd28175d829d12888a996a84e8f62a0e374d9ffd640662c1515adc679d3`; `encoder-model.onnx.data`: 2,435,420,160 bytes, `4dab7362d4874d85965045b1e41b2d61dd2cc0fb25671a7f6b3dc47bf120cc41` | `decoder_joint-model.onnx`: 35,792,059 bytes, `cbb52a07bd70ab5b67f8439d4b3cd8704b18467b4430bcacb5adabe154b8d191` | CC-BY-4.0 |
+| v3 int8 | `8f23f0c03c8761650bdb5b40aaf3e40d2c15f1ce` | `encoder-model.int8.onnx`: 652,183,999 bytes, `6139d2fa7e1b086097b277c7149725edbab89cc7c7ae64b23c741be4055aff09` | `decoder_joint-model.int8.onnx`: 18,202,004 bytes, `eea7483ee3d1a30375daedc8ed83e3960c91b098812127a0d99d1c8977667a70` | CC-BY-4.0 |
+| v3 fp32 | `8f23f0c03c8761650bdb5b40aaf3e40d2c15f1ce` | `encoder-model.onnx`: 41,770,866 bytes, `98a74b21b4cc0017c1e7030319a4a96f4a9506e50f0708f3a516d02a77c96bb1`; `encoder-model.onnx.data`: 2,435,420,160 bytes, `9a22d372c51455c34f13405da2520baefb7125bd16981397561423ed32d24f36` | `decoder_joint-model.onnx`: 72,520,893 bytes, `e978ddf6688527182c10fde2eb4b83068421648985ef23f7a86be732be8706c1` | CC-BY-4.0 |
+
+The shared exact records are `config.json` (97 bytes,
+`666903c76b9798caf2c210afd4f6cd60b08a8dbf9800ec8d7a3bc0d2148ac466`),
+`nemo128.onnx` (139,764 bytes,
+`a9fde1486ebfcc08f328d75ad4610c67835fea58c73ba57e3209a6f6cf019e9f`), and
+`silero_vad.onnx` (2,327,524 bytes,
+`1a153a22f4509e292a94e67d6f9b85e8deb25b4988682b7e174c65279d8788e3`). v2
+uses `vocab.txt` at 9,384 bytes with SHA-256
+`ec182b70dd42113aff6c5372c75cac58c952443eb22322f57bbd7f53977d497d`; v3
+uses 93,939 bytes with SHA-256
+`d58544679ea4bc6ac563d1f545eb7d474bd6cfa467f0a6e2c1dc1c7d37e3c35d`. The
+retained loopback executable is 6,809,344 bytes with SHA-256
+`4eaa7123e49756dea7714db20b4ea36aa96f3ba50d7e1ccec7df2ccededcdf9b`; its
+retained ONNX Runtime package is 8,518,976 bytes with SHA-256
+`eb566a49cfc49ef0642f809b69340b5bb656c7c4905ba873526d226f2c005816`. These
+values remain checked in the manifest source and covered by the immutable-
+manifest test.
+
+**Worker contract.** `conduit-web/native/transcribe-rs-worker` is a long-lived
+child process with private stdin/stdout/stderr pipes. It accepts version 1
+frames with two little-endian `uint32` lengths. It rejects oversized headers
+before allocation, keeps stdout frame-only, bounds stderr to 8,192 bytes in the
+Node client, and supports `hello`, `load`, `transcribe_range`, `cancel`,
+`unload`, `health`, and `shutdown`. It accepts 16 kHz mono PCM16, converts to
+`f32` once inside the worker, runs one inference at a time, and returns only
+finite, ordered, in-range segment timestamps. Cancellation marks late output
+non-authoritative. A worker exit rejects the active operation. The Docker
+source-build image now compiles the locked worker with Rust 1.88 and copies it
+into the unprivileged runtime image.
+
+**Checks.** The native suite passed 4/4 Rust tests. `cargo fmt --check` and
+`cargo build --release --locked` passed. The WP10 JavaScript suite passed 33/33.
+`npm test` passed 521/521. `npm run typecheck` passed. `npm run build` passed
+after transforming 2,200 modules and reported 184,413 bytes initial JavaScript
+gzip, 24,994 bytes initial CSS gzip, and 185,185 bytes largest lazy JavaScript
+gzip. The required restart build reported the same module count and CSS size.
+All changed JavaScript passed `node --check`; `git diff --check` passed.
+`node --test test/voice-stream-api.test.js` passed 32/32, including the
+Unified English `transcribe.cpp` StreamPort path. A Docker image build was not
+run because Docker Desktop is not available in this WSL distribution.
+
+**Manual handoff evidence.** The real worker ran without root against the
+installed v2 int8 package. `hello` reported worker `0.1.0`, crate `0.3.8`, ORT
+`1.24.2`, compiled provider `cpu`, batch `true`, stream `false`, 16 kHz mono
+PCM16, limits of 65,536 JSON bytes, 12,582,912 payload bytes, and 4,800,000
+PCM samples, on `x86_64` Linux. `load` reported requested `cpu` and actual
+`cpu`. The last 3.728-second recording produced
+`This is GPT live transcribe.` with verified timestamps. Worker load took
+2,038 ms; the following 3.728-second inference took 368 ms, or about 0.10
+times audio duration after load.
+
+Raw protocol checks returned these exact error codes: wrong version
+`protocol_version`, duplicate request ID `duplicate_request_id`, unknown
+session `unknown_session`, and an oversized declaration `protocol_error`.
+The worker stayed responsive to `health` while a long inference was active.
+Cancellation returned `voice_operation_cancelled` in 16 ms; the worker became
+idle on the next health poll and a later range completed authoritatively.
+Killing the worker returned `voice_worker_crashed`; a fresh worker loaded and
+completed a later range authoritatively. Two absolute-range runs retained the
+same phrase across simulated 10-second and 30-second pauses. The second ranges
+started at samples 219,648 and 539,648, and both returned verified timestamps.
+No new WER corpus or broad hardware benchmark was run. The prior poor-WER
+result and WSL CPU overhead remain open risks.
+
+**Status:** WP10 is ready for user testing and explicit handoff approval.
 
 ### Work package 11 — replace the Voice settings experience
 

@@ -8,6 +8,7 @@ import { pipeline as streamPipeline } from "node:stream/promises";
 import { getVoiceModelManifest, ONNXRUNTIME_VERSION } from "./voice-model-manifests.js";
 import { LEGACY_LOCAL_VOICE_MODELS, VOICE_EXECUTION_CATALOG, publicVoiceExecutionCatalog } from "./voice-execution-catalog.js";
 import { SileroVad, VoiceVadObservationQueue } from "./voice-vad.js";
+import { defaultTranscribeRsWorkerCommand, TranscribeRsWorkerClient } from "./transcribe-rs-worker.js";
 
 const MIB = 1024 * 1024;
 export const LOCAL_VOICE_MODELS = LEGACY_LOCAL_VOICE_MODELS;
@@ -243,7 +244,7 @@ function pcmFloat32(buffer) {
 export const DEFAULT_VOICE_MODEL_IDLE_TTL_MS = 5 * 60 * 1000;
 
 export class VoiceModelManager {
-  constructor({ root, catalog = VOICE_EXECUTION_CATALOG, fetchImpl = fetch, manifestResolver = packageManifest, runtimeExtractor = extractRuntime, transformersLoader = defaultTransformersLoader, transcribeCppLoader = defaultTranscribeCppLoader, downloadRetries = DOWNLOAD_RETRIES, downloadRetryBaseMs = DOWNLOAD_RETRY_BASE_MS, downloadConcurrency = 3, idleTtlMs = DEFAULT_VOICE_MODEL_IDLE_TTL_MS, vad = null, vadModelPath = null, vadSessionFactory = undefined } = {}) {
+  constructor({ root, catalog = VOICE_EXECUTION_CATALOG, fetchImpl = fetch, manifestResolver = packageManifest, runtimeExtractor = extractRuntime, transformersLoader = defaultTransformersLoader, transcribeCppLoader = defaultTranscribeCppLoader, transcribeRsWorkerCommand = defaultTranscribeRsWorkerCommand(), transcribeRsWorkerArgs = [], transcribeRsWorkerFactory = (options) => new TranscribeRsWorkerClient(options), downloadRetries = DOWNLOAD_RETRIES, downloadRetryBaseMs = DOWNLOAD_RETRY_BASE_MS, downloadConcurrency = 3, idleTtlMs = DEFAULT_VOICE_MODEL_IDLE_TTL_MS, vad = null, vadModelPath = null, vadSessionFactory = undefined } = {}) {
     if (!root) throw new Error("VoiceModelManager requires a root directory");
     this.root = path.resolve(root);
     this.catalog = catalog;
@@ -252,6 +253,9 @@ export class VoiceModelManager {
     this.runtimeExtractor = runtimeExtractor;
     this.transformersLoader = transformersLoader;
     this.transcribeCppLoader = transcribeCppLoader;
+    this.transcribeRsWorkerCommand = transcribeRsWorkerCommand;
+    this.transcribeRsWorkerArgs = [...transcribeRsWorkerArgs];
+    this.transcribeRsWorkerFactory = transcribeRsWorkerFactory;
     this.downloadRetries = downloadRetries;
     this.downloadRetryBaseMs = downloadRetryBaseMs;
     this.downloadConcurrency = downloadConcurrency;
@@ -263,10 +267,14 @@ export class VoiceModelManager {
     this.installingModelId = null;
     this.child = null;
     this.port = null;
+    this.transcribeRsWorker = null;
+    this.transcribeRsDescriptor = null;
     this.transcriber = null;
     this.activeModelId = null;
+    this.activeRuntimeId = null;
     this.startPromise = null;
     this.startingModelId = null;
+    this.startingRuntimeId = null;
     this.transcriptionTail = Promise.resolve();
     this.vadStreamTail = Promise.resolve();
     this.vadStreams = new Set();
@@ -291,7 +299,7 @@ export class VoiceModelManager {
   armIdleTimer() {
     this.clearIdleTimer();
     if (this.idleTtlMs <= 0 || this.pinCount > 0 || this.startPromise) return;
-    if (!this.activeModelId && !this.child && !this.transcriber) return;
+    if (!this.activeModelId && !this.child && !this.transcriber && !this.transcribeRsWorker) return;
     this.idleTimer = setTimeout(() => {
       this.idleTimer = null;
       if (this.pinCount > 0 || this.startPromise) return;
@@ -420,7 +428,18 @@ export class VoiceModelManager {
       await fs.rm(archive, { force: true });
       await fs.chmod(path.join(staging, "bin/parakeet"), 0o700);
     }
-    const finalManifest = { schemaVersion: 2, modelId: model.id, engine: model.engine, version: manifest.version, modelRevision: manifest.modelRevision, installedAt: new Date().toISOString(), artifacts: verified };
+    const finalManifest = {
+      schemaVersion: 2,
+      modelId: model.id,
+      engine: model.engine,
+      version: manifest.version,
+      modelRevision: manifest.modelRevision,
+      sourceRevision: manifest.sourceRevision || null,
+      runtime: manifest.runtime || null,
+      transcribeRs: manifest.transcribeRs || null,
+      installedAt: new Date().toISOString(),
+      artifacts: verified,
+    };
     await fs.writeFile(path.join(staging, "manifest.json"), `${JSON.stringify(finalManifest, null, 2)}\n`, { encoding: "utf8", mode: 0o600 });
     this.progress.phase = "activating";
     if (this.activeModelId === model.id) await this.stop();
@@ -429,18 +448,25 @@ export class VoiceModelManager {
     this.lastErrors.delete(model.id);
   }
 
-  activeRuntime(model) {
-    if (this.activeModelId === model.id) {
-      if (model.engine === "parakeet" && this.child && this.port) return { kind: "http", origin: `http://127.0.0.1:${this.port}` };
-      if (model.engine === "transformers-whisper" && this.transcriber) return { kind: "transcriber" };
-      if (model.engine === "transcribe-cpp" && this.transcriber) return this.transcribeCppDescriptor(this.transcriber, model);
-    }
+  defaultRuntimeId(model) {
+    if (model.engine === "transformers-whisper") return "transformers-js";
+    if (model.engine === "transcribe-cpp") return "transcribe-cpp";
+    return this.catalog.artifacts.find((artifact) => artifact.legacyModelId === model.id && artifact.runtimeId === "parakeet-loopback")?.runtimeId || "parakeet-loopback";
+  }
+
+  activeRuntime(model, runtimeId = this.activeRuntimeId || this.defaultRuntimeId(model)) {
+    if (!model || this.activeModelId !== model.id || this.activeRuntimeId !== runtimeId) return null;
+    if (model.engine === "parakeet" && runtimeId === "parakeet-loopback" && this.child && this.port) return { kind: "http", origin: `http://127.0.0.1:${this.port}` };
+    if (model.engine === "parakeet" && runtimeId === "transcribe-rs" && this.transcribeRsWorker?.isAlive !== false && this.transcribeRsDescriptor) return this.transcribeRsDescriptor;
+    if (model.engine === "transformers-whisper" && this.transcriber) return { kind: "transcriber" };
+    if (model.engine === "transcribe-cpp" && this.transcriber) return this.transcribeCppDescriptor(this.transcriber, model);
     return null;
   }
 
-  async ensureRunning(modelId) {
+  async ensureRunning(modelId, { runtimeId = null } = {}) {
     const model = requiredModel(modelId);
-    let active = this.activeRuntime(model);
+    const selectedRuntimeId = runtimeId || this.defaultRuntimeId(model);
+    let active = this.activeRuntime(model, selectedRuntimeId);
     if (active) {
       this.armIdleTimer();
       return active;
@@ -448,17 +474,19 @@ export class VoiceModelManager {
     while (this.startPromise) {
       const pending = this.startPromise;
       const pendingModelId = this.startingModelId;
+      const pendingRuntimeId = this.startingRuntimeId;
       try { await pending; }
-      catch (error) { if (pendingModelId === model.id) throw error; }
-      active = this.activeRuntime(model);
+      catch (error) { if (pendingModelId === model.id && pendingRuntimeId === selectedRuntimeId) throw error; }
+      active = this.activeRuntime(model, selectedRuntimeId);
       if (active) {
         this.armIdleTimer();
         return active;
       }
     }
-    const startPromise = this.startRuntime(model);
+    const startPromise = this.startRuntime(model, selectedRuntimeId);
     this.startPromise = startPromise;
     this.startingModelId = model.id;
+    this.startingRuntimeId = selectedRuntimeId;
     try {
       const runtime = await startPromise;
       this.armIdleTimer();
@@ -467,24 +495,28 @@ export class VoiceModelManager {
       if (this.startPromise === startPromise) {
         this.startPromise = null;
         this.startingModelId = null;
+        this.startingRuntimeId = null;
       }
     }
   }
 
-  async startRuntime(model) {
+  async startRuntime(model, runtimeId = this.defaultRuntimeId(model)) {
     if (!await this.installedManifest(model.id)) throw modelError("voice_model_not_installed", `Install ${model.label} from Voice settings first`, 409);
     await this.stopActive();
     if (model.engine === "transformers-whisper") {
       this.transcriber = await this.transformersLoader(this.modelRoot(model.id), model.precision || "q8");
       this.activeModelId = model.id;
+      this.activeRuntimeId = runtimeId;
       return { kind: "transcriber" };
     }
     if (model.engine === "transcribe-cpp") {
       const runtime = await this.transcribeCppLoader(path.join(this.modelRoot(model.id), model.modelFile), model);
       this.transcriber = runtime;
       this.activeModelId = model.id;
+      this.activeRuntimeId = runtimeId;
       return this.transcribeCppDescriptor(runtime, model);
     }
+    if (runtimeId === "transcribe-rs") return this.startTranscribeRs(model);
     const port = await availablePort();
     const modelRoot = this.modelRoot(model.id);
     const binary = path.join(modelRoot, "bin/parakeet");
@@ -495,8 +527,8 @@ export class VoiceModelManager {
     });
     let stderr = "";
     child.stderr.on("data", (chunk) => { stderr = `${stderr}${chunk}`.slice(-8_192); });
-    child.once("exit", () => { if (this.child === child) { this.child = null; this.port = null; this.activeModelId = null; } });
-    this.child = child; this.port = port; this.activeModelId = model.id;
+    child.once("exit", () => { if (this.child === child) { this.child = null; this.port = null; this.activeModelId = null; this.activeRuntimeId = null; } });
+    this.child = child; this.port = port; this.activeModelId = model.id; this.activeRuntimeId = runtimeId;
     const deadline = Date.now() + 30_000;
     while (Date.now() < deadline) {
       if (child.exitCode != null) { this.child = null; this.port = null; this.activeModelId = null; throw modelError("voice_model_start_failed", `Managed Parakeet exited during startup: ${stderr.trim()}`, 502); }
@@ -510,23 +542,81 @@ export class VoiceModelManager {
     throw modelError("voice_model_start_timeout", "Managed Parakeet did not become healthy in time", 504);
   }
 
+  async startTranscribeRs(model) {
+    const modelRoot = this.modelRoot(model.id);
+    const worker = this.transcribeRsWorkerFactory({
+      command: this.transcribeRsWorkerCommand,
+      args: this.transcribeRsWorkerArgs,
+      env: { ...process.env },
+    });
+    this.transcribeRsWorker = worker;
+    try {
+      const hello = await worker.start().then(() => worker.hello());
+      const loaded = await worker.load({
+        modelDir: path.join(modelRoot, "models"),
+        quantization: model.precision === "fp32" ? "fp32" : "int8",
+        requestedProvider: "cpu",
+      });
+      this.transcribeRsDescriptor = {
+        kind: "transcribe-rs",
+        adapter: "transcribe_rs_batch_v1",
+        backend: "transcribe_rs",
+        computeBackend: loaded.actualProvider || "cpu",
+        requestedComputeBackend: loaded.requestedProvider || "cpu",
+        actualComputeBackend: loaded.actualProvider || "cpu",
+        runtimeVersion: `transcribe-rs-${hello.crateVersion || "0.3.8"}`,
+        capabilities: {
+          language: "en",
+          inferenceMode: "batch",
+          partials: false,
+          externalVad: false,
+          precision: model.precision || "int8",
+          memory: { modelBytes: model.approximateBytes || null },
+        },
+        native: {
+          ...hello,
+          load: loaded,
+        },
+      };
+      this.activeModelId = model.id;
+      this.activeRuntimeId = "transcribe-rs";
+      return this.transcribeRsDescriptor;
+    } catch (error) {
+      await Promise.resolve(worker.close?.()).catch(() => {});
+      this.transcribeRsWorker = null;
+      this.transcribeRsDescriptor = null;
+      throw modelError("voice_model_start_failed", `Managed transcribe-rs could not start: ${error.message}`, 502);
+    }
+  }
+
   async transcribe(modelId, pcm, options = {}) {
     const model = requiredModel(modelId);
-    if (model.engine !== "transformers-whisper" && model.engine !== "transcribe-cpp") throw modelError("voice_model_engine", `${model.label} does not use the embedded transcription engine`, 409);
-    await this.ensureRunning(model.id);
+    const runtimeId = options.runtimeId || this.defaultRuntimeId(model);
+    if (model.engine !== "transformers-whisper" && model.engine !== "transcribe-cpp" && runtimeId !== "transcribe-rs") throw modelError("voice_model_engine", `${model.label} does not use the embedded transcription engine`, 409);
+    await this.ensureRunning(model.id, { runtimeId });
     const transcriber = this.transcriber;
-    const task = this.transcriptionTail.then(() => model.engine === "transcribe-cpp"
-      ? transcriber.transcribe(pcmFloat32(Buffer.from(pcm)), { signal: options.signal })
-      : transcriber(pcmFloat32(Buffer.from(pcm)), { chunk_length_s: 30, stride_length_s: 2, ...(options.signal ? { signal: options.signal } : {}) }));
+    const task = this.transcriptionTail.then(() => runtimeId === "transcribe-rs"
+      ? this.transcribeRsWorker.transcribeRange({
+        pcm16: Buffer.from(pcm || []),
+        fromSample: Number.isSafeInteger(options.startSample) ? options.startSample : 0,
+        throughSample: Number.isSafeInteger(options.endSample) ? options.endSample : Math.floor(Buffer.byteLength(pcm || []) / 2),
+        sequence: Number.isSafeInteger(options.sequence) ? options.sequence : 0,
+        operationId: options.operationId || null,
+        signal: options.signal,
+      })
+      : model.engine === "transcribe-cpp"
+        ? transcriber.transcribe(pcmFloat32(Buffer.from(pcm)), { signal: options.signal })
+        : transcriber(pcmFloat32(Buffer.from(pcm)), { chunk_length_s: 30, stride_length_s: 2, ...(options.signal ? { signal: options.signal } : {}) }));
     this.transcriptionTail = task.then(() => undefined, () => undefined);
     const output = await task;
+    if (runtimeId === "transcribe-rs") return output;
     return String(output?.text || "").trim();
   }
 
   async stream(modelId, options = {}) {
     const model = requiredModel(modelId);
     if (model.engine !== "transcribe-cpp") throw modelError("voice_model_engine", `${model.label} does not use the embedded streaming engine`, 409);
-    await this.ensureRunning(model.id);
+    await this.ensureRunning(model.id, { runtimeId: "transcribe-cpp" });
     if (typeof this.transcriber?.stream !== "function") throw modelError("voice_model_streaming", `${model.label} does not support stateful streaming`, 409);
     return this.transcriber.stream(options);
   }
@@ -547,12 +637,16 @@ export class VoiceModelManager {
     return wrapper;
   }
 
-  async test(modelId) {
+  async test(modelId, { runtimeId = null } = {}) {
     const model = requiredModel(modelId);
-    const resolved = await this.ensureRunning(model.id);
+    const resolved = await this.ensureRunning(model.id, { runtimeId: runtimeId || this.defaultRuntimeId(model) });
     if (resolved.kind === "http") {
       const response = await this.fetchImpl(`${resolved.origin}/health`, { signal: AbortSignal.timeout(3_000) });
       if (!response.ok) throw modelError("voice_model_unhealthy", `Managed ${model.label} health check failed (${response.status})`, 502);
+    }
+    if (resolved.kind === "transcribe-rs") {
+      const health = await this.transcribeRsWorker.health();
+      if (health.ready !== true || health.loaded !== true) throw modelError("voice_model_unhealthy", `Managed ${model.label} worker health check failed`, 502);
     }
     return { ok: true, mode: "local", modelId: model.id };
   }
@@ -596,10 +690,13 @@ export class VoiceModelManager {
     this.clearIdleTimer();
     const child = this.child;
     const transcriber = this.transcriber;
-    this.child = null; this.port = null; this.transcriber = null; this.activeModelId = null;
+    const transcribeRsWorker = this.transcribeRsWorker;
+    this.child = null; this.port = null; this.transcriber = null; this.transcribeRsWorker = null; this.transcribeRsDescriptor = null;
+    this.activeModelId = null; this.activeRuntimeId = null;
     await this.transcriptionTail.catch(() => {});
     this.transcriptionTail = Promise.resolve();
     if (typeof transcriber?.dispose === "function") await Promise.resolve().then(() => transcriber.dispose()).catch(() => {});
+    if (transcribeRsWorker) await Promise.resolve().then(() => transcribeRsWorker.close?.()).catch(() => {});
     if (!child || child.exitCode != null) return;
     child.kill("SIGTERM");
     await new Promise((resolve) => {
@@ -629,10 +726,11 @@ export class VoiceModelManager {
       const artifact = this.catalog.artifacts.find((candidate) => candidate.id === backendPath.artifactId);
       const modelId = artifact?.legacyModelId;
       const manifest = modelId ? await this.installedManifest(modelId) : null;
-      const active = modelId && this.activeModelId === modelId;
-      const runtime = modelId ? this.activeRuntime(LOCAL_VOICE_MODELS.find((model) => model.id === modelId)) : null;
+      const active = Boolean(modelId && this.activeModelId === modelId && this.activeRuntimeId === backendPath.runtimeId);
+      const runtime = modelId ? this.activeRuntime(LOCAL_VOICE_MODELS.find((model) => model.id === modelId), backendPath.runtimeId) : null;
       const runtimeDefinition = this.catalog.runtimes.find((candidate) => candidate.id === backendPath.runtimeId);
-      const runtimeState = this.startingModelId === modelId || (this.startPromise && this.startingModelId === modelId)
+      const runtimeState = (this.startingModelId === modelId && this.startingRuntimeId === backendPath.runtimeId)
+        || (this.startPromise && this.startingModelId === modelId && this.startingRuntimeId === backendPath.runtimeId)
         ? "loading"
         : this.lastErrors.has(modelId)
           ? "failed"

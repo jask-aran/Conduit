@@ -312,6 +312,54 @@ test("Unified English Live selects the measured sustained CPU profile", () => {
   });
 });
 
+test("transcribe-rs runs one private batch worker and reports provider truth", async () => {
+  const temporary = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-voice-transcribe-rs-"));
+  const root = path.join(temporary, "voice", "models");
+  const modelId = "parakeet-tdt-0.6b-v2-int8";
+  const calls = [];
+  class FakeWorker {
+    constructor(options) { this.options = options; this.sessionId = null; }
+    async start() { calls.push({ type: "start", command: this.options.command }); return this; }
+    async hello() { calls.push({ type: "hello" }); return { workerVersion: "0.1.0", crateVersion: "0.3.8", compiledOrtProviders: ["cpu"], ports: { batch: true, stream: false } }; }
+    async load(options) { calls.push({ type: "load", options }); this.sessionId = "session-test"; return { requestedProvider: "cpu", actualProvider: "cpu", compiledOrtProviders: ["cpu"], ports: { batch: true, stream: false } }; }
+    async transcribeRange(options) { calls.push({ type: "transcribe", options }); return { text: "transcribe-rs transcript", fromSample: options.fromSample, throughSample: options.throughSample, timestamps: [] }; }
+    async health() { return { ready: true, loaded: true }; }
+    async close() { calls.push({ type: "close" }); }
+  }
+  const manager = new VoiceModelManager({
+    root,
+    transcribeRsWorkerCommand: "fake-transcribe-rs-worker",
+    transcribeRsWorkerFactory: (options) => new FakeWorker(options),
+  });
+  try {
+    await fs.mkdir(path.join(root, modelId), { recursive: true });
+    await fs.writeFile(path.join(root, modelId, "manifest.json"), JSON.stringify({ modelId }));
+    const runtime = await manager.ensureRunning(modelId, { runtimeId: "transcribe-rs" });
+    assert.equal(runtime.kind, "transcribe-rs");
+    assert.equal(runtime.backend, "transcribe_rs");
+    assert.equal(runtime.computeBackend, "cpu");
+    const result = await manager.transcribe(modelId, Buffer.alloc(8), {
+      runtimeId: "transcribe-rs",
+      sequence: 3,
+      startSample: 400,
+      endSample: 404,
+      operationId: "range-3",
+    });
+    assert.deepEqual(result, { text: "transcribe-rs transcript", fromSample: 400, throughSample: 404, timestamps: [] });
+    assert.equal(calls.find((call) => call.type === "load").options.modelDir, path.join(root, modelId, "models"));
+    assert.equal(calls.find((call) => call.type === "load").options.quantization, "int8");
+    assert.equal(calls.find((call) => call.type === "transcribe").options.operationId, "range-3");
+    assert.equal(calls.find((call) => call.type === "transcribe").options.fromSample, 400);
+    const status = (await manager.publicView()).backendPaths.find((pathStatus) => pathStatus.backendPathId === `${modelId}.transcribe-rs.${"transcribe-rs"}`);
+    assert.equal(status.operational, true);
+    assert.equal(await manager.test(modelId, { runtimeId: "transcribe-rs" }).then((value) => value.ok), true);
+  } finally {
+    await manager.stop();
+    assert.equal(calls.at(-1).type, "close");
+    await fs.rm(temporary, { recursive: true, force: true });
+  }
+});
+
 test("concurrent managed Whisper requests share startup and serialize inference", async () => {
   const temporary = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-voice-whisper-concurrent-"));
   const root = path.join(temporary, "voice", "models");

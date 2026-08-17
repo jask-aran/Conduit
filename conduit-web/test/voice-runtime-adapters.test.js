@@ -73,3 +73,36 @@ test("WP8 adapter cancellation is idempotent and blocks use after cancel", async
   assert.equal(resets, 1);
   await assert.rejects(adapters.stream.feed({ pcm16: Buffer.alloc(2), startSample: 0, endSample: 1 }), { code: "voice_stream_not_open" });
 });
+
+test("WP10 transcribe-rs BatchPort preserves absolute range metadata and verified timestamps", async () => {
+  const profile = VOICE_EXECUTION_CATALOG.profiles.find((candidate) => candidate.runtimeId === "transcribe-rs" && candidate.execution === "eager");
+  const calls = [];
+  const adapters = createVoiceRuntimeAdapters({
+    profile,
+    modelManager: {
+      transcribe: async (_modelId, pcm, options) => {
+        calls.push({ pcm, options });
+        return {
+          text: "pause phrase",
+          fromSample: options.startSample,
+          throughSample: options.endSample,
+          timestamps: [{ text: "pause phrase", fromSample: options.startSample, throughSample: options.endSample }],
+          timestampsVerified: true,
+        };
+      },
+    },
+  });
+  const result = await adapters.batch.transcribe({
+    pcm16: Buffer.from([0, 0, 1, 0]),
+    operationId: "range-4",
+    sequence: 4,
+    startSample: 8_000,
+    endSample: 8_002,
+  });
+  assert.equal(result.text, "pause phrase");
+  assert.equal(result.timestampsVerified, true);
+  assert.deepEqual(result.timestamps, [{ text: "pause phrase", fromSample: 8_000, throughSample: 8_002 }]);
+  assert.equal(calls[0].options.runtimeId, "transcribe-rs");
+  assert.equal(calls[0].options.startSample, 8_000);
+  assert.equal(calls[0].options.endSample, 8_002);
+});
