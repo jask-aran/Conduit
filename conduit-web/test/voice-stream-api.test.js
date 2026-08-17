@@ -323,7 +323,7 @@ test("Unified English batch adapter transcribes the complete PCM once and does n
       computeBackend: "cpu",
       capabilities: { language: "en", inferenceMode: "batch", partials: false, externalVad: false, precision: "q8", memory: { modelBytes: 731357568 } },
       native: { package: "transcribe-cpp", version: "0.1.3", headerHash: "86b16dd97ad1cb58" },
-      transcribe: async (pcm) => { calls.push(Buffer.from(pcm)); return "complete unified batch"; },
+      transcribe: async (pcm, options) => { calls.push({ pcm: Buffer.from(pcm), options }); return "complete unified batch"; },
     },
   });
   const client = new WebSocket(`${origin}/dictation`);
@@ -343,7 +343,10 @@ test("Unified English batch adapter transcribes the complete PCM once and does n
     assert.equal(completed.progressiveBatch, false);
     assert.equal(completed.capabilities.externalVad, false);
     assert.equal(calls.length, 1);
-    assert.equal(calls[0].length, 4_096);
+    assert.equal(calls[0].pcm.length, 4_096);
+    assert.match(calls[0].options.operationId, /^[0-9a-f-]+:batch:1$/);
+    assert.match(calls[0].options.sessionId, /^[0-9a-f-]+$/);
+    assert.equal(calls[0].options.signal instanceof AbortSignal, true);
   } finally {
     client.terminate();
     await new Promise((resolve) => setTimeout(resolve, 25));
@@ -386,6 +389,16 @@ test("Unified English stream adapter coalesces PCM, exposes revisions, and stays
       precision: "q8",
       backend: "transcribe_cpp",
       computeBackend: "cpu",
+      modelId: "parakeet-unified-en-0.6b",
+      artifactId: "parakeet-unified-en-0.6b-q8-gguf",
+      runtimeId: "transcribe-cpp",
+      backendPathId: "parakeet-unified-en-0.6b-q8-gguf.transcribe-cpp",
+      resolvedProfileId: "parakeet-unified-en-0.6b-q8-gguf.live",
+      execution: "live",
+      segmentation: "none",
+      requestedComputeBackend: "auto",
+      actualComputeBackend: "cpu",
+      loadedRuntimeVersion: "0.1.3",
       capabilities: {
         language: "en",
         inferenceMode: "streaming",
@@ -433,6 +446,16 @@ test("Unified English stream adapter coalesces PCM, exposes revisions, and stays
     assert.equal(completed.text, "First phrase follows");
     assert.equal(completed.adapter, "transcribe_cpp_stream_v1");
     assert.equal(completed.inferenceMode, "streaming");
+    assert.equal(completed.modelId, "parakeet-unified-en-0.6b");
+    assert.equal(completed.artifactId, "parakeet-unified-en-0.6b-q8-gguf");
+    assert.equal(completed.runtimeId, "transcribe-cpp");
+    assert.equal(completed.backendPathId, "parakeet-unified-en-0.6b-q8-gguf.transcribe-cpp");
+    assert.equal(completed.resolvedProfileId, "parakeet-unified-en-0.6b-q8-gguf.live");
+    assert.equal(completed.execution, "live");
+    assert.equal(completed.segmentation, "none");
+    assert.equal(completed.requestedComputeBackend, "auto");
+    assert.equal(completed.actualComputeBackend, "cpu");
+    assert.equal(completed.loadedRuntimeVersion, "0.1.3");
     assert.equal(completed.progressiveBatch, false);
     assert.equal(completed.capabilities.partials, true);
     assert.equal(completed.diagnostics.server.inference.streaming.feedCount, 3);
@@ -910,7 +933,29 @@ test("successful dictation stores the server PCM with transcript diagnostics", a
     { event: "transcript.text.done", data: { type: "transcript.text.done", text: "long pause test" } },
   ]);
   const recordingStore = new VoiceRecordingStore({ root: recordingsRoot });
-  const { bridge, origin } = await startDictationBridge({ upstreamPort: upstream.address().port, recordingStore });
+  const { bridge, origin } = await startDictationBridge({
+    upstreamPort: upstream.address().port,
+    recordingStore,
+    runtimeConfig: {
+      mode: "remote",
+      provider: "custom",
+      adapter: "openai_audio_sse_v1",
+      model: "whisper-tiny-en-q8",
+      endpoint: `http://127.0.0.1:${upstream.address().port}/v1/audio/transcriptions`,
+      headers: {},
+      allowPrivate: true,
+      modelId: "whisper-tiny-en",
+      artifactId: "whisper-tiny-en-q8",
+      runtimeId: "transformers-js",
+      backendPathId: "whisper-tiny-en-q8.transformers-js",
+      resolvedProfileId: "whisper-tiny-en-q8.eager",
+      execution: "eager",
+      segmentation: "silero",
+      requestedComputeBackend: "wasm-cpu",
+      actualComputeBackend: "wasm-cpu",
+      loadedRuntimeVersion: "transformers.js-3.8.1",
+    },
+  });
   const client = new WebSocket(`${origin}/dictation`);
   const next = messageQueue(client);
   const audible = (value) => {
@@ -976,6 +1021,16 @@ test("successful dictation stores the server PCM with transcript diagnostics", a
     assert.equal(metadata.diagnostics.client.durations.stopToFinalMs, 8);
     assert.equal(metadata.provider, "custom");
     assert.equal(metadata.adapter, "openai_audio_sse_v1");
+    assert.equal(metadata.modelId, "whisper-tiny-en");
+    assert.equal(metadata.artifactId, "whisper-tiny-en-q8");
+    assert.equal(metadata.runtimeId, "transformers-js");
+    assert.equal(metadata.backendPathId, "whisper-tiny-en-q8.transformers-js");
+    assert.equal(metadata.resolvedProfileId, "whisper-tiny-en-q8.eager");
+    assert.equal(metadata.execution, "eager");
+    assert.equal(metadata.segmentation, "silero");
+    assert.equal(metadata.requestedComputeBackend, "wasm-cpu");
+    assert.equal(metadata.actualComputeBackend, "wasm-cpu");
+    assert.equal(metadata.loadedRuntimeVersion, "transformers.js-3.8.1");
     assert.equal(metadata.diagnostics.client.capture.requestedConstraints.audio.deviceId.exact, "[redacted]");
     assert.equal(metadata.diagnostics.client.capture.effectiveTrackSettings.deviceId, "[redacted]");
     assert.equal(metadata.diagnostics.client.capture.effectiveTrackSettings.groupId, "[redacted]");

@@ -1,4 +1,5 @@
 import { performance } from "node:perf_hooks";
+import { randomUUID } from "node:crypto";
 import { WebSocket } from "ws";
 import { OPENAI_LIVE_ADAPTER, OPENAI_LIVE_MODEL } from "../voice-settings.js";
 import { selectSileroVadRanges } from "./voice-vad.js";
@@ -793,19 +794,20 @@ function remoteSpeechRanges(pcm, byteLength, segmentation, limits, diagnostics) 
   return { analysis, pcm: pcm.subarray(start * 2, end * 2), byteLength: (end - start) * 2 };
 }
 
-export function createHttpAdapter(config, emit, limits, fetchImpl, diagnostics = null) {
+export function createHttpAdapter(config, emit, limits, fetchImpl, diagnostics = null, { signal: sessionSignal = null } = {}) {
   const chunks = [];
   let byteLength = 0;
-  const controller = new AbortController();
+  const controller = sessionSignal ? null : new AbortController();
+  const signal = sessionSignal || controller.signal;
   const upload = async (pcm) => {
-    if (!pcm.length || controller.signal.aborted) return { final: false, text: "" };
+    if (!pcm.length || signal.aborted) return { final: false, text: "" };
     const form = new FormData();
     form.append("file", wavBlob([pcm], pcm.length), "dictation.wav");
     form.append("response_format", "json");
     if (config.model) form.append("model", config.model);
     if (config.provider !== "groq") form.append("stream", "true");
     if (diagnostics) markInferenceStart(diagnostics);
-    const response = await fetchImpl(config.endpoint, { method: "POST", headers: { "User-Agent": "ConduitVoice/1.0", ...config.headers }, body: form, signal: controller.signal, redirect: "error" });
+    const response = await fetchImpl(config.endpoint, { method: "POST", headers: { "User-Agent": "ConduitVoice/1.0", ...config.headers }, body: form, signal, redirect: "error" });
     let text = "";
     await readSse(response, (event) => {
       if (event.type === "final") {
@@ -818,7 +820,7 @@ export function createHttpAdapter(config, emit, limits, fetchImpl, diagnostics =
     return { final: Boolean(text), text };
   };
   const transcribe = async ({ segmentation = null } = {}) => {
-    if (!byteLength || controller.signal.aborted) return { final: false, text: "" };
+    if (!byteLength || signal.aborted) return { final: false, text: "" };
     if (diagnostics) markInferenceQueued(diagnostics);
     const selected = remoteSpeechRanges(Buffer.concat(chunks, byteLength), byteLength, segmentation, limits, diagnostics);
     try {
@@ -847,16 +849,29 @@ export function createHttpAdapter(config, emit, limits, fetchImpl, diagnostics =
         if (error.name !== "AbortError") emit({ type: "error", code: error.code || "asr_request_failed", message: error.message });
       }
     },
-    close() { controller.abort(); chunks.length = 0; },
+    close() { controller?.abort(); chunks.length = 0; },
   };
 }
 
-function createSnapshotAdapter(emit, limits, transcribe, diagnostics = null, { progressive = true, useSegmentation = true } = {}) {
+function createSnapshotAdapter(emit, limits, transcribe, diagnostics = null, {
+  progressive = true,
+  useSegmentation = true,
+  signal = null,
+  sessionId = null,
+  nextOperationId = null,
+} = {}) {
   const chunks = [];
   let byteLength = 0;
+  let closed = false;
   const snapshot = () => Buffer.concat(chunks, byteLength);
-  const transcribeRange = async ({ startSample = 0, endSample = 0 } = {}) => {
-    if (!byteLength) return "";
+  const invoke = async (pcm, options = {}) => {
+    if (closed || signal?.aborted) return "";
+    const operationId = options.operationId || nextOperationId?.("batch") || `voice-batch-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    const result = await transcribe(pcm, { ...options, operationId, sessionId, signal });
+    return signal?.aborted || closed ? "" : String(result || "").trim();
+  };
+  const transcribeRange = async ({ startSample = 0, endSample = 0, sequence = 0 } = {}) => {
+    if (!byteLength || closed || signal?.aborted) return "";
     const pcm = snapshot();
     const start = Math.max(0, Math.min(Math.floor(startSample), Math.floor(byteLength / 2)));
     const end = Math.max(start, Math.min(Math.floor(endSample), Math.floor(byteLength / 2)));
@@ -866,13 +881,13 @@ function createSnapshotAdapter(emit, limits, transcribe, diagnostics = null, { p
       markInferenceStart(diagnostics);
     }
     try {
-      return String(await transcribe(pcm.subarray(start * 2, end * 2)) || "").trim();
+      return await invoke(pcm.subarray(start * 2, end * 2), { sequence, startSample: start, endSample: end });
     } finally {
       if (diagnostics) markInferenceComplete(diagnostics);
     }
   };
   const run = async ({ segmentation = null } = {}) => {
-    if (!byteLength) return { final: false, text: "" };
+    if (!byteLength || closed || signal?.aborted) return { final: false, text: "" };
     if (diagnostics) markInferenceQueued(diagnostics);
     const snapshot = Buffer.concat(chunks, byteLength);
     const analysis = useSegmentation
@@ -880,10 +895,10 @@ function createSnapshotAdapter(emit, limits, transcribe, diagnostics = null, { p
       : { segments: [[0, Math.floor(byteLength / 2)]] };
     const segments = analysis.segments;
     let text = "";
-    for (const [startSample, endSample] of segments) {
+    for (const [sequence, [startSample, endSample]] of segments.entries()) {
       const piece = snapshot.subarray(startSample * 2, endSample * 2);
       if (diagnostics) markInferenceStart(diagnostics);
-      const pieceText = String(await transcribe(piece) || "").trim();
+      const pieceText = await invoke(piece, { sequence, startSample, endSample });
       if (pieceText) text = appendText(text, pieceText);
     }
     if (text) emit({ type: "final", text });
@@ -909,7 +924,7 @@ function createSnapshotAdapter(emit, limits, transcribe, diagnostics = null, { p
       } catch (error) { emit({ type: "error", code: error.code || "asr_request_failed", message: error.message }); }
     },
     ...(progressive ? { transcribeRange } : {}),
-    close() { chunks.length = 0; },
+    close() { closed = true; byteLength = 0; chunks.length = 0; },
   };
 }
 
@@ -1437,7 +1452,7 @@ export function createTranscribeCppStreamAdapter(emit, limits = {}, openStream, 
   };
 }
 
-export function createDeepgramAdapter(config, emit, limits, fetchImpl, diagnostics = null) {
+export function createDeepgramAdapter(config, emit, limits, fetchImpl, diagnostics = null, options = {}) {
   return createSnapshotAdapter(emit, limits, async (pcm) => {
     const endpoint = new URL(config.endpoint);
     endpoint.searchParams.set("model", config.model || "nova-3");
@@ -1452,7 +1467,7 @@ export function createDeepgramAdapter(config, emit, limits, fetchImpl, diagnosti
     if (!response.ok) throw dictationError("asr_request_failed", `Deepgram returned ${response.status}`, 502);
     const result = await response.json();
     return result?.results?.channels?.[0]?.alternatives?.[0]?.transcript || "";
-  }, diagnostics, { progressive: false, useSegmentation: false });
+  }, diagnostics, { progressive: false, useSegmentation: false, ...options });
 }
 
 export function createDictationStream({ wss, voiceRuntime, recordingStore = null, fetchImpl = fetch, limits: limitOverrides = {} }) {
@@ -1465,7 +1480,18 @@ export function createDictationStream({ wss, voiceRuntime, recordingStore = null
       return;
     }
     activeSessions += 1;
-    voiceRuntime.pin?.();
+    const lease = typeof voiceRuntime.acquireLease === "function"
+      ? voiceRuntime.acquireLease()
+      : (voiceRuntime.pin?.(), null);
+    const releaseRuntimeLease = typeof lease === "function"
+      ? lease
+      : typeof lease?.release === "function"
+        ? () => lease.release()
+        : () => voiceRuntime.unpin?.();
+    const sessionId = randomUUID();
+    const sessionController = new AbortController();
+    let operationSequence = 0;
+    const nextOperationId = (kind) => `${sessionId}:${kind}:${++operationSequence}`;
     let adapter = null;
     let adapterReady = false;
     let pendingStreamChunks = [];
@@ -1522,6 +1548,16 @@ export function createDictationStream({ wss, voiceRuntime, recordingStore = null
       computeBackend: null,
       capabilities: null,
       native: null,
+      modelId: null,
+      artifactId: null,
+      runtimeId: null,
+      backendPathId: null,
+      resolvedProfileId: null,
+      execution: null,
+      segmentation: null,
+      requestedComputeBackend: null,
+      actualComputeBackend: null,
+      loadedRuntimeVersion: null,
       progressiveBatch: false,
       streamFallback: null,
     };
@@ -1535,6 +1571,8 @@ export function createDictationStream({ wss, voiceRuntime, recordingStore = null
       adapter?.close();
       adapter = null;
       adapterReady = false;
+      if (!sessionController.signal.aborted) sessionController.abort();
+      releaseRuntimeLease();
     };
     const diagnosticsPayload = () => ({
       client: diagnostics.client,
@@ -2065,6 +2103,16 @@ export function createDictationStream({ wss, voiceRuntime, recordingStore = null
         computeBackend: typeof config.computeBackend === "string" ? config.computeBackend : null,
         capabilities: config.capabilities && typeof config.capabilities === "object" ? config.capabilities : null,
         native: config.native && typeof config.native === "object" ? config.native : null,
+        modelId: typeof config.modelId === "string" ? config.modelId : null,
+        artifactId: typeof config.artifactId === "string" ? config.artifactId : null,
+        runtimeId: typeof config.runtimeId === "string" ? config.runtimeId : null,
+        backendPathId: typeof config.backendPathId === "string" ? config.backendPathId : null,
+        resolvedProfileId: typeof config.resolvedProfileId === "string" ? config.resolvedProfileId : null,
+        execution: typeof config.execution === "string" ? config.execution : null,
+        segmentation: typeof config.segmentation === "string" ? config.segmentation : null,
+        requestedComputeBackend: typeof config.requestedComputeBackend === "string" ? config.requestedComputeBackend : null,
+        actualComputeBackend: typeof config.actualComputeBackend === "string" ? config.actualComputeBackend : config.computeBackend || null,
+        loadedRuntimeVersion: typeof config.loadedRuntimeVersion === "string" ? config.loadedRuntimeVersion : null,
         progressiveBatch: false,
         streamFallback: null,
       };
@@ -2077,6 +2125,16 @@ export function createDictationStream({ wss, voiceRuntime, recordingStore = null
         computeBackend: runtimeMetadata.computeBackend,
         capabilities: runtimeMetadata.capabilities,
         native: runtimeMetadata.native,
+        modelId: runtimeMetadata.modelId,
+        artifactId: runtimeMetadata.artifactId,
+        runtimeId: runtimeMetadata.runtimeId,
+        backendPathId: runtimeMetadata.backendPathId,
+        resolvedProfileId: runtimeMetadata.resolvedProfileId,
+        execution: runtimeMetadata.execution,
+        segmentation: runtimeMetadata.segmentation,
+        requestedComputeBackend: runtimeMetadata.requestedComputeBackend,
+        actualComputeBackend: runtimeMetadata.actualComputeBackend,
+        loadedRuntimeVersion: runtimeMetadata.loadedRuntimeVersion,
         streamFallback: runtimeMetadata.streamFallback,
       };
       const updateRuntimeDiagnostics = () => {
@@ -2089,6 +2147,16 @@ export function createDictationStream({ wss, voiceRuntime, recordingStore = null
           computeBackend: runtimeMetadata.computeBackend,
           capabilities: runtimeMetadata.capabilities,
           native: runtimeMetadata.native,
+          modelId: runtimeMetadata.modelId,
+          artifactId: runtimeMetadata.artifactId,
+          runtimeId: runtimeMetadata.runtimeId,
+          backendPathId: runtimeMetadata.backendPathId,
+          resolvedProfileId: runtimeMetadata.resolvedProfileId,
+          execution: runtimeMetadata.execution,
+          segmentation: runtimeMetadata.segmentation,
+          requestedComputeBackend: runtimeMetadata.requestedComputeBackend,
+          actualComputeBackend: runtimeMetadata.actualComputeBackend,
+          loadedRuntimeVersion: runtimeMetadata.loadedRuntimeVersion,
           streamFallback: runtimeMetadata.streamFallback,
         };
       };
@@ -2118,19 +2186,21 @@ export function createDictationStream({ wss, voiceRuntime, recordingStore = null
           };
           diagnostics.streaming.fallback = runtimeMetadata.streamFallback;
           updateRuntimeDiagnostics();
-          next = createSnapshotAdapter(emit, limits, config.transcribe, diagnostics);
+          next = createSnapshotAdapter(emit, limits, config.transcribe, diagnostics, { signal: sessionController.signal, sessionId, nextOperationId });
         }
       } else if (config.adapter === OPENAI_LIVE_ADAPTER) {
         next = createOpenaiRealtimeStreamAdapter(emit, limits, config.stream, diagnostics);
         await next.opened;
       } else if (config.adapter === "deepgram_audio_v1") {
-        next = createDeepgramAdapter(config, emit, limits, fetchImpl, diagnostics);
+        next = createDeepgramAdapter(config, emit, limits, fetchImpl, diagnostics, { signal: sessionController.signal, sessionId, nextOperationId });
       } else if (config.adapter === "transcribe_cpp_batch_v1") {
-        next = createSnapshotAdapter(emit, limits, config.transcribe, diagnostics, { progressive: false, useSegmentation: false });
+        next = createSnapshotAdapter(emit, limits, config.transcribe, diagnostics, { progressive: false, useSegmentation: false, signal: sessionController.signal, sessionId, nextOperationId });
       } else if (config.adapter === "managed_transformers_v1") {
-        next = createSnapshotAdapter(emit, limits, config.transcribe, diagnostics);
+        next = createSnapshotAdapter(emit, limits, config.transcribe, diagnostics, { signal: sessionController.signal, sessionId, nextOperationId });
+      } else if (config.adapter === "managed_parakeet_loopback_v1") {
+        next = createSnapshotAdapter(emit, limits, config.transcribe, diagnostics, { progressive: false, useSegmentation: false, signal: sessionController.signal, sessionId, nextOperationId });
       } else {
-        next = createHttpAdapter(config, emit, limits, fetchImpl, diagnostics);
+        next = createHttpAdapter(config, emit, limits, fetchImpl, diagnostics, { signal: sessionController.signal });
       }
       if (config.adapter === "transcribe_cpp_stream_v1" && typeof config.transcribe === "function" && runtimeMetadata.adapter === "transcribe_cpp_stream_v1") {
         const startLiveFallback = async (event) => {
@@ -2160,7 +2230,7 @@ export function createDictationStream({ wss, voiceRuntime, recordingStore = null
           };
           diagnostics.streaming.fallback = runtimeMetadata.streamFallback;
           updateRuntimeDiagnostics();
-          const fallbackAdapter = createSnapshotAdapter(emit, limits, config.transcribe, diagnostics);
+          const fallbackAdapter = createSnapshotAdapter(emit, limits, config.transcribe, diagnostics, { signal: sessionController.signal, sessionId, nextOperationId });
           await fallbackAdapter.opened;
           if (completed) {
             fallbackAdapter.close();
@@ -2267,7 +2337,6 @@ export function createDictationStream({ wss, voiceRuntime, recordingStore = null
       }
       settleAdapter(null);
       activeSessions = Math.max(0, activeSessions - 1);
-      voiceRuntime.unpin?.();
     });
   });
   return { handleUpgrade, activeSessions: () => activeSessions };

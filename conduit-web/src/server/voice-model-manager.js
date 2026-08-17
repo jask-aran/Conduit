@@ -5,85 +5,12 @@ import net from "node:net";
 import path from "node:path";
 import { Readable, Transform } from "node:stream";
 import { pipeline as streamPipeline } from "node:stream/promises";
-import { getVoiceModelManifest, ONNXRUNTIME_VERSION, TRANSCRIBE_CPP_RUNTIME } from "./voice-model-manifests.js";
+import { getVoiceModelManifest, ONNXRUNTIME_VERSION } from "./voice-model-manifests.js";
+import { LEGACY_LOCAL_VOICE_MODELS, VOICE_EXECUTION_CATALOG, publicVoiceExecutionCatalog } from "./voice-execution-catalog.js";
 import { SileroVad, VoiceVadObservationQueue } from "./voice-vad.js";
 
 const MIB = 1024 * 1024;
-export const LOCAL_VOICE_MODELS = Object.freeze([
-  {
-    id: "whisper-tiny-en-q8", label: "Whisper Tiny English", engine: "transformers-whisper", size: "tiny", languages: "English",
-    description: "Smallest and fastest option for lightweight English dictation.", approximateBytes: 48 * MIB, minimumFreeBytes: 128 * MIB,
-    repository: "onnx-community/whisper-tiny.en", revision: "2575352d61be1bf7225cf8f8b268a4678025fc58", precision: "q8",
-    license: { id: "MIT", attribution: "OpenAI Whisper and the ONNX Community conversion" },
-  },
-  {
-    id: "whisper-tiny-en-fp32", label: "Whisper Tiny English (fp32)", engine: "transformers-whisper", size: "tiny", languages: "English",
-    description: "Full-precision Tiny tier for CPU-light accuracy comparisons.", approximateBytes: 155 * MIB, minimumFreeBytes: 256 * MIB,
-    repository: "onnx-community/whisper-tiny.en", revision: "2575352d61be1bf7225cf8f8b268a4678025fc58", precision: "fp32",
-    license: { id: "MIT", attribution: "OpenAI Whisper and the ONNX Community conversion" },
-  },
-  {
-    id: "whisper-base-q8", label: "Whisper Base", engine: "transformers-whisper", size: "small", languages: "Multilingual",
-    description: "Balanced multilingual model for modest CPU and memory budgets.", approximateBytes: 86 * MIB, minimumFreeBytes: 192 * MIB,
-    repository: "onnx-community/whisper-base", revision: "1846881b6b3a3024392c1eea3ad983695bc23925", precision: "q8",
-    license: { id: "MIT", attribution: "OpenAI Whisper and the ONNX Community conversion" },
-  },
-  {
-    id: "whisper-base-fp32", label: "Whisper Base (fp32)", engine: "transformers-whisper", size: "small", languages: "Multilingual",
-    description: "Full-precision Base tier for multilingual accuracy comparisons.", approximateBytes: 288 * MIB, minimumFreeBytes: 512 * MIB,
-    repository: "onnx-community/whisper-base", revision: "1846881b6b3a3024392c1eea3ad983695bc23925", precision: "fp32",
-    license: { id: "MIT", attribution: "OpenAI Whisper and the ONNX Community conversion" },
-  },
-  {
-    id: "whisper-small-q8", label: "Whisper Small", engine: "transformers-whisper", size: "medium", languages: "Multilingual",
-    description: "More accurate multilingual Whisper tier with a larger memory footprint.", approximateBytes: 260 * MIB, minimumFreeBytes: 480 * MIB,
-    repository: "onnx-community/whisper-small", revision: "36050c46d777d46dc4b5f43f6d90574fc38f8732", precision: "q8",
-    license: { id: "MIT", attribution: "OpenAI Whisper and the ONNX Community conversion" },
-  },
-  {
-    id: "whisper-small-fp32", label: "Whisper Small (fp32)", engine: "transformers-whisper", size: "medium", languages: "Multilingual",
-    description: "Full-precision Whisper Small tier for maximum embedded accuracy.", approximateBytes: 936 * MIB, minimumFreeBytes: 1536 * MIB,
-    repository: "onnx-community/whisper-small", revision: "36050c46d777d46dc4b5f43f6d90574fc38f8732", precision: "fp32",
-    license: { id: "MIT", attribution: "OpenAI Whisper and the ONNX Community conversion" },
-  },
-  {
-    id: "whisper-large-v3-turbo-q8", label: "Whisper Large v3 Turbo", engine: "transformers-whisper", size: "large", languages: "Multilingual",
-    description: "The most accurate embedded Whisper tier with fast turbo decoding for live dictation.", approximateBytes: 1040 * MIB, minimumFreeBytes: 1536 * MIB,
-    repository: "onnx-community/whisper-large-v3-turbo", revision: "360ebcde2559d60bb474678be3c1de9ef347d01a", precision: "q8",
-    license: { id: "MIT", attribution: "OpenAI Whisper and the ONNX Community conversion" },
-  },
-  {
-    id: "parakeet-unified-en-0.6b-q8", label: "Parakeet Unified English Q8", engine: "transcribe-cpp", size: "large", languages: "English",
-    description: "English-only Unified Parakeet Q8 batch model through the verified transcribe.cpp runtime.", approximateBytes: 731357568, minimumFreeBytes: 1024 * MIB,
-    repository: "handy-computer/parakeet-unified-en-0.6b-gguf", revision: "7e948f21b7bdbac698d3318db9d350f1096f3b6c", sourceRevision: "d4ac9928f3bf238223ff0779c06b8149bf8ac4e1",
-    modelFile: "parakeet-unified-en-0.6b-Q8_0.gguf", runtimeVersion: TRANSCRIBE_CPP_RUNTIME.version, precision: "q8",
-    license: { id: "CC-BY-4.0", attribution: "NVIDIA Parakeet Unified English and the Handy transcribe.cpp port" },
-  },
-  {
-    id: "parakeet-tdt-0.6b-v2-int8", label: "Parakeet TDT 0.6B v2", engine: "parakeet", size: "large", languages: "English",
-    description: "English-only Parakeet; slightly more accurate than v3 on English, same CPU int8 runtime.", approximateBytes: 650 * MIB, minimumFreeBytes: 900 * MIB,
-    repository: "istupakov/parakeet-tdt-0.6b-v2-onnx", revision: "0bbb45a3365852604aef28b538a8f066f4ccaa85", precision: "int8",
-    license: { id: "CC-BY-4.0", attribution: "NVIDIA Parakeet TDT 0.6B v2 and the istupakov ONNX conversion" },
-  },
-  {
-    id: "parakeet-tdt-0.6b-v2-fp32", label: "Parakeet TDT 0.6B v2 (fp32)", engine: "parakeet", size: "large", languages: "English",
-    description: "English-only full-precision Parakeet for accuracy comparisons.", approximateBytes: 2440 * MIB, minimumFreeBytes: 3584 * MIB,
-    repository: "istupakov/parakeet-tdt-0.6b-v2-onnx", revision: "0bbb45a3365852604aef28b538a8f066f4ccaa85", precision: "fp32",
-    license: { id: "CC-BY-4.0", attribution: "NVIDIA Parakeet TDT 0.6B v2 and the istupakov ONNX conversion" },
-  },
-  {
-    id: "parakeet-tdt-0.6b-v3-int8", label: "Parakeet TDT 0.6B v3", engine: "parakeet", size: "large", languages: "25 European",
-    description: "Multilingual Parakeet covering English plus 24 other European languages; optimized ONNX int8 runtime.", approximateBytes: 900 * MIB, minimumFreeBytes: 900 * MIB,
-    repository: "istupakov/parakeet-tdt-0.6b-v3-onnx", revision: "8f23f0c03c8761650bdb5b40aaf3e40d2c15f1ce", precision: "int8",
-    license: { id: "CC-BY-4.0", attribution: "NVIDIA Parakeet TDT 0.6B v3 and the istupakov ONNX conversion" },
-  },
-  {
-    id: "parakeet-tdt-0.6b-v3-fp32", label: "Parakeet TDT 0.6B v3 (fp32)", engine: "parakeet", size: "large", languages: "25 European",
-    description: "Full-precision multilingual Parakeet for accuracy comparisons.", approximateBytes: 2480 * MIB, minimumFreeBytes: 3584 * MIB,
-    repository: "istupakov/parakeet-tdt-0.6b-v3-onnx", revision: "8f23f0c03c8761650bdb5b40aaf3e40d2c15f1ce", precision: "fp32",
-    license: { id: "CC-BY-4.0", attribution: "NVIDIA Parakeet TDT 0.6B v3 and the istupakov ONNX conversion" },
-  },
-]);
+export const LOCAL_VOICE_MODELS = LEGACY_LOCAL_VOICE_MODELS;
 
 const MODEL_BY_ID = new Map(LOCAL_VOICE_MODELS.map((model) => [model.id, model]));
 
@@ -316,9 +243,10 @@ function pcmFloat32(buffer) {
 export const DEFAULT_VOICE_MODEL_IDLE_TTL_MS = 5 * 60 * 1000;
 
 export class VoiceModelManager {
-  constructor({ root, fetchImpl = fetch, manifestResolver = packageManifest, runtimeExtractor = extractRuntime, transformersLoader = defaultTransformersLoader, transcribeCppLoader = defaultTranscribeCppLoader, downloadRetries = DOWNLOAD_RETRIES, downloadRetryBaseMs = DOWNLOAD_RETRY_BASE_MS, downloadConcurrency = 3, idleTtlMs = DEFAULT_VOICE_MODEL_IDLE_TTL_MS, vad = null, vadModelPath = null, vadSessionFactory = undefined } = {}) {
+  constructor({ root, catalog = VOICE_EXECUTION_CATALOG, fetchImpl = fetch, manifestResolver = packageManifest, runtimeExtractor = extractRuntime, transformersLoader = defaultTransformersLoader, transcribeCppLoader = defaultTranscribeCppLoader, downloadRetries = DOWNLOAD_RETRIES, downloadRetryBaseMs = DOWNLOAD_RETRY_BASE_MS, downloadConcurrency = 3, idleTtlMs = DEFAULT_VOICE_MODEL_IDLE_TTL_MS, vad = null, vadModelPath = null, vadSessionFactory = undefined } = {}) {
     if (!root) throw new Error("VoiceModelManager requires a root directory");
     this.root = path.resolve(root);
+    this.catalog = catalog;
     this.fetchImpl = fetchImpl;
     this.manifestResolver = manifestResolver;
     this.runtimeExtractor = runtimeExtractor;
@@ -343,6 +271,7 @@ export class VoiceModelManager {
     this.vadStreamTail = Promise.resolve();
     this.vadStreams = new Set();
     this.lastErrors = new Map();
+    this.lastErrorCodes = new Map();
     this.progress = { phase: "idle", current: "", completedBytes: 0, totalBytes: 0 };
     this.vad = vad || new SileroVad({ root: this.root, modelPath: vadModelPath, sessionFactory: vadSessionFactory });
     this.vadQueue = new VoiceVadObservationQueue({ observer: (pcm, options) => this.scheduleVad(() => this.vad.observe(pcm, options)) });
@@ -402,7 +331,10 @@ export class VoiceModelManager {
   }
 
   async publicView() {
+    const backendPaths = await this.backendPathStatuses();
     return {
+      catalogue: publicVoiceExecutionCatalog(this.catalog),
+      backendPaths,
       installingModelId: this.installingModelId,
       progress: this.installPromise ? { ...this.progress } : null,
       activeModelId: this.activeModelId,
@@ -425,10 +357,17 @@ export class VoiceModelManager {
   startInstall({ modelId, licenseAccepted = false } = {}) {
     const model = this.assertInstall({ modelId, licenseAccepted });
     this.lastErrors.delete(model.id);
+    this.lastErrorCodes.delete(model.id);
     this.installingModelId = model.id;
     this.installController = new AbortController();
     this.installPromise = this.install(model, this.installController.signal)
-      .catch((error) => { if (error.name !== "AbortError") this.lastErrors.set(model.id, error.message); throw error; })
+      .catch((error) => {
+        if (error.name !== "AbortError") {
+          this.lastErrors.set(model.id, error.message);
+          this.lastErrorCodes.set(model.id, error.code || "voice_model_install_failed");
+        }
+        throw error;
+      })
       .finally(() => {
         this.installController = null; this.installPromise = null; this.installingModelId = null;
         this.progress = { phase: "idle", current: "", completedBytes: 0, totalBytes: 0 };
@@ -571,14 +510,14 @@ export class VoiceModelManager {
     throw modelError("voice_model_start_timeout", "Managed Parakeet did not become healthy in time", 504);
   }
 
-  async transcribe(modelId, pcm) {
+  async transcribe(modelId, pcm, options = {}) {
     const model = requiredModel(modelId);
     if (model.engine !== "transformers-whisper" && model.engine !== "transcribe-cpp") throw modelError("voice_model_engine", `${model.label} does not use the embedded transcription engine`, 409);
     await this.ensureRunning(model.id);
     const transcriber = this.transcriber;
     const task = this.transcriptionTail.then(() => model.engine === "transcribe-cpp"
-      ? transcriber.transcribe(pcmFloat32(Buffer.from(pcm)))
-      : transcriber(pcmFloat32(Buffer.from(pcm)), { chunk_length_s: 30, stride_length_s: 2 }));
+      ? transcriber.transcribe(pcmFloat32(Buffer.from(pcm)), { signal: options.signal })
+      : transcriber(pcmFloat32(Buffer.from(pcm)), { chunk_length_s: 30, stride_length_s: 2, ...(options.signal ? { signal: options.signal } : {}) }));
     this.transcriptionTail = task.then(() => undefined, () => undefined);
     const output = await task;
     return String(output?.text || "").trim();
@@ -677,6 +616,38 @@ export class VoiceModelManager {
     await fs.rm(this.modelRoot(model.id), { recursive: true, force: true });
     await fs.rm(this.stagingRoot(model.id), { recursive: true, force: true });
     this.lastErrors.delete(model.id);
+    this.lastErrorCodes.delete(model.id);
     return removed;
+  }
+
+  async backendPathStatuses() {
+    return Promise.all(this.catalog.backendPaths.map(async (backendPath) => {
+      const artifact = this.catalog.artifacts.find((candidate) => candidate.id === backendPath.artifactId);
+      const modelId = artifact?.legacyModelId;
+      const manifest = modelId ? await this.installedManifest(modelId) : null;
+      const active = modelId && this.activeModelId === modelId;
+      const runtime = modelId ? this.activeRuntime(LOCAL_VOICE_MODELS.find((model) => model.id === modelId)) : null;
+      const runtimeDefinition = this.catalog.runtimes.find((candidate) => candidate.id === backendPath.runtimeId);
+      const runtimeState = this.startingModelId === modelId || (this.startPromise && this.startingModelId === modelId)
+        ? "loading"
+        : this.lastErrors.has(modelId)
+          ? "failed"
+          : active
+            ? "warm"
+            : "cold";
+      const requestedComputeBackend = backendPath.runtimeId === "transcribe-cpp" ? "auto" : runtimeDefinition?.compiledComputeBackends?.[0] || null;
+      return {
+        backendPathId: backendPath.id,
+        installable: Boolean(artifact),
+        operational: Boolean(manifest && active && runtime),
+        blockedReason: null,
+        artifactState: this.installingModelId === modelId ? "installing" : manifest ? "installed" : this.lastErrors.has(modelId) ? "failed" : "absent",
+        runtimeState,
+        requestedComputeBackend,
+        actualComputeBackend: runtime?.computeBackend || null,
+        loadedRuntimeVersion: active ? runtime?.native?.version || runtime?.runtimeVersion || runtimeDefinition?.version || null : null,
+        lastErrorCode: this.lastErrorCodes.get(modelId) || null,
+      };
+    }));
   }
 }
