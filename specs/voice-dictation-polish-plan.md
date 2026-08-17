@@ -1,8 +1,8 @@
 # Voice dictation pipeline overhaul plan
 
-Status: **WP10 complete and checkpointed on 2026-08-17. WP0, WP1, WP2, WP3,
-WP4A, WP4B, WP5, WP6A, and WP8 approved. WP9 complete and checkpointed on
-2026-08-17. WP11 and WP12 have not started.**
+Status: **WP11 complete and checkpointed on 2026-08-17. WP0, WP1, WP2, WP3,
+WP4A, WP4B, WP5, WP6A, and WP8 approved. WP9, WP10, and WP11 are complete and
+checkpointed on 2026-08-17. WP12 has not started.**
 
 This document defines the active voice-dictation work. Git history preserves
 the completed polish sprint, its test counts, and its manual acceptance
@@ -152,8 +152,8 @@ compiled compute backends, actual compute backend, and resource cost.
   behaviour of `achetronic/parakeet`, but wants its progressive batching verified
   and improved rather than replacing that runtime. `transcribe-rs` is now
   integrated as the fourth runtime; the user may choose its default later.
-- **Work package 8 is approved. Work packages 11–12 have not started.** WP9
-  and WP10 are complete and checkpointed.
+- **Work package 8 is approved. WP11 is complete and checkpointed.** WP9 and
+  WP10 are complete and checkpointed. WP12 has not started.
 
 WP3, WP4A, WP4B, WP5, WP6A, WP6B manual approval, and the WP7–WP10 checkpoints
 are recorded below. WP7 owns the recorded live-latency follow-up.
