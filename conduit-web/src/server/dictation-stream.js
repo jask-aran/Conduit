@@ -2633,6 +2633,16 @@ export function createDictationStream({ wss, voiceRuntime, recordingStore = null
         });
       } else if (config.adapter === "managed_parakeet_loopback_v1") {
         next = createSnapshotAdapter(emit, limits, config.transcribe, diagnostics, { progressive: false, useSegmentation: false, signal: sessionController.signal, sessionId, nextOperationId, watermarks: watermarkHooks });
+      } else if (config.adapter === "transcribe_rs_batch_v1") {
+        const progressive = config.execution !== "stop";
+        next = createSnapshotAdapter(emit, limits, config.transcribe, diagnostics, {
+          progressive,
+          useSegmentation: progressive,
+          signal: sessionController.signal,
+          sessionId,
+          nextOperationId,
+          watermarks: watermarkHooks,
+        });
       } else {
         next = createHttpAdapter(config, emit, limits, fetchImpl, diagnostics, { signal: sessionController.signal, watermarks: watermarkHooks });
       }
