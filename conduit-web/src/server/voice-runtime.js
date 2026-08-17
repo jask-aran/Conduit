@@ -118,7 +118,7 @@ export class VoiceRuntime {
           : resolveVoiceExecutionProfile(migrateLocalSelection(config.localModelId, this.catalog).selection, this.catalog);
       const artifact = artifactForProfile(profile, this.catalog);
       const runtimeDefinition = runtimeForProfile(profile, this.catalog);
-      const local = await this.modelManager.ensureRunning(artifact.legacyModelId);
+      const local = await this.modelManager.ensureRunning(artifact.legacyModelId, { runtimeId: runtimeDefinition.id });
       const adapters = createVoiceRuntimeAdapters({
         profile,
         catalog: this.catalog,
@@ -136,6 +136,8 @@ export class VoiceRuntime {
           ? "managed_transformers_v1"
           : runtimeDefinition.adapterKind === "parakeet_loopback"
             ? "managed_parakeet_loopback_v1"
+            : runtimeDefinition.adapterKind === "transcribe_rs"
+              ? "transcribe_rs_batch_v1"
             : "transcribe_cpp_batch_v1";
       const transcribe = async (pcm, options = {}) => {
         const result = await adapters.batch.transcribe({
@@ -165,10 +167,10 @@ export class VoiceRuntime {
         segmentation: profile.segmentation,
         fallback: profile.fallback ? { ...profile.fallback } : null,
         precision: artifact.precision || modelPrecision(artifact.legacyModelId),
-        backend: local.backend || (runtimeDefinition.adapterKind === "transformers_js" ? "embedded_transformers" : runtimeDefinition.adapterKind === "parakeet_loopback" ? "loopback_parakeet" : "transcribe_cpp"),
-        computeBackend: local.computeBackend || (runtimeDefinition.adapterKind === "transformers_js" ? "wasm-cpu" : runtimeDefinition.adapterKind === "parakeet_loopback" ? "cpu" : null),
+        backend: local.backend || (runtimeDefinition.adapterKind === "transformers_js" ? "embedded_transformers" : runtimeDefinition.adapterKind === "parakeet_loopback" ? "loopback_parakeet" : runtimeDefinition.adapterKind === "transcribe_rs" ? "transcribe_rs" : "transcribe_cpp"),
+        computeBackend: local.computeBackend || (runtimeDefinition.adapterKind === "transformers_js" ? "wasm-cpu" : runtimeDefinition.adapterKind === "parakeet_loopback" || runtimeDefinition.adapterKind === "transcribe_rs" ? "cpu" : null),
         requestedComputeBackend: local.requestedComputeBackend || (profile.runtimeId === "transcribe-cpp" ? "auto" : runtimeDefinition.compiledComputeBackends[0] || null),
-        actualComputeBackend: local.computeBackend || (runtimeDefinition.adapterKind === "transformers_js" ? "wasm-cpu" : runtimeDefinition.adapterKind === "parakeet_loopback" ? "cpu" : null),
+        actualComputeBackend: local.actualComputeBackend || local.computeBackend || (runtimeDefinition.adapterKind === "transformers_js" ? "wasm-cpu" : runtimeDefinition.adapterKind === "parakeet_loopback" || runtimeDefinition.adapterKind === "transcribe_rs" ? "cpu" : null),
         loadedRuntimeVersion: local.runtimeVersion || local.native?.version || runtimeDefinition.version,
         capabilities: local.capabilities || { inferenceMode: profile.execution === "live" ? "streaming" : "batch", partials: profile.execution === "live" },
         streaming: actualStreaming ? local.capabilities?.streaming || null : null,
@@ -223,7 +225,7 @@ export class VoiceRuntime {
 
   async test() {
     const config = await this.resolve();
-    if (config.mode === "local") return this.modelManager.test(config.localModelId);
+    if (config.mode === "local") return this.modelManager.test(config.localModelId, { runtimeId: config.localSelection?.runtimeId || null });
     const testEndpoint = config.provider === "openai"
       ? `https://api.openai.com/v1/models/${encodeURIComponent(config.model)}`
       : config.provider === "groq"

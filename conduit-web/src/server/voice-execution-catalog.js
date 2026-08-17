@@ -2,6 +2,8 @@ import {
   ONNXRUNTIME_VERSION,
   TRANSCRIBE_CPP_RUNTIME,
   TRANSCRIBE_CPP_VERSION,
+  TRANSCRIBE_RS_RUNTIME,
+  TRANSCRIBE_RS_VERSION,
 } from "./voice-model-manifests.js";
 
 const MIB = 1024 * 1024;
@@ -137,6 +139,13 @@ const RUNTIME_DEFINITIONS = [
     version: `parakeet-${ONNXRUNTIME_VERSION}`,
     compiledComputeBackends: ["cpu"],
   },
+  {
+    id: "transcribe-rs",
+    adapterKind: "transcribe_rs",
+    version: `transcribe-rs-${TRANSCRIBE_RS_VERSION}`,
+    compiledComputeBackends: ["cpu"],
+    native: TRANSCRIBE_RS_RUNTIME,
+  },
 ];
 
 const runtimeIdForModel = (model) => model.engine === "transformers-whisper"
@@ -145,7 +154,7 @@ const runtimeIdForModel = (model) => model.engine === "transformers-whisper"
     ? "transcribe-cpp"
     : "parakeet-loopback";
 
-const ARTIFACT_DEFINITIONS = LEGACY_MODEL_DEFINITIONS.map((legacy) => ({
+const LEGACY_ARTIFACT_DEFINITIONS = LEGACY_MODEL_DEFINITIONS.map((legacy) => ({
   id: ARTIFACT_ID_BY_LEGACY_ID[legacy.id] || legacy.id,
   modelId: MODEL_ID_BY_LEGACY_ID[legacy.id],
   legacyModelId: legacy.id,
@@ -162,6 +171,18 @@ const ARTIFACT_DEFINITIONS = LEGACY_MODEL_DEFINITIONS.map((legacy) => ({
   runtimeVersion: legacy.runtimeVersion || null,
   license: legacy.license,
 }));
+
+const ARTIFACT_DEFINITIONS = [
+  ...LEGACY_ARTIFACT_DEFINITIONS,
+  ...LEGACY_ARTIFACT_DEFINITIONS
+    .filter((artifact) => artifact.runtimeId === "parakeet-loopback")
+    .map((artifact) => ({
+      ...artifact,
+      id: `${artifact.id}.transcribe-rs`,
+      runtimeId: "transcribe-rs",
+      runtimeVersion: TRANSCRIBE_RS_VERSION,
+    })),
+];
 
 const MODEL_DEFINITIONS = [...new Map(LEGACY_MODEL_DEFINITIONS.map((legacy) => {
   const modelId = MODEL_ID_BY_LEGACY_ID[legacy.id];
@@ -212,6 +233,7 @@ for (const artifact of ARTIFACT_DEFINITIONS) {
   const stop = profileFor(artifact, "stop");
   PROFILE_DEFINITIONS.push(stop);
   if (artifact.runtimeId === "transformers-js") PROFILE_DEFINITIONS.push(profileFor(artifact, "eager", "silero"));
+  if (artifact.runtimeId === "transcribe-rs") PROFILE_DEFINITIONS.push(profileFor(artifact, "eager", "silero"));
   if (artifact.runtimeId === "transcribe-cpp") {
     const live = profileFor(artifact, "live");
     live.fallback = { profileId: stop.id, allowed: "after_stable_checkpoint", replay: "from_committed_sample" };

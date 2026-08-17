@@ -6,6 +6,26 @@ function huggingFaceBase() {
 const PARAKEET_VERSION = "v0.8.0";
 export const ONNXRUNTIME_VERSION = "1.25.1";
 export const TRANSCRIBE_CPP_VERSION = "0.1.3";
+export const TRANSCRIBE_RS_VERSION = "0.3.8";
+export const TRANSCRIBE_RS_ORT_VERSION = "1.24.2";
+export const TRANSCRIBE_RS_CRATE_CHECKSUM = "b231bc9bd1b20be89583a49c3885dfa7d7323299564ee78eddf83db04f2b337b";
+export const TRANSCRIBE_RS_ORT_CHECKSUM = "d7de3af33d24a745ffb8fab904b13478438d1cd52868e6f17735ef6e1f8bf133";
+export const TRANSCRIBE_RS_RUNTIME = Object.freeze({
+  package: "transcribe-rs",
+  version: TRANSCRIBE_RS_VERSION,
+  license: "MIT",
+  crateChecksum: TRANSCRIBE_RS_CRATE_CHECKSUM,
+  ort: {
+    package: "ort",
+    version: "2.0.0-rc.12",
+    runtimeVersion: TRANSCRIBE_RS_ORT_VERSION,
+    license: "MIT OR Apache-2.0",
+    crateChecksum: TRANSCRIBE_RS_ORT_CHECKSUM,
+    linkage: "static-prebuilt",
+    providers: ["cpu"],
+  },
+  target: "x86_64-unknown-linux-gnu",
+});
 export const TRANSCRIBE_CPP_RUNTIME = Object.freeze({
   package: "transcribe-cpp",
   version: TRANSCRIBE_CPP_VERSION,
@@ -277,6 +297,7 @@ function parakeetManifest(model, architecture) {
     version: PARAKEET_VERSION,
     modelRevision: pack.revision,
     extractRuntime: true,
+    transcribeRs: TRANSCRIBE_RS_RUNTIME,
     artifacts: [
       {
         name: `parakeet-linux-${architecture.release}`,

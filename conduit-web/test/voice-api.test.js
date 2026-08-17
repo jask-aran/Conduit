@@ -11,8 +11,8 @@ test("voice settings API stores endpoint authentication without returning the se
     assert.equal(initial.mode, "off");
     assert.equal(initial.voiceConfigVersion, 2);
     assert.equal(initial.localSelectionOrigin, "default");
-    assert.equal(initial.local.catalogue.profiles.length, 20);
-    assert.equal(initial.local.backendPaths.length, 12);
+    assert.equal(initial.local.catalogue.profiles.length, 28);
+    assert.equal(initial.local.backendPaths.length, 16);
     assert.equal(initial.local.models.every((model) => !model.installed), true);
     assert.deepEqual(initial.providers.slice(0, 3).map((provider) => provider.id), ["openai", "deepgram", "groq"]);
 

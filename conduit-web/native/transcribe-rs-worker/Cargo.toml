@@ -1,0 +1,14 @@
+[package]
+name = "conduit-transcribe-rs-worker"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.88"
+license = "MIT"
+description = "Private pipe worker for Conduit's managed transcribe-rs Parakeet backend"
+
+[dependencies]
+env_logger = "0.10.0"
+log = "0.4.28"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+transcribe-rs = { version = "=0.3.8", features = ["onnx"] }

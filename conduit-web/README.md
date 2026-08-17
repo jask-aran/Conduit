@@ -282,10 +282,18 @@ pins every model artifact to an immutable revision or release URL, exact byte
 size, and SHA-256 digest. The installer verifies these digests, displays
 progress, supports cancellation and retry, and keeps only one selected model
 resident. Whisper runs in the server through Transformers.js; legacy Parakeet
-runs as one unprivileged loopback worker; Unified English Q8 uses the pinned
+runs as one unprivileged loopback worker; supported Parakeet ONNX artifacts
+also have a managed `transcribe-rs` BatchPort worker. Unified English Q8 uses the pinned
 `transcribe-cpp@0.1.3` Node binding and its locked Linux CPU/Vulkan native
 package. The binding verifies its ABI contract and reports the actual compute
-backend. Unified English Q8 uses one `parakeet_buffered` stateful session per
+backend. The `transcribe-rs` worker is a long-lived unprivileged child process
+over private pipes. It pins `transcribe-rs` 0.3.8, `ort` 2.0.0-rc.12, bundled
+ONNX Runtime 1.24.2, Rust 1.88, and the x86_64 Linux CPU target. Its versioned
+frames use bounded length-prefixed JSON and PCM16 payloads; the worker reports
+compiled, requested, and actual providers separately. The worker exposes
+After Stop and During pauses only. It does not advertise Live because this
+pinned Parakeet implementation has no persistent StreamPort. Unified English
+Q8 uses one `parakeet_buffered` stateful session per
 dictation, with the current 1.12 s profile (5.6 s left context, 560 ms chunk,
 and 560 ms right context) and stable-prefix commits. It emits stable and tentative text
 while capture continues. If stream startup fails before useful text, Conduit
@@ -295,7 +303,8 @@ only that checkpoint's bounded-overlap suffix through BatchPort and preserves
 the stable prefix. It does not run both paths in parallel. File-upload providers buffer one bounded
 utterance in memory and transcribe it after Stop. Other installed local batch
 models can use the bounded progressive range path during capture; this is not
-stateful streaming and does not run for remote providers.
+stateful streaming and does not run for remote providers. The native worker
+protocol and build records are in `native/transcribe-rs-worker/README.md`.
 Installing a model is separate from selecting the active model. The selected
 model is persisted with **Save Voice settings**, and installation never occurs
 without explicit license acceptance.
@@ -316,7 +325,9 @@ The current Unified English selection resolves to
 `parakeet-unified-en-0.6b` / `parakeet-unified-en-0.6b-q8-gguf` /
 `transcribe-cpp` and can use the persistent `live` StreamPort. The current
 Transformers.js paths use `eager` BatchPort execution with Silero
-segmentation. Legacy Parakeet paths use `stop` BatchPort execution. Each
+segmentation. Legacy Parakeet paths use `stop` BatchPort execution. The
+`transcribe-rs` paths use `stop` and Silero-segmented `eager` BatchPort
+profiles. Each
 dictation freezes this resolved tuple at open; a settings change affects the
 next dictation only. One runtime lease covers the session and releases once on
 completion, failure, cancellation, socket close, or shutdown.

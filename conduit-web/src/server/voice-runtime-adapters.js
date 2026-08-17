@@ -83,10 +83,19 @@ async function readLoopbackText(response) {
 }
 
 function createBatchPort({ profile, artifact, runtime, modelManager, fetchImpl }) {
-  const callManager = async ({ pcm16, signal, operationId }) => {
+  const callManager = async ({ pcm16, signal, operationId, sequence, startSample, endSample }) => {
     if (typeof modelManager?.transcribe !== "function") throw runtimeAdapterError("voice_batch_port_unavailable", "The selected local runtime has no BatchPort");
-    const task = modelManager.transcribe(artifact.legacyModelId, Buffer.from(pcm16 || []), { signal, operationId, profileId: profile.id });
+    const task = modelManager.transcribe(artifact.legacyModelId, Buffer.from(pcm16 || []), {
+      signal,
+      operationId,
+      profileId: profile.id,
+      runtimeId: profile.runtimeId,
+      sequence,
+      startSample,
+      endSample,
+    });
     const value = await withAbort(task, signal);
+    if (value && typeof value === "object") return { ...value, text: String(value.text || "").trim() };
     return { text: String(value || "").trim() };
   };
   const callLoopback = async ({ pcm16, signal, operationId }) => {

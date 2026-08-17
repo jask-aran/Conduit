@@ -16,9 +16,9 @@ const copy = () => structuredClone(VOICE_EXECUTION_CATALOG);
 
 test("WP8 catalogue resolves every legacy local model to one profile", () => {
   assert.equal(VOICE_EXECUTION_CATALOG.models.length, 7);
-  assert.equal(VOICE_EXECUTION_CATALOG.artifacts.length, 12);
-  assert.equal(VOICE_EXECUTION_CATALOG.runtimes.length, 3);
-  assert.equal(VOICE_EXECUTION_CATALOG.profiles.length, 20);
+  assert.equal(VOICE_EXECUTION_CATALOG.artifacts.length, 16);
+  assert.equal(VOICE_EXECUTION_CATALOG.runtimes.length, 4);
+  assert.equal(VOICE_EXECUTION_CATALOG.profiles.length, 28);
   const migration = migrateLocalSelection("parakeet-unified-en-0.6b-q8");
   assert.deepEqual(migration.selection, {
     modelId: "parakeet-unified-en-0.6b",
@@ -30,6 +30,17 @@ test("WP8 catalogue resolves every legacy local model to one profile", () => {
   const profile = resolveVoiceExecutionProfile(migration.selection);
   assert.equal(profile.id, migration.profileId);
   assert.equal(artifactForProfile(profile).legacyModelId, "parakeet-unified-en-0.6b-q8");
+});
+test("WP10 registers transcribe-rs batch paths without changing legacy defaults", () => {
+  const paths = VOICE_EXECUTION_CATALOG.backendPaths.filter((candidate) => candidate.runtimeId === "transcribe-rs");
+  assert.equal(paths.length, 4);
+  assert.equal(paths.every((candidate) => candidate.ports.batch && !candidate.ports.stream), true);
+  const profiles = VOICE_EXECUTION_CATALOG.profiles.filter((candidate) => candidate.runtimeId === "transcribe-rs");
+  assert.equal(profiles.length, 8);
+  assert.equal(profiles.filter((candidate) => candidate.execution === "stop").length, 4);
+  assert.equal(profiles.filter((candidate) => candidate.execution === "eager").length, 4);
+  assert.equal(VOICE_EXECUTION_CATALOG.defaultProfileId, "whisper-tiny-en-q8.eager");
+  assert.equal(VOICE_EXECUTION_CATALOG.runtimes.find((runtime) => runtime.id === "transcribe-rs").compiledComputeBackends[0], "cpu");
 });
 test("WP9 catalogue advertises stable sample-addressed output and checkpoint fallback", () => {
   const live = VOICE_EXECUTION_CATALOG.profiles.find((profile) => profile.execution === "live");
