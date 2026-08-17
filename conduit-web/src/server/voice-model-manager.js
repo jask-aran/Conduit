@@ -611,7 +611,11 @@ export class VoiceModelManager {
   async uninstall(modelId) {
     const model = requiredModel(modelId);
     if (this.installingModelId === model.id) throw modelError("voice_model_installing", "Cancel the model installation before uninstalling", 409);
-    if (this.activeModelId === model.id || this.startingModelId === model.id) await this.stop();
+    if (this.activeModelId === model.id || this.startingModelId === model.id) {
+      const startup = this.startPromise;
+      if (startup) await startup.catch(() => {});
+      await this.stopActive();
+    }
     const removed = Boolean(await this.installedManifest(model.id));
     await fs.rm(this.modelRoot(model.id), { recursive: true, force: true });
     await fs.rm(this.stagingRoot(model.id), { recursive: true, force: true });

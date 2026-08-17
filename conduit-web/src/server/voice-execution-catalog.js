@@ -195,8 +195,8 @@ const profileFor = (artifact, execution, segmentation = "none") => ({
   segmentation,
   output: {
     tentative: execution !== "stop",
-    stableSegments: execution !== "stop",
-    sampleTimestamps: false,
+    stableSegments: true,
+    sampleTimestamps: true,
   },
   resourcePolicy: {
     preload: execution === "live" ? "required" : "supported",
@@ -214,7 +214,7 @@ for (const artifact of ARTIFACT_DEFINITIONS) {
   if (artifact.runtimeId === "transformers-js") PROFILE_DEFINITIONS.push(profileFor(artifact, "eager", "silero"));
   if (artifact.runtimeId === "transcribe-cpp") {
     const live = profileFor(artifact, "live");
-    live.fallback = { profileId: stop.id, allowed: "before_output", replay: "from_zero" };
+    live.fallback = { profileId: stop.id, allowed: "after_stable_checkpoint", replay: "from_committed_sample" };
     PROFILE_DEFINITIONS.push(live);
   }
 }

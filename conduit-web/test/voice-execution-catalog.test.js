@@ -31,6 +31,13 @@ test("WP8 catalogue resolves every legacy local model to one profile", () => {
   assert.equal(profile.id, migration.profileId);
   assert.equal(artifactForProfile(profile).legacyModelId, "parakeet-unified-en-0.6b-q8");
 });
+test("WP9 catalogue advertises stable sample-addressed output and checkpoint fallback", () => {
+  const live = VOICE_EXECUTION_CATALOG.profiles.find((profile) => profile.execution === "live");
+  assert.equal(live.output.stableSegments, true);
+  assert.equal(live.output.sampleTimestamps, true);
+  assert.deepEqual(live.fallback.allowed, "after_stable_checkpoint");
+  assert.deepEqual(live.fallback.replay, "from_committed_sample");
+});
 test("WP8 catalogue validation rejects each structural contract violation", () => {
   const cases = [
     ["voice_catalog_duplicate_id", (catalog) => { catalog.profiles[1].id = catalog.profiles[0].id; }],

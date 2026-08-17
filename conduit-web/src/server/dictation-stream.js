@@ -2,6 +2,7 @@ import { performance } from "node:perf_hooks";
 import { randomUUID } from "node:crypto";
 import { WebSocket } from "ws";
 import { OPENAI_LIVE_ADAPTER, OPENAI_LIVE_MODEL } from "../voice-settings.js";
+import { createSegmentationProvider, segmentationObservationMetadata } from "./voice-segmentation.js";
 import { selectSileroVadRanges } from "./voice-vad.js";
 
 const DEFAULT_LIMITS = Object.freeze({
@@ -83,6 +84,188 @@ function appendText(left, right) {
   if (!left) return right;
   if (!right) return left;
   return `${left}${/\s$/.test(left) || /^\s/.test(right) ? "" : " "}${right}`;
+}
+
+function transcriptError(code, message) {
+  return Object.assign(new Error(message), { code, status: 502 });
+}
+
+function samplePosition(value, fallback = 0) {
+  const number = Number(value);
+  return Number.isSafeInteger(number) && number >= 0 ? number : fallback;
+}
+
+function sameTranscriptText(left, right) {
+  return String(left || "").trim().replace(/\s+/g, " ") === String(right || "").trim().replace(/\s+/g, " ");
+}
+
+/**
+ * Owns the transcript truth for one accepted PCM timeline. Runtime output is
+ * treated as a proposal: tentative revisions can be replaced, stable
+ * segments cannot, and the session final is derived from the accepted stable
+ * segments rather than copied over them.
+ */
+export function createTranscriptTruth(sessionId, { onEvent = null } = {}) {
+  const id = String(sessionId || "");
+  const tentative = new Map();
+  const stable = new Map();
+  let stableText = "";
+  let lastSequence = -1;
+  let committedThroughSample = 0;
+  let submittedThroughSample = 0;
+  let processedThroughSample = null;
+  const emitNormalized = (event) => onEvent?.(event);
+
+  const orderedTentative = () => [...tentative.values()]
+    .sort((left, right) => left.fromSample - right.fromSample || left.regionId.localeCompare(right.regionId));
+  const displayText = () => orderedTentative().reduce((text, region) => appendText(text, region.text), stableText);
+  const clearCoveredTentative = (fromSample, throughSample) => {
+    for (const [regionId, region] of tentative) {
+      if (region.throughSample <= throughSample || region.fromSample < throughSample && region.throughSample > fromSample) tentative.delete(regionId);
+    }
+  };
+  const acceptTentative = ({ regionId, revision, text, fromSample = 0, throughSample = 0 } = {}) => {
+    const safeRegionId = String(regionId || "");
+    const safeRevision = samplePosition(revision, -1);
+    if (!safeRegionId || safeRevision < 0) throw transcriptError("voice_tentative_invalid", "Tentative transcript output requires a region ID and revision");
+    const existing = tentative.get(safeRegionId);
+    if (existing && safeRevision <= existing.revision) return { accepted: false, revision: existing.revision };
+    const region = {
+      regionId: safeRegionId,
+      revision: safeRevision,
+      text: String(text || "").trim(),
+      fromSample: samplePosition(fromSample),
+      throughSample: Math.max(samplePosition(throughSample), samplePosition(fromSample)),
+    };
+    tentative.set(safeRegionId, region);
+    emitNormalized({
+      type: "tentative_region",
+      sessionId: id,
+      ...region,
+    });
+    return { accepted: true, revision: safeRevision };
+  };
+  const acceptStableSegment = ({ segmentId, sequence, text, fromSample = 0, throughSample = 0 } = {}) => {
+    const safeSegmentId = String(segmentId || "");
+    const safeSequence = samplePosition(sequence, -1);
+    const safeText = String(text || "").trim();
+    const safeFrom = samplePosition(fromSample);
+    const safeThrough = Math.max(samplePosition(throughSample), safeFrom);
+    if (!safeSegmentId || safeSequence < 0 || !safeText) return { accepted: false, sequence: safeSequence };
+    const existing = stable.get(safeSegmentId);
+    if (existing) {
+      if (!sameTranscriptText(existing.text, safeText)
+        || existing.sequence !== safeSequence
+        || existing.fromSample !== safeFrom
+        || existing.throughSample !== safeThrough) {
+        throw transcriptError("voice_stable_segment_conflict", `Stable segment ${safeSegmentId} was reused with different content`);
+      }
+      return { accepted: false, sequence: safeSequence };
+    }
+    if (safeSequence <= lastSequence) throw transcriptError("voice_stable_sequence_invalid", "Stable transcript sequence did not increase");
+    if (safeFrom < committedThroughSample || safeThrough <= committedThroughSample || safeThrough < safeFrom) throw transcriptError("voice_stable_coverage_invalid", "Stable transcript sample coverage did not increase");
+    const segment = {
+      segmentId: safeSegmentId,
+      sequence: safeSequence,
+      text: safeText,
+      fromSample: safeFrom,
+      throughSample: safeThrough,
+    };
+    stable.set(safeSegmentId, segment);
+    stableText = appendText(stableText, safeText);
+    lastSequence = safeSequence;
+    committedThroughSample = Math.max(committedThroughSample, safeThrough);
+    clearCoveredTentative(safeFrom, committedThroughSample);
+    emitNormalized({
+      type: "stable_segment",
+      sessionId: id,
+      ...segment,
+    });
+    return { accepted: true, sequence: safeSequence };
+  };
+  const acceptRuntimeSnapshot = ({ regionId = `${id}:live`, revision = 0, stableText: nextStable = "", tentativeText = "", fromSample = committedThroughSample, throughSample = committedThroughSample } = {}) => {
+    const candidateStable = String(nextStable || "").trim();
+    if (candidateStable && !sameTranscriptText(candidateStable, stableText)) {
+      const current = stableText.trim();
+      if (current && !candidateStable.startsWith(current)) throw transcriptError("voice_stable_text_conflict", "Runtime final text does not extend the stable transcript");
+      const suffix = current ? candidateStable.slice(current.length).trim() : candidateStable;
+      if (suffix) {
+        acceptStableSegment({
+          segmentId: `${id}:segment:${lastSequence + 1}`,
+          sequence: lastSequence + 1,
+          text: suffix,
+          fromSample: committedThroughSample,
+          throughSample: Math.max(samplePosition(throughSample), committedThroughSample),
+        });
+      }
+    }
+    acceptTentative({ regionId, revision, text: tentativeText, fromSample, throughSample });
+    if (!String(tentativeText || "").trim()) tentative.delete(String(regionId || ""));
+    return snapshot();
+  };
+  const acceptSessionFinal = ({ text = "", committedThroughSample: finalThroughSample = committedThroughSample } = {}) => {
+    const candidate = String(text || "").trim();
+    if (candidate && !sameTranscriptText(candidate, stableText)) {
+      const current = stableText.trim();
+      if (current && !candidate.startsWith(current)) throw transcriptError("voice_session_final_conflict", "Runtime final text cannot replace the stable transcript");
+      const suffix = current ? candidate.slice(current.length).trim() : candidate;
+      if (suffix) {
+        acceptStableSegment({
+          segmentId: `${id}:segment:${lastSequence + 1}`,
+          sequence: lastSequence + 1,
+          text: suffix,
+          fromSample: committedThroughSample,
+          throughSample: Math.max(samplePosition(finalThroughSample), committedThroughSample),
+        });
+      }
+    }
+    tentative.clear();
+    const finalText = stableText.trim();
+    if (finalText) committedThroughSample = Math.max(committedThroughSample, samplePosition(finalThroughSample));
+    const event = {
+      type: "session_final",
+      sessionId: id,
+      text: finalText,
+      committedThroughSample,
+    };
+    emitNormalized(event);
+    return event;
+  };
+  const discardTentative = () => {
+    const discardedRevisions = [...tentative.values()].map((region) => region.revision);
+    tentative.clear();
+    return { discardedRevisions: discardedRevisions.length, revisions: discardedRevisions };
+  };
+  const noteSubmitted = (throughSample) => {
+    submittedThroughSample = Math.max(submittedThroughSample, samplePosition(throughSample));
+    return submittedThroughSample;
+  };
+  const noteProcessed = (throughSample) => {
+    processedThroughSample = Math.max(processedThroughSample || 0, samplePosition(throughSample));
+    return processedThroughSample;
+  };
+  const snapshot = () => ({
+    text: displayText(),
+    stableText: stableText.trim(),
+    tentativeText: orderedTentative().map((region) => region.text).filter(Boolean).join(" "),
+    committedThroughSample,
+    tentativeRegions: orderedTentative(),
+    stableSegments: [...stable.values()],
+  });
+  return {
+    acceptTentative,
+    acceptStableSegment,
+    acceptRuntimeSnapshot,
+    acceptSessionFinal,
+    discardTentative,
+    noteSubmitted,
+    noteProcessed,
+    displayText,
+    stableText: () => stableText.trim(),
+    tentativeRegions: orderedTentative,
+    snapshot,
+    watermarks: () => ({ submittedThroughSample, processedThroughSample, committedThroughSample }),
+  };
 }
 
 function appendProgressiveSegment(left, right, overlapSamples = 0) {
@@ -412,6 +595,18 @@ function createServerDiagnostics() {
     },
     analysis: null,
     vadObservation: null,
+    segmentation: {
+      provider: null,
+      calibrationVersion: null,
+      state: "not_started",
+    },
+    watermarks: {
+      acceptedThroughSample: 0,
+      submittedThroughSample: 0,
+      processedThroughSample: null,
+      committedThroughSample: 0,
+      archiveOwnedThroughSample: 0,
+    },
     streaming: {
       enabled: false,
       family: null,
@@ -470,11 +665,11 @@ function gapsForSegments(segments, sampleCount) {
   return gaps;
 }
 
-function authoritativeAnalysis(selection, sampleCount) {
+function authoritativeAnalysis(selection, sampleCount, source = "silero_authoritative") {
   const segments = Array.isArray(selection?.segments) ? selection.segments : [];
   const silentRuns = selection?.available ? gapsForSegments(segments, sampleCount) : [];
   return {
-    source: "silero_authoritative",
+    source,
     available: selection?.available === true,
     status: selection?.status || "unavailable",
     sampleCount,
@@ -533,9 +728,9 @@ function markInferenceComplete(diagnostics) {
 }
 
 function speechDecision(diagnostics) {
-  if (diagnostics.analysis?.source === "silero_authoritative") {
+  if (["silero_authoritative", "heuristic"].includes(diagnostics.analysis?.source)) {
     return {
-      detector: "silero_vad",
+      detector: diagnostics.analysis.source === "heuristic" ? "heuristic" : "silero_vad",
       detected: diagnostics.analysis.segments.length > 0,
       available: diagnostics.analysis.available,
       status: diagnostics.analysis.status,
@@ -577,7 +772,7 @@ function serializeServerDiagnostics(diagnostics) {
     endMs: Math.round(endSample / 16),
     durationMs: Math.round((endSample - startSample) / 16),
   }));
-  const speechSamples = analysis?.source === "silero_authoritative"
+  const speechSamples = ["silero_authoritative", "heuristic"].includes(analysis?.source)
     ? analysis.speechSamples
     : analysis ? Math.max(0, analysis.sampleCount - analysis.silentSamples) : 0;
   const submittedSegmentSamples = segments.reduce((total, [start, end]) => total + end - start, 0);
@@ -653,6 +848,14 @@ function serializeServerDiagnostics(diagnostics) {
           sourceRegionCount: analysis.sourceRegionCount,
           normalizedRegionCount: analysis.normalizedRegionCount,
         }
+        : analysis?.source === "heuristic"
+          ? {
+            type: "heuristic",
+            ...(analysis.policy || {}),
+            maxSegments: analysis.maxSegments,
+            sourceRegionCount: analysis.sourceRegionCount,
+            normalizedRegionCount: analysis.normalizedRegionCount,
+          }
         : analysis?.source === "external_policy"
           ? { type: "external_policy" }
           : {
@@ -666,6 +869,8 @@ function serializeServerDiagnostics(diagnostics) {
             speechPaddingMs: 0,
           },
       streaming,
+      watermarks: { ...diagnostics.watermarks },
+      segmentation: { ...diagnostics.segmentation },
     },
   };
 }
@@ -771,6 +976,20 @@ function resolveInferenceAnalysis(pcm, byteLength, segmentation, limits, diagnos
     if (diagnostics) diagnostics.analysis = analysis;
     return analysis;
   }
+  if (segmentation?.mode === "heuristic") {
+    const analysis = segmentation.analysis || authoritativeAnalysis(
+      {
+        available: true,
+        status: "speech",
+        segments: segmentation.segments,
+        policy: segmentation.policy,
+      },
+      Math.floor(byteLength / 2),
+      "heuristic",
+    );
+    if (diagnostics) diagnostics.analysis = analysis;
+    return analysis;
+  }
   if (segmentation?.mode === "external_policy") {
     const analysis = externalAnalysis(Math.floor(byteLength / 2));
     if (diagnostics) diagnostics.analysis = analysis;
@@ -784,28 +1003,29 @@ function resolveInferenceAnalysis(pcm, byteLength, segmentation, limits, diagnos
 
 function remoteSpeechRanges(pcm, byteLength, segmentation, limits, diagnostics) {
   const analysis = resolveInferenceAnalysis(pcm, byteLength, segmentation, limits, diagnostics);
-  if (!analysis.segments?.length) return { analysis, pcm: Buffer.alloc(0), byteLength: 0 };
+  if (!analysis.segments?.length) return { analysis, pcm: Buffer.alloc(0), byteLength: 0, startSample: 0, endSample: 0 };
   let start = analysis.segments[0][0];
   let end = analysis.segments[0][1];
   for (const [rangeStart, rangeEnd] of analysis.segments) {
     start = Math.min(start, rangeStart);
     end = Math.max(end, rangeEnd);
   }
-  return { analysis, pcm: pcm.subarray(start * 2, end * 2), byteLength: (end - start) * 2 };
+  return { analysis, pcm: pcm.subarray(start * 2, end * 2), byteLength: (end - start) * 2, startSample: start, endSample: end };
 }
 
-export function createHttpAdapter(config, emit, limits, fetchImpl, diagnostics = null, { signal: sessionSignal = null } = {}) {
+export function createHttpAdapter(config, emit, limits, fetchImpl, diagnostics = null, { signal: sessionSignal = null, watermarks = null } = {}) {
   const chunks = [];
   let byteLength = 0;
   const controller = sessionSignal ? null : new AbortController();
   const signal = sessionSignal || controller.signal;
-  const upload = async (pcm) => {
+  const upload = async (pcm, range = {}) => {
     if (!pcm.length || signal.aborted) return { final: false, text: "" };
     const form = new FormData();
     form.append("file", wavBlob([pcm], pcm.length), "dictation.wav");
     form.append("response_format", "json");
     if (config.model) form.append("model", config.model);
     if (config.provider !== "groq") form.append("stream", "true");
+    watermarks?.onSubmitted?.({ startSample: range.startSample || 0, endSample: range.endSample || Math.floor(pcm.length / 2) });
     if (diagnostics) markInferenceStart(diagnostics);
     const response = await fetchImpl(config.endpoint, { method: "POST", headers: { "User-Agent": "ConduitVoice/1.0", ...config.headers }, body: form, signal, redirect: "error" });
     let text = "";
@@ -817,6 +1037,7 @@ export function createHttpAdapter(config, emit, limits, fetchImpl, diagnostics =
         emit({ type: "partial", text: String(event.text || "") });
       } else emit(event);
     }, limits);
+    watermarks?.onProcessed?.({ startSample: range.startSample || 0, endSample: range.endSample || Math.floor(pcm.length / 2) });
     return { final: Boolean(text), text };
   };
   const transcribe = async ({ segmentation = null } = {}) => {
@@ -824,7 +1045,7 @@ export function createHttpAdapter(config, emit, limits, fetchImpl, diagnostics =
     if (diagnostics) markInferenceQueued(diagnostics);
     const selected = remoteSpeechRanges(Buffer.concat(chunks, byteLength), byteLength, segmentation, limits, diagnostics);
     try {
-      return await upload(selected.pcm);
+      return await upload(selected.pcm, selected);
     } finally {
       if (diagnostics) markInferenceComplete(diagnostics);
     }
@@ -859,6 +1080,8 @@ function createSnapshotAdapter(emit, limits, transcribe, diagnostics = null, {
   signal = null,
   sessionId = null,
   nextOperationId = null,
+  watermarks = null,
+  sampleOffset = 0,
 } = {}) {
   const chunks = [];
   let byteLength = 0;
@@ -880,8 +1103,15 @@ function createSnapshotAdapter(emit, limits, transcribe, diagnostics = null, {
       markInferenceQueued(diagnostics);
       markInferenceStart(diagnostics);
     }
+    watermarks?.onSubmitted?.({ sequence, startSample: start + sampleOffset, endSample: end + sampleOffset });
     try {
-      return await invoke(pcm.subarray(start * 2, end * 2), { sequence, startSample: start, endSample: end });
+      const result = await invoke(pcm.subarray(start * 2, end * 2), {
+        sequence,
+        startSample: start + sampleOffset,
+        endSample: end + sampleOffset,
+      });
+      watermarks?.onProcessed?.({ sequence, startSample: start + sampleOffset, endSample: end + sampleOffset });
+      return result;
     } finally {
       if (diagnostics) markInferenceComplete(diagnostics);
     }
@@ -898,7 +1128,11 @@ function createSnapshotAdapter(emit, limits, transcribe, diagnostics = null, {
     for (const [sequence, [startSample, endSample]] of segments.entries()) {
       const piece = snapshot.subarray(startSample * 2, endSample * 2);
       if (diagnostics) markInferenceStart(diagnostics);
-      const pieceText = await invoke(piece, { sequence, startSample, endSample });
+      const absoluteStartSample = startSample + sampleOffset;
+      const absoluteEndSample = endSample + sampleOffset;
+      watermarks?.onSubmitted?.({ sequence, startSample: absoluteStartSample, endSample: absoluteEndSample });
+      const pieceText = await invoke(piece, { sequence, startSample: absoluteStartSample, endSample: absoluteEndSample });
+      watermarks?.onProcessed?.({ sequence, startSample: absoluteStartSample, endSample: absoluteEndSample });
       if (pieceText) text = appendText(text, pieceText);
     }
     if (text) emit({ type: "final", text });
@@ -960,7 +1194,7 @@ export function upsamplePcm16kTo24k(pcm16) {
   return output;
 }
 
-export function createOpenaiRealtimeStreamAdapter(emit, _limits, openStream, diagnostics = null) {
+export function createOpenaiRealtimeStreamAdapter(emit, _limits, openStream, diagnostics = null, { watermarks = null } = {}) {
   let session = null;
   let closed = false;
   let feedError = null;
@@ -969,6 +1203,9 @@ export function createOpenaiRealtimeStreamAdapter(emit, _limits, openStream, dia
   let committed = "";
   let tentative = "";
   let revision = 0;
+  let acceptedThroughSample = 0;
+  let submittedThroughSample = 0;
+  let committedThroughSample = 0;
 
   const opened = Promise.resolve().then(async () => {
     if (typeof openStream !== "function") throw dictationError("voice_stream_unsupported", "The selected voice model does not expose stateful streaming", 409);
@@ -998,13 +1235,19 @@ export function createOpenaiRealtimeStreamAdapter(emit, _limits, openStream, dia
       diagnostics.streaming.revisionCount = revision;
       if (committed.trim() && diagnostics.streaming.firstCommittedAt === null) diagnostics.streaming.firstCommittedAt = performance.now();
       if (tentative.trim() && diagnostics.streaming.firstTentativeAt === null) diagnostics.streaming.firstTentativeAt = performance.now();
+      diagnostics.streaming.acceptedThroughSample = Math.max(diagnostics.streaming.acceptedThroughSample, acceptedThroughSample);
+      diagnostics.streaming.submittedThroughSample = Math.max(diagnostics.streaming.submittedThroughSample, submittedThroughSample);
+      diagnostics.streaming.committedThroughSample = Math.max(diagnostics.streaming.committedThroughSample, committedThroughSample);
     }
+    const stableThroughSample = Math.min(acceptedThroughSample, Math.max(committedThroughSample, submittedThroughSample));
     emit({
       type: terminal ? "final" : "partial",
       text: full,
       stableText: committed.trim(),
       tentativeText: tentative.trim(),
       revision,
+      fromSample: committedThroughSample,
+      throughSample: stableThroughSample,
     });
     return full;
   };
@@ -1018,6 +1261,7 @@ export function createOpenaiRealtimeStreamAdapter(emit, _limits, openStream, dia
       const next = String(transcript || tentative).trim();
       committed = committed ? `${committed} ${next}`.trim() : next;
       tentative = "";
+      committedThroughSample = submittedThroughSample;
       publish();
     });
   };
@@ -1029,6 +1273,10 @@ export function createOpenaiRealtimeStreamAdapter(emit, _limits, openStream, dia
     }),
     write(data) {
       const copy = Buffer.from(data);
+      const sampleCount = Math.floor(copy.length / 2);
+      const startSample = acceptedThroughSample;
+      acceptedThroughSample += sampleCount;
+      if (diagnostics) diagnostics.streaming.acceptedThroughSample = Math.max(diagnostics.streaming.acceptedThroughSample, acceptedThroughSample);
       const task = feedTail.then(async () => {
         const live = await opened;
         if (closed || feedError) return;
@@ -1036,8 +1284,16 @@ export function createOpenaiRealtimeStreamAdapter(emit, _limits, openStream, dia
           markInferenceQueued(diagnostics);
           markInferenceStart(diagnostics);
           diagnostics.streaming.feedCount += 1;
+          diagnostics.streaming.feedSamples += sampleCount;
+          diagnostics.streaming.feedCallCount += 1;
+          diagnostics.streaming.meanAudioPerCallMs = diagnostics.streaming.feedSamples
+            / diagnostics.streaming.feedCallCount
+            / (VOICE_SAMPLE_RATE / 1_000);
         }
         await live.append(upsamplePcm16kTo24k(copy));
+        submittedThroughSample = Math.max(submittedThroughSample, startSample + sampleCount);
+        if (diagnostics) diagnostics.streaming.submittedThroughSample = Math.max(diagnostics.streaming.submittedThroughSample, submittedThroughSample);
+        watermarks?.onSubmitted?.({ startSample, endSample: submittedThroughSample });
       });
       feedTail = task.catch((error) => {
         feedError ||= error;
@@ -1054,6 +1310,8 @@ export function createOpenaiRealtimeStreamAdapter(emit, _limits, openStream, dia
         markInferenceStart(diagnostics);
       }
       const transcript = await session.commit();
+      committedThroughSample = submittedThroughSample;
+      watermarks?.onProcessed?.({ startSample: 0, endSample: submittedThroughSample });
       if (!committed && transcript) committed = String(transcript).trim();
       tentative = "";
       if (diagnostics) markInferenceComplete(diagnostics);
@@ -1216,7 +1474,12 @@ export function createTranscribeCppStreamAdapter(emit, limits = {}, openStream, 
     const serverQueuedSamples = Math.max(0, acceptedThroughSample - submittedThroughSample);
     target.acceptedThroughSample = Math.max(target.acceptedThroughSample || 0, acceptedThroughSample);
     target.submittedThroughSample = Math.max(target.submittedThroughSample || 0, submittedThroughSample);
-    target.processedThroughSample = processedThroughSample;
+    if (processedThroughSample !== null) {
+      target.processedThroughSample = Math.max(
+        target.processedThroughSample || 0,
+        Math.min(acceptedThroughSample, processedThroughSample),
+      );
+    }
     target.committedThroughSample = Math.max(target.committedThroughSample || 0, committedThroughSample);
     target.serverQueuedAudioMs = serverQueuedSamples / (VOICE_SAMPLE_RATE / 1_000);
     target.maxServerQueueMs = Math.max(target.maxServerQueueMs || 0, target.serverQueuedAudioMs);
@@ -1227,6 +1490,17 @@ export function createTranscribeCppStreamAdapter(emit, limits = {}, openStream, 
     target.meanAudioPerCallMs = target.feedCallCount
       ? target.feedSamples / target.feedCallCount / (VOICE_SAMPLE_RATE / 1_000)
       : 0;
+    if (diagnostics.watermarks) {
+      diagnostics.watermarks.acceptedThroughSample = Math.max(diagnostics.watermarks.acceptedThroughSample, acceptedThroughSample);
+      diagnostics.watermarks.submittedThroughSample = Math.max(diagnostics.watermarks.submittedThroughSample, submittedThroughSample);
+      if (processedThroughSample !== null) {
+        diagnostics.watermarks.processedThroughSample = Math.max(
+          diagnostics.watermarks.processedThroughSample || 0,
+          Math.min(acceptedThroughSample, processedThroughSample),
+        );
+      }
+      diagnostics.watermarks.committedThroughSample = Math.max(diagnostics.watermarks.committedThroughSample, committedThroughSample);
+    }
   };
 
   const opened = Promise.resolve().then(async () => {
@@ -1489,6 +1763,7 @@ export function createDictationStream({ wss, voiceRuntime, recordingStore = null
         ? () => lease.release()
         : () => voiceRuntime.unpin?.();
     const sessionId = randomUUID();
+    const transcriptTruth = createTranscriptTruth(sessionId);
     const sessionController = new AbortController();
     let operationSequence = 0;
     const nextOperationId = (kind) => `${sessionId}:${kind}:${++operationSequence}`;
@@ -1535,8 +1810,20 @@ export function createDictationStream({ wss, voiceRuntime, recordingStore = null
     let progressiveLastRangeEnd = 0;
     let fallbackLiveToBatch = null;
     let liveFallbackPromise = null;
+    let segmentationProvider = null;
     const SHORT_FAILURE_AUDIO_BYTES = 1;
     const diagnostics = createServerDiagnostics();
+    const noteWatermark = (name, value) => {
+      const sampleCount = Math.floor(audioBytes / 2);
+      const safeValue = Math.max(0, Math.min(sampleCount, samplePosition(value)));
+      diagnostics.watermarks[name] = Math.max(diagnostics.watermarks[name] || 0, safeValue);
+      if (name === "submittedThroughSample") transcriptTruth.noteSubmitted(safeValue);
+      if (name === "processedThroughSample") transcriptTruth.noteProcessed(safeValue);
+    };
+    const watermarkHooks = {
+      onSubmitted: ({ endSample }) => noteWatermark("submittedThroughSample", endSample),
+      onProcessed: ({ endSample }) => noteWatermark("processedThroughSample", endSample),
+    };
     let runtimeMetadata = {
       mode: null,
       adapter: null,
@@ -1555,6 +1842,7 @@ export function createDictationStream({ wss, voiceRuntime, recordingStore = null
       resolvedProfileId: null,
       execution: null,
       segmentation: null,
+      fallback: null,
       requestedComputeBackend: null,
       actualComputeBackend: null,
       loadedRuntimeVersion: null,
@@ -1581,7 +1869,17 @@ export function createDictationStream({ wss, voiceRuntime, recordingStore = null
     const setAuthoritativeVadAnalysis = (observation) => {
       const sampleCount = Math.floor(audioBytes / 2);
       const selection = selectSileroVadRanges(observation, sampleCount, { maxSegments: limits.maxSegments });
-      diagnostics.analysis = authoritativeAnalysis(selection, sampleCount);
+      const source = observation?.type === "heuristic_segmentation_observation" ? "heuristic" : "silero_authoritative";
+      const metadata = segmentationObservationMetadata(observation);
+      diagnostics.analysis = authoritativeAnalysis(selection, sampleCount, source);
+      diagnostics.segmentation = {
+        provider: source === "heuristic" ? "heuristic" : "silero",
+        calibrationVersion: observation?.policy?.calibrationVersion || null,
+        state: observation?.available === true ? "ready" : observation?.status || "unavailable",
+        status: metadata.status,
+        frameCount: metadata.frameCount,
+        regionCount: metadata.regionCount,
+      };
       return selection;
     };
     const publishProgressiveResults = () => {
@@ -1589,15 +1887,32 @@ export function createDictationStream({ wss, voiceRuntime, recordingStore = null
         const sequence = progressiveNextPublish;
         const result = progressiveResults.get(sequence);
         if (result?.text) {
-          progressiveText = appendProgressiveSegment(progressiveText, result.text, result.range.overlapSamples);
+          const mergedText = appendProgressiveSegment(progressiveText, result.text, result.range.overlapSamples);
+          const previousText = progressiveText.trim();
+          const segmentText = previousText && mergedText.startsWith(previousText)
+            ? mergedText.slice(previousText.length).trim()
+            : result.text;
+          const fromSample = Math.max(transcriptTruth.snapshot().committedThroughSample, result.range.startSample);
+          transcriptTruth.acceptStableSegment({
+            segmentId: `${sessionId}:segment:${sequence}`,
+            sequence,
+            text: segmentText,
+            fromSample,
+            throughSample: result.range.endSample,
+          });
+          progressiveText = transcriptTruth.stableText();
+          diagnostics.watermarks.committedThroughSample = Math.max(diagnostics.watermarks.committedThroughSample, result.range.endSample);
           emit({
             type: "final",
             text: progressiveText,
             segment: {
+              segmentId: `${sessionId}:segment:${sequence}`,
               sequence,
               startSample: result.range.startSample,
               endSample: result.range.endSample,
             },
+            stableSegment: true,
+            _truthApplied: true,
           });
         }
         progressiveNextPublish += 1;
@@ -1715,14 +2030,14 @@ export function createDictationStream({ wss, voiceRuntime, recordingStore = null
         progressiveVadError ||= error;
         diagnostics.progressive.vadError = error?.message || "Progressive VAD failed";
       }
-      if ((progressiveVadError || observation?.available !== true) && typeof voiceRuntime.observeVoiceActivity === "function") {
+      if ((progressiveVadError || observation?.available !== true) && segmentationProvider?.observe) {
         diagnostics.progressive.fallback = true;
         await progressiveInferenceTail;
         progressiveEnabled = false;
         runtimeMetadata.progressiveBatch = false;
         progressiveTailRange = null;
         diagnostics.progressive.heldTailRegions = 0;
-        observation = await voiceRuntime.observeVoiceActivity(freezeAcceptedPcm());
+        observation = await segmentationProvider.observe(freezeAcceptedPcm());
         return observation;
       }
       if (progressiveTailRange) {
@@ -1735,10 +2050,21 @@ export function createDictationStream({ wss, voiceRuntime, recordingStore = null
       return observation;
     };
     const activateProgressiveBatch = (config, next) => {
-      if (config?.mode !== "local" || config?.inferenceMode !== "batch" || typeof next?.transcribeRange !== "function") return;
-      if (typeof voiceRuntime.beginVoiceActivity !== "function") return;
+      if (config?.mode !== "local" || config?.execution === "stop" || config?.inferenceMode !== "batch" || typeof next?.transcribeRange !== "function") return;
+      let provider = segmentationProvider;
+      if ((!provider || provider.mode === "none") && typeof voiceRuntime.beginVoiceActivity === "function") {
+        provider = createSegmentationProvider({
+          mode: "silero",
+          silero: {
+            observe: (pcm) => voiceRuntime.observeVoiceActivity(pcm),
+            createStream: () => voiceRuntime.beginVoiceActivity(),
+          },
+        });
+        segmentationProvider = provider;
+      }
+      if (!provider?.createStream) return;
       let stream;
-      try { stream = voiceRuntime.beginVoiceActivity(); }
+      try { stream = provider.createStream(); }
       catch (error) {
         diagnostics.progressive.vadError = error?.message || "Progressive VAD could not start";
         return;
@@ -1746,6 +2072,9 @@ export function createDictationStream({ wss, voiceRuntime, recordingStore = null
       if (!stream) return;
       progressiveVad = stream;
       progressiveEnabled = true;
+      diagnostics.segmentation.provider = provider.mode;
+      diagnostics.segmentation.calibrationVersion = provider.policy?.calibrationVersion || null;
+      diagnostics.segmentation.state = "ready";
       runtimeMetadata.progressiveBatch = true;
       diagnostics.progressive.enabled = true;
       queueProgressivePcm(pcmAccumulator.view());
@@ -1760,6 +2089,7 @@ export function createDictationStream({ wss, voiceRuntime, recordingStore = null
       if (archivePromise) return archivePromise;
       const archiveStartedAt = performance.now();
       diagnostics.archiveStartedAt ||= archiveStartedAt;
+      diagnostics.watermarks.archiveOwnedThroughSample = Math.max(diagnostics.watermarks.archiveOwnedThroughSample, Math.floor(audioBytes / 2));
       const text = String(transcript || "").trim();
       const options = {
         audioChunks: [freezeAcceptedPcm()],
@@ -1831,7 +2161,12 @@ export function createDictationStream({ wss, voiceRuntime, recordingStore = null
           setAuthoritativeVadAnalysis(diagnostics.vadObservation);
           return diagnostics.vadObservation;
         }
-        if (typeof voiceRuntime.observeVoiceActivity !== "function") {
+        if (!segmentationProvider || segmentationProvider.mode === "none") {
+          diagnostics.segmentation = { provider: "none", calibrationVersion: null, state: "not_configured" };
+          diagnostics.vadObservation = null;
+          return null;
+        }
+        if (typeof segmentationProvider.observe !== "function") {
           diagnostics.vadObservation = {
             type: "silero_vad_observation",
             available: false,
@@ -1843,7 +2178,7 @@ export function createDictationStream({ wss, voiceRuntime, recordingStore = null
           return diagnostics.vadObservation;
         }
         const pcm = freezeAcceptedPcm();
-        const observation = await voiceRuntime.observeVoiceActivity(pcm);
+        const observation = await segmentationProvider.observe(pcm);
         const queue = observation?.queue;
         diagnostics.vadStartedAt = queue?.startedAt ?? performance.now();
         diagnostics.vadCompletedAt = queue?.completedAt ?? performance.now();
@@ -1875,11 +2210,23 @@ export function createDictationStream({ wss, voiceRuntime, recordingStore = null
     };
     const complete = (reason, upstream = {}) => {
       if (completed) return;
+      let sessionFinal;
+      try {
+        sessionFinal = transcriptTruth.acceptSessionFinal({
+          text: upstream.text || finalText,
+          committedThroughSample: Math.floor(audioBytes / 2),
+        });
+      } catch (error) {
+        fail(error);
+        return;
+      }
       completed = true;
       const completedAt = Date.now();
       diagnostics.sessionFinalAt ||= performance.now();
       cleanup();
-      const transcript = String(upstream.text || finalText || "").trim();
+      const transcript = sessionFinal.text;
+      finalText = transcript;
+      noteWatermark("committedThroughSample", sessionFinal.committedThroughSample);
       const finalUpdates = {
         transcript,
         transcriptStatus: transcript ? "non_empty" : "empty",
@@ -1898,13 +2245,14 @@ export function createDictationStream({ wss, voiceRuntime, recordingStore = null
       const archive = archiveRecording(reason, null, transcript, finalUpdates);
       diagnostics.completionSentAt = performance.now();
       const finalDiagnostics = diagnosticsPayload();
+      send(sessionFinal);
       send({
         type: "completed",
-        text: upstream.text || finalText,
-        final: upstream.final ?? hasFinal,
+        text: transcript,
+        final: upstream.final ?? (hasFinal || Boolean(transcript)),
         reason,
         settlementMs: stoppedAt ? completedAt - stoppedAt : null,
-        finalWithinDeadline: Boolean(hasFinal && stoppedAt && !deadlinePassed),
+        finalWithinDeadline: Boolean((hasFinal || transcript) && stoppedAt && !deadlinePassed),
         audioBytes,
         audioDurationMs: Math.round(audioBytes / 32),
         speech: speechDecision(diagnostics),
@@ -1956,6 +2304,7 @@ export function createDictationStream({ wss, voiceRuntime, recordingStore = null
       const chunk = pcmAccumulator.append(data);
       audioBytes = pcmAccumulator.byteLength;
       diagnostics.streaming.acceptedThroughSample = Math.max(diagnostics.streaming.acceptedThroughSample, Math.floor(audioBytes / 2));
+      diagnostics.watermarks.acceptedThroughSample = Math.floor(audioBytes / 2);
       const receivedAt = performance.now();
       if (diagnostics.firstServerPcmAt === null) diagnostics.firstServerPcmAt = receivedAt;
       diagnostics.lastServerPcmAt = receivedAt;
@@ -1998,9 +2347,14 @@ export function createDictationStream({ wss, voiceRuntime, recordingStore = null
           await vadPromise;
           if (completed) return;
           const segmentation = {
-            mode: "silero_authoritative",
+            mode: diagnostics.analysis?.source === "heuristic"
+              ? "heuristic"
+              : diagnostics.analysis?.source === "silero_authoritative"
+                ? "silero_authoritative"
+                : "external_policy",
             segments: diagnostics.analysis?.segments || [],
             analysis: diagnostics.analysis,
+            policy: diagnostics.analysis?.policy || null,
           };
           try {
             await current.stop({
@@ -2027,50 +2381,85 @@ export function createDictationStream({ wss, voiceRuntime, recordingStore = null
       // Session already advertised readiness so the browser can stream PCM while
       // the local model cold-starts; ignore the adapter's own ready event.
       if (event.type === "ready") return;
-      if (event.type === "partial") {
-        const text = String(event.text || "");
-        if (text.trim()) {
-          transcriptObserved = true;
-          diagnostics.firstPartialAt ||= performance.now();
-          diagnostics.firstUsableTextAt ||= performance.now();
-        }
-        send({
-          type: "partial",
-          text,
-          ...(typeof event.stableText === "string" ? { stableText: event.stableText } : {}),
-          ...(typeof event.tentativeText === "string" ? { tentativeText: event.tentativeText } : {}),
-          ...(Number.isFinite(Number(event.revision)) ? { revision: Number(event.revision) } : {}),
-          ...(Number.isFinite(event.audioCommittedMs) ? { audioCommittedMs: Number(event.audioCommittedMs) } : {}),
-          ...(Number.isFinite(event.bufferedMs) ? { bufferedMs: Number(event.bufferedMs) } : {}),
-        });
+      try {
+        const hasRuntimeRevision = Number.isFinite(Number(event.revision));
+        const hasRuntimeSnapshot = typeof event.stableText === "string" || typeof event.tentativeText === "string";
+        const applyRuntimeSnapshot = () => {
+          if (!hasRuntimeSnapshot) return transcriptTruth.snapshot();
+          const throughSample = Number.isFinite(Number(event.throughSample))
+            ? Number(event.throughSample)
+            : Number.isFinite(Number(event.audioCommittedMs))
+              ? Math.round(Number(event.audioCommittedMs) * VOICE_SAMPLE_RATE / 1_000)
+              : transcriptTruth.snapshot().committedThroughSample;
+          const snapshot = transcriptTruth.acceptRuntimeSnapshot({
+            regionId: event.regionId || `${sessionId}:tentative:0`,
+            revision: hasRuntimeRevision ? Number(event.revision) : diagnostics.streaming.revisionCount + 1,
+            stableText: event.stableText || "",
+            tentativeText: event.tentativeText || "",
+            fromSample: event.fromSample ?? transcriptTruth.snapshot().committedThroughSample,
+            throughSample,
+          });
+          if (Number.isFinite(Number(event.audioCommittedMs))) {
+            noteWatermark("committedThroughSample", throughSample);
+          }
+          return snapshot;
+        };
+        if (event.type === "partial") {
+          const snapshot = applyRuntimeSnapshot();
+          const text = hasRuntimeSnapshot ? snapshot.text : String(event.text || "");
+          if (text.trim()) {
+            transcriptObserved = true;
+            diagnostics.firstPartialAt ||= performance.now();
+            diagnostics.firstUsableTextAt ||= performance.now();
+          }
+          send({
+            type: "partial",
+            text,
+            ...(hasRuntimeSnapshot ? { stableText: snapshot.stableText, tentativeText: snapshot.tentativeText, regionId: event.regionId || `${sessionId}:tentative:0` } : {}),
+            ...(Number.isFinite(Number(event.revision)) ? { revision: Number(event.revision) } : {}),
+            ...(Number.isFinite(event.audioCommittedMs) ? { audioCommittedMs: Number(event.audioCommittedMs) } : {}),
+            ...(Number.isFinite(event.bufferedMs) ? { bufferedMs: Number(event.bufferedMs) } : {}),
+          });
+        } else if (event.type === "final") {
+          let snapshot;
+          if (event._truthApplied) snapshot = transcriptTruth.snapshot();
+          else if (hasRuntimeSnapshot) snapshot = applyRuntimeSnapshot();
+          else {
+            const candidate = String(event.text || "").trim();
+            const final = transcriptTruth.acceptSessionFinal({ text: candidate, committedThroughSample: Math.floor(audioBytes / 2) });
+            snapshot = transcriptTruth.snapshot();
+            noteWatermark("committedThroughSample", final.committedThroughSample);
+          }
+          finalText = snapshot.text;
+          if (finalText.trim()) {
+            transcriptObserved = true;
+            diagnostics.firstSegmentFinalAt ||= performance.now();
+            diagnostics.firstUsableTextAt ||= performance.now();
+          }
+          hasFinal = true;
+          send({
+            type: "final",
+            text: finalText,
+            ...(event.segment ? { segment: event.segment } : {}),
+            stableText: snapshot.stableText,
+            tentativeText: snapshot.tentativeText,
+            ...(Number.isFinite(Number(event.revision)) ? { revision: Number(event.revision) } : {}),
+            ...(Number.isFinite(event.audioCommittedMs) ? { audioCommittedMs: Number(event.audioCommittedMs) } : {}),
+            ...(Number.isFinite(event.bufferedMs) ? { bufferedMs: Number(event.bufferedMs) } : {}),
+          });
+          // Completion waits for adapter_closed: segmented transcriptions emit
+          // one final per utterance, so completing on the first final would drop
+          // every later segment.
+        } else if (event.type === "adapter_closed") complete(stopping ? stopReason || "stopped" : "upstream_closed", event);
+        else if (event.type === "error") {
+          const truth = transcriptTruth.snapshot();
+          const exactStableCheckpoint = truth.stableSegments.some((segment) => segment.throughSample === truth.committedThroughSample && segment.throughSample > 0);
+          if (fallbackLiveToBatch && (event.fallbackEligible || exactStableCheckpoint)) void fallbackLiveToBatch(event).catch(() => {});
+          else fail(dictationError(event.code || "asr_error", event.message || "Voice dictation failed", 502));
+        } else send(event);
+      } catch (error) {
+        fail(error);
       }
-      else if (event.type === "final") {
-        finalText = String(event.text || "");
-        if (finalText.trim()) {
-          transcriptObserved = true;
-          diagnostics.firstSegmentFinalAt ||= performance.now();
-          diagnostics.firstUsableTextAt ||= performance.now();
-        }
-        hasFinal = true;
-        send({
-          type: "final",
-          text: finalText,
-          ...(event.segment ? { segment: event.segment } : {}),
-          ...(typeof event.stableText === "string" ? { stableText: event.stableText } : {}),
-          ...(typeof event.tentativeText === "string" ? { tentativeText: event.tentativeText } : {}),
-          ...(Number.isFinite(Number(event.revision)) ? { revision: Number(event.revision) } : {}),
-          ...(Number.isFinite(event.audioCommittedMs) ? { audioCommittedMs: Number(event.audioCommittedMs) } : {}),
-          ...(Number.isFinite(event.bufferedMs) ? { bufferedMs: Number(event.bufferedMs) } : {}),
-        });
-        // Completion waits for adapter_closed: segmented transcriptions emit
-        // one final per utterance, so completing on the first final would drop
-        // every later segment.
-      } else if (event.type === "adapter_closed") complete(stopping ? stopReason || "stopped" : "upstream_closed", event);
-      else if (event.type === "error") {
-        if (event.fallbackEligible && fallbackLiveToBatch) void fallbackLiveToBatch(event).catch(() => {});
-        else fail(dictationError(event.code || "asr_error", event.message || "Voice dictation failed", 502));
-      }
-      else send(event);
     };
     // Accept PCM immediately. Cold model load continues in the background; the
     // server retains frames until the adapter is attached, then drains them.
@@ -2110,11 +2499,30 @@ export function createDictationStream({ wss, voiceRuntime, recordingStore = null
         resolvedProfileId: typeof config.resolvedProfileId === "string" ? config.resolvedProfileId : null,
         execution: typeof config.execution === "string" ? config.execution : null,
         segmentation: typeof config.segmentation === "string" ? config.segmentation : null,
+        fallback: config.fallback && typeof config.fallback === "object" ? config.fallback : null,
         requestedComputeBackend: typeof config.requestedComputeBackend === "string" ? config.requestedComputeBackend : null,
         actualComputeBackend: typeof config.actualComputeBackend === "string" ? config.actualComputeBackend : config.computeBackend || null,
         loadedRuntimeVersion: typeof config.loadedRuntimeVersion === "string" ? config.loadedRuntimeVersion : null,
         progressiveBatch: false,
         streamFallback: null,
+      };
+      const segmentationMode = config.segmentation === "heuristic"
+        ? "heuristic"
+        : config.segmentation === "none"
+          ? "none"
+          : "silero";
+      segmentationProvider = createSegmentationProvider({
+        mode: segmentationMode,
+        silero: {
+          ...(typeof voiceRuntime.observeVoiceActivity === "function" ? { observe: (pcm) => voiceRuntime.observeVoiceActivity(pcm) } : {}),
+          ...(typeof voiceRuntime.beginVoiceActivity === "function" ? { createStream: () => voiceRuntime.beginVoiceActivity() } : {}),
+        },
+        heuristicPolicy: config.heuristicPolicy || config.segmentationPolicy || {},
+      });
+      diagnostics.segmentation = {
+        provider: segmentationProvider.mode,
+        calibrationVersion: segmentationProvider.policy?.calibrationVersion || null,
+        state: segmentationProvider.mode === "none" ? "not_configured" : "ready",
       };
       diagnostics.runtime = {
         mode: runtimeMetadata.mode,
@@ -2132,6 +2540,7 @@ export function createDictationStream({ wss, voiceRuntime, recordingStore = null
         resolvedProfileId: runtimeMetadata.resolvedProfileId,
         execution: runtimeMetadata.execution,
         segmentation: runtimeMetadata.segmentation,
+        fallback: runtimeMetadata.fallback,
         requestedComputeBackend: runtimeMetadata.requestedComputeBackend,
         actualComputeBackend: runtimeMetadata.actualComputeBackend,
         loadedRuntimeVersion: runtimeMetadata.loadedRuntimeVersion,
@@ -2154,6 +2563,7 @@ export function createDictationStream({ wss, voiceRuntime, recordingStore = null
           resolvedProfileId: runtimeMetadata.resolvedProfileId,
           execution: runtimeMetadata.execution,
           segmentation: runtimeMetadata.segmentation,
+          fallback: runtimeMetadata.fallback,
           requestedComputeBackend: runtimeMetadata.requestedComputeBackend,
           actualComputeBackend: runtimeMetadata.actualComputeBackend,
           loadedRuntimeVersion: runtimeMetadata.loadedRuntimeVersion,
@@ -2167,6 +2577,14 @@ export function createDictationStream({ wss, voiceRuntime, recordingStore = null
           await next.opened;
         } catch (error) {
           next.close();
+          const sourceProfile = {
+            profileId: runtimeMetadata.resolvedProfileId,
+            adapter: runtimeMetadata.adapter,
+            model: runtimeMetadata.model,
+            runtimeId: runtimeMetadata.runtimeId,
+            backendPathId: runtimeMetadata.backendPathId,
+          };
+          const fallbackProfileId = runtimeMetadata.fallback?.profileId || null;
           if (typeof config.transcribe !== "function") throw error;
           runtimeMetadata = {
             ...runtimeMetadata,
@@ -2182,30 +2600,77 @@ export function createDictationStream({ wss, voiceRuntime, recordingStore = null
             streamFallback: {
               from: "transcribe_cpp_stream_v1",
               reason: error?.code || "voice_stream_open_failed",
+              replay: "from_zero",
+              replaySample: 0,
+              discardedTentativeRevisions: [],
+              stableCheckpoint: 0,
+              overlapSamples: 0,
+              duplicateBoundaryHandling: "none",
+              sourceProfile,
+              fallbackProfile: fallbackProfileId,
+              completingProfile: fallbackProfileId,
             },
           };
           diagnostics.streaming.fallback = runtimeMetadata.streamFallback;
           updateRuntimeDiagnostics();
-          next = createSnapshotAdapter(emit, limits, config.transcribe, diagnostics, { signal: sessionController.signal, sessionId, nextOperationId });
+          next = createSnapshotAdapter(emit, limits, config.transcribe, diagnostics, { signal: sessionController.signal, sessionId, nextOperationId, watermarks: watermarkHooks });
         }
       } else if (config.adapter === OPENAI_LIVE_ADAPTER) {
-        next = createOpenaiRealtimeStreamAdapter(emit, limits, config.stream, diagnostics);
+        next = createOpenaiRealtimeStreamAdapter(emit, limits, config.stream, diagnostics, { watermarks: watermarkHooks });
         await next.opened;
       } else if (config.adapter === "deepgram_audio_v1") {
-        next = createDeepgramAdapter(config, emit, limits, fetchImpl, diagnostics, { signal: sessionController.signal, sessionId, nextOperationId });
+        next = createDeepgramAdapter(config, emit, limits, fetchImpl, diagnostics, { signal: sessionController.signal, sessionId, nextOperationId, watermarks: watermarkHooks });
       } else if (config.adapter === "transcribe_cpp_batch_v1") {
-        next = createSnapshotAdapter(emit, limits, config.transcribe, diagnostics, { progressive: false, useSegmentation: false, signal: sessionController.signal, sessionId, nextOperationId });
+        next = createSnapshotAdapter(emit, limits, config.transcribe, diagnostics, { progressive: false, useSegmentation: false, signal: sessionController.signal, sessionId, nextOperationId, watermarks: watermarkHooks });
       } else if (config.adapter === "managed_transformers_v1") {
-        next = createSnapshotAdapter(emit, limits, config.transcribe, diagnostics, { signal: sessionController.signal, sessionId, nextOperationId });
+        next = createSnapshotAdapter(emit, limits, config.transcribe, diagnostics, {
+          progressive: config.execution !== "stop",
+          useSegmentation: config.execution !== "stop",
+          signal: sessionController.signal,
+          sessionId,
+          nextOperationId,
+          watermarks: watermarkHooks,
+        });
       } else if (config.adapter === "managed_parakeet_loopback_v1") {
-        next = createSnapshotAdapter(emit, limits, config.transcribe, diagnostics, { progressive: false, useSegmentation: false, signal: sessionController.signal, sessionId, nextOperationId });
+        next = createSnapshotAdapter(emit, limits, config.transcribe, diagnostics, { progressive: false, useSegmentation: false, signal: sessionController.signal, sessionId, nextOperationId, watermarks: watermarkHooks });
       } else {
-        next = createHttpAdapter(config, emit, limits, fetchImpl, diagnostics, { signal: sessionController.signal });
+        next = createHttpAdapter(config, emit, limits, fetchImpl, diagnostics, { signal: sessionController.signal, watermarks: watermarkHooks });
       }
       if (config.adapter === "transcribe_cpp_stream_v1" && typeof config.transcribe === "function" && runtimeMetadata.adapter === "transcribe_cpp_stream_v1") {
         const startLiveFallback = async (event) => {
           if (completed || runtimeMetadata.adapter !== "transcribe_cpp_stream_v1") return;
+          const truthBeforeFallback = transcriptTruth.snapshot();
+          const stableCheckpoint = truthBeforeFallback.committedThroughSample;
+          const stableSegment = truthBeforeFallback.stableSegments.at(-1) || null;
+          const hasStableCheckpoint = Boolean(stableSegment && stableCheckpoint > 0 && stableSegment.throughSample === stableCheckpoint);
+          const overlapSamples = hasStableCheckpoint ? Math.min(1_600, stableCheckpoint) : 0;
+          const replaySample = hasStableCheckpoint ? stableCheckpoint - overlapSamples : 0;
+          const sourceProfile = {
+            profileId: runtimeMetadata.resolvedProfileId,
+            adapter: runtimeMetadata.adapter,
+            model: runtimeMetadata.model,
+            runtimeId: runtimeMetadata.runtimeId,
+            backendPathId: runtimeMetadata.backendPathId,
+          };
+          const fallbackProfileId = runtimeMetadata.fallback?.profileId || null;
+          const fallbackEmit = (fallbackEvent) => {
+            if (!hasStableCheckpoint || !["final", "adapter_closed"].includes(fallbackEvent.type)) {
+              emit(fallbackEvent);
+              return;
+            }
+            const suffix = String(fallbackEvent.text || "").trim();
+            const text = suffix
+              ? appendProgressiveSegment(truthBeforeFallback.stableText, suffix, overlapSamples)
+              : truthBeforeFallback.stableText;
+            emit({
+              ...fallbackEvent,
+              text,
+              stableText: truthBeforeFallback.stableText,
+              tentativeText: "",
+            });
+          };
           const previous = adapter;
+          const discardedTentative = transcriptTruth.discardTentative();
           previous?.close();
           adapter = null;
           adapterReady = false;
@@ -2219,34 +2684,64 @@ export function createDictationStream({ wss, voiceRuntime, recordingStore = null
               inferenceMode: "batch",
               partials: false,
               streaming: null,
-              fallback: "wp5_progressive_batch",
+              fallback: hasStableCheckpoint ? "wp9_checkpoint_batch" : "wp5_progressive_batch",
             },
             streamFallback: {
               from: "transcribe_cpp_stream_v1",
               reason: event.code || "voice_stream_failed",
-              replay: "from_zero",
-              replaySample: 0,
+              replay: hasStableCheckpoint ? "from_committed_sample" : "from_zero",
+              replaySample,
+              discardedTentativeRevisions: discardedTentative.revisions,
+              stableCheckpoint,
+              overlapSamples,
+              duplicateBoundaryHandling: hasStableCheckpoint ? "stable_prefix_preserved" : "none",
+              sourceProfile,
+              fallbackProfile: fallbackProfileId,
+              completingProfile: fallbackProfileId,
             },
           };
           diagnostics.streaming.fallback = runtimeMetadata.streamFallback;
           updateRuntimeDiagnostics();
-          const fallbackAdapter = createSnapshotAdapter(emit, limits, config.transcribe, diagnostics, { signal: sessionController.signal, sessionId, nextOperationId });
+          const fallbackAdapter = createSnapshotAdapter(
+            fallbackEmit,
+            limits,
+            config.transcribe,
+            diagnostics,
+            {
+              progressive: !hasStableCheckpoint,
+              useSegmentation: !hasStableCheckpoint,
+              signal: sessionController.signal,
+              sessionId,
+              nextOperationId,
+              watermarks: watermarkHooks,
+              sampleOffset: replaySample,
+            },
+          );
           await fallbackAdapter.opened;
           if (completed) {
             fallbackAdapter.close();
             return;
           }
           adapter = fallbackAdapter;
-          if (pcmAccumulator.byteLength > 0) adapter.write(pcmAccumulator.view());
+          if (pcmAccumulator.byteLength > replaySample * 2) {
+            adapter.write(pcmAccumulator.view().subarray(replaySample * 2));
+          }
           adapterReady = true;
-          activateProgressiveBatch({ ...config, inferenceMode: "batch" }, fallbackAdapter);
+          activateProgressiveBatch({ ...config, inferenceMode: "batch", execution: hasStableCheckpoint ? "stop" : config.execution }, fallbackAdapter);
           send({
             type: "stream_fallback",
             from: "transcribe_cpp_stream_v1",
             to: "transcribe_cpp_batch_fallback_v1",
             reason: event.code || "voice_stream_failed",
-            replay: "from_zero",
-            replaySample: 0,
+            replay: hasStableCheckpoint ? "from_committed_sample" : "from_zero",
+            replaySample,
+            discardedTentativeRevisions: discardedTentative.revisions,
+            stableCheckpoint,
+            overlapSamples,
+            duplicateBoundaryHandling: hasStableCheckpoint ? "stable_prefix_preserved" : "none",
+            sourceProfile,
+            fallbackProfile: fallbackProfileId,
+            completingProfile: fallbackProfileId,
             ...runtimeMetadata,
           });
         };

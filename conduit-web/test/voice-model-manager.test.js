@@ -85,6 +85,29 @@ test("managed voice model requires license acceptance, verifies artifacts, repor
   } finally { await manager.stop(); await fs.rm(temporary, { recursive: true, force: true }); }
 });
 
+test("uninstalling ASR does not reset the shared Silero instance", async () => {
+  const temporary = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-voice-vad-lifecycle-"));
+  const root = path.join(temporary, "voice", "models");
+  const modelId = "whisper-tiny-en-q8";
+  let vadStops = 0;
+  const manager = new VoiceModelManager({
+    root,
+    vad: { stop: async () => { vadStops += 1; } },
+  });
+  try {
+    await fs.mkdir(path.join(root, modelId), { recursive: true });
+    await fs.writeFile(path.join(root, modelId, "manifest.json"), JSON.stringify({ modelId }));
+    manager.activeModelId = modelId;
+    manager.transcriber = { dispose() {} };
+    assert.equal(await manager.uninstall(modelId), true);
+    assert.equal(vadStops, 0);
+  } finally {
+    await manager.stop();
+    assert.equal(vadStops, 1);
+    await fs.rm(temporary, { recursive: true, force: true });
+  }
+});
+
 test("managed voice model rejects a mismatched artifact without activating it", async () => {
   const temporary = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-voice-model-bad-"));
   const root = path.join(temporary, "voice", "models");
