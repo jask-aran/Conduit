@@ -60,6 +60,9 @@ test("first-class cloud providers pin endpoints, models, and credential scope", 
     assert.equal(openai.endpoint, "https://api.openai.com/v1/audio/transcriptions");
     assert.equal(openai.adapter, "openai_audio_sse_v1");
     assert.equal(openai.auth.type, "bearer");
+    const openaiView = await fixture.store.publicView();
+    assert.equal(openaiView.providers.find((provider) => provider.id === "openai").models.find((model) => model.id === "gpt-transcribe").adapter, "openai_audio_sse_v1");
+    assert.equal(openaiView.providers.find((provider) => provider.id === "openai").models.find((model) => model.id === "gpt-live-transcribe").adapter, "openai_realtime_stream_v1");
     await fixture.store.update({
       mode: "remote", provider: "openai", model: "made-up", auth: { type: "bearer" },
     });

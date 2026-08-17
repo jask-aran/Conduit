@@ -5152,6 +5152,7 @@ test("Voice microphone test shows the shared live recorder monitor", async ({ pa
   await page.keyboard.press("Control+,");
   const dialog = page.getByRole("dialog", { name: "Settings" });
   await dialog.getByRole("tab", { name: "Voice" }).click();
+  await dialog.locator("#voice-advanced-summary").click();
   const activation = dialog.locator("#dictation-activation");
   const captureProfile = dialog.locator("#voice-capture-profile");
   const warmMicrophone = dialog.locator("#voice-warm-microphone");
@@ -5177,6 +5178,7 @@ test("Voice microphone test shows the shared live recorder monitor", async ({ pa
   await page.keyboard.press("Control+,");
   await expect(dialog).toBeVisible();
   await dialog.getByRole("tab", { name: "Voice" }).click();
+  await dialog.locator("#voice-advanced-summary").click();
   await expect(dialog.locator("#voice-input-device")).toHaveValue("mic-1");
   await expect(dialog.locator("#voice-capture-profile")).toHaveValue("processed");
   await expect(dialog.locator("#voice-warm-microphone")).toBeChecked();
@@ -5224,15 +5226,18 @@ test("voice catalogue selects the transcribe-rs backend and timing on mobile", a
   const modelId = "parakeet-tdt-0.6b-v2-int8";
   const artifactId = "parakeet-tdt-0.6b-v2-int8";
   const transcribeRsArtifactId = `${artifactId}.transcribe-rs`;
+  const whisperArtifactId = "whisper-tiny-en-q8";
   const loopbackPathId = `${artifactId}.parakeet-loopback`;
   const transcribeRsPathId = `${transcribeRsArtifactId}.transcribe-rs`;
+  const whisperPathId = `${whisperArtifactId}.transformers-js`;
   const stopProfileId = `${transcribeRsArtifactId}.stop`;
   const eagerProfileId = `${transcribeRsArtifactId}.eager`;
+  const whisperProfileId = `${whisperArtifactId}.eager`;
   const license = { id: "CC-BY-4.0", attribution: "NVIDIA and istupakov" };
-  const profile = (id, selectedArtifactId, runtimeId, execution, segmentation) => ({
+  const profile = (id, selectedArtifactId, runtimeId, execution, segmentation, selectedModelId = "parakeet-tdt-0.6b-v2") => ({
     schemaVersion: 1,
     id,
-    modelId: "parakeet-tdt-0.6b-v2",
+    modelId: selectedModelId,
     artifactId: selectedArtifactId,
     runtimeId,
     backendPathId: `${selectedArtifactId}.${runtimeId}`,
@@ -5245,23 +5250,30 @@ test("voice catalogue selects the transcribe-rs backend and timing on mobile", a
   const catalogue = {
     version: "1",
     schemaVersion: 1,
-    models: [{ id: "parakeet-tdt-0.6b-v2", label: "Parakeet TDT 0.6B v2", languages: "English", description: "Parakeet v2.", artifactIds: [artifactId, transcribeRsArtifactId] }],
+    models: [
+      { id: "parakeet-tdt-0.6b-v2", label: "Parakeet TDT 0.6B v2", languages: "English", description: "Parakeet v2.", artifactIds: [artifactId, transcribeRsArtifactId] },
+      { id: "whisper-tiny-en", label: "Whisper Tiny English", languages: "English", description: "Whisper Tiny.", artifactIds: [whisperArtifactId] },
+    ],
     artifacts: [
       { id: artifactId, modelId: "parakeet-tdt-0.6b-v2", legacyModelId: modelId, runtimeId: "parakeet-loopback", format: "onnx-package", precision: "int8", approximateBytes: 731_357_568, minimumFreeBytes: 1_500_000_000, modelFile: null, runtimeVersion: "parakeet-loopback-1", license },
       { id: transcribeRsArtifactId, modelId: "parakeet-tdt-0.6b-v2", legacyModelId: modelId, runtimeId: "transcribe-rs", format: "onnx-package", precision: "int8", approximateBytes: 731_357_568, minimumFreeBytes: 1_500_000_000, modelFile: null, runtimeVersion: "transcribe-rs-0.3.8", license },
+      { id: whisperArtifactId, modelId: "whisper-tiny-en", legacyModelId: whisperArtifactId, runtimeId: "transformers-js", format: "transformers.js", precision: "q8", approximateBytes: 78_000_000, minimumFreeBytes: 200_000_000, modelFile: null, runtimeVersion: "transformers.js-3", license },
     ],
     runtimes: [
       { id: "parakeet-loopback", adapterKind: "parakeet_loopback", version: "parakeet-loopback-1", compiledComputeBackends: ["cpu"] },
       { id: "transcribe-rs", adapterKind: "transcribe_rs", version: "transcribe-rs-0.3.8", compiledComputeBackends: ["cpu"] },
+      { id: "transformers-js", adapterKind: "transformers_whisper", version: "transformers.js-3", compiledComputeBackends: ["wasm"] },
     ],
     backendPaths: [
       { id: loopbackPathId, artifactId, runtimeId: "parakeet-loopback", ports: { batch: true, stream: false } },
       { id: transcribeRsPathId, artifactId: transcribeRsArtifactId, runtimeId: "transcribe-rs", ports: { batch: true, stream: false } },
+      { id: whisperPathId, artifactId: whisperArtifactId, runtimeId: "transformers-js", ports: { batch: true, stream: false } },
     ],
     profiles: [
       profile(`${artifactId}.stop`, artifactId, "parakeet-loopback", "stop", "none"),
       profile(stopProfileId, transcribeRsArtifactId, "transcribe-rs", "stop", "none"),
       profile(eagerProfileId, transcribeRsArtifactId, "transcribe-rs", "eager", "silero"),
+      profile(whisperProfileId, whisperArtifactId, "transformers-js", "eager", "silero", "whisper-tiny-en"),
     ],
     defaultProfileId: `${artifactId}.stop`,
   };
@@ -5309,10 +5321,19 @@ test("voice catalogue selects the transcribe-rs backend and timing on mobile", a
     },
   };
   let savedPayload = null;
+  let stalePollPending = false;
+  let stalePollSeen = false;
   await page.route("**/v0/voice/settings", async (route) => {
     if (route.request().method() === "PUT") {
       savedPayload = route.request().postDataJSON();
-      await route.fulfill({ json: { ...view, mode: savedPayload.mode, localModelId: "whisper-tiny-en-q8", localSelection: { ...savedPayload.localSelection, modelId: "whisper-tiny-en" }, localSelectionOrigin: "explicit", resolvedProfileId: `${savedPayload.localSelection.artifactId}.${savedPayload.localSelection.execution}` } });
+      stalePollPending = true;
+      await route.fulfill({ json: { ...view, mode: savedPayload.mode, localModelId: whisperArtifactId, localSelection: { modelId: "whisper-tiny-en", artifactId: whisperArtifactId, runtimeId: "transformers-js", execution: "eager", segmentation: "silero" }, localSelectionOrigin: "explicit", resolvedProfileId: whisperProfileId, local: { ...view.local, installingModelId: "parakeet-tdt-0.6b-v2-fp32" } } });
+      return;
+    }
+    if (stalePollPending) {
+      stalePollPending = false;
+      stalePollSeen = true;
+      await route.fulfill({ json: { ...view, localModelId: whisperArtifactId, localSelection: { modelId: "whisper-tiny-en", artifactId: whisperArtifactId, runtimeId: "transformers-js", execution: "eager", segmentation: "silero" }, localSelectionOrigin: "explicit", resolvedProfileId: whisperProfileId } });
       return;
     }
     await route.fulfill({ json: view });
@@ -5326,14 +5347,20 @@ test("voice catalogue selects the transcribe-rs backend and timing on mobile", a
   const dialog = page.getByRole("dialog", { name: "Settings" });
   await dialog.getByRole("tab", { name: "Voice" }).click();
   await expect(dialog.locator("#voice-local-family")).toHaveValue("parakeet-tdt-0.6b-v2");
-  await dialog.locator("#voice-local-artifact-runtime").selectOption(transcribeRsPathId);
-  await expect(dialog.locator("#voice-local-artifact-runtime")).toHaveValue(transcribeRsPathId);
-  await expect(dialog.locator("#voice-local-artifact-runtime option").filter({ hasText: "transcribe-rs ONNX worker" })).toHaveCount(1);
-  await dialog.locator("#voice-local-timing").selectOption(eagerProfileId);
-  await expect(dialog.locator("#voice-local-timing")).toHaveValue(eagerProfileId);
-  await expect(dialog.getByText("Pause detection: Silero", { exact: true })).toBeVisible();
+  await expect(dialog.locator("#voice-local-runtime")).toHaveValue("parakeet-loopback");
+  await dialog.locator("#voice-local-runtime").selectOption("transcribe-rs");
+  await expect(dialog.locator("#voice-local-runtime")).toHaveValue("transcribe-rs");
+  await expect(dialog.locator("#voice-local-runtime option").filter({ hasText: "transcribe-rs ONNX worker" })).toHaveCount(1);
+  await expect(dialog.locator("#voice-local-variant")).toHaveValue(transcribeRsArtifactId);
+  await expect(dialog.locator("#voice-local-variant option").filter({ hasText: "installed" })).toHaveCount(1);
+  await dialog.locator("#voice-local-batching").selectOption(eagerProfileId);
+  await expect(dialog.locator("#voice-local-batching")).toHaveValue(eagerProfileId);
+  await expect(dialog.locator("#voice-local-batching option").filter({ hasText: "During pauses · Silero" })).toHaveCount(1);
+  await expect(dialog.locator("#voice-pause-detection")).toHaveCount(0);
+  await expect(dialog.locator("#voice-advanced")).not.toHaveAttribute("open", "");
+  await dialog.locator("#voice-advanced-summary").click();
   await expect(dialog.getByText("Unsaved", { exact: true })).toBeVisible();
-  const controlOrder = await dialog.evaluate(() => ["#voice-mode", ".voice-local-catalogue", ".voice-input-test"].map((selector) => {
+  const controlOrder = await dialog.evaluate(() => ["#voice-mode", ".voice-local-catalogue", "#voice-advanced"].map((selector) => {
     const element = document.querySelector(selector);
     return element ? element.getBoundingClientRect().top : -1;
   }));
@@ -5341,6 +5368,7 @@ test("voice catalogue selects the transcribe-rs backend and timing on mobile", a
   expect(controlOrder[1]).toBeLessThan(controlOrder[2]);
   await dialog.getByRole("button", { name: "Save Voice settings" }).click();
   await expect(dialog.locator(".voice-save-success")).toBeVisible();
+  await expect.poll(() => stalePollSeen).toBe(true);
   await expect(dialog.locator("#voice-local-family")).toHaveValue("parakeet-tdt-0.6b-v2");
   expect(savedPayload.localSelection).toEqual({ modelId: "parakeet-tdt-0.6b-v2", artifactId: transcribeRsArtifactId, runtimeId: "transcribe-rs", execution: "eager", segmentation: "silero" });
   if (page.viewportSize().width <= 520) {
@@ -5371,6 +5399,9 @@ test("managed model installation preserves the unsaved local source during serve
   const view = (mode, installingModelId = null, state = "not_installed", error = null) => ({
     mode,
     localModelId: modelId,
+    localSelection: { modelId: "parakeet-tdt-0.6b-v3", artifactId: modelId, runtimeId: "parakeet-loopback", execution: "stop", segmentation: "none" },
+    localSelectionOrigin: "default",
+    resolvedProfileId: `${modelId}.stop`,
     provider: "",
     adapter: "",
     model: "",
@@ -5383,6 +5414,17 @@ test("managed model installation preserves the unsaved local source during serve
       installingModelId,
       activeModelId: null,
       progress: installingModelId ? { phase: "downloading", current: "parakeet", completedBytes: 10, totalBytes: 100 } : null,
+      catalogue: {
+        version: "1",
+        schemaVersion: 1,
+        models: [{ id: "parakeet-tdt-0.6b-v3", label: "Parakeet TDT 0.6B v3", languages: "English", description: "Accurate.", artifactIds: [modelId] }],
+        artifacts: [{ id: modelId, modelId: "parakeet-tdt-0.6b-v3", legacyModelId: modelId, runtimeId: "parakeet-loopback", format: "onnx-package", precision: "int8", approximateBytes: 943718400, minimumFreeBytes: 1500000000, modelFile: null, runtimeVersion: "parakeet-loopback-1", license: model.license }],
+        runtimes: [{ id: "parakeet-loopback", adapterKind: "parakeet_loopback", version: "parakeet-loopback-1", compiledComputeBackends: ["cpu"] }],
+        backendPaths: [{ id: `${modelId}.parakeet-loopback`, artifactId: modelId, runtimeId: "parakeet-loopback", ports: { batch: true, stream: false } }],
+        profiles: [{ schemaVersion: 1, id: `${modelId}.stop`, modelId: "parakeet-tdt-0.6b-v3", artifactId: modelId, runtimeId: "parakeet-loopback", backendPathId: `${modelId}.parakeet-loopback`, execution: "stop", segmentation: "none", output: { tentative: false, stableSegments: true, sampleTimestamps: true }, resourcePolicy: { preload: "supported", serialInference: true, maximumSessionMs: 300000, maximumQueuedAudioMs: null }, fallback: null }],
+        defaultProfileId: `${modelId}.stop`,
+      },
+      backendPaths: [{ backendPathId: `${modelId}.parakeet-loopback`, installable: true, operational: false, blockedReason: null, artifactState: state === "ready" ? "installed" : state === "installing" ? "installing" : "absent", runtimeState: state === "error" ? "failed" : "cold", requestedComputeBackend: "cpu", actualComputeBackend: null, loadedRuntimeVersion: null, lastErrorCode: state === "error" ? "install_failed" : null }],
       models: [{ ...model, state, error, staged: state === "interrupted" }],
     },
   });
@@ -5405,10 +5447,13 @@ test("managed model installation preserves the unsaved local source during serve
   await dialog.getByRole("tab", { name: "Voice" }).click();
   await dialog.locator("#voice-mode").selectOption("local");
   await expect(dialog.getByRole("heading", { name: "Managed local models" })).toBeVisible();
+  await expect(dialog.locator("#voice-local-variant option:checked")).toContainText("not installed");
   await dialog.getByLabel("Accept CC-BY-4.0").check();
-  await dialog.getByRole("button", { name: "Install selected model" }).click();
+  await dialog.getByRole("button", { name: "Install selected variant" }).click();
   await expect(dialog.getByRole("heading", { name: "Managed local models" })).toBeVisible();
   await expect(dialog.getByText("Installation interrupted; retry to resume.")).toBeVisible({ timeout: 3_000 });
+  await expect(dialog.locator("#voice-local-variant option:checked")).toContainText("not installed");
+  await expect(dialog.locator('.voice-selection-status[data-state="failed"]')).toContainText("failed");
 });
 
 test("stopping dictation releases a microphone stream that resolves after cancellation", async ({ page }) => {
@@ -5462,9 +5507,10 @@ test("Voice credential tests persist the displayed provider before testing it", 
     source: "stored",
     adapters: [
       { id: "openai_audio_sse_v1", label: "OpenAI-compatible audio upload", transport: "http", description: "Uploads one utterance." },
+      { id: "openai_realtime_stream_v1", label: "OpenAI realtime transcription", transport: "ws", description: "Feeds live PCM." },
     ],
     providers: [
-      { id: "openai", label: "OpenAI", adapter: "openai_audio_sse_v1", endpoint: "https://api.openai.com/v1/audio/transcriptions", authLabel: "OpenAI API key", models: [{ id: "gpt-transcribe", label: "GPT Transcribe", description: "Recommended." }] },
+      { id: "openai", label: "OpenAI", adapter: "openai_audio_sse_v1", endpoint: "https://api.openai.com/v1/audio/transcriptions", authLabel: "OpenAI API key", models: [{ id: "gpt-transcribe", label: "GPT Transcribe", description: "Recommended.", adapter: "openai_audio_sse_v1" }, { id: "gpt-live-transcribe", label: "GPT Live Transcribe", description: "Live.", adapter: "openai_realtime_stream_v1" }] },
       { id: "deepgram", label: "Deepgram", adapter: "deepgram_audio_v1", endpoint: "https://api.deepgram.com/v1/listen", authLabel: "Deepgram API key", models: [{ id: "nova-3", label: "Nova-3", description: "Recommended." }] },
       { id: "groq", label: "Groq", adapter: "openai_audio_sse_v1", endpoint: "https://api.groq.com/openai/v1/audio/transcriptions", authLabel: "Groq API key", models: [{ id: "whisper-large-v3-turbo", label: "Whisper Large V3 Turbo", description: "Recommended." }] },
       { id: "custom", label: "Custom endpoint", adapter: "openai_audio_sse_v1", endpoint: "", authLabel: "Endpoint credential", models: [] },
@@ -5488,6 +5534,12 @@ test("Voice credential tests persist the displayed provider before testing it", 
   await page.keyboard.press("Control+,");
   const dialog = page.getByRole("dialog", { name: "Settings" });
   await dialog.getByRole("tab", { name: "Voice" }).click();
+  await dialog.locator("#voice-cloud-model").selectOption("gpt-live-transcribe");
+  await expect(dialog).toContainText("WebSocket live PCM");
+  await expect(dialog.getByText("Live", { exact: true })).toBeVisible();
+  await dialog.locator("#voice-cloud-model").selectOption("gpt-transcribe");
+  await expect(dialog).toContainText("HTTPS audio upload");
+  await expect(dialog.getByText("After Stop", { exact: true })).toBeVisible();
   await dialog.getByLabel("OpenAI API key").fill("cloud-secret-value");
   await dialog.getByRole("button", { name: "Test credentials" }).click();
   await expect.poll(() => savedRequest).not.toBeNull();

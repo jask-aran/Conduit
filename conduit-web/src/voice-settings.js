@@ -250,7 +250,14 @@ export class VoiceSettingsStore {
       localSelection: effective.localSelection, localSelectionOrigin: effective.localSelectionOrigin, resolvedProfileId: effective.resolvedProfileId,
       provider: effective.provider, adapter: effective.adapter, model: effective.model,
       endpoint: effective.endpoint, source: effective.source, adapters: VOICE_ADAPTERS,
-      providers: VOICE_PROVIDERS.map((provider) => ({ ...provider, configured: Boolean(effective.credentials[provider.id]?.secret) })),
+      providers: VOICE_PROVIDERS.map((provider) => ({
+        ...provider,
+        models: provider.models.map((model) => ({
+          ...model,
+          adapter: provider.id === "openai" ? openaiAdapterFor(model.id) : provider.adapter,
+        })),
+        configured: Boolean(effective.credentials[provider.id]?.secret),
+      })),
       auth: { type: effective.auth.type, headerName: effective.auth.headerName, configured, source: configured ? effective.source : null, removable: configured && effective.source === "stored" },
       local,
     };

@@ -417,7 +417,7 @@ export interface VoiceServerSettings {
   endpoint: string;
   source: "stored";
   adapters: { id: string; label: string; transport: "http" | "ws"; description: string }[];
-  providers: { id: string; label: string; adapter: string; endpoint: string; authLabel: string; configured?: boolean; models: { id: string; label: string; description: string }[] }[];
+  providers: { id: string; label: string; adapter: string; endpoint: string; authLabel: string; configured?: boolean; models: { id: string; label: string; description: string; adapter?: string }[] }[];
   auth: { type: "none" | "bearer" | "header"; headerName: string; configured: boolean; source: "stored" | null; removable: boolean };
   local: {
     catalogue?: VoiceExecutionCatalogueView;

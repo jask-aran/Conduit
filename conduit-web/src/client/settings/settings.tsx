@@ -89,7 +89,18 @@ const selectionArtifactMatchesProfile = (selection: VoiceLocalSelection, profile
   && selection.runtimeId === profile.runtimeId
   && selection.execution === profile.execution
   && selection.segmentation === profile.segmentation;
-
+const sameVoiceSelection = (left: VoiceLocalSelection | null | undefined, right: VoiceLocalSelection | null | undefined) => Boolean(left && right
+  && left.modelId === right.modelId
+  && left.artifactId === right.artifactId
+  && left.runtimeId === right.runtimeId
+  && left.execution === right.execution
+  && left.segmentation === right.segmentation);
+const sameVoiceDraft = (left: VoiceDictationSettings, right: VoiceDictationSettings) => left.shortcut === right.shortcut
+  && left.activation === right.activation
+  && left.autoSend === right.autoSend
+  && left.inputDeviceId === right.inputDeviceId
+  && left.captureProfile === right.captureProfile
+  && left.warmMicrophone === right.warmMicrophone;
 const sameScope = (left: string[], right: string[]) => [...left].sort().join("\n") === [...right].sort().join("\n");
 const sameRuntime = (left: RuntimeSettings | null, right: RuntimeSettings | null) => Boolean(left && right
   && left.maxLiveProcesses === right.maxLiveProcesses
@@ -98,9 +109,9 @@ const sameRuntime = (left: RuntimeSettings | null, right: RuntimeSettings | null
 const preserveVoiceServerDraft = (loaded: VoiceServerSettings, previous: VoiceServerSettings, preserveDraft: boolean): VoiceServerSettings => ({
   ...loaded,
   localModelId: previous.localModelId,
+  ...(previous.localSelection ? { localSelection: previous.localSelection, resolvedProfileId: previous.resolvedProfileId } : {}),
   ...(preserveDraft ? {
     mode: previous.mode,
-    ...(previous.localSelection ? { localSelection: previous.localSelection, resolvedProfileId: previous.resolvedProfileId } : {}),
     provider: previous.provider,
     adapter: previous.adapter,
     model: previous.model,
@@ -187,6 +198,9 @@ export function Settings(props: {
   let voiceInputSelect!: HTMLSelectElement;
   let returnFocus: HTMLElement | null = null;
   let wasOpen = false;
+  let voiceLoadRequest = 0;
+  let voiceSettingsGeneration = 0;
+  let voiceSaveInFlight = 0;
   const stopAudioInputPlayback = () => {
     const audio = playbackAudio;
     playbackAudio = null;
@@ -448,15 +462,19 @@ export function Settings(props: {
   };
 
   const loadVoiceSettings = async ({ quiet = false, preserveLocalSelection = false } = {}) => {
+    const request = ++voiceLoadRequest;
+    const generation = voiceSettingsGeneration;
     if (!quiet) setVoiceStatus("loading");
     setVoiceError("");
     try {
       const loaded = await api<VoiceServerSettings>("/v0/voice/settings");
+      if (request !== voiceLoadRequest || generation !== voiceSettingsGeneration || voiceSaveInFlight > 0) return;
       const previous = voiceServerSettings();
       setVoiceServerSettings(preserveLocalSelection && previous ? preserveVoiceServerDraft(loaded, previous, voiceServerEdited()) : loaded);
       if (!preserveLocalSelection) setVoiceServerEdited(false);
       setVoiceStatus("ready");
     } catch (error) {
+      if (request !== voiceLoadRequest || generation !== voiceSettingsGeneration || voiceSaveInFlight > 0) return;
       setVoiceError((error as Error).message);
       setVoiceStatus("error");
     }
@@ -508,12 +526,11 @@ export function Settings(props: {
     const settings = voiceServerSettings();
     const catalogue = voiceCatalogue();
     if (!settings || !catalogue) return null;
-    const profile = (settings.localSelection
+    const profile = settings.localSelection
       ? catalogue.profiles.find((candidate) => selectionMatchesProfile(settings.localSelection, candidate))
         || catalogue.profiles.find((candidate) => selectionArtifactMatchesProfile(settings.localSelection, candidate))
-      : null)
-      || catalogue.profiles.find((candidate) => candidate.id === settings.resolvedProfileId)
-      || catalogue.profiles.find((candidate) => candidate.modelId === settings.localModelId);
+      : catalogue.profiles.find((candidate) => candidate.id === settings.resolvedProfileId)
+        || catalogue.profiles.find((candidate) => candidate.modelId === settings.localModelId);
     return profile ? voiceSelectionFromProfile(profile) : settings.localSelection || null;
   });
   const selectedVoiceCatalogueModel = createMemo(() => {
@@ -542,6 +559,14 @@ export function Settings(props: {
     const backendPath = selectedVoiceBackendPath();
     return catalogue && backendPath ? catalogue.profiles.filter((profile) => profile.backendPathId === backendPath.id) : [];
   });
+  const selectedVoiceAdapter = createMemo(() => {
+    const settings = voiceServerSettings();
+    return settings?.adapters.find((adapter) => adapter.id === settings.adapter) || null;
+  });
+  const cloudTiming = createMemo(() => selectedVoiceAdapter()?.transport === "ws"
+    ? { label: "Live", description: "Text appears while you speak and may revise." }
+    : { label: "After Stop", description: "Nothing appears until you stop." });
+  const voiceDirty = createMemo(() => voiceServerEdited() || Boolean(voiceSecret().trim()) || !sameVoiceDraft(voiceDraft(), props.voiceSettings));
   const selectLocalProfile = (profile: VoiceExecutionProfile) => {
     const catalogue = voiceCatalogue();
     const artifact = catalogue?.artifacts.find((candidate) => candidate.id === profile.artifactId);
@@ -555,16 +580,17 @@ export function Settings(props: {
     }));
     setVoiceLicenseAccepted(false);
   };
-  const profileForArtifact = (catalogue: VoiceExecutionCatalogueView, artifactId: string, current: VoiceLocalSelection | null) => {
+  const profileForArtifact = (catalogue: VoiceExecutionCatalogueView, artifactId: string, current: VoiceLocalSelection | null, runtimeId = current?.runtimeId) => {
     const artifact = catalogue.artifacts.find((candidate) => candidate.id === artifactId);
     if (!artifact) return null;
     const backendPath = catalogue.backendPaths
       .filter((candidate) => candidate.artifactId === artifact.id)
-      .find((candidate) => candidate.runtimeId === current?.runtimeId)
+      .find((candidate) => candidate.runtimeId === runtimeId)
       || catalogue.backendPaths.find((candidate) => candidate.artifactId === artifact.id);
     if (!backendPath) return null;
     const profiles = voiceProfilesForBackend(catalogue, artifact.id, backendPath.runtimeId);
-    return profiles.find((candidate) => candidate.execution === current?.execution)
+    return profiles.find((candidate) => candidate.execution === current?.execution && candidate.segmentation === current?.segmentation)
+      || profiles.find((candidate) => candidate.execution === current?.execution)
       || profiles.find((candidate) => candidate.execution === "stop")
       || profiles[0]
       || null;
@@ -578,48 +604,67 @@ export function Settings(props: {
     const profile = artifact && profileForArtifact(catalogue, artifact.id, current);
     if (profile) selectLocalProfile(profile);
   };
-  const selectLocalArtifact = (artifactId: string) => {
+  const selectLocalRuntime = (runtimeId: string) => {
+    const catalogue = voiceCatalogue();
+    const current = selectedVoiceSelection();
+    if (!catalogue || !current) return;
+    const currentArtifact = catalogue.artifacts.find((candidate) => candidate.id === current.artifactId);
+    const compatibleArtifacts = voiceArtifactsForModel(catalogue, current.modelId).filter((candidate) => catalogue.backendPaths.some((path) => path.artifactId === candidate.id && path.runtimeId === runtimeId));
+    const artifact = compatibleArtifacts.find((candidate) => candidate.legacyModelId === currentArtifact?.legacyModelId)
+      || compatibleArtifacts.find((candidate) => candidate.precision === currentArtifact?.precision)
+      || compatibleArtifacts[0];
+    const profile = artifact && profileForArtifact(catalogue, artifact.id, current, runtimeId);
+    if (profile) selectLocalProfile(profile);
+  };
+  const selectLocalVariant = (artifactId: string) => {
     const catalogue = voiceCatalogue();
     const current = selectedVoiceSelection();
     const profile = catalogue && profileForArtifact(catalogue, artifactId, current);
     if (profile) selectLocalProfile(profile);
   };
-  const selectLocalBackend = (backendPathId: string) => {
-    const catalogue = voiceCatalogue();
-    const current = selectedVoiceSelection();
-    const backendPath = catalogue?.backendPaths.find((candidate) => candidate.id === backendPathId);
-    if (!catalogue || !backendPath) return;
-    const profiles = catalogue.profiles.filter((candidate) => candidate.backendPathId === backendPath.id);
-    const profile = profiles.find((candidate) => candidate.execution === current?.execution)
-      || profiles.find((candidate) => candidate.execution === "stop")
-      || profiles[0];
-    if (profile) selectLocalProfile(profile);
-  };
   const selectLocalTiming = (profileId: string) => {
-    const profile = voiceCatalogue()?.profiles.find((candidate) => candidate.id === profileId);
+    const profile = selectedVoiceProfiles().find((candidate) => candidate.id === profileId);
     if (profile) selectLocalProfile(profile);
   };
   const persistVoiceServer = async (settings: VoiceServerSettings) => {
-    const saved = await api<VoiceServerSettings>("/v0/voice/settings", {
-      method: "PUT",
-      body: JSON.stringify({
-        mode: settings.mode,
-        localModelId: settings.localModelId,
-        ...(settings.localSelection ? { localSelection: settings.localSelection } : {}),
-        provider: settings.provider,
-        adapter: settings.adapter,
-        model: settings.model,
-        endpoint: settings.endpoint,
-        auth: { type: settings.auth.type, headerName: settings.auth.headerName, secret: voiceSecret() },
-      }),
-    });
-    setVoiceSecret("");
-    const savedState = settings.mode === "local" && settings.localSelection
-      ? { ...saved, localSelection: saved.localSelection || settings.localSelection, resolvedProfileId: saved.resolvedProfileId || settings.resolvedProfileId }
-      : saved;
-    setVoiceServerSettings(savedState);
-    setVoiceServerEdited(false);
-    return saved;
+    voiceSettingsGeneration += 1;
+    voiceSaveInFlight += 1;
+    try {
+      const saved = await api<VoiceServerSettings>("/v0/voice/settings", {
+        method: "PUT",
+        body: JSON.stringify({
+          mode: settings.mode,
+          localModelId: settings.localModelId,
+          ...(settings.localSelection ? { localSelection: settings.localSelection } : {}),
+          provider: settings.provider,
+          adapter: settings.adapter,
+          model: settings.model,
+          endpoint: settings.endpoint,
+          auth: { type: settings.auth.type, headerName: settings.auth.headerName, secret: voiceSecret() },
+        }),
+      });
+      setVoiceSecret("");
+      const savedState = settings.mode === "local" && settings.localSelection
+        ? (() => {
+          const responseSelection = saved.localSelection;
+          if (sameVoiceSelection(responseSelection, settings.localSelection)) return saved;
+          const requestedArtifact = saved.local?.catalogue?.artifacts.find((artifact) => artifact.id === settings.localSelection?.artifactId);
+          const requestedProfile = saved.local?.catalogue?.profiles.find((profile) => selectionMatchesProfile(settings.localSelection!, profile));
+          return {
+            ...saved,
+            localModelId: requestedArtifact?.legacyModelId || settings.localModelId,
+            localSelection: settings.localSelection,
+            resolvedProfileId: requestedProfile?.id || settings.resolvedProfileId,
+          };
+        })()
+        : saved;
+      setVoiceServerSettings(savedState);
+      setVoiceServerEdited(false);
+      return savedState;
+    } finally {
+      voiceSettingsGeneration += 1;
+      voiceSaveInFlight -= 1;
+    }
   };
   const saveVoiceSettings = async () => {
     const settings = voiceServerSettings();
@@ -891,7 +936,7 @@ export function Settings(props: {
           <Show when={section() === "voice"}>
             <Show when={voiceStatus() === "ready" && voiceServerSettings()} fallback={<Show when={voiceStatus() === "error"} fallback={<div class="settings-loading"><Spinner /><span>Loading voice settings…</span></div>}><div role="alert" class="settings-error"><span>{voiceError() || "Voice settings could not be loaded."}</span><Button variant="outline" size="sm" onClick={() => void loadVoiceSettings()}>Retry</Button></div></Show>}>
               <div class="voice-settings">
-                <p class="voice-settings-intro">Audio stays in memory and passes through authenticated Conduit. Cloud credentials remain server-side and are never returned to the browser.</p>
+                <p class="voice-settings-intro">Dictation passes through authenticated Conduit. Microphone-test playback stays in browser memory. Server dictation can retain configured diagnostic WAV/JSON pairs; Cloud credentials stay server-side.</p>
                 <FieldGroup>
                   <Field><FieldLabel for="voice-mode">Transcription source</FieldLabel><select id="voice-mode" disabled={voiceBusy()} value={voiceServerSettings()!.mode} onChange={(event) => {
                     const mode = event.currentTarget.value as VoiceServerSettings["mode"];
@@ -905,15 +950,22 @@ export function Settings(props: {
                   selectedArtifact={selectedVoiceArtifact()}
                   selectedBackendPath={selectedVoiceBackendPath()}
                   backendStatus={selectedVoiceBackendStatus()}
+                  backendStatuses={voiceServerSettings()!.local?.backendPaths || []}
+                  selectedLocalModel={selectedLocalVoiceModel() || null}
                   profiles={selectedVoiceProfiles()}
                   busy={voiceBusy()}
                   installingModelId={voiceServerSettings()!.local?.installingModelId || null}
-                  resolvedProfileId={voiceServerSettings()!.resolvedProfileId}
-                  dirty={voiceServerEdited()}
+                  installProgress={voiceServerSettings()!.local?.progress || null}
+                  licenseAccepted={voiceLicenseAccepted()}
+                  dirty={voiceDirty()}
                   onFamilyChange={selectLocalFamily}
-                  onArtifactChange={selectLocalArtifact}
-                  onBackendChange={selectLocalBackend}
+                  onRuntimeChange={selectLocalRuntime}
+                  onVariantChange={selectLocalVariant}
                   onTimingChange={selectLocalTiming}
+                  onLicenseChange={setVoiceLicenseAccepted}
+                  onInstall={() => void installVoiceModel(selectedVoiceInstallModelId())}
+                  onCancelInstall={() => void cancelVoiceInstall()}
+                  onUninstall={() => void uninstallVoiceModel(selectedVoiceInstallModelId())}
                 />}</Show>
                 <Show when={voiceServerSettings()!.mode === "remote"}>
                   <div class="voice-card">
@@ -924,7 +976,10 @@ export function Settings(props: {
                         setVoiceSecret("");
                         editVoiceServer((current) => ({ ...current, provider: provider.id, adapter: provider.adapter, endpoint: provider.endpoint, model: provider.models[0]?.id || "", auth: { ...current.auth, type: provider.id === "custom" ? current.auth.type : "bearer", configured: Boolean(provider.configured), source: provider.configured ? "stored" : null, removable: Boolean(provider.configured) } }));
                       }}><For each={voiceServerSettings()!.providers}>{(provider) => <option value={provider.id}>{provider.label}</option>}</For></select></Field>
-                      <Show when={selectedVoiceProvider()?.models.length}><Field><FieldLabel for="voice-cloud-model">Model</FieldLabel><select id="voice-cloud-model" disabled={voiceBusy()} value={voiceServerSettings()!.model} onChange={(event) => updateVoiceServer({ model: event.currentTarget.value })}><For each={selectedVoiceProvider()!.models}>{(model) => <option value={model.id}>{model.label}</option>}</For></select><small>{selectedVoiceProvider()!.models.find((model) => model.id === voiceServerSettings()!.model)?.description}</small></Field></Show>
+                      <Show when={selectedVoiceProvider()?.models.length}><Field><FieldLabel for="voice-cloud-model">Model</FieldLabel><select id="voice-cloud-model" disabled={voiceBusy()} value={voiceServerSettings()!.model} onChange={(event) => {
+                        const model = selectedVoiceProvider()!.models.find((candidate) => candidate.id === event.currentTarget.value);
+                        updateVoiceServer({ model: event.currentTarget.value, ...(model?.adapter ? { adapter: model.adapter } : {}) });
+                      }}><For each={selectedVoiceProvider()!.models}>{(model) => <option value={model.id}>{model.label}</option>}</For></select><small>{selectedVoiceProvider()!.models.find((model) => model.id === voiceServerSettings()!.model)?.description}</small></Field></Show>
                       <Show when={voiceServerSettings()!.provider === "custom"}>
                         <Field><FieldLabel for="voice-adapter">Protocol adapter</FieldLabel><select id="voice-adapter" disabled={voiceBusy()} value={voiceServerSettings()!.adapter} onChange={(event) => updateVoiceServer({ adapter: event.currentTarget.value })}><For each={voiceServerSettings()!.adapters}>{(adapter) => <option value={adapter.id}>{adapter.label}</option>}</For></select><small>{voiceServerSettings()!.adapters.find((adapter) => adapter.id === voiceServerSettings()!.adapter)?.description}</small></Field>
                         <Field><FieldLabel for="voice-endpoint">Endpoint URL</FieldLabel><Input id="voice-endpoint" type="url" disabled={voiceBusy()} value={voiceServerSettings()!.endpoint} placeholder="https://speech.example.com/v1/audio/transcriptions" onInput={(event) => updateVoiceServer({ endpoint: event.currentTarget.value })} /><small>Custom endpoints must resolve publicly and use HTTPS.</small></Field>
@@ -934,22 +989,18 @@ export function Settings(props: {
                       </Show>
                       <Show when={voiceServerSettings()!.provider !== "custom" || voiceServerSettings()!.auth.type !== "none"}><Field><FieldLabel for="voice-secret">{selectedVoiceProvider()?.authLabel || "Credential"}</FieldLabel><Input id="voice-secret" type="password" autocomplete="off" disabled={voiceBusy()} value={voiceSecret()} onInput={(event) => { setVoiceSecret(event.currentTarget.value); setVoiceServerEdited(true); setVoiceSettingsSaved(false); }} placeholder={voiceServerSettings()!.auth.configured ? "Saved · enter a new key to replace" : "Enter API key"} /><small>{voiceServerSettings()!.auth.configured ? "Stored on this server" : "Not configured"}</small></Field></Show>
                     </FieldGroup>
+                    <div class="voice-backend-facts" aria-label="Cloud backend and timing">
+                      <div><span>Backend</span><strong>{selectedVoiceAdapter()?.label || "Not selected"}</strong><small>{selectedVoiceAdapter()?.transport === "ws" ? "WebSocket live PCM" : "HTTPS audio upload"} · {voiceServerSettings()!.auth.configured ? "credential configured" : "credential not configured"}</small></div>
+                      <div><span>When to transcribe</span><strong>{cloudTiming().label}</strong><small>{cloudTiming().description}</small></div>
+                    </div>
                     <div class="voice-actions"><Button variant="outline" disabled={voiceBusy()} onClick={() => void testVoiceServer()}>Test credentials</Button><Show when={voiceServerSettings()!.auth.removable}><Button variant="outline" disabled={voiceBusy()} onClick={() => void removeVoiceCredential()}>Remove credential</Button></Show></div>
                   </div>
                 </Show>
 
-                <Show when={voiceServerSettings()!.mode === "local"}>
-                  <div class="voice-card">
-                    <h3>Managed local models</h3>
-                    <p>Compare the runtime before you install. Conduit downloads pinned, checksum-verified artifacts and keeps one model loaded at a time. Microphone tests stay in browser memory; server dictation can retain configured diagnostic WAV/JSON pairs.</p>
-                    <Show when={voiceServerSettings()!.local?.progress}>{(progress) => <div class="voice-progress"><progress max={Math.max(1, progress().totalBytes)} value={progress().completedBytes} /><small>{progress().phase} · {progress().current || "preparing package"}</small></div>}</Show>
-                    <Show when={selectedLocalVoiceModel()?.error}><p role="alert" class="settings-inline-error">{selectedLocalVoiceModel()!.error}</p></Show>
-                    <Show when={selectedLocalVoiceModel() && !selectedLocalVoiceModel()!.installed && !voiceServerSettings()!.local?.installingModelId}><label class="dictation-auto-send"><input type="checkbox" checked={voiceLicenseAccepted()} onChange={(event) => setVoiceLicenseAccepted(event.currentTarget.checked)} /><span><strong>Accept {selectedLocalVoiceModel()!.license.id}</strong><small>{selectedLocalVoiceModel()!.license.attribution}.</small></span></label></Show>
-                    <div class="voice-actions"><Show when={voiceServerSettings()!.local?.installingModelId} fallback={<Show when={selectedLocalVoiceModel()?.installed} fallback={<Button disabled={voiceBusy() || !voiceLicenseAccepted() || !selectedVoiceInstallModelId()} onClick={() => void installVoiceModel(selectedVoiceInstallModelId())}>{voiceBusy() ? <Spinner /> : null}Install selected model</Button>}><Button variant="outline" disabled={voiceBusy() || !selectedVoiceInstallModelId()} onClick={() => void uninstallVoiceModel(selectedVoiceInstallModelId())}>Uninstall</Button></Show>}><Button variant="outline" disabled={voiceBusy()} onClick={() => void cancelVoiceInstall()}>Cancel installation</Button></Show></div>
-                  </div>
-                </Show>
-
-                <FieldGroup>
+                <details class="voice-advanced" id="voice-advanced">
+                  <summary id="voice-advanced-summary"><span>Advanced</span><small>Input and capture behaviour</small></summary>
+                  <FieldGroup>
+                  <div class="voice-advanced-heading"><h3>Input</h3><p>These controls affect capture and draft delivery. They do not change the selected runtime.</p></div>
                   <div class="voice-input-test">
                     <Field><FieldLabel for="voice-input-device">Microphone</FieldLabel><select ref={voiceInputSelect} id="voice-input-device" disabled={audioInputBusy()} value={voiceDraft().inputDeviceId} onChange={(event) => updateVoiceDraft({ inputDeviceId: event.currentTarget.value })}>
                       <option value="">System default microphone</option>
@@ -994,9 +1045,10 @@ export function Settings(props: {
                   <Show when={warmMicrophoneActive()} fallback={<Show when={voiceDraft().warmMicrophone}><p class="voice-input-live-state" role="status">Warm microphone retention is enabled for the next dictation.</p></Show>}>
                     <div class="voice-input-live-state" role="status">Microphone remains active between dictations.<Button variant="outline" size="sm" onClick={stopWarmMicrophone}>Stop warm microphone</Button></div>
                   </Show>
-                </FieldGroup>
+                  </FieldGroup>
+                </details>
 
-                <div class="voice-settings-footer"><Button disabled={voiceBusy()} onClick={() => void saveVoiceSettings()}>{voiceBusy() ? <Spinner /> : null}Save Voice settings</Button><Show when={voiceSettingsSaved()}><span class="voice-save-success" role="status">Saved</span></Show></div>
+                <div class="voice-settings-footer"><Button disabled={voiceBusy()} onClick={() => void saveVoiceSettings()}>{voiceBusy() ? <Spinner /> : null}Save Voice settings</Button><span class="voice-draft-state" data-dirty={voiceDirty()}>{voiceDirty() ? "Unsaved changes" : "All voice settings saved"}</span><Show when={voiceSettingsSaved()}><span class="voice-save-success" role="status">Saved</span></Show></div>
                 <Show when={voiceTestResult()}><p role="status" class="voice-test-success">{voiceTestResult()}</p></Show>
                 <Show when={voiceError()}><p role="alert" class="settings-inline-error">{voiceError()}</p></Show>
               </div>

@@ -1,6 +1,6 @@
 import { For, Show } from "solid-js";
-import { Field, FieldGroup, FieldLabel } from "@/components/primitives";
-import type { VoiceBackendPathStatus, VoiceExecutionCatalogueView, VoiceExecutionProfile, VoiceLocalSelection } from "../api/contracts";
+import { Button, Field, FieldGroup, FieldLabel } from "@/components/primitives";
+import type { VoiceBackendPathStatus, VoiceExecutionProfile, VoiceExecutionCatalogueView, VoiceLocalModel, VoiceLocalSelection } from "../api/contracts";
 
 type CatalogueModel = VoiceExecutionCatalogueView["models"][number];
 type CatalogueArtifact = VoiceExecutionCatalogueView["artifacts"][number];
@@ -13,15 +13,22 @@ export interface VoiceLocalCatalogueProps {
   selectedArtifact: CatalogueArtifact | null;
   selectedBackendPath: CatalogueBackendPath | null;
   backendStatus: VoiceBackendPathStatus | null;
+  backendStatuses: VoiceBackendPathStatus[];
+  selectedLocalModel: VoiceLocalModel | null;
   profiles: VoiceExecutionProfile[];
   busy: boolean;
   installingModelId: string | null;
-  resolvedProfileId: string;
+  installProgress: { phase: string; current: string; completedBytes: number; totalBytes: number } | null;
+  licenseAccepted: boolean;
   dirty: boolean;
   onFamilyChange: (modelId: string) => void;
-  onArtifactChange: (artifactId: string) => void;
-  onBackendChange: (backendPathId: string) => void;
+  onRuntimeChange: (runtimeId: string) => void;
+  onVariantChange: (artifactId: string) => void;
   onTimingChange: (profileId: string) => void;
+  onLicenseChange: (accepted: boolean) => void;
+  onInstall: () => void;
+  onCancelInstall: () => void;
+  onUninstall: () => void;
 }
 
 const executionLabel = (execution: VoiceExecutionProfile["execution"]) => execution === "live" ? "Live" : execution === "eager" ? "During pauses" : "After Stop";
@@ -30,37 +37,83 @@ const executionDescription = (execution: VoiceExecutionProfile["execution"]) => 
   : execution === "eager"
     ? "Each pause commits a phrase."
     : "Nothing appears until you stop.";
-const runtimeLabel = (runtimeId: string) => runtimeId === "transcribe-rs" ? "transcribe-rs ONNX worker" : runtimeId;
+const segmentationLabel = (segmentation: VoiceExecutionProfile["segmentation"]) => segmentation === "silero" ? "Silero" : segmentation === "heuristic" ? "Silence detection" : "None";
+const runtimeLabel = (runtimeId: string) => runtimeId === "transcribe-rs"
+  ? "transcribe-rs ONNX worker"
+  : runtimeId === "parakeet-loopback"
+    ? "Parakeet loopback"
+    : runtimeId === "transformers-js"
+      ? "Transformers.js"
+      : runtimeId === "transcribe-cpp"
+        ? "transcribe.cpp"
+        : runtimeId;
 const precisionLabel = (precision: string) => precision === "fp32" ? "FP32" : precision.toUpperCase();
+const artifactStateLabel = (state: VoiceBackendPathStatus["artifactState"] | null | undefined) => state === "installed" ? "installed" : state === "installing" ? "installing" : state === "failed" ? "failed" : state === "absent" ? "not installed" : "state not reported";
 const artifactsForModel = (catalogue: VoiceExecutionCatalogueView, modelId: string) => catalogue.artifacts.filter((artifact) => artifact.modelId === modelId);
 const backendPathsForModel = (catalogue: VoiceExecutionCatalogueView, modelId: string) => {
   const artifactIds = new Set(artifactsForModel(catalogue, modelId).map((artifact) => artifact.id));
   return catalogue.backendPaths.filter((backendPath) => artifactIds.has(backendPath.artifactId));
 };
 const artifactForBackendPath = (catalogue: VoiceExecutionCatalogueView, backendPath: CatalogueBackendPath) => catalogue.artifacts.find((artifact) => artifact.id === backendPath.artifactId);
-const backendChoiceLabel = (catalogue: VoiceExecutionCatalogueView, backendPath: CatalogueBackendPath) => {
-  const artifact = artifactForBackendPath(catalogue, backendPath);
-  const runtime = catalogue.runtimes.find((candidate) => candidate.id === backendPath.runtimeId);
-  if (!artifact) return backendPath.id;
-  return `${precisionLabel(artifact.precision)} · ${artifact.format} · ${Math.ceil(artifact.approximateBytes / 1024 / 1024)} MiB · ${runtimeLabel(backendPath.runtimeId)} · ${backendPath.ports.stream ? "StreamPort" : "BatchPort"} · ${runtime?.compiledComputeBackends.join(" / ") || "compute not reported"}`;
-};
+const formatLabel = (format: string) => format === "onnx-package" ? "ONNX" : format === "transformers.js" ? "ONNX package" : format.toUpperCase();
+const profileLabel = (profile: VoiceExecutionProfile) => profile.execution === "eager"
+  ? `${executionLabel(profile.execution)} · ${segmentationLabel(profile.segmentation)}`
+  : executionLabel(profile.execution);
+const profileDescription = (profile: VoiceExecutionProfile) => profile.execution === "eager"
+  ? `${executionDescription(profile.execution)} Uses ${segmentationLabel(profile.segmentation)}.`
+  : executionDescription(profile.execution);
 
 export default function VoiceLocalCatalogue(props: VoiceLocalCatalogueProps) {
   const disabled = () => props.busy || Boolean(props.installingModelId);
   const familyArtifacts = () => props.selectedModel ? artifactsForModel(props.catalogue, props.selectedModel.id) : [];
   const familyBackendPaths = () => props.selectedModel ? backendPathsForModel(props.catalogue, props.selectedModel.id) : [];
-  const runnerSpecificArtifacts = () => familyArtifacts().length > 0
-    && familyArtifacts().every((artifact) => props.catalogue.backendPaths.filter((backendPath) => backendPath.artifactId === artifact.id).length === 1);
+  const runtimeChoices = () => {
+    const seen = new Set<string>();
+    return familyBackendPaths().filter((backendPath) => {
+      if (seen.has(backendPath.runtimeId)) return false;
+      seen.add(backendPath.runtimeId);
+      return true;
+    });
+  };
+  const pathsForRuntime = () => familyBackendPaths().filter((backendPath) => backendPath.runtimeId === props.selection?.runtimeId);
+  const variantChoices = () => pathsForRuntime()
+    .map((backendPath) => artifactForBackendPath(props.catalogue, backendPath))
+    .filter((artifact): artifact is CatalogueArtifact => Boolean(artifact));
+  const statusForPath = (backendPath: CatalogueBackendPath | null) => backendPath ? props.backendStatuses.find((status) => status.backendPathId === backendPath.id) || null : null;
+  const statusFacts = () => {
+    const status = props.backendStatus;
+    if (!status) return "Status not reported";
+    return [
+      artifactStateLabel(status.artifactState),
+      status.runtimeState,
+      status.requestedComputeBackend ? `requested ${status.requestedComputeBackend}` : null,
+      status.actualComputeBackend ? `actual ${status.actualComputeBackend}` : null,
+      status.loadedRuntimeVersion || null,
+    ].filter(Boolean).join(" · ");
+  };
+  const runtimeOptionLabel = (runtimeId: string) => {
+    const paths = familyBackendPaths().filter((backendPath) => backendPath.runtimeId === runtimeId);
+    const formats = [...new Set(paths.map((path) => artifactForBackendPath(props.catalogue, path)?.format).filter((format): format is string => Boolean(format)))].map(formatLabel).join(" / ");
+    const runtime = props.catalogue.runtimes.find((candidate) => candidate.id === runtimeId);
+    const ports = paths.some((path) => path.ports.stream) ? "BatchPort + StreamPort" : "BatchPort";
+    return `${runtimeLabel(runtimeId)} · ${formats || "format not reported"} · ${ports} · ${runtime?.compiledComputeBackends.join(" / ") || "compute not reported"}`;
+  };
+  const variantOptionLabel = (artifact: CatalogueArtifact) => {
+    const path = familyBackendPaths().find((candidate) => candidate.artifactId === artifact.id && candidate.runtimeId === props.selection?.runtimeId) || null;
+    return `${precisionLabel(artifact.precision)} · ${formatLabel(artifact.format)} · ${Math.ceil(artifact.approximateBytes / 1024 / 1024)} MiB · ${artifactStateLabel(statusForPath(path)?.artifactState)}`;
+  };
+  const selectedProfile = () => props.profiles.find((profile) => profile.execution === props.selection?.execution && profile.segmentation === props.selection?.segmentation) || null;
   return <div class="voice-card voice-local-catalogue" aria-label="Local transcription selection">
     <div class="voice-selection-heading">
       <div>
         <span class="voice-model-kicker">This machine</span>
         <strong>{props.selectedModel?.label || "Choose a model family"}</strong>
-        <small>{props.selectedArtifact?.precision?.toUpperCase() || ""} · {props.selectedArtifact?.format || "Select an artifact"} · {runtimeLabel(props.selection?.runtimeId || "")}</small>
+        <small>{props.selectedArtifact?.precision?.toUpperCase() || ""} · {props.selectedArtifact?.format || "Select a variant"} · {runtimeLabel(props.selection?.runtimeId || "")}</small>
       </div>
       <span class="voice-draft-state" data-dirty={props.dirty}>{props.dirty ? "Unsaved" : "Saved"}</span>
     </div>
-    <p>Choose the exact model artifact, runtime, and timing. The saved tuple controls the backend used by dictation.</p>
+    <p>{props.selectedModel?.description || "Choose a model family, runtime, variant, and batching mode."}</p>
+    <small class="voice-selection-guide">Choose the model family first. Runtime, variant, and batching choices are limited to the catalogue path that can run it.</small>
     <FieldGroup>
       <Field>
         <FieldLabel for="voice-local-family">Model family</FieldLabel>
@@ -70,45 +123,44 @@ export default function VoiceLocalCatalogue(props: VoiceLocalCatalogueProps) {
       </Field>
       <Show when={props.selection}>{(selection) => <>
         <Field>
-          <Show when={runnerSpecificArtifacts()} fallback={<>
-            <FieldLabel for="voice-local-artifact">Precision and artifact</FieldLabel>
-            <select id="voice-local-artifact" disabled={disabled()} value={selection().artifactId} onChange={(event) => props.onArtifactChange(event.currentTarget.value)}>
-              <For each={artifactsForModel(props.catalogue, selection().modelId)}>{(artifact) => <option value={artifact.id}>{precisionLabel(artifact.precision)} · {artifact.format} · {Math.ceil(artifact.approximateBytes / 1024 / 1024)} MiB</option>}</For>
-            </select>
-            <small>{props.selectedModel?.languages || ""} · {props.selectedArtifact?.license.id || ""} · {props.selectedArtifact?.license.attribution || ""}</small>
-          </>}>
-            <FieldLabel for="voice-local-artifact-runtime">Precision, artifact, and runtime</FieldLabel>
-            <select id="voice-local-artifact-runtime" disabled={disabled()} value={props.selectedBackendPath?.id || ""} onChange={(event) => props.onBackendChange(event.currentTarget.value)}>
-              <For each={familyBackendPaths()}>{(backendPath) => <option value={backendPath.id}>{backendChoiceLabel(props.catalogue, backendPath)}</option>}</For>
-            </select>
-            <small>Each row is one installable artifact and runner.</small>
-          </Show>
-          <Show when={!runnerSpecificArtifacts()}>
-            <small>{props.selectedModel?.languages || ""} · {props.selectedArtifact?.license.id || ""} · {props.selectedArtifact?.license.attribution || ""}</small>
-          </Show>
-        </Field>
-        <Show when={!runnerSpecificArtifacts()}>
-          <Field>
-            <FieldLabel for="voice-local-backend">Runs with</FieldLabel>
-            <select id="voice-local-backend" disabled={disabled()} value={props.selectedBackendPath?.id || ""} onChange={(event) => props.onBackendChange(event.currentTarget.value)}>
-              <For each={props.catalogue.backendPaths.filter((backendPath) => backendPath.artifactId === selection().artifactId)}>{(backendPath) => {
-                const runtime = props.catalogue.runtimes.find((candidate) => candidate.id === backendPath.runtimeId);
-                return <option value={backendPath.id}>{runtimeLabel(backendPath.runtimeId)} · {backendPath.ports.stream ? "StreamPort" : "BatchPort"} · {runtime?.compiledComputeBackends.join(" / ") || "compute not reported"}</option>;
-              }}</For>
-            </select>
-            <Show when={props.backendStatus}>{(status) => <span class="voice-selection-status" data-state={status().runtimeState}>{status().artifactState} · {status().runtimeState}{status().actualComputeBackend ? ` · actual ${status().actualComputeBackend}` : ""}{status().loadedRuntimeVersion ? ` · ${status().loadedRuntimeVersion}` : ""}</span>}</Show>
-          </Field>
-        </Show>
-        <Show when={runnerSpecificArtifacts()}>
-          <span class="voice-selection-status" data-state={props.backendStatus?.runtimeState || "cold"}>{props.backendStatus?.artifactState || "unknown"} · {props.backendStatus?.runtimeState || "cold"}{props.backendStatus?.actualComputeBackend ? ` · actual ${props.backendStatus.actualComputeBackend}` : ""}{props.backendStatus?.loadedRuntimeVersion ? ` · ${props.backendStatus.loadedRuntimeVersion}` : ""}</span>
-        </Show>
-        <Field>
-          <FieldLabel for="voice-local-timing">When to transcribe</FieldLabel>
-          <select id="voice-local-timing" disabled={disabled()} value={props.resolvedProfileId} onChange={(event) => props.onTimingChange(event.currentTarget.value)}>
-            <For each={props.profiles}>{(profile) => <option value={profile.id}>{executionLabel(profile.execution)} — {executionDescription(profile.execution)}</option>}</For>
+          <FieldLabel for="voice-local-runtime">Runtime</FieldLabel>
+          <select id="voice-local-runtime" disabled={disabled()} value={selection().runtimeId} onChange={(event) => props.onRuntimeChange(event.currentTarget.value)}>
+            <For each={runtimeChoices()}>{(backendPath) => <option value={backendPath.runtimeId}>{runtimeOptionLabel(backendPath.runtimeId)}</option>}</For>
           </select>
-          <small>{selection().segmentation === "silero" ? "Pause detection: Silero" : selection().segmentation === "heuristic" ? "Pause detection: Heuristic" : "Pause detection is not used for this timing."}</small>
+          <small>The runtime chooses the execution implementation. Compatible model format and valid ports are shown here.</small>
         </Field>
+        <Field>
+          <FieldLabel for="voice-local-variant">Precision or variant</FieldLabel>
+          <select id="voice-local-variant" disabled={disabled()} value={selection().artifactId} onChange={(event) => props.onVariantChange(event.currentTarget.value)}>
+            <For each={variantChoices()}>{(artifact) => <option value={artifact.id}>{variantOptionLabel(artifact)}</option>}</For>
+          </select>
+          <small>{props.selectedModel?.languages || ""} · {props.selectedArtifact?.license.id || ""} · {props.selectedArtifact?.license.attribution || ""}. Install state controls whether this variant's files are available.</small>
+        </Field>
+        <span class="voice-selection-status" data-state={props.backendStatus?.runtimeState || "cold"}>{statusFacts()}</span>
+        <Field>
+          <FieldLabel for="voice-local-batching">Batching</FieldLabel>
+          <select id="voice-local-batching" disabled={disabled() || !props.profiles.length} value={selectedProfile()?.id || ""} onChange={(event) => props.onTimingChange(event.currentTarget.value)}>
+            <For each={props.profiles}>{(profile) => <option value={profile.id}>{profileLabel(profile)}</option>}</For>
+          </select>
+          <small>{selectedProfile() ? profileDescription(selectedProfile()!) : "This runtime and variant have no available batching profile."}</small>
+        </Field>
+        <div class="voice-install-panel">
+          <div class="voice-install-heading">
+            <h3>Managed local models</h3>
+            <span class="voice-model-status"><span>{artifactStateLabel(props.backendStatus?.artifactState)}</span></span>
+          </div>
+          <p>Install the selected variant to enable this path. Compatible runtimes use the same managed model files where the catalogue declares them.</p>
+          <Show when={props.installProgress}>{(progress) => <div class="voice-progress"><progress max={Math.max(1, progress().totalBytes)} value={progress().completedBytes} /><small>{progress().phase} · {progress().current || "preparing package"}</small></div>}</Show>
+          <Show when={props.selectedLocalModel?.error}><p role="alert" class="settings-inline-error">{props.selectedLocalModel!.error}</p></Show>
+          <Show when={props.selectedLocalModel && !props.selectedLocalModel!.installed && !props.installingModelId}>
+            <label class="dictation-auto-send"><input type="checkbox" checked={props.licenseAccepted} onChange={(event) => props.onLicenseChange(event.currentTarget.checked)} /><span><strong>Accept {props.selectedLocalModel!.license.id}</strong><small>{props.selectedLocalModel!.license.attribution}.</small></span></label>
+          </Show>
+          <div class="voice-actions">
+            <Show when={props.installingModelId} fallback={<Show when={props.selectedLocalModel?.installed} fallback={<Button disabled={disabled() || !props.licenseAccepted || !props.selectedLocalModel} onClick={props.onInstall}>Install selected variant</Button>}><Button variant="outline" disabled={disabled() || !props.selectedLocalModel} onClick={props.onUninstall}>Uninstall model files</Button></Show>}>
+              <Button variant="outline" disabled={props.busy} onClick={props.onCancelInstall}>Cancel installation</Button>
+            </Show>
+          </div>
+        </div>
       </>}
       </Show>
     </FieldGroup>
