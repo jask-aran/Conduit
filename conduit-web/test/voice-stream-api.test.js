@@ -355,6 +355,57 @@ test("Unified English batch adapter transcribes the complete PCM once and does n
   }
 });
 
+test("transcribe-rs batch adapter uses the local BatchPort without an HTTP endpoint", async () => {
+  const upstream = await startUpstream([]);
+  const calls = [];
+  const { bridge, origin } = await startDictationBridge({
+    upstreamPort: upstream.address().port,
+    runtimeConfig: {
+      mode: "local",
+      inferenceMode: "batch",
+      adapter: "transcribe_rs_batch_v1",
+      provider: "local",
+      model: "parakeet-tdt-0.6b-v2-int8",
+      precision: "int8",
+      backend: "transcribe_rs",
+      computeBackend: "cpu",
+      modelId: "parakeet-tdt-0.6b-v2",
+      artifactId: "parakeet-tdt-0.6b-v2-int8.transcribe-rs",
+      runtimeId: "transcribe-rs",
+      backendPathId: "parakeet-tdt-0.6b-v2-int8.transcribe-rs.transcribe-rs",
+      resolvedProfileId: "parakeet-tdt-0.6b-v2-int8.transcribe-rs.stop",
+      execution: "stop",
+      segmentation: "none",
+      capabilities: { language: "en", inferenceMode: "batch", partials: false, externalVad: false, precision: "int8" },
+      transcribe: async (pcm, options) => { calls.push({ pcm: Buffer.from(pcm), options }); return "complete transcribe-rs batch"; },
+    },
+  });
+  const client = new WebSocket(`${origin}/dictation`);
+  const next = messageQueue(client);
+  try {
+    await new Promise((resolve, reject) => { client.once("open", resolve); client.once("error", reject); });
+    await next((event) => event.type === "ready");
+    await next((event) => event.type === "runtime_ready");
+    client.send(Buffer.alloc(2_048, 3), { binary: true });
+    client.send(JSON.stringify({ type: "stop", audioBytesSent: 2_048 }));
+    const completed = await next((event) => event.type === "completed");
+    assert.equal(completed.text, "complete transcribe-rs batch");
+    assert.equal(completed.adapter, "transcribe_rs_batch_v1");
+    assert.equal(completed.backend, "transcribe_rs");
+    assert.equal(completed.computeBackend, "cpu");
+    assert.equal(completed.progressiveBatch, false);
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].pcm.length, 2_048);
+    assert.equal(calls[0].options.startSample, 0);
+    assert.equal(calls[0].options.endSample, 1_024);
+  } finally {
+    client.terminate();
+    await new Promise((resolve) => setTimeout(resolve, 25));
+    await new Promise((resolve) => bridge.close(resolve));
+    await new Promise((resolve) => upstream.close(resolve));
+  }
+});
+
 test("Unified English stream adapter coalesces PCM, exposes revisions, and stays open across silence", async () => {
   const upstream = await startUpstream([]);
   const feedSizes = [];

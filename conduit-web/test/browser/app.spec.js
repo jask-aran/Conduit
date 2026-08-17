@@ -5220,60 +5220,74 @@ test("Voice microphone test shows the shared live recorder monitor", async ({ pa
   await expect.poll(() => page.evaluate(() => window.__voiceRevokedUrls.length)).toBeGreaterThan(0);
 });
 
-test("voice model picker exposes backend capabilities in a compact switcher", async ({ page }) => {
-  const models = [
-    {
-      id: "parakeet-unified-en-0.6b-q8",
-      label: "Parakeet Unified English Q8",
-      engine: "transcribe-cpp",
-      size: "large",
-      languages: "English",
-      description: "Verified native runtime.",
-      approximateBytes: 1_000_000_000,
-      precision: "q8",
-      license: { id: "CC-BY-4.0", attribution: "NVIDIA NeMo" },
-      installed: true,
-      staged: false,
-      running: true,
-      state: "running",
-      error: null,
-    },
-    {
-      id: "whisper-tiny-en-q8",
-      label: "Whisper Tiny English",
-      engine: "transformers-whisper",
-      size: "tiny",
-      languages: "English",
-      description: "Smallest and fastest option.",
-      approximateBytes: 80_000_000,
-      precision: "q8",
-      license: { id: "MIT", attribution: "OpenAI Whisper" },
-      installed: true,
-      staged: false,
-      running: false,
-      state: "ready",
-      error: null,
-    },
-    {
-      id: "parakeet-tdt-0.6b-v3-int8",
-      label: "Parakeet TDT 0.6B v3",
-      engine: "parakeet",
-      size: "large",
-      languages: "25 European",
-      description: "Legacy batch model.",
-      approximateBytes: 900_000_000,
-      precision: "int8",
-      license: { id: "CC-BY-4.0", attribution: "NVIDIA Parakeet" },
-      installed: false,
-      staged: false,
-      running: false,
-      state: "not_installed",
-      error: null,
-    },
-  ];
+test("voice catalogue selects the transcribe-rs backend and timing on mobile", async ({ page }) => {
+  const modelId = "parakeet-tdt-0.6b-v2-int8";
+  const artifactId = "parakeet-tdt-0.6b-v2-int8";
+  const transcribeRsArtifactId = `${artifactId}.transcribe-rs`;
+  const loopbackPathId = `${artifactId}.parakeet-loopback`;
+  const transcribeRsPathId = `${transcribeRsArtifactId}.transcribe-rs`;
+  const stopProfileId = `${transcribeRsArtifactId}.stop`;
+  const eagerProfileId = `${transcribeRsArtifactId}.eager`;
+  const license = { id: "CC-BY-4.0", attribution: "NVIDIA and istupakov" };
+  const profile = (id, selectedArtifactId, runtimeId, execution, segmentation) => ({
+    schemaVersion: 1,
+    id,
+    modelId: "parakeet-tdt-0.6b-v2",
+    artifactId: selectedArtifactId,
+    runtimeId,
+    backendPathId: `${selectedArtifactId}.${runtimeId}`,
+    execution,
+    segmentation,
+    output: { tentative: execution !== "stop", stableSegments: true, sampleTimestamps: true },
+    resourcePolicy: { preload: "supported", serialInference: true, maximumSessionMs: 300_000, maximumQueuedAudioMs: null },
+    fallback: null,
+  });
+  const catalogue = {
+    version: "1",
+    schemaVersion: 1,
+    models: [{ id: "parakeet-tdt-0.6b-v2", label: "Parakeet TDT 0.6B v2", languages: "English", description: "Parakeet v2.", artifactIds: [artifactId, transcribeRsArtifactId] }],
+    artifacts: [
+      { id: artifactId, modelId: "parakeet-tdt-0.6b-v2", legacyModelId: modelId, runtimeId: "parakeet-loopback", format: "onnx-package", precision: "int8", approximateBytes: 731_357_568, minimumFreeBytes: 1_500_000_000, modelFile: null, runtimeVersion: "parakeet-loopback-1", license },
+      { id: transcribeRsArtifactId, modelId: "parakeet-tdt-0.6b-v2", legacyModelId: modelId, runtimeId: "transcribe-rs", format: "onnx-package", precision: "int8", approximateBytes: 731_357_568, minimumFreeBytes: 1_500_000_000, modelFile: null, runtimeVersion: "transcribe-rs-0.3.8", license },
+    ],
+    runtimes: [
+      { id: "parakeet-loopback", adapterKind: "parakeet_loopback", version: "parakeet-loopback-1", compiledComputeBackends: ["cpu"] },
+      { id: "transcribe-rs", adapterKind: "transcribe_rs", version: "transcribe-rs-0.3.8", compiledComputeBackends: ["cpu"] },
+    ],
+    backendPaths: [
+      { id: loopbackPathId, artifactId, runtimeId: "parakeet-loopback", ports: { batch: true, stream: false } },
+      { id: transcribeRsPathId, artifactId: transcribeRsArtifactId, runtimeId: "transcribe-rs", ports: { batch: true, stream: false } },
+    ],
+    profiles: [
+      profile(`${artifactId}.stop`, artifactId, "parakeet-loopback", "stop", "none"),
+      profile(stopProfileId, transcribeRsArtifactId, "transcribe-rs", "stop", "none"),
+      profile(eagerProfileId, transcribeRsArtifactId, "transcribe-rs", "eager", "silero"),
+    ],
+    defaultProfileId: `${artifactId}.stop`,
+  };
+  const models = [{
+    id: modelId,
+    label: "Parakeet TDT 0.6B v2",
+    engine: "parakeet",
+    size: "large",
+    languages: "English",
+    description: "Parakeet v2.",
+    approximateBytes: 731_357_568,
+    precision: "int8",
+    license,
+    installed: true,
+    staged: false,
+    running: false,
+    state: "ready",
+    error: null,
+  }];
   const view = {
+    voiceConfigVersion: 2,
     mode: "local",
-    localModelId: models[0].id,
+    localModelId: modelId,
+    localSelection: { modelId: "parakeet-tdt-0.6b-v2", artifactId, runtimeId: "parakeet-loopback", execution: "stop", segmentation: "none" },
+    localSelectionOrigin: "default",
+    resolvedProfileId: `${artifactId}.stop`,
     provider: "",
     adapter: "",
     model: "",
@@ -5282,9 +5296,27 @@ test("voice model picker exposes backend capabilities in a compact switcher", as
     adapters: [],
     providers: [],
     auth: { type: "none", headerName: "", configured: false, source: null, removable: false },
-    local: { installingModelId: null, activeModelId: models[0].id, progress: null, models },
+    local: {
+      catalogue,
+      backendPaths: [
+        { backendPathId: loopbackPathId, installable: true, operational: false, blockedReason: null, artifactState: "installed", runtimeState: "cold", requestedComputeBackend: "cpu", actualComputeBackend: null, loadedRuntimeVersion: null, lastErrorCode: null },
+        { backendPathId: transcribeRsPathId, installable: true, operational: false, blockedReason: null, artifactState: "installed", runtimeState: "cold", requestedComputeBackend: "cpu", actualComputeBackend: null, loadedRuntimeVersion: null, lastErrorCode: null },
+      ],
+      installingModelId: null,
+      activeModelId: null,
+      progress: null,
+      models,
+    },
   };
-  await page.route("**/v0/voice/settings", async (route) => route.fulfill({ json: view }));
+  let savedPayload = null;
+  await page.route("**/v0/voice/settings", async (route) => {
+    if (route.request().method() === "PUT") {
+      savedPayload = route.request().postDataJSON();
+      await route.fulfill({ json: { ...view, mode: savedPayload.mode, localModelId: "whisper-tiny-en-q8", localSelection: { ...savedPayload.localSelection, modelId: "whisper-tiny-en" }, localSelectionOrigin: "explicit", resolvedProfileId: `${savedPayload.localSelection.artifactId}.${savedPayload.localSelection.execution}` } });
+      return;
+    }
+    await route.fulfill({ json: view });
+  });
   await page.addInitScript(() => {
     Object.defineProperty(navigator, "mediaDevices", { configurable: true, value: { enumerateDevices: async () => [] } });
   });
@@ -5293,19 +5325,28 @@ test("voice model picker exposes backend capabilities in a compact switcher", as
   await page.keyboard.press("Control+,");
   const dialog = page.getByRole("dialog", { name: "Settings" });
   await dialog.getByRole("tab", { name: "Voice" }).click();
-  await expect(dialog.locator("#voice-local-model-quick")).toHaveValue(models[0].id);
-  await expect(dialog.locator('[data-backend="transcribe.cpp"]')).toHaveCount(1);
-  await expect(dialog.getByText("Live streaming", { exact: true })).toBeVisible();
-  await expect(dialog.getByText("Live partials", { exact: true }).first()).toBeVisible();
-  await expect(dialog.getByText("Stable commits", { exact: true }).first()).toBeVisible();
-  await expect(dialog.getByText("Progressive batch", { exact: true })).toBeVisible();
-  await expect(dialog.getByText("Stop-time batch", { exact: true })).toBeVisible();
-  await dialog.locator("#voice-local-model-quick").selectOption(models[1].id);
-  await expect(dialog.locator("#voice-local-model-quick")).toHaveValue(models[1].id);
+  await expect(dialog.locator("#voice-local-family")).toHaveValue("parakeet-tdt-0.6b-v2");
+  await dialog.locator("#voice-local-artifact-runtime").selectOption(transcribeRsPathId);
+  await expect(dialog.locator("#voice-local-artifact-runtime")).toHaveValue(transcribeRsPathId);
+  await expect(dialog.locator("#voice-local-artifact-runtime option").filter({ hasText: "transcribe-rs ONNX worker" })).toHaveCount(1);
+  await dialog.locator("#voice-local-timing").selectOption(eagerProfileId);
+  await expect(dialog.locator("#voice-local-timing")).toHaveValue(eagerProfileId);
+  await expect(dialog.getByText("Pause detection: Silero", { exact: true })).toBeVisible();
   await expect(dialog.getByText("Unsaved", { exact: true })).toBeVisible();
-  await expect(dialog.locator(`[data-model-id="${models[1].id}"][data-current="true"]`)).toHaveCount(1);
-  const columns = await dialog.locator(".voice-model-grid").evaluate((element) => getComputedStyle(element).gridTemplateColumns.split(" ").length);
-  expect(columns).toBe(page.viewportSize().width <= 520 ? 1 : 2);
+  const controlOrder = await dialog.evaluate(() => ["#voice-mode", ".voice-local-catalogue", ".voice-input-test"].map((selector) => {
+    const element = document.querySelector(selector);
+    return element ? element.getBoundingClientRect().top : -1;
+  }));
+  expect(controlOrder[0]).toBeLessThan(controlOrder[1]);
+  expect(controlOrder[1]).toBeLessThan(controlOrder[2]);
+  await dialog.getByRole("button", { name: "Save Voice settings" }).click();
+  await expect(dialog.locator(".voice-save-success")).toBeVisible();
+  await expect(dialog.locator("#voice-local-family")).toHaveValue("parakeet-tdt-0.6b-v2");
+  expect(savedPayload.localSelection).toEqual({ modelId: "parakeet-tdt-0.6b-v2", artifactId: transcribeRsArtifactId, runtimeId: "transcribe-rs", execution: "eager", segmentation: "silero" });
+  if (page.viewportSize().width <= 520) {
+    const overflow = await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth);
+    expect(overflow).toBe(false);
+  }
 });
 
 test("managed model installation preserves the unsaved local source during server polling", async ({ page }) => {
@@ -5462,6 +5503,6 @@ test("Voice credential tests persist the displayed provider before testing it", 
   });
   await expect(dialog.getByLabel("OpenAI API key")).toHaveValue("");
   await expect(dialog).not.toContainText("cloud-secret-value");
-  await expect(dialog.getByText("Stored securely by Conduit")).toBeVisible();
+  await expect(dialog.getByText("Stored on this server")).toBeVisible();
   await expect(dialog.getByText("Connection successful")).toBeVisible();
 });
