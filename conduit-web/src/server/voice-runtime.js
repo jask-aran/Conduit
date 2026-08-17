@@ -163,6 +163,7 @@ export class VoiceRuntime {
         profile,
         execution: profile.execution,
         segmentation: profile.segmentation,
+        fallback: profile.fallback ? { ...profile.fallback } : null,
         precision: artifact.precision || modelPrecision(artifact.legacyModelId),
         backend: local.backend || (runtimeDefinition.adapterKind === "transformers_js" ? "embedded_transformers" : runtimeDefinition.adapterKind === "parakeet_loopback" ? "loopback_parakeet" : "transcribe_cpp"),
         computeBackend: local.computeBackend || (runtimeDefinition.adapterKind === "transformers_js" ? "wasm-cpu" : runtimeDefinition.adapterKind === "parakeet_loopback" ? "cpu" : null),
@@ -174,7 +175,7 @@ export class VoiceRuntime {
         native: local.native || null,
         ports: adapters,
         transcribe,
-        stream: profile.execution === "live" && adapters.stream ? (options) => adapters.stream.openNative(options) : null,
+        stream: profile.execution === "live" && adapters.stream ? (options) => adapters.stream.openSession(options) : null,
       };
     }
     const adapter = config.provider === "openai" ? openaiAdapterFor(config.model) : config.adapter;

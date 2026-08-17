@@ -1,7 +1,8 @@
 # Voice dictation pipeline overhaul plan
 
 Status: **WP7 complete and checkpointed on 2026-08-17. WP0, WP1, WP2, WP3,
-WP4A, WP4B, WP5, and WP6A approved. WP8–WP12 have not started.**
+WP4A, WP4B, WP5, WP6A, and WP8 approved. WP9 complete and checkpointed on
+2026-08-17. WP10–WP12 have not started.**
 
 This document defines the active voice-dictation work. Git history preserves
 the completed polish sprint, its test counts, and its manual acceptance
@@ -1501,10 +1502,9 @@ chunks over 500 kB remains.
 
 The user dictation run remains the accuracy reference: sustained pace now
 keeps up, but the user reports poor WER. WSL CPU overhead, native Windows or
-Vulkan comparison, and accuracy tuning remain open. WP9 scheduling and
-transcript-truth work has not started.
+Vulkan comparison, and accuracy tuning remain open.
 
-**Status:** WP8 is ready for user testing and explicit handoff approval.
+**Status:** WP8 was approved for the WP9 implementation checkpoint.
 
 ### Work package 9 — make Conduit own scheduling and transcript truth
 
@@ -1642,6 +1642,56 @@ diagnostics.
 
 **Handoff:** run focused checks and the production build. Restart, confirm
 `/healthz`, report the pause and fallback cases, then wait for user approval.
+
+#### WP9 implementation checkpoint — 2026-08-17
+
+WP9 is complete. Conduit now owns one accepted PCM timeline, one scheduler
+boundary, and one transcript truth per session. Stop passes one immutable whole
+session to BatchPort. Eager submits closed Silero or heuristic ranges with
+absolute samples and flushes the tail. Live feeds accepted PCM in order to the
+StreamPort and drains it before finalisation. A shared `SegmentationProvider`
+contract now covers Silero and a calibrated RMS heuristic. The heuristic uses
+the versioned `voice-segmentation-calibration-v1` manifest, an analysis copy,
+frame dBFS, an outside-speech noise floor, hysteresis, onset confirmation,
+pre-roll, exit silence, trailing padding, hangover, and a maximum range.
+
+Transcript truth accepts higher tentative revisions, append-only stable
+segments, idempotent repeated IDs, increasing sequence and sample coverage,
+and one derived `session_final`. It removes tentative text covered by stable
+output and rejects unrelated runtime finals. Diagnostics now separate
+`acceptedThroughSample`, `submittedThroughSample`,
+`processedThroughSample`, `committedThroughSample`, and
+`archiveOwnedThroughSample`.
+
+Fallback now records source and completing profiles, trigger, replay sample,
+discarded tentative revisions, checkpoint, overlap, and duplicate-boundary
+handling. Before stable output it replays from zero. After a stable checkpoint
+it replays a 1,600-sample maximum overlap from the exact committed cursor and
+preserves the stable prefix. Without an exact checkpoint it fails visibly and
+keeps the archive PCM. ASR uninstall stops only the ASR runtime and does not
+reset the shared Silero instance.
+
+**WP9 checks.** The focused catalogue, adapter, model lifecycle, segmentation,
+transcript, and WebSocket suite passed 63/63. The stream API suite passed
+32/32. `npm test` passed 514/514. `npm run typecheck`, `npm run build`, all
+changed-file `node --check` commands, and `git diff --check` passed. The
+production build transformed 2,200 modules and reported 184,415 B initial
+JavaScript gzip, 24,994 B initial CSS gzip, and 185,186 B largest lazy
+JavaScript gzip. The existing warning about chunks over 500 kB remains.
+
+**WP9 handoff evidence.** The heuristic pause scenario produced two regions
+for speech–silence–speech and retained a short activity range without changing
+the accepted PCM. The live scenario fed three 2,560-sample quanta, measured
+160 ms mean audio per native call, and finished with accepted, submitted, and
+committed cursors at 7,680 samples and zero server queue. The tentative-failure
+scenario discarded revision 1 and replayed 10,240 bytes from sample zero. The
+stable-failure scenario preserved the stable prefix, used checkpoint 2,560,
+replayed from sample 960 with 1,600 samples of overlap, and transcribed an
+8,320-byte suffix. No new WER or hardware benchmark was run in WP9; the poor
+WER and WSL CPU overhead from the WP7 user run remain open accuracy and
+performance risks.
+
+**Status:** WP9 is ready for user testing and explicit handoff approval.
 
 ### Work package 10 — add `transcribe-rs` as an ONNX backend
 

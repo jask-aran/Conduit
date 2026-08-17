@@ -30,7 +30,7 @@ export interface VoiceDictationCompletion {
   finalWithinDeadline: boolean;
   settlementMs: number | null;
   inputSignalDetected: boolean;
-  speechDetector: "digital_zero" | "silero" | "unclassified" | null;
+  speechDetector: "digital_zero" | "silero" | "heuristic" | "unclassified" | null;
   speechDetected: boolean | null;
   maxInputPeak: number;
   captureDurationMs: number;
@@ -615,7 +615,7 @@ export function createVoiceDictationClient(callbacks: VoiceDictationCallbacks, o
             const serverAudioBytes = Number(message.audioBytes);
             const serverAudioDurationMs = Number(message.audioDurationMs);
             const speechDetector = message.speech && typeof message.speech.detector === "string"
-              ? message.speech.detector as "digital_zero" | "silero" | "unclassified"
+              ? message.speech.detector as "digital_zero" | "silero" | "heuristic" | "unclassified"
               : null;
             const speechDetected = typeof message.speech?.detected === "boolean" ? message.speech.detected : null;
             callbacks.onCompleted({

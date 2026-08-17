@@ -659,7 +659,25 @@ test("Unified English stream startup failure falls back before consuming session
     const completed = await next((event) => event.type === "completed");
     assert.equal(completed.text, "batch fallback");
     assert.equal(completed.progressiveBatch, true);
-    assert.deepEqual(completed.streamFallback, { from: "transcribe_cpp_stream_v1", reason: "test_stream_unavailable" });
+    assert.deepEqual(completed.streamFallback, {
+      from: "transcribe_cpp_stream_v1",
+      reason: "test_stream_unavailable",
+      replay: "from_zero",
+      replaySample: 0,
+      discardedTentativeRevisions: [],
+      stableCheckpoint: 0,
+      overlapSamples: 0,
+      duplicateBoundaryHandling: "none",
+      sourceProfile: {
+        profileId: null,
+        adapter: "transcribe_cpp_stream_v1",
+        model: "parakeet-unified-en-0.6b-q8",
+        runtimeId: null,
+        backendPathId: null,
+      },
+      fallbackProfile: null,
+      completingProfile: null,
+    });
     assert.equal(streamAttempts, 1);
     assert.equal(progressiveStarts, 1);
     assert.equal(progressivePcmBytes, 4_096);
@@ -734,6 +752,19 @@ test("Unified English live queue overflow falls back from sample zero without a 
       reason: "live_queue_overflow",
       replay: "from_zero",
       replaySample: 0,
+      discardedTentativeRevisions: [],
+      stableCheckpoint: 0,
+      overlapSamples: 0,
+      duplicateBoundaryHandling: "none",
+      sourceProfile: {
+        profileId: null,
+        adapter: "transcribe_cpp_stream_v1",
+        model: "parakeet-unified-en-0.6b-q8",
+        runtimeId: null,
+        backendPathId: null,
+      },
+      fallbackProfile: null,
+      completingProfile: null,
     });
     assert.equal(completed.audioBytes, 15_360);
     assert.equal(transcribed.length, 1);
@@ -745,6 +776,155 @@ test("Unified English live queue overflow falls back from sample zero without a 
   } finally {
     client.terminate();
     await new Promise((resolve) => setTimeout(resolve, 300));
+    await new Promise((resolve) => bridge.close(resolve));
+    await new Promise((resolve) => upstream.close(resolve));
+  }
+});
+
+test("Unified English live failure after tentative output discards revisions and replays from zero", async () => {
+  const upstream = await startUpstream([]);
+  const transcribed = [];
+  let feedCount = 0;
+  let resetCount = 0;
+  const nativeStream = {
+    get text() {
+      return feedCount ? { full: "draft words", committed: "", tentative: "draft words" } : { full: "", committed: "", tentative: "" };
+    },
+    async feed() {
+      feedCount += 1;
+      if (feedCount === 1) return { resultChanged: true, revision: 1, audioCommittedMs: 0, bufferedMs: 0 };
+      throw Object.assign(new Error("native stream failed after tentative output"), { code: "native_stream_failed" });
+    },
+    async finalize() { return { resultChanged: false, isFinal: true, revision: feedCount, audioCommittedMs: 0, bufferedMs: 0 }; },
+    reset() { resetCount += 1; },
+  };
+  const { bridge, origin } = await startDictationBridge({
+    upstreamPort: upstream.address().port,
+    runtimeConfig: {
+      mode: "local",
+      inferenceMode: "streaming",
+      execution: "live",
+      segmentation: "none",
+      adapter: "transcribe_cpp_stream_v1",
+      provider: "local",
+      model: "parakeet-unified-en-0.6b-q8",
+      precision: "q8",
+      backend: "transcribe_cpp",
+      computeBackend: "cpu",
+      capabilities: { language: "en", inferenceMode: "streaming", partials: true, externalVad: false, precision: "q8", streaming: { family: "parakeet_buffered", chunkMs: 160, latencyMs: 480 } },
+      streaming: { family: "parakeet_buffered", chunkMs: 160, latencyMs: 480 },
+      stream: async () => nativeStream,
+      transcribe: async (pcm) => {
+        transcribed.push(Buffer.from(pcm));
+        return "fallback from tentative";
+      },
+    },
+  });
+  const client = new WebSocket(`${origin}/dictation`);
+  const next = messageQueue(client);
+  try {
+    await new Promise((resolve, reject) => { client.once("open", resolve); client.once("error", reject); });
+    await next((event) => event.type === "ready");
+    await next((event) => event.type === "runtime_ready");
+    for (let index = 0; index < 8; index += 1) client.send(Buffer.alloc(640, index + 1), { binary: true });
+    const partial = await next((event) => event.type === "partial" && event.tentativeText === "draft words");
+    assert.equal(partial.stableText, "");
+    for (let index = 8; index < 16; index += 1) client.send(Buffer.alloc(640, index + 1), { binary: true });
+    const fallback = await next((event) => event.type === "stream_fallback", 5_000);
+    assert.equal(fallback.replay, "from_zero");
+    assert.deepEqual(fallback.discardedTentativeRevisions, [1]);
+    assert.equal(fallback.stableCheckpoint, 0);
+    client.send(JSON.stringify({ type: "stop", audioBytesSent: 10_240 }));
+    const completed = await next((event) => event.type === "completed", 5_000);
+    assert.equal(completed.text, "fallback from tentative");
+    assert.equal(completed.streamFallback.replay, "from_zero");
+    assert.equal(completed.streamFallback.stableCheckpoint, 0);
+    assert.equal(transcribed.length, 1);
+    assert.equal(transcribed[0].length, 10_240);
+    assert.equal(resetCount, 1);
+  } finally {
+    client.terminate();
+    await new Promise((resolve) => setTimeout(resolve, 25));
+    await new Promise((resolve) => bridge.close(resolve));
+    await new Promise((resolve) => upstream.close(resolve));
+  }
+});
+
+test("Unified English live failure after a stable checkpoint replays an overlapped suffix", async () => {
+  const upstream = await startUpstream([]);
+  const transcribed = [];
+  let feedCount = 0;
+  let resetCount = 0;
+  let finalizeCount = 0;
+  const nativeStream = {
+    get text() {
+      return feedCount ? { full: "stable words", committed: "stable words", tentative: "" } : { full: "", committed: "", tentative: "" };
+    },
+    async feed() {
+      feedCount += 1;
+      if (feedCount === 1) return { resultChanged: true, revision: 1, audioCommittedMs: 160, bufferedMs: 0 };
+      throw Object.assign(new Error("native stream failed after stable output"), { code: "native_stream_failed" });
+    },
+    async finalize() {
+      finalizeCount += 1;
+      return { resultChanged: false, isFinal: true, revision: feedCount, audioCommittedMs: 160, bufferedMs: 0 };
+    },
+    reset() { resetCount += 1; },
+  };
+  const { bridge, origin } = await startDictationBridge({
+    upstreamPort: upstream.address().port,
+    runtimeConfig: {
+      mode: "local",
+      inferenceMode: "streaming",
+      execution: "live",
+      segmentation: "none",
+      adapter: "transcribe_cpp_stream_v1",
+      provider: "local",
+      model: "parakeet-unified-en-0.6b-q8",
+      precision: "q8",
+      backend: "transcribe_cpp",
+      computeBackend: "cpu",
+      resolvedProfileId: "parakeet-unified-en-0.6b-q8-live",
+      runtimeId: "transcribe-cpp",
+      backendPathId: "transcribe-cpp-native",
+      fallback: { profileId: "parakeet-unified-en-0.6b-q8-stop" },
+      capabilities: { language: "en", inferenceMode: "streaming", partials: true, externalVad: false, precision: "q8", streaming: { family: "parakeet_buffered", chunkMs: 160, latencyMs: 480 } },
+      streaming: { family: "parakeet_buffered", chunkMs: 160, latencyMs: 480 },
+      stream: async () => nativeStream,
+      transcribe: async (pcm) => {
+        transcribed.push(Buffer.from(pcm));
+        return "fallback tail";
+      },
+    },
+  });
+  const client = new WebSocket(`${origin}/dictation`);
+  const next = messageQueue(client);
+  try {
+    await new Promise((resolve, reject) => { client.once("open", resolve); client.once("error", reject); });
+    await next((event) => event.type === "ready");
+    await next((event) => event.type === "runtime_ready");
+    for (let index = 0; index < 8; index += 1) client.send(Buffer.alloc(640, index + 1), { binary: true });
+    const partial = await next((event) => event.type === "partial" && event.stableText === "stable words");
+    assert.equal(partial.text, "stable words");
+    for (let index = 8; index < 16; index += 1) client.send(Buffer.alloc(640, index + 1), { binary: true });
+    const fallback = await next((event) => event.type === "stream_fallback", 5_000);
+    assert.equal(fallback.replay, "from_committed_sample");
+    assert.equal(fallback.replaySample, 960);
+    assert.equal(fallback.stableCheckpoint, 2_560);
+    assert.equal(fallback.overlapSamples, 1_600);
+    assert.equal(fallback.duplicateBoundaryHandling, "stable_prefix_preserved");
+    assert.equal(fallback.fallbackProfile, "parakeet-unified-en-0.6b-q8-stop");
+    client.send(JSON.stringify({ type: "stop", audioBytesSent: 10_240 }));
+    const completed = await next((event) => event.type === "completed", 5_000);
+    assert.equal(completed.text, "stable words fallback tail");
+    assert.equal(completed.streamFallback.replay, "from_committed_sample");
+    assert.equal(transcribed.length, 1);
+    assert.equal(transcribed[0].length, (5_120 - 960) * 2);
+    assert.equal(finalizeCount, 0);
+    assert.equal(resetCount, 1);
+  } finally {
+    client.terminate();
+    await new Promise((resolve) => setTimeout(resolve, 25));
     await new Promise((resolve) => bridge.close(resolve));
     await new Promise((resolve) => upstream.close(resolve));
   }
@@ -767,7 +947,10 @@ test("progressive local batch publishes an ordered segment before Stop and appen
     client.send(Buffer.alloc(2_048, 1), { binary: true });
     const first = await next((event) => event.type === "final", 5_000);
     assert.equal(first.text, "first phrase");
-    assert.deepEqual(first.segment, { sequence: 0, startSample: 0, endSample: 1_024 });
+    assert.equal(first.segment.sequence, 0);
+    assert.equal(first.segment.startSample, 0);
+    assert.equal(first.segment.endSample, 1_024);
+    assert.match(first.segment.segmentId, /^[0-9a-f-]+:segment:0$/);
     client.send(Buffer.alloc(2_048, 2), { binary: true });
     client.send(JSON.stringify({ type: "stop", audioBytesSent: 4_096 }));
     const completed = await next((event) => event.type === "completed", 5_000);

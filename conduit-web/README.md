@@ -235,19 +235,17 @@ bounded bar renderer in a larger monitor with current level, peak hold, and
 recording state. The browser captures 16 kHz mono PCM with an `AudioWorklet`
 and sends it in 20 ms, 320-sample packets only to authenticated
 `WS /v0/dictation/stream`; Stop flushes one final partial packet when needed.
-Conduit runs the pinned Silero VAD when a verified artifact is installed. For
-batch adapters, Silero is authoritative: browser activity only drives the UI,
-and Conduit submits Silero's padded sample ranges. Local batch adapters use an
-incremental VAD session to queue closed ranges during capture and emit stable
-ordered finals before Stop; Stop flushes the final range. Remote providers and
-adapters without that local range capability use the same Silero ranges at
-Stop. Short valid ranges are retained, and a bounded overflow merges the
-remaining tail and records that action. Silence-only captures submit no PCM to
-ASR. The complete WAV remains the archive source, and sidecars retain frame
+Conduit owns one accepted PCM timeline and one transcript truth for each
+session. Stop sends one immutable whole-session buffer to BatchPort. During
+pauses sends each closed range to BatchPort with absolute sample positions and
+flushes the open tail. Live sends every accepted sample once, in order, to the
+persistent StreamPort. Live does not run Eager segmentation. Conduit uses one
+shared `SegmentationProvider` contract for pinned Silero and the calibrated
+heuristic provider; analysis always uses a copy of the accepted PCM. Short
+valid ranges are retained, and bounded range exhaustion merges the remaining
+tail. The complete WAV remains the archive source, and sidecars retain frame
 probabilities, selected ranges, source-region mapping, progressive sequence
-status, and the segment guard. The adapters also have an explicit
-external-policy path for a future runtime with a verified segmentation
-contract; current runtimes use server-side Silero.
+status, transcript watermarks, segmentation metadata, and the segment guard.
 Exact-zero input remains a digital-silence or device-stall diagnostic.
 Settings → Voice
 can select a browser microphone, refresh the device list, and run an in-memory
@@ -291,8 +289,10 @@ backend. Unified English Q8 uses one `parakeet_buffered` stateful session per
 dictation, with the current 1.12 s profile (5.6 s left context, 560 ms chunk,
 and 560 ms right context) and stable-prefix commits. It emits stable and tentative text
 while capture continues. If stream startup fails before useful text, Conduit
-records the failure and uses the bounded WP5 progressive batch fallback. It
-does not run both paths in parallel. File-upload providers buffer one bounded
+records the failure and uses the bounded WP5 progressive batch fallback. If a
+stable segment has an exact sample checkpoint, a later stream failure replays
+only that checkpoint's bounded-overlap suffix through BatchPort and preserves
+the stable prefix. It does not run both paths in parallel. File-upload providers buffer one bounded
 utterance in memory and transcribe it after Stop. Other installed local batch
 models can use the bounded progressive range path during capture; this is not
 stateful streaming and does not run for remote providers.
@@ -587,18 +587,21 @@ PCM packet is upsampled to 24 kHz and appended to a Realtime transcription
 session; `partial` / `final` events include `stableText`, `tentativeText`,
 and `revision`. Unified English Q8 uses `transcribe_cpp_stream_v1` the same
 way with native float32 packets, plus `audioCommittedMs` and `bufferedMs`.
-Conduit copies incoming packets into one bounded server queue, coalesces eight
-20 ms packets into one 160 ms native feed, and allows only one native `feed()`
-call at a time. The queue limit is 5,000 ms. The stream reports
+Conduit copies incoming packets into one bounded accepted timeline, coalesces
+eight 20 ms packets into one 160 ms native feed, and allows only one native
+`feed()` call at a time. The queue limit is 5,000 ms. The stream reports
 `serverQueuedAudioMs`, `runtimeBufferedAudioMs`, `totalInferenceLagMs`,
 `acceptedThroughSample`, `submittedThroughSample`, `committedThroughSample`,
-and `processedThroughSample` (null unless the binding reports an exact
-processed cursor). A queue overflow before stable text emits
-`stream_fallback` and replays the complete accepted PCM through
-`transcribe_cpp_batch_fallback_v1` from sample zero. An overflow after stable
-text emits `error` and preserves the accepted PCM for the archive. A
-stream-start failure is reported in `streamFallback` and can also select
-`transcribe_cpp_batch_fallback_v1` with the WP5 progressive path.
+`processedThroughSample`, and `archiveOwnedThroughSample` (null for processed
+unless the binding reports an exact cursor). A failure before output or after
+tentative output emits `stream_fallback` and replays the accepted PCM through
+`transcribe_cpp_batch_fallback_v1` from sample zero. A failure after stable
+output is safe only with an exact `throughSample`; the fallback replays from
+that committed sample with bounded overlap, preserves the stable prefix, and
+records discarded tentative revisions and duplicate-boundary handling. Without
+an exact checkpoint, Conduit emits `error` and preserves the accepted PCM for
+the archive. A stream-start failure is reported in `streamFallback` and can
+also select `transcribe_cpp_batch_fallback_v1` with the WP5 progressive path.
 The current CPU Live profile uses 5.6 s left context, a 560 ms chunk, and
 560 ms right context for 1.12 s lookahead. The other supported Unified English
 profiles remain available to later profile selection work.
@@ -606,8 +609,10 @@ Other managed local models can submit closed ranges during capture through the
 bounded progressive path; the managed legacy Parakeet runtime still serves
 the OpenAI-compatible upload endpoint on loopback. Conduit emits
 `ready`, `partial`, `final`, `stream_fallback`, `finalizing`, `segment_error`,
-`settlement_deadline`, `completed`, and `error`. Progressive `final` events
-contain cumulative text and optional sequence/sample metadata. `finalizing`
+`settlement_deadline`, `session_final`, `completed`, and `error`. `final` events
+contain cumulative text and optional stable segment IDs, sequence, revision,
+and sample metadata. `session_final` is derived once from the accepted stable
+segments before `completed`. `finalizing`
 announces the duration-aware server deadline before the selected adapter
 completes its final range or whole-session pass. The user stop or the
 five-minute limit finalizes the session. `completed` includes `settlementMs`,
@@ -631,7 +636,9 @@ PCM, runtime preparation, inference queue/start/finish, partial/final,
 completion-send, archive, and bounded VAD queue/execution timing.
 The client event record includes digital-silence device-stall notifications.
 The server record includes Silero frame probabilities, selected padded sample
-ranges, source-region mapping, and any segment-guard action. Direct adapter
+ranges, source-region mapping, segmentation provider and calibration version,
+accepted/submitted/processed/committed/archive-owned watermarks, fallback
+source and completing profiles, and any segment-guard action. Direct adapter
 calls without a session selection retain the legacy RMS split for compatibility;
 the authenticated dictation path always supplies its server-side VAD decision.
 Completed session metadata also records the frozen profile ID, model and
@@ -675,8 +682,9 @@ The JSON sidecar contains non-secret completion, provider, model, and byte
 metadata. Settings microphone tests remain browser-local and are not archived.
 
 The server owns one bounded PCM accumulator per active session and shares its
-views with the selected adapter and archive; batch adapters materialise one
-contiguous buffer only at Stop. The server limits concurrent dictation sessions, audio duration and bytes,
+immutable accepted view with the selected scheduler and archive. Stop BatchPort
+materialises one whole-session buffer; Eager BatchPort receives bounded range
+slices; Live StreamPort receives ordered feeds. The server limits concurrent dictation sessions, audio duration and bytes,
 frame/event sizes, WebSocket buffering, connect time, and finalisation time.
 Settings-created remote endpoints require HTTPS, reject URL credentials and
 query strings, resolve only to public addresses, and pin the checked address for

@@ -43,6 +43,15 @@ test("WP8 adapters expose the canonical BatchPort and StreamPort for Unified Eng
   assert.equal(final.text.committed, "he");
   assert.equal(typeof nativeStream.reset, "function");
   assert.deepEqual(calls.map((call) => call.type), ["batch", "open", "feed", "finalize"]);
+
+  const session = await adapters.stream.openSession({});
+  const sessionUpdate = await session.feed(new Float32Array([0.25, -0.25]));
+  assert.ok(sessionUpdate);
+  assert.equal(session.text.full, "hello");
+  await session.finalize();
+  assert.deepEqual(calls.map((call) => call.type), ["batch", "open", "feed", "finalize", "open", "feed", "finalize"]);
+  assert.ok(Math.abs(calls[5].pcm[0] - 0.25) < 0.001);
+  assert.ok(Math.abs(calls[5].pcm[1] + 0.25) < 0.001);
 });
 test("WP8 adapter cancellation is idempotent and blocks use after cancel", async () => {
   const profile = VOICE_EXECUTION_CATALOG.profiles.find((candidate) => candidate.execution === "live");

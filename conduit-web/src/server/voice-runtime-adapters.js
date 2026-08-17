@@ -34,6 +34,17 @@ function pcmFloat32(pcm16) {
   return samples;
 }
 
+function pcm16FromFloat32(value) {
+  if (Buffer.isBuffer(value)) return Buffer.from(value);
+  const samples = value instanceof Float32Array ? value : Float32Array.from(value || []);
+  const buffer = Buffer.allocUnsafe(samples.length * 2);
+  for (let index = 0; index < samples.length; index += 1) {
+    const sample = Math.max(-1, Math.min(1, Number(samples[index]) || 0));
+    buffer.writeInt16LE(Math.round(sample * (sample < 0 ? 32768 : 32767)), index * 2);
+  }
+  return buffer;
+}
+
 function streamOptions(profile, options = {}) {
   const streaming = options.streaming || profile.streaming || {};
   const family = {
@@ -144,7 +155,7 @@ function createStreamPort({ profile, modelManager, artifact, openNative }) {
     try { active?.reset?.(); }
     catch {}
   };
-  return {
+  const api = {
     open,
     async feed(input) {
       if (!stream) throw runtimeAdapterError("voice_stream_not_open", "StreamPort is not open");
@@ -170,9 +181,8 @@ function createStreamPort({ profile, modelManager, artifact, openNative }) {
       await close();
       return { cancelled: true, reason };
     },
-    // The existing dictation adapter owns queueing and publication. This
-    // bridge keeps that adapter on the same explicit StreamPort runtime path
-    // until WP9 moves scheduler truth into its own module.
+    // Legacy native opening remains available to callers that still expose the
+    // native session shape. Dictation uses openSession below.
     openNative: async (options = {}) => {
       if (typeof openNative !== "function") {
         if (typeof modelManager?.stream !== "function") throw runtimeAdapterError("voice_stream_unsupported", "The selected local runtime does not expose StreamPort", 409);
@@ -181,6 +191,30 @@ function createStreamPort({ profile, modelManager, artifact, openNative }) {
       return openNative(streamOptions(profile, options));
     },
   };
+  api.openSession = async (options = {}) => {
+    await api.open(options);
+    let cursor = 0;
+    let lastText = { full: "", committed: "", tentative: "" };
+    return {
+      get text() { return lastText; },
+      async feed(pcm) {
+        const pcm16 = pcm16FromFloat32(pcm);
+        const startSample = cursor;
+        const endSample = startSample + Math.floor(pcm16.length / 2);
+        const result = await api.feed({ pcm16, startSample, endSample });
+        cursor = endSample;
+        lastText = result.text;
+        return result.update;
+      },
+      async finalize() {
+        const result = await api.finalize({ endSample: cursor });
+        lastText = result.text;
+        return result.update;
+      },
+      reset() { void api.cancel("session_closed"); },
+    };
+  };
+  return api;
 }
 
 export function createVoiceRuntimeAdapters({ profile, catalog, modelManager, runtime, fetchImpl = fetch, openStream } = {}) {
