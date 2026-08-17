@@ -142,3 +142,73 @@ test("short failure recordings use a separate bounded rotation quota", async () 
     await fs.rm(root, { recursive: true, force: true });
   }
 });
+
+test("archive queue owns copied PCM and drains accepted work", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-voice-recordings-queue-"));
+  let release;
+  let started;
+  const startedPromise = new Promise((resolve) => { started = resolve; });
+  const gate = new Promise((resolve) => { release = resolve; });
+  try {
+    const store = new VoiceRecordingStore({ root });
+    const save = store.save.bind(store);
+    store.save = async (...args) => {
+      started();
+      await gate;
+      return save(...args);
+    };
+    const firstPcm = Buffer.alloc(MIN_VOICE_DIAGNOSTIC_AUDIO_BYTES, 7);
+    const first = store.enqueue({
+      audioChunks: [firstPcm],
+      audioBytes: firstPcm.length,
+      transcript: "first queued recording",
+    });
+    await startedPromise;
+    firstPcm.fill(3);
+    const secondPcm = Buffer.alloc(MIN_VOICE_DIAGNOSTIC_AUDIO_BYTES, 9);
+    const second = store.enqueue({
+      audioChunks: [secondPcm],
+      audioBytes: secondPcm.length,
+      transcript: "second queued recording",
+    });
+    const drain = store.drain({ timeoutMs: 1_000 });
+    release();
+    const [firstRecord, secondRecord, drainResult] = await Promise.all([first, second, drain]);
+    assert.equal(firstRecord.archive.failure, null);
+    assert.equal(typeof firstRecord.archive.queueDelayMs, "number");
+    assert.equal(typeof firstRecord.archive.writeDurationMs, "number");
+    assert.equal(firstRecord.archive.path.audioFile, firstRecord.audioFile);
+    assert.equal(drainResult.drained, true);
+    const firstWav = await fs.readFile(path.join(root, firstRecord.audioFile));
+    assert.equal(firstWav[44], 7);
+    assert.equal(secondRecord.archive.path.metadataFile, `${secondRecord.id}.json`);
+    assert.equal((await filesIn(root)).some((file) => file.startsWith(".pending-")), false);
+  } finally {
+    release?.();
+    await fs.rm(root, { recursive: true, force: true });
+  }
+});
+
+test("archive drain drops queued work at its shutdown deadline", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-voice-recordings-drain-"));
+  let release;
+  const gate = new Promise((resolve) => { release = resolve; });
+  try {
+    const store = new VoiceRecordingStore({ root });
+    store.save = async () => gate;
+    const pcm = Buffer.alloc(MIN_VOICE_DIAGNOSTIC_AUDIO_BYTES, 5);
+    const active = store.enqueue({ audioChunks: [pcm], audioBytes: pcm.length, transcript: "active" });
+    await new Promise((resolve) => setImmediate(resolve));
+    const queued = store.enqueue({ audioChunks: [pcm], audioBytes: pcm.length, transcript: "queued" });
+    const result = await store.drain({ timeoutMs: 20 });
+    assert.equal(result.drained, false);
+    assert.equal(result.timedOut, true);
+    assert.equal(result.droppedRecords, 1);
+    await assert.rejects(queued, (error) => error.code === "voice_archive_shutdown_timeout");
+    release();
+    await active;
+  } finally {
+    release?.();
+    await fs.rm(root, { recursive: true, force: true });
+  }
+});
