@@ -332,3 +332,99 @@ export interface LiveRecord {
   sessionFile?: string;
   modelProfile?: ModelProfileView | null;
 }
+
+export type VoiceExecution = "stop" | "eager" | "live";
+export type VoiceSegmentation = "none" | "silero" | "heuristic";
+
+export interface VoiceLocalSelection {
+  modelId: string;
+  artifactId: string;
+  runtimeId: string;
+  execution: VoiceExecution;
+  segmentation: VoiceSegmentation;
+}
+
+export interface VoiceExecutionProfile {
+  schemaVersion: 1;
+  id: string;
+  modelId: string;
+  artifactId: string;
+  runtimeId: string;
+  backendPathId: string;
+  execution: VoiceExecution;
+  segmentation: VoiceSegmentation;
+  output: { tentative: boolean; stableSegments: boolean; sampleTimestamps: boolean };
+  resourcePolicy: {
+    preload: "supported" | "required" | "unsupported";
+    serialInference: boolean;
+    maximumSessionMs: number;
+    maximumQueuedAudioMs: number | null;
+  };
+  fallback: { profileId: string; allowed: "before_output" | "after_tentative" | "after_stable_checkpoint"; replay: "from_zero" | "from_committed_sample" } | null;
+}
+
+export interface VoiceBackendPathStatus {
+  backendPathId: string;
+  installable: boolean;
+  operational: boolean;
+  blockedReason: string | null;
+  artifactState: "absent" | "installing" | "installed" | "failed";
+  runtimeState: "cold" | "loading" | "warm" | "busy" | "failed";
+  requestedComputeBackend: string | null;
+  actualComputeBackend: string | null;
+  loadedRuntimeVersion: string | null;
+  lastErrorCode: string | null;
+}
+
+export interface VoiceLocalModel {
+  id: string;
+  label: string;
+  engine: string;
+  size: string;
+  languages: string;
+  description: string;
+  approximateBytes: number;
+  precision: string;
+  license: { id: string; attribution: string };
+  installed: boolean;
+  staged: boolean;
+  running: boolean;
+  state: "not_installed" | "installing" | "ready" | "running" | "error" | "interrupted";
+  error: string | null;
+}
+
+export interface VoiceExecutionCatalogueView {
+  version: string;
+  schemaVersion: 1;
+  models: { id: string; label: string; languages: string; description: string; artifactIds: string[] }[];
+  artifacts: { id: string; modelId: string; legacyModelId: string; runtimeId: string; format: string; precision: string; approximateBytes: number; minimumFreeBytes: number; modelFile: string | null; runtimeVersion: string | null; license: { id: string; attribution: string } }[];
+  runtimes: { id: string; adapterKind: string; version: string; compiledComputeBackends: string[] }[];
+  backendPaths: { id: string; artifactId: string; runtimeId: string; ports: { batch: boolean; stream: boolean } }[];
+  profiles: VoiceExecutionProfile[];
+  defaultProfileId: string;
+}
+
+export interface VoiceServerSettings {
+  voiceConfigVersion: 2;
+  mode: "off" | "local" | "remote";
+  localModelId: string;
+  localSelection: VoiceLocalSelection;
+  localSelectionOrigin: "default" | "explicit" | "migrated_explicit";
+  resolvedProfileId: string;
+  provider: string;
+  adapter: string;
+  model: string;
+  endpoint: string;
+  source: "stored";
+  adapters: { id: string; label: string; transport: "http" | "ws"; description: string }[];
+  providers: { id: string; label: string; adapter: string; endpoint: string; authLabel: string; configured?: boolean; models: { id: string; label: string; description: string }[] }[];
+  auth: { type: "none" | "bearer" | "header"; headerName: string; configured: boolean; source: "stored" | null; removable: boolean };
+  local: {
+    catalogue?: VoiceExecutionCatalogueView;
+    backendPaths?: VoiceBackendPathStatus[];
+    installingModelId: string | null;
+    activeModelId: string | null;
+    progress: { phase: string; current: string; completedBytes: number; totalBytes: number } | null;
+    models: VoiceLocalModel[];
+  } | null;
+}

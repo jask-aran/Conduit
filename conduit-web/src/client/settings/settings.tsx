@@ -11,7 +11,7 @@ import { formatMicrophoneError, hasAudioSignal, isUnavailableAudioInputError, li
 import { shortcutFromKeyboardEvent } from "../chat/voice-dictation";
 import { isWarmMicrophoneActive, stopWarmMicrophone } from "../chat/voice-dictation-client";
 import { createVoiceWaveformController, VoiceWaveform } from "../chat/voice-waveform";
-import type { Installation, ModelOption, Project, Template } from "../api/contracts";
+import type { Installation, ModelOption, Project, Template, VoiceLocalModel, VoiceServerSettings } from "../api/contracts";
 import type { ModelSettings } from "../state/model-settings";
 import { MAX_SIDEBAR_CHAT_LIMIT, MIN_SIDEBAR_CHAT_LIMIT } from "../navigation/sidebar-preferences";
 import type { ShortcutManager } from "../shortcuts/shortcut-manager";
@@ -71,35 +71,6 @@ interface SearchSettings {
   providers: SearchProvider[];
 }
 
-interface VoiceServerSettings {
-  mode: "off" | "local" | "remote";
-  localModelId: string;
-  provider: string;
-  adapter: string;
-  model: string;
-  endpoint: string;
-  source: "stored";
-  adapters: { id: string; label: string; transport: "http"; description: string }[];
-  providers: { id: string; label: string; adapter: string; endpoint: string; authLabel: string; configured?: boolean; models: { id: string; label: string; description: string }[] }[];
-  auth: {
-    type: "none" | "bearer" | "header";
-    headerName: string;
-    configured: boolean;
-    source: "stored" | null;
-    removable: boolean;
-  };
-  local: {
-    installingModelId: string | null;
-    activeModelId: string | null;
-    progress: { phase: string; current: string; completedBytes: number; totalBytes: number } | null;
-    models: {
-      id: string; label: string; engine: string; size: string; languages: string; description: string; approximateBytes: number; precision: string;
-      license: { id: string; attribution: string }; installed: boolean; staged: boolean; running: boolean; state: "not_installed" | "installing" | "ready" | "running" | "error" | "interrupted"; error: string | null;
-    }[];
-  } | null;
-}
-
-type VoiceLocalModel = NonNullable<VoiceServerSettings["local"]>["models"][number];
 type VoiceModelPresentation = {
   backend: string;
   mode: string;

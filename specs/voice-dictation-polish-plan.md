@@ -1439,6 +1439,73 @@ invalid and absent-artifact cases. Run focused checks and the production
 build. Restart, confirm `/healthz`, provide one redacted settings response and
 sidecar, then wait for user approval.
 
+#### WP8 implementation checkpoint — 2026-08-17
+
+WP8 is complete. The implementation adds one validated static catalogue, the
+explicit BatchPort and StreamPort adapter boundary, v2 local-selection
+persistence, legacy migration, separate backend-path status, frozen session
+metadata, one idempotent session lease, one session abort signal, and
+operation IDs for local BatchPort calls. Existing legacy model IDs remain
+valid. No runtime was removed and no default-selection decision was made.
+
+The catalogue contains 7 semantic models, 12 artifacts, 3 runtimes, 12
+backend paths, and 20 profiles. The current Unified selection resolves to
+`parakeet-unified-en-0.6b` / `parakeet-unified-en-0.6b-q8-gguf` /
+`transcribe-cpp` / `live` / `none`. Non-Live profiles use a null queue limit;
+Live uses a bounded 30,000 ms queue.
+
+**Migration and runtime-path evidence.** Each legacy setting was loaded from
+v1 storage, atomically migrated to v2 with origin `migrated_explicit`, run
+through its declared port, then saved as the same explicit v2 tuple and run
+again. These are cold-start wall times for a 100 ms silent PCM input, not WER
+measurements:
+
+| legacy setting | resolved profile | port | migrated / explicit ms | actual backend | loaded version |
+| --- | --- | --- | ---: | --- | --- |
+| `whisper-tiny-en-q8` | `whisper-tiny-en-q8.eager` | BatchPort | 1,674 / 1,124 | `wasm-cpu` | `transformers.js-3.8.1` |
+| `parakeet-unified-en-0.6b-q8` | `parakeet-unified-en-0.6b-q8-gguf.live` | StreamPort | 1,440 / 1,211 | `cpu` | `0.1.3` |
+| `parakeet-tdt-0.6b-v3-int8` | `parakeet-tdt-0.6b-v3-int8.stop` | BatchPort | 4,397 / 2,988 | `cpu` | `parakeet-1.25.1` |
+
+The absent-artifact case saved the valid Unified tuple and returned this
+specific capture error: `voice_model_not_installed`, HTTP `409`, `Install
+Parakeet Unified English Q8 from Voice settings first`. Invalid catalogue
+fixtures failed with the expected codes for duplicate IDs, missing references,
+model/artifact mismatch, artifact/runtime mismatch, fallback cycles, missing
+ports, invalid segmentation, and unbounded Live queues.
+
+The redacted settings response was:
+
+```json
+{"status":200,"voiceConfigVersion":2,"mode":"off","localSelectionOrigin":"default","localSelection":{"modelId":"whisper-tiny-en","artifactId":"whisper-tiny-en-q8","runtimeId":"transformers-js","execution":"eager","segmentation":"silero"},"resolvedProfileId":"whisper-tiny-en-q8.eager","catalogue":{"version":"1","models":7,"artifacts":12,"runtimes":3,"backendPaths":12,"profiles":20}}
+```
+
+An actual diagnostic sidecar contained the frozen fields:
+
+```json
+{"transcriptionStatus":"completed","mode":"local","adapter":"managed_transformers_v1","modelId":"whisper-tiny-en","artifactId":"whisper-tiny-en-q8","runtimeId":"transformers-js","backendPathId":"whisper-tiny-en-q8.transformers-js","resolvedProfileId":"whisper-tiny-en-q8.eager","execution":"eager","segmentation":"silero","requestedComputeBackend":"wasm-cpu","actualComputeBackend":"wasm-cpu","loadedRuntimeVersion":"transformers.js-3.8.1"}
+```
+
+The managed production data migrated from the previous v1 selection to
+`voiceConfigVersion: 2`, preserved the Unified selection as
+`migrated_explicit`, and retained the existing credential without exposing
+its value. After the required restart, `GET /healthz` returned
+`{"ok":true,"status":"ready","release":"development"}`.
+
+**WP8 checks.** The focused catalogue, adapter, settings, manager, API, and
+runtime checks passed 32/32. `node --test test/voice-stream-api.test.js`
+passed 30/30. `npm test` passed 503/503. `npm run typecheck`, `npm run build`,
+and `git diff --check` passed. The production build transformed 2,200 modules
+and reported 184,415 B initial JavaScript gzip, 24,994 B initial CSS gzip,
+and 185,186 B largest lazy JavaScript gzip. The existing Vite warning about
+chunks over 500 kB remains.
+
+The user dictation run remains the accuracy reference: sustained pace now
+keeps up, but the user reports poor WER. WSL CPU overhead, native Windows or
+Vulkan comparison, and accuracy tuning remain open. WP9 scheduling and
+transcript-truth work has not started.
+
+**Status:** WP8 is ready for user testing and explicit handoff approval.
+
 ### Work package 9 — make Conduit own scheduling and transcript truth
 
 **Behavioural change:** After Stop, During pauses, and Live use one session

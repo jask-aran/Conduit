@@ -9,6 +9,10 @@ test("voice settings API stores endpoint authentication without returning the se
   try {
     const initial = await (await server.request("/v0/voice/settings")).json();
     assert.equal(initial.mode, "off");
+    assert.equal(initial.voiceConfigVersion, 2);
+    assert.equal(initial.localSelectionOrigin, "default");
+    assert.equal(initial.local.catalogue.profiles.length, 20);
+    assert.equal(initial.local.backendPaths.length, 12);
     assert.equal(initial.local.models.every((model) => !model.installed), true);
     assert.deepEqual(initial.providers.slice(0, 3).map((provider) => provider.id), ["openai", "deepgram", "groq"]);
 
@@ -35,5 +39,31 @@ test("voice settings API stores endpoint authentication without returning the se
     const removed = await (await server.request("/v0/voice/credential", { method: "DELETE" })).json();
     assert.equal(removed.removed, true);
     assert.equal(removed.settings.auth.configured, false);
+  } finally { await server.stop(); }
+});
+
+test("voice settings API accepts a valid absent-artifact execution tuple", async () => {
+  const server = await startConduitHarness();
+  try {
+    const initial = await (await server.request("/v0/voice/settings")).json();
+    const profile = initial.local.catalogue.profiles.find((candidate) => candidate.execution === "live");
+    const response = await server.request("/v0/voice/settings", {
+      method: "PUT",
+      body: JSON.stringify({
+        mode: "local",
+        localSelection: {
+          modelId: profile.modelId,
+          artifactId: profile.artifactId,
+          runtimeId: profile.runtimeId,
+          execution: profile.execution,
+          segmentation: profile.segmentation,
+        },
+      }),
+    });
+    assert.equal(response.status, 200);
+    const saved = await response.json();
+    assert.equal(saved.mode, "local");
+    assert.equal(saved.resolvedProfileId, profile.id);
+    assert.equal(saved.local.backendPaths.find((path) => path.backendPathId === profile.backendPathId).artifactState, "absent");
   } finally { await server.stop(); }
 });

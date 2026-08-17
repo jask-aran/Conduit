@@ -1,12 +1,20 @@
 import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
+import {
+  VOICE_EXECUTION_CATALOG,
+  artifactForProfile,
+  migrateLocalSelection,
+  profileSelection,
+  resolveVoiceExecutionProfile,
+} from "./server/voice-execution-catalog.js";
 
 const MAX_SECRET_LENGTH = 16 * 1024;
 const MAX_ENDPOINT_LENGTH = 2 * 1024;
 const HEADER_NAME = /^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/;
 
 export const DEFAULT_LOCAL_VOICE_MODEL = "whisper-tiny-en-q8";
+export const VOICE_CONFIG_VERSION = 2;
 
 export const OPENAI_LIVE_MODEL = "gpt-live-transcribe";
 export const OPENAI_FILE_MODEL = "gpt-transcribe";
@@ -151,8 +159,12 @@ function storedConfig(config) {
       ? openaiAdapterFor(model)
       : profile.adapter;
   return {
+    voiceConfigVersion: Number(config.voiceConfigVersion) === VOICE_CONFIG_VERSION ? VOICE_CONFIG_VERSION : 1,
     mode,
     localModelId: String(config.localModelId || DEFAULT_LOCAL_VOICE_MODEL),
+    localSelection: config.localSelection && typeof config.localSelection === "object" ? { ...config.localSelection } : null,
+    localSelectionOrigin: ["default", "explicit", "migrated_explicit"].includes(config.localSelectionOrigin) ? config.localSelectionOrigin : null,
+    resolvedProfileId: typeof config.resolvedProfileId === "string" ? config.resolvedProfileId : null,
     provider, adapter,
     model,
     endpoint: typeof config.endpoint === "string" ? config.endpoint : profile.endpoint,
@@ -162,29 +174,81 @@ function storedConfig(config) {
   };
 }
 
+function untouchedDefaultConfig(config) {
+  return config.mode === "off"
+    && (!config.localModelId || config.localModelId === DEFAULT_LOCAL_VOICE_MODEL)
+    && (!config.provider || config.provider === "openai")
+    && (!config.model || config.model === OPENAI_FILE_MODEL)
+    && (!config.endpoint || config.endpoint === "https://api.openai.com/v1/audio/transcriptions")
+    && !config.auth?.secret
+    && !Object.values(config.credentials || {}).some((credential) => credential?.secret);
+}
+
+function normalizedLocalConfig(config, catalog) {
+  let profile;
+  let origin = config.localSelectionOrigin;
+  if (Number(config.voiceConfigVersion) === VOICE_CONFIG_VERSION && config.localSelection) {
+    if (!origin || !["default", "explicit", "migrated_explicit"].includes(origin)) throw voiceError("voice_profile_recovery_required", "The saved local voice profile has no valid selection origin", 409);
+    profile = resolveVoiceExecutionProfile(config.localSelection, catalog);
+  } else {
+    const legacyModelId = String(config.localModelId || DEFAULT_LOCAL_VOICE_MODEL);
+    const migration = migrateLocalSelection(legacyModelId, catalog);
+    profile = resolveVoiceExecutionProfile(migration.selection, catalog);
+    origin = untouchedDefaultConfig(config) ? "default" : "migrated_explicit";
+  }
+  const artifact = artifactForProfile(profile, catalog);
+  return {
+    voiceConfigVersion: VOICE_CONFIG_VERSION,
+    localModelId: artifact.legacyModelId,
+    localSelectionOrigin: origin,
+    localSelection: profileSelection(profile),
+    resolvedProfileId: profile.id,
+  };
+}
+
+function normalizedStoredConfig(config, catalog) {
+  const local = normalizedLocalConfig(config, catalog);
+  return {
+    ...config,
+    ...local,
+  };
+}
+
 export class VoiceSettingsStore {
-  constructor({ filePath }) {
+  constructor({ filePath, catalog = VOICE_EXECUTION_CATALOG }) {
     if (!filePath) throw new Error("VoiceSettingsStore requires a file path");
     this.filePath = path.resolve(filePath);
+    this.catalog = catalog;
   }
 
   async initialize() {
     const current = await readJson(this.filePath);
-    if (!Object.keys(current).length) await writeJson(this.filePath, {
+    const initial = Object.keys(current).length ? current : {
       mode: "off", localModelId: DEFAULT_LOCAL_VOICE_MODEL, provider: "openai", adapter: "openai_audio_sse_v1", model: "gpt-transcribe",
       endpoint: "https://api.openai.com/v1/audio/transcriptions", auth: { type: "bearer", headerName: "Authorization" },
-    });
+    };
+    const normalized = normalizedStoredConfig(initial, this.catalog);
+    if (JSON.stringify(initial) !== JSON.stringify(normalized)) await writeJson(this.filePath, normalized);
+  }
+
+  async readNormalized() {
+    const current = await readJson(this.filePath);
+    const normalized = normalizedStoredConfig(current, this.catalog);
+    if (JSON.stringify(current) !== JSON.stringify(normalized)) await writeJson(this.filePath, normalized);
+    return normalized;
   }
 
   async effective() {
-    return storedConfig(await readJson(this.filePath));
+    return storedConfig(await this.readNormalized());
   }
 
   async publicView({ local = null } = {}) {
     const effective = await this.effective();
     const configured = Boolean(effective.auth.secret);
     return {
-      mode: effective.mode, localModelId: effective.localModelId, provider: effective.provider, adapter: effective.adapter, model: effective.model,
+      voiceConfigVersion: effective.voiceConfigVersion, mode: effective.mode, localModelId: effective.localModelId,
+      localSelection: effective.localSelection, localSelectionOrigin: effective.localSelectionOrigin, resolvedProfileId: effective.resolvedProfileId,
+      provider: effective.provider, adapter: effective.adapter, model: effective.model,
       endpoint: effective.endpoint, source: effective.source, adapters: VOICE_ADAPTERS,
       providers: VOICE_PROVIDERS.map((provider) => ({ ...provider, configured: Boolean(effective.credentials[provider.id]?.secret) })),
       auth: { type: effective.auth.type, headerName: effective.auth.headerName, configured, source: configured ? effective.source : null, removable: configured && effective.source === "stored" },
@@ -196,11 +260,21 @@ export class VoiceSettingsStore {
     if (!isObject(input)) throw voiceError("voice_settings_invalid", "Voice settings must be an object");
     const mode = String(input.mode || "");
     if (!MODES.has(mode)) throw voiceError("voice_mode_invalid", "Voice mode must be off, local, or remote");
-    const localModelId = String(input.localModelId || DEFAULT_LOCAL_VOICE_MODEL);
-    const current = await readJson(this.filePath);
+    const current = await this.readNormalized();
     const credentials = storedCredentials(current);
+    const selectionInput = input.localSelection
+      || (Object.prototype.hasOwnProperty.call(input, "localModelId") ? migrateLocalSelection(input.localModelId, this.catalog).selection : current.localSelection);
+    const selectedProfile = resolveVoiceExecutionProfile(selectionInput, this.catalog);
+    const selectedArtifact = artifactForProfile(selectedProfile, this.catalog);
+    const local = {
+      voiceConfigVersion: VOICE_CONFIG_VERSION,
+      localModelId: selectedArtifact.legacyModelId,
+      localSelectionOrigin: "explicit",
+      localSelection: profileSelection(selectedProfile),
+      resolvedProfileId: selectedProfile.id,
+    };
     if (mode !== "remote") {
-      await writeJson(this.filePath, { ...current, mode, localModelId, credentials });
+      await writeJson(this.filePath, { ...current, ...local, mode, credentials });
       return this.publicView();
     }
     const provider = PROVIDER_BY_ID.has(input.provider) ? String(input.provider) : "custom";
@@ -228,7 +302,7 @@ export class VoiceSettingsStore {
     const auth = { type: authType, headerName, ...(authType !== "none" && secret ? { secret } : {}) };
     credentials[provider] = { type: authType, headerName, secret };
     await writeJson(this.filePath, {
-      mode, localModelId, provider, adapter, model, endpoint, auth, credentials,
+      ...current, ...local, mode, provider, adapter, model, endpoint, auth, credentials,
     });
     return this.publicView();
   }
@@ -245,8 +319,19 @@ export class VoiceSettingsStore {
   }
 
   async selectLocalModel(localModelId) {
-    const config = await readJson(this.filePath);
-    await writeJson(this.filePath, { ...config, mode: "local", localModelId: String(localModelId) });
+    const config = await this.readNormalized();
+    const migration = migrateLocalSelection(String(localModelId), this.catalog);
+    const profile = resolveVoiceExecutionProfile(migration.selection, this.catalog);
+    const artifact = artifactForProfile(profile, this.catalog);
+    await writeJson(this.filePath, {
+      ...config,
+      mode: "local",
+      voiceConfigVersion: VOICE_CONFIG_VERSION,
+      localModelId: artifact.legacyModelId,
+      localSelectionOrigin: "explicit",
+      localSelection: profileSelection(profile),
+      resolvedProfileId: profile.id,
+    });
     return this.publicView();
   }
 }

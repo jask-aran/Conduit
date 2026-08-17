@@ -52,6 +52,7 @@ import { registerSearchRoutes } from "./server/routes/search.js";
 import { registerVoiceRoutes } from "./server/routes/voice.js";
 import { SearchSettingsStore } from "./search-settings.js";
 import { VoiceSettingsStore } from "./voice-settings.js";
+import { VOICE_EXECUTION_CATALOG } from "./server/voice-execution-catalog.js";
 import { ModelProfileRuntime, usesWebSearchOverlay } from "./model-profile-runtime.js";
 import { publicModelProfile, resolveModelProfile } from "./model-profiles.js";
 
@@ -85,11 +86,11 @@ const runtimeSettings = new RuntimeSettingsStore(config.runtimeSettingsFile, def
 await runtimeSettings.load();
 const searchSettings = new SearchSettingsStore({ filePath: config.searchConfigFile, environment: process.env });
 await searchSettings.initialize();
-const voiceSettings = new VoiceSettingsStore({ filePath: config.voiceConfigFile });
+const voiceSettings = new VoiceSettingsStore({ filePath: config.voiceConfigFile, catalog: VOICE_EXECUTION_CATALOG });
 await voiceSettings.initialize();
-const voiceModel = new VoiceModelManager({ root: config.voiceModelRoot });
+const voiceModel = new VoiceModelManager({ root: config.voiceModelRoot, catalog: VOICE_EXECUTION_CATALOG });
 const voiceRecordingStore = new VoiceRecordingStore({ root: config.voiceRecordingsRoot });
-const voiceRuntime = new VoiceRuntime({ settings: voiceSettings, modelManager: voiceModel });
+const voiceRuntime = new VoiceRuntime({ settings: voiceSettings, modelManager: voiceModel, catalog: VOICE_EXECUTION_CATALOG });
 const modelProfileRuntime = new ModelProfileRuntime({
   agentDir: config.piAgentDir,
   searchConfigFile: config.searchConfigFile,

@@ -2,6 +2,14 @@ import dns from "node:dns/promises";
 import net from "node:net";
 import { OPENAI_LIVE_ADAPTER, OPENAI_LIVE_MODEL, openaiAdapterFor } from "../voice-settings.js";
 import { openOpenaiRealtimeStream } from "./dictation-stream.js";
+import {
+  VOICE_EXECUTION_CATALOG,
+  artifactForProfile,
+  migrateLocalSelection,
+  resolveVoiceExecutionProfile,
+  runtimeForProfile,
+} from "./voice-execution-catalog.js";
+import { createVoiceRuntimeAdapters } from "./voice-runtime-adapters.js";
 
 function runtimeError(code, message, status = 400) {
   return Object.assign(new Error(message), { code, status });
@@ -61,9 +69,10 @@ function pinnedLookup(addresses) {
 }
 
 export class VoiceRuntime {
-  constructor({ settings, modelManager, fetchImpl = fetch, lookup = dns.lookup } = {}) {
+  constructor({ settings, modelManager, catalog = VOICE_EXECUTION_CATALOG, fetchImpl = fetch, lookup = dns.lookup } = {}) {
     this.settings = settings;
     this.modelManager = modelManager;
+    this.catalog = catalog;
     this.fetchImpl = fetchImpl;
     this.lookup = lookup;
   }
@@ -74,6 +83,18 @@ export class VoiceRuntime {
 
   unpin() {
     this.modelManager?.unpin?.();
+  }
+
+  acquireLease() {
+    this.pin();
+    let released = false;
+    const release = () => {
+      if (released) return;
+      released = true;
+      this.unpin();
+    };
+    release.release = release;
+    return release;
   }
 
   async observeVoiceActivity(pcm) {
@@ -90,40 +111,70 @@ export class VoiceRuntime {
     const config = await this.settings.effective();
     if (config.mode === "off") throw runtimeError("dictation_not_configured", "Voice dictation is disabled", 409);
     if (config.mode === "local") {
-      const local = await this.modelManager.ensureRunning(config.localModelId);
-      if (local.kind === "transcriber") {
-        return {
-          mode: "local",
-          inferenceMode: local.capabilities?.inferenceMode || "batch",
-          adapter: local.adapter || "managed_transformers_v1",
-          provider: "local",
-          localModelId: config.localModelId,
-          model: config.localModelId,
-          precision: modelPrecision(config.localModelId),
-          backend: local.backend || "embedded_transformers",
-          computeBackend: local.computeBackend || null,
-          capabilities: local.capabilities || null,
-          streaming: local.capabilities?.streaming || null,
-          native: local.native || null,
-          transcribe: (pcm) => this.modelManager.transcribe(config.localModelId, pcm),
-          stream: local.adapter === "transcribe_cpp_stream_v1" && typeof this.modelManager.stream === "function"
-            ? (options) => this.modelManager.stream(config.localModelId, options)
-            : null,
-        };
-      }
+      const profile = config.localSelection
+        ? resolveVoiceExecutionProfile(config.localSelection, this.catalog)
+        : config.resolvedProfileId
+          ? resolveVoiceExecutionProfile({ profileId: config.resolvedProfileId }, this.catalog)
+          : resolveVoiceExecutionProfile(migrateLocalSelection(config.localModelId, this.catalog).selection, this.catalog);
+      const artifact = artifactForProfile(profile, this.catalog);
+      const runtimeDefinition = runtimeForProfile(profile, this.catalog);
+      const local = await this.modelManager.ensureRunning(artifact.legacyModelId);
+      const adapters = createVoiceRuntimeAdapters({
+        profile,
+        catalog: this.catalog,
+        modelManager: this.modelManager,
+        runtime: { ...local, adapterKind: runtimeDefinition.adapterKind },
+        fetchImpl: this.fetchImpl,
+        openStream: profile.execution === "live" && typeof this.modelManager.stream === "function"
+          ? (options) => this.modelManager.stream(artifact.legacyModelId, options)
+          : null,
+      });
+      const actualStreaming = profile.execution === "live" && Boolean(adapters.stream);
+      const adapter = profile.execution === "live"
+        ? "transcribe_cpp_stream_v1"
+        : runtimeDefinition.adapterKind === "transformers_js"
+          ? "managed_transformers_v1"
+          : runtimeDefinition.adapterKind === "parakeet_loopback"
+            ? "managed_parakeet_loopback_v1"
+            : "transcribe_cpp_batch_v1";
+      const transcribe = async (pcm, options = {}) => {
+        const result = await adapters.batch.transcribe({
+          pcm16: Buffer.from(pcm || []),
+          operationId: options.operationId || `voice-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+          sequence: options.sequence || 0,
+          startSample: options.startSample || 0,
+          endSample: options.endSample || Math.floor(Buffer.byteLength(pcm || []) / 2),
+          signal: options.signal,
+        });
+        return result.text;
+      };
       return {
         mode: "local",
-        inferenceMode: "batch",
-        adapter: "openai_audio_sse_v1",
+        inferenceMode: profile.execution === "live" ? "streaming" : "batch",
+        adapter,
         provider: "local",
-        localModelId: config.localModelId,
-        model: "",
-        precision: modelPrecision(config.localModelId),
-        backend: "loopback_parakeet",
-        computeBackend: null,
-        endpoint: `${local.origin}/v1/audio/transcriptions`,
-        headers: {},
-        allowPrivate: true,
+        localModelId: artifact.legacyModelId,
+        model: artifact.legacyModelId,
+        modelId: profile.modelId,
+        artifactId: profile.artifactId,
+        runtimeId: profile.runtimeId,
+        backendPathId: profile.backendPathId,
+        resolvedProfileId: profile.id,
+        profile,
+        execution: profile.execution,
+        segmentation: profile.segmentation,
+        precision: artifact.precision || modelPrecision(artifact.legacyModelId),
+        backend: local.backend || (runtimeDefinition.adapterKind === "transformers_js" ? "embedded_transformers" : runtimeDefinition.adapterKind === "parakeet_loopback" ? "loopback_parakeet" : "transcribe_cpp"),
+        computeBackend: local.computeBackend || (runtimeDefinition.adapterKind === "transformers_js" ? "wasm-cpu" : runtimeDefinition.adapterKind === "parakeet_loopback" ? "cpu" : null),
+        requestedComputeBackend: local.requestedComputeBackend || (profile.runtimeId === "transcribe-cpp" ? "auto" : runtimeDefinition.compiledComputeBackends[0] || null),
+        actualComputeBackend: local.computeBackend || (runtimeDefinition.adapterKind === "transformers_js" ? "wasm-cpu" : runtimeDefinition.adapterKind === "parakeet_loopback" ? "cpu" : null),
+        loadedRuntimeVersion: local.runtimeVersion || local.native?.version || runtimeDefinition.version,
+        capabilities: local.capabilities || { inferenceMode: profile.execution === "live" ? "streaming" : "batch", partials: profile.execution === "live" },
+        streaming: actualStreaming ? local.capabilities?.streaming || null : null,
+        native: local.native || null,
+        ports: adapters,
+        transcribe,
+        stream: profile.execution === "live" && adapters.stream ? (options) => adapters.stream.openNative(options) : null,
       };
     }
     const adapter = config.provider === "openai" ? openaiAdapterFor(config.model) : config.adapter;

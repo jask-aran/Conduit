@@ -288,8 +288,8 @@ runs as one unprivileged loopback worker; Unified English Q8 uses the pinned
 `transcribe-cpp@0.1.3` Node binding and its locked Linux CPU/Vulkan native
 package. The binding verifies its ABI contract and reports the actual compute
 backend. Unified English Q8 uses one `parakeet_buffered` stateful session per
-dictation, with a 480 ms profile (5.6 s left context, 160 ms chunk, and 320 ms
-right context) and stable-prefix commits. It emits stable and tentative text
+dictation, with the current 1.12 s profile (5.6 s left context, 560 ms chunk,
+and 560 ms right context) and stable-prefix commits. It emits stable and tentative text
 while capture continues. If stream startup fails before useful text, Conduit
 records the failure and uses the bounded WP5 progressive batch fallback. It
 does not run both paths in parallel. File-upload providers buffer one bounded
@@ -299,6 +299,27 @@ stateful streaming and does not run for remote providers.
 Installing a model is separate from selecting the active model. The selected
 model is persisted with **Save Voice settings**, and installation never occurs
 without explicit license acceptance.
+
+Local selection is stored as `voiceConfigVersion: 2` with a canonical tuple:
+`modelId`, `artifactId`, stable `runtimeId`, `execution`, and `segmentation`.
+The tuple resolves to one immutable execution profile and backend path. The
+runtime version is reported separately, so a routine runtime update does not
+invalidate the selection. Legacy `localModelId` values migrate through an
+explicit map and remain available to the older client for compatibility. A
+valid selection can be saved before its artifact is installed; capture then
+returns the specific missing-artifact error and the selection remains intact.
+The settings response includes the static profile catalogue and a separate
+backend-path status list with artifact state, runtime state, requested and
+actual compute backend, loaded runtime version, and the last error code.
+
+The current Unified English selection resolves to
+`parakeet-unified-en-0.6b` / `parakeet-unified-en-0.6b-q8-gguf` /
+`transcribe-cpp` and can use the persistent `live` StreamPort. The current
+Transformers.js paths use `eager` BatchPort execution with Silero
+segmentation. Legacy Parakeet paths use `stop` BatchPort execution. Each
+dictation freezes this resolved tuple at open; a settings change affects the
+next dictation only. One runtime lease covers the session and releases once on
+completion, failure, cancellation, socket close, or shutdown.
 
 OpenAI offers `gpt-transcribe` for Stop-time file upload and `gpt-live-transcribe` for live PCM through the same dictation WebSocket. GPT-4o file models are not listed.
 Deepgram offers Nova-3 and Nova-2 with `Token` authentication and smart
@@ -442,7 +463,8 @@ starting, and browser-attached processes remain resident.
 - `GET /v0/runtime/stream` (SSE) pushes snapshot-first global process updates
 - `GET /v0/runtime/settings` and `PATCH /v0/runtime/settings` read/update max warm processes, max concurrent generations, and idle reclaim TTL (`data/runtime.json`, env defaults)
 - `GET|PUT /v0/voice/settings` reads or updates the redacted voice source,
-  named adapter, endpoint, and authentication policy
+  canonical local execution tuple, static execution catalogue, backend-path
+  status, named adapter, endpoint, and authentication policy
 - `POST /v0/voice/test` tests the effective endpoint without disclosing its
   credential; `DELETE /v0/voice/credential` removes a stored remote secret
 - `POST /v0/voice/model/install`, `POST /v0/voice/model/cancel`, and
@@ -612,6 +634,9 @@ The server record includes Silero frame probabilities, selected padded sample
 ranges, source-region mapping, and any segment-guard action. Direct adapter
 calls without a session selection retain the legacy RMS split for compatibility;
 the authenticated dictation path always supplies its server-side VAD decision.
+Completed session metadata also records the frozen profile ID, model and
+artifact IDs, stable runtime and backend-path IDs, execution and segmentation,
+requested and actual compute backend, and loaded runtime version.
 Raw device identifiers, credentials, and transcript bodies are not diagnostic
 fields or structured log fields. The current runtime reports its execution path
 and records an unavailable compute backend as `null` until the runtime exposes
