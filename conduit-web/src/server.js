@@ -38,7 +38,7 @@ import { createTerminalStream } from "./server/terminal-stream.js";
 import { createDictationStream } from "./server/dictation-stream.js";
 import { VoiceRuntime } from "./server/voice-runtime.js";
 import { VoiceModelManager } from "./server/voice-model-manager.js";
-import { VoiceRecordingStore } from "./server/voice-recording-store.js";
+import { VoiceRecordingStore, VOICE_ARCHIVE_SHUTDOWN_TIMEOUT_MS } from "./server/voice-recording-store.js";
 import { registerAttachmentRoutes } from "./server/routes/attachments.js";
 import { registerAuthRoutes } from "./server/routes/auth.js";
 import { registerPiAuthRoutes } from "./server/routes/pi-auth.js";
@@ -615,7 +615,9 @@ async function shutdown(signal) {
   shuttingDown = true;
   console.log(`Conduit received ${signal}; stopping`);
   runtimeHub.close();
+  await dictationStream.shutdown?.({ timeoutMs: 1_000 });
   for (const socket of wss.clients) socket.close(1012, "Conduit is restarting");
+  const archiveDrain = voiceRecordingStore.drain({ timeoutMs: VOICE_ARCHIVE_SHUTDOWN_TIMEOUT_MS });
   const closed = new Promise((resolve) => server.close(resolve));
   server.closeIdleConnections?.();
   const stoppedProcesses = await manager.shutdown();
@@ -623,6 +625,8 @@ async function shutdown(signal) {
   await voiceModel.stop();
   server.closeAllConnections?.();
   await closed;
+  const archiveResult = await archiveDrain;
+  console.log(JSON.stringify({ type: "conduit.voice-archive-drain", ...archiveResult }));
   console.log(`Conduit stopped ${stoppedProcesses} Pi process${stoppedProcesses === 1 ? "" : "es"}`);
 }
 

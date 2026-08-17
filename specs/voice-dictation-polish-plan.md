@@ -1,8 +1,8 @@
 # Voice dictation pipeline overhaul plan
 
-Status: **WP11 complete and checkpointed on 2026-08-17. WP0, WP1, WP2, WP3,
-WP4A, WP4B, WP5, WP6A, and WP8 approved. WP9, WP10, and WP11 are complete and
-checkpointed on 2026-08-17. WP12 has not started.**
+Status: **WP12 complete and checkpointed on 2026-08-17. WP0, WP1, WP2, WP3,
+WP4A, WP4B, WP5, WP6A, and WP8 approved. WP9, WP10, WP11, and WP12 are
+complete and checkpointed on 2026-08-17.**
 
 This document defines the active voice-dictation work. Git history preserves
 the completed polish sprint, its test counts, and its manual acceptance
@@ -152,8 +152,8 @@ compiled compute backends, actual compute backend, and resource cost.
   behaviour of `achetronic/parakeet`, but wants its progressive batching verified
   and improved rather than replacing that runtime. `transcribe-rs` is now
   integrated as the fourth runtime; the user may choose its default later.
-- **Work package 8 is approved. WP11 is complete and checkpointed.** WP9 and
-  WP10 are complete and checkpointed. WP12 has not started.
+- **Work package 8 is approved. WP11 and WP12 are complete and checkpointed.**
+  WP9 and WP10 are complete and checkpointed.
 
 WP3, WP4A, WP4B, WP5, WP6A, WP6B manual approval, and the WP7–WP10 checkpoints
 are recorded below. WP7 owns the recorded live-latency follow-up.
@@ -1995,6 +1995,47 @@ and retention documentation.
 **Handoff:** run focused checks and the production build. Restart, confirm
 `/healthz`, report transcript settlement separately from archive settlement,
 then wait for user approval.
+
+#### WP12 implementation checkpoint — 2026-08-17
+
+WP12 is complete and checkpointed. Successful transcript completion now emits
+`session_final` and `completed` without waiting for archive disk work. The
+archive queue copies the frozen accepted PCM before handoff, has bounded record
+and byte capacity, reports ownership only after successful handoff, and rejects
+new work during shutdown. Archive diagnostics now separate queue delay, pair
+write duration, published file names, rotation counts, and failure state from
+transcript settlement. The server closes dictation sessions before starting a
+bounded five-second archive drain and reports the drain result during orderly
+shutdown. WAV and JSON files remain staged under `.pending-*` names and are
+only treated as valid after the matching published pair exists.
+
+**WP12 checks.** The focused archive and dictation suite passed 42/42. The full
+Node suite passed 526/526. `npm run typecheck`, `npm run build`, and
+`git diff --check` passed. The production build transformed 2,201 modules and
+reported `bundle.initial_js_gzip_bytes=184856`,
+`bundle.initial_css_gzip_bytes=24837`, and
+`bundle.largest_lazy_js_gzip_bytes=185187`. The existing warning about chunks
+over 500 kB remains. The PWA build precached 52 entries and kept `/v0` out of
+the runtime cache.
+
+**WP12 handoff evidence.** The delayed-write scenario held archive completion
+for 200 ms while the transcript completed before the 150 ms assertion limit.
+The failed-handoff scenario kept the completed transcript unchanged, reported
+`voice_archive_capacity`, left `archiveOwnedThroughSample` at zero, and sent
+no error event. The immutable-buffer scenario mutated the caller's PCM after
+handoff and retained the original first WAV payload byte. The shutdown
+scenario closed the active dictation session, drained the accepted archive,
+and produced one complete WAV/JSON pair. The timeout scenario dropped one
+queued record at the 20 ms test deadline while the active record remained
+bounded. A normal one-second dictation produced a healthy pair with
+`queueDelayMs=0`, `writeDurationMs=3`, and `rotation.durationMs=1` in the
+sidecar diagnostics on the test host.
+
+No browser UI scenario applies to WP12; it changes server settlement and
+shutdown only. The managed server restart and health result are recorded in
+the handoff report.
+
+**Status:** WP12 is ready for user testing and explicit handoff approval.
 
 ## 6. Execution order and handoff contract
 

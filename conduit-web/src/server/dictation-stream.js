@@ -571,6 +571,14 @@ function createServerDiagnostics() {
     archiveStartedAt: null,
     archiveCompletedAt: null,
     archiveMs: null,
+    archive: {
+      status: "not_started",
+      queueDelayMs: null,
+      writeDurationMs: null,
+      path: null,
+      rotation: null,
+      failure: null,
+    },
     preprocessingMs: 0,
     inferenceQueuedAt: null,
     inferenceStartedAt: null,
@@ -871,6 +879,14 @@ function serializeServerDiagnostics(diagnostics) {
       streaming,
       watermarks: { ...diagnostics.watermarks },
       segmentation: { ...diagnostics.segmentation },
+    },
+    archive: {
+      status: diagnostics.archive.status,
+      queueDelayMs: diagnostics.archive.queueDelayMs === null ? null : Math.max(0, Math.round(diagnostics.archive.queueDelayMs)),
+      writeDurationMs: diagnostics.archive.writeDurationMs === null ? null : Math.max(0, Math.round(diagnostics.archive.writeDurationMs)),
+      path: diagnostics.archive.path ? { ...diagnostics.archive.path } : null,
+      rotation: diagnostics.archive.rotation ? { ...diagnostics.archive.rotation } : null,
+      failure: diagnostics.archive.failure ? { ...diagnostics.archive.failure } : null,
     },
   };
 }
@@ -1747,6 +1763,8 @@ export function createDeepgramAdapter(config, emit, limits, fetchImpl, diagnosti
 export function createDictationStream({ wss, voiceRuntime, recordingStore = null, fetchImpl = fetch, limits: limitOverrides = {} }) {
   const limits = { ...DEFAULT_LIMITS, ...limitOverrides };
   let activeSessions = 0;
+  const dictationClients = new Set();
+  const sessionCloseWaiters = new Set();
   const handleUpgrade = (request, socket, head) => wss.handleUpgrade(request, socket, head, (client) => {
     if (activeSessions >= limits.maxSessions) {
       client.send(JSON.stringify({ type: "error", code: "dictation_capacity", message: "The Conduit server is already handling the maximum number of dictation sessions" }));
@@ -1754,6 +1772,10 @@ export function createDictationStream({ wss, voiceRuntime, recordingStore = null
       return;
     }
     activeSessions += 1;
+    dictationClients.add(client);
+    let resolveSessionClosed;
+    const sessionClosed = new Promise((resolve) => { resolveSessionClosed = resolve; });
+    sessionCloseWaiters.add(sessionClosed);
     const lease = typeof voiceRuntime.acquireLease === "function"
       ? voiceRuntime.acquireLease()
       : (voiceRuntime.pin?.(), null);
@@ -2083,13 +2105,40 @@ export function createDictationStream({ wss, voiceRuntime, recordingStore = null
       if (!finalPcm) finalPcm = Buffer.from(pcmAccumulator.view());
       return finalPcm;
     };
+    const setArchiveFailure = (archiveError, phase = "enqueue") => {
+      const failure = archiveError?.archive?.failure || {
+        code: archiveError?.code || "voice_archive_failed",
+        message: String(archiveError?.message || "Voice diagnostic archive failed").slice(0, 240),
+        phase,
+      };
+      diagnostics.archive.status = "failed";
+      diagnostics.archive.failure = {
+        code: String(failure.code || "voice_archive_failed").slice(0, 80),
+        message: String(failure.message || "Voice diagnostic archive failed").slice(0, 240),
+        phase: String(failure.phase || phase).slice(0, 80),
+      };
+    };
+    const setArchiveRecord = (record) => {
+      if (!record) {
+        diagnostics.archive.status = "skipped";
+        return;
+      }
+      diagnostics.archive.status = "completed";
+      if (isRecord(record.archive)) {
+        diagnostics.archive.queueDelayMs = Number.isFinite(record.archive.queueDelayMs) ? Math.max(0, record.archive.queueDelayMs) : null;
+        diagnostics.archive.writeDurationMs = Number.isFinite(record.archive.writeDurationMs) ? Math.max(0, record.archive.writeDurationMs) : null;
+        diagnostics.archive.path = isRecord(record.archive.path) ? { ...record.archive.path } : null;
+        diagnostics.archive.rotation = isRecord(record.archive.rotation) ? { ...record.archive.rotation } : null;
+        diagnostics.archive.failure = isRecord(record.archive.failure) ? { ...record.archive.failure } : null;
+      }
+    };
     const archiveRecording = (reason, error = null, transcript = "", updates = {}) => {
       if (!recordingStore || audioBytes <= 0) return Promise.resolve(null);
       if (savedRecord) return Promise.resolve(savedRecord);
       if (archivePromise) return archivePromise;
       const archiveStartedAt = performance.now();
       diagnostics.archiveStartedAt ||= archiveStartedAt;
-      diagnostics.watermarks.archiveOwnedThroughSample = Math.max(diagnostics.watermarks.archiveOwnedThroughSample, Math.floor(audioBytes / 2));
+      diagnostics.archive.status = "handoff";
       const text = String(transcript || "").trim();
       const options = {
         audioChunks: [freezeAcceptedPcm()],
@@ -2114,13 +2163,27 @@ export function createDictationStream({ wss, voiceRuntime, recordingStore = null
           ...updates,
         },
       };
-      const persist = typeof recordingStore.enqueue === "function"
-        ? recordingStore.enqueue(options)
-        : recordingStore.save(options);
+      let persist;
+      try {
+        persist = typeof recordingStore.enqueue === "function"
+          ? recordingStore.enqueue(options)
+          : recordingStore.save(options);
+        diagnostics.archive.status = "queued";
+        diagnostics.watermarks.archiveOwnedThroughSample = Math.max(diagnostics.watermarks.archiveOwnedThroughSample, Math.floor(audioBytes / 2));
+      } catch (archiveError) {
+        setArchiveFailure(archiveError);
+        console.error(`Voice diagnostic recording failed: ${archiveError.message}`);
+        diagnostics.archiveCompletedAt = performance.now();
+        diagnostics.archiveMs = Math.max(0, Math.round(performance.now() - archiveStartedAt));
+        archivePromise = Promise.resolve(null);
+        return archivePromise;
+      }
       archivePromise = Promise.resolve(persist).then((record) => {
         savedRecord = record;
+        setArchiveRecord(record);
         return record;
       }).catch((archiveError) => {
+        setArchiveFailure(archiveError);
         console.error(`Voice diagnostic recording failed: ${archiveError.message}`);
         return null;
       }).finally(() => {
@@ -2275,8 +2338,9 @@ export function createDictationStream({ wss, voiceRuntime, recordingStore = null
       diagnostics.client = clientDiagnostics;
       diagnostics.transport.clientAudioBytes = clientAudioBytes ?? clientDiagnostics.transport.pcmBytes ?? null;
       if (completed && archivePromise) {
-        await archivePromise;
-        await updateSavedRecording({ diagnostics: diagnosticsPayload() });
+        void archivePromise.then(() => updateSavedRecording({ diagnostics: diagnosticsPayload() })).catch((error) => {
+          console.error(`Voice diagnostic completion metadata update failed: ${error.message}`);
+        });
       }
       console.info(JSON.stringify({ type: "conduit.voice-dictation-diagnostic", diagnostics: diagnosticsPayload() }));
       send({ type: "client_diagnostics_ack", accepted: true });
@@ -2842,7 +2906,30 @@ export function createDictationStream({ wss, voiceRuntime, recordingStore = null
       }
       settleAdapter(null);
       activeSessions = Math.max(0, activeSessions - 1);
+      dictationClients.delete(client);
+      sessionCloseWaiters.delete(sessionClosed);
+      resolveSessionClosed();
     });
   });
-  return { handleUpgrade, activeSessions: () => activeSessions };
+  const shutdown = async ({ timeoutMs = 1_000 } = {}) => {
+    const waiters = [...sessionCloseWaiters];
+    for (const client of dictationClients) {
+      try { client.close(1012, "Conduit is restarting"); }
+      catch { client.terminate?.(); }
+    }
+    const waitForClose = Promise.all(waiters);
+    await Promise.race([
+      waitForClose,
+      new Promise((resolve) => setTimeout(resolve, Math.max(0, Number(timeoutMs) || 0))),
+    ]);
+    for (const client of dictationClients) client.terminate?.();
+    if (dictationClients.size) {
+      await Promise.race([
+        Promise.all([...sessionCloseWaiters]),
+        new Promise((resolve) => setTimeout(resolve, 100)),
+      ]);
+    }
+    return { closed: dictationClients.size === 0, activeSessions };
+  };
+  return { handleUpgrade, activeSessions: () => activeSessions, shutdown };
 }

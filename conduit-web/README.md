@@ -702,6 +702,14 @@ archive keeps the latest 20 standard pairs and a separate bounded quota of
 four short failure recordings; short sessions do not evict normal recordings.
 The JSON sidecar contains non-secret completion, provider, model, and byte
 metadata. Settings microphone tests remain browser-local and are not archived.
+Archive handoff copies the accepted PCM into a bounded queue of at most two
+records and 32 MiB. Transcript completion and auto-send do not wait for disk.
+Server diagnostics record archive queue delay, pair-write duration, published
+file names, rotation counts, and failure state separately from transcript
+settlement. Archive work is drained for up to five seconds during orderly
+shutdown; work that misses that deadline is reported as a shutdown failure.
+WAV and JSON files are staged under `.pending-*` names, and only matching
+published pairs are retained as valid records.
 
 The server owns one bounded PCM accumulator per active session and shares its
 immutable accepted view with the selected scheduler and archive. Stop BatchPort
