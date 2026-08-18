@@ -18,7 +18,6 @@ import type { ActiveChatStore } from "../state/active-chat";
 import { filesFromDataTransfer } from "../state/attachments";
 import type { AttachmentsStore } from "../state/attachments";
 import type { ModelSettings } from "../state/model-settings";
-import { formatContextMetrics, type ContextMetricId } from "./context-metrics";
 import { AttachmentCards } from "./attachments";
 import { createVoiceDictationClient, type VoiceDictationState } from "./voice-dictation-client";
 import type { AudioSignalLevel } from "./voice-audio";
@@ -50,7 +49,6 @@ export function Composer(props: {
   activeProfile?: Template | null;
   serverOnline: boolean;
   voiceSettings: { shortcut: string; activation: "push_to_talk" | "toggle"; autoSend: boolean; inputDeviceId: string; captureProfile: "raw" | "processed"; warmMicrophone: boolean };
-  contextMetrics: () => readonly ContextMetricId[];
   onChooseProfile: (id: string) => void;
   onOpenSettings: (section: string) => void;
   onOpenAttachments: () => void;
@@ -78,12 +76,6 @@ export function Composer(props: {
   const recorderMonitorState = createMemo(() => dictationState() === "starting" ? "connecting" : dictationState() === "listening" ? "listening" : "stopped");
   const canSend = createMemo(() => hasText() && props.serverOnline && props.chat.generation() !== "stopping" && !dictating());
   const activity = createMemo(() => props.chat.activity());
-  const contextDetail = createMemo(() => formatContextMetrics({
-    enabled: props.contextMetrics(),
-    contextUsage: props.chat.contextUsage(),
-    sessionStats: props.chat.sessionStats(),
-    cacheStats: props.chat.cacheStats(),
-  }));
   const queueCount = createMemo(() => props.chat.queue().steering.length + props.chat.queue().followUp.length);
   const dictationLabel = createMemo(() => {
     if (dictationState() === "completed" && !dictatedRange()) return "";
@@ -420,7 +412,6 @@ export function Composer(props: {
           <Show when={dictationLabel()} fallback={<><Show when={SPINNING_ACTIVITY.has(activity()?.kind || "")}><Spinner /></Show><Show when={["request_failed", "runtime_failed"].includes(activity()?.kind || "")}><TriangleAlertIcon aria-hidden="true" /></Show>{activity()?.label || "Ready"}</>}>{dictationLabel()}</Show>
         </span>
       </div>
-      <Show when={contextDetail()}><span class="composer-status-metrics">{contextDetail()}</span></Show>
       <Show when={queueCount()}><span class="composer-status-queue">Queue {queueCount()}</span></Show>
       <Show when={dictating() && micSilent()}><span class="composer-status-warning" role="alert"><TriangleAlertIcon />No microphone signal — check the mic</span></Show>
     </div>

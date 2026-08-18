@@ -1223,6 +1223,34 @@ ran inside WSL, but no native Windows or Vulkan comparison was made. The
 Future accuracy tuning, WSL/native comparison, and further profile optimisation
 remain deferred.
 
+**WSL Vulkan investigation — deferred, 2026-08-17.** This was an environment
+investigation, not a new work package. The Windows host's Vulkan diagnostic saw
+the NVIDIA GeForce RTX 3070 with driver 595.79. WSL 2.6.1.0 exposed
+`/dev/dxg`, and `nvidia-smi` worked, but Ubuntu's Vulkan loader enumerated only
+`llvmpipe`. The Linux kernel log also recorded repeated
+`dxgkio_query_adapter_info: Ioctl failed: -22` and `-2` messages.
+
+Ubuntu had `libvulkan1` and `mesa-vulkan-drivers` installed. After installing
+`vulkan-tools`, the available Linux ICDs were Mesa's `virtio` and software or
+non-host adapters; there was no NVIDIA ICD or `libvulkan_dzn.so`. The existing
+`transcribe-cpp@0.1.3` binding therefore reported CPU only:
+`getAvailableBackends()` returned one CPU device and
+`backendAvailable("vulkan")` returned `false`. An explicit Unified GGUF load
+with `backend: "vulkan"` failed with `BackendError ... backend error (status
+8)`. The host Vulkan result does not prove a Linux WSL Vulkan device.
+
+The supported WSL update was attempted with `wsl.exe --update --web-download`.
+It downloaded `wsl.2.7.11.0.x64.msi`, but installation did not complete while
+the active WSL VM held the Codex remote-control process. No `wsl --shutdown`
+was issued. The next diagnostic must run after a separate Windows-terminal WSL
+update and a user-approved WSL restart; target evidence is
+`vulkaninfo --summary` naming the RTX 3070 in Linux and
+`backendAvailable("vulkan")` returning `true`. Do not add a native Windows
+helper. Do not remove the Vulkan runtime or change model defaults. Continue
+UX work independently. See the [WSL update command](https://learn.microsoft.com/en-us/windows/wsl/basic-commands),
+the [Ubuntu Vulkan package file list](https://packages.ubuntu.com/noble/amd64/mesa-vulkan-drivers/filelist),
+and the [WSLg GPU-enumeration report](https://github.com/microsoft/wslg/issues/1396).
+
 ### Work package 8 — add the canonical local execution contract
 
 **Behavioural change:** every existing local choice resolves to one validated
