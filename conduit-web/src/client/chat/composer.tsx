@@ -29,6 +29,7 @@ import { isMobileLayout } from "../navigation/mobile-layout";
 const thinkingLabel = (value: string) => value ? value[0]!.toUpperCase() + value.slice(1) : "Off";
 export const SPINNING_ACTIVITY = new Set(["starting", "thinking", "responding", "using_tool", "retrying", "compacting", "stopping", "waiting_for_model"]);
 const MobileComposerOptions = lazy(() => import("./mobile-composer-options"));
+const LiquidGlassSurface = lazy(() => import("./liquid-glass-surface"));
 
 export interface ComposerStatus {
   dictationState: () => VoiceDictationState;
@@ -48,6 +49,7 @@ export function Composer(props: {
   profiles: Template[];
   activeProfile?: Template | null;
   serverOnline: boolean;
+  liquidGlassSurface: boolean;
   voiceSettings: { shortcut: string; activation: "push_to_talk" | "toggle"; autoSend: boolean; inputDeviceId: string; captureProfile: "raw" | "processed"; warmMicrophone: boolean };
   onChooseProfile: (id: string) => void;
   onOpenSettings: (section: string) => void;
@@ -336,7 +338,8 @@ export function Composer(props: {
     <Show when={props.chat.queue().steering.length || props.chat.queue().followUp.length}>
       <div class="composer-queue"><span>Queued messages</span><Button variant="ghost" size="sm" onClick={props.chat.clearQueue}>Restore to draft</Button></div>
     </Show>
-    <div class="composer">
+    <div class="composer" data-liquid-glass={props.liquidGlassSurface ? "true" : "false"}>
+      <Show when={props.liquidGlassSurface}><LiquidGlassSurface /></Show>
       <MobileComposerOptions composer={props} />
       <div class="composer-input-shell">
         <textarea

@@ -134,7 +134,7 @@ svg { stroke-width: 1.5; }
 .terminal-canvas > canvas { display: block; max-width: 100%; max-height: 100%; transition: opacity 80ms linear; }
 
 .transcript { position: relative; z-index: 1; min-height: 0; flex: 1; overflow: hidden; }
-.transcript-motion-shell { position: relative; width: 100%; height: 100%; contain: layout paint; container-name: chat-main; container-type: inline-size; transform: translate3d(0, 0, 0); will-change: transform; }
+.transcript-motion-shell { position: relative; width: 100%; height: 100%; contain: layout; container-name: chat-main; container-type: inline-size; }
 .message-scroller-viewport { width: 100%; height: 100%; overflow-y: auto; scrollbar-width: none; }
 .message-scroller-viewport::-webkit-scrollbar { display: none; }
 .thread { width: min(760px, calc(100% - 48px)); min-height: 100%; margin-inline: auto; padding: 64px 44px 32px; }
@@ -221,63 +221,75 @@ svg { stroke-width: 1.5; }
 .composer-stack { position: relative; z-index: 2; display: flex; width: 100%; flex: none; flex-direction: column; gap: 8px; padding: 18px 44px 24px; background: transparent; }
 .chat-main:not(.chat-main-empty) .thread { padding-bottom: 128px; }
 .chat-main:not(.chat-main-empty) .composer-stack {
-  margin-top: -96px;
-  padding-top: 114px;
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  margin-top: 0;
   pointer-events: none;
   background: transparent;
 }
 .chat-main:not(.chat-main-empty) .composer-stack::before {
-  content: "";
-  position: absolute;
-  inset: 0 0 auto;
-  z-index: 0;
-  height: 114px;
-  pointer-events: none;
-  background: linear-gradient(180deg, transparent 0%, color-mix(in oklch, var(--background), transparent 86%) 56%, color-mix(in oklch, var(--background), transparent 68%) 100%);
+  display: none;
 }
 .chat-main:not(.chat-main-empty) .composer-stack > * { position: relative; z-index: 1; pointer-events: auto; }
 .composer-wrap { width: min(760px, 100%); margin-inline: auto; }
-/* The composer is a mostly opaque frosted-glass object. The tint hides detailed
-   transcript content while the baked gradients supply the broad light bends
-   that make the surface read as glass without simulated live refraction. */
+.chat-main:not(.chat-main-empty) .work-area-conversation { position: relative; }
+/* Basic path: Hype4-style frost at blur 20 and zero depth. The white tint is
+   deliberately visible so the surface remains frosted over a quiet transcript. */
 .composer {
   position: relative; min-height: 74px; width: 100%;
-  isolation: isolate;
-  border: 1px solid oklch(1 0 0 / 24%);
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.3);
   border-radius: 24px;
-  background:
-    radial-gradient(110% 90% at 8% -24%, oklch(1 0 0 / 20%), transparent 58%),
-    radial-gradient(85% 120% at 104% 115%, oklch(1 0 0 / 8%), transparent 64%),
-    linear-gradient(112deg, transparent 0 34%, oklch(1 0 0 / 7%) 44%, transparent 56% 100%),
-    color-mix(in oklch, var(--card) 90%, transparent);
-  backdrop-filter: blur(32px) saturate(120%);
-  -webkit-backdrop-filter: blur(32px) saturate(120%);
+  background: rgba(255, 255, 255, 0.15);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
   box-shadow:
-    inset 0 1px 0 oklch(1 0 0 / 58%),
-    inset 0 0 26px oklch(1 0 0 / 5%),
-    inset 0 -1px 0 rgb(0 0 0 / 34%),
-    0 18px 42px -22px rgb(0 0 0 / 82%);
+    0 2px 12px rgba(0, 0, 0, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.5),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.1),
+    inset 0 0 0 0 rgba(255, 255, 255, 0);
 }
-/* The rim changes brightness around the lens instead of drawing a flat border. */
+/* Fixed top and left specular rims. */
 .composer::before {
-  content: ""; position: absolute; inset: 0; z-index: 0; border-radius: inherit; padding: 1px; pointer-events: none;
-  background: linear-gradient(145deg, oklch(1 0 0 / 68%), oklch(1 0 0 / 16%) 30%, rgb(0 0 0 / 16%) 67%, oklch(1 0 0 / 30%));
-  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
-  -webkit-mask-composite: xor; mask-composite: exclude;
-  transition: background 160ms ease;
+  content: ""; position: absolute; inset: 0 0 auto; z-index: 0; height: 1px; pointer-events: none;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.8), transparent);
 }
-/* Static lens highlights give the material a refractive shape over plain areas. */
 .composer::after {
-  content: ""; position: absolute; inset: 0; z-index: 0; border-radius: inherit; pointer-events: none;
-  background:
-    radial-gradient(54% 145% at -3% 45%, oklch(1 0 0 / 10%), transparent 62%),
-    radial-gradient(48% 120% at 101% 25%, oklch(1 0 0 / 7%), transparent 66%),
-    linear-gradient(180deg, oklch(1 0 0 / 8%), transparent 32%, rgb(0 0 0 / 5%) 100%);
+  content: ""; position: absolute; inset: 0 auto 0 0; z-index: 0; width: 1px; pointer-events: none;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.8), transparent, rgba(255, 255, 255, 0.3));
+}
+.composer:has(.composer-glass-layer[data-liquid-glass-ready="true"]) {
+  border-color: transparent;
+  background: transparent;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  box-shadow: none;
+}
+.composer:has(.composer-glass-layer[data-liquid-glass-ready="true"])::before,
+.composer:has(.composer-glass-layer[data-liquid-glass-ready="true"])::after { opacity: 0; }
+.composer-glass-layer {
+  position: absolute;
+  inset: 1px;
+  z-index: 1;
+  display: block;
+  overflow: hidden;
+  border-radius: 23px;
+  background: transparent;
+  pointer-events: none;
+}
+.liquid-glass-definitions { position: absolute; width: 0; height: 0; overflow: hidden; pointer-events: none; }
+.composer-glass-layer[data-liquid-glass-ready="false"] { visibility: hidden; }
+@supports not (backdrop-filter: url(#conduit-liquid-glass-test)) {
+  .composer-glass-layer { display: none; }
+  .composer:has(.composer-glass-layer) { border-color: rgba(255, 255, 255, 0.3); background: rgba(255, 255, 255, 0.15); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.5), inset 0 -1px 0 rgba(255, 255, 255, 0.1); }
 }
 .composer textarea, .composer-actions { position: relative; z-index: 2; }
-.composer:focus-within::before {
-  background: linear-gradient(150deg, oklch(1 0 0 / 56%), oklch(0.72 0.045 246 / 26%) 38%, oklch(1 0 0 / 5%) 70%, oklch(1 0 0 / 26%));
-}
+.settings-toggle { display: flex; align-items: flex-start; gap: 10px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--card); padding: 12px; cursor: pointer; }
+.settings-toggle input { margin-top: 3px; accent-color: var(--primary); }
+.settings-toggle span { display: flex; flex-direction: column; gap: 3px; }
+.settings-toggle small { color: var(--muted-foreground); }
 .composer-mobile-plus { display: none; }
 .composer-input-shell { position: relative; min-height: 44px; }
 .composer textarea { display: block; width: 100%; min-height: 44px; max-height: 192px; resize: none; overflow-y: auto; border: 0; outline: 0; background: transparent; padding: 11px 12px 2px; color: inherit; line-height: 1.45; }
@@ -557,7 +569,7 @@ svg { stroke-width: 1.5; }
 .crash-card { width: min(460px, 100%); padding: 20px; border: 1px solid var(--border); border-radius: 12px; background: var(--card); }
 
 /* Overlays, dialogs, and cards share the menu's solid dark surface. The
-   liquid-glass treatment is reserved for the composer (and the drop overlay's
+   glassmorphism treatment is reserved for the composer (and the drop overlay's
    native blur); everywhere else translucent grey read as flat, not glassy. */
 .command-shell,
 .settings-shell,
@@ -717,6 +729,7 @@ svg { stroke-width: 1.5; }
      when it wraps, but the empty state stays at the same visual baseline as
      the three controls around it. */
   .composer { display: flex; min-height: 44px; align-items: center; border-radius: 18px; }
+  .composer-glass-layer { border-radius: 17px; }
   .composer-mobile-plus { display: flex; flex: 0 0 auto; align-self: center; align-items: center; padding: 0 0 0 4px; }
   .composer-plus-trigger { display: inline-flex; width: 38px; height: 38px; align-items: center; justify-content: center; border: 0; border-radius: 12px; background: transparent; color: var(--muted-foreground); -webkit-tap-highlight-color: transparent; }
   .composer-plus-trigger:hover, .composer-plus-trigger:active { background: transparent; color: var(--muted-foreground); }
@@ -783,14 +796,10 @@ svg { stroke-width: 1.5; }
     backdrop-filter: blur(18px) saturate(155%);
     -webkit-backdrop-filter: blur(18px) saturate(155%);
   }
-  .chat-main:not(.chat-main-empty) .thread { padding: calc(52px + env(safe-area-inset-top, 0px)) 16px 0; }
+  .chat-main:not(.chat-main-empty) .thread { padding: calc(52px + env(safe-area-inset-top, 0px)) 16px 220px; }
   .chat-main:not(.chat-main-empty) .composer-stack {
-    margin-top: -120px;
-    padding: 82px 12px calc(12px + env(safe-area-inset-bottom, 0px));
-  }
-  .chat-main:not(.chat-main-empty) .composer-stack::before {
-    height: 82px;
-    background: linear-gradient(180deg, transparent 0%, color-mix(in oklch, var(--background), transparent 90%) 56%, color-mix(in oklch, var(--background), transparent 76%) 100%);
+    margin-top: 0;
+    padding: 10px 12px calc(12px + env(safe-area-inset-bottom, 0px));
   }
   .chat-header > .mobile-sidebar-trigger,
   .chat-header-actions > [data-slot="button"],

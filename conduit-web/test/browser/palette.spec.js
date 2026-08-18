@@ -414,6 +414,70 @@ test("Settings UI exposes and persists the sidebar chat limit", async ({ page })
   await expect(page.getByRole("dialog", { name: "Settings" }).getByLabel("Chats shown in sidebar")).toHaveValue("8");
 });
 
+test("Settings UI toggles and persists the ambient meteor field", async ({ page }) => {
+  await page.addInitScript(() => {
+    if (sessionStorage.getItem("conduit:meteor-field-test-initialized") === "true") return;
+    localStorage.removeItem("conduit:meteor-field");
+    sessionStorage.setItem("conduit:meteor-field-test-initialized", "true");
+  });
+  await page.goto("/");
+  await expect(page.getByRole("textbox", { name: "Message Pi" })).toBeVisible();
+  await expect(page.locator(".chat-meteors")).toHaveCount(1);
+
+  await openPalette(page);
+  await page.getByRole("option", { name: /^Settings…/ }).click();
+  await page.getByRole("option", { name: /^UI$/ }).click();
+  const settings = page.getByRole("dialog", { name: "Settings" });
+  const toggle = settings.getByLabel("Ambient meteor field");
+  await expect(toggle).toBeChecked();
+  await toggle.uncheck();
+  await expect(toggle).not.toBeChecked();
+  await expect(page.locator(".chat-meteors")).toHaveCount(0);
+
+  await settings.getByRole("button", { name: "Close" }).click();
+  await page.reload();
+  await expect(page.getByRole("textbox", { name: "Message Pi" })).toBeVisible();
+  await expect(page.locator(".chat-meteors")).toHaveCount(0);
+
+  await openPalette(page);
+  await page.getByRole("option", { name: /^Settings…/ }).click();
+  await page.getByRole("option", { name: /^UI$/ }).click();
+  const reloadedSettings = page.getByRole("dialog", { name: "Settings" });
+  const reloadedToggle = reloadedSettings.getByLabel("Ambient meteor field");
+  await expect(reloadedToggle).not.toBeChecked();
+  await reloadedToggle.check();
+  await expect(page.locator(".chat-meteors")).toHaveCount(1);
+});
+
+test("Settings UI toggles and persists the liquid glass composer surface", async ({ page }) => {
+  await page.addInitScript(() => {
+    if (sessionStorage.getItem("conduit:liquid-glass-surface-test-initialized") === "true") return;
+    localStorage.removeItem("conduit:liquid-glass-surface");
+    sessionStorage.setItem("conduit:liquid-glass-surface-test-initialized", "true");
+  });
+  await page.goto("/");
+  await expect(page.getByRole("textbox", { name: "Message Pi" })).toBeVisible();
+  await expect(page.locator(".composer")).toHaveAttribute("data-liquid-glass", "false");
+
+  await openPalette(page);
+  await page.getByRole("option", { name: /^Settings…/ }).click();
+  await page.getByRole("option", { name: /^UI$/ }).click();
+  const settings = page.getByRole("dialog", { name: "Settings" });
+  const toggle = settings.getByLabel("Liquid glass surface");
+  await expect(toggle).not.toBeChecked();
+  await toggle.check();
+  await expect(toggle).toBeChecked();
+  await expect(page.locator(".composer")).toHaveAttribute("data-liquid-glass", "true");
+  const layer = page.locator(".composer-glass-layer");
+  await expect(layer).toHaveAttribute("data-liquid-glass-ready", "true");
+  await expect(layer).toHaveAttribute("data-liquid-glass-generation-count", "0");
+
+  await settings.getByRole("button", { name: "Close" }).click();
+  await page.reload();
+  await expect(page.getByRole("textbox", { name: "Message Pi" })).toBeVisible();
+  await expect(page.locator(".composer")).toHaveAttribute("data-liquid-glass", "true");
+});
+
 test("shortcut recording suppresses commands and updates chat-search hints immediately", async ({ page }) => {
   await page.goto("/");
   const settings = await openShortcutsSettings(page);

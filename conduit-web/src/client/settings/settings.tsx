@@ -139,6 +139,10 @@ export function Settings(props: {
   onWorkspaceDefaultChange: (id: string, templateId: string | null) => Promise<Project>;
   markdownRenderer: MarkdownRendererId;
   onMarkdownRendererChange: (renderer: MarkdownRendererId) => void;
+  meteorField: boolean;
+  onMeteorFieldChange: (enabled: boolean) => void;
+  liquidGlassSurface: boolean;
+  onLiquidGlassSurfaceChange: (enabled: boolean) => void;
   voiceSettings: VoiceDictationSettings;
   onVoiceSettingsSave: (settings: VoiceDictationSettings) => void;
   sidebarChatLimit: number;
@@ -849,6 +853,18 @@ export function Settings(props: {
                 <FieldLabel for="sidebar-chat-limit">Chats shown in sidebar</FieldLabel>
                 <Input id="sidebar-chat-limit" type="number" min={MIN_SIDEBAR_CHAT_LIMIT} max={MAX_SIDEBAR_CHAT_LIMIT} step="1" value={props.sidebarChatLimit} onChange={(event) => props.onSidebarChatLimitChange(Number(event.currentTarget.value))} onBlur={(event) => props.onSidebarChatLimitChange(Number(event.currentTarget.value))} />
                 <small>Show this many recent chats in the Chats group. Use View all chats to search older chats.</small>
+              </Field>
+              <Field>
+                <label class="settings-toggle">
+                  <input type="checkbox" aria-label="Liquid glass surface" checked={props.liquidGlassSurface} onChange={(event) => props.onLiquidGlassSurfaceChange(event.currentTarget.checked)} />
+                  <span><strong>Liquid glass composer surface</strong><small>Use the precomputed SVG refraction path. It costs more on mobile than the basic frosted path.</small></span>
+                </label>
+              </Field>
+              <Field>
+                <label class="settings-toggle">
+                  <input type="checkbox" aria-label="Ambient meteor field" checked={props.meteorField} onChange={(event) => props.onMeteorFieldChange(event.currentTarget.checked)} />
+                  <span><strong>Ambient meteor field</strong><small>Show the animated meteor field behind chat surfaces.</small></span>
+                </label>
               </Field>
               <Field>
                 <FieldLabel>Composer context metrics</FieldLabel>
