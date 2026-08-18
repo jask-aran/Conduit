@@ -1,0 +1,149 @@
+The current liquid-glass-static.ts approximation should not be the base. It changed the geometry, filter order, specular
+  composition, and layer structure.
+
+  ## Implementation plan
+
+  ### 1. Freeze the previous visual contract
+
+  Restore the previous filter graph unchanged:
+
+  1. feGaussianBlur, stdDeviation=4.
+  2. Displacement map.
+  3. feDisplacementMap, refraction scale 0.7.
+  4. feColorMatrix, saturation 4.
+  5. Specular map.
+  6. Specular opacity 0.2.
+  7. The previous blend order.
+
+  Preserve the previous geometry values:
+
+  - convex squircle surface;
+  - glass thickness 70;
+  - refractive index 1.5;
+  - previous bezel calculation;
+  - previous DPR behavior;
+  - actual element width, height, and radius.
+
+  Do not mix in the fixed 4px bezel or the current CSS approximation until visual parity is confirmed.
+
+  ### 2. Generate exact assets
+
+  Create one deterministic asset generator shared by build-time generation and resize-time generation.
+
+  Each asset key must include:
+
+  width
+  height
+  radius
+  bezelWidth
+  glassThickness
+  refractiveIndex
+  devicePixelRatio
+
+  The generator must produce both:
+
+  - displacement PNG;
+  - specular PNG;
+  - maximum displacement value.
+
+  The initial supported composer sizes should be generated ahead of time from real browser measurements. Do not use a
+  guessed 400×56 map stretched into a different element. Kube’s map geometry depends on the target dimensions. Kube’s
+  article (https://kube.io/blog/liquid-glass-css-svg/)
+
+  For an unsupported size:
+
+  - keep the basic surface visible;
+  - generate the exact liquid assets once;
+  - swap the liquid layer in only after both assets are ready;
+  - cache the result by the geometry key.
+
+  After that, ResizeObserver is the only path that may generate assets. Scrolling must not call the generator.
+
+  ### 3. Use one glass surface
+
+  The liquid composer should have one rounded glass surface.
+
+  The specular image should remain inside the same SVG filter graph as the displacement image. Do not use a second
+  absolutely positioned rounded CSS layer. That second layer caused the extra rounded surface and the unfiltered band.
+
+  The layer geometry must use the same radius as the composer:
+
+  composer radius = surface radius + border inset
+
+  The parent or surface must clip the filter output. No child layer may paint outside the composer shape.
+
+  The liquid path should not use the current CSS blur chain. The previous SVG graph already defines the blur order. Adding
+  CSS blur() after the SVG filter changes the appearance.
+
+  ### 4. Fix the desktop compositing boundary
+
+  The current desktop test proves only rectangle overlap. It does not prove that the filter samples transcript pixels.
+
+  For the liquid path, remove the compositing boundaries between the transcript and glass surface:
+
+  - disable contain: paint on .transcript-motion-shell;
+  - disable its transform and will-change when liquid glass is enabled;
+  - remove isolation: isolate from the liquid composer surface, or move the glass surface beside the composer content;
+  - keep the shared chat-main stacking context;
+  - keep the transcript below the composer;
+  - keep the composer stack background transparent inside the glass rectangle.
+
+  The important test is not “do the boxes overlap?” It is:
+
+  1. Place high-contrast coloured text behind the composer.
+  2. Scroll it through the top and bottom edges.
+  3. Confirm pixels inside the composer change as the text moves.
+  4. Disable liquid glass and confirm the same area changes differently.
+  5. Confirm there is only one visible rounded glass boundary.
+
+  ### 5. Add parity and resize tests
+
+  Add a dedicated liquid-glass browser fixture, separate from the general mobile PWA test.
+
+  It should verify:
+
+  - one displacement layer;
+  - one specular layer inside the SVG filter;
+  - no second CSS glass surface;
+  - exact filter primitives and parameter values;
+  - initial assets load without runtime generation;
+  - one resize creates one new asset pair;
+  - scrolling creates zero asset-generation calls;
+  - desktop pixels change when transcript text passes behind the composer;
+  - the final transcript remains reachable at maximum scroll;
+  - basic mode remains unchanged.
+
+  Capture golden screenshots at:
+
+  - transcript above the composer;
+  - text crossing the top edge;
+  - text centred behind the composer;
+  - text crossing the bottom edge;
+  - multiline composer after resize;
+  - desktop and mobile widths.
+
+  ### 6. Validate performance
+
+  Use the Chrome DevTools CLI on the same device profile for:
+
+  - basic composer;
+  - previous dynamic liquid composer;
+  - exact prebaked liquid composer.
+
+  Measure the same scroll sequence. The acceptance condition is:
+
+  - no map generation during scroll;
+  - no repeated layout or resize work during scroll;
+  - no meaningful increase in long frames compared with the basic surface;
+  - resize work occurs only after the composer height changes.
+
+  ## Definition of done
+
+  The first pass is complete only when:
+
+  - the new screenshots match the previous runtime version;
+  - the top and bottom edge effects appear once, in the correct direction;
+  - there is no second rounded surface;
+  - transcript pixels visibly pass behind the desktop composer;
+  - resize updates both assets;
+  - scrolling performs like the basic path within measurement noise.
