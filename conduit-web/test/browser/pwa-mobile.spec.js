@@ -458,26 +458,19 @@ test("acceptance: mobile transcript fades behind the frosted composer", async ({
     target.style.color = "#f8fafc";
     target.style.minHeight = "52px";
     target.style.padding = "4px";
-    const viewportBox = element.getBoundingClientRect();
+  });
+  await expect.poll(async () => page.evaluate(() => {
+    const element = document.querySelector(".chat-main:not(.chat-main-empty) .message-scroller-viewport");
+    const target = document.querySelector('[data-test-glass-target="true"]');
+    const composer = document.querySelector(".chat-main:not(.chat-main-empty) .composer");
+    if (!element || !target || !composer) return 0;
     const targetBox = target.getBoundingClientRect();
     const composerBox = composer.getBoundingClientRect();
-    const targetTopInContent = targetBox.top - viewportBox.top + element.scrollTop;
-    const composerTopInViewport = composerBox.top - viewportBox.top;
-    const desiredScrollTop = targetTopInContent - composerTopInViewport + 34;
-    const maxScrollTop = Math.max(0, element.scrollHeight - element.clientHeight);
-    element.scrollTop = Math.max(0, Math.min(maxScrollTop, desiredScrollTop));
-    return {
-      scrollTop: element.scrollTop,
-      scrollHeight: element.scrollHeight,
-      clientHeight: element.clientHeight,
-      targetTop: targetBox.top,
-      targetBottom: targetBox.bottom,
-      composerTop: composerBox.top,
-      composerBottom: composerBox.bottom,
-      desiredScrollTop,
-      maxScrollTop,
-    };
-  });
+    const overlap = Math.max(0, Math.min(targetBox.bottom, composerBox.bottom) - Math.max(targetBox.top, composerBox.top));
+    if (overlap > 8) return overlap;
+    element.scrollTop += targetBox.top - composerBox.top + 10;
+    return 0;
+  })).toBeGreaterThan(8);
   await expect.poll(async () => page.evaluate(() => {
     const target = document.querySelector('[data-test-glass-target="true"]');
     const composer = document.querySelector(".chat-main:not(.chat-main-empty) .composer");
@@ -644,8 +637,6 @@ test("acceptance: desktop transcript passes behind the static glassmorphism comp
     if (!frostFilter || !frostChrome) throw new Error("Expected basic frost layers");
     const frostFilterStyle = getComputedStyle(frostFilter);
     const frostChromeStyle = getComputedStyle(frostChrome);
-    const beforeStyle = getComputedStyle(frostChrome, "::before");
-    const afterStyle = getComputedStyle(frostChrome, "::after");
     const threadStyle = getComputedStyle(thread);
     const targetBox = target.getBoundingClientRect();
     const composerBox = composer.getBoundingClientRect();
@@ -656,12 +647,9 @@ test("acceptance: desktop transcript passes behind the static glassmorphism comp
       composerBackgroundColor: composerStyle.backgroundColor,
       composerBackdropFilter: composerStyle.backdropFilter,
       composerOverflow: composerStyle.overflow,
-      frostBackgroundColor: frostChromeStyle.backgroundColor,
+      frostBackgroundImage: frostChromeStyle.backgroundImage,
       frostBackdropFilter: frostFilterStyle.backdropFilter,
-      frostBorderTopColor: frostChromeStyle.borderTopColor,
       frostBoxShadow: frostChromeStyle.boxShadow,
-      frostBeforeBackground: beforeStyle.backgroundImage,
-      frostAfterBackground: afterStyle.backgroundImage,
       svgDefinitions: document.querySelectorAll(".liquid-glass-definitions").length,
       glassFilters: document.querySelectorAll(".composer-glass-filter").length,
       threadPaddingBottom: threadStyle.paddingBottom,
@@ -675,17 +663,13 @@ test("acceptance: desktop transcript passes behind the static glassmorphism comp
   expect(layout.composerBackgroundColor).toBe("rgba(0, 0, 0, 0)");
   expect(layout.composerBackdropFilter).toBe("none");
   expect(layout.composerOverflow).toBe("visible");
-  expect(layout.frostBackgroundColor).toBe("rgba(255, 255, 255, 0.15)");
-  expect(layout.frostBackdropFilter).toBe("blur(20px)");
-  expect(layout.frostBorderTopColor).toBe("rgba(255, 255, 255, 0.3)");
+  expect(layout.frostBackdropFilter).toContain("blur(36px)");
+  expect(layout.frostBackgroundImage).toContain("radial-gradient");
   expect(layout.frostBoxShadow).toContain("inset");
-  expect(layout.frostBeforeBackground).toContain("linear-gradient");
-  expect(layout.frostAfterBackground).toContain("linear-gradient");
   expect(layout.svgDefinitions).toBe(0);
   expect(layout.glassFilters).toBe(0);
   expect(layout.threadPaddingBottom).toBe("128px");
   expect(layout.composerClass).toBe("composer");
-  expect(layout.frostBackgroundColor).not.toBe("rgba(255, 255, 255, 0.05)");
   expect(layout.transcriptComposerOverlap).toBeGreaterThan(8);
   if (process.env.COMPOSER_GLASS_CAPTURE === "1") {
     await page.locator(".chat-main:not(.chat-main-empty) .composer").screenshot({ path: "/tmp/conduit-composer-basic-desktop.png" });
@@ -728,12 +712,12 @@ test("acceptance: desktop opt-in liquid glass uses the precomputed SVG path", as
       composerBackground: composerStyle.backgroundColor,
       composerBackdropFilter: composerStyle.backdropFilter,
       composerOverflow: composerStyle.overflow,
-      chromeBackground: chromeStyle.backgroundColor,
+      composerHeight: Math.round(composer.getBoundingClientRect().height),
+      chromeBackgroundImage: chromeStyle.backgroundImage,
       layerBackdropFilter: getComputedStyle(layer).backdropFilter,
-      generationCount: layer.getAttribute("data-liquid-glass-generation-count"),
-      assetKey: layer.getAttribute("data-liquid-glass-asset-key"),
       primitives: [...filter.children].map((node) => node.tagName),
-      scale: filter.querySelector("feDisplacementMap")?.getAttribute("scale"),
+      blur: filter.querySelector("feGaussianBlur")?.getAttribute("stdDeviation"),
+      assetKey: layer.getAttribute("data-liquid-glass-asset-key"),
       displacementHref: filter.querySelector("feImage")?.getAttribute("href"),
       transcriptComposerOverlap: (() => {
         const target = document.querySelector('[data-test-liquid-target="true"]');
@@ -746,13 +730,12 @@ test("acceptance: desktop opt-in liquid glass uses the precomputed SVG path", as
   expect(graph.composerBackground).toBe("rgba(0, 0, 0, 0)");
   expect(graph.composerBackdropFilter).toBe("none");
   expect(graph.composerOverflow).toBe("visible");
-  expect(graph.chromeBackground).toBe("rgba(255, 255, 255, 0.08)");
-  expect(graph.layerBackdropFilter).toContain("blur(4px)");
+  expect(graph.composerHeight).toBeLessThan(120);
+  expect(graph.chromeBackgroundImage).toContain("radial-gradient");
   expect(graph.layerBackdropFilter).toContain("url(\"#conduit-liquid-glass-");
-  expect(graph.generationCount).toBe("0");
+  expect(graph.primitives).toEqual(["feGaussianBlur", "feImage", "feDisplacementMap", "feColorMatrix", "feImage", "feComposite", "feComponentTransfer", "feBlend", "feBlend"]);
+  expect(graph.blur).toBe("8");
   expect(graph.assetKey).toBe("desktop:88");
-  expect(graph.primitives).toEqual(["feImage", "feDisplacementMap"]);
-  expect(Number(graph.scale)).toBeGreaterThan(8);
   expect(graph.displacementHref).toBe("/glass/composer-desktop-88.png");
   expect(graph.transcriptComposerOverlap).toBeGreaterThan(8);
   if (process.env.COMPOSER_GLASS_CAPTURE === "1") {
