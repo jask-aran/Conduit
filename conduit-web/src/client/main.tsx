@@ -2,7 +2,7 @@
 import { batch, createEffect, createMemo, createSignal, ErrorBoundary, lazy, onCleanup, onMount, Show } from "solid-js";
 import { render } from "solid-js/web";
 import {
-  ChevronDownIcon, EllipsisIcon, PanelLeftIcon, PanelRightIcon, PencilIcon, RefreshCwIcon, SearchIcon, ShareIcon, TerminalIcon, Trash2Icon, TriangleAlertIcon,
+  EllipsisIcon, PanelLeftIcon, PanelRightIcon, PencilIcon, RefreshCwIcon, SearchIcon, ShareIcon, TerminalIcon, Trash2Icon, TriangleAlertIcon,
 } from "lucide-solid";
 import { registerSW } from "virtual:pwa-register";
 import { Toaster, toast } from "solid-sonner";
@@ -71,8 +71,6 @@ function ChatHeader(props: {
   pwaUpdating: () => boolean;
   dashboard?: boolean;
 }) {
-  const [statusOpen, setStatusOpen] = createSignal(false);
-  let statusTrigger!: HTMLButtonElement;
   const projectLabel = () => props.project?.slug === "chat" ? "Chats" : props.project?.slug || props.project?.name || "Chats";
   const runtimeLabel = () => !props.runtime ? null : props.runtime.kind === "native_pi" ? "Host Pi" : "Isolated Pi";
   const profileLabel = () => props.runtime?.kind === "native_pi" ? null : props.profile?.label || props.profile?.id;
@@ -90,7 +88,6 @@ function ChatHeader(props: {
       cacheStats: props.chat.cacheStats(),
     })
     : "";
-  const queueCount = () => props.chat ? props.chat.queue().steering.length + props.chat.queue().followUp.length : 0;
   const dictationLabel = () => props.composerStatus?.dictationLabel() || "";
   const dictating = () => Boolean(props.composerStatus?.dictating());
   const recording = () => Boolean(props.composerStatus?.recording());
@@ -104,15 +101,10 @@ function ChatHeader(props: {
     if (props.connectivity === "connecting") return "Connecting…";
     return "Ready";
   };
-  const statusKind = () => activity()?.kind || (props.connectivity === "offline" ? "runtime_failed" : "idle");
-  const statusBusy = () => dictating() || SPINNING_ACTIVITY.has(statusKind()) || ["connecting", "reconnecting"].includes(props.connectivity || "");
-  const statusFailure = () => props.connectivity === "offline" || ["request_failed", "runtime_failed"].includes(statusKind());
+  const activityKind = () => activity()?.kind || (props.connectivity === "offline" ? "runtime_failed" : "idle");
+  const statusBusy = () => dictating() || SPINNING_ACTIVITY.has(activityKind()) || ["connecting", "reconnecting"].includes(props.connectivity || "");
+  const statusFailure = () => props.connectivity === "offline" || ["request_failed", "runtime_failed"].includes(activityKind());
   const statusTone = () => statusFailure() ? "error" : recording() ? "listening" : dictating() ? "active" : statusBusy() ? "active" : "ready";
-  const connectionLabel = () => ({ connecting: "Connecting", online: "Connected", reconnecting: "Reconnecting", offline: "Offline" }[props.connectivity || "offline"] || "Unknown");
-  const closeStatus = (open: boolean) => {
-    setStatusOpen(open);
-    if (!open) queueMicrotask(() => statusTrigger?.focus());
-  };
   const waveformHistory = () => props.composerStatus?.waveform.history() || [];
   const waveformLevel = () => props.composerStatus?.waveform.level() || 0;
   const waveformPeak = () => props.composerStatus?.waveform.peak() || 0;
@@ -125,12 +117,11 @@ function ChatHeader(props: {
       <nav aria-label="breadcrumb" class="chat-header-title"><span>{projectLabel()}</span><span class="breadcrumb-separator" aria-hidden="true" /><strong>{props.title}</strong></nav>
       <Show when={line()}><span class="chat-profile-posture" title={line()}>{line()}</span></Show>
       <Show when={!props.dashboard && props.chat}>
-        <Button ref={statusTrigger} variant="ghost" size="sm" class="chat-status-trigger" data-state={statusTone()} aria-label={`Runtime status: ${statusLabel()}. Open runtime details`} aria-live="polite" aria-expanded={statusOpen()} aria-haspopup="dialog" onClick={() => setStatusOpen(true)}>
+        <span class="chat-status-line" data-state={statusTone()} role="status" aria-label={`Runtime status: ${statusLabel()}`} aria-live="polite">
           <Show when={recording()} fallback={<span class="chat-status-label">{statusLabel()}</span>}>
             <VoiceWaveform class="chat-status-waveform" history={waveformHistory} level={waveformLevel} peak={waveformPeak} state={waveformState()} variant="compact" barDensity={3.5} ariaLabel="Microphone input level" />
           </Show>
-          <ChevronDownIcon class="chat-status-chevron" aria-hidden="true" />
-        </Button>
+        </span>
       </Show>
       <div class="chat-header-actions">
         <Button variant="ghost" size="icon-sm" class="search-trigger" aria-label="Search chats" title="Search chats" onClick={props.onOpenSearch}><SearchIcon /></Button>
@@ -146,6 +137,12 @@ function ChatHeader(props: {
               <MenuLabel class="chat-header-menu-title">{props.title}</MenuLabel>
               <MenuLabel class="chat-header-menu-meta">{menuLine()}</MenuLabel>
             </MenuGroup>
+            <Show when={!props.dashboard}>
+              <MenuGroup class="chat-header-menu-context" aria-label="Context metrics">
+                <MenuLabel class="chat-header-menu-section-label">Context metrics</MenuLabel>
+                <div class="chat-header-menu-context-values">{contextDetail() || "No context metrics available yet."}</div>
+              </MenuGroup>
+            </Show>
             <MenuSeparator />
             <Show when={!props.dashboard}>
               <MenuItem disabled={props.pwaUpdating()} onSelect={props.onUpdatePwa}><RefreshCwIcon class={props.pwaUpdating() ? "pwa-update-icon pwa-update-icon-active" : "pwa-update-icon"} />{props.pwaUpdating() ? "Updating app…" : "Update app"}</MenuItem>
@@ -163,36 +160,6 @@ function ChatHeader(props: {
         </Menu>
       </div>
     </header>
-    <Show when={!props.dashboard && props.chat}>
-      <Dialog open={statusOpen()} onOpenChange={closeStatus}>
-        <DialogContent class="mobile-status-sheet" title="Runtime status" closeLabel="Close runtime status">
-          <div class="mobile-status-sheet-scroll">
-            <div class={`mobile-status-sheet-state mobile-status-tone-${statusTone()}`} role="status" aria-live="polite">
-              <span class="mobile-status-sheet-state-label">{statusLabel()}</span>
-              <span class="mobile-status-sheet-state-kind">{statusKind()}</span>
-            </div>
-            <Show when={recording()}>
-              <VoiceWaveform class="mobile-status-sheet-waveform" history={waveformHistory} level={waveformLevel} peak={waveformPeak} state={waveformState()} variant="compact" barDensity={3.5} ariaLabel="Microphone input level" />
-            </Show>
-            <dl class="mobile-status-facts">
-              <div><dt>Connection</dt><dd>{connectionLabel()}</dd></div>
-              <div><dt>Activity</dt><dd>{activity()?.label || "Ready"}</dd></div>
-              <Show when={queueCount()}><div><dt>Queued messages</dt><dd>{queueCount()}</dd></div></Show>
-            </dl>
-            <section class="mobile-status-context" aria-labelledby="mobile-status-context-title">
-              <h3 id="mobile-status-context-title">Context metrics</h3>
-              <div class="mobile-status-context-values">{contextDetail() || "No context metrics available yet."}</div>
-            </section>
-            <Show when={props.composerStatus?.dictationError()}>
-              <p class="mobile-status-error" role="alert">{props.composerStatus?.dictationError()}</p>
-            </Show>
-            <Show when={props.composerStatus?.micSilent()}>
-              <p class="mobile-status-error" role="alert">No microphone signal — check the mic or speak up</p>
-            </Show>
-          </div>
-        </DialogContent>
-      </Dialog>
-    </Show>
   </>;
 }
 
@@ -966,7 +933,7 @@ function App() {
             <section class="work-area-conversation" aria-label="Conversation">
               <Transcript chat={chat} partialContinue={partialContinue()} markdownRenderer={markdownRenderer()} profileLabel={activeProfile()?.label || activeProfile()?.id || chat.templateId() || undefined} />
               <div class="composer-stack"><HostUiRequests requests={chat.hostUiRequests()} onRespond={chat.respondHostUi} />
-                <Composer chat={chat} attachments={attachments} models={models} profiles={profiles()} activeProfile={activeProfile()} serverOnline={runtime.connectivity() === "online"} voiceSettings={voiceSettings()} contextMetrics={contextMetrics} onChooseProfile={(id) => void switchProfile(id)} onOpenSettings={openSettings} onOpenAttachments={() => attachFileInput?.click()} onStatusChange={setComposerStatus} /></div>
+                <Composer chat={chat} attachments={attachments} models={models} profiles={profiles()} activeProfile={activeProfile()} serverOnline={runtime.connectivity() === "online"} voiceSettings={voiceSettings()} onChooseProfile={(id) => void switchProfile(id)} onOpenSettings={openSettings} onOpenAttachments={() => attachFileInput?.click()} onStatusChange={setComposerStatus} /></div>
             </section>
           </div>
         </>}>

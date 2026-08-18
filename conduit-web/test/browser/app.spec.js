@@ -4689,11 +4689,11 @@ test("Ctrl+Shift+D captures in the page and buffers microphone audio until the s
   await expect(waveform).toHaveAttribute("data-variant", "compact");
   if (isMobile) {
     await expect(page.locator(".chat-status-label")).toHaveCount(0);
-    await expect(page.getByRole("button", { name: /Runtime status: Recording · preparing transcription…/ })).toBeVisible();
+    await expect(page.locator(".chat-status-line")).toHaveAttribute("aria-label", "Runtime status: Recording · preparing transcription…");
   } else {
     await expect(page.locator(".composer-status-state")).toContainText("Recording · preparing transcription…");
   }
-  const [waveformBox, statusBox] = await Promise.all([waveform.boundingBox(), isMobile ? page.locator(".chat-status-trigger").boundingBox() : page.locator(".composer-status-state").boundingBox()]);
+  const [waveformBox, statusBox] = await Promise.all([waveform.boundingBox(), isMobile ? page.locator(".chat-status-line").boundingBox() : page.locator(".composer-status-state").boundingBox()]);
   expect(waveformBox).not.toBeNull();
   expect(statusBox).not.toBeNull();
   if (isMobile) expect(waveformBox.width).toBeGreaterThan(120);
