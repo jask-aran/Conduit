@@ -133,7 +133,7 @@ svg { stroke-width: 1.5; }
 .terminal-canvas[data-terminal-ready="false"] > canvas { opacity: 0; }
 .terminal-canvas > canvas { display: block; max-width: 100%; max-height: 100%; transition: opacity 80ms linear; }
 
-.transcript { position: relative; z-index: 1; min-height: 0; flex: 1; overflow: hidden; }
+.transcript { position: relative; min-height: 0; flex: 1; overflow: hidden; }
 .transcript-motion-shell { position: relative; width: 100%; height: 100%; contain: layout; container-name: chat-main; container-type: inline-size; }
 .message-scroller-viewport { width: 100%; height: 100%; overflow-y: auto; scrollbar-width: none; }
 .message-scroller-viewport::-webkit-scrollbar { display: none; }
@@ -218,54 +218,43 @@ svg { stroke-width: 1.5; }
 /* Menus: one solid dark surface everywhere; icons sized inside items. */
 [data-slot="menu-content"] svg, [data-slot="context-menu-content"] svg { width: 16px; height: 16px; flex: none; }
 [data-slot="menu-content"] .menu-chevron, [data-slot="context-menu-content"] .menu-chevron { margin-left: auto; width: 14px; height: 14px; color: var(--muted-foreground); }
-.composer-stack { position: relative; z-index: 2; display: flex; width: 100%; flex: none; flex-direction: column; gap: 8px; padding: 18px 44px 24px; background: transparent; }
+.composer-stack { position: relative; display: flex; width: 100%; flex: none; flex-direction: column; gap: 8px; padding: 18px 44px 24px; background: transparent; }
 .chat-main:not(.chat-main-empty) .thread { padding-bottom: 128px; }
 .chat-main:not(.chat-main-empty) .composer-stack {
-  position: absolute;
+  position: sticky;
   right: 0;
   bottom: 0;
   left: 0;
-  margin-top: 0;
+  margin-top: -128px;
   pointer-events: none;
   background: transparent;
 }
 .chat-main:not(.chat-main-empty) .composer-stack::before {
   display: none;
 }
-.chat-main:not(.chat-main-empty) .composer-stack > * { position: relative; z-index: 1; pointer-events: auto; }
-.composer-wrap { width: min(760px, 100%); margin-inline: auto; }
+.chat-main:not(.chat-main-empty) .composer-stack > * { pointer-events: auto; }
+.composer-wrap { width: min(760px, 100%); margin-inline: auto; z-index: auto; }
 .chat-main:not(.chat-main-empty) .work-area-conversation { position: relative; }
-/* Composer shell stays overflow-visible so backdrop-filter can sample the
-   transcript. Filter, chrome, and content are independent layers. */
 .composer {
   position: relative; min-height: 74px; width: 100%;
   border-radius: 24px;
   background: transparent;
 }
-.composer-frost-filter,
-.composer-frost-chrome,
+.composer[data-liquid-glass="false"] {
+  background: #ffffff2b;
+  backdrop-filter: blur(24px);
+  border: 1px solid #ffffff4d;
+  box-shadow:
+    0 8px 32px rgba(0, 0, 0, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.5),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.1);
+}
 .composer-glass-filter,
 .composer-glass-chrome {
   position: absolute;
   inset: 0;
   border-radius: inherit;
   pointer-events: none;
-}
-.composer-frost-filter {
-  backdrop-filter: blur(36px) saturate(145%) brightness(1.08);
-  -webkit-backdrop-filter: blur(36px) saturate(145%) brightness(1.08);
-}
-.composer-frost-chrome {
-  border: 1px solid rgba(220, 238, 255, 0.22);
-  background:
-    radial-gradient(120% 170% at 8% -55%, rgba(255, 255, 255, 0.08), transparent 52%),
-    radial-gradient(105% 150% at 96% 155%, rgba(145, 195, 255, 0.05), transparent 58%),
-    linear-gradient(135deg, rgba(210, 232, 255, 0.032), rgba(255, 255, 255, 0.012) 52%, rgba(155, 202, 255, 0.027));
-  box-shadow:
-    0 10px 30px -22px rgba(0, 0, 0, 0.7),
-    inset 0 1px 0 rgba(255, 255, 255, 0.38),
-    inset 0 -1px 0 rgba(155, 200, 255, 0.08),
-    inset 0 0 0 1px rgba(178, 215, 255, 0.06);
 }
 .composer-glass-filter[data-liquid-glass-ready="false"] { visibility: hidden; }
 .composer-glass-chrome {

@@ -113,6 +113,20 @@ Add an entry through `$tacit-knowledge` after explicit approval or validated rep
 - **Scope:** Root command palette and all first-class palette pages at widths up to 760px.
 - **Evidence:** Manual review at a 523px-wide tall viewport found the chat-search list capped at desktop height while the app had already entered its mobile layout.
 
+### Keep composer frost inside the transcript scrollport
+
+- **Type:** Gotcha.
+- **Rule:** Put the basic frosted composer in the same overflow scroller as the transcript, sticky to the bottom. Do not overlay it from a `z-index` sibling of `.transcript` or `.message-scroller-viewport`. `backdrop-filter` cannot sample that sibling paint group; raising blur or moving the rule onto a child overlay will not fix it. Do not treat authored CSS strings or an absolutely positioned test stripe as proof of live frost.
+- **Scope:** `.composer`, `.composer-stack`, and transcript/composer overlap.
+- **Evidence:** `660fad3` hid text with a 90% card tint, not live blur. Later overlays showed sharp transcript through a 17% pane while tests still asserted `blur(Npx)`. An in-flow striped paragraph inside the viewport blurred; the same paint as an overlay sibling did not. The accepted path is sticky `.composer-stack` as the transcript footer.
+
+### Author only unprefixed backdrop-filter for production CSS
+
+- **Type:** Gotcha.
+- **Rule:** Write `backdrop-filter` only. Do not pair it with `-webkit-backdrop-filter` in source. LightningCSS then emits only the prefixed property, which current Chrome reports as invalid and ignores.
+- **Scope:** Production CSS processed by Tailwind/LightningCSS, especially `.composer[data-liquid-glass="false"]`.
+- **Evidence:** Built `index-*.css` contained `-webkit-backdrop-filter:blur(21px)` and no standard property. Chrome DevTools marked the prefix invalid. After authoring the unprefixed rule alone, the bundle kept `backdrop-filter:blur(24px)` and Chromium computed `blur(24px)` with `CSS.supports("backdrop-filter", "blur(1px)") === true`.
+
 ### Keep browser-hosted shortcuts inside an app-owned path
 
 - **Type:** Gotcha.

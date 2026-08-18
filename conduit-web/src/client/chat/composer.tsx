@@ -339,9 +339,7 @@ export function Composer(props: {
       <div class="composer-queue"><span>Queued messages</span><Button variant="ghost" size="sm" onClick={props.chat.clearQueue}>Restore to draft</Button></div>
     </Show>
     <div class="composer" data-liquid-glass={props.liquidGlassSurface ? "true" : "false"}>
-      <Show when={props.liquidGlassSurface} fallback={<><span class="composer-frost-filter" aria-hidden="true" /><span class="composer-frost-chrome" aria-hidden="true" /></>}>
-        <LiquidGlassSurface />
-      </Show>
+      <Show when={props.liquidGlassSurface}><LiquidGlassSurface /></Show>
       <div class="composer-content">
       <MobileComposerOptions composer={props} />
       <div class="composer-input-shell">
