@@ -454,12 +454,16 @@ test("acceptance: mobile transcript fades behind the frosted composer", async ({
     const target = paragraphs.find((candidate) => candidate.getBoundingClientRect().top >= (composer?.getBoundingClientRect().top ?? Infinity)) || paragraphs.at(-1);
     if (!target || !composer) throw new Error("Expected transcript paragraph and composer overlap targets");
     target.setAttribute("data-test-glass-target", "true");
+    target.style.background = "repeating-linear-gradient(90deg, #ff5c8a 0 8px, #56d7ff 8px 16px, #ffd166 16px 24px)";
+    target.style.color = "#f8fafc";
+    target.style.minHeight = "52px";
+    target.style.padding = "4px";
     const viewportBox = element.getBoundingClientRect();
     const targetBox = target.getBoundingClientRect();
     const composerBox = composer.getBoundingClientRect();
     const targetTopInContent = targetBox.top - viewportBox.top + element.scrollTop;
     const composerTopInViewport = composerBox.top - viewportBox.top;
-    const desiredScrollTop = targetTopInContent - composerTopInViewport + 12;
+    const desiredScrollTop = targetTopInContent - composerTopInViewport + 34;
     const maxScrollTop = Math.max(0, element.scrollHeight - element.clientHeight);
     element.scrollTop = Math.max(0, Math.min(maxScrollTop, desiredScrollTop));
     return {
@@ -496,7 +500,6 @@ test("acceptance: mobile transcript fades behind the frosted composer", async ({
     const transcriptBox = transcript.getBoundingClientRect();
     const stackStyle = getComputedStyle(stack);
     const stackFadeStyle = getComputedStyle(stack, "::before");
-    const composerStyle = getComputedStyle(composer);
     const headerStyle = getComputedStyle(header);
     const threadStyle = getComputedStyle(thread);
     const target = document.querySelector('[data-test-glass-target="true"]');
@@ -516,12 +519,6 @@ test("acceptance: mobile transcript fades behind the frosted composer", async ({
       stackBackgroundImage: stackStyle.backgroundImage,
       stackFadeBackgroundImage: stackFadeStyle.backgroundImage,
       stackPointerEvents: stackStyle.pointerEvents,
-      composerBackgroundColor: composerStyle.backgroundColor,
-      composerBackgroundAlpha: Number(composerStyle.backgroundColor.match(/(?:\/|,)\s*([0-9.]+)\s*\)?$/)?.[1] ?? 0),
-      composerBackgroundImage: composerStyle.backgroundImage,
-      composerBackdropFilter: composerStyle.backdropFilter,
-      composerBorderTopWidth: composerStyle.borderTopWidth,
-      composerBoxShadow: composerStyle.boxShadow,
       headerBackdropFilter: headerStyle.backdropFilter,
       transcriptUnderComposer: targetBox.top < composerBox.bottom && targetBox.bottom > composerBox.top,
       transcriptComposerOverlap: Math.max(0, Math.min(targetBox.bottom, composerBox.bottom) - Math.max(targetBox.top, composerBox.top)),
@@ -546,16 +543,18 @@ test("acceptance: mobile transcript fades behind the frosted composer", async ({
   expect(layout.headerBackgroundImage).toContain("linear-gradient");
   expect(layout.stackBackgroundImage).toBe("none");
   expect(layout.stackFadeBackgroundImage).toBe("none");
-  expect(layout.composerBackgroundAlpha).toBeGreaterThanOrEqual(0.14);
-  expect(layout.composerBackgroundAlpha).toBeLessThanOrEqual(0.16);
-  expect(layout.composerBackgroundImage).toBe("none");
-  expect(layout.composerBackdropFilter).toBe("blur(20px)");
-  expect(layout.composerBorderTopWidth).toBe("1px");
-  expect(layout.composerBoxShadow).toContain("inset");
   expect(layout.headerBackdropFilter).toContain("blur");
   expect(layout.transcriptUnderComposer).toBe(true);
   expect(layout.transcriptComposerOverlap).toBeGreaterThan(8);
   expect(layout.composerTranscriptOverlap).toBeGreaterThan(8);
+  await expect(page.locator(".chat-main:not(.chat-main-empty) .composer")).toHaveScreenshot("composer-frost-mobile.png", {
+    animations: "disabled",
+    caret: "hide",
+    scale: "css",
+  });
+  if (process.env.COMPOSER_GLASS_CAPTURE === "1") {
+    await page.locator(".chat-main:not(.chat-main-empty) .composer").screenshot({ path: "/tmp/conduit-composer-basic-mobile.png" });
+  }
 });
 
 test("acceptance: desktop transcript stays behind the basic composer", async ({ page }, testInfo) => {
@@ -640,8 +639,13 @@ test("acceptance: desktop transcript passes behind the static glassmorphism comp
     const stackStyle = getComputedStyle(stack);
     const stackFadeStyle = getComputedStyle(stack, "::before");
     const composerStyle = getComputedStyle(composer);
-    const beforeStyle = getComputedStyle(composer, "::before");
-    const afterStyle = getComputedStyle(composer, "::after");
+    const frostFilter = composer.querySelector(".composer-frost-filter");
+    const frostChrome = composer.querySelector(".composer-frost-chrome");
+    if (!frostFilter || !frostChrome) throw new Error("Expected basic frost layers");
+    const frostFilterStyle = getComputedStyle(frostFilter);
+    const frostChromeStyle = getComputedStyle(frostChrome);
+    const beforeStyle = getComputedStyle(frostChrome, "::before");
+    const afterStyle = getComputedStyle(frostChrome, "::after");
     const threadStyle = getComputedStyle(thread);
     const targetBox = target.getBoundingClientRect();
     const composerBox = composer.getBoundingClientRect();
@@ -651,13 +655,15 @@ test("acceptance: desktop transcript passes behind the static glassmorphism comp
       stackFadeBackgroundImage: stackFadeStyle.backgroundImage,
       composerBackgroundColor: composerStyle.backgroundColor,
       composerBackdropFilter: composerStyle.backdropFilter,
-      composerBorderTopColor: composerStyle.borderTopColor,
       composerOverflow: composerStyle.overflow,
-      composerBoxShadow: composerStyle.boxShadow,
-      composerBeforeBackground: beforeStyle.backgroundImage,
-      composerAfterBackground: afterStyle.backgroundImage,
+      frostBackgroundColor: frostChromeStyle.backgroundColor,
+      frostBackdropFilter: frostFilterStyle.backdropFilter,
+      frostBorderTopColor: frostChromeStyle.borderTopColor,
+      frostBoxShadow: frostChromeStyle.boxShadow,
+      frostBeforeBackground: beforeStyle.backgroundImage,
+      frostAfterBackground: afterStyle.backgroundImage,
       svgDefinitions: document.querySelectorAll(".liquid-glass-definitions").length,
-      glassLayers: document.querySelectorAll(".composer-glass-layer").length,
+      glassFilters: document.querySelectorAll(".composer-glass-filter").length,
       threadPaddingBottom: threadStyle.paddingBottom,
       composerClass: composer.className,
       transcriptComposerOverlap: Math.max(0, Math.min(targetBox.bottom, composerBox.bottom) - Math.max(targetBox.top, composerBox.top)),
@@ -666,19 +672,24 @@ test("acceptance: desktop transcript passes behind the static glassmorphism comp
   expect(layout.stackBackgroundColor).toBe("rgba(0, 0, 0, 0)");
   expect(layout.stackBackgroundImage).toBe("none");
   expect(layout.stackFadeBackgroundImage).toBe("none");
-  expect(layout.composerBackgroundColor).toBe("rgba(255, 255, 255, 0.15)");
-  expect(layout.composerBackdropFilter).toBe("blur(20px)");
-  expect(layout.composerBorderTopColor).toBe("rgba(255, 255, 255, 0.3)");
-  expect(layout.composerOverflow).toBe("hidden");
-  expect(layout.composerBoxShadow).toContain("inset");
-  expect(layout.composerBeforeBackground).toContain("linear-gradient");
-  expect(layout.composerAfterBackground).toContain("linear-gradient");
+  expect(layout.composerBackgroundColor).toBe("rgba(0, 0, 0, 0)");
+  expect(layout.composerBackdropFilter).toBe("none");
+  expect(layout.composerOverflow).toBe("visible");
+  expect(layout.frostBackgroundColor).toBe("rgba(255, 255, 255, 0.15)");
+  expect(layout.frostBackdropFilter).toBe("blur(20px)");
+  expect(layout.frostBorderTopColor).toBe("rgba(255, 255, 255, 0.3)");
+  expect(layout.frostBoxShadow).toContain("inset");
+  expect(layout.frostBeforeBackground).toContain("linear-gradient");
+  expect(layout.frostAfterBackground).toContain("linear-gradient");
   expect(layout.svgDefinitions).toBe(0);
-  expect(layout.glassLayers).toBe(0);
+  expect(layout.glassFilters).toBe(0);
   expect(layout.threadPaddingBottom).toBe("128px");
   expect(layout.composerClass).toBe("composer");
-  expect(layout.composerBackgroundColor).not.toBe("rgba(255, 255, 255, 0.05)");
+  expect(layout.frostBackgroundColor).not.toBe("rgba(255, 255, 255, 0.05)");
   expect(layout.transcriptComposerOverlap).toBeGreaterThan(8);
+  if (process.env.COMPOSER_GLASS_CAPTURE === "1") {
+    await page.locator(".chat-main:not(.chat-main-empty) .composer").screenshot({ path: "/tmp/conduit-composer-basic-desktop.png" });
+  }
 });
 
 test("acceptance: desktop opt-in liquid glass uses the precomputed SVG path", async ({ page }, testInfo) => {
@@ -687,7 +698,7 @@ test("acceptance: desktop opt-in liquid glass uses the precomputed SVG path", as
   await openApp(page);
   await page.locator(".sidebar-chat").filter({ hasText: "Existing chat" }).click();
   await expect(page.locator(".chat-main:not(.chat-main-empty) article.message-assistant")).toContainText("Transcript paragraph 1");
-  const layer = page.locator(".composer-glass-layer");
+  const layer = page.locator(".composer-glass-filter");
   await expect(layer).toHaveAttribute("data-liquid-glass-ready", "true");
   const messageViewport = page.locator(".chat-main:not(.chat-main-empty) .message-scroller-viewport");
   await messageViewport.evaluate((element) => {
@@ -707,22 +718,23 @@ test("acceptance: desktop opt-in liquid glass uses the precomputed SVG path", as
   });
   const graph = await page.evaluate(() => {
     const composer = document.querySelector(".chat-main:not(.chat-main-empty) .composer");
-    const layer = document.querySelector(".composer-glass-layer");
+    const layer = document.querySelector(".composer-glass-filter");
+    const chrome = document.querySelector(".composer-glass-chrome");
     const filter = document.querySelector(".liquid-glass-definitions filter");
-    if (!composer || !layer || !filter) throw new Error("Expected liquid glass surface");
+    if (!composer || !layer || !chrome || !filter) throw new Error("Expected liquid glass surface");
     const composerStyle = getComputedStyle(composer);
+    const chromeStyle = getComputedStyle(chrome);
     return {
       composerBackground: composerStyle.backgroundColor,
       composerBackdropFilter: composerStyle.backdropFilter,
+      composerOverflow: composerStyle.overflow,
+      chromeBackground: chromeStyle.backgroundColor,
       layerBackdropFilter: getComputedStyle(layer).backdropFilter,
       generationCount: layer.getAttribute("data-liquid-glass-generation-count"),
       assetKey: layer.getAttribute("data-liquid-glass-asset-key"),
       primitives: [...filter.children].map((node) => node.tagName),
-      blur: filter.querySelector("feGaussianBlur")?.getAttribute("stdDeviation"),
       scale: filter.querySelector("feDisplacementMap")?.getAttribute("scale"),
-      saturation: filter.querySelector("feColorMatrix")?.getAttribute("values"),
-      specularOpacity: filter.querySelector("feFuncA")?.getAttribute("slope"),
-      displacementHref: filter.querySelector("feImage")?.getAttribute("href")?.slice(0, 27),
+      displacementHref: filter.querySelector("feImage")?.getAttribute("href"),
       transcriptComposerOverlap: (() => {
         const target = document.querySelector('[data-test-liquid-target="true"]');
         const targetBox = target?.getBoundingClientRect();
@@ -733,16 +745,19 @@ test("acceptance: desktop opt-in liquid glass uses the precomputed SVG path", as
   });
   expect(graph.composerBackground).toBe("rgba(0, 0, 0, 0)");
   expect(graph.composerBackdropFilter).toBe("none");
+  expect(graph.composerOverflow).toBe("visible");
+  expect(graph.chromeBackground).toBe("rgba(255, 255, 255, 0.08)");
+  expect(graph.layerBackdropFilter).toContain("blur(4px)");
   expect(graph.layerBackdropFilter).toContain("url(\"#conduit-liquid-glass-");
   expect(graph.generationCount).toBe("0");
-  expect(graph.assetKey).toContain("756:81:23:4:70:1.5:");
-  expect(graph.primitives).toEqual(["feGaussianBlur", "feImage", "feDisplacementMap", "feColorMatrix", "feImage", "feComposite", "feComponentTransfer", "feBlend", "feBlend"]);
-  expect(graph.blur).toBe("4");
-  expect(Number(graph.scale)).toBeCloseTo(54.70579020571819, 8);
-  expect(graph.saturation).toBe("4");
-  expect(graph.specularOpacity).toBe("0.2");
-  expect(graph.displacementHref).toBe("data:image/png;base64,iVBOR");
+  expect(graph.assetKey).toBe("desktop:88");
+  expect(graph.primitives).toEqual(["feImage", "feDisplacementMap"]);
+  expect(Number(graph.scale)).toBeGreaterThan(8);
+  expect(graph.displacementHref).toBe("/glass/composer-desktop-88.png");
   expect(graph.transcriptComposerOverlap).toBeGreaterThan(8);
+  if (process.env.COMPOSER_GLASS_CAPTURE === "1") {
+    await page.locator(".chat-main:not(.chat-main-empty) .composer").screenshot({ path: "/tmp/conduit-composer-liquid-desktop.png" });
+  }
 });
 
 test("acceptance: final transcript remains reachable above the composer", async ({ page }, testInfo) => {

@@ -339,7 +339,10 @@ export function Composer(props: {
       <div class="composer-queue"><span>Queued messages</span><Button variant="ghost" size="sm" onClick={props.chat.clearQueue}>Restore to draft</Button></div>
     </Show>
     <div class="composer" data-liquid-glass={props.liquidGlassSurface ? "true" : "false"}>
-      <Show when={props.liquidGlassSurface}><LiquidGlassSurface /></Show>
+      <Show when={props.liquidGlassSurface} fallback={<><span class="composer-frost-filter" aria-hidden="true" /><span class="composer-frost-chrome" aria-hidden="true" /></>}>
+        <LiquidGlassSurface />
+      </Show>
+      <div class="composer-content">
       <MobileComposerOptions composer={props} />
       <div class="composer-input-shell">
         <textarea
@@ -403,6 +406,7 @@ export function Composer(props: {
           <Show when={busy() && hasText()}><Button variant="outline" size="icon-sm" aria-label="Steer after tools" disabled={dictating()} onClick={() => sendMessage("steer")}><WaypointsIcon /></Button></Show>
           <Button size="icon-sm" aria-label={busy() ? "Queue follow-up" : "Send message"} disabled={!canSend()} onClick={() => sendMessage()}><Show when={props.chat.generation() === "submitting"} fallback={<ArrowUpIcon />}><Spinner /></Show></Button>
         </div>
+      </div>
       </div>
     </div>
     <Show when={dictationError()}><div class="composer-dictation-error" role="alert"><TriangleAlertIcon />{dictationError()}</div></Show>

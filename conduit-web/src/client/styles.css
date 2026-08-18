@@ -235,56 +235,58 @@ svg { stroke-width: 1.5; }
 .chat-main:not(.chat-main-empty) .composer-stack > * { position: relative; z-index: 1; pointer-events: auto; }
 .composer-wrap { width: min(760px, 100%); margin-inline: auto; }
 .chat-main:not(.chat-main-empty) .work-area-conversation { position: relative; }
-/* Basic path: Hype4-style frost at blur 20 and zero depth. The white tint is
-   deliberately visible so the surface remains frosted over a quiet transcript. */
+/* Composer shell stays overflow-visible so backdrop-filter can sample the
+   transcript. Filter, chrome, and content are independent layers. */
 .composer {
   position: relative; min-height: 74px; width: 100%;
-  overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.3);
   border-radius: 24px;
-  background: rgba(255, 255, 255, 0.15);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  box-shadow:
-    0 2px 12px rgba(0, 0, 0, 0.08),
-    inset 0 1px 0 rgba(255, 255, 255, 0.5),
-    inset 0 -1px 0 rgba(255, 255, 255, 0.1),
-    inset 0 0 0 0 rgba(255, 255, 255, 0);
-}
-/* Fixed top and left specular rims. */
-.composer::before {
-  content: ""; position: absolute; inset: 0 0 auto; z-index: 0; height: 1px; pointer-events: none;
-  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.8), transparent);
-}
-.composer::after {
-  content: ""; position: absolute; inset: 0 auto 0 0; z-index: 0; width: 1px; pointer-events: none;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.8), transparent, rgba(255, 255, 255, 0.3));
-}
-.composer:has(.composer-glass-layer[data-liquid-glass-ready="true"]) {
-  border-color: transparent;
   background: transparent;
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
-  box-shadow: none;
 }
-.composer:has(.composer-glass-layer[data-liquid-glass-ready="true"])::before,
-.composer:has(.composer-glass-layer[data-liquid-glass-ready="true"])::after { opacity: 0; }
-.composer-glass-layer {
+.composer-frost-filter,
+.composer-frost-chrome,
+.composer-glass-filter,
+.composer-glass-chrome {
   position: absolute;
-  inset: 1px;
-  z-index: 1;
-  display: block;
-  overflow: hidden;
-  border-radius: 23px;
-  background: transparent;
+  inset: 0;
+  border-radius: inherit;
   pointer-events: none;
 }
-.liquid-glass-definitions { position: absolute; width: 0; height: 0; overflow: hidden; pointer-events: none; }
-.composer-glass-layer[data-liquid-glass-ready="false"] { visibility: hidden; }
-@supports not (backdrop-filter: url(#conduit-liquid-glass-test)) {
-  .composer-glass-layer { display: none; }
-  .composer:has(.composer-glass-layer) { border-color: rgba(255, 255, 255, 0.3); background: rgba(255, 255, 255, 0.15); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.5), inset 0 -1px 0 rgba(255, 255, 255, 0.1); }
+.composer-frost-filter {
+  backdrop-filter: blur(36px) saturate(145%) brightness(1.08);
+  -webkit-backdrop-filter: blur(36px) saturate(145%) brightness(1.08);
 }
+.composer-frost-chrome {
+  border: 1px solid rgba(220, 238, 255, 0.22);
+  background:
+    radial-gradient(120% 170% at 8% -55%, rgba(255, 255, 255, 0.08), transparent 52%),
+    radial-gradient(105% 150% at 96% 155%, rgba(145, 195, 255, 0.05), transparent 58%),
+    linear-gradient(135deg, rgba(210, 232, 255, 0.032), rgba(255, 255, 255, 0.012) 52%, rgba(155, 202, 255, 0.027));
+  box-shadow:
+    0 10px 30px -22px rgba(0, 0, 0, 0.7),
+    inset 0 1px 0 rgba(255, 255, 255, 0.38),
+    inset 0 -1px 0 rgba(155, 200, 255, 0.08),
+    inset 0 0 0 1px rgba(178, 215, 255, 0.06);
+}
+.composer-glass-filter[data-liquid-glass-ready="false"] { visibility: hidden; }
+.composer-glass-chrome {
+  border: 1px solid rgba(220, 238, 255, 0.2);
+  background:
+    radial-gradient(130% 180% at 12% -70%, rgba(255, 255, 255, 0.12), transparent 48%),
+    linear-gradient(135deg, rgba(190, 220, 255, 0.055), rgba(255, 255, 255, 0.018) 55%, rgba(145, 195, 255, 0.035));
+  box-shadow:
+    0 8px 24px -18px rgba(0, 0, 0, 0.68),
+    inset 0 1px rgba(255, 255, 255, 0.34),
+    inset 0 -1px rgba(145, 195, 255, 0.07),
+    inset 0 0 0 1px rgba(178, 215, 255, 0.05);
+}
+.liquid-glass-definitions { position: absolute; width: 0; height: 0; overflow: hidden; pointer-events: none; }
+@supports not (backdrop-filter: url(#conduit-liquid-glass-test)) {
+  .composer-glass-filter {
+    backdrop-filter: blur(6px) !important;
+    -webkit-backdrop-filter: blur(6px) !important;
+  }
+}
+.composer-content { position: relative; z-index: 1; }
 .composer textarea, .composer-actions { position: relative; z-index: 2; }
 .settings-toggle { display: flex; align-items: flex-start; gap: 10px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--card); padding: 12px; cursor: pointer; }
 .settings-toggle input { margin-top: 3px; accent-color: var(--primary); }
@@ -729,7 +731,7 @@ svg { stroke-width: 1.5; }
      when it wraps, but the empty state stays at the same visual baseline as
      the three controls around it. */
   .composer { display: flex; min-height: 44px; align-items: center; border-radius: 18px; }
-  .composer-glass-layer { border-radius: 17px; }
+  .composer-content { display: contents; }
   .composer-mobile-plus { display: flex; flex: 0 0 auto; align-self: center; align-items: center; padding: 0 0 0 4px; }
   .composer-plus-trigger { display: inline-flex; width: 38px; height: 38px; align-items: center; justify-content: center; border: 0; border-radius: 12px; background: transparent; color: var(--muted-foreground); -webkit-tap-highlight-color: transparent; }
   .composer-plus-trigger:hover, .composer-plus-trigger:active { background: transparent; color: var(--muted-foreground); }

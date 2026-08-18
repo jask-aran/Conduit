@@ -468,7 +468,7 @@ test("Settings UI toggles and persists the liquid glass composer surface", async
   await toggle.check();
   await expect(toggle).toBeChecked();
   await expect(page.locator(".composer")).toHaveAttribute("data-liquid-glass", "true");
-  const layer = page.locator(".composer-glass-layer");
+  const layer = page.locator(".composer-glass-filter");
   await expect(layer).toHaveAttribute("data-liquid-glass-ready", "true");
   await expect(layer).toHaveAttribute("data-liquid-glass-generation-count", "0");
 
