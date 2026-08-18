@@ -632,11 +632,7 @@ test("acceptance: desktop transcript passes behind the static glassmorphism comp
     const stackStyle = getComputedStyle(stack);
     const stackFadeStyle = getComputedStyle(stack, "::before");
     const composerStyle = getComputedStyle(composer);
-    const frostFilter = composer.querySelector(".composer-frost-filter");
-    const frostChrome = composer.querySelector(".composer-frost-chrome");
-    if (!frostFilter || !frostChrome) throw new Error("Expected basic frost layers");
-    const frostFilterStyle = getComputedStyle(frostFilter);
-    const frostChromeStyle = getComputedStyle(frostChrome);
+    const frostChromeStyle = getComputedStyle(composer);
     const threadStyle = getComputedStyle(thread);
     const targetBox = target.getBoundingClientRect();
     const composerBox = composer.getBoundingClientRect();
@@ -647,8 +643,8 @@ test("acceptance: desktop transcript passes behind the static glassmorphism comp
       composerBackgroundColor: composerStyle.backgroundColor,
       composerBackdropFilter: composerStyle.backdropFilter,
       composerOverflow: composerStyle.overflow,
-      frostBackgroundImage: frostChromeStyle.backgroundImage,
-      frostBackdropFilter: frostFilterStyle.backdropFilter,
+      frostBackgroundColor: frostChromeStyle.backgroundColor,
+      frostBackdropFilter: frostChromeStyle.backdropFilter,
       frostBoxShadow: frostChromeStyle.boxShadow,
       svgDefinitions: document.querySelectorAll(".liquid-glass-definitions").length,
       glassFilters: document.querySelectorAll(".composer-glass-filter").length,
@@ -660,11 +656,9 @@ test("acceptance: desktop transcript passes behind the static glassmorphism comp
   expect(layout.stackBackgroundColor).toBe("rgba(0, 0, 0, 0)");
   expect(layout.stackBackgroundImage).toBe("none");
   expect(layout.stackFadeBackgroundImage).toBe("none");
-  expect(layout.composerBackgroundColor).toBe("rgba(0, 0, 0, 0)");
-  expect(layout.composerBackdropFilter).toBe("none");
   expect(layout.composerOverflow).toBe("visible");
-  expect(layout.frostBackdropFilter).toContain("blur(36px)");
-  expect(layout.frostBackgroundImage).toContain("radial-gradient");
+  expect(layout.frostBackdropFilter).toContain("blur(24px)");
+  expect(layout.frostBackgroundColor).toBe("rgba(255, 255, 255, 0.169)");
   expect(layout.frostBoxShadow).toContain("inset");
   expect(layout.svgDefinitions).toBe(0);
   expect(layout.glassFilters).toBe(0);
