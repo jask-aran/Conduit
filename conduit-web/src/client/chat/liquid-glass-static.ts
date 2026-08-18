@@ -6,7 +6,7 @@ export const LIQUID_GLASS_FAMILIES = {
 export const LIQUID_GLASS_THICKNESS = 70;
 export const LIQUID_GLASS_REFRACTIVE_INDEX = 1.5;
 export const LIQUID_GLASS_SCALE_RATIO = 0.7;
-export const LIQUID_GLASS_BLUR_PX = 4;
+export const LIQUID_GLASS_BLUR_PX = 8;
 
 export type LiquidGlassFamilyName = keyof typeof LIQUID_GLASS_FAMILIES;
 export type LiquidGlassHeightBucket = (typeof LIQUID_GLASS_HEIGHT_BUCKETS)[number];

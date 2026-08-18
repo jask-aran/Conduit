@@ -470,7 +470,7 @@ test("Settings UI toggles and persists the liquid glass composer surface", async
   await expect(page.locator(".composer")).toHaveAttribute("data-liquid-glass", "true");
   const layer = page.locator(".composer-glass-filter");
   await expect(layer).toHaveAttribute("data-liquid-glass-ready", "true");
-  await expect(layer).toHaveAttribute("data-liquid-glass-generation-count", "0");
+  await expect(page.locator(".liquid-glass-definitions feGaussianBlur")).toHaveCount(1);
 
   await settings.getByRole("button", { name: "Close" }).click();
   await page.reload();
