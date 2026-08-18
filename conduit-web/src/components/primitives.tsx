@@ -75,7 +75,7 @@ export function DialogClose(props: ParentProps<{ class?: string }>) {
 
 /* Menus share one dark, solid surface profile: --popover ground, hairline ring,
    rounded-lg shell over rounded-md items. Kept deliberately un-glassy — the
-   liquid-glass treatment is reserved for the composer. */
+   glassmorphism treatment is reserved for the composer. */
 const menuContentClass = "z-[100] min-w-40 rounded-lg bg-popover p-1 text-popover-foreground shadow-md ring-1 ring-foreground/10 outline-none";
 /* Submenus get a smaller min-width so a flipped submenu can still fit beside
    its parent on narrow viewports instead of overflowing offscreen. */
