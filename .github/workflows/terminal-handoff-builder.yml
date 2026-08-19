@@ -24,7 +24,36 @@ jobs:
           cache: npm
           cache-dependency-path: conduit-web/package-lock.json
       - name: Apply atomic handoff
-        run: node scripts/apply-terminal-handoff.mjs
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('scripts/apply-terminal-handoff.mjs')
+          text = p.read_text()
+          start = text.index('{\n  const path = "conduit-web/test/pty-transport.test.js";')
+          replacement = '''{
+            const path = "conduit-web/test/pty-transport.test.js";
+            let content = await read(path);
+            content = replaceOnce(
+              content,
+              '  socket.on("message", (data, isBinary) => messages.push({ data: Buffer.from(data), isBinary }));',
+              `  socket.on("message", (data, isBinary) => {
+              const frame = { data: Buffer.from(data), isBinary };
+              messages.push(frame);
+              if (!isBinary) {
+                try {
+                  if (JSON.parse(frame.data.toString()).type === "replay_end") socket.send(JSON.stringify({ type: "restore_ready" }));
+                } catch {}
+              }
+            });`,
+              "test client restore acknowledgement",
+            );
+            await write(path, content);
+          }
+          '''
+          p.write_text(text[:start] + replacement)
+          PY
+          node --check scripts/apply-terminal-handoff.mjs
+          node scripts/apply-terminal-handoff.mjs
       - name: Install dependencies
         working-directory: conduit-web
         run: npm ci
