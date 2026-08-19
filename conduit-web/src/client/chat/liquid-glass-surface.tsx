@@ -30,6 +30,7 @@ export function LiquidGlassSurface() {
   const [mapHref, setMapHref] = createSignal("");
   const [specularHref, setSpecularHref] = createSignal("");
   const [scale, setScale] = createSignal(16);
+  const [surface, setSurface] = createSignal({ width: 0, height: 0 });
 
   onMount(() => {
     let lastKey = "";
@@ -38,6 +39,7 @@ export function LiquidGlassSurface() {
       const family = pickLiquidGlassFamily(width);
       const bucket = pickLiquidGlassHeight(height);
       const key = liquidGlassAssetKey(family, bucket);
+      setSurface({ width, height });
       if (key === lastKey) return;
       lastKey = key;
       setAssetKey(key);
@@ -69,10 +71,10 @@ export function LiquidGlassSurface() {
         <filter id={filterId} color-interpolation-filters="sRGB" x="-8%" y="-12%" width="116%" height="124%">
           <Show when={assetKey()}>
             <feGaussianBlur in="SourceGraphic" stdDeviation={LIQUID_GLASS_BLUR_PX} result="blurred_source" />
-            <feImage href={mapHref()} x="0" y="0" width="100%" height="100%" preserveAspectRatio="none" result="displacement_map" />
+            <feImage href={mapHref()} x="0" y="0" width={surface().width} height={surface().height} preserveAspectRatio="none" result="displacement_map" />
             <feDisplacementMap in="blurred_source" in2="displacement_map" scale={scale()} xChannelSelector="R" yChannelSelector="G" result="displaced" />
             <feColorMatrix in="displaced" type="saturate" values={String(SPECULAR_SATURATION)} result="displaced_saturated" />
-            <feImage href={specularHref()} x="0" y="0" width="100%" height="100%" preserveAspectRatio="none" result="specular_layer" />
+            <feImage href={specularHref()} x="0" y="0" width={surface().width} height={surface().height} preserveAspectRatio="none" result="specular_layer" />
             <feComposite in="displaced_saturated" in2="specular_layer" operator="in" result="specular_saturated" />
             <feComponentTransfer in="specular_layer" result="specular_faded"><feFuncA type="linear" slope={SPECULAR_OPACITY} /></feComponentTransfer>
             <feBlend in="specular_saturated" in2="displaced" mode="normal" result="withSaturation" />
