@@ -216,6 +216,12 @@ function replaceOnce(content, before, after, label) {
   assert.match(canonical.events.find((event) => event.type === "data")?.bytes.toString() || "", /abcde/);`,
     "canonical state after replay overflow",
   );
+  content = replaceOnce(
+    content,
+    '  assert.deepEqual(manager.replay(record.id), { complete: false, events: [], bytes: Buffer.alloc(0) });',
+    '  assert.deepEqual(manager.replay(record.id), { complete: false, events: [], bytes: Buffer.alloc(0), sequence: 5000 });',
+    "resize replay sequence",
+  );
   await write(path, content);
 }
 
