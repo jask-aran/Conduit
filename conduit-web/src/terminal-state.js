@@ -1,5 +1,8 @@
-import { Terminal } from "@xterm/headless";
-import { SerializeAddon } from "@xterm/addon-serialize";
+import { createRequire } from "node:module";
+
+const require = createRequire(import.meta.url);
+const { Terminal } = require("@xterm/headless");
+const { SerializeAddon } = require("@xterm/addon-serialize");
 
 export const PTY_STATE_SCROLLBACK_ROWS = 1000;
 
