@@ -1,8 +1,4 @@
-import fs from "node:fs/promises";
-const root = new URL("../", import.meta.url);
-async function write(path, content) { await fs.writeFile(new URL(path, root), content, "utf8"); }
-
-await write("conduit-web/test/terminal-state.test.js", `import assert from "node:assert/strict";
+import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -14,8 +10,8 @@ test("headless terminal generates protocol replies while detached", async () => 
   const replies = [];
   const state = new TerminalState({ onData: (data) => replies.push(data) });
   try {
-    await state.write("\\x1b[6n");
-    assert.match(replies.join(""), /\\x1b\\[1;1R/);
+    await state.write("\x1b[6n");
+    assert.match(replies.join(""), /\x1b\[1;1R/);
   } finally {
     state.dispose();
   }
@@ -87,4 +83,3 @@ test("PtyManager hands protocol-response ownership between headless state and br
     await fs.rm(root, { recursive: true, force: true });
   }
 });
-`);

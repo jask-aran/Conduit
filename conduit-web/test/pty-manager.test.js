@@ -44,9 +44,11 @@ test("PTY manager starts a terminal only with a server-resolved absolute working
   await assert.rejects(manager.create({ project: { id: "managed" } }), { code: "pty_cwd_required" });
   await assert.rejects(manager.create({ project: { id: "missing" }, cwd: path.join(root, "missing") }), { code: "pty_cwd_unavailable" });
   const record = await manager.create({ project: { id: "workspace" }, cwd: workspace });
-  const duplicate = await manager.create({ project: { id: "workspace" }, cwd: workspace });
-  assert.equal(duplicate.id, record.id);
-  assert.equal(pty.handles.length, 1);
+  const sibling = await manager.create({ project: { id: "workspace" }, cwd: workspace });
+  assert.notEqual(sibling.id, record.id);
+  assert.equal(sibling.title, "Shell 2");
+  assert.equal(pty.handles.length, 2);
+  assert.equal(await manager.remove(sibling.id), true);
   assert.equal(pty.handles[0].options.env.TERM, "xterm-256color");
   assert.equal(pty.handles[0].options.env.COLORTERM, "truecolor");
   assert.equal(Object.hasOwn(pty.handles[0].options.env, "NO_COLOR"), false);
@@ -78,6 +80,11 @@ test("PTY manager starts a terminal only with a server-resolved absolute working
   assert.deepEqual(replayView(manager, record.id), { complete: false, events: [] });
   assert.equal(manager.replay(record.id).bytes.length, 0);
   assert.equal(manager.output(record.id).length, 0);
+  const canonical = await manager.stateReplay(record.id);
+  assert.equal(canonical.source, "state");
+  assert.equal(canonical.complete, true);
+  assert.deepEqual(canonical.events[0], { type: "resize", cols: 120, rows: 40 });
+  assert.match(canonical.events.find((event) => event.type === "data")?.bytes.toString() || "", /abcde/);
   manager.input(record.id, Buffer.from("ls\n"));
   assert.equal(pty.handles[0].input, "ls\n");
   assert.deepEqual(pty.handles[0].size, { cols: 120, rows: 40 });
@@ -128,6 +135,6 @@ test("PTY replay journal bounds resize history", async () => {
   await manager.load();
   const record = await manager.create({ project: { id: "resize-project" }, cwd: root });
   for (let index = 0; index < 5000; index += 1) manager.resize(record.id, index % 2 ? 80 : 81, 24);
-  assert.deepEqual(manager.replay(record.id), { complete: false, events: [], bytes: Buffer.alloc(0) });
+  assert.deepEqual(manager.replay(record.id), { complete: false, events: [], bytes: Buffer.alloc(0), sequence: 5000 });
   await fs.rm(root, { recursive: true, force: true });
 });

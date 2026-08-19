@@ -60,14 +60,14 @@ async function loadTerminalFont() {
 
 export function selectedTerminalRenderer(): TerminalRendererId {
   const value = new URLSearchParams(location.search).get("terminalRenderer") || localStorage.getItem("conduit:terminal-renderer");
-  return value === "ghostty" ? "ghostty" : "xterm";
+  return value === "xterm" ? "xterm" : "ghostty";
 }
 
 export async function createTerminalRenderer(host: HTMLElement, id = selectedTerminalRenderer()): Promise<TerminalRenderer> {
   await loadTerminalFont();
   host.style.setProperty("--conduit-terminal-background", CONDUIT_TERMINAL_THEME.background);
-  if (id === "ghostty") return createGhosttyRenderer(host);
-  return createXtermRenderer(host);
+  if (id === "xterm") return createXtermRenderer(host);
+  return createGhosttyRenderer(host);
 }
 
 type TerminalFit = {
@@ -104,12 +104,15 @@ function writeTerminal(terminal: WritableTerminal, bytes: Uint8Array) {
   });
 }
 
-function applyFit(fit: TerminalFit, terminal?: ResizableTerminal & RefreshableTerminal) {
-  // FitAddon owns renderer-specific cell metrics and the render invalidation
-  // needed after a resize. A refresh after fit also repairs a renderer that was
-  // hidden while its Workspace tab was inactive.
-  fit.fit();
+function repaintTerminal(terminal?: ResizableTerminal & RefreshableTerminal) {
   terminal?.refresh?.(0, Math.max(0, terminal.rows - 1));
+}
+
+function applyFit(fit: TerminalFit, terminal?: ResizableTerminal & RefreshableTerminal) {
+  // Geometry fitting and visual repainting are deliberately separate. A caller
+  // that only needs to repaint must never silently change the terminal grid.
+  fit.fit();
+  repaintTerminal(terminal);
 }
 
 function observeHostSize(host: HTMLElement, terminal: ResizableTerminal & RefreshableTerminal, fit: TerminalFit) {
@@ -193,7 +196,7 @@ async function createGhosttyRenderer(host: HTMLElement): Promise<TerminalRendere
     write: (bytes) => writeTerminal(terminal as unknown as WritableTerminal, bytes),
     focus: () => terminal.focus(),
     fit: () => applyFit(fit, refreshable),
-    repaint: () => applyFit(fit, refreshable),
+    repaint: () => repaintTerminal(refreshable),
     resize: (cols, rows) => resizeTerminal(terminal, cols, rows),
     onData: (listener) => { const subscription = terminal.onData(listener); return () => subscription.dispose(); },
     onResize: (listener) => { const subscription = terminal.onResize(listener); return () => subscription.dispose(); },
@@ -202,7 +205,7 @@ async function createGhosttyRenderer(host: HTMLElement): Promise<TerminalRendere
 }
 
 async function createXtermRenderer(host: HTMLElement): Promise<TerminalRenderer> {
-  const [{ Terminal }, { FitAddon }, { ClipboardAddon }] = await Promise.all([
+  const [{ Terminal }, { FitAddon }, { ClipboardAddon, Base64 }] = await Promise.all([
     import("@xterm/xterm"),
     import("@xterm/addon-fit"),
     import("@xterm/addon-clipboard"),
@@ -216,7 +219,16 @@ async function createXtermRenderer(host: HTMLElement): Promise<TerminalRenderer>
     theme: CONDUIT_TERMINAL_THEME,
   });
   const fit = new FitAddon();
-  const clipboard = new ClipboardAddon();
+  const clipboard = new ClipboardAddon(new Base64(), {
+    // OSC 52 output may offer text to the system clipboard, but a terminal
+    // process cannot read the user's clipboard. Clipboard reads remain an
+    // explicit user gesture through the paste shortcut below.
+    readText: async () => "",
+    writeText: async (selection: string, text: string) => {
+      if (selection !== "c") return;
+      await navigator.clipboard.writeText(text).catch(() => {});
+    },
+  });
   terminal.loadAddon(fit);
   terminal.loadAddon(clipboard);
   terminal.open(host);
@@ -229,7 +241,7 @@ async function createXtermRenderer(host: HTMLElement): Promise<TerminalRenderer>
     write: (bytes) => writeTerminal(terminal, bytes),
     focus: () => terminal.focus(),
     fit: () => applyFit(fit, terminal),
-    repaint: () => applyFit(fit, terminal),
+    repaint: () => repaintTerminal(terminal),
     resize: (cols, rows) => resizeTerminal(terminal, cols, rows),
     onData: (listener) => { const subscription = terminal.onData(listener); return () => subscription.dispose(); },
     onResize: (listener) => { const subscription = terminal.onResize(listener); return () => subscription.dispose(); },

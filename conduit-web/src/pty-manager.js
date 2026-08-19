@@ -142,6 +142,7 @@ export class PtyManager extends EventEmitter {
     this.handles = new Map();
     this.states = new Map();
     this.sequences = new Map();
+    this.protocolResponders = new Map();
     this.scrollback = new Map();
     this.queue = Promise.resolve();
   }
@@ -175,7 +176,7 @@ export class PtyManager extends EventEmitter {
 
   async stateReplay(id) {
     const state = this.states.get(id);
-    if (!state) return this.replay(id);
+    if (!state || state.isValid?.() === false) return this.replay(id);
     // Capture the mutation sequence and enqueue the state cut in one synchronous
     // turn. Later output/resizes get a higher sequence and are delivered as
     // post-snapshot deltas by terminal-stream.
@@ -209,6 +210,7 @@ export class PtyManager extends EventEmitter {
       this.states.get(item.id)?.dispose();
       this.states.delete(item.id);
       this.sequences.delete(item.id);
+      this.protocolResponders.delete(item.id);
     }
 
     const width = Math.max(1, Math.min(500, Math.trunc(Number(cols)) || 80));
@@ -219,8 +221,22 @@ export class PtyManager extends EventEmitter {
     const record = { id, projectId: project.id, templateId, title, status: "running", createdAt: now, updatedAt: now, exitCode: null, signal: null };
     const env = { ...process.env, TERM: "xterm-256color", COLORTERM: "truecolor" };
     delete env.NO_COLOR;
-    const state = this.stateFactory({ cols: width, rows: height });
     let handle;
+    const state = this.stateFactory({
+      cols: width,
+      rows: height,
+      onData: (data) => {
+        if (this.protocolResponders.get(id) === false) return;
+        this.handles.get(id)?.write(data);
+      },
+      onBackpressure: (paused) => {
+        const active = this.handles.get(id);
+        if (!active) return;
+        if (paused) active.pause?.();
+        else active.resume?.();
+      },
+      onInvalid: (error) => this.emit("state_error", { id, error }),
+    });
     try {
       handle = this.pty.spawn(template.command, template.args, { name: "xterm-256color", cols: width, rows: height, cwd, env });
     } catch (error) {
@@ -233,11 +249,12 @@ export class PtyManager extends EventEmitter {
     this.handles.set(id, handle);
     this.states.set(id, state);
     this.sequences.set(id, 0);
+    this.protocolResponders.set(id, true);
     this.scrollback.set(id, replay);
     handle.onData((data) => {
       const sequence = (this.sequences.get(id) || 0) + 1;
       this.sequences.set(id, sequence);
-      void state.write(data).catch((error) => this.emit("state_error", { id, error }));
+      void state.write(data);
       const bytes = this.scrollback.get(id)?.appendData(data);
       if (!bytes) return;
       this.emit("output", { id, bytes, sequence });
@@ -249,6 +266,7 @@ export class PtyManager extends EventEmitter {
       this.states.get(id)?.dispose();
       this.states.delete(id);
       this.sequences.delete(id);
+      this.protocolResponders.delete(id);
       Object.assign(current, { status: "exited", exitCode: exitCode ?? null, signal: signal ?? null, updatedAt: new Date().toISOString() });
       this.emit("exit", view(current));
       this.scrollback.delete(id);
@@ -276,6 +294,12 @@ export class PtyManager extends EventEmitter {
     handle.write(bytes.toString("utf8"));
   }
 
+  setProtocolResponder(id, enabled) {
+    if (!this.handles.has(id)) return false;
+    this.protocolResponders.set(id, enabled === true);
+    return true;
+  }
+
   resize(id, cols, rows) {
     const handle = this.handles.get(id);
     const width = Math.trunc(Number(cols));
@@ -284,7 +308,7 @@ export class PtyManager extends EventEmitter {
     if (!Number.isInteger(width) || !Number.isInteger(height) || width < 1 || width > 500 || height < 1 || height > 500) throw failure("pty_resize_invalid", "Terminal dimensions are out of range");
     const sequence = (this.sequences.get(id) || 0) + 1;
     this.sequences.set(id, sequence);
-    void this.states.get(id)?.resize(width, height).catch((error) => this.emit("state_error", { id, error }));
+    void this.states.get(id)?.resize(width, height);
     handle.resize(width, height);
     this.scrollback.get(id)?.appendResize(width, height);
     this.emit("resize", { id, cols: width, rows: height, sequence });
@@ -300,6 +324,7 @@ export class PtyManager extends EventEmitter {
     this.states.get(id)?.dispose();
     this.states.delete(id);
     this.sequences.delete(id);
+    this.protocolResponders.delete(id);
     handle?.kill();
     this.emit("removed", { id, projectId: record.projectId });
     await this.persist();
@@ -317,6 +342,7 @@ export class PtyManager extends EventEmitter {
       this.states.get(record.id)?.dispose();
       this.states.delete(record.id);
       this.sequences.delete(record.id);
+      this.protocolResponders.delete(record.id);
       handle?.kill();
       this.emit("removed", { id: record.id, projectId });
     }
@@ -328,6 +354,7 @@ export class PtyManager extends EventEmitter {
     for (const state of this.states.values()) state.dispose();
     this.states.clear();
     this.sequences.clear();
+    this.protocolResponders.clear();
     for (const handle of this.handles.values()) handle.kill();
     this.handles.clear();
   }

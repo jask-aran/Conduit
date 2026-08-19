@@ -47,6 +47,7 @@ test("PTY API streams binary terminal output over an authenticated server-owned 
     await stream.opened;
     const replayStart = await stream.next((frame) => !frame.isBinary && jsonFrame(frame).type === "replay_start");
     assert.equal(jsonFrame(replayStart).complete, true);
+    assert.equal(jsonFrame(replayStart).source, "state");
     const replay = await stream.next((frame) => frame.isBinary && frame.data.toString().startsWith(PTY_REPLAY_PREFIX));
     assert.deepEqual(replayPayload(replay)[0], { type: "resize", cols: 100, rows: 30 });
     await stream.next((frame) => !frame.isBinary && jsonFrame(frame).type === "replay_end");
@@ -63,6 +64,23 @@ test("PTY API streams binary terminal output over an authenticated server-owned 
     assert.equal(listed.ptys[0].status, "running");
     assert.equal((await harness.request(`/v0/ptys/${terminal.id}`, { method: "DELETE" })).status, 204);
     stream.socket.close();
+  } finally {
+    await harness.stop();
+  }
+});
+
+test("PTY API supports multiple active Project terminals and scoped session discovery", async () => {
+  const harness = await startConduitHarness({ env: { SHELL: "sh" } });
+  try {
+    const project = await harness.createProject("Multi-terminal project");
+    const other = await harness.createProject("Other terminal project");
+    const first = await (await harness.request("/v0/ptys", { method: "POST", body: JSON.stringify({ projectId: project.id }) })).json();
+    const second = await (await harness.request("/v0/ptys", { method: "POST", body: JSON.stringify({ projectId: project.id }) })).json();
+    await harness.request("/v0/ptys", { method: "POST", body: JSON.stringify({ projectId: other.id }) });
+    assert.notEqual(first.id, second.id);
+    const scoped = await (await harness.request(`/v0/ptys?projectId=${encodeURIComponent(project.id)}`)).json();
+    assert.deepEqual(scoped.ptys.map((item) => item.id).sort(), [first.id, second.id].sort());
+    assert.equal(scoped.ptys.every((item) => item.projectId === project.id && item.status === "running"), true);
   } finally {
     await harness.stop();
   }
