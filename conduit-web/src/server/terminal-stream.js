@@ -19,11 +19,8 @@ export function createTerminalStream({ terminals, wss }) {
   const sendTerminalControl = (id) => {
     const controller = terminalControllers.get(id) || null;
     for (const ws of terminalClients.get(id) || []) {
-      if (ws.readyState !== ws.OPEN) continue;
-      ws.send(JSON.stringify({
-        type: "control",
-        writable: ws === controller && ws.conduitTerminalRestoring !== true,
-      }));
+      if (ws.readyState !== ws.OPEN || ws.conduitTerminalRestoring) continue;
+      ws.send(JSON.stringify({ type: "control", writable: ws === controller }));
     }
   };
 
@@ -70,6 +67,33 @@ export function createTerminalStream({ terminals, wss }) {
     ws.send(bytes, { binary: true });
   };
 
+  const sendRestoreEvent = (ws, event) => {
+    if (event.type === "resize") ws.send(JSON.stringify({ type: "replay_resize", cols: event.cols, rows: event.rows }));
+    else sendOutput(ws, event.bytes);
+  };
+
+  const finishRestoreRound = (id, ws) => {
+    if (ws.readyState !== ws.OPEN || !ws.conduitTerminalRestoring) return;
+    const pending = ws.conduitTerminalPending;
+    ws.conduitTerminalPending = [];
+    ws.conduitTerminalPendingBytes = 0;
+    if (pending.length) {
+      // The headless emulator already answered protocol queries represented by
+      // these bytes. Send another catch-up round while browser replies remain
+      // suppressed, then wait for another acknowledgement.
+      for (const event of pending) sendRestoreEvent(ws, event);
+      ws.send(JSON.stringify({ type: "replay_end" }));
+      return;
+    }
+
+    // Empty pending queue is the atomic ownership cut: all prior PTY output was
+    // consumed by headless state, and all subsequent output belongs to the
+    // browser controller (if this client is the controller).
+    ws.conduitTerminalRestoring = false;
+    syncProtocolResponder(id);
+    sendTerminalControl(id);
+  };
+
   const terminalOutput = new PtyOutputBatcher((id, bytes) => {
     for (const ws of terminalClients.get(id) || []) {
       if (ws.readyState !== ws.OPEN || ws.conduitTerminalRestoring) continue;
@@ -98,7 +122,7 @@ export function createTerminalStream({ terminals, wss }) {
     for (const ws of terminalClients.get(record.id) || []) {
       if (ws.readyState !== ws.OPEN) continue;
       ws.send(JSON.stringify({ type: "status", status: "exited", exitCode: record.exitCode, signal: record.signal }));
-      ws.send(JSON.stringify({ type: "control", writable: false }));
+      if (!ws.conduitTerminalRestoring) ws.send(JSON.stringify({ type: "control", writable: false }));
     }
   });
   terminals.on("removed", ({ id }) => {
@@ -125,6 +149,13 @@ export function createTerminalStream({ terminals, wss }) {
 
     ws.on("message", (data, isBinary) => {
       try {
+        if (!isBinary) {
+          const command = JSON.parse(String(data));
+          if (command.type === "restore_ready") {
+            finishRestoreRound(id, ws);
+            return;
+          }
+        }
         if (terminalControllers.get(id) !== ws) {
           throw Object.assign(new Error("Another attached browser currently controls this terminal"), { code: "pty_read_only" });
         }
@@ -162,15 +193,12 @@ export function createTerminalStream({ terminals, wss }) {
 
       ws.send(JSON.stringify({ type: "replay_start", complete: replay.complete, source: replay.source || "journal" }));
       if (replay.bytes.length) ws.send(replay.bytes, { binary: true });
-      for (const event of pending) {
-        if (event.type === "resize") ws.send(JSON.stringify({ type: "replay_resize", cols: event.cols, rows: event.rows }));
-        else sendOutput(ws, event.bytes);
-      }
+      for (const event of pending) sendRestoreEvent(ws, event);
       ws.send(JSON.stringify({ type: "replay_end" }));
       ws.send(JSON.stringify({ type: "status", status: record.status, exitCode: record.exitCode, signal: record.signal }));
-      ws.conduitTerminalRestoring = false;
-      syncProtocolResponder(id);
-      sendTerminalControl(id);
+      // Do not hand off terminal protocol ownership here. The browser acks only
+      // after it has applied this replay, and catch-up repeats until the pending
+      // queue is empty at an acknowledgement boundary.
     })().catch(() => {
       if (ws.readyState === ws.OPEN) ws.close(1011, "Terminal state restoration failed");
     });

@@ -9,7 +9,15 @@ import { startConduitHarness, waitFor } from "./helpers/conduit-harness.js";
 function openTerminal(origin, id) {
   const socket = new WebSocket(`${origin.replace("http", "ws")}/v0/ptys/${id}/attach`);
   const messages = [];
-  socket.on("message", (data, isBinary) => messages.push({ data: Buffer.from(data), isBinary }));
+  socket.on("message", (data, isBinary) => {
+    const frame = { data: Buffer.from(data), isBinary };
+    messages.push(frame);
+    if (!isBinary) {
+      try {
+        if (JSON.parse(frame.data.toString()).type === "replay_end") socket.send(JSON.stringify({ type: "restore_ready" }));
+      } catch {}
+    }
+  });
   return {
     socket,
     messages,
