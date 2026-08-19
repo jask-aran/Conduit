@@ -135,6 +135,11 @@ svg { stroke-width: 1.5; }
 
 .transcript { position: relative; min-height: 0; flex: 1; overflow: hidden; }
 .transcript-motion-shell { position: relative; width: 100%; height: 100%; contain: layout; container-name: chat-main; container-type: inline-size; }
+.chat-main[data-composer-surface="static-experimental"] .transcript-motion-shell {
+  contain: layout paint;
+  transform: translate3d(0, 0, 0);
+  will-change: transform;
+}
 .message-scroller-viewport { width: 100%; height: 100%; overflow-y: auto; scrollbar-width: none; }
 .message-scroller-viewport::-webkit-scrollbar { display: none; }
 .thread { width: min(var(--composer-desktop-reference-width), calc(100% - 48px)); min-height: 100%; margin-inline: auto; padding: 64px 44px 32px; }
