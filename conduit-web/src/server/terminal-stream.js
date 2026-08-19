@@ -37,14 +37,14 @@ export function createTerminalStream({ terminals, wss }) {
     promoteTerminalController(id);
   };
 
-  const sendOrQueueOutput = (ws, bytes) => {
-    if (ws.conduitTerminalRestoring) {
-      const copy = Buffer.from(bytes);
-      ws.conduitTerminalPending.push(copy);
-      ws.conduitTerminalPendingBytes += copy.length;
-      if (ws.conduitTerminalPendingBytes > TERMINAL_PENDING_LIMIT) ws.close(1013, "Terminal client is too slow");
-      return;
-    }
+  const queuePending = (ws, event) => {
+    const size = event.type === "data" ? event.bytes.length : 32;
+    ws.conduitTerminalPending.push(event);
+    ws.conduitTerminalPendingBytes += size;
+    if (ws.conduitTerminalPendingBytes > TERMINAL_PENDING_LIMIT) ws.close(1013, "Terminal client is too slow");
+  };
+
+  const sendOutput = (ws, bytes) => {
     if (ws.bufferedAmount > TERMINAL_PENDING_LIMIT) {
       ws.close(1013, "Terminal client is too slow");
       return;
@@ -52,24 +52,30 @@ export function createTerminalStream({ terminals, wss }) {
     ws.send(bytes, { binary: true });
   };
 
-  const flushPendingOutput = (ws) => {
-    const pending = ws.conduitTerminalPending;
-    ws.conduitTerminalPending = [];
-    ws.conduitTerminalPendingBytes = 0;
-    for (const bytes of pending) {
-      if (ws.readyState !== ws.OPEN) return;
-      sendOrQueueOutput(ws, bytes);
-    }
-  };
-
   const terminalOutput = new PtyOutputBatcher((id, bytes) => {
     for (const ws of terminalClients.get(id) || []) {
-      if (ws.readyState !== ws.OPEN) continue;
-      sendOrQueueOutput(ws, bytes);
+      if (ws.readyState !== ws.OPEN || ws.conduitTerminalRestoring) continue;
+      sendOutput(ws, bytes);
     }
   });
 
-  terminals.on("output", ({ id, bytes }) => terminalOutput.append(id, bytes));
+  terminals.on("output", ({ id, bytes, sequence }) => {
+    // Restoring clients need unbatched, sequenced deltas so bytes already
+    // represented by their canonical state cut can be discarded exactly.
+    for (const ws of terminalClients.get(id) || []) {
+      if (ws.readyState === ws.OPEN && ws.conduitTerminalRestoring) {
+        queuePending(ws, { type: "data", bytes: Buffer.from(bytes), sequence });
+      }
+    }
+    terminalOutput.append(id, bytes);
+  });
+  terminals.on("resize", ({ id, cols, rows, sequence }) => {
+    for (const ws of terminalClients.get(id) || []) {
+      if (ws.readyState !== ws.OPEN) continue;
+      if (ws.conduitTerminalRestoring) queuePending(ws, { type: "resize", cols, rows, sequence });
+      else ws.send(JSON.stringify({ type: "remote_resize", cols, rows }));
+    }
+  });
   terminals.on("exit", (record) => {
     terminalOutput.flush(record.id);
     terminalControllers.delete(record.id);
@@ -89,9 +95,6 @@ export function createTerminalStream({ terminals, wss }) {
   });
 
   const handleUpgrade = (id, request, socket, head) => wss.handleUpgrade(request, socket, head, (ws) => {
-    // Flush output produced before this client existed. The canonical state
-    // already includes it, and sending that batch again after restoration would
-    // duplicate terminal input.
     terminalOutput.flush(id);
     const clients = terminalClients.get(id) || new Set();
     clients.add(ws);
@@ -135,13 +138,26 @@ export function createTerminalStream({ terminals, wss }) {
         replay = terminals.replay(id);
       }
       if (ws.readyState !== ws.OPEN) return;
+
+      // Clear every output batch accumulated while the state cut was being
+      // serialized. Established clients receive it; this restoring client skips
+      // the batch because it captured each mutation with a sequence above.
+      terminalOutput.flush(id);
+      const boundary = replay.sequence || 0;
+      const pending = ws.conduitTerminalPending.filter((event) => event.sequence > boundary);
+      ws.conduitTerminalPending = [];
+      ws.conduitTerminalPendingBytes = 0;
+
       ws.send(JSON.stringify({ type: "replay_start", complete: replay.complete, source: replay.source || "journal" }));
       if (replay.bytes.length) ws.send(replay.bytes, { binary: true });
+      for (const event of pending) {
+        if (event.type === "resize") ws.send(JSON.stringify({ type: "replay_resize", cols: event.cols, rows: event.rows }));
+        else sendOutput(ws, event.bytes);
+      }
       ws.send(JSON.stringify({ type: "replay_end" }));
       ws.send(JSON.stringify({ type: "status", status: record.status, exitCode: record.exitCode, signal: record.signal }));
       ws.conduitTerminalRestoring = false;
       sendTerminalControl(id);
-      flushPendingOutput(ws);
     })().catch(() => {
       if (ws.readyState === ws.OPEN) ws.close(1011, "Terminal state restoration failed");
     });
