@@ -3,6 +3,7 @@ import { EventEmitter } from "node:events";
 import fs from "node:fs/promises";
 import path from "node:path";
 import nodePty from "node-pty";
+import { TerminalState } from "./terminal-state.js";
 
 export const PTY_MAX_SESSIONS = 8;
 export const PTY_SCROLLBACK_BYTES = 256 * 1024;
@@ -111,14 +112,22 @@ function latestPerProject(items) {
 }
 
 export class PtyManager extends EventEmitter {
-  constructor({ filePath, maxSessions = PTY_MAX_SESSIONS, scrollbackBytes = PTY_SCROLLBACK_BYTES, pty = nodePty }) {
+  constructor({
+    filePath,
+    maxSessions = PTY_MAX_SESSIONS,
+    scrollbackBytes = PTY_SCROLLBACK_BYTES,
+    pty = nodePty,
+    stateFactory = (options) => new TerminalState(options),
+  }) {
     super();
     this.filePath = filePath;
     this.maxSessions = maxSessions;
     this.scrollbackBytes = scrollbackBytes;
     this.pty = pty;
+    this.stateFactory = stateFactory;
     this.records = new Map();
     this.handles = new Map();
+    this.states = new Map();
     this.scrollback = new Map();
     this.queue = Promise.resolve();
   }
@@ -149,6 +158,15 @@ export class PtyManager extends EventEmitter {
     return buffer.replay();
   }
 
+  async stateReplay(id) {
+    const state = this.states.get(id);
+    if (!state) return this.replay(id);
+    const snapshot = await state.snapshot();
+    const events = [{ type: "resize", cols: snapshot.cols, rows: snapshot.rows }];
+    if (snapshot.data) events.push({ type: "data", bytes: Buffer.from(snapshot.data, "utf8") });
+    return { complete: true, source: "state", events, bytes: encodeReplay(events) };
+  }
+
   async create({ project, cwd, templateId = "shell", cols = 80, rows = 24 }) {
     const template = TEMPLATES[templateId];
     if (!template) throw failure("pty_template_not_allowed", "That terminal template is not available");
@@ -161,30 +179,43 @@ export class PtyManager extends EventEmitter {
       throw error;
     }
     if (!cwdStat.isDirectory()) throw failure("pty_cwd_unavailable", "Terminal working directory is not a directory");
-    const resident = [...this.records.values()].find((item) => item.projectId === project.id && item.status === "running");
-    if (resident) return view(resident);
     if (this.handles.size >= this.maxSessions) throw failure("pty_capacity_reached", "The terminal session limit has been reached");
 
+    // Exited rows are diagnostic only. Once a new terminal is created in this
+    // project, discard old dead rows while leaving every running sibling alive.
     for (const item of [...this.records.values()]) {
       if (item.projectId !== project.id || item.status === "running") continue;
       this.records.delete(item.id);
       this.scrollback.delete(item.id);
+      this.states.get(item.id)?.dispose();
+      this.states.delete(item.id);
     }
 
     const width = Math.max(1, Math.min(500, Math.trunc(Number(cols)) || 80));
     const height = Math.max(1, Math.min(500, Math.trunc(Number(rows)) || 24));
     const id = crypto.randomUUID();
     const now = new Date().toISOString();
-    const record = { id, projectId: project.id, templateId, title: template.title, status: "running", createdAt: now, updatedAt: now, exitCode: null, signal: null };
+    const activeCount = [...this.records.values()].filter((item) => item.projectId === project.id && item.status === "running").length;
+    const title = activeCount ? `${template.title} ${activeCount + 1}` : template.title;
+    const record = { id, projectId: project.id, templateId, title, status: "running", createdAt: now, updatedAt: now, exitCode: null, signal: null };
     const env = { ...process.env, TERM: "xterm-256color", COLORTERM: "truecolor" };
     delete env.NO_COLOR;
-    const handle = this.pty.spawn(template.command, template.args, { name: "xterm-256color", cols: width, rows: height, cwd, env });
+    const state = this.stateFactory({ cols: width, rows: height });
+    let handle;
+    try {
+      handle = this.pty.spawn(template.command, template.args, { name: "xterm-256color", cols: width, rows: height, cwd, env });
+    } catch (error) {
+      state.dispose();
+      throw error;
+    }
     const replay = new ReplayBuffer(this.scrollbackBytes);
     replay.appendResize(width, height);
     this.records.set(id, record);
     this.handles.set(id, handle);
+    this.states.set(id, state);
     this.scrollback.set(id, replay);
     handle.onData((data) => {
+      void state.write(data).catch((error) => this.emit("state_error", { id, error }));
       const bytes = this.scrollback.get(id)?.appendData(data);
       if (!bytes) return;
       this.emit("output", { id, bytes });
@@ -193,6 +224,8 @@ export class PtyManager extends EventEmitter {
       const current = this.records.get(id);
       if (!current) return;
       this.handles.delete(id);
+      this.states.get(id)?.dispose();
+      this.states.delete(id);
       Object.assign(current, { status: "exited", exitCode: exitCode ?? null, signal: signal ?? null, updatedAt: new Date().toISOString() });
       this.emit("exit", view(current));
       this.scrollback.delete(id);
@@ -226,6 +259,7 @@ export class PtyManager extends EventEmitter {
     const height = Math.trunc(Number(rows));
     if (!handle) throw failure("pty_not_running", "Terminal is not running");
     if (!Number.isInteger(width) || !Number.isInteger(height) || width < 1 || width > 500 || height < 1 || height > 500) throw failure("pty_resize_invalid", "Terminal dimensions are out of range");
+    void this.states.get(id)?.resize(width, height).catch((error) => this.emit("state_error", { id, error }));
     handle.resize(width, height);
     this.scrollback.get(id)?.appendResize(width, height);
   }
@@ -237,6 +271,8 @@ export class PtyManager extends EventEmitter {
     this.records.delete(id);
     this.handles.delete(id);
     this.scrollback.delete(id);
+    this.states.get(id)?.dispose();
+    this.states.delete(id);
     handle?.kill();
     this.emit("removed", { id, projectId: record.projectId });
     await this.persist();
@@ -251,6 +287,8 @@ export class PtyManager extends EventEmitter {
       this.records.delete(record.id);
       this.handles.delete(record.id);
       this.scrollback.delete(record.id);
+      this.states.get(record.id)?.dispose();
+      this.states.delete(record.id);
       handle?.kill();
       this.emit("removed", { id: record.id, projectId });
     }
@@ -259,6 +297,8 @@ export class PtyManager extends EventEmitter {
   }
 
   async stopAll() {
+    for (const state of this.states.values()) state.dispose();
+    this.states.clear();
     for (const handle of this.handles.values()) handle.kill();
     this.handles.clear();
   }
