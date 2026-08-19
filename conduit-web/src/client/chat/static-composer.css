@@ -1,24 +1,16 @@
-/* Static restores the v0.4.7 glassmorphism material exactly, but gives the
-   backdrop filter a composer-sized opaque backing surface instead of the old
-   full-width footer. Transcript content can scroll behind the floating composer
-   without becoming input to the filter. */
+/* Static restores the v0.4.7 glassmorphism material exactly, but tightens the
+   old opaque composer-stack backing to the composer bounds. Transcript content
+   can scroll behind the floating composer without becoming input to the filter. */
 .composer-surface-shell {
   position: relative;
   width: 100%;
   border-radius: 24px;
 }
 
-.composer-static-backing {
-  position: absolute;
-  inset: 0;
-  z-index: 0;
-  border-radius: inherit;
+/* v0.4.7 placed the filtered composer over an opaque parent background. Keep
+   that parent/child relationship, but make the parent exactly composer-sized. */
+.composer-surface-shell[data-composer-surface="static"] {
   background: var(--background);
-  pointer-events: none;
-}
-
-.composer-surface-shell > .composer {
-  z-index: 1;
 }
 
 .composer-surface-shell[data-composer-surface="static"] > .composer {
