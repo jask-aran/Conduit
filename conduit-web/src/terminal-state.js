@@ -18,6 +18,9 @@ export class TerminalState {
       cols: boundedDimension(cols, 80),
       rows: boundedDimension(rows, 24),
       scrollback: this.scrollback,
+      // SerializeAddon currently reads proposed buffer APIs even though the
+      // serialized VT stream itself remains renderer-neutral.
+      allowProposedApi: true,
     });
     this.serializer = new SerializeAddon();
     this.terminal.loadAddon(this.serializer);
