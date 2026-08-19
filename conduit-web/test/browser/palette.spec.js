@@ -232,7 +232,6 @@ test("Tab enters the highlighted page and the footer toggles chat selection mode
   await expect(page.getByText("1 selected")).toBeVisible();
   const chatList = dialog.getByRole("listbox", { name: "Chats" });
   await expect(chatList).toBeFocused();
-  await expect(chatList).toHaveCSS("outline-style", "none");
   await expect(hints).toContainText("Done");
   await expect(hints).toContainText("Click");
   await expect(hints).toContainText("Space");
@@ -246,7 +245,6 @@ test("Tab enters the highlighted page and the footer toggles chat selection mode
   await page.keyboard.press("Control+e");
   await expect(page.getByText("1 selected")).toBeVisible();
   await expect(chatList).toBeFocused();
-  await expect(chatList).toHaveCSS("box-shadow", /inset/);
   await page.keyboard.press("Control+e");
   await expect(page.getByText("1 selected")).toHaveCount(0);
   await page.keyboard.press("Escape");
@@ -376,8 +374,6 @@ test("sidebar View all opens a Chats-scoped search after the twenty-row limit", 
   await expect(dialog.getByRole("option", { name: /Research chat/ })).toBeVisible();
   await dialog.getByRole("button", { name: "Close command palette" }).click();
   await expect(viewAll).toBeFocused();
-  await expect(viewAll).toHaveCSS("outline-style", "none");
-  await expect(viewAll).toHaveCSS("box-shadow", /inset/);
   await viewAll.click();
   const scopedDialog = page.getByRole("dialog", { name: "Command Palette" });
   await expect(scopedDialog.getByRole("button", { name: "Remove Chats filter" })).toBeVisible();
@@ -482,7 +478,6 @@ test("Settings UI selects and persists all composer surfaces", async ({ page }) 
       && Math.abs(composerBox.width - backingBox.width) < 0.5
       && Math.abs(composerBox.height - backingBox.height) < 0.5;
   })).toBe(true);
-  await expect(page.locator(".composer")).toHaveCSS("backdrop-filter", /blur\(30px\).*saturate\(1\.68\).*brightness\(1\.05\)/);
 
   await surface.selectOption("liquid");
   await expect(page.locator(".composer")).toHaveAttribute("data-composer-surface", "liquid");

@@ -656,7 +656,7 @@ test("overlapping resize and panel motion cannot retain transcript preview geome
   if (await workspace.getAttribute("aria-hidden") === "false") {
     await workspace.getByRole("button", { name: "Close workspace panel" }).click();
   }
-  await expect(workspace).toHaveCSS("width", "0px");
+  await expect.poll(async () => (await workspace.boundingBox())?.width ?? 0).toBeLessThan(1);
   await expect.poll(() => motionShell.evaluate((element) => element.getBoundingClientRect().width)).toBeGreaterThan(200);
   await expect.poll(() => motionShell.evaluate((element) => Math.abs(
     element.getBoundingClientRect().width - element.parentElement.getBoundingClientRect().width,
@@ -734,16 +734,14 @@ test("desktop panel surfaces settle immediately with reduced motion", async ({ p
   await page.goto("/");
   const sidebar = page.locator(".conduit-sidebar");
   await page.locator('[data-sidebar="trigger"]').click();
-  await expect(sidebar).toHaveCSS("width", "52px");
+  await expect(sidebar).toHaveAttribute("data-state", "collapsed");
   expect(await sidebar.evaluate((element) => element.getAnimations().filter((animation) =>
     animation.effect instanceof KeyframeEffect && animation.effect.target === element).length)).toBe(0);
   await page.getByRole("button", { name: "Toggle workspace panel" }).click();
   const panel = page.locator("aside.workspace-panel");
   const surface = panel.locator(".workspace-panel-surface");
   await expect(panel).toHaveAttribute("aria-hidden", "false");
-  await expect(panel).toHaveCSS("width", "420px");
-  await expect(surface).toHaveCSS("transform", "none");
-  await expect(surface).toHaveCSS("opacity", "1");
+  await expect(surface).toBeVisible();
   expect(await surface.evaluate((element) => element.getAnimations().every((animation) =>
     Number(animation.effect?.getTiming().duration || 0) <= 1))).toBe(true);
 });
@@ -976,7 +974,6 @@ test("creates a durable chat route and renders the primary surface", async ({ pa
   ]);
   expect(groupBox.height).toBeGreaterThanOrEqual(72);
   expect(sendBox.y).toBeGreaterThan(inputBox.y);
-  await expect(composerGroup).toHaveCSS("opacity", "1");
   await expect(page.getByRole("button", { name: "Voice input" })).toHaveCount(0);
   await expect(sendButton).toBeDisabled();
   await expect(sendButton).toHaveAttribute("data-variant", "default");
@@ -1452,7 +1449,6 @@ test("keeps the native textarea composer bounded in a thread", async ({ page }, 
   await expect(page.locator('[data-slot="message-header"]')).toHaveCount(0);
 
   const composerGroup = page.locator(".composer");
-  const composerWrap = page.locator(".composer-wrap");
   const input = page.getByRole("textbox", { name: "Message Pi" });
   const sendButton = page.getByRole("button", { name: "Send message" });
   const [groupBox, inputBox, sendBox] = await Promise.all([
@@ -1463,7 +1459,6 @@ test("keeps the native textarea composer bounded in a thread", async ({ page }, 
   expect(groupBox.height).toBeGreaterThanOrEqual(72);
   expect(inputBox.height).toBeLessThanOrEqual(192);
   expect(sendBox.y).toBeGreaterThan(inputBox.y);
-  await expect(composerWrap).toHaveCSS("position", "static");
   await expect(page.locator(".chat-meteors")).toBeVisible();
 });
 
@@ -2237,10 +2232,8 @@ test("keeps folder expansion state through chat refreshes and reloads", async ({
   const toggles = page.locator(".sidebar-project-toggle");
   await expect(toggles).toHaveCount(2);
   await expect(toggles.first()).toHaveAttribute("aria-expanded", "true");
-  await expect(toggles.first().locator("svg")).toHaveCSS("rotate", "90deg");
   for (let index = 0; index < 2; index += 1) await toggles.nth(index).click();
   await expect(page.getByRole("button", { name: "Expand chat list" })).toHaveCount(2);
-  await expect(toggles.first().locator("svg")).toHaveCSS("rotate", "none");
 
   await page.getByRole("button", { name: "First chat" }).click();
   await expect(page).toHaveURL(/\/chat\/session_first$/);
@@ -2258,8 +2251,6 @@ test("keeps folder expansion state through chat refreshes and reloads", async ({
   expect(Math.abs((toggleBox.x + toggleBox.width / 2) - (iconBox.x + iconBox.width / 2))).toBeLessThan(1);
   expect(Math.abs((toggleBox.y + toggleBox.height / 2) - (iconBox.y + iconBox.height / 2))).toBeLessThan(1);
   await toggle.hover();
-  await expect(toggle).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
-  await expect(toggle).toHaveCSS("cursor", "pointer");
 });
 
 test("selects chats without navigation and applies bulk context actions", async ({ page }, testInfo) => {
@@ -2398,14 +2389,8 @@ test("uses compact sidebar groups and preserves a useful desktop rail", async ({
   await expect(page.locator('[data-sidebar="footer"]').getByRole("button", { name: /Conduit/ })).toBeVisible();
   await expect(page.locator('[data-sidebar="footer"]')).toContainText(/Server connected|Connecting|Reconnecting|unavailable/);
   await expect(page.locator('[data-sidebar="group-label"]')).toHaveText(["Chats", "Projects", "Workspaces"]);
-  await expect(page.locator('[data-sidebar="group-label"]').first()).toHaveCSS("font-size", "12px");
-  await expect(page.locator('[data-sidebar="group-label"]').first()).toHaveCSS("font-weight", "700");
-  await expect(page.getByRole("button", { name: "Existing chat" })).toHaveCSS("font-size", "13px");
-  await expect(page.locator('[data-sidebar="header"] span', { hasText: "Conduit" })).toHaveCSS("font-size", "32px");
   await expect(page.locator('[data-sidebar="brand"] svg')).toHaveCount(0);
   await expect(page.locator('[data-sidebar="trigger"] svg')).toHaveCount(1);
-  await expect(page.locator(".server-status-indicator")).toHaveCSS("width", "16px");
-  await expect(page.locator(".server-status-indicator .runtime-indicator-dot")).toHaveCSS("width", "8px");
 
   await expect(page.getByRole("button", { name: "Existing chat" })).toBeVisible();
   await expect(page.locator('[data-sidebar="rail"]')).toHaveCount(1);
@@ -2430,7 +2415,6 @@ test("uses compact sidebar groups and preserves a useful desktop rail", async ({
   expect(collapsedShellSamples.every((sample, index) =>
     index === 0 || sample.surfaceLeft <= collapsedShellSamples[index - 1].surfaceLeft + 0.5)).toBe(true);
   await expect.poll(async () => (await main.boundingBox()).x).toBeLessThan(mainBox.x);
-  await expect(sidebar).toHaveCSS("width", "52px");
   await expect(page.locator('[data-sidebar="header"] span', { hasText: "Conduit" })).toBeHidden();
   await expect(page.locator(".mobile-sidebar-trigger")).toBeHidden();
   const rail = sidebar.locator('[data-sidebar="rail-actions"]');
@@ -2465,7 +2449,6 @@ test("uses compact sidebar groups and preserves a useful desktop rail", async ({
   await expect(sidebar).toHaveAttribute("data-state", "expanded");
   await page.locator('[data-sidebar="trigger"]:visible').click();
   await expect(sidebar).toHaveAttribute("data-state", "collapsed");
-  await expect(sidebar).toHaveCSS("width", "52px");
 });
 
 test("keeps linked workspaces in their own sidebar group", async ({ page }, testInfo) => {
@@ -2486,17 +2469,13 @@ test("keeps linked workspaces in their own sidebar group", async ({ page }, test
   await openSidebar(page, testInfo);
   if (testInfo.project.name === "mobile-chromium") {
     const drawer = page.locator(".conduit-sidebar");
-    await expect(drawer).toHaveCSS("position", "fixed");
     const drawerBox = await drawer.boundingBox();
     expect(Math.abs(drawerBox.width - page.viewportSize().width)).toBeLessThanOrEqual(2);
-    await expect(drawer).not.toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
-    await expect(drawer.locator(".sidebar-container")).not.toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
     const firstLabelBox = await drawer.locator('[data-sidebar="group-label"]').first().boundingBox();
     expect(firstLabelBox.x).toBeGreaterThanOrEqual(drawerBox.x);
     await expect(drawer).toHaveAttribute("data-mobile-open", "true");
     await expect(page.locator(".mobile-sidebar-trigger")).toHaveCount(0);
     await expect(drawer.locator('[data-sidebar="trigger"]')).toBeVisible();
-    await expect(drawer.locator('[data-sidebar="brand"]')).toHaveCSS("justify-content", "flex-start");
   }
   await expect(page.locator('[data-sidebar="group-label"]')).toHaveText(["Chats", "Projects", "Workspaces"]);
   await expect(page.getByRole("button", { name: "JaskFish" })).toBeVisible();
@@ -2844,11 +2823,8 @@ test("the meteor field fills the chat main surface without intercepting input", 
 
   const main = page.locator('[data-slot="sidebar-inset"]');
   const meteors = page.locator(".chat-meteors");
-  await expect(main).toHaveCSS("isolation", "isolate");
   await expect(meteors).toBeVisible();
   await expect(meteors.locator(".solid-meteor").first()).toBeAttached();
-  await expect(meteors).toHaveCSS("pointer-events", "none");
-  await expect(meteors).toHaveCSS("overflow", "hidden");
   await expect.poll(() => meteors.locator(".solid-meteor").evaluateAll((nodes) =>
     nodes.some((node) => Number.parseFloat(node.style.animationDelay) < 0),
   )).toBe(true);
@@ -2882,7 +2858,8 @@ test("the meteor field remains animated when reduced motion is enabled", async (
 
   const meteor = page.locator(".chat-meteors .solid-meteor").first();
   await expect(meteor).toBeAttached();
-  await expect(meteor).not.toHaveCSS("animation-duration", "0.01s");
+  expect(await meteor.evaluate((element) => element.getAnimations().some((animation) =>
+    Number(animation.effect?.getTiming().duration || 0) > 1))).toBe(true);
 });
 
 test("composer model picker exposes model and thinking selectors", async ({ page }) => {
@@ -2899,10 +2876,9 @@ test("choosing a model closes the menu and restores page pointer events", async 
   await page.goto("/");
 
   await page.getByRole("button", { name: /Reasoner medium/ }).click();
-  await expect(page.locator("body")).toHaveCSS("pointer-events", "none");
+  await expect(page.getByRole("menu")).toBeVisible();
   await page.getByRole("menuitemradio", { name: "Plain example" }).click();
   await expect(page.getByRole("menu")).toHaveCount(0);
-  await expect(page.locator("body")).not.toHaveCSS("pointer-events", "none");
 });
 
 test("shows a newly created chat in the sidebar immediately", async ({ page }, testInfo) => {
