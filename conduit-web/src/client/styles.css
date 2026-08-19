@@ -244,6 +244,17 @@ svg { stroke-width: 1.5; }
   bottom: 0;
   left: 0;
   margin-top: 0;
+  z-index: 2;
+}
+.chat-main[data-composer-surface="static-experimental"] .composer-motion-shell {
+  width: min(var(--composer-desktop-reference-width), 100%);
+  margin-inline: auto;
+  contain: layout paint;
+  transform: translate3d(0, 0, 0);
+  will-change: transform;
+}
+.chat-main[data-composer-surface="static-experimental"] .composer-motion-shell .composer-status {
+  background: var(--background);
 }
 .composer-wrap { width: min(var(--composer-desktop-reference-width), 100%); margin-inline: auto; z-index: auto; }
 .chat-main:not(.chat-main-empty) .work-area-conversation { position: relative; }
