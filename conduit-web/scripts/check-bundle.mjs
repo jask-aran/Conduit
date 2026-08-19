@@ -87,7 +87,7 @@ if (!frostRule) {
     filterFailures.push("frost rule dropped -webkit-backdrop-filter");
   }
 }
-const staticRule = cssText.match(/\.composer-surface-shell\[data-composer-surface=static\]>.composer\{[^}]+\}/);
+const staticRule = cssText.match(/\.composer-surface-shell\[data-composer-surface=(?:"?static"?)\]\s*>\s*\.composer\{[^}]+\}/);
 if (!staticRule) {
   filterFailures.push("missing static composer material rule");
 } else {
