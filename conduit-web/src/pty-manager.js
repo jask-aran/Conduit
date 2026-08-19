@@ -111,6 +111,19 @@ function latestPerProject(items) {
   return [...latest.values()];
 }
 
+function nextTerminalTitle(records, projectId, baseTitle) {
+  const used = new Set(records
+    .filter((item) => item.projectId === projectId && item.status === "running")
+    .map((item) => item.title));
+  let title = baseTitle;
+  let suffix = 2;
+  while (used.has(title)) {
+    title = `${baseTitle} ${suffix}`;
+    suffix += 1;
+  }
+  return title;
+}
+
 export class PtyManager extends EventEmitter {
   constructor({
     filePath,
@@ -128,6 +141,7 @@ export class PtyManager extends EventEmitter {
     this.records = new Map();
     this.handles = new Map();
     this.states = new Map();
+    this.sequences = new Map();
     this.scrollback = new Map();
     this.queue = Promise.resolve();
   }
@@ -153,18 +167,23 @@ export class PtyManager extends EventEmitter {
   get(id) { const record = this.records.get(id); return record ? view(record) : null; }
   output(id) { return this.scrollback.get(id)?.snapshot() || Buffer.alloc(0); }
   replay(id) {
+    const sequence = this.sequences.get(id) || 0;
     const buffer = this.scrollback.get(id);
-    if (!buffer) return { complete: false, events: [], bytes: Buffer.alloc(0) };
-    return buffer.replay();
+    if (!buffer) return { complete: false, events: [], bytes: Buffer.alloc(0), sequence };
+    return { ...buffer.replay(), sequence };
   }
 
   async stateReplay(id) {
     const state = this.states.get(id);
     if (!state) return this.replay(id);
+    // Capture the mutation sequence and enqueue the state cut in one synchronous
+    // turn. Later output/resizes get a higher sequence and are delivered as
+    // post-snapshot deltas by terminal-stream.
+    const sequence = this.sequences.get(id) || 0;
     const snapshot = await state.snapshot();
     const events = [{ type: "resize", cols: snapshot.cols, rows: snapshot.rows }];
     if (snapshot.data) events.push({ type: "data", bytes: Buffer.from(snapshot.data, "utf8") });
-    return { complete: true, source: "state", events, bytes: encodeReplay(events) };
+    return { complete: true, source: "state", sequence, events, bytes: encodeReplay(events) };
   }
 
   async create({ project, cwd, templateId = "shell", cols = 80, rows = 24 }) {
@@ -189,14 +208,14 @@ export class PtyManager extends EventEmitter {
       this.scrollback.delete(item.id);
       this.states.get(item.id)?.dispose();
       this.states.delete(item.id);
+      this.sequences.delete(item.id);
     }
 
     const width = Math.max(1, Math.min(500, Math.trunc(Number(cols)) || 80));
     const height = Math.max(1, Math.min(500, Math.trunc(Number(rows)) || 24));
     const id = crypto.randomUUID();
     const now = new Date().toISOString();
-    const activeCount = [...this.records.values()].filter((item) => item.projectId === project.id && item.status === "running").length;
-    const title = activeCount ? `${template.title} ${activeCount + 1}` : template.title;
+    const title = nextTerminalTitle([...this.records.values()], project.id, template.title);
     const record = { id, projectId: project.id, templateId, title, status: "running", createdAt: now, updatedAt: now, exitCode: null, signal: null };
     const env = { ...process.env, TERM: "xterm-256color", COLORTERM: "truecolor" };
     delete env.NO_COLOR;
@@ -213,12 +232,15 @@ export class PtyManager extends EventEmitter {
     this.records.set(id, record);
     this.handles.set(id, handle);
     this.states.set(id, state);
+    this.sequences.set(id, 0);
     this.scrollback.set(id, replay);
     handle.onData((data) => {
+      const sequence = (this.sequences.get(id) || 0) + 1;
+      this.sequences.set(id, sequence);
       void state.write(data).catch((error) => this.emit("state_error", { id, error }));
       const bytes = this.scrollback.get(id)?.appendData(data);
       if (!bytes) return;
-      this.emit("output", { id, bytes });
+      this.emit("output", { id, bytes, sequence });
     });
     handle.onExit(({ exitCode, signal }) => {
       const current = this.records.get(id);
@@ -226,6 +248,7 @@ export class PtyManager extends EventEmitter {
       this.handles.delete(id);
       this.states.get(id)?.dispose();
       this.states.delete(id);
+      this.sequences.delete(id);
       Object.assign(current, { status: "exited", exitCode: exitCode ?? null, signal: signal ?? null, updatedAt: new Date().toISOString() });
       this.emit("exit", view(current));
       this.scrollback.delete(id);
@@ -259,9 +282,12 @@ export class PtyManager extends EventEmitter {
     const height = Math.trunc(Number(rows));
     if (!handle) throw failure("pty_not_running", "Terminal is not running");
     if (!Number.isInteger(width) || !Number.isInteger(height) || width < 1 || width > 500 || height < 1 || height > 500) throw failure("pty_resize_invalid", "Terminal dimensions are out of range");
+    const sequence = (this.sequences.get(id) || 0) + 1;
+    this.sequences.set(id, sequence);
     void this.states.get(id)?.resize(width, height).catch((error) => this.emit("state_error", { id, error }));
     handle.resize(width, height);
     this.scrollback.get(id)?.appendResize(width, height);
+    this.emit("resize", { id, cols: width, rows: height, sequence });
   }
 
   async remove(id) {
@@ -273,6 +299,7 @@ export class PtyManager extends EventEmitter {
     this.scrollback.delete(id);
     this.states.get(id)?.dispose();
     this.states.delete(id);
+    this.sequences.delete(id);
     handle?.kill();
     this.emit("removed", { id, projectId: record.projectId });
     await this.persist();
@@ -289,6 +316,7 @@ export class PtyManager extends EventEmitter {
       this.scrollback.delete(record.id);
       this.states.get(record.id)?.dispose();
       this.states.delete(record.id);
+      this.sequences.delete(record.id);
       handle?.kill();
       this.emit("removed", { id: record.id, projectId });
     }
@@ -299,6 +327,7 @@ export class PtyManager extends EventEmitter {
   async stopAll() {
     for (const state of this.states.values()) state.dispose();
     this.states.clear();
+    this.sequences.clear();
     for (const handle of this.handles.values()) handle.kill();
     this.handles.clear();
   }
