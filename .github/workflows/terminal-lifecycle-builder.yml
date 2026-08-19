@@ -1,0 +1,55 @@
+name: Terminal lifecycle branch builder
+
+on:
+  push:
+    branches:
+      - agent/terminal-lifecycle-state
+
+permissions:
+  contents: write
+
+jobs:
+  build-terminal-lifecycle:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/terminal-lifecycle-state
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: conduit-web/package-lock.json
+      - name: Apply integration edits
+        run: node scripts/apply-terminal-lifecycle.mjs
+      - name: Refresh dependency lock
+        working-directory: conduit-web
+        run: npm install --package-lock-only --ignore-scripts
+      - name: Install dependencies
+        working-directory: conduit-web
+        run: npm ci
+      - name: Validate terminal contracts
+        working-directory: conduit-web
+        run: node --test test/pty-manager.test.js test/pty-transport.test.js
+      - name: Typecheck
+        working-directory: conduit-web
+        run: npm run typecheck
+      - name: Run node suite
+        working-directory: conduit-web
+        run: npm test
+      - name: Build client
+        working-directory: conduit-web
+        run: npm run build
+      - name: Diff check
+        run: git diff --check
+      - name: Commit validated implementation
+        run: |
+          rm -f scripts/apply-terminal-lifecycle.mjs .github/workflows/terminal-lifecycle-builder.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --cached --check
+          git commit -m "Build persistent workspace terminal lifecycle"
+          git push origin HEAD:agent/terminal-lifecycle-state
