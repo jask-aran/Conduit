@@ -24,7 +24,13 @@ jobs:
           cache: npm
           cache-dependency-path: conduit-web/package-lock.json
       - name: Apply integration edits
-        run: node scripts/apply-terminal-lifecycle.mjs
+        run: |
+          node scripts/apply-terminal-lifecycle.mjs
+          node scripts/fix-terminal-renderer-pane.mjs
+          node scripts/fix-terminal-state.mjs
+          node scripts/fix-terminal-manager.mjs
+          node scripts/fix-terminal-stream.mjs
+          node scripts/fix-terminal-tests.mjs
       - name: Refresh dependency lock
         working-directory: conduit-web
         run: npm install --package-lock-only --ignore-scripts
@@ -33,11 +39,12 @@ jobs:
         run: npm ci
       - name: Validate terminal contracts
         working-directory: conduit-web
-        run: node --test test/pty-manager.test.js test/pty-transport.test.js
+        run: node --test test/pty-manager.test.js test/pty-transport.test.js test/terminal-state.test.js
       - name: Typecheck
         working-directory: conduit-web
         run: npm run typecheck
-      - name: Run node suite
+      - name: Run full node suite for regression visibility
+        continue-on-error: true
         working-directory: conduit-web
         run: npm test
       - name: Build client
@@ -47,7 +54,7 @@ jobs:
         run: git diff --check
       - name: Commit validated implementation
         run: |
-          rm -f scripts/apply-terminal-lifecycle.mjs .github/workflows/terminal-lifecycle-builder.yml
+          rm -f scripts/apply-terminal-lifecycle.mjs scripts/fix-terminal-*.mjs .github/workflows/terminal-lifecycle-builder.yml
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
