@@ -1,13 +1,26 @@
-import { createEffect, createSignal, onCleanup, onMount, Show } from "solid-js";
-import { FocusIcon, SquareIcon, TerminalIcon } from "lucide-solid";
-import { Button, Spinner } from "@/components/primitives";
+import { createEffect, createSignal, For, onCleanup, onMount, Show } from "solid-js";
+import { CheckIcon, ChevronDownIcon, FocusIcon, PlusIcon, SquareIcon, TerminalIcon, Trash2Icon } from "lucide-solid";
+import {
+  Button,
+  Menu,
+  MenuContent,
+  MenuItem,
+  MenuLabel,
+  MenuSeparator,
+  MenuTrigger,
+  Spinner,
+} from "@/components/primitives";
 import { api } from "../api/client";
 import { createTerminalRenderer, selectedTerminalRenderer, type TerminalRenderer, type TerminalRendererId } from "./terminal-renderer";
 
 type Pty = {
   id: string;
   projectId: string;
+  templateId?: string;
+  title?: string;
   status: string;
+  createdAt?: string;
+  updatedAt?: string;
   exitCode?: number | null;
   signal?: string | null;
 };
@@ -45,12 +58,21 @@ function decodeReplayFrame(bytes: Uint8Array): ReplayEvent[] | null {
   });
 }
 
-export function TerminalPane(props: { projectId: string }) {
+function sessionTimestamp(record: Pty) {
+  if (!record.createdAt) return record.id.slice(0, 8);
+  const date = new Date(record.createdAt);
+  if (Number.isNaN(date.getTime())) return record.id.slice(0, 8);
+  return `${date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} · ${record.id.slice(0, 8)}`;
+}
+
+export function TerminalPane(props: { projectId: string; active?: boolean }) {
   const [pty, setPty] = createSignal<Pty | null>(null);
+  const [sessions, setSessions] = createSignal<Pty[]>([]);
   const [error, setError] = createSignal("");
   const [replayWarning, setReplayWarning] = createSignal("");
   const [starting, setStarting] = createSignal(false);
   const [stopping, setStopping] = createSignal(false);
+  const [sessionBusy, setSessionBusy] = createSignal("");
   const [connectionState, setConnectionState] = createSignal<ConnectionState>("idle");
   const [writable, setWritable] = createSignal(false);
   const [terminalFocused, setTerminalFocused] = createSignal(false);
@@ -59,11 +81,13 @@ export function TerminalPane(props: { projectId: string }) {
   let terminal: TerminalRenderer | undefined;
   let socket: WebSocket | undefined;
   let disposeConnection: (() => void) | undefined;
+  let syncGeometry: (() => void) | undefined;
   let reconnectTimer: number | undefined;
   let reconnectAttempts = 0;
   let connectionGeneration = 0;
   let mounted = false;
   let activeProjectId = "";
+  let ptyChangeListener: (() => void) | undefined;
   const encoder = new TextEncoder();
 
   const clearReconnect = () => {
@@ -75,6 +99,7 @@ export function TerminalPane(props: { projectId: string }) {
     clearReconnect();
     disposeConnection?.();
     disposeConnection = undefined;
+    syncGeometry = undefined;
     socket = undefined;
     setWritable(false);
     setTerminalFocused(false);
@@ -116,6 +141,7 @@ export function TerminalPane(props: { projectId: string }) {
     closeConnection();
     disposeRenderer();
     setPty(null);
+    setSessions([]);
     setError("");
     setReplayWarning("");
     setConnectionState("idle");
@@ -135,7 +161,7 @@ export function TerminalPane(props: { projectId: string }) {
     terminal = created;
     host.dataset.terminalRenderer = created.id;
     host.dataset.terminalRendererReadyMs = String(Math.round(performance.now() - startedAt));
-    created.fit();
+    created.repaint();
     return created;
   };
 
@@ -175,13 +201,15 @@ export function TerminalPane(props: { projectId: string }) {
 
     const sendResize = () => {
       if (generation !== connectionGeneration || replaying || !writable() || connection.readyState !== WebSocket.OPEN) return;
-      activeTerminal.fit();
+      activeTerminal.repaint();
       connection.send(JSON.stringify({ type: "resize", cols: activeTerminal.cols(), rows: activeTerminal.rows() }));
     };
+    syncGeometry = sendResize;
 
     const finishReplay = () => {
       if (generation !== connectionGeneration) return;
       replaying = false;
+      activeTerminal.repaint();
       if (host) host.dataset.terminalReady = "true";
       setConnectionState("attached");
       sendResize();
@@ -197,7 +225,7 @@ export function TerminalPane(props: { projectId: string }) {
             replaying = true;
             replayWork = Promise.resolve();
             setReplayWarning(message.complete === false
-              ? "Earlier terminal state exceeded the replay buffer. Live output is attached without replaying an unsafe partial ANSI stream."
+              ? "Canonical terminal state was unavailable and the bounded fallback journal was incomplete. Live output is attached without replaying an unsafe ANSI tail."
               : "");
             return;
           }
@@ -207,7 +235,7 @@ export function TerminalPane(props: { projectId: string }) {
           }
           if (message.type === "replay_end") {
             void replayWork.then(finishReplay).catch((cause) => {
-              setError((cause as Error).message || "Terminal replay failed");
+              setError((cause as Error).message || "Terminal state restoration failed");
               finishReplay();
             });
             return;
@@ -256,7 +284,7 @@ export function TerminalPane(props: { projectId: string }) {
         let replayEvents: ReplayEvent[] | null = null;
         try { replayEvents = decodeReplayFrame(bytes); }
         catch (cause) {
-          setError((cause as Error).message || "Terminal replay could not be decoded");
+          setError((cause as Error).message || "Terminal state could not be decoded");
           return;
         }
         if (replayEvents) {
@@ -268,8 +296,6 @@ export function TerminalPane(props: { projectId: string }) {
             }
           });
         } else {
-          // A live frame can race with replay_end. Preserve arrival order by
-          // queueing it behind replay work instead of painting it early.
           replayWork = replayWork.then(() => activeTerminal.write(bytes));
         }
         return;
@@ -282,15 +308,15 @@ export function TerminalPane(props: { projectId: string }) {
         intentionallyClosed = true;
         return connection.close();
       }
-      // The server sends replay_start/replay_end before accepting live terminal
-      // responses. Do not guess at that boundary with a timer.
+      // State restoration owns the initial geometry; do not race it with a
+      // guessed client resize before replay_end.
       activeTerminal.focus();
     };
 
     const removeData = activeTerminal.onData((data) => {
-      // onData includes both keyboard/paste bytes and emulator-generated replies
-      // to DEC/OSC/device queries. Preserve it verbatim; the explicit replay and
-      // controller phases decide whether forwarding is safe.
+      // onData includes keyboard/paste bytes and emulator-generated replies.
+      // Preserve it verbatim; replay/controller phases decide when forwarding
+      // to the server-owned PTY is safe.
       if (!replaying && writable() && data && generation === connectionGeneration && connection.readyState === WebSocket.OPEN) {
         connection.send(encoder.encode(data));
       }
@@ -329,15 +355,22 @@ export function TerminalPane(props: { projectId: string }) {
     };
   };
 
+  const refreshSessions = async (projectId = activeProjectId) => {
+    const { ptys = [] } = await api<{ ptys: Pty[] }>(`/v0/ptys?projectId=${encodeURIComponent(projectId)}`);
+    const running = ptys.filter((item) => item.projectId === projectId && item.status === "running");
+    if (projectId === activeProjectId) setSessions(running);
+    return running;
+  };
+
   const attachExisting = async (projectId = props.projectId) => {
     if (pty() || projectId !== activeProjectId) return;
     setStarting(true);
     setError("");
     try {
-      const { ptys } = await api<{ ptys: Pty[] }>("/v0/ptys");
+      const running = await refreshSessions(projectId);
       if (projectId !== activeProjectId || pty()) return;
-      const record = ptys.find((item) => item.projectId === projectId && item.status === "running");
-      if (!record || pty()) return;
+      const record = running[0];
+      if (!record) return;
       setPty(record);
       notifyPtyChange();
       await connect(record);
@@ -348,15 +381,28 @@ export function TerminalPane(props: { projectId: string }) {
     }
   };
 
+  const attachSession = async (record: Pty) => {
+    if (record.projectId !== activeProjectId || record.status !== "running") return;
+    if (pty()?.id === record.id) {
+      focusActiveTerminal();
+      return;
+    }
+    setPty(record);
+    setReplayWarning("");
+    notifyPtyChange();
+    try { await connect(record, rendererId(), { freshRenderer: true }); }
+    catch (cause) { setError((cause as Error).message); }
+  };
+
   const start = async () => {
-    if (pty() || starting()) return;
+    if (starting()) return;
     const projectId = activeProjectId;
     setStarting(true);
     setError("");
     setReplayWarning("");
     try {
       const activeTerminal = await ensureRenderer(rendererId());
-      activeTerminal.fit();
+      activeTerminal.repaint();
       if (projectId !== activeProjectId) return;
       const record = await api<Pty>("/v0/ptys", {
         method: "POST",
@@ -369,7 +415,8 @@ export function TerminalPane(props: { projectId: string }) {
       if (projectId !== activeProjectId) return;
       setPty(record);
       notifyPtyChange();
-      await connect(record);
+      await refreshSessions(projectId);
+      await connect(record, rendererId(), { freshRenderer: true });
     } catch (cause) {
       if (projectId === activeProjectId) setError((cause as Error).message);
     } finally {
@@ -384,43 +431,60 @@ export function TerminalPane(props: { projectId: string }) {
     await connect(record, rendererId(), { freshRenderer: true });
   };
 
-  const stop = async () => {
-    const record = pty();
-    if (!record || stopping()) return;
+  const removeSession = async (record: Pty) => {
+    if (sessionBusy() || record.projectId !== activeProjectId) return;
     const projectId = activeProjectId;
     const id = record.id;
-    setStopping(true);
+    const current = pty()?.id === id;
+    setSessionBusy(id);
     setError("");
-    connectionGeneration += 1;
-    closeConnection();
+    if (current) {
+      connectionGeneration += 1;
+      closeConnection();
+    }
     try {
       await api(`/v0/ptys/${encodeURIComponent(id)}`, { method: "DELETE" });
-      if (projectId !== activeProjectId || pty()?.id !== id) return;
-      disposeRenderer();
-      setPty(null);
-      setReplayWarning("");
-      setConnectionState("idle");
-      notifyPtyChange();
-    } catch (cause) {
-      if (projectId !== activeProjectId || pty()?.id !== id) return;
-      if ((cause as { error?: string }).error === "pty_not_found") {
+      if (projectId !== activeProjectId) return;
+      if (current && pty()?.id === id) {
         disposeRenderer();
         setPty(null);
         setReplayWarning("");
         setConnectionState("idle");
+      }
+      notifyPtyChange();
+      await refreshSessions(projectId);
+    } catch (cause) {
+      if (projectId !== activeProjectId) return;
+      if ((cause as { error?: string }).error === "pty_not_found") {
+        if (current && pty()?.id === id) {
+          disposeRenderer();
+          setPty(null);
+          setReplayWarning("");
+          setConnectionState("idle");
+        }
         notifyPtyChange();
+        await refreshSessions(projectId);
         return;
       }
       setError((cause as Error).message);
-      try {
-        await connect(record, rendererId(), { freshRenderer: true });
-      } catch (reconnectCause) {
-        setError((reconnectCause as Error).message);
-        setConnectionState("disconnected");
+      if (current && pty()?.id === id) {
+        try { await connect(record, rendererId(), { freshRenderer: true }); }
+        catch (reconnectCause) {
+          setError((reconnectCause as Error).message);
+          setConnectionState("disconnected");
+        }
       }
     } finally {
-      if (projectId === activeProjectId) setStopping(false);
+      if (projectId === activeProjectId && sessionBusy() === id) setSessionBusy("");
     }
+  };
+
+  const stop = async () => {
+    const record = pty();
+    if (!record || stopping()) return;
+    setStopping(true);
+    try { await removeSession(record); }
+    finally { setStopping(false); }
   };
 
   const restart = async () => {
@@ -459,17 +523,34 @@ export function TerminalPane(props: { projectId: string }) {
   onMount(() => {
     mounted = true;
     activeProjectId = props.projectId;
-    void attachExisting(activeProjectId);
+    ptyChangeListener = () => {
+      void refreshSessions(activeProjectId).catch(() => {});
+    };
+    window.addEventListener("conduit:ptys-changed", ptyChangeListener);
+    if (props.active !== false) void attachExisting(activeProjectId);
   });
+
   createEffect(() => {
     const projectId = props.projectId;
     if (!mounted || projectId === activeProjectId) return;
     resetProject();
     activeProjectId = projectId;
-    void attachExisting(projectId);
+    if (props.active !== false) void attachExisting(projectId);
   });
+
+  createEffect(() => {
+    const active = props.active !== false;
+    if (!mounted || !active) return;
+    queueMicrotask(() => {
+      terminal?.repaint();
+      syncGeometry?.();
+      if (!pty() && !starting()) void attachExisting(activeProjectId);
+    });
+  });
+
   onCleanup(() => {
     mounted = false;
+    if (ptyChangeListener) window.removeEventListener("conduit:ptys-changed", ptyChangeListener);
     connectionGeneration += 1;
     closeConnection();
     disposeRenderer();
@@ -479,6 +560,38 @@ export function TerminalPane(props: { projectId: string }) {
     <header class="terminal-pane-header">
       <div><TerminalIcon /><strong>Terminal</strong><span>{statusLabel()}</span></div>
       <div class="terminal-pane-actions">
+        <Menu onOpenChange={(open) => { if (open) void refreshSessions().catch((cause) => setError((cause as Error).message)); }}>
+          <MenuTrigger class="terminal-sessions-trigger" aria-label="Active terminal sessions" title="Active terminal sessions">
+            <TerminalIcon /><span>{sessions().length}</span><ChevronDownIcon />
+          </MenuTrigger>
+          <MenuContent class="terminal-sessions-menu">
+            <MenuLabel>Active terminals</MenuLabel>
+            <Show when={sessions().length > 0} fallback={<div class="terminal-session-empty">No active terminals in this Workspace.</div>}>
+              <For each={sessions()}>{(session) => <>
+                <MenuItem class="terminal-session-item" onSelect={() => void attachSession(session)}>
+                  <CheckIcon class={pty()?.id === session.id ? "terminal-session-check" : "terminal-session-check terminal-session-check-hidden"} />
+                  <span class="terminal-session-copy">
+                    <strong>{session.title || "Shell"}</strong>
+                    <small>{sessionTimestamp(session)}</small>
+                  </span>
+                </MenuItem>
+                <MenuItem
+                  class="terminal-session-destroy"
+                  variant="destructive"
+                  closeOnSelect={false}
+                  disabled={sessionBusy() === session.id}
+                  onSelect={() => void removeSession(session)}
+                >
+                  <Trash2Icon /><span>{sessionBusy() === session.id ? "Destroying…" : `Destroy ${session.title || "terminal"}`}</span>
+                </MenuItem>
+              </>}</For>
+            </Show>
+            <MenuSeparator />
+            <MenuItem disabled={starting()} onSelect={() => void start()}>
+              <PlusIcon /><span>{starting() ? "Starting…" : "New terminal"}</span>
+            </MenuItem>
+          </MenuContent>
+        </Menu>
         <Show when={pty()?.status === "running"}>
           <Button
             type="button"
@@ -499,8 +612,8 @@ export function TerminalPane(props: { projectId: string }) {
             size="sm"
             class="terminal-stop-action"
             aria-label="Stop terminal"
-            title="Stop terminal process"
-            disabled={stopping()}
+            title="Destroy this terminal process"
+            disabled={stopping() || sessionBusy() === pty()?.id}
             onClick={() => void stop()}
           >
             <Show when={stopping()} fallback={<SquareIcon />}><Spinner /></Show>
@@ -508,8 +621,8 @@ export function TerminalPane(props: { projectId: string }) {
           </Button>
         </Show>
         <select aria-label="Terminal renderer" value={rendererId()} onChange={(event) => void switchRenderer(event.currentTarget.value as TerminalRendererId)}>
-          <option value="ghostty">Ghostty</option>
           <option value="xterm">xterm</option>
+          <option value="ghostty">Ghostty</option>
         </select>
       </div>
     </header>
@@ -527,8 +640,8 @@ export function TerminalPane(props: { projectId: string }) {
       <Show when={!pty()}>
         <div class="terminal-pane-empty">
           <TerminalIcon />
-          <strong>Start a terminal</strong>
-          <p>Runs a server-owned shell in this Workspace or Conduit home directory.</p>
+          <strong>Start or reattach a terminal</strong>
+          <p>Terminal processes stay resident in this Workspace when the browser or pane detaches. Use the sessions menu to reattach or cull them.</p>
           <Button disabled={starting()} onClick={() => void start()}>{starting() ? <Spinner /> : "Start terminal"}</Button>
         </div>
       </Show>
