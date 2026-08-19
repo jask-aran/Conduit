@@ -5,6 +5,7 @@ import { CheckIcon, SearchIcon } from "lucide-solid";
 import { toast } from "solid-sonner";
 import { Button, Field, FieldGroup, FieldLabel, Input, Spinner } from "@/components/primitives";
 import { api } from "../api/client";
+import { COMPOSER_SURFACE_OPTIONS, type ComposerSurfaceMode } from "../chat/composer-surface";
 import { MARKDOWN_RENDERER_OPTIONS, type MarkdownRendererId } from "../chat/markdown-settings";
 import { CONTEXT_METRIC_GROUPS, CONTEXT_METRIC_OPTIONS, CONTEXT_METRIC_PRESETS, contextMetricPreset, metricsForContextMetricPreset, type ContextMetricId, type ContextMetricPresetId } from "../chat/context-metrics";
 import { formatMicrophoneError, hasAudioSignal, isUnavailableAudioInputError, listAudioInputDevices, MAX_AUDIO_INPUT_TEST_DURATION_MS, revokeAudioInputRecording, startAudioInputTest as beginAudioInputTest, type AudioInputDevice, type AudioInputTestResult, type AudioInputTestSession, } from "../chat/voice-audio";
@@ -141,8 +142,8 @@ export function Settings(props: {
   onMarkdownRendererChange: (renderer: MarkdownRendererId) => void;
   meteorField: boolean;
   onMeteorFieldChange: (enabled: boolean) => void;
-  liquidGlassSurface: boolean;
-  onLiquidGlassSurfaceChange: (enabled: boolean) => void;
+  composerSurface: ComposerSurfaceMode;
+  onComposerSurfaceChange: (surface: ComposerSurfaceMode) => void;
   voiceSettings: VoiceDictationSettings;
   onVoiceSettingsSave: (settings: VoiceDictationSettings) => void;
   sidebarChatLimit: number;
@@ -855,10 +856,11 @@ export function Settings(props: {
                 <small>Show this many recent chats in the Chats group. Use View all chats to search older chats.</small>
               </Field>
               <Field>
-                <label class="settings-toggle">
-                  <input type="checkbox" aria-label="Liquid glass surface" checked={props.liquidGlassSurface} onChange={(event) => props.onLiquidGlassSurfaceChange(event.currentTarget.checked)} />
-                  <span><strong>Liquid glass composer surface</strong><small>Use the precomputed SVG refraction path. It costs more on mobile than the frost path.</small></span>
-                </label>
+                <FieldLabel for="composer-surface">Composer surface</FieldLabel>
+                <select id="composer-surface" aria-label="Composer surface" value={props.composerSurface} onChange={(event) => props.onComposerSurfaceChange(event.currentTarget.value as ComposerSurfaceMode)}>
+                  <For each={COMPOSER_SURFACE_OPTIONS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
+                </select>
+                <small>{COMPOSER_SURFACE_OPTIONS.find((option) => option.value === props.composerSurface)?.description}</small>
               </Field>
               <Field>
                 <label class="settings-toggle">
