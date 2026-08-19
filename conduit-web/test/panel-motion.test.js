@@ -49,7 +49,10 @@ test("desktop panel shells transition open and close while surfaces fill the she
   const transcriptMotionShell = rule(styles, ".transcript-motion-shell");
   assert.match(transcriptMotionShell, /width:\s*100%/);
   assert.match(transcriptMotionShell, /position:\s*relative/);
-  assert.match(transcriptMotionShell, /contain:\s*layout paint/);
+  // Liquid glass needs transcript pixels to remain sampleable by the composer;
+  // layout containment is fine, paint containment would create a compositing boundary.
+  assert.match(transcriptMotionShell, /contain:\s*layout(?:\s*;|\s*$)/);
+  assert.doesNotMatch(transcriptMotionShell, /contain:[^;]*paint/);
   assert.match(transcriptMotionShell, /container-name:\s*chat-main/);
   assert.match(transcriptMotionShell, /container-type:\s*inline-size/);
   const hiddenTranscriptContent = rule(styles, "[data-transcript-visibility=\"hidden\"]");
