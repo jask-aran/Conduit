@@ -67,6 +67,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
   const [shellWidth, setShellWidth] = createSignal(props.open() ? width() : 0);
   const [shellGap, setShellGap] = createSignal(props.open() && !isMobileLayout() ? 10 : 0);
   const [artifactMode, setArtifactMode] = createSignal<ArtifactMode>("outputs");
+  const [terminalMounted, setTerminalMounted] = createSignal(tab() === "terminal");
   const detailOpenKey = () => `conduit:workspace-panel:${props.chatId()}:${tab()}:detail-open`;
   const detailHeightKey = () => `conduit:workspace-panel:${props.chatId()}:${tab()}:detail-height`;
   const detailOpenFor = (nextTab: PanelTab) => localStorage.getItem(`conduit:workspace-panel:${props.chatId()}:${nextTab}:detail-open`) ?? (nextTab === "diff" ? "false" : "true");
@@ -232,6 +233,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
   const selectTab = (next: PanelTab) => {
     setDetailOpen(detailOpenFor(next) === "true");
     setDetailHeight(Math.max(160, Number(localStorage.getItem(`conduit:workspace-panel:${props.chatId()}:${next}:detail-height`)) || 360));
+    if (next === "terminal") setTerminalMounted(true);
     setTab(next);
     localStorage.setItem(storageKey(), next);
   };
@@ -448,6 +450,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
       const nextWidth = Math.max(320, Math.min(620, Number(localStorage.getItem(widthKey())) || 420));
       setWidth(nextWidth);
       if (props.open()) setShellWidth(nextWidth);
+      setTerminalMounted(nextTab === "terminal");
       setTab(nextTab);
     });
   }));
@@ -524,7 +527,11 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
       <div class="workspace-artifact-modes" role="radiogroup" aria-label="Artifact modality"><button role="radio" aria-checked={artifactMode() === "outputs"} onClick={() => setArtifactMode("outputs")}>Outputs</button><button role="radio" aria-checked={artifactMode() === "interactive"} onClick={() => setArtifactMode("interactive")}>Interactive UI</button></div>
       <div class="workspace-panel-empty"><div><BoxesIcon /><strong>{artifactMode() === "outputs" ? "No artifacts in the loaded transcript" : "Interactive artifacts are not enabled"}</strong><p>{artifactMode() === "outputs" ? "Code blocks and file outputs will appear here as transcript artifact projection lands." : "This boundary is reserved for sandboxed, explicitly trusted generated interfaces."}</p></div></div>
     </section></Show>
-    <Show when={tab() === "terminal"}><TerminalPane projectId={props.projectId()} /></Show>
+    <Show when={terminalMounted()}>
+      <div class="workspace-terminal-slot" data-active={tab() === "terminal" ? "true" : "false"} aria-hidden={tab() !== "terminal"}>
+        <TerminalPane projectId={props.projectId()} active={props.open() && tab() === "terminal"} />
+      </div>
+    </Show>
     <Show when={loading()}><div class="workspace-panel-loading"><Spinner /><span>Loading workspace</span></div></Show>
     </div>
   </aside>

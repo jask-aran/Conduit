@@ -133,3 +133,80 @@
 .terminal-pane-warning + .terminal-pane-error {
   bottom: 58px;
 }
+
+
+/* Persistent terminal lifecycle additions. */
+.workspace-terminal-slot {
+  display: none;
+  min-width: 0;
+  min-height: 0;
+  flex: 1;
+  overflow: hidden;
+}
+.workspace-terminal-slot[data-active="true"] { display: flex; }
+.workspace-terminal-slot > .terminal-pane {
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+  flex: 1;
+}
+
+.terminal-sessions-trigger {
+  display: inline-flex;
+  min-height: 26px;
+  height: 26px;
+  align-items: center;
+  gap: 5px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  padding: 0 7px;
+  color: var(--muted-foreground);
+  font-size: 11px;
+}
+.terminal-sessions-trigger:hover,
+.terminal-sessions-trigger[data-expanded] {
+  background: var(--accent);
+  color: var(--foreground);
+}
+.terminal-sessions-trigger svg { width: 13px; height: 13px; }
+.terminal-sessions-trigger svg:last-child { width: 11px; height: 11px; }
+
+.terminal-sessions-menu { width: min(300px, calc(100vw - 24px)); }
+.terminal-session-item { align-items: flex-start; }
+.terminal-session-check {
+  width: 13px;
+  height: 13px;
+  margin-top: 2px;
+  flex: none;
+}
+.terminal-session-check-hidden { visibility: hidden; }
+.terminal-session-copy {
+  display: grid;
+  min-width: 0;
+  gap: 1px;
+}
+.terminal-session-copy strong {
+  overflow: hidden;
+  color: var(--foreground);
+  font-size: 12px;
+  font-weight: 560;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.terminal-session-copy small {
+  color: var(--muted-foreground);
+  font: 10px ui-monospace, SFMono-Regular, Consolas, monospace;
+}
+.terminal-session-destroy {
+  margin-top: -1px;
+  padding-left: 27px;
+  font-size: 11px;
+}
+.terminal-session-destroy svg { width: 12px; height: 12px; }
+.terminal-session-empty {
+  padding: 7px 8px;
+  color: var(--muted-foreground);
+  font-size: 11px;
+  line-height: 1.4;
+}

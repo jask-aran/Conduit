@@ -6,19 +6,36 @@ export function createTerminalStream({ terminals, wss }) {
   const terminalClients = new Map();
   const terminalControllers = new Map();
 
+  const syncProtocolResponder = (id) => {
+    const controller = terminalControllers.get(id) || null;
+    const browserOwnsProtocol = Boolean(
+      controller
+      && controller.readyState === controller.OPEN
+      && controller.conduitTerminalRestoring !== true
+    );
+    terminals.setProtocolResponder?.(id, !browserOwnsProtocol);
+  };
+
   const sendTerminalControl = (id) => {
     const controller = terminalControllers.get(id) || null;
     for (const ws of terminalClients.get(id) || []) {
-      if (ws.readyState === ws.OPEN) ws.send(JSON.stringify({ type: "control", writable: ws === controller }));
+      if (ws.readyState !== ws.OPEN) continue;
+      ws.send(JSON.stringify({
+        type: "control",
+        writable: ws === controller && ws.conduitTerminalRestoring !== true,
+      }));
     }
   };
 
   const promoteTerminalController = (id) => {
-    if (terminalControllers.has(id)) return;
-    const record = terminals.get(id);
-    if (record?.status !== "running") return sendTerminalControl(id);
-    const next = [...(terminalClients.get(id) || [])].find((ws) => ws.readyState === ws.OPEN);
-    if (next) terminalControllers.set(id, next);
+    if (!terminalControllers.has(id)) {
+      const record = terminals.get(id);
+      if (record?.status === "running") {
+        const next = [...(terminalClients.get(id) || [])].find((ws) => ws.readyState === ws.OPEN);
+        if (next) terminalControllers.set(id, next);
+      }
+    }
+    syncProtocolResponder(id);
     sendTerminalControl(id);
   };
 
@@ -32,6 +49,7 @@ export function createTerminalStream({ terminals, wss }) {
     if (!clients.size) {
       terminalClients.delete(id);
       terminalControllers.delete(id);
+      terminals.setProtocolResponder?.(id, true);
       return;
     }
     promoteTerminalController(id);
@@ -60,8 +78,6 @@ export function createTerminalStream({ terminals, wss }) {
   });
 
   terminals.on("output", ({ id, bytes, sequence }) => {
-    // Restoring clients need unbatched, sequenced deltas so bytes already
-    // represented by their canonical state cut can be discarded exactly.
     for (const ws of terminalClients.get(id) || []) {
       if (ws.readyState === ws.OPEN && ws.conduitTerminalRestoring) {
         queuePending(ws, { type: "data", bytes: Buffer.from(bytes), sequence });
@@ -96,15 +112,16 @@ export function createTerminalStream({ terminals, wss }) {
 
   const handleUpgrade = (id, request, socket, head) => wss.handleUpgrade(request, socket, head, (ws) => {
     terminalOutput.flush(id);
+    ws.conduitTerminalRestoring = true;
+    ws.conduitTerminalPending = [];
+    ws.conduitTerminalPendingBytes = 0;
+
     const clients = terminalClients.get(id) || new Set();
     clients.add(ws);
     terminalClients.set(id, clients);
     const record = terminals.get(id);
     if (record.status === "running" && !terminalControllers.has(id)) terminalControllers.set(id, ws);
-
-    ws.conduitTerminalRestoring = true;
-    ws.conduitTerminalPending = [];
-    ws.conduitTerminalPendingBytes = 0;
+    syncProtocolResponder(id);
 
     ws.on("message", (data, isBinary) => {
       try {
@@ -133,15 +150,10 @@ export function createTerminalStream({ terminals, wss }) {
       try {
         replay = record.status === "running" ? await terminals.stateReplay(id) : terminals.replay(id);
       } catch {
-        // The bounded byte journal remains a safe fallback. It is deliberately
-        // discarded once incomplete rather than replaying a corrupt ANSI tail.
         replay = terminals.replay(id);
       }
       if (ws.readyState !== ws.OPEN) return;
 
-      // Clear every output batch accumulated while the state cut was being
-      // serialized. Established clients receive it; this restoring client skips
-      // the batch because it captured each mutation with a sequence above.
       terminalOutput.flush(id);
       const boundary = replay.sequence || 0;
       const pending = ws.conduitTerminalPending.filter((event) => event.sequence > boundary);
@@ -157,6 +169,7 @@ export function createTerminalStream({ terminals, wss }) {
       ws.send(JSON.stringify({ type: "replay_end" }));
       ws.send(JSON.stringify({ type: "status", status: record.status, exitCode: record.exitCode, signal: record.signal }));
       ws.conduitTerminalRestoring = false;
+      syncProtocolResponder(id);
       sendTerminalControl(id);
     })().catch(() => {
       if (ws.readyState === ws.OPEN) ws.close(1011, "Terminal state restoration failed");

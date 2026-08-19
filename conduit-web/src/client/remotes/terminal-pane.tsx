@@ -161,7 +161,7 @@ export function TerminalPane(props: { projectId: string; active?: boolean }) {
     terminal = created;
     host.dataset.terminalRenderer = created.id;
     host.dataset.terminalRendererReadyMs = String(Math.round(performance.now() - startedAt));
-    created.repaint();
+    created.fit();
     return created;
   };
 
@@ -201,7 +201,7 @@ export function TerminalPane(props: { projectId: string; active?: boolean }) {
 
     const sendResize = () => {
       if (generation !== connectionGeneration || replaying || !writable() || connection.readyState !== WebSocket.OPEN) return;
-      activeTerminal.repaint();
+      activeTerminal.fit();
       connection.send(JSON.stringify({ type: "resize", cols: activeTerminal.cols(), rows: activeTerminal.rows() }));
     };
     syncGeometry = sendResize;
@@ -231,6 +231,12 @@ export function TerminalPane(props: { projectId: string; active?: boolean }) {
           }
           if (message.type === "replay_resize") {
             if (replaying) replayWork = replayWork.then(() => { activeTerminal.resize(message.cols, message.rows); });
+            return;
+          }
+          if (message.type === "remote_resize") {
+            const cols = Math.trunc(Number(message.cols));
+            const rows = Math.trunc(Number(message.rows));
+            if (cols >= 1 && cols <= 500 && rows >= 1 && rows <= 500) activeTerminal.resize(cols, rows);
             return;
           }
           if (message.type === "replay_end") {
@@ -402,7 +408,7 @@ export function TerminalPane(props: { projectId: string; active?: boolean }) {
     setReplayWarning("");
     try {
       const activeTerminal = await ensureRenderer(rendererId());
-      activeTerminal.repaint();
+      activeTerminal.fit();
       if (projectId !== activeProjectId) return;
       const record = await api<Pty>("/v0/ptys", {
         method: "POST",
