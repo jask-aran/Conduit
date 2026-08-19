@@ -449,11 +449,12 @@ test("Settings UI toggles and persists the ambient meteor field", async ({ page 
   await expect(page.locator(".chat-meteors")).toHaveCount(1);
 });
 
-test("Settings UI toggles and persists the liquid glass composer surface", async ({ page }) => {
+test("Settings UI selects and persists all composer surfaces", async ({ page }) => {
   await page.addInitScript(() => {
-    if (sessionStorage.getItem("conduit:liquid-glass-surface-test-initialized") === "true") return;
+    if (sessionStorage.getItem("conduit:composer-surface-test-initialized") === "true") return;
+    localStorage.removeItem("conduit:composer-surface");
     localStorage.removeItem("conduit:liquid-glass-surface");
-    sessionStorage.setItem("conduit:liquid-glass-surface-test-initialized", "true");
+    sessionStorage.setItem("conduit:composer-surface-test-initialized", "true");
   });
   await page.goto("/");
   await expect(page.getByRole("textbox", { name: "Message Pi" })).toBeVisible();
@@ -463,19 +464,42 @@ test("Settings UI toggles and persists the liquid glass composer surface", async
   await page.getByRole("option", { name: /^Settings…/ }).click();
   await page.getByRole("option", { name: /^UI$/ }).click();
   const settings = page.getByRole("dialog", { name: "Settings" });
-  const toggle = settings.getByLabel("Liquid glass surface");
-  await expect(toggle).not.toBeChecked();
-  await toggle.check();
-  await expect(toggle).toBeChecked();
+  const surface = settings.getByLabel("Composer surface");
+  await expect(surface).toHaveValue("frost");
+
+  await surface.selectOption("static");
+  await expect(page.locator(".composer")).toHaveAttribute("data-composer-surface", "static");
+  const backing = page.locator(".composer-static-backing");
+  await expect(backing).toHaveCount(1);
+  expect(await page.evaluate(() => {
+    const composer = document.querySelector(".composer");
+    const backing = document.querySelector(".composer-static-backing");
+    if (!composer || !backing) return false;
+    const composerBox = composer.getBoundingClientRect();
+    const backingBox = backing.getBoundingClientRect();
+    return Math.abs(composerBox.left - backingBox.left) < 0.5
+      && Math.abs(composerBox.top - backingBox.top) < 0.5
+      && Math.abs(composerBox.width - backingBox.width) < 0.5
+      && Math.abs(composerBox.height - backingBox.height) < 0.5;
+  })).toBe(true);
+  await expect(page.locator(".composer")).toHaveCSS("backdrop-filter", /blur\(30px\).*saturate\(1\.68\).*brightness\(1\.05\)/);
+
+  await surface.selectOption("liquid");
   await expect(page.locator(".composer")).toHaveAttribute("data-composer-surface", "liquid");
   const layer = page.locator(".composer-glass-filter");
   await expect(layer).toHaveAttribute("data-liquid-glass-ready", "true");
   await expect(page.locator(".liquid-glass-definitions feGaussianBlur")).toHaveCount(1);
 
+  await surface.selectOption("frost");
+  await expect(page.locator(".composer")).toHaveAttribute("data-composer-surface", "frost");
+  await expect(page.locator(".composer-static-backing")).toHaveCount(0);
+
+  await surface.selectOption("static");
   await settings.getByRole("button", { name: "Close" }).click();
   await page.reload();
   await expect(page.getByRole("textbox", { name: "Message Pi" })).toBeVisible();
-  await expect(page.locator(".composer")).toHaveAttribute("data-composer-surface", "liquid");
+  await expect(page.locator(".composer")).toHaveAttribute("data-composer-surface", "static");
+  await expect(page.locator(".composer-static-backing")).toHaveCount(1);
 });
 
 test("shortcut recording suppresses commands and updates chat-search hints immediately", async ({ page }) => {
