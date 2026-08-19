@@ -1,15 +1,16 @@
 name: Terminal lifecycle branch builder
 
 on:
-  push:
+  pull_request:
     branches:
-      - agent/terminal-lifecycle-state
+      - main
 
 permissions:
   contents: write
 
 jobs:
   build-terminal-lifecycle:
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'agent/terminal-lifecycle-state'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
