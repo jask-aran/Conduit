@@ -479,6 +479,15 @@ test("Settings UI selects and persists all composer surfaces", async ({ page }) 
       && Math.abs(composerBox.height - backingBox.height) < 0.5;
   })).toBe(true);
 
+  await surface.selectOption("static-experimental");
+  await expect(page.locator(".composer")).toHaveAttribute("data-composer-surface", "static-experimental");
+  await expect(page.locator(".composer-static-backing")).toHaveCount(1);
+  expect(await page.evaluate(() => {
+    const viewport = document.querySelector(".message-scroller-viewport");
+    const stack = document.querySelector(".composer-stack");
+    return Boolean(viewport && stack && !viewport.contains(stack) && stack.parentElement?.classList.contains("work-area-conversation"));
+  })).toBe(true);
+
   await surface.selectOption("liquid");
   await expect(page.locator(".composer")).toHaveAttribute("data-composer-surface", "liquid");
   const layer = page.locator(".composer-glass-filter");

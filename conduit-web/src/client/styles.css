@@ -233,6 +233,13 @@ svg { stroke-width: 1.5; }
   display: none;
 }
 .chat-main:not(.chat-main-empty) .composer-stack > * { pointer-events: auto; }
+.chat-main[data-composer-surface="static-experimental"]:not(.chat-main-empty) .composer-stack-experimental {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  margin-top: 0;
+}
 .composer-wrap { width: min(var(--composer-desktop-reference-width), 100%); margin-inline: auto; z-index: auto; }
 .chat-main:not(.chat-main-empty) .work-area-conversation { position: relative; }
 .composer {
@@ -360,6 +367,16 @@ svg { stroke-width: 1.5; }
 .chat-main-empty .thread, .chat-main-empty .empty-thread, .chat-main-empty .welcome { width: 100%; min-height: 100%; padding: 0; }
 .chat-main-empty .welcome { padding-bottom: 176px; }
 .chat-main-empty .composer-stack { position: absolute; inset-inline: 0; top: 50%; z-index: 2; width: min(704px, calc(100% - 48px)); margin-inline: auto; padding: 0; transform: translateY(54px); background: transparent; }
+.chat-main[data-composer-surface="static-experimental"].chat-main-empty .composer-stack-experimental {
+  top: auto;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  transform: none;
+}
 .chat-bootstrap { display: grid; min-height: 100%; place-items: center; color: var(--muted-foreground); font-size: 14px; }
 
 .conduit-modal, .settings-dialog, .command-dialog, .external-link-dialog { position: fixed; inset: 0; z-index: 80; display: grid; place-items: center; padding: 16px; background: rgb(0 0 0 / 55%); opacity: 1; visibility: visible; transition: opacity 150ms ease, visibility 0s; }
@@ -679,6 +696,9 @@ svg { stroke-width: 1.5; }
     transform: none;
     background: var(--background);
   }
+  .chat-main[data-composer-surface="static-experimental"].chat-main-empty .composer-stack-experimental {
+    padding: 10px 12px calc(12px + env(safe-area-inset-bottom, 0px));
+  }
   .tool-card { margin-left: 0; }
   .response-actions { opacity: 1; }
   .chat-header {
@@ -790,6 +810,9 @@ svg { stroke-width: 1.5; }
   .chat-main:not(.chat-main-empty) .thread { padding: calc(52px + env(safe-area-inset-top, 0px)) 16px 220px; }
   .chat-main:not(.chat-main-empty) .composer-stack {
     margin-top: 0;
+    padding: 10px 12px calc(12px + env(safe-area-inset-bottom, 0px));
+  }
+  .chat-main[data-composer-surface="static-experimental"]:not(.chat-main-empty) .composer-stack-experimental {
     padding: 10px 12px calc(12px + env(safe-area-inset-bottom, 0px));
   }
   .chat-header > .mobile-sidebar-trigger,

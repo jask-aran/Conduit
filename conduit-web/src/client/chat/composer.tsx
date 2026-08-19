@@ -340,7 +340,7 @@ export function Composer(props: {
     <Show when={props.chat.queue().steering.length || props.chat.queue().followUp.length}>
       <div class="composer-queue"><span>Queued messages</span><Button variant="ghost" size="sm" onClick={props.chat.clearQueue}>Restore to draft</Button></div>
     </Show>
-    <div class={props.composerSurface === "static" ? "composer-surface-shell composer-static-backing" : "composer-surface-shell"} data-composer-surface={props.composerSurface}>
+    <div class={props.composerSurface === "static" || props.composerSurface === "static-experimental" ? "composer-surface-shell composer-static-backing" : "composer-surface-shell"} data-composer-surface={props.composerSurface}>
       <div class="composer" data-composer-surface={props.composerSurface}>
         <Show when={props.composerSurface === "liquid"}><LiquidGlassSurface /></Show>
         <div class="composer-content">

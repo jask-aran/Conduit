@@ -1,4 +1,4 @@
-export type ComposerSurfaceMode = "static" | "frost" | "liquid";
+export type ComposerSurfaceMode = "static" | "static-experimental" | "frost" | "liquid";
 
 export const COMPOSER_SURFACE_STORAGE_KEY = "conduit:composer-surface";
 const LEGACY_LIQUID_GLASS_SURFACE_STORAGE_KEY = "conduit:liquid-glass-surface";
@@ -14,6 +14,11 @@ export const COMPOSER_SURFACE_OPTIONS: readonly {
     description: "Use the original glassmorphism composer over an opaque local backing surface, without sampling transcript pixels.",
   },
   {
+    value: "static-experimental",
+    label: "Static Experimental",
+    description: "Test the Static material outside the transcript scroller for compositor performance.",
+  },
+  {
     value: "frost",
     label: "Frosted",
     description: "Use native backdrop blur over the live transcript.",
@@ -25,7 +30,7 @@ export const COMPOSER_SURFACE_OPTIONS: readonly {
   },
 ];
 
-const isComposerSurfaceMode = (value: string | null): value is ComposerSurfaceMode => value === "static" || value === "frost" || value === "liquid";
+const isComposerSurfaceMode = (value: string | null): value is ComposerSurfaceMode => value === "static" || value === "static-experimental" || value === "frost" || value === "liquid";
 
 export function selectedComposerSurface(storage: Pick<Storage, "getItem"> = localStorage): ComposerSurfaceMode {
   const selected = storage.getItem(COMPOSER_SURFACE_STORAGE_KEY);

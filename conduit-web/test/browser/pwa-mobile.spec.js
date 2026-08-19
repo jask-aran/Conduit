@@ -706,6 +706,36 @@ test("acceptance: final transcript remains reachable above the composer", async 
   expect(reachability.lastBottom).toBeLessThanOrEqual(reachability.viewportBottom + 1);
 });
 
+test("acceptance: static experimental keeps the final transcript reachable outside the scroller", async ({ page }, testInfo) => {
+  await page.addInitScript(() => localStorage.setItem("conduit:composer-surface", "static-experimental"));
+  await openApp(page);
+  if (testInfo.project.name === "mobile-chromium") {
+    await page.locator(".mobile-sidebar-trigger").tap();
+    await page.getByText("Existing chat", { exact: true }).tap();
+  } else {
+    await page.locator(".sidebar-chat").filter({ hasText: "Existing chat" }).click();
+  }
+  await expect(page.locator(".chat-main:not(.chat-main-empty) article.message-assistant")).toContainText("Transcript paragraph 1");
+  const reachability = await page.locator(".chat-main:not(.chat-main-empty) .message-scroller-viewport").evaluate((element) => {
+    const composer = document.querySelector(".chat-main:not(.chat-main-empty) .composer");
+    const stack = document.querySelector(".chat-main:not(.chat-main-empty) .composer-stack");
+    const lastParagraph = [...element.querySelectorAll("article.message-assistant p")].at(-1);
+    if (!composer || !stack || !lastParagraph) throw new Error("Expected static experimental transcript and composer");
+    element.scrollTop = element.scrollHeight;
+    const lastBox = lastParagraph.getBoundingClientRect();
+    const composerBox = composer.getBoundingClientRect();
+    return {
+      stackInsideViewport: element.contains(stack),
+      lastBottom: lastBox.bottom,
+      composerTop: composerBox.top,
+      viewportBottom: element.getBoundingClientRect().bottom,
+    };
+  });
+  expect(reachability.stackInsideViewport).toBe(false);
+  expect(reachability.lastBottom).toBeLessThanOrEqual(reachability.composerTop + 1);
+  expect(reachability.lastBottom).toBeLessThanOrEqual(reachability.viewportBottom + 1);
+});
+
 test("acceptance: tall narrow command and chat palettes fill the inset mobile frame", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "desktop-chromium", "exact 523px responsive boundary");
   await page.setViewportSize({ width: 523, height: 1100 });

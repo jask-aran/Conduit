@@ -9,11 +9,13 @@
 
 /* v0.4.7 placed the filtered composer over an opaque parent background. Keep
    that parent/child relationship, but make the parent exactly composer-sized. */
-.composer-surface-shell[data-composer-surface="static"] {
+.composer-surface-shell[data-composer-surface="static"],
+.composer-surface-shell[data-composer-surface="static-experimental"] {
   background: var(--background);
 }
 
-.composer-surface-shell[data-composer-surface="static"] > .composer {
+.composer-surface-shell[data-composer-surface="static"] > .composer,
+.composer-surface-shell[data-composer-surface="static-experimental"] > .composer {
   background:
     linear-gradient(180deg, oklch(1 0 0 / 9%), oklch(1 0 0 / 2%) 58%),
     var(--glass-bg);
@@ -21,7 +23,8 @@
 }
 
 /* Light-catching hairline rim, brightest at the top-left, via masked gradient. */
-.composer-surface-shell[data-composer-surface="static"] > .composer::before {
+.composer-surface-shell[data-composer-surface="static"] > .composer::before,
+.composer-surface-shell[data-composer-surface="static-experimental"] > .composer::before {
   content: "";
   position: absolute;
   inset: 0;
@@ -37,7 +40,8 @@
 }
 
 /* Soft specular sheen pooled near the top, the "wet" highlight. */
-.composer-surface-shell[data-composer-surface="static"] > .composer::after {
+.composer-surface-shell[data-composer-surface="static"] > .composer::after,
+.composer-surface-shell[data-composer-surface="static-experimental"] > .composer::after {
   content: "";
   position: absolute;
   inset: 0;
@@ -47,6 +51,7 @@
   background: radial-gradient(150% 72% at 50% -34%, oklch(1 0 0 / 12%), transparent 56%);
 }
 
-.composer-surface-shell[data-composer-surface="static"] > .composer:focus-within::before {
+.composer-surface-shell[data-composer-surface="static"] > .composer:focus-within::before,
+.composer-surface-shell[data-composer-surface="static-experimental"] > .composer:focus-within::before {
   background: linear-gradient(150deg, oklch(1 0 0 / 56%), oklch(0.72 0.045 246 / 26%) 38%, oklch(1 0 0 / 5%) 70%, oklch(1 0 0 / 26%));
 }

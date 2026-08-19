@@ -912,6 +912,11 @@ function App() {
     onDrop: (event: DragEvent) => { event.preventDefault(); dragDepth = 0; setDropActive(false); const files = filesFromDataTransfer(event.dataTransfer); if (files.length) attachments.addFiles(files); },
   };
 
+  const renderComposerStack = () => <div class={`composer-stack${composerSurface() === "static-experimental" ? " composer-stack-experimental" : ""}`}>
+    <HostUiRequests requests={chat.hostUiRequests()} onRespond={chat.respondHostUi} />
+    <Composer chat={chat} attachments={attachments} models={models} profiles={profiles()} activeProfile={activeProfile()} serverOnline={runtime.connectivity() === "online"} composerSurface={composerSurface()} voiceSettings={voiceSettings()} onChooseProfile={(id) => void switchProfile(id)} onOpenSettings={openSettings} onOpenAttachments={() => attachFileInput?.click()} onStatusChange={setComposerStatus} />
+  </div>;
+
   return <>
     <Toaster richColors />
     <input ref={attachFileInput} type="file" multiple hidden aria-hidden="true" onChange={(event) => { if (event.currentTarget.files) attachments.addFiles(event.currentTarget.files); event.currentTarget.value = ""; }} />
@@ -944,8 +949,8 @@ function App() {
           <Show when={selectedProject()?.kind === "workspace" && [...runtime.processes().values()].some((process) => process.chatId !== catalogue.selectedId() && process.active)}><div class="workspace-warning"><TriangleAlertIcon /><div><strong>Another chat is working in this Workspace</strong><p>Both agents can edit the same files. Conduit does not lock the Workspace or create worktrees automatically.</p></div></div></Show>
           <div class="work-area">
             <section class="work-area-conversation" aria-label="Conversation">
-              <Transcript chat={chat} partialContinue={partialContinue()} markdownRenderer={markdownRenderer()} profileLabel={activeProfile()?.label || activeProfile()?.id || chat.templateId() || undefined} stickyFooter={<div class="composer-stack"><HostUiRequests requests={chat.hostUiRequests()} onRespond={chat.respondHostUi} />
-                <Composer chat={chat} attachments={attachments} models={models} profiles={profiles()} activeProfile={activeProfile()} serverOnline={runtime.connectivity() === "online"} composerSurface={composerSurface()} voiceSettings={voiceSettings()} onChooseProfile={(id) => void switchProfile(id)} onOpenSettings={openSettings} onOpenAttachments={() => attachFileInput?.click()} onStatusChange={setComposerStatus} /></div>} />
+              <Transcript chat={chat} partialContinue={partialContinue()} markdownRenderer={markdownRenderer()} profileLabel={activeProfile()?.label || activeProfile()?.id || chat.templateId() || undefined} stickyFooter={composerSurface() === "static-experimental" ? undefined : renderComposerStack()} />
+              <Show when={composerSurface() === "static-experimental"}>{renderComposerStack()}</Show>
             </section>
           </div>
         </>}>
