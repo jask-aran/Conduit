@@ -1,5 +1,5 @@
 /// <reference types="vite-plugin-pwa/client" />
-import { batch, createEffect, createMemo, createSignal, ErrorBoundary, lazy, onCleanup, onMount, Show, type JSX } from "solid-js";
+import { batch, createEffect, createMemo, createSignal, ErrorBoundary, lazy, onCleanup, onMount, Show } from "solid-js";
 import { render } from "solid-js/web";
 import {
   EllipsisIcon, PanelLeftIcon, PanelRightIcon, PencilIcon, RefreshCwIcon, SearchIcon, ShareIcon, TerminalIcon, Trash2Icon, TriangleAlertIcon,
@@ -14,7 +14,6 @@ import { api, asList, pathChatId, pathProjectId, projectPath } from "./api/clien
 import type { ChatSummary, DashboardChat, Installation, Project, RuntimeIdentity, Template, TranscriptDetail, WorkspaceAppearance, WorkspacePolicy, WorkspaceSuggestion, WorkspaceSuggestionsPayload } from "./api/contracts";
 import { createErrorDiagnostic, formatRuntimeDiagnosticPrompt, type ErrorDiagnostic, type ErrorDiagnosticContext } from "./error-diagnostics";
 import { Composer, SPINNING_ACTIVITY, type ComposerStatus } from "./chat/composer";
-import { mountComposerPanelMotion } from "./chat/composer-motion";
 import { selectedComposerSurface, saveComposerSurface, type ComposerSurfaceMode } from "./chat/composer-surface";
 import { formatContextMetrics, saveContextMetrics, selectedContextMetrics, type ContextMetricId } from "./chat/context-metrics";
 import { HostUiRequests } from "./chat/host-ui-card";
@@ -52,21 +51,6 @@ const METEOR_FIELD_STORAGE_KEY = "conduit:meteor-field";
 const selectedMeteorField = () => localStorage.getItem(METEOR_FIELD_STORAGE_KEY) !== "false";
 const WorkspacePanel = lazy(() => import("./workspace/workspace-panel"));
 const ProjectDashboard = lazy(() => import("./project/dashboard"));
-
-function ComposerMotionShell(props: { children: JSX.Element }) {
-  let shell!: HTMLDivElement;
-  let panelMotion: ReturnType<typeof mountComposerPanelMotion> | null = null;
-
-  onMount(() => {
-    panelMotion = mountComposerPanelMotion(shell);
-  });
-  onCleanup(() => {
-    panelMotion?.destroy();
-    panelMotion = null;
-  });
-
-  return <div ref={shell} class="composer-motion-shell">{props.children}</div>;
-}
 
 function ChatHeader(props: {
   project?: Project;
@@ -931,9 +915,7 @@ function App() {
   const renderComposer = () => <Composer chat={chat} attachments={attachments} models={models} profiles={profiles()} activeProfile={activeProfile()} serverOnline={runtime.connectivity() === "online"} composerSurface={composerSurface()} voiceSettings={voiceSettings()} onChooseProfile={(id) => void switchProfile(id)} onOpenSettings={openSettings} onOpenAttachments={() => attachFileInput?.click()} onStatusChange={setComposerStatus} />;
   const renderComposerStack = () => <div class={`composer-stack${composerSurface() === "static-experimental" ? " composer-stack-experimental" : ""}`}>
     <HostUiRequests requests={chat.hostUiRequests()} onRespond={chat.respondHostUi} />
-    <Show when={composerSurface() === "static-experimental"} fallback={renderComposer()}>
-      <ComposerMotionShell>{renderComposer()}</ComposerMotionShell>
-    </Show>
+    {renderComposer()}
   </div>;
 
   return <>

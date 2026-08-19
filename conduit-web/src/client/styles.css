@@ -134,6 +134,7 @@ svg { stroke-width: 1.5; }
 .terminal-canvas > canvas { display: block; max-width: 100%; max-height: 100%; transition: opacity 80ms linear; }
 
 .transcript { position: relative; min-height: 0; flex: 1; overflow: hidden; }
+.chat-main[data-composer-surface="static-experimental"] .transcript { z-index: 1; }
 .transcript-motion-shell { position: relative; width: 100%; height: 100%; contain: layout; container-name: chat-main; container-type: inline-size; }
 .chat-main[data-composer-surface="static-experimental"] .transcript-motion-shell {
   contain: layout paint;
@@ -225,6 +226,7 @@ svg { stroke-width: 1.5; }
 [data-slot="menu-content"] .menu-chevron, [data-slot="context-menu-content"] .menu-chevron { margin-left: auto; width: 14px; height: 14px; color: var(--muted-foreground); }
 .composer-stack { position: relative; display: flex; width: 100%; flex: none; flex-direction: column; gap: 8px; padding: 18px 44px 24px; background: transparent; }
 .chat-main:not(.chat-main-empty) .thread { padding-bottom: 128px; }
+.chat-main[data-composer-surface="static-experimental"]:not(.chat-main-empty) .thread { padding-bottom: 32px; }
 .chat-main:not(.chat-main-empty) .composer-stack {
   position: sticky;
   right: 0;
@@ -239,21 +241,13 @@ svg { stroke-width: 1.5; }
 }
 .chat-main:not(.chat-main-empty) .composer-stack > * { pointer-events: auto; }
 .chat-main[data-composer-surface="static-experimental"]:not(.chat-main-empty) .composer-stack-experimental {
-  position: absolute;
-  right: 0;
-  bottom: 0;
-  left: 0;
+  position: relative;
+  right: auto;
+  bottom: auto;
+  left: auto;
   margin-top: 0;
   z-index: 2;
-}
-.chat-main[data-composer-surface="static-experimental"] .composer-motion-shell {
-  width: min(var(--composer-desktop-reference-width), 100%);
-  margin-inline: auto;
-  contain: layout paint;
-  transform: translate3d(0, 0, 0);
-  will-change: transform;
-}
-.chat-main[data-composer-surface="static-experimental"] .composer-motion-shell .composer-status {
+  pointer-events: auto;
   background: var(--background);
 }
 .composer-wrap { width: min(var(--composer-desktop-reference-width), 100%); margin-inline: auto; z-index: auto; }
@@ -351,7 +345,6 @@ svg { stroke-width: 1.5; }
 .composer-status-state::after { content: ""; position: absolute; top: 0; right: -9px; z-index: 1; border-block: 11px solid transparent; border-left: 9px solid color-mix(in oklch, var(--accent-cool), transparent 82%); }
 .composer-status-queue { flex: 0 0 auto; }
 .composer-status svg { width: 12px; height: 12px; }
-.chat-main[data-composer-surface="static-experimental"] .composer-status { background: var(--background); }
 .composer-status-waveform.voice-waveform { display: inline-flex; width: 64px; height: 22px; flex: 0 0 auto; box-sizing: border-box; align-items: center; justify-content: center; padding: 0 6px; border: 0; border-right: 1px solid color-mix(in oklch, var(--accent-cool), transparent 75%); border-radius: 0; background: transparent; }
 .composer-status-waveform .voice-waveform-plot { width: 100%; height: 100%; align-items: center; justify-content: space-between; gap: 1px; padding: 0; border: 0; border-radius: 0; background: transparent; }
 .composer-status-waveform .voice-waveform-bar { max-width: 2px; min-height: 2px; background: var(--accent-cool); opacity: 0.88; transition: height 90ms ease-out; }
