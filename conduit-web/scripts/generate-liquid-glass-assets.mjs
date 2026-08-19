@@ -2,14 +2,18 @@ import fs from "node:fs";
 import path from "node:path";
 import { deflateSync } from "node:zlib";
 import { createLiquidGlassAsset } from "../src/client/chat/liquid-glass-generator.mjs";
+import {
+  LIQUID_GLASS_FAMILIES,
+  LIQUID_GLASS_HEIGHT_BUCKETS,
+  LIQUID_GLASS_REFRACTIVE_INDEX,
+  LIQUID_GLASS_SCALE_RATIO,
+  LIQUID_GLASS_THICKNESS,
+} from "../src/client/chat/liquid-glass-static.ts";
 
 const outputDir = path.resolve(import.meta.dirname, "../public/glass");
 const constantsPath = path.resolve(import.meta.dirname, "../src/client/chat/liquid-glass-constants.ts");
-const families = [
-  { name: "desktop", width: 760, radius: 24, bezelWidth: 23 },
-  { name: "mobile", width: 388, radius: 18, bezelWidth: 17 },
-];
-const heights = [64, 88, 112, 136, 160, 184];
+const families = Object.values(LIQUID_GLASS_FAMILIES);
+const heights = LIQUID_GLASS_HEIGHT_BUCKETS;
 
 function crc32(buffer) {
   let crc = 0xffffffff;
@@ -59,13 +63,13 @@ for (const family of families) {
     const asset = createLiquidGlassAsset({
       ...family,
       height,
-      glassThickness: 70,
-      refractiveIndex: 1.5,
+      glassThickness: LIQUID_GLASS_THICKNESS,
+      refractiveIndex: LIQUID_GLASS_REFRACTIVE_INDEX,
       dpr: 1,
     });
     fs.writeFileSync(path.join(outputDir, `composer-${family.name}-${height}.png`), encodePng(asset.displacement));
     fs.writeFileSync(path.join(outputDir, `composer-${family.name}-${height}-specular.png`), encodePng(asset.specular));
-    scales[`${family.name}:${height}`] = asset.maxDisplacement * 0.7;
+    scales[`${family.name}:${height}`] = asset.maxDisplacement * LIQUID_GLASS_SCALE_RATIO;
     count += 2;
   }
 }

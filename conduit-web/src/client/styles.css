@@ -240,7 +240,7 @@ svg { stroke-width: 1.5; }
   border-radius: 24px;
   background: transparent;
 }
-.composer[data-liquid-glass="false"] {
+.composer[data-composer-surface="frost"] {
   background: #ffffff2b;
   backdrop-filter: blur(24px);
   border: 1px solid #ffffff4d;

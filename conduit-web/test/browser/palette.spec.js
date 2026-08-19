@@ -457,7 +457,7 @@ test("Settings UI toggles and persists the liquid glass composer surface", async
   });
   await page.goto("/");
   await expect(page.getByRole("textbox", { name: "Message Pi" })).toBeVisible();
-  await expect(page.locator(".composer")).toHaveAttribute("data-liquid-glass", "false");
+  await expect(page.locator(".composer")).toHaveAttribute("data-composer-surface", "frost");
 
   await openPalette(page);
   await page.getByRole("option", { name: /^Settings…/ }).click();
@@ -467,7 +467,7 @@ test("Settings UI toggles and persists the liquid glass composer surface", async
   await expect(toggle).not.toBeChecked();
   await toggle.check();
   await expect(toggle).toBeChecked();
-  await expect(page.locator(".composer")).toHaveAttribute("data-liquid-glass", "true");
+  await expect(page.locator(".composer")).toHaveAttribute("data-composer-surface", "liquid");
   const layer = page.locator(".composer-glass-filter");
   await expect(layer).toHaveAttribute("data-liquid-glass-ready", "true");
   await expect(page.locator(".liquid-glass-definitions feGaussianBlur")).toHaveCount(1);
@@ -475,7 +475,7 @@ test("Settings UI toggles and persists the liquid glass composer surface", async
   await settings.getByRole("button", { name: "Close" }).click();
   await page.reload();
   await expect(page.getByRole("textbox", { name: "Message Pi" })).toBeVisible();
-  await expect(page.locator(".composer")).toHaveAttribute("data-liquid-glass", "true");
+  await expect(page.locator(".composer")).toHaveAttribute("data-composer-surface", "liquid");
 });
 
 test("shortcut recording suppresses commands and updates chat-search hints immediately", async ({ page }) => {
