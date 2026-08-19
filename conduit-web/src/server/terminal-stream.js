@@ -1,5 +1,7 @@
 import { PtyOutputBatcher } from "../pty-output-batcher.js";
 
+const TERMINAL_PENDING_LIMIT = 1024 * 1024;
+
 export function createTerminalStream({ terminals, wss }) {
   const terminalClients = new Map();
   const terminalControllers = new Map();
@@ -24,6 +26,8 @@ export function createTerminalStream({ terminals, wss }) {
     const clients = terminalClients.get(id);
     if (!clients) return;
     clients.delete(ws);
+    ws.conduitTerminalPending = [];
+    ws.conduitTerminalPendingBytes = 0;
     if (terminalControllers.get(id) === ws) terminalControllers.delete(id);
     if (!clients.size) {
       terminalClients.delete(id);
@@ -33,14 +37,35 @@ export function createTerminalStream({ terminals, wss }) {
     promoteTerminalController(id);
   };
 
+  const sendOrQueueOutput = (ws, bytes) => {
+    if (ws.conduitTerminalRestoring) {
+      const copy = Buffer.from(bytes);
+      ws.conduitTerminalPending.push(copy);
+      ws.conduitTerminalPendingBytes += copy.length;
+      if (ws.conduitTerminalPendingBytes > TERMINAL_PENDING_LIMIT) ws.close(1013, "Terminal client is too slow");
+      return;
+    }
+    if (ws.bufferedAmount > TERMINAL_PENDING_LIMIT) {
+      ws.close(1013, "Terminal client is too slow");
+      return;
+    }
+    ws.send(bytes, { binary: true });
+  };
+
+  const flushPendingOutput = (ws) => {
+    const pending = ws.conduitTerminalPending;
+    ws.conduitTerminalPending = [];
+    ws.conduitTerminalPendingBytes = 0;
+    for (const bytes of pending) {
+      if (ws.readyState !== ws.OPEN) return;
+      sendOrQueueOutput(ws, bytes);
+    }
+  };
+
   const terminalOutput = new PtyOutputBatcher((id, bytes) => {
     for (const ws of terminalClients.get(id) || []) {
       if (ws.readyState !== ws.OPEN) continue;
-      if (ws.bufferedAmount > 1024 * 1024) {
-        ws.close(1013, "Terminal client is too slow");
-        continue;
-      }
-      ws.send(bytes, { binary: true });
+      sendOrQueueOutput(ws, bytes);
     }
   });
 
@@ -64,6 +89,9 @@ export function createTerminalStream({ terminals, wss }) {
   });
 
   const handleUpgrade = (id, request, socket, head) => wss.handleUpgrade(request, socket, head, (ws) => {
+    // Flush output produced before this client existed. The canonical state
+    // already includes it, and sending that batch again after restoration would
+    // duplicate terminal input.
     terminalOutput.flush(id);
     const clients = terminalClients.get(id) || new Set();
     clients.add(ws);
@@ -71,17 +99,17 @@ export function createTerminalStream({ terminals, wss }) {
     const record = terminals.get(id);
     if (record.status === "running" && !terminalControllers.has(id)) terminalControllers.set(id, ws);
 
-    const replay = terminals.replay(id);
-    ws.send(JSON.stringify({ type: "replay_start", complete: replay.complete }));
-    if (replay.bytes.length) ws.send(replay.bytes, { binary: true });
-    ws.send(JSON.stringify({ type: "replay_end" }));
-    ws.send(JSON.stringify({ type: "status", status: record.status, exitCode: record.exitCode, signal: record.signal }));
-    sendTerminalControl(id);
+    ws.conduitTerminalRestoring = true;
+    ws.conduitTerminalPending = [];
+    ws.conduitTerminalPendingBytes = 0;
 
     ws.on("message", (data, isBinary) => {
       try {
         if (terminalControllers.get(id) !== ws) {
           throw Object.assign(new Error("Another attached browser currently controls this terminal"), { code: "pty_read_only" });
+        }
+        if (ws.conduitTerminalRestoring) {
+          throw Object.assign(new Error("Terminal state is still restoring"), { code: "pty_not_ready" });
         }
         if (isBinary) {
           terminalOutput.flush(id);
@@ -96,6 +124,27 @@ export function createTerminalStream({ terminals, wss }) {
       }
     });
     ws.on("close", () => detachTerminalClient(id, ws));
+
+    void (async () => {
+      let replay;
+      try {
+        replay = record.status === "running" ? await terminals.stateReplay(id) : terminals.replay(id);
+      } catch {
+        // The bounded byte journal remains a safe fallback. It is deliberately
+        // discarded once incomplete rather than replaying a corrupt ANSI tail.
+        replay = terminals.replay(id);
+      }
+      if (ws.readyState !== ws.OPEN) return;
+      ws.send(JSON.stringify({ type: "replay_start", complete: replay.complete, source: replay.source || "journal" }));
+      if (replay.bytes.length) ws.send(replay.bytes, { binary: true });
+      ws.send(JSON.stringify({ type: "replay_end" }));
+      ws.send(JSON.stringify({ type: "status", status: record.status, exitCode: record.exitCode, signal: record.signal }));
+      ws.conduitTerminalRestoring = false;
+      sendTerminalControl(id);
+      flushPendingOutput(ws);
+    })().catch(() => {
+      if (ws.readyState === ws.OPEN) ws.close(1011, "Terminal state restoration failed");
+    });
   });
 
   return { handleUpgrade };
