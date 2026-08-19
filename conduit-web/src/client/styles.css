@@ -110,7 +110,7 @@ svg { stroke-width: 1.5; }
 .chat-header-menu-context { display: grid; gap: 6px; margin-top: 10px; padding: 10px 12px 2px; border-top: 1px solid var(--border); }
 .chat-header-menu-section-label { padding: 0; color: var(--muted-foreground); font: 10px/1.2 ui-monospace, SFMono-Regular, Consolas, monospace; letter-spacing: .07em; text-transform: uppercase; }
 .chat-header-menu-context-values { overflow-wrap: anywhere; color: var(--foreground); font: 11px/1.5 ui-monospace, SFMono-Regular, Consolas, monospace; }
-.workspace-warning { position: relative; z-index: 2; display: flex; width: min(760px, calc(100% - 48px)); gap: 10px; margin: 8px auto; padding: 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--card); }
+.workspace-warning { position: relative; z-index: 2; display: flex; width: min(var(--composer-desktop-reference-width), calc(100% - 48px)); gap: 10px; margin: 8px auto; padding: 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--card); }
 .workspace-warning svg { width: 18px; flex: none; }
 .workspace-warning p { margin: 3px 0 0; color: var(--muted-foreground); font-size: 13px; }
 
@@ -137,7 +137,7 @@ svg { stroke-width: 1.5; }
 .transcript-motion-shell { position: relative; width: 100%; height: 100%; contain: layout; container-name: chat-main; container-type: inline-size; }
 .message-scroller-viewport { width: 100%; height: 100%; overflow-y: auto; scrollbar-width: none; }
 .message-scroller-viewport::-webkit-scrollbar { display: none; }
-.thread { width: min(760px, calc(100% - 48px)); min-height: 100%; margin-inline: auto; padding: 64px 44px 32px; }
+.thread { width: min(var(--composer-desktop-reference-width), calc(100% - 48px)); min-height: 100%; margin-inline: auto; padding: 64px 44px 32px; }
 [data-slot="message-scroller-item"] { margin-block: 10px; content-visibility: visible; contain-intrinsic-size: none; }
 [data-transcript-visibility="hidden"] { content-visibility: hidden; }
 [data-slot="message"] { display: flex; width: 100%; }
@@ -233,11 +233,11 @@ svg { stroke-width: 1.5; }
   display: none;
 }
 .chat-main:not(.chat-main-empty) .composer-stack > * { pointer-events: auto; }
-.composer-wrap { width: min(760px, 100%); margin-inline: auto; z-index: auto; }
+.composer-wrap { width: min(var(--composer-desktop-reference-width), 100%); margin-inline: auto; z-index: auto; }
 .chat-main:not(.chat-main-empty) .work-area-conversation { position: relative; }
 .composer {
   position: relative; min-height: 74px; width: 100%;
-  border-radius: 24px;
+  border-radius: var(--composer-radius);
   background: transparent;
 }
 .composer[data-composer-surface="frost"] {
@@ -306,7 +306,7 @@ svg { stroke-width: 1.5; }
 .voice-waveform[data-state="error"] { border-color: color-mix(in oklch, var(--destructive), var(--border) 48%); }
 .voice-waveform[data-state="error"] .voice-waveform-dot { background: var(--destructive); }
 .composer-actions { display: flex; min-height: 36px; align-items: center; justify-content: space-between; gap: 12px; padding: 2px 7px 7px 8px; }
-/* Composer chrome sits inside the 24px-radius glass bubble; compact squircles
+/* Composer chrome sits inside the shared-radius glass bubble; compact squircles
    echo that geometry without competing with the outer silhouette. */
 .composer-actions [data-slot="button"] { width: 28px; height: 28px; border-radius: 10px; }
 .composer-actions [data-slot="button"] svg { width: 16px; height: 16px; }
@@ -336,7 +336,7 @@ svg { stroke-width: 1.5; }
 .slash-suggestions { position: absolute; left: 10px; bottom: 48px; z-index: 30; width: 260px; padding: 5px; border: 1px solid var(--border); border-radius: 10px; background: var(--popover); box-shadow: 0 12px 32px rgb(0 0 0 / 25%); }
 .slash-suggestions button { display: flex; width: 100%; flex-direction: column; border: 0; border-radius: 7px; background: var(--accent); padding: 8px; color: inherit; text-align: left; }
 .slash-suggestions span { color: var(--muted-foreground); font-size: 12px; }
-.composer-queue, .host-ui-card { width: min(760px, 100%); margin-inline: auto; padding: 8px 10px; border: 1px solid var(--border); border-radius: 10px; background: var(--card); }
+.composer-queue, .host-ui-card { width: min(var(--composer-desktop-reference-width), 100%); margin-inline: auto; padding: 8px 10px; border: 1px solid var(--border); border-radius: 10px; background: var(--card); }
 .composer-queue { display: flex; align-items: center; justify-content: space-between; }
 .host-ui-card { display: flex; flex-direction: column; gap: 8px; padding: 12px; }
 .host-ui-card p { margin: 0; color: var(--muted-foreground); font-size: 13px; }
@@ -344,7 +344,7 @@ svg { stroke-width: 1.5; }
 .host-ui-actions { justify-content: flex-end; }
 .host-ui-editor { min-height: 112px; font: 12px/1.5 ui-monospace, monospace; }
 
-.attachment-tray { display: flex; width: min(760px, 100%); max-height: min(320px, 40dvh); flex-direction: column; gap: 8px; margin: 0 auto 10px; overflow-y: auto; }
+.attachment-tray { display: flex; width: min(var(--composer-desktop-reference-width), 100%); max-height: min(320px, 40dvh); flex-direction: column; gap: 8px; margin: 0 auto 10px; overflow-y: auto; }
 .attachment-card { display: flex; width: min(400px, 100%); align-items: center; gap: 9px; padding: 6px; border: 1px solid var(--border); border-radius: 10px; background: var(--card); }
 .attachment-media { display: grid; width: 40px; height: 40px; flex: none; place-items: center; overflow: hidden; border-radius: 7px; background: var(--muted); }
 .attachment-media img { width: 100%; height: 100%; object-fit: cover; }
@@ -591,7 +591,7 @@ svg { stroke-width: 1.5; }
 /* Selection carries the single cool accent. */
 .command-option[data-highlighted] { box-shadow: inset 0 0 0 1px oklch(1 0 0 / 6%); }
 
-@media (max-width: 760px) {
+@media (--conduit-mobile-layout) {
   .mobile-panel-backdrop {
     display: block;
     position: fixed;
@@ -719,7 +719,7 @@ svg { stroke-width: 1.5; }
   /* The collapsed mobile composer is one quiet, centred row. Text can grow
      when it wraps, but the empty state stays at the same visual baseline as
      the three controls around it. */
-  .composer { display: flex; min-height: 44px; align-items: center; border-radius: 18px; }
+  .composer { display: flex; min-height: 44px; align-items: center; }
   .composer-content { display: contents; }
   .composer-mobile-plus { display: flex; flex: 0 0 auto; align-self: center; align-items: center; padding: 0 0 0 4px; }
   .composer-plus-trigger { display: inline-flex; width: 38px; height: 38px; align-items: center; justify-content: center; border: 0; border-radius: 12px; background: transparent; color: var(--muted-foreground); -webkit-tap-highlight-color: transparent; }

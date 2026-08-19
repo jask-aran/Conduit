@@ -83,7 +83,7 @@
 .sidebar-context-menu svg { width: 18px; height: 18px; }
 .sidebar-context-menu .menu-chevron { width: 15px; height: 15px; }
 
-@media (max-width: 760px) {
+@media (--conduit-mobile-layout) {
   .sidebar-container { height: var(--app-height, 100dvh); }
   .sidebar-context-menu { width: 11rem; max-height: min(70dvh, calc(var(--app-height, 100dvh) - 24px)); }
   [data-slot="context-menu-sub-content"].sidebar-context-menu { width: 7rem; }

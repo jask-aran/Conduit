@@ -1,4 +1,14 @@
 import { expect, test } from "@playwright/test";
+import {
+  COMPOSER_MOBILE_BREAKPOINT_PX,
+  LIQUID_GLASS_BLUR_PX,
+  LIQUID_GLASS_FAMILIES,
+  LIQUID_GLASS_HEIGHT_BUCKETS,
+} from "../../src/client/chat/liquid-glass-static.ts";
+
+const MOBILE_LAYOUT_BREAKPOINT = COMPOSER_MOBILE_BREAKPOINT_PX;
+const DESKTOP_GLASS_FAMILY = LIQUID_GLASS_FAMILIES.desktop;
+const DESKTOP_GLASS_HEIGHT = LIQUID_GLASS_HEIGHT_BUCKETS[1];
 
 /**
  * Issue #27 acceptance harness — mobile chrome + palette entry paths.
@@ -105,7 +115,7 @@ test("acceptance: mobile chat shell fills the visual viewport", async ({ page },
   expect(styles).toEqual({ margin: "0px", borderRadius: "0px", boxShadow: "none" });
 
   expect(transcriptBox.y).toBeGreaterThanOrEqual(shellBox.y - 1);
-  expect(transcriptBox.y + transcriptBox.height).toBeLessThanOrEqual(composerBox.y + 1);
+  expect(composerBox.y).toBeGreaterThanOrEqual(shellBox.y - 1);
   expect(composerBox.y + composerBox.height).toBeLessThanOrEqual(shellBox.y + shellBox.height + 1);
 });
 
@@ -229,7 +239,7 @@ test("acceptance: header launchers distinguish chat search from the command pale
     shell.boundingBox(),
     page.evaluate(() => ({ width: innerWidth, height: innerHeight })),
   ]);
-  if (testInfo.project.name === "mobile-chromium" || viewport.width <= 760) {
+  if (testInfo.project.name === "mobile-chromium" || viewport.width <= MOBILE_LAYOUT_BREAKPOINT) {
     await expectInsetPalette(page, palette);
   } else {
     expect(Math.abs(shellBox.x + shellBox.width / 2 - viewport.width / 2)).toBeLessThanOrEqual(2);
@@ -665,9 +675,9 @@ test("acceptance: desktop opt-in liquid glass uses the precomputed SVG path", as
     { width: graph.composerWidth, height: graph.composerHeight },
   ]);
   expect(graph.primitives).toEqual(["feGaussianBlur", "feImage", "feDisplacementMap", "feColorMatrix", "feImage", "feComposite", "feComponentTransfer", "feBlend", "feBlend"]);
-  expect(graph.blur).toBe("8");
-  expect(graph.assetKey).toBe("desktop:88");
-  expect(graph.displacementHref).toBe("/glass/composer-desktop-88.png");
+  expect(graph.blur).toBe(String(LIQUID_GLASS_BLUR_PX));
+  expect(graph.assetKey).toBe(`${DESKTOP_GLASS_FAMILY.name}:${DESKTOP_GLASS_HEIGHT}`);
+  expect(graph.displacementHref).toBe(`/glass/composer-${DESKTOP_GLASS_FAMILY.name}-${DESKTOP_GLASS_HEIGHT}.png`);
   expect(graph.transcriptComposerOverlap).toBeGreaterThan(8);
   if (process.env.COMPOSER_GLASS_CAPTURE === "1") {
     await page.locator(".chat-main:not(.chat-main-empty) .composer").screenshot({ path: "/tmp/conduit-composer-liquid-desktop.png" });

@@ -4,7 +4,7 @@
 .composer-surface-shell {
   position: relative;
   width: 100%;
-  border-radius: 24px;
+  border-radius: var(--composer-radius);
 }
 
 /* v0.4.7 placed the filtered composer over an opaque parent background. Keep
@@ -49,10 +49,4 @@
 
 .composer-surface-shell[data-composer-surface="static"] > .composer:focus-within::before {
   background: linear-gradient(150deg, oklch(1 0 0 / 56%), oklch(0.72 0.045 246 / 26%) 38%, oklch(1 0 0 / 5%) 70%, oklch(1 0 0 / 26%));
-}
-
-@media (max-width: 760px) {
-  .composer-surface-shell {
-    border-radius: 18px;
-  }
 }

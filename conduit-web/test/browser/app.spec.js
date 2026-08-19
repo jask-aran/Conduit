@@ -1,4 +1,7 @@
 import { expect, test } from "@playwright/test";
+import { COMPOSER_MOBILE_BREAKPOINT_PX } from "../../src/client/chat/liquid-glass-static.ts";
+
+const MOBILE_LAYOUT_BREAKPOINT = COMPOSER_MOBILE_BREAKPOINT_PX;
 
 const projects = [{
   id: "project_chat",
@@ -293,7 +296,7 @@ test("workspace panel previews files, shows diff, and persists per chat", async 
   await page.getByRole("button", { name: "Toggle workspace panel" }).click();
   const panel = page.getByRole("complementary", { name: "Workspace panel" });
   await expect(panel).toBeVisible();
-  if (page.viewportSize().width > 760) {
+  if (page.viewportSize().width > MOBILE_LAYOUT_BREAKPOINT) {
     const main = page.locator('[data-slot="sidebar-inset"]');
     const thread = page.locator(".thread");
     const [panelBox, widthHandleBox, mainBox, threadBox] = await Promise.all([
@@ -1041,7 +1044,7 @@ test("Workspace views use the nested palette page and terminal lives in the Work
   await expect(terminal).toContainText("Start a terminal");
   await expect(page.getByRole("tab", { name: "Terminal" })).toHaveAttribute("aria-selected", "true");
   const divider = page.getByRole("separator", { name: "Resize workspace panel" });
-  if ((page.viewportSize()?.width || 0) > 760) {
+  if ((page.viewportSize()?.width || 0) > MOBILE_LAYOUT_BREAKPOINT) {
     const box = await divider.boundingBox();
     const panel = page.getByRole("complementary", { name: "Workspace panel" });
     const originalWidth = (await panel.boundingBox()).width;
@@ -1345,7 +1348,7 @@ test("header command button opens the command palette and the close control dism
   await page.locator(".palette-trigger").click();
   const palette = page.getByRole("dialog", { name: "Command Palette" });
   await expect(palette).toBeVisible();
-  if (testInfo.project.name === "mobile-chromium" || (page.viewportSize()?.width || 0) <= 760) {
+  if (testInfo.project.name === "mobile-chromium" || (page.viewportSize()?.width || 0) <= MOBILE_LAYOUT_BREAKPOINT) {
     const [shellBox, viewport] = await Promise.all([
       palette.locator(".command-shell").boundingBox(),
       page.evaluate(() => ({ width: innerWidth, height: innerHeight })),
@@ -3866,7 +3869,7 @@ test("global commands and slash suggestions preserve their intended focus models
   await expect(palette).toBeVisible();
   const [paletteBox, viewport] = await Promise.all([palette.locator(".command-shell").boundingBox(), page.evaluate(() => ({ width: innerWidth, height: innerHeight }))]);
   // Mobile layout: viewport-filling shell inside the persistent dialog frame.
-  if (viewport.width <= 760 || testInfo.project.name === "mobile-chromium") {
+  if (viewport.width <= MOBILE_LAYOUT_BREAKPOINT || testInfo.project.name === "mobile-chromium") {
     expect(Math.abs(paletteBox.x - 8)).toBeLessThanOrEqual(2);
     expect(Math.abs(paletteBox.y - 8)).toBeLessThanOrEqual(2);
     expect(Math.abs(paletteBox.width - (viewport.width - 16))).toBeLessThanOrEqual(2);
