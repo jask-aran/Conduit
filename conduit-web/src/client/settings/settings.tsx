@@ -857,7 +857,7 @@ export function Settings(props: {
               <Field>
                 <label class="settings-toggle">
                   <input type="checkbox" aria-label="Liquid glass surface" checked={props.liquidGlassSurface} onChange={(event) => props.onLiquidGlassSurfaceChange(event.currentTarget.checked)} />
-                  <span><strong>Liquid glass composer surface</strong><small>Use the precomputed SVG refraction path. It costs more on mobile than the basic frosted path.</small></span>
+                  <span><strong>Liquid glass composer surface</strong><small>Use the precomputed SVG refraction path. It costs more on mobile than the frost path.</small></span>
                 </label>
               </Field>
               <Field>

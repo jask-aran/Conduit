@@ -33,6 +33,13 @@ test("displacement maps keep a neutral centre and a convex-squircle bezel", () =
   assert.ok(asset.maxDisplacement > 0);
 });
 
+test("generator reads families and buckets from the shared static module", () => {
+  const generator = fs.readFileSync(path.resolve(import.meta.dirname, "../scripts/generate-liquid-glass-assets.mjs"), "utf8");
+  assert.match(generator, /from "\.\.\/src\/client\/chat\/liquid-glass-static\.ts"/);
+  assert.doesNotMatch(generator, /width:\s*760/);
+  assert.doesNotMatch(generator, /heights = \[64,/);
+});
+
 test("prebaked PNG maps exist for every family and height bucket", () => {
   const glassDir = path.resolve(import.meta.dirname, "../public/glass");
   for (const family of Object.values(LIQUID_GLASS_FAMILIES)) {

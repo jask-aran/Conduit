@@ -49,7 +49,7 @@ function Actions(props: { message: Message; precedingUserId?: string; chat: Acti
   </div>;
 }
 
-export function Transcript(props: { chat: ActiveChatStore; partialContinue: boolean; markdownRenderer: MarkdownRendererId; profileLabel?: string; footer?: JSX.Element }) {
+export function Transcript(props: { chat: ActiveChatStore; partialContinue: boolean; markdownRenderer: MarkdownRendererId; profileLabel?: string; stickyFooter?: JSX.Element }) {
   let transcriptRoot!: HTMLDivElement;
   let motionShell!: HTMLDivElement;
   let viewport!: HTMLDivElement;
@@ -512,7 +512,7 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
           </div>;
         }}</For>
         </div>
-        {props.footer}
+        {props.stickyFooter}
       </div>
       <Show when={!following()}><Button class="message-scroller-button" aria-label="Scroll to latest" onClick={() => { if (rendererUsesInertialTailFollow()) resumeTypewriterTailFollow("user-scroll-to-latest"); else { setFollowing(true); scrollBottom(); } }}>↓</Button></Show>
     </div>

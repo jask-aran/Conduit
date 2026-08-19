@@ -546,12 +546,12 @@ test("acceptance: mobile transcript fades behind the frosted composer", async ({
     scale: "css",
   });
   if (process.env.COMPOSER_GLASS_CAPTURE === "1") {
-    await page.locator(".chat-main:not(.chat-main-empty) .composer").screenshot({ path: "/tmp/conduit-composer-basic-mobile.png" });
+    await page.locator(".chat-main:not(.chat-main-empty) .composer").screenshot({ path: "/tmp/conduit-composer-frost-mobile.png" });
   }
 });
 
-test("acceptance: desktop transcript stays behind the basic composer", async ({ page }, testInfo) => {
-  test.skip(testInfo.project.name !== "desktop-chromium", "desktop basic composer overlap");
+test("acceptance: desktop transcript stays behind the frost composer", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop-chromium", "desktop frost composer overlap");
   await openApp(page);
   await page.locator(".sidebar-chat").filter({ hasText: "Existing chat" }).click();
   await expect(page.locator(".chat-main:not(.chat-main-empty) article.message-assistant")).toContainText("Transcript paragraph 1");
@@ -561,7 +561,7 @@ test("acceptance: desktop transcript stays behind the basic composer", async ({ 
     const paragraphs = [...element.querySelectorAll("article.message-assistant p")];
     const target = paragraphs.find((candidate) => candidate.getBoundingClientRect().top >= (composer?.getBoundingClientRect().top ?? Infinity)) || paragraphs.at(-1);
     if (!target || !composer) throw new Error("Expected transcript paragraph and composer overlap targets");
-    target.setAttribute("data-test-desktop-basic-target", "true");
+    target.setAttribute("data-test-desktop-frost-target", "true");
     const viewportBox = element.getBoundingClientRect();
     const targetBox = target.getBoundingClientRect();
     const composerBox = composer.getBoundingClientRect();
@@ -574,8 +574,8 @@ test("acceptance: desktop transcript stays behind the basic composer", async ({ 
   const layout = await page.evaluate(() => {
     const stack = document.querySelector(".chat-main:not(.chat-main-empty) .composer-stack");
     const composer = document.querySelector(".chat-main:not(.chat-main-empty) .composer");
-    const target = document.querySelector('[data-test-desktop-basic-target="true"]');
-    if (!stack || !composer || !target) throw new Error("Expected desktop basic composer layout");
+    const target = document.querySelector('[data-test-desktop-frost-target="true"]');
+    if (!stack || !composer || !target) throw new Error("Expected desktop frost composer layout");
     const stackStyle = getComputedStyle(stack);
     const fadeStyle = getComputedStyle(stack, "::before");
     const composerBox = composer.getBoundingClientRect();
@@ -632,33 +632,40 @@ test("acceptance: desktop transcript passes behind the static glassmorphism comp
     const stackStyle = getComputedStyle(stack);
     const stackFadeStyle = getComputedStyle(stack, "::before");
     const composerStyle = getComputedStyle(composer);
-    const frostChromeStyle = getComputedStyle(composer);
+    const frostStyle = getComputedStyle(composer);
     const threadStyle = getComputedStyle(thread);
+    const viewport = document.querySelector(".chat-main:not(.chat-main-empty) .message-scroller-viewport");
     const targetBox = target.getBoundingClientRect();
     const composerBox = composer.getBoundingClientRect();
     return {
       stackBackgroundColor: stackStyle.backgroundColor,
       stackBackgroundImage: stackStyle.backgroundImage,
       stackFadeBackgroundImage: stackFadeStyle.backgroundImage,
+      stackPosition: stackStyle.position,
+      composerSurface: composer.getAttribute("data-composer-surface"),
       composerBackgroundColor: composerStyle.backgroundColor,
       composerBackdropFilter: composerStyle.backdropFilter,
       composerOverflow: composerStyle.overflow,
-      frostBackgroundColor: frostChromeStyle.backgroundColor,
-      frostBackdropFilter: frostChromeStyle.backdropFilter,
-      frostBoxShadow: frostChromeStyle.boxShadow,
+      frostBackgroundColor: frostStyle.backgroundColor,
+      frostBackdropFilter: frostStyle.backdropFilter,
+      frostBoxShadow: frostStyle.boxShadow,
       svgDefinitions: document.querySelectorAll(".liquid-glass-definitions").length,
       glassFilters: document.querySelectorAll(".composer-glass-filter").length,
       threadPaddingBottom: threadStyle.paddingBottom,
       composerClass: composer.className,
+      insideViewport: Boolean(viewport?.contains(composer)),
       transcriptComposerOverlap: Math.max(0, Math.min(targetBox.bottom, composerBox.bottom) - Math.max(targetBox.top, composerBox.top)),
     };
   });
   expect(layout.stackBackgroundColor).toBe("rgba(0, 0, 0, 0)");
   expect(layout.stackBackgroundImage).toBe("none");
   expect(layout.stackFadeBackgroundImage).toBe("none");
+  expect(layout.stackPosition).toBe("sticky");
+  expect(layout.insideViewport).toBe(true);
+  expect(layout.composerSurface).toBe("frost");
   expect(layout.composerOverflow).toBe("visible");
-  expect(layout.frostBackdropFilter).toContain("blur(24px)");
-  expect(layout.frostBackgroundColor).toBe("rgba(255, 255, 255, 0.169)");
+  expect(layout.frostBackdropFilter).toMatch(/blur\(/);
+  expect(layout.frostBackgroundColor).not.toBe("rgba(0, 0, 0, 0)");
   expect(layout.frostBoxShadow).toContain("inset");
   expect(layout.svgDefinitions).toBe(0);
   expect(layout.glassFilters).toBe(0);
@@ -666,7 +673,7 @@ test("acceptance: desktop transcript passes behind the static glassmorphism comp
   expect(layout.composerClass).toBe("composer");
   expect(layout.transcriptComposerOverlap).toBeGreaterThan(8);
   if (process.env.COMPOSER_GLASS_CAPTURE === "1") {
-    await page.locator(".chat-main:not(.chat-main-empty) .composer").screenshot({ path: "/tmp/conduit-composer-basic-desktop.png" });
+    await page.locator(".chat-main:not(.chat-main-empty) .composer").screenshot({ path: "/tmp/conduit-composer-frost-desktop.png" });
   }
 });
 

@@ -338,7 +338,7 @@ export function Composer(props: {
     <Show when={props.chat.queue().steering.length || props.chat.queue().followUp.length}>
       <div class="composer-queue"><span>Queued messages</span><Button variant="ghost" size="sm" onClick={props.chat.clearQueue}>Restore to draft</Button></div>
     </Show>
-    <div class="composer" data-liquid-glass={props.liquidGlassSurface ? "true" : "false"}>
+    <div class="composer" data-composer-surface={props.liquidGlassSurface ? "liquid" : "frost"}>
       <Show when={props.liquidGlassSurface}><LiquidGlassSurface /></Show>
       <div class="composer-content">
       <MobileComposerOptions composer={props} />
