@@ -207,13 +207,11 @@ export function TerminalPane(props: { projectId: string; active?: boolean }) {
     syncGeometry = sendResize;
 
     const finishReplay = () => {
-      if (generation !== connectionGeneration) return;
-      replaying = false;
+      if (generation !== connectionGeneration || connection.readyState !== WebSocket.OPEN) return;
+      // Keep browser-generated terminal replies suppressed until the server has
+      // drained every output mutation that the headless emulator already saw.
       activeTerminal.repaint();
-      if (host) host.dataset.terminalReady = "true";
-      setConnectionState("attached");
-      sendResize();
-      focusActiveTerminal();
+      connection.send(JSON.stringify({ type: "restore_ready" }));
     };
 
     connection.onmessage = (event) => {
@@ -247,10 +245,15 @@ export function TerminalPane(props: { projectId: string; active?: boolean }) {
             return;
           }
           if (message.type === "control") {
+            // A control frame is only sent after this client's restore/catch-up
+            // handshake is complete. From this point on, live browser output may
+            // answer terminal protocol queries when this client owns control.
+            replaying = false;
             setWritable(message.writable === true);
+            if (host) host.dataset.terminalReady = "true";
+            setConnectionState("attached");
             if (message.writable !== true) setTerminalFocused(false);
             if (message.writable === true) {
-              setConnectionState("attached");
               sendResize();
               focusActiveTerminal();
             }
