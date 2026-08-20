@@ -77,7 +77,7 @@ test("composer remains a sibling overlay outside the transcript motion island", 
   assert.match(motionShell, /transform:\s*translate3d\(0,\s*0,\s*0\)/);
   assert.match(motionShell, /will-change:\s*transform/);
 
-  const composerOverlay = rule(performanceStyles, ".chat-main:not\(.chat-main-empty\) .composer-stack");
+  const composerOverlay = rule(performanceStyles, ".chat-main:not(.chat-main-empty) .composer-stack");
   assert.match(composerOverlay, /position:\s*absolute/);
   assert.match(composerOverlay, /bottom:\s*0/);
   assert.match(composerOverlay, /z-index:\s*2/);
