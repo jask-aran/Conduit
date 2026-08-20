@@ -325,7 +325,7 @@ export function TerminalPane(props: { projectId: string; active?: boolean }) {
     setError("");
     try {
       const running = await refreshSessions(projectId);
-      if (projectId !== activeProjectId || pty() || props.active === false) return;
+      if (projectId !== activeProjectId || pty()) return;
       const record = running[0];
       if (!record) return;
       setPty(record);
