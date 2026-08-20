@@ -2,18 +2,19 @@
 import { batch, createEffect, createMemo, createSignal, ErrorBoundary, lazy, onCleanup, onMount, Show } from "solid-js";
 import { render } from "solid-js/web";
 import {
-  PanelLeftIcon, PanelRightIcon, SearchIcon, ShareIcon, TerminalIcon, TriangleAlertIcon,
+  ChevronDownIcon, EllipsisIcon, PanelLeftIcon, PanelRightIcon, PencilIcon, SearchIcon, ShareIcon, TerminalIcon, Trash2Icon, TriangleAlertIcon,
 } from "lucide-solid";
 import { registerSW } from "virtual:pwa-register";
 import { Toaster, toast } from "solid-sonner";
 import "solid-sonner/styles.css";
 import { DefaultMeteorShower } from "@jask-aran/solid-components/meteor-shower";
 import "@jask-aran/solid-components/meteor-shower.css";
-import { Button, Dialog, DialogContent, Spinner } from "@/components/primitives";
+import { Button, Dialog, DialogContent, Menu, MenuContent, MenuGroup, MenuItem, MenuLabel, MenuSeparator, MenuTrigger, Spinner } from "@/components/primitives";
 import { api, asList, pathChatId, pathProjectId, projectPath } from "./api/client";
 import type { ChatSummary, DashboardChat, Installation, Project, RuntimeIdentity, Template, TranscriptDetail, WorkspaceAppearance, WorkspacePolicy, WorkspaceSuggestion, WorkspaceSuggestionsPayload } from "./api/contracts";
 import { createErrorDiagnostic, formatRuntimeDiagnosticPrompt, type ErrorDiagnostic, type ErrorDiagnosticContext } from "./error-diagnostics";
-import { Composer } from "./chat/composer";
+import { Composer, SPINNING_ACTIVITY, type ComposerStatus } from "./chat/composer";
+import { formatContextMetrics, saveContextMetrics, selectedContextMetrics, type ContextMetricId } from "./chat/context-metrics";
 import { HostUiRequests } from "./chat/host-ui-card";
 import { MARKDOWN_RENDERER_STORAGE_KEY, selectedMarkdownRenderer, type MarkdownRendererId } from "./chat/markdown-settings";
 import { loadVoiceDictationSettings, saveVoiceDictationSettings } from "./chat/voice-dictation";
@@ -26,11 +27,12 @@ import { Sidebar } from "./navigation/sidebar";
 import { clampSidebarChatLimit, selectedSidebarChatLimit, SIDEBAR_CHAT_LIMIT_STORAGE_KEY } from "./navigation/sidebar-preferences";
 import { WorkspaceAppearanceEditor } from "./project/workspace-appearance-editor";
 import { Settings } from "./settings/settings";
-import { createActiveChat } from "./state/active-chat";
+import { createActiveChat, type ActiveChatStore } from "./state/active-chat";
 import { createAttachments, DEFAULT_MAX_ATTACHMENT_BYTES, filesFromDataTransfer } from "./state/attachments";
 import { createCatalogueStore } from "./state/catalogue";
 import { createModelSettings } from "./state/model-settings";
 import { createRuntimeStore } from "./state/runtime";
+import { VoiceWaveform } from "./chat/voice-waveform";
 import { browserShortcutEnvironmentProvider } from "./shortcuts/shortcut-environment";
 import { ShortcutManager } from "./shortcuts/shortcut-manager";
 import "./project/dashboard.css";
@@ -50,6 +52,10 @@ function ChatHeader(props: {
   profile?: Template | null;
   runtime?: RuntimeIdentity | null;
   live?: Record<string, unknown> | null;
+  chat?: ActiveChatStore;
+  contextMetrics?: () => readonly ContextMetricId[];
+  composerStatus?: ComposerStatus | null;
+  connectivity?: "connecting" | "online" | "reconnecting" | "offline";
   panelOpen: boolean;
   mobileSidebarOpen: boolean;
   onToggleMobileSidebar: () => void;
@@ -57,30 +63,126 @@ function ChatHeader(props: {
   onOpenSearch: () => void;
   onTogglePanel: () => void;
   onShare: () => void;
+  onRename?: () => void;
+  onDelete?: () => void;
   dashboard?: boolean;
 }) {
+  const [statusOpen, setStatusOpen] = createSignal(false);
+  let statusTrigger!: HTMLButtonElement;
   const projectLabel = () => props.project?.slug === "chat" ? "Chats" : props.project?.slug || props.project?.name || "Chats";
-  const runtimeLabel = () => props.runtime?.kind === "native_pi" ? "Host Pi" : "Isolated Pi";
+  const runtimeLabel = () => !props.runtime ? null : props.runtime.kind === "native_pi" ? "Host Pi" : "Isolated Pi";
   const profileLabel = () => props.runtime?.kind === "native_pi" ? null : props.profile?.label || props.profile?.id;
   const posture = () => props.runtime?.kind === "native_pi"
     ? props.live?.trustPosture === "native_saved_trust" ? "project resources trusted" : "project trust pending"
     : props.profile?.posture || props.profile?.tools?.join(" / ");
   const line = () => props.dashboard ? "" : [runtimeLabel(), props.live?.binaryVersion || props.runtime?.binaryVersion ? `Pi ${props.live?.binaryVersion || props.runtime?.binaryVersion}` : null, profileLabel(), projectLabel() !== "Chats" ? projectLabel() : null, posture()].filter(Boolean).join(" · ");
-  return <header class="chat-header">
-    <Show when={!props.mobileSidebarOpen}>
-      <Button variant="ghost" size="icon-sm" class="mobile-sidebar-trigger" data-mobile-open="false" aria-label="Toggle Sidebar" aria-expanded={false} onClick={props.onToggleMobileSidebar}><PanelLeftIcon /></Button>
-    </Show>
-    <nav aria-label="breadcrumb" class="chat-header-title"><span>{projectLabel()}</span><span class="breadcrumb-separator" aria-hidden="true" /><strong>{props.title}</strong></nav>
-    <Show when={line()}><span class="chat-profile-posture" title={line()}>{line()}</span></Show>
-    <div class="chat-header-actions">
-      <Button variant="ghost" size="icon-sm" class="search-trigger" aria-label="Search chats" title="Search chats" onClick={props.onOpenSearch}><SearchIcon /></Button>
-      <Button variant="ghost" size="icon-sm" class="palette-trigger" aria-label="Open command palette" title="Command palette" onClick={props.onOpenPalette}><TerminalIcon /></Button>
-      <Button variant="ghost" size="icon-sm" aria-label={props.dashboard ? "Copy Tailscale workspace link" : "Copy Tailscale chat link"} title={props.dashboard ? "Copy Tailscale workspace link" : "Copy Tailscale chat link"} onClick={props.onShare}><ShareIcon /></Button>
-      <Show when={!props.panelOpen}>
-        <Button variant="ghost" size="icon-sm" aria-label="Toggle workspace panel" aria-expanded={false} onClick={props.onTogglePanel}><PanelRightIcon /></Button>
+  const menuLine = () => [projectLabel(), runtimeLabel(), props.live?.binaryVersion || props.runtime?.binaryVersion ? `Pi ${props.live?.binaryVersion || props.runtime?.binaryVersion}` : null, profileLabel(), posture()].filter(Boolean).join(" · ");
+  const activity = () => props.chat?.activity();
+  const contextDetail = () => props.chat && props.contextMetrics
+    ? formatContextMetrics({
+      enabled: props.contextMetrics(),
+      contextUsage: props.chat.contextUsage(),
+      sessionStats: props.chat.sessionStats(),
+      cacheStats: props.chat.cacheStats(),
+    })
+    : "";
+  const queueCount = () => props.chat ? props.chat.queue().steering.length + props.chat.queue().followUp.length : 0;
+  const dictationLabel = () => props.composerStatus?.dictationLabel() || "";
+  const dictating = () => Boolean(props.composerStatus?.dictating());
+  const statusLabel = () => {
+    const currentDictation = dictationLabel();
+    if (currentDictation) return currentDictation;
+    const currentActivity = activity();
+    if (currentActivity?.label) return currentActivity.label;
+    if (props.connectivity === "offline") return "Offline";
+    if (props.connectivity === "reconnecting") return "Reconnecting…";
+    if (props.connectivity === "connecting") return "Connecting…";
+    return "Ready";
+  };
+  const statusKind = () => activity()?.kind || (props.connectivity === "offline" ? "runtime_failed" : "idle");
+  const statusBusy = () => dictating() || SPINNING_ACTIVITY.has(statusKind()) || ["connecting", "reconnecting"].includes(props.connectivity || "");
+  const statusFailure = () => props.connectivity === "offline" || ["request_failed", "runtime_failed"].includes(statusKind());
+  const statusTone = () => statusFailure() ? "error" : dictating() ? "listening" : statusBusy() ? "active" : "ready";
+  const connectionLabel = () => ({ connecting: "Connecting", online: "Connected", reconnecting: "Reconnecting", offline: "Offline" }[props.connectivity || "offline"] || "Unknown");
+  const closeStatus = (open: boolean) => {
+    setStatusOpen(open);
+    if (!open) queueMicrotask(() => statusTrigger?.focus());
+  };
+  const waveformHistory = () => props.composerStatus?.waveform.history() || [];
+  const waveformLevel = () => props.composerStatus?.waveform.level() || 0;
+  const waveformPeak = () => props.composerStatus?.waveform.peak() || 0;
+  const waveformState = () => props.composerStatus?.recorderMonitorState() || "stopped";
+  return <>
+    <header class="chat-header">
+      <Show when={!props.mobileSidebarOpen}>
+        <Button variant="ghost" size="icon-sm" class="mobile-sidebar-trigger" data-mobile-open="false" aria-label="Toggle Sidebar" aria-expanded={false} onClick={props.onToggleMobileSidebar}><PanelLeftIcon /></Button>
       </Show>
-    </div>
-  </header>;
+      <nav aria-label="breadcrumb" class="chat-header-title"><span>{projectLabel()}</span><span class="breadcrumb-separator" aria-hidden="true" /><strong>{props.title}</strong></nav>
+      <Show when={line()}><span class="chat-profile-posture" title={line()}>{line()}</span></Show>
+      <Show when={!props.dashboard && props.chat}>
+        <Button ref={statusTrigger} variant="ghost" size="sm" class="chat-status-trigger" data-state={statusTone()} aria-label={`Runtime status: ${statusLabel()}. Open runtime details`} aria-live="polite" aria-expanded={statusOpen()} aria-haspopup="dialog" onClick={() => setStatusOpen(true)}>
+          <Show when={dictating()} fallback={<span class="chat-status-icon" aria-hidden="true"><Show when={statusFailure()} fallback={<Show when={statusBusy()} fallback={<span class="chat-status-dot" />}><Spinner /></Show>}><TriangleAlertIcon /></Show></span>}>
+              <VoiceWaveform class="chat-status-waveform" history={waveformHistory} level={waveformLevel} peak={waveformPeak} state={waveformState()} variant="compact" barCount={16} ariaLabel="Microphone input level" />
+          </Show>
+          <span class="chat-status-label">{statusLabel()}</span>
+          <ChevronDownIcon class="chat-status-chevron" aria-hidden="true" />
+        </Button>
+      </Show>
+      <div class="chat-header-actions">
+        <Button variant="ghost" size="icon-sm" class="search-trigger" aria-label="Search chats" title="Search chats" onClick={props.onOpenSearch}><SearchIcon /></Button>
+        <Button variant="ghost" size="icon-sm" class="palette-trigger" aria-label="Open command palette" title="Command palette" onClick={props.onOpenPalette}><TerminalIcon /></Button>
+        <Button variant="ghost" size="icon-sm" class="chat-header-desktop-action" aria-label={props.dashboard ? "Copy Tailscale workspace link" : "Copy Tailscale chat link"} title={props.dashboard ? "Copy Tailscale workspace link" : "Copy Tailscale chat link"} onClick={props.onShare}><ShareIcon /></Button>
+        <Show when={!props.panelOpen}>
+          <Button variant="ghost" size="icon-sm" class="chat-header-desktop-action" aria-label="Toggle workspace panel" aria-expanded={false} onClick={props.onTogglePanel}><PanelRightIcon /></Button>
+        </Show>
+        <Menu>
+          <MenuTrigger class="chat-header-more" aria-label="More chat options" title="More chat options"><EllipsisIcon /></MenuTrigger>
+          <MenuContent class="chat-header-menu">
+            <MenuGroup>
+              <MenuLabel class="chat-header-menu-title">{props.title}</MenuLabel>
+              <MenuLabel class="chat-header-menu-meta">{menuLine()}</MenuLabel>
+            </MenuGroup>
+            <MenuSeparator />
+            <MenuItem onSelect={props.onTogglePanel}><PanelRightIcon />Workspace panel</MenuItem>
+            <MenuItem onSelect={props.onShare}><ShareIcon />Share</MenuItem>
+            <Show when={props.onRename}>
+              <MenuItem onSelect={() => props.onRename?.()}><PencilIcon />{props.dashboard ? "Rename workspace" : "Rename"}</MenuItem>
+            </Show>
+            <Show when={props.onDelete}>
+              <MenuItem variant="destructive" onSelect={() => props.onDelete?.()}><Trash2Icon />{props.dashboard ? "Delete workspace" : "Delete"}</MenuItem>
+            </Show>
+          </MenuContent>
+        </Menu>
+      </div>
+    </header>
+    <Show when={!props.dashboard && props.chat}>
+      <Dialog open={statusOpen()} onOpenChange={closeStatus}>
+        <DialogContent class="mobile-status-sheet" title="Runtime status" closeLabel="Close runtime status">
+          <div class="mobile-status-sheet-scroll">
+            <div class={`mobile-status-sheet-state mobile-status-tone-${statusTone()}`} role="status" aria-live="polite">
+              <span class="mobile-status-sheet-state-label">{statusLabel()}</span>
+              <span class="mobile-status-sheet-state-kind">{statusKind()}</span>
+            </div>
+            <Show when={dictating()}>
+              <VoiceWaveform class="mobile-status-sheet-waveform" history={waveformHistory} level={waveformLevel} peak={waveformPeak} state={waveformState()} variant="compact" barCount={24} ariaLabel="Microphone input level" />
+            </Show>
+            <dl class="mobile-status-facts">
+              <div><dt>Connection</dt><dd>{connectionLabel()}</dd></div>
+              <div><dt>Activity</dt><dd>{activity()?.label || "Ready"}</dd></div>
+              <Show when={queueCount()}><div><dt>Queued messages</dt><dd>{queueCount()}</dd></div></Show>
+            </dl>
+            <section class="mobile-status-context" aria-labelledby="mobile-status-context-title">
+              <h3 id="mobile-status-context-title">Context metrics</h3>
+              <div class="mobile-status-context-values">{contextDetail() || "No context metrics available yet."}</div>
+            </section>
+            <Show when={props.composerStatus?.dictationError()}>
+              <p class="mobile-status-error" role="alert">{props.composerStatus?.dictationError()}</p>
+            </Show>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </Show>
+  </>;
 }
 
 function App() {
@@ -101,6 +203,7 @@ function App() {
   const [maxAttachmentBytes, setMaxAttachmentBytes] = createSignal(DEFAULT_MAX_ATTACHMENT_BYTES);
   const [markdownRenderer, setMarkdownRenderer] = createSignal<MarkdownRendererId>(selectedMarkdownRenderer());
   const [sidebarChatLimit, setSidebarChatLimit] = createSignal(selectedSidebarChatLimit());
+  const [contextMetrics, setContextMetrics] = createSignal<ContextMetricId[]>(selectedContextMetrics());
   const [settingsOpen, setSettingsOpen] = createSignal(false);
   const [settingsSection, setSettingsSection] = createSignal<SettingsSection>("models");
   const [settingsWorkspaceId, setSettingsWorkspaceId] = createSignal<string | null>(null);
@@ -139,6 +242,7 @@ function App() {
   };
   const catalogue = createCatalogueStore();
   const runtime = createRuntimeStore();
+  const [composerStatus, setComposerStatus] = createSignal<ComposerStatus | null>(null);
   const models = createModelSettings(showError, ({ from, to }) => {
     const label = (level: string) => level ? level[0]!.toUpperCase() + level.slice(1) : "Off";
     toast.info(`Saved thinking level ${label(from)} is no longer available. Using ${label(to)}.`, {
@@ -518,6 +622,7 @@ function App() {
     setSidebarChatLimit(value);
     localStorage.setItem(SIDEBAR_CHAT_LIMIT_STORAGE_KEY, String(value));
   };
+  const switchContextMetrics = (next: ContextMetricId[]) => setContextMetrics(saveContextMetrics(next));
   const saveDefaultTemplate = async (id: string) => {
     const saved = await api<{ defaultTemplateId: string }>("/v0/preferences", { method: "PATCH", body: JSON.stringify({ defaultTemplateId: id }) });
     setDefaultTemplateId(saved.defaultTemplateId || id);
@@ -832,17 +937,17 @@ function App() {
         </Show>
         <Show when={routeKind() === "project" && selectedProject()} fallback={<>
           <Show when={dropActive()}><div class="chat-drop-overlay"><div>Drop files to attach</div></div></Show>
-          <ChatHeader project={selectedProject()} title={chat.title()} profile={activeProfile()} runtime={chat.runtimeIdentity()} live={chat.live() as unknown as Record<string, unknown>} panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={() => void shareChat()} />
+          <ChatHeader project={selectedProject()} title={chat.title()} profile={activeProfile()} runtime={chat.runtimeIdentity()} live={chat.live() as unknown as Record<string, unknown>} chat={chat} contextMetrics={contextMetrics} composerStatus={composerStatus()} connectivity={runtime.connectivity()} panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={() => void shareChat()} onRename={() => runSidebar("rename-chat")} onDelete={() => runSidebar("delete-chat")} />
           <Show when={selectedProject()?.kind === "workspace" && [...runtime.processes().values()].some((process) => process.chatId !== catalogue.selectedId() && process.active)}><div class="workspace-warning"><TriangleAlertIcon /><div><strong>Another chat is working in this Workspace</strong><p>Both agents can edit the same files. Conduit does not lock the Workspace or create worktrees automatically.</p></div></div></Show>
           <div class="work-area">
             <section class="work-area-conversation" aria-label="Conversation">
               <Transcript chat={chat} partialContinue={partialContinue()} markdownRenderer={markdownRenderer()} profileLabel={activeProfile()?.label || activeProfile()?.id || chat.templateId() || undefined} />
               <div class="composer-stack"><HostUiRequests requests={chat.hostUiRequests()} onRespond={chat.respondHostUi} />
-                <Composer chat={chat} attachments={attachments} models={models} profiles={profiles()} activeProfile={activeProfile()} serverOnline={runtime.connectivity() === "online"} voiceSettings={voiceSettings()} onChooseProfile={(id) => void switchProfile(id)} onOpenSettings={openSettings} onOpenAttachments={() => attachFileInput?.click()} /></div>
+                <Composer chat={chat} attachments={attachments} models={models} profiles={profiles()} activeProfile={activeProfile()} serverOnline={runtime.connectivity() === "online"} voiceSettings={voiceSettings()} contextMetrics={contextMetrics} onChooseProfile={(id) => void switchProfile(id)} onOpenSettings={openSettings} onOpenAttachments={() => attachFileInput?.click()} onStatusChange={setComposerStatus} /></div>
             </section>
           </div>
         </>}>
-          <ChatHeader project={selectedProject()} title="Dashboard" panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={() => void shareProject()} dashboard />
+          <ChatHeader project={selectedProject()} title="Dashboard" panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={() => void shareProject()} onRename={() => runSidebar("rename-folder")} onDelete={() => runSidebar("delete-project")} dashboard />
           <ProjectDashboard project={selectedProject()!} templates={templates()} runtime={runtime}
             onNewChat={async (project) => { await createChat(project); }} onOpenChat={(target: DashboardChat, project) => openChat(target, project)}
             onRename={() => runSidebar("rename-folder")} onDelete={() => runSidebar("delete-project")}
@@ -853,7 +958,7 @@ function App() {
     <Show when={Boolean(selectedProject()) && Boolean(workspacePanelScope())}><WorkspacePanel projectId={() => selectedProject()!.id} chatId={() => workspacePanelScope()!} open={panelOpen} requestedTab={workspaceViewRequest} onClose={togglePanel} /></Show>
     <CommandMenu open={paletteOpen()} onOpenChange={setPaletteOpen} onPageChange={setPalettePage} initialPage={palettePage()} initialQuery={paletteInitialQuery()} launchNonce={paletteNonce()} directLaunch={paletteDirectLaunch()}
       context={paletteContext()} actions={paletteActions} models={models.models()} currentModel={models.model()} onChooseModel={(spec) => void models.chooseModel(spec)} shortcuts={shortcutManager} />
-                <Settings open={settingsOpen()} initialSection={settingsSection()} initialWorkspaceId={settingsWorkspaceId()} onOpenChange={setSettingsOpen} models={models} templates={templates()} templatesLoading={templatesLoading()} defaultTemplateId={defaultTemplateId()} projects={catalogue.projects()} installations={installations()} installationsLoading={installationsLoading()} onInstallationsChange={setInstallations} onDefaultTemplateChange={saveDefaultTemplate} onWorkspaceDefaultChange={saveWorkspaceDefault} markdownRenderer={markdownRenderer()} onMarkdownRendererChange={switchMarkdownRenderer} voiceSettings={voiceSettings()} onVoiceSettingsSave={updateVoiceSettings} sidebarChatLimit={sidebarChatLimit()} onSidebarChatLimitChange={switchSidebarChatLimit} shortcuts={shortcutManager} />
+                <Settings open={settingsOpen()} initialSection={settingsSection()} initialWorkspaceId={settingsWorkspaceId()} onOpenChange={setSettingsOpen} models={models} templates={templates()} templatesLoading={templatesLoading()} defaultTemplateId={defaultTemplateId()} projects={catalogue.projects()} installations={installations()} installationsLoading={installationsLoading()} onInstallationsChange={setInstallations} onDefaultTemplateChange={saveDefaultTemplate} onWorkspaceDefaultChange={saveWorkspaceDefault} markdownRenderer={markdownRenderer()} onMarkdownRendererChange={switchMarkdownRenderer} voiceSettings={voiceSettings()} onVoiceSettingsSave={updateVoiceSettings} sidebarChatLimit={sidebarChatLimit()} onSidebarChatLimitChange={switchSidebarChatLimit} contextMetrics={contextMetrics()} onContextMetricsChange={switchContextMetrics} shortcuts={shortcutManager} />
   </>;
 }
 
