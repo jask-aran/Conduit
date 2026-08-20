@@ -123,8 +123,11 @@ export class PtyManager extends EventEmitter {
     this.tmuxPath = tmuxPath;
     this.run = run;
     this.records = new Map();
+    // One disposable tmux client may own a terminal at a time. Different
+    // terminal ids remain completely independent and may stream concurrently.
     this.attachments = new Map();
-    this.queue = Promise.resolve();
+    this.persistQueue = Promise.resolve();
+    this.createQueue = Promise.resolve();
     this.tmuxReady = false;
     this.stopping = false;
     const namespace = crypto.createHash("sha256").update(path.resolve(filePath)).digest("hex").slice(0, 12);
@@ -140,7 +143,8 @@ export class PtyManager extends EventEmitter {
     try {
       return await this.run(this.tmuxPath, this.tmuxArgs(...args), { env: cleanEnvironment(), maxBuffer: 1024 * 1024 });
     } catch (error) {
-      if (tolerateMissingServer && (error?.code === 1 || /no server running|can't find session|no sessions/i.test(String(error?.stderr || error?.message)))) return null;
+      const detail = String(error?.stderr || error?.message || "");
+      if (tolerateMissingServer && /no server running|can't find session|no sessions/i.test(detail)) return null;
       if (error?.code === "ENOENT") throw failure("pty_tmux_unavailable", "tmux 3.3 or newer is required for Workspace terminals");
       throw error;
     }
@@ -160,7 +164,8 @@ export class PtyManager extends EventEmitter {
       throw failure("pty_tmux_version", `tmux ${PTY_TMUX_MIN_VERSION.join(".")} or newer is required for Workspace terminals`);
     }
     await fs.mkdir(path.dirname(this.tmuxConfigPath), { recursive: true });
-    await fs.writeFile(this.tmuxConfigPath, TMUX_CONFIG, { mode: 0o600 });
+    await fs.writeFile(this.tmuxConfigPath, TMUX_CONFIG, { encoding: "utf8", mode: 0o600 });
+    await fs.chmod(this.tmuxConfigPath, 0o600);
     this.tmuxReady = true;
   }
 
@@ -224,7 +229,16 @@ export class PtyManager extends EventEmitter {
     return this.list();
   }
 
-  async create({ project, cwd, templateId = "shell", cols = 80, rows = 24 }) {
+  create(options) {
+    const operation = this.createQueue.then(
+      () => this.createSerialized(options),
+      () => this.createSerialized(options),
+    );
+    this.createQueue = operation.catch(() => {});
+    return operation;
+  }
+
+  async createSerialized({ project, cwd, templateId = "shell", cols = 80, rows = 24 }) {
     const template = TEMPLATES[templateId];
     if (!template) throw failure("pty_template_not_allowed", "That terminal template is not available");
     if (!project?.id) throw failure("pty_project_required", "A terminal must belong to a project");
@@ -276,78 +290,93 @@ export class PtyManager extends EventEmitter {
     const record = this.records.get(id);
     if (!record) throw failure("pty_not_found", "Terminal was not found");
     if (record.status !== "running") throw failure("pty_not_running", "Terminal is not running");
-    await this.ensureTmux();
-    const names = await this.activeSessionNames();
-    if (!names.has(record.tmuxSession || terminalSessionName(id))) {
-      await this.reconcile();
-      throw failure("pty_not_running", "Terminal is no longer running");
-    }
+    if (this.attachments.has(id)) throw failure("pty_in_use", "Terminal is attached in another Conduit client");
 
-    const width = boundedDimension(cols, 80);
-    const height = boundedDimension(rows, 24);
-    const tmuxSession = record.tmuxSession || terminalSessionName(id);
-    const handle = this.pty.spawn(
-      this.tmuxPath,
-      this.tmuxArgs("-u", "attach-session", "-t", tmuxSession),
-      {
-        name: "xterm-256color",
-        cols: width,
-        rows: height,
-        cwd: process.cwd(),
-        env: cleanEnvironment(),
-      },
-    );
-    const attachments = this.attachments.get(id) || new Set();
-    attachments.add(handle);
-    this.attachments.set(id, attachments);
+    // Reserve before any asynchronous tmux work. This closes the attach/attach
+    // race without introducing a global streaming lease.
+    const lease = { state: "attaching", handle: null, cancelled: false };
+    this.attachments.set(id, lease);
+    try {
+      await this.ensureTmux();
+      const names = await this.activeSessionNames();
+      if (this.attachments.get(id) !== lease || lease.cancelled) throw failure("pty_not_running", "Terminal is no longer available");
+      if (!names.has(record.tmuxSession || terminalSessionName(id))) {
+        this.attachments.delete(id);
+        await this.reconcile();
+        throw failure("pty_not_running", "Terminal is no longer running");
+      }
 
-    let exited = false;
-    let exitEvent = null;
-    const exitListeners = new Set();
-    const dataListeners = new Set();
-    const earlyData = [];
-    handle.onData((value) => {
-      // tmux may redraw immediately after attach. Do not lose that authoritative
-      // initial screen in the small interval before terminal-stream subscribes.
-      if (!dataListeners.size) earlyData.push(value);
-      else for (const listener of dataListeners) listener(value);
-    });
-    handle.onExit((event) => {
-      if (exited) return;
-      exited = true;
-      exitEvent = event;
-      attachments.delete(handle);
-      if (!attachments.size) this.attachments.delete(id);
-      for (const listener of exitListeners) listener(event);
-      if (!this.stopping) void this.reconcile().catch(() => {});
-    });
-
-    return {
-      onData(listener) {
-        dataListeners.add(listener);
-        if (earlyData.length) {
-          for (const value of earlyData.splice(0)) listener(value);
-        }
-        return () => dataListeners.delete(listener);
-      },
-      onExit(listener) {
-        exitListeners.add(listener);
-        if (exitEvent) queueMicrotask(() => { if (exitListeners.has(listener)) listener(exitEvent); });
-        return () => exitListeners.delete(listener);
-      },
-      write(bytes) {
-        const value = Buffer.isBuffer(bytes) ? bytes : Buffer.from(bytes);
-        if (value.length > PTY_MAX_INPUT_BYTES) throw failure("pty_input_too_large", `Terminal input exceeds ${PTY_MAX_INPUT_BYTES} bytes`);
-        if (!exited) handle.write(value.toString("utf8"));
-      },
-      resize(nextCols, nextRows) {
-        if (!exited) handle.resize(boundedDimension(nextCols, width), boundedDimension(nextRows, height));
-      },
-      kill() {
-        if (exited) return;
+      const width = boundedDimension(cols, 80);
+      const height = boundedDimension(rows, 24);
+      const tmuxSession = record.tmuxSession || terminalSessionName(id);
+      const handle = this.pty.spawn(
+        this.tmuxPath,
+        this.tmuxArgs("-u", "attach-session", "-t", tmuxSession),
+        {
+          name: "xterm-256color",
+          cols: width,
+          rows: height,
+          cwd: process.cwd(),
+          env: cleanEnvironment(),
+        },
+      );
+      lease.handle = handle;
+      lease.state = "attached";
+      if (this.attachments.get(id) !== lease || lease.cancelled) {
         try { handle.kill(); } catch {}
-      },
-    };
+        throw failure("pty_not_running", "Terminal is no longer available");
+      }
+
+      let exited = false;
+      let exitEvent = null;
+      const exitListeners = new Set();
+      const dataListeners = new Set();
+      const earlyData = [];
+      handle.onData((value) => {
+        // tmux may redraw immediately after attach. Do not lose that authoritative
+        // initial screen in the small interval before terminal-stream subscribes.
+        if (!dataListeners.size) earlyData.push(value);
+        else for (const listener of dataListeners) listener(value);
+      });
+      handle.onExit((event) => {
+        if (exited) return;
+        exited = true;
+        exitEvent = event;
+        if (this.attachments.get(id) === lease) this.attachments.delete(id);
+        for (const listener of exitListeners) listener(event);
+        if (!this.stopping) void this.reconcile().catch(() => {});
+      });
+
+      return {
+        onData(listener) {
+          dataListeners.add(listener);
+          if (earlyData.length) {
+            for (const value of earlyData.splice(0)) listener(value);
+          }
+          return () => dataListeners.delete(listener);
+        },
+        onExit(listener) {
+          exitListeners.add(listener);
+          if (exitEvent) queueMicrotask(() => { if (exitListeners.has(listener)) listener(exitEvent); });
+          return () => exitListeners.delete(listener);
+        },
+        write(bytes) {
+          const value = Buffer.isBuffer(bytes) ? bytes : Buffer.from(bytes);
+          if (value.length > PTY_MAX_INPUT_BYTES) throw failure("pty_input_too_large", `Terminal input exceeds ${PTY_MAX_INPUT_BYTES} bytes`);
+          if (!exited) handle.write(value.toString("utf8"));
+        },
+        resize(nextCols, nextRows) {
+          if (!exited) handle.resize(boundedDimension(nextCols, width), boundedDimension(nextRows, height));
+        },
+        kill() {
+          if (exited) return;
+          try { handle.kill(); } catch {}
+        },
+      };
+    } catch (error) {
+      if (this.attachments.get(id) === lease) this.attachments.delete(id);
+      throw error;
+    }
   }
 
   async rename(id, title) {
@@ -372,22 +401,36 @@ export class PtyManager extends EventEmitter {
     }
   }
 
-  killAttachments(id) {
-    for (const handle of this.attachments.get(id) || []) {
-      try { handle.kill(); } catch {}
-    }
-    this.attachments.delete(id);
+  killAttachment(id) {
+    const lease = this.attachments.get(id);
+    if (!lease) return;
+    lease.cancelled = true;
+    try { lease.handle?.kill(); } catch {}
+    if (this.attachments.get(id) === lease) this.attachments.delete(id);
   }
 
   async remove(id) {
     const record = this.records.get(id);
     if (!record) return false;
-    this.killAttachments(id);
-    if (record.status === "running") await this.killTmuxSession(record);
-    this.records.delete(id);
-    await this.persist();
-    this.emit("removed", { id, projectId: record.projectId });
-    return true;
+
+    // A destruction sentinel blocks a new attach until the tmux session has
+    // actually been removed, including when removal races an in-flight attach.
+    const previous = this.attachments.get(id);
+    if (previous) {
+      previous.cancelled = true;
+      try { previous.handle?.kill(); } catch {}
+    }
+    const removalLease = { state: "destroying", handle: null, cancelled: true };
+    this.attachments.set(id, removalLease);
+    try {
+      if (record.status === "running") await this.killTmuxSession(record);
+      this.records.delete(id);
+      await this.persist();
+      this.emit("removed", { id, projectId: record.projectId });
+      return true;
+    } finally {
+      if (this.attachments.get(id) === removalLease) this.attachments.delete(id);
+    }
   }
 
   async removeProject(projectId) {
@@ -398,7 +441,7 @@ export class PtyManager extends EventEmitter {
 
   async stopAll() {
     this.stopping = true;
-    for (const id of [...this.attachments.keys()]) this.killAttachments(id);
+    for (const id of [...this.attachments.keys()]) this.killAttachment(id);
     try {
       if (this.tmuxReady || [...this.records.values()].some((item) => item.status === "running")) {
         await this.ensureTmux();
@@ -413,9 +456,17 @@ export class PtyManager extends EventEmitter {
     const payload = JSON.stringify({ version: 2, sessions: [...this.records.values()] }, null, 2) + "\n";
     const write = async () => {
       await fs.mkdir(path.dirname(this.filePath), { recursive: true });
-      await fs.writeFile(this.filePath, payload);
+      const tempPath = `${this.filePath}.tmp-${process.pid}-${crypto.randomBytes(6).toString("hex")}`;
+      try {
+        await fs.writeFile(tempPath, payload, { encoding: "utf8", mode: 0o600 });
+        await fs.chmod(tempPath, 0o600);
+        await fs.rename(tempPath, this.filePath);
+        await fs.chmod(this.filePath, 0o600);
+      } finally {
+        await fs.rm(tempPath, { force: true }).catch(() => {});
+      }
     };
-    this.queue = this.queue.then(write, write);
-    return this.queue;
+    this.persistQueue = this.persistQueue.then(write, write);
+    return this.persistQueue;
   }
 }
