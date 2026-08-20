@@ -1,3 +1,5 @@
+@import "./mobile-header-backports.css";
+
 /* Performance rebuild: keep the composer as a later-painted sibling of the
    transcript. The transcript remains the v0.4.7 layout/paint island while the
    composer overlays its bottom edge without becoming part of the scroll or
