@@ -25,6 +25,8 @@ type Pty = {
   signal?: string | null;
 };
 type ConnectionState = "idle" | "connecting" | "attached" | "disconnected" | "exited";
+const PTY_IN_USE_CLOSE_CODE = 4009;
+
 function notifyPtyChange() {
   window.dispatchEvent(new Event("conduit:ptys-changed"));
 }
@@ -134,7 +136,14 @@ export function TerminalPane(props: { projectId: string; active?: boolean }) {
   };
 
   const scheduleReconnect = (record: Pty, renderer: TerminalRendererId, closeCode: number) => {
-    if (record.status !== "running" || closeCode === 1013 || reconnectAttempts >= 3 || activeProjectId !== record.projectId) return;
+    if (
+      record.status !== "running"
+      || closeCode === 1013
+      || closeCode === PTY_IN_USE_CLOSE_CODE
+      || reconnectAttempts >= 3
+      || activeProjectId !== record.projectId
+      || props.active === false
+    ) return;
     const delay = 250 * (2 ** reconnectAttempts);
     reconnectAttempts += 1;
     clearReconnect();
@@ -156,7 +165,10 @@ export function TerminalPane(props: { projectId: string; active?: boolean }) {
     setConnectionState("connecting");
     const activeTerminal = await ensureRenderer(renderer, { fresh: freshRenderer });
     activeTerminal.fit();
-    if (generation !== connectionGeneration || activeProjectId !== record.projectId) return;
+    if (generation !== connectionGeneration || activeProjectId !== record.projectId || props.active === false) {
+      if (props.active === false) disposeRenderer();
+      return;
+    }
 
     const initialCols = activeTerminal.cols();
     const initialRows = activeTerminal.rows();
@@ -215,7 +227,14 @@ export function TerminalPane(props: { projectId: string; active?: boolean }) {
             return;
           }
           if (message.type === "client_error") {
-            setError(message.message || "Terminal control failed");
+            if (message.code === "pty_in_use") {
+              setWritable(false);
+              setTerminalFocused(false);
+              setConnectionState("disconnected");
+              setError("Terminal is attached in another Conduit client.");
+            } else {
+              setError(message.message || "Terminal control failed");
+            }
             return;
           }
         } catch {
@@ -236,7 +255,7 @@ export function TerminalPane(props: { projectId: string; active?: boolean }) {
     };
 
     connection.onopen = () => {
-      if (generation !== connectionGeneration) {
+      if (generation !== connectionGeneration || props.active === false) {
         intentionallyClosed = true;
         return connection.close();
       }
@@ -265,9 +284,11 @@ export function TerminalPane(props: { projectId: string; active?: boolean }) {
         return;
       }
       setConnectionState("disconnected");
-      const reason = event.code === 1013
-        ? "Terminal connection was closed because this browser could not keep up with output."
-        : "Terminal connection was interrupted.";
+      const reason = event.code === PTY_IN_USE_CLOSE_CODE
+        ? "Terminal is attached in another Conduit client."
+        : event.code === 1013
+          ? "Terminal connection was closed because this browser could not keep up with output."
+          : "Terminal connection was interrupted.";
       setError(reason);
       scheduleReconnect({ ...record, status: "running" }, renderer, event.code);
     };
@@ -293,12 +314,18 @@ export function TerminalPane(props: { projectId: string; active?: boolean }) {
   };
 
   const attachExisting = async (projectId = props.projectId) => {
-    if (pty() || projectId !== activeProjectId) return;
+    if (projectId !== activeProjectId || props.active === false) return;
+    const selected = pty();
+    if (selected?.status === "running") {
+      if (!socket) await connect(selected, rendererId(), { freshRenderer: true });
+      return;
+    }
+    if (selected) return;
     setStarting(true);
     setError("");
     try {
       const running = await refreshSessions(projectId);
-      if (projectId !== activeProjectId || pty()) return;
+      if (projectId !== activeProjectId || pty() || props.active === false) return;
       const record = running[0];
       if (!record) return;
       setPty(record);
@@ -314,7 +341,11 @@ export function TerminalPane(props: { projectId: string; active?: boolean }) {
   const attachSession = async (record: Pty) => {
     if (record.projectId !== activeProjectId || record.status !== "running") return;
     if (pty()?.id === record.id) {
-      focusActiveTerminal();
+      if (socket && connectionState() === "attached") focusActiveTerminal();
+      else {
+        try { await connect(record, rendererId(), { freshRenderer: true }); }
+        catch (cause) { setError((cause as Error).message); }
+      }
       return;
     }
     setPty(record);
@@ -393,7 +424,7 @@ export function TerminalPane(props: { projectId: string; active?: boolean }) {
         return;
       }
       setError((cause as Error).message);
-      if (current && pty()?.id === id) {
+      if (current && pty()?.id === id && props.active !== false) {
         try { await connect(record, rendererId(), { freshRenderer: true }); }
         catch (reconnectCause) {
           setError((reconnectCause as Error).message);
@@ -428,8 +459,11 @@ export function TerminalPane(props: { projectId: string; active?: boolean }) {
     setRendererId(next);
     localStorage.setItem("conduit:terminal-renderer", next);
     const record = pty();
-    if (!record || !host) {
+    if (!record || !host || props.active === false) {
+      connectionGeneration += 1;
+      closeConnection();
       disposeRenderer();
+      if (record?.status === "running") setConnectionState("disconnected");
       return;
     }
     try { await connect(record, next, { freshRenderer: true }); }
@@ -465,15 +499,27 @@ export function TerminalPane(props: { projectId: string; active?: boolean }) {
 
   createEffect(() => {
     const active = props.active !== false;
-    if (!mounted || !active) return;
+    if (!mounted) return;
+    if (!active) {
+      // The tmux session is durable; the browser attachment is not. Releasing
+      // both WebSocket and renderer means an invisible pane consumes no live
+      // terminal stream and immediately releases its per-terminal lease.
+      connectionGeneration += 1;
+      reconnectAttempts = 0;
+      closeConnection();
+      disposeRenderer();
+      if (pty()?.status === "running") setConnectionState("disconnected");
+      return;
+    }
     queueMicrotask(() => {
-      // A resident terminal may have spent time inside display:none. Fit only
-      // when it becomes visible again, then repaint and publish a real grid
-      // change. Normal live output never enters this path.
-      terminal?.fit();
-      terminal?.repaint();
-      syncGeometry?.();
-      if (!pty() && !starting()) void attachExisting(activeProjectId);
+      const record = pty();
+      if (record?.status === "running") {
+        if (!socket && connectionState() !== "connecting") {
+          void connect(record, rendererId(), { freshRenderer: true }).catch((cause) => setError((cause as Error).message));
+        }
+      } else if (!record && !starting()) {
+        void attachExisting(activeProjectId);
+      }
     });
   });
 
