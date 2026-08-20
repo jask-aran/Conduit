@@ -139,7 +139,6 @@ export function TerminalPane(props: { projectId: string; active?: boolean }) {
     if (
       record.status !== "running"
       || closeCode === 1013
-      || closeCode === PTY_IN_USE_CLOSE_CODE
       || reconnectAttempts >= 3
       || activeProjectId !== record.projectId
       || props.active === false
