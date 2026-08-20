@@ -1,6 +1,9 @@
 name: Apply terminal review fixes
 
 on:
+  pull_request:
+    branches:
+      - main
   push:
     branches:
       - agent/terminal-lifecycle-state
