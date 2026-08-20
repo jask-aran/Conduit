@@ -1,6 +1,7 @@
 export type ComposerSurfaceMode = "static" | "frost" | "liquid";
 
 export const COMPOSER_SURFACE_STORAGE_KEY = "conduit:composer-surface";
+export const COMPOSER_SURFACE_CHANGE_EVENT = "conduit:composer-surface-change";
 const LEGACY_LIQUID_GLASS_SURFACE_STORAGE_KEY = "conduit:liquid-glass-surface";
 
 export const COMPOSER_SURFACE_OPTIONS: readonly {
@@ -43,5 +44,6 @@ export function saveComposerSurface(
   storage.setItem(COMPOSER_SURFACE_STORAGE_KEY, surface);
   // Keep downgrade compatibility with builds that only understand the old toggle.
   storage.setItem(LEGACY_LIQUID_GLASS_SURFACE_STORAGE_KEY, String(surface === "liquid"));
+  if (typeof window !== "undefined") window.dispatchEvent(new CustomEvent<ComposerSurfaceMode>(COMPOSER_SURFACE_CHANGE_EVENT, { detail: surface }));
   return surface;
 }
