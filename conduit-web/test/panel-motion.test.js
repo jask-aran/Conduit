@@ -33,7 +33,6 @@ test("desktop panel shells transition open and close while surfaces fill the she
   assert.match(sidebar, /overflow:\s*hidden/);
   assert.match(sidebar, /transition:[^;]*width/);
   assert.match(collapsedSidebar, /width:\s*52px/);
-  // Rail chrome is right-anchored so the 52px rail shows the toggle.
   assert.match(sidebarContainer, /position:\s*absolute/);
   assert.match(sidebarContainer, /right:\s*0/);
   assert.match(sidebarContainer, /width:\s*244px/);
@@ -47,7 +46,6 @@ test("desktop panel shells transition open and close while surfaces fill the she
   assert.match(workspaceSurface, /position:\s*absolute/);
   assert.match(workspaceSurface, /right:\s*0/);
   assert.match(workspaceSurface, /contain:\s*layout paint/);
-  // Gutter sits between chat and panel (half outside the shell).
   assert.match(resizeHandle, /left:\s*-12px/);
   assert.match(resizeHandle, /width:\s*24px/);
   assert.doesNotMatch(styles, /\.workspace-resizing \.chat-meteors/);
@@ -85,6 +83,21 @@ test("desktop open-close uses atomic geometry, compositor surfaces, and motion-s
   assert.match(movingFrost, /backdrop-filter:\s*none/);
   assert.match(movingFrost, /-webkit-backdrop-filter:\s*none/);
   assert.match(movingFrost, /color-mix\(in oklch, var\(--background\), transparent 18%\)/);
+});
+
+test("static composer keeps material chrome without sampling transcript pixels", async () => {
+  const performanceStyles = await fs.readFile(performanceComposerStylesPath, "utf8");
+  const staticSurface = rule(performanceStyles, '.composer[data-composer-surface="static"]');
+  const staticRim = rule(performanceStyles, '.composer[data-composer-surface="static"]::before');
+  const staticSheen = rule(performanceStyles, '.composer[data-composer-surface="static"]::after');
+
+  assert.match(staticSurface, /background:[\s\S]*var\(--background\)/);
+  assert.match(staticSurface, /backdrop-filter:\s*none/);
+  assert.match(staticSurface, /-webkit-backdrop-filter:\s*none/);
+  assert.match(staticRim, /content:\s*""/);
+  assert.match(staticRim, /linear-gradient\(150deg/);
+  assert.match(staticSheen, /content:\s*""/);
+  assert.match(staticSheen, /radial-gradient\(150% 72%/);
 });
 
 test("composer remains a sibling overlay outside the transcript motion island", async () => {

@@ -1,0 +1,279 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Conduit Composer Material Lab</title>
+<style>
+  :root {
+    color-scheme: light;
+    --page: #e9e9e7;
+    --panel: #ffffff;
+    --panel-border: #d9d9d6;
+    --scene: #f7f7f5;
+    --text: #171717;
+    --muted: #6b6b68;
+    --line: #e6e6e3;
+    --accent: #5a67ff;
+    --background: #ffffff;
+    --foreground: #171717;
+    --glass-bg: rgba(65,65,67,.10);
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --page: #151517;
+    --panel: #1f1f22;
+    --panel-border: rgba(255,255,255,.09);
+    --scene: #2a2a2e;
+    --text: #ededee;
+    --muted: #9a9aa0;
+    --line: rgba(255,255,255,.08);
+    --accent: #9aa5ff;
+    --background: #2a2a2e;
+    --foreground: #ededee;
+    --glass-bg: rgba(74,74,78,.52);
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; min-height: 100%; background: var(--page); color: var(--text); }
+  body { font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+  button, input, select, textarea { font: inherit; }
+  button { cursor: pointer; }
+  .app { max-width: 1540px; margin: 0 auto; padding: 28px; }
+  header { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; margin-bottom: 20px; }
+  h1 { margin: 0 0 5px; font-size: 24px; letter-spacing: -.025em; }
+  header p { max-width: 820px; margin: 0; color: var(--muted); font-size: 13px; line-height: 1.5; }
+  .header-actions { display: flex; gap: 8px; flex: none; }
+  .button { border: 1px solid var(--panel-border); border-radius: 9px; background: var(--panel); color: var(--text); padding: 7px 10px; font-size: 12px; }
+  .button:hover { background: color-mix(in srgb, var(--panel), var(--text) 5%); }
+  .layout { display: grid; grid-template-columns: minmax(0,1fr) 350px; gap: 20px; align-items: start; }
+  .stage-card, .controls-card { border: 1px solid var(--panel-border); border-radius: 18px; background: var(--panel); overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,.05); }
+  .stage-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 13px 15px; border-bottom: 1px solid var(--line); }
+  .stage-head strong { font-size: 13px; }
+  .stage-head small { color: var(--muted); font: 11px ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .scene { position: relative; height: 610px; overflow: hidden; background: var(--scene); }
+  .scene::before, .scene::after { content:""; position:absolute; border-radius:999px; filter: blur(2px); opacity:.22; pointer-events:none; }
+  .scene::before { width: 520px; height: 240px; left: -80px; top: 70px; background: #6577ff; }
+  .scene::after { width: 500px; height: 300px; right: -110px; bottom: 70px; background: #ff816d; }
+  .transcript { position: absolute; inset: 0; overflow: hidden; padding: 48px max(46px, calc((100% - 760px)/2)) 160px; color: var(--foreground); transform: translateX(0); }
+  .scene[data-moving="true"] .transcript { animation: transcript-shift 1.15s ease-in-out infinite alternate; }
+  @keyframes transcript-shift { from { transform: translateX(-28px); } to { transform: translateX(28px); } }
+  .transcript h2 { margin: 0 0 18px; font-size: 15px; }
+  .transcript p { max-width: 670px; margin: 0 0 15px; font-size: 14px; line-height: 1.55; }
+  .code { display: inline-block; border-radius: 5px; background: color-mix(in srgb, var(--foreground), transparent 93%); padding: 2px 5px; font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .rainbow { width: 420px; height: 10px; margin: 18px 0; border-radius: 99px; background: linear-gradient(90deg,#725cff,#58b9ff,#ff805f); }
+  .user { width: min(520px,70%); margin: 28px 0 0 auto !important; border-radius: 16px; background: color-mix(in srgb, var(--background), var(--foreground) 7%); padding: 11px 14px; }
+  .contrast { height: 3px; margin: 24px 0 0; background: linear-gradient(90deg,#111 0 25%,#fff 25% 50%,#5267ff 50% 75%,#ff6956 75%); opacity: .8; }
+  .composer-wrap { position: absolute; z-index: 5; left: 50%; bottom: 36px; width: min(760px, calc(100% - 72px)); transform: translateX(-50%); }
+  .composer { position: relative; min-height: 106px; overflow: hidden; color: var(--foreground); transition: background .08s linear, border-color .08s linear, box-shadow .08s linear, border-radius .08s linear; }
+  .composer::before, .composer::after { content:""; position:absolute; inset:0; z-index:0; border-radius:inherit; pointer-events:none; }
+  .composer::before { padding: 1px; background: var(--rim-gradient); -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite:xor; mask-composite:exclude; }
+  .composer::after { background: radial-gradient(150% 72% at 50% -34%, rgba(255,255,255,var(--sheen-alpha)), transparent 56%); }
+  .composer-content { position: relative; z-index: 2; min-height: 106px; display:grid; grid-template-columns:auto 1fr auto; grid-template-rows:1fr 34px; align-items:center; padding: 14px 15px 10px; }
+  .prompt { grid-column:1/4; align-self:start; padding: 7px 2px 0; font-size:14px; }
+  .plus { font-size:22px; padding-left:2px; }
+  .model { color:var(--muted); font-size:12px; padding-left:10px; }
+  .send { display:grid; place-items:center; width:31px; height:31px; border-radius:50%; background:var(--foreground); color:var(--background); }
+  .material-readout { position:absolute; top:16px; right:16px; z-index:6; border:1px solid var(--panel-border); border-radius:8px; background:color-mix(in srgb,var(--panel),transparent 8%); padding:6px 8px; color:var(--muted); font:10.5px ui-monospace,SFMono-Regular,Menlo,monospace; }
+  .presets { display:flex; flex-wrap:wrap; gap:7px; padding:12px 14px; border-top:1px solid var(--line); }
+  .presets button[data-active="true"] { border-color: color-mix(in srgb,var(--accent),transparent 20%); color:var(--accent); }
+  .controls-card { position: sticky; top: 16px; max-height: calc(100dvh - 32px); overflow:auto; }
+  .controls-title { padding:13px 14px; border-bottom:1px solid var(--line); }
+  .controls-title strong { font-size:13px; }
+  .controls-title p { margin:4px 0 0; color:var(--muted); font-size:11.5px; line-height:1.45; }
+  .controls { padding: 8px 14px 14px; }
+  .control { display:grid; grid-template-columns:1fr auto; gap:5px 10px; padding:9px 0; border-bottom:1px solid var(--line); }
+  .control label { font-size:12px; }
+  .control output { min-width:58px; text-align:right; color:var(--muted); font:11px ui-monospace,SFMono-Regular,Menlo,monospace; }
+  .control input[type="range"] { grid-column:1/3; width:100%; accent-color:var(--accent); }
+  .control input[type="color"] { width:42px; height:26px; padding:0; border:1px solid var(--panel-border); border-radius:7px; background:none; }
+  .switch-row { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:10px 0; border-bottom:1px solid var(--line); font-size:12px; }
+  .export { padding: 13px 14px 14px; border-top:1px solid var(--line); }
+  .export textarea { width:100%; height:188px; resize:vertical; border:1px solid var(--panel-border); border-radius:9px; background:color-mix(in srgb,var(--panel),var(--text) 3%); color:var(--text); padding:9px; font:10.5px/1.45 ui-monospace,SFMono-Regular,Menlo,monospace; }
+  .export-actions { display:flex; gap:7px; margin-top:8px; }
+  .hint { margin-top:8px; color:var(--muted); font-size:10.5px; line-height:1.45; }
+  @media (max-width: 980px) {
+    .app { padding:16px; }
+    header { flex-direction:column; }
+    .layout { grid-template-columns:1fr; }
+    .controls-card { position:static; max-height:none; }
+    .scene { height:540px; }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div>
+      <h1>Conduit Composer Material Lab</h1>
+      <p>Tune a cheap no-backdrop composer material against transcript text and colour. The Custom preset starts from the current panel-motion Frost proxy. Values persist in localStorage. This file has no build/runtime dependencies.</p>
+    </div>
+    <div class="header-actions">
+      <button class="button" id="themeButton">Dark scene</button>
+      <button class="button" id="motionButton">Simulate motion</button>
+    </div>
+  </header>
+
+  <div class="layout">
+    <section class="stage-card">
+      <div class="stage-head"><strong>Live preview</strong><small id="presetLabel">Current motion proxy</small></div>
+      <div class="scene" id="scene">
+        <div class="transcript">
+          <h2>Answer Output</h2>
+          <p>The transcript remains fully rendered beneath the composer. Put a material over this text that still feels glassy without requiring live backdrop sampling.</p>
+          <div class="rainbow"></div>
+          <p><span class="code">contain: layout paint</span> protects the transcript motion shell. High-contrast text should not become distracting beneath the composer.</p>
+          <p>Dense Markdown, code blocks, tables and math can all cross behind this region while the user scrolls.</p>
+          <p class="user">Can the zero-blur material still read as intentional rather than simply opaque?</p>
+          <div class="contrast"></div>
+        </div>
+        <div class="material-readout" id="readout"></div>
+        <div class="composer-wrap">
+          <div class="composer" id="composer">
+            <div class="composer-content">
+              <div class="prompt">Ask anything</div>
+              <div class="plus">+</div><div class="model">GPT-5.6 Sol · high</div><div class="send">↑</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="presets" id="presets">
+        <button class="button" data-preset="motion">Current motion proxy</button>
+        <button class="button" data-preset="static">Intended Static</button>
+        <button class="button" data-preset="frost">Steady Frost</button>
+        <button class="button" data-preset="custom">Custom / saved</button>
+      </div>
+    </section>
+
+    <aside class="controls-card">
+      <div class="controls-title">
+        <strong>Material controls</strong>
+        <p>For a true performance-control material, keep blur at 0. You can still tune saturation/tint/chrome independently.</p>
+      </div>
+      <div class="controls" id="controls"></div>
+      <div class="export">
+        <textarea id="cssOutput" readonly></textarea>
+        <div class="export-actions">
+          <button class="button" id="copyCss">Copy CSS</button>
+          <button class="button" id="resetSaved">Reset saved</button>
+        </div>
+        <div class="hint">Export targets the motion-Frost selector. If this becomes Static, change the selector to <span class="code">.composer[data-composer-surface="static"]</span>.</div>
+      </div>
+    </aside>
+  </div>
+</div>
+<script>
+(() => {
+  const storageKey = 'conduit:composer-material-lab:v1';
+  const defaults = {
+    motion: { blur:0, saturation:100, base:'#ffffff', baseOpacity:82, top:'#ffffff', topOpacity:10, bottomOpacity:2.5, stop:58, borderOpacity:30, rimOpacity:0, sheenOpacity:0, shadowOpacity:10, shadowBlur:32, radius:24, topInset:50, bottomInset:10 },
+    static: { blur:0, saturation:100, base:'#ffffff', baseOpacity:100, top:'#ffffff', topOpacity:9, bottomOpacity:2, stop:58, borderOpacity:0, rimOpacity:44, sheenOpacity:12, shadowOpacity:10, shadowBlur:28, radius:24, topInset:0, bottomInset:0 },
+    frost: { blur:24, saturation:100, base:'#ffffff', baseOpacity:17, top:'#ffffff', topOpacity:0, bottomOpacity:0, stop:58, borderOpacity:30, rimOpacity:0, sheenOpacity:0, shadowOpacity:10, shadowBlur:32, radius:24, topInset:50, bottomInset:10 }
+  };
+  const saved = (() => { try { return JSON.parse(localStorage.getItem(storageKey) || 'null'); } catch { return null; } })();
+  let values = saved?.values || {...defaults.motion};
+  let currentPreset = saved?.preset || 'motion';
+  let theme = saved?.theme || 'light';
+  let moving = false;
+
+  const specs = [
+    ['blur','Backdrop blur',0,30,1,'px'],
+    ['saturation','Backdrop saturation',100,180,1,'%'],
+    ['baseOpacity','Base opacity',0,100,1,'%'],
+    ['topOpacity','Top gradient alpha',0,30,.5,'%'],
+    ['bottomOpacity','Lower gradient alpha',0,20,.5,'%'],
+    ['stop','Gradient fade stop',25,85,1,'%'],
+    ['borderOpacity','Border alpha',0,60,1,'%'],
+    ['rimOpacity','Gradient rim alpha',0,70,1,'%'],
+    ['sheenOpacity','Top sheen alpha',0,30,.5,'%'],
+    ['shadowOpacity','Drop shadow alpha',0,30,1,'%'],
+    ['shadowBlur','Drop shadow blur',0,48,1,'px'],
+    ['topInset','Top inset highlight',0,70,1,'%'],
+    ['bottomInset','Bottom inset highlight',0,40,1,'%'],
+    ['radius','Corner radius',12,32,1,'px']
+  ];
+
+  const composer = document.getElementById('composer');
+  const controls = document.getElementById('controls');
+  const scene = document.getElementById('scene');
+  const readout = document.getElementById('readout');
+  const cssOutput = document.getElementById('cssOutput');
+  const presetLabel = document.getElementById('presetLabel');
+
+  const rgba = (hex, alphaPct) => {
+    const n = parseInt(hex.slice(1), 16), r=(n>>16)&255, g=(n>>8)&255, b=n&255;
+    return `rgba(${r}, ${g}, ${b}, ${(alphaPct/100).toFixed(3)})`;
+  };
+  const clone = obj => JSON.parse(JSON.stringify(obj));
+  const persist = () => localStorage.setItem(storageKey, JSON.stringify({values,currentPreset,theme}));
+
+  function buildControls() {
+    controls.innerHTML = '';
+    const colorRow = document.createElement('div');
+    colorRow.className = 'switch-row';
+    colorRow.innerHTML = '<span>Material tint</span>';
+    const color = document.createElement('input');
+    color.type = 'color'; color.value = values.base;
+    color.addEventListener('input', () => { values.base = color.value; currentPreset='custom'; update(); });
+    colorRow.appendChild(color); controls.appendChild(colorRow);
+
+    for (const [key,label,min,max,step,unit] of specs) {
+      const row = document.createElement('div'); row.className='control';
+      const lab = document.createElement('label'); lab.textContent=label;
+      const out = document.createElement('output'); out.id=`out-${key}`;
+      const input = document.createElement('input'); input.type='range'; input.min=min; input.max=max; input.step=step; input.value=values[key]; input.dataset.key=key; input.dataset.unit=unit;
+      input.addEventListener('input', () => { values[key]=Number(input.value); currentPreset='custom'; update(); });
+      row.append(lab,out,input); controls.appendChild(row);
+    }
+  }
+
+  function materialCss(selector) {
+    const blur = values.blur ? `blur(${values.blur}px) saturate(${values.saturation}%)` : 'none';
+    const bg = `linear-gradient(180deg, ${rgba(values.top, values.topOpacity)}, ${rgba(values.top, values.bottomOpacity)} ${values.stop}%), ${rgba(values.base, values.baseOpacity)}`;
+    const shadow = `0 8px ${values.shadowBlur}px rgba(0,0,0,${(values.shadowOpacity/100).toFixed(2)}), inset 0 1px 0 rgba(255,255,255,${(values.topInset/100).toFixed(2)}), inset 0 -1px 0 rgba(255,255,255,${(values.bottomInset/100).toFixed(2)})`;
+    let css = `${selector} {\n  background: ${bg};\n  backdrop-filter: ${blur};\n  -webkit-backdrop-filter: ${blur};\n  border: 1px solid rgba(255,255,255,${(values.borderOpacity/100).toFixed(2)});\n  border-radius: ${values.radius}px;\n  box-shadow: ${shadow};\n}`;
+    if (values.rimOpacity > 0) css += `\n\n${selector}::before {\n  content: \"\";\n  background: linear-gradient(150deg, rgba(255,255,255,${(values.rimOpacity/100).toFixed(2)}), rgba(255,255,255,0.06) 32%, rgba(255,255,255,0.03) 66%, rgba(255,255,255,0.22));\n}`;
+    if (values.sheenOpacity > 0) css += `\n\n${selector}::after {\n  content: \"\";\n  background: radial-gradient(150% 72% at 50% -34%, rgba(255,255,255,${(values.sheenOpacity/100).toFixed(3)}), transparent 56%);\n}`;
+    return css;
+  }
+
+  function update() {
+    document.documentElement.dataset.theme = theme;
+    scene.dataset.moving = moving ? 'true' : 'false';
+    composer.style.background = `linear-gradient(180deg, ${rgba(values.top,values.topOpacity)}, ${rgba(values.top,values.bottomOpacity)} ${values.stop}%), ${rgba(values.base,values.baseOpacity)}`;
+    composer.style.backdropFilter = values.blur ? `blur(${values.blur}px) saturate(${values.saturation}%)` : 'none';
+    composer.style.webkitBackdropFilter = composer.style.backdropFilter;
+    composer.style.border = `1px solid ${rgba('#ffffff',values.borderOpacity)}`;
+    composer.style.borderRadius = `${values.radius}px`;
+    composer.style.boxShadow = `0 8px ${values.shadowBlur}px rgba(0,0,0,${values.shadowOpacity/100}), inset 0 1px 0 rgba(255,255,255,${values.topInset/100}), inset 0 -1px 0 rgba(255,255,255,${values.bottomInset/100})`;
+    composer.style.setProperty('--rim-gradient', values.rimOpacity > 0 ? `linear-gradient(150deg, rgba(255,255,255,${values.rimOpacity/100}), rgba(255,255,255,.06) 32%, rgba(255,255,255,.03) 66%, rgba(255,255,255,.22))` : 'linear-gradient(transparent,transparent)');
+    composer.style.setProperty('--sheen-alpha', values.sheenOpacity/100);
+    for (const [key,,,,,unit] of specs) {
+      const input = controls.querySelector(`[data-key="${key}"]`); if (input) input.value=values[key];
+      const out = document.getElementById(`out-${key}`); if (out) out.textContent=`${values[key]}${unit}`;
+    }
+    const color = controls.querySelector('input[type="color"]'); if (color) color.value=values.base;
+    presetLabel.textContent = currentPreset === 'motion' ? 'Current motion proxy' : currentPreset === 'static' ? 'Intended Static' : currentPreset === 'frost' ? 'Steady Frost' : 'Custom / saved';
+    document.querySelectorAll('[data-preset]').forEach(b => b.dataset.active = String(b.dataset.preset===currentPreset));
+    readout.textContent = `${values.blur}px blur · ${values.baseOpacity}% base · ${values.borderOpacity}% rim`;
+    cssOutput.value = materialCss('body[data-panel-geometry-motion="true"] .composer[data-composer-surface="frost"]');
+    persist();
+  }
+
+  buildControls();
+  document.getElementById('presets').addEventListener('click', e => {
+    const button = e.target.closest('[data-preset]'); if (!button) return;
+    const p = button.dataset.preset;
+    if (p === 'custom') { currentPreset='custom'; }
+    else { values = clone(defaults[p]); currentPreset=p; buildControls(); }
+    update();
+  });
+  document.getElementById('themeButton').addEventListener('click', e => { theme = theme==='light'?'dark':'light'; e.currentTarget.textContent = theme==='light'?'Dark scene':'Light scene'; update(); });
+  document.getElementById('motionButton').addEventListener('click', e => { moving=!moving; e.currentTarget.textContent=moving?'Stop motion':'Simulate motion'; update(); });
+  document.getElementById('copyCss').addEventListener('click', async e => { await navigator.clipboard.writeText(cssOutput.value); const old=e.currentTarget.textContent; e.currentTarget.textContent='Copied'; setTimeout(()=>e.currentTarget.textContent=old,900); });
+  document.getElementById('resetSaved').addEventListener('click', () => { localStorage.removeItem(storageKey); values=clone(defaults.motion); currentPreset='motion'; theme='light'; moving=false; buildControls(); document.getElementById('themeButton').textContent='Dark scene'; document.getElementById('motionButton').textContent='Simulate motion'; update(); });
+  document.getElementById('themeButton').textContent = theme==='light'?'Dark scene':'Light scene';
+  update();
+})();
+</script>
+</body>
+</html>
