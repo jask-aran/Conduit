@@ -1,0 +1,37 @@
+name: Apply terminal typecheck fix
+
+on:
+  push:
+    branches:
+      - agent/terminal-lifecycle-state
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/terminal-lifecycle-state
+      - name: Apply narrow typecheck fix
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('conduit-web/src/client/remotes/terminal-pane.tsx')
+          text = path.read_text()
+          old = 'if (projectId !== activeProjectId || pty() || props.active === false) return;'
+          new = 'if (projectId !== activeProjectId || pty()) return;'
+          if text.count(old) != 1:
+              raise SystemExit(f'expected exactly one target, found {text.count(old)}')
+          path.write_text(text.replace(old, new))
+          PY
+      - name: Commit fix
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add conduit-web/src/client/remotes/terminal-pane.tsx
+          git commit -m "Fix terminal pane active-state narrowing"
+          git push origin HEAD:agent/terminal-lifecycle-state
