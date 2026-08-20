@@ -1,0 +1,129 @@
+name: Apply terminal review fixes
+
+on:
+  push:
+    branches:
+      - agent/terminal-lifecycle-state
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/terminal-lifecycle-state
+      - name: Install tmux
+        run: sudo apt-get update && sudo apt-get install -y tmux
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: conduit-web/package-lock.json
+      - name: Install dependencies
+        working-directory: conduit-web
+        run: npm ci
+      - name: Apply review fixes
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path, old, new):
+              text = path.read_text()
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"{path}: expected exactly one target, found {count}")
+              path.write_text(text.replace(old, new, 1))
+
+          pane = Path("conduit-web/src/client/remotes/terminal-pane.tsx")
+          replace_once(
+              pane,
+              '''      || closeCode === 1013\n      || closeCode === PTY_IN_USE_CLOSE_CODE\n      || reconnectAttempts >= 3''',
+              '''      || closeCode === 1013\n      || reconnectAttempts >= 3''',
+          )
+
+          server = Path("conduit-web/src/server.js")
+          replace_once(
+              server,
+              'import { PtyManager } from "./pty-manager.js";',
+              'import { PtyManager, PTY_MAX_INPUT_BYTES } from "./pty-manager.js";',
+          )
+          replace_once(
+              server,
+              '''const wss = new WebSocketServer({ noServer: true });\nconst terminalStream = createTerminalStream({ terminals, wss });''',
+              '''const wss = new WebSocketServer({ noServer: true });\nconst terminalWss = new WebSocketServer({ noServer: true, maxPayload: PTY_MAX_INPUT_BYTES });\nconst terminalStream = createTerminalStream({ terminals, wss: terminalWss });''',
+          )
+          replace_once(
+              server,
+              '  for (const socket of wss.clients) socket.close(1012, "Conduit is restarting");',
+              '''  for (const websocketServer of [wss, terminalWss]) {\n    for (const socket of websocketServer.clients) socket.close(1012, "Conduit is restarting");\n  }''',
+          )
+
+          stream = Path("conduit-web/src/server/terminal-stream.js")
+          replace_once(
+              stream,
+              '''    ws.on("close", () => {\n      detachClient(id, ws);\n      disposeAttachment();\n    });''',
+              '''    ws.on("error", () => {\n      detachClient(id, ws);\n      disposeAttachment();\n    });\n\n    ws.on("close", () => {\n      detachClient(id, ws);\n      disposeAttachment();\n    });''',
+          )
+
+          transport = Path("conduit-web/test/pty-transport.test.js")
+          replace_once(
+              transport,
+              'import { WebSocket } from "ws";',
+              'import { WebSocket } from "ws";\nimport { PTY_MAX_INPUT_BYTES } from "../src/pty-manager.js";',
+          )
+          test_name = 'PTY WebSocket rejects oversized input at the transport boundary'
+          text = transport.read_text()
+          if test_name in text:
+              raise SystemExit("oversized-input integration test already exists")
+          text += r'''
+
+tmuxTest("PTY WebSocket rejects oversized input at the transport boundary", async () => {
+  const harness = await startConduitHarness({ env: { SHELL: "sh" } });
+  try {
+    const project = await harness.createProject("Oversized terminal input");
+    const created = await (await harness.request("/v0/ptys", {
+      method: "POST",
+      body: JSON.stringify({ projectId: project.id }),
+    })).json();
+    const stream = openTerminal(harness.origin, created.id);
+    await stream.opened;
+    await waitWritable(stream);
+
+    stream.socket.send(Buffer.alloc(PTY_MAX_INPUT_BYTES + 1, 0x61));
+    assert.equal((await waitClosed(stream)).code, 1009);
+
+    const replacement = openTerminal(harness.origin, created.id);
+    await replacement.opened;
+    await waitWritable(replacement);
+    replacement.socket.send(Buffer.from("printf 'oversize-recovery-ready\\n'\n"));
+    await replacement.outputIncludes("oversize-recovery-ready");
+    replacement.socket.close();
+  } finally {
+    await harness.stop();
+  }
+});
+'''
+          transport.write_text(text)
+          PY
+      - name: Targeted terminal tests
+        working-directory: conduit-web
+        run: node --test test/pty-output-batcher.test.js test/pty-manager.test.js test/pty-transport.test.js
+      - name: Typecheck
+        working-directory: conduit-web
+        run: npm run typecheck
+      - name: Production build
+        working-directory: conduit-web
+        run: npm run build
+      - name: Commit fixes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/apply-terminal-review-fixes.yml
+          git add -- conduit-web/src/client/remotes/terminal-pane.tsx conduit-web/src/server.js conduit-web/src/server/terminal-stream.js conduit-web/test/pty-transport.test.js
+          git diff --cached --check
+          git diff --cached --stat
+          git commit -m "Fix terminal reconnect and input bounds"
+          git push origin HEAD:agent/terminal-lifecycle-state
