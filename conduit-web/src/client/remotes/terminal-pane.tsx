@@ -25,37 +25,8 @@ type Pty = {
   signal?: string | null;
 };
 type ConnectionState = "idle" | "connecting" | "attached" | "disconnected" | "exited";
-type ReplayEvent = { type: "resize"; cols: number; rows: number } | { type: "data"; bytes: Uint8Array };
-
-const PTY_REPLAY_PREFIX = "CONDUIT-PTY-REPLAY/1\n";
-const replayDecoder = new TextDecoder();
-
 function notifyPtyChange() {
   window.dispatchEvent(new Event("conduit:ptys-changed"));
-}
-
-function base64Bytes(value: string) {
-  const binary = atob(value);
-  const bytes = new Uint8Array(binary.length);
-  for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
-  return bytes;
-}
-
-function decodeReplayFrame(bytes: Uint8Array): ReplayEvent[] | null {
-  const text = replayDecoder.decode(bytes);
-  if (!text.startsWith(PTY_REPLAY_PREFIX)) return null;
-  const payload = JSON.parse(text.slice(PTY_REPLAY_PREFIX.length));
-  if (!Array.isArray(payload)) throw new Error("Terminal replay payload is invalid");
-  return payload.map((event) => {
-    if (event?.type === "resize") {
-      const cols = Math.trunc(Number(event.cols));
-      const rows = Math.trunc(Number(event.rows));
-      if (cols < 1 || cols > 500 || rows < 1 || rows > 500) throw new Error("Terminal replay resize is invalid");
-      return { type: "resize", cols, rows };
-    }
-    if (event?.type === "data" && typeof event.data === "string") return { type: "data", bytes: base64Bytes(event.data) };
-    throw new Error("Terminal replay event is invalid");
-  });
 }
 
 function sessionTimestamp(record: Pty) {
@@ -161,7 +132,6 @@ export function TerminalPane(props: { projectId: string; active?: boolean }) {
     terminal = created;
     host.dataset.terminalRenderer = created.id;
     host.dataset.terminalRendererReadyMs = String(Math.round(performance.now() - startedAt));
-    created.fit();
     return created;
   };
 
@@ -195,22 +165,25 @@ export function TerminalPane(props: { projectId: string; active?: boolean }) {
     socket = connection;
     connection.binaryType = "arraybuffer";
     let replaying = true;
-    let replayWork = Promise.resolve();
+    let replayWork: Promise<void> = Promise.resolve();
     let firstOutput = true;
     let intentionallyClosed = false;
+    let lastSentCols = 0;
+    let lastSentRows = 0;
 
     const sendResize = () => {
       if (generation !== connectionGeneration || replaying || !writable() || connection.readyState !== WebSocket.OPEN) return;
-      activeTerminal.fit();
-      connection.send(JSON.stringify({ type: "resize", cols: activeTerminal.cols(), rows: activeTerminal.rows() }));
+      const cols = activeTerminal.cols();
+      const rows = activeTerminal.rows();
+      if (cols === lastSentCols && rows === lastSentRows) return;
+      lastSentCols = cols;
+      lastSentRows = rows;
+      connection.send(JSON.stringify({ type: "resize", cols, rows }));
     };
     syncGeometry = sendResize;
 
     const finishReplay = () => {
       if (generation !== connectionGeneration || connection.readyState !== WebSocket.OPEN) return;
-      // Keep browser-generated terminal replies suppressed until the server has
-      // drained every output mutation that the headless emulator already saw.
-      activeTerminal.repaint();
       connection.send(JSON.stringify({ type: "restore_ready" }));
     };
 
@@ -228,7 +201,14 @@ export function TerminalPane(props: { projectId: string; active?: boolean }) {
             return;
           }
           if (message.type === "replay_resize") {
-            if (replaying) replayWork = replayWork.then(() => { activeTerminal.resize(message.cols, message.rows); });
+            const cols = Math.trunc(Number(message.cols));
+            const rows = Math.trunc(Number(message.rows));
+            if (replaying && cols >= 1 && cols <= 500 && rows >= 1 && rows <= 500) {
+              replayWork = replayWork.then(async () => {
+                await activeTerminal.drain();
+                if (generation === connectionGeneration) activeTerminal.resize(cols, rows);
+              });
+            }
             return;
           }
           if (message.type === "remote_resize") {
@@ -238,7 +218,7 @@ export function TerminalPane(props: { projectId: string; active?: boolean }) {
             return;
           }
           if (message.type === "replay_end") {
-            void replayWork.then(finishReplay).catch((cause) => {
+            void replayWork.then(() => activeTerminal.drain()).then(finishReplay).catch((cause) => {
               setError((cause as Error).message || "Terminal state restoration failed");
               finishReplay();
             });
@@ -254,6 +234,10 @@ export function TerminalPane(props: { projectId: string; active?: boolean }) {
             setConnectionState("attached");
             if (message.writable !== true) setTerminalFocused(false);
             if (message.writable === true) {
+              // Replay restores server geometry; now fit once to the actual host.
+              // The onResize callback sends the changed dimensions, with the
+              // explicit send below serving only as a no-op-safe fallback.
+              activeTerminal.fit();
               sendResize();
               focusActiveTerminal();
             }
@@ -290,26 +274,15 @@ export function TerminalPane(props: { projectId: string; active?: boolean }) {
         if (host) host.dataset.terminalFirstByteMs = String(Math.round(performance.now() - startedAt));
       }
       if (replaying) {
-        let replayEvents: ReplayEvent[] | null = null;
-        try { replayEvents = decodeReplayFrame(bytes); }
-        catch (cause) {
-          setError((cause as Error).message || "Terminal state could not be decoded");
-          return;
-        }
-        if (replayEvents) {
-          replayWork = replayWork.then(async () => {
-            for (const replayEvent of replayEvents) {
-              if (generation !== connectionGeneration) return;
-              if (replayEvent.type === "resize") activeTerminal.resize(replayEvent.cols, replayEvent.rows);
-              else await activeTerminal.write(replayEvent.bytes);
-            }
-          });
-        } else {
-          replayWork = replayWork.then(() => activeTerminal.write(bytes));
-        }
+        // WebSocket ordering plus the explicit drain barriers around replay
+        // resizes/end are sufficient; raw terminal bytes need no JSON/Base64
+        // decoding or Promise allocation of their own.
+        replayWork = replayWork.then(() => {
+          if (generation === connectionGeneration) activeTerminal.write(bytes);
+        });
         return;
       }
-      void activeTerminal.write(bytes);
+      activeTerminal.write(bytes);
     };
 
     connection.onopen = () => {
@@ -551,6 +524,10 @@ export function TerminalPane(props: { projectId: string; active?: boolean }) {
     const active = props.active !== false;
     if (!mounted || !active) return;
     queueMicrotask(() => {
+      // A resident terminal may have spent time inside display:none. Fit only
+      // when it becomes visible again, then repaint and publish any real grid
+      // change. Normal live output never enters this path.
+      terminal?.fit();
       terminal?.repaint();
       syncGeometry?.();
       if (!pty() && !starting()) void attachExisting(activeProjectId);

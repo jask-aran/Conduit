@@ -110,6 +110,9 @@ export function createTerminalStream({ terminals, wss }) {
     terminalOutput.append(id, bytes);
   });
   terminals.on("resize", ({ id, cols, rows, sequence }) => {
+    // Preserve PTY mutation order: any output accumulated earlier in this turn
+    // must reach live clients before the resize that followed it.
+    terminalOutput.flush(id);
     for (const ws of terminalClients.get(id) || []) {
       if (ws.readyState !== ws.OPEN) continue;
       if (ws.conduitTerminalRestoring) queuePending(ws, { type: "resize", cols, rows, sequence });
@@ -192,7 +195,10 @@ export function createTerminalStream({ terminals, wss }) {
       ws.conduitTerminalPendingBytes = 0;
 
       ws.send(JSON.stringify({ type: "replay_start", complete: replay.complete, source: replay.source || "journal" }));
-      if (replay.bytes.length) ws.send(replay.bytes, { binary: true });
+      // Replay uses the same wire representation as live traffic: tiny text
+      // control frames for geometry and raw binary terminal bytes for output.
+      // No Base64/JSON envelope sits on the browser's restore path.
+      for (const event of replay.events || []) sendRestoreEvent(ws, event);
       for (const event of pending) sendRestoreEvent(ws, event);
       ws.send(JSON.stringify({ type: "replay_end" }));
       ws.send(JSON.stringify({ type: "status", status: record.status, exitCode: record.exitCode, signal: record.signal }));
