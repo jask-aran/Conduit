@@ -1,16 +1,13 @@
 name: Terminal fast-path migration
 
 on:
-  push:
-    branches:
-      - agent/terminal-lifecycle-state
+  pull_request:
 
 permissions:
   contents: write
 
 jobs:
   migrate:
-    # The workflow now exists in the parent commit; this push deliberately runs it.
     if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     steps:
