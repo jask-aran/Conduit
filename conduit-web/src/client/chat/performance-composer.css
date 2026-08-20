@@ -12,6 +12,18 @@
   will-change: transform;
 }
 
+/* Desktop panel open/close commits sidebar geometry once, then moves the fixed
+   sidebar surface on the compositor. */
+@media (min-width: 761px) {
+  .conduit-sidebar[data-compositor-motion="true"] {
+    overflow: visible;
+    transition: none !important;
+  }
+  .conduit-sidebar[data-compositor-motion="true"] .sidebar-container {
+    will-change: transform;
+  }
+}
+
 .chat-main:not(.chat-main-empty) .thread { padding-bottom: 184px; }
 .chat-main:not(.chat-main-empty) .composer-stack {
   position: absolute;
@@ -53,6 +65,17 @@
     0 8px 32px rgba(0, 0, 0, 0.1),
     inset 0 1px 0 rgba(255, 255, 255, 0.5),
     inset 0 -1px 0 rgba(255, 255, 255, 0.1);
+}
+
+/* During authored panel motion, preserve the frosted appearance without
+   continuously resampling a moving desktop backdrop. Live blur returns two
+   frames after the last panel motion settles. */
+body[data-panel-geometry-motion="true"] .composer[data-composer-surface="frost"] {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.10), rgba(255, 255, 255, 0.025) 58%),
+    color-mix(in oklch, var(--background), transparent 18%);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
 }
 
 /* Liquid uses the same sibling backdrop, with refraction driven by prebaked

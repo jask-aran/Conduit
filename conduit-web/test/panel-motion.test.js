@@ -5,8 +5,10 @@ import test from "node:test";
 
 const stylesPath = path.resolve(import.meta.dirname, "../../conduit-web/src/client/styles.css");
 const performanceComposerStylesPath = path.resolve(import.meta.dirname, "../../conduit-web/src/client/chat/performance-composer.css");
+const panelMotionPath = path.resolve(import.meta.dirname, "../../conduit-web/src/client/panel-motion.ts");
 const mainPath = path.resolve(import.meta.dirname, "../../conduit-web/src/client/main.tsx");
 const transcriptPath = path.resolve(import.meta.dirname, "../../conduit-web/src/client/chat/transcript.tsx");
+const sidebarPath = path.resolve(import.meta.dirname, "../../conduit-web/src/client/navigation/sidebar.tsx");
 const sidebarStylesPath = path.resolve(import.meta.dirname, "../../conduit-web/src/client/navigation/sidebar.css");
 const workspaceStylesPath = path.resolve(import.meta.dirname, "../../conduit-web/src/client/workspace/workspace.css");
 
@@ -57,6 +59,32 @@ test("desktop panel shells transition open and close while surfaces fill the she
   assert.match(transcriptMotionShell, /container-type:\s*inline-size/);
   const hiddenTranscriptContent = rule(styles, "[data-transcript-visibility=\"hidden\"]");
   assert.match(hiddenTranscriptContent, /content-visibility:\s*hidden/);
+});
+
+test("desktop open-close uses atomic geometry, compositor surfaces, and motion-safe frost", async () => {
+  const [performanceStyles, panelMotion, sidebarSource] = await Promise.all([
+    fs.readFile(performanceComposerStylesPath, "utf8"),
+    fs.readFile(panelMotionPath, "utf8"),
+    fs.readFile(sidebarPath, "utf8"),
+  ]);
+
+  const sidebarMotion = rule(performanceStyles, '.conduit-sidebar[data-compositor-motion="true"]');
+  assert.match(sidebarMotion, /overflow:\s*visible/);
+  assert.match(sidebarMotion, /transition:\s*none\s*!important/);
+
+  assert.match(sidebarSource, /targetSize:\s*targetWidth/);
+  assert.match(sidebarSource, /sidebarSurface\.animate\(/);
+  assert.match(sidebarSource, /setShellWidth\(targetWidth\)/);
+  assert.doesNotMatch(sidebarSource, /sampleEdge|sidebarEdgeRaf|getBoundingClientRect\(\)\.width/);
+
+  assert.match(panelMotion, /document\.querySelector<HTMLElement>\("\.composer-wrap"\)/);
+  assert.match(panelMotion, /naturalShift = detail\.source === "sidebar" \? delta \/ 2 : -delta \/ 2/);
+  assert.match(panelMotion, /document\.body\.dataset\.panelGeometryMotion = "true"/);
+
+  const movingFrost = rule(performanceStyles, 'body[data-panel-geometry-motion="true"] .composer[data-composer-surface="frost"]');
+  assert.match(movingFrost, /backdrop-filter:\s*none/);
+  assert.match(movingFrost, /-webkit-backdrop-filter:\s*none/);
+  assert.match(movingFrost, /color-mix\(in oklch, var\(--background\), transparent 18%\)/);
 });
 
 test("composer remains a sibling overlay outside the transcript motion island", async () => {
