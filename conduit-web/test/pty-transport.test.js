@@ -46,6 +46,11 @@ async function waitWritable(stream) {
   return stream.next((frame) => !frame.isBinary && jsonFrame(frame).type === "control" && jsonFrame(frame).writable === true);
 }
 
+async function waitClosed(stream) {
+  if (stream.socket.readyState === WebSocket.CLOSED) return { code: stream.socket._closeCode };
+  return new Promise((resolve) => stream.socket.once("close", (code, reason) => resolve({ code, reason: reason.toString() })));
+}
+
 tmuxTest("PTY API attaches a thin binary WebSocket to a tmux-owned terminal session", async () => {
   const harness = await startConduitHarness({ env: { SHELL: "sh" } });
   try {
@@ -91,7 +96,7 @@ tmuxTest("detaching and reattaching a browser preserves the tmux-owned current t
     first.socket.send(Buffer.from("printf 'reattach-screen-marker\\n'\n"));
     await first.outputIncludes("reattach-screen-marker");
     first.socket.close();
-    await new Promise((resolve) => first.socket.once("close", resolve));
+    await waitClosed(first);
 
     const listed = await (await harness.request(`/v0/ptys?projectId=${encodeURIComponent(project.id)}`)).json();
     assert.equal(listed.ptys.find((item) => item.id === created.id)?.status, "running");
@@ -149,25 +154,58 @@ tmuxTest("PTY API uses a linked Workspace root or the server home directory, nev
   }
 });
 
-tmuxTest("multiple attached browser clients can observe and write the same tmux terminal", async () => {
+tmuxTest("one browser owns a terminal while unrelated terminals may stream concurrently", async () => {
   const harness = await startConduitHarness({ env: { SHELL: "sh" } });
   try {
-    const project = await harness.createProject("Shared tmux terminal");
+    const project = await harness.createProject("Exclusive terminal leases");
+    const firstTerminal = await (await harness.request("/v0/ptys", { method: "POST", body: JSON.stringify({ projectId: project.id }) })).json();
+    const secondTerminal = await (await harness.request("/v0/ptys", { method: "POST", body: JSON.stringify({ projectId: project.id }) })).json();
+
+    const owner = openTerminal(harness.origin, firstTerminal.id);
+    const unrelated = openTerminal(harness.origin, secondTerminal.id);
+    await Promise.all([owner.opened, unrelated.opened]);
+    await Promise.all([waitWritable(owner), waitWritable(unrelated)]);
+
+    const blocked = openTerminal(harness.origin, firstTerminal.id);
+    await blocked.opened;
+    const inUse = await blocked.next((frame) => !frame.isBinary && jsonFrame(frame).type === "client_error" && jsonFrame(frame).code === "pty_in_use");
+    assert.match(jsonFrame(inUse).message, /another Conduit client/i);
+    assert.equal((await waitClosed(blocked)).code, 4009);
+
+    owner.socket.send(Buffer.from("printf 'owner-terminal-input\\n'\n"));
+    unrelated.socket.send(Buffer.from("printf 'unrelated-terminal-input\\n'\n"));
+    await Promise.all([owner.outputIncludes("owner-terminal-input"), unrelated.outputIncludes("unrelated-terminal-input")]);
+
+    owner.socket.close();
+    await waitClosed(owner);
+    const replacement = openTerminal(harness.origin, firstTerminal.id);
+    await replacement.opened;
+    await waitWritable(replacement);
+    replacement.socket.send(Buffer.from("printf 'replacement-owner-input\\n'\n"));
+    await replacement.outputIncludes("replacement-owner-input");
+
+    replacement.socket.close();
+    unrelated.socket.close();
+  } finally {
+    await harness.stop();
+  }
+});
+
+tmuxTest("tmux transport survives alternate-screen and modern TUI control sequences", async () => {
+  const harness = await startConduitHarness({ env: { SHELL: "sh" } });
+  try {
+    const project = await harness.createProject("TUI control sequence test");
     const created = await (await harness.request("/v0/ptys", { method: "POST", body: JSON.stringify({ projectId: project.id }) })).json();
-    const first = openTerminal(harness.origin, created.id);
-    const second = openTerminal(harness.origin, created.id);
-    await Promise.all([first.opened, second.opened]);
-    await Promise.all([waitWritable(first), waitWritable(second)]);
+    const stream = openTerminal(harness.origin, created.id, { cols: 140, rows: 50 });
+    await stream.opened;
+    await waitWritable(stream);
 
-    first.socket.send(Buffer.from("printf 'first-browser-input\\n'\n"));
-    await Promise.all([first.outputIncludes("first-browser-input"), second.outputIncludes("first-browser-input")]);
-    second.socket.send(Buffer.from("printf 'second-browser-input\\n'\n"));
-    await Promise.all([first.outputIncludes("second-browser-input"), second.outputIncludes("second-browser-input")]);
-
-    first.socket.close();
-    second.socket.send(Buffer.from("printf 'survives-first-detach\\n'\n"));
-    await second.outputIncludes("survives-first-detach");
-    second.socket.close();
+    stream.socket.send(Buffer.from("printf '\\033[?1049h\\033[2J\\033[H\\033[?1000h\\033[?1004hTUI-CONTROL-MARKER\\033[?1004l\\033[?1000l\\033[?1049l'\n"));
+    await stream.outputIncludes("TUI-CONTROL-MARKER");
+    stream.socket.send(JSON.stringify({ type: "resize", cols: 132, rows: 44 }));
+    stream.socket.send(Buffer.from("printf 'TUI-AFTER-RESIZE\\n'\n"));
+    await stream.outputIncludes("TUI-AFTER-RESIZE");
+    stream.socket.close();
   } finally {
     await harness.stop();
   }
