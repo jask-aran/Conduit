@@ -25,10 +25,13 @@ async function terminalContext(projects, id) {
 }
 
 export function registerPtyRoutes(app, { projects, terminals }) {
-  app.get("/v0/ptys", (request, response) => {
-    const projectId = String(request.query?.projectId || "");
-    const ptys = terminals.list().filter((record) => !projectId || record.projectId === projectId);
-    response.json({ ptys });
+  app.get("/v0/ptys", async (request, response, next) => {
+    try {
+      await terminals.reconcile();
+      const projectId = String(request.query?.projectId || "");
+      const ptys = terminals.list().filter((record) => !projectId || record.projectId === projectId);
+      response.json({ ptys });
+    } catch (error) { next(error); }
   });
 
   app.post("/v0/ptys", async (request, response, next) => {

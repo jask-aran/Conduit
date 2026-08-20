@@ -40,7 +40,6 @@ export function TerminalPane(props: { projectId: string; active?: boolean }) {
   const [pty, setPty] = createSignal<Pty | null>(null);
   const [sessions, setSessions] = createSignal<Pty[]>([]);
   const [error, setError] = createSignal("");
-  const [replayWarning, setReplayWarning] = createSignal("");
   const [starting, setStarting] = createSignal(false);
   const [stopping, setStopping] = createSignal(false);
   const [sessionBusy, setSessionBusy] = createSignal("");
@@ -91,8 +90,8 @@ export function TerminalPane(props: { projectId: string; active?: boolean }) {
     });
   };
   const scopeTerminalKeyboard = (event: KeyboardEvent) => {
-    // Let xterm/Ghostty handle the key first, then stop Conduit's window-level
-    // shortcuts from turning terminal chords into application commands.
+    // Let the terminal renderer handle the key first, then stop Conduit's
+    // window-level shortcuts from turning terminal chords into app commands.
     if (terminalFocused() && isTerminalTarget(event.target)) event.stopPropagation();
   };
 
@@ -114,7 +113,6 @@ export function TerminalPane(props: { projectId: string; active?: boolean }) {
     setPty(null);
     setSessions([]);
     setError("");
-    setReplayWarning("");
     setConnectionState("idle");
   };
 
@@ -157,22 +155,23 @@ export function TerminalPane(props: { projectId: string; active?: boolean }) {
     if (!retrying) reconnectAttempts = 0;
     setConnectionState("connecting");
     const activeTerminal = await ensureRenderer(renderer, { fresh: freshRenderer });
+    activeTerminal.fit();
     if (generation !== connectionGeneration || activeProjectId !== record.projectId) return;
 
+    const initialCols = activeTerminal.cols();
+    const initialRows = activeTerminal.rows();
     const startedAt = performance.now();
-    const url = `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/v0/ptys/${record.id}/attach`;
+    const url = `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/v0/ptys/${record.id}/attach?cols=${initialCols}&rows=${initialRows}`;
     const connection = new WebSocket(url);
     socket = connection;
     connection.binaryType = "arraybuffer";
-    let replaying = true;
-    let replayWork: Promise<void> = Promise.resolve();
     let firstOutput = true;
     let intentionallyClosed = false;
-    let lastSentCols = 0;
-    let lastSentRows = 0;
+    let lastSentCols = initialCols;
+    let lastSentRows = initialRows;
 
     const sendResize = () => {
-      if (generation !== connectionGeneration || replaying || !writable() || connection.readyState !== WebSocket.OPEN) return;
+      if (generation !== connectionGeneration || !writable() || connection.readyState !== WebSocket.OPEN) return;
       const cols = activeTerminal.cols();
       const rows = activeTerminal.rows();
       if (cols === lastSentCols && rows === lastSentRows) return;
@@ -182,61 +181,19 @@ export function TerminalPane(props: { projectId: string; active?: boolean }) {
     };
     syncGeometry = sendResize;
 
-    const finishReplay = () => {
-      if (generation !== connectionGeneration || connection.readyState !== WebSocket.OPEN) return;
-      connection.send(JSON.stringify({ type: "restore_ready" }));
-    };
-
     connection.onmessage = (event) => {
       if (generation !== connectionGeneration) return;
       if (typeof event.data === "string") {
         try {
           const message = JSON.parse(event.data);
-          if (message.type === "replay_start") {
-            replaying = true;
-            replayWork = Promise.resolve();
-            setReplayWarning(message.complete === false
-              ? "Canonical terminal state was unavailable and the bounded fallback journal was incomplete. Live output is attached without replaying an unsafe ANSI tail."
-              : "");
-            return;
-          }
-          if (message.type === "replay_resize") {
-            const cols = Math.trunc(Number(message.cols));
-            const rows = Math.trunc(Number(message.rows));
-            if (replaying && cols >= 1 && cols <= 500 && rows >= 1 && rows <= 500) {
-              replayWork = replayWork.then(async () => {
-                await activeTerminal.drain();
-                if (generation === connectionGeneration) activeTerminal.resize(cols, rows);
-              });
-            }
-            return;
-          }
-          if (message.type === "remote_resize") {
-            const cols = Math.trunc(Number(message.cols));
-            const rows = Math.trunc(Number(message.rows));
-            if (cols >= 1 && cols <= 500 && rows >= 1 && rows <= 500) activeTerminal.resize(cols, rows);
-            return;
-          }
-          if (message.type === "replay_end") {
-            void replayWork.then(() => activeTerminal.drain()).then(finishReplay).catch((cause) => {
-              setError((cause as Error).message || "Terminal state restoration failed");
-              finishReplay();
-            });
-            return;
-          }
           if (message.type === "control") {
-            // A control frame is only sent after this client's restore/catch-up
-            // handshake is complete. From this point on, live browser output may
-            // answer terminal protocol queries when this client owns control.
-            replaying = false;
             setWritable(message.writable === true);
             if (host) host.dataset.terminalReady = "true";
             setConnectionState("attached");
             if (message.writable !== true) setTerminalFocused(false);
             if (message.writable === true) {
-              // Replay restores server geometry; now fit once to the actual host.
-              // The onResize callback sends the changed dimensions, with the
-              // explicit send below serving only as a no-op-safe fallback.
+              // tmux already owns the current screen. Fit only to the actual
+              // browser host, then publish a geometry change if one occurred.
               activeTerminal.fit();
               sendResize();
               focusActiveTerminal();
@@ -262,8 +219,8 @@ export function TerminalPane(props: { projectId: string; active?: boolean }) {
             return;
           }
         } catch {
-          // Ignore malformed PTY control frames; binary terminal bytes are never
-          // routed through this parser.
+          // Ignore malformed control frames; terminal output is binary and
+          // never enters this parser.
         }
         return;
       }
@@ -273,15 +230,8 @@ export function TerminalPane(props: { projectId: string; active?: boolean }) {
         firstOutput = false;
         if (host) host.dataset.terminalFirstByteMs = String(Math.round(performance.now() - startedAt));
       }
-      if (replaying) {
-        // WebSocket ordering plus the explicit drain barriers around replay
-        // resizes/end are sufficient; raw terminal bytes need no JSON/Base64
-        // decoding or Promise allocation of their own.
-        replayWork = replayWork.then(() => {
-          if (generation === connectionGeneration) activeTerminal.write(bytes);
-        });
-        return;
-      }
+      // Fresh tmux attachments redraw their current screen themselves. Live and
+      // reattach traffic therefore use the same minimal byte path.
       activeTerminal.write(bytes);
     };
 
@@ -290,16 +240,14 @@ export function TerminalPane(props: { projectId: string; active?: boolean }) {
         intentionallyClosed = true;
         return connection.close();
       }
-      // State restoration owns the initial geometry; do not race it with a
-      // guessed client resize before replay_end.
-      activeTerminal.focus();
     };
 
     const removeData = activeTerminal.onData((data) => {
-      // onData includes keyboard/paste bytes and emulator-generated replies.
-      // Preserve it verbatim; replay/controller phases decide when forwarding
-      // to the server-owned PTY is safe.
-      if (!replaying && writable() && data && generation === connectionGeneration && connection.readyState === WebSocket.OPEN) {
+      // Includes keyboard/paste bytes and emulator-generated terminal replies.
+      // During the brief connecting phase the terminal is not user-focusable,
+      // but generated protocol replies still need to reach tmux.
+      const acceptsTerminalData = writable() || connectionState() === "connecting";
+      if (acceptsTerminalData && data && generation === connectionGeneration && connection.readyState === WebSocket.OPEN) {
         connection.send(encoder.encode(data));
       }
     });
@@ -370,7 +318,6 @@ export function TerminalPane(props: { projectId: string; active?: boolean }) {
       return;
     }
     setPty(record);
-    setReplayWarning("");
     notifyPtyChange();
     try { await connect(record, rendererId(), { freshRenderer: true }); }
     catch (cause) { setError((cause as Error).message); }
@@ -381,7 +328,6 @@ export function TerminalPane(props: { projectId: string; active?: boolean }) {
     const projectId = activeProjectId;
     setStarting(true);
     setError("");
-    setReplayWarning("");
     try {
       const activeTerminal = await ensureRenderer(rendererId());
       activeTerminal.fit();
@@ -430,7 +376,6 @@ export function TerminalPane(props: { projectId: string; active?: boolean }) {
       if (current && pty()?.id === id) {
         disposeRenderer();
         setPty(null);
-        setReplayWarning("");
         setConnectionState("idle");
       }
       notifyPtyChange();
@@ -441,7 +386,6 @@ export function TerminalPane(props: { projectId: string; active?: boolean }) {
         if (current && pty()?.id === id) {
           disposeRenderer();
           setPty(null);
-          setReplayWarning("");
           setConnectionState("idle");
         }
         notifyPtyChange();
@@ -476,7 +420,6 @@ export function TerminalPane(props: { projectId: string; active?: boolean }) {
     setPty(null);
     setConnectionState("idle");
     setError("");
-    setReplayWarning("");
     await start();
   };
 
@@ -525,7 +468,7 @@ export function TerminalPane(props: { projectId: string; active?: boolean }) {
     if (!mounted || !active) return;
     queueMicrotask(() => {
       // A resident terminal may have spent time inside display:none. Fit only
-      // when it becomes visible again, then repaint and publish any real grid
+      // when it becomes visible again, then repaint and publish a real grid
       // change. Normal live output never enters this path.
       terminal?.fit();
       terminal?.repaint();
@@ -637,7 +580,6 @@ export function TerminalPane(props: { projectId: string; active?: boolean }) {
       <Show when={pty() && connectionState() === "exited"}>
         <div class="terminal-pane-state"><strong>Terminal exited</strong><Button onClick={() => void restart()}>Start new terminal</Button></div>
       </Show>
-      <Show when={replayWarning()}><p class="terminal-pane-warning" role="status">{replayWarning()}</p></Show>
       <Show when={error()}><p class="terminal-pane-error" role="alert">{error()}</p></Show>
     </div>
   </section>;

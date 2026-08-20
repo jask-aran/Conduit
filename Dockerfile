@@ -39,7 +39,7 @@ LABEL org.opencontainers.image.title="Conduit" \
       org.opencontainers.image.revision="${CONDUIT_RELEASE}"
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends bash ca-certificates git libgomp1 openssh-client tar \
+    && apt-get install -y --no-install-recommends bash ca-certificates git libgomp1 openssh-client tar tmux \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
