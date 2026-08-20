@@ -1,6 +1,7 @@
 import { PtyOutputBatcher } from "../pty-output-batcher.js";
 
 const TERMINAL_PENDING_LIMIT = 1024 * 1024;
+const PTY_IN_USE_CLOSE_CODE = 4009;
 
 function boundedDimension(value, fallback) {
   const next = Math.trunc(Number(value));
@@ -8,6 +9,8 @@ function boundedDimension(value, fallback) {
 }
 
 export function createTerminalStream({ terminals, wss }) {
+  // One browser owns one terminal id at a time. There is deliberately no
+  // global lease: unrelated tmux sessions may stream concurrently.
   const terminalClients = new Map();
 
   const sendOutput = (ws, bytes) => {
@@ -29,33 +32,43 @@ export function createTerminalStream({ terminals, wss }) {
     }));
   };
 
+  const sendClientError = (ws, error) => {
+    if (ws.readyState !== ws.OPEN) return;
+    ws.send(JSON.stringify({
+      type: "client_error",
+      code: error?.code || "pty_attach_failed",
+      message: error?.message || "Terminal attachment failed",
+    }));
+  };
+
   const detachClient = (id, ws) => {
-    const clients = terminalClients.get(id);
-    if (!clients) return;
-    clients.delete(ws);
-    if (!clients.size) terminalClients.delete(id);
+    if (terminalClients.get(id) === ws) terminalClients.delete(id);
   };
 
   terminals.on("exit", (record) => {
-    for (const ws of terminalClients.get(record.id) || []) {
-      if (ws.readyState !== ws.OPEN) continue;
-      sendStatus(ws, record);
-      ws.send(JSON.stringify({ type: "control", writable: false }));
-      ws.close(1000, "Terminal exited");
-    }
+    const ws = terminalClients.get(record.id);
+    if (!ws || ws.readyState !== ws.OPEN) return;
+    sendStatus(ws, record);
+    ws.send(JSON.stringify({ type: "control", writable: false }));
+    ws.close(1000, "Terminal exited");
   });
 
   terminals.on("removed", ({ id }) => {
-    for (const ws of terminalClients.get(id) || []) {
-      if (ws.readyState === ws.OPEN) ws.close(1001, "Terminal was removed");
-    }
+    const ws = terminalClients.get(id);
+    if (ws?.readyState === ws.OPEN) ws.close(1001, "Terminal was removed");
     terminalClients.delete(id);
   });
 
   const handleUpgrade = (id, request, socket, head) => wss.handleUpgrade(request, socket, head, (ws) => {
-    const clients = terminalClients.get(id) || new Set();
-    clients.add(ws);
-    terminalClients.set(id, clients);
+    // Reserve synchronously before terminals.attach() does asynchronous tmux
+    // work. This is transport-level defense in depth for the manager lease.
+    if (terminalClients.has(id)) {
+      const error = Object.assign(new Error("Terminal is attached in another Conduit client"), { code: "pty_in_use" });
+      sendClientError(ws, error);
+      ws.close(PTY_IN_USE_CLOSE_CODE, "pty_in_use");
+      return;
+    }
+    terminalClients.set(id, ws);
 
     let attachment;
     let disposed = false;
@@ -91,7 +104,7 @@ export function createTerminalStream({ terminals, wss }) {
         output.flushAll();
         attachment.resize(command.cols, command.rows);
       } catch (error) {
-        if (ws.readyState === ws.OPEN) ws.send(JSON.stringify({ type: "client_error", code: error.code, message: error.message }));
+        sendClientError(ws, error);
       }
     });
 
@@ -103,7 +116,7 @@ export function createTerminalStream({ terminals, wss }) {
     void (async () => {
       try {
         attachment = await terminals.attach(id, { cols: initialCols, rows: initialRows });
-        if (disposed || ws.readyState !== ws.OPEN) {
+        if (disposed || ws.readyState !== ws.OPEN || terminalClients.get(id) !== ws) {
           attachment.kill();
           attachment = undefined;
           return;
@@ -127,14 +140,14 @@ export function createTerminalStream({ terminals, wss }) {
           }).catch(() => ws.close(1011, "Terminal attachment failed"));
         });
 
-        // Every human browser attachment is writable. tmux owns the durable
-        // session; Conduit no longer elects a browser protocol/controller owner.
         sendStatus(ws, terminals.get(id));
         ws.send(JSON.stringify({ type: "control", writable: true }));
       } catch (error) {
+        detachClient(id, ws);
         if (ws.readyState === ws.OPEN) {
-          ws.send(JSON.stringify({ type: "client_error", code: error.code, message: error.message }));
-          ws.close(1011, "Terminal attachment failed");
+          sendClientError(ws, error);
+          if (error?.code === "pty_in_use") ws.close(PTY_IN_USE_CLOSE_CODE, "pty_in_use");
+          else ws.close(1011, "Terminal attachment failed");
         }
       }
     })();
