@@ -39,3 +39,21 @@ test("PTY output batcher can flush synchronously without a duplicate scheduled s
 
   assert.deepEqual(sent.map(({ id, bytes }) => [id, bytes.toString()]), [["pty-1", "before attach"]]);
 });
+
+test("PTY output batcher bounds bulk output without reordering bytes", () => {
+  const scheduler = controlledScheduler();
+  const sent = [];
+  const batcher = new PtyOutputBatcher(
+    (id, bytes) => sent.push({ id, bytes }),
+    { ...scheduler, maxBatchBytes: 5 },
+  );
+
+  batcher.append("pty-1", Buffer.from("1234567890x"));
+  scheduler.run();
+
+  assert.deepEqual(sent.map(({ id, bytes }) => [id, bytes.toString()]), [
+    ["pty-1", "12345"],
+    ["pty-1", "67890"],
+    ["pty-1", "x"],
+  ]);
+});
