@@ -1,0 +1,98 @@
+/* Performance rebuild: keep the composer as a later-painted sibling of the
+   transcript. The transcript remains the v0.4.7 layout/paint island while the
+   composer overlays its bottom edge without becoming part of the scroll or
+   panel-motion subtree. */
+.work-area-conversation { position: relative; }
+.transcript { position: relative; z-index: 1; }
+.transcript-motion-shell {
+  contain: layout paint;
+  transform: translate3d(0, 0, 0);
+  will-change: transform;
+}
+
+.chat-main:not(.chat-main-empty) .thread { padding-bottom: 184px; }
+.chat-main:not(.chat-main-empty) .composer-stack {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 2;
+  width: 100%;
+  margin: 0;
+  padding: 18px 44px 24px;
+  background: transparent;
+  pointer-events: none;
+}
+.chat-main:not(.chat-main-empty) .composer-stack > * { pointer-events: auto; }
+
+.composer-wrap { position: relative; width: min(760px, 100%); margin-inline: auto; }
+.composer-surface-shell { position: relative; width: 100%; border-radius: 24px; }
+.composer[data-composer-surface] {
+  position: relative;
+  min-height: 74px;
+  width: 100%;
+  border-radius: 24px;
+  background: transparent;
+  backdrop-filter: none;
+}
+.composer[data-composer-surface]::before,
+.composer[data-composer-surface]::after { content: none; }
+.composer-content { position: relative; z-index: 1; }
+.composer textarea,
+.composer-actions { position: relative; z-index: 2; }
+
+/* Frost samples the already-painted transcript sibling through the shared
+   conversation backdrop. Do not move this element into the transcript tree. */
+.composer[data-composer-surface="frost"] {
+  background: #ffffff2b;
+  backdrop-filter: blur(24px);
+  border: 1px solid #ffffff4d;
+  box-shadow:
+    0 8px 32px rgba(0, 0, 0, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.5),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.1);
+}
+
+/* Liquid uses the same sibling backdrop, with refraction driven by prebaked
+   displacement/specular assets. */
+.composer-glass-filter,
+.composer-glass-chrome {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+}
+.composer-glass-filter[data-liquid-glass-ready="false"] { visibility: hidden; }
+.composer-glass-chrome {
+  border: 1px solid rgba(220, 238, 255, 0.28);
+  background:
+    radial-gradient(130% 180% at 12% -70%, rgba(255, 255, 255, 0.16), transparent 48%),
+    linear-gradient(135deg, rgba(210, 228, 245, 0.14), rgba(255, 255, 255, 0.06) 55%, rgba(190, 214, 240, 0.1));
+  box-shadow:
+    0 8px 24px -18px rgba(0, 0, 0, 0.68),
+    inset 0 1px rgba(255, 255, 255, 0.42),
+    inset 0 -1px rgba(145, 195, 255, 0.1),
+    inset 0 0 0 1px rgba(178, 215, 255, 0.08);
+}
+.liquid-glass-definitions {
+  position: absolute;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+@supports not (backdrop-filter: url(#conduit-liquid-glass-test)) {
+  .composer-glass-filter { backdrop-filter: blur(8px) saturate(140%) !important; }
+}
+
+@media (max-width: 760px) {
+  .chat-main:not(.chat-main-empty) .thread { padding-bottom: 160px; }
+  .composer-stack,
+  .chat-main-empty .composer-stack { background: transparent; }
+  .chat-main:not(.chat-main-empty) .composer-stack {
+    padding: 10px 12px calc(12px + env(safe-area-inset-bottom, 0px));
+  }
+  .composer-surface-shell { border-radius: 18px; }
+  .composer[data-composer-surface] { border-radius: 18px; }
+  .composer-content { display: contents; }
+}
