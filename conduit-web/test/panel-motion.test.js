@@ -4,6 +4,9 @@ import path from "node:path";
 import test from "node:test";
 
 const stylesPath = path.resolve(import.meta.dirname, "../../conduit-web/src/client/styles.css");
+const performanceComposerStylesPath = path.resolve(import.meta.dirname, "../../conduit-web/src/client/chat/performance-composer.css");
+const mainPath = path.resolve(import.meta.dirname, "../../conduit-web/src/client/main.tsx");
+const transcriptPath = path.resolve(import.meta.dirname, "../../conduit-web/src/client/chat/transcript.tsx");
 const sidebarStylesPath = path.resolve(import.meta.dirname, "../../conduit-web/src/client/navigation/sidebar.css");
 const workspaceStylesPath = path.resolve(import.meta.dirname, "../../conduit-web/src/client/workspace/workspace.css");
 
@@ -54,6 +57,35 @@ test("desktop panel shells transition open and close while surfaces fill the she
   assert.match(transcriptMotionShell, /container-type:\s*inline-size/);
   const hiddenTranscriptContent = rule(styles, "[data-transcript-visibility=\"hidden\"]");
   assert.match(hiddenTranscriptContent, /content-visibility:\s*hidden/);
+});
+
+test("composer remains a sibling overlay outside the transcript motion island", async () => {
+  const [main, transcript, performanceStyles] = await Promise.all([
+    fs.readFile(mainPath, "utf8"),
+    fs.readFile(transcriptPath, "utf8"),
+    fs.readFile(performanceComposerStylesPath, "utf8"),
+  ]);
+
+  const transcriptIndex = main.indexOf("<Transcript chat={chat}");
+  const composerIndex = main.indexOf('<div class="composer-stack">', transcriptIndex);
+  assert.ok(transcriptIndex >= 0, "main.tsx should render Transcript");
+  assert.ok(composerIndex > transcriptIndex, "composer should be painted after Transcript as its sibling");
+  assert.doesNotMatch(transcript, /stickyFooter|footer\?:\s*JSX\.Element|props\.(stickyFooter|footer)/);
+
+  const motionShell = rule(performanceStyles, ".transcript-motion-shell");
+  assert.match(motionShell, /contain:\s*layout paint/);
+  assert.match(motionShell, /transform:\s*translate3d\(0,\s*0,\s*0\)/);
+  assert.match(motionShell, /will-change:\s*transform/);
+
+  const composerOverlay = rule(performanceStyles, ".chat-main:not\(.chat-main-empty\) .composer-stack");
+  assert.match(composerOverlay, /position:\s*absolute/);
+  assert.match(composerOverlay, /bottom:\s*0/);
+  assert.match(composerOverlay, /z-index:\s*2/);
+  assert.match(composerOverlay, /background:\s*transparent/);
+
+  const frost = rule(performanceStyles, '.composer[data-composer-surface="frost"]');
+  assert.match(frost, /backdrop-filter:\s*blur\(24px\)/);
+  assert.doesNotMatch(performanceStyles, /position:\s*sticky/);
 });
 
 test("reduced motion preserves the explicitly requested meteor timeline", async () => {
