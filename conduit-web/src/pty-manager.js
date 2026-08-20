@@ -8,7 +8,6 @@ import { TerminalState } from "./terminal-state.js";
 export const PTY_MAX_SESSIONS = 8;
 export const PTY_SCROLLBACK_BYTES = 256 * 1024;
 export const PTY_MAX_REPLAY_EVENTS = 4096;
-export const PTY_REPLAY_PREFIX = "CONDUIT-PTY-REPLAY/1\n";
 
 const TEMPLATES = {
   shell: {
@@ -34,13 +33,6 @@ function view(record) {
     exitCode: record.exitCode ?? null,
     signal: record.signal ?? null,
   };
-}
-
-function encodeReplay(events) {
-  const payload = events.map((event) => event.type === "data"
-    ? { type: "data", data: event.bytes.toString("base64") }
-    : { type: "resize", cols: event.cols, rows: event.rows });
-  return Buffer.from(`${PTY_REPLAY_PREFIX}${JSON.stringify(payload)}`, "utf8");
 }
 
 class ReplayBuffer {
@@ -91,11 +83,7 @@ class ReplayBuffer {
     const events = this.complete
       ? this.events.map((event) => event.type === "data" ? { type: "data", bytes: Buffer.from(event.bytes) } : { ...event })
       : [];
-    return {
-      complete: this.complete,
-      events,
-      bytes: this.complete ? encodeReplay(events) : Buffer.alloc(0),
-    };
+    return { complete: this.complete, events };
   }
 }
 
@@ -170,7 +158,7 @@ export class PtyManager extends EventEmitter {
   replay(id) {
     const sequence = this.sequences.get(id) || 0;
     const buffer = this.scrollback.get(id);
-    if (!buffer) return { complete: false, events: [], bytes: Buffer.alloc(0), sequence };
+    if (!buffer) return { complete: false, events: [], sequence };
     return { ...buffer.replay(), sequence };
   }
 
@@ -184,7 +172,7 @@ export class PtyManager extends EventEmitter {
     const snapshot = await state.snapshot();
     const events = [{ type: "resize", cols: snapshot.cols, rows: snapshot.rows }];
     if (snapshot.data) events.push({ type: "data", bytes: Buffer.from(snapshot.data, "utf8") });
-    return { complete: true, source: "state", sequence, events, bytes: encodeReplay(events) };
+    return { complete: true, source: "state", sequence, events };
   }
 
   async create({ project, cwd, templateId = "shell", cols = 80, rows = 24 }) {

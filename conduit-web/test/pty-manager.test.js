@@ -3,7 +3,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { PTY_REPLAY_PREFIX, PtyManager } from "../src/pty-manager.js";
+import { PtyManager } from "../src/pty-manager.js";
 
 function fakePty() {
   const handles = [];
@@ -61,7 +61,6 @@ test("PTY manager starts a terminal only with a server-resolved absolute working
       { type: "data", bytes: Buffer.from("ab") },
     ],
   });
-  assert.equal(manager.replay(record.id).bytes.toString().startsWith(PTY_REPLAY_PREFIX), true);
 
   manager.resize(record.id, 120, 40);
   pty.handles[0].emit("cd");
@@ -78,7 +77,6 @@ test("PTY manager starts a terminal only with a server-resolved absolute working
 
   pty.handles[0].emit("e");
   assert.deepEqual(replayView(manager, record.id), { complete: false, events: [] });
-  assert.equal(manager.replay(record.id).bytes.length, 0);
   assert.equal(manager.output(record.id).length, 0);
   const canonical = await manager.stateReplay(record.id);
   assert.equal(canonical.source, "state");
@@ -92,7 +90,6 @@ test("PTY manager starts a terminal only with a server-resolved absolute working
   pty.handles[0].kill();
   assert.equal(manager.get(record.id)?.status, "exited");
   assert.deepEqual(replayView(manager, record.id), { complete: false, events: [] });
-  assert.equal(manager.replay(record.id).bytes.length, 0);
   const persisted = JSON.parse(await fs.readFile(path.join(root, "remotes.json"), "utf8"));
   assert.equal(persisted.sessions[0].title, "Build shell");
 
@@ -135,6 +132,6 @@ test("PTY replay journal bounds resize history", async () => {
   await manager.load();
   const record = await manager.create({ project: { id: "resize-project" }, cwd: root });
   for (let index = 0; index < 5000; index += 1) manager.resize(record.id, index % 2 ? 80 : 81, 24);
-  assert.deepEqual(manager.replay(record.id), { complete: false, events: [], bytes: Buffer.alloc(0), sequence: 5000 });
+  assert.deepEqual(manager.replay(record.id), { complete: false, events: [], sequence: 5000 });
   await fs.rm(root, { recursive: true, force: true });
 });

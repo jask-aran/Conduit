@@ -3,7 +3,6 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
 import { WebSocket } from "ws";
-import { PTY_REPLAY_PREFIX } from "../src/pty-manager.js";
 import { startConduitHarness, waitFor } from "./helpers/conduit-harness.js";
 
 function openTerminal(origin, id) {
@@ -34,12 +33,6 @@ function jsonFrame(frame) {
   return JSON.parse(frame.data.toString());
 }
 
-function replayPayload(frame) {
-  const text = frame.data.toString();
-  assert.equal(text.startsWith(PTY_REPLAY_PREFIX), true);
-  return JSON.parse(text.slice(PTY_REPLAY_PREFIX.length));
-}
-
 test("PTY API streams binary terminal output over an authenticated server-owned socket", async () => {
   const harness = await startConduitHarness({ env: { SHELL: "sh" } });
   try {
@@ -56,8 +49,8 @@ test("PTY API streams binary terminal output over an authenticated server-owned 
     const replayStart = await stream.next((frame) => !frame.isBinary && jsonFrame(frame).type === "replay_start");
     assert.equal(jsonFrame(replayStart).complete, true);
     assert.equal(jsonFrame(replayStart).source, "state");
-    const replay = await stream.next((frame) => frame.isBinary && frame.data.toString().startsWith(PTY_REPLAY_PREFIX));
-    assert.deepEqual(replayPayload(replay)[0], { type: "resize", cols: 100, rows: 30 });
+    const replayResize = await stream.next((frame) => !frame.isBinary && jsonFrame(frame).type === "replay_resize");
+    assert.deepEqual(jsonFrame(replayResize), { type: "replay_resize", cols: 100, rows: 30 });
     await stream.next((frame) => !frame.isBinary && jsonFrame(frame).type === "replay_end");
     const status = await stream.next((frame) => !frame.isBinary && jsonFrame(frame).type === "status");
     assert.equal(jsonFrame(status).status, "running");

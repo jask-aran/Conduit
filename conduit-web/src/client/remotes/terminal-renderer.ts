@@ -7,7 +7,8 @@ export type TerminalRenderer = {
   id: TerminalRendererId;
   cols: () => number;
   rows: () => number;
-  write: (bytes: Uint8Array) => Promise<void>;
+  write: (bytes: Uint8Array) => void;
+  drain: () => Promise<void>;
   focus: () => void;
   fit: () => void;
   repaint: () => void;
@@ -60,7 +61,7 @@ async function loadTerminalFont() {
 
 export function selectedTerminalRenderer(): TerminalRendererId {
   const value = new URLSearchParams(location.search).get("terminalRenderer") || localStorage.getItem("conduit:terminal-renderer");
-  return value === "xterm" ? "xterm" : "ghostty";
+  return value === "ghostty" ? "ghostty" : "xterm";
 }
 
 export async function createTerminalRenderer(host: HTMLElement, id = selectedTerminalRenderer()): Promise<TerminalRenderer> {
@@ -85,7 +86,6 @@ type ClipboardTerminal = {
 
 type WritableTerminal = ResizableTerminal & RefreshableTerminal & {
   write: (bytes: Uint8Array, callback?: () => void) => void;
-  options: { cursorBlink?: boolean };
 };
 
 function resizeTerminal(terminal: ResizableTerminal, cols: number, rows: number) {
@@ -96,23 +96,21 @@ function resizeTerminal(terminal: ResizableTerminal, cols: number, rows: number)
 }
 
 function writeTerminal(terminal: WritableTerminal, bytes: Uint8Array) {
-  return new Promise<void>((resolve) => {
-    terminal.write(bytes, () => {
-      terminal.options.cursorBlink = false;
-      resolve();
-    });
-  });
+  terminal.write(bytes);
+}
+
+function drainTerminal(terminal: WritableTerminal) {
+  return new Promise<void>((resolve) => terminal.write(new Uint8Array(0), resolve));
 }
 
 function repaintTerminal(terminal?: ResizableTerminal & RefreshableTerminal) {
   terminal?.refresh?.(0, Math.max(0, terminal.rows - 1));
 }
 
-function applyFit(fit: TerminalFit, terminal?: ResizableTerminal & RefreshableTerminal) {
-  // Geometry fitting and visual repainting are deliberately separate. A caller
-  // that only needs to repaint must never silently change the terminal grid.
+function applyFit(fit: TerminalFit) {
+  // FitAddon owns geometry. Repaint is reserved for visibility changes and must
+  // not sit on the resize or live-output hot path.
   fit.fit();
-  repaintTerminal(terminal);
 }
 
 function observeHostSize(host: HTMLElement, terminal: ResizableTerminal & RefreshableTerminal, fit: TerminalFit) {
@@ -124,7 +122,7 @@ function observeHostSize(host: HTMLElement, terminal: ResizableTerminal & Refres
   const fitNow = () => {
     frame = undefined;
     if (disposed || !host.isConnected || host.clientWidth <= 0 || host.clientHeight <= 0) return;
-    applyFit(fit, terminal);
+    applyFit(fit);
   };
   const scheduleFit = () => {
     if (frame === undefined) frame = requestAnimationFrame(fitNow);
@@ -194,8 +192,9 @@ async function createGhosttyRenderer(host: HTMLElement): Promise<TerminalRendere
     cols: () => terminal.cols,
     rows: () => terminal.rows,
     write: (bytes) => writeTerminal(terminal as unknown as WritableTerminal, bytes),
+    drain: () => drainTerminal(terminal as unknown as WritableTerminal),
     focus: () => terminal.focus(),
-    fit: () => applyFit(fit, refreshable),
+    fit: () => applyFit(fit),
     repaint: () => repaintTerminal(refreshable),
     resize: (cols, rows) => resizeTerminal(terminal, cols, rows),
     onData: (listener) => { const subscription = terminal.onData(listener); return () => subscription.dispose(); },
@@ -239,8 +238,9 @@ async function createXtermRenderer(host: HTMLElement): Promise<TerminalRenderer>
     cols: () => terminal.cols,
     rows: () => terminal.rows,
     write: (bytes) => writeTerminal(terminal, bytes),
+    drain: () => drainTerminal(terminal),
     focus: () => terminal.focus(),
-    fit: () => applyFit(fit, terminal),
+    fit: () => applyFit(fit),
     repaint: () => repaintTerminal(terminal),
     resize: (cols, rows) => resizeTerminal(terminal, cols, rows),
     onData: (listener) => { const subscription = terminal.onData(listener); return () => subscription.dispose(); },
