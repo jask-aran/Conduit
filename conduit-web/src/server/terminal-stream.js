@@ -1,4 +1,6 @@
+import { WebSocketServer } from "ws";
 import { PtyOutputBatcher } from "../pty-output-batcher.js";
+import { PTY_MAX_INPUT_BYTES } from "../pty-manager.js";
 
 const TERMINAL_PENDING_LIMIT = 1024 * 1024;
 const PTY_IN_USE_CLOSE_CODE = 4009;
@@ -8,7 +10,11 @@ function boundedDimension(value, fallback) {
   return Number.isInteger(next) && next >= 1 && next <= 500 ? next : fallback;
 }
 
-export function createTerminalStream({ terminals, wss }) {
+export function createTerminalStream({ terminals }) {
+  // Keep terminal payload limits isolated from chat/dictation WebSockets. ws
+  // rejects oversized terminal frames before buffering them for application code.
+  const wss = new WebSocketServer({ noServer: true, maxPayload: PTY_MAX_INPUT_BYTES });
+
   // One browser owns one terminal id at a time. There is deliberately no
   // global lease: unrelated tmux sessions may stream concurrently.
   const terminalClients = new Map();
@@ -106,6 +112,14 @@ export function createTerminalStream({ terminals, wss }) {
       } catch (error) {
         sendClientError(ws, error);
       }
+    });
+
+    // maxPayload violations surface as WebSocket errors before close. Dispose
+    // the disposable tmux attachment and release the lease without affecting
+    // the durable tmux session.
+    ws.on("error", () => {
+      detachClient(id, ws);
+      disposeAttachment();
     });
 
     ws.on("close", () => {
