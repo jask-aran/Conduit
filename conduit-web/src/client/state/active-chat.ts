@@ -6,6 +6,7 @@ import type { LiveEvent, RuntimeStateEvent, StructuredGenerationEvent } from "..
 import type {
   ChatStatus,
   ChatSummary,
+  CacheStats,
   ContextUsage,
   GenerationState,
   HostUiRequest,
@@ -15,6 +16,7 @@ import type {
   QueueState,
   RetryState,
   RuntimeIdentity,
+  SessionStats,
   ToolItem,
   TranscriptDetail,
 } from "../api/contracts";
@@ -82,6 +84,8 @@ export function createActiveChat(options: ActiveChatOptions) {
   const [generation, setGeneration] = createSignal<GenerationState>("idle");
   const [editingEntryId, setEditingEntryId] = createSignal<string | null>(null);
   const [contextUsage, setContextUsage] = createSignal<ContextUsage | null>(null);
+  const [sessionStats, setSessionStats] = createSignal<SessionStats | null>(null);
+  const [cacheStats, setCacheStats] = createSignal<CacheStats | null>(null);
   const [compacting, setCompacting] = createSignal(false);
   const [hostUiRequests, setHostUiRequests] = createSignal<HostUiRequest[]>([]);
   const [queue, setQueue] = createSignal<QueueState>({ steering: [], followUp: [] });
@@ -249,6 +253,8 @@ export function createActiveChat(options: ActiveChatOptions) {
     setDraft("");
     setEditingEntryId(null);
     setContextUsage(null);
+    setSessionStats(null);
+    setCacheStats(null);
     setLoadingOlder(false);
     setHostUiRequests([]);
     setQueue({ steering: [], followUp: [] });
@@ -379,6 +385,8 @@ export function createActiveChat(options: ActiveChatOptions) {
   const applySnapshot = (event: RuntimeStateEvent) => {
     const { session } = event;
     if (event.contextUsage || session.contextUsage) setContextUsage(event.contextUsage || session.contextUsage);
+    if (event.sessionStats || session.sessionStats) setSessionStats(event.sessionStats || session.sessionStats);
+    if (event.cacheStats || session.cacheStats) setCacheStats(event.cacheStats || session.cacheStats);
     if (event.queue || session.queue) setQueue(event.queue || session.queue!);
     if (event.hostUiRequests || session.hostUiRequests) setHostUiRequests(event.hostUiRequests || session.hostUiRequests!);
     if (session.compacting != null) setCompacting(session.compacting);
@@ -446,6 +454,8 @@ export function createActiveChat(options: ActiveChatOptions) {
       setLive(record);
       if (record.runtime) setRuntimeIdentity(record.runtime);
       if (record.contextUsage) setContextUsage(record.contextUsage);
+      if (record.sessionStats) setSessionStats(record.sessionStats);
+      if (record.cacheStats) setCacheStats(record.cacheStats);
       connect(record, chatId, selection);
       await new Promise<void>((resolve, reject) => {
         const current = socket;
@@ -505,6 +515,8 @@ export function createActiveChat(options: ActiveChatOptions) {
         break;
       case "context_usage":
         if (event.contextUsage) setContextUsage(event.contextUsage);
+        if (event.sessionStats) setSessionStats(event.sessionStats);
+        if (event.cacheStats) setCacheStats(event.cacheStats);
         break;
       case "compaction_start":
         setCompacting(true);
@@ -792,7 +804,7 @@ export function createActiveChat(options: ActiveChatOptions) {
   return {
     status, setStatus, title, setTitle, templateId, setTemplateId, runtimeIdentity, setRuntimeIdentity,
     live, messages, setMessages, tools, loadedId, pageBefore, loadingOlder, draft, setDraft,
-    generation, editingEntryId, contextUsage, compacting, hostUiRequests, queue, activeGeneration, activeGenerationChange,
+    generation, editingEntryId, contextUsage, sessionStats, cacheStats, compacting, hostUiRequests, queue, activeGeneration, activeGenerationChange,
     connectingId, streaming, stopping, activity,
     initialize, select, loadDetail, openLive, ensureLive, reset, send, stop, regenerate,
     continueResponse, loadOlder, edit, respondHostUi, clearQueue,

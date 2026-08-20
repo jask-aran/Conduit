@@ -2,6 +2,7 @@ import { EventEmitter } from "node:events";
 import { spawn } from "node:child_process";
 import crypto from "node:crypto";
 import path from "node:path";
+import { SessionManager } from "@earendil-works/pi-coding-agent";
 import { buildPiEnvironment, buildPiResourceArgs } from "../../scripts/pi-runtime.mjs";
 import {
   applyActivityEvent,
@@ -39,6 +40,125 @@ function emptyContextUsage() {
     source: "unknown",
     lastRequestUsage: null,
   };
+}
+
+function numericValue(value, fallback = null) {
+  if (value == null) return fallback;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : fallback;
+}
+
+function normalizeUsageCost(cost) {
+  if (!cost || typeof cost !== "object") return null;
+  return {
+    input: numericValue(cost.input),
+    output: numericValue(cost.output),
+    cacheRead: numericValue(cost.cacheRead),
+    cacheWrite: numericValue(cost.cacheWrite),
+    total: numericValue(cost.total),
+  };
+}
+
+function normalizeRequestUsage(usage) {
+  if (!usage || typeof usage !== "object") return null;
+  return {
+    input: numericValue(usage.input ?? usage.inputTokens),
+    output: numericValue(usage.output ?? usage.outputTokens),
+    cacheRead: numericValue(usage.cacheRead ?? usage.cachedInputTokens),
+    cacheWrite: numericValue(usage.cacheWrite),
+    cacheWrite1h: numericValue(usage.cacheWrite1h),
+    reasoning: numericValue(usage.reasoning),
+    totalTokens: numericValue(usage.totalTokens),
+    cost: normalizeUsageCost(usage.cost),
+  };
+}
+
+function normalizeSessionStats(stats) {
+  if (!stats || typeof stats !== "object") return null;
+  const tokens = stats.tokens && typeof stats.tokens === "object" ? stats.tokens : null;
+  if (!tokens && stats.userMessages == null && stats.assistantMessages == null) return null;
+  return {
+    userMessages: numericValue(stats.userMessages, 0),
+    assistantMessages: numericValue(stats.assistantMessages, 0),
+    toolCalls: numericValue(stats.toolCalls, 0),
+    toolResults: numericValue(stats.toolResults, 0),
+    totalMessages: numericValue(stats.totalMessages, 0),
+    tokens: {
+      input: numericValue(tokens?.input, 0),
+      output: numericValue(tokens?.output, 0),
+      cacheRead: numericValue(tokens?.cacheRead, 0),
+      cacheWrite: numericValue(tokens?.cacheWrite, 0),
+      total: numericValue(tokens?.total, 0),
+    },
+    cost: numericValue(stats.cost, 0),
+  };
+}
+
+function promptTokenParts(usage) {
+  if (!usage || typeof usage !== "object") return null;
+  const input = numericValue(usage.input ?? usage.inputTokens);
+  if (input == null) return null;
+  const cacheRead = numericValue(usage.cacheRead ?? usage.cachedInputTokens, 0);
+  const cacheWrite = numericValue(usage.cacheWrite, 0);
+  if (cacheRead == null || cacheWrite == null) return null;
+  return {
+    promptTokens: input + cacheRead + cacheWrite,
+    cacheRead,
+  };
+}
+
+function emptyCacheStats() {
+  return {
+    eligibleTokens: 0,
+    cacheHits: 0,
+    cacheMissedTokens: 0,
+    eligibleRequests: 0,
+    eligibleHitRate: null,
+  };
+}
+
+function finishCacheStats(stats) {
+  return {
+    ...stats,
+    eligibleHitRate: stats.eligibleTokens > 0 ? stats.cacheHits / stats.eligibleTokens : null,
+  };
+}
+
+function cacheStatsFromEntries(entries) {
+  let previousPromptTokens = null;
+  const stats = emptyCacheStats();
+  for (const entry of entries || []) {
+    if (entry.type === "compaction" || entry.type === "branch_summary") {
+      previousPromptTokens = null;
+      continue;
+    }
+    if (entry.type !== "message" || entry.message?.role !== "assistant") continue;
+    const request = promptTokenParts(entry.message.usage);
+    if (!request) continue;
+    if (previousPromptTokens != null) {
+      const eligibleTokens = Math.min(previousPromptTokens, request.promptTokens);
+      const cacheHits = Math.min(request.cacheRead, eligibleTokens);
+      stats.eligibleTokens += eligibleTokens;
+      stats.cacheHits += cacheHits;
+      stats.cacheMissedTokens += Math.max(0, eligibleTokens - cacheHits);
+      stats.eligibleRequests += 1;
+    }
+    previousPromptTokens = request.promptTokens;
+  }
+  return {
+    stats: stats.eligibleRequests > 0 ? finishCacheStats(stats) : null,
+    previousPromptTokens,
+  };
+}
+
+function restoreCacheStats(sessionFile, cwd) {
+  if (!sessionFile) return { stats: null, previousPromptTokens: null };
+  try {
+    const session = SessionManager.open(sessionFile, path.dirname(sessionFile), cwd);
+    return cacheStatsFromEntries(session.getEntries());
+  } catch {
+    return { stats: null, previousPromptTokens: null };
+  }
 }
 
 function socketIsOpen(socket) {
@@ -315,6 +435,7 @@ export class PiManager extends EventEmitter {
     const launchTemplate = launchSpec ? template : (template || this.template);
     if (!launchSpec && !launchTemplate) throw new Error("PiManager.create requires a template or launch specification");
     const args = launchSpec?.args || buildPiArgs({ sessionFile: resolvedFile, model, thinkingLevel, models, template: launchTemplate });
+    const restoredCache = restoreCacheStats(resolvedFile, launchSpec?.cwd || project.path);
     const child = this.spawnImpl(launchSpec?.command || this.command, args, {
       cwd: launchSpec?.cwd || project.path,
       stdio: ["pipe", "pipe", "pipe"],
@@ -353,6 +474,9 @@ export class PiManager extends EventEmitter {
       hostUiRequests: [],
       queue: emptyQueue(),
       contextUsage: emptyContextUsage(),
+      sessionStats: null,
+      cacheStats: restoredCache.stats,
+      cachePreviousPromptTokens: restoredCache.previousPromptTokens,
       clients: new Set(),
       delivery: new Map(),
       events: [],
@@ -464,6 +588,10 @@ export class PiManager extends EventEmitter {
           if (record.generation) record.generation.settled = true;
         }
 
+        if (event.type === "compaction_start" || event.type === "branch_summary") {
+          record.cachePreviousPromptTokens = null;
+        }
+
         this.ingestGenerationEvent(record, event);
 
         if (event.type === "extension_ui_request" && isBlockingHostUi(event)) {
@@ -541,25 +669,44 @@ export class PiManager extends EventEmitter {
       record.activity = deriveCoarseActivity(record);
       this.emit("process_changed", { record, reason: "state" });
     }
-    if (event.command === "get_session_stats" && data.contextUsage) {
-      this.applyContextUsage(record, data.contextUsage, "pi-stats");
+    if (event.command === "get_session_stats") {
+      const stats = normalizeSessionStats(data);
+      if (stats) record.sessionStats = stats;
+      if (data.contextUsage) this.applyContextUsage(record, data.contextUsage, "pi-stats");
     }
   }
 
   captureLastRequestUsage(record, message) {
     const usage = message?.usage;
     if (!usage || typeof usage !== "object") return;
+    const normalized = normalizeRequestUsage(usage);
     record.contextUsage = {
       ...record.contextUsage,
-      lastRequestUsage: {
-        input: usage.input ?? usage.inputTokens ?? null,
-        output: usage.output ?? usage.outputTokens ?? null,
-        cacheRead: usage.cacheRead ?? usage.cachedInputTokens ?? null,
-        cacheWrite: usage.cacheWrite ?? null,
-        totalTokens: usage.totalTokens ?? null,
-        cost: usage.cost || null,
-      },
+      lastRequestUsage: normalized,
     };
+    this.captureCacheStats(record, normalized);
+    this.publish(record, {
+      type: "context_usage",
+      contextUsage: record.contextUsage,
+      sessionStats: record.sessionStats || null,
+      cacheStats: record.cacheStats || null,
+    });
+  }
+
+  captureCacheStats(record, usage) {
+    const request = promptTokenParts(usage);
+    if (!request) return;
+    if (record.cachePreviousPromptTokens != null) {
+      const eligibleTokens = Math.min(record.cachePreviousPromptTokens, request.promptTokens);
+      const cacheHits = Math.min(request.cacheRead, eligibleTokens);
+      const stats = record.cacheStats || emptyCacheStats();
+      stats.eligibleTokens += eligibleTokens;
+      stats.cacheHits += cacheHits;
+      stats.cacheMissedTokens += Math.max(0, eligibleTokens - cacheHits);
+      stats.eligibleRequests += 1;
+      record.cacheStats = finishCacheStats(stats);
+    }
+    record.cachePreviousPromptTokens = request.promptTokens;
   }
 
   applyContextUsage(record, usage, source = "pi-stats") {
@@ -575,7 +722,12 @@ export class PiManager extends EventEmitter {
       reportedAt: new Date().toISOString(),
       source,
     };
-    this.publish(record, { type: "context_usage", contextUsage: record.contextUsage });
+    this.publish(record, {
+      type: "context_usage",
+      contextUsage: record.contextUsage,
+      sessionStats: record.sessionStats || null,
+      cacheStats: record.cacheStats || null,
+    });
   }
 
   scheduleContextRefresh(record, { afterCompaction = false } = {}) {
@@ -588,7 +740,12 @@ export class PiManager extends EventEmitter {
         reportedAt: new Date().toISOString(),
         source: "unknown",
       };
-      this.publish(record, { type: "context_usage", contextUsage: record.contextUsage });
+      this.publish(record, {
+        type: "context_usage",
+        contextUsage: record.contextUsage,
+        sessionStats: record.sessionStats || null,
+        cacheStats: record.cacheStats || null,
+      });
     }
     if (record.statsTimer) clearTimeout(record.statsTimer);
     record.statsTimer = setTimeout(() => {
@@ -603,6 +760,8 @@ export class PiManager extends EventEmitter {
     if (!record || !["starting", "running"].includes(record.status)) return null;
     try {
       const response = await this.request(id, { type: "get_session_stats" }, { timeout: 3000 });
+      const stats = normalizeSessionStats(response?.data);
+      if (stats) record.sessionStats = stats;
       if (response?.data?.contextUsage) this.applyContextUsage(record, response.data.contextUsage, "pi-stats");
       return record.contextUsage;
     } catch {
@@ -1087,6 +1246,8 @@ export class PiManager extends EventEmitter {
       hostUiRequests: [...(safe.hostUiRequests || [])],
       queue: safe.queue || emptyQueue(),
       contextUsage: safe.contextUsage || emptyContextUsage(),
+      sessionStats: safe.sessionStats || null,
+      cacheStats: safe.cacheStats || null,
       createdAt: safe.createdAt,
       updatedAt: safe.updatedAt,
       lastClientAt: lastClientAt || null,
