@@ -5,6 +5,7 @@ import { CheckIcon, SearchIcon } from "lucide-solid";
 import { toast } from "solid-sonner";
 import { Button, Field, FieldGroup, FieldLabel, Input, Spinner } from "@/components/primitives";
 import { api } from "../api/client";
+import { COMPOSER_SURFACE_OPTIONS, saveComposerSurface, selectedComposerSurface, type ComposerSurfaceMode } from "../chat/composer-surface";
 import { MARKDOWN_RENDERER_OPTIONS, type MarkdownRendererId } from "../chat/markdown-settings";
 import { formatMicrophoneError, hasAudioSignal, isUnavailableAudioInputError, listAudioInputDevices, MAX_AUDIO_INPUT_TEST_DURATION_MS, revokeAudioInputRecording, startAudioInputTest as beginAudioInputTest, type AudioInputDevice, type AudioInputTestResult, type AudioInputTestSession, } from "../chat/voice-audio";
 import { shortcutFromKeyboardEvent } from "../chat/voice-dictation";
@@ -140,6 +141,7 @@ export function Settings(props: {
   shortcuts: ShortcutManager;
 }) {
   const [section, setSection] = createSignal<Section>(props.initialSection || "models");
+  const [composerSurface, setComposerSurface] = createSignal<ComposerSurfaceMode>(selectedComposerSurface());
   const [scope, setScope] = createSignal<string[]>([]);
   const [scopeEdited, setScopeEdited] = createSignal(false);
   const [runtime, setRuntime] = createSignal<RuntimeSettings | null>(null);
@@ -267,6 +269,7 @@ export function Settings(props: {
       setAudioInputSignalDetected(false);
       return;
     }
+    setComposerSurface(selectedComposerSurface());
     setVoiceDraft({ ...props.voiceSettings });
     setVoiceSettingsSaved(false);
     const initial = props.initialSection || "models";
@@ -692,6 +695,13 @@ export function Settings(props: {
                 <Input id="sidebar-chat-limit" type="number" min={MIN_SIDEBAR_CHAT_LIMIT} max={MAX_SIDEBAR_CHAT_LIMIT} step="1" value={props.sidebarChatLimit} onChange={(event) => props.onSidebarChatLimitChange(Number(event.currentTarget.value))} onBlur={(event) => props.onSidebarChatLimitChange(Number(event.currentTarget.value))} />
                 <small>Show this many recent chats in the Chats group. Use View all chats to search older chats.</small>
               </Field>
+              <Field>
+                <FieldLabel for="composer-surface">Composer surface</FieldLabel>
+                <select id="composer-surface" aria-label="Composer surface" value={composerSurface()} onChange={(event) => setComposerSurface(saveComposerSurface(event.currentTarget.value as ComposerSurfaceMode))}>
+                  <For each={COMPOSER_SURFACE_OPTIONS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
+                </select>
+                <small>{COMPOSER_SURFACE_OPTIONS.find((option) => option.value === composerSurface())?.description}</small>
+              </Field>
             </FieldGroup>
           </Show>
           <Show when={section() === "shortcuts"}><ShortcutsSettings manager={props.shortcuts} /></Show>
@@ -788,14 +798,10 @@ export function Settings(props: {
                     if (shortcut) updateVoiceDraft({ shortcut });
                   }} /><small>Focus the field and press a shortcut. The microphone button remains a start/stop toggle.</small></Field>
                   <Field><FieldLabel for="dictation-activation">Activation behaviour</FieldLabel><select id="dictation-activation" value={voiceDraft().activation} onChange={(event) => updateVoiceDraft({ activation: event.currentTarget.value as "push_to_talk" | "toggle" })}>
-                    <option value="push_to_talk">Push to talk (hold)</option>
-                    <option value="toggle">Toggle (press)</option>
+                    <option value="push_to_talk">Push to talk (hold)</option><option value="toggle">Toggle (press)</option>
                   </select><small>{voiceDraft().activation === "toggle" ? "Press the shortcut once to start and again to stop." : "Hold the shortcut while you speak. Release it to stop."}</small></Field>
                   <label class="dictation-auto-send"><input type="checkbox" checked={voiceDraft().autoSend} onChange={(event) => updateVoiceDraft({ autoSend: event.currentTarget.checked })} /><span><strong>Auto-send timely final dictation</strong><small>Off by default. Conduit only submits a server-confirmed final transcript settled within one second.</small></span></label>
-                  <Field><FieldLabel for="voice-mode">Transcription source</FieldLabel><select id="voice-mode" disabled={voiceServerSettings()!.locked || voiceBusy()} value={voiceServerSettings()!.mode} onChange={(event) => {
-                    const mode = event.currentTarget.value as VoiceServerSettings["mode"];
-                    updateVoiceServer({ mode });
-                  }}><option value="off">Off</option><option value="local">Managed local model</option><option value="remote">Cloud or remote endpoint</option></select></Field>
+                  <Field><FieldLabel for="voice-mode">Transcription source</FieldLabel><select id="voice-mode" disabled={voiceServerSettings()!.locked || voiceBusy()} value={voiceServerSettings()!.mode} onChange={(event) => { const mode = event.currentTarget.value as VoiceServerSettings["mode"]; updateVoiceServer({ mode }); }}><option value="off">Off</option><option value="local">Managed local model</option><option value="remote">Cloud or remote endpoint</option></select></Field>
                 </FieldGroup>
 
                 <Show when={voiceServerSettings()!.locked}><div class="voice-notice">Using <code>CONDUIT_PARAKEET_STREAM_URL</code> from the server environment. Endpoint and credentials are locked here.</div></Show>

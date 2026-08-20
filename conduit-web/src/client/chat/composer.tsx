@@ -19,7 +19,7 @@ import { filesFromDataTransfer } from "../state/attachments";
 import type { AttachmentsStore } from "../state/attachments";
 import type { ModelSettings } from "../state/model-settings";
 import { AttachmentCards } from "./attachments";
-import { selectedComposerSurface, type ComposerSurfaceMode } from "./composer-surface";
+import { COMPOSER_SURFACE_CHANGE_EVENT, selectedComposerSurface, type ComposerSurfaceMode } from "./composer-surface";
 import { createVoiceDictationClient, type VoiceDictationState } from "./voice-dictation-client";
 import type { AudioSignalLevel } from "./voice-audio";
 import { toast } from "solid-sonner";
@@ -51,7 +51,7 @@ export function Composer(props: {
   const [dictationError, setDictationError] = createSignal("");
   const [dictatedRange, setDictatedRange] = createSignal<{ start: number; end: number } | null>(null);
   const [dictationSelectionOwned, setDictationSelectionOwned] = createSignal(false);
-  const [composerSurface] = createSignal<ComposerSurfaceMode>(selectedComposerSurface());
+  const [composerSurface, setComposerSurface] = createSignal<ComposerSurfaceMode>(selectedComposerSurface());
   const dictationWaveform = createVoiceWaveformController();
   let dictationCancelled = false;
   let pushToTalkActive = false;
@@ -235,6 +235,7 @@ export function Composer(props: {
       props.chat.draft();
       queueMicrotask(resize);
     });
+    const composerSurfaceChanged = (event: Event) => setComposerSurface((event as CustomEvent<ComposerSurfaceMode>).detail);
     const voiceKeyDown = (event: KeyboardEvent) => {
       if (event.defaultPrevented || document.querySelector('.settings-dialog[data-state="open"]')) return;
       if (!matchesShortcut(event, props.voiceSettings.shortcut)) return;
@@ -259,10 +260,12 @@ export function Composer(props: {
       voiceClient.stop();
     };
     const voiceToggle = () => toggleDictation();
+    window.addEventListener(COMPOSER_SURFACE_CHANGE_EVENT, composerSurfaceChanged);
     window.addEventListener("keydown", voiceKeyDown, true);
     window.addEventListener("keyup", voiceKeyUp, true);
     window.addEventListener("conduit:toggle-dictation", voiceToggle);
     onCleanup(() => {
+      window.removeEventListener(COMPOSER_SURFACE_CHANGE_EVENT, composerSurfaceChanged);
       window.removeEventListener("keydown", voiceKeyDown, true);
       window.removeEventListener("keyup", voiceKeyUp, true);
       window.removeEventListener("conduit:toggle-dictation", voiceToggle);
