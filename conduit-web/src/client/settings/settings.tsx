@@ -1,59 +1,37 @@
 import { createEffect, createSignal, onCleanup, Show } from "solid-js";
 import { Portal } from "solid-js/web";
-import { Field } from "@/components/primitives";
-import { Settings as PerformanceSettings } from "./settings-performance";
-import { Settings as CurrentMainSettings } from "./settings-main";
-import { COMPOSER_SURFACE_CHANGE_EVENT, saveComposerSurface, selectedComposerSurface, type ComposerSurfaceMode } from "../chat/composer-surface";
-import { normalizeVoiceDictationSettings } from "../chat/voice-settings-compat";
-import "./voice-main-bridge.css";
+import { Field, FieldLabel } from "@/components/primitives";
+import { Settings as SettingsCore } from "./settings-core";
+import {
+  COMPOSER_SURFACE_CHANGE_EVENT,
+  COMPOSER_SURFACE_OPTIONS,
+  saveComposerSurface,
+  selectedComposerSurface,
+  type ComposerSurfaceMode,
+} from "../chat/composer-surface";
+import "./voice-settings.css";
 
-const SETTINGS_SECTIONS = ["general", "ui", "shortcuts", "models", "profiles", "runtime", "workspaces", "voice", "search", "auth"] as const;
-type SettingsSection = typeof SETTINGS_SECTIONS[number];
-const SETTINGS_SECTION_SET: ReadonlySet<string> = new Set(SETTINGS_SECTIONS);
 const METEOR_FIELD_STORAGE_KEY = "conduit:meteor-field";
 
-const normalizeSection = (value: unknown): SettingsSection => {
-  const candidate = String(value || "general").toLowerCase();
-  return SETTINGS_SECTION_SET.has(candidate) ? candidate as SettingsSection : "general";
-};
 const selectedMeteorField = () => typeof localStorage === "undefined" || localStorage.getItem(METEOR_FIELD_STORAGE_KEY) !== "false";
 const applyMeteorField = (enabled: boolean) => {
   if (typeof document !== "undefined") document.documentElement.dataset.meteorField = enabled ? "on" : "off";
 };
 if (typeof document !== "undefined") applyMeteorField(selectedMeteorField());
 
-const sectionFromTab = (event: MouseEvent): SettingsSection | null => {
-  const target = event.target instanceof Element ? event.target : null;
-  const tab = target?.closest<HTMLButtonElement>("button[role='tab']");
-  if (!tab) return null;
-  const value = (tab.textContent || "").trim().toLowerCase();
-  return SETTINGS_SECTION_SET.has(value) ? value as SettingsSection : null;
-};
-
-// Keep every performance-rebuild settings surface except Voice. Voice is the
-// exact current-main settings implementation, mounted only while that tab is
-// active. This prevents current main's older transcript/material choices from
-// leaking back into the rebuild.
+// The rebuild owns composer material as a three-way preference. Current main's
+// Settings dialog is otherwise the canonical Settings implementation, including
+// the complete Voice section. This wrapper supplies only rebuild-specific app
+// preferences; it does not switch Settings implementations or translate Voice.
 export function Settings(props: any) {
-  const initial = () => normalizeSection(props.initialSection);
-  const initialValue = initial();
-  const [voiceMode, setVoiceMode] = createSignal(initialValue === "voice");
-  const [performanceSection, setPerformanceSection] = createSignal<SettingsSection>(initialValue === "voice" ? "general" : initialValue);
   const [meteorField, setMeteorField] = createSignal(selectedMeteorField());
   const [composerSurface, setComposerSurface] = createSignal<ComposerSurfaceMode>(selectedComposerSurface());
-  const [meteorMount, setMeteorMount] = createSignal<HTMLElement | null>(null);
-  let wasOpen = false;
+  const [surfaceMount, setSurfaceMount] = createSignal<HTMLElement | null>(null);
 
   createEffect(() => {
-    const open = Boolean(props.open);
-    if (open && !wasOpen) {
-      const section = initial();
-      setVoiceMode(section === "voice");
-      if (section !== "voice") setPerformanceSection(section);
-      setMeteorField(selectedMeteorField());
-      setComposerSurface(selectedComposerSurface());
-    }
-    wasOpen = open;
+    if (!props.open) return;
+    setMeteorField(selectedMeteorField());
+    setComposerSurface(selectedComposerSurface());
   });
 
   createEffect(() => {
@@ -64,39 +42,17 @@ export function Settings(props: any) {
   });
 
   createEffect(() => {
-    if (!props.open) return;
-    const onTabClick = (event: MouseEvent) => {
-      const section = sectionFromTab(event);
-      if (!section) return;
-      if (voiceMode()) {
-        if (section === "voice") return;
-        event.preventDefault();
-        event.stopImmediatePropagation();
-        setPerformanceSection(section);
-        setVoiceMode(false);
-        return;
-      }
-      setPerformanceSection(section);
-      if (section !== "voice") return;
-      event.preventDefault();
-      event.stopImmediatePropagation();
-      setVoiceMode(true);
+    setSurfaceMount(null);
+    if (!props.open || typeof document === "undefined") return;
+    const syncMount = () => {
+      const group = document.querySelector<HTMLElement>(".settings-dialog .settings-content[data-section='ui'] > [data-slot='field-group']");
+      setSurfaceMount(group || null);
     };
-    document.addEventListener("click", onTabClick, true);
-    onCleanup(() => document.removeEventListener("click", onTabClick, true));
-  });
-
-  createEffect(() => {
-    setMeteorMount(null);
-    if (!props.open || voiceMode() || performanceSection() !== "ui") return;
-    let cancelled = false;
-    requestAnimationFrame(() => requestAnimationFrame(() => {
-      if (cancelled) return;
-      const fieldGroup = document.querySelector<HTMLElement>(".settings-dialog .settings-content [data-slot='field-group']");
-      const content = document.querySelector<HTMLElement>(".settings-dialog .settings-content");
-      setMeteorMount(fieldGroup || content);
-    }));
-    onCleanup(() => { cancelled = true; });
+    requestAnimationFrame(syncMount);
+    const observer = new MutationObserver(syncMount);
+    const dialog = document.querySelector<HTMLElement>(".settings-dialog");
+    if (dialog) observer.observe(dialog, { subtree: true, childList: true, attributes: true, attributeFilter: ["data-section"] });
+    onCleanup(() => observer.disconnect());
   });
 
   const updateMeteorField = (enabled: boolean) => {
@@ -105,30 +61,36 @@ export function Settings(props: any) {
     applyMeteorField(enabled);
   };
 
-  const updateLiquidCompatibility = (enabled: boolean) => {
-    const next: ComposerSurfaceMode = enabled ? "liquid" : composerSurface() === "static" ? "static" : "frost";
-    setComposerSurface(saveComposerSurface(next));
+  const updateComposerSurface = (surface: ComposerSurfaceMode) => {
+    setComposerSurface(saveComposerSurface(surface));
   };
 
+  const voiceSettings = () => ({
+    shortcut: props.voiceSettings?.shortcut || "Ctrl+Shift+D",
+    activation: props.voiceSettings?.activation === "toggle" ? "toggle" as const : "push_to_talk" as const,
+    autoSend: props.voiceSettings?.autoSend === true,
+    inputDeviceId: typeof props.voiceSettings?.inputDeviceId === "string" ? props.voiceSettings.inputDeviceId : "",
+    captureProfile: props.voiceSettings?.captureProfile === "processed" ? "processed" as const : "raw" as const,
+    warmMicrophone: props.voiceSettings?.warmMicrophone === true,
+  });
+
   return <>
-    <PerformanceSettings {...props} open={Boolean(props.open) && !voiceMode()} initialSection={performanceSection()} />
-    <CurrentMainSettings
+    <SettingsCore
       {...props}
-      open={Boolean(props.open) && voiceMode()}
-      initialSection="voice"
       meteorField={meteorField()}
       onMeteorFieldChange={updateMeteorField}
       liquidGlassSurface={composerSurface() === "liquid"}
-      onLiquidGlassSurfaceChange={updateLiquidCompatibility}
-      voiceSettings={normalizeVoiceDictationSettings(props.voiceSettings)}
-      onVoiceSettingsSave={(settings: any) => props.onVoiceSettingsSave(normalizeVoiceDictationSettings(settings))}
+      onLiquidGlassSurfaceChange={(enabled: boolean) => updateComposerSurface(enabled ? "liquid" : composerSurface() === "static" ? "static" : "frost")}
+      voiceSettings={voiceSettings()}
+      onVoiceSettingsSave={(settings: unknown) => props.onVoiceSettingsSave(settings)}
     />
-    <Show when={meteorMount()}>{(mount) => <Portal mount={mount()}>
-      <Field>
-        <label class="meteor-settings-toggle">
-          <input type="checkbox" aria-label="Ambient meteor field" checked={meteorField()} onChange={(event) => updateMeteorField(event.currentTarget.checked)} />
-          <span><strong>Ambient meteor field</strong><small>Show the animated meteor field behind chat surfaces.</small></span>
-        </label>
+    <Show when={surfaceMount()}>{(mount) => <Portal mount={mount()}>
+      <Field class="performance-composer-surface-setting">
+        <FieldLabel for="composer-surface-mode">Composer material</FieldLabel>
+        <select id="composer-surface-mode" aria-label="Composer material" value={composerSurface()} onChange={(event) => updateComposerSurface(event.currentTarget.value as ComposerSurfaceMode)}>
+          {COMPOSER_SURFACE_OPTIONS.map((option) => <option value={option.value}>{option.label}</option>)}
+        </select>
+        <small>{COMPOSER_SURFACE_OPTIONS.find((option) => option.value === composerSurface())?.description}</small>
       </Field>
     </Portal>}</Show>
   </>;

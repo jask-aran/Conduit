@@ -1,5 +1,14 @@
-/* Current-main Voice settings additions that are not present in the v0.4.7-derived shell. */
+/* Current-main Voice settings additions retained by the performance rebuild. */
 html[data-meteor-field="off"] .chat-meteors { display: none !important; }
+
+/* The rebuild owns composer material as Static/Frosted/Liquid Glass. Hide the
+   older binary current-main toggle; settings.tsx inserts the three-way field. */
+.settings-content[data-section="ui"] [data-slot="field"]:has(input[aria-label="Liquid glass surface"]) { display: none; }
+
+/* Current Voice lifecycle names, rendered by the rebuild composer. */
+.dictation-trigger[data-state="listening"] { box-shadow: 0 0 0 3px color-mix(in oklch, var(--accent-cool), transparent 78%); }
+.composer-status-warning { display: inline-flex; min-height: 22px; align-items: center; gap: 5px; padding: 0 10px; color: var(--destructive); white-space: nowrap; }
+.composer-status-warning svg { width: 12px; height: 12px; flex: none; }
 
 .settings-content[data-section="voice"] { padding: 14px 18px; }
 .settings-content[data-section="voice"] > header { margin-bottom: 12px; }
@@ -43,8 +52,4 @@ html[data-meteor-field="off"] .chat-meteors { display: none !important; }
 .voice-advanced-heading h3 { margin: 0; font-size: 13px; }
 .voice-advanced-heading p { margin: 0; color: var(--muted-foreground); font-size: 11px; line-height: 1.35; }
 .voice-settings-footer { padding-top: 10px; }
-.meteor-settings-toggle { display: flex; align-items: flex-start; gap: 10px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--card); padding: 12px; cursor: pointer; }
-.meteor-settings-toggle input { margin-top: 3px; accent-color: var(--primary); }
-.meteor-settings-toggle span { display: flex; flex-direction: column; gap: 3px; }
-.meteor-settings-toggle small { color: var(--muted-foreground); }
 @media (max-width: 760px) { .voice-backend-facts { grid-template-columns: 1fr; } }
