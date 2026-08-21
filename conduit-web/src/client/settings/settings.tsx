@@ -13,17 +13,23 @@ import "./voice-settings.css";
 
 const METEOR_FIELD_STORAGE_KEY = "conduit:meteor-field";
 
+type CoreProps = Parameters<typeof SettingsCore>[0];
+type CoreVoiceSettings = CoreProps["voiceSettings"];
+type ShellVoiceSettings = Omit<CoreVoiceSettings, "captureProfile" | "warmMicrophone"> & Partial<Pick<CoreVoiceSettings, "captureProfile" | "warmMicrophone">>;
+type SettingsProps = Omit<CoreProps, "meteorField" | "onMeteorFieldChange" | "liquidGlassSurface" | "onLiquidGlassSurfaceChange" | "voiceSettings"> & {
+  voiceSettings: ShellVoiceSettings;
+};
+
 const selectedMeteorField = () => typeof localStorage === "undefined" || localStorage.getItem(METEOR_FIELD_STORAGE_KEY) !== "false";
 const applyMeteorField = (enabled: boolean) => {
   if (typeof document !== "undefined") document.documentElement.dataset.meteorField = enabled ? "on" : "off";
 };
 if (typeof document !== "undefined") applyMeteorField(selectedMeteorField());
 
-// The rebuild owns composer material as a three-way preference. Current main's
-// Settings dialog is otherwise the canonical Settings implementation, including
-// the complete Voice section. This wrapper supplies only rebuild-specific app
-// preferences; it does not switch Settings implementations or translate Voice.
-export function Settings(props: any) {
+// Current main owns the single Settings dialog, including the complete Voice
+// section. This shell only supplies rebuild-owned presentation preferences; it
+// never swaps Settings trees and performs no Voice lifecycle translation.
+export function Settings(props: SettingsProps) {
   const [meteorField, setMeteorField] = createSignal(selectedMeteorField());
   const [composerSurface, setComposerSurface] = createSignal<ComposerSurfaceMode>(selectedComposerSurface());
   const [surfaceMount, setSurfaceMount] = createSignal<HTMLElement | null>(null);
@@ -65,13 +71,10 @@ export function Settings(props: any) {
     setComposerSurface(saveComposerSurface(surface));
   };
 
-  const voiceSettings = () => ({
-    shortcut: props.voiceSettings?.shortcut || "Ctrl+Shift+D",
-    activation: props.voiceSettings?.activation === "toggle" ? "toggle" as const : "push_to_talk" as const,
-    autoSend: props.voiceSettings?.autoSend === true,
-    inputDeviceId: typeof props.voiceSettings?.inputDeviceId === "string" ? props.voiceSettings.inputDeviceId : "",
-    captureProfile: props.voiceSettings?.captureProfile === "processed" ? "processed" as const : "raw" as const,
-    warmMicrophone: props.voiceSettings?.warmMicrophone === true,
+  const voiceSettings = (): CoreVoiceSettings => ({
+    ...props.voiceSettings,
+    captureProfile: props.voiceSettings.captureProfile === "processed" ? "processed" : "raw",
+    warmMicrophone: props.voiceSettings.warmMicrophone === true,
   });
 
   return <>
@@ -80,9 +83,8 @@ export function Settings(props: any) {
       meteorField={meteorField()}
       onMeteorFieldChange={updateMeteorField}
       liquidGlassSurface={composerSurface() === "liquid"}
-      onLiquidGlassSurfaceChange={(enabled: boolean) => updateComposerSurface(enabled ? "liquid" : composerSurface() === "static" ? "static" : "frost")}
+      onLiquidGlassSurfaceChange={(enabled) => updateComposerSurface(enabled ? "liquid" : composerSurface() === "static" ? "static" : "frost")}
       voiceSettings={voiceSettings()}
-      onVoiceSettingsSave={(settings: unknown) => props.onVoiceSettingsSave(settings)}
     />
     <Show when={surfaceMount()}>{(mount) => <Portal mount={mount()}>
       <Field class="performance-composer-surface-setting">
