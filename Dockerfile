@@ -10,6 +10,13 @@ WORKDIR /build/conduit-web
 COPY conduit-web/package.json conduit-web/package-lock.json ./
 RUN npm ci
 
+FROM rust:1.88.0-bookworm AS transcribe-rs-build
+
+WORKDIR /build/transcribe-rs-worker
+COPY conduit-web/native/transcribe-rs-worker/Cargo.toml conduit-web/native/transcribe-rs-worker/Cargo.lock ./
+COPY conduit-web/native/transcribe-rs-worker/src ./src
+RUN cargo build --release --locked
+
 FROM development-dependencies AS client-build
 
 COPY conduit-web/index.html conduit-web/vite.config.js conduit-web/tsconfig.json ./
@@ -42,6 +49,7 @@ COPY --chown=node:node conduit-web/package.json ./conduit-web/package.json
 COPY --chown=node:node conduit-web/src ./conduit-web/src
 COPY --from=production-dependencies --chown=node:node /build/conduit-web/node_modules ./conduit-web/node_modules
 COPY --from=client-build --chown=node:node /build/conduit-web/dist ./conduit-web/dist
+COPY --from=transcribe-rs-build --chown=node:node /build/transcribe-rs-worker/target/release/conduit-transcribe-rs-worker ./conduit-web/native/transcribe-rs-worker/target/release/conduit-transcribe-rs-worker
 
 RUN mkdir -p /data/home /workspaces && chown -R node:node /data /workspaces
 

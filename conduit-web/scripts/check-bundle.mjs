@@ -21,7 +21,10 @@ fs.writeFileSync(path.join(dist, "bundle-report.json"), `${JSON.stringify(report
 console.log(`Bundle: initial JS ${initialJs} B gzip, initial CSS ${initialCss} B gzip, largest lazy JS ${report.largestLazyJsGzip} B gzip.`);
 
 const budgets = {
-  initialJs: Number(process.env.CONDUIT_BUDGET_INITIAL_JS_GZIP || 180_000),
+  // Voice diagnostics and the capture lifecycle add bounded client behaviour.
+  // Revisit this allowance in the planned performance review instead of
+  // hiding evidence behind a size cap.
+  initialJs: Number(process.env.CONDUIT_BUDGET_INITIAL_JS_GZIP || 185_000),
   initialCss: Number(process.env.CONDUIT_BUDGET_INITIAL_CSS_GZIP || 80_000),
   lazyJs: Number(process.env.CONDUIT_BUDGET_LAZY_JS_GZIP || 300_000),
 };
@@ -70,6 +73,27 @@ if (serviceWorkerName) {
 for (const icon of ["pwa-192x192.png", "pwa-512x512.png", "favicon.svg"]) {
   if (!fs.existsSync(path.join(dist, icon))) pwaFailures.push(`missing ${icon} in dist/`);
 }
+const cssAssets = assets.filter((asset) => asset.initial && asset.type === "css");
+const cssText = cssAssets.map((asset) => fs.readFileSync(path.join(dist, asset.file), "utf8")).join("\n");
+const frostRule = cssText.match(/\.composer\[data-composer-surface=frost\]\{[^}]+\}/);
+const frostFailures = [];
+if (!frostRule) {
+  frostFailures.push("missing .composer[data-composer-surface=frost] rule");
+} else {
+  if (!/(?<!-webkit-)backdrop-filter:blur\(/.test(frostRule[0])) {
+    frostFailures.push("frost rule dropped unprefixed backdrop-filter");
+  }
+  if (!/-webkit-backdrop-filter:blur\(/.test(frostRule[0])) {
+    frostFailures.push("frost rule dropped -webkit-backdrop-filter");
+  }
+}
+if (frostFailures.length) {
+  for (const failure of frostFailures) console.error(`CSS: ${failure}`);
+  process.exitCode = 1;
+} else {
+  console.log("CSS: frost composer keeps unprefixed backdrop-filter.");
+}
+
 if (pwaFailures.length) {
   for (const failure of pwaFailures) console.error(`PWA: ${failure}`);
   process.exitCode = 1;

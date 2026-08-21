@@ -38,7 +38,7 @@ import { createTerminalStream } from "./server/terminal-stream.js";
 import { createDictationStream } from "./server/dictation-stream.js";
 import { VoiceRuntime } from "./server/voice-runtime.js";
 import { VoiceModelManager } from "./server/voice-model-manager.js";
-import { VoiceRecordingStore } from "./server/voice-recording-store.js";
+import { VoiceRecordingStore, VOICE_ARCHIVE_SHUTDOWN_TIMEOUT_MS } from "./server/voice-recording-store.js";
 import { registerAttachmentRoutes } from "./server/routes/attachments.js";
 import { registerAuthRoutes } from "./server/routes/auth.js";
 import { registerPiAuthRoutes } from "./server/routes/pi-auth.js";
@@ -52,6 +52,7 @@ import { registerSearchRoutes } from "./server/routes/search.js";
 import { registerVoiceRoutes } from "./server/routes/voice.js";
 import { SearchSettingsStore } from "./search-settings.js";
 import { VoiceSettingsStore } from "./voice-settings.js";
+import { VOICE_EXECUTION_CATALOG } from "./server/voice-execution-catalog.js";
 import { ModelProfileRuntime, usesWebSearchOverlay } from "./model-profile-runtime.js";
 import { publicModelProfile, resolveModelProfile } from "./model-profiles.js";
 
@@ -85,11 +86,11 @@ const runtimeSettings = new RuntimeSettingsStore(config.runtimeSettingsFile, def
 await runtimeSettings.load();
 const searchSettings = new SearchSettingsStore({ filePath: config.searchConfigFile, environment: process.env });
 await searchSettings.initialize();
-const voiceSettings = new VoiceSettingsStore({ filePath: config.voiceConfigFile, environment: process.env });
+const voiceSettings = new VoiceSettingsStore({ filePath: config.voiceConfigFile, catalog: VOICE_EXECUTION_CATALOG });
 await voiceSettings.initialize();
-const voiceModel = new VoiceModelManager({ root: config.voiceModelRoot });
+const voiceModel = new VoiceModelManager({ root: config.voiceModelRoot, catalog: VOICE_EXECUTION_CATALOG });
 const voiceRecordingStore = new VoiceRecordingStore({ root: config.voiceRecordingsRoot });
-const voiceRuntime = new VoiceRuntime({ settings: voiceSettings, modelManager: voiceModel });
+const voiceRuntime = new VoiceRuntime({ settings: voiceSettings, modelManager: voiceModel, catalog: VOICE_EXECUTION_CATALOG });
 const modelProfileRuntime = new ModelProfileRuntime({
   agentDir: config.piAgentDir,
   searchConfigFile: config.searchConfigFile,
@@ -614,7 +615,9 @@ async function shutdown(signal) {
   shuttingDown = true;
   console.log(`Conduit received ${signal}; stopping`);
   runtimeHub.close();
+  await dictationStream.shutdown?.({ timeoutMs: 1_000 });
   for (const socket of wss.clients) socket.close(1012, "Conduit is restarting");
+  const archiveDrain = voiceRecordingStore.drain({ timeoutMs: VOICE_ARCHIVE_SHUTDOWN_TIMEOUT_MS });
   const closed = new Promise((resolve) => server.close(resolve));
   server.closeIdleConnections?.();
   const stoppedProcesses = await manager.shutdown();
@@ -622,6 +625,8 @@ async function shutdown(signal) {
   await voiceModel.stop();
   server.closeAllConnections?.();
   await closed;
+  const archiveResult = await archiveDrain;
+  console.log(JSON.stringify({ type: "conduit.voice-archive-drain", ...archiveResult }));
   console.log(`Conduit stopped ${stoppedProcesses} Pi process${stoppedProcesses === 1 ? "" : "es"}`);
 }
 
