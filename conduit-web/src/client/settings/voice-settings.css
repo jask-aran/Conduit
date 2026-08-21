@@ -2,19 +2,8 @@
 html[data-meteor-field="off"] .chat-meteors { display: none !important; }
 
 /* The rebuild owns composer material as Static/Frosted/Liquid Glass. Hide the
-   older binary current-main toggle; settings.tsx inserts the three-way field.
-   The portal is appended to the UI FieldGroup, so explicitly order it near the
-   other primary presentation controls rather than after the metrics matrix. */
+   older binary current-main toggle; settings.tsx inserts the three-way field. */
 .settings-content[data-section="ui"] [data-slot="field"]:has(input[aria-label="Liquid glass surface"]) { display: none; }
-.performance-composer-surface-setting { order: -1; }
-
-/* Current main introduced card-style settings toggles after the performance
-   rebuild diverged. Keep those controls visually intact without importing the
-   rest of main's composer/layout CSS. */
-.settings-toggle { display: flex; align-items: flex-start; gap: 10px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--card); padding: 12px; cursor: pointer; }
-.settings-toggle input { margin-top: 3px; accent-color: var(--primary); }
-.settings-toggle span { display: flex; flex-direction: column; gap: 3px; }
-.settings-toggle small { color: var(--muted-foreground); }
 
 /* Current Voice lifecycle names, rendered by the rebuild composer. */
 .dictation-trigger[data-state="listening"] { box-shadow: 0 0 0 3px color-mix(in oklch, var(--accent-cool), transparent 78%); }
