@@ -7,21 +7,27 @@ import { COMPOSER_SURFACE_CHANGE_EVENT, saveComposerSurface, selectedComposerSur
 import { normalizeVoiceDictationSettings } from "../chat/voice-settings-compat";
 import "./voice-main-bridge.css";
 
-const SECTIONS = new Set(["general", "ui", "shortcuts", "models", "profiles", "runtime", "workspaces", "voice", "search", "auth"]);
+const SETTINGS_SECTIONS = ["general", "ui", "shortcuts", "models", "profiles", "runtime", "workspaces", "voice", "search", "auth"] as const;
+type SettingsSection = typeof SETTINGS_SECTIONS[number];
+const SETTINGS_SECTION_SET: ReadonlySet<string> = new Set(SETTINGS_SECTIONS);
 const METEOR_FIELD_STORAGE_KEY = "conduit:meteor-field";
 
+const normalizeSection = (value: unknown): SettingsSection => {
+  const candidate = String(value || "general").toLowerCase();
+  return SETTINGS_SECTION_SET.has(candidate) ? candidate as SettingsSection : "general";
+};
 const selectedMeteorField = () => typeof localStorage === "undefined" || localStorage.getItem(METEOR_FIELD_STORAGE_KEY) !== "false";
 const applyMeteorField = (enabled: boolean) => {
   if (typeof document !== "undefined") document.documentElement.dataset.meteorField = enabled ? "on" : "off";
 };
 if (typeof document !== "undefined") applyMeteorField(selectedMeteorField());
 
-const sectionFromTab = (event: MouseEvent) => {
+const sectionFromTab = (event: MouseEvent): SettingsSection | null => {
   const target = event.target instanceof Element ? event.target : null;
   const tab = target?.closest<HTMLButtonElement>("button[role='tab']");
   if (!tab) return null;
   const value = (tab.textContent || "").trim().toLowerCase();
-  return SECTIONS.has(value) ? value : null;
+  return SETTINGS_SECTION_SET.has(value) ? value as SettingsSection : null;
 };
 
 // Keep every performance-rebuild settings surface except Voice. Voice is the
@@ -29,9 +35,10 @@ const sectionFromTab = (event: MouseEvent) => {
 // active. This prevents current main's older transcript/material choices from
 // leaking back into the rebuild.
 export function Settings(props: any) {
-  const initial = () => String(props.initialSection || "general").toLowerCase();
-  const [voiceMode, setVoiceMode] = createSignal(initial() === "voice");
-  const [performanceSection, setPerformanceSection] = createSignal(initial() === "voice" ? "general" : initial());
+  const initial = () => normalizeSection(props.initialSection);
+  const initialValue = initial();
+  const [voiceMode, setVoiceMode] = createSignal(initialValue === "voice");
+  const [performanceSection, setPerformanceSection] = createSignal<SettingsSection>(initialValue === "voice" ? "general" : initialValue);
   const [meteorField, setMeteorField] = createSignal(selectedMeteorField());
   const [composerSurface, setComposerSurface] = createSignal<ComposerSurfaceMode>(selectedComposerSurface());
   const [meteorMount, setMeteorMount] = createSignal<HTMLElement | null>(null);
