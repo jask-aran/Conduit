@@ -1,16 +1,28 @@
 import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
+import {
+  VOICE_EXECUTION_CATALOG,
+  artifactForProfile,
+  migrateLocalSelection,
+  profileSelection,
+  resolveVoiceExecutionProfile,
+} from "./server/voice-execution-catalog.js";
 
 const MAX_SECRET_LENGTH = 16 * 1024;
 const MAX_ENDPOINT_LENGTH = 2 * 1024;
 const HEADER_NAME = /^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/;
 
-export const DEFAULT_LOCAL_VOICE_MODEL = "parakeet-tdt-0.6b-v3-int8";
+export const DEFAULT_LOCAL_VOICE_MODEL = "whisper-tiny-en-q8";
+export const VOICE_CONFIG_VERSION = 2;
+
+export const OPENAI_LIVE_MODEL = "gpt-live-transcribe";
+export const OPENAI_FILE_MODEL = "gpt-transcribe";
+export const OPENAI_LIVE_ADAPTER = "openai_realtime_stream_v1";
 
 export const VOICE_ADAPTERS = Object.freeze([
-  { id: "parakeet_pcm_ws_v1", label: "Live PCM WebSocket", transport: "websocket", description: "Streams 16 kHz signed PCM and expects explicit partial/final JSON events." },
   { id: "openai_audio_sse_v1", label: "OpenAI-compatible audio upload", transport: "http", description: "Uploads one in-memory WAV after stop and accepts JSON or transcript SSE events." },
+  { id: OPENAI_LIVE_ADAPTER, label: "OpenAI realtime transcription", transport: "ws", description: "Feeds live PCM into gpt-live-transcribe and maps deltas to Conduit partials." },
   { id: "deepgram_audio_v1", label: "Deepgram prerecorded audio", transport: "http", description: "Uploads one in-memory WAV after stop and reads Deepgram channel alternatives." },
 ]);
 
@@ -18,9 +30,8 @@ export const VOICE_PROVIDERS = Object.freeze([
   {
     id: "openai", label: "OpenAI", adapter: "openai_audio_sse_v1", endpoint: "https://api.openai.com/v1/audio/transcriptions", authLabel: "OpenAI API key",
     models: [
-      { id: "gpt-transcribe", label: "GPT Transcribe", description: "Recommended general-purpose transcription model." },
-      { id: "gpt-4o-mini-transcribe", label: "GPT-4o mini Transcribe", description: "Lower-cost, lower-latency transcription." },
-      { id: "gpt-4o-transcribe", label: "GPT-4o Transcribe", description: "High-quality multilingual transcription." },
+      { id: OPENAI_FILE_MODEL, label: "GPT Transcribe", description: "Stop-time file transcription. Text appears after you stop." },
+      { id: OPENAI_LIVE_MODEL, label: "GPT Live Transcribe", description: "Live transcription while you speak." },
     ],
   },
   {
@@ -103,120 +114,231 @@ async function writeJson(filePath, value) {
   } finally { await fs.rm(temporary, { force: true }).catch(() => {}); }
 }
 
-function environmentConfig(environment) {
-  const endpoint = String(environment.CONDUIT_PARAKEET_STREAM_URL || "").trim();
-  if (!endpoint) return null;
-  return {
-    mode: "remote", localModelId: DEFAULT_LOCAL_VOICE_MODEL, provider: "custom",
-    adapter: String(environment.CONDUIT_VOICE_ADAPTER || "parakeet_pcm_ws_v1").trim(),
-    model: String(environment.CONDUIT_VOICE_MODEL || "").trim(), endpoint,
-    auth: { type: environment.CONDUIT_PARAKEET_API_KEY ? "bearer" : "none", headerName: "Authorization", secret: String(environment.CONDUIT_PARAKEET_API_KEY || "") },
-    stopMessage: String(environment.CONDUIT_PARAKEET_STOP_MESSAGE || ""), source: "environment", allowPrivate: true,
-  };
+function credentialRecord(value) {
+  if (!isObject(value)) return null;
+  const type = AUTH_TYPES.has(value.type) ? value.type : "none";
+  const headerName = type === "bearer"
+    ? "Authorization"
+    : type === "header"
+      ? normalizeHeaderName(value.headerName)
+      : "X-API-Key";
+  const secret = typeof value.secret === "string" ? value.secret : "";
+  return { type, headerName, secret };
+}
+
+function storedCredentials(config) {
+  const credentials = {};
+  if (isObject(config.credentials)) {
+    for (const [provider, value] of Object.entries(config.credentials)) {
+      if (!PROVIDER_BY_ID.has(provider)) continue;
+      const record = credentialRecord(value);
+      if (record) credentials[provider] = record;
+    }
+  }
+  const provider = PROVIDER_BY_ID.has(config.provider) ? config.provider : "custom";
+  const legacy = credentialRecord(config.auth);
+  if (legacy && (legacy.secret || !credentials[provider])) credentials[provider] = { ...credentials[provider], ...legacy, secret: legacy.secret || credentials[provider]?.secret || "" };
+  return credentials;
+}
+
+export function openaiAdapterFor(model) {
+  return model === OPENAI_LIVE_MODEL ? OPENAI_LIVE_ADAPTER : "openai_audio_sse_v1";
 }
 
 function storedConfig(config) {
   const mode = MODES.has(config.mode) ? config.mode : "off";
   const provider = PROVIDER_BY_ID.has(config.provider) ? config.provider : "custom";
   const profile = PROVIDER_BY_ID.get(provider);
-  const adapter = provider === "custom" && ADAPTER_IDS.has(config.adapter) ? config.adapter : profile.adapter;
-  const authType = AUTH_TYPES.has(config.auth?.type) ? config.auth.type : "none";
-  const headerName = authType === "bearer"
-    ? "Authorization"
-    : authType === "header"
-      ? normalizeHeaderName(config.auth?.headerName)
-      : "X-API-Key";
+  const credentials = storedCredentials(config);
+  const auth = credentials[provider] || { type: "none", headerName: "X-API-Key", secret: "" };
+  let model = typeof config.model === "string" ? config.model : profile.models[0]?.id || "";
+  if (provider === "openai" && !profile.models.some((candidate) => candidate.id === model)) model = OPENAI_FILE_MODEL;
+  const adapter = provider === "custom" && ADAPTER_IDS.has(config.adapter)
+    ? config.adapter
+    : provider === "openai"
+      ? openaiAdapterFor(model)
+      : profile.adapter;
   return {
+    voiceConfigVersion: Number(config.voiceConfigVersion) === VOICE_CONFIG_VERSION ? VOICE_CONFIG_VERSION : 1,
     mode,
     localModelId: String(config.localModelId || DEFAULT_LOCAL_VOICE_MODEL),
+    localSelection: config.localSelection && typeof config.localSelection === "object" ? { ...config.localSelection } : null,
+    localSelectionOrigin: ["default", "explicit", "migrated_explicit"].includes(config.localSelectionOrigin) ? config.localSelectionOrigin : null,
+    resolvedProfileId: typeof config.resolvedProfileId === "string" ? config.resolvedProfileId : null,
     provider, adapter,
-    model: typeof config.model === "string" ? config.model : profile.models[0]?.id || "",
+    model,
     endpoint: typeof config.endpoint === "string" ? config.endpoint : profile.endpoint,
-    auth: { type: authType, headerName, secret: typeof config.auth?.secret === "string" ? config.auth.secret : "" },
+    auth,
+    credentials,
     source: "stored", allowPrivate: false,
   };
 }
 
+function untouchedDefaultConfig(config) {
+  return config.mode === "off"
+    && (!config.localModelId || config.localModelId === DEFAULT_LOCAL_VOICE_MODEL)
+    && (!config.provider || config.provider === "openai")
+    && (!config.model || config.model === OPENAI_FILE_MODEL)
+    && (!config.endpoint || config.endpoint === "https://api.openai.com/v1/audio/transcriptions")
+    && !config.auth?.secret
+    && !Object.values(config.credentials || {}).some((credential) => credential?.secret);
+}
+
+function normalizedLocalConfig(config, catalog) {
+  let profile;
+  let origin = config.localSelectionOrigin;
+  if (Number(config.voiceConfigVersion) === VOICE_CONFIG_VERSION && config.localSelection) {
+    if (!origin || !["default", "explicit", "migrated_explicit"].includes(origin)) throw voiceError("voice_profile_recovery_required", "The saved local voice profile has no valid selection origin", 409);
+    profile = resolveVoiceExecutionProfile(config.localSelection, catalog);
+  } else {
+    const legacyModelId = String(config.localModelId || DEFAULT_LOCAL_VOICE_MODEL);
+    const migration = migrateLocalSelection(legacyModelId, catalog);
+    profile = resolveVoiceExecutionProfile(migration.selection, catalog);
+    origin = untouchedDefaultConfig(config) ? "default" : "migrated_explicit";
+  }
+  const artifact = artifactForProfile(profile, catalog);
+  return {
+    voiceConfigVersion: VOICE_CONFIG_VERSION,
+    localModelId: artifact.legacyModelId,
+    localSelectionOrigin: origin,
+    localSelection: profileSelection(profile),
+    resolvedProfileId: profile.id,
+  };
+}
+
+function normalizedStoredConfig(config, catalog) {
+  const local = normalizedLocalConfig(config, catalog);
+  return {
+    ...config,
+    ...local,
+  };
+}
+
 export class VoiceSettingsStore {
-  constructor({ filePath, environment = process.env } = {}) {
+  constructor({ filePath, catalog = VOICE_EXECUTION_CATALOG }) {
     if (!filePath) throw new Error("VoiceSettingsStore requires a file path");
     this.filePath = path.resolve(filePath);
-    this.environment = environment;
+    this.catalog = catalog;
   }
 
   async initialize() {
     const current = await readJson(this.filePath);
-    if (!Object.keys(current).length) await writeJson(this.filePath, {
+    const initial = Object.keys(current).length ? current : {
       mode: "off", localModelId: DEFAULT_LOCAL_VOICE_MODEL, provider: "openai", adapter: "openai_audio_sse_v1", model: "gpt-transcribe",
       endpoint: "https://api.openai.com/v1/audio/transcriptions", auth: { type: "bearer", headerName: "Authorization" },
-    });
+    };
+    const normalized = normalizedStoredConfig(initial, this.catalog);
+    if (JSON.stringify(initial) !== JSON.stringify(normalized)) await writeJson(this.filePath, normalized);
+  }
+
+  async readNormalized() {
+    const current = await readJson(this.filePath);
+    const normalized = normalizedStoredConfig(current, this.catalog);
+    if (JSON.stringify(current) !== JSON.stringify(normalized)) await writeJson(this.filePath, normalized);
+    return normalized;
   }
 
   async effective() {
-    return environmentConfig(this.environment) || storedConfig(await readJson(this.filePath));
+    return storedConfig(await this.readNormalized());
   }
 
   async publicView({ local = null } = {}) {
     const effective = await this.effective();
     const configured = Boolean(effective.auth.secret);
     return {
-      mode: effective.mode, localModelId: effective.localModelId, provider: effective.provider, adapter: effective.adapter, model: effective.model,
-      endpoint: effective.endpoint, source: effective.source, locked: effective.source === "environment", adapters: VOICE_ADAPTERS, providers: VOICE_PROVIDERS,
+      voiceConfigVersion: effective.voiceConfigVersion, mode: effective.mode, localModelId: effective.localModelId,
+      localSelection: effective.localSelection, localSelectionOrigin: effective.localSelectionOrigin, resolvedProfileId: effective.resolvedProfileId,
+      provider: effective.provider, adapter: effective.adapter, model: effective.model,
+      endpoint: effective.endpoint, source: effective.source, adapters: VOICE_ADAPTERS,
+      providers: VOICE_PROVIDERS.map((provider) => ({
+        ...provider,
+        models: provider.models.map((model) => ({
+          ...model,
+          adapter: provider.id === "openai" ? openaiAdapterFor(model.id) : provider.adapter,
+        })),
+        configured: Boolean(effective.credentials[provider.id]?.secret),
+      })),
       auth: { type: effective.auth.type, headerName: effective.auth.headerName, configured, source: configured ? effective.source : null, removable: configured && effective.source === "stored" },
       local,
     };
   }
 
   async update(input) {
-    if (environmentConfig(this.environment)) throw voiceError("voice_settings_locked", "Voice settings are managed by the server environment", 409);
     if (!isObject(input)) throw voiceError("voice_settings_invalid", "Voice settings must be an object");
     const mode = String(input.mode || "");
     if (!MODES.has(mode)) throw voiceError("voice_mode_invalid", "Voice mode must be off, local, or remote");
-    const localModelId = String(input.localModelId || DEFAULT_LOCAL_VOICE_MODEL);
-    const current = await readJson(this.filePath);
+    const current = await this.readNormalized();
+    const credentials = storedCredentials(current);
+    const selectionInput = input.localSelection
+      || (Object.prototype.hasOwnProperty.call(input, "localModelId") ? migrateLocalSelection(input.localModelId, this.catalog).selection : current.localSelection);
+    const selectedProfile = resolveVoiceExecutionProfile(selectionInput, this.catalog);
+    const selectedArtifact = artifactForProfile(selectedProfile, this.catalog);
+    const local = {
+      voiceConfigVersion: VOICE_CONFIG_VERSION,
+      localModelId: selectedArtifact.legacyModelId,
+      localSelectionOrigin: "explicit",
+      localSelection: profileSelection(selectedProfile),
+      resolvedProfileId: selectedProfile.id,
+    };
     if (mode !== "remote") {
-      await writeJson(this.filePath, { ...current, mode, localModelId });
+      await writeJson(this.filePath, { ...current, ...local, mode, credentials });
       return this.publicView();
     }
     const provider = PROVIDER_BY_ID.has(input.provider) ? String(input.provider) : "custom";
     const profile = PROVIDER_BY_ID.get(provider);
-    const adapter = provider === "custom" ? String(input.adapter || "") : profile.adapter;
+    let model = provider === "custom" ? String(input.model || "").trim() : String(input.model || profile.models[0]?.id || "");
+    if (provider !== "custom" && !profile.models.some((candidate) => candidate.id === model)) {
+      if (provider === "openai") model = OPENAI_FILE_MODEL;
+      else throw voiceError("voice_model_invalid", `Choose a supported ${profile.label} transcription model`);
+    }
+    const adapter = provider === "custom"
+      ? String(input.adapter || "")
+      : provider === "openai"
+        ? openaiAdapterFor(model)
+        : profile.adapter;
     if (!ADAPTER_IDS.has(adapter)) throw voiceError("voice_adapter_invalid", "Unknown voice endpoint adapter");
-    const sameCredentialScope = provider === (current.provider || "custom")
-      && String(input.auth?.type || "none") === String(current.auth?.type || "none")
-      && String(input.auth?.headerName || "X-API-Key") === String(current.auth?.headerName || "X-API-Key");
-    const previousSecret = sameCredentialScope && typeof current.auth?.secret === "string" ? current.auth.secret : "";
-    const secret = typeof input.auth?.secret === "string" && input.auth.secret.trim() ? normalizeSecret(input.auth.secret) : previousSecret;
+    const previous = credentials[provider] || {};
+    const secret = typeof input.auth?.secret === "string" && input.auth.secret.trim() ? normalizeSecret(input.auth.secret) : previous.secret || "";
     const endpoint = provider === "custom" ? normalizeRemoteVoiceEndpoint(input.endpoint) : profile.endpoint;
-    const model = provider === "custom" ? String(input.model || "").trim() : String(input.model || profile.models[0]?.id || "");
-    if (provider !== "custom" && !profile.models.some((candidate) => candidate.id === model)) throw voiceError("voice_model_invalid", `Choose a supported ${profile.label} transcription model`);
     const authType = provider === "custom" ? String(input.auth?.type || "none") : "bearer";
     if (!AUTH_TYPES.has(authType)) throw voiceError("voice_auth_invalid", "Unknown voice endpoint authentication type");
     const headerName = authType === "bearer" ? "Authorization" : authType === "header" ? normalizeHeaderName(input.auth?.headerName) : "X-API-Key";
     const protocol = new URL(endpoint).protocol;
-    if (adapter === "parakeet_pcm_ws_v1" && protocol !== "wss:") throw voiceError("voice_endpoint_protocol", "The live PCM adapter requires a WSS endpoint");
-    if (adapter !== "parakeet_pcm_ws_v1" && protocol !== "https:") throw voiceError("voice_endpoint_protocol", "Audio upload adapters require an HTTPS endpoint");
+    if (adapter !== OPENAI_LIVE_ADAPTER && protocol !== "https:") throw voiceError("voice_endpoint_protocol", "Audio upload adapters require an HTTPS endpoint");
     if (authType !== "none" && !secret) throw voiceError("voice_secret_invalid", `Enter a credential for ${profile.label}`);
+    const auth = { type: authType, headerName, ...(authType !== "none" && secret ? { secret } : {}) };
+    credentials[provider] = { type: authType, headerName, secret };
     await writeJson(this.filePath, {
-      mode, localModelId, provider, adapter, model, endpoint,
-      auth: { type: authType, headerName, ...(authType !== "none" && secret ? { secret } : {}) },
+      ...current, ...local, mode, provider, adapter, model, endpoint, auth, credentials,
     });
     return this.publicView();
   }
 
   async removeCredential() {
-    if (environmentConfig(this.environment)) throw voiceError("voice_settings_locked", "Voice settings are managed by the server environment", 409);
     const config = await readJson(this.filePath);
-    const removed = Boolean(config.auth?.secret);
+    const provider = PROVIDER_BY_ID.has(config.provider) ? config.provider : "custom";
+    const credentials = storedCredentials(config);
+    const removed = Boolean(config.auth?.secret || credentials[provider]?.secret);
     if (isObject(config.auth)) delete config.auth.secret;
-    if (removed) await writeJson(this.filePath, config);
+    if (credentials[provider]) delete credentials[provider].secret;
+    if (removed) await writeJson(this.filePath, { ...config, credentials });
     return removed;
   }
 
   async selectLocalModel(localModelId) {
-    if (environmentConfig(this.environment)) throw voiceError("voice_settings_locked", "Voice settings are managed by the server environment", 409);
-    const config = await readJson(this.filePath);
-    await writeJson(this.filePath, { ...config, mode: "local", localModelId: String(localModelId) });
+    const config = await this.readNormalized();
+    const migration = migrateLocalSelection(String(localModelId), this.catalog);
+    const profile = resolveVoiceExecutionProfile(migration.selection, this.catalog);
+    const artifact = artifactForProfile(profile, this.catalog);
+    await writeJson(this.filePath, {
+      ...config,
+      mode: "local",
+      voiceConfigVersion: VOICE_CONFIG_VERSION,
+      localModelId: artifact.legacyModelId,
+      localSelectionOrigin: "explicit",
+      localSelection: profileSelection(profile),
+      resolvedProfileId: profile.id,
+    });
     return this.publicView();
   }
 }

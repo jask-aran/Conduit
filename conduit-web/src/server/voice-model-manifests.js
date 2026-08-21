@@ -3,10 +3,55 @@ function huggingFaceBase() {
   return (endpoint || "https://huggingface.co").replace(/\/+$/, "");
 }
 
-const PARAKEET_REPOSITORY = "istupakov/parakeet-tdt-0.6b-v3-onnx";
 const PARAKEET_VERSION = "v0.8.0";
-const PARAKEET_REVISION = "8f23f0c03c8761650bdb5b40aaf3e40d2c15f1ce";
 export const ONNXRUNTIME_VERSION = "1.25.1";
+export const TRANSCRIBE_CPP_VERSION = "0.1.3";
+export const TRANSCRIBE_RS_VERSION = "0.3.8";
+export const TRANSCRIBE_RS_ORT_VERSION = "1.24.2";
+export const TRANSCRIBE_RS_CRATE_CHECKSUM = "b231bc9bd1b20be89583a49c3885dfa7d7323299564ee78eddf83db04f2b337b";
+export const TRANSCRIBE_RS_ORT_CHECKSUM = "d7de3af33d24a745ffb8fab904b13478438d1cd52868e6f17735ef6e1f8bf133";
+export const TRANSCRIBE_RS_RUNTIME = Object.freeze({
+  package: "transcribe-rs",
+  version: TRANSCRIBE_RS_VERSION,
+  license: "MIT",
+  crateChecksum: TRANSCRIBE_RS_CRATE_CHECKSUM,
+  ort: {
+    package: "ort",
+    version: "2.0.0-rc.12",
+    runtimeVersion: TRANSCRIBE_RS_ORT_VERSION,
+    license: "MIT OR Apache-2.0",
+    crateChecksum: TRANSCRIBE_RS_ORT_CHECKSUM,
+    linkage: "static-prebuilt",
+    providers: ["cpu"],
+  },
+  target: "x86_64-unknown-linux-gnu",
+});
+export const TRANSCRIBE_CPP_RUNTIME = Object.freeze({
+  package: "transcribe-cpp",
+  version: TRANSCRIBE_CPP_VERSION,
+  headerHash: "86b16dd97ad1cb58",
+  platforms: Object.freeze({
+    "linux-x64-cpu-vulkan": Object.freeze({
+      package: "@transcribe-cpp/linux-x64-cpu-vulkan",
+      release: "transcribe-native-0.1.3-linux-x86_64-cpu-vulkan.tar.gz",
+      size: 29703996,
+      sha256: "5e150c7862748d33dc2f559a38274bcb46d06ba63f8f5d1247f8196569e02797",
+    }),
+    "linux-arm64-cpu-vulkan": Object.freeze({
+      package: "@transcribe-cpp/linux-arm64-cpu-vulkan",
+      release: "transcribe-native-0.1.3-linux-aarch64-cpu-vulkan.tar.gz",
+      size: 26134718,
+      sha256: "ba003aed1c4edb86d2c6b44eb5c0386b21b939505c139d8b58afc80439866f65",
+    }),
+  }),
+});
+
+const TRANSCRIBE_CPP_MODEL_FILE = "parakeet-unified-en-0.6b-Q8_0.gguf";
+const TRANSCRIBE_CPP_MODEL_REPOSITORY = "handy-computer/parakeet-unified-en-0.6b-gguf";
+const TRANSCRIBE_CPP_MODEL_REVISION = "7e948f21b7bdbac698d3318db9d350f1096f3b6c";
+const TRANSCRIBE_CPP_SOURCE_REVISION = "d4ac9928f3bf238223ff0779c06b8149bf8ac4e1";
+const TRANSCRIBE_CPP_MODEL_SIZE = 731357568;
+const TRANSCRIBE_CPP_MODEL_SHA256 = "4b50b6dd862bf6e346929aaf4f5eaacec003bfa3f56462d6c874b41ef2f38795";
 
 const WHISPER_FILES = Object.freeze([
   "added_tokens.json", "config.json", "generation_config.json", "merges.txt", "normalizer.json", "preprocessor_config.json",
@@ -127,7 +172,7 @@ const WHISPER_MANIFESTS = Object.freeze({
   ),
 });
 
-const PARAKEET_FILES = Object.freeze({
+const PARAKEET_V3_INT8_FILES = Object.freeze({
   "config.json": [97, "666903c76b9798caf2c210afd4f6cd60b08a8dbf9800ec8d7a3bc0d2148ac466"],
   "vocab.txt": [93939, "d58544679ea4bc6ac563d1f545eb7d474bd6cfa467f0a6e2c1dc1c7d37e3c35d"],
   "nemo128.onnx": [139764, "a9fde1486ebfcc08f328d75ad4610c67835fea58c73ba57e3209a6f6cf019e9f"],
@@ -135,13 +180,53 @@ const PARAKEET_FILES = Object.freeze({
   "decoder_joint-model.int8.onnx": [18202004, "eea7483ee3d1a30375daedc8ed83e3960c91b098812127a0d99d1c8977667a70"],
 });
 
-const PARAKEET_FP32_FILES = Object.freeze({
-  "config.json": PARAKEET_FILES["config.json"],
-  "vocab.txt": PARAKEET_FILES["vocab.txt"],
-  "nemo128.onnx": PARAKEET_FILES["nemo128.onnx"],
+const PARAKEET_V3_FP32_FILES = Object.freeze({
+  "config.json": PARAKEET_V3_INT8_FILES["config.json"],
+  "vocab.txt": PARAKEET_V3_INT8_FILES["vocab.txt"],
+  "nemo128.onnx": PARAKEET_V3_INT8_FILES["nemo128.onnx"],
   "encoder-model.onnx": [41770866, "98a74b21b4cc0017c1e7030319a4a96f4a9506e50f0708f3a516d02a77c96bb1"],
   "encoder-model.onnx.data": [2435420160, "9a22d372c51455c34f13405da2520baefb7125bd16981397561423ed32d24f36"],
   "decoder_joint-model.onnx": [72520893, "e978ddf6688527182c10fde2eb4b83068421648985ef23f7a86be732be8706c1"],
+});
+
+const PARAKEET_V2_INT8_FILES = Object.freeze({
+  "config.json": [97, "666903c76b9798caf2c210afd4f6cd60b08a8dbf9800ec8d7a3bc0d2148ac466"],
+  "vocab.txt": [9384, "ec182b70dd42113aff6c5372c75cac58c952443eb22322f57bbd7f53977d497d"],
+  "nemo128.onnx": [139764, "a9fde1486ebfcc08f328d75ad4610c67835fea58c73ba57e3209a6f6cf019e9f"],
+  "encoder-model.int8.onnx": [652184014, "3e0581fda6ab843888b51e56d7ee78b6d5bc3237ec113af1f732d1d5286aa155"],
+  "decoder_joint-model.int8.onnx": [8998286, "a449f49acd68979d418651dd2dcb737cc0f1bf0225e009e29ee326354edbf7d3"],
+});
+
+const PARAKEET_V2_FP32_FILES = Object.freeze({
+  "config.json": PARAKEET_V2_INT8_FILES["config.json"],
+  "vocab.txt": PARAKEET_V2_INT8_FILES["vocab.txt"],
+  "nemo128.onnx": PARAKEET_V2_INT8_FILES["nemo128.onnx"],
+  "encoder-model.onnx": [41770866, "3987bcd28175d829d12888a996a84e8f62a0e374d9ffd640662c1515adc679d3"],
+  "encoder-model.onnx.data": [2435420160, "4dab7362d4874d85965045b1e41b2d61dd2cc0fb25671a7f6b3dc47bf120cc41"],
+  "decoder_joint-model.onnx": [35792059, "cbb52a07bd70ab5b67f8439d4b3cd8704b18467b4430bcacb5adabe154b8d191"],
+});
+
+const PARAKEET_PACKAGES = Object.freeze({
+  "parakeet-tdt-0.6b-v3-int8": Object.freeze({
+    repository: "istupakov/parakeet-tdt-0.6b-v3-onnx",
+    revision: "8f23f0c03c8761650bdb5b40aaf3e40d2c15f1ce",
+    files: PARAKEET_V3_INT8_FILES,
+  }),
+  "parakeet-tdt-0.6b-v3-fp32": Object.freeze({
+    repository: "istupakov/parakeet-tdt-0.6b-v3-onnx",
+    revision: "8f23f0c03c8761650bdb5b40aaf3e40d2c15f1ce",
+    files: PARAKEET_V3_FP32_FILES,
+  }),
+  "parakeet-tdt-0.6b-v2-int8": Object.freeze({
+    repository: "istupakov/parakeet-tdt-0.6b-v2-onnx",
+    revision: "0bbb45a3365852604aef28b538a8f066f4ccaa85",
+    files: PARAKEET_V2_INT8_FILES,
+  }),
+  "parakeet-tdt-0.6b-v2-fp32": Object.freeze({
+    repository: "istupakov/parakeet-tdt-0.6b-v2-onnx",
+    revision: "0bbb45a3365852604aef28b538a8f066f4ccaa85",
+    files: PARAKEET_V2_FP32_FILES,
+  }),
 });
 
 const PARAKEET_RUNTIME = Object.freeze({
@@ -162,11 +247,14 @@ const PARAKEET_BINARY = Object.freeze({
   arm64: Object.freeze({ size: 6338344, sha256: "70413b539fae9c7951ead0c069a155f84dc485276281aebbcbc38812ea921882" }),
 });
 
-const SILERO = Object.freeze({
+export const SILERO_VAD_ARTIFACT = Object.freeze({
   name: "silero_vad.onnx",
   url: "https://raw.githubusercontent.com/snakers4/silero-vad/7e30209a3e901f9842f81b225f3e93d8199902b1/src/silero_vad/data/silero_vad.onnx",
   size: 2327524,
   sha256: "1a153a22f4509e292a94e67d6f9b85e8deb25b4988682b7e174c65279d8788e3",
+  revision: "7e30209a3e901f9842f81b225f3e93d8199902b1",
+  license: "MIT",
+  attribution: "Silero Team",
 });
 
 function manifestError(message) {
@@ -181,7 +269,8 @@ function whisperManifest(model) {
   return {
     version: "transformers.js-3.8.1",
     modelRevision: definition.revision,
-    artifacts: (definition.fullPrecision ? WHISPER_FP32_FILES : WHISPER_FILES).map((name) => {
+    artifacts: [
+      ...(definition.fullPrecision ? WHISPER_FP32_FILES : WHISPER_FILES).map((name) => {
       const [size, sha256] = definition.files[name];
       return {
         name,
@@ -190,19 +279,25 @@ function whisperManifest(model) {
         size,
         sha256,
       };
-    }),
+      }),
+      { ...SILERO_VAD_ARTIFACT, relative: "models/silero_vad.onnx" },
+    ],
   };
 }
 
 function parakeetManifest(model, architecture) {
+  const pack = PARAKEET_PACKAGES[model.id];
   const binary = PARAKEET_BINARY[architecture.release];
   const runtime = PARAKEET_RUNTIME[architecture.runtime];
-  const files = model.precision === "fp32" ? PARAKEET_FP32_FILES : PARAKEET_FILES;
+  if (!pack || pack.repository !== model.repository || pack.revision !== model.revision) {
+    throw manifestError(`No reviewed artifact manifest exists for ${model.label}`);
+  }
   if (!binary || !runtime) throw manifestError(`No reviewed Parakeet package exists for ${architecture.release}`);
   return {
     version: PARAKEET_VERSION,
-    modelRevision: PARAKEET_REVISION,
+    modelRevision: pack.revision,
     extractRuntime: true,
+    transcribeRs: TRANSCRIBE_RS_RUNTIME,
     artifacts: [
       {
         name: `parakeet-linux-${architecture.release}`,
@@ -218,18 +313,39 @@ function parakeetManifest(model, architecture) {
         size: runtime.size,
         sha256: runtime.sha256,
       },
-      ...Object.entries(files).map(([name, [size, sha256]]) => ({
+      ...Object.entries(pack.files).map(([name, [size, sha256]]) => ({
         name,
         relative: `models/${name}`,
-        url: `${huggingFaceBase()}/${PARAKEET_REPOSITORY}/resolve/${PARAKEET_REVISION}/${name}`,
+        url: `${huggingFaceBase()}/${pack.repository}/resolve/${pack.revision}/${name}`,
         size,
         sha256,
       })),
-      { ...SILERO, relative: "models/silero_vad.onnx" },
+      { ...SILERO_VAD_ARTIFACT, relative: "models/silero_vad.onnx" },
     ],
   };
 }
 
+function transcribeCppManifest(model) {
+  if (model.repository !== TRANSCRIBE_CPP_MODEL_REPOSITORY || model.revision !== TRANSCRIBE_CPP_MODEL_REVISION || model.sourceRevision !== TRANSCRIBE_CPP_SOURCE_REVISION) {
+    throw manifestError(`No reviewed transcribe.cpp manifest exists for ${model.label}`);
+  }
+  return {
+    version: `transcribe-cpp-${TRANSCRIBE_CPP_VERSION}`,
+    modelRevision: model.revision,
+    sourceRevision: model.sourceRevision,
+    runtime: TRANSCRIBE_CPP_RUNTIME,
+    artifacts: [{
+      name: TRANSCRIBE_CPP_MODEL_FILE,
+      relative: TRANSCRIBE_CPP_MODEL_FILE,
+      url: `${huggingFaceBase()}/${TRANSCRIBE_CPP_MODEL_REPOSITORY}/resolve/${TRANSCRIBE_CPP_MODEL_REVISION}/${TRANSCRIBE_CPP_MODEL_FILE}`,
+      size: TRANSCRIBE_CPP_MODEL_SIZE,
+      sha256: TRANSCRIBE_CPP_MODEL_SHA256,
+    }],
+  };
+}
+
 export function getVoiceModelManifest(model, architecture) {
-  return model.engine === "parakeet" ? parakeetManifest(model, architecture) : whisperManifest(model);
+  if (model.engine === "parakeet") return parakeetManifest(model, architecture);
+  if (model.engine === "transcribe-cpp") return transcribeCppManifest(model);
+  return whisperManifest(model);
 }

@@ -6,66 +6,12 @@ import path from "node:path";
 import { Readable, Transform } from "node:stream";
 import { pipeline as streamPipeline } from "node:stream/promises";
 import { getVoiceModelManifest, ONNXRUNTIME_VERSION } from "./voice-model-manifests.js";
+import { LEGACY_LOCAL_VOICE_MODELS, VOICE_EXECUTION_CATALOG, publicVoiceExecutionCatalog } from "./voice-execution-catalog.js";
+import { SileroVad, VoiceVadObservationQueue } from "./voice-vad.js";
+import { defaultTranscribeRsWorkerCommand, TranscribeRsWorkerClient } from "./transcribe-rs-worker.js";
 
 const MIB = 1024 * 1024;
-const PARAKEET_MODEL_REVISION = "8f23f0c03c8761650bdb5b40aaf3e40d2c15f1ce";
-
-export const LOCAL_VOICE_MODELS = Object.freeze([
-  {
-    id: "whisper-tiny-en-q8", label: "Whisper Tiny English", engine: "transformers-whisper", size: "tiny", languages: "English",
-    description: "Smallest and fastest option for lightweight English dictation.", approximateBytes: 48 * MIB, minimumFreeBytes: 128 * MIB,
-    repository: "onnx-community/whisper-tiny.en", revision: "2575352d61be1bf7225cf8f8b268a4678025fc58", precision: "q8",
-    license: { id: "MIT", attribution: "OpenAI Whisper and the ONNX Community conversion" },
-  },
-  {
-    id: "whisper-tiny-en-fp32", label: "Whisper Tiny English (fp32)", engine: "transformers-whisper", size: "tiny", languages: "English",
-    description: "Full-precision Tiny tier for CPU-light accuracy comparisons.", approximateBytes: 155 * MIB, minimumFreeBytes: 256 * MIB,
-    repository: "onnx-community/whisper-tiny.en", revision: "2575352d61be1bf7225cf8f8b268a4678025fc58", precision: "fp32",
-    license: { id: "MIT", attribution: "OpenAI Whisper and the ONNX Community conversion" },
-  },
-  {
-    id: "whisper-base-q8", label: "Whisper Base", engine: "transformers-whisper", size: "small", languages: "Multilingual",
-    description: "Balanced multilingual model for modest CPU and memory budgets.", approximateBytes: 86 * MIB, minimumFreeBytes: 192 * MIB,
-    repository: "onnx-community/whisper-base", revision: "1846881b6b3a3024392c1eea3ad983695bc23925", precision: "q8",
-    license: { id: "MIT", attribution: "OpenAI Whisper and the ONNX Community conversion" },
-  },
-  {
-    id: "whisper-base-fp32", label: "Whisper Base (fp32)", engine: "transformers-whisper", size: "small", languages: "Multilingual",
-    description: "Full-precision Base tier for multilingual accuracy comparisons.", approximateBytes: 288 * MIB, minimumFreeBytes: 512 * MIB,
-    repository: "onnx-community/whisper-base", revision: "1846881b6b3a3024392c1eea3ad983695bc23925", precision: "fp32",
-    license: { id: "MIT", attribution: "OpenAI Whisper and the ONNX Community conversion" },
-  },
-  {
-    id: "whisper-small-q8", label: "Whisper Small", engine: "transformers-whisper", size: "medium", languages: "Multilingual",
-    description: "More accurate multilingual Whisper tier with a larger memory footprint.", approximateBytes: 260 * MIB, minimumFreeBytes: 480 * MIB,
-    repository: "onnx-community/whisper-small", revision: "36050c46d777d46dc4b5f43f6d90574fc38f8732", precision: "q8",
-    license: { id: "MIT", attribution: "OpenAI Whisper and the ONNX Community conversion" },
-  },
-  {
-    id: "whisper-small-fp32", label: "Whisper Small (fp32)", engine: "transformers-whisper", size: "medium", languages: "Multilingual",
-    description: "Full-precision Whisper Small tier for maximum embedded accuracy.", approximateBytes: 936 * MIB, minimumFreeBytes: 1536 * MIB,
-    repository: "onnx-community/whisper-small", revision: "36050c46d777d46dc4b5f43f6d90574fc38f8732", precision: "fp32",
-    license: { id: "MIT", attribution: "OpenAI Whisper and the ONNX Community conversion" },
-  },
-  {
-    id: "whisper-large-v3-turbo-q8", label: "Whisper Large v3 Turbo", engine: "transformers-whisper", size: "large", languages: "Multilingual",
-    description: "The most accurate embedded Whisper tier with fast turbo decoding for live dictation.", approximateBytes: 1040 * MIB, minimumFreeBytes: 1536 * MIB,
-    repository: "onnx-community/whisper-large-v3-turbo", revision: "360ebcde2559d60bb474678be3c1de9ef347d01a", precision: "q8",
-    license: { id: "MIT", attribution: "OpenAI Whisper and the ONNX Community conversion" },
-  },
-  {
-    id: "parakeet-tdt-0.6b-v3-int8", label: "Parakeet TDT 0.6B v3", engine: "parakeet", size: "large", languages: "English",
-    description: "Highest-quality managed English option; optimized ONNX int8 runtime.", approximateBytes: 900 * MIB, minimumFreeBytes: 900 * MIB,
-    revision: PARAKEET_MODEL_REVISION, precision: "int8",
-    license: { id: "CC-BY-4.0", attribution: "NVIDIA Parakeet TDT 0.6B v3 and the istupakov ONNX conversion" },
-  },
-  {
-    id: "parakeet-tdt-0.6b-v3-fp32", label: "Parakeet TDT 0.6B v3 (fp32)", engine: "parakeet", size: "large", languages: "English",
-    description: "Highest-accuracy managed English option; full-precision ONNX runtime.", approximateBytes: 2480 * MIB, minimumFreeBytes: 3584 * MIB,
-    revision: PARAKEET_MODEL_REVISION, precision: "fp32",
-    license: { id: "CC-BY-4.0", attribution: "NVIDIA Parakeet TDT 0.6B v3 and the istupakov ONNX conversion" },
-  },
-]);
+export const LOCAL_VOICE_MODELS = LEGACY_LOCAL_VOICE_MODELS;
 
 const MODEL_BY_ID = new Map(LOCAL_VOICE_MODELS.map((model) => [model.id, model]));
 
@@ -223,35 +169,153 @@ async function defaultTransformersLoader(modelPath, precision = "q8") {
   return pipeline("automatic-speech-recognition", modelPath, { dtype: precision === "fp32" ? "fp32" : "q8", local_files_only: true });
 }
 
+export const DEFAULT_TRANSCRIBE_CPP_STREAM = Object.freeze({
+  family: "parakeet_buffered",
+  leftMs: 5_600,
+  chunkMs: 560,
+  rightMs: 560,
+  latencyMs: 1_120,
+  commitPolicy: "stable_prefix",
+  stablePrefixAgreementN: 3,
+});
+
+async function defaultTranscribeCppLoader(modelPath, modelDefinition) {
+  const native = await import("transcribe-cpp");
+  const version = native.version();
+  const availableBackends = native.getAvailableBackends();
+  const model = await native.TranscribeModel.load(modelPath, { backend: "auto" });
+  const session = model.createSession();
+  const device = model.device || {};
+  const supportsStreaming = model.capabilities?.supportsStreaming === true
+    && model.accepts({ kind: "parakeet_buffered" });
+  return {
+    adapter: supportsStreaming ? "transcribe_cpp_stream_v1" : "transcribe_cpp_batch_v1",
+    backend: String(model.backend || device.kind || "unknown"),
+    computeBackend: String(device.kind || model.backend || "unknown"),
+    capabilities: {
+      language: "en",
+      inferenceMode: supportsStreaming ? "streaming" : "batch",
+      partials: supportsStreaming,
+      externalVad: false,
+      precision: modelDefinition?.precision || "q8",
+      memory: {
+        modelBytes: modelDefinition?.approximateBytes || null,
+        totalBytes: Number.isFinite(Number(device.memoryTotal)) ? Number(device.memoryTotal) : null,
+        freeBytes: Number.isFinite(Number(device.memoryFree)) ? Number(device.memoryFree) : null,
+      },
+      streaming: supportsStreaming ? {
+        family: DEFAULT_TRANSCRIBE_CPP_STREAM.family,
+        leftMs: DEFAULT_TRANSCRIBE_CPP_STREAM.leftMs,
+        chunkMs: DEFAULT_TRANSCRIBE_CPP_STREAM.chunkMs,
+        rightMs: DEFAULT_TRANSCRIBE_CPP_STREAM.rightMs,
+        latencyMs: DEFAULT_TRANSCRIBE_CPP_STREAM.latencyMs,
+        commitPolicy: DEFAULT_TRANSCRIBE_CPP_STREAM.commitPolicy,
+        stablePrefixAgreementN: DEFAULT_TRANSCRIBE_CPP_STREAM.stablePrefixAgreementN,
+        supportedProfiles: [
+          { latencyMs: 160, chunkMs: 80, rightMs: 80 },
+          { latencyMs: 480, chunkMs: 160, rightMs: 320 },
+          { latencyMs: 1_120, chunkMs: 560, rightMs: 560 },
+          { latencyMs: 2_080, chunkMs: 1_040, rightMs: 1_040 },
+        ],
+      } : null,
+    },
+    native: {
+      package: "transcribe-cpp",
+      version: version.version,
+      commit: version.commit,
+      headerHash: version.headerHash,
+      availableBackends: availableBackends.map((backend) => ({ kind: backend.kind, name: backend.name, deviceType: backend.deviceType })),
+    },
+    transcribe: (pcm) => session.run(pcm),
+    stream: supportsStreaming ? (options = {}) => session.stream(options) : null,
+    dispose() {
+      session.dispose();
+      model.dispose();
+    },
+  };
+}
+
 function pcmFloat32(buffer) {
   const samples = new Float32Array(Math.floor(buffer.length / 2));
   for (let index = 0; index < samples.length; index += 1) samples[index] = buffer.readInt16LE(index * 2) / 32768;
   return samples;
 }
 
+export const DEFAULT_VOICE_MODEL_IDLE_TTL_MS = 5 * 60 * 1000;
+
 export class VoiceModelManager {
-  constructor({ root, fetchImpl = fetch, manifestResolver = packageManifest, runtimeExtractor = extractRuntime, transformersLoader = defaultTransformersLoader, downloadRetries = DOWNLOAD_RETRIES, downloadRetryBaseMs = DOWNLOAD_RETRY_BASE_MS, downloadConcurrency = 3 } = {}) {
+  constructor({ root, catalog = VOICE_EXECUTION_CATALOG, fetchImpl = fetch, manifestResolver = packageManifest, runtimeExtractor = extractRuntime, transformersLoader = defaultTransformersLoader, transcribeCppLoader = defaultTranscribeCppLoader, transcribeRsWorkerCommand = defaultTranscribeRsWorkerCommand(), transcribeRsWorkerArgs = [], transcribeRsWorkerFactory = (options) => new TranscribeRsWorkerClient(options), downloadRetries = DOWNLOAD_RETRIES, downloadRetryBaseMs = DOWNLOAD_RETRY_BASE_MS, downloadConcurrency = 3, idleTtlMs = DEFAULT_VOICE_MODEL_IDLE_TTL_MS, vad = null, vadModelPath = null, vadSessionFactory = undefined } = {}) {
     if (!root) throw new Error("VoiceModelManager requires a root directory");
     this.root = path.resolve(root);
+    this.catalog = catalog;
     this.fetchImpl = fetchImpl;
     this.manifestResolver = manifestResolver;
     this.runtimeExtractor = runtimeExtractor;
     this.transformersLoader = transformersLoader;
+    this.transcribeCppLoader = transcribeCppLoader;
+    this.transcribeRsWorkerCommand = transcribeRsWorkerCommand;
+    this.transcribeRsWorkerArgs = [...transcribeRsWorkerArgs];
+    this.transcribeRsWorkerFactory = transcribeRsWorkerFactory;
     this.downloadRetries = downloadRetries;
     this.downloadRetryBaseMs = downloadRetryBaseMs;
     this.downloadConcurrency = downloadConcurrency;
+    this.idleTtlMs = Number.isFinite(Number(idleTtlMs)) ? Math.max(0, Number(idleTtlMs)) : DEFAULT_VOICE_MODEL_IDLE_TTL_MS;
+    this.idleTimer = null;
+    this.pinCount = 0;
     this.installController = null;
     this.installPromise = null;
     this.installingModelId = null;
     this.child = null;
     this.port = null;
+    this.transcribeRsWorker = null;
+    this.transcribeRsDescriptor = null;
     this.transcriber = null;
     this.activeModelId = null;
+    this.activeRuntimeId = null;
     this.startPromise = null;
     this.startingModelId = null;
+    this.startingRuntimeId = null;
     this.transcriptionTail = Promise.resolve();
+    this.vadStreamTail = Promise.resolve();
+    this.vadStreams = new Set();
     this.lastErrors = new Map();
+    this.lastErrorCodes = new Map();
     this.progress = { phase: "idle", current: "", completedBytes: 0, totalBytes: 0 };
+    this.vad = vad || new SileroVad({ root: this.root, modelPath: vadModelPath, sessionFactory: vadSessionFactory });
+    this.vadQueue = new VoiceVadObservationQueue({ observer: (pcm, options) => this.scheduleVad(() => this.vad.observe(pcm, options)) });
+  }
+
+  scheduleVad(operation) {
+    const task = this.vadStreamTail.then(operation, operation);
+    this.vadStreamTail = task.then(() => undefined, () => undefined);
+    return task;
+  }
+
+  clearIdleTimer() {
+    if (this.idleTimer) clearTimeout(this.idleTimer);
+    this.idleTimer = null;
+  }
+
+  armIdleTimer() {
+    this.clearIdleTimer();
+    if (this.idleTtlMs <= 0 || this.pinCount > 0 || this.startPromise) return;
+    if (!this.activeModelId && !this.child && !this.transcriber && !this.transcribeRsWorker) return;
+    this.idleTimer = setTimeout(() => {
+      this.idleTimer = null;
+      if (this.pinCount > 0 || this.startPromise) return;
+      void this.stopActive().catch(() => {});
+    }, this.idleTtlMs);
+    this.idleTimer.unref?.();
+  }
+
+  pin() {
+    this.pinCount += 1;
+    this.clearIdleTimer();
+  }
+
+  unpin() {
+    this.pinCount = Math.max(0, this.pinCount - 1);
+    if (this.pinCount === 0) this.armIdleTimer();
   }
 
   modelRoot(modelId) { return path.join(this.root, modelId); }
@@ -275,7 +339,10 @@ export class VoiceModelManager {
   }
 
   async publicView() {
+    const backendPaths = await this.backendPathStatuses();
     return {
+      catalogue: publicVoiceExecutionCatalog(this.catalog),
+      backendPaths,
       installingModelId: this.installingModelId,
       progress: this.installPromise ? { ...this.progress } : null,
       activeModelId: this.activeModelId,
@@ -298,10 +365,17 @@ export class VoiceModelManager {
   startInstall({ modelId, licenseAccepted = false } = {}) {
     const model = this.assertInstall({ modelId, licenseAccepted });
     this.lastErrors.delete(model.id);
+    this.lastErrorCodes.delete(model.id);
     this.installingModelId = model.id;
     this.installController = new AbortController();
     this.installPromise = this.install(model, this.installController.signal)
-      .catch((error) => { if (error.name !== "AbortError") this.lastErrors.set(model.id, error.message); throw error; })
+      .catch((error) => {
+        if (error.name !== "AbortError") {
+          this.lastErrors.set(model.id, error.message);
+          this.lastErrorCodes.set(model.id, error.code || "voice_model_install_failed");
+        }
+        throw error;
+      })
       .finally(() => {
         this.installController = null; this.installPromise = null; this.installingModelId = null;
         this.progress = { phase: "idle", current: "", completedBytes: 0, totalBytes: 0 };
@@ -354,7 +428,18 @@ export class VoiceModelManager {
       await fs.rm(archive, { force: true });
       await fs.chmod(path.join(staging, "bin/parakeet"), 0o700);
     }
-    const finalManifest = { schemaVersion: 2, modelId: model.id, engine: model.engine, version: manifest.version, modelRevision: manifest.modelRevision, installedAt: new Date().toISOString(), artifacts: verified };
+    const finalManifest = {
+      schemaVersion: 2,
+      modelId: model.id,
+      engine: model.engine,
+      version: manifest.version,
+      modelRevision: manifest.modelRevision,
+      sourceRevision: manifest.sourceRevision || null,
+      runtime: manifest.runtime || null,
+      transcribeRs: manifest.transcribeRs || null,
+      installedAt: new Date().toISOString(),
+      artifacts: verified,
+    };
     await fs.writeFile(path.join(staging, "manifest.json"), `${JSON.stringify(finalManifest, null, 2)}\n`, { encoding: "utf8", mode: 0o600 });
     this.progress.phase = "activating";
     if (this.activeModelId === model.id) await this.stop();
@@ -363,46 +448,75 @@ export class VoiceModelManager {
     this.lastErrors.delete(model.id);
   }
 
-  activeRuntime(model) {
-    if (this.activeModelId === model.id) {
-      if (model.engine === "parakeet" && this.child && this.port) return { kind: "http", origin: `http://127.0.0.1:${this.port}` };
-      if (model.engine === "transformers-whisper" && this.transcriber) return { kind: "transcriber" };
-    }
+  defaultRuntimeId(model) {
+    if (model.engine === "transformers-whisper") return "transformers-js";
+    if (model.engine === "transcribe-cpp") return "transcribe-cpp";
+    return this.catalog.artifacts.find((artifact) => artifact.legacyModelId === model.id && artifact.runtimeId === "parakeet-loopback")?.runtimeId || "parakeet-loopback";
+  }
+
+  activeRuntime(model, runtimeId = this.activeRuntimeId || this.defaultRuntimeId(model)) {
+    if (!model || this.activeModelId !== model.id || this.activeRuntimeId !== runtimeId) return null;
+    if (model.engine === "parakeet" && runtimeId === "parakeet-loopback" && this.child && this.port) return { kind: "http", origin: `http://127.0.0.1:${this.port}` };
+    if (model.engine === "parakeet" && runtimeId === "transcribe-rs" && this.transcribeRsWorker?.isAlive !== false && this.transcribeRsDescriptor) return this.transcribeRsDescriptor;
+    if (model.engine === "transformers-whisper" && this.transcriber) return { kind: "transcriber" };
+    if (model.engine === "transcribe-cpp" && this.transcriber) return this.transcribeCppDescriptor(this.transcriber, model);
     return null;
   }
 
-  async ensureRunning(modelId) {
+  async ensureRunning(modelId, { runtimeId = null } = {}) {
     const model = requiredModel(modelId);
-    let active = this.activeRuntime(model);
-    if (active) return active;
+    const selectedRuntimeId = runtimeId || this.defaultRuntimeId(model);
+    let active = this.activeRuntime(model, selectedRuntimeId);
+    if (active) {
+      this.armIdleTimer();
+      return active;
+    }
     while (this.startPromise) {
       const pending = this.startPromise;
       const pendingModelId = this.startingModelId;
+      const pendingRuntimeId = this.startingRuntimeId;
       try { await pending; }
-      catch (error) { if (pendingModelId === model.id) throw error; }
-      active = this.activeRuntime(model);
-      if (active) return active;
+      catch (error) { if (pendingModelId === model.id && pendingRuntimeId === selectedRuntimeId) throw error; }
+      active = this.activeRuntime(model, selectedRuntimeId);
+      if (active) {
+        this.armIdleTimer();
+        return active;
+      }
     }
-    const startPromise = this.startRuntime(model);
+    const startPromise = this.startRuntime(model, selectedRuntimeId);
     this.startPromise = startPromise;
     this.startingModelId = model.id;
-    try { return await startPromise; }
-    finally {
+    this.startingRuntimeId = selectedRuntimeId;
+    try {
+      const runtime = await startPromise;
+      this.armIdleTimer();
+      return runtime;
+    } finally {
       if (this.startPromise === startPromise) {
         this.startPromise = null;
         this.startingModelId = null;
+        this.startingRuntimeId = null;
       }
     }
   }
 
-  async startRuntime(model) {
+  async startRuntime(model, runtimeId = this.defaultRuntimeId(model)) {
     if (!await this.installedManifest(model.id)) throw modelError("voice_model_not_installed", `Install ${model.label} from Voice settings first`, 409);
     await this.stopActive();
     if (model.engine === "transformers-whisper") {
       this.transcriber = await this.transformersLoader(this.modelRoot(model.id), model.precision || "q8");
       this.activeModelId = model.id;
+      this.activeRuntimeId = runtimeId;
       return { kind: "transcriber" };
     }
+    if (model.engine === "transcribe-cpp") {
+      const runtime = await this.transcribeCppLoader(path.join(this.modelRoot(model.id), model.modelFile), model);
+      this.transcriber = runtime;
+      this.activeModelId = model.id;
+      this.activeRuntimeId = runtimeId;
+      return this.transcribeCppDescriptor(runtime, model);
+    }
+    if (runtimeId === "transcribe-rs") return this.startTranscribeRs(model);
     const port = await availablePort();
     const modelRoot = this.modelRoot(model.id);
     const binary = path.join(modelRoot, "bin/parakeet");
@@ -413,8 +527,8 @@ export class VoiceModelManager {
     });
     let stderr = "";
     child.stderr.on("data", (chunk) => { stderr = `${stderr}${chunk}`.slice(-8_192); });
-    child.once("exit", () => { if (this.child === child) { this.child = null; this.port = null; this.activeModelId = null; } });
-    this.child = child; this.port = port; this.activeModelId = model.id;
+    child.once("exit", () => { if (this.child === child) { this.child = null; this.port = null; this.activeModelId = null; this.activeRuntimeId = null; } });
+    this.child = child; this.port = port; this.activeModelId = model.id; this.activeRuntimeId = runtimeId;
     const deadline = Date.now() + 30_000;
     while (Date.now() < deadline) {
       if (child.exitCode != null) { this.child = null; this.port = null; this.activeModelId = null; throw modelError("voice_model_start_failed", `Managed Parakeet exited during startup: ${stderr.trim()}`, 502); }
@@ -428,25 +542,131 @@ export class VoiceModelManager {
     throw modelError("voice_model_start_timeout", "Managed Parakeet did not become healthy in time", 504);
   }
 
-  async transcribe(modelId, pcm) {
+  async startTranscribeRs(model) {
+    const modelRoot = this.modelRoot(model.id);
+    const worker = this.transcribeRsWorkerFactory({
+      command: this.transcribeRsWorkerCommand,
+      args: this.transcribeRsWorkerArgs,
+      env: { ...process.env },
+    });
+    this.transcribeRsWorker = worker;
+    try {
+      const hello = await worker.start().then(() => worker.hello());
+      const loaded = await worker.load({
+        modelDir: path.join(modelRoot, "models"),
+        quantization: model.precision === "fp32" ? "fp32" : "int8",
+        requestedProvider: "cpu",
+      });
+      this.transcribeRsDescriptor = {
+        kind: "transcribe-rs",
+        adapter: "transcribe_rs_batch_v1",
+        backend: "transcribe_rs",
+        computeBackend: loaded.actualProvider || "cpu",
+        requestedComputeBackend: loaded.requestedProvider || "cpu",
+        actualComputeBackend: loaded.actualProvider || "cpu",
+        runtimeVersion: `transcribe-rs-${hello.crateVersion || "0.3.8"}`,
+        capabilities: {
+          language: "en",
+          inferenceMode: "batch",
+          partials: false,
+          externalVad: false,
+          precision: model.precision || "int8",
+          memory: { modelBytes: model.approximateBytes || null },
+        },
+        native: {
+          ...hello,
+          load: loaded,
+        },
+      };
+      this.activeModelId = model.id;
+      this.activeRuntimeId = "transcribe-rs";
+      return this.transcribeRsDescriptor;
+    } catch (error) {
+      await Promise.resolve(worker.close?.()).catch(() => {});
+      this.transcribeRsWorker = null;
+      this.transcribeRsDescriptor = null;
+      throw modelError("voice_model_start_failed", `Managed transcribe-rs could not start: ${error.message}`, 502);
+    }
+  }
+
+  async transcribe(modelId, pcm, options = {}) {
     const model = requiredModel(modelId);
-    if (model.engine !== "transformers-whisper") throw modelError("voice_model_engine", `${model.label} does not use the embedded transcription engine`, 409);
-    await this.ensureRunning(model.id);
+    const runtimeId = options.runtimeId || this.defaultRuntimeId(model);
+    if (model.engine !== "transformers-whisper" && model.engine !== "transcribe-cpp" && runtimeId !== "transcribe-rs") throw modelError("voice_model_engine", `${model.label} does not use the embedded transcription engine`, 409);
+    await this.ensureRunning(model.id, { runtimeId });
     const transcriber = this.transcriber;
-    const task = this.transcriptionTail.then(() => transcriber(pcmFloat32(Buffer.from(pcm)), { chunk_length_s: 30, stride_length_s: 2 }));
+    const task = this.transcriptionTail.then(() => runtimeId === "transcribe-rs"
+      ? this.transcribeRsWorker.transcribeRange({
+        pcm16: Buffer.from(pcm || []),
+        fromSample: Number.isSafeInteger(options.startSample) ? options.startSample : 0,
+        throughSample: Number.isSafeInteger(options.endSample) ? options.endSample : Math.floor(Buffer.byteLength(pcm || []) / 2),
+        sequence: Number.isSafeInteger(options.sequence) ? options.sequence : 0,
+        operationId: options.operationId || null,
+        signal: options.signal,
+      })
+      : model.engine === "transcribe-cpp"
+        ? transcriber.transcribe(pcmFloat32(Buffer.from(pcm)), { signal: options.signal })
+        : transcriber(pcmFloat32(Buffer.from(pcm)), { chunk_length_s: 30, stride_length_s: 2, ...(options.signal ? { signal: options.signal } : {}) }));
     this.transcriptionTail = task.then(() => undefined, () => undefined);
     const output = await task;
+    if (runtimeId === "transcribe-rs") return output;
     return String(output?.text || "").trim();
   }
 
-  async test(modelId) {
+  async stream(modelId, options = {}) {
     const model = requiredModel(modelId);
-    const resolved = await this.ensureRunning(model.id);
+    if (model.engine !== "transcribe-cpp") throw modelError("voice_model_engine", `${model.label} does not use the embedded streaming engine`, 409);
+    await this.ensureRunning(model.id, { runtimeId: "transcribe-cpp" });
+    if (typeof this.transcriber?.stream !== "function") throw modelError("voice_model_streaming", `${model.label} does not support stateful streaming`, 409);
+    return this.transcriber.stream(options);
+  }
+
+  async observeVoiceActivity(pcm) {
+    return this.vadQueue.enqueue(pcm);
+  }
+
+  beginVoiceActivity() {
+    if (typeof this.vad?.createStream !== "function") return null;
+    const stream = this.vad.createStream();
+    const wrapper = {
+      push: (pcm) => this.scheduleVad(() => stream.push(pcm)),
+      finish: () => this.scheduleVad(() => stream.finish()).finally(() => this.vadStreams.delete(wrapper)),
+      cancel: () => this.scheduleVad(() => stream.cancel?.()).finally(() => this.vadStreams.delete(wrapper)),
+    };
+    this.vadStreams.add(wrapper);
+    return wrapper;
+  }
+
+  async test(modelId, { runtimeId = null } = {}) {
+    const model = requiredModel(modelId);
+    const resolved = await this.ensureRunning(model.id, { runtimeId: runtimeId || this.defaultRuntimeId(model) });
     if (resolved.kind === "http") {
       const response = await this.fetchImpl(`${resolved.origin}/health`, { signal: AbortSignal.timeout(3_000) });
       if (!response.ok) throw modelError("voice_model_unhealthy", `Managed ${model.label} health check failed (${response.status})`, 502);
     }
+    if (resolved.kind === "transcribe-rs") {
+      const health = await this.transcribeRsWorker.health();
+      if (health.ready !== true || health.loaded !== true) throw modelError("voice_model_unhealthy", `Managed ${model.label} worker health check failed`, 502);
+    }
     return { ok: true, mode: "local", modelId: model.id };
+  }
+
+  transcribeCppDescriptor(runtime, model) {
+    return {
+      kind: "transcriber",
+      adapter: runtime.adapter || (typeof runtime.stream === "function" ? "transcribe_cpp_stream_v1" : "transcribe_cpp_batch_v1"),
+      backend: "transcribe_cpp",
+      computeBackend: runtime.computeBackend || runtime.backend || null,
+      capabilities: runtime.capabilities || {
+        language: model.languages === "English" ? "en" : null,
+        inferenceMode: "batch",
+        partials: false,
+        externalVad: false,
+        precision: model.precision || null,
+        memory: { modelBytes: model.approximateBytes || null },
+      },
+      native: runtime.native || null,
+    };
   }
 
   async stop() {
@@ -458,15 +678,25 @@ export class VoiceModelManager {
     const startup = this.startPromise;
     if (startup) await startup.catch(() => {});
     await this.stopActive();
+    for (const stream of this.vadStreams) await stream.cancel?.().catch(() => {});
+    this.vadStreams.clear();
+    await this.vadStreamTail.catch(() => {});
+    this.vadStreamTail = Promise.resolve();
+    this.vadQueue.stop();
+    await this.vad?.stop?.();
   }
 
   async stopActive() {
+    this.clearIdleTimer();
     const child = this.child;
     const transcriber = this.transcriber;
-    this.child = null; this.port = null; this.transcriber = null; this.activeModelId = null;
+    const transcribeRsWorker = this.transcribeRsWorker;
+    this.child = null; this.port = null; this.transcriber = null; this.transcribeRsWorker = null; this.transcribeRsDescriptor = null;
+    this.activeModelId = null; this.activeRuntimeId = null;
     await this.transcriptionTail.catch(() => {});
     this.transcriptionTail = Promise.resolve();
-    if (transcriber?.dispose) await transcriber.dispose().catch(() => {});
+    if (typeof transcriber?.dispose === "function") await Promise.resolve().then(() => transcriber.dispose()).catch(() => {});
+    if (transcribeRsWorker) await Promise.resolve().then(() => transcribeRsWorker.close?.()).catch(() => {});
     if (!child || child.exitCode != null) return;
     child.kill("SIGTERM");
     await new Promise((resolve) => {
@@ -478,11 +708,48 @@ export class VoiceModelManager {
   async uninstall(modelId) {
     const model = requiredModel(modelId);
     if (this.installingModelId === model.id) throw modelError("voice_model_installing", "Cancel the model installation before uninstalling", 409);
-    if (this.activeModelId === model.id || this.startingModelId === model.id) await this.stop();
+    if (this.activeModelId === model.id || this.startingModelId === model.id) {
+      const startup = this.startPromise;
+      if (startup) await startup.catch(() => {});
+      await this.stopActive();
+    }
     const removed = Boolean(await this.installedManifest(model.id));
     await fs.rm(this.modelRoot(model.id), { recursive: true, force: true });
     await fs.rm(this.stagingRoot(model.id), { recursive: true, force: true });
     this.lastErrors.delete(model.id);
+    this.lastErrorCodes.delete(model.id);
     return removed;
+  }
+
+  async backendPathStatuses() {
+    return Promise.all(this.catalog.backendPaths.map(async (backendPath) => {
+      const artifact = this.catalog.artifacts.find((candidate) => candidate.id === backendPath.artifactId);
+      const modelId = artifact?.legacyModelId;
+      const manifest = modelId ? await this.installedManifest(modelId) : null;
+      const active = Boolean(modelId && this.activeModelId === modelId && this.activeRuntimeId === backendPath.runtimeId);
+      const runtime = modelId ? this.activeRuntime(LOCAL_VOICE_MODELS.find((model) => model.id === modelId), backendPath.runtimeId) : null;
+      const runtimeDefinition = this.catalog.runtimes.find((candidate) => candidate.id === backendPath.runtimeId);
+      const runtimeState = (this.startingModelId === modelId && this.startingRuntimeId === backendPath.runtimeId)
+        || (this.startPromise && this.startingModelId === modelId && this.startingRuntimeId === backendPath.runtimeId)
+        ? "loading"
+        : this.lastErrors.has(modelId)
+          ? "failed"
+          : active
+            ? "warm"
+            : "cold";
+      const requestedComputeBackend = backendPath.runtimeId === "transcribe-cpp" ? "auto" : runtimeDefinition?.compiledComputeBackends?.[0] || null;
+      return {
+        backendPathId: backendPath.id,
+        installable: Boolean(artifact),
+        operational: Boolean(manifest && active && runtime),
+        blockedReason: null,
+        artifactState: this.installingModelId === modelId ? "installing" : manifest ? "installed" : this.lastErrors.has(modelId) ? "failed" : "absent",
+        runtimeState,
+        requestedComputeBackend,
+        actualComputeBackend: runtime?.computeBackend || null,
+        loadedRuntimeVersion: active ? runtime?.native?.version || runtime?.runtimeVersion || runtimeDefinition?.version || null : null,
+        lastErrorCode: this.lastErrorCodes.get(modelId) || null,
+      };
+    }));
   }
 }

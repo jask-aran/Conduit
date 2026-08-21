@@ -5,8 +5,8 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { extractRuntime, LOCAL_VOICE_MODELS, VoiceModelManager } from "../src/server/voice-model-manager.js";
-import { getVoiceModelManifest } from "../src/server/voice-model-manifests.js";
+import { DEFAULT_TRANSCRIBE_CPP_STREAM, extractRuntime, LOCAL_VOICE_MODELS, VoiceModelManager } from "../src/server/voice-model-manager.js";
+import { getVoiceModelManifest, TRANSCRIBE_CPP_RUNTIME } from "../src/server/voice-model-manifests.js";
 
 const sha256 = (value) => crypto.createHash("sha256").update(value).digest("hex");
 const runCommand = (command, args) => new Promise((resolve, reject) => {
@@ -30,6 +30,19 @@ test("managed voice packages use reviewed immutable revisions, sizes, and SHA-25
   }
   const parakeet = getVoiceModelManifest(LOCAL_VOICE_MODELS.at(-1), { release: "amd64", runtime: "x64" });
   assert.equal(parakeet.artifacts.find((artifact) => artifact.name === "parakeet-linux-amd64").sha256, "4eaa7123e49756dea7714db20b4ea36aa96f3ba50d7e1ccec7df2ccededcdf9b");
+  const v2 = getVoiceModelManifest(LOCAL_VOICE_MODELS.find((model) => model.id === "parakeet-tdt-0.6b-v2-int8"), { release: "amd64", runtime: "x64" });
+  assert.equal(v2.modelRevision, "0bbb45a3365852604aef28b538a8f066f4ccaa85");
+  assert.ok(v2.artifacts.some((artifact) => artifact.url.includes("istupakov/parakeet-tdt-0.6b-v2-onnx/resolve/0bbb45a3365852604aef28b538a8f066f4ccaa85/encoder-model.int8.onnx")));
+  assert.equal(v2.artifacts.find((artifact) => artifact.name === "encoder-model.int8.onnx").sha256, "3e0581fda6ab843888b51e56d7ee78b6d5bc3237ec113af1f732d1d5286aa155");
+  assert.notEqual(v2.artifacts.find((artifact) => artifact.name === "vocab.txt").sha256, parakeet.artifacts.find((artifact) => artifact.name === "vocab.txt").sha256);
+  const whisper = getVoiceModelManifest(LOCAL_VOICE_MODELS[0], { release: "amd64", runtime: "x64" });
+  assert.equal(whisper.artifacts.find((artifact) => artifact.name === "silero_vad.onnx").sha256, "1a153a22f4509e292a94e67d6f9b85e8deb25b4988682b7e174c65279d8788e3");
+  const unified = getVoiceModelManifest(LOCAL_VOICE_MODELS.find((model) => model.id === "parakeet-unified-en-0.6b-q8"), { release: "amd64", runtime: "x64" });
+  assert.equal(unified.artifacts[0].name, "parakeet-unified-en-0.6b-Q8_0.gguf");
+  assert.equal(unified.artifacts[0].size, 731357568);
+  assert.equal(unified.artifacts[0].sha256, "4b50b6dd862bf6e346929aaf4f5eaacec003bfa3f56462d6c874b41ef2f38795");
+  assert.equal(unified.sourceRevision, "d4ac9928f3bf238223ff0779c06b8149bf8ac4e1");
+  assert.deepEqual(unified.runtime, TRANSCRIBE_CPP_RUNTIME);
 });
 
 test("managed voice model requires license acceptance, verifies artifacts, reports progress, and uninstalls", async () => {
@@ -70,6 +83,29 @@ test("managed voice model requires license acceptance, verifies artifacts, repor
     assert.equal(await manager.uninstall(modelId), true);
     assert.equal((await manager.publicView()).models.find((model) => model.id === modelId).installed, false);
   } finally { await manager.stop(); await fs.rm(temporary, { recursive: true, force: true }); }
+});
+
+test("uninstalling ASR does not reset the shared Silero instance", async () => {
+  const temporary = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-voice-vad-lifecycle-"));
+  const root = path.join(temporary, "voice", "models");
+  const modelId = "whisper-tiny-en-q8";
+  let vadStops = 0;
+  const manager = new VoiceModelManager({
+    root,
+    vad: { stop: async () => { vadStops += 1; } },
+  });
+  try {
+    await fs.mkdir(path.join(root, modelId), { recursive: true });
+    await fs.writeFile(path.join(root, modelId, "manifest.json"), JSON.stringify({ modelId }));
+    manager.activeModelId = modelId;
+    manager.transcriber = { dispose() {} };
+    assert.equal(await manager.uninstall(modelId), true);
+    assert.equal(vadStops, 0);
+  } finally {
+    await manager.stop();
+    assert.equal(vadStops, 1);
+    await fs.rm(temporary, { recursive: true, force: true });
+  }
 });
 
 test("managed voice model rejects a mismatched artifact without activating it", async () => {
@@ -186,6 +222,142 @@ test("managed Whisper tiers install independently and transcribe through the emb
     assert.equal(loadedPath, path.join(root, modelId));
     assert.equal((await manager.publicView()).activeModelId, modelId);
   } finally { await manager.stop(); await fs.rm(temporary, { recursive: true, force: true }); }
+});
+
+test("Unified English Q8 uses one reusable transcribe.cpp session and exposes streaming", async () => {
+  const temporary = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-voice-unified-"));
+  const root = path.join(temporary, "voice", "models");
+  const modelId = "parakeet-unified-en-0.6b-q8";
+  const content = Buffer.from("fake gguf model");
+  let loadedPath = "";
+  let loadedDefinition = null;
+  let activeInferences = 0;
+  let maximumInferences = 0;
+  let disposals = 0;
+  let requestedStreamOptions = null;
+  const runtime = {
+    backend: "cpu",
+    computeBackend: "cpu",
+    adapter: "transcribe_cpp_stream_v1",
+    capabilities: {
+      language: "en",
+      inferenceMode: "streaming",
+      partials: true,
+      externalVad: false,
+      precision: "q8",
+      memory: { modelBytes: 731357568 },
+      streaming: { family: "parakeet_buffered", leftMs: 5_600, chunkMs: 160, rightMs: 320, latencyMs: 480, commitPolicy: "stable_prefix", stablePrefixAgreementN: 3 },
+    },
+    native: { package: "transcribe-cpp", version: "0.1.3", headerHash: "86b16dd97ad1cb58" },
+    async transcribe(audio) {
+      assert.equal(audio instanceof Float32Array, true);
+      activeInferences += 1;
+      maximumInferences = Math.max(maximumInferences, activeInferences);
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      activeInferences -= 1;
+      return { text: "unified transcript" };
+    },
+    async stream(options) {
+      requestedStreamOptions = options;
+      return { state: "active" };
+    },
+    dispose() { disposals += 1; },
+  };
+  const manager = new VoiceModelManager({
+    root,
+    manifestResolver: async () => ({ version: "transcribe-cpp-0.1.3", modelRevision: "pinned", sourceRevision: "source-pinned", runtime: TRANSCRIBE_CPP_RUNTIME, artifacts: [{
+      name: "parakeet-unified-en-0.6b-Q8_0.gguf", relative: "parakeet-unified-en-0.6b-Q8_0.gguf", url: "https://packages.invalid/unified", size: content.length,
+      sha256: sha256(content),
+    }] }),
+    fetchImpl: async () => new Response(content),
+    transcribeCppLoader: async (modelPath, definition) => {
+      loadedPath = modelPath;
+      loadedDefinition = definition;
+      return runtime;
+    },
+  });
+  try {
+    await manager.startInstall({ modelId, licenseAccepted: true });
+    const [first, second] = await Promise.all([manager.transcribe(modelId, Buffer.alloc(4)), manager.transcribe(modelId, Buffer.alloc(4))]);
+    assert.deepEqual([first, second], ["unified transcript", "unified transcript"]);
+    assert.equal(maximumInferences, 1);
+    assert.equal(loadedPath, path.join(root, modelId, "parakeet-unified-en-0.6b-Q8_0.gguf"));
+    assert.equal(loadedDefinition.id, modelId);
+    assert.deepEqual(await manager.stream(modelId, { family: { kind: "parakeet_buffered", leftMs: 5_600, chunkMs: 160, rightMs: 320 } }), { state: "active" });
+    assert.deepEqual(requestedStreamOptions, { family: { kind: "parakeet_buffered", leftMs: 5_600, chunkMs: 160, rightMs: 320 } });
+    assert.deepEqual(await manager.ensureRunning(modelId), {
+      kind: "transcriber",
+      adapter: "transcribe_cpp_stream_v1",
+      backend: "transcribe_cpp",
+      computeBackend: "cpu",
+      capabilities: runtime.capabilities,
+      native: runtime.native,
+    });
+  } finally {
+    await manager.stop();
+    assert.equal(disposals, 1);
+    await fs.rm(temporary, { recursive: true, force: true });
+  }
+});
+
+test("Unified English Live selects the measured sustained CPU profile", () => {
+  assert.deepEqual(DEFAULT_TRANSCRIBE_CPP_STREAM, {
+    family: "parakeet_buffered",
+    leftMs: 5_600,
+    chunkMs: 560,
+    rightMs: 560,
+    latencyMs: 1_120,
+    commitPolicy: "stable_prefix",
+    stablePrefixAgreementN: 3,
+  });
+});
+
+test("transcribe-rs runs one private batch worker and reports provider truth", async () => {
+  const temporary = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-voice-transcribe-rs-"));
+  const root = path.join(temporary, "voice", "models");
+  const modelId = "parakeet-tdt-0.6b-v2-int8";
+  const calls = [];
+  class FakeWorker {
+    constructor(options) { this.options = options; this.sessionId = null; }
+    async start() { calls.push({ type: "start", command: this.options.command }); return this; }
+    async hello() { calls.push({ type: "hello" }); return { workerVersion: "0.1.0", crateVersion: "0.3.8", compiledOrtProviders: ["cpu"], ports: { batch: true, stream: false } }; }
+    async load(options) { calls.push({ type: "load", options }); this.sessionId = "session-test"; return { requestedProvider: "cpu", actualProvider: "cpu", compiledOrtProviders: ["cpu"], ports: { batch: true, stream: false } }; }
+    async transcribeRange(options) { calls.push({ type: "transcribe", options }); return { text: "transcribe-rs transcript", fromSample: options.fromSample, throughSample: options.throughSample, timestamps: [] }; }
+    async health() { return { ready: true, loaded: true }; }
+    async close() { calls.push({ type: "close" }); }
+  }
+  const manager = new VoiceModelManager({
+    root,
+    transcribeRsWorkerCommand: "fake-transcribe-rs-worker",
+    transcribeRsWorkerFactory: (options) => new FakeWorker(options),
+  });
+  try {
+    await fs.mkdir(path.join(root, modelId), { recursive: true });
+    await fs.writeFile(path.join(root, modelId, "manifest.json"), JSON.stringify({ modelId }));
+    const runtime = await manager.ensureRunning(modelId, { runtimeId: "transcribe-rs" });
+    assert.equal(runtime.kind, "transcribe-rs");
+    assert.equal(runtime.backend, "transcribe_rs");
+    assert.equal(runtime.computeBackend, "cpu");
+    const result = await manager.transcribe(modelId, Buffer.alloc(8), {
+      runtimeId: "transcribe-rs",
+      sequence: 3,
+      startSample: 400,
+      endSample: 404,
+      operationId: "range-3",
+    });
+    assert.deepEqual(result, { text: "transcribe-rs transcript", fromSample: 400, throughSample: 404, timestamps: [] });
+    assert.equal(calls.find((call) => call.type === "load").options.modelDir, path.join(root, modelId, "models"));
+    assert.equal(calls.find((call) => call.type === "load").options.quantization, "int8");
+    assert.equal(calls.find((call) => call.type === "transcribe").options.operationId, "range-3");
+    assert.equal(calls.find((call) => call.type === "transcribe").options.fromSample, 400);
+    const status = (await manager.publicView()).backendPaths.find((pathStatus) => pathStatus.backendPathId === `${modelId}.transcribe-rs.${"transcribe-rs"}`);
+    assert.equal(status.operational, true);
+    assert.equal(await manager.test(modelId, { runtimeId: "transcribe-rs" }).then((value) => value.ok), true);
+  } finally {
+    await manager.stop();
+    assert.equal(calls.at(-1).type, "close");
+    await fs.rm(temporary, { recursive: true, force: true });
+  }
 });
 
 test("concurrent managed Whisper requests share startup and serialize inference", async () => {
@@ -317,6 +489,71 @@ test("install downloads artifacts concurrently up to a bounded limit", async () 
     assert.ok(maximumActive >= 2, `expected parallel downloads, saw ${maximumActive}`);
     assert.ok(maximumActive <= 3, `expected bounded concurrency, saw ${maximumActive}`);
   } finally { await fs.rm(temporary, { recursive: true, force: true }); }
+});
+
+test("managed models stay warm briefly then unload after the idle TTL", async () => {
+  const temporary = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-voice-idle-"));
+  const root = path.join(temporary, "voice", "models");
+  const modelId = "whisper-tiny-en-q8";
+  await fs.mkdir(path.join(root, modelId), { recursive: true });
+  await fs.writeFile(path.join(root, modelId, "manifest.json"), JSON.stringify({ modelId }));
+  let loads = 0;
+  let disposals = 0;
+  const manager = new VoiceModelManager({
+    root,
+    idleTtlMs: 40,
+    transformersLoader: async () => {
+      loads += 1;
+      const transcriber = async () => ({ text: "idle transcript" });
+      transcriber.dispose = async () => { disposals += 1; };
+      return transcriber;
+    },
+  });
+  try {
+    await manager.ensureRunning(modelId);
+    assert.equal(loads, 1);
+    await manager.ensureRunning(modelId);
+    assert.equal(loads, 1);
+    await new Promise((resolve) => setTimeout(resolve, 80));
+    assert.equal(disposals, 1);
+    await manager.ensureRunning(modelId);
+    assert.equal(loads, 2);
+  } finally {
+    await manager.stop();
+    await fs.rm(temporary, { recursive: true, force: true });
+  }
+});
+
+test("pinned managed models do not unload while a dictation session is open", async () => {
+  const temporary = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-voice-pin-"));
+  const root = path.join(temporary, "voice", "models");
+  const modelId = "whisper-tiny-en-q8";
+  await fs.mkdir(path.join(root, modelId), { recursive: true });
+  await fs.writeFile(path.join(root, modelId, "manifest.json"), JSON.stringify({ modelId }));
+  let disposals = 0;
+  const manager = new VoiceModelManager({
+    root,
+    idleTtlMs: 30,
+    transformersLoader: async () => {
+      const transcriber = async () => ({ text: "pinned transcript" });
+      transcriber.dispose = async () => { disposals += 1; };
+      return transcriber;
+    },
+  });
+  try {
+    manager.pin();
+    await manager.ensureRunning(modelId);
+    await new Promise((resolve) => setTimeout(resolve, 60));
+    assert.equal(disposals, 0);
+    assert.equal(manager.activeModelId, modelId);
+    manager.unpin();
+    await new Promise((resolve) => setTimeout(resolve, 60));
+    assert.equal(disposals, 1);
+    assert.equal(manager.activeModelId, null);
+  } finally {
+    await manager.stop();
+    await fs.rm(temporary, { recursive: true, force: true });
+  }
 });
 
 test("full-precision Whisper models load with the fp32 precision", async () => {
