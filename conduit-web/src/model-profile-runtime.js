@@ -32,7 +32,15 @@ async function writeJsonAtomic(filePath, value) {
   try {
     await fs.writeFile(temporary, `${JSON.stringify(value, null, 2)}\n`, { encoding: "utf8", mode: 0o600 });
     await fs.chmod(temporary, 0o600);
-    await fs.rename(temporary, filePath);
+    try {
+      await fs.rename(temporary, filePath);
+    } catch (error) {
+      // Windows cannot replace an existing file with rename when concurrent
+      // materialization has already published the same derived profile.
+      if (process.platform !== "win32" || !["EEXIST", "EPERM"].includes(error.code)) throw error;
+      await fs.rm(filePath, { force: true });
+      await fs.rename(temporary, filePath);
+    }
     await fs.chmod(filePath, 0o600);
   } finally {
     await fs.rm(temporary, { force: true }).catch(() => {});

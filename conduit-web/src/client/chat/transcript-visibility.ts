@@ -7,6 +7,7 @@ import {
 const VISIBILITY_ATTRIBUTE = "data-transcript-visibility";
 const INTRINSIC_SIZE_PROPERTY = "contain-intrinsic-block-size";
 const OVERSCAN_PX = 120;
+const DISPLAY_MATH_SELECTOR = ".incremark-math-block, .katex-display";
 
 interface TableLock {
   table: HTMLTableElement;
@@ -18,6 +19,10 @@ function blockSize(entry: ResizeObserverEntry) {
   const borderBox = entry.borderBoxSize;
   if (borderBox[0]) return borderBox[0].blockSize;
   return entry.contentRect.height;
+}
+
+function containsDisplayMath(element: HTMLElement) {
+  return element.matches(DISPLAY_MATH_SELECTOR) || Boolean(element.querySelector(DISPLAY_MATH_SELECTOR));
 }
 
 export function mountTranscriptVisibility(
@@ -34,13 +39,21 @@ export function mountTranscriptVisibility(
   let fontsReady = document.fonts.status === "loaded";
 
   const setIntrinsicSize = (element: HTMLElement, height: number) => {
-    if (height > 0) element.style.setProperty(INTRINSIC_SIZE_PROPERTY, `auto ${height}px`);
+    if (height <= 0) return;
+    const value = `auto ${height}px`;
+    if (element.style.getPropertyValue(INTRINSIC_SIZE_PROPERTY) !== value) {
+      element.style.setProperty(INTRINSIC_SIZE_PROPERTY, value);
+    }
   };
   const show = (element: HTMLElement) => {
-    element.removeAttribute(VISIBILITY_ATTRIBUTE);
+    if (element.hasAttribute(VISIBILITY_ATTRIBUTE)) {
+      element.removeAttribute(VISIBILITY_ATTRIBUTE);
+    }
   };
   const hide = (element: HTMLElement) => {
-    element.setAttribute(VISIBILITY_ATTRIBUTE, "hidden");
+    if (element.getAttribute(VISIBILITY_ATTRIBUTE) !== "hidden") {
+      element.setAttribute(VISIBILITY_ATTRIBUTE, "hidden");
+    }
   };
   const clear = (element: HTMLElement) => {
     show(element);
@@ -71,13 +84,18 @@ export function mountTranscriptVisibility(
     const top = viewportRect.top - OVERSCAN_PX;
     const bottom = viewportRect.bottom + OVERSCAN_PX;
     const next = new Set<HTMLElement>();
+    const stableIncremarkBlocks = new Set<HTMLElement>();
     const rows = [...thread.querySelectorAll<HTMLElement>('[data-slot="message-scroller-item"]')];
 
     for (const row of rows) {
       const blocks = [...row.querySelectorAll<HTMLElement>(".chat-markdown > .incremark > *")];
       if (blocks.length) {
         show(row);
-        for (const block of blocks) next.add(block);
+        const hasDisplayMath = blocks.some(containsDisplayMath);
+        for (const block of blocks) {
+          next.add(block);
+          if (hasDisplayMath) stableIncremarkBlocks.add(block);
+        }
       } else {
         next.add(row);
       }
@@ -87,8 +105,20 @@ export function mountTranscriptVisibility(
       element,
       rect: element.getBoundingClientRect(),
     }));
+    const virtualized = new Set<HTMLElement>();
     let revealed = false;
     for (const { element, rect } of measurements) {
+      // Incremark display math centers its KaTeX subtree inside a flex
+      // wrapper. Toggling content-visibility on that wrapper, or on a sibling
+      // block in the same Incremark root, changes the root's intrinsic inline
+      // geometry and makes formulas jump horizontally as they cross the
+      // virtualized window. Keep the whole math-containing root laid out.
+      if (stableIncremarkBlocks.has(element) || containsDisplayMath(element)) {
+        clear(element);
+        sizeObserver.unobserve(element);
+        continue;
+      }
+      virtualized.add(element);
       setIntrinsicSize(element, rect.height);
       const visible = rect.bottom >= top && rect.top <= bottom;
       if (visible) {
@@ -100,12 +130,12 @@ export function mountTranscriptVisibility(
       if (!managed.has(element)) sizeObserver.observe(element);
     }
     for (const element of managed) {
-      if (next.has(element)) continue;
+      if (virtualized.has(element)) continue;
       sizeObserver.unobserve(element);
       clear(element);
     }
     managed.clear();
-    for (const element of next) managed.add(element);
+    for (const element of virtualized) managed.add(element);
     if (revealed) refreshFrame = requestAnimationFrame(refresh);
   };
 

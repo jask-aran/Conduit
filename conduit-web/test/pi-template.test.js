@@ -109,7 +109,7 @@ test("Pi runtime environment uses the Conduit-owned agent directory", () => {
     PI_CODING_AGENT_DIR: "/home/user/.pi/agent",
     PI_CODING_AGENT_SESSION_DIR: "/tmp/flat-sessions",
   });
-  assert.equal(env.PI_CODING_AGENT_DIR, "/repo/data/pi");
+  assert.equal(env.PI_CODING_AGENT_DIR, path.resolve("/repo/data/pi"));
   assert.equal("PI_CODING_AGENT_SESSION_DIR" in env, false);
   assert.equal(env.PATH, "/bin");
 });

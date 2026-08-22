@@ -41,7 +41,7 @@ test("Isolated Pi profile launch uses the pinned installation and isolated agent
   });
   assert.equal(launch.command, "/opt/conduit/pi/0.84.1/pi");
   assert.equal(launch.cwd, path.resolve(project.path));
-  assert.equal(launch.env.PI_CODING_AGENT_DIR, "/var/lib/conduit/pi");
+  assert.equal(launch.env.PI_CODING_AGENT_DIR, path.resolve("/var/lib/conduit/pi"));
   assert.ok(launch.args.includes("--system-prompt"));
   assert.ok(launch.args.includes("--no-extensions"));
   assert.ok(launch.args.includes("--session"));
@@ -63,7 +63,7 @@ test("isolated Pi launch can use a model-profile agent overlay", () => {
     runtimeAgentDir: "/var/lib/conduit/pi/model-profiles/openai-search",
     modelProfile: { id: "openai-search", label: "OpenAI search", searchRouting: { providers: ["openai", "brave"], fallbackOn: ["network"] } },
   });
-  assert.equal(launch.env.PI_CODING_AGENT_DIR, "/var/lib/conduit/pi/model-profiles/openai-search");
+  assert.equal(launch.env.PI_CODING_AGENT_DIR, path.resolve("/var/lib/conduit/pi/model-profiles/openai-search"));
   assert.equal(launch.modelProfile.id, "openai-search");
 });
 

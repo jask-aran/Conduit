@@ -1,5 +1,5 @@
 import path from "node:path";
-import { buildPiEnvironment, buildPiResourceArgs } from "../../scripts/pi-runtime.mjs";
+import { buildPiEnvironment, buildPiResourceArgs, resolvePiProcess } from "../../scripts/pi-runtime.mjs";
 
 const SENSITIVE_ENV = /^(?:CONDUIT_|COOKIE|SESSION|BROKER|EDGE_AUTH|AUTH_TOKEN|GITHUB_TOKEN|GH_TOKEN$)/i;
 
@@ -44,12 +44,13 @@ export function resolvePiLaunch({
   }
   const cwd = path.resolve(project.path);
   const runtime = chat.runtime;
+  const processSpec = resolvePiProcess(installation.command, installation.commandArgs || []);
   if (runtime.kind === "native_pi") {
     if (!bridgeSystemPrompt || !bridgeSkill) throw new Error("Native Pi requires the Conduit bridge");
     return {
-      command: installation.command,
+      command: processSpec.command,
       args: [
-        ...(installation.commandArgs || []),
+        ...processSpec.args,
         "--mode", "rpc",
         "--append-system-prompt", path.resolve(bridgeSystemPrompt),
         "--skill", path.resolve(bridgeSkill),
@@ -71,9 +72,9 @@ export function resolvePiLaunch({
     throw error;
   }
   return {
-    command: installation.command,
+    command: processSpec.command,
     args: [
-      ...(installation.commandArgs || []),
+      ...processSpec.args,
       "--mode", "rpc",
       ...buildPiResourceArgs(models ? { ...template, models } : template),
       ...sessionArgs(chat.piSessionFile, model, thinkingLevel),

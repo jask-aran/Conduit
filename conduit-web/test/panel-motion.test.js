@@ -8,6 +8,7 @@ const performanceComposerStylesPath = path.resolve(import.meta.dirname, "../../c
 const panelMotionPath = path.resolve(import.meta.dirname, "../../conduit-web/src/client/panel-motion.ts");
 const mainPath = path.resolve(import.meta.dirname, "../../conduit-web/src/client/main.tsx");
 const transcriptPath = path.resolve(import.meta.dirname, "../../conduit-web/src/client/chat/transcript.tsx");
+const transcriptVisibilityPath = path.resolve(import.meta.dirname, "../../conduit-web/src/client/chat/transcript-visibility.ts");
 const sidebarPath = path.resolve(import.meta.dirname, "../../conduit-web/src/client/navigation/sidebar.tsx");
 const sidebarStylesPath = path.resolve(import.meta.dirname, "../../conduit-web/src/client/navigation/sidebar.css");
 const workspaceStylesPath = path.resolve(import.meta.dirname, "../../conduit-web/src/client/workspace/workspace.css");
@@ -52,9 +53,14 @@ test("desktop panel shells transition open and close while surfaces fill the she
   const transcriptMotionShell = rule(styles, ".transcript-motion-shell");
   assert.match(transcriptMotionShell, /width:\s*100%/);
   assert.match(transcriptMotionShell, /position:\s*relative/);
-  assert.match(transcriptMotionShell, /contain:\s*layout paint/);
+  assert.match(transcriptMotionShell, /contain:\s*layout/);
+  assert.doesNotMatch(transcriptMotionShell, /transform:\s*translate3d/);
+  assert.doesNotMatch(transcriptMotionShell, /will-change:\s*transform/);
   assert.match(transcriptMotionShell, /container-name:\s*chat-main/);
   assert.match(transcriptMotionShell, /container-type:\s*inline-size/);
+  const settingsRailNav = rule(styles, ".settings-rail nav");
+  assert.match(settingsRailNav, /display:\s*flex/);
+  assert.match(settingsRailNav, /flex-direction:\s*column/);
   const hiddenTranscriptContent = rule(styles, "[data-transcript-visibility=\"hidden\"]");
   assert.match(hiddenTranscriptContent, /content-visibility:\s*hidden/);
 });
@@ -101,9 +107,10 @@ test("static composer keeps material chrome without sampling transcript pixels",
 });
 
 test("composer remains a sibling overlay outside the transcript motion island", async () => {
-  const [main, transcript, performanceStyles] = await Promise.all([
+  const [main, transcript, transcriptVisibility, performanceStyles] = await Promise.all([
     fs.readFile(mainPath, "utf8"),
     fs.readFile(transcriptPath, "utf8"),
+    fs.readFile(transcriptVisibilityPath, "utf8"),
     fs.readFile(performanceComposerStylesPath, "utf8"),
   ]);
 
@@ -114,9 +121,11 @@ test("composer remains a sibling overlay outside the transcript motion island", 
   assert.doesNotMatch(transcript, /stickyFooter|footer\?:\s*JSX\.Element|props\.(stickyFooter|footer)/);
 
   const motionShell = rule(performanceStyles, ".transcript-motion-shell");
-  assert.match(motionShell, /contain:\s*layout paint/);
-  assert.match(motionShell, /transform:\s*translate3d\(0,\s*0,\s*0\)/);
-  assert.match(motionShell, /will-change:\s*transform/);
+  assert.equal(motionShell, "");
+  assert.match(transcriptVisibility, /DISPLAY_MATH_SELECTOR/);
+  assert.match(transcriptVisibility, /containsDisplayMath/);
+  assert.match(transcriptVisibility, /stableIncremarkBlocks/);
+  assert.match(transcriptVisibility, /hasDisplayMath/);
 
   const composerOverlay = rule(performanceStyles, ".chat-main:not(.chat-main-empty) .composer-stack");
   assert.match(composerOverlay, /position:\s*absolute/);

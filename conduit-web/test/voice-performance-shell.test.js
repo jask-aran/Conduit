@@ -52,7 +52,7 @@ test("Voice is forward-ported into the performance shell without legacy adapters
   assert.match(settingsCore, /Transcription source/);
 
   // Rebuild-only material and meteor preferences remain available.
-  assert.match(settings, /COMPOSER_SURFACE_OPTIONS/);
+  assert.match(settingsCore, /COMPOSER_SURFACE_OPTIONS/);
   assert.match(settings, /conduit:meteor-field/);
   assert.match(voiceCss, /html\[data-meteor-field="off"\] \.chat-meteors/);
 });

@@ -133,7 +133,7 @@ svg { stroke-width: 1.5; }
 .terminal-canvas > canvas { display: block; max-width: 100%; max-height: 100%; transition: opacity 80ms linear; }
 
 .transcript { position: relative; z-index: 1; min-height: 0; flex: 1; overflow: hidden; }
-.transcript-motion-shell { position: relative; width: 100%; height: 100%; contain: layout paint; container-name: chat-main; container-type: inline-size; transform: translate3d(0, 0, 0); will-change: transform; }
+.transcript-motion-shell { position: relative; width: 100%; height: 100%; contain: layout; container-name: chat-main; container-type: inline-size; }
 .message-scroller-viewport { width: 100%; height: 100%; overflow-y: auto; scrollbar-width: none; }
 .message-scroller-viewport::-webkit-scrollbar { display: none; }
 .thread { width: min(760px, calc(100% - 48px)); min-height: 100%; margin-inline: auto; padding: 64px 44px 32px; }
@@ -349,6 +349,7 @@ svg { stroke-width: 1.5; }
 
 .settings-shell { display: flex; width: min(900px, calc(100vw - 32px)); height: min(720px, calc(100dvh - 32px)); overflow: hidden; border: 1px solid var(--border); border-radius: 13px; background: var(--background); box-shadow: 0 24px 80px rgb(0 0 0 / 40%); }
 .settings-rail { display: flex; width: 184px; flex: none; flex-direction: column; gap: 3px; padding: 16px 8px; border-right: 1px solid var(--border); }
+.settings-rail nav { display: flex; flex-direction: column; gap: 3px; }
 .settings-rail h2 { margin: 0 8px 12px; font-size: 19px; }
 .settings-rail button { min-height: 36px; border: 0; border-radius: 7px; background: transparent; color: inherit; padding: 7px 10px; text-align: left; }
 .settings-rail button[aria-selected="true"] { background: var(--accent); }

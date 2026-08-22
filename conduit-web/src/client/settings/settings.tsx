@@ -1,10 +1,7 @@
-import { createEffect, createSignal, onCleanup, Show } from "solid-js";
-import { Portal } from "solid-js/web";
-import { Field, FieldLabel } from "@/components/primitives";
+import { createEffect, createSignal, onCleanup } from "solid-js";
 import { Settings as SettingsCore } from "./settings-core";
 import {
   COMPOSER_SURFACE_CHANGE_EVENT,
-  COMPOSER_SURFACE_OPTIONS,
   saveComposerSurface,
   selectedComposerSurface,
   type ComposerSurfaceMode,
@@ -16,7 +13,7 @@ const METEOR_FIELD_STORAGE_KEY = "conduit:meteor-field";
 type CoreProps = Parameters<typeof SettingsCore>[0];
 type CoreVoiceSettings = CoreProps["voiceSettings"];
 type ShellVoiceSettings = Omit<CoreVoiceSettings, "captureProfile" | "warmMicrophone"> & Partial<Pick<CoreVoiceSettings, "captureProfile" | "warmMicrophone">>;
-type SettingsProps = Omit<CoreProps, "meteorField" | "onMeteorFieldChange" | "liquidGlassSurface" | "onLiquidGlassSurfaceChange" | "voiceSettings"> & {
+type SettingsProps = Omit<CoreProps, "meteorField" | "onMeteorFieldChange" | "composerSurface" | "onComposerSurfaceChange" | "voiceSettings"> & {
   voiceSettings: ShellVoiceSettings;
 };
 
@@ -32,7 +29,6 @@ if (typeof document !== "undefined") applyMeteorField(selectedMeteorField());
 export function Settings(props: SettingsProps) {
   const [meteorField, setMeteorField] = createSignal(selectedMeteorField());
   const [composerSurface, setComposerSurface] = createSignal<ComposerSurfaceMode>(selectedComposerSurface());
-  const [surfaceMount, setSurfaceMount] = createSignal<HTMLElement | null>(null);
 
   createEffect(() => {
     if (!props.open) return;
@@ -45,20 +41,6 @@ export function Settings(props: SettingsProps) {
     const syncSurface = () => setComposerSurface(selectedComposerSurface());
     window.addEventListener(COMPOSER_SURFACE_CHANGE_EVENT, syncSurface);
     onCleanup(() => window.removeEventListener(COMPOSER_SURFACE_CHANGE_EVENT, syncSurface));
-  });
-
-  createEffect(() => {
-    setSurfaceMount(null);
-    if (!props.open || typeof document === "undefined") return;
-    const syncMount = () => {
-      const group = document.querySelector<HTMLElement>(".settings-dialog .settings-content[data-section='ui'] > [data-slot='field-group']");
-      setSurfaceMount(group || null);
-    };
-    requestAnimationFrame(syncMount);
-    const observer = new MutationObserver(syncMount);
-    const dialog = document.querySelector<HTMLElement>(".settings-dialog");
-    if (dialog) observer.observe(dialog, { subtree: true, childList: true, attributes: true, attributeFilter: ["data-section"] });
-    onCleanup(() => observer.disconnect());
   });
 
   const updateMeteorField = (enabled: boolean) => {
@@ -77,23 +59,12 @@ export function Settings(props: SettingsProps) {
     warmMicrophone: props.voiceSettings.warmMicrophone === true,
   });
 
-  return <>
-    <SettingsCore
+  return <SettingsCore
       {...props}
       meteorField={meteorField()}
       onMeteorFieldChange={updateMeteorField}
-      liquidGlassSurface={composerSurface() === "liquid"}
-      onLiquidGlassSurfaceChange={(enabled) => updateComposerSurface(enabled ? "liquid" : composerSurface() === "static" ? "static" : "frost")}
+      composerSurface={composerSurface()}
+      onComposerSurfaceChange={updateComposerSurface}
       voiceSettings={voiceSettings()}
-    />
-    <Show when={surfaceMount()}>{(mount) => <Portal mount={mount()}>
-      <Field class="performance-composer-surface-setting">
-        <FieldLabel for="composer-surface-mode">Composer material</FieldLabel>
-        <select id="composer-surface-mode" aria-label="Composer material" value={composerSurface()} onChange={(event) => updateComposerSurface(event.currentTarget.value as ComposerSurfaceMode)}>
-          {COMPOSER_SURFACE_OPTIONS.map((option) => <option value={option.value}>{option.label}</option>)}
-        </select>
-        <small>{COMPOSER_SURFACE_OPTIONS.find((option) => option.value === composerSurface())?.description}</small>
-      </Field>
-    </Portal>}</Show>
-  </>;
+    />;
 }
