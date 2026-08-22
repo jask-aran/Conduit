@@ -4050,6 +4050,16 @@ test("settings remains centered with a persistent vertical rail at narrow widths
   const [dialogBox, railBox] = await Promise.all([dialog.boundingBox(), rail.boundingBox()]);
   expect(Math.abs(dialogBox.x + dialogBox.width / 2 - 240)).toBeLessThanOrEqual(2);
   expect(railBox.width).toBeGreaterThan(60);
+  const tabBoxes = await rail.getByRole("tab").evaluateAll((tabs) => tabs.map((tab) => {
+    const box = tab.getBoundingClientRect();
+    return { x: box.x, y: box.y, width: box.width };
+  }));
+  expect(tabBoxes.length).toBeGreaterThan(1);
+  for (let index = 1; index < tabBoxes.length; index += 1) {
+    expect(tabBoxes[index].x).toBeCloseTo(tabBoxes[0].x, 0);
+    expect(tabBoxes[index].y).toBeGreaterThan(tabBoxes[index - 1].y);
+    expect(tabBoxes[index].width).toBeCloseTo(tabBoxes[0].width, 0);
+  }
 });
 
 test("generation_limit bounce surfaces an error and keeps the composer usable", async ({ page }) => {

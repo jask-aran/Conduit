@@ -71,6 +71,7 @@ export default defineConfig(() => {
       proxy: {
         "/v0": { target: serverTarget, ws: true },
         "/healthz": serverTarget,
+        "/login": serverTarget,
       },
     },
   };

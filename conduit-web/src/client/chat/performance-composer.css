@@ -6,12 +6,6 @@
    panel-motion subtree. */
 .work-area-conversation { position: relative; }
 .transcript { position: relative; z-index: 1; }
-.transcript-motion-shell {
-  contain: layout paint;
-  transform: translate3d(0, 0, 0);
-  will-change: transform;
-}
-
 /* Desktop panel open/close commits sidebar geometry once, then moves the fixed
    sidebar surface on the compositor. */
 @media (min-width: 761px) {
