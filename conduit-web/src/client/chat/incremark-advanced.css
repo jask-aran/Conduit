@@ -1,20 +1,5 @@
 .incremark-advanced-shell { display: contents; }
 
-/* Keep the live geometry equivalent to Synthetic: these explicit block widths
-   resolve to the same full-width boxes but give settlement a stable inline
-   basis. No containment is introduced while the typewriter is active. */
-.incremark-advanced-shell > .chat-markdown,
-.incremark-advanced-shell > .chat-markdown > .incremark {
-  width: 100%;
-  min-width: 0;
-  max-width: 100%;
-}
-
-/* Only after the existing Synthetic renderer has completely finished do we
-   add inline-size containment. The used width is already fixed above, so this
-   changes the settled root's intrinsic participation without replacing nodes
-   or changing its visible box. That lets sibling blocks virtualize without
-   changing the centering basis used by display KaTeX. */
-.incremark-advanced-shell[data-incremark-advanced-state="settled"] > .chat-markdown > .incremark {
-  contain: inline-size;
-}
+/* Synthetic and Advanced share their complete live sizing contract in
+   transcript-renderer.css. Advanced adds no layout-affecting rule at the
+   settlement boundary; settlement only changes ownership/virtualization. */
