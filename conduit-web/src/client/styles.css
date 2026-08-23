@@ -114,7 +114,7 @@ svg { stroke-width: 1.5; }
 .workspace-warning p { margin: 3px 0 0; color: var(--muted-foreground); font-size: 13px; }
 
 .work-area { position: relative; z-index: 1; display: flex; min-height: 0; flex: 1; }
-.work-area-conversation { display: flex; min-width: 0; flex: 1; flex-direction: column; }
+.work-area-conversation { display: flex; min-width: 0; flex: 1; flex-direction: column; transform: translate3d(0, 0, 0); will-change: transform; }
 .terminal-pane { display: flex; min-width: 0; min-height: 0; flex: 1; flex-direction: column; overflow: hidden; background: color-mix(in oklch, var(--background), black 9%); }
 .terminal-pane-header { display: flex; min-height: 48px; align-items: center; justify-content: space-between; padding: 6px 8px 6px 14px; border-bottom: 1px solid var(--border); }
 .terminal-pane-header > div { display: flex; min-width: 0; align-items: center; gap: 8px; }
@@ -173,7 +173,7 @@ svg { stroke-width: 1.5; }
 .composer-status-state > svg { width: 13px; height: 13px; flex: none; }
 .message-scroller-button[data-slot="button"] {
   position: absolute;
-  right: var(--message-scroller-button-right, 24px);
+  right: max(44px, calc((100% - 760px) / 2));
   bottom: var(--message-scroller-button-bottom, 18px);
   z-index: 4;
   width: 36px;
@@ -612,6 +612,7 @@ svg { stroke-width: 1.5; }
     box-shadow: none;
   }
   .thread { width: 100%; padding: 40px 16px 20px; }
+  .message-scroller-button[data-slot="button"] { right: 12px; }
   .composer-stack {
     flex: none;
     padding: 10px 12px calc(12px + env(safe-area-inset-bottom, 0px));
