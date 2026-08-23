@@ -1,0 +1,17 @@
+.incremark-advanced-shell { display: contents; }
+
+/* Advanced keeps the exact streaming DOM, but gives the settled Incremark
+   root an explicit inline geometry contract. Sibling content-visibility may
+   then change block participation without changing the width used to centre
+   display KaTeX. This is size containment only: overflow such as wide tables
+   remains visible and no paint/layout containment is introduced here. */
+.incremark-advanced-shell > .chat-markdown,
+.incremark-advanced-shell > .chat-markdown > .incremark {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.incremark-advanced-shell[data-incremark-advanced-state="settled"] > .chat-markdown > .incremark {
+  contain: inline-size;
+}
