@@ -63,20 +63,28 @@ export function TranscriptMarkdown(props: TranscriptMarkdownProps) {
     ? "incremark-synthetic"
     : props.renderer as MarkdownRendererId;
 
+  const common = () => ({
+    displayKey: props.displayKey,
+    streamVersion: props.streamVersion,
+    inline: props.inline,
+    onRendered: props.onRendered,
+  });
+
   return <Suspense fallback={<div class="markdown-skeleton" />}>
     <Show when={advanced()} fallback={
       <ChatMarkdown
-        {...props}
+        {...common()}
         renderer={baseRenderer()}
         streaming={effectiveStreaming()}
         typewriter={baseRenderer() === "incremark-typewriter" || baseRenderer() === "incremark-synthetic"}
         syntheticMath={baseRenderer() === "incremark-synthetic"}
-      />
+      >{props.children || ""}</ChatMarkdown>
     }>
       <IncremarkAdvancedMarkdown
-        {...props}
+        {...common()}
+        renderer="incremark-synthetic"
         streaming={effectiveStreaming()}
-      />
+      >{props.children || ""}</IncremarkAdvancedMarkdown>
     </Show>
   </Suspense>;
 }
