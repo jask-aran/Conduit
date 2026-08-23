@@ -25,9 +25,9 @@ const isTranscriptRendererMode = (value: string | null): value is TranscriptRend
   value === "current" || value === "incremark-advanced";
 
 export function selectedTranscriptRenderer(storage: Pick<Storage, "getItem"> = localStorage): TranscriptRendererMode {
-  const override = typeof location === "undefined"
-    ? null
-    : new URLSearchParams(location.search).get("transcriptRenderer");
+  const params = typeof location === "undefined" ? null : new URLSearchParams(location.search);
+  const override = params?.get("transcriptRenderer")
+    || (params?.get("markdownRenderer") === "incremark-advanced" ? "incremark-advanced" : null);
   if (isTranscriptRendererMode(override)) return override;
   const selected = storage.getItem(TRANSCRIPT_RENDERER_STORAGE_KEY);
   return isTranscriptRendererMode(selected) ? selected : "current";
