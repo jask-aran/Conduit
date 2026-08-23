@@ -144,6 +144,8 @@ export function Settings(props: {
   onMeteorFieldChange: (enabled: boolean) => void;
   composerSurface: ComposerSurfaceMode;
   onComposerSurfaceChange: (surface: ComposerSurfaceMode) => void;
+  liquidGlassRuntimeEnabled: boolean;
+  onLiquidGlassRuntimeChange: (enabled: boolean) => void;
   voiceSettings: VoiceDictationSettings;
   onVoiceSettingsSave: (settings: VoiceDictationSettings) => void;
   sidebarChatLimit: number;
@@ -858,9 +860,17 @@ export function Settings(props: {
               <Field>
                 <FieldLabel for="composer-surface-mode">Composer material</FieldLabel>
                 <select id="composer-surface-mode" aria-label="Composer material" value={props.composerSurface} onChange={(event) => props.onComposerSurfaceChange(event.currentTarget.value as ComposerSurfaceMode)}>
-                  <For each={COMPOSER_SURFACE_OPTIONS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
+                  <For each={COMPOSER_SURFACE_OPTIONS.filter((option) => props.liquidGlassRuntimeEnabled || option.value !== "liquid")}>{(option) => <option value={option.value}>{option.label}</option>}</For>
                 </select>
                 <small>{COMPOSER_SURFACE_OPTIONS.find((option) => option.value === props.composerSurface)?.description}</small>
+              </Field>
+              <Field>
+                <FieldLabel for="liquid-glass-runtime">Liquid Glass runtime</FieldLabel>
+                <select id="liquid-glass-runtime" aria-label="Liquid Glass runtime" value={props.liquidGlassRuntimeEnabled ? "enabled" : "disabled"} onChange={(event) => props.onLiquidGlassRuntimeChange(event.currentTarget.value === "enabled")}>
+                  <option value="disabled">Disabled — safe mode</option>
+                  <option value="enabled">Enabled — experimental</option>
+                </select>
+                <small>Disabled prevents the Liquid component and SVG filter from mounting. Changing this setting reloads Conduit; disabling also clears prior Liquid preferences.</small>
               </Field>
               <Field>
                 <label class="settings-toggle">

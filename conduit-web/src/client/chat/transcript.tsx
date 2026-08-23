@@ -7,7 +7,7 @@ import { AttachmentCards } from "./attachments";
 import { TurnTrace } from "./turn-trace";
 import { createTimelineStore } from "../state/timeline-store";
 import type { MarkdownRendererId } from "./markdown-settings";
-import { COMPOSER_SURFACE_CHANGE_EVENT, COMPOSER_SURFACE_OPTIONS, saveComposerSurface, selectedComposerSurface, type ComposerSurfaceMode } from "./composer-surface";
+import { COMPOSER_SURFACE_CHANGE_EVENT, COMPOSER_SURFACE_OPTIONS, liquidGlassRuntimeEnabled, saveComposerSurface, selectedComposerSurface, type ComposerSurfaceMode } from "./composer-surface";
 import { saveTranscriptRenderer, selectedTranscriptRenderer, TRANSCRIPT_RENDERER_OPTIONS, type TranscriptRendererMode } from "./transcript-renderer";
 import { mountTranscriptPanelMotion } from "./transcript-motion";
 import { mountTranscriptVisibility } from "./transcript-visibility";
@@ -531,7 +531,7 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
   return <div ref={transcriptRoot} class="transcript" data-slot="message-scroller" data-markdown-renderer={markdownRenderer()} data-transcript-renderer={transcriptRenderer()} data-markdown-typewriter={rendererUsesTypewriter() ? "true" : undefined} data-markdown-synthetic-math={markdownRenderer() === "incremark-synthetic" ? "true" : undefined}>
     <div class="composer-renderer-switch">
       <label>Composer renderer<select aria-label="Composer renderer" title="Composer renderer" value={composerSurface()} onChange={(event) => switchComposerSurface(event.currentTarget.value as ComposerSurfaceMode)}>
-        <For each={COMPOSER_SURFACE_OPTIONS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
+        <For each={COMPOSER_SURFACE_OPTIONS.filter((option) => liquidGlassRuntimeEnabled() || option.value !== "liquid")}>{(option) => <option value={option.value}>{option.label}</option>}</For>
       </select></label>
       <label>Transcript renderer<select aria-label="Transcript renderer" title="Transcript renderer" value={transcriptRenderer()} onChange={(event) => switchTranscriptRenderer(event.currentTarget.value as TranscriptRendererMode)}>
         <For each={TRANSCRIPT_RENDERER_OPTIONS}>{(option) => <option value={option.value}>{option.label}</option>}</For>

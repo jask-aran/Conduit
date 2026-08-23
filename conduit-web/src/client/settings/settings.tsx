@@ -2,7 +2,9 @@ import { createEffect, createSignal, onCleanup } from "solid-js";
 import { Settings as SettingsCore } from "./settings-core";
 import {
   COMPOSER_SURFACE_CHANGE_EVENT,
+  liquidGlassRuntimeEnabled,
   saveComposerSurface,
+  saveLiquidGlassRuntime,
   selectedComposerSurface,
   type ComposerSurfaceMode,
 } from "../chat/composer-surface";
@@ -13,7 +15,7 @@ const METEOR_FIELD_STORAGE_KEY = "conduit:meteor-field";
 type CoreProps = Parameters<typeof SettingsCore>[0];
 type CoreVoiceSettings = CoreProps["voiceSettings"];
 type ShellVoiceSettings = Omit<CoreVoiceSettings, "captureProfile" | "warmMicrophone"> & Partial<Pick<CoreVoiceSettings, "captureProfile" | "warmMicrophone">>;
-type SettingsProps = Omit<CoreProps, "meteorField" | "onMeteorFieldChange" | "composerSurface" | "onComposerSurfaceChange" | "voiceSettings"> & {
+type SettingsProps = Omit<CoreProps, "meteorField" | "onMeteorFieldChange" | "composerSurface" | "onComposerSurfaceChange" | "liquidGlassRuntimeEnabled" | "onLiquidGlassRuntimeChange" | "voiceSettings"> & {
   voiceSettings: ShellVoiceSettings;
 };
 
@@ -29,11 +31,13 @@ if (typeof document !== "undefined") applyMeteorField(selectedMeteorField());
 export function Settings(props: SettingsProps) {
   const [meteorField, setMeteorField] = createSignal(selectedMeteorField());
   const [composerSurface, setComposerSurface] = createSignal<ComposerSurfaceMode>(selectedComposerSurface());
+  const [liquidGlassEnabled, setLiquidGlassEnabled] = createSignal(liquidGlassRuntimeEnabled());
 
   createEffect(() => {
     if (!props.open) return;
     setMeteorField(selectedMeteorField());
     setComposerSurface(selectedComposerSurface());
+    setLiquidGlassEnabled(liquidGlassRuntimeEnabled());
   });
 
   createEffect(() => {
@@ -53,6 +57,13 @@ export function Settings(props: SettingsProps) {
     setComposerSurface(saveComposerSurface(surface));
   };
 
+  const updateLiquidGlassRuntime = (enabled: boolean) => {
+    if (enabled === liquidGlassEnabled()) return;
+    setLiquidGlassEnabled(saveLiquidGlassRuntime(enabled));
+    if (!enabled) setComposerSurface("frost");
+    window.location.reload();
+  };
+
   const voiceSettings = (): CoreVoiceSettings => ({
     ...props.voiceSettings,
     captureProfile: props.voiceSettings.captureProfile === "processed" ? "processed" : "raw",
@@ -65,6 +76,8 @@ export function Settings(props: SettingsProps) {
       onMeteorFieldChange={updateMeteorField}
       composerSurface={composerSurface()}
       onComposerSurfaceChange={updateComposerSurface}
+      liquidGlassRuntimeEnabled={liquidGlassEnabled()}
+      onLiquidGlassRuntimeChange={updateLiquidGlassRuntime}
       voiceSettings={voiceSettings()}
     />;
 }
