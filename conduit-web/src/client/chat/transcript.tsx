@@ -7,6 +7,7 @@ import { AttachmentCards } from "./attachments";
 import { TurnTrace } from "./turn-trace";
 import { createTimelineStore } from "../state/timeline-store";
 import type { MarkdownRendererId } from "./markdown-settings";
+import { COMPOSER_SURFACE_CHANGE_EVENT, COMPOSER_SURFACE_OPTIONS, saveComposerSurface, selectedComposerSurface, type ComposerSurfaceMode } from "./composer-surface";
 import { mountTranscriptPanelMotion } from "./transcript-motion";
 import { mountTranscriptVisibility } from "./transcript-visibility";
 import { getHarnessRecorder, recordHarnessMetric } from "../harness-metrics";
@@ -61,6 +62,8 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
   let layoutEpoch = 0;
   const [following, setFollowing] = createSignal(true);
   const markdownRenderer = () => props.markdownRenderer;
+  const [composerSurface, setComposerSurface] = createSignal<ComposerSurfaceMode>(selectedComposerSurface());
+  const switchComposerSurface = (next: ComposerSurfaceMode) => setComposerSurface(saveComposerSurface(next));
   const rendererUsesTypewriter = () => markdownRenderer() === "incremark-typewriter" || markdownRenderer() === "incremark-synthetic";
   const rendererUsesInertialTailFollow = () => markdownRenderer() === "incremark-typewriter" || markdownRenderer() === "incremark-synthetic";
   const timeline = createTimelineStore(
@@ -351,6 +354,7 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
   let pulling = false;
 
   onMount(() => {
+    const syncComposerSurface = () => setComposerSurface(selectedComposerSurface());
     panelMotion = mountTranscriptPanelMotion(transcriptRoot, motionShell);
     transcriptVisibility = mountTranscriptVisibility(transcriptRoot, viewport, thread);
     const claimUserScroll = () => {
@@ -430,6 +434,7 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
     viewport.addEventListener("touchmove", onTouchMove, { passive: false });
     viewport.addEventListener("touchend", onTouchEnd);
     viewport.addEventListener("touchcancel", onTouchEnd);
+    window.addEventListener(COMPOSER_SURFACE_CHANGE_EVENT, syncComposerSurface);
     const resizeObserver = new ResizeObserver(() => {
       if (!following()) return;
       if (rendererUsesInertialTailFollow()) requestTypewriterTailFollow("resize");
@@ -445,6 +450,7 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
       viewport.removeEventListener("touchmove", onTouchMove);
       viewport.removeEventListener("touchend", onTouchEnd);
       viewport.removeEventListener("touchcancel", onTouchEnd);
+      window.removeEventListener(COMPOSER_SURFACE_CHANGE_EVENT, syncComposerSurface);
       if (scrollFrame != null) cancelAnimationFrame(scrollFrame);
       cancelTypewriterTailFrame();
       cancelTypewriterTailRejoin();
@@ -457,6 +463,11 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
   });
 
   return <div ref={transcriptRoot} class="transcript" data-slot="message-scroller" data-markdown-renderer={markdownRenderer()} data-markdown-typewriter={rendererUsesTypewriter() ? "true" : undefined} data-markdown-synthetic-math={markdownRenderer() === "incremark-synthetic" ? "true" : undefined}>
+    <div class="composer-renderer-switch">
+      <label>Composer renderer<select aria-label="Composer renderer" title="Composer renderer" value={composerSurface()} onChange={(event) => switchComposerSurface(event.currentTarget.value as ComposerSurfaceMode)}>
+        <For each={COMPOSER_SURFACE_OPTIONS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
+      </select></label>
+    </div>
     <Show when={empty() && pullDistance() > 8}>
       <div class="empty-pull-hint" data-visible="true" data-armed={pullArmed() ? "true" : "false"} aria-hidden="true">
         {pullArmed() ? "Release to refresh" : "Pull to refresh"}
