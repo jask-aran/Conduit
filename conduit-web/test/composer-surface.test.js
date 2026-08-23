@@ -34,6 +34,18 @@ test("Liquid Glass is fail-closed for current and legacy preferences", () => {
   }
 });
 
+test("Frosted Live keeps a separate renderer value", () => {
+  assert.deepEqual(surface.COMPOSER_SURFACE_OPTIONS.map(({ value, label }) => ({ value, label })), [
+    { value: "static", label: "Static" },
+    { value: "frost", label: "Frosted" },
+    { value: "frosted-live", label: "Frosted Live" },
+    { value: "liquid", label: "Liquid Glass" },
+  ]);
+  assert.equal(surface.selectedComposerSurface(memoryStorage({
+    "conduit:composer-surface": "frosted-live",
+  })), "frosted-live");
+});
+
 test("Liquid Glass requires an explicit runtime opt-in", () => {
   const storage = memoryStorage({
     "conduit:liquid-glass-runtime": "enabled",

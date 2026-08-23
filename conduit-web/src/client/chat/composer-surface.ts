@@ -1,4 +1,4 @@
-export type ComposerSurfaceMode = "static" | "frost" | "liquid";
+export type ComposerSurfaceMode = "static" | "frost" | "frosted-live" | "liquid";
 
 export const COMPOSER_SURFACE_STORAGE_KEY = "conduit:composer-surface";
 export const COMPOSER_SURFACE_CHANGE_EVENT = "conduit:composer-surface-change";
@@ -21,13 +21,18 @@ export const COMPOSER_SURFACE_OPTIONS: readonly {
     description: "Use native backdrop blur over the live transcript.",
   },
   {
+    value: "frosted-live",
+    label: "Frosted Live",
+    description: "Keep native backdrop blur active over the live transcript during panel motion.",
+  },
+  {
     value: "liquid",
     label: "Liquid Glass",
     description: "Use the precomputed SVG refraction path over the live transcript.",
   },
 ];
 
-const isComposerSurfaceMode = (value: string | null): value is ComposerSurfaceMode => value === "static" || value === "frost" || value === "liquid";
+const isComposerSurfaceMode = (value: string | null): value is ComposerSurfaceMode => value === "static" || value === "frost" || value === "frosted-live" || value === "liquid";
 
 export function liquidGlassRuntimeEnabled(storage: Pick<Storage, "getItem"> = localStorage): boolean {
   return storage.getItem(LIQUID_GLASS_RUNTIME_STORAGE_KEY) === "enabled";
