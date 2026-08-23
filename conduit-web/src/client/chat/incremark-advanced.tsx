@@ -1,4 +1,4 @@
-import { createEffect, createSignal, onCleanup, onMount } from "solid-js";
+import { createEffect, createMemo, createSignal, onCleanup, onMount } from "solid-js";
 import type { ChatMarkdownProps } from "./markdown";
 import { IncremarkMarkdown } from "./incremark-markdown";
 import "./incremark-advanced.css";
@@ -14,7 +14,13 @@ export function IncremarkAdvancedMarkdown(props: ChatMarkdownProps) {
   let settleFrame: number | null = null;
   let settleFramesRemaining = 0;
 
-  const source = () => frozenSource() ?? String(props.children || "");
+  // Both memos deliberately preserve value equality across settlement. When
+  // frozenSource changes from null to the already-rendered final string, and
+  // settled changes while streaming is already false, downstream Incremark
+  // computations see no value change and therefore receive no terminal render
+  // pulse. The memo also drops its live props.children dependency once frozen.
+  const source = createMemo(() => frozenSource() ?? String(props.children || ""));
+  const streaming = createMemo(() => settled() ? false : Boolean(props.streaming));
   const cancelSettlement = () => {
     if (settleFrame != null) cancelAnimationFrame(settleFrame);
     settleFrame = null;
@@ -36,13 +42,14 @@ export function IncremarkAdvancedMarkdown(props: ChatMarkdownProps) {
     const snapshot = String(props.children || "");
     // The source branch becomes permanently local after this write. The
     // already-mounted Incremark DOM is not cloned, serialized, replaced, or
-    // reparsed; downstream effects simply stop depending on the live source.
+    // reparsed. Because source() and streaming() retain equal output values,
+    // the underlying renderer is not notified of a terminal representation
+    // change either.
     setFrozenSource(snapshot);
     setSettled(true);
     shell.setAttribute(SETTLE_ATTRIBUTE, "settled");
     observer?.disconnect();
     observer = null;
-    queueMicrotask(() => props.onRendered?.());
   };
   const advanceSettlement = () => {
     settleFrame = null;
@@ -105,7 +112,7 @@ export function IncremarkAdvancedMarkdown(props: ChatMarkdownProps) {
       {...props}
       typewriter
       syntheticMath
-      streaming={settled() ? false : props.streaming}
+      streaming={streaming()}
       onRendered={rendered}
     >{source()}</IncremarkMarkdown>
   </div>;
