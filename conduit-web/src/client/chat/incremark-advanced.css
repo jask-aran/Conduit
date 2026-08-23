@@ -1,5 +1,22 @@
 .incremark-advanced-shell { display: contents; }
 
-/* Synthetic and Advanced share their complete live sizing contract in
-   transcript-renderer.css. Advanced adds no layout-affecting rule at the
-   settlement boundary; settlement only changes ownership/virtualization. */
+/* Advanced is the only renderer allowed to change this sizing contract.
+   The assistant message-content node is otherwise intrinsically sized; an
+   inline-size-contained descendant contributes zero intrinsic inline size and
+   collapses that ancestor. Give the Advanced message a definite containing
+   width first, then isolate only its Incremark root. Existing renderers never
+   match these selectors. */
+.message-assistant [data-slot="message-content"]:has(.incremark-advanced-shell) {
+  width: 100%;
+}
+
+.incremark-advanced-shell > .chat-markdown,
+.incremark-advanced-shell > .chat-markdown > .incremark {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.incremark-advanced-shell > .chat-markdown > .incremark {
+  contain: inline-size;
+}
