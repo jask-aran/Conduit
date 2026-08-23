@@ -171,7 +171,45 @@ svg { stroke-width: 1.5; }
 .marker { color: var(--muted-foreground); font-size: 12px; }
 .agent-activity { display: flex; align-items: center; color: var(--muted-foreground); font-size: 12px; }
 .composer-status-state > svg { width: 13px; height: 13px; flex: none; }
-.message-scroller-button { position: absolute; right: 24px; bottom: 18px; }
+.message-scroller-button[data-slot="button"] {
+  position: absolute;
+  right: var(--message-scroller-button-right, 24px);
+  bottom: var(--message-scroller-button-bottom, 18px);
+  z-index: 4;
+  width: 36px;
+  min-height: 36px;
+  height: 36px;
+  border: 1px solid rgba(220, 238, 255, 0.28);
+  border-radius: 13px;
+  background:
+    radial-gradient(130% 180% at 12% -70%, rgba(255, 255, 255, 0.16), transparent 48%),
+    linear-gradient(135deg, rgba(210, 228, 245, 0.14), rgba(255, 255, 255, 0.06) 55%, rgba(190, 214, 240, 0.1));
+  padding: 0;
+  color: var(--foreground);
+  backdrop-filter: blur(8px) saturate(140%);
+  -webkit-backdrop-filter: blur(8px) saturate(140%);
+  box-shadow:
+    0 8px 24px -18px rgba(0, 0, 0, 0.68),
+    inset 0 1px rgba(255, 255, 255, 0.42),
+    inset 0 -1px rgba(145, 195, 255, 0.1),
+    inset 0 0 0 1px rgba(178, 215, 255, 0.08);
+}
+.message-scroller-button[data-slot="button"] svg { width: 16px; height: 16px; }
+.message-scroller-button[data-slot="button"]:hover:not(:disabled) { filter: brightness(1.12); }
+.message-scroller-button[data-composer-surface="static"] {
+  border-color: var(--glass-border);
+  background: linear-gradient(180deg, oklch(1 0 0 / 9%), oklch(1 0 0 / 2%) 58%), var(--glass-bg);
+  backdrop-filter: blur(30px) saturate(168%) brightness(1.05);
+  -webkit-backdrop-filter: blur(30px) saturate(168%) brightness(1.05);
+  box-shadow: inset 0 1px 0 oklch(1 0 0 / 30%), inset 0 -1px 1px oklch(0 0 0 / 18%), 0 8px 24px -18px rgb(0 0 0 / 62%);
+}
+.message-scroller-button[data-composer-surface="frost"] {
+  border-color: #ffffff4d;
+  background: #ffffff2b;
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.5), inset 0 -1px 0 rgba(255, 255, 255, 0.1);
+}
 .response-actions { display: flex; min-height: 28px; align-items: center; gap: 2px; opacity: 0; transition: opacity 120ms; }
 [data-slot="message-scroller-item"]:hover .response-actions, .response-actions:focus-within { opacity: 1; }
 .response-actions [data-slot="button"] { width: 24px; height: 24px; border-radius: 999px; }

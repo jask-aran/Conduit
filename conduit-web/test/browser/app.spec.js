@@ -3885,6 +3885,11 @@ test("global commands and slash suggestions preserve their intended focus models
   await expect(composer).toHaveValue("/att");
   await expect(slashList).toHaveCount(0);
 
+  const composerRenderer = page.getByRole("combobox", { name: "Composer renderer" });
+  await expect(composerRenderer).toBeVisible();
+  await composerRenderer.selectOption("liquid");
+  await expect(page.locator(".composer")).toHaveAttribute("data-composer-surface", "liquid");
+
   await page.keyboard.press("Control+k");
   const palette = page.getByRole("dialog", { name: "Command Palette" });
   await expect(palette).toBeVisible();
@@ -3902,10 +3907,6 @@ test("global commands and slash suggestions preserve their intended focus models
   const [statusBox, composerBox] = await Promise.all([page.locator(".composer-status").boundingBox(), page.locator(".composer").boundingBox()]);
   expect(statusBox.width).toBe(composerBox.width);
   await expect(page.locator(".composer-status")).toContainText(/Ready|Responding|Thinking/);
-  const composerRenderer = page.getByRole("combobox", { name: "Composer renderer" });
-  await expect(composerRenderer).toBeVisible();
-  await composerRenderer.selectOption("liquid");
-  await expect(page.locator(".composer")).toHaveAttribute("data-composer-surface", "liquid");
   await expect(palette.getByRole("combobox", { name: "Search commands" })).toHaveAttribute("aria-expanded", "true");
   await expect(page.locator("#root")).toHaveAttribute("aria-hidden", "true");
   await page.keyboard.press("Escape");
