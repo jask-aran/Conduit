@@ -62,17 +62,20 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
   let previousLoaded: string | null = null;
   let historyLoad: Promise<void> | null = null;
   let layoutEpoch = 0;
+  let previousMarkdownRenderer = props.markdownRenderer;
   const [following, setFollowing] = createSignal(true);
-  const markdownRenderer = () => props.markdownRenderer;
   const [composerSurface, setComposerSurface] = createSignal<ComposerSurfaceMode>(selectedComposerSurface());
-  const [transcriptRenderer, setTranscriptRenderer] = createSignal<TranscriptRendererMode>(selectedTranscriptRenderer());
+  const [transcriptRenderer, setTranscriptRenderer] = createSignal<TranscriptRendererMode>(selectedTranscriptRenderer(props.markdownRenderer));
+  const markdownRenderer = (): MarkdownRendererId => transcriptRenderer() === "incremark-advanced"
+    ? "incremark-synthetic"
+    : transcriptRenderer() as MarkdownRendererId;
   const switchComposerSurface = (next: ComposerSurfaceMode) => setComposerSurface(saveComposerSurface(next));
   const switchTranscriptRenderer = (next: TranscriptRendererMode) => {
     setTranscriptRenderer(saveTranscriptRenderer(next));
     queueMicrotask(() => transcriptVisibility?.reset());
   };
   const advancedTranscript = () => transcriptRenderer() === "incremark-advanced";
-  const rendererUsesTypewriter = () => advancedTranscript() || markdownRenderer() === "incremark-typewriter" || markdownRenderer() === "incremark-synthetic";
+  const rendererUsesTypewriter = () => markdownRenderer() === "incremark-typewriter" || markdownRenderer() === "incremark-synthetic";
   const rendererUsesInertialTailFollow = () => rendererUsesTypewriter();
   const rendererMetric = () => advancedTranscript() ? "incremark-advanced" : markdownRenderer();
   const timeline = createTimelineStore(
@@ -341,6 +344,13 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
     else if (following() && !rendererUsesTypewriter()) scrollBottom();
   });
   createEffect(() => {
+    const next = props.markdownRenderer;
+    if (next === previousMarkdownRenderer) return;
+    previousMarkdownRenderer = next;
+    if (advancedTranscript()) return;
+    setTranscriptRenderer(saveTranscriptRenderer(next));
+  });
+  createEffect(() => {
     const renderer = `${transcriptRenderer()}:${markdownRenderer()}`;
     if (previousRenderer == null) {
       previousRenderer = renderer;
@@ -503,12 +513,12 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
     });
   });
 
-  return <div ref={transcriptRoot} class="transcript" data-slot="message-scroller" data-markdown-renderer={markdownRenderer()} data-transcript-renderer={transcriptRenderer()} data-markdown-typewriter={rendererUsesTypewriter() ? "true" : undefined} data-markdown-synthetic-math={advancedTranscript() || markdownRenderer() === "incremark-synthetic" ? "true" : undefined}>
+  return <div ref={transcriptRoot} class="transcript" data-slot="message-scroller" data-markdown-renderer={markdownRenderer()} data-transcript-renderer={transcriptRenderer()} data-markdown-typewriter={rendererUsesTypewriter() ? "true" : undefined} data-markdown-synthetic-math={markdownRenderer() === "incremark-synthetic" ? "true" : undefined}>
     <div class="composer-renderer-switch">
       <label>Composer renderer<select aria-label="Composer renderer" title="Composer renderer" value={composerSurface()} onChange={(event) => switchComposerSurface(event.currentTarget.value as ComposerSurfaceMode)}>
         <For each={COMPOSER_SURFACE_OPTIONS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
       </select></label>
-      <label>Transcript renderer<select aria-label="Transcript renderer" title="Transcript renderer" value={transcriptRenderer()} disabled={Boolean(props.chat.activeGeneration())} onChange={(event) => switchTranscriptRenderer(event.currentTarget.value as TranscriptRendererMode)}>
+      <label>Transcript renderer<select aria-label="Transcript renderer" title="Transcript renderer" value={transcriptRenderer()} disabled={props.chat.streaming() || props.chat.stopping()} onChange={(event) => switchTranscriptRenderer(event.currentTarget.value as TranscriptRendererMode)}>
         <For each={TRANSCRIPT_RENDERER_OPTIONS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
       </select></label>
     </div>
