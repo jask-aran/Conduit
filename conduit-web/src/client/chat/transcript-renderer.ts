@@ -1,4 +1,4 @@
-import { MARKDOWN_RENDERER_OPTIONS, type MarkdownRendererId } from "./markdown-settings";
+import { MARKDOWN_RENDERER_OPTIONS, MARKDOWN_RENDERER_STORAGE_KEY, type MarkdownRendererId } from "./markdown-settings";
 import "./transcript-renderer.css";
 
 export type TranscriptRendererMode = MarkdownRendererId | "incremark-advanced";
@@ -44,5 +44,6 @@ export function saveTranscriptRenderer(
   storage: Pick<Storage, "setItem"> = localStorage,
 ): TranscriptRendererMode {
   storage.setItem(TRANSCRIPT_RENDERER_STORAGE_KEY, renderer);
+  if (renderer !== "incremark-advanced") storage.setItem(MARKDOWN_RENDERER_STORAGE_KEY, renderer);
   return renderer;
 }
