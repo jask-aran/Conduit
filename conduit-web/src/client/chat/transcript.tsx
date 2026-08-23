@@ -8,6 +8,7 @@ import { TurnTrace } from "./turn-trace";
 import { createTimelineStore } from "../state/timeline-store";
 import type { MarkdownRendererId } from "./markdown-settings";
 import { COMPOSER_SURFACE_CHANGE_EVENT, COMPOSER_SURFACE_OPTIONS, saveComposerSurface, selectedComposerSurface, type ComposerSurfaceMode } from "./composer-surface";
+import { saveTranscriptRenderer, selectedTranscriptRenderer, TRANSCRIPT_RENDERER_OPTIONS, type TranscriptRendererMode } from "./transcript-renderer";
 import { mountTranscriptPanelMotion } from "./transcript-motion";
 import { mountTranscriptVisibility } from "./transcript-visibility";
 import { getHarnessRecorder, recordHarnessMetric } from "../harness-metrics";
@@ -20,6 +21,7 @@ import {
 } from "./transcript-tail-follow";
 
 const ChatMarkdown = lazy(() => import("./markdown").then((module) => ({ default: module.ChatMarkdown })));
+const IncremarkAdvancedMarkdown = lazy(() => import("./incremark-advanced").then((module) => ({ default: module.IncremarkAdvancedMarkdown })));
 const fullDateTime = (value?: string) => {
   if (!value) return "";
   const date = new Date(value);
@@ -63,9 +65,16 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
   const [following, setFollowing] = createSignal(true);
   const markdownRenderer = () => props.markdownRenderer;
   const [composerSurface, setComposerSurface] = createSignal<ComposerSurfaceMode>(selectedComposerSurface());
+  const [transcriptRenderer, setTranscriptRenderer] = createSignal<TranscriptRendererMode>(selectedTranscriptRenderer());
   const switchComposerSurface = (next: ComposerSurfaceMode) => setComposerSurface(saveComposerSurface(next));
-  const rendererUsesTypewriter = () => markdownRenderer() === "incremark-typewriter" || markdownRenderer() === "incremark-synthetic";
-  const rendererUsesInertialTailFollow = () => markdownRenderer() === "incremark-typewriter" || markdownRenderer() === "incremark-synthetic";
+  const switchTranscriptRenderer = (next: TranscriptRendererMode) => {
+    setTranscriptRenderer(saveTranscriptRenderer(next));
+    queueMicrotask(() => transcriptVisibility?.reset());
+  };
+  const advancedTranscript = () => transcriptRenderer() === "incremark-advanced";
+  const rendererUsesTypewriter = () => advancedTranscript() || markdownRenderer() === "incremark-typewriter" || markdownRenderer() === "incremark-synthetic";
+  const rendererUsesInertialTailFollow = () => rendererUsesTypewriter();
+  const rendererMetric = () => advancedTranscript() ? "incremark-advanced" : markdownRenderer();
   const timeline = createTimelineStore(
     props.chat.messages,
     props.chat.tools,
@@ -84,7 +93,7 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
   let typewriterTailLastExpected: number | null = null;
   let typewriterTailTargetDeltaEma = 0;
   let programmaticScrollTop: number | null = null;
-  let previousRenderer: MarkdownRendererId | null = null;
+  let previousRenderer: string | null = null;
   const currentViewportScrollTop = () => viewport?.scrollTop ?? 0;
   const cancelTypewriterTailFrame = () => {
     if (typewriterTailFrame == null) return;
@@ -207,7 +216,7 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
       if (recorder) {
         recordHarnessMetric(recorder, {
           stage: "transcript-scroll",
-          renderer: markdownRenderer(),
+          renderer: rendererMetric(),
           owner: "typewriter-tail-inertial",
           ownership: typewriterTailState.owner,
           reasons,
@@ -332,13 +341,14 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
     else if (following() && !rendererUsesTypewriter()) scrollBottom();
   });
   createEffect(() => {
-    const renderer = markdownRenderer();
+    const renderer = `${transcriptRenderer()}:${markdownRenderer()}`;
     if (previousRenderer == null) {
       previousRenderer = renderer;
       return;
     }
     if (renderer === previousRenderer) return;
     previousRenderer = renderer;
+    transcriptVisibility?.reset();
     if (rendererUsesInertialTailFollow()) resumeTypewriterTailFollow("renderer-switch");
     else {
       cancelTypewriterTailRejoin();
@@ -393,7 +403,7 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
         if (recorder) {
           recordHarnessMetric(recorder, {
             stage: "transcript-scroll",
-            renderer: markdownRenderer(),
+            renderer: rendererMetric(),
             owner: "typewriter-tail-inertial",
             ownership: "user",
             reasons: ["user-input"],
@@ -493,10 +503,13 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
     });
   });
 
-  return <div ref={transcriptRoot} class="transcript" data-slot="message-scroller" data-markdown-renderer={markdownRenderer()} data-markdown-typewriter={rendererUsesTypewriter() ? "true" : undefined} data-markdown-synthetic-math={markdownRenderer() === "incremark-synthetic" ? "true" : undefined}>
+  return <div ref={transcriptRoot} class="transcript" data-slot="message-scroller" data-markdown-renderer={markdownRenderer()} data-transcript-renderer={transcriptRenderer()} data-markdown-typewriter={rendererUsesTypewriter() ? "true" : undefined} data-markdown-synthetic-math={advancedTranscript() || markdownRenderer() === "incremark-synthetic" ? "true" : undefined}>
     <div class="composer-renderer-switch">
       <label>Composer renderer<select aria-label="Composer renderer" title="Composer renderer" value={composerSurface()} onChange={(event) => switchComposerSurface(event.currentTarget.value as ComposerSurfaceMode)}>
         <For each={COMPOSER_SURFACE_OPTIONS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
+      </select></label>
+      <label>Transcript renderer<select aria-label="Transcript renderer" title="Transcript renderer" value={transcriptRenderer()} disabled={Boolean(props.chat.activeGeneration())} onChange={(event) => switchTranscriptRenderer(event.currentTarget.value as TranscriptRendererMode)}>
+        <For each={TRANSCRIPT_RENDERER_OPTIONS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
       </select></label>
     </div>
     <Show when={empty() && pullDistance() > 8}>
@@ -529,7 +542,11 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
                 <div data-slot="bubble" data-align={user() ? "end" : "start"} data-error={failed() ? "true" : undefined} data-editing={props.chat.editingEntryId() === message().id ? "true" : "false"} class={user() ? "bubble bubble-user" : "bubble bubble-assistant"}>
                   <div data-slot="bubble-content">
                     <Show when={user()} fallback={<>
-                      <Show when={message().content}><Suspense fallback={<div class="markdown-skeleton" />}><ChatMarkdown renderer={markdownRenderer()} typewriter={rendererUsesTypewriter()} syntheticMath={markdownRenderer() === "incremark-synthetic"} displayKey={item.displayKey} streaming={live()} streamVersion={item.streamVersion} onRendered={settleAfterMarkdown}>{message().content || ""}</ChatMarkdown></Suspense></Show>
+                      <Show when={message().content}><Suspense fallback={<div class="markdown-skeleton" />}>
+                        <Show when={advancedTranscript()} fallback={<ChatMarkdown renderer={markdownRenderer()} typewriter={rendererUsesTypewriter()} syntheticMath={markdownRenderer() === "incremark-synthetic"} displayKey={item.displayKey} streaming={live()} streamVersion={item.streamVersion} onRendered={settleAfterMarkdown}>{message().content || ""}</ChatMarkdown>}>
+                          <IncremarkAdvancedMarkdown displayKey={item.displayKey} streaming={live()} streamVersion={item.streamVersion} onRendered={settleAfterMarkdown}>{message().content || ""}</IncremarkAdvancedMarkdown>
+                        </Show>
+                      </Suspense></Show>
                       <Show when={failed()}>
                         <details class="assistant-error" open role="alert">
                           <summary><TriangleAlertIcon aria-hidden="true" /><strong>Request failed</strong></summary>
