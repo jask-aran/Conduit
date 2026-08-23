@@ -1,21 +1,10 @@
 .composer-renderer-switch { display: flex; align-items: center; gap: 10px; }
 .composer-renderer-switch label { flex: none; }
 
-/* Synthetic and Advanced intentionally share the same live layout contract.
-   The Incremark root already consumes the transcript width; inline-size
-   containment makes that horizontal size independent of descendant intrinsic
-   widths without adding layout/paint containment or clipping overflow. This
-   keeps display-math centering on a stable basis before, during and after a
-   stream. Advanced can then differ only in settled-state virtualization. */
-.transcript[data-markdown-synthetic-math="true"] .chat-markdown,
-.transcript[data-markdown-synthetic-math="true"] .chat-markdown > .incremark {
-  width: 100%;
-  min-width: 0;
-  max-width: 100%;
-}
-.transcript[data-markdown-synthetic-math="true"] .chat-markdown > .incremark {
-  contain: inline-size;
-}
+/* Renderer experiments must not alter the layout contract of the five
+   existing transcript renderers. Advanced-specific geometry belongs in
+   incremark-advanced.css so Synthetic remains identical to the known-good
+   pre-Advanced path. */
 
 @media (max-width: 720px) {
   .composer-renderer-switch { max-width: calc(100% - 24px); flex-wrap: wrap; justify-content: flex-end; }
