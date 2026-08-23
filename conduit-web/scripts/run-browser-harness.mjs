@@ -11,7 +11,7 @@ Options:
   --flow <stream|reconnect>         Browser flow to exercise (default: stream)
   --scenario <name>                 Reported scenario name (default: browser-streaming-baseline)
   --profile <steady|burst|jitter>   Source cadence profile (default: steady)
-  --renderer <marked-stable|marked|incremark|incremark-typewriter|incremark-synthetic>  Markdown renderer (default: marked)
+  --renderer <marked-stable|marked|incremark|incremark-typewriter|incremark-synthetic|incremark-advanced>  Renderer (default: marked)
   --typewriter                     Legacy alias for a Typewriter-capable Incremark renderer
   --require-typewriter-metrics     Require scheduled typewriter metric samples
   --text <value>                    Scripted assistant output
@@ -62,9 +62,11 @@ const expectedInteractions = valueAfter(args, "--expected-interactions", null);
 const instrumentation = valueAfter(args, "--instrumentation", "on");
 if (!["on", "off"].includes(instrumentation)) throw new Error("--instrumentation must be on or off");
 const renderer = valueAfter(args, "--renderer", "marked");
-if (!["marked-stable", "marked", "incremark", "incremark-typewriter", "incremark-synthetic"].includes(renderer)) throw new Error("--renderer must be marked-stable, marked, incremark, incremark-typewriter, or incremark-synthetic");
-if (args.includes("--typewriter") && !["incremark", "incremark-typewriter", "incremark-synthetic"].includes(renderer)) throw new Error("--typewriter requires an Incremark renderer");
-const rendererContract = fixture?.rendererContracts?.[renderer] || {};
+const rendererOptions = ["marked-stable", "marked", "incremark", "incremark-typewriter", "incremark-synthetic", "incremark-advanced"];
+if (!rendererOptions.includes(renderer)) throw new Error(`--renderer must be ${rendererOptions.join(", ")}`);
+if (args.includes("--typewriter") && !["incremark", "incremark-typewriter", "incremark-synthetic", "incremark-advanced"].includes(renderer)) throw new Error("--typewriter requires an Incremark renderer");
+const contractRenderer = renderer === "incremark-advanced" ? "incremark-synthetic" : renderer;
+const rendererContract = fixture?.rendererContracts?.[contractRenderer] || {};
 const resolvedExpectedAssertions = expectedAssertions == null
   ? rendererContract.expectedAssertions ?? fixture?.expectedAssertions
   : JSON.parse(expectedAssertions);
@@ -77,7 +79,7 @@ const environment = {
   ...(fixture ? { HARNESS_FIXTURE: fixture.id } : {}),
   HARNESS_PROFILE: valueAfter(args, "--profile", "steady"),
   HARNESS_RENDERER: renderer,
-  ...(args.includes("--typewriter") || renderer === "incremark-typewriter" || renderer === "incremark-synthetic" ? { HARNESS_TYPEWRITER: "1" } : {}),
+  ...(args.includes("--typewriter") || renderer === "incremark-typewriter" || renderer === "incremark-synthetic" || renderer === "incremark-advanced" ? { HARNESS_TYPEWRITER: "1" } : {}),
   ...(args.includes("--require-typewriter-metrics") ? { HARNESS_REQUIRE_TYPEWRITER_METRICS: "1" } : {}),
   HARNESS_TEXT: valueAfter(
     args,
