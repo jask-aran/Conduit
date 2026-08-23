@@ -455,6 +455,17 @@ test("Settings UI selects and persists all composer surfaces", async ({ page }) 
   await page.goto("/");
   await expect(page.getByRole("textbox", { name: "Message Pi" })).toBeVisible();
   await expect(page.locator(".composer")).toHaveAttribute("data-composer-surface", "frost");
+  const inlineRenderer = page.locator(".composer-renderer-switch select");
+  await expect(inlineRenderer).toHaveValue("frost");
+  await inlineRenderer.selectOption("static-experimental");
+  await expect(page.locator(".composer")).toHaveAttribute("data-composer-surface", "static-experimental");
+  await inlineRenderer.selectOption("static-047");
+  await expect(page.locator(".composer-stack-static-047")).toHaveCount(1);
+  await expect(page.locator(".composer-047")).toHaveCount(1);
+  await expect(page.locator(".composer-047-status")).toHaveCount(1);
+  await expect(page.locator(".composer")).toHaveCount(0);
+  await expect(page.locator(".composer-mobile-plus, .composer-glass-filter")).toHaveCount(0);
+  await inlineRenderer.selectOption("frost");
 
   await openPalette(page);
   await page.getByRole("option", { name: /^Settings…/ }).click();

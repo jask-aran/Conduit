@@ -49,7 +49,7 @@ function Actions(props: { message: Message; precedingUserId?: string; chat: Acti
   </div>;
 }
 
-export function Transcript(props: { chat: ActiveChatStore; partialContinue: boolean; markdownRenderer: MarkdownRendererId; profileLabel?: string; stickyFooter?: JSX.Element }) {
+export function Transcript(props: { chat: ActiveChatStore; partialContinue: boolean; markdownRenderer: MarkdownRendererId; profileLabel?: string; stickyFooter?: JSX.Element; composerRendererSwitch?: JSX.Element }) {
   let transcriptRoot!: HTMLDivElement;
   let motionShell!: HTMLDivElement;
   let viewport!: HTMLDivElement;
@@ -457,6 +457,7 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
   });
 
   return <div ref={transcriptRoot} class="transcript" data-slot="message-scroller" data-markdown-renderer={markdownRenderer()} data-markdown-typewriter={rendererUsesTypewriter() ? "true" : undefined} data-markdown-synthetic-math={markdownRenderer() === "incremark-synthetic" ? "true" : undefined}>
+    {props.composerRendererSwitch}
     <Show when={empty() && pullDistance() > 8}>
       <div class="empty-pull-hint" data-visible="true" data-armed={pullArmed() ? "true" : "false"} aria-hidden="true">
         {pullArmed() ? "Release to refresh" : "Pull to refresh"}

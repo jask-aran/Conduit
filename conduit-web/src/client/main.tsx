@@ -14,6 +14,8 @@ import { api, asList, pathChatId, pathProjectId, projectPath } from "./api/clien
 import type { ChatSummary, DashboardChat, Installation, Project, RuntimeIdentity, Template, TranscriptDetail, WorkspaceAppearance, WorkspacePolicy, WorkspaceSuggestion, WorkspaceSuggestionsPayload } from "./api/contracts";
 import { createErrorDiagnostic, formatRuntimeDiagnosticPrompt, type ErrorDiagnostic, type ErrorDiagnosticContext } from "./error-diagnostics";
 import { Composer, SPINNING_ACTIVITY, type ComposerStatus } from "./chat/composer";
+import { ComposerRendererSwitch } from "./chat/composer-renderer-switch";
+import { Static047Composer } from "./chat/static-047-composer";
 import { selectedComposerSurface, saveComposerSurface, type ComposerSurfaceMode } from "./chat/composer-surface";
 import { formatContextMetrics, saveContextMetrics, selectedContextMetrics, type ContextMetricId } from "./chat/context-metrics";
 import { HostUiRequests } from "./chat/host-ui-card";
@@ -41,6 +43,7 @@ import { ShortcutManager } from "./shortcuts/shortcut-manager";
 import "./project/dashboard.css";
 import "./chat/composer-geometry.css";
 import "./styles.css";
+import "./chat/static-047-composer.css";
 
 if (import.meta.env.PROD) registerSW({ immediate: true, onRegisteredSW: (_url, registration) => rememberPwaRegistration(registration) });
 
@@ -917,6 +920,11 @@ function App() {
     <HostUiRequests requests={chat.hostUiRequests()} onRespond={chat.respondHostUi} />
     {renderComposer()}
   </div>;
+  const renderStatic047ComposerStack = () => <div class="composer-stack-static-047" data-composer-renderer="static-047">
+    <HostUiRequests requests={chat.hostUiRequests()} onRespond={chat.respondHostUi} />
+    <Static047Composer chat={chat} attachments={attachments} models={models} profiles={profiles()} activeProfile={activeProfile()} serverOnline={runtime.connectivity() === "online"} voiceSettings={voiceSettings()} onChooseProfile={(id) => void switchProfile(id)} onOpenSettings={openSettings} onOpenAttachments={() => attachFileInput?.click()} />
+  </div>;
+  const renderComposerRendererSwitch = () => <ComposerRendererSwitch value={composerSurface()} onChange={switchComposerSurface} />;
 
   return <>
     <Toaster richColors />
@@ -950,8 +958,9 @@ function App() {
           <Show when={selectedProject()?.kind === "workspace" && [...runtime.processes().values()].some((process) => process.chatId !== catalogue.selectedId() && process.active)}><div class="workspace-warning"><TriangleAlertIcon /><div><strong>Another chat is working in this Workspace</strong><p>Both agents can edit the same files. Conduit does not lock the Workspace or create worktrees automatically.</p></div></div></Show>
           <div class="work-area">
             <section class="work-area-conversation" aria-label="Conversation">
-              <Transcript chat={chat} partialContinue={partialContinue()} markdownRenderer={markdownRenderer()} profileLabel={activeProfile()?.label || activeProfile()?.id || chat.templateId() || undefined} stickyFooter={composerSurface() === "static-experimental" ? undefined : renderComposerStack()} />
+              <Transcript chat={chat} partialContinue={partialContinue()} markdownRenderer={markdownRenderer()} profileLabel={activeProfile()?.label || activeProfile()?.id || chat.templateId() || undefined} composerRendererSwitch={renderComposerRendererSwitch()} stickyFooter={composerSurface() === "static-experimental" || composerSurface() === "static-047" ? undefined : renderComposerStack()} />
               <Show when={composerSurface() === "static-experimental"}>{renderComposerStack()}</Show>
+              <Show when={composerSurface() === "static-047"}>{renderStatic047ComposerStack()}</Show>
             </section>
           </div>
         </>}>
