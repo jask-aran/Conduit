@@ -20,8 +20,7 @@ import {
   type TailFollowState,
 } from "./transcript-tail-follow";
 
-const ChatMarkdown = lazy(() => import("./markdown").then((module) => ({ default: module.ChatMarkdown })));
-const IncremarkAdvancedMarkdown = lazy(() => import("./incremark-advanced").then((module) => ({ default: module.IncremarkAdvancedMarkdown })));
+const TranscriptMarkdown = lazy(() => import("./transcript-markdown").then((module) => ({ default: module.TranscriptMarkdown })));
 const fullDateTime = (value?: string) => {
   if (!value) return "";
   const date = new Date(value);
@@ -518,7 +517,7 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
       <label>Composer renderer<select aria-label="Composer renderer" title="Composer renderer" value={composerSurface()} onChange={(event) => switchComposerSurface(event.currentTarget.value as ComposerSurfaceMode)}>
         <For each={COMPOSER_SURFACE_OPTIONS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
       </select></label>
-      <label>Transcript renderer<select aria-label="Transcript renderer" title="Transcript renderer" value={transcriptRenderer()} disabled={props.chat.streaming() || props.chat.stopping()} onChange={(event) => switchTranscriptRenderer(event.currentTarget.value as TranscriptRendererMode)}>
+      <label>Transcript renderer<select aria-label="Transcript renderer" title="Transcript renderer" value={transcriptRenderer()} onChange={(event) => switchTranscriptRenderer(event.currentTarget.value as TranscriptRendererMode)}>
         <For each={TRANSCRIPT_RENDERER_OPTIONS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
       </select></label>
     </div>
@@ -553,9 +552,7 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
                   <div data-slot="bubble-content">
                     <Show when={user()} fallback={<>
                       <Show when={message().content}><Suspense fallback={<div class="markdown-skeleton" />}>
-                        <Show when={advancedTranscript()} fallback={<ChatMarkdown renderer={markdownRenderer()} typewriter={rendererUsesTypewriter()} syntheticMath={markdownRenderer() === "incremark-synthetic"} displayKey={item.displayKey} streaming={live()} streamVersion={item.streamVersion} onRendered={settleAfterMarkdown}>{message().content || ""}</ChatMarkdown>}>
-                          <IncremarkAdvancedMarkdown displayKey={item.displayKey} streaming={live()} streamVersion={item.streamVersion} onRendered={settleAfterMarkdown}>{message().content || ""}</IncremarkAdvancedMarkdown>
-                        </Show>
+                        <TranscriptMarkdown renderer={transcriptRenderer()} displayKey={item.displayKey} streaming={live()} streamVersion={item.streamVersion} onRendered={settleAfterMarkdown}>{message().content || ""}</TranscriptMarkdown>
                       </Suspense></Show>
                       <Show when={failed()}>
                         <details class="assistant-error" open role="alert">
