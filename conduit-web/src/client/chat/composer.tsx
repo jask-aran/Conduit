@@ -20,7 +20,7 @@ import type { AttachmentsStore } from "../state/attachments";
 import type { ModelSettings } from "../state/model-settings";
 import { isMobileLayout } from "../navigation/mobile-layout";
 import { AttachmentCards } from "./attachments";
-import { COMPOSER_SURFACE_CHANGE_EVENT, selectedComposerSurface, type ComposerSurfaceMode } from "./composer-surface";
+import { allowedComposerSurface, COMPOSER_SURFACE_CHANGE_EVENT, liquidGlassRuntimeEnabled, selectedComposerSurface, type ComposerSurfaceMode } from "./composer-surface";
 import { formatContextMetrics, type ContextMetricId } from "./context-metrics";
 import { createVoiceDictationClient, type VoiceDictationState } from "./voice-dictation-client";
 import type { AudioSignalLevel } from "./voice-audio";
@@ -314,7 +314,7 @@ export function Composer(props: {
       props.chat.draft();
       queueMicrotask(resize);
     });
-    const composerSurfaceChanged = (event: Event) => setComposerSurface((event as CustomEvent<ComposerSurfaceMode>).detail);
+    const composerSurfaceChanged = (event: Event) => setComposerSurface(allowedComposerSurface((event as CustomEvent<ComposerSurfaceMode>).detail));
     const voiceKeyDown = (event: KeyboardEvent) => {
       if (event.defaultPrevented || document.querySelector('.settings-dialog[data-state="open"]')) return;
       if (!matchesShortcut(event, props.voiceSettings.shortcut)) return;
@@ -362,7 +362,7 @@ export function Composer(props: {
     </Show>
     <div class="composer-surface-shell" data-composer-surface={composerSurface()}>
       <div class="composer" data-composer-surface={composerSurface()}>
-        <Show when={composerSurface() === "liquid"}><LiquidGlassSurface /></Show>
+        <Show when={liquidGlassRuntimeEnabled() && composerSurface() === "liquid"}><LiquidGlassSurface /></Show>
         <div class="composer-content">
           <MobileComposerOptions composer={props} />
           <div class="composer-input-shell">
