@@ -5,6 +5,7 @@ import test from "node:test";
 
 const stylesPath = path.resolve(import.meta.dirname, "../../conduit-web/src/client/styles.css");
 const performanceComposerStylesPath = path.resolve(import.meta.dirname, "../../conduit-web/src/client/chat/performance-composer.css");
+const liquidGlassSurfacePath = path.resolve(import.meta.dirname, "../../conduit-web/src/client/chat/liquid-glass-surface.tsx");
 const panelMotionPath = path.resolve(import.meta.dirname, "../../conduit-web/src/client/panel-motion.ts");
 const mainPath = path.resolve(import.meta.dirname, "../../conduit-web/src/client/main.tsx");
 const transcriptPath = path.resolve(import.meta.dirname, "../../conduit-web/src/client/chat/transcript.tsx");
@@ -104,6 +105,18 @@ test("static composer keeps material chrome without sampling transcript pixels",
   assert.match(staticRim, /linear-gradient\(150deg/);
   assert.match(staticSheen, /content:\s*""/);
   assert.match(staticSheen, /radial-gradient\(150% 72%/);
+});
+
+test("liquid glass maps use measured user-space composer dimensions", async () => {
+  const liquidSurface = await fs.readFile(liquidGlassSurfacePath, "utf8");
+
+  assert.match(liquidSurface, /primitiveUnits="userSpaceOnUse"/);
+  assert.match(liquidSurface, /setFilterWidth\(width\)/);
+  assert.match(liquidSurface, /setFilterHeight\(height\)/);
+  assert.match(liquidSurface, /width=\{filterWidth\(\)\}/);
+  assert.match(liquidSurface, /height=\{filterHeight\(\)\}/);
+  assert.doesNotMatch(liquidSurface, /<feImage[^>]+width="100%"/);
+  assert.doesNotMatch(liquidSurface, /<feImage[^>]+height="100%"/);
 });
 
 test("composer remains a sibling overlay outside the transcript motion island", async () => {
