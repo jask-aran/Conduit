@@ -24,19 +24,17 @@ test("Advanced deliberately uses the same live renderer contract as Synthetic", 
   assert.match(source, /streaming=\{streaming\(\)\}/);
   assert.match(source, /streamVersion/);
   assert.doesNotMatch(source, /typewriter=\{false\}|syntheticMath=\{false\}/);
-  assert.match(transcriptMarkdown, /advanced\(\)[\s\S]*\? "incremark-synthetic"/);
   assert.match(transcriptMarkdown, /renderer="incremark-synthetic"/);
-  assert.match(transcriptMarkdown, /syntheticMath=\{baseRenderer\(\) === "incremark-synthetic"\}/);
 });
 
-test("live renderer attachment receives latest source and leaves typewriter catch-up to the adaptive backlog controller", async () => {
+test("existing renderers remain on the original ChatMarkdown path", async () => {
   const router = await read("transcript-markdown.tsx");
-  const typewriter = await read("incremark-typewriter.ts");
-  assert.match(router, /streaming:\s*props\.streaming/);
-  assert.match(router, /\{props\.children \|\| ""\}/);
+  assert.match(router, /import \{ ChatMarkdown, type ChatMarkdownProps \} from "\.\/markdown"/);
+  assert.match(router, /fallback=\{\s*<ChatMarkdown/);
+  assert.match(router, /renderer=\{baseRenderer\(\)\}/);
+  assert.match(router, /typewriter=\{baseRenderer\(\) === "incremark-typewriter" \|\| baseRenderer\(\) === "incremark-synthetic"\}/);
+  assert.match(router, /syntheticMath=\{baseRenderer\(\) === "incremark-synthetic"\}/);
   assert.doesNotMatch(router, /setAttached|seed\(|effectiveStreaming/);
-  assert.match(typewriter, /TYPEWRITER_BACKLOG_WINDOW_MS\s*=\s*250/);
-  assert.match(typewriter, /catchUpRate/);
 });
 
 test("Incremark Advanced waits for streaming, typewriter and deferred math to go quiet", async () => {
@@ -47,16 +45,18 @@ test("Incremark Advanced waits for streaming, typewriter and deferred math to go
   assert.match(source, /SETTLE_DELAY_FRAMES\s*=\s*2/);
 });
 
-test("Synthetic and Advanced share stable inline sizing while only Advanced virtualizes settled math per block", async () => {
+test("Advanced containment cannot change Synthetic or other existing renderer layout", async () => {
   const visibility = await read("transcript-visibility.ts");
   const advancedCss = await read("incremark-advanced.css");
   const rendererCss = await read("transcript-renderer.css");
   assert.match(visibility, /advancedIncremarkBlocks/);
   assert.match(visibility, /!advancedIncremarkBlocks\.has\(element\)/);
   assert.match(visibility, /data-incremark-advanced-state/);
-  assert.match(rendererCss, /data-markdown-synthetic-math="true"[\s\S]*contain:\s*inline-size/);
-  assert.doesNotMatch(rendererCss, /contain:\s*(?:layout|paint|strict|content)/);
-  assert.doesNotMatch(advancedCss, /contain:/);
+  assert.doesNotMatch(rendererCss, /contain\s*:/);
+  assert.doesNotMatch(rendererCss, /data-markdown-synthetic-math/);
+  assert.match(advancedCss, /:has\(\.incremark-advanced-shell\)[\s\S]*width:\s*100%/);
+  assert.match(advancedCss, /\.incremark-advanced-shell[\s\S]*contain:\s*inline-size/);
+  assert.doesNotMatch(advancedCss, /contain:\s*(?:layout|paint|strict|content)/);
 });
 
 test("transcript picker exposes the five existing renderers plus Advanced and remains live during generation", async () => {
