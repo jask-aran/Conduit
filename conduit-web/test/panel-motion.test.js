@@ -96,6 +96,7 @@ test("desktop open-close uses atomic geometry, compositor surfaces, and motion-s
   assert.match(movingFrost, /backdrop-filter:\s*none/);
   assert.match(movingFrost, /-webkit-backdrop-filter:\s*none/);
   assert.match(movingFrost, /color-mix\(in oklch, var\(--background\), transparent 18%\)/);
+  assert.equal(rule(performanceStyles, 'body[data-panel-geometry-motion="true"] .composer[data-composer-surface="frosted-live"]'), "");
 });
 
 test("static composer keeps material chrome without sampling transcript pixels", async () => {
@@ -157,6 +158,8 @@ test("composer remains a sibling overlay outside the transcript motion island", 
 
   const frost = rule(performanceStyles, '.composer[data-composer-surface="frost"]');
   assert.match(frost, /backdrop-filter:\s*blur\(24px\)/);
+  const frostedLive = rule(performanceStyles, '.composer[data-composer-surface="frosted-live"]');
+  assert.match(frostedLive, /backdrop-filter:\s*blur\(24px\)/);
   assert.doesNotMatch(performanceStyles, /position:\s*sticky/);
 });
 

@@ -98,6 +98,17 @@
     inset 0 -1px 0 rgba(255, 255, 255, 0.1);
 }
 
+/* Frosted Live keeps the native blur active during authored panel motion. */
+.composer[data-composer-surface="frosted-live"] {
+  background: #ffffff2b;
+  backdrop-filter: blur(24px);
+  border: 1px solid #ffffff4d;
+  box-shadow:
+    0 8px 32px rgba(0, 0, 0, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.5),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.1);
+}
+
 /* During authored panel motion, preserve the frosted appearance without
    continuously resampling a moving desktop backdrop. Live blur returns two
    frames after the last panel motion settles. */

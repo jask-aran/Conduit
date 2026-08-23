@@ -75,7 +75,7 @@ for (const icon of ["pwa-192x192.png", "pwa-512x512.png", "favicon.svg"]) {
 }
 const cssAssets = assets.filter((asset) => asset.initial && asset.type === "css");
 const cssText = cssAssets.map((asset) => fs.readFileSync(path.join(dist, asset.file), "utf8")).join("\n");
-const frostRule = cssText.match(/\.composer\[data-composer-surface=frost\]\{[^}]+\}/);
+const frostRule = cssText.match(/\.composer\[data-composer-surface=frost\][^{]*\{[^}]+\}/);
 const frostFailures = [];
 if (!frostRule) {
   frostFailures.push("missing .composer[data-composer-surface=frost] rule");
