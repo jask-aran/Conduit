@@ -17,7 +17,9 @@ export type TranscriptMarkdownProps = Omit<ChatMarkdownProps, "renderer"> & {
  */
 export function TranscriptMarkdown(props: TranscriptMarkdownProps) {
   const advanced = () => props.renderer === "incremark-advanced";
-  const baseRenderer = (): MarkdownRendererId => props.renderer as MarkdownRendererId;
+  const baseRenderer = (): MarkdownRendererId => advanced()
+    ? "incremark-synthetic"
+    : props.renderer as MarkdownRendererId;
 
   return <Show when={advanced()} fallback={
     <ChatMarkdown
