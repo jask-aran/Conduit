@@ -1,5 +1,5 @@
 import { createEffect, createMemo, createRenderEffect, createSignal, For, lazy, onCleanup, onMount, Show, Suspense } from "solid-js";
-import { CopyIcon, PencilIcon, PlayIcon, RefreshCwIcon, TriangleAlertIcon } from "lucide-solid";
+import { ArrowDownIcon, CopyIcon, PencilIcon, PlayIcon, RefreshCwIcon, TriangleAlertIcon } from "lucide-solid";
 import { Button, Spinner } from "@/components/primitives";
 import type { Message, RuntimeActivity, ToolItem } from "../api/contracts";
 import type { ActiveChatStore } from "../state/active-chat";
@@ -355,6 +355,31 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
 
   onMount(() => {
     const syncComposerSurface = () => setComposerSurface(selectedComposerSurface());
+    let latestButtonAnchorFrame: number | null = null;
+    const syncLatestButtonAnchor = () => {
+      latestButtonAnchorFrame = null;
+      // The composer is a later-painted overlay, so derive the button's
+      // coordinates from its actual surface rather than from fixed offsets.
+      const conversation = transcriptRoot.closest<HTMLElement>(".work-area-conversation");
+      const composerShell = conversation?.querySelector<HTMLElement>(".composer-surface-shell");
+      if (!conversation || !composerShell) return;
+      const shellRect = motionShell.getBoundingClientRect();
+      const composerRect = composerShell.getBoundingClientRect();
+      if (shellRect.width <= 0 || shellRect.height <= 0 || composerRect.width <= 0 || composerRect.height <= 0) return;
+      transcriptRoot.style.setProperty("--message-scroller-button-right", `${Math.max(8, shellRect.right - composerRect.right)}px`);
+      transcriptRoot.style.setProperty("--message-scroller-button-bottom", `${Math.max(8, shellRect.bottom - composerRect.top + 10)}px`);
+    };
+    const scheduleLatestButtonAnchor = () => {
+      if (latestButtonAnchorFrame != null) return;
+      latestButtonAnchorFrame = requestAnimationFrame(syncLatestButtonAnchor);
+    };
+    const composerStack = transcriptRoot.closest<HTMLElement>(".work-area-conversation")?.querySelector<HTMLElement>(".composer-stack");
+    const composerResizeObserver = new ResizeObserver(scheduleLatestButtonAnchor);
+    if (composerStack) composerResizeObserver.observe(composerStack);
+    const visualViewport = window.visualViewport;
+    window.addEventListener("resize", scheduleLatestButtonAnchor);
+    visualViewport?.addEventListener("resize", scheduleLatestButtonAnchor);
+    scheduleLatestButtonAnchor();
     panelMotion = mountTranscriptPanelMotion(transcriptRoot, motionShell);
     transcriptVisibility = mountTranscriptVisibility(transcriptRoot, viewport, thread);
     const claimUserScroll = () => {
@@ -451,6 +476,12 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
       viewport.removeEventListener("touchend", onTouchEnd);
       viewport.removeEventListener("touchcancel", onTouchEnd);
       window.removeEventListener(COMPOSER_SURFACE_CHANGE_EVENT, syncComposerSurface);
+      composerResizeObserver.disconnect();
+      window.removeEventListener("resize", scheduleLatestButtonAnchor);
+      visualViewport?.removeEventListener("resize", scheduleLatestButtonAnchor);
+      if (latestButtonAnchorFrame != null) cancelAnimationFrame(latestButtonAnchorFrame);
+      transcriptRoot.style.removeProperty("--message-scroller-button-right");
+      transcriptRoot.style.removeProperty("--message-scroller-button-bottom");
       if (scrollFrame != null) cancelAnimationFrame(scrollFrame);
       cancelTypewriterTailFrame();
       cancelTypewriterTailRejoin();
@@ -524,7 +555,7 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
         }}</For>
         </div>
       </div>
-      <Show when={!following()}><Button class="message-scroller-button" aria-label="Scroll to latest" onClick={() => { if (rendererUsesInertialTailFollow()) resumeTypewriterTailFollow("user-scroll-to-latest"); else { setFollowing(true); scrollBottom(); } }}>↓</Button></Show>
+      <Show when={!following()}><Button variant="ghost" size="icon-sm" class="message-scroller-button" data-composer-surface={composerSurface()} aria-label="Scroll to latest" title="Scroll to latest" onClick={() => { if (rendererUsesInertialTailFollow()) resumeTypewriterTailFollow("user-scroll-to-latest"); else { setFollowing(true); scrollBottom(); } }}><ArrowDownIcon /></Button></Show>
     </div>
   </div>;
 }
