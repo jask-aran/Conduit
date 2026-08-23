@@ -1,36 +1,42 @@
+import { MARKDOWN_RENDERER_OPTIONS, type MarkdownRendererId } from "./markdown-settings";
 import "./transcript-renderer.css";
 
-export type TranscriptRendererMode = "current" | "incremark-advanced";
+export type TranscriptRendererMode = MarkdownRendererId | "incremark-advanced";
 
 export const TRANSCRIPT_RENDERER_STORAGE_KEY = "conduit:transcript-renderer";
 
 export const TRANSCRIPT_RENDERER_OPTIONS: readonly {
   value: TranscriptRendererMode;
   label: string;
-  description: string;
+  description?: string;
 }[] = [
-  {
-    value: "current",
-    label: "Current",
-    description: "Use the currently selected Markdown renderer and its existing transcript settlement behavior.",
-  },
+  ...MARKDOWN_RENDERER_OPTIONS,
   {
     value: "incremark-advanced",
     label: "Incremark Advanced",
-    description: "Keep the proven Incremark streaming DOM, then freeze its final source in place and virtualize settled blocks independently.",
+    description: "Use the Synthetic streaming path unchanged, then freeze and independently virtualize settled blocks.",
   },
 ];
 
-const isTranscriptRendererMode = (value: string | null): value is TranscriptRendererMode =>
-  value === "current" || value === "incremark-advanced";
+const MARKDOWN_RENDERER_IDS = new Set<MarkdownRendererId>(MARKDOWN_RENDERER_OPTIONS.map((option) => option.value));
 
-export function selectedTranscriptRenderer(storage: Pick<Storage, "getItem"> = localStorage): TranscriptRendererMode {
+export function isTranscriptRendererMode(value: string | null): value is TranscriptRendererMode {
+  return value === "incremark-advanced" || (value != null && MARKDOWN_RENDERER_IDS.has(value as MarkdownRendererId));
+}
+
+export function selectedTranscriptRenderer(
+  fallback: MarkdownRendererId,
+  storage: Pick<Storage, "getItem"> = localStorage,
+): TranscriptRendererMode {
   const params = typeof location === "undefined" ? null : new URLSearchParams(location.search);
   const override = params?.get("transcriptRenderer")
     || (params?.get("markdownRenderer") === "incremark-advanced" ? "incremark-advanced" : null);
   if (isTranscriptRendererMode(override)) return override;
   const selected = storage.getItem(TRANSCRIPT_RENDERER_STORAGE_KEY);
-  return isTranscriptRendererMode(selected) ? selected : "current";
+  if (isTranscriptRendererMode(selected)) return selected;
+  // "current" was written by the first Advanced prototype. Treat it as the
+  // canonical Markdown renderer during the migration to one six-way picker.
+  return fallback;
 }
 
 export function saveTranscriptRenderer(
