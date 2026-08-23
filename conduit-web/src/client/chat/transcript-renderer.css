@@ -1,0 +1,7 @@
+.composer-renderer-switch { display: flex; align-items: center; gap: 10px; }
+.composer-renderer-switch label { flex: none; }
+.composer-renderer-switch select:disabled { cursor: not-allowed; opacity: 0.55; }
+
+@media (max-width: 720px) {
+  .composer-renderer-switch { max-width: calc(100% - 24px); flex-wrap: wrap; justify-content: flex-end; }
+}
