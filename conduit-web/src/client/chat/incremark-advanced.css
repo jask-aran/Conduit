@@ -1,11 +1,8 @@
 .incremark-advanced-shell { display: contents; }
 
-/* Advanced establishes its final inline geometry before the first streamed
-   block paints. Settlement therefore does not introduce a new containment or
-   sizing rule: it only releases the blocks to the transcript visibility
-   manager. Inline-size containment keeps sibling visibility from changing the
-   width used to centre display KaTeX while preserving overflow such as wide
-   tables; no paint/layout containment is introduced here. */
+/* Keep the live geometry equivalent to Synthetic: these explicit block widths
+   resolve to the same full-width boxes but give settlement a stable inline
+   basis. No containment is introduced while the typewriter is active. */
 .incremark-advanced-shell > .chat-markdown,
 .incremark-advanced-shell > .chat-markdown > .incremark {
   width: 100%;
@@ -13,6 +10,11 @@
   max-width: 100%;
 }
 
-.incremark-advanced-shell > .chat-markdown > .incremark {
+/* Only after the existing Synthetic renderer has completely finished do we
+   add inline-size containment. The used width is already fixed above, so this
+   changes the settled root's intrinsic participation without replacing nodes
+   or changing its visible box. That lets sibling blocks virtualize without
+   changing the centering basis used by display KaTeX. */
+.incremark-advanced-shell[data-incremark-advanced-state="settled"] > .chat-markdown > .incremark {
   contain: inline-size;
 }
