@@ -1,3 +1,5 @@
+import "./transcript-renderer.css";
+
 export type TranscriptRendererMode = "current" | "incremark-advanced";
 
 export const TRANSCRIPT_RENDERER_STORAGE_KEY = "conduit:transcript-renderer";
