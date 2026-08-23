@@ -17,14 +17,7 @@ export type PanelGeometryMotionDetail = {
 };
 
 const activeMotions = new Map<PanelGeometryMotionSource, number>();
-let composerMotion: Animation | null = null;
 let motionReleaseFrame = 0;
-
-function transformX(element: HTMLElement) {
-  const transform = getComputedStyle(element).transform;
-  if (transform === "none") return 0;
-  return new DOMMatrixReadOnly(transform).m41;
-}
 
 function cancelMotionRelease() {
   if (motionReleaseFrame) cancelAnimationFrame(motionReleaseFrame);
@@ -52,37 +45,9 @@ function markPanelMotion(detail: PanelGeometryMotionDetail) {
   });
 }
 
-function animateComposer(detail: PanelGeometryMotionDetail) {
-  if (detail.phase !== "begin" || detail.targetSize == null || typeof document === "undefined") return;
-  const composer = document.querySelector<HTMLElement>(".composer-wrap");
-  if (!composer) return;
-  const current = transformX(composer);
-  composerMotion?.cancel();
-  const delta = detail.targetSize - detail.size;
-  const naturalShift = detail.source === "sidebar" ? delta / 2 : -delta / 2;
-  composer.style.willChange = "transform";
-  composerMotion = composer.animate([
-    { transform: `translateX(${current - naturalShift}px)` },
-    { transform: "translateX(0px)" },
-  ], {
-    duration: detail.duration || 0,
-    easing: detail.easing || "linear",
-    fill: "forwards",
-  });
-}
-
-function settleComposerMotion(detail: PanelGeometryMotionDetail) {
-  if (detail.phase !== "end" || activeMotions.size || typeof document === "undefined") return;
-  composerMotion?.cancel();
-  composerMotion = null;
-  document.querySelector<HTMLElement>(".composer-wrap")?.style.removeProperty("will-change");
-}
-
 export function dispatchPanelGeometryMotion(detail: PanelGeometryMotionDetail) {
   markPanelMotion(detail);
-  animateComposer(detail);
   window.dispatchEvent(new CustomEvent<PanelGeometryMotionDetail>(PANEL_GEOMETRY_MOTION_EVENT, { detail }));
-  settleComposerMotion(detail);
 }
 
 /** Approximate CSS `ease` (cubic-bezier(0.25, 0.1, 0.25, 1)) with a smoothstep-like curve. */

@@ -9,6 +9,7 @@ const liquidGlassSurfacePath = path.resolve(import.meta.dirname, "../../conduit-
 const panelMotionPath = path.resolve(import.meta.dirname, "../../conduit-web/src/client/panel-motion.ts");
 const mainPath = path.resolve(import.meta.dirname, "../../conduit-web/src/client/main.tsx");
 const transcriptPath = path.resolve(import.meta.dirname, "../../conduit-web/src/client/chat/transcript.tsx");
+const transcriptMotionPath = path.resolve(import.meta.dirname, "../../conduit-web/src/client/chat/transcript-motion.ts");
 const transcriptVisibilityPath = path.resolve(import.meta.dirname, "../../conduit-web/src/client/chat/transcript-visibility.ts");
 const sidebarPath = path.resolve(import.meta.dirname, "../../conduit-web/src/client/navigation/sidebar.tsx");
 const sidebarStylesPath = path.resolve(import.meta.dirname, "../../conduit-web/src/client/navigation/sidebar.css");
@@ -52,6 +53,7 @@ test("desktop panel shells transition open and close while surfaces fill the she
   assert.match(resizeHandle, /width:\s*24px/);
   assert.doesNotMatch(styles, /\.workspace-resizing \.chat-meteors/);
   const transcriptMotionShell = rule(styles, ".transcript-motion-shell");
+  const conversationMotion = rule(styles, ".work-area-conversation");
   assert.match(transcriptMotionShell, /width:\s*100%/);
   assert.match(transcriptMotionShell, /position:\s*relative/);
   assert.match(transcriptMotionShell, /contain:\s*layout/);
@@ -59,6 +61,8 @@ test("desktop panel shells transition open and close while surfaces fill the she
   assert.doesNotMatch(transcriptMotionShell, /will-change:\s*transform/);
   assert.match(transcriptMotionShell, /container-name:\s*chat-main/);
   assert.match(transcriptMotionShell, /container-type:\s*inline-size/);
+  assert.match(conversationMotion, /transform:\s*translate3d\(0,\s*0,\s*0\)/);
+  assert.match(conversationMotion, /will-change:\s*transform/);
   const settingsRailNav = rule(styles, ".settings-rail nav");
   assert.match(settingsRailNav, /display:\s*flex/);
   assert.match(settingsRailNav, /flex-direction:\s*column/);
@@ -67,9 +71,10 @@ test("desktop panel shells transition open and close while surfaces fill the she
 });
 
 test("desktop open-close uses atomic geometry, compositor surfaces, and motion-safe frost", async () => {
-  const [performanceStyles, panelMotion, sidebarSource] = await Promise.all([
+  const [performanceStyles, panelMotion, transcriptMotion, sidebarSource] = await Promise.all([
     fs.readFile(performanceComposerStylesPath, "utf8"),
     fs.readFile(panelMotionPath, "utf8"),
+    fs.readFile(transcriptMotionPath, "utf8"),
     fs.readFile(sidebarPath, "utf8"),
   ]);
 
@@ -82,9 +87,10 @@ test("desktop open-close uses atomic geometry, compositor surfaces, and motion-s
   assert.match(sidebarSource, /setShellWidth\(targetWidth\)/);
   assert.doesNotMatch(sidebarSource, /sampleEdge|sidebarEdgeRaf|getBoundingClientRect\(\)\.width/);
 
-  assert.match(panelMotion, /document\.querySelector<HTMLElement>\("\.composer-wrap"\)/);
-  assert.match(panelMotion, /naturalShift = detail\.source === "sidebar" \? delta \/ 2 : -delta \/ 2/);
+  assert.doesNotMatch(panelMotion, /composerMotion|animateComposer|\.composer-wrap/);
   assert.match(panelMotion, /document\.body\.dataset\.panelGeometryMotion = "true"/);
+  assert.match(transcriptMotion, /transcript\.closest<HTMLElement>\("\.work-area-conversation"\)/);
+  assert.match(transcriptMotion, /motion = conversationMotion\.animate\(/);
 
   const movingFrost = rule(performanceStyles, 'body[data-panel-geometry-motion="true"] .composer[data-composer-surface="frost"]');
   assert.match(movingFrost, /backdrop-filter:\s*none/);
@@ -132,6 +138,9 @@ test("composer remains a sibling overlay outside the transcript motion island", 
   assert.ok(transcriptIndex >= 0, "main.tsx should render Transcript");
   assert.ok(composerIndex > transcriptIndex, "composer should be painted after Transcript as its sibling");
   assert.doesNotMatch(transcript, /stickyFooter|footer\?:\s*JSX\.Element|props\.(stickyFooter|footer)/);
+  assert.doesNotMatch(transcript, /transcriptRoot\.style\.setProperty\("--message-scroller-button/);
+  assert.match(transcript, /latestButton\.style\.setProperty\("--message-scroller-button-bottom"/);
+  assert.match(transcript, /Math\.abs\(blockSize - composerBlockSize\) < 0\.5/);
 
   const motionShell = rule(performanceStyles, ".transcript-motion-shell");
   assert.equal(motionShell, "");

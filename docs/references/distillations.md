@@ -186,9 +186,9 @@ Add an entry through `$tacit-knowledge` after explicit approval or validated rep
 ### Separate resize mechanics from panel presentation
 
 - **Type:** Gotcha.
-- **Rule:** Never transition a CSS property while pointer input directly changes it. Put open/close animation on an inner presentation surface, keep the resize shell immediate and overflow-visible for its gutter, schedule pointer updates with `requestAnimationFrame`, and persist only when the gesture ends.
-- **Scope:** Resizable Solid surfaces, beginning with `WorkspacePanel` and its detail splitter. A visible panel surface may clip its contents; its edge-spanning resize target must not be clipped with them.
-- **Evidence:** The shared 160ms width transition was continuously retargeted during drag, causing cursor-to-panel lag; `overflow: hidden` cut the `left: -12px; width: 24px` workspace gutter in half. The focused browser workspace-panel test now rapidly drags the gutter and asserts the final width.
+- **Rule:** Never transition a CSS property while pointer input directly changes it. Keep the resize shell immediate and overflow-visible for its gutter, schedule pointer updates with `requestAnimationFrame`, and persist only when the gesture ends. During open/close, animate one shared conversation surface instead of separate transcript and composer surfaces. Never write geometry variables on a transcript ancestor; apply dynamic geometry to the narrowest rendered control and ignore width-only observer notifications when CSS can own that axis.
+- **Scope:** Resizable Solid surfaces, beginning with `WorkspacePanel`, panel-driven transcript/composer motion, and overlay controls such as the scroll-to-latest button. A visible panel surface may clip its contents; its edge-spanning resize target must not be clipped with them.
+- **Evidence:** The shared 160ms width transition was continuously retargeted during drag, causing cursor-to-panel lag; `overflow: hidden` cut the `left: -12px; width: 24px` workspace gutter in half. A later composer `ResizeObserver` wrote two inherited variables on `.transcript`, and Chrome then walked 10,588 elements for 30–42ms during panel motion. Button-local geometry and shared conversation motion passed the focused panel contract plus workspace resize and open/close browser checks; manual review found the result substantially smoother.
 
 ## Streaming Markdown renderer invariants
 

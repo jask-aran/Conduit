@@ -57,6 +57,8 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
   let motionShell!: HTMLDivElement;
   let viewport!: HTMLDivElement;
   let thread!: HTMLDivElement;
+  let latestButton: HTMLButtonElement | undefined;
+  let scheduleLatestButtonAnchor = () => {};
   let panelMotion: ReturnType<typeof mountTranscriptPanelMotion> | null = null;
   let transcriptVisibility: ReturnType<typeof mountTranscriptVisibility> | null = null;
   let previousLoaded: string | null = null;
@@ -378,25 +380,36 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
   onMount(() => {
     const syncComposerSurface = () => setComposerSurface(selectedComposerSurface());
     let latestButtonAnchorFrame: number | null = null;
+    let composerBlockSize = -1;
     const syncLatestButtonAnchor = () => {
       latestButtonAnchorFrame = null;
-      // The composer is a later-painted overlay, so derive the button's
-      // coordinates from its actual surface rather than from fixed offsets.
+      // The horizontal anchor follows the centred composer through CSS. Only
+      // its dynamic height needs measurement, and that style belongs on the
+      // button rather than the inherited transcript root.
+      if (!latestButton?.isConnected) return;
       const conversation = transcriptRoot.closest<HTMLElement>(".work-area-conversation");
       const composerShell = conversation?.querySelector<HTMLElement>(".composer-surface-shell");
       if (!conversation || !composerShell) return;
       const shellRect = motionShell.getBoundingClientRect();
       const composerRect = composerShell.getBoundingClientRect();
       if (shellRect.width <= 0 || shellRect.height <= 0 || composerRect.width <= 0 || composerRect.height <= 0) return;
-      transcriptRoot.style.setProperty("--message-scroller-button-right", `${Math.max(8, shellRect.right - composerRect.right)}px`);
-      transcriptRoot.style.setProperty("--message-scroller-button-bottom", `${Math.max(8, shellRect.bottom - composerRect.top + 10)}px`);
+      const bottom = `${Math.max(8, shellRect.bottom - composerRect.top + 10)}px`;
+      if (latestButton.style.getPropertyValue("--message-scroller-button-bottom") !== bottom) {
+        latestButton.style.setProperty("--message-scroller-button-bottom", bottom);
+      }
     };
-    const scheduleLatestButtonAnchor = () => {
+    scheduleLatestButtonAnchor = () => {
       if (latestButtonAnchorFrame != null) return;
       latestButtonAnchorFrame = requestAnimationFrame(syncLatestButtonAnchor);
     };
     const composerStack = transcriptRoot.closest<HTMLElement>(".work-area-conversation")?.querySelector<HTMLElement>(".composer-stack");
-    const composerResizeObserver = new ResizeObserver(scheduleLatestButtonAnchor);
+    const composerResizeObserver = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      const blockSize = entry?.borderBoxSize[0]?.blockSize ?? entry?.contentRect.height ?? 0;
+      if (Math.abs(blockSize - composerBlockSize) < 0.5) return;
+      composerBlockSize = blockSize;
+      scheduleLatestButtonAnchor();
+    });
     if (composerStack) composerResizeObserver.observe(composerStack);
     const visualViewport = window.visualViewport;
     window.addEventListener("resize", scheduleLatestButtonAnchor);
@@ -502,8 +515,8 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
       window.removeEventListener("resize", scheduleLatestButtonAnchor);
       visualViewport?.removeEventListener("resize", scheduleLatestButtonAnchor);
       if (latestButtonAnchorFrame != null) cancelAnimationFrame(latestButtonAnchorFrame);
-      transcriptRoot.style.removeProperty("--message-scroller-button-right");
-      transcriptRoot.style.removeProperty("--message-scroller-button-bottom");
+      latestButton?.style.removeProperty("--message-scroller-button-bottom");
+      scheduleLatestButtonAnchor = () => {};
       if (scrollFrame != null) cancelAnimationFrame(scrollFrame);
       cancelTypewriterTailFrame();
       cancelTypewriterTailRejoin();
@@ -584,7 +597,7 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
         }}</For>
         </div>
       </div>
-      <Show when={!following()}><Button variant="ghost" size="icon-sm" class="message-scroller-button" data-composer-surface={composerSurface()} aria-label="Scroll to latest" title="Scroll to latest" onClick={() => { if (rendererUsesInertialTailFollow()) resumeTypewriterTailFollow("user-scroll-to-latest"); else { setFollowing(true); scrollBottom(); } }}><ArrowDownIcon /></Button></Show>
+      <Show when={!following()}><Button ref={(element) => { latestButton = element; scheduleLatestButtonAnchor(); }} variant="ghost" size="icon-sm" class="message-scroller-button" data-composer-surface={composerSurface()} aria-label="Scroll to latest" title="Scroll to latest" onClick={() => { if (rendererUsesInertialTailFollow()) resumeTypewriterTailFollow("user-scroll-to-latest"); else { setFollowing(true); scrollBottom(); } }}><ArrowDownIcon /></Button></Show>
     </div>
   </div>;
 }
