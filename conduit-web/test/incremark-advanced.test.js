@@ -11,6 +11,8 @@ test("Incremark Advanced settles the existing streaming DOM without a second ren
   assert.match(source, /typewriter/);
   assert.match(source, /syntheticMath/);
   assert.match(source, /setFrozenSource\(snapshot\)/);
+  assert.match(source, /const source = createMemo/);
+  assert.match(source, /const streaming = createMemo/);
   assert.match(source, /data-incremark-advanced-state/);
   assert.doesNotMatch(source, /cloneNode|replaceChildren|innerHTML\s*=|DOMParser|marked\.parse/);
 });
@@ -41,4 +43,5 @@ test("transcript exposes the Advanced selector beside the composer renderer", as
   assert.match(transcript, /<IncremarkAdvancedMarkdown/);
   assert.match(transcript, /disabled=\{Boolean\(props\.chat\.activeGeneration\(\)\)\}/);
   assert.match(preference, /Incremark Advanced/);
+  assert.match(preference, /transcriptRenderer/);
 });
