@@ -24,17 +24,19 @@ test("Advanced deliberately uses the same live renderer contract as Synthetic", 
   assert.match(source, /streaming=\{streaming\(\)\}/);
   assert.match(source, /streamVersion/);
   assert.doesNotMatch(source, /typewriter=\{false\}|syntheticMath=\{false\}/);
-  assert.match(transcriptMarkdown, /renderer === "incremark-synthetic"[\s\S]*renderer === "incremark-advanced"/);
+  assert.match(transcriptMarkdown, /advanced\(\)[\s\S]*\? "incremark-synthetic"/);
   assert.match(transcriptMarkdown, /renderer="incremark-synthetic"/);
+  assert.match(transcriptMarkdown, /syntheticMath=\{baseRenderer\(\) === "incremark-synthetic"\}/);
 });
 
-test("fresh typewriter-family mounts seed existing live source before animating future deltas", async () => {
-  const source = await read("transcript-markdown.tsx");
-  assert.match(source, /createRenderEffect/);
-  assert.match(source, /setAttached\(false\)/);
-  assert.match(source, /requestAnimationFrame/);
-  assert.match(source, /effectiveStreaming/);
-  assert.match(source, /!usesTypewriter\(props\.renderer\) \|\| attached\(\)/);
+test("live renderer attachment receives latest source and leaves typewriter catch-up to the adaptive backlog controller", async () => {
+  const router = await read("transcript-markdown.tsx");
+  const typewriter = await read("incremark-typewriter.ts");
+  assert.match(router, /streaming:\s*props\.streaming/);
+  assert.match(router, /\{props\.children \|\| ""\}/);
+  assert.doesNotMatch(router, /setAttached|seed\(|effectiveStreaming/);
+  assert.match(typewriter, /TYPEWRITER_BACKLOG_WINDOW_MS\s*=\s*250/);
+  assert.match(typewriter, /catchUpRate/);
 });
 
 test("Incremark Advanced waits for streaming, typewriter and deferred math to go quiet", async () => {
