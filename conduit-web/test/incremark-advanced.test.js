@@ -39,7 +39,7 @@ test("settled Advanced blocks are independently virtualizable", async () => {
   assert.match(visibility, /advancedIncremarkBlocks/);
   assert.match(visibility, /!advancedIncremarkBlocks\.has\(element\)/);
   assert.match(visibility, /data-incremark-advanced-state/);
-  assert.match(css, /contain:\s*inline-size/);
+  assert.match(css, /data-incremark-advanced-state="settled"[\s\S]*contain:\s*inline-size/);
   assert.doesNotMatch(css, /contain:\s*(?:layout|paint|strict|content)/);
 });
 
