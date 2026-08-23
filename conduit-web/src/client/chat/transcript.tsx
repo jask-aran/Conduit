@@ -20,7 +20,8 @@ import {
   type TailFollowState,
 } from "./transcript-tail-follow";
 
-const TranscriptMarkdown = lazy(() => import("./transcript-markdown").then((module) => ({ default: module.TranscriptMarkdown })));
+const ChatMarkdown = lazy(() => import("./markdown").then((module) => ({ default: module.ChatMarkdown })));
+const IncremarkAdvancedMarkdown = lazy(() => import("./incremark-advanced").then((module) => ({ default: module.IncremarkAdvancedMarkdown })));
 const fullDateTime = (value?: string) => {
   if (!value) return "";
   const date = new Date(value);
@@ -70,8 +71,9 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
     : transcriptRenderer() as MarkdownRendererId;
   const switchComposerSurface = (next: ComposerSurfaceMode) => setComposerSurface(saveComposerSurface(next));
   const switchTranscriptRenderer = (next: TranscriptRendererMode) => {
+    const crossesAdvancedBoundary = transcriptRenderer() === "incremark-advanced" || next === "incremark-advanced";
     setTranscriptRenderer(saveTranscriptRenderer(next));
-    queueMicrotask(() => transcriptVisibility?.reset());
+    if (crossesAdvancedBoundary) queueMicrotask(() => transcriptVisibility?.reset());
   };
   const advancedTranscript = () => transcriptRenderer() === "incremark-advanced";
   const rendererUsesTypewriter = () => markdownRenderer() === "incremark-typewriter" || markdownRenderer() === "incremark-synthetic";
@@ -95,7 +97,7 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
   let typewriterTailLastExpected: number | null = null;
   let typewriterTailTargetDeltaEma = 0;
   let programmaticScrollTop: number | null = null;
-  let previousRenderer: string | null = null;
+  let previousRenderer: TranscriptRendererMode | null = null;
   const currentViewportScrollTop = () => viewport?.scrollTop ?? 0;
   const cancelTypewriterTailFrame = () => {
     if (typewriterTailFrame == null) return;
@@ -350,14 +352,15 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
     setTranscriptRenderer(saveTranscriptRenderer(next));
   });
   createEffect(() => {
-    const renderer = `${transcriptRenderer()}:${markdownRenderer()}`;
-    if (previousRenderer == null) {
+    const renderer = transcriptRenderer();
+    const previous = previousRenderer;
+    if (previous == null) {
       previousRenderer = renderer;
       return;
     }
-    if (renderer === previousRenderer) return;
+    if (renderer === previous) return;
     previousRenderer = renderer;
-    transcriptVisibility?.reset();
+    if (renderer === "incremark-advanced" || previous === "incremark-advanced") transcriptVisibility?.reset();
     if (rendererUsesInertialTailFollow()) resumeTypewriterTailFollow("renderer-switch");
     else {
       cancelTypewriterTailRejoin();
@@ -552,7 +555,9 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
                   <div data-slot="bubble-content">
                     <Show when={user()} fallback={<>
                       <Show when={message().content}><Suspense fallback={<div class="markdown-skeleton" />}>
-                        <TranscriptMarkdown renderer={transcriptRenderer()} displayKey={item.displayKey} streaming={live()} streamVersion={item.streamVersion} onRendered={settleAfterMarkdown}>{message().content || ""}</TranscriptMarkdown>
+                        <Show when={advancedTranscript()} fallback={<ChatMarkdown renderer={markdownRenderer()} typewriter={rendererUsesTypewriter()} syntheticMath={markdownRenderer() === "incremark-synthetic"} displayKey={item.displayKey} streaming={live()} streamVersion={item.streamVersion} onRendered={settleAfterMarkdown}>{message().content || ""}</ChatMarkdown>}>
+                          <IncremarkAdvancedMarkdown renderer="incremark-synthetic" displayKey={item.displayKey} streaming={live()} streamVersion={item.streamVersion} onRendered={settleAfterMarkdown}>{message().content || ""}</IncremarkAdvancedMarkdown>
+                        </Show>
                       </Suspense></Show>
                       <Show when={failed()}>
                         <details class="assistant-error" open role="alert">
