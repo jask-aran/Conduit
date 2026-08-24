@@ -1,13 +1,13 @@
 {
   "schemaVersion": 3,
   "generatedAt": "2026-08-24",
-  "jsonSha256": "cfae16bab7e545230da0bdc497f6c0a4e4cb4063fb7fd73fd531e6d84b24edb0",
-  "htmlSha256": "c8d086cdd0808d467ced99a84b038388516d9100214ab3b9e84910945280f419",
+  "jsonSha256": "f57837ecbddf7723cd117872aae64a621c0dc3e9556fac0feb2143120f570811",
+  "htmlSha256": "84f31959f64fe6247f32aba2b3e5f792619e1106d2c1b48c0300d418b4606622",
   "embeddedDataMatchesJson": true,
-  "sourceManifestSha256": "086772bb3fc75a49d2d0405980b0b536e1dd4745454f2ccb648b475edf2b9c14",
+  "sourceManifestSha256": "04648d47b5278f6cac5336c17917bac4df97ae72ced3a832b8c33ec7b29d4755",
   "primaryNodes": 17,
-  "uniqueSourceFiles": 103,
-  "moduleFileRecords": 124,
+  "uniqueSourceFiles": 111,
+  "moduleFileRecords": 132,
   "edges": 28,
   "endToEndFlows": 5,
   "inventoryRoots": [
@@ -39,8 +39,8 @@
       "size": 2904
     },
     "conduit-web/README.md": {
-      "sha256": "e70cb1ee8c100379153442b2a6b9cea6fcc7311b3b4cbc79b76518aaf62f1d22",
-      "size": 39930
+      "sha256": "b6c13048d37e84da61713ba8abcda0f497e99b2668b680b54e2b2f182d433bec",
+      "size": 53149
     },
     "conduit-web/index.html": {
       "sha256": "251b93762c9156ee20c4784fe6d3a32da3792635d6161ad92f758b238ad793d9",
@@ -271,8 +271,8 @@
       "size": 6245
     },
     "conduit-web/src/client/chat/voice-waveform.tsx": {
-      "sha256": "9aac1e8f5849c9235759b023fee12b5a2b2a92566813c0f39fa77a8e9479a19f",
-      "size": 4940
+      "sha256": "505324465e27e6f07ca903b7730d3968dd3d09534d1c5038a8323069614b37fe",
+      "size": 6005
     },
     "conduit-web/src/client/commands/command-registry.ts": {
       "sha256": "6598ed4cf4c15bf1c0506e93c8edda276410784004da487f929c62c93b223722",
@@ -735,12 +735,12 @@
       "size": 15614
     },
     "conduit-web/test/browser/app.spec.js": {
-      "sha256": "ded01fdfccd2034b67310aae2720052116ee95db7e0ef6857072a5f46a5ab124",
-      "size": 268323
+      "sha256": "2abd92ae2d13af549c0557df5dcf94df3f2178ec02f01e7159b5e37aaed30959",
+      "size": 294754
     },
     "conduit-web/test/browser/auth.spec.js": {
-      "sha256": "c199c65a9ce69dc361d67c25302d9c87873e7c84af1009f7be620560097ab1a6",
-      "size": 9085
+      "sha256": "8651733564daea05dea5e06737dc2cf7b975c38e9a9ed2acbf66bfdcaa804ae1",
+      "size": 8755
     },
     "conduit-web/test/browser/harness-streaming.spec.js": {
       "sha256": "2bfa718b23db7b1ba68bac1f439f0acc5692f543736c817f1c2399faa614a18f",
