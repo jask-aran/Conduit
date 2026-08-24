@@ -71,7 +71,7 @@ body.workspace-resizing .workspace-panel { transition: none !important; }
 .workspace-artifacts .workspace-panel-empty strong { color: var(--foreground); }
 .workspace-artifacts .workspace-panel-empty p { margin: 0; line-height: 1.5; }
 
-@media (max-width: 760px) {
+@media (--conduit-mobile-layout) {
   .workspace-panel {
     position: fixed;
     inset: 0;

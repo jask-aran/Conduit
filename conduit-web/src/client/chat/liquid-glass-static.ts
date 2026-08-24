@@ -3,6 +3,7 @@ export const LIQUID_GLASS_FAMILIES = {
   desktop: { name: "desktop", width: 760, radius: 24, bezelWidth: 23 },
   mobile: { name: "mobile", width: 388, radius: 18, bezelWidth: 17 },
 } as const;
+export const COMPOSER_MOBILE_BREAKPOINT_PX = LIQUID_GLASS_FAMILIES.desktop.width;
 export const LIQUID_GLASS_THICKNESS = 70;
 export const LIQUID_GLASS_REFRACTIVE_INDEX = 1.5;
 export const LIQUID_GLASS_SCALE_RATIO = 0.7;
@@ -12,7 +13,7 @@ export type LiquidGlassFamilyName = keyof typeof LIQUID_GLASS_FAMILIES;
 export type LiquidGlassHeightBucket = (typeof LIQUID_GLASS_HEIGHT_BUCKETS)[number];
 
 export function pickLiquidGlassFamily(width: number): LiquidGlassFamilyName {
-  return width < 560 ? "mobile" : "desktop";
+  return width < LIQUID_GLASS_FAMILIES.desktop.width ? "mobile" : "desktop";
 }
 
 export function pickLiquidGlassHeight(height: number): LiquidGlassHeightBucket {

@@ -52,4 +52,4 @@ html[data-meteor-field="off"] .chat-meteors { display: none !important; }
 .voice-advanced-heading h3 { margin: 0; font-size: 13px; }
 .voice-advanced-heading p { margin: 0; color: var(--muted-foreground); font-size: 11px; line-height: 1.35; }
 .voice-settings-footer { padding-top: 10px; }
-@media (max-width: 760px) { .voice-backend-facts { grid-template-columns: 1fr; } }
+@media (--conduit-mobile-layout) { .voice-backend-facts { grid-template-columns: 1fr; } }

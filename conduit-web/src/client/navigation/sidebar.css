@@ -83,7 +83,7 @@
 .sidebar-context-menu svg { width: 18px; height: 18px; }
 .sidebar-context-menu .menu-chevron { width: 15px; height: 15px; }
 
-@media (max-width: 760px) {
+@media (--conduit-mobile-layout) {
   .sidebar-container { height: var(--app-height, 100dvh); }
   .sidebar-context-menu { width: 11rem; max-height: min(70dvh, calc(var(--app-height, 100dvh) - 24px)); }
   [data-slot="context-menu-sub-content"].sidebar-context-menu { width: 7rem; }
@@ -107,7 +107,7 @@
   .conduit-sidebar [data-sidebar="trigger"] { display: inline-flex; }
 }
 
-@media (min-width: 761px) {
+@media (--conduit-wide-layout) {
   .chat-header .mobile-sidebar-trigger { display: none; }
   .conduit-sidebar[data-visual-state="collapsed"] .sidebar-content { align-items: center; padding-inline: 8px; }
   .conduit-sidebar[data-visual-state="collapsed"] .sidebar-content > .sidebar-group { display: none; }
