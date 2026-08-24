@@ -44,14 +44,17 @@ test("Incremark Advanced waits for streaming, typewriter and deferred math to go
   assert.match(source, /SETTLE_DELAY_FRAMES\s*=\s*2/);
 });
 
-test("Advanced containment cannot change Synthetic or other existing renderer layout", async () => {
+test("all Incremark renderers share the Advanced geometry contract", async () => {
   const visibility = await read("transcript-visibility.ts");
   const advancedCss = await read("incremark-advanced.css");
   const rendererCss = await read("transcript-renderer.css");
   assert.match(visibility, /advancedIncremarkBlocks/);
   assert.match(visibility, /!advancedIncremarkBlocks\.has\(element\)/);
   assert.match(visibility, /data-incremark-advanced-state/);
-  assert.doesNotMatch(rendererCss, /contain\s*:/);
+  assert.match(rendererCss, /\[data-slot="bubble-content"\]\s*>\s*\.chat-markdown\[data-renderer\^="incremark"\]/);
+  assert.match(rendererCss, /width:\s*100%/);
+  assert.doesNotMatch(rendererCss, /:has\(/);
+  assert.doesNotMatch(rendererCss, /contain:\s*inline-size/);
   assert.doesNotMatch(rendererCss, /data-markdown-synthetic-math/);
   assert.match(advancedCss, /:has\(\.incremark-advanced-shell\)[\s\S]*width:\s*100%/);
   assert.match(advancedCss, /\.incremark-advanced-shell[\s\S]*contain:\s*inline-size/);
