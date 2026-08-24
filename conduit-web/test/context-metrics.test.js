@@ -6,6 +6,7 @@ import {
   CONTEXT_METRIC_PRESETS,
   DEFAULT_CONTEXT_METRICS,
   contextMetricPreset,
+  contextUsagePercent,
   formatContextMetrics,
   metricsForContextMetricPreset,
   normalizeContextMetrics,
@@ -95,6 +96,7 @@ test("unknown context values remain visible as unknown", () => {
 });
 
 test("derives context remaining values when Pi omits the percentage", () => {
+  assert.equal(contextUsagePercent({ tokens: 400, contextWindow: 1000, percent: null }), 40);
   assert.equal(formatContextMetrics({
     enabled: ["contextPercentUsed", "contextTokensRemaining", "contextPercentRemaining"],
     contextUsage: { tokens: 400, contextWindow: 1000, percent: null },

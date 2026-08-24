@@ -387,14 +387,5 @@ export function Composer(props: {
       </div>
     </div>
     <Show when={dictationError()}><div class="composer-dictation-error" role="alert"><TriangleAlertIcon />{dictationError()}</div></Show>
-    <div class="agent-activity composer-status" role="status" aria-live="polite">
-      <div class="composer-status-leading">
-        <Show when={recording()}><VoiceWaveform class="composer-status-waveform" history={dictationWaveform.history} level={dictationWaveform.level} peak={dictationWaveform.peak} state={recorderMonitorState()} variant="compact" barCount={24} ariaLabel="Microphone input level" /></Show>
-        <span class="composer-status-state"><Show when={dictationLabel()} fallback={<><Show when={SPINNING_ACTIVITY.has(activity()?.kind || "")}><Spinner /></Show><Show when={["request_failed", "runtime_failed"].includes(activity()?.kind || "")}><TriangleAlertIcon aria-hidden="true" /></Show>{activity()?.label || "Ready"}</>}>{dictationLabel()}</Show></span>
-      </div>
-      <span class="composer-status-segment">{contextDetail()}</span>
-      <Show when={queueCount()}><span class="composer-status-segment">Queue {queueCount()}</span></Show>
-      <Show when={dictating() && micSilent()}><span class="composer-status-warning" role="alert"><TriangleAlertIcon />No microphone signal — check the mic</span></Show>
-    </div>
   </div>;
 }

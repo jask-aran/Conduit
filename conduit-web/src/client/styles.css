@@ -81,6 +81,18 @@ svg { stroke-width: 1.5; }
 .chat-header [data-slot="button"] svg { width: 16px; height: 16px; }
 .palette-trigger, .search-trigger { display: inline-flex; flex: none; }
 .chat-header-actions { display: flex; margin-left: auto; flex: none; align-items: center; gap: 2px; }
+.chat-context-trigger { position: relative; display: inline-flex; width: 32px; height: 32px; flex: none; align-items: center; justify-content: center; border: 0; border-radius: var(--radius-md); background: transparent; color: var(--foreground); outline: none; }
+.chat-context-trigger:hover { background: var(--accent); color: var(--foreground); }
+.chat-context-trigger:focus-visible { box-shadow: 0 0 0 3px color-mix(in oklch, var(--ring), transparent 50%); }
+.chat-context-trigger[data-state="warning"] { color: var(--warning, #d99a22); }
+.chat-context-trigger[data-state="critical"] { color: var(--destructive); }
+.chat-context-gauge { width: 18px; height: 18px; transform: rotate(-90deg); }
+.chat-context-gauge-track, .chat-context-gauge-value { fill: none; stroke-width: 2.25; }
+.chat-context-gauge-track { stroke: color-mix(in oklch, currentColor, transparent 58%); }
+.chat-context-gauge-value { stroke: currentColor; stroke-linecap: round; transition: stroke-dasharray 260ms ease-out; }
+.chat-context-menu { width: min(28rem, calc(100vw - 32px)); padding: 6px; }
+.chat-context-menu-meta { display: block; max-width: 100%; overflow-wrap: anywhere; line-height: 1.35; }
+.chat-context-menu-values { padding: 2px 6px 6px; color: var(--foreground); font: 11px/1.55 ui-monospace, SFMono-Regular, Consolas, monospace; overflow-wrap: anywhere; }
 
 /* Inset panel: floats on the darker frame. The hairline is an inset ring, not a
    border, so the absolutely-positioned meteor field still fills the panel
@@ -90,7 +102,6 @@ svg { stroke-width: 1.5; }
 .chat-header-title { display: flex; min-width: 0; align-items: center; gap: 7px; overflow: hidden; font-size: 14px; line-height: 20px; }
 .chat-header-title span, .chat-header-title strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .breadcrumb-separator::before { content: "/"; }
-.chat-profile-posture { max-width: min(420px, 42vw); min-width: 0; overflow: hidden; color: var(--muted-foreground); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
 .chat-status-trigger { display: none; }
 .chat-status-trigger[data-state="error"] { color: color-mix(in oklch, var(--destructive), var(--foreground) 25%); }
 .chat-status-trigger[data-state="listening"], .chat-status-trigger[data-state="active"] { color: var(--muted-foreground); }
@@ -656,7 +667,7 @@ svg { stroke-width: 1.5; }
     gap: 6px;
   }
   .chat-header-title { display: none; }
-  .chat-profile-posture { display: none; }
+  .chat-context-trigger { display: none !important; }
   .chat-header-desktop-action { display: none !important; }
   .chat-status-trigger {
     display: inline-flex;
