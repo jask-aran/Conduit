@@ -55,6 +55,8 @@ export interface PaletteActions {
   copy: () => void;
   retryConnection: () => void;
   reload: () => void;
+  updateApp: () => void;
+  resetAppCache: () => void;
   delete: () => void;
   deleteFolder: () => void;
   settings: (section: string) => void;
@@ -196,6 +198,8 @@ const paletteCommandRuntime: Record<string, PaletteCommandRuntime> = {
     run: (actions) => actions.retryConnection(),
   },
   [COMMAND_IDS.reload]: { isAvailable: (context) => context.connectivity === "offline", run: (actions) => actions.reload() },
+  [COMMAND_IDS.updateApp]: { isAvailable: () => true, run: (actions) => actions.updateApp() },
+  [COMMAND_IDS.resetAppCache]: { isAvailable: () => true, run: (actions) => actions.resetAppCache() },
   [COMMAND_IDS.deleteChat]: { isAvailable: hasChat, run: (actions) => actions.delete() },
   [COMMAND_IDS.deleteFolder]: { isAvailable: isNamedFolder, run: (actions) => actions.deleteFolder() },
 };

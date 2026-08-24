@@ -26,7 +26,7 @@ import { bindVisualViewportShell, isMobileLayout, MOBILE_LAYOUT_QUERY, setMobile
 import { Sidebar } from "./navigation/sidebar";
 import { clampSidebarChatLimit, selectedSidebarChatLimit, SIDEBAR_CHAT_LIMIT_STORAGE_KEY } from "./navigation/sidebar-preferences";
 import { WorkspaceAppearanceEditor } from "./project/workspace-appearance-editor";
-import { forcePwaUpdate, rememberPwaRegistration } from "./pwa-update";
+import { forcePwaUpdate, rememberPwaRegistration, resetPwaAppCache } from "./pwa-update";
 import { Settings } from "./settings/settings";
 import { createActiveChat, type ActiveChatStore } from "./state/active-chat";
 import { createAttachments, DEFAULT_MAX_ATTACHMENT_BYTES, filesFromDataTransfer } from "./state/attachments";
@@ -260,6 +260,16 @@ function App() {
     setPwaUpdating(true);
     try {
       await forcePwaUpdate();
+    } catch (error) {
+      setPwaUpdating(false);
+      showError(error);
+    }
+  };
+  const runPwaCacheReset = async () => {
+    if (pwaUpdating()) return;
+    setPwaUpdating(true);
+    try {
+      await resetPwaAppCache();
     } catch (error) {
       setPwaUpdating(false);
       showError(error);
@@ -768,6 +778,8 @@ function App() {
     copy: () => { const content = lastAssistant()?.content; if (content) void navigator.clipboard.writeText(content); },
     retryConnection: () => runtime.retry(),
     reload: () => location.reload(),
+    updateApp: () => void runPwaUpdate(),
+    resetAppCache: () => void runPwaCacheReset(),
     delete: () => runSidebar("delete-chat"),
     deleteFolder: () => runSidebar("delete-project"),
     settings: (section) => openSettings(section),
