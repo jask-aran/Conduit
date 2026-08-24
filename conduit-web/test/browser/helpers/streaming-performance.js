@@ -40,7 +40,9 @@ function summarizeHarnessMetrics(metrics = []) {
   const typewriterSamples = [];
   const typewriterTerminalSamples = [];
   const typewriterSteadyStateSamples = [];
+  const typewriterAdaptiveModes = new Set();
   const transcriptScrollSamples = [];
+  const mathQueueSamples = [];
   const changedBlocks = new Set();
   const changedBlockLengths = new Set();
   const projectionModes = {};
@@ -95,6 +97,7 @@ function summarizeHarnessMetrics(metrics = []) {
     }
     if (metric.stage === "markdown-typewriter") {
       typewriterSamples.push(metric);
+      if (typeof metric.adaptive === "boolean") typewriterAdaptiveModes.add(metric.adaptive ? "adaptive" : "fixed");
       if (metric.terminal === true) typewriterTerminalSamples.push(metric);
       if (metric.sourceVisibleCharacters >= 500 && metric.displayedVisibleCharacters > 0) {
         typewriterSteadyStateSamples.push(metric);
@@ -103,6 +106,7 @@ function summarizeHarnessMetrics(metrics = []) {
     if (metric.stage === "transcript-scroll" && metric.owner === "typewriter-tail-inertial") {
       transcriptScrollSamples.push(metric);
     }
+    if (metric.stage === "markdown-math-queue") mathQueueSamples.push(metric);
     if (metric.renderer?.startsWith("incremark") && metric.tableAst) {
       const signature = JSON.stringify(metric.tableAst);
       if (signature !== lastTableAstSignature) {
@@ -162,12 +166,21 @@ function summarizeHarnessMetrics(metrics = []) {
     katexHtmlCharacters: summary(katexHtmlLengths),
     katexRenderWindowMs: katexTimes.length ? Math.max(...katexTimes) - Math.min(...katexTimes) : null,
     katexTimingBlockers: [...katexTimingBlockers],
+    mathQueue: {
+      sampleCount: mathQueueSamples.length,
+      queueDepth: summarizeNumbers(mathQueueSamples.map((metric) => metric.queueDepth).filter((value) => typeof value === "number")),
+      oldestJobAgeMs: summarizeNumbers(mathQueueSamples.map((metric) => metric.oldestJobAgeMs).filter((value) => typeof value === "number")),
+      processedJobs: summarizeNumbers(mathQueueSamples.map((metric) => metric.processedJobs).filter((value) => typeof value === "number")),
+      cancelledJobs: Math.max(0, ...mathQueueSamples.map((metric) => Number(metric.cancelledJobs) || 0)),
+      policies: [...new Set(mathQueueSamples.map((metric) => metric.queuePolicy).filter((value) => typeof value === "string"))],
+    },
     changedRowKeyEventCount: changedRowKeys.length,
     uniqueChangedRowKeyCount: changedRowKeySet.size,
     changedRowKeyLengthEvidence: redactChangedKeys(changedRowKeys),
     tableAstTransitions,
     typewriter: {
       sampleCount: typewriterSamples.length,
+      adaptiveModes: [...typewriterAdaptiveModes],
       sourceVisibleCharacters: summarizeNumbers(typewriterSamples.map((metric) => metric.sourceVisibleCharacters).filter((value) => typeof value === "number")),
       displayedVisibleCharacters: summarizeNumbers(typewriterSamples.map((metric) => metric.displayedVisibleCharacters).filter((value) => typeof value === "number")),
       backlogCharacters: summarizeNumbers(typewriterSamples.map((metric) => metric.backlogCharacters).filter((value) => typeof value === "number")),
@@ -250,10 +263,11 @@ function summarizeHarnessMetrics(metrics = []) {
   };
 }
 
-function rendererPath(renderer, typewriter = false) {
+function rendererPath(renderer, typewriter = false, adaptivePacing = "adaptive") {
   const selectedRenderer = typewriter && renderer === "incremark" ? "incremark-typewriter" : renderer;
   const params = new URLSearchParams({
     markdownRenderer: selectedRenderer,
+    incremarkPacing: adaptivePacing,
   });
   return `/?${params.toString()}`;
 }
@@ -1564,7 +1578,7 @@ export async function runBrowserStreamingScenario(page, scenario) {
     browserErrors.push(`${response.status()} ${request.method()} ${new URL(response.url()).pathname}`);
   });
   await installBrowserProtocol(page, scenario);
-  await page.goto(rendererPath(renderer, Boolean(scenario.typewriter)));
+  await page.goto(rendererPath(renderer, Boolean(scenario.typewriter), scenario.adaptivePacing));
   await page.getByRole("textbox", { name: "Message Pi" }).fill(scenario.prompt || `Run ${scenario.name}`);
   await page.getByRole("button", { name: "Send message" }).click();
   const sourceText = scenario.cadence.deltas.join("");
@@ -1741,6 +1755,7 @@ export async function runBrowserStreamingScenario(page, scenario) {
       profile: scenario.profile || "fixed",
       renderer,
       typewriter: Boolean(scenario.typewriter),
+      adaptivePacing: scenario.adaptivePacing || "adaptive",
       runtime,
       command: "npm run test:harness:browser",
     },
@@ -1749,6 +1764,7 @@ export async function runBrowserStreamingScenario(page, scenario) {
     browser: {
       renderer,
       typewriter: Boolean(scenario.typewriter),
+      adaptivePacing: scenario.adaptivePacing || "adaptive",
       sourceCharacters: sourceText.length,
       sourceDeltaCount: scenario.cadence.deltas.length,
       sourceEvidence: { length: sourceText.length, digest: raw.sourceDigest || null },
@@ -1850,7 +1866,7 @@ export async function runBrowserReconnectScenario(page, scenario) {
     },
     instrumentation: scenario.instrumentation !== false,
   });
-  await page.goto(rendererPath(renderer, Boolean(scenario.typewriter)));
+  await page.goto(rendererPath(renderer, Boolean(scenario.typewriter), scenario.adaptivePacing));
   await page.getByRole("textbox", { name: "Message Pi" }).fill(scenario.prompt || `Run ${scenario.name}`);
   await page.getByRole("button", { name: "Send message" }).click();
   const expectedText = scenario.initialText + scenario.recoveredDelta;
@@ -1902,8 +1918,9 @@ export async function runBrowserReconnectScenario(page, scenario) {
     metadata: {
       commit: process.env.CONDUIT_RELEASE || "working-tree",
       profile: "reconnect",
-        renderer,
-        typewriter: Boolean(scenario.typewriter),
+      renderer,
+      typewriter: Boolean(scenario.typewriter),
+      adaptivePacing: scenario.adaptivePacing || "adaptive",
       runtime,
       command: "npm run test:harness:browser",
     },
@@ -1918,6 +1935,7 @@ export async function runBrowserReconnectScenario(page, scenario) {
       recoveryMs: raw.resumedAt - raw.disconnectedAt,
       displayCompletionDelayMs: displayCompletedAt == null ? null : displayCompletedAt - raw.completedAt,
       typewriter: Boolean(scenario.typewriter),
+      adaptivePacing: scenario.adaptivePacing || "adaptive",
       finalSemanticTextEvidence: { length: normalizeSemanticText(raw.finalSemanticText).length, digest: raw.finalSemanticTextDigest || null },
       finalSemanticTextLength: normalizeSemanticText(raw.finalSemanticText).length,
       structuralFingerprint,
