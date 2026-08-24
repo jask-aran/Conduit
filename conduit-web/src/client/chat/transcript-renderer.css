@@ -1,10 +1,19 @@
 .composer-renderer-switch { display: flex; align-items: center; gap: 10px; }
 .composer-renderer-switch label { flex: none; }
 
-/* Renderer experiments must not alter the layout contract of the five
-   existing transcript renderers. Advanced-specific geometry belongs in
-   incremark-advanced.css so Synthetic remains identical to the known-good
-   pre-Advanced path. */
+/* Direct Incremark renderers get the same definite-width contract as the
+   Advanced renderer. The direct-child selector leaves Advanced's wrapper and
+   its inline-size containment completely unchanged. */
+.message-assistant [data-slot="bubble-content"] > .chat-markdown[data-renderer^="incremark"] {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+}
+.message-assistant [data-slot="bubble-content"] > .chat-markdown[data-renderer^="incremark"] > .incremark {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+}
 
 @media (max-width: 720px) {
   .composer-renderer-switch { max-width: calc(100% - 24px); flex-wrap: wrap; justify-content: flex-end; }
