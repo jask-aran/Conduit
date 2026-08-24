@@ -15,7 +15,7 @@ import type { ChatSummary, DashboardChat, Installation, Project, RuntimeIdentity
 import { createErrorDiagnostic, formatRuntimeDiagnosticPrompt, type ErrorDiagnostic, type ErrorDiagnosticContext } from "./error-diagnostics";
 import { Composer, SPINNING_ACTIVITY, type ComposerStatus } from "./chat/composer";
 import type { VoiceDictationSettings } from "./chat/voice-dictation-types";
-import { formatContextMetrics, saveContextMetrics, selectedContextMetrics, type ContextMetricId } from "./chat/context-metrics";
+import { contextUsagePercent, formatContextMetrics, saveContextMetrics, selectedContextMetrics, type ContextMetricId } from "./chat/context-metrics";
 import { HostUiRequests } from "./chat/host-ui-card";
 import { MARKDOWN_RENDERER_STORAGE_KEY, selectedMarkdownRenderer, type MarkdownRendererId } from "./chat/markdown-settings";
 import { loadVoiceDictationSettings, saveVoiceDictationSettings } from "./chat/voice-dictation";
@@ -92,6 +92,18 @@ function ChatHeader(props: {
       cacheStats: props.chat.cacheStats(),
     })
     : "";
+  const contextPercent = () => {
+    const value = props.chat ? contextUsagePercent(props.chat.contextUsage()) : null;
+    return value == null ? 0 : Math.max(0, Math.min(100, value));
+  };
+  const contextTone = () => {
+    const value = contextPercent();
+    if (value >= 90) return "critical";
+    if (value >= 70) return "warning";
+    return "normal";
+  };
+  const contextLabel = () => `Context usage: ${Math.round(contextPercent())}%`;
+  const contextDashArray = () => `${contextPercent()} 100`;
   const queueCount = () => props.chat ? props.chat.queue().steering.length + props.chat.queue().followUp.length : 0;
   const dictationLabel = () => props.composerStatus?.dictationLabel() || "";
   const dictating = () => Boolean(props.composerStatus?.dictating());
@@ -124,7 +136,6 @@ function ChatHeader(props: {
         <Button variant="ghost" size="icon-sm" class="mobile-sidebar-trigger" data-mobile-open="false" aria-label="Toggle Sidebar" aria-expanded={false} onClick={props.onToggleMobileSidebar}><PanelLeftIcon /></Button>
       </Show>
       <nav aria-label="breadcrumb" class="chat-header-title"><span>{projectLabel()}</span><span class="breadcrumb-separator" aria-hidden="true" /><strong>{props.title}</strong></nav>
-      <Show when={line()}><span class="chat-profile-posture" title={line()}>{line()}</span></Show>
       <Show when={!props.dashboard && props.chat}>
         <Button ref={statusTrigger} variant="ghost" size="sm" class="chat-status-trigger" data-state={statusTone()} aria-label={`Runtime status: ${statusLabel()}. Open runtime details`} aria-live="polite" aria-expanded={statusOpen()} aria-haspopup="dialog" onClick={() => setStatusOpen(true)}>
           <Show when={dictating()} fallback={<span class="chat-status-icon" aria-hidden="true"><Show when={statusFailure()} fallback={<Show when={statusBusy()} fallback={<span class="chat-status-dot" />}><Spinner /></Show>}><TriangleAlertIcon /></Show></span>}>
@@ -138,6 +149,28 @@ function ChatHeader(props: {
         <Button variant="ghost" size="icon-sm" class="search-trigger" aria-label="Search chats" title="Search chats" onClick={props.onOpenSearch}><SearchIcon /></Button>
         <Button variant="ghost" size="icon-sm" class="palette-trigger" aria-label="Open command palette" title="Command palette" onClick={props.onOpenPalette}><TerminalIcon /></Button>
         <Button variant="ghost" size="icon-sm" class="chat-header-desktop-action" aria-label={props.dashboard ? "Copy Tailscale workspace link" : "Copy Tailscale chat link"} title={props.dashboard ? "Copy Tailscale workspace link" : "Copy Tailscale chat link"} onClick={props.onShare}><ShareIcon /></Button>
+        <Show when={!props.dashboard && props.chat}>
+          <Menu>
+            <MenuTrigger class="chat-context-trigger" data-state={contextTone()} aria-label={contextLabel()} title={contextLabel()}>
+              <svg class="chat-context-gauge" viewBox="0 0 24 24" aria-hidden="true">
+                <circle class="chat-context-gauge-track" cx="12" cy="12" r="9" pathLength="100" />
+                <circle class="chat-context-gauge-value" cx="12" cy="12" r="9" pathLength="100" style={`stroke-dasharray: ${contextDashArray()}`} />
+              </svg>
+            </MenuTrigger>
+            <MenuContent class="chat-context-menu">
+              <Show when={line()}>
+                <MenuGroup>
+                  <MenuLabel class="chat-context-menu-meta">{line()}</MenuLabel>
+                </MenuGroup>
+                <MenuSeparator />
+              </Show>
+              <MenuGroup aria-label="Context metrics">
+                <MenuLabel>Context metrics</MenuLabel>
+                <div class="chat-context-menu-values">{contextDetail() || "No context metrics selected."}</div>
+              </MenuGroup>
+            </MenuContent>
+          </Menu>
+        </Show>
         <Show when={!props.panelOpen}>
           <Button variant="ghost" size="icon-sm" class="chat-header-desktop-action" aria-label="Toggle workspace panel" aria-expanded={false} onClick={props.onTogglePanel}><PanelRightIcon /></Button>
         </Show>
