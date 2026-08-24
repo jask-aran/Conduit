@@ -102,19 +102,14 @@ svg { stroke-width: 1.5; }
 .chat-header-title { display: flex; min-width: 0; align-items: center; gap: 7px; overflow: hidden; font-size: 14px; line-height: 20px; }
 .chat-header-title span, .chat-header-title strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .breadcrumb-separator::before { content: "/"; }
-.chat-status-trigger { display: none; }
-.chat-status-trigger[data-state="error"] { color: color-mix(in oklch, var(--destructive), var(--foreground) 25%); }
-.chat-status-trigger[data-state="listening"], .chat-status-trigger[data-state="active"] { color: var(--muted-foreground); }
-.chat-status-trigger[data-state="ready"] .chat-status-icon { display: none; }
-.chat-status-icon { display: inline-flex; width: 16px; height: 16px; flex: 0 0 16px; align-items: center; justify-content: center; }
-.chat-status-icon svg { width: 15px; height: 15px; }
-.chat-status-dot { width: 6px; height: 6px; border-radius: 999px; background: currentColor; box-shadow: 0 0 0 2px color-mix(in oklch, currentColor, transparent 84%); }
+.chat-status-line { display: none; }
+.chat-status-line[data-state="error"] { color: color-mix(in oklch, var(--destructive), var(--foreground) 25%); }
+.chat-status-line[data-state="listening"], .chat-status-line[data-state="active"] { color: var(--muted-foreground); }
 .chat-status-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 11px/1.2 ui-monospace, SFMono-Regular, Consolas, monospace; }
-.chat-status-chevron { width: 14px; height: 14px; flex: 0 0 14px; color: var(--muted-foreground); }
-.chat-status-waveform.voice-waveform { display: inline-flex; width: 54px; height: 24px; flex: 0 0 54px; box-sizing: border-box; align-items: center; justify-content: center; padding: 0 4px; border: 0; border-radius: 0; background: transparent; }
+.chat-status-waveform.voice-waveform { display: inline-flex; width: 54px; height: 28px; flex: 0 0 54px; box-sizing: border-box; align-items: center; justify-content: center; padding: 0 4px; border: 0; border-radius: 0; background: transparent; }
 .chat-status-waveform .voice-waveform-header, .chat-status-waveform .voice-waveform-readout, .chat-status-waveform .voice-waveform-scale { display: none; }
-.chat-status-waveform .voice-waveform-plot { width: 100%; height: 100%; align-items: center; justify-content: space-between; gap: 1px; padding: 0; border: 0; border-radius: 0; background: transparent; }
-.chat-status-waveform .voice-waveform-bar { max-width: 2px; min-height: 2px; flex: 0 0 2px; background: currentColor; opacity: 0.78; }
+.chat-status-waveform .voice-waveform-plot { width: 100%; height: 100%; align-items: center; justify-content: space-between; gap: 2px; padding: 0; border: 0; border-radius: 0; background: transparent; }
+.chat-status-waveform .voice-waveform-bar { width: 1px; max-width: 1px; min-width: 1px; min-height: 2px; flex: 0 0 1px; border-radius: 999px; background: currentColor; opacity: 0.78; }
 .chat-status-waveform .voice-waveform-gridline, .chat-status-waveform .voice-waveform-peak { display: none; }
 .chat-header-more { display: none; }
 .chat-header-more svg { width: 16px; height: 16px; }
@@ -180,7 +175,6 @@ svg { stroke-width: 1.5; }
 .empty-pull-hint[data-visible="true"] { opacity: 1; transform: translateY(0); }
 .empty-pull-hint[data-armed="true"] { color: var(--foreground); }
 .marker { color: var(--muted-foreground); font-size: 12px; }
-.agent-activity { display: flex; align-items: center; color: var(--muted-foreground); font-size: 12px; }
 .composer-status-state > svg { width: 13px; height: 13px; flex: none; }
 .message-scroller-button[data-slot="button"] {
   position: absolute;
@@ -316,7 +310,8 @@ svg { stroke-width: 1.5; }
    echo that geometry without competing with the outer silhouette. */
 .composer-actions [data-slot="button"] { width: 28px; height: 28px; border-radius: 10px; }
 .composer-actions [data-slot="button"] svg { width: 16px; height: 16px; }
-.composer-actions-left, .composer-actions-right { display: flex; min-width: 0; align-items: center; gap: 3px; }
+.composer-actions-left { display: flex; min-width: 0; flex: 0 1 auto; align-items: center; gap: 3px; }
+.composer-actions-right { display: flex; min-width: 0; flex: 0 0 auto; align-items: center; gap: 3px; }
 .model-trigger { min-height: 30px; padding: 4px 7px; font-size: 13px; }
 .model-trigger:hover:not(:disabled) { background: var(--accent); }
 .model-trigger:disabled { cursor: default; color: var(--muted-foreground); opacity: .62; }
@@ -325,19 +320,15 @@ svg { stroke-width: 1.5; }
 .dictation-trigger[data-state="active"] { box-shadow: 0 0 0 3px color-mix(in oklch, var(--accent-cool), transparent 78%); }
 .composer-dictation-error { display: flex; align-items: center; gap: 7px; margin-top: 6px; color: var(--destructive); font-size: 12px; }
 .composer-dictation-error svg { width: 14px; height: 14px; flex: none; }
-.composer-status { display: flex; width: 100%; min-height: 22px; flex-wrap: wrap; align-items: stretch; margin-top: 6px; overflow: hidden; border-radius: 5px; background: oklch(1 0 0 / 3%); font: 11px/18px ui-monospace, SFMono-Regular, Consolas, monospace; letter-spacing: 0.015em; }
-.composer-status-leading { display: inline-flex; height: 22px; flex: 0 0 auto; align-items: center; }
-.composer-status-state, .composer-status-queue { display: inline-flex; height: 22px; align-items: center; gap: 6px; padding: 0 12px; white-space: nowrap; }
+.composer-status-state { display: inline-flex; height: 22px; align-items: center; gap: 6px; padding: 0 12px; white-space: nowrap; }
 .composer-status-state { position: relative; padding-left: 10px; background: color-mix(in oklch, var(--accent-cool), transparent 82%); color: var(--foreground); }
 .composer-status-state::after { content: ""; position: absolute; top: 0; right: -9px; z-index: 1; border-block: 11px solid transparent; border-left: 9px solid color-mix(in oklch, var(--accent-cool), transparent 82%); }
-.composer-status-metrics { min-width: 0; flex: 1 1 280px; align-self: stretch; padding: 2px 12px; overflow-wrap: anywhere; white-space: normal; }
-.composer-status-queue { flex: 0 0 auto; }
-.composer-status svg { width: 12px; height: 12px; }
-.composer-status-waveform.voice-waveform { display: inline-flex; width: 64px; height: 22px; flex: 0 0 auto; box-sizing: border-box; align-items: center; justify-content: center; padding: 0 6px; border: 0; border-right: 1px solid color-mix(in oklch, var(--accent-cool), transparent 75%); border-radius: 0; background: transparent; }
-.composer-status-waveform .voice-waveform-plot { width: 100%; height: 100%; align-items: center; justify-content: space-between; gap: 1px; padding: 0; border: 0; border-radius: 0; background: transparent; }
-.composer-status-waveform .voice-waveform-bar { max-width: 2px; min-height: 2px; background: var(--accent-cool); opacity: 0.88; transition: height 90ms ease-out; }
-.composer-status-waveform[data-state="connecting"] .voice-waveform-bar { animation: dictation-wave-pulse 900ms ease-in-out infinite alternate; }
-.mobile-status-sheet { display: none; }
+.composer-actions-status { min-width: 0; max-width: min(240px, 28vw); overflow: hidden; padding: 0 8px; background: transparent; color: var(--muted-foreground); font-size: 13px; line-height: 20px; letter-spacing: 0; text-overflow: ellipsis; }
+.composer-actions-status::after { content: none; }
+.composer-actions-waveform.voice-waveform { display: inline-flex; width: auto; min-width: 48px; height: 28px; flex: 1 1 auto; box-sizing: border-box; align-items: center; justify-content: center; padding: 0 6px; border: 0; border-radius: 0; background: transparent; color: var(--muted-foreground); }
+.composer-actions-waveform .voice-waveform-plot { width: 100%; height: 100%; align-items: center; justify-content: space-between; gap: 2px; padding: 0; border: 0; border-radius: 0; background: transparent; }
+.composer-actions-waveform .voice-waveform-bar { width: 1px; max-width: 1px; min-width: 1px; min-height: 2px; flex: 0 0 1px; border-radius: 999px; background: currentColor; opacity: 0.88; transition: height 90ms ease-out; }
+.composer-actions-waveform[data-state="connecting"] .voice-waveform-bar { animation: dictation-wave-pulse 900ms ease-in-out infinite alternate; }
 @keyframes dictation-wave-pulse { from { opacity: 0.4; transform: scaleY(0.65); } to { opacity: 0.95; transform: scaleY(1); } }
 .slash-suggestions { position: absolute; left: 10px; bottom: 48px; z-index: 30; width: 260px; padding: 5px; border: 1px solid var(--border); border-radius: 10px; background: var(--popover); box-shadow: 0 12px 32px rgb(0 0 0 / 25%); }
 .slash-suggestions button { display: flex; width: 100%; flex-direction: column; border: 0; border-radius: 7px; background: var(--accent); padding: 8px; color: inherit; text-align: left; }
@@ -667,9 +658,9 @@ svg { stroke-width: 1.5; }
     gap: 6px;
   }
   .chat-header-title { display: none; }
-  .chat-context-trigger { display: none !important; }
   .chat-header-desktop-action { display: none !important; }
-  .chat-status-trigger {
+  .chat-context-trigger { display: none !important; }
+  .chat-status-line {
     display: inline-flex;
     min-width: 0;
     min-height: 44px;
@@ -685,60 +676,12 @@ svg { stroke-width: 1.5; }
     box-shadow: none;
     color: var(--muted-foreground);
     text-align: left;
-    backdrop-filter: none;
-    -webkit-backdrop-filter: none;
   }
-  .chat-status-trigger:hover { background: var(--accent); color: var(--foreground); }
-  .chat-status-trigger[data-state="ready"] { color: var(--muted-foreground); }
-  .chat-status-trigger[data-state="error"] { color: var(--destructive); }
-  .chat-status-trigger[data-state="listening"], .chat-status-trigger[data-state="active"] { color: var(--muted-foreground); }
-  .chat-status-trigger[data-state="listening"] { min-width: 0; flex: 1 1 auto; }
-  .chat-status-trigger[data-state="listening"] .chat-status-waveform.voice-waveform { width: auto; height: 22px; min-width: 0; flex: 1 1 auto; padding: 0 2px; }
-  .chat-status-trigger:focus-visible { outline: 2px solid var(--ring); outline-offset: 1px; }
-  .mobile-status-sheet {
-    position: fixed !important;
-    top: calc(60px + env(safe-area-inset-top, 0px) + 8px) !important;
-    right: 12px !important;
-    bottom: auto !important;
-    left: 12px !important;
-    width: auto !important;
-    max-width: none !important;
-    max-height: calc(var(--app-height, 100dvh) - 76px - env(safe-area-inset-top, 0px));
-    min-height: 0;
-    display: flex !important;
-    flex-direction: column;
-    gap: 12px;
-    overflow: hidden;
-    transform: none !important;
-    translate: 0 0 !important;
-    --tw-translate-x: 0px !important;
-    --tw-translate-y: 0px !important;
-    border-color: color-mix(in oklch, var(--accent-cool), var(--border) 70%);
-    border-radius: 14px;
-    background: var(--popover);
-    padding: 14px;
-    box-shadow: 0 20px 60px rgb(0 0 0 / 40%);
-  }
-  .mobile-status-sheet > [data-slot="dialog-title"] { margin: 0; padding-right: 34px; font-size: 15px; }
-  .mobile-status-sheet > [data-slot="dialog-close"], .mobile-status-sheet > button { top: 10px; right: 10px; width: 36px; height: 36px; }
-  .mobile-status-sheet-scroll { min-height: 0; display: grid; gap: 12px; overflow-y: auto; padding-right: 2px; scrollbar-color: color-mix(in oklch, var(--foreground), transparent 72%) transparent; scrollbar-width: thin; }
-  .mobile-status-sheet-state { display: flex; min-height: 42px; align-items: center; justify-content: space-between; gap: 12px; border-radius: 10px; background: color-mix(in oklch, var(--accent-cool), transparent 91%); padding: 9px 11px; }
-  .mobile-status-sheet-state-label { min-width: 0; overflow: hidden; color: var(--foreground); font-size: 14px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
-  .mobile-status-sheet-state-kind { flex: none; color: var(--muted-foreground); font: 10px/1.2 ui-monospace, SFMono-Regular, Consolas, monospace; text-transform: uppercase; letter-spacing: .07em; }
-  .mobile-status-sheet-state.mobile-status-tone-active, .mobile-status-sheet-state.mobile-status-tone-listening { background: color-mix(in oklch, var(--accent-cool), transparent 88%); }
-  .mobile-status-sheet-state.mobile-status-tone-error { background: color-mix(in oklch, var(--destructive), transparent 90%); color: var(--destructive); }
-  .mobile-status-facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin: 0; }
-  .mobile-status-facts > div { min-width: 0; border: 1px solid var(--border); border-radius: 9px; background: color-mix(in oklch, var(--background), transparent 20%); padding: 8px 9px; }
-  .mobile-status-facts dt { color: var(--muted-foreground); font: 10px/1.2 ui-monospace, SFMono-Regular, Consolas, monospace; text-transform: uppercase; letter-spacing: .05em; }
-  .mobile-status-facts dd { min-width: 0; margin: 4px 0 0; overflow: hidden; color: var(--foreground); font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
-  .mobile-status-context { display: grid; gap: 6px; border-top: 1px solid var(--border); padding-top: 11px; }
-  .mobile-status-context h3 { margin: 0; color: var(--muted-foreground); font: 10px/1.2 ui-monospace, SFMono-Regular, Consolas, monospace; text-transform: uppercase; letter-spacing: .06em; }
-  .mobile-status-context-values { overflow-wrap: anywhere; color: var(--foreground); font: 11px/1.55 ui-monospace, SFMono-Regular, Consolas, monospace; }
-  .mobile-status-sheet-waveform.voice-waveform { width: 100%; height: 34px; padding: 0 4px; border: 0; border-radius: 0; background: transparent; }
-  .mobile-status-sheet-waveform .voice-waveform-header, .mobile-status-sheet-waveform .voice-waveform-readout, .mobile-status-sheet-waveform .voice-waveform-scale { display: none; }
-  .mobile-status-sheet-waveform .voice-waveform-plot { height: 100%; border-radius: 7px; }
-  .mobile-status-error { margin: 0; color: var(--destructive); font-size: 12px; line-height: 1.45; }
-  .composer-status { display: none; }
+  .chat-status-line[data-state="ready"] { color: var(--muted-foreground); }
+  .chat-status-line[data-state="error"] { color: var(--destructive); }
+  .chat-status-line[data-state="listening"], .chat-status-line[data-state="active"] { color: var(--muted-foreground); }
+  .chat-status-line[data-state="listening"] { min-width: 0; flex: 1 1 auto; }
+  .chat-status-line[data-state="listening"] .chat-status-waveform.voice-waveform { width: auto; height: 28px; min-width: 0; flex: 1 1 auto; padding: 0 2px; }
   /* The collapsed mobile composer is one quiet, centred row. Text can grow
      when it wraps, but the empty state stays at the same visual baseline as
      the three controls around it. */
@@ -753,6 +696,7 @@ svg { stroke-width: 1.5; }
   .composer textarea[data-has-text="true"] { padding: 11px 4px 9px; line-height: 1.35; }
   .composer-actions { min-width: 0; min-height: 44px; flex: 0 0 auto; align-self: center; order: 3; gap: 2px; padding: 0 4px 0 2px; }
   .composer-actions-left, .composer-actions-right { gap: 2px; }
+  .composer-actions-waveform.voice-waveform, .composer-actions-status { display: none; }
   .composer-actions [data-slot="button"] { width: 40px; height: 40px; border-radius: 12px; }
   .composer-actions [data-slot="button"] svg { width: 18px; height: 18px; }
   .composer-desktop-attachment, .composer-desktop-setting { display: none; }

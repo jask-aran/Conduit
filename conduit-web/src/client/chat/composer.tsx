@@ -19,15 +19,14 @@ import { filesFromDataTransfer } from "../state/attachments";
 import type { AttachmentsStore } from "../state/attachments";
 import type { ModelSettings } from "../state/model-settings";
 import type { VoiceDictationSettings } from "./voice-dictation-types";
-import { isMobileLayout } from "../navigation/mobile-layout";
+import { isMobileLayout, MOBILE_LAYOUT_QUERY } from "../navigation/mobile-layout";
 import { AttachmentCards } from "./attachments";
 import { COMPOSER_SURFACE_CHANGE_EVENT, selectedComposerSurface, type ComposerSurfaceMode } from "./composer-surface";
-import { formatContextMetrics, type ContextMetricId } from "./context-metrics";
 import { createVoiceDictationClient, type VoiceDictationState } from "./voice-dictation-client";
 import type { AudioSignalLevel } from "./voice-audio";
 import { toast } from "solid-sonner";
 import { audioTransferLost, beginDictatedRange, matchesShortcut, releasesShortcut, replaceDictatedRange, shouldAutoSend, shouldReportNoSignal } from "./voice-dictation";
-import { createVoiceWaveformController, VoiceWaveform, type VoiceWaveformController } from "./voice-waveform";
+import { createVoiceWaveformController, MAX_RESPONSIVE_BAR_COUNT, VoiceWaveform, type VoiceWaveformController } from "./voice-waveform";
 import "./performance-composer.css";
 
 const thinkingLabel = (value: string) => value ? value[0]!.toUpperCase() + value.slice(1) : "Off";
@@ -38,7 +37,6 @@ export interface ComposerStatus {
   dictationState: () => VoiceDictationState;
   dictationLabel: () => string;
   dictationError: () => string;
-  micSilent: () => boolean;
   dictating: () => boolean;
   recording: () => boolean;
   recorderMonitorState: () => "connecting" | "listening" | "stopped";
@@ -53,7 +51,6 @@ export function Composer(props: {
   activeProfile?: Template | null;
   serverOnline: boolean;
   voiceSettings: VoiceDictationSettings;
-  contextMetrics: () => readonly ContextMetricId[];
   onChooseProfile: (id: string) => void;
   onOpenSettings: (section: string) => void;
   onOpenAttachments: () => void;
@@ -63,12 +60,12 @@ export function Composer(props: {
   const [slashOpen, setSlashOpen] = createSignal(false);
   const [dictationState, setDictationState] = createSignal<VoiceDictationState>("idle");
   const [dictationError, setDictationError] = createSignal("");
-  const [micSilent, setMicSilent] = createSignal(false);
   const [transcriberReady, setTranscriberReady] = createSignal(false);
   const [dictatedRange, setDictatedRange] = createSignal<{ start: number; end: number } | null>(null);
   const [dictationSelectionOwned, setDictationSelectionOwned] = createSignal(false);
   const [composerSurface, setComposerSurface] = createSignal<ComposerSurfaceMode>(selectedComposerSurface());
-  const dictationWaveform = createVoiceWaveformController();
+  const [phoneLayout, setPhoneLayout] = createSignal(isMobileLayout());
+  const dictationWaveform = createVoiceWaveformController(MAX_RESPONSIVE_BAR_COUNT);
   let dictationCancelled = false;
   let pushToTalkActive = false;
   let dictationRestoreFocus = true;
@@ -83,13 +80,6 @@ export function Composer(props: {
   const recorderMonitorState = createMemo(() => dictationState() === "starting" ? "connecting" : dictationState() === "listening" ? "listening" : "stopped");
   const canSend = createMemo(() => hasText() && props.serverOnline && props.chat.generation() !== "stopping" && !dictating());
   const activity = createMemo(() => props.chat.activity());
-  const contextDetail = createMemo(() => formatContextMetrics({
-    enabled: props.contextMetrics(),
-    contextUsage: props.chat.contextUsage(),
-    sessionStats: props.chat.sessionStats(),
-    cacheStats: props.chat.cacheStats(),
-  }));
-  const queueCount = createMemo(() => props.chat.queue().steering.length + props.chat.queue().followUp.length);
   const dictationLabel = createMemo(() => {
     if (dictationState() === "completed" && !dictatedRange()) return "";
     if (dictationState() === "failed" && !dictationError()) return "";
@@ -108,7 +98,6 @@ export function Composer(props: {
     dictationState,
     dictationLabel,
     dictationError,
-    micSilent,
     dictating,
     recording,
     recorderMonitorState,
@@ -169,7 +158,6 @@ export function Composer(props: {
       if (next === "starting") setTranscriberReady(false);
       if (next !== "listening") {
         dictationWaveform.reset();
-        setMicSilent(false);
       }
       if (["completed", "failed"].includes(next)) setTranscriberReady(false);
     },
@@ -178,7 +166,6 @@ export function Composer(props: {
     onPartial: applyTranscript,
     onFinal: applyTranscript,
     onInputLevel: setInputLevel,
-    onInputWarning: (warning) => setMicSilent(warning?.kind === "digital_silence"),
     onCompleted: (completion) => {
       window.dispatchEvent(new CustomEvent("conduit:voice-dictation-metrics", { detail: completion }));
       if (completion.speechDetector === "digital_zero") {
@@ -299,6 +286,10 @@ export function Composer(props: {
   };
 
   onMount(() => {
+    const media = typeof matchMedia === "function" ? matchMedia(MOBILE_LAYOUT_QUERY) : null;
+    const syncPhoneLayout = () => setPhoneLayout(Boolean(media?.matches));
+    syncPhoneLayout();
+    media?.addEventListener("change", syncPhoneLayout);
     props.onStatusChange?.(composerStatus);
     createEffect(() => {
       props.chat.draft();
@@ -336,6 +327,7 @@ export function Composer(props: {
     window.addEventListener("keyup", voiceKeyUp, true);
     window.addEventListener("conduit:toggle-dictation", voiceToggle);
     onCleanup(() => {
+      media?.removeEventListener("change", syncPhoneLayout);
       props.onStatusChange?.(null);
       window.removeEventListener(COMPOSER_SURFACE_CHANGE_EVENT, composerSurfaceChanged);
       window.removeEventListener("keydown", voiceKeyDown, true);
@@ -362,7 +354,6 @@ export function Composer(props: {
           </Show>
           <div class="composer-actions">
             <div class="composer-actions-left">
-              <Button variant={dictationState() === "listening" ? "default" : "ghost"} size="icon-sm" class="dictation-trigger" data-state={dictationState()} aria-label={["starting", "listening"].includes(dictationState()) ? "Stop voice dictation" : "Start voice dictation"} aria-pressed={dictating()} title={`Voice dictation (${props.voiceSettings.shortcut})`} disabled={!props.serverOnline || ["finishing", "waiting", "transcribing"].includes(dictationState())} onPointerDown={captureDictationLaunch} onClick={toggleDictation}><Show when={["starting", "finishing", "waiting", "transcribing"].includes(dictationState())} fallback={<Show when={dictationState() === "listening"} fallback={<MicIcon />}><SquareIcon /></Show>}><Spinner /></Show></Button>
               <Button class="composer-desktop-attachment" variant="ghost" size="icon-sm" aria-label={`Attach files${props.attachments.items().length ? ` (${props.attachments.items().length})` : ""}`} disabled={!props.serverOnline} onClick={attach}><PaperclipIcon /></Button>
               <div class="composer-desktop-setting">
                 <Menu>
@@ -377,10 +368,14 @@ export function Composer(props: {
               </div>
               <Show when={props.profiles.length}><div class="composer-desktop-setting"><Menu><MenuTrigger class="model-trigger" aria-label={`Profile ${props.activeProfile?.label || "General"}`} disabled={!props.serverOnline || props.chat.status() !== "draft"}><span>{props.activeProfile?.label || "Profile"}</span><ChevronDownIcon /></MenuTrigger><MenuContent class="w-72"><MenuGroup><MenuLabel>Profile</MenuLabel><Show when={props.chat.status() !== "draft"}><div class="px-2 pb-2 text-xs text-muted-foreground">Locked for this chat after the first message.</div></Show><MenuRadioGroup value={props.activeProfile?.id || ""} onChange={props.onChooseProfile}><For each={props.profiles}>{(item) => <MenuRadioItem value={item.id} disabled={props.chat.status() !== "draft" || item.disabled}>{item.label}</MenuRadioItem>}</For></MenuRadioGroup></MenuGroup><MenuSeparator /><MenuItem onSelect={() => props.onOpenSettings("profiles")}>Manage profiles…</MenuItem></MenuContent></Menu></div></Show>
             </div>
+            <Show when={recording() && !phoneLayout()}><VoiceWaveform class="composer-status-waveform composer-actions-waveform" history={dictationWaveform.history} level={dictationWaveform.level} peak={dictationWaveform.peak} state={recorderMonitorState()} variant="compact" barDensity={3} ariaLabel={dictationLabel() || "Microphone input level"} /></Show>
             <div class="composer-actions-right">
-              <Show when={busy()}><Button variant={hasText() ? "outline" : "default"} size="icon-sm" aria-label="Stop response" onClick={props.chat.stop}><Show when={props.chat.stopping()} fallback={<SquareIcon />}><Spinner /></Show></Button></Show>
-              <Show when={busy() && hasText()}><Button variant="outline" size="icon-sm" aria-label="Steer after tools" disabled={dictating()} onClick={() => sendMessage("steer")}><WaypointsIcon /></Button></Show>
-              <Button size="icon-sm" aria-label={busy() ? "Queue follow-up" : "Send message"} disabled={!canSend()} onClick={() => sendMessage()}><Show when={props.chat.generation() === "submitting"} fallback={<ArrowUpIcon />}><Spinner /></Show></Button>
+              <Show when={!recording()}><span class="composer-status-state composer-actions-status" role="status" aria-live="polite"><Show when={dictationLabel()} fallback={<><Show when={SPINNING_ACTIVITY.has(activity()?.kind || "")}><Spinner /></Show><Show when={["request_failed", "runtime_failed"].includes(activity()?.kind || "")}><TriangleAlertIcon aria-hidden="true" /></Show>{activity()?.label || "Ready"}</>}>{dictationLabel()}</Show></span></Show>
+              <Button variant={recording() ? "default" : "ghost"} size="icon-sm" class="dictation-trigger" data-state={dictationState()} aria-label={["starting", "listening"].includes(dictationState()) ? "Stop voice dictation" : "Start voice dictation"} aria-pressed={dictating()} title={`Voice dictation (${props.voiceSettings.shortcut})`} disabled={!props.serverOnline || ["finishing", "waiting", "transcribing"].includes(dictationState())} onPointerDown={captureDictationLaunch} onClick={toggleDictation}><Show when={["starting", "finishing", "waiting", "transcribing"].includes(dictationState())} fallback={<MicIcon />}><Spinner /></Show></Button>
+              <Show when={busy() && hasText() && !dictating()}><Button variant="outline" size="icon-sm" aria-label="Steer after tools" onClick={() => sendMessage("steer")}><WaypointsIcon /></Button></Show>
+              <Show when={busy() || props.chat.stopping()} fallback={<Button size="icon-sm" aria-label="Send message" disabled={!canSend()} onClick={() => sendMessage()}><ArrowUpIcon /></Button>}>
+                <Button variant="default" size="icon-sm" aria-label="Stop response" onClick={props.chat.stop}><Show when={props.chat.stopping()} fallback={<SquareIcon />}><Spinner /></Show></Button>
+              </Show>
             </div>
           </div>
         </div>

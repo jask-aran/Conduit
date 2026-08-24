@@ -3459,7 +3459,7 @@ test("editing from history abandons the current attachment draft cleanly", async
   });
 });
 
-test("stop freezes the visible response and rejects late generation deltas", async ({ page }) => {
+test("stop freezes the visible response and rejects late generation deltas", async ({ page }, testInfo) => {
   await page.addInitScript(() => {
     class StopWebSocket extends EventTarget {
       static OPEN = 1;
@@ -3489,7 +3489,15 @@ test("stop freezes the visible response and rejects late generation deltas", asy
   await page.getByRole("textbox", { name: "Message Pi" }).fill("Start");
   await page.getByRole("button", { name: "Send message" }).click();
   await expect(page.getByText("partial")).toBeVisible();
-  await page.getByRole("button", { name: "Stop response" }).click();
+  const stop = page.getByRole("button", { name: "Stop response" });
+  await expect(page.getByRole("button", { name: "Send message" })).toHaveCount(0);
+  if (testInfo.project.name !== "mobile-chromium") {
+    const [statusBox, stopBox] = await Promise.all([page.locator(".composer-actions-status").boundingBox(), stop.boundingBox()]);
+    expect(statusBox).not.toBeNull();
+    expect(stopBox).not.toBeNull();
+    expect(statusBox.x + statusBox.width).toBeLessThanOrEqual(stopBox.x + 1);
+  }
+  await stop.click();
   // Stopping may resolve quickly; accept either in-flight or completed stop UI.
   await expect(page.getByText(/Stopping…|Stopped/)).toBeVisible();
   await expect(page.getByText("LATE OUTPUT")).toHaveCount(0);
@@ -3880,9 +3888,15 @@ test("global commands and slash suggestions preserve their intended focus models
     expect(Math.abs(paletteBox.x + paletteBox.width / 2 - viewport.width / 2)).toBeLessThanOrEqual(2);
     expect(Math.abs(paletteBox.y + paletteBox.height / 2 - viewport.height / 2)).toBeLessThanOrEqual(2);
   }
-  const [statusBox, composerBox] = await Promise.all([page.locator(".composer-status").boundingBox(), page.locator(".composer").boundingBox()]);
-  expect(statusBox.width).toBe(composerBox.width);
-  await expect(page.locator(".composer-status")).toContainText(/Ready|Responding|Thinking/);
+  if (viewport.width > 760 && testInfo.project.name !== "mobile-chromium") {
+    const status = page.locator(".composer-actions .composer-actions-status");
+    await expect(status).toContainText(/Ready|Responding|Thinking/);
+    await expect.poll(() => status.evaluate((node) => getComputedStyle(node).fontSize)).toBe("13px");
+    await expect.poll(() => Promise.all([
+      status.evaluate((node) => getComputedStyle(node).fontFamily),
+      page.locator(".composer-desktop-setting .model-trigger").first().evaluate((node) => getComputedStyle(node).fontFamily),
+    ]).then(([statusFont, triggerFont]) => statusFont === triggerFont)).toBe(true);
+  }
   await expect(palette.getByRole("combobox", { name: "Search commands" })).toHaveAttribute("aria-expanded", "true");
   await expect(page.locator("#root")).toHaveAttribute("aria-hidden", "true");
   await page.keyboard.press("Escape");
@@ -4668,7 +4682,8 @@ test("Ctrl+Shift+D captures in the page and buffers microphone audio until the s
   const isMobile = testInfo.project.name === "mobile-chromium";
   await expect.poll(() => page.evaluate(() => Boolean(window.__voicePcmHandler))).toBe(true);
   await expect(trigger).toHaveAttribute("data-state", "starting");
-  await expect(page.locator(".composer-status-state")).toContainText("Preparing microphone…");
+  if (isMobile) await expect(page.locator(".chat-status-label")).toContainText("Preparing microphone…");
+  else await expect(page.locator(".composer-status-state")).toContainText("Preparing microphone…");
   const startingWaveform = page.locator(isMobile ? ".chat-status-waveform" : ".composer-status-waveform");
   await expect(startingWaveform).toHaveCount(0);
   await expect.poll(() => page.evaluate(() => window.__voiceBinaryCount)).toBe(0);
@@ -4680,20 +4695,38 @@ test("Ctrl+Shift+D captures in the page and buffers microphone audio until the s
   await expect(waveform).toHaveAttribute("data-variant", "compact");
   if (isMobile) {
     await expect(page.locator(".chat-status-label")).toHaveCount(0);
+    await expect(page.locator(".composer-status-waveform")).toHaveCount(0);
     await expect(page.locator(".chat-status-line")).toHaveAttribute("aria-label", "Runtime status: Recording · preparing transcription…");
   } else {
-    await expect(page.locator(".composer-status-state")).toContainText("Recording · preparing transcription…");
+    await expect(page.locator(".composer-actions .composer-actions-status")).toHaveCount(0);
+    await expect(waveform).toHaveAttribute("aria-label", "Recording · preparing transcription…");
   }
-  const [waveformBox, statusBox] = await Promise.all([waveform.boundingBox(), isMobile ? page.locator(".chat-status-line").boundingBox() : page.locator(".composer-status-state").boundingBox()]);
+  const [waveformBox, slotBox] = await Promise.all([waveform.boundingBox(), isMobile ? page.locator(".chat-status-line").boundingBox() : page.locator(".composer-actions").boundingBox()]);
   expect(waveformBox).not.toBeNull();
-  expect(statusBox).not.toBeNull();
+  expect(slotBox).not.toBeNull();
   if (isMobile) expect(waveformBox.width).toBeGreaterThan(120);
-  else expect(statusBox.x).toBeGreaterThanOrEqual(waveformBox.x + waveformBox.width - 1);
+  else {
+    await expect(page.locator(".composer-actions .composer-status-waveform")).toHaveCount(1);
+    const sendBox = await page.getByRole("button", { name: "Send message" }).boundingBox();
+    expect(sendBox).not.toBeNull();
+    expect(waveformBox.y).toBeLessThan(slotBox.y + slotBox.height);
+    expect(waveformBox.y + waveformBox.height).toBeGreaterThan(slotBox.y);
+    const micBox = await page.locator(".dictation-trigger").boundingBox();
+    expect(micBox).not.toBeNull();
+    expect(waveformBox.x + waveformBox.width).toBeLessThanOrEqual(micBox.x + 1);
+    expect(micBox.x + micBox.width).toBeLessThanOrEqual(sendBox.x + 1);
+    expect(waveformBox.width).toBeGreaterThan(80);
+  }
   const barCount = () => waveform.locator(".voice-waveform-bar").count();
   await expect.poll(barCount).toBeGreaterThan(0);
   if (isMobile) await expect.poll(barCount).toBeGreaterThanOrEqual(32);
   await expect.poll(() => waveform.locator(".voice-waveform-bar").evaluateAll((bars) => bars.filter((bar) => bar.getBoundingClientRect().width >= 1).length)).toBeGreaterThan(0);
-  await expect.poll(() => waveform.locator(".voice-waveform-bar").evaluateAll((bars) => Math.max(...bars.map((bar) => Number.parseFloat(bar.style.height) || 0)))).toBeLessThan(90);
+  await expect.poll(() => waveform.locator(".voice-waveform-bar").evaluateAll((bars) => {
+    const widths = bars.map((bar) => Math.round(bar.getBoundingClientRect().width * 10) / 10);
+    return widths.length > 1 && widths.every((width) => width === widths[0]);
+  })).toBe(true);
+  await expect.poll(() => waveform.locator(".voice-waveform-bar").evaluateAll((bars) => Math.max(...bars.map((bar) => Number.parseFloat(bar.style.height) || 0)))).toBeGreaterThan(50);
+  await expect.poll(() => waveform.locator(".voice-waveform-bar").evaluateAll((bars) => Math.max(...bars.map((bar) => Number.parseFloat(bar.style.height) || 0)))).toBeLessThanOrEqual(100);
   await expect(waveform.locator(".voice-waveform-peak")).toHaveCount(0);
   await expect(page.locator(".composer-recorder-monitor")).toHaveCount(0);
   await expect.poll(() => page.evaluate(() => window.__voiceBinaryCount)).toBe(0);
