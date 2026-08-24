@@ -1,4 +1,4 @@
-import { createSignal, For, onCleanup, Show, type Accessor } from "solid-js";
+import { createSignal, For, onCleanup, onMount, Show, type Accessor } from "solid-js";
 import type { AudioSignalLevel } from "./voice-audio";
 
 export const VOICE_WAVEFORM_SAMPLE_COUNT = 48;
@@ -17,13 +17,17 @@ export interface VoiceWaveformController {
 }
 
 const clamp = (value: number) => Math.min(1, Math.max(0, Number.isFinite(value) ? value : 0));
+const VOICE_LEVEL_RMS_GAIN = 4;
+const VOICE_LEVEL_PEAK_GAIN = 1.6;
+const VOICE_PEAK_RMS_GAIN = 3.2;
+const VOICE_PEAK_GAIN = 1.6;
 
 export function normalizeVoiceLevel(level: AudioSignalLevel) {
-  return clamp(Math.max(level.rms * 10, level.peak * 2.4));
+  return clamp(Math.max(level.rms * VOICE_LEVEL_RMS_GAIN, level.peak * VOICE_LEVEL_PEAK_GAIN));
 }
 
 export function normalizeVoicePeak(level: AudioSignalLevel) {
-  return clamp(Math.max(level.peak * 2.4, level.rms * 8));
+  return clamp(Math.max(level.peak * VOICE_PEAK_GAIN, level.rms * VOICE_PEAK_RMS_GAIN));
 }
 
 const emptyHistory = (sampleCount: number) => Array.from({ length: sampleCount }, () => 0);
@@ -87,6 +91,8 @@ export interface VoiceWaveformProps {
   peak: Accessor<number>;
   state: VoiceWaveformState;
   barCount?: number;
+  /** Pixels allocated to each bar when the plot width is known. */
+  barDensity?: number;
   variant?: "monitor" | "compact";
   ariaLabel?: string;
   class?: string;
@@ -100,11 +106,31 @@ const stateLabel = (state: VoiceWaveformState) => ({
 }[state]);
 
 const percent = (value: number) => `${Math.round(clamp(value) * 100)}%`;
+const MAX_RESPONSIVE_BAR_COUNT = 64;
 
 export function VoiceWaveform(props: VoiceWaveformProps) {
+  let plot!: HTMLDivElement;
+  const [plotWidth, setPlotWidth] = createSignal(0);
+  let resizeObserver: ResizeObserver | undefined;
+
+  onMount(() => {
+    if (!props.barDensity || typeof ResizeObserver === "undefined") return;
+    const measure = () => setPlotWidth(plot.getBoundingClientRect().width);
+    measure();
+    resizeObserver = new ResizeObserver(([entry]) => {
+      if (entry) setPlotWidth(entry.contentRect.width);
+    });
+    resizeObserver.observe(plot);
+  });
+
+  onCleanup(() => resizeObserver?.disconnect());
+
   const bars = () => {
     const history = props.history();
-    const count = Math.max(1, Math.floor(props.barCount || history.length || VOICE_WAVEFORM_SAMPLE_COUNT));
+    const responsiveCount = props.barDensity && plotWidth() > 0
+      ? Math.min(MAX_RESPONSIVE_BAR_COUNT, Math.max(1, Math.round(plotWidth() / props.barDensity)))
+      : 0;
+    const count = Math.max(1, Math.floor(responsiveCount || props.barCount || history.length || VOICE_WAVEFORM_SAMPLE_COUNT));
     return history.length >= count
       ? history.slice(-count).map(clamp)
       : [...emptyHistory(count - history.length), ...history].map(clamp);
@@ -119,7 +145,7 @@ export function VoiceWaveform(props: VoiceWaveformProps) {
         <span class="voice-waveform-readout"><span>Level {percent(props.level())}</span><span>Peak {percent(props.peak())}</span></span>
       </div>
     </Show>
-    <div class="voice-waveform-plot" aria-hidden="true">
+    <div ref={plot} class="voice-waveform-plot" aria-hidden="true">
       <Show when={!compact()}>
         <span class="voice-waveform-gridline voice-waveform-gridline-high" />
         <span class="voice-waveform-gridline voice-waveform-gridline-low" />

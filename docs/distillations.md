@@ -113,6 +113,20 @@ Add an entry through `$tacit-knowledge` after explicit approval or validated rep
 - **Scope:** Root command palette and all first-class palette pages at widths up to 760px.
 - **Evidence:** Manual review at a 523px-wide tall viewport found the chat-search list capped at desktop height while the app had already entered its mobile layout.
 
+### Keep composer frost inside the transcript scrollport
+
+- **Type:** Gotcha.
+- **Rule:** Put the frost composer in the same overflow scroller as the transcript, sticky to the bottom. Do not overlay it from a `z-index` sibling of `.transcript` or `.message-scroller-viewport`. `backdrop-filter` cannot sample that sibling paint group; raising blur or moving the rule onto a child overlay will not fix it. Do not treat authored CSS strings or an absolutely positioned test stripe as proof of live frost.
+- **Scope:** `.composer`, `.composer-stack`, and transcript/composer overlap.
+- **Evidence:** `660fad3` hid text with a 90% card tint, not live blur. Later overlays showed sharp transcript through a 17% pane while tests still asserted `blur(Npx)`. An in-flow striped paragraph inside the viewport blurred; the same paint as an overlay sibling did not. The accepted path is sticky `.composer-stack` as the transcript `stickyFooter`.
+
+### Author only unprefixed backdrop-filter for production CSS
+
+- **Type:** Gotcha.
+- **Rule:** Write `backdrop-filter` only. Do not pair it with `-webkit-backdrop-filter` in source. LightningCSS then emits only the prefixed property, which current Chrome reports as invalid and ignores.
+- **Scope:** Production CSS processed by Tailwind/LightningCSS, especially `.composer[data-composer-surface="frost"]`.
+- **Evidence:** Built `index-*.css` contained `-webkit-backdrop-filter:blur(21px)` and no standard property. Chrome DevTools marked the prefix invalid. After authoring the unprefixed rule alone, the bundle kept both declarations. `scripts/check-bundle.mjs` now fails if LightningCSS drops the unprefixed property.
+
 ### Keep browser-hosted shortcuts inside an app-owned path
 
 - **Type:** Gotcha.
@@ -127,12 +141,48 @@ Add an entry through `$tacit-knowledge` after explicit approval or validated rep
 - **Scope:** Composer voice dictation keyboard handling.
 - **Evidence:** Chrome treated `Ctrl+Shift+D` as bookmark-all-tabs when the page handler ran in the bubble phase. `test/browser/app.spec.js` verifies the captured chord does not reach a document listener or open another tab.
 
+### Keep mobile touch activation semantics explicit
+
+- **Type:** Gotcha.
+- **Rule:** Do not infer mobile push-to-talk behavior from the saved activation setting. The composer microphone button currently calls `toggleDictation()` for every tap; only the keyboard shortcut path handles push-to-talk keydown and keyup. A future touch push-to-talk control must implement press and release explicitly.
+- **Scope:** Mobile composer voice controls and future native-sized touch targets.
+- **Evidence:** `composer.tsx` routes the microphone button through `toggleDictation()` while its window key handlers branch on `push_to_talk`; the user accepted WP3 on mobile with this limitation deferred.
+
 ### Decouple microphone capture from ASR readiness
 
 - **Type:** Invariant.
 - **Rule:** Start browser microphone and `AudioWorklet` setup in parallel with the dictation WebSocket, buffer PCM within a fixed byte limit, and send no PCM until the server emits `ready`; use the browser input selector and signal test to diagnose device choice before trusting a transcript.
 - **Scope:** `voice-dictation-client.ts`, `voice-audio.ts`, and Settings → Voice.
 - **Evidence:** The measured one-second startup delay came from waiting for the server handshake before capture. The focused browser test proves capture and waveform state start before `ready`, queued audio stays off the socket, and PCM flushes after `ready`; the silent-input test prevents the short `you` hallucination.
+
+### Keep authoritative VAD decisions server-side
+
+- **Type:** Invariant.
+- **Rule:** Keep Silero authoritative in Conduit. For local batch adapters, process closed ranges incrementally and flush the final result at Stop; for remote or compatibility adapters, wait until Stop. Submit only selected padded ranges, retain short speech, merge overflow into a bounded tail, keep complete accepted PCM in the archive, and never restore RMS segmentation to the authenticated path.
+- **Scope:** `dictation-stream.js`, `voice-vad.js` incremental sessions, voice diagnostics, and archived voice sidecars.
+- **Evidence:** WP4B focused tests cover silence-only no-submit behavior, short-range submission, padded multi-region ordering, and segment-cap tail preservation. WP5 focused tests cover a stable final before Stop, ordered tail append, and failed-range retention. The accepted sidecar `2026-08-15T14-18-07-767Z-739d2241-3737-4005-aced-e24764c69dea.json` records a Silero positive at 0.89368 during silence and Parakeet's `Mm-hmm.` hallucination; treat this as a false-positive/noise-quality issue, not permission to move VAD into the browser. The approved WP5 sidecar `2026-08-15T15-32-21-828Z-ee4f2317-0d3c-4816-9e09-516a9cd758c6.json` confirms 49,240 ms of archived mono PCM16, 9 of 9 progressive ranges completed, no fallback, and a first segment final at 3,878 ms.
+
+### Keep local voice selection through installation polling
+
+- **Type:** Gotcha.
+- **Rule:** During managed model installation polling, preserve the current local selection and invalidate settings GET responses that overlap a Save; never let a stale poll response replace the selected tuple with the legacy default profile.
+- **Scope:** `Settings` voice settings load/save and managed model installation refreshes.
+- **Evidence:** Desktop and mobile regression coverage now simulates Save followed by a stale Whisper response and keeps the selected Parakeet `transcribe-rs` profile. The full browser voice slice passed 8/8 and the full suite passed 522/522.
+
+### Amortize buffered Parakeet streaming before lowering latency
+
+- **Type:** Gotcha.
+- **Rule:** For `transcribe_cpp_stream_v1` on a CPU host, use a supported
+  `parakeet_buffered` profile with a chunk large enough to amortize the
+  sliding-window encoder work. Keep the 20 ms transport packets and 160 ms
+  server feed quantum independent from that profile. Do not blame the model
+  size alone when a low-latency profile falls behind.
+- **Scope:** Unified English Q8 Live through `transcribe.cpp`.
+- **Evidence:** WP7 recorded a 5,020 ms queue and `live_queue_overflow` with
+  the 480 ms profile on the 13,340 ms reference WAV. The same model and input
+  held the paced adapter queue to 500 ms and drained to 0 ms with the supported
+  1,120 ms profile. The focused Stop-drain and overflow tests preserve the
+  scheduler and failure boundary.
 
 ### Preserve authored timelines when animations self-clean
 

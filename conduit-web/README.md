@@ -225,11 +225,29 @@ selected Activation behaviour: Push to talk holds the recording, while Toggle
 starts and stops it with separate presses. The shortcut is captured before page
 controls so Chrome does not consume the default chord as a bookmark command.
 Microphone capture starts in
-parallel with the voice connection. The composer keeps a compact 24-bar,
-left-to-right history in the status line. Settings → Voice uses the same
+parallel with the voice connection. The composer shows Preparing microphone
+until the first PCM packet exists, then shows Recording, Finishing capture,
+Waiting for transcription engine when needed, and Transcribing as the session
+advances. A healthy AudioContext and cached worklet are reused between
+sessions. The composer keeps a compact,
+width-responsive left-to-right history in the status line. Settings → Voice uses the same
 bounded bar renderer in a larger monitor with current level, peak hold, and
 recording state. The browser captures 16 kHz mono PCM with an `AudioWorklet`
-and sends it only to authenticated `WS /v0/dictation/stream`. Settings → Voice
+and sends it in 20 ms, 320-sample packets only to authenticated
+`WS /v0/dictation/stream`; Stop flushes one final partial packet when needed.
+Conduit owns one accepted PCM timeline and one transcript truth for each
+session. Stop sends one immutable whole-session buffer to BatchPort. During
+pauses sends each closed range to BatchPort with absolute sample positions and
+flushes the open tail. Live sends every accepted sample once, in order, to the
+persistent StreamPort. Live does not run Eager segmentation. Conduit uses one
+shared `SegmentationProvider` contract for pinned Silero and the calibrated
+heuristic provider; analysis always uses a copy of the accepted PCM. Short
+valid ranges are retained, and bounded range exhaustion merges the remaining
+tail. The complete WAV remains the archive source, and sidecars retain frame
+probabilities, selected ranges, source-region mapping, progressive sequence
+status, transcript watermarks, segmentation metadata, and the segment guard.
+Exact-zero input remains a digital-silence or device-stall diagnostic.
+Settings → Voice
 can select a browser microphone, refresh the device list, and run an in-memory
 input-level test until the user stops it; a 60-second safety cap prevents an
 abandoned test from running forever. When the browser supports a playable
@@ -239,13 +257,26 @@ released when replaced or when Settings closes. Browsers without a playable
 recorder still provide the live level test and show why playback is unavailable.
 Chrome site settings still control permission. The selected input must be
 available there. Voice shortcut,
-activation, auto-send, microphone, transcription source, and model changes stay
+activation, auto-send, microphone, warm-microphone retention, transcription source, and model changes stay
 in a draft until **Save Voice settings**. A selected microphone remains stored
 until capture reports that it is unavailable; Conduit then shows a recovery
 toast without silently changing the device. Conduit ignores a no-signal
 completion from a short intentional stop, and reports sustained silence only
-after five seconds. Settings → Voice can use managed
-Whisper Tiny English, Whisper Base, Whisper Small, or Parakeet TDT 0.6B v3,
+after five seconds. Warm microphone retention is off by default; when enabled,
+Settings shows the active state and a direct Stop warm microphone control.
+The page presents Transcription source before the selected local or Cloud path.
+Local settings show one semantic model family at a time, then the compatible
+runtime, precision or variant, and valid batching profiles. Variant choices
+show truthful install state; the selected path reports requested and actual
+compute state. During pauses is labelled with its catalogue detector, such as
+Silero or Silence detection, rather than hiding pause selection in Advanced.
+Capture profile, shortcut, activation, auto-send, and warm microphone stay
+inside one closed Advanced section. Cloud settings show the selected transport
+and its fixed timing;
+OpenAI model selection updates between the HTTPS upload and WebSocket live
+adapters before Save.
+Settings → Voice can use managed
+Whisper Tiny English, Whisper Base, Whisper Small, Parakeet Unified English Q8, Parakeet TDT 0.6B v2, or Parakeet TDT 0.6B v3,
 and has first-class provider/model profiles for OpenAI, Deepgram, and Groq.
 Remote None, Bearer, and custom API-key-header credentials are stored server-side in `data/voice.json`
 (mode `0600`) and are never returned to the browser. Environment configuration
@@ -256,20 +287,63 @@ optional auto-send accepts only a server-confirmed final event settled within
 one second of stop.
 
 Managed local setup is an explicit user action. Conduit downloads pinned q8
-Whisper ONNX artifacts or the pinned Parakeet/ONNX Runtime package into
-`data/voice/models`. A reviewed source manifest pins every artifact to an
-immutable revision or release URL, exact byte size, and SHA-256 digest. The
-installer verifies these digests, displays progress, supports cancellation and
-retry, and keeps only one selected model resident. Whisper runs in the server
-through Transformers.js; Parakeet runs as one unprivileged loopback worker.
-File-upload providers and managed
-Whisper buffer one bounded utterance in memory and transcribe it once after
-stop; live WebSocket adapters can provide provisional text during capture.
+Whisper ONNX artifacts, the pinned Parakeet/ONNX Runtime package, or the
+Unified English Q8 GGUF into `data/voice/models`. A reviewed source manifest
+pins every model artifact to an immutable revision or release URL, exact byte
+size, and SHA-256 digest. The installer verifies these digests, displays
+progress, supports cancellation and retry, and keeps only one selected model
+resident. Whisper runs in the server through Transformers.js; legacy Parakeet
+runs as one unprivileged loopback worker; supported Parakeet ONNX artifacts
+also have a managed `transcribe-rs` BatchPort worker. Unified English Q8 uses the pinned
+`transcribe-cpp@0.1.3` Node binding and its locked Linux CPU/Vulkan native
+package. The binding verifies its ABI contract and reports the actual compute
+backend. The `transcribe-rs` worker is a long-lived unprivileged child process
+over private pipes. It pins `transcribe-rs` 0.3.8, `ort` 2.0.0-rc.12, bundled
+ONNX Runtime 1.24.2, Rust 1.88, and the x86_64 Linux CPU target. Its versioned
+frames use bounded length-prefixed JSON and PCM16 payloads; the worker reports
+compiled, requested, and actual providers separately. The worker exposes
+After Stop and During pauses only. It does not advertise Live because this
+pinned Parakeet implementation has no persistent StreamPort. Unified English
+Q8 uses one `parakeet_buffered` stateful session per
+dictation, with the current 1.12 s profile (5.6 s left context, 560 ms chunk,
+and 560 ms right context) and stable-prefix commits. It emits stable and tentative text
+while capture continues. If stream startup fails before useful text, Conduit
+records the failure and uses the bounded WP5 progressive batch fallback. If a
+stable segment has an exact sample checkpoint, a later stream failure replays
+only that checkpoint's bounded-overlap suffix through BatchPort and preserves
+the stable prefix. It does not run both paths in parallel. File-upload providers buffer one bounded
+utterance in memory and transcribe it after Stop. Other installed local batch
+models can use the bounded progressive range path during capture; this is not
+stateful streaming and does not run for remote providers. The native worker
+protocol and build records are in `native/transcribe-rs-worker/README.md`.
 Installing a model is separate from selecting the active model. The selected
 model is persisted with **Save Voice settings**, and installation never occurs
 without explicit license acceptance.
 
-OpenAI defaults to `gpt-transcribe`, with GPT-4o mini/full transcription choices;
+Local selection is stored as `voiceConfigVersion: 2` with a canonical tuple:
+`modelId`, `artifactId`, stable `runtimeId`, `execution`, and `segmentation`.
+The tuple resolves to one immutable execution profile and backend path. The
+runtime version is reported separately, so a routine runtime update does not
+invalidate the selection. Legacy `localModelId` values migrate through an
+explicit map and remain available to the older client for compatibility. A
+valid selection can be saved before its artifact is installed; capture then
+returns the specific missing-artifact error and the selection remains intact.
+The settings response includes the static profile catalogue and a separate
+backend-path status list with artifact state, runtime state, requested and
+actual compute backend, loaded runtime version, and the last error code.
+
+The current Unified English selection resolves to
+`parakeet-unified-en-0.6b` / `parakeet-unified-en-0.6b-q8-gguf` /
+`transcribe-cpp` and can use the persistent `live` StreamPort. The current
+Transformers.js paths use `eager` BatchPort execution with Silero
+segmentation. Legacy Parakeet paths use `stop` BatchPort execution. The
+`transcribe-rs` paths use `stop` and Silero-segmented `eager` BatchPort
+profiles. Each
+dictation freezes this resolved tuple at open; a settings change affects the
+next dictation only. One runtime lease covers the session and releases once on
+completion, failure, cancellation, socket close, or shutdown.
+
+OpenAI offers `gpt-transcribe` for Stop-time file upload and `gpt-live-transcribe` for live PCM through the same dictation WebSocket. GPT-4o file models are not listed.
 Deepgram offers Nova-3 and Nova-2 with `Token` authentication and smart
 formatting; Groq offers Whisper Large V3 Turbo and Large V3. Provider endpoints,
 auth schemes, model fields, streaming behavior, and response parsing are owned
@@ -411,7 +485,8 @@ starting, and browser-attached processes remain resident.
 - `GET /v0/runtime/stream` (SSE) pushes snapshot-first global process updates
 - `GET /v0/runtime/settings` and `PATCH /v0/runtime/settings` read/update max warm processes, max concurrent generations, and idle reclaim TTL (`data/runtime.json`, env defaults)
 - `GET|PUT /v0/voice/settings` reads or updates the redacted voice source,
-  named adapter, endpoint, and authentication policy
+  canonical local execution tuple, static execution catalogue, backend-path
+  status, named adapter, endpoint, and authentication policy
 - `POST /v0/voice/test` tests the effective endpoint without disclosing its
   credential; `DELETE /v0/voice/credential` removes a stored remote secret
 - `POST /v0/voice/model/install`, `POST /v0/voice/model/cancel`, and
@@ -428,6 +503,7 @@ live process view, then low-frequency `runtime_process` and
 Each public process view includes safe client-facing fields only: `id`,
 `chatId`, `projectId`, `status`, `active`, `activity`, `activityDetail`,
 `stopping`, queue lengths via `queue`, `hostUiRequests`, `contextUsage`,
+`sessionStats`, and cumulative derived `cacheStats`,
 `runtime`, `binaryVersion`, `trustPosture`, `updatedAt`, and `clientCount`. The durable Conduit chat id is the public row
 key; the live process id is disposable.
 
@@ -447,8 +523,35 @@ remain on disk and resume on the next open.
 
 Context usage is synthesized by Conduit: after `agent_end` / `compaction_end`
 (and on selected-chat reconnect) the server calls Pi `get_session_stats` and
-emits a Conduit `context_usage` event. Null tokens/percent mean unknown, not
-zero.
+emits a Conduit `context_usage` event. The event carries current context usage,
+the latest assistant request usage, cumulative session statistics, and
+cumulative derived cache statistics. Null tokens/percent mean unknown, not
+zero. Session statistics include message and tool counts, input/output/cache
+token totals, and cumulative cost.
+
+`cacheStats` is derived from successive assistant request usage records. For
+each eligible pair, Conduit sets prompt tokens to input plus cache-read plus
+cache-write tokens, eligible tokens to the lower prompt total, and cache hits
+to the lower cache-read and eligible totals. The cumulative eligible hit rate
+is the sum of cache hits divided by the sum of eligible tokens. Compaction and
+branch summaries break the request-to-request eligibility link; cumulative
+totals remain.
+
+The composer can display these values as independent browser-local metrics.
+The default `Compact` preset shows core context usage, the latest request's
+input/output/cache fields, cumulative session totals, cost, and eligible cache
+hit rate. `Full` enables every measure. `Cache diagnostics` focuses on current
+and cumulative cache-read, uncached, eligible, hit, and missed measures.
+Changing one checkbox switches the selector to `Custom`; all selections remain
+browser-local.
+
+The complete metric catalogue includes:
+context tokens, window size, used and remaining percentages, latest request
+token/cache/reasoning/cost fields, cumulative session token and cost fields,
+message counts, tool counts, cumulative cache-eligible tokens/hits/misses and
+eligible hit rate, and derived cache-read or uncached-input percentages.
+Derived values are display calculations only; Pi remains the source of token
+and cost values.
 
 ## Live session protocol
 
@@ -493,26 +596,80 @@ produces `client_error` with `code` and `message`.
 ## Voice dictation protocol
 
 `WS /v0/dictation/stream` is authenticated like every other upgrade. Browser
-binary frames are signed 16-bit little-endian mono PCM at 16 kHz. The browser
+binary frames are signed 16-bit little-endian mono PCM at 16 kHz. The normal
+packet is 320 samples (640 bytes, 20 ms); the final frame can be shorter. The browser
 stop control is `{ "type": "stop" }`; it may include the optional numeric
-`audioBytesSent` diagnostic field. The
-`parakeet_pcm_ws_v1` adapter forwards binary PCM, sends an explicit stop control,
-and accepts only its documented partial/final/end/error JSON event vocabulary;
-the `openai_audio_sse_v1` adapter sends an in-memory WAV utterance and consumes
-JSON or `transcript.text.delta` / `transcript.text.done` SSE events; the
-`deepgram_audio_v1` adapter sends WAV audio and reads channel alternatives.
-Each file-upload adapter makes one finalization request per utterance. The
-internal managed-Whisper adapter transcribes one buffered PCM utterance without
-opening a network listener. Conduit emits
-`ready`, `partial`, `final`, `end_of_speech`, `finalizing`, `settlement_deadline`, `completed`,
-and `error`. `finalizing` announces the duration-aware server deadline before
-the selected adapter runs its final transcription pass. `end_of_speech` is an upstream pause boundary; it does not stop
-the browser session. The user stop or the five-minute limit finalizes the
-session. `completed` includes `settlementMs`, `finalWithinDeadline`,
-`reason`, `audioBytes`, `audioDurationMs`, and non-secret adapter/provider/model
-metadata; clients must never infer auto-send timing from browser clocks. The
-browser also emits `conduit:voice-dictation-metrics` with the completion
-diagnostics.
+`audioBytesSent` field and bounded `clientDiagnostics` metadata. After the server
+sends `completed`, the browser sends one bounded `{ "type": "client_diagnostics" }`
+frame with its final-event timing; the server acknowledges it and updates the
+matching JSON sidecar. File-upload adapters (`openai_audio_sse_v1`,
+`deepgram_audio_v1`) send one in-memory WAV after Stop. OpenAI
+`gpt-live-transcribe` uses `openai_realtime_stream_v1`: each accepted 16 kHz
+PCM packet is upsampled to 24 kHz and appended to a Realtime transcription
+session; `partial` / `final` events include `stableText`, `tentativeText`,
+and `revision`. Unified English Q8 uses `transcribe_cpp_stream_v1` the same
+way with native float32 packets, plus `audioCommittedMs` and `bufferedMs`.
+Conduit copies incoming packets into one bounded accepted timeline, coalesces
+eight 20 ms packets into one 160 ms native feed, and allows only one native
+`feed()` call at a time. The queue limit is 5,000 ms. The stream reports
+`serverQueuedAudioMs`, `runtimeBufferedAudioMs`, `totalInferenceLagMs`,
+`acceptedThroughSample`, `submittedThroughSample`, `committedThroughSample`,
+`processedThroughSample`, and `archiveOwnedThroughSample` (null for processed
+unless the binding reports an exact cursor). A failure before output or after
+tentative output emits `stream_fallback` and replays the accepted PCM through
+`transcribe_cpp_batch_fallback_v1` from sample zero. A failure after stable
+output is safe only with an exact `throughSample`; the fallback replays from
+that committed sample with bounded overlap, preserves the stable prefix, and
+records discarded tentative revisions and duplicate-boundary handling. Without
+an exact checkpoint, Conduit emits `error` and preserves the accepted PCM for
+the archive. A stream-start failure is reported in `streamFallback` and can
+also select `transcribe_cpp_batch_fallback_v1` with the WP5 progressive path.
+The current CPU Live profile uses 5.6 s left context, a 560 ms chunk, and
+560 ms right context for 1.12 s lookahead. The other supported Unified English
+profiles remain available to later profile selection work.
+Other managed local models can submit closed ranges during capture through the
+bounded progressive path; the managed legacy Parakeet runtime still serves
+the OpenAI-compatible upload endpoint on loopback. Conduit emits
+`ready`, `partial`, `final`, `stream_fallback`, `finalizing`, `segment_error`,
+`settlement_deadline`, `session_final`, `completed`, and `error`. `final` events
+contain cumulative text and optional stable segment IDs, sequence, revision,
+and sample metadata. `session_final` is derived once from the accepted stable
+segments before `completed`. `finalizing`
+announces the duration-aware server deadline before the selected adapter
+completes its final range or whole-session pass. The user stop or the
+five-minute limit finalizes the session. `completed` includes `settlementMs`,
+`finalWithinDeadline`, `reason`, `audioBytes`, `audioDurationMs`, and
+non-secret adapter/provider/model metadata; clients must never infer auto-send
+timing from browser clocks. The browser also emits
+`conduit:voice-dictation-metrics` with the completion diagnostics.
+
+Completion diagnostics use schema version 5. Client timings use the browser's
+monotonic `performance.now()` clock and server timings use the server's own
+monotonic clock; the two clocks must not be subtracted. The bounded sidecar and
+metrics event include shortcut-to-first-PCM capture startup, microphone and
+worklet setup, first WebSocket send, packet and byte counts, socket buffering,
+redacted requested/effective audio settings, the selected raw or processed
+capture profile, source and processing sample rates, resampler method, and
+pre/post-worklet RMS/peak/clipping. Live capture does not calculate spectral
+energy. Conduit does not apply adaptive ASR gain; the recorded worklet gain is
+therefore an identity value. Capture diagnostics also state whether the
+microphone stream was reused. The diagnostics also include first/last server
+PCM, runtime preparation, inference queue/start/finish, partial/final,
+completion-send, archive, and bounded VAD queue/execution timing.
+The client event record includes digital-silence device-stall notifications.
+The server record includes Silero frame probabilities, selected padded sample
+ranges, source-region mapping, segmentation provider and calibration version,
+accepted/submitted/processed/committed/archive-owned watermarks, fallback
+source and completing profiles, and any segment-guard action. Direct adapter
+calls without a session selection retain the legacy RMS split for compatibility;
+the authenticated dictation path always supplies its server-side VAD decision.
+Completed session metadata also records the frozen profile ID, model and
+artifact IDs, stable runtime and backend-path IDs, execution and segmentation,
+requested and actual compute backend, and loaded runtime version.
+Raw device identifiers, credentials, and transcript bodies are not diagnostic
+fields or structured log fields. The current runtime reports its execution path
+and records an unavailable compute backend as `null` until the runtime exposes
+that fact.
 
 Finalisation uses `max(base, recordedAudioSeconds × modelMultiplier)` and a
 ten-minute cap. The relaxed defaults are a 30-second base and a 12× fallback
@@ -521,24 +678,47 @@ adjust the base, cap, and fallback with
 `CONDUIT_VOICE_FINALIZATION_BASE_MS`, `CONDUIT_VOICE_FINALIZATION_MAX_MS`, and
 `CONDUIT_VOICE_FINALIZATION_DEFAULT_MULTIPLIER`.
 
-The browser keeps the selected microphone ID in local settings and applies it
-as an exact `getUserMedia` device constraint. The input test measures the live
-stream until the user stops it, with a 60-second safety cap. A missing signal is
-reported in Settings → Voice and blocks transcript insertion for that
-utterance. Dictation sessions accept up to five minutes and the client surfaces
-the completion reason when the server reaches that limit.
+The browser keeps the selected microphone ID and capture profile in local
+settings and applies the microphone ID as an exact `getUserMedia` device
+constraint. The raw candidate profile requests echo cancellation, noise
+suppression, and browser automatic gain control off. The processed profile
+requests all three features on for devices that need speaker-echo handling.
+The browser reports the effective track settings separately from those
+requests. Both profiles use the same unamplified ASR PCM path.
+Conduit requests a 16 kHz `AudioContext`; when the browser keeps another source
+rate, the capture worklet uses a windowed-sinc FIR resampler and records the
+effective rates and method. The input test uses the selected profile, measures
+the live stream until the user stops it, and has a 60-second safety cap. A
+missing signal is reported in Settings → Voice. It blocks only an empty
+completion; a non-empty server transcript is retained even when browser level
+meters are quiet. Dictation sessions accept up to five minutes and the client
+surfaces the completion reason when the server reaches that limit.
 
-Successful dictations with at least one second of server-received PCM and
-non-empty transcript output are retained under `data/voice/recordings` as
-timestamped WAV/JSON diagnostic pairs. The archive keeps the latest 20 pairs;
-the JSON sidecar contains non-secret completion, provider, model, and byte
+Dictations with at least one second of server-received PCM are retained under
+`data/voice/recordings` as timestamped WAV/JSON diagnostic pairs, including
+sessions where the transcription service returns no text. Empty results have
+an empty `transcript` and `transcriptStatus: "empty"` in the sidecar. The
+archive keeps the latest 20 standard pairs and a separate bounded quota of
+four short failure recordings; short sessions do not evict normal recordings.
+The JSON sidecar contains non-secret completion, provider, model, and byte
 metadata. Settings microphone tests remain browser-local and are not archived.
+Archive handoff copies the accepted PCM into a bounded queue of at most two
+records and 32 MiB. Transcript completion and auto-send do not wait for disk.
+Server diagnostics record archive queue delay, pair-write duration, published
+file names, rotation counts, and failure state separately from transcript
+settlement. Archive work is drained for up to five seconds during orderly
+shutdown; work that misses that deadline is reported as a shutdown failure.
+WAV and JSON files are staged under `.pending-*` names, and only matching
+published pairs are retained as valid records.
 
-The server limits concurrent dictation sessions, audio duration and bytes,
+The server owns one bounded PCM accumulator per active session and shares its
+immutable accepted view with the selected scheduler and archive. Stop BatchPort
+materialises one whole-session buffer; Eager BatchPort receives bounded range
+slices; Live StreamPort receives ordered feeds. The server limits concurrent dictation sessions, audio duration and bytes,
 frame/event sizes, WebSocket buffering, connect time, and finalisation time.
-Settings-created remote endpoints require WSS/HTTPS, reject URL credentials and
+Settings-created remote endpoints require HTTPS, reject URL credentials and
 query strings, resolve only to public addresses, and pin the checked address for
-WebSocket connection setup. Diagnostic WAV files use a private data directory
+connection setup. Diagnostic WAV files use a private data directory
 and do not contain credentials or Pi JSONL content.
 
 ## Workspace terminal protocol
@@ -567,7 +747,8 @@ connections.
 Server events. When a generation is open, connect first sends one
 `generation_resume` containing the complete current reduced generation and its
 last applied sequence. It then sends `runtime_state` containing the session
-view plus `hostUiRequests`, `queue`, and `contextUsage` when known. Structured
+view plus `hostUiRequests`, `queue`, `contextUsage`, and `sessionStats` when
+known. Structured
 events are independent of the capped diagnostic event ring.
 Delivery coalesces same-block deltas briefly per socket and flushes before
 message, tool, stop, error, and settlement boundaries. A socket above the
@@ -590,7 +771,7 @@ Conduit-origin events thereafter:
 | `generation_retry_started` / `generation_retry_ended` / `generation_turn_ended` | `generationId`, `seq`, retry fields | Retry-aware lifecycle that does not settle the generation during a retry gap |
 | `generation_failed` | `generationId`, `seq`, `error` | Terminal structured runtime failure |
 | `generation_stopped` | `generationId`, `seq`, `status`, `processTerminated` | Stop completed; late output was gated |
-| `context_usage` | `contextUsage` | Synthesized context window usage (nullable tokens/percent) |
+| `context_usage` | `contextUsage`, `sessionStats` | Synthesized context window usage, latest request usage, and cumulative Pi statistics (nullable context tokens/percent) |
 | `extension_ui_resolved` | `requestId` | A host-UI request was answered |
 | `session_checkpoint` | `chat` | Registry row checkpointed after a completed response |
 | `history_forked` | `chat` | The chat advanced to a forked native session |
@@ -619,6 +800,11 @@ Production builds (`npm run build` via `vite-plugin-pwa`) emit:
 Add to Home Screen. The plugin injects manifest link and service-worker
 registration into the production HTML only; Vite dev does not register a
 worker, so installability is a production property.
+
+To force an installed app to check for a new shell, open any chat's More chat
+options menu and select `Update app`. Conduit asks the active service worker to
+update, waits for a new worker to take control when needed, and reloads the
+current chat.
 
 The service worker precaches static shell assets (`js`/`css`/`html`/`svg`/
 `png`/`ico`/`woff2`). It does **not** add runtime caching for `/v0`,
