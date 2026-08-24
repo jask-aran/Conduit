@@ -37,6 +37,7 @@ import { VoiceWaveform } from "./chat/voice-waveform";
 import { browserShortcutEnvironmentProvider } from "./shortcuts/shortcut-environment";
 import { ShortcutManager } from "./shortcuts/shortcut-manager";
 import "./project/dashboard.css";
+import "./chat/composer-geometry.css";
 import "./styles.css";
 
 if (import.meta.env.PROD) registerSW({ immediate: true, onRegisteredSW: (_url, registration) => rememberPwaRegistration(registration) });

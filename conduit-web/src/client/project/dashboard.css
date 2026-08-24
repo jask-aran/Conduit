@@ -135,7 +135,7 @@
 .project-dashboard-meta span { display: flex; align-items: center; gap: 5px; }
 .project-dashboard-meta svg { width: 12px; height: 12px; }
 
-@media (max-width: 760px) {
+@media (--conduit-mobile-layout) {
   .project-dashboard-content { width: calc(100% - 24px); padding: 24px 0 calc(32px + env(safe-area-inset-bottom, 0px)); }
   .project-identity { flex-direction: column; gap: 16px; padding-bottom: 20px; }
   .project-identity-title { gap: 12px; }

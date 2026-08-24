@@ -7,7 +7,8 @@
     "node": ">=22"
   },
   "scripts": {
-    "build": "vite build && node scripts/check-bundle.mjs",
+    "prebuild": "npm run generate:liquid-glass",
+    "build": "vite build && node scripts/check-bundle.mjs && node scripts/check-liquid-glass-assets.mjs dist/glass",
     "generate:liquid-glass": "node scripts/generate-liquid-glass-assets.mjs",
     "dev": "vite --host 0.0.0.0",
     "dev:server": "node --watch src/server.js",
