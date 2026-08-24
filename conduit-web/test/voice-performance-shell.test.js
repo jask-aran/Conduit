@@ -7,13 +7,14 @@ const pathUrl = (path) => new URL(`../${path}`, import.meta.url);
 const source = (path) => readFile(pathUrl(path), "utf8");
 
 test("Voice is forward-ported into the performance shell without legacy adapters", async () => {
-  const [main, composer, client, settings, settingsCore, voiceCss] = await Promise.all([
+  const [main, composer, client, settings, settingsCore, voiceCss, voiceTypes] = await Promise.all([
     source("src/client/main.tsx"),
     source("src/client/chat/composer.tsx"),
     source("src/client/chat/voice-dictation-client.ts"),
     source("src/client/settings/settings.tsx"),
     source("src/client/settings/settings-core.tsx"),
     source("src/client/settings/voice-settings.css"),
+    source("src/client/chat/voice-dictation-types.ts"),
   ]);
 
   // Performance topology remains the owner of the visible chat shell.
@@ -50,9 +51,17 @@ test("Voice is forward-ported into the performance shell without legacy adapters
   assert.match(settingsCore, /VoiceLocalCatalogue/);
   assert.match(settingsCore, /isWarmMicrophoneActive/);
   assert.match(settingsCore, /Transcription source/);
+  assert.match(main, /import type \{ VoiceDictationSettings \} from "\.\/chat\/voice-dictation-types"/);
+  assert.match(composer, /import type \{ VoiceDictationSettings \} from "\.\/voice-dictation-types"/);
+  assert.match(settingsCore, /import type \{ VoiceDictationSettings \} from "\.\.\/chat\/voice-dictation-types"/);
+  assert.match(settings, /voiceSettings: VoiceDictationSettings/);
+  assert.match(voiceTypes, /captureProfile: "raw" \| "processed"/);
+  assert.match(voiceTypes, /warmMicrophone: boolean/);
 
   // Rebuild-only material and meteor preferences remain available.
   assert.match(settingsCore, /COMPOSER_SURFACE_OPTIONS/);
-  assert.match(settings, /conduit:meteor-field/);
-  assert.match(voiceCss, /html\[data-meteor-field="off"\] \.chat-meteors/);
+  assert.match(main, /const METEOR_FIELD_STORAGE_KEY = "conduit:meteor-field"/);
+  assert.match(main, /routeKind\(\) === "chat" && meteorField\(\)/);
+  assert.match(main, /meteorField=\{meteorField\(\)\}/);
+  assert.doesNotMatch(voiceCss, /data-meteor-field/);
 });

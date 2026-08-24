@@ -414,6 +414,85 @@ test("Settings UI exposes and persists the sidebar chat limit", async ({ page })
   await expect(page.getByRole("dialog", { name: "Settings" }).getByLabel("Chats shown in sidebar")).toHaveValue("8");
 });
 
+test("Settings UI toggles and persists the ambient meteor field", async ({ page }) => {
+  await page.addInitScript(() => {
+    if (sessionStorage.getItem("conduit:meteor-field-test-initialized") === "true") return;
+    localStorage.removeItem("conduit:meteor-field");
+    sessionStorage.setItem("conduit:meteor-field-test-initialized", "true");
+  });
+  await page.goto("/");
+  await expect(page.getByRole("textbox", { name: "Message Pi" })).toBeVisible();
+  await expect(page.locator(".chat-meteors")).toHaveCount(1);
+
+  await openPalette(page);
+  await page.getByRole("option", { name: /^Settings…/ }).click();
+  await page.getByRole("option", { name: /^UI$/ }).click();
+  const settings = page.getByRole("dialog", { name: "Settings" });
+  const toggle = settings.getByLabel("Ambient meteor field");
+  await expect(toggle).toBeChecked();
+  await toggle.uncheck();
+  await expect(toggle).not.toBeChecked();
+  await expect(page.locator(".chat-meteors")).toHaveCount(0);
+
+  await settings.getByRole("button", { name: "Close" }).click();
+  await page.reload();
+  await expect(page.getByRole("textbox", { name: "Message Pi" })).toBeVisible();
+  await expect(page.locator(".chat-meteors")).toHaveCount(0);
+
+  await openPalette(page);
+  await page.getByRole("option", { name: /^Settings…/ }).click();
+  await page.getByRole("option", { name: /^UI$/ }).click();
+  const reloadedSettings = page.getByRole("dialog", { name: "Settings" });
+  const reloadedToggle = reloadedSettings.getByLabel("Ambient meteor field");
+  await expect(reloadedToggle).not.toBeChecked();
+  await reloadedToggle.check();
+  await expect(page.locator(".chat-meteors")).toHaveCount(1);
+});
+
+test("Settings UI selects and persists all composer surfaces", async ({ page }) => {
+  await page.addInitScript(() => {
+    if (sessionStorage.getItem("conduit:composer-surface-test-initialized") === "true") return;
+    localStorage.removeItem("conduit:composer-surface");
+    localStorage.removeItem("conduit:liquid-glass-surface");
+    localStorage.setItem("conduit:liquid-glass-runtime", "enabled");
+    sessionStorage.setItem("conduit:composer-surface-test-initialized", "true");
+  });
+  await page.goto("/");
+  await expect(page.getByRole("textbox", { name: "Message Pi" })).toBeVisible();
+  await expect(page.locator(".composer")).toHaveAttribute("data-composer-surface", "frost");
+
+  await openPalette(page);
+  await page.getByRole("option", { name: /^Settings…/ }).click();
+  await page.getByRole("option", { name: /^UI$/ }).click();
+  const settings = page.getByRole("dialog", { name: "Settings" });
+  const surface = settings.getByLabel("Composer material");
+  await expect(surface).toHaveValue("frost");
+
+  await surface.selectOption("static");
+  await expect(page.locator(".composer")).toHaveAttribute("data-composer-surface", "static");
+  await expect(page.locator(".composer-surface-shell[data-composer-surface=static]")).toHaveCount(1);
+
+  await surface.selectOption("frosted-live");
+  await expect(page.locator(".composer")).toHaveAttribute("data-composer-surface", "frosted-live");
+  await expect(page.locator(".composer-glass-filter")).toHaveCount(0);
+
+  await surface.selectOption("liquid");
+  await expect(page.locator(".composer")).toHaveAttribute("data-composer-surface", "liquid");
+  await expect(page.locator(".composer-glass-filter")).toHaveAttribute("data-liquid-glass-ready", "true");
+  await expect(page.locator(".liquid-glass-definitions feGaussianBlur")).toHaveCount(1);
+
+  await surface.selectOption("frost");
+  await expect(page.locator(".composer")).toHaveAttribute("data-composer-surface", "frost");
+  await expect(page.locator(".composer-glass-filter")).toHaveCount(0);
+
+  await surface.selectOption("static");
+  await settings.getByRole("button", { name: "Close" }).click();
+  await page.reload();
+  await expect(page.getByRole("textbox", { name: "Message Pi" })).toBeVisible();
+  await expect(page.locator(".composer")).toHaveAttribute("data-composer-surface", "static");
+  await expect(page.locator(".composer-surface-shell[data-composer-surface=static]")).toHaveCount(1);
+});
+
 test("shortcut recording suppresses commands and updates chat-search hints immediately", async ({ page }) => {
   await page.goto("/");
   const settings = await openShortcutsSettings(page);

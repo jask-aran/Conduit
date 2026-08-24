@@ -10,6 +10,7 @@ import { MARKDOWN_RENDERER_OPTIONS, type MarkdownRendererId } from "../chat/mark
 import { CONTEXT_METRIC_GROUPS, CONTEXT_METRIC_OPTIONS, CONTEXT_METRIC_PRESETS, contextMetricPreset, metricsForContextMetricPreset, type ContextMetricId, type ContextMetricPresetId } from "../chat/context-metrics";
 import { formatMicrophoneError, hasAudioSignal, isUnavailableAudioInputError, listAudioInputDevices, MAX_AUDIO_INPUT_TEST_DURATION_MS, revokeAudioInputRecording, startAudioInputTest as beginAudioInputTest, type AudioInputDevice, type AudioInputTestResult, type AudioInputTestSession, } from "../chat/voice-audio";
 import { shortcutFromKeyboardEvent } from "../chat/voice-dictation";
+import type { VoiceDictationSettings } from "../chat/voice-dictation-types";
 import { isWarmMicrophoneActive, stopWarmMicrophone } from "../chat/voice-dictation-client";
 import { createVoiceWaveformController, VoiceWaveform } from "../chat/voice-waveform";
 import type { Installation, ModelOption, Project, Template, VoiceExecutionCatalogueView, VoiceExecutionProfile, VoiceLocalModel, VoiceLocalSelection, VoiceServerSettings } from "../api/contracts";
@@ -21,8 +22,6 @@ import { ShortcutsSettings } from "./shortcuts-settings";
 const sections = ["general", "ui", "shortcuts", "models", "profiles", "runtime", "workspaces", "voice", "search", "auth"] as const;
 type Section = typeof sections[number];
 const label = (section: Section) => section === "ui" ? "UI" : section[0]!.toUpperCase() + section.slice(1);
-type VoiceDictationSettings = { shortcut: string; activation: "push_to_talk" | "toggle"; autoSend: boolean; inputDeviceId: string; captureProfile: "raw" | "processed"; warmMicrophone: boolean };
-
 interface RuntimeSettings {
   maxLiveProcesses: number;
   maxGeneratingProcesses: number;
