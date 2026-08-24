@@ -1,4 +1,4 @@
-FROM node:24.14.0-bookworm-slim@sha256:b506e7321f176aae77317f99d67a24b272c1f09f1d10f1761f2773447d8da26c AS dependency-build-base
+FROM node:24.14.0-trixie-slim@sha256:8c8f12cedb96c3b59642cf30d713943c2b223990c9919b96a141681f62e6e292 AS dependency-build-base
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends g++ make python3 \
@@ -10,7 +10,7 @@ WORKDIR /build/conduit-web
 COPY conduit-web/package.json conduit-web/package-lock.json ./
 RUN npm ci
 
-FROM rust:1.88.0-bookworm AS transcribe-rs-build
+FROM rust:1.88.0-trixie AS transcribe-rs-build
 
 WORKDIR /build/transcribe-rs-worker
 COPY conduit-web/native/transcribe-rs-worker/Cargo.toml conduit-web/native/transcribe-rs-worker/Cargo.lock ./
@@ -31,7 +31,7 @@ WORKDIR /build/conduit-web
 COPY conduit-web/package.json conduit-web/package-lock.json ./
 RUN npm ci --omit=dev && npm cache clean --force
 
-FROM node:24.14.0-bookworm-slim@sha256:b506e7321f176aae77317f99d67a24b272c1f09f1d10f1761f2773447d8da26c AS runtime
+FROM node:24.14.0-trixie-slim@sha256:8c8f12cedb96c3b59642cf30d713943c2b223990c9919b96a141681f62e6e292 AS runtime
 
 ARG CONDUIT_RELEASE=development
 LABEL org.opencontainers.image.title="Conduit" \
