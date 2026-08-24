@@ -57,6 +57,7 @@ export function Composer(props: {
   onStatusChange?: (status: ComposerStatus | null) => void;
 }) {
   let input!: HTMLTextAreaElement;
+  let mobileActions!: HTMLDivElement;
   const [slashOpen, setSlashOpen] = createSignal(false);
   const [dictationState, setDictationState] = createSignal<VoiceDictationState>("idle");
   const [dictationError, setDictationError] = createSignal("");
@@ -65,6 +66,7 @@ export function Composer(props: {
   const [dictationSelectionOwned, setDictationSelectionOwned] = createSignal(false);
   const [composerSurface, setComposerSurface] = createSignal<ComposerSurfaceMode>(selectedComposerSurface());
   const [phoneLayout, setPhoneLayout] = createSignal(isMobileLayout());
+  const [mobileActionsStacked, setMobileActionsStacked] = createSignal(false);
   const dictationWaveform = createVoiceWaveformController(MAX_RESPONSIVE_BAR_COUNT);
   let dictationCancelled = false;
   let pushToTalkActive = false;
@@ -109,6 +111,11 @@ export function Composer(props: {
   const resize = () => {
     input.style.height = "auto";
     input.style.height = `${Math.min(input.scrollHeight, 192)}px`;
+    if (!phoneLayout() || !mobileActions) return setMobileActionsStacked(false);
+    const buttons = [...mobileActions.querySelectorAll<HTMLButtonElement>('[data-slot="button"]')];
+    const gap = Number.parseFloat(getComputedStyle(mobileActions).rowGap) || 0;
+    const requiredHeight = buttons.reduce((total, button) => total + button.offsetHeight, 0) + gap * Math.max(0, buttons.length - 1);
+    setMobileActionsStacked(input.clientHeight >= requiredHeight);
   };
 
   const keyboardWasOpen = (inputFocused: boolean) => {
@@ -287,12 +294,17 @@ export function Composer(props: {
 
   onMount(() => {
     const media = typeof matchMedia === "function" ? matchMedia(MOBILE_LAYOUT_QUERY) : null;
-    const syncPhoneLayout = () => setPhoneLayout(Boolean(media?.matches));
+    const syncPhoneLayout = () => {
+      setPhoneLayout(Boolean(media?.matches));
+      queueMicrotask(resize);
+    };
     syncPhoneLayout();
     media?.addEventListener("change", syncPhoneLayout);
     props.onStatusChange?.(composerStatus);
     createEffect(() => {
       props.chat.draft();
+      busy();
+      dictating();
       queueMicrotask(resize);
     });
     const composerSurfaceChanged = (event: Event) => setComposerSurface((event as CustomEvent<ComposerSurfaceMode>).detail);
@@ -343,16 +355,16 @@ export function Composer(props: {
       <div class="composer-queue"><span>Queued messages</span><Button variant="ghost" size="sm" onClick={props.chat.clearQueue}>Restore to draft</Button></div>
     </Show>
     <div class="composer-surface-shell" data-composer-surface={composerSurface()}>
-      <div class="composer" data-composer-surface={composerSurface()}>
+      <div class="composer composer-surface-material" data-composer-surface={composerSurface()}>
         <div class="composer-content">
           <MobileComposerOptions composer={props} />
           <div class="composer-input-shell">
-            <textarea ref={input} rows={1} aria-label="Message Pi" aria-expanded={slashOpen()} aria-controls={slashOpen() ? "slash-suggestions" : undefined} data-has-text={hasText() ? "true" : "false"} placeholder={props.serverOnline ? "Send a message..." : "Server unavailable"} value={props.chat.draft()} disabled={!props.serverOnline} onInput={(event) => change(event.currentTarget.value)} onPaste={paste} onSelect={selectionChanged} onKeyDown={keydown} />
+            <textarea ref={input} rows={1} aria-label="Message Pi" aria-expanded={slashOpen()} aria-controls={slashOpen() ? "slash-suggestions" : undefined} data-has-text={hasText() ? "true" : "false"} data-dictated-range={dictationSelectionOwned() && dictatedRange() ? "true" : undefined} placeholder={props.serverOnline ? "Send a message..." : "Server unavailable"} value={props.chat.draft()} disabled={!props.serverOnline} onInput={(event) => change(event.currentTarget.value)} onPaste={paste} onSelect={selectionChanged} onKeyDown={keydown} />
           </div>
           <Show when={slashOpen()}>
             <div id="slash-suggestions" role="listbox" aria-label="Suggestions" class="slash-suggestions"><button type="button" role="option" aria-selected="true" onMouseDown={(event) => event.preventDefault()} onClick={attach}><strong>/attach</strong><span>Choose files to attach</span></button></div>
           </Show>
-          <div class="composer-actions">
+          <div class="composer-actions" data-mobile-actions-stacked={mobileActionsStacked()}>
             <div class="composer-actions-left">
               <Button class="composer-desktop-attachment" variant="ghost" size="icon-sm" aria-label={`Attach files${props.attachments.items().length ? ` (${props.attachments.items().length})` : ""}`} disabled={!props.serverOnline} onClick={attach}><PaperclipIcon /></Button>
               <div class="composer-desktop-setting">
@@ -369,11 +381,11 @@ export function Composer(props: {
               <Show when={props.profiles.length}><div class="composer-desktop-setting"><Menu><MenuTrigger class="model-trigger" aria-label={`Profile ${props.activeProfile?.label || "General"}`} disabled={!props.serverOnline || props.chat.status() !== "draft"}><span>{props.activeProfile?.label || "Profile"}</span><ChevronDownIcon /></MenuTrigger><MenuContent class="w-72"><MenuGroup><MenuLabel>Profile</MenuLabel><Show when={props.chat.status() !== "draft"}><div class="px-2 pb-2 text-xs text-muted-foreground">Locked for this chat after the first message.</div></Show><MenuRadioGroup value={props.activeProfile?.id || ""} onChange={props.onChooseProfile}><For each={props.profiles}>{(item) => <MenuRadioItem value={item.id} disabled={props.chat.status() !== "draft" || item.disabled}>{item.label}</MenuRadioItem>}</For></MenuRadioGroup></MenuGroup><MenuSeparator /><MenuItem onSelect={() => props.onOpenSettings("profiles")}>Manage profiles…</MenuItem></MenuContent></Menu></div></Show>
             </div>
             <Show when={recording() && !phoneLayout()}><VoiceWaveform class="composer-status-waveform composer-actions-waveform" history={dictationWaveform.history} level={dictationWaveform.level} peak={dictationWaveform.peak} state={recorderMonitorState()} variant="compact" barDensity={3} ariaLabel={dictationLabel() || "Microphone input level"} /></Show>
-            <div class="composer-actions-right">
+            <div ref={mobileActions} class="composer-actions-right">
               <Show when={!recording()}><span class="composer-status-state composer-actions-status" role="status" aria-live="polite"><Show when={dictationLabel()} fallback={<><Show when={SPINNING_ACTIVITY.has(activity()?.kind || "")}><Spinner /></Show><Show when={["request_failed", "runtime_failed"].includes(activity()?.kind || "")}><TriangleAlertIcon aria-hidden="true" /></Show>{activity()?.label || "Ready"}</>}>{dictationLabel()}</Show></span></Show>
               <Button variant={recording() ? "default" : "ghost"} size="icon-sm" class="dictation-trigger" data-state={dictationState()} aria-label={["starting", "listening"].includes(dictationState()) ? "Stop voice dictation" : "Start voice dictation"} aria-pressed={dictating()} title={`Voice dictation (${props.voiceSettings.shortcut})`} disabled={!props.serverOnline || ["finishing", "waiting", "transcribing"].includes(dictationState())} onPointerDown={captureDictationLaunch} onClick={toggleDictation}><Show when={["starting", "finishing", "waiting", "transcribing"].includes(dictationState())} fallback={<MicIcon />}><Spinner /></Show></Button>
               <Show when={busy() && hasText() && !dictating()}><Button variant="outline" size="icon-sm" aria-label="Steer after tools" onClick={() => sendMessage("steer")}><WaypointsIcon /></Button></Show>
-              <Show when={busy() || props.chat.stopping()} fallback={<Button size="icon-sm" aria-label="Send message" disabled={!canSend()} onClick={() => sendMessage()}><ArrowUpIcon /></Button>}>
+              <Show when={busy() || props.chat.stopping()} fallback={<Button variant="ghost" size="icon-sm" class="composer-send-trigger" aria-label="Send message" disabled={!canSend()} onClick={() => sendMessage()}><ArrowUpIcon /></Button>}>
                 <Button variant="default" size="icon-sm" aria-label="Stop response" onClick={props.chat.stop}><Show when={props.chat.stopping()} fallback={<SquareIcon />}><Spinner /></Show></Button>
               </Show>
             </div>

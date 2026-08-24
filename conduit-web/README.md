@@ -364,6 +364,7 @@ Provision one user, one password from the CLI:
 node scripts/conduit-auth.mjs set-password     # hidden prompt, twice
 node scripts/conduit-auth.mjs reset-sessions   # sign out every device
 node scripts/conduit-auth.mjs status           # password set? session count?
+node scripts/conduit-auth.mjs mint-session     # local agent session; no password
 ```
 
 Credentials live in `data/auth.json` (mode `0600`, atomic writes). Tokens are
@@ -826,6 +827,6 @@ covered by `test/browser/pwa-mobile.spec.js` on the Playwright
 
 ## Verification
 
-Use [`../docs/operations/testing.md`](../docs/operations/testing.md) as the
+Use [`../docs/testing.md`](../docs/testing.md) as the
 single source of truth for fast checks, deterministic harnesses, browser QA,
 Playwright canaries, live transport measurements, and deployment proof.

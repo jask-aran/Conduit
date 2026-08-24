@@ -14,6 +14,7 @@ import { api, asList, pathChatId, pathProjectId, projectPath } from "./api/clien
 import type { ChatSummary, DashboardChat, Installation, Project, RuntimeIdentity, Template, TranscriptDetail, WorkspaceAppearance, WorkspacePolicy, WorkspaceSuggestion, WorkspaceSuggestionsPayload } from "./api/contracts";
 import { createErrorDiagnostic, formatRuntimeDiagnosticPrompt, type ErrorDiagnostic, type ErrorDiagnosticContext } from "./error-diagnostics";
 import { Composer, SPINNING_ACTIVITY, type ComposerStatus } from "./chat/composer";
+import { COMPOSER_SURFACE_CHANGE_EVENT, selectedComposerSurface, type ComposerSurfaceMode } from "./chat/composer-surface";
 import type { VoiceDictationSettings } from "./chat/voice-dictation-types";
 import { contextUsagePercent, formatContextMetrics, saveContextMetrics, selectedContextMetrics, type ContextMetricId } from "./chat/context-metrics";
 import { HostUiRequests } from "./chat/host-ui-card";
@@ -73,6 +74,7 @@ function ChatHeader(props: {
   pwaUpdating: () => boolean;
   dashboard?: boolean;
 }) {
+  const [composerSurface, setComposerSurface] = createSignal<ComposerSurfaceMode>(selectedComposerSurface());
   const projectLabel = () => props.project?.slug === "chat" ? "Chats" : props.project?.slug || props.project?.name || "Chats";
   const runtimeLabel = () => !props.runtime ? null : props.runtime.kind === "native_pi" ? "Host Pi" : "Isolated Pi";
   const profileLabel = () => props.runtime?.kind === "native_pi" ? null : props.profile?.label || props.profile?.id;
@@ -126,6 +128,11 @@ function ChatHeader(props: {
   const waveformLevel = () => props.composerStatus?.waveform.level() || 0;
   const waveformPeak = () => props.composerStatus?.waveform.peak() || 0;
   const waveformState = () => props.composerStatus?.recorderMonitorState() || "stopped";
+  onMount(() => {
+    const syncComposerSurface = (event: Event) => setComposerSurface((event as CustomEvent<ComposerSurfaceMode>).detail);
+    window.addEventListener(COMPOSER_SURFACE_CHANGE_EVENT, syncComposerSurface);
+    onCleanup(() => window.removeEventListener(COMPOSER_SURFACE_CHANGE_EVENT, syncComposerSurface));
+  });
   return <>
     <header class="chat-header">
       <Show when={!props.mobileSidebarOpen}>
@@ -139,12 +146,12 @@ function ChatHeader(props: {
           </Show>
         </span>
       </Show>
-      <div class="chat-header-actions">
+      <div class="chat-header-actions composer-surface-material" data-composer-surface={composerSurface()}>
         <Button variant="ghost" size="icon-sm" class="search-trigger" aria-label="Search chats" title="Search chats" onClick={props.onOpenSearch}><SearchIcon /></Button>
         <Button variant="ghost" size="icon-sm" class="palette-trigger" aria-label="Open command palette" title="Command palette" onClick={props.onOpenPalette}><TerminalIcon /></Button>
         <Button variant="ghost" size="icon-sm" class="chat-header-desktop-action" aria-label={props.dashboard ? "Copy Tailscale workspace link" : "Copy Tailscale chat link"} title={props.dashboard ? "Copy Tailscale workspace link" : "Copy Tailscale chat link"} onClick={props.onShare}><ShareIcon /></Button>
         <Show when={!props.dashboard && props.chat}>
-          <Menu>
+          <Menu modal={false}>
             <MenuTrigger class="chat-context-trigger" data-state={contextTone()} aria-label={contextLabel()} title={contextLabel()}>
               <svg class="chat-context-gauge" viewBox="0 0 24 24" aria-hidden="true">
                 <circle class="chat-context-gauge-track" cx="12" cy="12" r="9" pathLength="100" />
@@ -165,10 +172,8 @@ function ChatHeader(props: {
             </MenuContent>
           </Menu>
         </Show>
-        <Show when={!props.panelOpen}>
-          <Button variant="ghost" size="icon-sm" class="chat-header-desktop-action" aria-label="Toggle workspace panel" aria-expanded={false} onClick={props.onTogglePanel}><PanelRightIcon /></Button>
-        </Show>
-        <Menu>
+        <Button variant="ghost" size="icon-sm" class="chat-header-desktop-action" aria-label="Toggle workspace panel" aria-expanded={props.panelOpen} onClick={props.onTogglePanel}><PanelRightIcon /></Button>
+        <Menu modal={false}>
           <MenuTrigger class="chat-header-more" aria-label="More chat options" title="More chat options"><EllipsisIcon /></MenuTrigger>
           <MenuContent class="chat-header-menu">
             <MenuGroup>
@@ -374,6 +379,9 @@ function App() {
   });
 
   const setPanelOpenForChat = (next: boolean) => {
+    if (!next && document.activeElement instanceof HTMLElement && document.activeElement.closest(".workspace-panel")) {
+      document.querySelector<HTMLElement>(".chat-header [aria-label='Toggle workspace panel']")?.focus({ preventScroll: true });
+    }
     const id = workspacePanelScope();
     setPanelOpen(next);
     if (id) localStorage.setItem(`conduit:workspace-panel:${id}:open`, String(next));

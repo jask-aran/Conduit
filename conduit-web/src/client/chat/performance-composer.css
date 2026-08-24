@@ -25,66 +25,14 @@
 .composer-surface-shell { position: relative; width: 100%; border-radius: var(--composer-radius); }
 .composer[data-composer-surface] {
   position: relative;
-  min-height: 74px;
   width: 100%;
   border-radius: var(--composer-radius);
-  background: transparent;
-  backdrop-filter: none;
 }
 .composer[data-composer-surface]::before,
 .composer[data-composer-surface]::after { content: none; }
 .composer-content { position: relative; z-index: 1; }
 .composer textarea,
 .composer-actions { position: relative; z-index: 2; }
-
-/* Static is the performance-control material: preserve the original Conduit
-   glassmorphism chrome, but place it over a fully opaque local backing instead
-   of sampling transcript pixels. */
-.composer[data-composer-surface="static"] {
-  background:
-    linear-gradient(180deg, oklch(1 0 0 / 9%), oklch(1 0 0 / 2%) 58%),
-    var(--background);
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
-  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.1);
-}
-.composer[data-composer-surface="static"]::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  z-index: 0;
-  border-radius: inherit;
-  padding: 1px;
-  pointer-events: none;
-  background: linear-gradient(150deg, oklch(1 0 0 / 44%), oklch(1 0 0 / 6%) 32%, oklch(1 0 0 / 3%) 66%, oklch(1 0 0 / 22%));
-  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
-  -webkit-mask-composite: xor;
-  mask-composite: exclude;
-}
-.composer[data-composer-surface="static"]::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  z-index: 0;
-  border-radius: inherit;
-  pointer-events: none;
-  background: radial-gradient(150% 72% at 50% -34%, oklch(1 0 0 / 12%), transparent 56%);
-}
-.composer[data-composer-surface="static"]:focus-within::before {
-  background: linear-gradient(150deg, oklch(1 0 0 / 56%), oklch(0.72 0.045 246 / 26%) 38%, oklch(1 0 0 / 5%) 70%, oklch(1 0 0 / 26%));
-}
-
-/* Frosted Live keeps the native blur active during authored panel motion. */
-.composer[data-composer-surface="frosted-live"] {
-  background: #ffffff2b;
-  backdrop-filter: blur(24px);
-  border: 1px solid #ffffff4d;
-  box-shadow:
-    0 8px 32px rgba(0, 0, 0, 0.1),
-    inset 0 1px 0 rgba(255, 255, 255, 0.5),
-    inset 0 -1px 0 rgba(255, 255, 255, 0.1);
-}
-
 
 @media (--conduit-mobile-layout) {
   .chat-main:not(.chat-main-empty) .thread { padding-bottom: 160px; }

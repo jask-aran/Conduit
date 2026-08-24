@@ -620,10 +620,10 @@ async function shutdown(signal) {
   const archiveDrain = voiceRecordingStore.drain({ timeoutMs: VOICE_ARCHIVE_SHUTDOWN_TIMEOUT_MS });
   const closed = new Promise((resolve) => server.close(resolve));
   server.closeIdleConnections?.();
+  server.closeAllConnections?.();
   const stoppedProcesses = await manager.shutdown();
   await terminals.stopAll();
   await voiceModel.stop();
-  server.closeAllConnections?.();
   await closed;
   const archiveResult = await archiveDrain;
   console.log(JSON.stringify({ type: "conduit.voice-archive-drain", ...archiveResult }));
