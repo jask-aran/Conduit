@@ -22,7 +22,9 @@ test("Advanced deliberately uses the same live renderer contract as Synthetic", 
   const transcript = await read("transcript.tsx");
   assert.match(source, /<IncremarkMarkdown[\s\S]*\btypewriter\b[\s\S]*\bsyntheticMath\b/);
   assert.match(source, /streaming=\{streaming\(\)\}/);
-  assert.match(source, /streamVersion/);
+  // The advanced renderer forwards the full ChatMarkdown contract through
+  // `{...props}`; this includes streamVersion without duplicating every prop.
+  assert.match(source, /<IncremarkMarkdown[\s\S]*\{\.\.\.props\}/);
   assert.doesNotMatch(source, /typewriter=\{false\}|syntheticMath=\{false\}/);
   assert.match(transcript, /<IncremarkAdvancedMarkdown renderer="incremark-synthetic"/);
 });

@@ -18,6 +18,7 @@ import type { ActiveChatStore } from "../state/active-chat";
 import { filesFromDataTransfer } from "../state/attachments";
 import type { AttachmentsStore } from "../state/attachments";
 import type { ModelSettings } from "../state/model-settings";
+import type { VoiceDictationSettings } from "./voice-dictation-types";
 import { isMobileLayout } from "../navigation/mobile-layout";
 import { AttachmentCards } from "./attachments";
 import { allowedComposerSurface, COMPOSER_SURFACE_CHANGE_EVENT, liquidGlassRuntimeEnabled, selectedComposerSurface, type ComposerSurfaceMode } from "./composer-surface";
@@ -46,15 +47,6 @@ export interface ComposerStatus {
   waveform: VoiceWaveformController;
 }
 
-type VoiceSettings = {
-  shortcut: string;
-  activation: "push_to_talk" | "toggle";
-  autoSend: boolean;
-  inputDeviceId: string;
-  captureProfile?: "raw" | "processed";
-  warmMicrophone?: boolean;
-};
-
 export function Composer(props: {
   chat: ActiveChatStore;
   attachments: AttachmentsStore;
@@ -62,7 +54,7 @@ export function Composer(props: {
   profiles: Template[];
   activeProfile?: Template | null;
   serverOnline: boolean;
-  voiceSettings: VoiceSettings;
+  voiceSettings: VoiceDictationSettings;
   contextMetrics: () => readonly ContextMetricId[];
   onChooseProfile: (id: string) => void;
   onOpenSettings: (section: string) => void;

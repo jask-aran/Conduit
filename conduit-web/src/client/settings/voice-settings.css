@@ -1,6 +1,4 @@
 /* Current-main Voice settings additions retained by the performance rebuild. */
-html[data-meteor-field="off"] .chat-meteors { display: none !important; }
-
 /* The rebuild owns composer material as Static/Frosted/Liquid Glass. Hide the
    older binary current-main toggle; settings.tsx inserts the three-way field. */
 .settings-content[data-section="ui"] [data-slot="field"]:has(input[aria-label="Liquid glass surface"]) { display: none; }
