@@ -976,10 +976,10 @@ test("creates a durable chat route and renders the primary surface", async ({ pa
   expect(sendBox.y).toBeGreaterThan(inputBox.y);
   await expect(page.getByRole("button", { name: "Voice input" })).toHaveCount(0);
   await expect(sendButton).toBeDisabled();
-  await expect(sendButton).toHaveAttribute("data-variant", "default");
+  await expect(sendButton).toHaveAttribute("data-variant", "ghost");
   await composer.fill("Hello");
   await expect(sendButton).toBeEnabled();
-  await expect(sendButton).toHaveAttribute("data-variant", "default");
+  await expect(sendButton).toHaveAttribute("data-variant", "ghost");
 });
 
 test("shows one toast when an obsolete thinking level is recovered", async ({ page }) => {

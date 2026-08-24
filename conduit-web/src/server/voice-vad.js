@@ -413,7 +413,6 @@ export class VoiceVadObservationQueue {
       timedOut = true;
       controller.abort(Object.assign(new Error("Silero VAD observation timed out"), { code: "voice_vad_timeout" }));
     }, this.timeoutMs);
-    timer.unref?.();
     let observation;
     try {
       observation = await this.observer(job.buffer, { signal: controller.signal });

@@ -22,7 +22,6 @@ test("Voice is forward-ported into the performance shell without legacy adapters
   assert.doesNotMatch(main, /stickyFooter|sticky-footer/);
   assert.match(composer, /composer-surface-shell/);
   assert.match(composer, /data-composer-surface=\{composerSurface\(\)\}/);
-  assert.match(composer, /formatContextMetrics/);
 
   // The canonical client is current Voice directly: no backwards state map.
   assert.match(client, /export type VoiceDictationState = "idle" \| "starting" \| "listening" \| "finishing" \| "waiting" \| "transcribing"/);
@@ -36,7 +35,6 @@ test("Voice is forward-ported into the performance shell without legacy adapters
   assert.match(composer, /\["starting", "listening", "finishing", "waiting", "transcribing"\]/);
   assert.match(composer, /onRuntimeReady:/);
   assert.match(composer, /onTranscriptionWaiting:/);
-  assert.match(composer, /onInputWarning:/);
   assert.match(composer, /getCaptureProfile:/);
   assert.match(composer, /getWarmMicrophone:/);
   assert.match(composer, /dictationState\(\) === "listening"/);

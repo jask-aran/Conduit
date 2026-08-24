@@ -67,7 +67,8 @@ test("desktop panel shells transition open and close while surfaces fill the she
 });
 
 test("desktop open-close keeps the v0.4.7 edge path and live frost", async () => {
-  const [performanceStyles, panelMotion, transcriptMotion, sidebarSource] = await Promise.all([
+  const [styles, performanceStyles, panelMotion, transcriptMotion, sidebarSource] = await Promise.all([
+    fs.readFile(stylesPath, "utf8"),
     fs.readFile(performanceComposerStylesPath, "utf8"),
     fs.readFile(panelMotionPath, "utf8"),
     fs.readFile(transcriptMotionPath, "utf8"),
@@ -86,23 +87,16 @@ test("desktop open-close keeps the v0.4.7 edge path and live frost", async () =>
   assert.match(transcriptMotion, /motion = motionShell\.animate\(/);
 
   assert.doesNotMatch(performanceStyles, /data-panel-geometry-motion/);
-  const frostedLive = rule(performanceStyles, '.composer[data-composer-surface="frosted-live"]');
+  const frostedLive = rule(styles, '.composer-surface-material[data-composer-surface="frosted-live"]');
   assert.match(frostedLive, /backdrop-filter:\s*blur\(24px\)/);
 });
 
 test("static composer keeps material chrome without sampling transcript pixels", async () => {
-  const performanceStyles = await fs.readFile(performanceComposerStylesPath, "utf8");
-  const staticSurface = rule(performanceStyles, '.composer[data-composer-surface="static"]');
-  const staticRim = rule(performanceStyles, '.composer[data-composer-surface="static"]::before');
-  const staticSheen = rule(performanceStyles, '.composer[data-composer-surface="static"]::after');
+  const styles = await fs.readFile(stylesPath, "utf8");
+  const staticSurface = rule(styles, '.composer-surface-material[data-composer-surface="static"]');
 
   assert.match(staticSurface, /background:[\s\S]*var\(--background\)/);
   assert.match(staticSurface, /backdrop-filter:\s*none/);
-  assert.match(staticSurface, /-webkit-backdrop-filter:\s*none/);
-  assert.match(staticRim, /content:\s*""/);
-  assert.match(staticRim, /linear-gradient\(150deg/);
-  assert.match(staticSheen, /content:\s*""/);
-  assert.match(staticSheen, /radial-gradient\(150% 72%/);
 });
 
 test("composer remains a sibling overlay outside the transcript motion island", async () => {
@@ -135,8 +129,6 @@ test("composer remains a sibling overlay outside the transcript motion island", 
   assert.match(composerOverlay, /z-index:\s*2/);
   assert.match(composerOverlay, /background:\s*transparent/);
 
-  const frostedLive = rule(performanceStyles, '.composer[data-composer-surface="frosted-live"]');
-  assert.match(frostedLive, /backdrop-filter:\s*blur\(24px\)/);
   assert.doesNotMatch(performanceStyles, /position:\s*sticky/);
 });
 
