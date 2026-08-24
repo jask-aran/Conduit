@@ -309,6 +309,7 @@ export type ChatMarkdownProps = {
   onRendered?: () => void;
   typewriter?: boolean;
   syntheticMath?: boolean;
+  adaptivePacing?: boolean;
   displayKey?: string;
   renderer?: MarkdownRendererId;
 };

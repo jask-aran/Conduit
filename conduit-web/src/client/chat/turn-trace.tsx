@@ -42,6 +42,7 @@ function TraceSegmentRow(props: {
   segment: () => TraceSegment;
   sessionId: string | null;
   renderer?: MarkdownRendererId;
+  adaptivePacing?: boolean;
   profileLabel?: string;
 }) {
   const tool = () => {
@@ -63,7 +64,7 @@ function TraceSegmentRow(props: {
   return <Show when={tool()} fallback={
     <Show when={error()} fallback={
       <div class="turn-trace-text" data-kind={props.segment().kind}>
-        <Suspense fallback={<div class="markdown-skeleton" />}><ChatMarkdown streaming={live()} renderer={props.renderer}>{text()}</ChatMarkdown></Suspense>
+        <Suspense fallback={<div class="markdown-skeleton" />}><ChatMarkdown streaming={live()} renderer={props.renderer} adaptivePacing={props.adaptivePacing}>{text()}</ChatMarkdown></Suspense>
       </div>
     }>
       {(message) => <TraceError message={message()} profileLabel={props.profileLabel} />}
@@ -99,7 +100,7 @@ function previewOf(trace: TurnTraceData): { text: string; counters: string } {
   return { text: clipped, counters };
 }
 
-export function TurnTrace(props: { trace: TurnTraceData; sessionId: string | null; renderer?: MarkdownRendererId; profileLabel?: string }) {
+export function TurnTrace(props: { trace: TurnTraceData; sessionId: string | null; renderer?: MarkdownRendererId; adaptivePacing?: boolean; profileLabel?: string }) {
   const [open, setOpen] = createSignal(false);
   return <div class="turn-trace" data-active={props.trace.active ? "true" : "false"}>
     <button type="button" class="turn-trace-header" aria-expanded={open()} onClick={() => setOpen(!open())}>
@@ -113,7 +114,7 @@ export function TurnTrace(props: { trace: TurnTraceData; sessionId: string | nul
     <Show when={open()}>
       <div class="turn-trace-body">
         <Index each={props.trace.segments}>{(segment) =>
-          <TraceSegmentRow segment={segment} sessionId={props.sessionId} renderer={props.renderer} profileLabel={props.profileLabel} />
+          <TraceSegmentRow segment={segment} sessionId={props.sessionId} renderer={props.renderer} adaptivePacing={props.adaptivePacing} profileLabel={props.profileLabel} />
         }</Index>
       </div>
     </Show>

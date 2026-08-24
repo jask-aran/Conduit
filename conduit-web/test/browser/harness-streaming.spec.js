@@ -34,6 +34,7 @@ test("a deterministic stream reports browser delivery and visible rendering cade
   const expectedSemanticFingerprint = jsonEnv("HARNESS_EXPECTED_SEMANTIC_FINGERPRINT") ?? fixture?.expectedSemanticFingerprint ?? null;
   const renderer = process.env.HARNESS_RENDERER || "marked";
   const typewriter = process.env.HARNESS_TYPEWRITER === "1";
+  const adaptivePacing = process.env.HARNESS_PACING || "adaptive";
   const selectedRenderer = typewriter && renderer === "incremark" ? "incremark-typewriter" : renderer;
   const rendererContract = fixture?.rendererContracts?.[selectedRenderer] || {};
   const expectedAssertions = jsonEnv("HARNESS_EXPECTED_ASSERTIONS") ?? rendererContract.expectedAssertions ?? fixture?.expectedAssertions ?? {};
@@ -88,6 +89,7 @@ test("a deterministic stream reports browser delivery and visible rendering cade
     seed,
     renderer,
     typewriter,
+    adaptivePacing,
   };
   let report = await runBrowserStreamingScenario(page, scenario);
   if (process.env.HARNESS_PAIRED_INSTRUMENTATION === "1") {
@@ -147,6 +149,7 @@ test("a deterministic stream reports browser delivery and visible rendering cade
     expect(report.browser.clientWork.typewriter.terminalSampleCount).toBeGreaterThan(0);
   }
   if (typewriter && report.browser.clientWork.typewriter.sampleCount > 0) {
+    expect(report.browser.clientWork.typewriter.adaptiveModes).toContain(adaptivePacing);
     expect(report.browser.clientWork.typewriter.terminal?.backlogCharacters).toBe(0);
     expect(report.browser.clientWork.typewriter.terminal?.displayedVisibleCharacters)
       .toBe(report.browser.clientWork.typewriter.terminal?.sourceVisibleCharacters);
@@ -189,6 +192,7 @@ test("a dropped stream reports reconnect recovery without duplicated output", as
   const expectedInteractions = jsonEnv("HARNESS_EXPECTED_INTERACTIONS") ?? fixture?.expectedInteractions ?? {};
   const renderer = process.env.HARNESS_RENDERER || "marked";
   const typewriter = process.env.HARNESS_TYPEWRITER === "1";
+  const adaptivePacing = process.env.HARNESS_PACING || "adaptive";
   const report = await runBrowserReconnectScenario(page, {
     name: process.env.HARNESS_SCENARIO || "browser-reconnect-answer",
     initialText,
@@ -201,6 +205,7 @@ test("a dropped stream reports reconnect recovery without duplicated output", as
     instrumentation: process.env.HARNESS_INSTRUMENTATION !== "off",
     renderer,
     typewriter,
+    adaptivePacing,
   });
   await testInfo.attach("harness-report", {
     body: Buffer.from(JSON.stringify(report, null, 2)),

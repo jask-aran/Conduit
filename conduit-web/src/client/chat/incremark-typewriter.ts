@@ -22,6 +22,7 @@ export type TypewriterFallbackMode = "normal" | "safe-step" | "safe-block";
 const TYPEWRITER_MATH_SOURCE = "__conduitMathSource";
 
 export type TypewriterMetrics = {
+  adaptive: boolean;
   sourceVisibleCharacters: number;
   displayedVisibleCharacters: number;
   backlogCharacters: number;
@@ -274,7 +275,7 @@ export type AdaptiveIncremarkTypewriterOptions = {
 export class AdaptiveIncremarkTypewriter {
   readonly transformer;
   private readonly callbacks: AdaptiveIncremarkTypewriterOptions;
-  private readonly adaptive: boolean;
+  private adaptive: boolean;
   private baselineCharacters = 0;
   private sourceVisibleCharacters = 0;
   private observedRate: number | null = null;
@@ -305,6 +306,7 @@ export class AdaptiveIncremarkTypewriter {
   private lastProgressAt: number | null = null;
   private adaptiveFallbackMode: TypewriterFallbackMode = "normal";
   private metrics: TypewriterMetrics = {
+    adaptive: false,
     sourceVisibleCharacters: 0,
     displayedVisibleCharacters: 0,
     backlogCharacters: 0,
@@ -363,6 +365,14 @@ export class AdaptiveIncremarkTypewriter {
     this.enabled = enabled;
     if (enabled) this.scheduleFrameProbe();
     else this.stopFrameProbe();
+  }
+
+  setAdaptive(enabled: boolean) {
+    const next = Boolean(enabled);
+    if (this.adaptive === next) return;
+    this.adaptive = next;
+    this.resetAdaptiveHealth();
+    this.recalculate(performance.now(), this.lastDisplayedCharacters, this.metrics.displayRate, !next);
   }
 
   observeSource(blocks: ParsedBlock[], now = performance.now()) {
@@ -708,6 +718,7 @@ export class AdaptiveIncremarkTypewriter {
       ? this.adaptiveFallbackMode
       : chooseFallbackMode(this.frameWorkEmaMs, nextStep, this.lastFallbackMode === "safe-block");
     this.metrics = {
+      adaptive: this.adaptive,
       sourceVisibleCharacters: this.sourceVisibleCharacters,
       displayedVisibleCharacters: displayedCharacters,
       backlogCharacters,
