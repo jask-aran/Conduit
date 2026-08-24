@@ -37,6 +37,13 @@ const newChatId = "550e8400-e29b-41d4-a716-446655440099";
 const mobileOverlapTranscript = Array.from({ length: 18 }, (_, index) =>
   `Transcript paragraph ${index + 1} keeps enough content in the narrow viewport to exercise the glass overlap at the bottom of the chat.`,
 ).join("\n\n");
+const mobileMathTranscript = [
+  "Mobile math width",
+  "",
+  "The renderer must keep the formula inside the phone column:",
+  "",
+  "$$\\sum_{n=1}^{\\infty} \\frac{1}{n^2} + \\int_{0}^{\\infty} e^{-x} \\, dx = \\frac{\\pi^2}{6}$$",
+].join("\n");
 
 async function openApp(page) {
   await page.goto("/");
@@ -412,7 +419,7 @@ test("acceptance: mobile composer is one row with Plus-owned message options", a
   }
 });
 
-test("acceptance: mobile transcript fades behind the frosted composer", async ({ page }, testInfo) => {
+test("acceptance: mobile transcript fades behind the frosted live composer", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "mobile-chromium", "phone transcript/composer overlap");
   await openApp(page);
   await page.locator(".mobile-sidebar-trigger").tap();
@@ -420,20 +427,74 @@ test("acceptance: mobile transcript fades behind the frosted composer", async ({
   await expect.poll(async () => (await page.locator(".conduit-sidebar").boundingBox())?.x ?? -Infinity).toBeLessThan(-400);
   await expect(page.locator(".bubble-user")).toContainText("Hello");
   await expect(page.locator(".chat-main:not(.chat-main-empty) article.message-assistant")).toContainText("Transcript paragraph 1");
-  await scrollTranscriptBehindComposer(page, "mobile-frost");
-  await expect.poll(() => overlapWithComposer(page, "mobile-frost")).toBeGreaterThan(8);
-  await expect(page.locator(".composer")).toHaveAttribute("data-composer-surface", "frost");
+  await scrollTranscriptBehindComposer(page, "mobile-frosted-live");
+  await expect.poll(() => overlapWithComposer(page, "mobile-frosted-live")).toBeGreaterThan(8);
+  await expect(page.locator(".composer")).toHaveAttribute("data-composer-surface", "frosted-live");
 });
 
-test("acceptance: desktop transcript stays behind the frost composer", async ({ page }, testInfo) => {
-  test.skip(testInfo.project.name !== "desktop-chromium", "desktop frost composer overlap");
+test("acceptance: mobile renderer probes stay in the viewport and pacing is selectable", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "mobile-chromium", "phone renderer probes");
+  await page.addInitScript(() => localStorage.setItem("conduit:transcript-renderer", "incremark-synthetic"));
+  await page.route("**/v0/sessions/session_existing", (route) => route.fulfill({
+    json: {
+      id: "session_existing",
+      projectId: "project_chat",
+      status: "active",
+      title: "Existing chat",
+      messages: [
+        { id: "u1", role: "user", content: "Show the equation" },
+        { id: "a1", role: "assistant", content: mobileMathTranscript },
+      ],
+      tools: [],
+      page: { before: null },
+    },
+  }));
+  await openApp(page);
+  await page.locator(".mobile-sidebar-trigger").tap();
+  await page.getByText("Existing chat", { exact: true }).tap();
+  await expect(page.locator(".chat-main:not(.chat-main-empty) article.message-assistant")).toContainText("Mobile math width");
+
+  const switcher = page.locator(".composer-renderer-switch");
+  await expect(switcher).toBeVisible();
+  const pacing = page.getByRole("combobox", { name: "Typewriter pacing" });
+  await expect(pacing.locator("option")).toHaveText(["Adaptive", "Fixed", "Buffered"]);
+  for (const mode of ["fixed", "adaptive", "buffered"]) {
+    await pacing.selectOption(mode);
+    await expect(page.locator(".transcript")).toHaveAttribute("data-incremark-pacing", mode);
+  }
+
+  const viewport = await page.evaluate(() => ({ width: innerWidth, height: innerHeight }));
+  const [switchBox, firstMessageBox, selects] = await Promise.all([
+    switcher.boundingBox(),
+    page.locator("[data-slot=message-scroller-item]").last().boundingBox(),
+    page.locator(".composer-renderer-switch select").evaluateAll((elements) => elements.map((element) => element.getBoundingClientRect().toJSON())),
+  ]);
+  expect(switchBox.x).toBeGreaterThanOrEqual(-1);
+  expect(switchBox.x + switchBox.width).toBeLessThanOrEqual(viewport.width + 1);
+  expect(firstMessageBox.y).toBeGreaterThanOrEqual(switchBox.y + switchBox.height - 1);
+  for (const box of selects) expect(box.x + box.width).toBeLessThanOrEqual(viewport.width + 1);
+
+  await expect.poll(() => page.locator(".incremark-math-block .katex").count()).toBeGreaterThan(0);
+  const mathBox = await page.locator(".incremark-math-block").first().boundingBox();
+  const mathOverflow = await page.locator(".incremark-math-block").first().evaluate((element) => ({
+    clientWidth: element.clientWidth,
+    scrollWidth: element.scrollWidth,
+    right: element.getBoundingClientRect().right,
+  }));
+  expect(mathBox.x).toBeGreaterThanOrEqual(-1);
+  expect(mathBox.x + mathBox.width).toBeLessThanOrEqual(viewport.width + 1);
+  expect(mathOverflow.right).toBeLessThanOrEqual(viewport.width + 1);
+  expect(mathOverflow.scrollWidth).toBeGreaterThanOrEqual(mathOverflow.clientWidth);
+});
+
+test("acceptance: desktop transcript stays behind the frosted live composer", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop-chromium", "desktop frosted live composer overlap");
   await openApp(page);
   await page.locator(".sidebar-chat").filter({ hasText: "Existing chat" }).click();
   await expect(page.locator(".chat-main:not(.chat-main-empty) article.message-assistant")).toContainText("Transcript paragraph 1");
-  await scrollTranscriptBehindComposer(page, "desktop-frost");
-  await expect.poll(() => overlapWithComposer(page, "desktop-frost")).toBeGreaterThan(8);
-  await expect(page.locator(".composer")).toHaveAttribute("data-composer-surface", "frost");
-  await expect(page.locator(".composer-glass-filter")).toHaveCount(0);
+  await scrollTranscriptBehindComposer(page, "desktop-frosted-live");
+  await expect.poll(() => overlapWithComposer(page, "desktop-frosted-live")).toBeGreaterThan(8);
+  await expect(page.locator(".composer")).toHaveAttribute("data-composer-surface", "frosted-live");
 });
 
 test("acceptance: desktop transcript passes behind the static glassmorphism composer", async ({ page }, testInfo) => {
@@ -446,43 +507,6 @@ test("acceptance: desktop transcript passes behind the static glassmorphism comp
   await expect.poll(() => overlapWithComposer(page, "desktop-static")).toBeGreaterThan(8);
   await expect(page.locator(".composer")).toHaveAttribute("data-composer-surface", "static");
   await expect(page.locator(".composer-surface-shell")).toHaveCount(1);
-  await expect(page.locator(".composer-glass-filter")).toHaveCount(0);
-});
-
-test("acceptance: desktop opt-in liquid glass uses the precomputed SVG path", async ({ page }, testInfo) => {
-  test.skip(testInfo.project.name !== "desktop-chromium", "desktop liquid glass path");
-  await page.addInitScript(() => {
-    localStorage.setItem("conduit:liquid-glass-runtime", "enabled");
-    localStorage.setItem("conduit:composer-surface", "liquid");
-  });
-  await openApp(page);
-  await page.locator(".sidebar-chat").filter({ hasText: "Existing chat" }).click();
-  await expect(page.locator(".chat-main:not(.chat-main-empty) article.message-assistant")).toContainText("Transcript paragraph 1");
-  const layer = page.locator(".composer-glass-filter");
-  await expect(layer).toHaveAttribute("data-liquid-glass-ready", "true");
-  await scrollTranscriptBehindComposer(page, "desktop-liquid");
-  await expect.poll(() => overlapWithComposer(page, "desktop-liquid")).toBeGreaterThan(8);
-  const graph = await page.evaluate(() => {
-    const composer = document.querySelector(".chat-main:not(.chat-main-empty) .composer");
-    const filter = document.querySelector(".liquid-glass-definitions filter");
-    if (!composer || !filter) throw new Error("Expected liquid glass surface");
-    return {
-      composerHeight: Math.round(composer.getBoundingClientRect().height),
-      composerWidth: Math.round(composer.getBoundingClientRect().width),
-      imageSizes: [...filter.querySelectorAll("feImage")].map((image) => ({ width: Number(image.getAttribute("width")), height: Number(image.getAttribute("height")) })),
-      blur: filter.querySelector("feGaussianBlur")?.getAttribute("stdDeviation"),
-      assetKey: document.querySelector(".composer-glass-filter")?.getAttribute("data-liquid-glass-asset-key"),
-      displacementHref: filter.querySelector("feImage")?.getAttribute("href"),
-    };
-  });
-  expect(graph.composerHeight).toBeLessThan(120);
-  expect(graph.imageSizes).toEqual([
-    { width: graph.composerWidth, height: graph.composerHeight },
-    { width: graph.composerWidth, height: graph.composerHeight },
-  ]);
-  expect(graph.blur).toBe("8");
-  expect(graph.assetKey).toBe("desktop:88");
-  expect(graph.displacementHref).toBe("/glass/composer-desktop-88.png");
 });
 
 test("acceptance: final transcript remains reachable above the composer", async ({ page }, testInfo) => {

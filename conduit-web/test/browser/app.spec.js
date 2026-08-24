@@ -3177,67 +3177,6 @@ test("model scope settings searches and toggles multiple checked models", async 
   await expect(dialog).toHaveCount(0);
 });
 
-test("Liquid Glass runtime is fail-closed and disabling removes its live path", async ({ page }, testInfo) => {
-  const openUiSettings = async () => {
-    await openSidebar(page, testInfo);
-    await page.locator('[data-sidebar="footer"]').getByRole("button", { name: /Conduit/ }).click();
-    await page.getByRole("menuitem", { name: "Manage settings" }).click();
-    const dialog = page.getByRole("dialog", { name: "Settings" });
-    await dialog.getByRole("tab", { name: /^UI$/ }).click();
-    return dialog;
-  };
-  const selectAndWaitForReload = async (select, value) => {
-    const navigated = page.waitForEvent("framenavigated", (frame) => frame === page.mainFrame());
-    await select.selectOption(value);
-    await navigated;
-  };
-
-  await page.goto("/");
-  await page.evaluate(() => {
-    localStorage.removeItem("conduit:liquid-glass-runtime");
-    localStorage.setItem("conduit:composer-surface", "liquid");
-    localStorage.setItem("conduit:liquid-glass-surface", "true");
-  });
-  await page.reload();
-
-  await expect(page.locator(".composer")).toHaveAttribute("data-composer-surface", "frost");
-  await expect(page.locator(".composer-glass-filter")).toHaveCount(0);
-  await expect(page.locator(".liquid-glass-definitions")).toHaveCount(0);
-
-  let settings = await openUiSettings();
-  let runtime = settings.getByRole("combobox", { name: "Liquid Glass runtime" });
-  await expect(runtime).toHaveValue("disabled");
-  await expect(settings.getByRole("combobox", { name: "Composer material" }).locator('option[value="liquid"]')).toHaveCount(0);
-
-  await selectAndWaitForReload(runtime, "enabled");
-  await expect(page.locator(".composer")).toHaveAttribute("data-composer-surface", "frost");
-  await expect(page.locator(".composer-glass-filter")).toHaveCount(0);
-
-  settings = await openUiSettings();
-  runtime = settings.getByRole("combobox", { name: "Liquid Glass runtime" });
-  const material = settings.getByRole("combobox", { name: "Composer material" });
-  await expect(runtime).toHaveValue("enabled");
-  await expect(material.locator('option[value="liquid"]')).toHaveCount(1);
-  await material.selectOption("liquid");
-  await expect(page.locator(".composer")).toHaveAttribute("data-composer-surface", "liquid");
-  await expect(page.locator(".composer-glass-filter")).toHaveCount(1);
-  await expect(page.locator(".liquid-glass-definitions")).toHaveCount(1);
-
-  await selectAndWaitForReload(runtime, "disabled");
-  await expect(page.locator(".composer")).toHaveAttribute("data-composer-surface", "frost");
-  await expect(page.locator(".composer-glass-filter")).toHaveCount(0);
-  await expect(page.locator(".liquid-glass-definitions")).toHaveCount(0);
-  await expect.poll(() => page.evaluate(() => ({
-    runtime: localStorage.getItem("conduit:liquid-glass-runtime"),
-    surface: localStorage.getItem("conduit:composer-surface"),
-    legacy: localStorage.getItem("conduit:liquid-glass-surface"),
-  }))).toEqual({
-    runtime: "disabled",
-    surface: null,
-    legacy: null,
-  });
-});
-
 test("model scope search auto-focuses and its long result list scrolls", async ({ page }, testInfo) => {
   const manyModels = Array.from({ length: 36 }, (_, index) => ({
     provider: index < 18 ? "alpha" : "beta",
@@ -3948,8 +3887,8 @@ test("global commands and slash suggestions preserve their intended focus models
 
   const composerRenderer = page.getByRole("combobox", { name: "Composer renderer" });
   await expect(composerRenderer).toBeVisible();
-  await composerRenderer.selectOption("liquid");
-  await expect(page.locator(".composer")).toHaveAttribute("data-composer-surface", "liquid");
+  await composerRenderer.selectOption("frosted-live");
+  await expect(page.locator(".composer")).toHaveAttribute("data-composer-surface", "frosted-live");
 
   await page.keyboard.press("Control+k");
   const palette = page.getByRole("dialog", { name: "Command Palette" });

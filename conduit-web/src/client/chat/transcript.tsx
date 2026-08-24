@@ -7,7 +7,7 @@ import { AttachmentCards } from "./attachments";
 import { TurnTrace } from "./turn-trace";
 import { createTimelineStore } from "../state/timeline-store";
 import type { MarkdownRendererId } from "./markdown-settings";
-import { COMPOSER_SURFACE_CHANGE_EVENT, COMPOSER_SURFACE_OPTIONS, liquidGlassRuntimeEnabled, saveComposerSurface, selectedComposerSurface, type ComposerSurfaceMode } from "./composer-surface";
+import { COMPOSER_SURFACE_CHANGE_EVENT, COMPOSER_SURFACE_OPTIONS, saveComposerSurface, selectedComposerSurface, type ComposerSurfaceMode } from "./composer-surface";
 import { saveTranscriptRenderer, selectedTranscriptRenderer, TRANSCRIPT_RENDERER_OPTIONS, type TranscriptRendererMode } from "./transcript-renderer";
 import { INCREMARK_PACING_OPTIONS, saveIncremarkPacing, selectedIncremarkPacing, type IncremarkPacingMode } from "./incremark-pacing";
 import { mountTranscriptPanelMotion } from "./transcript-motion";
@@ -531,10 +531,10 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
     });
   });
 
-  return <div ref={transcriptRoot} class="transcript" data-slot="message-scroller" data-markdown-renderer={markdownRenderer()} data-transcript-renderer={transcriptRenderer()} data-markdown-typewriter={rendererUsesTypewriter() ? "true" : undefined} data-markdown-synthetic-math={markdownRenderer() === "incremark-synthetic" ? "true" : undefined}>
+  return <div ref={transcriptRoot} class="transcript" data-slot="message-scroller" data-markdown-renderer={markdownRenderer()} data-transcript-renderer={transcriptRenderer()} data-markdown-typewriter={rendererUsesTypewriter() ? "true" : undefined} data-incremark-pacing={rendererUsesTypewriter() ? incremarkPacing() : undefined} data-markdown-synthetic-math={markdownRenderer() === "incremark-synthetic" ? "true" : undefined}>
     <div class="composer-renderer-switch">
       <label>Composer renderer<select aria-label="Composer renderer" title="Composer renderer" value={composerSurface()} onChange={(event) => switchComposerSurface(event.currentTarget.value as ComposerSurfaceMode)}>
-        <For each={COMPOSER_SURFACE_OPTIONS.filter((option) => liquidGlassRuntimeEnabled() || option.value !== "liquid")}>{(option) => <option value={option.value}>{option.label}</option>}</For>
+        <For each={COMPOSER_SURFACE_OPTIONS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
       </select></label>
       <label>Transcript renderer<select aria-label="Transcript renderer" title="Transcript renderer" value={transcriptRenderer()} onChange={(event) => switchTranscriptRenderer(event.currentTarget.value as TranscriptRendererMode)}>
         <For each={TRANSCRIPT_RENDERER_OPTIONS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
@@ -558,7 +558,7 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
         </Show>
         <Show when={empty()}><div class="empty-thread" data-slot="message-scroller-item"><div class="welcome"><h1>How can I help you today?</h1></div></div></Show>
         <For each={timeline}>{(item) => {
-          if (item.type === "trace") return <div data-slot="message-scroller-item"><TurnTrace trace={item.value} sessionId={props.chat.loadedId()} renderer={markdownRenderer()} adaptivePacing={incremarkPacing() === "adaptive"} profileLabel={props.profileLabel} /></div>;
+          if (item.type === "trace") return <div data-slot="message-scroller-item"><TurnTrace trace={item.value} sessionId={props.chat.loadedId()} renderer={markdownRenderer()} pacing={incremarkPacing()} profileLabel={props.profileLabel} /></div>;
           const message = createMemo(() => item.value);
           const user = createMemo(() => message().role === "user");
           const failed = createMemo(() => !user() && message().stopReason === "error");
@@ -576,8 +576,8 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
                   <div data-slot="bubble-content">
                     <Show when={user()} fallback={<>
                       <Show when={message().content}><Suspense fallback={<div class="markdown-skeleton" />}>
-                        <Show when={advancedTranscript()} fallback={<ChatMarkdown renderer={markdownRenderer()} typewriter={rendererUsesTypewriter()} syntheticMath={markdownRenderer() === "incremark-synthetic"} adaptivePacing={incremarkPacing() === "adaptive"} displayKey={item.displayKey} streaming={live()} streamVersion={item.streamVersion} onRendered={settleAfterMarkdown}>{message().content || ""}</ChatMarkdown>}>
-                          <IncremarkAdvancedMarkdown renderer="incremark-synthetic" adaptivePacing={incremarkPacing() === "adaptive"} displayKey={item.displayKey} streaming={live()} streamVersion={item.streamVersion} onRendered={settleAfterMarkdown}>{message().content || ""}</IncremarkAdvancedMarkdown>
+                        <Show when={advancedTranscript()} fallback={<ChatMarkdown renderer={markdownRenderer()} typewriter={rendererUsesTypewriter()} syntheticMath={markdownRenderer() === "incremark-synthetic"} pacing={incremarkPacing()} displayKey={item.displayKey} streaming={live()} streamVersion={item.streamVersion} onRendered={settleAfterMarkdown}>{message().content || ""}</ChatMarkdown>}>
+                          <IncremarkAdvancedMarkdown renderer="incremark-synthetic" pacing={incremarkPacing()} displayKey={item.displayKey} streaming={live()} streamVersion={item.streamVersion} onRendered={settleAfterMarkdown}>{message().content || ""}</IncremarkAdvancedMarkdown>
                         </Show>
                       </Suspense></Show>
                       <Show when={failed()}>

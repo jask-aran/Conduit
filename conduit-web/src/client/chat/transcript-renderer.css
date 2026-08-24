@@ -16,5 +16,23 @@
 }
 
 @media (max-width: 720px) {
-  .composer-renderer-switch { max-width: calc(100% - 24px); flex-wrap: wrap; justify-content: flex-end; }
+  .composer-renderer-switch {
+    top: 8px;
+    right: 12px;
+    left: 12px;
+    width: auto;
+    max-width: none;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 6px;
+  }
+  .composer-renderer-switch label {
+    width: min(100%, 340px);
+    min-width: 0;
+    justify-content: flex-end;
+  }
+  .composer-renderer-switch select {
+    min-width: 0;
+    max-width: calc(100% - 106px);
+  }
 }

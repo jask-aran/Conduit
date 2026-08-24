@@ -75,23 +75,23 @@ for (const icon of ["pwa-192x192.png", "pwa-512x512.png", "favicon.svg"]) {
 }
 const cssAssets = assets.filter((asset) => asset.initial && asset.type === "css");
 const cssText = cssAssets.map((asset) => fs.readFileSync(path.join(dist, asset.file), "utf8")).join("\n");
-const frostRule = cssText.match(/\.composer\[data-composer-surface=frost\][^{]*\{[^}]+\}/);
-const frostFailures = [];
-if (!frostRule) {
-  frostFailures.push("missing .composer[data-composer-surface=frost] rule");
+const frostedLiveRule = cssText.match(/\.composer\[data-composer-surface=frosted-live\][^{]*\{[^}]+\}/);
+const frostedLiveFailures = [];
+if (!frostedLiveRule) {
+  frostedLiveFailures.push("missing .composer[data-composer-surface=frosted-live] rule");
 } else {
-  if (!/(?<!-webkit-)backdrop-filter:blur\(/.test(frostRule[0])) {
-    frostFailures.push("frost rule dropped unprefixed backdrop-filter");
+  if (!/(?<!-webkit-)backdrop-filter:blur\(/.test(frostedLiveRule[0])) {
+    frostedLiveFailures.push("frosted-live rule dropped unprefixed backdrop-filter");
   }
-  if (!/-webkit-backdrop-filter:blur\(/.test(frostRule[0])) {
-    frostFailures.push("frost rule dropped -webkit-backdrop-filter");
+  if (!/-webkit-backdrop-filter:blur\(/.test(frostedLiveRule[0])) {
+    frostedLiveFailures.push("frosted-live rule dropped -webkit-backdrop-filter");
   }
 }
-if (frostFailures.length) {
-  for (const failure of frostFailures) console.error(`CSS: ${failure}`);
+if (frostedLiveFailures.length) {
+  for (const failure of frostedLiveFailures) console.error(`CSS: ${failure}`);
   process.exitCode = 1;
 } else {
-  console.log("CSS: frost composer keeps unprefixed backdrop-filter.");
+  console.log("CSS: frosted-live composer keeps unprefixed backdrop-filter.");
 }
 
 if (pwaFailures.length) {

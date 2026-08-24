@@ -4,13 +4,13 @@ import tailwindcss from "@tailwindcss/vite";
 import { VitePWA } from "vite-plugin-pwa";
 import path from "node:path";
 import { solidComponentsViteOptions } from "./scripts/solid-components-mode.mjs";
-import { COMPOSER_MOBILE_BREAKPOINT_PX } from "./src/client/chat/liquid-glass-static.ts";
+import { MOBILE_LAYOUT_BREAKPOINT_PX } from "./src/client/layout-geometry.ts";
 
 function sharedGeometryCssPlugin() {
   const replacements = [
-    ["@media (--conduit-mobile-layout)", `@media (max-width: ${COMPOSER_MOBILE_BREAKPOINT_PX}px)`],
-    ["@media (--conduit-wide-layout)", `@media (min-width: ${COMPOSER_MOBILE_BREAKPOINT_PX + 1}px)`],
-    ["@container chat-main (--conduit-wide-chat)", `@container chat-main (min-width: ${COMPOSER_MOBILE_BREAKPOINT_PX}px)`],
+    ["@media (--conduit-mobile-layout)", `@media (max-width: ${MOBILE_LAYOUT_BREAKPOINT_PX}px)`],
+    ["@media (--conduit-wide-layout)", `@media (min-width: ${MOBILE_LAYOUT_BREAKPOINT_PX + 1}px)`],
+    ["@container chat-main (--conduit-wide-chat)", `@container chat-main (min-width: ${MOBILE_LAYOUT_BREAKPOINT_PX}px)`],
   ];
   return {
     name: "conduit-shared-geometry-css",

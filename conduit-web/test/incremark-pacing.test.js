@@ -21,21 +21,35 @@ function withBrowserSettings(search, stored, run) {
   }
 }
 
-test("adaptive pacing defaults to Adaptive and persists the A/B choice", () => {
+test("buffered pacing is the default and all three modes persist", () => {
   withBrowserSettings("", {}, (values) => {
-    assert.equal(selectedIncremarkPacing(), "adaptive");
-    assert.equal(saveIncremarkPacing("fixed"), "fixed");
-    assert.equal(values["conduit:incremark-pacing"], "fixed");
-    assert.equal(selectedIncremarkPacing(), "fixed");
+    assert.equal(selectedIncremarkPacing(), "buffered");
+    for (const mode of ["adaptive", "fixed", "buffered"]) {
+      assert.equal(saveIncremarkPacing(mode), mode);
+      assert.equal(values["conduit:incremark-pacing"], mode);
+      assert.equal(selectedIncremarkPacing(), mode);
+    }
   });
 });
 
-test("adaptive pacing URL overrides are explicit and do not write storage", () => {
+test("URL pacing overrides are explicit and do not write storage", () => {
   withBrowserSettings("?incremarkPacing=fixed", { "conduit:incremark-pacing": "adaptive" }, (values) => {
     assert.equal(selectedIncremarkPacing(), "fixed");
     assert.equal(values["conduit:incremark-pacing"], "adaptive");
   });
+  withBrowserSettings("?incremarkPacing=buffered", {}, () => {
+    assert.equal(selectedIncremarkPacing(), "buffered");
+  });
   withBrowserSettings("?adaptivePacing=1", {}, () => {
     assert.equal(selectedIncremarkPacing(), "adaptive");
+  });
+});
+
+test("legacy boolean pacing values map to the old A/B choices", () => {
+  withBrowserSettings("", { "conduit:incremark-pacing": "1" }, () => {
+    assert.equal(selectedIncremarkPacing(), "adaptive");
+  });
+  withBrowserSettings("", { "conduit:incremark-pacing": "0" }, () => {
+    assert.equal(selectedIncremarkPacing(), "fixed");
   });
 });

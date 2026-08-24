@@ -449,24 +449,22 @@ test("Settings UI toggles and persists the ambient meteor field", async ({ page 
   await expect(page.locator(".chat-meteors")).toHaveCount(1);
 });
 
-test("Settings UI selects and persists all composer surfaces", async ({ page }) => {
+test("Settings UI selects and persists the two composer surfaces", async ({ page }) => {
   await page.addInitScript(() => {
     if (sessionStorage.getItem("conduit:composer-surface-test-initialized") === "true") return;
     localStorage.removeItem("conduit:composer-surface");
-    localStorage.removeItem("conduit:liquid-glass-surface");
-    localStorage.setItem("conduit:liquid-glass-runtime", "enabled");
     sessionStorage.setItem("conduit:composer-surface-test-initialized", "true");
   });
   await page.goto("/");
   await expect(page.getByRole("textbox", { name: "Message Pi" })).toBeVisible();
-  await expect(page.locator(".composer")).toHaveAttribute("data-composer-surface", "frost");
+  await expect(page.locator(".composer")).toHaveAttribute("data-composer-surface", "frosted-live");
 
   await openPalette(page);
   await page.getByRole("option", { name: /^Settings…/ }).click();
   await page.getByRole("option", { name: /^UI$/ }).click();
   const settings = page.getByRole("dialog", { name: "Settings" });
   const surface = settings.getByLabel("Composer material");
-  await expect(surface).toHaveValue("frost");
+  await expect(surface).toHaveValue("frosted-live");
 
   await surface.selectOption("static");
   await expect(page.locator(".composer")).toHaveAttribute("data-composer-surface", "static");
@@ -474,16 +472,6 @@ test("Settings UI selects and persists all composer surfaces", async ({ page }) 
 
   await surface.selectOption("frosted-live");
   await expect(page.locator(".composer")).toHaveAttribute("data-composer-surface", "frosted-live");
-  await expect(page.locator(".composer-glass-filter")).toHaveCount(0);
-
-  await surface.selectOption("liquid");
-  await expect(page.locator(".composer")).toHaveAttribute("data-composer-surface", "liquid");
-  await expect(page.locator(".composer-glass-filter")).toHaveAttribute("data-liquid-glass-ready", "true");
-  await expect(page.locator(".liquid-glass-definitions feGaussianBlur")).toHaveCount(1);
-
-  await surface.selectOption("frost");
-  await expect(page.locator(".composer")).toHaveAttribute("data-composer-surface", "frost");
-  await expect(page.locator(".composer-glass-filter")).toHaveCount(0);
 
   await surface.selectOption("static");
   await settings.getByRole("button", { name: "Close" }).click();

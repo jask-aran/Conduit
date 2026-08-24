@@ -2,9 +2,7 @@ import { createEffect, createSignal, onCleanup } from "solid-js";
 import { Settings as SettingsCore } from "./settings-core";
 import {
   COMPOSER_SURFACE_CHANGE_EVENT,
-  liquidGlassRuntimeEnabled,
   saveComposerSurface,
-  saveLiquidGlassRuntime,
   selectedComposerSurface,
   type ComposerSurfaceMode,
 } from "../chat/composer-surface";
@@ -12,7 +10,7 @@ import type { VoiceDictationSettings } from "../chat/voice-dictation-types";
 import "./voice-settings.css";
 
 type CoreProps = Parameters<typeof SettingsCore>[0];
-type SettingsProps = Omit<CoreProps, "composerSurface" | "onComposerSurfaceChange" | "liquidGlassRuntimeEnabled" | "onLiquidGlassRuntimeChange" | "voiceSettings"> & {
+type SettingsProps = Omit<CoreProps, "composerSurface" | "onComposerSurfaceChange" | "voiceSettings"> & {
   voiceSettings: VoiceDictationSettings;
 };
 
@@ -21,12 +19,10 @@ type SettingsProps = Omit<CoreProps, "composerSurface" | "onComposerSurfaceChang
 // never swaps Settings trees and performs no Voice lifecycle translation.
 export function Settings(props: SettingsProps) {
   const [composerSurface, setComposerSurface] = createSignal<ComposerSurfaceMode>(selectedComposerSurface());
-  const [liquidGlassEnabled, setLiquidGlassEnabled] = createSignal(liquidGlassRuntimeEnabled());
 
   createEffect(() => {
     if (!props.open) return;
     setComposerSurface(selectedComposerSurface());
-    setLiquidGlassEnabled(liquidGlassRuntimeEnabled());
   });
 
   createEffect(() => {
@@ -40,19 +36,10 @@ export function Settings(props: SettingsProps) {
     setComposerSurface(saveComposerSurface(surface));
   };
 
-  const updateLiquidGlassRuntime = (enabled: boolean) => {
-    if (enabled === liquidGlassEnabled()) return;
-    setLiquidGlassEnabled(saveLiquidGlassRuntime(enabled));
-    if (!enabled) setComposerSurface("frost");
-    window.location.reload();
-  };
-
   return <SettingsCore
       {...props}
       composerSurface={composerSurface()}
       onComposerSurfaceChange={updateComposerSurface}
-      liquidGlassRuntimeEnabled={liquidGlassEnabled()}
-      onLiquidGlassRuntimeChange={updateLiquidGlassRuntime}
       voiceSettings={props.voiceSettings}
     />;
 }

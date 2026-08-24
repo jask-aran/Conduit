@@ -38,7 +38,7 @@
   --sidebar-primary: oklch(0.74 0.004 260); --sidebar-primary-foreground: oklch(0.985 0.003 258);
   --sidebar-accent: oklch(1 0 0 / 6%); --sidebar-accent-foreground: oklch(0.96 0.003 258);
   --sidebar-border: oklch(1 0 0 / 6%); --sidebar-ring: oklch(0.7 0.028 248);
-  /* Liquid-glass tokens, used by the composer (the signature surface). */
+  /* Glass tokens used by the composer and message surfaces. */
   --glass-bg: oklch(0.3 0.006 264 / 52%);
   --glass-border: oklch(1 0 0 / 10%);
   --accent-cool: oklch(0.72 0.045 246);
@@ -114,7 +114,7 @@ svg { stroke-width: 1.5; }
 .workspace-warning p { margin: 3px 0 0; color: var(--muted-foreground); font-size: 13px; }
 
 .work-area { position: relative; z-index: 1; display: flex; min-height: 0; flex: 1; }
-.work-area-conversation { display: flex; min-width: 0; flex: 1; flex-direction: column; transform: translate3d(0, 0, 0); will-change: transform; }
+.work-area-conversation { display: flex; min-width: 0; flex: 1; flex-direction: column; }
 .terminal-pane { display: flex; min-width: 0; min-height: 0; flex: 1; flex-direction: column; overflow: hidden; background: color-mix(in oklch, var(--background), black 9%); }
 .terminal-pane-header { display: flex; min-height: 48px; align-items: center; justify-content: space-between; padding: 6px 8px 6px 14px; border-bottom: 1px solid var(--border); }
 .terminal-pane-header > div { display: flex; min-width: 0; align-items: center; gap: 8px; }
@@ -136,7 +136,7 @@ svg { stroke-width: 1.5; }
 .composer-renderer-switch { position: absolute; top: 8px; right: 12px; z-index: 3; }
 .composer-renderer-switch label { display: flex; align-items: center; gap: 6px; color: var(--muted-foreground); font: 10px ui-monospace, SFMono-Regular, Consolas, monospace; text-transform: uppercase; letter-spacing: .06em; }
 .composer-renderer-switch select { min-height: 26px; border: 1px solid var(--border); border-radius: 5px; background: color-mix(in oklch, var(--background), transparent 8%); padding: 2px 5px; color: var(--foreground); font: 11px ui-monospace, SFMono-Regular, Consolas, monospace; text-transform: none; }
-.transcript-motion-shell { position: relative; width: 100%; height: 100%; contain: layout; container-name: chat-main; container-type: inline-size; }
+.transcript-motion-shell { position: relative; width: 100%; height: 100%; contain: layout paint; container-name: chat-main; container-type: inline-size; transform: translate3d(0, 0, 0); will-change: transform; }
 .message-scroller-viewport { width: 100%; height: 100%; overflow-y: auto; scrollbar-width: none; }
 .message-scroller-viewport::-webkit-scrollbar { display: none; }
 .thread { width: min(var(--composer-desktop-reference-width), calc(100% - 48px)); min-height: 100%; margin-inline: auto; padding: 64px 44px 32px; }
@@ -203,13 +203,6 @@ svg { stroke-width: 1.5; }
   -webkit-backdrop-filter: blur(30px) saturate(168%) brightness(1.05);
   box-shadow: inset 0 1px 0 oklch(1 0 0 / 30%), inset 0 -1px 1px oklch(0 0 0 / 18%), 0 8px 24px -18px rgb(0 0 0 / 62%);
 }
-.message-scroller-button[data-composer-surface="frost"] {
-  border-color: #ffffff4d;
-  background: #ffffff2b;
-  backdrop-filter: blur(24px);
-  -webkit-backdrop-filter: blur(24px);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.5), inset 0 -1px 0 rgba(255, 255, 255, 0.1);
-}
 .message-scroller-button[data-composer-surface="frosted-live"] {
   border-color: #ffffff4d;
   background: #ffffff2b;
@@ -267,36 +260,22 @@ svg { stroke-width: 1.5; }
 [data-slot="menu-content"] .menu-chevron, [data-slot="context-menu-content"] .menu-chevron { margin-left: auto; width: 14px; height: 14px; color: var(--muted-foreground); }
 .composer-stack { position: relative; z-index: 2; display: flex; width: 100%; flex: none; flex-direction: column; gap: 8px; padding: 18px 44px 24px; background: var(--background); }
 .composer-wrap { width: min(var(--composer-desktop-reference-width), 100%); margin-inline: auto; }
-/* The composer is the signature: a liquid-glass bubble with intrinsic material —
-   layered translucent fill, a light-catching gradient rim, a bright specular
-   top edge, an inner sheen, and a deep float — so it reads as glass even over a
-   plain ground, not merely a blurred rectangle. */
+/* The composer layout is shared by the Static and Frosted Live materials. */
 .composer {
   position: relative; min-height: 74px; width: 100%;
   border-radius: var(--composer-radius);
-  background:
-    linear-gradient(180deg, oklch(1 0 0 / 9%), oklch(1 0 0 / 2%) 58%),
-    var(--glass-bg);
-  backdrop-filter: blur(30px) saturate(168%) brightness(1.05);
-  -webkit-backdrop-filter: blur(30px) saturate(168%) brightness(1.05);
+  background: transparent;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
 }
-/* Light-catching hairline rim, brightest at the top-left, via masked gradient. */
+/* Material-specific chrome lives in performance-composer.css. */
 .composer::before {
-  content: ""; position: absolute; inset: 0; z-index: 0; border-radius: inherit; padding: 1px; pointer-events: none;
-  background: linear-gradient(150deg, oklch(1 0 0 / 44%), oklch(1 0 0 / 6%) 32%, oklch(1 0 0 / 3%) 66%, oklch(1 0 0 / 22%));
-  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
-  -webkit-mask-composite: xor; mask-composite: exclude;
-  transition: background 160ms ease;
+  content: none;
 }
-/* Soft specular sheen pooled near the top, the "wet" highlight. */
 .composer::after {
-  content: ""; position: absolute; inset: 0; z-index: 0; border-radius: inherit; pointer-events: none;
-  background: radial-gradient(150% 72% at 50% -34%, oklch(1 0 0 / 12%), transparent 56%);
+  content: none;
 }
 .composer textarea, .composer-actions { position: relative; z-index: 2; }
-.composer:focus-within::before {
-  background: linear-gradient(150deg, oklch(1 0 0 / 56%), oklch(0.72 0.045 246 / 26%) 38%, oklch(1 0 0 / 5%) 70%, oklch(1 0 0 / 26%));
-}
 .composer-mobile-plus { display: none; }
 .composer-input-shell { position: relative; min-height: 44px; }
 .composer textarea { display: block; width: 100%; min-height: 44px; max-height: 192px; resize: none; overflow-y: auto; border: 0; outline: 0; background: transparent; padding: 11px 12px 2px; color: inherit; line-height: 1.45; }
@@ -546,7 +525,7 @@ svg { stroke-width: 1.5; }
 .crash-card { width: min(460px, 100%); padding: 20px; border: 1px solid var(--border); border-radius: 12px; background: var(--card); }
 
 /* Overlays, dialogs, and cards share the menu's solid dark surface. The
-   liquid-glass treatment is reserved for the composer (and the drop overlay's
+   glass treatment is reserved for the composer (and the drop overlay's
    native blur); everywhere else translucent grey read as flat, not glassy. */
 .command-shell,
 .settings-shell,
@@ -618,7 +597,9 @@ svg { stroke-width: 1.5; }
     border-radius: 0;
     box-shadow: none;
   }
-  .thread { width: 100%; padding: 40px 16px 20px; }
+  /* Three renderer probes stack above the first message on a phone. Reserve
+     their height so the controls never cover the streamed transcript. */
+  .thread { width: 100%; padding: 112px 16px 20px; }
   .message-scroller-button[data-slot="button"] { right: 12px; }
   .composer-stack {
     flex: none;

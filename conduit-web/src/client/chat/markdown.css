@@ -28,3 +28,20 @@
 .streaming-pending-fence { opacity: 0.92; }
 .chat-markdown .katex-display { display: flex; min-height: 2.2em; margin: 1em 0; align-items: center; justify-content: center; }
 .chat-markdown .incremark-math-block { display: block; min-height: 2.2em; margin: 1em 0; }
+
+/* KaTeX does not wrap a display formula. Keep the formula inside the phone
+   column and expose the excess width as a local touch scroll instead of
+   widening the transcript or clipping both ends of the equation. */
+.chat-markdown .katex-display,
+.chat-markdown .incremark-math-block {
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+}
+.chat-markdown .katex-display::-webkit-scrollbar,
+.chat-markdown .incremark-math-block::-webkit-scrollbar { display: none; }
+@media (max-width: 720px) {
+  .chat-markdown .katex-display { justify-content: flex-start; }
+  .chat-markdown .katex-display > .katex { flex: 0 0 auto; }
+}

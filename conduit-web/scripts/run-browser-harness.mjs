@@ -12,8 +12,8 @@ Options:
   --scenario <name>                 Reported scenario name (default: browser-streaming-baseline)
   --profile <steady|burst|jitter>   Source cadence profile (default: steady)
   --renderer <marked-stable|marked|incremark|incremark-typewriter|incremark-synthetic|incremark-advanced>  Renderer (default: marked)
-  --pacing <adaptive|fixed>        Incremark Typewriter pacing mode (default: adaptive)
   --typewriter                     Legacy alias for a Typewriter-capable Incremark renderer
+  --pacing <adaptive|fixed|buffered>  Typewriter pacing mode (default: buffered)
   --require-typewriter-metrics     Require scheduled typewriter metric samples
   --text <value>                    Scripted assistant output
   --fixture <name>                  Named deterministic fixture (use --list-fixtures)
@@ -63,11 +63,12 @@ const expectedInteractions = valueAfter(args, "--expected-interactions", null);
 const instrumentation = valueAfter(args, "--instrumentation", "on");
 if (!["on", "off"].includes(instrumentation)) throw new Error("--instrumentation must be on or off");
 const renderer = valueAfter(args, "--renderer", "marked");
-const pacing = valueAfter(args, "--pacing", "adaptive");
-if (!["adaptive", "fixed"].includes(pacing)) throw new Error("--pacing must be adaptive or fixed");
 const rendererOptions = ["marked-stable", "marked", "incremark", "incremark-typewriter", "incremark-synthetic", "incremark-advanced"];
 if (!rendererOptions.includes(renderer)) throw new Error(`--renderer must be ${rendererOptions.join(", ")}`);
 if (args.includes("--typewriter") && !["incremark", "incremark-typewriter", "incremark-synthetic", "incremark-advanced"].includes(renderer)) throw new Error("--typewriter requires an Incremark renderer");
+const pacing = valueAfter(args, "--pacing", "buffered");
+const pacingOptions = ["adaptive", "fixed", "buffered"];
+if (!pacingOptions.includes(pacing)) throw new Error(`--pacing must be ${pacingOptions.join(", ")}`);
 const contractRenderer = renderer === "incremark-advanced" ? "incremark-synthetic" : renderer;
 const rendererContract = fixture?.rendererContracts?.[contractRenderer] || {};
 const resolvedExpectedAssertions = expectedAssertions == null
