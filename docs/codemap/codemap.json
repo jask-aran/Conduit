@@ -54,7 +54,15 @@
         "conduit-web/src/client/settings/voice-local-catalogue.tsx",
         "conduit-web/src/client/settings/voice-settings.css",
         "conduit-web/src/client/styles.css",
-        "conduit-web/src/components/primitives.tsx"
+        "conduit-web/src/components/primitives.tsx",
+        "conduit-web/src/client/chat/attachments.tsx",
+        "conduit-web/src/client/chat/context-metrics.ts",
+        "conduit-web/src/client/chat/host-ui-card.tsx",
+        "conduit-web/src/client/chat/voice-audio.ts",
+        "conduit-web/src/client/chat/voice-dictation-diagnostics.ts",
+        "conduit-web/src/client/chat/voice-dictation-types.ts",
+        "conduit-web/src/client/chat/voice-dictation.js",
+        "conduit-web/src/client/chat/voice-waveform.tsx"
       ],
       "tests": [
         "conduit-web/test/browser/app.spec.js",
@@ -1039,6 +1047,210 @@
           ],
           "imports": [],
           "importedBy": [],
+          "directTests": []
+        },
+        {
+          "path": "conduit-web/src/client/chat/attachments.tsx",
+          "responsibility": "Supporting implementation for this module.",
+          "lines": 34,
+          "sourceSha256": "b7d3b9c995533d3e46532e917c13dc26d2f183147358c7e44b9b0d2045b67558",
+          "exports": [
+            "AttachmentCards"
+          ],
+          "imports": [
+            "conduit-web/src/client/api/contracts.ts",
+            "conduit-web/src/client/state/attachments.ts"
+          ],
+          "importedBy": [
+            "conduit-web/src/client/chat/composer.tsx",
+            "conduit-web/src/client/chat/transcript.tsx"
+          ],
+          "directTests": []
+        },
+        {
+          "path": "conduit-web/src/client/chat/context-metrics.ts",
+          "responsibility": "Supporting implementation for this module.",
+          "lines": 274,
+          "sourceSha256": "0f2ad223cdb39f658656bd2a7e1b4944f90803a0e73ff80f8d035c66f044fadb",
+          "exports": [
+            "ALL_CONTEXT_METRICS",
+            "CONTEXT_METRIC_GROUPS",
+            "CONTEXT_METRIC_OPTIONS",
+            "CONTEXT_METRIC_PRESETS",
+            "CONTEXT_METRIC_STORAGE_KEY",
+            "ContextMetricId",
+            "ContextMetricPresetId",
+            "ContextMetricSelection",
+            "DEFAULT_CONTEXT_METRICS",
+            "contextMetricPreset",
+            "formatContextMetrics",
+            "metricsForContextMetricPreset",
+            "normalizeContextMetrics",
+            "saveContextMetrics",
+            "selectedContextMetrics"
+          ],
+          "imports": [
+            "conduit-web/src/client/api/contracts.ts"
+          ],
+          "importedBy": [
+            "conduit-web/src/client/chat/composer.tsx",
+            "conduit-web/src/client/main.tsx",
+            "conduit-web/src/client/settings/settings-core.tsx"
+          ],
+          "directTests": [
+            "conduit-web/test/context-metrics.test.js"
+          ]
+        },
+        {
+          "path": "conduit-web/src/client/chat/host-ui-card.tsx",
+          "responsibility": "Supporting implementation for this module.",
+          "lines": 49,
+          "sourceSha256": "3bc91454dbebf42baf782a47387c6110ac7204ab3238150e492d1ea3957b7487",
+          "exports": [
+            "HostUiRequests"
+          ],
+          "imports": [
+            "conduit-web/src/client/api/contracts.ts"
+          ],
+          "importedBy": [
+            "conduit-web/src/client/main.tsx"
+          ],
+          "directTests": []
+        },
+        {
+          "path": "conduit-web/src/client/chat/voice-audio.ts",
+          "responsibility": "Supporting implementation for this module.",
+          "lines": 331,
+          "sourceSha256": "b52ecf8dce9774f8575b0e8d2228f259f44a6025c3493afd21e55cb7213528b0",
+          "exports": [
+            "AUDIO_INPUT_PLAYBACK_UNSUPPORTED_MESSAGE",
+            "AUDIO_INPUT_TEST_STOP_GRACE_MS",
+            "AudioInputDevice",
+            "AudioInputTestOptions",
+            "AudioInputTestRecording",
+            "AudioInputTestResult",
+            "AudioInputTestSession",
+            "AudioSignalLevel",
+            "DEFAULT_VOICE_CAPTURE_PROFILE",
+            "MAX_AUDIO_INPUT_TEST_DURATION_MS",
+            "MIN_AUDIO_SIGNAL_PEAK",
+            "MIN_AUDIO_SIGNAL_RMS",
+            "VOICE_CAPTURE_PROFILES",
+            "VoiceCaptureProfile",
+            "audioInputConstraints",
+            "formatMicrophoneError",
+            "hasAudioSignal",
+            "isUnavailableAudioInputError",
+            "listAudioInputDevices",
+            "normalizeVoiceCaptureProfile",
+            "revokeAudioInputRecording",
+            "startAudioInputTest",
+            "testAudioInput"
+          ],
+          "imports": [],
+          "importedBy": [
+            "conduit-web/src/client/chat/composer.tsx",
+            "conduit-web/src/client/chat/voice-dictation-client.ts",
+            "conduit-web/src/client/chat/voice-dictation-diagnostics.ts",
+            "conduit-web/src/client/chat/voice-waveform.tsx",
+            "conduit-web/src/client/settings/settings-core.tsx"
+          ],
+          "directTests": []
+        },
+        {
+          "path": "conduit-web/src/client/chat/voice-dictation-diagnostics.ts",
+          "responsibility": "Supporting implementation for this module.",
+          "lines": 256,
+          "sourceSha256": "18c2ae487ab4ffc6e6edb9bea40c2b4d1e36d44c18dca3312ae4562ccb61c2bd",
+          "exports": [
+            "VoiceDictationClientDiagnostics",
+            "VoiceDictationDiagnostics",
+            "createVoiceDictationDiagnostics"
+          ],
+          "imports": [
+            "conduit-web/src/client/chat/voice-audio.ts"
+          ],
+          "importedBy": [
+            "conduit-web/src/client/chat/voice-dictation-client.ts"
+          ],
+          "directTests": []
+        },
+        {
+          "path": "conduit-web/src/client/chat/voice-dictation-types.ts",
+          "responsibility": "Supporting implementation for this module.",
+          "lines": 9,
+          "sourceSha256": "fb393ec77bc91a0c020ff1639ec74fa6ea00bd5534f06754eee65e1fcd36faf3",
+          "exports": [
+            "VoiceDictationSettings"
+          ],
+          "imports": [],
+          "importedBy": [
+            "conduit-web/src/client/chat/composer.tsx",
+            "conduit-web/src/client/chat/voice-dictation.js",
+            "conduit-web/src/client/main.tsx",
+            "conduit-web/src/client/settings/settings-core.tsx",
+            "conduit-web/src/client/settings/settings.tsx"
+          ],
+          "directTests": []
+        },
+        {
+          "path": "conduit-web/src/client/chat/voice-dictation.js",
+          "responsibility": "Supporting implementation for this module.",
+          "lines": 141,
+          "sourceSha256": "6b9cc16a0783bef7be74bb7bcfe940993a6db6e6ed9617327a28e4e26654fd9c",
+          "exports": [
+            "DEFAULT_VOICE_DICTATION_SETTINGS",
+            "NO_SIGNAL_ERROR_MIN_DURATION_MS",
+            "VOICE_DICTATION_STORAGE_KEY",
+            "audioTransferLost",
+            "beginDictatedRange",
+            "loadVoiceDictationSettings",
+            "matchesShortcut",
+            "normalizeActivation",
+            "normalizeShortcut",
+            "releasesShortcut",
+            "replaceDictatedRange",
+            "saveVoiceDictationSettings",
+            "shortcutFromKeyboardEvent",
+            "shouldAutoSend",
+            "shouldReportNoSignal"
+          ],
+          "imports": [
+            "conduit-web/src/client/chat/voice-dictation-types.ts"
+          ],
+          "importedBy": [
+            "conduit-web/src/client/chat/composer.tsx",
+            "conduit-web/src/client/main.tsx",
+            "conduit-web/src/client/settings/settings-core.tsx"
+          ],
+          "directTests": [
+            "conduit-web/test/voice-dictation.test.js"
+          ]
+        },
+        {
+          "path": "conduit-web/src/client/chat/voice-waveform.tsx",
+          "responsibility": "Supporting implementation for this module.",
+          "lines": 159,
+          "sourceSha256": "505324465e27e6f07ca903b7730d3968dd3d09534d1c5038a8323069614b37fe",
+          "exports": [
+            "VOICE_WAVEFORM_SAMPLE_COUNT",
+            "VOICE_WAVEFORM_SAMPLE_INTERVAL_MS",
+            "VoiceWaveform",
+            "VoiceWaveformController",
+            "VoiceWaveformProps",
+            "VoiceWaveformState",
+            "createVoiceWaveformController",
+            "normalizeVoiceLevel",
+            "normalizeVoicePeak"
+          ],
+          "imports": [
+            "conduit-web/src/client/chat/voice-audio.ts"
+          ],
+          "importedBy": [
+            "conduit-web/src/client/chat/composer.tsx",
+            "conduit-web/src/client/main.tsx",
+            "conduit-web/src/client/settings/settings-core.tsx"
+          ],
           "directTests": []
         }
       ]
@@ -2232,8 +2444,8 @@
         {
           "path": "conduit-web/README.md",
           "responsibility": "Supporting implementation for Remote host / shell.",
-          "lines": 646,
-          "sourceSha256": "e70cb1ee8c100379153442b2a6b9cea6fcc7311b3b4cbc79b76518aaf62f1d22",
+          "lines": 832,
+          "sourceSha256": "b6c13048d37e84da61713ba8abcda0f497e99b2668b680b54e2b2f182d433bec",
           "exports": [],
           "imports": [],
           "importedBy": [],
@@ -2342,8 +2554,8 @@
         {
           "path": "conduit-web/README.md",
           "responsibility": "Supporting implementation for Remote host / shell.",
-          "lines": 646,
-          "sourceSha256": "e70cb1ee8c100379153442b2a6b9cea6fcc7311b3b4cbc79b76518aaf62f1d22",
+          "lines": 832,
+          "sourceSha256": "b6c13048d37e84da61713ba8abcda0f497e99b2668b680b54e2b2f182d433bec",
           "exports": [],
           "imports": [],
           "importedBy": [],
@@ -2817,8 +3029,8 @@
         {
           "path": "conduit-web/README.md",
           "responsibility": "Supporting implementation for Remote host / shell.",
-          "lines": 646,
-          "sourceSha256": "e70cb1ee8c100379153442b2a6b9cea6fcc7311b3b4cbc79b76518aaf62f1d22",
+          "lines": 832,
+          "sourceSha256": "b6c13048d37e84da61713ba8abcda0f497e99b2668b680b54e2b2f182d433bec",
           "exports": [],
           "imports": [],
           "importedBy": [],
