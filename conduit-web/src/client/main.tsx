@@ -2,14 +2,14 @@
 import { batch, createEffect, createMemo, createSignal, ErrorBoundary, lazy, onCleanup, onMount, Show } from "solid-js";
 import { render } from "solid-js/web";
 import {
-  ChevronDownIcon, EllipsisIcon, PanelLeftIcon, PanelRightIcon, PencilIcon, RefreshCwIcon, SearchIcon, ShareIcon, TerminalIcon, Trash2Icon, TriangleAlertIcon,
+  EllipsisIcon, PanelLeftIcon, PanelRightIcon, PencilIcon, RefreshCwIcon, SearchIcon, ShareIcon, TerminalIcon, Trash2Icon, TriangleAlertIcon,
 } from "lucide-solid";
 import { registerSW } from "virtual:pwa-register";
 import { Toaster, toast } from "solid-sonner";
 import "solid-sonner/styles.css";
 import { DefaultMeteorShower } from "@jask-aran/solid-components/meteor-shower";
 import "@jask-aran/solid-components/meteor-shower.css";
-import { Button, Dialog, DialogContent, Menu, MenuContent, MenuGroup, MenuItem, MenuLabel, MenuSeparator, MenuTrigger, Spinner } from "@/components/primitives";
+import { Button, Dialog, DialogContent, Menu, MenuContent, MenuGroup, MenuItem, MenuLabel, MenuSeparator, MenuTrigger } from "@/components/primitives";
 import { api, asList, pathChatId, pathProjectId, projectPath } from "./api/client";
 import type { ChatSummary, DashboardChat, Installation, Project, RuntimeIdentity, Template, TranscriptDetail, WorkspaceAppearance, WorkspacePolicy, WorkspaceSuggestion, WorkspaceSuggestionsPayload } from "./api/contracts";
 import { createErrorDiagnostic, formatRuntimeDiagnosticPrompt, type ErrorDiagnostic, type ErrorDiagnosticContext } from "./error-diagnostics";
@@ -73,8 +73,6 @@ function ChatHeader(props: {
   pwaUpdating: () => boolean;
   dashboard?: boolean;
 }) {
-  const [statusOpen, setStatusOpen] = createSignal(false);
-  let statusTrigger!: HTMLButtonElement;
   const projectLabel = () => props.project?.slug === "chat" ? "Chats" : props.project?.slug || props.project?.name || "Chats";
   const runtimeLabel = () => !props.runtime ? null : props.runtime.kind === "native_pi" ? "Host Pi" : "Isolated Pi";
   const profileLabel = () => props.runtime?.kind === "native_pi" ? null : props.profile?.label || props.profile?.id;
@@ -102,9 +100,11 @@ function ChatHeader(props: {
     if (value >= 70) return "warning";
     return "normal";
   };
-  const contextLabel = () => `Context usage: ${Math.round(contextPercent())}%`;
-  const contextDashArray = () => `${contextPercent()} 100`;
-  const queueCount = () => props.chat ? props.chat.queue().steering.length + props.chat.queue().followUp.length : 0;
+  const contextLabel = () => {
+    const value = contextPercent();
+    return `Context usage: ${Math.round(value)}%`;
+  };
+  const contextDashArray = () => `${contextPercent() || 0} 100`;
   const dictationLabel = () => props.composerStatus?.dictationLabel() || "";
   const dictating = () => Boolean(props.composerStatus?.dictating());
   const statusLabel = () => {
@@ -117,15 +117,11 @@ function ChatHeader(props: {
     if (props.connectivity === "connecting") return "Connecting…";
     return "Ready";
   };
-  const statusKind = () => activity()?.kind || (props.connectivity === "offline" ? "runtime_failed" : "idle");
-  const statusBusy = () => dictating() || SPINNING_ACTIVITY.has(statusKind()) || ["connecting", "reconnecting"].includes(props.connectivity || "");
-  const statusFailure = () => props.connectivity === "offline" || ["request_failed", "runtime_failed"].includes(statusKind());
-  const statusTone = () => statusFailure() ? "error" : dictating() ? "listening" : statusBusy() ? "active" : "ready";
-  const connectionLabel = () => ({ connecting: "Connecting", online: "Connected", reconnecting: "Reconnecting", offline: "Offline" }[props.connectivity || "offline"] || "Unknown");
-  const closeStatus = (open: boolean) => {
-    setStatusOpen(open);
-    if (!open) queueMicrotask(() => statusTrigger?.focus());
-  };
+  const recording = () => Boolean(props.composerStatus?.recording());
+  const activityKind = () => activity()?.kind || (props.connectivity === "offline" ? "runtime_failed" : "idle");
+  const statusBusy = () => dictating() || SPINNING_ACTIVITY.has(activityKind()) || ["connecting", "reconnecting"].includes(props.connectivity || "");
+  const statusFailure = () => props.connectivity === "offline" || ["request_failed", "runtime_failed"].includes(activityKind());
+  const statusTone = () => statusFailure() ? "error" : recording() ? "listening" : dictating() ? "active" : statusBusy() ? "active" : "ready";
   const waveformHistory = () => props.composerStatus?.waveform.history() || [];
   const waveformLevel = () => props.composerStatus?.waveform.level() || 0;
   const waveformPeak = () => props.composerStatus?.waveform.peak() || 0;
@@ -137,13 +133,11 @@ function ChatHeader(props: {
       </Show>
       <nav aria-label="breadcrumb" class="chat-header-title"><span>{projectLabel()}</span><span class="breadcrumb-separator" aria-hidden="true" /><strong>{props.title}</strong></nav>
       <Show when={!props.dashboard && props.chat}>
-        <Button ref={statusTrigger} variant="ghost" size="sm" class="chat-status-trigger" data-state={statusTone()} aria-label={`Runtime status: ${statusLabel()}. Open runtime details`} aria-live="polite" aria-expanded={statusOpen()} aria-haspopup="dialog" onClick={() => setStatusOpen(true)}>
-          <Show when={dictating()} fallback={<span class="chat-status-icon" aria-hidden="true"><Show when={statusFailure()} fallback={<Show when={statusBusy()} fallback={<span class="chat-status-dot" />}><Spinner /></Show>}><TriangleAlertIcon /></Show></span>}>
-              <VoiceWaveform class="chat-status-waveform" history={waveformHistory} level={waveformLevel} peak={waveformPeak} state={waveformState()} variant="compact" barCount={16} ariaLabel="Microphone input level" />
+        <span class="chat-status-line" data-state={statusTone()} role="status" aria-label={`Runtime status: ${statusLabel()}`} aria-live="polite">
+          <Show when={recording()} fallback={<span class="chat-status-label">{statusLabel()}</span>}>
+            <VoiceWaveform class="chat-status-waveform" history={waveformHistory} level={waveformLevel} peak={waveformPeak} state={waveformState()} variant="compact" barDensity={3} ariaLabel="Microphone input level" />
           </Show>
-          <span class="chat-status-label">{statusLabel()}</span>
-          <ChevronDownIcon class="chat-status-chevron" aria-hidden="true" />
-        </Button>
+        </span>
       </Show>
       <div class="chat-header-actions">
         <Button variant="ghost" size="icon-sm" class="search-trigger" aria-label="Search chats" title="Search chats" onClick={props.onOpenSearch}><SearchIcon /></Button>
@@ -204,33 +198,6 @@ function ChatHeader(props: {
         </Menu>
       </div>
     </header>
-    <Show when={!props.dashboard && props.chat}>
-      <Dialog open={statusOpen()} onOpenChange={closeStatus}>
-        <DialogContent class="mobile-status-sheet" title="Runtime status" closeLabel="Close runtime status">
-          <div class="mobile-status-sheet-scroll">
-            <div class={`mobile-status-sheet-state mobile-status-tone-${statusTone()}`} role="status" aria-live="polite">
-              <span class="mobile-status-sheet-state-label">{statusLabel()}</span>
-              <span class="mobile-status-sheet-state-kind">{statusKind()}</span>
-            </div>
-            <Show when={dictating()}>
-              <VoiceWaveform class="mobile-status-sheet-waveform" history={waveformHistory} level={waveformLevel} peak={waveformPeak} state={waveformState()} variant="compact" barCount={24} ariaLabel="Microphone input level" />
-            </Show>
-            <dl class="mobile-status-facts">
-              <div><dt>Connection</dt><dd>{connectionLabel()}</dd></div>
-              <div><dt>Activity</dt><dd>{activity()?.label || "Ready"}</dd></div>
-              <Show when={queueCount()}><div><dt>Queued messages</dt><dd>{queueCount()}</dd></div></Show>
-            </dl>
-            <section class="mobile-status-context" aria-labelledby="mobile-status-context-title">
-              <h3 id="mobile-status-context-title">Context metrics</h3>
-              <div class="mobile-status-context-values">{contextDetail() || "No context metrics available yet."}</div>
-            </section>
-            <Show when={props.composerStatus?.dictationError()}>
-              <p class="mobile-status-error" role="alert">{props.composerStatus?.dictationError()}</p>
-            </Show>
-          </div>
-        </DialogContent>
-      </Dialog>
-    </Show>
   </>;
 }
 
@@ -1020,7 +987,7 @@ function App() {
             <section class="work-area-conversation" aria-label="Conversation">
               <Transcript chat={chat} partialContinue={partialContinue()} markdownRenderer={markdownRenderer()} profileLabel={activeProfile()?.label || activeProfile()?.id || chat.templateId() || undefined} />
               <div class="composer-stack"><HostUiRequests requests={chat.hostUiRequests()} onRespond={chat.respondHostUi} />
-                <Composer chat={chat} attachments={attachments} models={models} profiles={profiles()} activeProfile={activeProfile()} serverOnline={runtime.connectivity() === "online"} voiceSettings={voiceSettings()} contextMetrics={contextMetrics} onChooseProfile={(id) => void switchProfile(id)} onOpenSettings={openSettings} onOpenAttachments={() => attachFileInput?.click()} onStatusChange={setComposerStatus} /></div>
+                <Composer chat={chat} attachments={attachments} models={models} profiles={profiles()} activeProfile={activeProfile()} serverOnline={runtime.connectivity() === "online"} voiceSettings={voiceSettings()} onChooseProfile={(id) => void switchProfile(id)} onOpenSettings={openSettings} onOpenAttachments={() => attachFileInput?.click()} onStatusChange={setComposerStatus} /></div>
             </section>
           </div>
         </>}>
