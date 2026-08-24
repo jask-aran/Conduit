@@ -375,11 +375,6 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
     }
   });
 
-  const [pullDistance, setPullDistance] = createSignal(0);
-  const [pullArmed, setPullArmed] = createSignal(false);
-  let pullStartY = 0;
-  let pulling = false;
-
   onMount(() => {
     const syncComposerSurface = () => setComposerSurface(selectedComposerSurface());
     let latestButtonAnchorFrame: number | null = null;
@@ -421,6 +416,7 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
     panelMotion = mountTranscriptPanelMotion(transcriptRoot, motionShell);
     transcriptVisibility = mountTranscriptVisibility(transcriptRoot, viewport, thread);
     const claimUserScroll = () => {
+      if (empty()) return;
       if (!rendererUsesInertialTailFollow()) return;
       const changedOwner = typewriterTailState.owner !== "user";
       programmaticScrollTop = null;
@@ -445,6 +441,10 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
       }
     };
     const onScroll = () => {
+      if (empty()) {
+        setFollowing(true);
+        return;
+      }
       if (programmaticScrollTop != null && Math.abs(viewport.scrollTop - programmaticScrollTop) < 1) {
         programmaticScrollTop = null;
         return;
@@ -459,44 +459,10 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
       }
       if (viewport.scrollTop < 240) loadEarlier();
     };
-    // Empty-state pull-to-refresh: hard reload so a stuck PWA shell or live
-    // socket can recover without hunting browser menus.
-    const onTouchStart = (event: TouchEvent) => {
-      claimUserScroll();
-      if (!empty() || event.touches.length !== 1) return;
-      pullStartY = event.touches[0]!.clientY;
-      pulling = true;
-      setPullArmed(false);
-      setPullDistance(0);
-    };
-    const onTouchMove = (event: TouchEvent) => {
-      if (!pulling || !empty() || event.touches.length !== 1) return;
-      const delta = event.touches[0]!.clientY - pullStartY;
-      if (delta <= 0) {
-        setPullDistance(0);
-        setPullArmed(false);
-        return;
-      }
-      // Resist the drag so the welcome card barely moves.
-      const resisted = Math.min(96, delta * 0.35);
-      setPullDistance(resisted);
-      setPullArmed(resisted >= 56);
-      if (delta > 8) event.preventDefault();
-    };
-    const onTouchEnd = () => {
-      if (!pulling) return;
-      pulling = false;
-      const shouldReload = pullArmed();
-      setPullDistance(0);
-      setPullArmed(false);
-      if (shouldReload) location.reload();
-    };
+    const onTouchStart = () => claimUserScroll();
     viewport.addEventListener("scroll", onScroll, { passive: true });
     viewport.addEventListener("wheel", claimUserScroll, { passive: true });
     viewport.addEventListener("touchstart", onTouchStart, { passive: true });
-    viewport.addEventListener("touchmove", onTouchMove, { passive: false });
-    viewport.addEventListener("touchend", onTouchEnd);
-    viewport.addEventListener("touchcancel", onTouchEnd);
     window.addEventListener(COMPOSER_SURFACE_CHANGE_EVENT, syncComposerSurface);
     const resizeObserver = new ResizeObserver(() => {
       if (!following()) return;
@@ -510,9 +476,6 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
       viewport.removeEventListener("scroll", onScroll);
       viewport.removeEventListener("wheel", claimUserScroll);
       viewport.removeEventListener("touchstart", onTouchStart);
-      viewport.removeEventListener("touchmove", onTouchMove);
-      viewport.removeEventListener("touchend", onTouchEnd);
-      viewport.removeEventListener("touchcancel", onTouchEnd);
       window.removeEventListener(COMPOSER_SURFACE_CHANGE_EVENT, syncComposerSurface);
       composerResizeObserver.disconnect();
       window.removeEventListener("resize", scheduleLatestButtonAnchor);
@@ -545,14 +508,9 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
         </select></label>
       </Show>
     </div>
-    <Show when={empty() && pullDistance() > 8}>
-      <div class="empty-pull-hint" data-visible="true" data-armed={pullArmed() ? "true" : "false"} aria-hidden="true">
-        {pullArmed() ? "Release to refresh" : "Pull to refresh"}
-      </div>
-    </Show>
     <div ref={motionShell} class="transcript-motion-shell">
       <div ref={viewport} class="message-scroller-viewport" data-slot="message-scroller-viewport">
-        <div ref={thread} class="thread" data-slot="message-scroller-content" style={empty() && pullDistance() > 0 ? { transform: `translateY(${pullDistance()}px)` } : undefined}>
+        <div ref={thread} class="thread" data-slot="message-scroller-content">
         <Show when={props.chat.loadingOlder()}>
           <div data-slot="message-scroller-item" class="flex justify-center" role="status" aria-label="Loading earlier messages"><Spinner /></div>
         </Show>
@@ -605,7 +563,7 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
         }}</For>
         </div>
       </div>
-      <Show when={!following()}><Button ref={(element) => { latestButton = element; scheduleLatestButtonAnchor(); }} variant="ghost" size="icon-sm" class="message-scroller-button" data-composer-surface={composerSurface()} aria-label="Scroll to latest" title="Scroll to latest" onClick={() => { if (rendererUsesInertialTailFollow()) resumeTypewriterTailFollow("user-scroll-to-latest"); else { setFollowing(true); scrollBottom(); } }}><ArrowDownIcon /></Button></Show>
+      <Show when={!following()}><Button ref={(element) => { latestButton = element; scheduleLatestButtonAnchor(); }} variant="ghost" size="icon-sm" class="message-scroller-button composer-surface-material" data-composer-surface={composerSurface()} aria-label="Scroll to latest" title="Scroll to latest" onClick={() => { if (rendererUsesInertialTailFollow()) resumeTypewriterTailFollow("user-scroll-to-latest"); else { setFollowing(true); scrollBottom(); } }}><ArrowDownIcon /></Button></Show>
     </div>
   </div>;
 }

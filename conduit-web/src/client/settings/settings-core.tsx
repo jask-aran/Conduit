@@ -841,8 +841,12 @@ export function Settings(props: {
             <Field><FieldLabel for="default-profile">Default profile</FieldLabel><select id="default-profile" value={props.defaultTemplateId} onChange={(event) => void props.onDefaultTemplateChange(event.currentTarget.value)}><For each={props.templates.filter((item) => item.defaultable !== false)}>{(item) => <option value={item.id}>{item.label}</option>}</For></select></Field>
           </FieldGroup></Show></Show>
           <Show when={section() === "ui"}>
-            <FieldGroup>
-              <Field>
+           <FieldGroup>
+             <div class="settings-performance-warning" role="note">
+               <strong>Performance note</strong>
+               <p>For smooth animations, backdrop blur, and high-refresh-rate rendering, enable <em>Use graphics acceleration when available</em> in your browser settings, then relaunch the browser. Disabled hardware acceleration can cause severe frame drops even when Conduit and the server are healthy.</p>
+             </div>
+             <Field>
                 <FieldLabel for="markdown-renderer">Markdown renderer</FieldLabel>
                 <select id="markdown-renderer" aria-label="Markdown renderer" value={props.markdownRenderer} onChange={(event) => props.onMarkdownRendererChange(event.currentTarget.value as MarkdownRendererId)}>
                   <For each={MARKDOWN_RENDERER_OPTIONS}>{(option) => <option value={option.value}>{option.label}</option>}</For>

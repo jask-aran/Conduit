@@ -75,10 +75,10 @@ for (const icon of ["pwa-192x192.png", "pwa-512x512.png", "favicon.svg"]) {
 }
 const cssAssets = assets.filter((asset) => asset.initial && asset.type === "css");
 const cssText = cssAssets.map((asset) => fs.readFileSync(path.join(dist, asset.file), "utf8")).join("\n");
-const frostedLiveRule = cssText.match(/\.composer\[data-composer-surface=frosted-live\][^{]*\{[^}]+\}/);
+const frostedLiveRule = cssText.match(/\.composer-surface-material\[data-composer-surface=frosted-live\][^{]*\{[^}]+\}/);
 const frostedLiveFailures = [];
 if (!frostedLiveRule) {
-  frostedLiveFailures.push("missing .composer[data-composer-surface=frosted-live] rule");
+  frostedLiveFailures.push("missing shared frosted-live material rule");
 } else {
   if (!/(?<!-webkit-)backdrop-filter:blur\(/.test(frostedLiveRule[0])) {
     frostedLiveFailures.push("frosted-live rule dropped unprefixed backdrop-filter");
@@ -91,7 +91,7 @@ if (frostedLiveFailures.length) {
   for (const failure of frostedLiveFailures) console.error(`CSS: ${failure}`);
   process.exitCode = 1;
 } else {
-  console.log("CSS: frosted-live composer keeps unprefixed backdrop-filter.");
+  console.log("CSS: composer, follow button, and header pill share the frosted-live material.");
 }
 
 if (pwaFailures.length) {

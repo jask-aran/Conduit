@@ -1,4 +1,8 @@
 #!/usr/bin/env node
+import fs from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+import { mintLocalSession } from "../../scripts/conduit-local-auth.mjs";
 import {
   DEFAULT_CONDUIT_ORIGIN,
   resolveLocalTarget,
@@ -25,7 +29,7 @@ const target = resolveLocalTarget({
 
 function run(args, { capture = false } = {}) {
   const result = spawnLocalAgentBrowser(args, { capture });
-  if (result.status !== 0) process.exit(result.status ?? 1);
+  if (result.status !== 0) throw new Error(`agent-browser exited with status ${result.status ?? 1}`);
   return result.stdout?.trim() || "";
 }
 
@@ -36,9 +40,18 @@ const session = process.env.AGENT_BROWSER_SESSION || run(
 if (!session) throw new Error("agent-browser did not return a session id");
 
 const browser = ["--session", session, "--restore"];
-run([...browser, "open", target]);
-run([...browser, "wait", "--load", "networkidle"]);
-run([...browser, "snapshot", "-i", "-c"]);
+const minted = await mintLocalSession({ userAgent: "conduit-agent-browser" });
+const authDir = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-agent-auth-"));
+const cookieFile = path.join(authDir, "cookie");
+try {
+  await fs.writeFile(cookieFile, `conduit_session=${minted.token}\n`, { mode: 0o600 });
+  run([...browser, "cookies", "set", "--curl", cookieFile]);
+  run([...browser, "open", target]);
+  run([...browser, "wait", "--load", "networkidle"]);
+  run([...browser, "snapshot", "-i", "-c"]);
+} finally {
+  await fs.rm(authDir, { recursive: true, force: true });
+}
 
 process.stdout.write(`\nRestored agent-browser session: ${session}\n`);
 process.stdout.write(`Target: ${target}\n`);

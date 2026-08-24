@@ -2,12 +2,16 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import readline from "node:readline";
-import { fileURLToPath } from "node:url";
 import { AuthStore, statusSummary } from "../conduit-web/src/auth-store.js";
+import {
+  DEFAULT_AGENT_USER,
+  DEFAULT_ORIGIN,
+  mintLocalSession,
+  resolveLocalAuthFile,
+  sessionArtifact,
+} from "./conduit-local-auth.mjs";
 
-const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const dataRoot = path.resolve(process.env.CONDUIT_DATA_ROOT || path.join(repositoryRoot, "data"));
-const authFile = path.resolve(process.env.CONDUIT_AUTH_FILE || path.join(dataRoot, "auth.json"));
+const authFile = resolveLocalAuthFile();
 
 function printHelp() {
   console.log(`Usage:
@@ -20,6 +24,13 @@ function printHelp() {
                                           every device. The password is unchanged.
   conduit-auth status                     Reports whether a password is set and the
                                           active session count.
+  conduit-auth mint-session [options]     Create a local session without a password.
+
+Mint options:
+  --user-agent <label>                    Session label (default: ${DEFAULT_AGENT_USER}).
+  --format <token|cookie|json|playwright> Output format (default: token).
+  --output <path>                         Write mode-0600 output instead of stdout.
+  --origin <url>                          Cookie origin (default: ${DEFAULT_ORIGIN}).
 
 Environment:
   CONDUIT_DATA_ROOT    Override the durable data root (default: data).
@@ -118,6 +129,35 @@ async function status() {
   console.log(`Auth file: ${authFile}`);
 }
 
+async function mintSession() {
+  const valueAfter = (name, fallback) => {
+    const index = process.argv.indexOf(name);
+    if (index === -1) return fallback;
+    const value = process.argv[index + 1];
+    if (!value || value.startsWith("--")) throw new Error(`${name} requires a value`);
+    return value;
+  };
+  const format = process.argv.includes("--json")
+    ? "json"
+    : valueAfter("--format", "token");
+  const session = await mintLocalSession({
+    authFile,
+    userAgent: valueAfter("--user-agent", DEFAULT_AGENT_USER),
+  });
+  const output = sessionArtifact(session, {
+    format,
+    origin: valueAfter("--origin", DEFAULT_ORIGIN),
+  });
+  const outputPath = valueAfter("--output", null);
+  if (!outputPath) {
+    process.stdout.write(output);
+    return;
+  }
+  await fs.mkdir(path.dirname(path.resolve(outputPath)), { recursive: true });
+  await fs.writeFile(path.resolve(outputPath), output, { mode: 0o600 });
+  await fs.chmod(path.resolve(outputPath), 0o600);
+}
+
 const command = process.argv[2];
 try {
   if (!command || command === "-h" || command === "--help" || command === "help") {
@@ -128,6 +168,8 @@ try {
     await resetSessions();
   } else if (command === "status") {
     await status();
+  } else if (command === "mint-session") {
+    await mintSession();
   } else {
     console.error(`Unknown command: ${command}`);
     printHelp();
