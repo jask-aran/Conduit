@@ -7,7 +7,7 @@ import type { ChatMarkdownProps } from "./markdown";
 import { ExternalLinkDialog } from "./external-link-dialog";
 import { createExternalLinkController } from "./markdown-actions";
 import { createSyntheticMathPreviewNode, repairSyntheticMathSource } from "./incremark-synthetic-math";
-import { AdaptiveIncremarkTypewriter, visibleAstCharacters } from "./incremark-typewriter";
+import { BufferedIncremarkTypewriter, visibleAstCharacters } from "./incremark-typewriter";
 import { MathRenderQueue, type MathRenderPolicy } from "./incremark-math-queue";
 import { resolveMarkdownUrl } from "./markdown-security";
 import { projectTableMathSource, promoteTableCellDisplayMath, restoreTableMathAst, restoreTableMathSentinel } from "./table-math";
@@ -395,7 +395,10 @@ function MathNode(props: { node: MarkdownNode | NodeAccessor; defer?: () => bool
     // the transcript. Display equations remain queued to protect the frame
     // budget when a response contains many large formulas.
     if (props.defer?.() && current?.type === "math") {
-      setHtml("");
+      // Keep the last valid formula in place while the replacement render is
+      // queued. Clearing the span here makes every streamed partial flash
+      // blank before KaTeX completes, which is most visible on mobile.
+      if (!lastValidHtml && html() === "") setHtml(fallbackHtml);
       setBusy(true);
       cancelJob = scheduleMathRender(() => renderCurrent(current, source, version), props.policy?.() || "stream");
       return;
@@ -567,8 +570,7 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
   const setDisplayBlocks = (next: DisplayBlock[]) => {
     setDisplayBlockStore("items", reconcile(next, { key: "id", merge: true }));
   };
-  const typewriterController = new AdaptiveIncremarkTypewriter({
-    adaptive: Boolean(props.typewriter && !props.inline) && props.adaptivePacing !== false,
+  const typewriterController = new BufferedIncremarkTypewriter({
     onChange: (next) => {
       setDisplayBlocks(next);
       queueMicrotask(() => props.onRendered?.());
@@ -583,32 +585,19 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
         stage: "markdown-typewriter",
         renderer: rendererId(),
         typewriter: true,
-        adaptive: metrics.adaptive,
+        scheduler: metrics.scheduler,
         sourceVisibleCharacters: metrics.sourceVisibleCharacters,
         displayedVisibleCharacters: metrics.displayedVisibleCharacters,
         backlogCharacters: metrics.backlogCharacters,
         backlogAgeMs: metrics.backlogAgeMs,
-        observedRate: metrics.observedRate,
-        targetRate: metrics.targetRate,
-        controlRate: metrics.controlRate,
-        displayRate: metrics.displayRate,
-        relativeLag: metrics.relativeLag,
-        charsPerTick: metrics.charsPerTick,
+        pendingBlockCount: metrics.pendingBlockCount,
+        completedBlockCount: metrics.completedBlockCount,
+        charsPerFrame: metrics.charsPerFrame,
         frameIntervalMs: metrics.frameIntervalMs,
-        tickInterval: metrics.tickInterval,
+        frameBudgetMs: metrics.frameBudgetMs,
         frameWorkMs: metrics.frameWorkMs,
         frameWorkEmaMs: metrics.frameWorkEmaMs,
-        fallbackMode: metrics.fallbackMode,
-        lagTargetMet: metrics.lagTargetMet,
         terminal: metrics.terminal,
-        ...(metrics.frameGapMs !== undefined ? {
-          frameGapMs: metrics.frameGapMs,
-          commitToNextFrameMs: metrics.commitToNextFrameMs,
-          frameHealthy: metrics.frameHealthy,
-          saturationMs: metrics.saturationMs,
-          stepChanged: metrics.stepChanged,
-          previousCharsPerTick: metrics.previousCharsPerTick,
-        } : {}),
         nativeTransformer: typewriterController.getDebugState(),
       });
     },
@@ -783,7 +772,7 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
     }
 
     const enabled = typewriter();
-    typewriterController.setAdaptive(enabled && props.adaptivePacing !== false);
+    typewriterController.setPacing(props.pacing || "buffered");
     typewriterController.setEnabled(enabled);
     if (previousTypewriter === true && !enabled) {
       typewriterController.flush();
@@ -814,7 +803,6 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
       typewriterController.setBaselineCharacters(visibleAstCharacters(seededRoot));
       typewriterController.observeSource(animated);
       typewriterController.push(animated);
-      setDisplayBlocks(typewriterController.getDisplayBlocks());
       if (animated.length === 0 && currentBlocks.length > 0) typewriterController.completeSeeded();
     }
     previousTypewriter = enabled;

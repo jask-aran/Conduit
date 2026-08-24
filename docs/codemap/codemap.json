@@ -1,0 +1,3582 @@
+{
+  "schemaVersion": 3,
+  "generatedAt": "2026-08-24",
+  "repository": "conduit-performance-rebuild",
+  "sourceOfTruth": "Current worktree source and tests",
+  "detailLevel": "module-and-file",
+  "primaryNodeLimit": 20,
+  "nodes": [
+    {
+      "id": "browser-client",
+      "label": "Browser client",
+      "kind": "module",
+      "role": "Owns Solid UI state, navigation, transcript rendering, workspace, terminal, settings, shortcuts, and browser voice capture.",
+      "sources": [
+        "conduit-web/src/client/main.tsx",
+        "conduit-web/src/client/api/client.ts",
+        "conduit-web/src/client/state/active-chat.ts",
+        "conduit-web/src/client/chat/transcript.tsx",
+        "conduit-web/src/client/chat/composer.tsx",
+        "conduit-web/src/client/chat/composer-surface.ts",
+        "conduit-web/src/client/navigation/command-menu.tsx",
+        "conduit-web/src/client/chat/voice-dictation-client.ts",
+        "conduit-web/src/client/workspace/workspace-panel.tsx",
+        "conduit-web/src/client/remotes/terminal-pane.tsx",
+        "conduit-web/src/client/state/catalogue.ts",
+        "conduit-web/src/client/chat/composer-geometry.css",
+        "conduit-web/src/client/chat/incremark-advanced.css",
+        "conduit-web/src/client/chat/incremark-advanced.tsx",
+        "conduit-web/src/client/chat/incremark-markdown.tsx",
+        "conduit-web/src/client/chat/incremark-math-queue.ts",
+        "conduit-web/src/client/chat/incremark-pacing.ts",
+        "conduit-web/src/client/chat/incremark-synthetic-math.ts",
+        "conduit-web/src/client/chat/incremark-typewriter.ts",
+        "conduit-web/src/client/chat/markdown-actions.ts",
+        "conduit-web/src/client/chat/markdown-security.ts",
+        "conduit-web/src/client/chat/markdown.css",
+        "conduit-web/src/client/chat/markdown.tsx",
+        "conduit-web/src/client/chat/performance-composer.css",
+        "conduit-web/src/client/chat/streaming-markdown.ts",
+        "conduit-web/src/client/chat/transcript-motion.ts",
+        "conduit-web/src/client/chat/transcript-renderer.css",
+        "conduit-web/src/client/chat/transcript-renderer.ts",
+        "conduit-web/src/client/chat/transcript-tail-follow.ts",
+        "conduit-web/src/client/chat/transcript-visibility.ts",
+        "conduit-web/src/client/layout-geometry.ts",
+        "conduit-web/src/client/navigation/mobile-layout.ts",
+        "conduit-web/src/client/navigation/sidebar.css",
+        "conduit-web/src/client/navigation/sidebar.tsx",
+        "conduit-web/src/client/panel-motion.ts",
+        "conduit-web/src/client/settings/settings-core.tsx",
+        "conduit-web/src/client/settings/settings.tsx",
+        "conduit-web/src/client/settings/shortcuts-settings.css",
+        "conduit-web/src/client/settings/shortcuts-settings.tsx",
+        "conduit-web/src/client/settings/voice-local-catalogue.tsx",
+        "conduit-web/src/client/settings/voice-settings.css",
+        "conduit-web/src/client/styles.css",
+        "conduit-web/src/components/primitives.tsx"
+      ],
+      "tests": [
+        "conduit-web/test/browser/app.spec.js",
+        "conduit-web/test/browser/palette.spec.js",
+        "conduit-web/test/browser/harness-streaming.spec.js",
+        "conduit-web/test/streaming-markdown.test.js",
+        "conduit-web/test/timeline-order.test.js",
+        "conduit-web/test/composer-surface.test.js"
+      ],
+      "callers": [
+        {
+          "node": "browser-runtime",
+          "via": "hosts"
+        },
+        {
+          "node": "live-stream",
+          "via": "resume / deltas"
+        },
+        {
+          "node": "runtime-hub",
+          "via": "global status"
+        },
+        {
+          "node": "project-catalog",
+          "via": "catalog / settings"
+        }
+      ],
+      "dependencies": [
+        {
+          "node": "api-server",
+          "via": "HTTP / JSON"
+        },
+        {
+          "node": "live-stream",
+          "via": "chat WebSocket"
+        },
+        {
+          "node": "workspace-files",
+          "via": "files / attachments"
+        },
+        {
+          "node": "terminal-pty",
+          "via": "terminal WebSocket"
+        },
+        {
+          "node": "voice-dictation",
+          "via": "audio WebSocket"
+        }
+      ],
+      "files": [
+        {
+          "path": "conduit-web/src/client/main.tsx",
+          "responsibility": "Supporting implementation for Browser client.",
+          "lines": 1010,
+          "sourceSha256": "0e47256c6fc7b2f855f46101b2f7e8cb5c0d3658eb7a6236a3ee010d984576bc",
+          "exports": [],
+          "imports": [
+            "conduit-web/src/client/api/client.ts",
+            "conduit-web/src/client/api/contracts.ts",
+            "conduit-web/src/client/chat/composer-geometry.css",
+            "conduit-web/src/client/chat/composer.tsx",
+            "conduit-web/src/client/chat/context-metrics.ts",
+            "conduit-web/src/client/chat/host-ui-card.tsx",
+            "conduit-web/src/client/chat/markdown-settings.ts",
+            "conduit-web/src/client/chat/transcript.tsx",
+            "conduit-web/src/client/chat/voice-dictation-types.ts",
+            "conduit-web/src/client/chat/voice-dictation.js",
+            "conduit-web/src/client/chat/voice-waveform.tsx",
+            "conduit-web/src/client/commands/command-registry.ts",
+            "conduit-web/src/client/error-diagnostics.ts",
+            "conduit-web/src/client/navigation/command-menu.tsx",
+            "conduit-web/src/client/navigation/mobile-layout.ts",
+            "conduit-web/src/client/navigation/sidebar-preferences.ts",
+            "conduit-web/src/client/navigation/sidebar.tsx",
+            "conduit-web/src/client/palette/command-registry.ts",
+            "conduit-web/src/client/project/dashboard.css",
+            "conduit-web/src/client/project/dashboard.tsx",
+            "conduit-web/src/client/project/workspace-appearance-editor.tsx",
+            "conduit-web/src/client/pwa-update.ts",
+            "conduit-web/src/client/settings/settings.tsx",
+            "conduit-web/src/client/shortcuts/shortcut-environment.ts",
+            "conduit-web/src/client/shortcuts/shortcut-manager.ts",
+            "conduit-web/src/client/state/active-chat.ts",
+            "conduit-web/src/client/state/attachments.ts",
+            "conduit-web/src/client/state/catalogue.ts",
+            "conduit-web/src/client/state/model-settings.ts",
+            "conduit-web/src/client/state/runtime.ts",
+            "conduit-web/src/client/styles.css",
+            "conduit-web/src/client/workspace/workspace-panel.tsx"
+          ],
+          "importedBy": [],
+          "directTests": []
+        },
+        {
+          "path": "conduit-web/src/client/api/client.ts",
+          "responsibility": "Supporting implementation for Browser client.",
+          "lines": 49,
+          "sourceSha256": "266633718303196296102ba80d70680db1326c97f9941fd883aa1c4b7feaf869",
+          "exports": [
+            "ApiRequestMetadata",
+            "api",
+            "asList",
+            "pathChatId",
+            "pathProjectId",
+            "projectPath"
+          ],
+          "imports": [],
+          "importedBy": [
+            "conduit-web/src/client/main.tsx",
+            "conduit-web/src/client/navigation/sidebar.tsx",
+            "conduit-web/src/client/remotes/terminal-pane.tsx",
+            "conduit-web/src/client/settings/settings-core.tsx",
+            "conduit-web/src/client/state/active-chat.ts",
+            "conduit-web/src/client/state/catalogue.ts",
+            "conduit-web/src/client/workspace/workspace-panel.tsx"
+          ],
+          "directTests": []
+        },
+        {
+          "path": "conduit-web/src/client/state/active-chat.ts",
+          "responsibility": "Owns one selected chat: transcript loading, WebSocket connection, generation state, queued prompts, host UI, and reconnect behavior.",
+          "lines": 815,
+          "sourceSha256": "bd7ca70239fa525799d20d6d14953fad36c0669176b8c2804750520eaff8d6ef",
+          "exports": [
+            "ActiveChatStore",
+            "createActiveChat"
+          ],
+          "imports": [
+            "conduit-web/src/activity.js",
+            "conduit-web/src/client/api/client.ts",
+            "conduit-web/src/client/api/contracts.ts",
+            "conduit-web/src/client/api/live-events.ts",
+            "conduit-web/src/client/harness-metrics.ts",
+            "conduit-web/src/client/reconcile-messages.ts",
+            "conduit-web/src/client/state/active-generation-store.js",
+            "conduit-web/src/client/state/attachments.ts",
+            "conduit-web/src/client/state/catalogue.ts",
+            "conduit-web/src/client/state/model-settings.ts",
+            "conduit-web/src/client/state/runtime.ts",
+            "conduit-web/src/client/state/text-delta-batcher.ts",
+            "conduit-web/src/client/timeline-order.ts",
+            "conduit-web/src/client/turn-rows.ts"
+          ],
+          "importedBy": [
+            "conduit-web/src/client/chat/composer.tsx",
+            "conduit-web/src/client/chat/transcript.tsx",
+            "conduit-web/src/client/main.tsx"
+          ],
+          "directTests": []
+        },
+        {
+          "path": "conduit-web/src/client/chat/transcript.tsx",
+          "responsibility": "Supporting implementation for Browser client.",
+          "lines": 612,
+          "sourceSha256": "29174e50d653cac05d0466fc64df09f9198f506be5cc5413260942adb0fb5524",
+          "exports": [
+            "Transcript"
+          ],
+          "imports": [
+            "conduit-web/src/client/api/contracts.ts",
+            "conduit-web/src/client/chat/attachments.tsx",
+            "conduit-web/src/client/chat/composer-surface.ts",
+            "conduit-web/src/client/chat/incremark-advanced.tsx",
+            "conduit-web/src/client/chat/incremark-pacing.ts",
+            "conduit-web/src/client/chat/markdown-settings.ts",
+            "conduit-web/src/client/chat/markdown.tsx",
+            "conduit-web/src/client/chat/transcript-motion.ts",
+            "conduit-web/src/client/chat/transcript-renderer.ts",
+            "conduit-web/src/client/chat/transcript-tail-follow.ts",
+            "conduit-web/src/client/chat/transcript-visibility.ts",
+            "conduit-web/src/client/chat/turn-trace.tsx",
+            "conduit-web/src/client/harness-metrics.ts",
+            "conduit-web/src/client/state/active-chat.ts",
+            "conduit-web/src/client/state/timeline-store.ts"
+          ],
+          "importedBy": [
+            "conduit-web/src/client/main.tsx"
+          ],
+          "directTests": []
+        },
+        {
+          "path": "conduit-web/src/client/chat/composer.tsx",
+          "responsibility": "Renders prompt input, attachments, send/stop controls, model state, and dictation actions.",
+          "lines": 401,
+          "sourceSha256": "6ff9997bfbc1c26897c29f9d73c2f3fe4300f05e1c8aa3f7e75b85a4fe922776",
+          "exports": [
+            "Composer",
+            "ComposerStatus",
+            "SPINNING_ACTIVITY"
+          ],
+          "imports": [
+            "conduit-web/src/client/api/contracts.ts",
+            "conduit-web/src/client/chat/attachments.tsx",
+            "conduit-web/src/client/chat/composer-surface.ts",
+            "conduit-web/src/client/chat/context-metrics.ts",
+            "conduit-web/src/client/chat/mobile-composer-options.tsx",
+            "conduit-web/src/client/chat/performance-composer.css",
+            "conduit-web/src/client/chat/voice-audio.ts",
+            "conduit-web/src/client/chat/voice-dictation-client.ts",
+            "conduit-web/src/client/chat/voice-dictation-types.ts",
+            "conduit-web/src/client/chat/voice-dictation.js",
+            "conduit-web/src/client/chat/voice-waveform.tsx",
+            "conduit-web/src/client/navigation/mobile-layout.ts",
+            "conduit-web/src/client/state/active-chat.ts",
+            "conduit-web/src/client/state/attachments.ts",
+            "conduit-web/src/client/state/model-settings.ts"
+          ],
+          "importedBy": [
+            "conduit-web/src/client/main.tsx"
+          ],
+          "directTests": []
+        },
+        {
+          "path": "conduit-web/src/client/chat/composer-surface.ts",
+          "responsibility": "Supporting implementation for Browser client.",
+          "lines": 38,
+          "sourceSha256": "b26e3c5269f4bd64b7d4a834ee53f6c2c74244877b760a0b991be8268d486b06",
+          "exports": [
+            "COMPOSER_SURFACE_CHANGE_EVENT",
+            "COMPOSER_SURFACE_OPTIONS",
+            "COMPOSER_SURFACE_STORAGE_KEY",
+            "ComposerSurfaceMode",
+            "saveComposerSurface",
+            "selectedComposerSurface"
+          ],
+          "imports": [],
+          "importedBy": [
+            "conduit-web/src/client/chat/composer.tsx",
+            "conduit-web/src/client/chat/transcript.tsx",
+            "conduit-web/src/client/settings/settings-core.tsx",
+            "conduit-web/src/client/settings/settings.tsx"
+          ],
+          "directTests": []
+        },
+        {
+          "path": "conduit-web/src/client/navigation/command-menu.tsx",
+          "responsibility": "Supporting implementation for Browser client.",
+          "lines": 750,
+          "sourceSha256": "c2b7534955fd64138caf5bf85c76ad851c2c6e329a99e19cb99203e786bd218c",
+          "exports": [
+            "CommandMenu"
+          ],
+          "imports": [
+            "conduit-web/src/client/api/contracts.ts",
+            "conduit-web/src/client/commands/command-registry.ts",
+            "conduit-web/src/client/navigation/command-hint-bar.tsx",
+            "conduit-web/src/client/palette/chat-query.ts",
+            "conduit-web/src/client/palette/command-registry.ts",
+            "conduit-web/src/client/palette/palette-search.ts",
+            "conduit-web/src/client/shortcuts/shortcut-manager.ts",
+            "conduit-web/src/client/shortcuts/shortcut-types.ts"
+          ],
+          "importedBy": [
+            "conduit-web/src/client/main.tsx"
+          ],
+          "directTests": []
+        },
+        {
+          "path": "conduit-web/src/client/chat/voice-dictation-client.ts",
+          "responsibility": "Coordinates microphone capture, AudioWorklet PCM, readiness gating, waveform state, socket events, and transcript insertion.",
+          "lines": 677,
+          "sourceSha256": "5283d8684bf6452c56c66e9796247bfd5f7b592bbb56e98d87e8c66b7ad20071",
+          "exports": [
+            "VoiceDictationCompletion",
+            "VoiceDictationState",
+            "VoiceInputWarning",
+            "createVoiceDictationClient",
+            "isWarmMicrophoneActive",
+            "preloadVoiceCaptureWorklet",
+            "stopWarmMicrophone"
+          ],
+          "imports": [
+            "conduit-web/src/client/chat/voice-audio.ts",
+            "conduit-web/src/client/chat/voice-dictation-diagnostics.ts"
+          ],
+          "importedBy": [
+            "conduit-web/src/client/chat/composer.tsx",
+            "conduit-web/src/client/settings/settings-core.tsx"
+          ],
+          "directTests": []
+        },
+        {
+          "path": "conduit-web/src/client/workspace/workspace-panel.tsx",
+          "responsibility": "Supporting implementation for Browser client.",
+          "lines": 533,
+          "sourceSha256": "e75ca2382acf150893e3585a9697ba275114cc2b80a0752c38931f2c7a81c5e3",
+          "exports": [
+            "WorkspacePanel",
+            "default"
+          ],
+          "imports": [
+            "conduit-web/src/client/api/client.ts",
+            "conduit-web/src/client/navigation/mobile-layout.ts",
+            "conduit-web/src/client/panel-motion.ts",
+            "conduit-web/src/client/remotes/terminal-pane.tsx",
+            "conduit-web/src/client/workspace/request-ownership.ts",
+            "conduit-web/src/client/workspace/workspace.css"
+          ],
+          "importedBy": [
+            "conduit-web/src/client/main.tsx"
+          ],
+          "directTests": []
+        },
+        {
+          "path": "conduit-web/src/client/remotes/terminal-pane.tsx",
+          "responsibility": "Supporting implementation for Terminal / PTY remotes.",
+          "lines": 546,
+          "sourceSha256": "f86d3800166b68753f82c29f7de459d6f4ca46a240e3f69d116ff3b776f43e26",
+          "exports": [
+            "TerminalPane"
+          ],
+          "imports": [
+            "conduit-web/src/client/api/client.ts",
+            "conduit-web/src/client/remotes/terminal-renderer.ts"
+          ],
+          "importedBy": [
+            "conduit-web/src/client/workspace/workspace-panel.tsx"
+          ],
+          "directTests": []
+        },
+        {
+          "path": "conduit-web/src/client/state/catalogue.ts",
+          "responsibility": "Supporting implementation for Browser client.",
+          "lines": 46,
+          "sourceSha256": "a1a018f78ae3057c6428e9f7d9c8e95d8777bbb58d8f47f2421a1862d6caacd7",
+          "exports": [
+            "CatalogueStore",
+            "createCatalogueStore"
+          ],
+          "imports": [
+            "conduit-web/src/client/api/client.ts",
+            "conduit-web/src/client/api/contracts.ts"
+          ],
+          "importedBy": [
+            "conduit-web/src/client/main.tsx",
+            "conduit-web/src/client/state/active-chat.ts"
+          ],
+          "directTests": []
+        },
+        {
+          "path": "conduit-web/src/client/chat/composer-geometry.css",
+          "responsibility": "Defines the prompt composer geometry contract used by the layout and performance surfaces.",
+          "lines": 13,
+          "sourceSha256": "8bc00a726b3dd7df5c91d9e8e6c201e59f838f125b7568d8a318e0c288374431",
+          "exports": [],
+          "imports": [],
+          "importedBy": [
+            "conduit-web/src/client/main.tsx"
+          ],
+          "directTests": []
+        },
+        {
+          "path": "conduit-web/src/client/chat/incremark-advanced.css",
+          "responsibility": "Styles the advanced streaming-markdown blocks and their incremental render states.",
+          "lines": 23,
+          "sourceSha256": "252afbca2e474c22998514f9908690bd18eb0bc29c366fea3434f2423b3626d4",
+          "exports": [],
+          "imports": [],
+          "importedBy": [
+            "conduit-web/src/client/chat/incremark-advanced.tsx"
+          ],
+          "directTests": []
+        },
+        {
+          "path": "conduit-web/src/client/chat/incremark-advanced.tsx",
+          "responsibility": "Renders advanced incremental-markdown blocks and coordinates their streaming state.",
+          "lines": 120,
+          "sourceSha256": "4ae69fee9e8af8fb105f92bfd358ed45897fe9787c07f7657350a43abb8b8627",
+          "exports": [
+            "IncremarkAdvancedMarkdown"
+          ],
+          "imports": [
+            "conduit-web/src/client/chat/incremark-advanced.css",
+            "conduit-web/src/client/chat/incremark-markdown.tsx",
+            "conduit-web/src/client/chat/markdown.tsx"
+          ],
+          "importedBy": [
+            "conduit-web/src/client/chat/transcript.tsx"
+          ],
+          "directTests": []
+        },
+        {
+          "path": "conduit-web/src/client/chat/incremark-markdown.tsx",
+          "responsibility": "Owns incremental Markdown parsing and rendering for streaming assistant output.",
+          "lines": 886,
+          "sourceSha256": "904c1aace78e37aeced51acfe6e0e3b528ead58402f1e583243be4f509dab9d0",
+          "exports": [
+            "IncremarkMarkdown"
+          ],
+          "imports": [
+            "conduit-web/src/client/chat/external-link-dialog.tsx",
+            "conduit-web/src/client/chat/incremark-math-queue.ts",
+            "conduit-web/src/client/chat/incremark-synthetic-math.ts",
+            "conduit-web/src/client/chat/incremark-typewriter.ts",
+            "conduit-web/src/client/chat/markdown-actions.ts",
+            "conduit-web/src/client/chat/markdown-security.ts",
+            "conduit-web/src/client/chat/markdown.tsx",
+            "conduit-web/src/client/chat/streaming-markdown.ts",
+            "conduit-web/src/client/chat/table-math.ts"
+          ],
+          "importedBy": [
+            "conduit-web/src/client/chat/incremark-advanced.tsx",
+            "conduit-web/src/client/chat/markdown.tsx"
+          ],
+          "directTests": []
+        },
+        {
+          "path": "conduit-web/src/client/chat/incremark-math-queue.ts",
+          "responsibility": "Queues math blocks so incremental Markdown can render bounded asynchronous work.",
+          "lines": 160,
+          "sourceSha256": "31aa8fa5d74cc6fc8e0b277f8f43271a8ccf90fe97c42ffd8772d35ab112eb01",
+          "exports": [
+            "MATH_RENDER_REATTACH_FRAME_BUDGET_MS",
+            "MATH_RENDER_REATTACH_MAX_JOBS_PER_FRAME",
+            "MATH_RENDER_STREAM_FRAME_BUDGET_MS",
+            "MATH_RENDER_STREAM_MAX_JOBS_PER_FRAME",
+            "MathRenderPolicy",
+            "MathRenderQueue",
+            "MathRenderQueueMetric"
+          ],
+          "imports": [],
+          "importedBy": [
+            "conduit-web/src/client/chat/incremark-markdown.tsx"
+          ],
+          "directTests": [
+            "conduit-web/test/incremark-math-queue.test.js"
+          ]
+        },
+        {
+          "path": "conduit-web/src/client/chat/incremark-pacing.ts",
+          "responsibility": "Calculates bounded reveal pacing and reports streaming-render diagnostics.",
+          "lines": 38,
+          "sourceSha256": "224a08a3dc5e6c17ad3aa7553db1b0be69f90ecb6252269c0ddddaa23a80b901",
+          "exports": [
+            "INCREMARK_PACING_OPTIONS",
+            "INCREMARK_PACING_STORAGE_KEY",
+            "IncremarkPacingMode",
+            "saveIncremarkPacing",
+            "selectedIncremarkPacing"
+          ],
+          "imports": [],
+          "importedBy": [
+            "conduit-web/src/client/chat/incremark-typewriter.ts",
+            "conduit-web/src/client/chat/markdown.tsx",
+            "conduit-web/src/client/chat/transcript.tsx"
+          ],
+          "directTests": [
+            "conduit-web/test/incremark-pacing.test.js"
+          ]
+        },
+        {
+          "path": "conduit-web/src/client/chat/incremark-synthetic-math.ts",
+          "responsibility": "Builds synthetic math fixtures used to exercise incremental rendering.",
+          "lines": 190,
+          "sourceSha256": "bbc0a852522d623fd603f45e3311591dcf3ec805171ad9fe5a317ef94407da58",
+          "exports": [
+            "createSyntheticMathPreviewNode",
+            "repairSyntheticMathSource"
+          ],
+          "imports": [],
+          "importedBy": [
+            "conduit-web/src/client/chat/incremark-markdown.tsx"
+          ],
+          "directTests": [
+            "conduit-web/test/incremark-synthetic-math.test.js"
+          ]
+        },
+        {
+          "path": "conduit-web/src/client/chat/incremark-typewriter.ts",
+          "responsibility": "Reveals streaming text in bounded chunks and tracks typewriter progress.",
+          "lines": 566,
+          "sourceSha256": "188c2fb2c85df9e5dd2e0c64ad9b2617a26f31329ab85d10d28122745b8a0303",
+          "exports": [
+            "BufferedIncremarkTypewriter",
+            "BufferedIncremarkTypewriterOptions",
+            "TYPEWRITER_ADAPTIVE_BACKLOG_WINDOW_MS",
+            "TYPEWRITER_DEFAULT_FRAME_INTERVAL_MS",
+            "TYPEWRITER_EMA_ALPHA",
+            "TYPEWRITER_FIXED_STEP",
+            "TYPEWRITER_FRAME_WORK_BUDGET_MS",
+            "TYPEWRITER_INITIAL_STEP",
+            "TYPEWRITER_MAX_BLOCKS_PER_FRAME",
+            "TYPEWRITER_MAX_CHARS_PER_FRAME",
+            "TYPEWRITER_MAX_FRAME_INTERVAL_MS",
+            "TYPEWRITER_MAX_STEP",
+            "TYPEWRITER_MIN_FRAME_BUDGET_MS",
+            "TYPEWRITER_MIN_FRAME_INTERVAL_MS",
+            "TypewriterMetrics",
+            "chooseAdaptiveStep",
+            "chooseBufferedStep",
+            "chooseFixedStep",
+            "chooseFrameBudget",
+            "normalizeFrameInterval",
+            "prepareTypewriterBlocks",
+            "prepareTypewriterNode",
+            "updateEma",
+            "visibleAstCharacters"
+          ],
+          "imports": [
+            "conduit-web/src/client/chat/incremark-pacing.ts"
+          ],
+          "importedBy": [
+            "conduit-web/src/client/chat/incremark-markdown.tsx"
+          ],
+          "directTests": [
+            "conduit-web/test/incremark-typewriter.test.js"
+          ]
+        },
+        {
+          "path": "conduit-web/src/client/chat/markdown-actions.ts",
+          "responsibility": "Builds safe actions and links for rendered Markdown content.",
+          "lines": 37,
+          "sourceSha256": "a72102dbc2466c5bb4f78f8ec097cca7443a9488d8a5e9a007162eac66c9a84a",
+          "exports": [
+            "createExternalLinkController",
+            "handleMarkdownClick"
+          ],
+          "imports": [],
+          "importedBy": [
+            "conduit-web/src/client/chat/incremark-markdown.tsx",
+            "conduit-web/src/client/chat/markdown.tsx"
+          ],
+          "directTests": []
+        },
+        {
+          "path": "conduit-web/src/client/chat/markdown-security.ts",
+          "responsibility": "Applies URL and HTML safety rules before Markdown reaches the DOM.",
+          "lines": 53,
+          "sourceSha256": "e06a31dfd7b4e9d8a9847f20890c527611a2a4501f6bd9940e38d982c0ab7f32",
+          "exports": [
+            "escapeHtml",
+            "renderMarkdownLink",
+            "resolveMarkdownUrl",
+            "sanitizeMarkdownFragment"
+          ],
+          "imports": [],
+          "importedBy": [
+            "conduit-web/src/client/chat/incremark-markdown.tsx",
+            "conduit-web/src/client/chat/markdown.tsx"
+          ],
+          "directTests": []
+        },
+        {
+          "path": "conduit-web/src/client/chat/markdown.css",
+          "responsibility": "Styles rendered Markdown blocks, code, links, tables, and math.",
+          "lines": 48,
+          "sourceSha256": "308fb7abc37f99b0d2dd61fc191cb68d5ccd4f51cc90d7747c4a6e80d45e0d21",
+          "exports": [],
+          "imports": [],
+          "importedBy": [
+            "conduit-web/src/client/chat/markdown.tsx"
+          ],
+          "directTests": []
+        },
+        {
+          "path": "conduit-web/src/client/chat/markdown.tsx",
+          "responsibility": "Renders stable and streaming Markdown content inside transcript turns.",
+          "lines": 562,
+          "sourceSha256": "f26abc54a1e26384947eb5f8a690f8b2a3edfa42a9de51043f4ba9c52ad39534",
+          "exports": [
+            "ChatMarkdown",
+            "ChatMarkdownProps",
+            "MARKDOWN_RENDERER_STORAGE_KEY",
+            "markdownRendererSwitchEnabled",
+            "selectedMarkdownRenderer",
+            "selectedMarkdownTypewriter"
+          ],
+          "imports": [
+            "conduit-web/src/client/chat/external-link-dialog.tsx",
+            "conduit-web/src/client/chat/incremark-markdown.tsx",
+            "conduit-web/src/client/chat/incremark-pacing.ts",
+            "conduit-web/src/client/chat/markdown-actions.ts",
+            "conduit-web/src/client/chat/markdown-security.ts",
+            "conduit-web/src/client/chat/markdown-settings.ts",
+            "conduit-web/src/client/chat/markdown.css",
+            "conduit-web/src/client/chat/marked-stable.tsx",
+            "conduit-web/src/client/chat/streaming-markdown.ts",
+            "conduit-web/src/client/harness-metrics.ts"
+          ],
+          "importedBy": [
+            "conduit-web/src/client/chat/incremark-advanced.tsx",
+            "conduit-web/src/client/chat/incremark-markdown.tsx",
+            "conduit-web/src/client/chat/transcript.tsx"
+          ],
+          "directTests": []
+        },
+        {
+          "path": "conduit-web/src/client/chat/performance-composer.css",
+          "responsibility": "Defines the performance composer surface styles and geometry hooks.",
+          "lines": 98,
+          "sourceSha256": "8126a36ca78ab46e134343de31ed40d3b53f10b1459ff3e660dafded1a38ecf0",
+          "exports": [],
+          "imports": [
+            "conduit-web/src/client/chat/mobile-header-backports.css"
+          ],
+          "importedBy": [
+            "conduit-web/src/client/chat/composer.tsx"
+          ],
+          "directTests": []
+        },
+        {
+          "path": "conduit-web/src/client/chat/streaming-markdown.ts",
+          "responsibility": "Adapts streaming text deltas into incremental Markdown render input.",
+          "lines": 312,
+          "sourceSha256": "8d366d3870e170a9a915a38be7614df5b6bb1ef8aa22ee0c610e33c1320e5bad",
+          "exports": [
+            "StreamingMarkdownOptions",
+            "StreamingMarkdownSplit",
+            "StreamingPending",
+            "StreamingPendingKind",
+            "splitStreamingMarkdown"
+          ],
+          "imports": [],
+          "importedBy": [
+            "conduit-web/src/client/chat/incremark-markdown.tsx",
+            "conduit-web/src/client/chat/markdown.tsx"
+          ],
+          "directTests": [
+            "conduit-web/test/incremark-synthetic-math.test.js",
+            "conduit-web/test/streaming-markdown.test.js"
+          ]
+        },
+        {
+          "path": "conduit-web/src/client/chat/transcript-motion.ts",
+          "responsibility": "Coordinates transcript motion state and reduced-motion behavior.",
+          "lines": 156,
+          "sourceSha256": "1d5f419377cf717cf4beb5d0d207a72e99e1d928d9aac90555e358572f8e6f1b",
+          "exports": [
+            "mountTranscriptPanelMotion"
+          ],
+          "imports": [
+            "conduit-web/src/client/panel-motion.ts"
+          ],
+          "importedBy": [
+            "conduit-web/src/client/chat/transcript.tsx"
+          ],
+          "directTests": []
+        },
+        {
+          "path": "conduit-web/src/client/chat/transcript-renderer.css",
+          "responsibility": "Defines transcript renderer layout and rendering-state styles.",
+          "lines": 39,
+          "sourceSha256": "8fb3d224864d62c01095c7f0f5a843041b70d436eb4c978912166e784e98d438",
+          "exports": [],
+          "imports": [],
+          "importedBy": [
+            "conduit-web/src/client/chat/transcript-renderer.ts"
+          ],
+          "directTests": []
+        },
+        {
+          "path": "conduit-web/src/client/chat/transcript-renderer.ts",
+          "responsibility": "Owns transcript block rendering and incremental update coordination.",
+          "lines": 50,
+          "sourceSha256": "0846eac915aa89f7f2fd3d06e6373d7323c4d101120e04f42db70da9d4afaddd",
+          "exports": [
+            "TRANSCRIPT_RENDERER_OPTIONS",
+            "TRANSCRIPT_RENDERER_STORAGE_KEY",
+            "TranscriptRendererMode",
+            "isTranscriptRendererMode",
+            "saveTranscriptRenderer",
+            "selectedTranscriptRenderer"
+          ],
+          "imports": [
+            "conduit-web/src/client/chat/markdown-settings.ts",
+            "conduit-web/src/client/chat/transcript-renderer.css"
+          ],
+          "importedBy": [
+            "conduit-web/src/client/chat/transcript.tsx"
+          ],
+          "directTests": []
+        },
+        {
+          "path": "conduit-web/src/client/chat/transcript-tail-follow.ts",
+          "responsibility": "Keeps the transcript viewport at the tail while new content arrives.",
+          "lines": 129,
+          "sourceSha256": "d8a61c16cf278f91461e9218c6f404e74aa77b2477312cb89be5012a5b65240a",
+          "exports": [
+            "TYPEWRITER_TAIL_MAX_FRAME_GAP_MS",
+            "TYPEWRITER_TAIL_RESPONSE",
+            "TYPEWRITER_TAIL_SETTLE_DISTANCE_PX",
+            "TYPEWRITER_TAIL_TARGET_FEED_FORWARD",
+            "TailFollowFrame",
+            "TailFollowOwner",
+            "TailFollowState",
+            "advanceTailFollow",
+            "createTailFollowState",
+            "rebaseTailFollowState"
+          ],
+          "imports": [],
+          "importedBy": [
+            "conduit-web/src/client/chat/transcript.tsx"
+          ],
+          "directTests": [
+            "conduit-web/test/incremark-typewriter.test.js"
+          ]
+        },
+        {
+          "path": "conduit-web/src/client/chat/transcript-visibility.ts",
+          "responsibility": "Tracks transcript visibility and viewport state for render decisions.",
+          "lines": 263,
+          "sourceSha256": "c6cabce87a6aa4db5b460a2dbc2443a14971f9648aa156d00d1c4f6651929443",
+          "exports": [
+            "mountTranscriptVisibility"
+          ],
+          "imports": [
+            "conduit-web/src/client/panel-motion.ts"
+          ],
+          "importedBy": [
+            "conduit-web/src/client/chat/transcript.tsx"
+          ],
+          "directTests": []
+        },
+        {
+          "path": "conduit-web/src/client/layout-geometry.ts",
+          "responsibility": "Provides shared viewport and panel geometry calculations for the browser layout.",
+          "lines": 3,
+          "sourceSha256": "db31f0418b7ea11f7c094dc6098b6f732771261b4bbaefd3f9298c990dd1142b",
+          "exports": [
+            "MOBILE_LAYOUT_BREAKPOINT_PX"
+          ],
+          "imports": [],
+          "importedBy": [
+            "conduit-web/src/client/navigation/mobile-layout.ts",
+            "conduit-web/vite.config.js"
+          ],
+          "directTests": []
+        },
+        {
+          "path": "conduit-web/src/client/navigation/mobile-layout.ts",
+          "responsibility": "Controls mobile navigation layout and responsive panel state.",
+          "lines": 78,
+          "sourceSha256": "520e737dabeddb928b8ee1964a03aa7c80fd8fbab41e5b6bc077469b2e9fc138",
+          "exports": [
+            "MOBILE_LAYOUT_QUERY",
+            "MobileOverlayKind",
+            "bindVisualViewportShell",
+            "focusFirst",
+            "isMobileLayout",
+            "restoreFocus",
+            "setMobileOverlayKind"
+          ],
+          "imports": [
+            "conduit-web/src/client/layout-geometry.ts"
+          ],
+          "importedBy": [
+            "conduit-web/src/client/chat/composer.tsx",
+            "conduit-web/src/client/main.tsx",
+            "conduit-web/src/client/navigation/sidebar.tsx",
+            "conduit-web/src/client/workspace/workspace-panel.tsx"
+          ],
+          "directTests": []
+        },
+        {
+          "path": "conduit-web/src/client/navigation/sidebar.css",
+          "responsibility": "Styles the navigation sidebar and its responsive states.",
+          "lines": 122,
+          "sourceSha256": "78a87509f1fbf3a8146509298ed38231fe4a85ed28dc3777f02a90f2a1f9294a",
+          "exports": [],
+          "imports": [],
+          "importedBy": [
+            "conduit-web/src/client/navigation/sidebar.tsx"
+          ],
+          "directTests": []
+        },
+        {
+          "path": "conduit-web/src/client/navigation/sidebar.tsx",
+          "responsibility": "Renders project navigation, chat selection, and sidebar controls.",
+          "lines": 822,
+          "sourceSha256": "fe5ffce2f4aa00819135afd4c97b05e664bca4465bbc6cc9167a4b7a0fa5c43d",
+          "exports": [
+            "Sidebar"
+          ],
+          "imports": [
+            "conduit-web/src/client/api/client.ts",
+            "conduit-web/src/client/api/contracts.ts",
+            "conduit-web/src/client/navigation/mobile-layout.ts",
+            "conduit-web/src/client/navigation/runtime-indicator.tsx",
+            "conduit-web/src/client/navigation/sidebar.css",
+            "conduit-web/src/client/panel-motion.ts",
+            "conduit-web/src/client/project/workspace-appearance.tsx",
+            "conduit-web/src/client/state/runtime.ts"
+          ],
+          "importedBy": [
+            "conduit-web/src/client/main.tsx"
+          ],
+          "directTests": []
+        },
+        {
+          "path": "conduit-web/src/client/panel-motion.ts",
+          "responsibility": "Provides shared panel transition state and motion timing.",
+          "lines": 71,
+          "sourceSha256": "b188ebf95b82d4d405172f186b0e631bb8eb038ad00635667b4c3676497bcb4f",
+          "exports": [
+            "PANEL_GEOMETRY_MOTION_EVENT",
+            "PANEL_MOTION_DURATION_MS",
+            "PanelEdgeAnimation",
+            "PanelGeometryMotionDetail",
+            "PanelGeometryMotionSource",
+            "animatePanelEdge",
+            "dispatchPanelGeometryMotion",
+            "panelMotionEase"
+          ],
+          "imports": [],
+          "importedBy": [
+            "conduit-web/src/client/chat/transcript-motion.ts",
+            "conduit-web/src/client/chat/transcript-visibility.ts",
+            "conduit-web/src/client/navigation/sidebar.tsx",
+            "conduit-web/src/client/workspace/workspace-panel.tsx"
+          ],
+          "directTests": []
+        },
+        {
+          "path": "conduit-web/src/client/settings/settings-core.tsx",
+          "responsibility": "Renders shared settings controls and settings state coordination.",
+          "lines": 1125,
+          "sourceSha256": "7d295947d4b0f094948352ec091e1ed3ad03b881e289e866fa946cd20abb30d0",
+          "exports": [
+            "Settings"
+          ],
+          "imports": [
+            "conduit-web/src/client/api/client.ts",
+            "conduit-web/src/client/api/contracts.ts",
+            "conduit-web/src/client/chat/composer-surface.ts",
+            "conduit-web/src/client/chat/context-metrics.ts",
+            "conduit-web/src/client/chat/markdown-settings.ts",
+            "conduit-web/src/client/chat/voice-audio.ts",
+            "conduit-web/src/client/chat/voice-dictation-client.ts",
+            "conduit-web/src/client/chat/voice-dictation-types.ts",
+            "conduit-web/src/client/chat/voice-dictation.js",
+            "conduit-web/src/client/chat/voice-waveform.tsx",
+            "conduit-web/src/client/navigation/sidebar-preferences.ts",
+            "conduit-web/src/client/settings/shortcuts-settings.tsx",
+            "conduit-web/src/client/settings/voice-local-catalogue.tsx",
+            "conduit-web/src/client/shortcuts/shortcut-manager.ts",
+            "conduit-web/src/client/state/model-settings.ts"
+          ],
+          "importedBy": [
+            "conduit-web/src/client/settings/settings.tsx"
+          ],
+          "directTests": []
+        },
+        {
+          "path": "conduit-web/src/client/settings/settings.tsx",
+          "responsibility": "Composes the settings view and its runtime, voice, and appearance sections.",
+          "lines": 46,
+          "sourceSha256": "a6006246e9cfa75ab35a145fe2f7dc6f779fa6b3afeb1f0f4d659fccd4e37570",
+          "exports": [
+            "Settings"
+          ],
+          "imports": [
+            "conduit-web/src/client/chat/composer-surface.ts",
+            "conduit-web/src/client/chat/voice-dictation-types.ts",
+            "conduit-web/src/client/settings/settings-core.tsx",
+            "conduit-web/src/client/settings/voice-settings.css"
+          ],
+          "importedBy": [
+            "conduit-web/src/client/main.tsx"
+          ],
+          "directTests": []
+        },
+        {
+          "path": "conduit-web/src/client/settings/shortcuts-settings.css",
+          "responsibility": "Styles keyboard shortcut settings controls.",
+          "lines": 52,
+          "sourceSha256": "d7785490497aa0ab13605f7a5b96018f30c3629e0231040cce945bf857ba47cc",
+          "exports": [],
+          "imports": [],
+          "importedBy": [
+            "conduit-web/src/client/settings/shortcuts-settings.tsx"
+          ],
+          "directTests": []
+        },
+        {
+          "path": "conduit-web/src/client/settings/shortcuts-settings.tsx",
+          "responsibility": "Renders keyboard shortcut configuration controls.",
+          "lines": 324,
+          "sourceSha256": "caacc435f7f22ca1a25f7f6d91c047bdf9415ab38b899419ad28b0a8fc9a949e",
+          "exports": [
+            "ShortcutsSettings"
+          ],
+          "imports": [
+            "conduit-web/src/client/settings/shortcuts-settings.css",
+            "conduit-web/src/client/shortcuts/shortcut-conflicts.ts",
+            "conduit-web/src/client/shortcuts/shortcut-environment.ts",
+            "conduit-web/src/client/shortcuts/shortcut-manager.ts",
+            "conduit-web/src/client/shortcuts/shortcut-normalize.ts",
+            "conduit-web/src/client/shortcuts/shortcut-types.ts"
+          ],
+          "importedBy": [
+            "conduit-web/src/client/settings/settings-core.tsx"
+          ],
+          "directTests": []
+        },
+        {
+          "path": "conduit-web/src/client/settings/voice-local-catalogue.tsx",
+          "responsibility": "Renders local voice catalogue settings and model choices.",
+          "lines": 169,
+          "sourceSha256": "e2b2a1615a9f8de7e24c34d7a3c34c618909927d1cb9ad8e1a3b2c56014773cb",
+          "exports": [
+            "VoiceLocalCatalogueProps",
+            "default"
+          ],
+          "imports": [
+            "conduit-web/src/client/api/contracts.ts"
+          ],
+          "importedBy": [
+            "conduit-web/src/client/settings/settings-core.tsx"
+          ],
+          "directTests": []
+        },
+        {
+          "path": "conduit-web/src/client/settings/voice-settings.css",
+          "responsibility": "Styles voice settings and dictation configuration controls.",
+          "lines": 51,
+          "sourceSha256": "6b5982c052ea9549efb9479b7b2163ca0bc530b35ba24309c94df333f3c1c08f",
+          "exports": [],
+          "imports": [],
+          "importedBy": [
+            "conduit-web/src/client/settings/settings.tsx"
+          ],
+          "directTests": []
+        },
+        {
+          "path": "conduit-web/src/client/styles.css",
+          "responsibility": "Defines shared browser-client tokens, layout styles, and global UI rules.",
+          "lines": 860,
+          "sourceSha256": "674af1c7d36cebd7155d5244af955a613766b53a9bf972af12407532c7d427ac",
+          "exports": [],
+          "imports": [],
+          "importedBy": [
+            "conduit-web/src/client/main.tsx"
+          ],
+          "directTests": []
+        },
+        {
+          "path": "conduit-web/src/components/primitives.tsx",
+          "responsibility": "Provides shared UI primitives used by browser-client surfaces.",
+          "lines": 132,
+          "sourceSha256": "1fa999ed099ee9746e984a8663ebd38384315f93b2f5e5a76d0ff7f384981a1b",
+          "exports": [
+            "Badge",
+            "Button",
+            "ContextMenu",
+            "ContextMenuContent",
+            "ContextMenuGroup",
+            "ContextMenuItem",
+            "ContextMenuRadioGroup",
+            "ContextMenuRadioItem",
+            "ContextMenuSeparator",
+            "ContextMenuSub",
+            "ContextMenuSubContent",
+            "ContextMenuSubTrigger",
+            "ContextMenuTrigger",
+            "Dialog",
+            "DialogClose",
+            "DialogContent",
+            "DialogDescription",
+            "DialogTitle",
+            "DialogTrigger",
+            "Field",
+            "FieldGroup",
+            "FieldLabel",
+            "Input",
+            "Menu",
+            "MenuContent",
+            "MenuGroup",
+            "MenuItem",
+            "MenuLabel",
+            "MenuRadioGroup",
+            "MenuRadioItem",
+            "MenuSeparator",
+            "MenuSub",
+            "MenuSubContent",
+            "MenuSubTrigger",
+            "MenuTrigger",
+            "Spinner",
+            "Textarea",
+            "Tooltip",
+            "TooltipContent",
+            "TooltipTrigger"
+          ],
+          "imports": [],
+          "importedBy": [],
+          "directTests": []
+        }
+      ]
+    },
+    {
+      "id": "api-server",
+      "label": "Express API + HTTP server",
+      "kind": "service",
+      "role": "Composition root for stores, services, route registration, static assets, authenticated upgrades, and shutdown.",
+      "sources": [
+        "conduit-web/src/server.js",
+        "conduit-web/src/server/routes/chats.js",
+        "conduit-web/src/server/routes/projects.js",
+        "conduit-web/src/server/routes/sessions.js",
+        "conduit-web/src/server/routes/runtime.js",
+        "conduit-web/src/server/routes/live-sessions.js",
+        "conduit-web/src/server/routes/ptys.js",
+        "conduit-web/src/server/routes/voice.js",
+        "conduit-web/src/server/routes/attachments.js"
+      ],
+      "tests": [
+        "conduit-web/test/server-api.test.js",
+        "conduit-web/test/server-lifecycle.test.js",
+        "conduit-web/test/auth-server.test.js",
+        "conduit-web/test/live-harness.test.js"
+      ],
+      "callers": [
+        {
+          "node": "browser-client",
+          "via": "HTTP / JSON"
+        }
+      ],
+      "dependencies": [
+        {
+          "node": "auth-boundary",
+          "via": "protects routes"
+        },
+        {
+          "node": "project-catalog",
+          "via": "route handlers"
+        },
+        {
+          "node": "chat-lifecycle",
+          "via": "chat commands"
+        },
+        {
+          "node": "workspace-files",
+          "via": "workspace routes"
+        },
+        {
+          "node": "terminal-pty",
+          "via": "PTY routes"
+        },
+        {
+          "node": "voice-dictation",
+          "via": "voice routes"
+        }
+      ],
+      "files": [
+        {
+          "path": "conduit-web/src/server.js",
+          "responsibility": "Composition root. Creates stores and services, registers routes and upgrades, serves the client, and coordinates shutdown.",
+          "lines": 646,
+          "sourceSha256": "3824fdb2e81fb6523392600354a3f712e4206732e1abcf12dd48e5b04d70b625",
+          "exports": [],
+          "imports": [
+            "conduit-web/src/attachment-store.js",
+            "conduit-web/src/auth-middleware.js",
+            "conduit-web/src/auth-store.js",
+            "conduit-web/src/chat-lifecycle.js",
+            "conduit-web/src/chat-store.js",
+            "conduit-web/src/config.js",
+            "conduit-web/src/model-profile-runtime.js",
+            "conduit-web/src/model-profiles.js",
+            "conduit-web/src/native-resource-validation.js",
+            "conduit-web/src/pi-auth-broker.js",
+            "conduit-web/src/pi-launch.js",
+            "conduit-web/src/pi-manager.js",
+            "conduit-web/src/pi-model-catalog.js",
+            "conduit-web/src/preferences-store.js",
+            "conduit-web/src/project-dashboard.js",
+            "conduit-web/src/project-store.js",
+            "conduit-web/src/pty-manager.js",
+            "conduit-web/src/runtime-hub.js",
+            "conduit-web/src/runtime-settings.js",
+            "conduit-web/src/search-settings.js",
+            "conduit-web/src/server/dictation-stream.js",
+            "conduit-web/src/server/live-session-stream.js",
+            "conduit-web/src/server/routes/attachments.js",
+            "conduit-web/src/server/routes/auth.js",
+            "conduit-web/src/server/routes/chats.js",
+            "conduit-web/src/server/routes/live-sessions.js",
+            "conduit-web/src/server/routes/pi-auth.js",
+            "conduit-web/src/server/routes/projects.js",
+            "conduit-web/src/server/routes/ptys.js",
+            "conduit-web/src/server/routes/runtime.js",
+            "conduit-web/src/server/routes/search.js",
+            "conduit-web/src/server/routes/sessions.js",
+            "conduit-web/src/server/routes/voice.js",
+            "conduit-web/src/server/terminal-stream.js",
+            "conduit-web/src/server/voice-execution-catalog.js",
+            "conduit-web/src/server/voice-model-manager.js",
+            "conduit-web/src/server/voice-recording-store.js",
+            "conduit-web/src/server/voice-runtime.js",
+            "conduit-web/src/session-store.js",
+            "conduit-web/src/tailscale-share.js",
+            "conduit-web/src/voice-settings.js",
+            "conduit-web/src/workspace-inspector.js",
+            "conduit-web/src/workspace-paths.js",
+            "scripts/pi-runtime.mjs"
+          ],
+          "importedBy": [],
+          "directTests": []
+        },
+        {
+          "path": "conduit-web/src/server/routes/chats.js",
+          "responsibility": "Supporting implementation for Chat lifecycle.",
+          "lines": 267,
+          "sourceSha256": "ba314a41d60ae5258fa4a3e2cfd4fac72158423f960c05556029a49fcae1cfdf",
+          "exports": [
+            "registerChatRoutes"
+          ],
+          "imports": [
+            "conduit-web/src/chat-store.js",
+            "conduit-web/src/config.js",
+            "conduit-web/src/model-profile-runtime.js",
+            "conduit-web/src/model-profiles.js",
+            "conduit-web/src/session-operations.js"
+          ],
+          "importedBy": [
+            "conduit-web/src/server.js"
+          ],
+          "directTests": [
+            "conduit-web/test/model-profile-transition.test.js"
+          ]
+        },
+        {
+          "path": "conduit-web/src/server/routes/projects.js",
+          "responsibility": "Supporting implementation for Workspace + attachments.",
+          "lines": 348,
+          "sourceSha256": "3d80371540652979fd3d91040d9b92fd08ce28d7f139311f3ac08d0d6ba8d9b3",
+          "exports": [
+            "registerProjectRoutes"
+          ],
+          "imports": [
+            "conduit-web/src/chat-store.js",
+            "conduit-web/src/config.js",
+            "conduit-web/src/session-operations.js",
+            "conduit-web/src/session-store.js"
+          ],
+          "importedBy": [
+            "conduit-web/src/server.js"
+          ],
+          "directTests": []
+        },
+        {
+          "path": "conduit-web/src/server/routes/sessions.js",
+          "responsibility": "Supporting implementation for Chat lifecycle.",
+          "lines": 166,
+          "sourceSha256": "9c29f37a9e72a230207b53df0f55260df88cbc1ad2d73a77a4ee7369e562fe40",
+          "exports": [
+            "registerSessionRoutes"
+          ],
+          "imports": [
+            "conduit-web/src/chat-store.js",
+            "conduit-web/src/session-operations.js",
+            "conduit-web/src/session-store.js"
+          ],
+          "importedBy": [
+            "conduit-web/src/server.js"
+          ],
+          "directTests": []
+        },
+        {
+          "path": "conduit-web/src/server/routes/runtime.js",
+          "responsibility": "Supporting implementation for Express API + HTTP server.",
+          "lines": 137,
+          "sourceSha256": "8eb201343c047f968f3f915b81b7889f7521b3c64f61227995557bc1a03ae932",
+          "exports": [
+            "registerRuntimeRoutes"
+          ],
+          "imports": [],
+          "importedBy": [
+            "conduit-web/src/server.js"
+          ],
+          "directTests": []
+        },
+        {
+          "path": "conduit-web/src/server/routes/live-sessions.js",
+          "responsibility": "Supporting implementation for Live session stream.",
+          "lines": 80,
+          "sourceSha256": "a2184499ab4ca557157600a0f2eac8e2a3f3c872a63e7c462603f4c46a78b440",
+          "exports": [
+            "registerLiveSessionRoutes"
+          ],
+          "imports": [
+            "conduit-web/src/server/live-session-launcher.js",
+            "conduit-web/src/session-store.js"
+          ],
+          "importedBy": [
+            "conduit-web/src/server.js"
+          ],
+          "directTests": []
+        },
+        {
+          "path": "conduit-web/src/server/routes/ptys.js",
+          "responsibility": "Supporting implementation for Terminal / PTY remotes.",
+          "lines": 48,
+          "sourceSha256": "b2ab6d3d8637e4a98e76c002e238044ea5a2e870372008087f07b876a5f7bd72",
+          "exports": [
+            "registerPtyRoutes"
+          ],
+          "imports": [],
+          "importedBy": [
+            "conduit-web/src/server.js"
+          ],
+          "directTests": []
+        },
+        {
+          "path": "conduit-web/src/server/routes/voice.js",
+          "responsibility": "Supporting implementation for Voice dictation.",
+          "lines": 60,
+          "sourceSha256": "c14d38ebd16d6376c99910db4ae34948f9a89a95e4a5f08d40b16865da6c23e5",
+          "exports": [
+            "registerVoiceRoutes"
+          ],
+          "imports": [],
+          "importedBy": [
+            "conduit-web/src/server.js"
+          ],
+          "directTests": []
+        },
+        {
+          "path": "conduit-web/src/server/routes/attachments.js",
+          "responsibility": "Supporting implementation for Workspace + attachments.",
+          "lines": 68,
+          "sourceSha256": "be731fb689dc8911230b92f80f46ccf5909a3da973a746d2633227d2cffc79fa",
+          "exports": [
+            "registerAttachmentRoutes"
+          ],
+          "imports": [
+            "conduit-web/src/session-store.js"
+          ],
+          "importedBy": [
+            "conduit-web/src/server.js"
+          ],
+          "directTests": []
+        }
+      ]
+    },
+    {
+      "id": "auth-boundary",
+      "label": "Auth boundary",
+      "kind": "service",
+      "role": "Protects every route, static asset, upload, and WebSocket upgrade while keeping browser sessions separate from Isolated Pi credentials.",
+      "sources": [
+        "conduit-web/src/auth-store.js",
+        "conduit-web/src/auth-middleware.js",
+        "conduit-web/src/pi-auth-broker.js",
+        "conduit-web/src/server/routes/auth.js",
+        "conduit-web/src/server/routes/pi-auth.js"
+      ],
+      "tests": [
+        "conduit-web/test/auth-store.test.js",
+        "conduit-web/test/auth-middleware.test.js",
+        "conduit-web/test/auth-server.test.js",
+        "conduit-web/test/pi-auth-broker.test.js"
+      ],
+      "callers": [
+        {
+          "node": "api-server",
+          "via": "protects routes"
+        }
+      ],
+      "dependencies": [
+        {
+          "node": "pi-runtime",
+          "via": "scoped Pi auth"
+        }
+      ],
+      "files": [
+        {
+          "path": "conduit-web/src/auth-store.js",
+          "responsibility": "Persists password hashes and browser sessions in atomic JSON, including expiry and token hashing.",
+          "lines": 456,
+          "sourceSha256": "d54b07bf6dc64c2a416827316b713afea196e47ee3dfba15955a57c770634284",
+          "exports": [
+            "AuthStore",
+            "hashPassword",
+            "hashToken",
+            "newSessionToken",
+            "statusSummary",
+            "verifyPassword"
+          ],
+          "imports": [],
+          "importedBy": [
+            "conduit-web/src/server.js"
+          ],
+          "directTests": [
+            "conduit-web/test/auth-middleware.test.js",
+            "conduit-web/test/auth-server.test.js",
+            "conduit-web/test/auth-store.test.js",
+            "conduit-web/test/browser/auth.spec.js"
+          ]
+        },
+        {
+          "path": "conduit-web/src/auth-middleware.js",
+          "responsibility": "Defines the public-route allowlist, cookie parsing, session validation, rate limiting, and auth middleware.",
+          "lines": 172,
+          "sourceSha256": "60fe2289718c03cc4371f2c7690e002116702acb0fcfe1d34a507bac57a7ecbd",
+          "exports": [
+            "COOKIE_NAME",
+            "authStartupViolation",
+            "clearSessionCookie",
+            "cookieName",
+            "createRateLimiter",
+            "isAllowlistedPath",
+            "isSecureRequest",
+            "issueSessionCookie",
+            "prepareAuthMiddleware",
+            "readCookie",
+            "safeRedirectTarget",
+            "validateSession"
+          ],
+          "imports": [],
+          "importedBy": [
+            "conduit-web/src/server.js",
+            "conduit-web/src/server/routes/auth.js"
+          ],
+          "directTests": [
+            "conduit-web/test/auth-middleware.test.js"
+          ]
+        },
+        {
+          "path": "conduit-web/src/pi-auth-broker.js",
+          "responsibility": "Supporting implementation for Auth boundary.",
+          "lines": 336,
+          "sourceSha256": "11224ec36188735cd1837e8e97a9a79b67b30e87aa6bed4273a07cd15e2cb00b",
+          "exports": [
+            "PiAuthBroker"
+          ],
+          "imports": [],
+          "importedBy": [
+            "conduit-web/src/server.js"
+          ],
+          "directTests": [
+            "conduit-web/test/pi-auth-broker.test.js"
+          ]
+        },
+        {
+          "path": "conduit-web/src/server/routes/auth.js",
+          "responsibility": "Supporting implementation for Auth boundary.",
+          "lines": 66,
+          "sourceSha256": "7d6f7074b9fff78f03ab3846fe4f04a8d0b994f49cc3f934e4b508201fbce3a7",
+          "exports": [
+            "registerAuthRoutes"
+          ],
+          "imports": [
+            "conduit-web/src/auth-login-page.js",
+            "conduit-web/src/auth-middleware.js"
+          ],
+          "importedBy": [
+            "conduit-web/src/server.js"
+          ],
+          "directTests": []
+        },
+        {
+          "path": "conduit-web/src/server/routes/pi-auth.js",
+          "responsibility": "Supporting implementation for Auth boundary.",
+          "lines": 86,
+          "sourceSha256": "27e7ea855be65a727a6adb1c45fb6996785ed7b797d966fd94b6b5403dbd13d6",
+          "exports": [
+            "registerPiAuthRoutes"
+          ],
+          "imports": [],
+          "importedBy": [
+            "conduit-web/src/server.js"
+          ],
+          "directTests": []
+        }
+      ]
+    },
+    {
+      "id": "project-catalog",
+      "label": "Projects, chats + settings",
+      "kind": "module",
+      "role": "Owns bounded registry metadata and configuration for workspaces, chats, preferences, runtime, search, and voice.",
+      "sources": [
+        "conduit-web/src/project-store.js",
+        "conduit-web/src/chat-store.js",
+        "conduit-web/src/project-dashboard.js",
+        "conduit-web/src/preferences-store.js",
+        "conduit-web/src/runtime-settings.js",
+        "conduit-web/src/search-settings.js",
+        "conduit-web/src/voice-settings.js"
+      ],
+      "tests": [
+        "conduit-web/test/project-store.test.js",
+        "conduit-web/test/chat-store.test.js",
+        "conduit-web/test/project-dashboard.test.js",
+        "conduit-web/test/preferences-store.test.js",
+        "conduit-web/test/search-settings.test.js",
+        "conduit-web/test/voice-settings.test.js"
+      ],
+      "callers": [
+        {
+          "node": "api-server",
+          "via": "route handlers"
+        }
+      ],
+      "dependencies": [
+        {
+          "node": "session-jsonl",
+          "via": "bounded metadata"
+        },
+        {
+          "node": "browser-client",
+          "via": "catalog / settings"
+        }
+      ],
+      "files": [
+        {
+          "path": "conduit-web/src/project-store.js",
+          "responsibility": "Supporting implementation for Workspace project files.",
+          "lines": 865,
+          "sourceSha256": "3c52342b169485cec9c2322ab3f5808bcecd8d538d827eacb54032a3c4485763",
+          "exports": [
+            "CLONE_COMMAND_MAX_OUTPUT_BYTES",
+            "CLONE_COMMAND_TIMEOUT_MS",
+            "ProjectStore",
+            "runCommand",
+            "slugify",
+            "writeJsonAtomically"
+          ],
+          "imports": [
+            "conduit-web/src/owned-paths.js",
+            "conduit-web/src/session-store.js",
+            "conduit-web/src/workspace-paths.js"
+          ],
+          "importedBy": [
+            "conduit-web/src/server.js"
+          ],
+          "directTests": [
+            "conduit-web/test/project-store.test.js"
+          ]
+        },
+        {
+          "path": "conduit-web/src/chat-store.js",
+          "responsibility": "Owns bounded chat identity and registry metadata, reconciles Pi session families, and keeps transcript content out of the registry.",
+          "lines": 472,
+          "sourceSha256": "012c5245b7f3425040d368d92e39399daa03b9fc8e034ad13013e92e34e52715",
+          "exports": [
+            "ChatStore",
+            "chatDirectory",
+            "chatView",
+            "isChatId"
+          ],
+          "imports": [
+            "conduit-web/src/owned-paths.js",
+            "conduit-web/src/session-store.js"
+          ],
+          "importedBy": [
+            "conduit-web/src/attachment-store.js",
+            "conduit-web/src/server.js",
+            "conduit-web/src/server/live-session-launcher.js",
+            "conduit-web/src/server/live-session-stream.js",
+            "conduit-web/src/server/routes/chats.js",
+            "conduit-web/src/server/routes/projects.js",
+            "conduit-web/src/server/routes/sessions.js"
+          ],
+          "directTests": [
+            "conduit-web/test/attachment-store.test.js",
+            "conduit-web/test/chat-store.test.js"
+          ]
+        },
+        {
+          "path": "conduit-web/src/project-dashboard.js",
+          "responsibility": "Supporting implementation for Projects, chats + settings.",
+          "lines": 129,
+          "sourceSha256": "50bb04e1920e1812f7315115af448c1d103f8b1fbbff89cfdfff834d4f0f18f9",
+          "exports": [
+            "buildProjectDashboard"
+          ],
+          "imports": [
+            "conduit-web/src/session-store.js"
+          ],
+          "importedBy": [
+            "conduit-web/src/server.js"
+          ],
+          "directTests": [
+            "conduit-web/test/project-dashboard.test.js"
+          ]
+        },
+        {
+          "path": "conduit-web/src/preferences-store.js",
+          "responsibility": "Supporting implementation for Projects, chats + settings.",
+          "lines": 51,
+          "sourceSha256": "d9e14429184839573a1486e775418af97dbdf708fd5c00be8d407b37928c9fa1",
+          "exports": [
+            "PreferencesStore",
+            "normalizePreferences"
+          ],
+          "imports": [],
+          "importedBy": [
+            "conduit-web/src/server.js"
+          ],
+          "directTests": [
+            "conduit-web/test/preferences-store.test.js"
+          ]
+        },
+        {
+          "path": "conduit-web/src/runtime-settings.js",
+          "responsibility": "Supporting implementation for Projects, chats + settings.",
+          "lines": 61,
+          "sourceSha256": "4acd17e0bfa94130387dfe830d84758fbb90527252d999ac293ba211b0ea7eab",
+          "exports": [
+            "RuntimeSettingsStore",
+            "defaultsFromEnv",
+            "normalizeRuntimeSettings"
+          ],
+          "imports": [],
+          "importedBy": [
+            "conduit-web/src/server.js"
+          ],
+          "directTests": [
+            "conduit-web/test/process-policy.test.js"
+          ]
+        },
+        {
+          "path": "conduit-web/src/search-settings.js",
+          "responsibility": "Supporting implementation for Projects, chats + settings.",
+          "lines": 203,
+          "sourceSha256": "dc25b86344f41d3aa889f354761d78b800ba9e86b5cc7c4ec33628b61d78bae7",
+          "exports": [
+            "SEARCH_PROVIDERS",
+            "SearchSettingsStore"
+          ],
+          "imports": [],
+          "importedBy": [
+            "conduit-web/src/server.js"
+          ],
+          "directTests": [
+            "conduit-web/test/search-settings.test.js"
+          ]
+        },
+        {
+          "path": "conduit-web/src/voice-settings.js",
+          "responsibility": "Supporting implementation for Projects, chats + settings.",
+          "lines": 345,
+          "sourceSha256": "afce7d21417be141cfe64c802bfffaa64dc979f6627eea55f2905c6ff50e971f",
+          "exports": [
+            "DEFAULT_LOCAL_VOICE_MODEL",
+            "OPENAI_FILE_MODEL",
+            "OPENAI_LIVE_ADAPTER",
+            "OPENAI_LIVE_MODEL",
+            "VOICE_ADAPTERS",
+            "VOICE_CONFIG_VERSION",
+            "VOICE_PROVIDERS",
+            "VoiceSettingsStore",
+            "normalizeRemoteVoiceEndpoint",
+            "openaiAdapterFor"
+          ],
+          "imports": [
+            "conduit-web/src/server/voice-execution-catalog.js"
+          ],
+          "importedBy": [
+            "conduit-web/src/server.js",
+            "conduit-web/src/server/dictation-stream.js",
+            "conduit-web/src/server/voice-runtime.js"
+          ],
+          "directTests": [
+            "conduit-web/test/voice-execution-catalog.test.js",
+            "conduit-web/test/voice-settings.test.js"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "chat-lifecycle",
+      "label": "Chat lifecycle",
+      "kind": "module",
+      "role": "Serializes chat start, attach, reconnect, stop, fork, move, and destructive-delete transitions.",
+      "sources": [
+        "conduit-web/src/chat-lifecycle.js",
+        "conduit-web/src/session-operations.js",
+        "conduit-web/src/server/routes/chats.js",
+        "conduit-web/src/server/routes/sessions.js",
+        "conduit-web/src/active-generation.js"
+      ],
+      "tests": [
+        "conduit-web/test/chat-lifecycle.test.js",
+        "conduit-web/test/chat-actions.test.js",
+        "conduit-web/test/active-generation.test.js",
+        "conduit-web/test/pi-process.test.js",
+        "conduit-web/test/live-harness.test.js"
+      ],
+      "callers": [
+        {
+          "node": "api-server",
+          "via": "chat commands"
+        }
+      ],
+      "dependencies": [
+        {
+          "node": "pi-runtime",
+          "via": "start / stop / fork"
+        },
+        {
+          "node": "session-jsonl",
+          "via": "map / delete family"
+        }
+      ],
+      "files": [
+        {
+          "path": "conduit-web/src/chat-lifecycle.js",
+          "responsibility": "Supporting implementation for Chat lifecycle.",
+          "lines": 91,
+          "sourceSha256": "3677a8cc2a650101d124f1aebd98fcccc83acac521fedc59839c8567d69116d4",
+          "exports": [
+            "ChatLifecycle"
+          ],
+          "imports": [],
+          "importedBy": [
+            "conduit-web/src/server.js"
+          ],
+          "directTests": [
+            "conduit-web/test/chat-lifecycle.test.js"
+          ]
+        },
+        {
+          "path": "conduit-web/src/session-operations.js",
+          "responsibility": "Supporting implementation for Pi session JSONL.",
+          "lines": 59,
+          "sourceSha256": "2c2870478ed03b423af12b968321362aa41a0fb7c125f184c123f529f4eda3e4",
+          "exports": [
+            "findDeletableSession",
+            "moveRegisteredChat",
+            "sessionDirectoryForChat",
+            "sessionDirectoryRootForChat",
+            "stopSessionFamilyProcesses",
+            "stopSessionProcesses"
+          ],
+          "imports": [
+            "conduit-web/src/session-store.js"
+          ],
+          "importedBy": [
+            "conduit-web/src/server/routes/chats.js",
+            "conduit-web/src/server/routes/projects.js",
+            "conduit-web/src/server/routes/sessions.js"
+          ],
+          "directTests": []
+        },
+        {
+          "path": "conduit-web/src/server/routes/chats.js",
+          "responsibility": "Supporting implementation for Chat lifecycle.",
+          "lines": 267,
+          "sourceSha256": "ba314a41d60ae5258fa4a3e2cfd4fac72158423f960c05556029a49fcae1cfdf",
+          "exports": [
+            "registerChatRoutes"
+          ],
+          "imports": [
+            "conduit-web/src/chat-store.js",
+            "conduit-web/src/config.js",
+            "conduit-web/src/model-profile-runtime.js",
+            "conduit-web/src/model-profiles.js",
+            "conduit-web/src/session-operations.js"
+          ],
+          "importedBy": [
+            "conduit-web/src/server.js"
+          ],
+          "directTests": [
+            "conduit-web/test/model-profile-transition.test.js"
+          ]
+        },
+        {
+          "path": "conduit-web/src/server/routes/sessions.js",
+          "responsibility": "Supporting implementation for Chat lifecycle.",
+          "lines": 166,
+          "sourceSha256": "9c29f37a9e72a230207b53df0f55260df88cbc1ad2d73a77a4ee7369e562fe40",
+          "exports": [
+            "registerSessionRoutes"
+          ],
+          "imports": [
+            "conduit-web/src/chat-store.js",
+            "conduit-web/src/session-operations.js",
+            "conduit-web/src/session-store.js"
+          ],
+          "importedBy": [
+            "conduit-web/src/server.js"
+          ],
+          "directTests": []
+        },
+        {
+          "path": "conduit-web/src/active-generation.js",
+          "responsibility": "Supporting implementation for Chat lifecycle.",
+          "lines": 300,
+          "sourceSha256": "9c2bbe699a6a130cac15cb2bfa6586f3b5df7001b4b3f3584b42f53769d2ad2a",
+          "exports": [
+            "activeGenerationFromPersistedMessages",
+            "contentBlockIdentity",
+            "createActiveGeneration",
+            "generationResumeEvent",
+            "reduceActiveGeneration",
+            "reduceGenerationEvents",
+            "snapshotActiveGeneration",
+            "textBlockClassifications"
+          ],
+          "imports": [],
+          "importedBy": [
+            "conduit-web/src/pi-manager.js"
+          ],
+          "directTests": [
+            "conduit-web/test/active-generation.test.js"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "pi-runtime",
+      "label": "Pi runtime manager",
+      "kind": "service",
+      "role": "Owns Isolated Pi and Host Pi processes, RPC, generation gates, event normalization, caps, backpressure, and idle reaping.",
+      "sources": [
+        "conduit-web/src/pi-manager.js",
+        "conduit-web/src/pi-launch.js",
+        "conduit-web/src/pi-installations.js",
+        "conduit-web/src/pi-event-normalizer.js",
+        "conduit-web/src/model-profile-runtime.js",
+        "conduit-web/src/pi-model-catalog.js"
+      ],
+      "tests": [
+        "conduit-web/test/pi-process.test.js",
+        "conduit-web/test/pi-launch.test.js",
+        "conduit-web/test/pi-installations.test.js",
+        "conduit-web/test/pi-model-catalog.test.js",
+        "conduit-web/test/runtime-hub.test.js"
+      ],
+      "callers": [
+        {
+          "node": "chat-lifecycle",
+          "via": "start / stop / fork"
+        },
+        {
+          "node": "auth-boundary",
+          "via": "scoped Pi auth"
+        }
+      ],
+      "dependencies": [
+        {
+          "node": "external-pi",
+          "via": "RPC stdin/stdout"
+        },
+        {
+          "node": "live-stream",
+          "via": "normalized events"
+        },
+        {
+          "node": "runtime-hub",
+          "via": "process changes"
+        }
+      ],
+      "files": [
+        {
+          "path": "conduit-web/src/pi-manager.js",
+          "responsibility": "Owns the Pi child-process pool, RPC commands, generation gates, socket delivery, backpressure, resume state, and idle reaping.",
+          "lines": 1278,
+          "sourceSha256": "a660e46fe1f625128ee367f10f77587b65d60d84ea91bd9f1fa1041fa39c4e00",
+          "exports": [
+            "PiManager",
+            "buildPiArgs"
+          ],
+          "imports": [
+            "conduit-web/src/active-generation.js",
+            "conduit-web/src/activity.js",
+            "conduit-web/src/pi-event-normalizer.js",
+            "scripts/pi-runtime.mjs"
+          ],
+          "importedBy": [
+            "conduit-web/src/server.js"
+          ],
+          "directTests": [
+            "conduit-web/test/pi-template.test.js",
+            "conduit-web/test/process-policy.test.js"
+          ]
+        },
+        {
+          "path": "conduit-web/src/pi-launch.js",
+          "responsibility": "Supporting implementation for Pi coding agent.",
+          "lines": 102,
+          "sourceSha256": "a1615a5dace4ad7c8af9f6f5937c940edeab162da39c4b70fb74fa8ad4f878a0",
+          "exports": [
+            "publicRuntime",
+            "resolvePiLaunch"
+          ],
+          "imports": [
+            "scripts/pi-runtime.mjs"
+          ],
+          "importedBy": [
+            "conduit-web/src/server.js",
+            "conduit-web/src/server/live-session-launcher.js"
+          ],
+          "directTests": [
+            "conduit-web/test/pi-launch.test.js"
+          ]
+        },
+        {
+          "path": "conduit-web/src/pi-installations.js",
+          "responsibility": "Supporting implementation for Pi runtime manager.",
+          "lines": 227,
+          "sourceSha256": "dc1a899ededa7acbed2bff84b5bbe7d9d4cc5cf3eacc1d8c3681c15319285f39",
+          "exports": [
+            "PiInstallationRegistry"
+          ],
+          "imports": [],
+          "importedBy": [],
+          "directTests": [
+            "conduit-web/test/pi-installations.test.js"
+          ]
+        },
+        {
+          "path": "conduit-web/src/pi-event-normalizer.js",
+          "responsibility": "Supporting implementation for Pi runtime manager.",
+          "lines": 201,
+          "sourceSha256": "d148cd9af708d3ecd333ea2281b80dfb62e49a49fea2931bb7f9a5ab15a3ffb4",
+          "exports": [
+            "createPiEventNormalizer"
+          ],
+          "imports": [],
+          "importedBy": [
+            "conduit-web/src/pi-manager.js"
+          ],
+          "directTests": [
+            "conduit-web/test/active-generation.test.js"
+          ]
+        },
+        {
+          "path": "conduit-web/src/model-profile-runtime.js",
+          "responsibility": "Supporting implementation for Pi runtime manager.",
+          "lines": 125,
+          "sourceSha256": "aaa91bad11843d6a1ce2a639c94908ba4f77ea849ae58987d6d69c2a9e688acd",
+          "exports": [
+            "ModelProfileRuntime",
+            "overlaySearchConfig",
+            "usesWebSearchOverlay"
+          ],
+          "imports": [],
+          "importedBy": [
+            "conduit-web/src/server.js",
+            "conduit-web/src/server/live-session-launcher.js",
+            "conduit-web/src/server/routes/chats.js"
+          ],
+          "directTests": [
+            "conduit-web/test/live-session-launcher.test.js",
+            "conduit-web/test/model-profile-runtime.test.js"
+          ]
+        },
+        {
+          "path": "conduit-web/src/pi-model-catalog.js",
+          "responsibility": "Supporting implementation for Pi runtime manager.",
+          "lines": 197,
+          "sourceSha256": "f598ce53509c07bc775a8358141e79413e4c44ba3b94eabec56378836634ffbc",
+          "exports": [
+            "PiModelCatalog",
+            "resolveThinkingLevel"
+          ],
+          "imports": [],
+          "importedBy": [
+            "conduit-web/src/server.js",
+            "conduit-web/src/server/live-session-launcher.js"
+          ],
+          "directTests": [
+            "conduit-web/test/pi-model-catalog.test.js"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "live-stream",
+      "label": "Live session stream",
+      "kind": "transport",
+      "role": "Bridges browser chat sockets and Pi events with resume state, ordered delivery, prompt envelopes, backpressure, and reconnect handling.",
+      "sources": [
+        "conduit-web/src/server/live-session-stream.js",
+        "conduit-web/src/server/live-session-launcher.js",
+        "conduit-web/src/server/routes/live-sessions.js",
+        "conduit-web/src/client/api/live-events.ts",
+        "conduit-web/src/client/state/timeline-store.ts",
+        "conduit-web/src/client/reconcile-messages.ts"
+      ],
+      "tests": [
+        "conduit-web/test/live-events.test.js",
+        "conduit-web/test/live-harness.test.js",
+        "conduit-web/test/browser/harness-streaming.spec.js",
+        "conduit-web/test/browser/app.spec.js",
+        "conduit-web/test/reconcile-messages.test.js"
+      ],
+      "callers": [
+        {
+          "node": "browser-client",
+          "via": "chat WebSocket"
+        },
+        {
+          "node": "pi-runtime",
+          "via": "normalized events"
+        }
+      ],
+      "dependencies": [
+        {
+          "node": "browser-client",
+          "via": "resume / deltas"
+        },
+        {
+          "node": "session-jsonl",
+          "via": "read state"
+        }
+      ],
+      "files": [
+        {
+          "path": "conduit-web/src/server/live-session-stream.js",
+          "responsibility": "Handles an attached chat socket: resume snapshots, prompt envelopes, control commands, and Pi event delivery.",
+          "lines": 131,
+          "sourceSha256": "cc96c6e0e7d61f6b64e22e42788c68ed0c4d03a3f373c7e60c7cee223020d3c9",
+          "exports": [
+            "createLiveSessionStream"
+          ],
+          "imports": [
+            "conduit-web/src/attachment-envelope.js",
+            "conduit-web/src/chat-store.js",
+            "conduit-web/src/continuation.js",
+            "conduit-web/src/session-store.js"
+          ],
+          "importedBy": [
+            "conduit-web/src/server.js"
+          ],
+          "directTests": []
+        },
+        {
+          "path": "conduit-web/src/server/live-session-launcher.js",
+          "responsibility": "Supporting implementation for Live session stream.",
+          "lines": 199,
+          "sourceSha256": "7d252ef170acc53d682252ccfb19a9583cd7349ca490eacb908fd6dbda3bc12f",
+          "exports": [
+            "createLiveSessionLauncher"
+          ],
+          "imports": [
+            "conduit-web/src/chat-store.js",
+            "conduit-web/src/model-profile-runtime.js",
+            "conduit-web/src/model-profiles.js",
+            "conduit-web/src/pi-launch.js",
+            "conduit-web/src/pi-model-catalog.js",
+            "conduit-web/src/session-store.js"
+          ],
+          "importedBy": [
+            "conduit-web/src/server/routes/live-sessions.js"
+          ],
+          "directTests": [
+            "conduit-web/test/live-session-launcher.test.js"
+          ]
+        },
+        {
+          "path": "conduit-web/src/server/routes/live-sessions.js",
+          "responsibility": "Supporting implementation for Live session stream.",
+          "lines": 80,
+          "sourceSha256": "a2184499ab4ca557157600a0f2eac8e2a3f3c872a63e7c462603f4c46a78b440",
+          "exports": [
+            "registerLiveSessionRoutes"
+          ],
+          "imports": [
+            "conduit-web/src/server/live-session-launcher.js",
+            "conduit-web/src/session-store.js"
+          ],
+          "importedBy": [
+            "conduit-web/src/server.js"
+          ],
+          "directTests": []
+        },
+        {
+          "path": "conduit-web/src/client/api/live-events.ts",
+          "responsibility": "Supporting implementation for Live session stream.",
+          "lines": 204,
+          "sourceSha256": "7d800217f3b3059bbc81b3170689a007688f93fedc6a85b575b3639e41ab22a1",
+          "exports": [
+            "GenerationHandle",
+            "LiveEvent",
+            "RuntimeStateEvent",
+            "SessionSnapshot",
+            "StructuredGenerationEvent",
+            "StructuredGenerationType",
+            "isStructuredGenerationEvent",
+            "normalizeHostUiRequest",
+            "normalizeLiveEvent"
+          ],
+          "imports": [
+            "conduit-web/src/client/api/contracts.ts",
+            "conduit-web/src/client/timeline-order.ts"
+          ],
+          "importedBy": [
+            "conduit-web/src/client/state/active-chat.ts"
+          ],
+          "directTests": [
+            "conduit-web/test/live-events.test.js"
+          ]
+        },
+        {
+          "path": "conduit-web/src/client/state/timeline-store.ts",
+          "responsibility": "Stores durable timeline entries and applies streaming updates without replacing row identity.",
+          "lines": 193,
+          "sourceSha256": "3582f46fe80b44c878a1f806fd9c298e8693284980648db1c2b8093fb5b3547e",
+          "exports": [
+            "TimelineRow",
+            "createTimelineStore"
+          ],
+          "imports": [
+            "conduit-web/src/client/api/contracts.ts",
+            "conduit-web/src/client/harness-metrics.ts",
+            "conduit-web/src/client/turn-rows.ts"
+          ],
+          "importedBy": [
+            "conduit-web/src/client/chat/transcript.tsx"
+          ],
+          "directTests": []
+        },
+        {
+          "path": "conduit-web/src/client/reconcile-messages.ts",
+          "responsibility": "Supporting implementation for Live session stream.",
+          "lines": 46,
+          "sourceSha256": "3fe70f6c0c5d0b8cef9340ad8e7bbdb7f6b3e297f60b032ae73125a439a0bf73",
+          "exports": [
+            "reconcileMessages"
+          ],
+          "imports": [
+            "conduit-web/src/client/api/contracts.ts"
+          ],
+          "importedBy": [
+            "conduit-web/src/client/state/active-chat.ts"
+          ],
+          "directTests": [
+            "conduit-web/test/reconcile-messages.test.js"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "session-jsonl",
+      "label": "Pi session JSONL",
+      "kind": "database",
+      "role": "Authoritative owner of persisted messages, tool calls, model changes, forks, and transcript history; Conduit indexes and reads it.",
+      "sources": [
+        "conduit-web/src/session-store.js",
+        "conduit-web/src/chat-store.js",
+        "conduit-web/src/session-operations.js",
+        "conduit-web/README.md"
+      ],
+      "tests": [
+        "conduit-web/test/session-store.test.js",
+        "conduit-web/test/chat-store.test.js",
+        "conduit-web/test/server-api.test.js",
+        "conduit-web/test/deployment-lifecycle.test.js"
+      ],
+      "callers": [
+        {
+          "node": "chat-lifecycle",
+          "via": "map / delete family"
+        },
+        {
+          "node": "external-pi",
+          "via": "writes transcript"
+        },
+        {
+          "node": "live-stream",
+          "via": "read state"
+        },
+        {
+          "node": "project-catalog",
+          "via": "bounded metadata"
+        }
+      ],
+      "dependencies": [],
+      "files": [
+        {
+          "path": "conduit-web/src/session-store.js",
+          "responsibility": "Indexes native Pi JSONL incrementally and exposes validated metadata, pages, attachment announcements, and fork relationships.",
+          "lines": 654,
+          "sourceSha256": "0df8f2c32896b657691c3d74b988596bc07adf018a63e9e4e85db429bcc5dbcb",
+          "exports": [
+            "discoverProjectSessions",
+            "discoverSessions",
+            "duplicateSession",
+            "findSession",
+            "messagesFromEntries",
+            "moveSession",
+            "moveSessions",
+            "pageSessionEntries",
+            "parseSession",
+            "projectSessionView",
+            "readAnnouncedAttachmentIds",
+            "readSessionMetadata",
+            "readSessionPage",
+            "readSessionParentSession",
+            "removeProjectSessions",
+            "removeSession",
+            "removeSessionFamily",
+            "renameSession",
+            "sessionDirectoryFor",
+            "sessionFamilyFiles",
+            "sessionIdFor",
+            "settingsFromEntries",
+            "toolsFromEntries",
+            "transcriptFromEntries",
+            "validateSessionFile",
+            "validateSessionHeader"
+          ],
+          "imports": [
+            "conduit-web/src/attachment-envelope.js",
+            "conduit-web/src/continuation.js",
+            "conduit-web/src/workspace-paths.js"
+          ],
+          "importedBy": [
+            "conduit-web/src/chat-store.js",
+            "conduit-web/src/project-dashboard.js",
+            "conduit-web/src/project-store.js",
+            "conduit-web/src/server.js",
+            "conduit-web/src/server/live-session-launcher.js",
+            "conduit-web/src/server/live-session-stream.js",
+            "conduit-web/src/server/routes/attachments.js",
+            "conduit-web/src/server/routes/live-sessions.js",
+            "conduit-web/src/server/routes/projects.js",
+            "conduit-web/src/server/routes/sessions.js",
+            "conduit-web/src/session-operations.js"
+          ],
+          "directTests": [
+            "conduit-web/test/chat-store.test.js",
+            "conduit-web/test/project-store.test.js",
+            "conduit-web/test/server-api.test.js",
+            "conduit-web/test/server-lifecycle.test.js",
+            "conduit-web/test/session-store.test.js"
+          ]
+        },
+        {
+          "path": "conduit-web/src/chat-store.js",
+          "responsibility": "Owns bounded chat identity and registry metadata, reconciles Pi session families, and keeps transcript content out of the registry.",
+          "lines": 472,
+          "sourceSha256": "012c5245b7f3425040d368d92e39399daa03b9fc8e034ad13013e92e34e52715",
+          "exports": [
+            "ChatStore",
+            "chatDirectory",
+            "chatView",
+            "isChatId"
+          ],
+          "imports": [
+            "conduit-web/src/owned-paths.js",
+            "conduit-web/src/session-store.js"
+          ],
+          "importedBy": [
+            "conduit-web/src/attachment-store.js",
+            "conduit-web/src/server.js",
+            "conduit-web/src/server/live-session-launcher.js",
+            "conduit-web/src/server/live-session-stream.js",
+            "conduit-web/src/server/routes/chats.js",
+            "conduit-web/src/server/routes/projects.js",
+            "conduit-web/src/server/routes/sessions.js"
+          ],
+          "directTests": [
+            "conduit-web/test/attachment-store.test.js",
+            "conduit-web/test/chat-store.test.js"
+          ]
+        },
+        {
+          "path": "conduit-web/src/session-operations.js",
+          "responsibility": "Supporting implementation for Pi session JSONL.",
+          "lines": 59,
+          "sourceSha256": "2c2870478ed03b423af12b968321362aa41a0fb7c125f184c123f529f4eda3e4",
+          "exports": [
+            "findDeletableSession",
+            "moveRegisteredChat",
+            "sessionDirectoryForChat",
+            "sessionDirectoryRootForChat",
+            "stopSessionFamilyProcesses",
+            "stopSessionProcesses"
+          ],
+          "imports": [
+            "conduit-web/src/session-store.js"
+          ],
+          "importedBy": [
+            "conduit-web/src/server/routes/chats.js",
+            "conduit-web/src/server/routes/projects.js",
+            "conduit-web/src/server/routes/sessions.js"
+          ],
+          "directTests": []
+        },
+        {
+          "path": "conduit-web/README.md",
+          "responsibility": "Supporting implementation for Remote host / shell.",
+          "lines": 646,
+          "sourceSha256": "e70cb1ee8c100379153442b2a6b9cea6fcc7311b3b4cbc79b76518aaf62f1d22",
+          "exports": [],
+          "imports": [],
+          "importedBy": [],
+          "directTests": []
+        }
+      ]
+    },
+    {
+      "id": "external-pi",
+      "label": "Pi coding agent",
+      "kind": "external",
+      "role": "Runs model turns, tools, compaction, retries, forks, and native JSONL persistence outside the web process.",
+      "sources": [
+        "conduit-web/src/pi-launch.js",
+        "scripts/pi-runtime.mjs",
+        "conduit-web/src/pi-manager.js",
+        "conduit-web/README.md"
+      ],
+      "tests": [
+        "conduit-web/test/pi-process.test.js",
+        "conduit-web/test/pi-template.test.js",
+        "conduit-web/test/deployment-artifacts.test.js",
+        "conduit-web/test/live-harness.test.js"
+      ],
+      "callers": [
+        {
+          "node": "pi-runtime",
+          "via": "RPC stdin/stdout"
+        }
+      ],
+      "dependencies": [
+        {
+          "node": "session-jsonl",
+          "via": "writes transcript"
+        }
+      ],
+      "files": [
+        {
+          "path": "conduit-web/src/pi-launch.js",
+          "responsibility": "Supporting implementation for Pi coding agent.",
+          "lines": 102,
+          "sourceSha256": "a1615a5dace4ad7c8af9f6f5937c940edeab162da39c4b70fb74fa8ad4f878a0",
+          "exports": [
+            "publicRuntime",
+            "resolvePiLaunch"
+          ],
+          "imports": [
+            "scripts/pi-runtime.mjs"
+          ],
+          "importedBy": [
+            "conduit-web/src/server.js",
+            "conduit-web/src/server/live-session-launcher.js"
+          ],
+          "directTests": [
+            "conduit-web/test/pi-launch.test.js"
+          ]
+        },
+        {
+          "path": "scripts/pi-runtime.mjs",
+          "responsibility": "Loads Pi templates and resolves executable, arguments, resources, environment, agent directory, and model patterns.",
+          "lines": 150,
+          "sourceSha256": "86d9d1a21a47a4603d4121dc1ba0110bf2b10c0cf270d144ffc65dd3ddfb71b9",
+          "exports": [
+            "buildPiEnvironment",
+            "buildPiResourceArgs",
+            "listPiTemplates",
+            "loadPiModelPatterns",
+            "loadPiTemplate",
+            "resolvePiProcess",
+            "templatePublicView"
+          ],
+          "imports": [],
+          "importedBy": [
+            "conduit-web/src/pi-launch.js",
+            "conduit-web/src/pi-manager.js",
+            "conduit-web/src/server.js"
+          ],
+          "directTests": [
+            "conduit-web/test/pi-process.test.js",
+            "conduit-web/test/pi-template.test.js"
+          ]
+        },
+        {
+          "path": "conduit-web/src/pi-manager.js",
+          "responsibility": "Owns the Pi child-process pool, RPC commands, generation gates, socket delivery, backpressure, resume state, and idle reaping.",
+          "lines": 1278,
+          "sourceSha256": "a660e46fe1f625128ee367f10f77587b65d60d84ea91bd9f1fa1041fa39c4e00",
+          "exports": [
+            "PiManager",
+            "buildPiArgs"
+          ],
+          "imports": [
+            "conduit-web/src/active-generation.js",
+            "conduit-web/src/activity.js",
+            "conduit-web/src/pi-event-normalizer.js",
+            "scripts/pi-runtime.mjs"
+          ],
+          "importedBy": [
+            "conduit-web/src/server.js"
+          ],
+          "directTests": [
+            "conduit-web/test/pi-template.test.js",
+            "conduit-web/test/process-policy.test.js"
+          ]
+        },
+        {
+          "path": "conduit-web/README.md",
+          "responsibility": "Supporting implementation for Remote host / shell.",
+          "lines": 646,
+          "sourceSha256": "e70cb1ee8c100379153442b2a6b9cea6fcc7311b3b4cbc79b76518aaf62f1d22",
+          "exports": [],
+          "imports": [],
+          "importedBy": [],
+          "directTests": []
+        }
+      ]
+    },
+    {
+      "id": "workspace-files",
+      "label": "Workspace + attachments",
+      "kind": "module",
+      "role": "Resolves allowlisted workspace paths, reads project files and diffs, validates native resources, and publishes chat attachments atomically.",
+      "sources": [
+        "conduit-web/src/workspace-paths.js",
+        "conduit-web/src/workspace-inspector.js",
+        "conduit-web/src/attachment-store.js",
+        "conduit-web/src/attachment-envelope.js",
+        "conduit-web/src/native-resource-validation.js",
+        "conduit-web/src/server/routes/attachments.js",
+        "conduit-web/src/server/routes/projects.js"
+      ],
+      "tests": [
+        "conduit-web/test/workspace-paths.test.js",
+        "conduit-web/test/workspace-inspector.test.js",
+        "conduit-web/test/attachment-store.test.js",
+        "conduit-web/test/attachment-envelope.test.js",
+        "conduit-web/test/native-resource-validation.test.js"
+      ],
+      "callers": [
+        {
+          "node": "browser-client",
+          "via": "files / attachments"
+        },
+        {
+          "node": "api-server",
+          "via": "workspace routes"
+        }
+      ],
+      "dependencies": [
+        {
+          "node": "project-files",
+          "via": "validated paths"
+        }
+      ],
+      "files": [
+        {
+          "path": "conduit-web/src/workspace-paths.js",
+          "responsibility": "Expands, allowlists, canonicalizes, and validates user-supplied workspace paths.",
+          "lines": 171,
+          "sourceSha256": "4f38dfe9bd030a9827b238443293e5c81ecd5f533e7a2b9d3727665789ad3813",
+          "exports": [
+            "assertAllowedPath",
+            "assertSafeWorkspaceRoot",
+            "expandHome",
+            "formatWorkspacePath",
+            "isPathInside",
+            "listDirectorySuggestions",
+            "parseAllowlist",
+            "resolveExistingDirectory",
+            "resolveNewWorkspaceDirectory"
+          ],
+          "imports": [],
+          "importedBy": [
+            "conduit-web/src/project-store.js",
+            "conduit-web/src/server.js",
+            "conduit-web/src/session-store.js"
+          ],
+          "directTests": [
+            "conduit-web/test/workspace-paths.test.js"
+          ]
+        },
+        {
+          "path": "conduit-web/src/workspace-inspector.js",
+          "responsibility": "Provides bounded directory listing, file preview, and Git diff reads for the workspace panel.",
+          "lines": 302,
+          "sourceSha256": "6f7ce2797074772523ec0182f19b890309903f653d9419d315bfff2368de0c53",
+          "exports": [
+            "GIT_COMMAND_TIMEOUT_MS",
+            "MAX_CONCURRENT_GIT_PROCESSES",
+            "MAX_PREVIEW_BYTES",
+            "listWorkspaceDirectory",
+            "readWorkspaceDiff",
+            "readWorkspaceFile",
+            "resolveInspectorPath",
+            "runBoundedGit"
+          ],
+          "imports": [],
+          "importedBy": [
+            "conduit-web/src/server.js"
+          ],
+          "directTests": [
+            "conduit-web/test/workspace-inspector.test.js"
+          ]
+        },
+        {
+          "path": "conduit-web/src/attachment-store.js",
+          "responsibility": "Supporting implementation for Workspace + attachments.",
+          "lines": 227,
+          "sourceSha256": "0d4ef72d1b1de2de9a74143040a1b9adf0301b7d8d0d03993c4e49a548ad48f2",
+          "exports": [
+            "AttachmentStore",
+            "DEFAULT_MAX_ATTACHMENT_BYTES",
+            "isAttachmentId",
+            "newAttachmentId",
+            "safeAttachmentName"
+          ],
+          "imports": [
+            "conduit-web/src/chat-store.js",
+            "conduit-web/src/owned-paths.js"
+          ],
+          "importedBy": [
+            "conduit-web/src/server.js"
+          ],
+          "directTests": [
+            "conduit-web/test/attachment-store.test.js"
+          ]
+        },
+        {
+          "path": "conduit-web/src/attachment-envelope.js",
+          "responsibility": "Supporting implementation for Workspace + attachments.",
+          "lines": 112,
+          "sourceSha256": "c3ee02a75e037da53f7bcf198e6f5dfb99bf6c789bd03b3f5a02fcbfee8b4b96",
+          "exports": [
+            "announcedAttachmentIds",
+            "attachmentChatIdFromPath",
+            "enrichAttachment",
+            "parseAttachmentEnvelope",
+            "serializeAttachmentEnvelope"
+          ],
+          "imports": [],
+          "importedBy": [
+            "conduit-web/src/server/live-session-stream.js",
+            "conduit-web/src/session-store.js"
+          ],
+          "directTests": [
+            "conduit-web/test/attachment-envelope.test.js",
+            "conduit-web/test/session-store.test.js"
+          ]
+        },
+        {
+          "path": "conduit-web/src/native-resource-validation.js",
+          "responsibility": "Supporting implementation for Workspace + attachments.",
+          "lines": 80,
+          "sourceSha256": "d9d238ff85f01fd743f8c95230f25a350d02574eac2618739efe1197905f8bf7",
+          "exports": [
+            "validateNativeProjectResources"
+          ],
+          "imports": [],
+          "importedBy": [
+            "conduit-web/src/server.js"
+          ],
+          "directTests": [
+            "conduit-web/test/native-resource-validation.test.js"
+          ]
+        },
+        {
+          "path": "conduit-web/src/server/routes/attachments.js",
+          "responsibility": "Supporting implementation for Workspace + attachments.",
+          "lines": 68,
+          "sourceSha256": "be731fb689dc8911230b92f80f46ccf5909a3da973a746d2633227d2cffc79fa",
+          "exports": [
+            "registerAttachmentRoutes"
+          ],
+          "imports": [
+            "conduit-web/src/session-store.js"
+          ],
+          "importedBy": [
+            "conduit-web/src/server.js"
+          ],
+          "directTests": []
+        },
+        {
+          "path": "conduit-web/src/server/routes/projects.js",
+          "responsibility": "Supporting implementation for Workspace + attachments.",
+          "lines": 348,
+          "sourceSha256": "3d80371540652979fd3d91040d9b92fd08ce28d7f139311f3ac08d0d6ba8d9b3",
+          "exports": [
+            "registerProjectRoutes"
+          ],
+          "imports": [
+            "conduit-web/src/chat-store.js",
+            "conduit-web/src/config.js",
+            "conduit-web/src/session-operations.js",
+            "conduit-web/src/session-store.js"
+          ],
+          "importedBy": [
+            "conduit-web/src/server.js"
+          ],
+          "directTests": []
+        }
+      ]
+    },
+    {
+      "id": "project-files",
+      "label": "Workspace project files",
+      "kind": "database",
+      "role": "Stores user workspace code and server-owned .conduit project and chat trees.",
+      "sources": [
+        "conduit-web/src/owned-paths.js",
+        "conduit-web/src/project-store.js",
+        "conduit-web/src/chat-store.js"
+      ],
+      "tests": [
+        "conduit-web/test/project-store.test.js",
+        "conduit-web/test/chat-store.test.js",
+        "conduit-web/test/deployment-lifecycle.test.js",
+        "conduit-web/test/deployment-backup.test.js"
+      ],
+      "callers": [
+        {
+          "node": "workspace-files",
+          "via": "validated paths"
+        }
+      ],
+      "dependencies": [],
+      "files": [
+        {
+          "path": "conduit-web/src/owned-paths.js",
+          "responsibility": "Supporting implementation for Workspace project files.",
+          "lines": 51,
+          "sourceSha256": "ea3a762bdad1630bdbad44534e7ca4f56fc21882d2b0dc30df266c873e449425",
+          "exports": [
+            "ensureChatTree",
+            "ensureConduitRoot"
+          ],
+          "imports": [],
+          "importedBy": [
+            "conduit-web/src/attachment-store.js",
+            "conduit-web/src/chat-store.js",
+            "conduit-web/src/project-store.js"
+          ],
+          "directTests": []
+        },
+        {
+          "path": "conduit-web/src/project-store.js",
+          "responsibility": "Supporting implementation for Workspace project files.",
+          "lines": 865,
+          "sourceSha256": "3c52342b169485cec9c2322ab3f5808bcecd8d538d827eacb54032a3c4485763",
+          "exports": [
+            "CLONE_COMMAND_MAX_OUTPUT_BYTES",
+            "CLONE_COMMAND_TIMEOUT_MS",
+            "ProjectStore",
+            "runCommand",
+            "slugify",
+            "writeJsonAtomically"
+          ],
+          "imports": [
+            "conduit-web/src/owned-paths.js",
+            "conduit-web/src/session-store.js",
+            "conduit-web/src/workspace-paths.js"
+          ],
+          "importedBy": [
+            "conduit-web/src/server.js"
+          ],
+          "directTests": [
+            "conduit-web/test/project-store.test.js"
+          ]
+        },
+        {
+          "path": "conduit-web/src/chat-store.js",
+          "responsibility": "Owns bounded chat identity and registry metadata, reconciles Pi session families, and keeps transcript content out of the registry.",
+          "lines": 472,
+          "sourceSha256": "012c5245b7f3425040d368d92e39399daa03b9fc8e034ad13013e92e34e52715",
+          "exports": [
+            "ChatStore",
+            "chatDirectory",
+            "chatView",
+            "isChatId"
+          ],
+          "imports": [
+            "conduit-web/src/owned-paths.js",
+            "conduit-web/src/session-store.js"
+          ],
+          "importedBy": [
+            "conduit-web/src/attachment-store.js",
+            "conduit-web/src/server.js",
+            "conduit-web/src/server/live-session-launcher.js",
+            "conduit-web/src/server/live-session-stream.js",
+            "conduit-web/src/server/routes/chats.js",
+            "conduit-web/src/server/routes/projects.js",
+            "conduit-web/src/server/routes/sessions.js"
+          ],
+          "directTests": [
+            "conduit-web/test/attachment-store.test.js",
+            "conduit-web/test/chat-store.test.js"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "terminal-pty",
+      "label": "Terminal / PTY remotes",
+      "kind": "service",
+      "role": "Owns configured remotes, PTY processes, scrollback, replay, resize, output batching, and terminal WebSockets.",
+      "sources": [
+        "conduit-web/src/pty-manager.js",
+        "conduit-web/src/pty-output-batcher.js",
+        "conduit-web/src/server/terminal-stream.js",
+        "conduit-web/src/server/routes/ptys.js",
+        "conduit-web/src/client/remotes/terminal-pane.tsx"
+      ],
+      "tests": [
+        "conduit-web/test/pty-manager.test.js",
+        "conduit-web/test/pty-output-batcher.test.js",
+        "conduit-web/test/pty-transport.test.js",
+        "conduit-web/test/browser/terminal-performance.spec.js"
+      ],
+      "callers": [
+        {
+          "node": "browser-client",
+          "via": "terminal WebSocket"
+        },
+        {
+          "node": "api-server",
+          "via": "PTY routes"
+        }
+      ],
+      "dependencies": [
+        {
+          "node": "remote-host",
+          "via": "node-pty"
+        }
+      ],
+      "files": [
+        {
+          "path": "conduit-web/src/pty-manager.js",
+          "responsibility": "Owns PTY session creation, process lifecycle, scrollback, replay events, resize, and configured remotes.",
+          "lines": 277,
+          "sourceSha256": "a965973357481a30c40862e045646b4175fcc757b99b5660ad9fe419c0c2b8cf",
+          "exports": [
+            "PTY_MAX_REPLAY_EVENTS",
+            "PTY_MAX_SESSIONS",
+            "PTY_REPLAY_PREFIX",
+            "PTY_SCROLLBACK_BYTES",
+            "PtyManager"
+          ],
+          "imports": [],
+          "importedBy": [
+            "conduit-web/src/server.js"
+          ],
+          "directTests": [
+            "conduit-web/test/pty-manager.test.js",
+            "conduit-web/test/pty-transport.test.js"
+          ]
+        },
+        {
+          "path": "conduit-web/src/pty-output-batcher.js",
+          "responsibility": "Supporting implementation for Terminal / PTY remotes.",
+          "lines": 31,
+          "sourceSha256": "de88d66f356581c706b2f4df5235f93016925a95c6e25266cd2fbfecfe36ea4c",
+          "exports": [
+            "PtyOutputBatcher"
+          ],
+          "imports": [],
+          "importedBy": [
+            "conduit-web/src/server/terminal-stream.js"
+          ],
+          "directTests": [
+            "conduit-web/test/pty-output-batcher.test.js"
+          ]
+        },
+        {
+          "path": "conduit-web/src/server/terminal-stream.js",
+          "responsibility": "Bridges one authenticated terminal WebSocket to PtyManager with replay, resize, input, and backpressure handling.",
+          "lines": 103,
+          "sourceSha256": "31dcdad5f85d57c52f6f2358f0e1b469938a540d3cd1e02871d4f201f46dbb94",
+          "exports": [
+            "createTerminalStream"
+          ],
+          "imports": [
+            "conduit-web/src/pty-output-batcher.js"
+          ],
+          "importedBy": [
+            "conduit-web/src/server.js"
+          ],
+          "directTests": []
+        },
+        {
+          "path": "conduit-web/src/server/routes/ptys.js",
+          "responsibility": "Supporting implementation for Terminal / PTY remotes.",
+          "lines": 48,
+          "sourceSha256": "b2ab6d3d8637e4a98e76c002e238044ea5a2e870372008087f07b876a5f7bd72",
+          "exports": [
+            "registerPtyRoutes"
+          ],
+          "imports": [],
+          "importedBy": [
+            "conduit-web/src/server.js"
+          ],
+          "directTests": []
+        },
+        {
+          "path": "conduit-web/src/client/remotes/terminal-pane.tsx",
+          "responsibility": "Supporting implementation for Terminal / PTY remotes.",
+          "lines": 546,
+          "sourceSha256": "f86d3800166b68753f82c29f7de459d6f4ca46a240e3f69d116ff3b776f43e26",
+          "exports": [
+            "TerminalPane"
+          ],
+          "imports": [
+            "conduit-web/src/client/api/client.ts",
+            "conduit-web/src/client/remotes/terminal-renderer.ts"
+          ],
+          "importedBy": [
+            "conduit-web/src/client/workspace/workspace-panel.tsx"
+          ],
+          "directTests": []
+        }
+      ]
+    },
+    {
+      "id": "remote-host",
+      "label": "Remote host / shell",
+      "kind": "external",
+      "role": "Runs local or configured remote shells reached through node-pty and returns terminal output.",
+      "sources": [
+        "conduit-web/src/pty-manager.js",
+        "conduit-web/src/server/terminal-stream.js",
+        "conduit-web/README.md"
+      ],
+      "tests": [
+        "conduit-web/test/pty-manager.test.js",
+        "conduit-web/test/pty-transport.test.js",
+        "conduit-web/test/browser/terminal-performance.spec.js"
+      ],
+      "callers": [
+        {
+          "node": "terminal-pty",
+          "via": "node-pty"
+        }
+      ],
+      "dependencies": [],
+      "files": [
+        {
+          "path": "conduit-web/src/pty-manager.js",
+          "responsibility": "Owns PTY session creation, process lifecycle, scrollback, replay events, resize, and configured remotes.",
+          "lines": 277,
+          "sourceSha256": "a965973357481a30c40862e045646b4175fcc757b99b5660ad9fe419c0c2b8cf",
+          "exports": [
+            "PTY_MAX_REPLAY_EVENTS",
+            "PTY_MAX_SESSIONS",
+            "PTY_REPLAY_PREFIX",
+            "PTY_SCROLLBACK_BYTES",
+            "PtyManager"
+          ],
+          "imports": [],
+          "importedBy": [
+            "conduit-web/src/server.js"
+          ],
+          "directTests": [
+            "conduit-web/test/pty-manager.test.js",
+            "conduit-web/test/pty-transport.test.js"
+          ]
+        },
+        {
+          "path": "conduit-web/src/server/terminal-stream.js",
+          "responsibility": "Bridges one authenticated terminal WebSocket to PtyManager with replay, resize, input, and backpressure handling.",
+          "lines": 103,
+          "sourceSha256": "31dcdad5f85d57c52f6f2358f0e1b469938a540d3cd1e02871d4f201f46dbb94",
+          "exports": [
+            "createTerminalStream"
+          ],
+          "imports": [
+            "conduit-web/src/pty-output-batcher.js"
+          ],
+          "importedBy": [
+            "conduit-web/src/server.js"
+          ],
+          "directTests": []
+        },
+        {
+          "path": "conduit-web/README.md",
+          "responsibility": "Supporting implementation for Remote host / shell.",
+          "lines": 646,
+          "sourceSha256": "e70cb1ee8c100379153442b2a6b9cea6fcc7311b3b4cbc79b76518aaf62f1d22",
+          "exports": [],
+          "imports": [],
+          "importedBy": [],
+          "directTests": []
+        }
+      ]
+    },
+    {
+      "id": "voice-dictation",
+      "label": "Voice dictation",
+      "kind": "service",
+      "role": "Coordinates authenticated audio sockets, PCM readiness, VAD, segmentation, local or remote recognition, transcript truth, and diagnostics.",
+      "sources": [
+        "conduit-web/src/server/dictation-stream.js",
+        "conduit-web/src/server/voice-runtime.js",
+        "conduit-web/src/server/voice-runtime-adapters.js",
+        "conduit-web/src/server/voice-model-manager.js",
+        "conduit-web/src/client/chat/voice-dictation-client.ts",
+        "conduit-web/src/server/routes/voice.js"
+      ],
+      "tests": [
+        "conduit-web/test/voice-dictation.test.js",
+        "conduit-web/test/voice-stream-api.test.js",
+        "conduit-web/test/voice-providers.test.js",
+        "conduit-web/test/voice-model-manager.test.js",
+        "conduit-web/test/voice-transcript.test.js"
+      ],
+      "callers": [
+        {
+          "node": "browser-client",
+          "via": "audio WebSocket"
+        },
+        {
+          "node": "api-server",
+          "via": "voice routes"
+        },
+        {
+          "node": "external-voice",
+          "via": "partial / final text"
+        }
+      ],
+      "dependencies": [
+        {
+          "node": "external-voice",
+          "via": "PCM / transcript"
+        }
+      ],
+      "files": [
+        {
+          "path": "conduit-web/src/server/dictation-stream.js",
+          "responsibility": "Implements the voice WebSocket protocol, PCM buffering, VAD, segmentation, local and HTTP adapters, transcript truth, and finalization.",
+          "lines": 2936,
+          "sourceSha256": "86252fc22895d9cee003e8d960feeb2bf8c92822e4fc3c53293c49c68f3fa7d9",
+          "exports": [
+            "FINALIZATION_MODEL_MULTIPLIERS",
+            "TRANSCRIBE_CPP_FEED_QUANTUM_MS",
+            "TRANSCRIBE_CPP_LIVE_QUEUE_LIMIT_MS",
+            "analyzeSilence",
+            "calculateFinalizationTimeoutMs",
+            "createDeepgramAdapter",
+            "createDictationStream",
+            "createHttpAdapter",
+            "createOpenaiRealtimeStreamAdapter",
+            "createTranscribeCppStreamAdapter",
+            "createTranscriptTruth",
+            "openOpenaiRealtimeStream",
+            "splitSilence",
+            "upsamplePcm16kTo24k"
+          ],
+          "imports": [
+            "conduit-web/src/server/voice-segmentation.js",
+            "conduit-web/src/server/voice-vad.js",
+            "conduit-web/src/voice-settings.js"
+          ],
+          "importedBy": [
+            "conduit-web/src/server.js",
+            "conduit-web/src/server/voice-runtime.js"
+          ],
+          "directTests": [
+            "conduit-web/test/voice-dictation.test.js",
+            "conduit-web/test/voice-providers.test.js",
+            "conduit-web/test/voice-stream-api.test.js",
+            "conduit-web/test/voice-transcript.test.js"
+          ]
+        },
+        {
+          "path": "conduit-web/src/server/voice-runtime.js",
+          "responsibility": "Supporting implementation for Voice dictation.",
+          "lines": 252,
+          "sourceSha256": "e875dfcef7535b73dccfa67e0fede90f9697dd86ce15824f932be7856067f3cb",
+          "exports": [
+            "VoiceRuntime",
+            "isPrivateAddress"
+          ],
+          "imports": [
+            "conduit-web/src/server/dictation-stream.js",
+            "conduit-web/src/server/voice-execution-catalog.js",
+            "conduit-web/src/server/voice-runtime-adapters.js",
+            "conduit-web/src/voice-settings.js"
+          ],
+          "importedBy": [
+            "conduit-web/src/server.js"
+          ],
+          "directTests": [
+            "conduit-web/test/voice-providers.test.js",
+            "conduit-web/test/voice-settings.test.js"
+          ]
+        },
+        {
+          "path": "conduit-web/src/server/voice-runtime-adapters.js",
+          "responsibility": "Supporting implementation for Whisper / remote voice provider.",
+          "lines": 248,
+          "sourceSha256": "0fe8b6bd4bc22357cc857c4248db8cb52c1eb48c42f26c8af28559907ea89e2a",
+          "exports": [
+            "createVoiceRuntimeAdapters"
+          ],
+          "imports": [
+            "conduit-web/src/server/voice-execution-catalog.js"
+          ],
+          "importedBy": [
+            "conduit-web/src/server/voice-runtime.js"
+          ],
+          "directTests": [
+            "conduit-web/test/voice-runtime-adapters.test.js"
+          ]
+        },
+        {
+          "path": "conduit-web/src/server/voice-model-manager.js",
+          "responsibility": "Installs, verifies, loads, shares, and reaps local speech models and worker processes.",
+          "lines": 756,
+          "sourceSha256": "d5cc1c9111f68b2285f201efc67ab5a390266f25ceaabd5dc58722c18c6a8190",
+          "exports": [
+            "DEFAULT_TRANSCRIBE_CPP_STREAM",
+            "DEFAULT_VOICE_MODEL_IDLE_TTL_MS",
+            "LOCAL_VOICE_MODELS",
+            "VoiceModelManager",
+            "extractRuntime"
+          ],
+          "imports": [
+            "conduit-web/src/server/transcribe-rs-worker.js",
+            "conduit-web/src/server/voice-execution-catalog.js",
+            "conduit-web/src/server/voice-model-manifests.js",
+            "conduit-web/src/server/voice-vad.js"
+          ],
+          "importedBy": [
+            "conduit-web/src/server.js"
+          ],
+          "directTests": [
+            "conduit-web/test/voice-model-manager.test.js"
+          ]
+        },
+        {
+          "path": "conduit-web/src/client/chat/voice-dictation-client.ts",
+          "responsibility": "Coordinates microphone capture, AudioWorklet PCM, readiness gating, waveform state, socket events, and transcript insertion.",
+          "lines": 677,
+          "sourceSha256": "5283d8684bf6452c56c66e9796247bfd5f7b592bbb56e98d87e8c66b7ad20071",
+          "exports": [
+            "VoiceDictationCompletion",
+            "VoiceDictationState",
+            "VoiceInputWarning",
+            "createVoiceDictationClient",
+            "isWarmMicrophoneActive",
+            "preloadVoiceCaptureWorklet",
+            "stopWarmMicrophone"
+          ],
+          "imports": [
+            "conduit-web/src/client/chat/voice-audio.ts",
+            "conduit-web/src/client/chat/voice-dictation-diagnostics.ts"
+          ],
+          "importedBy": [
+            "conduit-web/src/client/chat/composer.tsx",
+            "conduit-web/src/client/settings/settings-core.tsx"
+          ],
+          "directTests": []
+        },
+        {
+          "path": "conduit-web/src/server/routes/voice.js",
+          "responsibility": "Supporting implementation for Voice dictation.",
+          "lines": 60,
+          "sourceSha256": "c14d38ebd16d6376c99910db4ae34948f9a89a95e4a5f08d40b16865da6c23e5",
+          "exports": [
+            "registerVoiceRoutes"
+          ],
+          "imports": [],
+          "importedBy": [
+            "conduit-web/src/server.js"
+          ],
+          "directTests": []
+        }
+      ]
+    },
+    {
+      "id": "external-voice",
+      "label": "Whisper / remote voice provider",
+      "kind": "external",
+      "role": "Converts PCM audio into transcript events through the selected native worker or configured remote speech adapter.",
+      "sources": [
+        "conduit-web/src/server/transcribe-rs-worker.js",
+        "conduit-web/native/transcribe-rs-worker/src/main.rs",
+        "conduit-web/src/server/voice-runtime-adapters.js",
+        "conduit-web/src/server/voice-execution-catalog.js"
+      ],
+      "tests": [
+        "conduit-web/test/transcribe-rs-worker.test.js",
+        "conduit-web/test/voice-providers.test.js",
+        "conduit-web/test/voice-runtime-adapters.test.js",
+        "conduit-web/test/voice-execution-catalog.test.js"
+      ],
+      "callers": [
+        {
+          "node": "voice-dictation",
+          "via": "PCM / transcript"
+        }
+      ],
+      "dependencies": [
+        {
+          "node": "voice-dictation",
+          "via": "partial / final text"
+        }
+      ],
+      "files": [
+        {
+          "path": "conduit-web/src/server/transcribe-rs-worker.js",
+          "responsibility": "Implements the framed Node-to-Rust worker protocol and worker child-process client.",
+          "lines": 266,
+          "sourceSha256": "c4214800daf406dd3b6ad1553a19e544173ae8f35280e81f6b02a4f2f6e0e85b",
+          "exports": [
+            "TRANSCRIBE_RS_MAX_JSON_BYTES",
+            "TRANSCRIBE_RS_MAX_PAYLOAD_BYTES",
+            "TRANSCRIBE_RS_PROTOCOL_VERSION",
+            "TranscribeRsFrameDecoder",
+            "TranscribeRsWorkerClient",
+            "defaultTranscribeRsWorkerCommand",
+            "encodeTranscribeRsFrame"
+          ],
+          "imports": [],
+          "importedBy": [
+            "conduit-web/src/server/voice-model-manager.js"
+          ],
+          "directTests": [
+            "conduit-web/test/transcribe-rs-worker.test.js"
+          ]
+        },
+        {
+          "path": "conduit-web/native/transcribe-rs-worker/src/main.rs",
+          "responsibility": "Supporting implementation for Whisper / remote voice provider.",
+          "lines": 843,
+          "sourceSha256": "0766ba5e25577ac302538995397f92323772b3de93401ed5e8f25e66f4c4d5f2",
+          "exports": [],
+          "imports": [],
+          "importedBy": [],
+          "directTests": []
+        },
+        {
+          "path": "conduit-web/src/server/voice-runtime-adapters.js",
+          "responsibility": "Supporting implementation for Whisper / remote voice provider.",
+          "lines": 248,
+          "sourceSha256": "0fe8b6bd4bc22357cc857c4248db8cb52c1eb48c42f26c8af28559907ea89e2a",
+          "exports": [
+            "createVoiceRuntimeAdapters"
+          ],
+          "imports": [
+            "conduit-web/src/server/voice-execution-catalog.js"
+          ],
+          "importedBy": [
+            "conduit-web/src/server/voice-runtime.js"
+          ],
+          "directTests": [
+            "conduit-web/test/voice-runtime-adapters.test.js"
+          ]
+        },
+        {
+          "path": "conduit-web/src/server/voice-execution-catalog.js",
+          "responsibility": "Supporting implementation for Whisper / remote voice provider.",
+          "lines": 453,
+          "sourceSha256": "828f94eeea1a0151872fd7ac9d4bebe2fca2a313f38442af1938ab00da1192e7",
+          "exports": [
+            "LEGACY_LOCAL_VOICE_MODELS",
+            "LOCAL_VOICE_MODELS",
+            "VOICE_CATALOG",
+            "VOICE_EXECUTION_CATALOG",
+            "VOICE_EXECUTION_CATALOG_SCHEMA_VERSION",
+            "VOICE_EXECUTION_CATALOG_VERSION",
+            "artifactForProfile",
+            "backendPathForProfile",
+            "catalogModelForLegacyId",
+            "migrateLocalSelection",
+            "profileSelection",
+            "publicVoiceExecutionCatalog",
+            "resolveVoiceExecutionProfile",
+            "runtimeForProfile",
+            "validateVoiceExecutionCatalog"
+          ],
+          "imports": [
+            "conduit-web/src/server/voice-model-manifests.js"
+          ],
+          "importedBy": [
+            "conduit-web/src/server.js",
+            "conduit-web/src/server/voice-model-manager.js",
+            "conduit-web/src/server/voice-runtime-adapters.js",
+            "conduit-web/src/server/voice-runtime.js",
+            "conduit-web/src/voice-settings.js"
+          ],
+          "directTests": [
+            "conduit-web/test/voice-execution-catalog.test.js",
+            "conduit-web/test/voice-runtime-adapters.test.js"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "runtime-hub",
+      "label": "Runtime event hub",
+      "kind": "module",
+      "role": "Publishes global Pi process snapshots separately from per-chat transcript streams.",
+      "sources": [
+        "conduit-web/src/runtime-hub.js",
+        "conduit-web/src/server.js",
+        "conduit-web/src/client/state/runtime.ts",
+        "conduit-web/src/client/navigation/runtime-indicator.tsx"
+      ],
+      "tests": [
+        "conduit-web/test/runtime-hub.test.js",
+        "conduit-web/test/browser/app.spec.js"
+      ],
+      "callers": [
+        {
+          "node": "pi-runtime",
+          "via": "process changes"
+        }
+      ],
+      "dependencies": [
+        {
+          "node": "browser-client",
+          "via": "global status"
+        }
+      ],
+      "files": [
+        {
+          "path": "conduit-web/src/runtime-hub.js",
+          "responsibility": "Fans out global Pi process snapshots and changes over the runtime event channel.",
+          "lines": 86,
+          "sourceSha256": "8e9fc550ee2a1b58d9894145b344b86b2b8b1583ed99051d576db50f986e0d7f",
+          "exports": [
+            "RuntimeHub"
+          ],
+          "imports": [],
+          "importedBy": [
+            "conduit-web/src/server.js"
+          ],
+          "directTests": [
+            "conduit-web/test/runtime-hub.test.js"
+          ]
+        },
+        {
+          "path": "conduit-web/src/server.js",
+          "responsibility": "Composition root. Creates stores and services, registers routes and upgrades, serves the client, and coordinates shutdown.",
+          "lines": 646,
+          "sourceSha256": "3824fdb2e81fb6523392600354a3f712e4206732e1abcf12dd48e5b04d70b625",
+          "exports": [],
+          "imports": [
+            "conduit-web/src/attachment-store.js",
+            "conduit-web/src/auth-middleware.js",
+            "conduit-web/src/auth-store.js",
+            "conduit-web/src/chat-lifecycle.js",
+            "conduit-web/src/chat-store.js",
+            "conduit-web/src/config.js",
+            "conduit-web/src/model-profile-runtime.js",
+            "conduit-web/src/model-profiles.js",
+            "conduit-web/src/native-resource-validation.js",
+            "conduit-web/src/pi-auth-broker.js",
+            "conduit-web/src/pi-launch.js",
+            "conduit-web/src/pi-manager.js",
+            "conduit-web/src/pi-model-catalog.js",
+            "conduit-web/src/preferences-store.js",
+            "conduit-web/src/project-dashboard.js",
+            "conduit-web/src/project-store.js",
+            "conduit-web/src/pty-manager.js",
+            "conduit-web/src/runtime-hub.js",
+            "conduit-web/src/runtime-settings.js",
+            "conduit-web/src/search-settings.js",
+            "conduit-web/src/server/dictation-stream.js",
+            "conduit-web/src/server/live-session-stream.js",
+            "conduit-web/src/server/routes/attachments.js",
+            "conduit-web/src/server/routes/auth.js",
+            "conduit-web/src/server/routes/chats.js",
+            "conduit-web/src/server/routes/live-sessions.js",
+            "conduit-web/src/server/routes/pi-auth.js",
+            "conduit-web/src/server/routes/projects.js",
+            "conduit-web/src/server/routes/ptys.js",
+            "conduit-web/src/server/routes/runtime.js",
+            "conduit-web/src/server/routes/search.js",
+            "conduit-web/src/server/routes/sessions.js",
+            "conduit-web/src/server/routes/voice.js",
+            "conduit-web/src/server/terminal-stream.js",
+            "conduit-web/src/server/voice-execution-catalog.js",
+            "conduit-web/src/server/voice-model-manager.js",
+            "conduit-web/src/server/voice-recording-store.js",
+            "conduit-web/src/server/voice-runtime.js",
+            "conduit-web/src/session-store.js",
+            "conduit-web/src/tailscale-share.js",
+            "conduit-web/src/voice-settings.js",
+            "conduit-web/src/workspace-inspector.js",
+            "conduit-web/src/workspace-paths.js",
+            "scripts/pi-runtime.mjs"
+          ],
+          "importedBy": [],
+          "directTests": []
+        },
+        {
+          "path": "conduit-web/src/client/state/runtime.ts",
+          "responsibility": "Supporting implementation for Runtime event hub.",
+          "lines": 89,
+          "sourceSha256": "bd976c4916c0697ac48725f891e5979fa3b819d5dd922e42073051bc04c8d4f1",
+          "exports": [
+            "Connectivity",
+            "RuntimeStore",
+            "createRuntimeStore"
+          ],
+          "imports": [
+            "conduit-web/src/client/api/contracts.ts"
+          ],
+          "importedBy": [
+            "conduit-web/src/client/main.tsx",
+            "conduit-web/src/client/navigation/sidebar.tsx",
+            "conduit-web/src/client/state/active-chat.ts"
+          ],
+          "directTests": []
+        },
+        {
+          "path": "conduit-web/src/client/navigation/runtime-indicator.tsx",
+          "responsibility": "Supporting implementation for Runtime event hub.",
+          "lines": 102,
+          "sourceSha256": "1cc5aedc5d87951be508e91aad9e95eac04d5e8a487497e806b7a7271a3763f3",
+          "exports": [
+            "ProjectActivityIndicator",
+            "RuntimeIndicator"
+          ],
+          "imports": [
+            "conduit-web/src/activity.js",
+            "conduit-web/src/client/api/contracts.ts"
+          ],
+          "importedBy": [
+            "conduit-web/src/client/navigation/sidebar.tsx"
+          ],
+          "directTests": []
+        }
+      ]
+    },
+    {
+      "id": "browser-runtime",
+      "label": "Browser / PWA runtime",
+      "kind": "external",
+      "role": "Hosts the client and provides WebSocket, audio, keyboard, file, service-worker, and PWA APIs.",
+      "sources": [
+        "conduit-web/index.html",
+        "conduit-web/src/client/pwa-update.ts",
+        "conduit-web/vite.config.js"
+      ],
+      "tests": [
+        "conduit-web/test/pwa-update.test.js",
+        "conduit-web/test/pwa-artifacts.test.js",
+        "conduit-web/test/browser/pwa-mobile.spec.js",
+        "conduit-web/test/browser/auth.spec.js"
+      ],
+      "callers": [],
+      "dependencies": [
+        {
+          "node": "browser-client",
+          "via": "hosts"
+        }
+      ],
+      "files": [
+        {
+          "path": "conduit-web/index.html",
+          "responsibility": "Supporting implementation for Browser / PWA runtime.",
+          "lines": 18,
+          "sourceSha256": "251b93762c9156ee20c4784fe6d3a32da3792635d6161ad92f758b238ad793d9",
+          "exports": [],
+          "imports": [],
+          "importedBy": [],
+          "directTests": []
+        },
+        {
+          "path": "conduit-web/src/client/pwa-update.ts",
+          "responsibility": "Supporting implementation for Browser / PWA runtime.",
+          "lines": 96,
+          "sourceSha256": "e75efac14df98b0c4cd2a0a95603fad91b9d554632e03878eb03580070f00574",
+          "exports": [
+            "forcePwaUpdate",
+            "rememberPwaRegistration",
+            "resetPwaAppCache"
+          ],
+          "imports": [],
+          "importedBy": [
+            "conduit-web/src/client/main.tsx"
+          ],
+          "directTests": [
+            "conduit-web/test/pwa-update.test.js"
+          ]
+        },
+        {
+          "path": "conduit-web/vite.config.js",
+          "responsibility": "Supporting implementation for Browser / PWA runtime.",
+          "lines": 99,
+          "sourceSha256": "e854842c156489d13d233633ba758dafd365afde370d50d0c7bb0d1b7346dfda",
+          "exports": [
+            "default"
+          ],
+          "imports": [
+            "conduit-web/scripts/solid-components-mode.mjs",
+            "conduit-web/src/client/layout-geometry.ts"
+          ],
+          "importedBy": [],
+          "directTests": []
+        }
+      ]
+    }
+  ],
+  "edges": [
+    {
+      "from": "browser-runtime",
+      "to": "browser-client",
+      "label": "hosts"
+    },
+    {
+      "from": "browser-client",
+      "to": "api-server",
+      "label": "HTTP / JSON"
+    },
+    {
+      "from": "browser-client",
+      "to": "live-stream",
+      "label": "chat WebSocket"
+    },
+    {
+      "from": "browser-client",
+      "to": "workspace-files",
+      "label": "files / attachments"
+    },
+    {
+      "from": "browser-client",
+      "to": "terminal-pty",
+      "label": "terminal WebSocket"
+    },
+    {
+      "from": "browser-client",
+      "to": "voice-dictation",
+      "label": "audio WebSocket"
+    },
+    {
+      "from": "api-server",
+      "to": "auth-boundary",
+      "label": "protects routes"
+    },
+    {
+      "from": "api-server",
+      "to": "project-catalog",
+      "label": "route handlers"
+    },
+    {
+      "from": "api-server",
+      "to": "chat-lifecycle",
+      "label": "chat commands"
+    },
+    {
+      "from": "api-server",
+      "to": "workspace-files",
+      "label": "workspace routes"
+    },
+    {
+      "from": "api-server",
+      "to": "terminal-pty",
+      "label": "PTY routes"
+    },
+    {
+      "from": "api-server",
+      "to": "voice-dictation",
+      "label": "voice routes"
+    },
+    {
+      "from": "chat-lifecycle",
+      "to": "pi-runtime",
+      "label": "start / stop / fork"
+    },
+    {
+      "from": "chat-lifecycle",
+      "to": "session-jsonl",
+      "label": "map / delete family"
+    },
+    {
+      "from": "pi-runtime",
+      "to": "external-pi",
+      "label": "RPC stdin/stdout"
+    },
+    {
+      "from": "pi-runtime",
+      "to": "live-stream",
+      "label": "normalized events"
+    },
+    {
+      "from": "external-pi",
+      "to": "session-jsonl",
+      "label": "writes transcript"
+    },
+    {
+      "from": "live-stream",
+      "to": "browser-client",
+      "label": "resume / deltas"
+    },
+    {
+      "from": "live-stream",
+      "to": "session-jsonl",
+      "label": "read state"
+    },
+    {
+      "from": "project-catalog",
+      "to": "session-jsonl",
+      "label": "bounded metadata"
+    },
+    {
+      "from": "workspace-files",
+      "to": "project-files",
+      "label": "validated paths"
+    },
+    {
+      "from": "terminal-pty",
+      "to": "remote-host",
+      "label": "node-pty"
+    },
+    {
+      "from": "voice-dictation",
+      "to": "external-voice",
+      "label": "PCM / transcript"
+    },
+    {
+      "from": "external-voice",
+      "to": "voice-dictation",
+      "label": "partial / final text"
+    },
+    {
+      "from": "pi-runtime",
+      "to": "runtime-hub",
+      "label": "process changes"
+    },
+    {
+      "from": "runtime-hub",
+      "to": "browser-client",
+      "label": "global status"
+    },
+    {
+      "from": "auth-boundary",
+      "to": "pi-runtime",
+      "label": "scoped Pi auth"
+    },
+    {
+      "from": "project-catalog",
+      "to": "browser-client",
+      "label": "catalog / settings"
+    }
+  ],
+  "flows": [
+    {
+      "id": "chat-generation",
+      "label": "Chat generation",
+      "steps": [
+        "browser-client",
+        "api-server",
+        "auth-boundary",
+        "chat-lifecycle",
+        "pi-runtime",
+        "external-pi",
+        "live-stream",
+        "browser-client",
+        "session-jsonl"
+      ],
+      "evidence": [
+        "conduit-web/README.md",
+        "conduit-web/test/live-harness.test.js",
+        "conduit-web/test/browser/harness-streaming.spec.js"
+      ]
+    },
+    {
+      "id": "reconnect-resume",
+      "label": "Reconnect and resume",
+      "steps": [
+        "browser-client",
+        "live-stream",
+        "pi-runtime",
+        "session-jsonl",
+        "live-stream",
+        "browser-client"
+      ],
+      "evidence": [
+        "conduit-web/src/server/live-session-stream.js",
+        "conduit-web/src/client/api/live-events.ts",
+        "conduit-web/test/browser/app.spec.js",
+        "conduit-web/test/live-events.test.js"
+      ]
+    },
+    {
+      "id": "workspace-terminal",
+      "label": "Workspace and terminal",
+      "steps": [
+        "browser-client",
+        "api-server",
+        "auth-boundary",
+        "workspace-files",
+        "project-files",
+        "terminal-pty",
+        "remote-host",
+        "terminal-pty",
+        "browser-client"
+      ],
+      "evidence": [
+        "conduit-web/src/server/routes/ptys.js",
+        "conduit-web/src/server/terminal-stream.js",
+        "conduit-web/test/pty-transport.test.js",
+        "conduit-web/test/workspace-inspector.test.js"
+      ]
+    },
+    {
+      "id": "voice-dictation-flow",
+      "label": "Voice dictation",
+      "steps": [
+        "browser-client",
+        "api-server",
+        "auth-boundary",
+        "voice-dictation",
+        "external-voice",
+        "voice-dictation",
+        "browser-client"
+      ],
+      "evidence": [
+        "conduit-web/README.md",
+        "conduit-web/src/client/chat/voice-dictation-client.ts",
+        "conduit-web/test/voice-stream-api.test.js",
+        "conduit-web/test/voice-providers.test.js"
+      ]
+    },
+    {
+      "id": "auth-and-catalogue",
+      "label": "Auth and catalogue bootstrap",
+      "steps": [
+        "browser-runtime",
+        "browser-client",
+        "api-server",
+        "auth-boundary",
+        "project-catalog",
+        "session-jsonl",
+        "browser-client"
+      ],
+      "evidence": [
+        "conduit-web/src/auth-middleware.js",
+        "conduit-web/src/server.js",
+        "conduit-web/test/auth-server.test.js",
+        "conduit-web/test/project-dashboard.test.js"
+      ]
+    }
+  ]
+}

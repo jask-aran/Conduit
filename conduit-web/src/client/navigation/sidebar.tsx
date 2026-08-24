@@ -145,37 +145,24 @@ export function Sidebar(props: {
   let sidebarSurface: HTMLDivElement | undefined;
   let sidebarMotionId = 0;
   let sidebarEdgeMotionId: number | null = null;
-  let sidebarSurfaceMotion: Animation | null = null;
+  let sidebarEdgeRaf = 0;
   let mobileReturnFocus: HTMLElement | null = null;
   let mobileWasOpen = false;
-
-  const surfaceTranslateX = () => {
-    if (!sidebarSurface) return 0;
-    const transform = getComputedStyle(sidebarSurface).transform;
-    if (transform === "none") return 0;
-    return new DOMMatrixReadOnly(transform).m41;
-  };
-  const clearSidebarSurfaceMotion = () => {
-    sidebarSurfaceMotion?.cancel();
-    sidebarSurfaceMotion = null;
-    sidebarSurface?.style.removeProperty("transform");
-    sidebarSurface?.style.removeProperty("will-change");
-    sidebarRoot?.removeAttribute("data-compositor-motion");
-    sidebarRoot?.removeAttribute("data-edge-instant");
-  };
-  const settleSidebarMotion = () => {
-    if (sidebarEdgeMotionId == null) return;
+  const cancelSidebarEdgeMotion = () => {
+    if (sidebarEdgeRaf) {
+      cancelAnimationFrame(sidebarEdgeRaf);
+      sidebarEdgeRaf = 0;
+    }
     const id = sidebarEdgeMotionId;
     sidebarEdgeMotionId = null;
-    clearSidebarSurfaceMotion();
-    dispatchPanelGeometryMotion({ phase: "end", id, source: "sidebar", size: shellWidth() });
+    sidebarRoot?.removeAttribute("data-edge-instant");
+    if (id != null) dispatchPanelGeometryMotion({ phase: "end", id, source: "sidebar", size: shellWidth() });
   };
   const toggleSidebar = () => {
     const nextCollapsed = !collapsed();
     const startWidth = shellWidth();
     const targetWidth = nextCollapsed ? 52 : 244;
-    const currentSurfaceX = sidebarSurfaceMotion ? surfaceTranslateX() : 0;
-    settleSidebarMotion();
+    cancelSidebarEdgeMotion();
     if (isMobileLayout()) {
       batch(() => {
         setCollapsed(nextCollapsed);
@@ -184,7 +171,7 @@ export function Sidebar(props: {
       });
       return;
     }
-    if (!sidebarRoot || !sidebarSurface || matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    if (!sidebarRoot || matchMedia("(prefers-reduced-motion: reduce)").matches) {
       sidebarRoot?.setAttribute("data-edge-instant", "true");
       batch(() => {
         setCollapsed(nextCollapsed);
@@ -196,45 +183,42 @@ export function Sidebar(props: {
     }
     const id = ++sidebarMotionId;
     sidebarEdgeMotionId = id;
-    const delta = targetWidth - startWidth;
-    const startSurfaceX = currentSurfaceX - delta;
-    sidebarRoot.setAttribute("data-edge-instant", "true");
-    sidebarRoot.setAttribute("data-compositor-motion", "true");
-    sidebarSurface.style.willChange = "transform";
-    sidebarSurface.style.transform = `translateX(${startSurfaceX}px)`;
+    batch(() => {
+      setCollapsed(nextCollapsed);
+      if (!nextCollapsed) setVisualCollapsed(false);
+    });
+    // Keep the v0.4.7 sidebar contract: the real shell follows its CSS width
+    // transition, while the transcript motion shell tracks that edge once per
+    // display frame. This keeps the composer in the same geometry path.
     dispatchPanelGeometryMotion({
       phase: "begin",
       id,
       source: "sidebar",
       size: startWidth,
-      targetSize: targetWidth,
-      duration: PANEL_MOTION_DURATION_MS,
-      easing: "ease",
     });
-    batch(() => {
-      setCollapsed(nextCollapsed);
-      if (!nextCollapsed) setVisualCollapsed(false);
-      setShellWidth(targetWidth);
-    });
-    const animation = sidebarSurface.animate([
-      { transform: `translateX(${startSurfaceX}px)` },
-      { transform: "translateX(0px)" },
-    ], {
-      duration: PANEL_MOTION_DURATION_MS,
-      easing: "ease",
-      fill: "forwards",
-    });
-    sidebarSurfaceMotion = animation;
-    animation.onfinish = () => {
-      if (sidebarSurfaceMotion !== animation || sidebarEdgeMotionId !== id) return;
-      setVisualCollapsed(nextCollapsed);
+    setShellWidth(targetWidth);
+    const startedAt = performance.now();
+    const sampleEdge = () => {
+      if (!sidebarRoot || sidebarMotionId !== id || sidebarEdgeMotionId !== id) return;
+      dispatchPanelGeometryMotion({
+        phase: "change",
+        id,
+        source: "sidebar",
+        size: sidebarRoot.getBoundingClientRect().width,
+      });
+      if (performance.now() - startedAt < PANEL_MOTION_DURATION_MS) {
+        sidebarEdgeRaf = requestAnimationFrame(sampleEdge);
+        return;
+      }
+      sidebarEdgeRaf = 0;
       sidebarEdgeMotionId = null;
-      clearSidebarSurfaceMotion();
+      setVisualCollapsed(nextCollapsed);
       dispatchPanelGeometryMotion({ phase: "end", id, source: "sidebar", size: targetWidth });
     };
+    sidebarEdgeRaf = requestAnimationFrame(sampleEdge);
   };
   onCleanup(() => {
-    settleSidebarMotion();
+    cancelSidebarEdgeMotion();
   });
   const [phoneLayout, setPhoneLayout] = createSignal(isMobileLayout());
   onMount(() => {

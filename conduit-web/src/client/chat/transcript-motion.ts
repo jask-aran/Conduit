@@ -14,7 +14,6 @@ export function mountTranscriptPanelMotion(
   transcript: HTMLElement,
   motionShell: HTMLElement,
 ) {
-  const conversationMotion = transcript.closest<HTMLElement>(".work-area-conversation") || motionShell;
   let motion: Animation | null = null;
   let releaseFrame: number | null = null;
   const activeIds = new Map<PanelGeometryMotionSource, number>();
@@ -31,7 +30,7 @@ export function mountTranscriptPanelMotion(
   const setTransform = (next: number) => {
     motion?.cancel();
     motion = null;
-    conversationMotion.style.transform = next ? `translateX(${next}px)` : "";
+    motionShell.style.transform = next ? `translateX(${next}px)` : "";
   };
 
   const releasePreviewWidth = () => {
@@ -75,12 +74,12 @@ export function mountTranscriptPanelMotion(
         if (!edgeStarts.size) motionShell.style.removeProperty("width");
         transformSource = detail.source;
         transcript.dataset.panelMotion = "translate";
-        const current = transformX(conversationMotion);
+        const current = transformX(motionShell);
         const delta = detail.targetSize - detail.size;
         const naturalShift = detail.source === "sidebar" ? delta / 2 : -delta / 2;
         motion?.cancel();
-        conversationMotion.style.removeProperty("transform");
-        motion = conversationMotion.animate([
+        motionShell.style.removeProperty("transform");
+        motion = motionShell.animate([
           { transform: `translateX(${current - naturalShift}px)` },
           { transform: "translateX(0px)" },
         ], {

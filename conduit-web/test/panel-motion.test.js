@@ -5,7 +5,6 @@ import test from "node:test";
 
 const stylesPath = path.resolve(import.meta.dirname, "../../conduit-web/src/client/styles.css");
 const performanceComposerStylesPath = path.resolve(import.meta.dirname, "../../conduit-web/src/client/chat/performance-composer.css");
-const liquidGlassSurfacePath = path.resolve(import.meta.dirname, "../../conduit-web/src/client/chat/liquid-glass-surface.tsx");
 const panelMotionPath = path.resolve(import.meta.dirname, "../../conduit-web/src/client/panel-motion.ts");
 const mainPath = path.resolve(import.meta.dirname, "../../conduit-web/src/client/main.tsx");
 const transcriptPath = path.resolve(import.meta.dirname, "../../conduit-web/src/client/chat/transcript.tsx");
@@ -53,16 +52,13 @@ test("desktop panel shells transition open and close while surfaces fill the she
   assert.match(resizeHandle, /width:\s*24px/);
   assert.doesNotMatch(styles, /\.workspace-resizing \.chat-meteors/);
   const transcriptMotionShell = rule(styles, ".transcript-motion-shell");
-  const conversationMotion = rule(styles, ".work-area-conversation");
   assert.match(transcriptMotionShell, /width:\s*100%/);
   assert.match(transcriptMotionShell, /position:\s*relative/);
-  assert.match(transcriptMotionShell, /contain:\s*layout/);
-  assert.doesNotMatch(transcriptMotionShell, /transform:\s*translate3d/);
-  assert.doesNotMatch(transcriptMotionShell, /will-change:\s*transform/);
+  assert.match(transcriptMotionShell, /contain:\s*layout paint/);
+  assert.match(transcriptMotionShell, /transform:\s*translate3d/);
+  assert.match(transcriptMotionShell, /will-change:\s*transform/);
   assert.match(transcriptMotionShell, /container-name:\s*chat-main/);
   assert.match(transcriptMotionShell, /container-type:\s*inline-size/);
-  assert.match(conversationMotion, /transform:\s*translate3d\(0,\s*0,\s*0\)/);
-  assert.match(conversationMotion, /will-change:\s*transform/);
   const settingsRailNav = rule(styles, ".settings-rail nav");
   assert.match(settingsRailNav, /display:\s*flex/);
   assert.match(settingsRailNav, /flex-direction:\s*column/);
@@ -70,7 +66,7 @@ test("desktop panel shells transition open and close while surfaces fill the she
   assert.match(hiddenTranscriptContent, /content-visibility:\s*hidden/);
 });
 
-test("desktop open-close uses atomic geometry, compositor surfaces, and motion-safe frost", async () => {
+test("desktop open-close keeps the v0.4.7 edge path and live frost", async () => {
   const [performanceStyles, panelMotion, transcriptMotion, sidebarSource] = await Promise.all([
     fs.readFile(performanceComposerStylesPath, "utf8"),
     fs.readFile(panelMotionPath, "utf8"),
@@ -78,25 +74,20 @@ test("desktop open-close uses atomic geometry, compositor surfaces, and motion-s
     fs.readFile(sidebarPath, "utf8"),
   ]);
 
-  const sidebarMotion = rule(performanceStyles, '.conduit-sidebar[data-compositor-motion="true"]');
-  assert.match(sidebarMotion, /overflow:\s*visible/);
-  assert.match(sidebarMotion, /transition:\s*none\s*!important/);
-
-  assert.match(sidebarSource, /targetSize:\s*targetWidth/);
-  assert.match(sidebarSource, /sidebarSurface\.animate\(/);
+  assert.match(sidebarSource, /dispatchPanelGeometryMotion\(\{[\s\S]*phase:\s*"begin"[\s\S]*source:\s*"sidebar"[\s\S]*size:\s*startWidth,[\s\S]*\}\)/);
   assert.match(sidebarSource, /setShellWidth\(targetWidth\)/);
-  assert.doesNotMatch(sidebarSource, /sampleEdge|sidebarEdgeRaf|getBoundingClientRect\(\)\.width/);
+  assert.match(sidebarSource, /sidebarRoot\.getBoundingClientRect\(\)\.width/);
+  assert.match(sidebarSource, /sidebarEdgeRaf/);
+  assert.doesNotMatch(sidebarSource, /sidebarSurface\.animate\(|targetSize:\s*targetWidth/);
 
   assert.doesNotMatch(panelMotion, /composerMotion|animateComposer|\.composer-wrap/);
-  assert.match(panelMotion, /document\.body\.dataset\.panelGeometryMotion = "true"/);
-  assert.match(transcriptMotion, /transcript\.closest<HTMLElement>\("\.work-area-conversation"\)/);
-  assert.match(transcriptMotion, /motion = conversationMotion\.animate\(/);
+  assert.doesNotMatch(panelMotion, /document\.body\.dataset\.panelGeometryMotion/);
+  assert.doesNotMatch(transcriptMotion, /conversationMotion/);
+  assert.match(transcriptMotion, /motion = motionShell\.animate\(/);
 
-  const movingFrost = rule(performanceStyles, 'body[data-panel-geometry-motion="true"] .composer[data-composer-surface="frost"]');
-  assert.match(movingFrost, /backdrop-filter:\s*none/);
-  assert.match(movingFrost, /-webkit-backdrop-filter:\s*none/);
-  assert.match(movingFrost, /color-mix\(in oklch, var\(--background\), transparent 18%\)/);
-  assert.equal(rule(performanceStyles, 'body[data-panel-geometry-motion="true"] .composer[data-composer-surface="frosted-live"]'), "");
+  assert.doesNotMatch(performanceStyles, /data-panel-geometry-motion/);
+  const frostedLive = rule(performanceStyles, '.composer[data-composer-surface="frosted-live"]');
+  assert.match(frostedLive, /backdrop-filter:\s*blur\(24px\)/);
 });
 
 test("static composer keeps material chrome without sampling transcript pixels", async () => {
@@ -112,18 +103,6 @@ test("static composer keeps material chrome without sampling transcript pixels",
   assert.match(staticRim, /linear-gradient\(150deg/);
   assert.match(staticSheen, /content:\s*""/);
   assert.match(staticSheen, /radial-gradient\(150% 72%/);
-});
-
-test("liquid glass maps use measured user-space composer dimensions", async () => {
-  const liquidSurface = await fs.readFile(liquidGlassSurfacePath, "utf8");
-
-  assert.match(liquidSurface, /primitiveUnits="userSpaceOnUse"/);
-  assert.match(liquidSurface, /setFilterWidth\(width\)/);
-  assert.match(liquidSurface, /setFilterHeight\(height\)/);
-  assert.match(liquidSurface, /width=\{filterWidth\(\)\}/);
-  assert.match(liquidSurface, /height=\{filterHeight\(\)\}/);
-  assert.doesNotMatch(liquidSurface, /<feImage[^>]+width="100%"/);
-  assert.doesNotMatch(liquidSurface, /<feImage[^>]+height="100%"/);
 });
 
 test("composer remains a sibling overlay outside the transcript motion island", async () => {
@@ -156,8 +135,6 @@ test("composer remains a sibling overlay outside the transcript motion island", 
   assert.match(composerOverlay, /z-index:\s*2/);
   assert.match(composerOverlay, /background:\s*transparent/);
 
-  const frost = rule(performanceStyles, '.composer[data-composer-surface="frost"]');
-  assert.match(frost, /backdrop-filter:\s*blur\(24px\)/);
   const frostedLive = rule(performanceStyles, '.composer[data-composer-surface="frosted-live"]');
   assert.match(frostedLive, /backdrop-filter:\s*blur\(24px\)/);
   assert.doesNotMatch(performanceStyles, /position:\s*sticky/);

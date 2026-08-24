@@ -72,9 +72,6 @@ test("transcript picker exposes the five existing renderers plus Advanced and re
   const preference = await read("transcript-renderer.ts");
   assert.match(transcript, /aria-label="Composer renderer"/);
   assert.match(transcript, /aria-label="Transcript renderer"/);
-  assert.match(transcript, /aria-label="Typewriter pacing"/);
-  assert.match(transcript, /<Show when=\{rendererUsesTypewriter\(\)\}>/);
-  assert.match(transcript, /adaptivePacing=\{incremarkPacing\(\) === "adaptive"\}/);
   assert.match(transcript, /<IncremarkAdvancedMarkdown/);
   assert.doesNotMatch(transcript, /aria-label="Transcript renderer"[^>]*disabled=/);
   assert.match(preference, /\.\.\.MARKDOWN_RENDERER_OPTIONS/);

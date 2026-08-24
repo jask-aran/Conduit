@@ -1,214 +1,98 @@
 import {
-  createBlockTransformer,
-  mathPlugin,
+  countChars,
+  sliceAst,
   type DisplayBlock,
   type ParsedBlock,
 } from "@incremark/core";
+import type { IncremarkPacingMode } from "./incremark-pacing";
 
-export const TYPEWRITER_LAG_FRACTION = 0.10;
-export const TYPEWRITER_BACKLOG_WINDOW_MS = 250;
-export const TYPEWRITER_EMA_ALPHA = 0.25;
 export const TYPEWRITER_FRAME_WORK_BUDGET_MS = 8;
-export const TYPEWRITER_DEFAULT_TICK_INTERVAL_MS = 16;
-export const TYPEWRITER_RELAXED_TICK_INTERVAL_MS = 33;
+export const TYPEWRITER_MIN_FRAME_BUDGET_MS = 2;
+export const TYPEWRITER_DEFAULT_FRAME_INTERVAL_MS = 16;
 export const TYPEWRITER_MIN_FRAME_INTERVAL_MS = 4;
-export const TYPEWRITER_MAX_FRAME_INTERVAL_MS = TYPEWRITER_RELAXED_TICK_INTERVAL_MS;
-export const TYPEWRITER_FRAME_INTERVAL_EMA_ALPHA = 0.25;
-export const TYPEWRITER_LAG_CORRECTION_WINDOW_MS = 100;
-export const TYPEWRITER_SATURATION_WINDOW_MS = 120;
-export const TYPEWRITER_SAFE_BLOCK_WINDOW_MS = 1000;
-export const TYPEWRITER_NO_PROGRESS_WINDOW_MS = 500;
-export type TypewriterFallbackMode = "normal" | "safe-step" | "safe-block";
+export const TYPEWRITER_MAX_FRAME_INTERVAL_MS = 100;
+export const TYPEWRITER_INITIAL_STEP = 32;
+export const TYPEWRITER_MAX_STEP = 4096;
+export const TYPEWRITER_MAX_CHARS_PER_FRAME = 8192;
+export const TYPEWRITER_MAX_BLOCKS_PER_FRAME = 64;
+export const TYPEWRITER_EMA_ALPHA = 0.25;
+export const TYPEWRITER_FIXED_STEP = 32;
+export const TYPEWRITER_ADAPTIVE_BACKLOG_WINDOW_MS = 250;
 const TYPEWRITER_MATH_SOURCE = "__conduitMathSource";
 
 export type TypewriterMetrics = {
-  adaptive: boolean;
+  scheduler: IncremarkPacingMode;
   sourceVisibleCharacters: number;
   displayedVisibleCharacters: number;
   backlogCharacters: number;
   backlogAgeMs: number;
-  observedRate: number | null;
-  targetRate: number;
-  controlRate: number;
-  displayRate: number | null;
-  relativeLag: number | null;
-  charsPerTick: number;
+  pendingBlockCount: number;
+  completedBlockCount: number;
+  charsPerFrame: number;
   frameIntervalMs: number;
-  tickInterval: number;
+  frameBudgetMs: number;
   frameWorkMs: number;
   frameWorkEmaMs: number;
-  fallbackMode: TypewriterFallbackMode;
-  lagTargetMet: boolean;
   terminal: boolean;
-  frameGapMs?: number | null;
-  commitToNextFrameMs?: number | null;
-  frameHealthy?: boolean;
-  saturationMs?: number;
-  stepChanged?: boolean;
-  previousCharsPerTick?: number;
 };
 
-export type AdaptiveRate = {
-  leadRate: number;
-  catchUpRate: number;
-  targetRate: number;
-};
-
-export function updateRateEma(previous: number | null, sample: number, alpha = TYPEWRITER_EMA_ALPHA) {
+export function updateEma(previous: number | null, sample: number, alpha = TYPEWRITER_EMA_ALPHA) {
   if (!Number.isFinite(sample) || sample < 0) return previous;
   if (previous == null) return sample;
   return previous + alpha * (sample - previous);
 }
 
-export function calculateAdaptiveRate(
-  observedRate: number | null,
-  backlogCharacters: number,
-  lagFraction = TYPEWRITER_LAG_FRACTION,
-  backlogWindowMs = TYPEWRITER_BACKLOG_WINDOW_MS,
-): AdaptiveRate {
-  const leadRate = observedRate != null && observedRate > 0
-    ? observedRate / Math.max(0.001, 1 - lagFraction)
-    : 0;
-  const catchUpRate = Math.max(0, backlogCharacters) / Math.max(1, backlogWindowMs) * 1000;
-  return {
-    leadRate,
-    catchUpRate,
-    targetRate: Math.max(leadRate, catchUpRate),
-  };
-}
-
-/** Keep pace with new output while draining the existing backlog. */
-export function calculateControlRate(
-  observedRate: number | null,
-  backlogCharacters: number,
-  lagFraction = TYPEWRITER_LAG_FRACTION,
-  backlogWindowMs = TYPEWRITER_BACKLOG_WINDOW_MS,
-  sourceVisibleCharacters: number | null = null,
+export function normalizeFrameInterval(
+  sample: number,
+  fallback = TYPEWRITER_DEFAULT_FRAME_INTERVAL_MS,
 ) {
-  const adaptive = calculateAdaptiveRate(observedRate, backlogCharacters, lagFraction, backlogWindowMs);
-  const sustainableRate = Math.max(0, observedRate || 0) + adaptive.catchUpRate;
-  const lagBudget = sourceVisibleCharacters != null
-    ? Math.max(0, sourceVisibleCharacters) * lagFraction
-    : 0;
-  const excessBacklog = sourceVisibleCharacters != null
-    ? Math.max(0, backlogCharacters - lagBudget)
-    : 0;
-  const lagCorrectionRate = excessBacklog / TYPEWRITER_LAG_CORRECTION_WINDOW_MS * 1000;
-  const correctionRate = Math.max(0, observedRate || 0) + lagCorrectionRate;
-  return Math.max(adaptive.targetRate, sustainableRate, correctionRate);
-}
-
-export function calculateBacklogAgeMs(backlogCharacters: number, observedRate: number | null) {
-  if (backlogCharacters <= 0 || observedRate == null || observedRate <= 0) return 0;
-  return Math.max(0, backlogCharacters) / observedRate * 1000;
-}
-
-export function normalizeFrameInterval(sample: number, fallback = TYPEWRITER_DEFAULT_TICK_INTERVAL_MS) {
-  if (!Number.isFinite(sample) || sample < TYPEWRITER_MIN_FRAME_INTERVAL_MS || sample > 100) {
+  if (!Number.isFinite(sample)
+    || sample < TYPEWRITER_MIN_FRAME_INTERVAL_MS
+    || sample > TYPEWRITER_MAX_FRAME_INTERVAL_MS) {
     return fallback;
   }
   return Math.min(TYPEWRITER_MAX_FRAME_INTERVAL_MS, Math.max(TYPEWRITER_MIN_FRAME_INTERVAL_MS, sample));
 }
 
-export function updateFrameInterval(
-  previous: number | null,
-  sample: number,
-  alpha = TYPEWRITER_FRAME_INTERVAL_EMA_ALPHA,
-) {
-  const normalized = normalizeFrameInterval(sample, previous ?? TYPEWRITER_DEFAULT_TICK_INTERVAL_MS);
-  if (previous == null) return normalized;
-  return normalizeFrameInterval(updateRateEma(previous, normalized, alpha) || normalized, normalized);
+export function chooseFrameBudget(frameIntervalMs = TYPEWRITER_DEFAULT_FRAME_INTERVAL_MS) {
+  const interval = normalizeFrameInterval(frameIntervalMs);
+  return Math.min(
+    TYPEWRITER_FRAME_WORK_BUDGET_MS,
+    Math.max(TYPEWRITER_MIN_FRAME_BUDGET_MS, interval * 0.5),
+  );
 }
 
-export function chooseTickInterval(
-  frameWorkEmaMs: number,
-  frameIntervalMs = TYPEWRITER_DEFAULT_TICK_INTERVAL_MS,
-) {
-  const frameInterval = normalizeFrameInterval(frameIntervalMs);
-  const workMultiplier = frameWorkEmaMs > TYPEWRITER_FRAME_WORK_BUDGET_MS ? 2 : 1;
-  return Math.min(TYPEWRITER_MAX_FRAME_INTERVAL_MS, frameInterval * workMultiplier);
-}
-
-export function chooseCharsPerTick(
-  targetRate: number,
-  tickInterval: number,
+/** Select the next buffered work chunk from measured frame cost, not input rate. */
+export function chooseBufferedStep(
+  bufferedCharacters: number,
   previousStep: number,
   frameWorkMs: number,
-  frameWorkBudgetMs = TYPEWRITER_FRAME_WORK_BUDGET_MS,
-  allowGrowth = true,
+  frameBudgetMs: number,
 ) {
-  const desiredStep = Math.max(1, Math.ceil(Math.max(0, targetRate) * tickInterval / 1000));
-  const currentStep = Math.max(1, Math.trunc(previousStep) || 1);
-  if (!allowGrowth) return Math.min(desiredStep, currentStep);
-  if (!Number.isFinite(frameWorkMs) || frameWorkMs <= 0) {
-    return Math.min(desiredStep, Math.max(currentStep, currentStep * 4));
-  }
-  if (frameWorkMs > frameWorkBudgetMs) {
-    return Math.max(1, Math.min(desiredStep, Math.floor(currentStep * frameWorkBudgetMs / frameWorkMs)));
-  }
-  return Math.min(desiredStep, Math.max(currentStep, currentStep * 4));
+  const available = Math.max(1, Math.trunc(bufferedCharacters));
+  const current = Math.max(1, Math.trunc(previousStep) || 1);
+  const budget = Math.max(TYPEWRITER_MIN_FRAME_BUDGET_MS, frameBudgetMs);
+  if (frameWorkMs > budget) return Math.min(available, Math.max(1, Math.floor(current * 0.5)));
+  if (frameWorkMs <= budget * 0.5) return Math.min(available, Math.min(TYPEWRITER_MAX_STEP, current * 2));
+  return Math.min(available, current);
 }
 
-export function isFrameHealthy(
-  frameWorkEmaMs: number,
-  commitToNextFrameMs: number | null,
-  frameGapMs: number | null,
-  frameIntervalMs = TYPEWRITER_DEFAULT_TICK_INTERVAL_MS,
-  frameWorkBudgetMs = TYPEWRITER_FRAME_WORK_BUDGET_MS,
-) {
-  const expectedFrame = normalizeFrameInterval(frameIntervalMs);
-  // A fixed 8 ms budget already misses a 144 Hz frame (6.94 ms). Scale the
-  // budget with the measured display interval and reserve half a frame for
-  // the renderer's own commit and compositor work.
-  const measuredWorkBudget = Math.min(frameWorkBudgetMs, Math.max(2, expectedFrame * 0.5));
-  if (!Number.isFinite(frameWorkEmaMs) || frameWorkEmaMs > measuredWorkBudget) return false;
-  // Treat a missed display interval as unhealthy. The old 1.75x + 8 ms
-  // threshold allowed one or more dropped frames to look healthy, then the
-  // adaptive path slowed the animation further.
-  const frameBudget = Math.max(expectedFrame * 1.5, expectedFrame + 2);
-  if (commitToNextFrameMs != null && commitToNextFrameMs > frameBudget) return false;
-  if (frameGapMs != null && frameGapMs > frameBudget) return false;
-  return true;
+export function chooseFixedStep(availableCharacters: number) {
+  return Math.min(Math.max(1, Math.trunc(availableCharacters)), TYPEWRITER_FIXED_STEP);
 }
 
-export function chooseAdaptiveTickInterval(
-  _frameWorkEmaMs: number,
-  _commitToNextFrameMs: number | null,
-  _frameGapMs: number | null,
-  frameIntervalMs = TYPEWRITER_DEFAULT_TICK_INTERVAL_MS,
+export function chooseAdaptiveStep(
+  availableCharacters: number,
+  observedRate: number | null,
+  backlogCharacters: number,
+  frameIntervalMs: number,
 ) {
-  // Keep the transformer on the browser's rAF cadence. Adaptive health
-  // reduces charsPerTick; doubling tickInterval creates an artificial 30 Hz
-  // fallback after a dropped frame.
-  return normalizeFrameInterval(frameIntervalMs);
-}
-
-export function chooseAdaptiveCharsPerTick(
-  targetRate: number,
-  tickInterval: number,
-  previousStep: number,
-  frameHealthy: boolean,
-  allowGrowth = true,
-) {
-  const desiredStep = Math.max(1, Math.ceil(Math.max(0, targetRate) * tickInterval / 1000));
-  const currentStep = Math.max(1, Math.trunc(previousStep) || 1);
-  if (!frameHealthy) {
-    const reduction = Math.max(1, Math.floor(currentStep * 0.25));
-    return Math.max(1, Math.min(desiredStep, currentStep - reduction));
-  }
-  if (!allowGrowth) return Math.min(desiredStep, currentStep);
-  const growth = Math.max(1, Math.ceil(currentStep * 0.25));
-  return Math.min(desiredStep, currentStep + growth);
-}
-
-export function chooseFallbackMode(
-  frameWorkEmaMs: number,
-  charsPerTick: number,
-  blockFallbackActive = false,
-): TypewriterFallbackMode {
-  if (blockFallbackActive) return "safe-block";
-  if (frameWorkEmaMs > TYPEWRITER_FRAME_WORK_BUDGET_MS && charsPerTick <= 1) return "safe-step";
-  return "normal";
+  const available = Math.max(1, Math.trunc(availableCharacters));
+  const catchUpRate = Math.max(0, backlogCharacters) / TYPEWRITER_ADAPTIVE_BACKLOG_WINDOW_MS * 1000;
+  const targetRate = Math.max(0, observedRate || 0, catchUpRate);
+  if (targetRate <= 0) return Math.min(available, TYPEWRITER_FIXED_STEP);
+  const interval = normalizeFrameInterval(frameIntervalMs);
+  return Math.min(available, Math.max(1, Math.min(TYPEWRITER_MAX_STEP, Math.ceil(targetRate * interval / 1000))));
 }
 
 export function visibleAstCharacters(node: any): number {
@@ -221,10 +105,9 @@ export function visibleAstCharacters(node: any): number {
 }
 
 /**
- * The core math plugin handles a math block only when math is the block root.
- * Markdown paragraphs and table cells are sliced by the generic AST path, so
- * nested math would otherwise be exposed one source character at a time.
- * Store its source outside `value`; the core then treats the node as a leaf.
+ * The core math plugin treats formulas as one visible unit. Nested formulas
+ * need the same contract before they enter the generic AST slicer. Keep their
+ * source outside `value`; MathNode reads it from this private field.
  */
 export function prepareTypewriterNode(node: any): any {
   if (!node || typeof node !== "object") return node;
@@ -250,214 +133,405 @@ export function prepareTypewriterBlocks<T extends { node: any }>(blocks: T[]): T
   });
 }
 
-function mathSource(node: any) {
-  return String(node?.[TYPEWRITER_MATH_SOURCE] ?? node?.value ?? "");
-}
-
-function visibleBlockCharacters(blocks: Array<{ node?: any; displayNode?: any }>, display = false) {
+function countVisibleBlocks(blocks: Array<{ node?: any; displayNode?: any }>, display = false) {
   return blocks.reduce((total, block) => total + visibleAstCharacters(display ? block.displayNode : block.node), 0);
 }
 
-export type AdaptiveIncremarkTypewriterOptions = {
+function smartMergeAst(baseNode: any, fullSlice: any): any {
+  if (!baseNode || !fullSlice || baseNode.type !== fullSlice.type) return fullSlice;
+  if (fullSlice.value !== undefined) return fullSlice;
+  if (!Array.isArray(baseNode.children) || !Array.isArray(fullSlice.children)) return fullSlice;
+  if (fullSlice.children.length < baseNode.children.length) return fullSlice;
+  if (fullSlice.children.length === baseNode.children.length) {
+    if (baseNode.children.length === 0) return fullSlice;
+    const lastIndex = baseNode.children.length - 1;
+    return {
+      ...fullSlice,
+      children: [
+        ...baseNode.children.slice(0, lastIndex),
+        smartMergeAst(baseNode.children[lastIndex], fullSlice.children[lastIndex]),
+      ],
+    };
+  }
+  const baseLastIndex = baseNode.children.length - 1;
+  return {
+    ...fullSlice,
+    children: [
+      ...baseNode.children.slice(0, baseLastIndex),
+      smartMergeAst(baseNode.children[baseLastIndex], fullSlice.children[baseLastIndex]),
+      ...fullSlice.children.slice(baseNode.children.length),
+    ],
+  };
+}
+
+function appendToAst(baseNode: any, sourceNode: any, endChars: number) {
+  const fullSlice = sliceAst(sourceNode, endChars);
+  return fullSlice ? smartMergeAst(baseNode, fullSlice) : baseNode;
+}
+
+function emptyDisplayNode(node: any): any {
+  if (!node || typeof node !== "object") return { type: "paragraph", children: [] };
+  if (Array.isArray(node.children)) return { ...node, children: [] };
+  return { type: node.type || "paragraph", children: [] };
+}
+
+export type BufferedIncremarkTypewriterOptions = {
   onChange: (blocks: DisplayBlock[]) => void;
   onDisplayBusyChange?: (busy: boolean) => void;
   onMetrics?: (metrics: TypewriterMetrics) => void;
-  adaptive?: boolean;
+  pacing?: IncremarkPacingMode;
 };
 
 /**
- * Adaptive pacing around Incremark's native block transformer.
+ * A producer-consumer scheduler for incremental Markdown.
  *
- * The transformer remains the owner of rAF scheduling, block queues, AST
- * slicing, cached display nodes, and hidden-tab pausing. This class only
- * supplies source-rate feedback and frame-work limits.
+ * Parser updates replace the source queue. The consumer drains complete
+ * blocks and bounded partial slices on one rAF schedule. Buffered mode selects
+ * work from measured frame cost; adaptive mode also uses the observed source
+ * rate to catch up; fixed mode uses a stable chunk size. None of these modes
+ * render outside the frame budget.
  */
-export class AdaptiveIncremarkTypewriter {
-  readonly transformer;
-  private readonly callbacks: AdaptiveIncremarkTypewriterOptions;
-  private adaptive: boolean;
+export class BufferedIncremarkTypewriter {
+  private readonly callbacks: BufferedIncremarkTypewriterOptions;
+  private pacing: IncremarkPacingMode;
+  private sourceBlocks: ParsedBlock[] = [];
+  private progress = new Map<string, number>();
+  private cachedDisplay = new Map<string, { node: any; progress: number; source: any }>();
   private baselineCharacters = 0;
-  private sourceVisibleCharacters = 0;
-  private observedRate: number | null = null;
-  private lastSourceCharacters = 0;
-  private lastSourceAt: number | null = null;
-  private lastDisplayedCharacters = 0;
-  private lastDisplayedAt: number | null = null;
-  private currentStep = 1;
+  private enabled = false;
+  private busy = false;
+  private frameHandle: number | null = null;
+  private lastFrameAt: number | null = null;
+  private frameIntervalMs = TYPEWRITER_DEFAULT_FRAME_INTERVAL_MS;
+  private currentStep = TYPEWRITER_INITIAL_STEP;
   private frameWorkMs = 0;
   private frameWorkEmaMs = 0;
-  private overBudgetFrames = 0;
-  private fallbackInProgress = false;
-  private lastFallbackMode: TypewriterFallbackMode = "normal";
-  private busy = false;
-  private enabled = false;
-  private publishedBlocks = new Map<string, DisplayBlock>();
-  private frameProbeId: number | null = null;
-  private lastFrameAt: number | null = null;
-  private frameIntervalMs = TYPEWRITER_MIN_FRAME_INTERVAL_MS;
-  private frameIntervalEmaMs = TYPEWRITER_MIN_FRAME_INTERVAL_MS;
-  private lastFrameGapMs: number | null = null;
-  private commitToNextFrameMs: number | null = null;
-  private pendingCommitAt: number | null = null;
-  private commitProbeId: number | null = null;
-  private frameHealthy = true;
-  private saturationSince: number | null = null;
-  private saturationMs = 0;
-  private lastProgressAt: number | null = null;
-  private adaptiveFallbackMode: TypewriterFallbackMode = "normal";
-  private metrics: TypewriterMetrics = {
-    adaptive: false,
+  private observedRate: number | null = null;
+  private lastObservedSourceCharacters = 0;
+  private lastObservedSourceAt: number | null = null;
+  private backlogStartedAt: number | null = null;
+  private lastMetrics: TypewriterMetrics = {
+    scheduler: "buffered",
     sourceVisibleCharacters: 0,
     displayedVisibleCharacters: 0,
     backlogCharacters: 0,
     backlogAgeMs: 0,
-    observedRate: null,
-    targetRate: 0,
-    controlRate: 0,
-    displayRate: null,
-    relativeLag: null,
-    charsPerTick: 1,
-    frameIntervalMs: TYPEWRITER_MIN_FRAME_INTERVAL_MS,
-    tickInterval: TYPEWRITER_MIN_FRAME_INTERVAL_MS,
+    pendingBlockCount: 0,
+    completedBlockCount: 0,
+    charsPerFrame: 0,
+    frameIntervalMs: TYPEWRITER_DEFAULT_FRAME_INTERVAL_MS,
+    frameBudgetMs: chooseFrameBudget(),
     frameWorkMs: 0,
     frameWorkEmaMs: 0,
-    fallbackMode: "normal",
-    lagTargetMet: true,
     terminal: false,
   };
+  private publishedBlocks = new Map<string, DisplayBlock>();
+  private terminalEmitted = false;
 
-  constructor(callbacks: AdaptiveIncremarkTypewriterOptions) {
+  constructor(callbacks: BufferedIncremarkTypewriterOptions) {
     this.callbacks = callbacks;
-    this.adaptive = callbacks.adaptive === true;
-    this.transformer = createBlockTransformer({
-      charsPerTick: 1,
-      tickInterval: TYPEWRITER_MIN_FRAME_INTERVAL_MS,
-      effect: "none",
-      pauseOnHidden: true,
-      plugins: [mathPlugin],
-      onChange: (blocks) => {
-        if (this.fallbackInProgress && blocks.length === 0) return;
-        const startedAt = performance.now();
-        const published = this.stabilizeDisplayBlocks(blocks);
-        callbacks.onChange(published);
-        const committedAt = performance.now();
-        this.recordDisplay(published, committedAt - startedAt);
-        this.scheduleCommitProbe(committedAt);
-      },
-      onAllComplete: () => {
-        // The native transformer can finish its final slice without another
-        // observable change callback. Read the committed display state before
-        // emitting the terminal metric, or the harness reports a false tail.
-        this.recordDisplay(this.transformer.getDisplayBlocks(), 0);
-        this.setBusy(false);
-        this.emitMetrics(performance.now(), true);
-      },
-    });
+    this.pacing = callbacks.pacing || "buffered";
   }
 
   setBaselineCharacters(characters: number) {
     this.baselineCharacters = Math.max(0, Math.trunc(characters));
-    this.recalculate(performance.now());
+    this.emitMetrics(performance.now(), false, 0, this.getDisplayBlocks());
   }
 
   setEnabled(enabled: boolean) {
     if (this.enabled === enabled) return;
     this.enabled = enabled;
-    if (enabled) this.scheduleFrameProbe();
-    else this.stopFrameProbe();
+    if (enabled) this.scheduleFrame();
+    else this.cancelFrame();
   }
 
-  setAdaptive(enabled: boolean) {
-    const next = Boolean(enabled);
-    if (this.adaptive === next) return;
-    this.adaptive = next;
-    this.resetAdaptiveHealth();
-    this.recalculate(performance.now(), this.lastDisplayedCharacters, this.metrics.displayRate, !next);
+  setPacing(mode: IncremarkPacingMode) {
+    if (this.pacing === mode) return;
+    this.pacing = mode;
+    this.currentStep = mode === "fixed" ? TYPEWRITER_FIXED_STEP : TYPEWRITER_INITIAL_STEP;
+    this.emitMetrics(performance.now(), false, 0, this.getDisplayBlocks());
+    this.scheduleFrame();
   }
 
-  observeSource(blocks: ParsedBlock[], now = performance.now()) {
-    const sourceCharacters = this.baselineCharacters + visibleBlockCharacters(blocks);
-    const elapsed = this.lastSourceAt == null ? 0 : now - this.lastSourceAt;
-    const delta = sourceCharacters - this.lastSourceCharacters;
-    if (elapsed > 0 && delta > 0) {
-      this.observedRate = updateRateEma(this.observedRate, delta / elapsed * 1000);
-    }
-    this.lastSourceAt = now;
-    this.lastSourceCharacters = sourceCharacters;
-    this.sourceVisibleCharacters = sourceCharacters;
-    this.recalculate(now, this.lastDisplayedCharacters, this.metrics.displayRate, !this.adaptive);
+  observeSource(blocks: ParsedBlock[]) {
+    const now = performance.now();
+    const sourceCharacters = this.baselineCharacters + countVisibleBlocks(blocks);
+    const elapsed = this.lastObservedSourceAt == null ? 0 : now - this.lastObservedSourceAt;
+    const delta = sourceCharacters - this.lastObservedSourceCharacters;
+    if (elapsed > 0 && delta > 0) this.observedRate = updateEma(this.observedRate, delta / elapsed * 1000);
+    this.lastObservedSourceCharacters = sourceCharacters;
+    this.lastObservedSourceAt = now;
+    this.setSourceBlocks(blocks);
+    this.scheduleFrame();
   }
 
   push(blocks: ParsedBlock[]) {
-    this.transformer.push(prepareTypewriterBlocks(blocks));
-    this.recalculate(performance.now());
+    this.setSourceBlocks(blocks);
+    this.scheduleFrame();
   }
 
   reset() {
-    this.transformer.reset();
+    this.cancelFrame();
+    this.sourceBlocks = [];
+    this.progress.clear();
+    this.cachedDisplay.clear();
     this.publishedBlocks.clear();
-    this.sourceVisibleCharacters = this.baselineCharacters;
-    this.lastSourceCharacters = this.baselineCharacters;
-    this.lastSourceAt = null;
+    this.baselineCharacters = 0;
+    this.lastFrameAt = null;
+    this.frameIntervalMs = TYPEWRITER_DEFAULT_FRAME_INTERVAL_MS;
+    this.currentStep = TYPEWRITER_INITIAL_STEP;
+    this.frameWorkMs = 0;
+    this.frameWorkEmaMs = 0;
     this.observedRate = null;
-    this.lastDisplayedCharacters = this.baselineCharacters;
-    this.lastDisplayedAt = null;
-    this.resetAdaptiveHealth();
+    this.lastObservedSourceCharacters = this.baselineCharacters;
+    this.lastObservedSourceAt = null;
+    this.backlogStartedAt = null;
+    this.terminalEmitted = false;
     this.setBusy(false);
-    this.recalculate(performance.now());
+    this.emitMetrics(performance.now(), false, 0, []);
   }
 
   seed(blocks: ParsedBlock[]) {
     this.reset();
-    this.baselineCharacters = visibleBlockCharacters(blocks);
-    this.sourceVisibleCharacters = this.baselineCharacters;
-    this.lastSourceCharacters = this.baselineCharacters;
-    this.lastDisplayedCharacters = this.baselineCharacters;
-    this.setBusy(false);
-    this.recalculate(performance.now());
+    this.baselineCharacters = countVisibleBlocks(blocks);
+    this.emitMetrics(performance.now(), false, 0, []);
   }
 
   flush() {
-    this.transformer.skip();
+    for (const block of this.sourceBlocks) this.progress.set(block.id, this.blockCharacters(block));
+    const display = this.getDisplayBlocks();
     this.setBusy(false);
-    this.recalculate(performance.now());
+    this.callbacks.onChange(display);
+    this.emitMetrics(performance.now(), true, 0, display);
   }
 
-  /** Record content that is already visible outside the native queue. */
   completeSeeded() {
-    const now = performance.now();
-    this.lastDisplayedCharacters = this.sourceVisibleCharacters;
-    this.lastDisplayedAt = now;
-    this.emitMetrics(now, true);
     this.setBusy(false);
+    this.emitMetrics(performance.now(), true, 0, []);
   }
 
   getDisplayBlocks() {
-    return this.transformer.getDisplayBlocks();
+    return this.stabilizeDisplayBlocks(this.buildDisplayBlocks());
   }
 
   getMetrics() {
-    return this.metrics;
+    return this.lastMetrics;
   }
 
   getDebugState() {
-    const state = this.transformer.getState();
-    const current = state.currentBlock;
-    const transformer = this.transformer as unknown as { countChars(node: any): number };
+    const activeIndex = this.firstIncompleteIndex();
+    const active = activeIndex >= 0 ? this.sourceBlocks[activeIndex] : null;
+    const currentProgress = active ? this.progress.get(active.id) || 0 : 0;
+    const currentTotal = active ? this.blockCharacters(active) : 0;
     return {
-      processing: this.transformer.isProcessing(),
-      currentBlockId: current?.id ?? null,
-      currentProgress: state.currentProgress,
-      currentTotal: current ? transformer.countChars(current.node) : 0,
-      pendingBlockCount: state.pendingBlocks.length,
-      completedBlockCount: state.completedBlocks.length,
+      processing: activeIndex >= 0,
+      currentBlockId: active?.id ?? null,
+      currentProgress,
+      currentTotal,
+      pendingBlockCount: activeIndex >= 0 ? Math.max(0, this.sourceBlocks.length - activeIndex - 1) : 0,
+      completedBlockCount: activeIndex >= 0 ? activeIndex : this.sourceBlocks.length,
     };
   }
 
   destroy() {
-    this.stopFrameProbe();
+    this.cancelFrame();
     this.publishedBlocks.clear();
-    this.transformer.destroy();
+    this.sourceBlocks = [];
+    this.progress.clear();
+    this.cachedDisplay.clear();
+    this.setBusy(false);
+  }
+
+  private setSourceBlocks(blocks: ParsedBlock[]) {
+    const prepared = prepareTypewriterBlocks(blocks);
+    const ids = new Set(prepared.map((block) => block.id));
+    for (const id of this.progress.keys()) if (!ids.has(id)) this.progress.delete(id);
+    for (const id of this.cachedDisplay.keys()) if (!ids.has(id)) this.cachedDisplay.delete(id);
+    for (const block of prepared) {
+      const previous = this.sourceBlocks.find((entry) => entry.id === block.id);
+      if (!previous || previous.node !== block.node) {
+        const previousProgress = this.progress.get(block.id) || 0;
+        this.progress.set(block.id, Math.min(previousProgress, this.blockCharacters(block)));
+        this.cachedDisplay.delete(block.id);
+      }
+    }
+    this.sourceBlocks = prepared;
+    const active = this.firstIncompleteIndex() >= 0;
+    if (active && this.backlogStartedAt == null) this.backlogStartedAt = performance.now();
+    if (!active) this.backlogStartedAt = null;
+    this.setBusy(active);
+    this.terminalEmitted = false;
+  }
+
+  private scheduleFrame() {
+    if (!this.enabled || this.frameHandle != null || typeof requestAnimationFrame !== "function") return;
+    this.frameHandle = requestAnimationFrame((timestamp) => {
+      this.frameHandle = null;
+      this.drainFrame(timestamp);
+      if (this.firstIncompleteIndex() >= 0) this.scheduleFrame();
+    });
+  }
+
+  private cancelFrame() {
+    if (this.frameHandle != null && typeof cancelAnimationFrame === "function") {
+      cancelAnimationFrame(this.frameHandle);
+    }
+    this.frameHandle = null;
+  }
+
+  private drainFrame(timestamp: number) {
+    if (this.lastFrameAt != null) {
+      this.frameIntervalMs = normalizeFrameInterval(timestamp - this.lastFrameAt, this.frameIntervalMs);
+    }
+    this.lastFrameAt = timestamp;
+    const frameBudgetMs = chooseFrameBudget(this.frameIntervalMs);
+    const startedAt = performance.now();
+    let accepted = this.getDisplayBlocks();
+    const sourceCharacters = this.baselineCharacters + countVisibleBlocks(this.sourceBlocks);
+    let displayedCharacters = this.baselineCharacters + countVisibleBlocks(accepted, true);
+    let processedCharacters = 0;
+    let processedBlocks = 0;
+    let acceptedProgress = false;
+
+    while (processedCharacters < TYPEWRITER_MAX_CHARS_PER_FRAME
+      && processedBlocks < TYPEWRITER_MAX_BLOCKS_PER_FRAME) {
+      const activeIndex = this.firstIncompleteIndex();
+      if (activeIndex < 0) break;
+      const block = this.sourceBlocks[activeIndex]!;
+      const total = this.blockCharacters(block);
+      const current = this.progress.get(block.id) || 0;
+      const remaining = Math.max(0, total - current);
+      if (remaining <= 0) continue;
+      const step = Math.min(
+        remaining,
+        TYPEWRITER_MAX_CHARS_PER_FRAME - processedCharacters,
+        this.chooseStep(remaining, sourceCharacters - displayedCharacters, frameBudgetMs),
+      );
+      if (step <= 0) break;
+      const nextProgress = current + step;
+      this.progress.set(block.id, nextProgress);
+      const candidate = this.getDisplayBlocks();
+      const elapsed = performance.now() - startedAt;
+      if (elapsed > frameBudgetMs && processedCharacters > 0) {
+        this.progress.set(block.id, current);
+        break;
+      }
+      accepted = candidate;
+      displayedCharacters = this.baselineCharacters + countVisibleBlocks(accepted, true);
+      acceptedProgress = true;
+      processedCharacters += step;
+      if (nextProgress >= total) processedBlocks += 1;
+      if (elapsed >= frameBudgetMs) break;
+    }
+
+    if (!acceptedProgress && this.firstIncompleteIndex() >= 0) {
+      const active = this.sourceBlocks[this.firstIncompleteIndex()]!;
+      const current = this.progress.get(active.id) || 0;
+      const next = Math.min(this.blockCharacters(active), current + 1);
+      this.progress.set(active.id, next);
+      accepted = this.getDisplayBlocks();
+      processedCharacters = Math.max(1, next - current);
+    }
+
+    this.callbacks.onChange(accepted);
+    const frameWorkMs = Math.max(0, performance.now() - startedAt);
+    this.frameWorkMs = frameWorkMs;
+    this.frameWorkEmaMs = updateEma(this.frameWorkEmaMs, frameWorkMs) || frameWorkMs;
+    if (frameWorkMs > frameBudgetMs) {
+      this.currentStep = Math.max(1, Math.floor(this.currentStep * 0.5));
+    } else if (frameWorkMs <= frameBudgetMs * 0.5) {
+      this.currentStep = Math.min(TYPEWRITER_MAX_STEP, Math.max(1, this.currentStep * 2));
+    }
+    const pending = this.firstIncompleteIndex() >= 0;
+    if (!pending) {
+      this.backlogStartedAt = null;
+      this.setBusy(false);
+    } else if (this.backlogStartedAt == null) {
+      this.backlogStartedAt = performance.now();
+      this.setBusy(true);
+    }
+    const terminal = !pending && !this.terminalEmitted;
+    if (terminal) this.terminalEmitted = true;
+    this.emitMetrics(performance.now(), terminal, processedCharacters, accepted, frameBudgetMs);
+  }
+
+  private chooseStep(availableCharacters: number, backlogCharacters: number, frameBudgetMs: number) {
+    if (this.pacing === "fixed") return chooseFixedStep(availableCharacters);
+    if (this.pacing === "adaptive") {
+      return chooseAdaptiveStep(availableCharacters, this.observedRate, backlogCharacters, this.frameIntervalMs);
+    }
+    return chooseBufferedStep(availableCharacters, this.currentStep, this.frameWorkMs, frameBudgetMs);
+  }
+
+  private emitMetrics(
+    now: number,
+    terminal: boolean,
+    charsPerFrame: number,
+    display: DisplayBlock[],
+    frameBudgetMs = chooseFrameBudget(this.frameIntervalMs),
+  ) {
+    const sourceVisibleCharacters = this.baselineCharacters + countVisibleBlocks(this.sourceBlocks);
+    const displayedVisibleCharacters = this.baselineCharacters + countVisibleBlocks(display, true);
+    const backlogCharacters = Math.max(0, sourceVisibleCharacters - displayedVisibleCharacters);
+    const activeIndex = this.firstIncompleteIndex();
+    this.lastMetrics = {
+      scheduler: this.pacing,
+      sourceVisibleCharacters,
+      displayedVisibleCharacters,
+      backlogCharacters,
+      backlogAgeMs: this.backlogStartedAt == null ? 0 : Math.max(0, now - this.backlogStartedAt),
+      pendingBlockCount: activeIndex >= 0 ? Math.max(0, this.sourceBlocks.length - activeIndex) : 0,
+      completedBlockCount: activeIndex >= 0 ? activeIndex : this.sourceBlocks.length,
+      charsPerFrame,
+      frameIntervalMs: this.frameIntervalMs,
+      frameBudgetMs,
+      frameWorkMs: this.frameWorkMs,
+      frameWorkEmaMs: this.frameWorkEmaMs,
+      terminal,
+    };
+    this.callbacks.onMetrics?.(this.lastMetrics);
+  }
+
+  private firstIncompleteIndex() {
+    return this.sourceBlocks.findIndex((block) => (this.progress.get(block.id) || 0) < this.blockCharacters(block));
+  }
+
+  private blockCharacters(block: ParsedBlock) {
+    return Math.max(1, countChars(block.node));
+  }
+
+  private buildDisplayBlocks(): DisplayBlock[] {
+    const activeIndex = this.firstIncompleteIndex();
+    const completed = activeIndex < 0 ? this.sourceBlocks : this.sourceBlocks.slice(0, activeIndex);
+    const display = completed.map((block) => ({
+      ...block,
+      status: "completed",
+      displayNode: block.node,
+      progress: 1,
+      isDisplayComplete: true,
+    } as DisplayBlock));
+    if (activeIndex < 0) return display;
+    const active = this.sourceBlocks[activeIndex]!;
+    const total = this.blockCharacters(active);
+    const progress = Math.min(total, this.progress.get(active.id) || 0);
+    const cached = this.cachedDisplay.get(active.id);
+    let displayNode: any;
+    if (progress <= 0) {
+      displayNode = emptyDisplayNode(active.node);
+    } else if (cached && cached.source === active.node && progress >= cached.progress) {
+      displayNode = appendToAst(cached.node, active.node, progress);
+    } else {
+      displayNode = sliceAst(active.node, progress) || emptyDisplayNode(active.node);
+    }
+    this.cachedDisplay.set(active.id, { node: displayNode, progress, source: active.node });
+    display.push({
+      ...active,
+      status: "pending",
+      displayNode,
+      progress: total > 0 ? progress / total : 1,
+      isDisplayComplete: false,
+    } as DisplayBlock);
+    return display;
   }
 
   private stabilizeDisplayBlocks(blocks: DisplayBlock[]) {
@@ -483,294 +557,9 @@ export class AdaptiveIncremarkTypewriter {
     return next;
   }
 
-  private scheduleFrameProbe() {
-    if (!this.enabled || this.frameProbeId != null || typeof requestAnimationFrame !== "function") return;
-    this.frameProbeId = requestAnimationFrame((timestamp) => {
-      this.frameProbeId = null;
-      if (!this.enabled) return;
-      if (this.lastFrameAt != null) {
-        const gap = timestamp - this.lastFrameAt;
-        if (gap >= TYPEWRITER_MIN_FRAME_INTERVAL_MS && gap <= 100) {
-          if (this.adaptive) {
-            const previousInterval = this.frameIntervalMs;
-            const previousHealthy = this.frameHealthy;
-            const previousFallback = this.adaptiveFallbackMode;
-            this.lastFrameGapMs = gap;
-            const next = this.lastFrameAt == null
-              ? normalizeFrameInterval(gap)
-              : updateFrameInterval(this.frameIntervalEmaMs, gap);
-            this.frameIntervalMs = next;
-            this.frameIntervalEmaMs = next;
-            this.frameHealthy = isFrameHealthy(
-              this.frameWorkEmaMs,
-              this.commitToNextFrameMs,
-              this.lastFrameGapMs,
-              previousInterval,
-            );
-            const shouldBlock = this.updateAdaptiveHealth(timestamp, this.lastDisplayedCharacters);
-            if (shouldBlock) this.completeCurrentBlockSafely();
-            if (previousHealthy !== this.frameHealthy
-              || previousFallback !== this.adaptiveFallbackMode
-              || Math.abs(next - previousInterval) >= 0.1) {
-              this.recalculate(timestamp);
-            }
-          } else {
-            const next = this.lastFrameAt == null
-              ? normalizeFrameInterval(gap)
-              : updateFrameInterval(this.frameIntervalEmaMs, gap);
-            if (Math.abs(next - this.frameIntervalMs) >= 0.1) {
-              this.frameIntervalMs = next;
-              this.frameIntervalEmaMs = next;
-              this.recalculate(timestamp);
-            } else {
-              this.frameIntervalEmaMs = next;
-            }
-          }
-        }
-      }
-      this.lastFrameAt = timestamp;
-      this.scheduleFrameProbe();
-    });
-  }
-
-  private stopFrameProbe() {
-    if (this.frameProbeId != null && typeof cancelAnimationFrame === "function") {
-      cancelAnimationFrame(this.frameProbeId);
-    }
-    this.frameProbeId = null;
-    this.lastFrameAt = null;
-    if (this.commitProbeId != null && typeof cancelAnimationFrame === "function") {
-      cancelAnimationFrame(this.commitProbeId);
-    }
-    this.commitProbeId = null;
-    this.pendingCommitAt = null;
-  }
-
-  private recordDisplay(blocks: DisplayBlock[], frameWorkMs: number) {
-    if (this.adaptive) {
-      this.recordAdaptiveDisplay(blocks, frameWorkMs);
-      return;
-    }
-    const now = performance.now();
-    const displayedCharacters = this.baselineCharacters + visibleBlockCharacters(blocks, true);
-    const elapsed = this.lastDisplayedAt == null ? 0 : now - this.lastDisplayedAt;
-    const delta = displayedCharacters - this.lastDisplayedCharacters;
-    const displayRate = elapsed > 0 && delta > 0 ? delta / elapsed * 1000 : this.metrics.displayRate;
-    this.lastDisplayedAt = now;
-    this.lastDisplayedCharacters = displayedCharacters;
-    this.frameWorkMs = Math.max(0, frameWorkMs);
-    this.frameWorkEmaMs = this.frameWorkEmaMs === 0
-      ? this.frameWorkMs
-      : updateRateEma(this.frameWorkEmaMs, this.frameWorkMs) || this.frameWorkMs;
-    this.overBudgetFrames = this.frameWorkEmaMs > TYPEWRITER_FRAME_WORK_BUDGET_MS
-      ? this.overBudgetFrames + 1
-      : 0;
-    if (this.overBudgetFrames === 0) this.lastFallbackMode = "normal";
-    const transformerComplete = !this.transformer.isProcessing();
-    const reachedSource = this.sourceVisibleCharacters <= displayedCharacters;
-    // The DOM has received the final display blocks before onChange returns.
-    // Do not keep a stale busy marker when a later parser update only refreshes
-    // an already-completed block after the native transformer has gone idle.
-    this.setBusy(!reachedSource || !transformerComplete);
-    if (this.overBudgetFrames >= 3 && this.sourceVisibleCharacters > displayedCharacters) {
-      this.completeCurrentBlockSafely();
-    }
-    this.recalculate(now, displayedCharacters, displayRate, true);
-  }
-
-  private recordAdaptiveDisplay(blocks: DisplayBlock[], frameWorkMs: number) {
-    const now = performance.now();
-    const displayedCharacters = this.baselineCharacters + visibleBlockCharacters(blocks, true);
-    const elapsed = this.lastDisplayedAt == null ? 0 : now - this.lastDisplayedAt;
-    const delta = displayedCharacters - this.lastDisplayedCharacters;
-    const displayRate = elapsed > 0 && delta > 0 ? delta / elapsed * 1000 : this.metrics.displayRate;
-    this.lastDisplayedAt = now;
-    this.lastDisplayedCharacters = displayedCharacters;
-    this.frameWorkMs = Math.max(0, frameWorkMs);
-    this.frameWorkEmaMs = this.frameWorkEmaMs === 0
-      ? this.frameWorkMs
-      : updateRateEma(this.frameWorkEmaMs, this.frameWorkMs) || this.frameWorkMs;
-    if (delta > 0) this.lastProgressAt = now;
-    this.frameHealthy = isFrameHealthy(
-      this.frameWorkEmaMs,
-      this.commitToNextFrameMs,
-      this.lastFrameGapMs,
-      this.frameIntervalMs,
-    );
-    const shouldBlock = this.updateAdaptiveHealth(now, displayedCharacters);
-    const transformerComplete = !this.transformer.isProcessing();
-    const reachedSource = this.sourceVisibleCharacters <= displayedCharacters;
-    this.setBusy(!reachedSource || !transformerComplete);
-    if (shouldBlock) this.completeCurrentBlockSafely();
-    this.recalculate(now, displayedCharacters, displayRate, delta > 0);
-  }
-
-  private scheduleCommitProbe(committedAt: number) {
-    if (!this.adaptive || !this.enabled || typeof requestAnimationFrame !== "function") return;
-    this.pendingCommitAt = committedAt;
-    if (this.commitProbeId != null) return;
-    this.commitProbeId = requestAnimationFrame((timestamp) => {
-      this.commitProbeId = null;
-      const pendingCommitAt = this.pendingCommitAt;
-      this.pendingCommitAt = null;
-      if (pendingCommitAt == null || !this.enabled) return;
-      this.commitToNextFrameMs = Math.max(0, timestamp - pendingCommitAt);
-      const previousHealthy = this.frameHealthy;
-      const previousFallback = this.adaptiveFallbackMode;
-      this.frameHealthy = isFrameHealthy(
-        this.frameWorkEmaMs,
-        this.commitToNextFrameMs,
-        this.lastFrameGapMs,
-        this.frameIntervalMs,
-      );
-      const shouldBlock = this.updateAdaptiveHealth(timestamp, this.lastDisplayedCharacters);
-      if (shouldBlock) this.completeCurrentBlockSafely();
-      if (previousHealthy !== this.frameHealthy || previousFallback !== this.adaptiveFallbackMode) {
-        this.recalculate(timestamp);
-      }
-    });
-  }
-
-  private updateAdaptiveHealth(now: number, displayedCharacters: number) {
-    const backlogCharacters = Math.max(0, this.sourceVisibleCharacters - displayedCharacters);
-    if (backlogCharacters <= 0) {
-      this.saturationSince = null;
-      this.saturationMs = 0;
-      this.lastProgressAt = null;
-      this.adaptiveFallbackMode = "normal";
-      return false;
-    }
-    if (this.lastProgressAt == null) this.lastProgressAt = now;
-    if (this.frameHealthy) {
-      this.saturationSince = null;
-      this.saturationMs = 0;
-      if (this.adaptiveFallbackMode === "safe-step") this.adaptiveFallbackMode = "normal";
-      return false;
-    }
-    if (this.saturationSince == null) this.saturationSince = now;
-    this.saturationMs = Math.max(0, now - this.saturationSince);
-    if (this.saturationMs >= TYPEWRITER_SATURATION_WINDOW_MS
-      && this.adaptiveFallbackMode === "normal") {
-      this.adaptiveFallbackMode = "safe-step";
-    }
-    const noProgressMs = this.lastProgressAt == null ? 0 : Math.max(0, now - this.lastProgressAt);
-    if (this.saturationMs >= TYPEWRITER_SAFE_BLOCK_WINDOW_MS
-      && noProgressMs >= TYPEWRITER_NO_PROGRESS_WINDOW_MS
-      && this.adaptiveFallbackMode !== "safe-block") {
-      this.adaptiveFallbackMode = "safe-block";
-      return true;
-    }
-    return false;
-  }
-
-  private resetAdaptiveHealth() {
-    this.lastFrameGapMs = null;
-    this.commitToNextFrameMs = null;
-    this.pendingCommitAt = null;
-    this.frameHealthy = true;
-    this.saturationSince = null;
-    this.saturationMs = 0;
-    this.lastProgressAt = null;
-    this.adaptiveFallbackMode = "normal";
-  }
-
   private setBusy(next: boolean) {
     if (next === this.busy) return;
     this.busy = next;
     this.callbacks.onDisplayBusyChange?.(next);
-  }
-
-  private recalculate(
-    now: number,
-    displayedCharacters = this.lastDisplayedCharacters,
-    displayRate = this.metrics.displayRate,
-    allowStepGrowth = false,
-    terminal = false,
-  ) {
-    const backlogCharacters = Math.max(0, this.sourceVisibleCharacters - displayedCharacters);
-    const adaptive = calculateAdaptiveRate(this.observedRate, backlogCharacters);
-    const controlRate = this.adaptive
-      ? adaptive.targetRate
-      : calculateControlRate(this.observedRate, backlogCharacters, undefined, undefined, this.sourceVisibleCharacters);
-    const tickInterval = this.adaptive
-      ? chooseAdaptiveTickInterval(this.frameWorkEmaMs, this.commitToNextFrameMs, this.lastFrameGapMs, this.frameIntervalMs)
-      : chooseTickInterval(this.frameWorkEmaMs, this.frameIntervalMs);
-    const previousStep = this.currentStep;
-    const nextStep = this.adaptive
-      ? this.adaptiveFallbackMode === "normal"
-        ? chooseAdaptiveCharsPerTick(controlRate, tickInterval, this.currentStep, this.frameHealthy, allowStepGrowth)
-        : 1
-      : chooseCharsPerTick(
-        controlRate,
-        tickInterval,
-        this.currentStep,
-        this.frameWorkMs,
-        TYPEWRITER_FRAME_WORK_BUDGET_MS,
-        allowStepGrowth,
-      );
-    this.currentStep = nextStep;
-    this.transformer.setOptions({ charsPerTick: nextStep, tickInterval });
-    const backlogAgeMs = calculateBacklogAgeMs(backlogCharacters, this.observedRate);
-    const relativeLag = this.sourceVisibleCharacters > 0
-      ? backlogCharacters / this.sourceVisibleCharacters
-      : 0;
-    const fallbackMode = this.adaptive
-      ? this.adaptiveFallbackMode
-      : chooseFallbackMode(this.frameWorkEmaMs, nextStep, this.lastFallbackMode === "safe-block");
-    this.metrics = {
-      adaptive: this.adaptive,
-      sourceVisibleCharacters: this.sourceVisibleCharacters,
-      displayedVisibleCharacters: displayedCharacters,
-      backlogCharacters,
-      backlogAgeMs,
-      observedRate: this.observedRate,
-      targetRate: adaptive.targetRate,
-      controlRate,
-      displayRate,
-      relativeLag,
-      charsPerTick: nextStep,
-      frameIntervalMs: this.frameIntervalMs,
-      tickInterval,
-      frameWorkMs: this.frameWorkMs,
-      frameWorkEmaMs: this.frameWorkEmaMs,
-      fallbackMode,
-      lagTargetMet: backlogCharacters === 0 || (relativeLag <= TYPEWRITER_LAG_FRACTION && backlogAgeMs <= TYPEWRITER_BACKLOG_WINDOW_MS),
-      terminal,
-      ...(this.adaptive ? {
-        frameGapMs: this.lastFrameGapMs,
-        commitToNextFrameMs: this.commitToNextFrameMs,
-        frameHealthy: this.frameHealthy,
-        saturationMs: this.saturationMs,
-        stepChanged: nextStep !== previousStep,
-        previousCharsPerTick: previousStep,
-      } : {}),
-    };
-    this.callbacks.onMetrics?.(this.metrics);
-  }
-
-  /**
-   * Complete only the active native block, then return the remaining blocks
-   * to the native queue. BlockTransformer exposes skip() for the whole queue,
-   * so preserve the completed and pending slices around a temporary reset.
-   */
-  private completeCurrentBlockSafely() {
-    if (this.fallbackInProgress) return;
-    const state = this.transformer.getState();
-    if (!state.currentBlock) return;
-    this.fallbackInProgress = true;
-    this.lastFallbackMode = "safe-block";
-    if (this.adaptive) this.adaptiveFallbackMode = "safe-block";
-    const completed = [...state.completedBlocks, state.currentBlock];
-    const pending = [...state.pendingBlocks];
-    this.transformer.reset();
-    this.transformer.push(completed);
-    this.transformer.skip();
-    if (pending.length) this.transformer.push(pending);
-    this.fallbackInProgress = false;
-    this.overBudgetFrames = 0;
-  }
-
-  private emitMetrics(now: number, terminal = false) {
-    this.recalculate(now, this.lastDisplayedCharacters, this.metrics.displayRate, false, terminal);
   }
 }

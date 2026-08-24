@@ -1,0 +1,1135 @@
+{
+  "schemaVersion": 3,
+  "generatedAt": "2026-08-24",
+  "jsonSha256": "cfae16bab7e545230da0bdc497f6c0a4e4cb4063fb7fd73fd531e6d84b24edb0",
+  "htmlSha256": "",
+  "embeddedDataMatchesJson": true,
+  "sourceManifestSha256": "086772bb3fc75a49d2d0405980b0b536e1dd4745454f2ccb648b475edf2b9c14",
+  "primaryNodes": 17,
+  "uniqueSourceFiles": 103,
+  "moduleFileRecords": 124,
+  "edges": 28,
+  "endToEndFlows": 5,
+  "inventoryRoots": [
+    "README.md",
+    "conduit-web/README.md",
+    "conduit-web/package.json",
+    "conduit-web/index.html",
+    "conduit-web/vite.config.js",
+    "conduit-web/src",
+    "conduit-web/test",
+    "conduit-web/native",
+    "scripts"
+  ],
+  "inventoryExtensions": [
+    ".css",
+    ".html",
+    ".js",
+    ".json",
+    ".mjs",
+    ".rs",
+    ".sh",
+    ".toml",
+    ".ts",
+    ".tsx"
+  ],
+  "sourceManifest": {
+    "README.md": {
+      "sha256": "6911373810294c01578b72c7ce1f89bd5cb78a0c275719063d1eb7caeb07f319",
+      "size": 2904
+    },
+    "conduit-web/README.md": {
+      "sha256": "e70cb1ee8c100379153442b2a6b9cea6fcc7311b3b4cbc79b76518aaf62f1d22",
+      "size": 39930
+    },
+    "conduit-web/index.html": {
+      "sha256": "251b93762c9156ee20c4784fe6d3a32da3792635d6161ad92f758b238ad793d9",
+      "size": 694
+    },
+    "conduit-web/native/transcribe-rs-worker/Cargo.toml": {
+      "sha256": "c0bead3c4726ffa03d0634b01016136ed97703e58a7ee0a772547119fc66d13b",
+      "size": 393
+    },
+    "conduit-web/native/transcribe-rs-worker/src/main.rs": {
+      "sha256": "0766ba5e25577ac302538995397f92323772b3de93401ed5e8f25e66f4c4d5f2",
+      "size": 29441
+    },
+    "conduit-web/native/transcribe-rs-worker/src/protocol.rs": {
+      "sha256": "41f8a4fe426dbcdfe84fba16673e41f66e8c6bba10dd97e4cde634862e530430",
+      "size": 8809
+    },
+    "conduit-web/package.json": {
+      "sha256": "96aece360afd3c6368eef978e84ef41f582c863846fd81741179f1dc78a5f980",
+      "size": 3765
+    },
+    "conduit-web/src/active-generation.js": {
+      "sha256": "9c2bbe699a6a130cac15cb2bfa6586f3b5df7001b4b3f3584b42f53769d2ad2a",
+      "size": 10280
+    },
+    "conduit-web/src/activity.d.ts": {
+      "sha256": "e5957c36b85a037b57ee0c494b0a52447462c4656edea6c311689f202343190d",
+      "size": 547
+    },
+    "conduit-web/src/activity.js": {
+      "sha256": "360952f9befb622ae194540f76a10c842879a48178bf388c18279f6197f5a2f8",
+      "size": 8255
+    },
+    "conduit-web/src/attachment-envelope.d.ts": {
+      "sha256": "4a5e9f355d967c190f3ad7fac63a2cde5a61fa0751e5c930631c7fd46bb931b8",
+      "size": 104
+    },
+    "conduit-web/src/attachment-envelope.js": {
+      "sha256": "c3ee02a75e037da53f7bcf198e6f5dfb99bf6c789bd03b3f5a02fcbfee8b4b96",
+      "size": 4759
+    },
+    "conduit-web/src/attachment-store.js": {
+      "sha256": "0d4ef72d1b1de2de9a74143040a1b9adf0301b7d8d0d03993c4e49a548ad48f2",
+      "size": 9587
+    },
+    "conduit-web/src/auth-login-page.js": {
+      "sha256": "46714f68d35ea6b1093b492125498d93ae3fd3e618850461362fa65fac916faa",
+      "size": 5151
+    },
+    "conduit-web/src/auth-middleware.js": {
+      "sha256": "60fe2289718c03cc4371f2c7690e002116702acb0fcfe1d34a507bac57a7ecbd",
+      "size": 5481
+    },
+    "conduit-web/src/auth-store.js": {
+      "sha256": "d54b07bf6dc64c2a416827316b713afea196e47ee3dfba15955a57c770634284",
+      "size": 15223
+    },
+    "conduit-web/src/chat-lifecycle.js": {
+      "sha256": "3677a8cc2a650101d124f1aebd98fcccc83acac521fedc59839c8567d69116d4",
+      "size": 3018
+    },
+    "conduit-web/src/chat-store.js": {
+      "sha256": "012c5245b7f3425040d368d92e39399daa03b9fc8e034ad13013e92e34e52715",
+      "size": 18580
+    },
+    "conduit-web/src/client/api/client.ts": {
+      "sha256": "266633718303196296102ba80d70680db1326c97f9941fd883aa1c4b7feaf869",
+      "size": 1913
+    },
+    "conduit-web/src/client/api/contracts.ts": {
+      "sha256": "3f43be4ce2289d3a4d3b0b5167b316675b4c972a0db13528a12f2f802065f2de",
+      "size": 11381
+    },
+    "conduit-web/src/client/api/live-events.ts": {
+      "sha256": "7d800217f3b3059bbc81b3170689a007688f93fedc6a85b575b3639e41ab22a1",
+      "size": 9674
+    },
+    "conduit-web/src/client/chat/attachments.tsx": {
+      "sha256": "b7d3b9c995533d3e46532e917c13dc26d2f183147358c7e44b9b0d2045b67558",
+      "size": 1989
+    },
+    "conduit-web/src/client/chat/composer-geometry.css": {
+      "sha256": "8bc00a726b3dd7df5c91d9e8e6c201e59f838f125b7568d8a318e0c288374431",
+      "size": 246
+    },
+    "conduit-web/src/client/chat/composer-surface.ts": {
+      "sha256": "b26e3c5269f4bd64b7d4a834ee53f6c2c74244877b760a0b991be8268d486b06",
+      "size": 1454
+    },
+    "conduit-web/src/client/chat/composer.tsx": {
+      "sha256": "6ff9997bfbc1c26897c29f9d73c2f3fe4300f05e1c8aa3f7e75b85a4fe922776",
+      "size": 23241
+    },
+    "conduit-web/src/client/chat/context-metrics.ts": {
+      "sha256": "0f2ad223cdb39f658656bd2a7e1b4944f90803a0e73ff80f8d035c66f044fadb",
+      "size": 16961
+    },
+    "conduit-web/src/client/chat/external-link-dialog.tsx": {
+      "sha256": "449ec9c5f247ac823cd36c3f3008d8c5c37d78d3ea1fabf610710fa86518707e",
+      "size": 1494
+    },
+    "conduit-web/src/client/chat/host-ui-card.tsx": {
+      "sha256": "3bc91454dbebf42baf782a47387c6110ac7204ab3238150e492d1ea3957b7487",
+      "size": 2573
+    },
+    "conduit-web/src/client/chat/incremark-advanced.css": {
+      "sha256": "252afbca2e474c22998514f9908690bd18eb0bc29c366fea3434f2423b3626d4",
+      "size": 800
+    },
+    "conduit-web/src/client/chat/incremark-advanced.tsx": {
+      "sha256": "4ae69fee9e8af8fb105f92bfd358ed45897fe9787c07f7657350a43abb8b8627",
+      "size": 4359
+    },
+    "conduit-web/src/client/chat/incremark-markdown.tsx": {
+      "sha256": "904c1aace78e37aeced51acfe6e0e3b528ead58402f1e583243be4f509dab9d0",
+      "size": 42031
+    },
+    "conduit-web/src/client/chat/incremark-math-queue.ts": {
+      "sha256": "31aa8fa5d74cc6fc8e0b277f8f43271a8ccf90fe97c42ffd8772d35ab112eb01",
+      "size": 4999
+    },
+    "conduit-web/src/client/chat/incremark-pacing.ts": {
+      "sha256": "224a08a3dc5e6c17ad3aa7553db1b0be69f90ecb6252269c0ddddaa23a80b901",
+      "size": 1425
+    },
+    "conduit-web/src/client/chat/incremark-synthetic-math.ts": {
+      "sha256": "bbc0a852522d623fd603f45e3311591dcf3ec805171ad9fe5a317ef94407da58",
+      "size": 8182
+    },
+    "conduit-web/src/client/chat/incremark-typewriter.ts": {
+      "sha256": "188c2fb2c85df9e5dd2e0c64ad9b2617a26f31329ab85d10d28122745b8a0303",
+      "size": 22266
+    },
+    "conduit-web/src/client/chat/markdown-actions.ts": {
+      "sha256": "a72102dbc2466c5bb4f78f8ec097cca7443a9488d8a5e9a007162eac66c9a84a",
+      "size": 1213
+    },
+    "conduit-web/src/client/chat/markdown-security.ts": {
+      "sha256": "e06a31dfd7b4e9d8a9847f20890c527611a2a4501f6bd9940e38d982c0ab7f32",
+      "size": 1951
+    },
+    "conduit-web/src/client/chat/markdown-settings.ts": {
+      "sha256": "96835a9d1c1e0712c62542c1575be654c59aab6ca2ee2db04f4d1ff9b5a67bdd",
+      "size": 1899
+    },
+    "conduit-web/src/client/chat/markdown.css": {
+      "sha256": "308fb7abc37f99b0d2dd61fc191cb68d5ccd4f51cc90d7747c4a6e80d45e0d21",
+      "size": 3351
+    },
+    "conduit-web/src/client/chat/markdown.tsx": {
+      "sha256": "f26abc54a1e26384947eb5f8a690f8b2a3edfa42a9de51043f4ba9c52ad39534",
+      "size": 23035
+    },
+    "conduit-web/src/client/chat/marked-stable.tsx": {
+      "sha256": "5056b19ec02059316d2d3ae600995b14e0be26828b11ec4a1b1b22be05ac8964",
+      "size": 7277
+    },
+    "conduit-web/src/client/chat/mobile-composer-options.tsx": {
+      "sha256": "1ad6be4dfafd864aa658af3e718abc98a6c38ffd502c1e8d24420e28aaca2ddd",
+      "size": 11216
+    },
+    "conduit-web/src/client/chat/mobile-header-backports.css": {
+      "sha256": "9ee054afc0eb972194dc1ad1c7bd6b48751bd200ceb5fd52a2151c38aee88c82",
+      "size": 714
+    },
+    "conduit-web/src/client/chat/performance-composer.css": {
+      "sha256": "8126a36ca78ab46e134343de31ed40d3b53f10b1459ff3e660dafded1a38ecf0",
+      "size": 3487
+    },
+    "conduit-web/src/client/chat/streaming-markdown.ts": {
+      "sha256": "8d366d3870e170a9a915a38be7614df5b6bb1ef8aa22ee0c610e33c1320e5bad",
+      "size": 11600
+    },
+    "conduit-web/src/client/chat/table-math.ts": {
+      "sha256": "c7baf8f7081c95973cf434396da95f17ca40219c258703b8c723e5817b38a7c7",
+      "size": 11009
+    },
+    "conduit-web/src/client/chat/tool-card.tsx": {
+      "sha256": "536516f4de0f0107f7cf1ccb1253c6fb0f3eda0f8d3d59fdc9b9c7eba2f99932",
+      "size": 3979
+    },
+    "conduit-web/src/client/chat/transcript-motion.ts": {
+      "sha256": "1d5f419377cf717cf4beb5d0d207a72e99e1d928d9aac90555e358572f8e6f1b",
+      "size": 5501
+    },
+    "conduit-web/src/client/chat/transcript-renderer.css": {
+      "sha256": "8fb3d224864d62c01095c7f0f5a843041b70d436eb4c978912166e784e98d438",
+      "size": 1072
+    },
+    "conduit-web/src/client/chat/transcript-renderer.ts": {
+      "sha256": "0846eac915aa89f7f2fd3d06e6373d7323c4d101120e04f42db70da9d4afaddd",
+      "size": 2123
+    },
+    "conduit-web/src/client/chat/transcript-tail-follow.ts": {
+      "sha256": "d8a61c16cf278f91461e9218c6f404e74aa77b2477312cb89be5012a5b65240a",
+      "size": 4061
+    },
+    "conduit-web/src/client/chat/transcript-visibility.ts": {
+      "sha256": "c6cabce87a6aa4db5b460a2dbc2443a14971f9648aa156d00d1c4f6651929443",
+      "size": 9132
+    },
+    "conduit-web/src/client/chat/transcript.tsx": {
+      "sha256": "29174e50d653cac05d0466fc64df09f9198f506be5cc5413260942adb0fb5524",
+      "size": 32828
+    },
+    "conduit-web/src/client/chat/turn-trace.tsx": {
+      "sha256": "bbb0e4309c9fa514f7322d53b96b9b63505875f68723b1c15d972ffd202a8b78",
+      "size": 5597
+    },
+    "conduit-web/src/client/chat/voice-audio.ts": {
+      "sha256": "b52ecf8dce9774f8575b0e8d2228f259f44a6025c3493afd21e55cb7213528b0",
+      "size": 12878
+    },
+    "conduit-web/src/client/chat/voice-dictation-client.ts": {
+      "sha256": "5283d8684bf6452c56c66e9796247bfd5f7b592bbb56e98d87e8c66b7ad20071",
+      "size": 28039
+    },
+    "conduit-web/src/client/chat/voice-dictation-diagnostics.ts": {
+      "sha256": "18c2ae487ab4ffc6e6edb9bea40c2b4d1e36d44c18dca3312ae4562ccb61c2bd",
+      "size": 9765
+    },
+    "conduit-web/src/client/chat/voice-dictation-types.ts": {
+      "sha256": "fb393ec77bc91a0c020ff1639ec74fa6ea00bd5534f06754eee65e1fcd36faf3",
+      "size": 217
+    },
+    "conduit-web/src/client/chat/voice-dictation.js": {
+      "sha256": "6b9cc16a0783bef7be74bb7bcfe940993a6db6e6ed9617327a28e4e26654fd9c",
+      "size": 6245
+    },
+    "conduit-web/src/client/chat/voice-waveform.tsx": {
+      "sha256": "9aac1e8f5849c9235759b023fee12b5a2b2a92566813c0f39fa77a8e9479a19f",
+      "size": 4940
+    },
+    "conduit-web/src/client/commands/command-registry.ts": {
+      "sha256": "6598ed4cf4c15bf1c0506e93c8edda276410784004da487f929c62c93b223722",
+      "size": 13833
+    },
+    "conduit-web/src/client/error-diagnostics.ts": {
+      "sha256": "9ff805866c6bc236c66e0572576df7d4b56750faaa4a6fe8241d23c05cc660c2",
+      "size": 4540
+    },
+    "conduit-web/src/client/harness-metrics.ts": {
+      "sha256": "41d4ba2cae9d1d3649de3cf283c5222ddfb80158d0181a9c0a88d05b96ce2bf4",
+      "size": 1199
+    },
+    "conduit-web/src/client/layout-geometry.ts": {
+      "sha256": "db31f0418b7ea11f7c094dc6098b6f732771261b4bbaefd3f9298c990dd1142b",
+      "size": 121
+    },
+    "conduit-web/src/client/main.tsx": {
+      "sha256": "0e47256c6fc7b2f855f46101b2f7e8cb5c0d3658eb7a6236a3ee010d984576bc",
+      "size": 60935
+    },
+    "conduit-web/src/client/navigation/command-hint-bar.tsx": {
+      "sha256": "cae2f27c10985fefe2463ac8ca53211fbb27daba15d4d811024dec08a73048de",
+      "size": 5811
+    },
+    "conduit-web/src/client/navigation/command-menu.tsx": {
+      "sha256": "c2b7534955fd64138caf5bf85c76ad851c2c6e329a99e19cb99203e786bd218c",
+      "size": 33424
+    },
+    "conduit-web/src/client/navigation/mobile-layout.ts": {
+      "sha256": "520e737dabeddb928b8ee1964a03aa7c80fd8fbab41e5b6bc077469b2e9fc138",
+      "size": 2961
+    },
+    "conduit-web/src/client/navigation/runtime-indicator.tsx": {
+      "sha256": "1cc5aedc5d87951be508e91aad9e95eac04d5e8a487497e806b7a7271a3763f3",
+      "size": 4471
+    },
+    "conduit-web/src/client/navigation/sidebar-preferences.ts": {
+      "sha256": "5f487212832d6e3ebc74dba17e5ae122f9b8322524160cc516ab1659be6ed85e",
+      "size": 797
+    },
+    "conduit-web/src/client/navigation/sidebar.css": {
+      "sha256": "78a87509f1fbf3a8146509298ed38231fe4a85ed28dc3777f02a90f2a1f9294a",
+      "size": 12187
+    },
+    "conduit-web/src/client/navigation/sidebar.tsx": {
+      "sha256": "fe5ffce2f4aa00819135afd4c97b05e664bca4465bbc6cc9167a4b7a0fa5c43d",
+      "size": 48607
+    },
+    "conduit-web/src/client/palette/chat-query.ts": {
+      "sha256": "aa8f661f9774cefca29da047d01e698f5f72a93ce7f185b92bcffd02557232c6",
+      "size": 3999
+    },
+    "conduit-web/src/client/palette/command-registry.ts": {
+      "sha256": "be8b4ed33a068ad43d927fa71efcc12242a7d31b2a4eb0d6234659f12b403493",
+      "size": 19325
+    },
+    "conduit-web/src/client/palette/palette-search.ts": {
+      "sha256": "1f9fb8c69120c416bdb9a17478c5a7e11311eea757def225f6ec4153e77c3047",
+      "size": 7001
+    },
+    "conduit-web/src/client/panel-motion.ts": {
+      "sha256": "b188ebf95b82d4d405172f186b0e631bb8eb038ad00635667b4c3676497bcb4f",
+      "size": 2094
+    },
+    "conduit-web/src/client/project/dashboard.css": {
+      "sha256": "bcf666789f14ce45d4e7bf8ccad28dd8a2e48da5cffb17af3d233ca6517d490c",
+      "size": 19246
+    },
+    "conduit-web/src/client/project/dashboard.tsx": {
+      "sha256": "8053c9540a70b2d85c97d03e7494b6df343c053a480bc875ce2ea8bc996c4b24",
+      "size": 22974
+    },
+    "conduit-web/src/client/project/workspace-appearance-editor.tsx": {
+      "sha256": "a45a704fdb35d497792938eb35e6af32a8af1fb299c100a7e8e81881b309d023",
+      "size": 8195
+    },
+    "conduit-web/src/client/project/workspace-appearance.tsx": {
+      "sha256": "42e8667a1efcf7aade31f4b2565d048493cd583f986ac625794ae15bf78802cb",
+      "size": 5929
+    },
+    "conduit-web/src/client/pwa-update.ts": {
+      "sha256": "e75efac14df98b0c4cd2a0a95603fad91b9d554632e03878eb03580070f00574",
+      "size": 3116
+    },
+    "conduit-web/src/client/reconcile-messages.ts": {
+      "sha256": "3fe70f6c0c5d0b8cef9340ad8e7bbdb7f6b3e297f60b032ae73125a439a0bf73",
+      "size": 1899
+    },
+    "conduit-web/src/client/remotes/terminal-pane.css": {
+      "sha256": "6776d6bc1480defb4d3a85b7e3e39dfc0a7c98771198e9df6ce013b9dcfbf0ec",
+      "size": 2780
+    },
+    "conduit-web/src/client/remotes/terminal-pane.tsx": {
+      "sha256": "f86d3800166b68753f82c29f7de459d6f4ca46a240e3f69d116ff3b776f43e26",
+      "size": 20838
+    },
+    "conduit-web/src/client/remotes/terminal-renderer.ts": {
+      "sha256": "51ca63c6fc54ba78eddfcfbc5938f27c36270770084d8ccafe5e456a1abca33c",
+      "size": 6877
+    },
+    "conduit-web/src/client/settings/settings-core.tsx": {
+      "sha256": "7d295947d4b0f094948352ec091e1ed3ad03b881e289e866fa946cd20abb30d0",
+      "size": 76186
+    },
+    "conduit-web/src/client/settings/settings.tsx": {
+      "sha256": "a6006246e9cfa75ab35a145fe2f7dc6f779fa6b3afeb1f0f4d659fccd4e37570",
+      "size": 1733
+    },
+    "conduit-web/src/client/settings/shortcuts-settings.css": {
+      "sha256": "d7785490497aa0ab13605f7a5b96018f30c3629e0231040cce945bf857ba47cc",
+      "size": 5996
+    },
+    "conduit-web/src/client/settings/shortcuts-settings.tsx": {
+      "sha256": "caacc435f7f22ca1a25f7f6d91c047bdf9415ab38b899419ad28b0a8fc9a949e",
+      "size": 13596
+    },
+    "conduit-web/src/client/settings/voice-local-catalogue.tsx": {
+      "sha256": "e2b2a1615a9f8de7e24c34d7a3c34c618909927d1cb9ad8e1a3b2c56014773cb",
+      "size": 12283
+    },
+    "conduit-web/src/client/settings/voice-settings.css": {
+      "sha256": "6b5982c052ea9549efb9479b7b2163ca0bc530b35ba24309c94df333f3c1c08f",
+      "size": 4673
+    },
+    "conduit-web/src/client/shortcuts/browser-conflicts.ts": {
+      "sha256": "c290d70cd76e17b99804dc2d0257844e4805beab29a10707717aa707fc1863da",
+      "size": 3197
+    },
+    "conduit-web/src/client/shortcuts/shortcut-conflicts.ts": {
+      "sha256": "58f8bd08b038c39cacfef71945d1887a512e7120c889c5521e95fcb6da556586",
+      "size": 3964
+    },
+    "conduit-web/src/client/shortcuts/shortcut-environment.ts": {
+      "sha256": "0545dd94f271ce242938452ca2df3a5c7bb1e2cd98537edcc168383fa61b38a3",
+      "size": 3170
+    },
+    "conduit-web/src/client/shortcuts/shortcut-manager.ts": {
+      "sha256": "481cbdb2cb27a5dbfc5ee60ce8b928e772b798342c089166ed25c5e595e63df1",
+      "size": 12133
+    },
+    "conduit-web/src/client/shortcuts/shortcut-normalize.ts": {
+      "sha256": "8ee80c7fa8139ac99121362c86f875456659a995578f866128428f1d5367e006",
+      "size": 5993
+    },
+    "conduit-web/src/client/shortcuts/shortcut-preferences.ts": {
+      "sha256": "c87e237b2b6cf6323374826dd333f8f870163f4278eb63e8205a6993ce6d60f9",
+      "size": 2288
+    },
+    "conduit-web/src/client/shortcuts/shortcut-types.ts": {
+      "sha256": "21858bdaef5b545c5e832f94e56f7f6a14b8c21a2335965c5063f24f3f4c34cf",
+      "size": 2017
+    },
+    "conduit-web/src/client/state/active-chat.ts": {
+      "sha256": "bd7ca70239fa525799d20d6d14953fad36c0669176b8c2804750520eaff8d6ef",
+      "size": 37574
+    },
+    "conduit-web/src/client/state/active-generation-store.js": {
+      "sha256": "bb9499cd478159c5415ad72a19117d40e757943256a553fe54aab49feeddf34b",
+      "size": 11711
+    },
+    "conduit-web/src/client/state/attachments.ts": {
+      "sha256": "bb1357d4b890c246f9970430a6beb5939f5becc62e6f3008654d2356bf5cb494",
+      "size": 7630
+    },
+    "conduit-web/src/client/state/catalogue.ts": {
+      "sha256": "a1a018f78ae3057c6428e9f7d9c8e95d8777bbb58d8f47f2421a1862d6caacd7",
+      "size": 1656
+    },
+    "conduit-web/src/client/state/model-settings.ts": {
+      "sha256": "5cdb9ffb3661d438ed6685100bc0c8afc817948d5ed4ce311171d97c6ec4e291",
+      "size": 8822
+    },
+    "conduit-web/src/client/state/runtime.ts": {
+      "sha256": "bd976c4916c0697ac48725f891e5979fa3b819d5dd922e42073051bc04c8d4f1",
+      "size": 2990
+    },
+    "conduit-web/src/client/state/text-delta-batcher.ts": {
+      "sha256": "db653482b49b77aa32f200b47122cdd2e209c3b6fee8e52e0023ad1090081bab",
+      "size": 2556
+    },
+    "conduit-web/src/client/state/timeline-store.ts": {
+      "sha256": "3582f46fe80b44c878a1f806fd9c298e8693284980648db1c2b8093fb5b3547e",
+      "size": 7873
+    },
+    "conduit-web/src/client/styles.css": {
+      "sha256": "674af1c7d36cebd7155d5244af955a613766b53a9bf972af12407532c7d427ac",
+      "size": 69774
+    },
+    "conduit-web/src/client/timeline-order.ts": {
+      "sha256": "794cdf694b8190cd5991e57235fc8c421d4044372260d9f6e739573c2c5ee19e",
+      "size": 5933
+    },
+    "conduit-web/src/client/turn-rows.ts": {
+      "sha256": "31dd4c984a54241cc9ad2beb8072ba78e39d798b8043483d4edfa5e46e8e1d15",
+      "size": 15770
+    },
+    "conduit-web/src/client/workspace/request-ownership.ts": {
+      "sha256": "e9415b45b048bee34a5474246910fd8b58eed2db0284d0cff330431e705a480c",
+      "size": 416
+    },
+    "conduit-web/src/client/workspace/workspace-panel.tsx": {
+      "sha256": "e75ca2382acf150893e3585a9697ba275114cc2b80a0752c38931f2c7a81c5e3",
+      "size": 29669
+    },
+    "conduit-web/src/client/workspace/workspace.css": {
+      "sha256": "80802c851c6361511e2ec4c2cfe8867b32dd2e64fd4d0a2458bf22209394c081",
+      "size": 10205
+    },
+    "conduit-web/src/components/primitives.tsx": {
+      "sha256": "1fa999ed099ee9746e984a8663ebd38384315f93b2f5e5a76d0ff7f384981a1b",
+      "size": 11993
+    },
+    "conduit-web/src/config.js": {
+      "sha256": "8423e1c68ab5ee0b7fcfdd2669fd6e3e46ceccc33e6f4e830cf8fe7b0e539d7e",
+      "size": 5334
+    },
+    "conduit-web/src/continuation.js": {
+      "sha256": "9384a982e0a1ca7188145986d105cf1970e0e868399261bdb03db426e4f2429f",
+      "size": 1294
+    },
+    "conduit-web/src/lib/utils.js": {
+      "sha256": "5ba0ae526d768600bbfb4a4d345c47f6208cb941adbf456de80804a4cf938350",
+      "size": 137
+    },
+    "conduit-web/src/model-profile-runtime.js": {
+      "sha256": "aaa91bad11843d6a1ce2a639c94908ba4f77ea849ae58987d6d69c2a9e688acd",
+      "size": 4784
+    },
+    "conduit-web/src/model-profiles.js": {
+      "sha256": "96903813af9f52f534a8209e5658a9ff3f3dcb5006eb27d4f9c3f691d0677444",
+      "size": 7808
+    },
+    "conduit-web/src/native-resource-validation.js": {
+      "sha256": "d9d238ff85f01fd743f8c95230f25a350d02574eac2618739efe1197905f8bf7",
+      "size": 2515
+    },
+    "conduit-web/src/owned-paths.js": {
+      "sha256": "ea3a762bdad1630bdbad44534e7ca4f56fc21882d2b0dc30df266c873e449425",
+      "size": 1646
+    },
+    "conduit-web/src/pi-auth-broker.js": {
+      "sha256": "11224ec36188735cd1837e8e97a9a79b67b30e87aa6bed4273a07cd15e2cb00b",
+      "size": 12953
+    },
+    "conduit-web/src/pi-event-normalizer.js": {
+      "sha256": "d148cd9af708d3ecd333ea2281b80dfb62e49a49fea2931bb7f9a5ab15a3ffb4",
+      "size": 7513
+    },
+    "conduit-web/src/pi-installations.js": {
+      "sha256": "dc1a899ededa7acbed2bff84b5bbe7d9d4cc5cf3eacc1d8c3681c15319285f39",
+      "size": 9834
+    },
+    "conduit-web/src/pi-launch.js": {
+      "sha256": "a1615a5dace4ad7c8af9f6f5937c940edeab162da39c4b70fb74fa8ad4f878a0",
+      "size": 3472
+    },
+    "conduit-web/src/pi-manager.js": {
+      "sha256": "a660e46fe1f625128ee367f10f77587b65d60d84ea91bd9f1fa1041fa39c4e00",
+      "size": 51037
+    },
+    "conduit-web/src/pi-model-catalog.js": {
+      "sha256": "f598ce53509c07bc775a8358141e79413e4c44ba3b94eabec56378836634ffbc",
+      "size": 7867
+    },
+    "conduit-web/src/preferences-store.js": {
+      "sha256": "d9e14429184839573a1486e775418af97dbdf708fd5c00be8d407b37928c9fa1",
+      "size": 1861
+    },
+    "conduit-web/src/project-dashboard.js": {
+      "sha256": "50bb04e1920e1812f7315115af448c1d103f8b1fbbff89cfdfff834d4f0f18f9",
+      "size": 4336
+    },
+    "conduit-web/src/project-store.js": {
+      "sha256": "3c52342b169485cec9c2322ab3f5808bcecd8d538d827eacb54032a3c4485763",
+      "size": 37567
+    },
+    "conduit-web/src/pty-manager.js": {
+      "sha256": "a965973357481a30c40862e045646b4175fcc757b99b5660ad9fe419c0c2b8cf",
+      "size": 10440
+    },
+    "conduit-web/src/pty-output-batcher.js": {
+      "sha256": "de88d66f356581c706b2f4df5235f93016925a95c6e25266cd2fbfecfe36ea4c",
+      "size": 877
+    },
+    "conduit-web/src/runtime-hub.js": {
+      "sha256": "8e9fc550ee2a1b58d9894145b344b86b2b8b1583ed99051d576db50f986e0d7f",
+      "size": 2064
+    },
+    "conduit-web/src/runtime-settings.js": {
+      "sha256": "4acd17e0bfa94130387dfe830d84758fbb90527252d999ac293ba211b0ea7eab",
+      "size": 1936
+    },
+    "conduit-web/src/search-settings.js": {
+      "sha256": "dc25b86344f41d3aa889f354761d78b800ba9e86b5cc7c4ec33628b61d78bae7",
+      "size": 6898
+    },
+    "conduit-web/src/server.js": {
+      "sha256": "3824fdb2e81fb6523392600354a3f712e4206732e1abcf12dd48e5b04d70b625",
+      "size": 25291
+    },
+    "conduit-web/src/server/dictation-stream.js": {
+      "sha256": "86252fc22895d9cee003e8d960feeb2bf8c92822e4fc3c53293c49c68f3fa7d9",
+      "size": 129278
+    },
+    "conduit-web/src/server/live-session-launcher.js": {
+      "sha256": "7d252ef170acc53d682252ccfb19a9583cd7349ca490eacb908fd6dbda3bc12f",
+      "size": 8126
+    },
+    "conduit-web/src/server/live-session-stream.js": {
+      "sha256": "cc96c6e0e7d61f6b64e22e42788c68ed0c4d03a3f373c7e60c7cee223020d3c9",
+      "size": 6122
+    },
+    "conduit-web/src/server/routes/attachments.js": {
+      "sha256": "be731fb689dc8911230b92f80f46ccf5909a3da973a746d2633227d2cffc79fa",
+      "size": 3617
+    },
+    "conduit-web/src/server/routes/auth.js": {
+      "sha256": "7d6f7074b9fff78f03ab3846fe4f04a8d0b994f49cc3f934e4b508201fbce3a7",
+      "size": 2794
+    },
+    "conduit-web/src/server/routes/chats.js": {
+      "sha256": "ba314a41d60ae5258fa4a3e2cfd4fac72158423f960c05556029a49fcae1cfdf",
+      "size": 12864
+    },
+    "conduit-web/src/server/routes/live-sessions.js": {
+      "sha256": "a2184499ab4ca557157600a0f2eac8e2a3f3c872a63e7c462603f4c46a78b440",
+      "size": 2627
+    },
+    "conduit-web/src/server/routes/pi-auth.js": {
+      "sha256": "27e7ea855be65a727a6adb1c45fb6996785ed7b797d966fd94b6b5403dbd13d6",
+      "size": 2883
+    },
+    "conduit-web/src/server/routes/projects.js": {
+      "sha256": "3d80371540652979fd3d91040d9b92fd08ce28d7f139311f3ac08d0d6ba8d9b3",
+      "size": 16331
+    },
+    "conduit-web/src/server/routes/ptys.js": {
+      "sha256": "b2ab6d3d8637e4a98e76c002e238044ea5a2e870372008087f07b876a5f7bd72",
+      "size": 2139
+    },
+    "conduit-web/src/server/routes/runtime.js": {
+      "sha256": "8eb201343c047f968f3f915b81b7889f7521b3c64f61227995557bc1a03ae932",
+      "size": 5007
+    },
+    "conduit-web/src/server/routes/search.js": {
+      "sha256": "82d3c1c1413c411f0a9f35eb171eaeee24dfd2e1e9abf19529a5cf7909022c63",
+      "size": 1024
+    },
+    "conduit-web/src/server/routes/sessions.js": {
+      "sha256": "9c29f37a9e72a230207b53df0f55260df88cbc1ad2d73a77a4ee7369e562fe40",
+      "size": 8160
+    },
+    "conduit-web/src/server/routes/voice.js": {
+      "sha256": "c14d38ebd16d6376c99910db4ae34948f9a89a95e4a5f08d40b16865da6c23e5",
+      "size": 2199
+    },
+    "conduit-web/src/server/terminal-stream.js": {
+      "sha256": "31dcdad5f85d57c52f6f2358f0e1b469938a540d3cd1e02871d4f201f46dbb94",
+      "size": 4042
+    },
+    "conduit-web/src/server/transcribe-rs-worker.js": {
+      "sha256": "c4214800daf406dd3b6ad1553a19e544173ae8f35280e81f6b02a4f2f6e0e85b",
+      "size": 10335
+    },
+    "conduit-web/src/server/voice-execution-catalog.js": {
+      "sha256": "828f94eeea1a0151872fd7ac9d4bebe2fca2a313f38442af1938ab00da1192e7",
+      "size": 26655
+    },
+    "conduit-web/src/server/voice-model-manager.js": {
+      "sha256": "d5cc1c9111f68b2285f201efc67ab5a390266f25ceaabd5dc58722c18c6a8190",
+      "size": 35628
+    },
+    "conduit-web/src/server/voice-model-manifests.js": {
+      "sha256": "d3141b4f8699ba2bc2b1ab04853eada09ef180f2a2bec86154d72b5d4b614422",
+      "size": 17870
+    },
+    "conduit-web/src/server/voice-recording-store.js": {
+      "sha256": "e536a84406a12703ae879978947fea0b2e6736584bbba423b09bd42e42e5931e",
+      "size": 11803
+    },
+    "conduit-web/src/server/voice-runtime-adapters.js": {
+      "sha256": "0fe8b6bd4bc22357cc857c4248db8cb52c1eb48c42f26c8af28559907ea89e2a",
+      "size": 9985
+    },
+    "conduit-web/src/server/voice-runtime.js": {
+      "sha256": "e875dfcef7535b73dccfa67e0fede90f9697dd86ce15824f932be7856067f3cb",
+      "size": 11574
+    },
+    "conduit-web/src/server/voice-segmentation.js": {
+      "sha256": "08cc29d5e1ef07689985903b7cd685590cf6651344b71cbf628d3a71f0bfce8c",
+      "size": 12033
+    },
+    "conduit-web/src/server/voice-vad.js": {
+      "sha256": "ef889202a96db89110bd394113718dfe5712ee3b05825a446cb21470355b37b6",
+      "size": 29599
+    },
+    "conduit-web/src/session-operations.js": {
+      "sha256": "2c2870478ed03b423af12b968321362aa41a0fb7c125f184c123f529f4eda3e4",
+      "size": 2360
+    },
+    "conduit-web/src/session-store.js": {
+      "sha256": "0df8f2c32896b657691c3d74b988596bc07adf018a63e9e4e85db429bcc5dbcb",
+      "size": 24473
+    },
+    "conduit-web/src/tailscale-share.js": {
+      "sha256": "41b01078034046b6614b8f37c8a79bcef038eaf941ede0aad61a0d3d04537327",
+      "size": 647
+    },
+    "conduit-web/src/voice-settings.js": {
+      "sha256": "afce7d21417be141cfe64c802bfffaa64dc979f6627eea55f2905c6ff50e971f",
+      "size": 17286
+    },
+    "conduit-web/src/workspace-inspector.js": {
+      "sha256": "6f7ce2797074772523ec0182f19b890309903f653d9419d315bfff2368de0c53",
+      "size": 12194
+    },
+    "conduit-web/src/workspace-paths.js": {
+      "sha256": "4f38dfe9bd030a9827b238443293e5c81ecd5f533e7a2b9d3727665789ad3813",
+      "size": 6429
+    },
+    "conduit-web/test/active-generation.test.js": {
+      "sha256": "783634c6d053806252a7c3074bd7415b6bc753cfaf772b494ed8bd998c5a2a4b",
+      "size": 15374
+    },
+    "conduit-web/test/activity.test.js": {
+      "sha256": "b4f50c47d04a288ef1586440a77dc100113ddf946c6e609824985e0ef3953f73",
+      "size": 5022
+    },
+    "conduit-web/test/agent-browser-command-policy.test.js": {
+      "sha256": "701e6c9f5ef249897a8f745ec537cbf7414676a0f1ade4c8e4315b285fb15b8d",
+      "size": 3270
+    },
+    "conduit-web/test/agent-browser-runtime.test.js": {
+      "sha256": "4004a0d40cf3eeae7f79eea8af0a68ae2ed87e5d00055b3bc18cba207560049f",
+      "size": 1388
+    },
+    "conduit-web/test/agent-browser-target.test.js": {
+      "sha256": "833ef842d596f2f89ea0dfe9cfaa6173017ddbe18f106a2ef0b0191504a043ca",
+      "size": 1487
+    },
+    "conduit-web/test/attachment-envelope.test.js": {
+      "sha256": "20705253f5a3dc9d794178d804b8256aac78faace2bbdfeaaf4da379a8a7dd83",
+      "size": 2723
+    },
+    "conduit-web/test/attachment-store.test.js": {
+      "sha256": "1a541ce760922c1ffd10586b77c0d04fb749eb1ef0871f7c2711ab9d91ee350c",
+      "size": 5880
+    },
+    "conduit-web/test/auth-middleware.test.js": {
+      "sha256": "e954f3ada80f6e2c4f531e4791004cf5308e5130be5a397f738369979c0ee8ba",
+      "size": 3621
+    },
+    "conduit-web/test/auth-server.test.js": {
+      "sha256": "6a3c73aa7e2972256561522d88bfe06fc09157e12a55f5749392682459409acf",
+      "size": 17251
+    },
+    "conduit-web/test/auth-store.test.js": {
+      "sha256": "04a65a3535152b95941c736fc4f443da5f043034c8af93a554f24fb5e5b67ac9",
+      "size": 15614
+    },
+    "conduit-web/test/browser/app.spec.js": {
+      "sha256": "ded01fdfccd2034b67310aae2720052116ee95db7e0ef6857072a5f46a5ab124",
+      "size": 268323
+    },
+    "conduit-web/test/browser/auth.spec.js": {
+      "sha256": "c199c65a9ce69dc361d67c25302d9c87873e7c84af1009f7be620560097ab1a6",
+      "size": 9085
+    },
+    "conduit-web/test/browser/harness-streaming.spec.js": {
+      "sha256": "2bfa718b23db7b1ba68bac1f439f0acc5692f543736c817f1c2399faa614a18f",
+      "size": 13295
+    },
+    "conduit-web/test/browser/helpers/streaming-fixtures.js": {
+      "sha256": "2250cfdb36115ce80dcee0fda999e8c047b6755faa02833d905f5f765a514352",
+      "size": 21167
+    },
+    "conduit-web/test/browser/helpers/streaming-performance.js": {
+      "sha256": "e0f70cc4bcee5908cde46843193ddc88ab5b1466d40afb978a2d8a243cefc455",
+      "size": 98969
+    },
+    "conduit-web/test/browser/palette.spec.js": {
+      "sha256": "4775bd9e306723f55eaed8cda530790fa8247a23173a514f4b960fe0f1eb1e6d",
+      "size": 40107
+    },
+    "conduit-web/test/browser/pwa-mobile.spec.js": {
+      "sha256": "491c6694d8277d18509b3634c8aa891ab2043d478762d877da7aa6ccec47f8af",
+      "size": 34240
+    },
+    "conduit-web/test/browser/terminal-performance.spec.js": {
+      "sha256": "fc0d31b2cc1241a8b1d5c9145b4eb0ff7505c503a8c68a20b01c807746da03fc",
+      "size": 1777
+    },
+    "conduit-web/test/chat-actions.test.js": {
+      "sha256": "3083c4e98334202ee8497d34217ef1b9cc4a1413aea1a4a8a8bda625014181f2",
+      "size": 538
+    },
+    "conduit-web/test/chat-lifecycle.test.js": {
+      "sha256": "7ea7e0d7439a2610f11afe0624093349bd0446966400af43938c72355f215880",
+      "size": 2108
+    },
+    "conduit-web/test/chat-search.test.js": {
+      "sha256": "7fdc129153ce1bc132c2e5edd2a55b11dfe8188013f90dfa567b4cb808a37a07",
+      "size": 4834
+    },
+    "conduit-web/test/chat-store.test.js": {
+      "sha256": "c1eaa8277534f567d705eb883b9fc21e2e42d0cf08cf4c9b20bebee1ee3b129b",
+      "size": 16433
+    },
+    "conduit-web/test/composer-surface.test.js": {
+      "sha256": "5c074c949d24ab65725e8182f890ab5483b82bc45fea7b8ae9d4d865df8f10d7",
+      "size": 2454
+    },
+    "conduit-web/test/config.test.js": {
+      "sha256": "c9c7981ac0cbcf003b6e2a15704b60875daf3da7a0754cb5ae02bfe3262279b2",
+      "size": 5757
+    },
+    "conduit-web/test/context-metrics.test.js": {
+      "sha256": "4e47da05888db3280f490fa7ec65205dca42b171f352372a3d13defa9fbfbdf3",
+      "size": 5647
+    },
+    "conduit-web/test/deployment-artifacts.test.js": {
+      "sha256": "75f50769380ba01fea6bcdb8899b3aa97742776b81914b963e88e9f3f4ada2fb",
+      "size": 3272
+    },
+    "conduit-web/test/deployment-backup.test.js": {
+      "sha256": "99d4b769cddc172eb8900962d7f7cac0593d5882d33d99e7694c2b146b89da8c",
+      "size": 4601
+    },
+    "conduit-web/test/deployment-lifecycle.test.js": {
+      "sha256": "a11f8e94d82553f68e0ecd3f4f3b44424fb823fd1df5edf2759198bfd50c174e",
+      "size": 1543
+    },
+    "conduit-web/test/error-diagnostics.test.js": {
+      "sha256": "fd0c11db9e197236da1070cb0784fed885b3801359ced9ceaff5d0b4fd0ad32c",
+      "size": 2157
+    },
+    "conduit-web/test/fixtures/pi-rpc-generations.js": {
+      "sha256": "b18eb8e37d7d24acbcc3cdcaa34d220b1a87230859497194b938f42f56ece8c6",
+      "size": 8828
+    },
+    "conduit-web/test/fixtures/terminal-performance.html": {
+      "sha256": "13511430e488111d3f37e98a8bbd5c8948b611ca5417a04dad7a4364c5f21d14",
+      "size": 6071
+    },
+    "conduit-web/test/harness-scenarios.test.js": {
+      "sha256": "b296a8de6b8830448e7e6a961a5c36c14845fbb0db74593539d1dbe3eee65ae5",
+      "size": 4877
+    },
+    "conduit-web/test/helpers/conduit-harness.js": {
+      "sha256": "15467865ec6eb06832c960b7f7e45329cc8feaf4669999b6bfd844c0a8561eb3",
+      "size": 11893
+    },
+    "conduit-web/test/helpers/streaming-scenario.js": {
+      "sha256": "e3674b6ab02b9ce614c3d69fe38a4d2c2ad6c7b5d667abd5e315d624630d50e2",
+      "size": 9936
+    },
+    "conduit-web/test/incremark-advanced.test.js": {
+      "sha256": "8508aebec684b31be22a504bd233ddb7cd2919ae932888d9028cac65850044e3",
+      "size": 4539
+    },
+    "conduit-web/test/incremark-math-queue.test.js": {
+      "sha256": "b51226a87b36b69d7ccce4d15148a2454d1c063881fd71ffa78743d5097ee9e4",
+      "size": 2456
+    },
+    "conduit-web/test/incremark-pacing.test.js": {
+      "sha256": "419fea5ae5cc1c18b50330c60eeaa50827f8aef8db479398a5be648d78d90c37",
+      "size": 2138
+    },
+    "conduit-web/test/incremark-synthetic-math.test.js": {
+      "sha256": "faae8f850b28816cf3eb13e8f24f63cdcbe12017ca9bd141577324cf88e9f535",
+      "size": 10317
+    },
+    "conduit-web/test/incremark-typewriter.test.js": {
+      "sha256": "d935d03d402e23dd353df3bd97a93e3a0e0299c5badfcc99ed39a46d0c453d05",
+      "size": 5544
+    },
+    "conduit-web/test/live-events.test.js": {
+      "sha256": "31c45ba5774732fe43099b1cd721c953f263e2aeec6c2fcf0ad326b4cd23ec95",
+      "size": 3523
+    },
+    "conduit-web/test/live-harness.test.js": {
+      "sha256": "7ffc3ff593f32a506fd0f87bf71f1bc3903d907d4e8518a0e9ee04b16d7a335a",
+      "size": 7204
+    },
+    "conduit-web/test/live-session-launcher.test.js": {
+      "sha256": "dc55742ade32e01f9cfe921538ad91e4d9463276c6ca9a4d5384c18333493842",
+      "size": 7720
+    },
+    "conduit-web/test/markdown-settings.test.js": {
+      "sha256": "3d3955d81cd5fe82fd100b612d6189748ee8cc6658bdac27aa9a39830163d724",
+      "size": 3601
+    },
+    "conduit-web/test/model-profile-runtime.test.js": {
+      "sha256": "7ce67e91ee1edc6f54b5ca80cdac38d95cd7b5738e72e1f0fc0e1a662a111900",
+      "size": 4886
+    },
+    "conduit-web/test/model-profile-transition.test.js": {
+      "sha256": "1a7e891d0508afb353693595989f70306bda526ad09ffbe6e2bc8a5b8808182f",
+      "size": 4265
+    },
+    "conduit-web/test/model-profiles.test.js": {
+      "sha256": "eb8558e7b30096e00f881cfc8c0de118ac3e68f195496af4f1551e688767b58f",
+      "size": 3043
+    },
+    "conduit-web/test/native-resource-validation.test.js": {
+      "sha256": "b50b0ff7448abe7b917001461cbb28d8df45a381d84222b93e16a2045619087a",
+      "size": 2990
+    },
+    "conduit-web/test/palette-search.test.js": {
+      "sha256": "e975ece8f96157d99c1a398d5a8b2ec8f88564777a4380b14c0483325ff44198",
+      "size": 3649
+    },
+    "conduit-web/test/panel-motion.test.js": {
+      "sha256": "06d340b02ab8268b7b9f81ef665cf6b5d2e5a5dc14d09b305d3dc405125b83f2",
+      "size": 8877
+    },
+    "conduit-web/test/pi-auth-broker.test.js": {
+      "sha256": "7cfc8330e77c9020eabddce4f7cb6b66b89d5135723bfb9b5085dd2c798ccc67",
+      "size": 3762
+    },
+    "conduit-web/test/pi-installations.test.js": {
+      "sha256": "0dc53c21c53d7b4588688d7273c56820114505b4e6999e73e65cd06726672ef3",
+      "size": 2551
+    },
+    "conduit-web/test/pi-launch.test.js": {
+      "sha256": "93eeedf055bb84b77797a566eb97780fb4df030793d9300778e7c907062a99c7",
+      "size": 5042
+    },
+    "conduit-web/test/pi-model-catalog.test.js": {
+      "sha256": "a557ef49e1b8edc3ea44c25c66e854e101dfae860929bb325b335b1532c46c89",
+      "size": 8786
+    },
+    "conduit-web/test/pi-process.test.js": {
+      "sha256": "301478bd33620bc2211db694fdd5f5b89128c63e539b7b4a7305bcc63739f4d6",
+      "size": 789
+    },
+    "conduit-web/test/pi-template.test.js": {
+      "sha256": "daaa26077469cc1a8681f93d9892186d85e48d8b8e91ffa58c2ce66ac65ff3a0",
+      "size": 33363
+    },
+    "conduit-web/test/preferences-store.test.js": {
+      "sha256": "702ce5d77a8fb2ba7240fa9f9af5453c2c52a3c103ad4082b42da3c6c47e9b37",
+      "size": 1391
+    },
+    "conduit-web/test/process-policy.test.js": {
+      "sha256": "46e3aed931cfd4a9b5984343bf7af7c83bbaae5b3b744d29fb2ec593215488dd",
+      "size": 11755
+    },
+    "conduit-web/test/project-dashboard.test.js": {
+      "sha256": "8aba7590d3899677ca3c2be5d076959607aa94cbb1e144418e8e34ae575e542f",
+      "size": 4965
+    },
+    "conduit-web/test/project-store.test.js": {
+      "sha256": "99fd4f7b64bdf4c52a6312ae1c6119a3e907fc6e669c902efeae50ea4fc70f1d",
+      "size": 34574
+    },
+    "conduit-web/test/pty-manager.test.js": {
+      "sha256": "3033e6b0682dba7128880d74fb4f2dffc37ce924f199c03c4e2cf7eca5c40831",
+      "size": 6174
+    },
+    "conduit-web/test/pty-output-batcher.test.js": {
+      "sha256": "483212f301dba0929f9a63e97e78c5db80fbd3431c946cd29739dc85801fcf32",
+      "size": 1501
+    },
+    "conduit-web/test/pty-transport.test.js": {
+      "sha256": "ef8a74412d4f616cf8948adab48e6cdd616fe1b7dd486785e345497d2ea52186",
+      "size": 8143
+    },
+    "conduit-web/test/pwa-artifacts.test.js": {
+      "sha256": "4fb6d89e1da9fe11df62aeb160308cafbdd0795eeeaeb49d151c90427e667a28",
+      "size": 1864
+    },
+    "conduit-web/test/pwa-update.test.js": {
+      "sha256": "7382a35d63c4be56069ad17950403328ae9e48075a2cbc90713aa7fb21b29ae8",
+      "size": 1605
+    },
+    "conduit-web/test/reconcile-messages.test.js": {
+      "sha256": "07b93156b0cd6f54d0d1251c13a95b4b3a50d2e1e592ebbc8efdccbe64daa526",
+      "size": 3448
+    },
+    "conduit-web/test/runtime-hub.test.js": {
+      "sha256": "c18ae1b969d42d7f3cfd4326b1d131ac705196837e9c6da7d58bfc35fac25389",
+      "size": 1167
+    },
+    "conduit-web/test/search-api.test.js": {
+      "sha256": "ee5488b717b5c1a98ae93b5f796371c288c0b86659c3273efc53c2d428bab731",
+      "size": 1696
+    },
+    "conduit-web/test/search-settings.test.js": {
+      "sha256": "d29308e233026d3229d6a6540beeee9d0e255ed8ff6f81db29273223704df4ab",
+      "size": 3052
+    },
+    "conduit-web/test/server-api.test.js": {
+      "sha256": "cb991657ad02b918536d7e9a379549152d6cf1b3ee8c36505ea30a19100e6f47",
+      "size": 25750
+    },
+    "conduit-web/test/server-lifecycle.test.js": {
+      "sha256": "cf29d06e9257094e84969cb7edc001fd581c0b115b7968427c00aadf946e960e",
+      "size": 12637
+    },
+    "conduit-web/test/session-store.test.js": {
+      "sha256": "ff65d33e551c1c868a906df705280e745cc4acc265ec014cfc81e8e9a8540bae",
+      "size": 21147
+    },
+    "conduit-web/test/shortcut-manager.test.js": {
+      "sha256": "5baa1a33a605b007efb6a46bff9f7c4e73905cae66c3ddcac994d6e6060400c8",
+      "size": 11877
+    },
+    "conduit-web/test/sidebar-preferences.test.js": {
+      "sha256": "29229d651c3a74541d23f191900179d65f9256d51491d298b2dce8e076a6aba5",
+      "size": 547
+    },
+    "conduit-web/test/solid-components-mode.test.js": {
+      "sha256": "cb120feae91876ccd2a7433a7883ccc6ab6f400e3cb26f9a49028ca68ae1afa5",
+      "size": 3568
+    },
+    "conduit-web/test/solid-components-workbench.test.js": {
+      "sha256": "c2152d60e2371843ecfb7b61b5ccfc5cfeaaad98c651432bd4c7ed88399e44a8",
+      "size": 1993
+    },
+    "conduit-web/test/streaming-markdown.test.js": {
+      "sha256": "a1df01bdb094e831c70bb2dde96d9cc8ea050eb29b8328a893b1fc3e6ca4180d",
+      "size": 5194
+    },
+    "conduit-web/test/tailscale-share.test.js": {
+      "sha256": "778d6aa84877c640481f2f48f50156612ec5c59544a2f4ac0a0c179a9b5e4666",
+      "size": 897
+    },
+    "conduit-web/test/text-delta-batcher.test.js": {
+      "sha256": "6478a0b132c1aae261fcd07a612c01820f7e5378f09eb1584633110f36c351b1",
+      "size": 2598
+    },
+    "conduit-web/test/timeline-order.test.js": {
+      "sha256": "095cdf65bd8f09a438886564f453475f839338b15cb3b22a47f1763b5c05d61b",
+      "size": 2355
+    },
+    "conduit-web/test/timeline-projection.test.js": {
+      "sha256": "14bff7adce7d97d7491b559bf868b5022600be5e72471b5ef6860b2faef899fe",
+      "size": 4440
+    },
+    "conduit-web/test/transcribe-rs-worker.test.js": {
+      "sha256": "826d67919a908a46596d028ee91ca64cd44212439a16ecfeb8957b273807b7dc",
+      "size": 5512
+    },
+    "conduit-web/test/turn-rows.test.js": {
+      "sha256": "072d831da9212e21b8dc2d48ec7c9373e65efda392b8f371f09d2591c8f9cf30",
+      "size": 10067
+    },
+    "conduit-web/test/voice-api.test.js": {
+      "sha256": "676c97aca2944cddacdbca372e0db5c81a9434f10f11d1ee60733b456ffb9dc2",
+      "size": 3246
+    },
+    "conduit-web/test/voice-dictation.test.js": {
+      "sha256": "77574f513495f43a4cfd92cb162e28b4f7e3d6ccb2e193fcb137b3ba8475ee14",
+      "size": 13557
+    },
+    "conduit-web/test/voice-execution-catalog.test.js": {
+      "sha256": "30d1f6087daf7d6e46aa5a66b60365434aaaf21d6f71f35a6407c18e878b9d2e",
+      "size": 6954
+    },
+    "conduit-web/test/voice-model-manager.test.js": {
+      "sha256": "736b1ed44c70122bfdf184133a31878456eee7b52b5d2c1fd90911c3f8fe1f4c",
+      "size": 30594
+    },
+    "conduit-web/test/voice-performance-shell.test.js": {
+      "sha256": "0e46f6c8c05457fb62d3361f56ba059e3417054edaaee5f6947d0ab2662868d4",
+      "size": 3904
+    },
+    "conduit-web/test/voice-providers.test.js": {
+      "sha256": "e6ac6738508d21da587800de93897ff7806f033b18fc54da7445811468dac676",
+      "size": 6787
+    },
+    "conduit-web/test/voice-recording-store.test.js": {
+      "sha256": "845a7424e4377791f722801097b46cbb76f5de0839eebe1f1dca2dedcf782e82",
+      "size": 9959
+    },
+    "conduit-web/test/voice-runtime-adapters.test.js": {
+      "sha256": "09d1fef2d2673eaf2fa729f372e16e855e0ee5a73dfd57972652697ccdeaf7c6",
+      "size": 4670
+    },
+    "conduit-web/test/voice-segmentation.test.js": {
+      "sha256": "20e4dc790bb0a9988ca973c69858415411d4b5e78a903f236c1bfafe65b3a064",
+      "size": 2526
+    },
+    "conduit-web/test/voice-settings.test.js": {
+      "sha256": "3f7839db7d292ce9cab6eb32fb84e39ebd0fad83d40acda5c20bdcf2a7d5eb4c",
+      "size": 12182
+    },
+    "conduit-web/test/voice-stream-api.test.js": {
+      "sha256": "93bdea7fb64a7806e3d1286c69e26daef1a774c7e8af9b7b87b1ad9794a34940",
+      "size": 82414
+    },
+    "conduit-web/test/voice-transcript.test.js": {
+      "sha256": "c7d83cc99d8bacb6cac19f4529972ed6cb7e15af694276213de8091a577ed0e7",
+      "size": 3318
+    },
+    "conduit-web/test/voice-vad.test.js": {
+      "sha256": "a2d0614195608a1699629c96fe54500fc2ccc52c697bfa19842e606ddd7b7090",
+      "size": 9878
+    },
+    "conduit-web/test/workspace-inspector.test.js": {
+      "sha256": "2b5f8251e8551f35f7f4ad9b9ce7dca8d7806df5cc1a6612ab36f53243dbf7b0",
+      "size": 6009
+    },
+    "conduit-web/test/workspace-paths.test.js": {
+      "sha256": "1e992024514368726aa3eac939cd3892c83bbae2f8247ffc98d372f6835bba67",
+      "size": 5822
+    },
+    "conduit-web/test/workspace-request-ownership.test.js": {
+      "sha256": "b3700263783afc862e04ce35f5e6f30a9cb3a01a6fcaf0c74dbb2f8c47473483",
+      "size": 977
+    },
+    "conduit-web/vite.config.js": {
+      "sha256": "e854842c156489d13d233633ba758dafd365afde370d50d0c7bb0d1b7346dfda",
+      "size": 3766
+    },
+    "scripts/backup.sh": {
+      "sha256": "6bb5ee60d321d93c1c75369628e6599b939bfbd296be5438af2136fc702dec3c",
+      "size": 4029
+    },
+    "scripts/conduit-auth.mjs": {
+      "sha256": "b7b5bda5e261bbc939d09e038f9f234bc6eda7ac74fe77567eb80130aa67b1d8",
+      "size": 4651
+    },
+    "scripts/conduit-pi.mjs": {
+      "sha256": "67de37f200369097ffd688ba087bcf6bb64fa806ae5d9fba9ea19c6bbefa0835",
+      "size": 1501
+    },
+    "scripts/deploy.sh": {
+      "sha256": "33a4a2fcb192fb81e029318aa596f36fdfb4cff483249589c089a32dcfdf1949",
+      "size": 5753
+    },
+    "scripts/install.sh": {
+      "sha256": "2eb2a794d2f414d138b629d90be8323436de931f3fe158b27170b2a379712e40",
+      "size": 1900
+    },
+    "scripts/package-release.sh": {
+      "sha256": "fd5939c65ad708922e5e31e085a65534d7fde41629478e8a594bcee378bb1fe7",
+      "size": 1461
+    },
+    "scripts/pi-runtime.mjs": {
+      "sha256": "86d9d1a21a47a4603d4121dc1ba0110bf2b10c0cf270d144ffc65dd3ddfb71b9",
+      "size": 5517
+    },
+    "scripts/prove-deployment.sh": {
+      "sha256": "837beced77673f1684b324e96b9cc0a35bb7040724e20a039310b71296ba327a",
+      "size": 10523
+    },
+    "scripts/restore.sh": {
+      "sha256": "dff2dc580298eed1ea67eb1560d8f18ef29badc216ed0990ad9916417628b71d",
+      "size": 4026
+    },
+    "scripts/solid-components-workbench.mjs": {
+      "sha256": "4fd02a83f7ea43a26dfbfa6b08397090287e12be653c8dd67d75d2d6e84c6c06",
+      "size": 14723
+    }
+  },
+  "pathPolicy": "Every mapped source, test, import, reverse importer, flow evidence path, and generated inventory path must exist in the current worktree."
+}
