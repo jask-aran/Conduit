@@ -932,8 +932,8 @@ export function Settings(props: {
                   modal={false}
                   sectionComponent={(sectionProps) => <KCombobox.Section class="model-provider-heading">{sectionProps.section.rawValue.provider}</KCombobox.Section>}
                   itemComponent={(itemProps) => <KCombobox.Item item={itemProps.item} data-slot="combobox-item">
-                    <span class="model-check"><KCombobox.ItemIndicator><CheckIcon /></KCombobox.ItemIndicator></span>
-                    <span><strong>{itemProps.item.rawValue.label}</strong><small>{itemProps.item.rawValue.spec}</small></span>
+                    <span class="model-check"><Show when={props.models.enabledModels().includes(itemProps.item.rawValue.spec)}><CheckIcon /></Show></span>
+                    <span class="model-row-label"><strong>{itemProps.item.rawValue.label}</strong><small>{itemProps.item.rawValue.spec}</small></span>
                   </KCombobox.Item>}
                 >
                   <KCombobox.Control class="model-search"><SearchIcon /><KCombobox.Input ref={search} aria-label="Search available models" onKeyDown={(event) => {
