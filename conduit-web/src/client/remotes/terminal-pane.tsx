@@ -165,7 +165,7 @@ export function TerminalPane(props: { projectId: string }) {
     if (generation !== connectionGeneration || activeProjectId !== record.projectId) return;
 
     const startedAt = performance.now();
-    const connection = new WebSocket(terminalSocketUrl(record.id));
+    const connection = new WebSocket(await terminalSocketUrl(record.id));
     socket = connection;
     connection.binaryType = "arraybuffer";
     let replaying = true;

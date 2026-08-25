@@ -50,6 +50,7 @@ function normalizeAuthFile(raw) {
         createdAt: session.createdAt || null,
         lastSeenAt: session.lastSeenAt || null,
         userAgent: typeof session.userAgent === "string" ? session.userAgent : null,
+        kind: session.kind === "native" ? "native" : "browser",
       })) : [],
   };
 }
@@ -344,13 +345,14 @@ export class AuthStore {
     return verifyPassword(password, stored);
   }
 
-  async createSession({ userAgent = null, now = new Date() } = {}) {
+  async createSession({ userAgent = null, kind = "browser", now = new Date() } = {}) {
     const token = newSessionToken();
     const session = {
       tokenHash: hashToken(token),
       createdAt: now.toISOString(),
       lastSeenAt: now.toISOString(),
       userAgent,
+      kind,
     };
     return this._mutate((data) => {
       appendSession(data, session);
@@ -358,13 +360,14 @@ export class AuthStore {
     });
   }
 
-  async authenticateAndCreateSession(password, { userAgent = null, now = new Date() } = {}) {
+  async authenticateAndCreateSession(password, { userAgent = null, kind = "browser", now = new Date() } = {}) {
     const token = newSessionToken();
     const session = {
       tokenHash: hashToken(token),
       createdAt: now.toISOString(),
       lastSeenAt: now.toISOString(),
       userAgent,
+      kind,
     };
     return this._transition(() => this._withFileLock(async () => {
       await this.load({ force: true });
@@ -377,7 +380,11 @@ export class AuthStore {
 
   async findSession(token) {
     if (!token) return null;
-    const tokenHash = hashToken(token);
+    return this.findSessionHash(hashToken(token));
+  }
+
+  async findSessionHash(tokenHash) {
+    if (!tokenHash) return null;
     const now = Date.now();
     return this._transition(async () => {
       let force = false;

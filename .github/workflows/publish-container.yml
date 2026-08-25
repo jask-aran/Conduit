@@ -49,13 +49,66 @@ jobs:
         id: image
         shell: bash
         run: |
-          echo "name=${REGISTRY}/${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+          image="${REGISTRY}/${GITHUB_REPOSITORY,,}"
+          echo "name=$image" >> "$GITHUB_OUTPUT"
           if [[ "$GITHUB_REF_TYPE" == "tag" ]]; then
-            echo "version=$GITHUB_REF_NAME" >> "$GITHUB_OUTPUT"
+            version="$GITHUB_REF_NAME"
           else
-            echo "version=manual-${GITHUB_SHA::12}" >> "$GITHUB_OUTPUT"
+            version="manual-${GITHUB_SHA::12}"
           fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "release=$GITHUB_SHA" >> "$GITHUB_OUTPUT"
+          {
+            echo "tags<<EOF"
+            echo "$image:$version"
+            echo "$image:sha-$GITHUB_SHA"
+            if [[ "$GITHUB_REF_TYPE" == "tag" && "$GITHUB_REF_NAME" != *-rc.* ]]; then
+              echo "$image:latest"
+            fi
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Set up Node
+        if: github.ref_type == 'tag'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: conduit-web/package-lock.json
+
+      - name: Set up Java
+        if: github.ref_type == 'tag'
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Build Android APK
+        if: github.ref_type == 'tag'
+        working-directory: conduit-web
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          CONDUIT_VERSION_NAME: ${{ github.ref_name }}
+          CONDUIT_VERSION_CODE: ${{ github.run_number }}
+          CONDUIT_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          CONDUIT_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          CONDUIT_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          for value in ANDROID_KEYSTORE_BASE64 CONDUIT_KEYSTORE_PASSWORD CONDUIT_KEY_ALIAS CONDUIT_KEY_PASSWORD; do
+            if [[ -z "${!value}" ]]; then
+              echo "::error::Missing GitHub Actions secret: ${value/CONDUIT_/ANDROID_}"
+              exit 1
+            fi
+          done
+          export CONDUIT_KEYSTORE_PATH="$RUNNER_TEMP/conduit-release.jks"
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$CONDUIT_KEYSTORE_PATH"
+          npm ci
+          npm run cap:sync
+          cd android
+          ./gradlew assembleRelease
+          cd ..
+          cp android/app/build/outputs/apk/release/app-release.apk "conduit-${GITHUB_REF_NAME}.apk"
+          sha256sum "conduit-${GITHUB_REF_NAME}.apk" > "conduit-${GITHUB_REF_NAME}.apk.sha256"
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
@@ -79,10 +132,7 @@ jobs:
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
             org.opencontainers.image.version=${{ steps.image.outputs.version }}
             org.opencontainers.image.revision=${{ github.sha }}
-          tags: |
-            ${{ steps.image.outputs.name }}:${{ steps.image.outputs.version }}
-            ${{ steps.image.outputs.name }}:sha-${{ github.sha }}
-            ${{ steps.image.outputs.name }}:latest
+          tags: ${{ steps.image.outputs.tags }}
           provenance: mode=max
           sbom: true
 
@@ -95,8 +145,19 @@ jobs:
             echo "Release $GITHUB_REF_NAME already exists — skipping creation"
           else
             changelog="docs/releases/${GITHUB_REF_NAME}.md"
+            release_kind=(--latest)
+            if [[ "$GITHUB_REF_NAME" == *-rc.* ]]; then
+              release_kind=(--prerelease)
+            fi
             gh release create "$GITHUB_REF_NAME" \
               --notes-file "$changelog" \
               --verify-tag \
-              --latest
+              "${release_kind[@]}"
           fi
+
+      - name: Upload Android APK
+        if: github.ref_type == 'tag'
+        working-directory: conduit-web
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "$GITHUB_REF_NAME" "conduit-${GITHUB_REF_NAME}.apk" "conduit-${GITHUB_REF_NAME}.apk.sha256" --clobber

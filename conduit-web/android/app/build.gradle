@@ -3,12 +3,22 @@ apply plugin: 'com.android.application'
 android {
     namespace = "com.jaskaran.conduit"
     compileSdk = rootProject.ext.compileSdkVersion
+    signingConfigs {
+        release {
+            if (System.getenv("CONDUIT_KEYSTORE_PATH")) {
+                storeFile file(System.getenv("CONDUIT_KEYSTORE_PATH"))
+                storePassword System.getenv("CONDUIT_KEYSTORE_PASSWORD")
+                keyAlias System.getenv("CONDUIT_KEY_ALIAS")
+                keyPassword System.getenv("CONDUIT_KEY_PASSWORD")
+            }
+        }
+    }
     defaultConfig {
         applicationId "com.jaskaran.conduit"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1
-        versionName "1.0"
+        versionCode Integer.parseInt(System.getenv("CONDUIT_VERSION_CODE") ?: "1")
+        versionName System.getenv("CONDUIT_VERSION_NAME") ?: "0.0.0-dev"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
@@ -19,6 +29,7 @@ android {
     buildTypes {
         release {
             minifyEnabled false
+            signingConfig signingConfigs.release
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }
     }

@@ -31,6 +31,7 @@
     "android:run": "npm run cap:sync && cap run android"
   },
   "dependencies": {
+    "@aparajita/capacitor-secure-storage": "^8.0.0",
     "@capacitor/android": "8.5.0",
     "@capacitor/core": "8.5.0",
     "@earendil-works/pi-ai": "0.84.1",

@@ -27,9 +27,11 @@ import { PiAuthBroker } from "./pi-auth-broker.js";
 import { ChatLifecycle } from "./chat-lifecycle.js";
 import {
   authStartupViolation,
+  nativeCors,
   prepareAuthMiddleware,
   validateSession,
 } from "./auth-middleware.js";
+import { NATIVE_APP_ORIGIN, SocketTicketStore } from "./native-auth.js";
 import { listWorkspaceDirectory, readWorkspaceDiff, readWorkspaceFile } from "./workspace-inspector.js";
 import { currentMagicDnsOrigin } from "./tailscale-share.js";
 import { buildProjectDashboard } from "./project-dashboard.js";
@@ -108,6 +110,7 @@ await preferences.load();
 const authStore = new AuthStore(config.authFile);
 await authStore.load();
 await authStore.pruneExpired();
+const socketTickets = new SocketTicketStore();
 const startupViolation = authStartupViolation(config, authStore);
 if (startupViolation) {
   console.error(startupViolation.message);
@@ -355,6 +358,7 @@ async function ensureChatTemplate(chat, project = null) {
 }
 
 app.use(compression());
+app.use(nativeCors);
 
 const requireAuth = prepareAuthMiddleware(authStore);
 app.use(requireAuth);
@@ -379,7 +383,7 @@ registerAttachmentRoutes(app, { attachments, findChatContext });
 app.use(express.json({ limit: "128kb" }));
 app.use(express.urlencoded({ extended: false, limit: "32kb" }));
 
-registerAuthRoutes(app, { authStore });
+registerAuthRoutes(app, { authStore, socketTickets });
 
 const pendingCheckpoints = new Set();
 let shuttingDown = false;
@@ -631,15 +635,25 @@ const liveSessionStream = createLiveSessionStream({
 });
 
 server.on("upgrade", async (request, socket, head) => {
-  const pathname = new URL(request.url, "http://localhost").pathname;
+  const requestUrl = new URL(request.url, "http://localhost");
+  const pathname = requestUrl.pathname;
   const match = pathname.match(/^\/v0\/live-sessions\/([a-f0-9]{24})\/stream$/);
   const ptyMatch = pathname.match(/^\/v0\/ptys\/([a-f0-9-]{36})\/attach$/);
   const dictationMatch = pathname === "/v0/dictation/stream";
   if ((!match || !manager.get(match[1])) && (!ptyMatch || !terminals.get(ptyMatch[1])) && !dictationMatch) return socket.destroy();
   try {
     if (authStore.hasPassword()) {
-      const context = await validateSession(authStore, request);
-      if (!context) return socket.destroy();
+      const ticket = requestUrl.searchParams.get("ticket");
+      if (ticket) {
+        if (request.headers.origin !== NATIVE_APP_ORIGIN) return socket.destroy();
+        const sessionHash = socketTickets.consume(ticket);
+        const session = await authStore.findSessionHash(sessionHash);
+        if (!session || session.kind !== "native") return socket.destroy();
+        await authStore.touchSession(session);
+      } else {
+        const context = await validateSession(authStore, request);
+        if (!context) return socket.destroy();
+      }
     }
   } catch (error) {
     console.error("WebSocket session validation failed", error);
