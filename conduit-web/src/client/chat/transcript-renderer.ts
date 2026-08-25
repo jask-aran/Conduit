@@ -4,6 +4,21 @@ import "./transcript-renderer.css";
 export type TranscriptRendererMode = MarkdownRendererId | "incremark-advanced";
 
 export const TRANSCRIPT_RENDERER_STORAGE_KEY = "conduit:transcript-renderer";
+export const RENDERER_CONTROLS_VISIBLE_STORAGE_KEY = "conduit:renderer-controls-visible";
+
+export function selectedRendererControlsVisible(
+  storage: Pick<Storage, "getItem"> = localStorage,
+): boolean {
+  return storage.getItem(RENDERER_CONTROLS_VISIBLE_STORAGE_KEY) !== "false";
+}
+
+export function saveRendererControlsVisible(
+  visible: boolean,
+  storage: Pick<Storage, "setItem"> = localStorage,
+): boolean {
+  storage.setItem(RENDERER_CONTROLS_VISIBLE_STORAGE_KEY, String(visible));
+  return visible;
+}
 
 export const TRANSCRIPT_RENDERER_OPTIONS: readonly {
   value: TranscriptRendererMode;

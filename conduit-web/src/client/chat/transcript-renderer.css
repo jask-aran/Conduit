@@ -16,8 +16,8 @@
 }
 
 @media (max-width: 720px) {
-  .composer-renderer-switch {
-    top: 8px;
+  .chat-main .composer-renderer-switch {
+    top: calc(48px + env(safe-area-inset-top, 0px) + 8px);
     right: 12px;
     left: 12px;
     width: auto;

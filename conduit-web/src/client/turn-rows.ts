@@ -335,16 +335,15 @@ export function buildTurnRows(
       const segments: TraceSegment[] = [];
       const claimed = new Set<string>();
       const toolById = new Map(tools.map((tool) => [tool.id, tool]));
-      const bubble = [...turn.assistants].reverse().find((assistant) => assistant.stopReason !== "toolUse");
       const finalAssistant = turn.assistants.at(-1) || null;
-      const bubbleIsFinalAssistant = bubble != null && bubble === finalAssistant;
-      const answerAssistants = turn.assistants.filter((assistant) => assistant.stopReason !== "toolUse"
+      const lastToolAssistantIndex = turn.assistants.findLastIndex((assistant) => toolCallIdsOf(assistant).length > 0);
+      const answerAssistants = turn.assistants.filter((assistant, assistantIndex) => assistant.stopReason !== "toolUse"
+        && assistantIndex > lastToolAssistantIndex
         && !(assistant.stopReason === "error" && assistant !== finalAssistant));
-      const answerIndex = bubble ? Math.max(0, answerAssistants.indexOf(bubble)) : 0;
       for (const assistant of turn.assistants) {
         const thinking = thinkingOf(assistant);
         if (thinking) segments.push({ kind: "thinking", id: `thinking:${assistant.id}`, text: thinking });
-        if ((!bubbleIsFinalAssistant || assistant !== bubble) && String(assistant.content || "").trim()) {
+        if (!answerAssistants.includes(assistant) && String(assistant.content || "").trim()) {
           segments.push({ kind: "narration", id: `narration:${assistant.id}`, text: String(assistant.content) });
         }
         for (const id of toolCallIdsOf(assistant)) {
@@ -359,10 +358,17 @@ export function buildTurnRows(
         if (!claimed.has(tool.id)) { claimed.add(tool.id); segments.push({ kind: "tool", id: `tool:${tool.id}`, tool }); }
       }
       if (segments.length > 0) rows.push({ key: `trace:${turn.userMessage ? messageKey(turn.userMessage) : messageKey(turn.assistants[0]!)}`, type: "trace", value: { active: false, segments } });
-      const text = String(bubble?.content || "").trim();
-      if (bubble && (text || (bubbleIsFinalAssistant && bubble.stopReason === "error"))) {
-        const displayKey = answerDisplayKey(turn.userMessage, answerIndex, `message:${messageKey(bubble)}`);
-        rows.push({ key: displayKey, displayKey, type: "message", value: bubble, index: messages.indexOf(bubble) });
+      const answer = answerAssistants.at(-1) || null;
+      const answerText = answerAssistants.map((assistant) => String(assistant.content || "").trim()).filter(Boolean).join("\n\n");
+      if (answer && (answerText || (answer === finalAssistant && answer.stopReason === "error"))) {
+        const displayKey = answerDisplayKey(turn.userMessage, 0, `message:${messageKey(answer)}`);
+        rows.push({
+          key: displayKey,
+          displayKey,
+          type: "message",
+          value: answerAssistants.length === 1 ? answer : { ...answer, content: answerText },
+          index: messages.indexOf(answer),
+        });
       }
     }
     if (opts.activeGeneration && turn.userMessage === liveOwner) {

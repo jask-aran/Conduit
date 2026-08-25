@@ -29,7 +29,7 @@ FROM dependency-build-base AS production-dependencies
 
 WORKDIR /build/conduit-web
 COPY conduit-web/package.json conduit-web/package-lock.json ./
-RUN npm ci --omit=dev && npm cache clean --force
+RUN npm ci --omit=dev
 
 FROM node:24.14.0-trixie-slim@sha256:8c8f12cedb96c3b59642cf30d713943c2b223990c9919b96a141681f62e6e292 AS runtime
 

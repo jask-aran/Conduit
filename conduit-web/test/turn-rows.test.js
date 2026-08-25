@@ -118,6 +118,29 @@ test("keeps the answer display key across live and persisted projections", () =>
   assert.equal(persistedAnswer?.type === "message" && persistedAnswer.displayKey, "answer:u1:0");
 });
 
+test("keeps consecutive final assistant messages in the answer area", () => {
+  const rows = buildTurnRows([
+    { id: "u1", role: "user", content: "Explain the pathway" },
+    {
+      id: "a1",
+      role: "assistant",
+      content: "I will check the sources first.",
+      stopReason: "toolUse",
+      blocks: [
+        { type: "thinking", thinking: "Checking sources" },
+        { type: "toolCall", id: "call_1", name: "web_search", arguments: {} },
+      ],
+    },
+    { id: "a2", role: "assistant", content: "The main answer.", stopReason: "stop", blocks: [{ type: "text", text: "The main answer." }] },
+    { id: "a3", role: "assistant", content: "A short follow-up.", stopReason: "stop", blocks: [{ type: "text", text: "A short follow-up." }] },
+  ], [{ id: "call_1", name: "web_search", done: true }]);
+
+  const answers = rows.filter((row) => row.type === "message" && row.value.role === "assistant");
+  assert.deepEqual(answers.map((row) => row.type === "message" && row.value.content), ["The main answer.\n\nA short follow-up."]);
+  const trace = rows.find((row) => row.type === "trace");
+  assert.equal(trace?.type === "trace" && trace.value.segments.some((segment) => segment.kind === "narration" && segment.text === "The main answer."), false);
+});
+
 test("projects empty and partial assistant errors as highlighted message rows", () => {
   const user = { id: "u1", role: "user", content: "Try this request" };
   const persisted = buildTurnRows([
