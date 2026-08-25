@@ -49,6 +49,7 @@ import {
 } from "@/components/primitives";
 import type { ChatSummary, Project, RuntimeProcess, WorkspacePolicy, WorkspaceSuggestion } from "../api/contracts";
 import { api } from "../api/client";
+import { loginUrl, logoutUrl } from "../api/transport";
 import { WorkspaceGlyph } from "../project/workspace-appearance";
 import type { RuntimeStore } from "../state/runtime";
 import { focusFirst, isMobileLayout, MOBILE_LAYOUT_QUERY, restoreFocus } from "./mobile-layout";
@@ -147,6 +148,7 @@ export function Sidebar(props: {
   onOpenWorkspaceIdentity: (project: Project) => void;
   onOpenSettings: (section?: string, workspaceId?: string | null) => void;
   onOpenPalette: (page?: string | null, initialQuery?: string | null) => void;
+  onChangeServer?: () => void;
   chatLimit: number;
   mobileOpen: boolean;
   onMobileOpenChange: (open: boolean) => void;
@@ -789,7 +791,8 @@ export function Sidebar(props: {
         <div data-sidebar="footer"><Menu><MenuTrigger class="sidebar-user" aria-label={`Conduit · ${connectionLabel()}`} title={connectionLabel()}><CableIcon /><span><strong>Conduit</strong><small>{connectionLabel()}</small></span><span class={`server-status-indicator runtime-indicator runtime-indicator-${connectionTone()}`} aria-hidden="true"><Show when={props.connectivity === "connecting" || props.connectivity === "reconnecting"} fallback={<span class="runtime-indicator-dot" />}><Spinner class="size-3" /></Show></span></MenuTrigger><MenuContent>
           <MenuItem onSelect={() => { closeMobile(); props.onOpenSettings("models"); }}>Manage settings</MenuItem>
           <MenuItem onSelect={() => { closeMobile(); props.onOpenPalette(); }}>Command Palette</MenuItem>
-          <MenuItem onSelect={() => fetch("/v0/auth/logout", { method: "POST" }).finally(() => { location.href = "/login"; })}>Sign out</MenuItem>
+          <Show when={props.onChangeServer}><MenuItem onSelect={() => props.onChangeServer?.()}>Change server</MenuItem></Show>
+          <MenuItem onSelect={() => fetch(logoutUrl(), { method: "POST" }).finally(() => { location.href = loginUrl(); })}>Sign out</MenuItem>
         </MenuContent></Menu></div>
         <button data-sidebar="rail" aria-hidden="true" tabIndex={-1} onClick={toggleSidebar} />
       </div>

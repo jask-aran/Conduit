@@ -13,11 +13,14 @@ export function registerRuntimeRoutes(app, {
   templatePublicView,
   projects,
 }) {
-  app.get("/healthz", (_request, response) => response.status(isShuttingDown() ? 503 : 200).json({
-    ok: !isShuttingDown(),
-    status: isShuttingDown() ? "stopping" : "ready",
-    release: config.release,
-  }));
+  app.get("/healthz", (request, response) => {
+    if (request.get("origin") === "https://localhost") response.set("Access-Control-Allow-Origin", "https://localhost");
+    response.status(isShuttingDown() ? 503 : 200).json({
+      ok: !isShuttingDown(),
+      status: isShuttingDown() ? "stopping" : "ready",
+      release: config.release,
+    });
+  });
 
   app.get("/v0/capabilities", (_request, response) => response.json({
     runtime: "pi-rpc", create: true, resume: true, projects: true,

@@ -103,6 +103,10 @@ exit 0
 
   try {
     await waitForServer(origin, child);
+    const nativeHealth = await fetch(`${origin}/healthz`, { headers: { origin: "https://localhost" } });
+    assert.equal(nativeHealth.headers.get("access-control-allow-origin"), "https://localhost");
+    const externalHealth = await fetch(`${origin}/healthz`, { headers: { origin: "https://example.com" } });
+    assert.equal(externalHealth.headers.get("access-control-allow-origin"), null);
     const workspacePolicy = await fetch(`${origin}/v0/workspaces/policy`).then((response) => response.json());
     assert.deepEqual(workspacePolicy.defaultRoot, workspaceParent);
     assert.deepEqual(workspacePolicy.defaultInputPath, workspaceParent);

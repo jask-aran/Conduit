@@ -8,6 +8,7 @@ import {
 
 function context(projects, chatId = null) {
   return {
+    nativeApp: false,
     chatId,
     projects,
     templates: [],
@@ -61,6 +62,13 @@ test("root palette exposes app update and cache reset actions", () => {
   reset?.run({ resetAppCache: () => { resets += 1; } });
   assert.equal(updates, 1);
   assert.equal(resets, 1);
+});
+
+test("native palette hides service-worker actions", () => {
+  const nativeContext = { ...context([]), nativeApp: true };
+  const ids = resolvePaletteCommands(nativeContext).map((command) => command.id);
+  assert.ok(!ids.includes(COMMAND_IDS.updateApp));
+  assert.ok(!ids.includes(COMMAND_IDS.resetAppCache));
 });
 
 test("chat date sections use local calendar boundaries", () => {

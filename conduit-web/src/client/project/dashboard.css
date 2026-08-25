@@ -136,7 +136,7 @@
 .project-dashboard-meta svg { width: 9.6px; height: 9.6px; }
 
 @media (--conduit-mobile-layout) {
-  .project-dashboard-content { width: calc(100% - 19.2px); padding: 19.2px 0 calc(25.6px + env(safe-area-inset-bottom, 0px)); }
+  .project-dashboard-content { width: calc(100% - 19.2px); padding: 19.2px 0 calc(25.6px + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px))); }
   .project-identity { flex-direction: column; gap: 12.8px; padding-bottom: 16px; }
   .project-identity-title { gap: 9.6px; }
   .project-kind-icon { width: 32px; height: 32px; border-radius: 8.8px; }
@@ -306,7 +306,7 @@
 .project-dashboard-meta svg { width: 12px; height: 12px; }
 
 @media (--conduit-mobile-layout) {
-  .project-dashboard-content { width: calc(100% - 24px); padding: 24px 0 calc(32px + env(safe-area-inset-bottom, 0px)); }
+  .project-dashboard-content { width: calc(100% - 24px); padding: 24px 0 calc(32px + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px))); }
   .project-identity { flex-direction: column; gap: 16px; padding-bottom: 20px; }
   .project-identity-title { gap: 12px; }
   .project-kind-icon { width: 40px; height: 40px; border-radius: 11px; }

@@ -2,6 +2,7 @@ import { createEffect, createSignal, onCleanup, onMount, Show } from "solid-js";
 import { FocusIcon, SquareIcon, TerminalIcon } from "lucide-solid";
 import { Button, Spinner } from "@/components/primitives";
 import { api } from "../api/client";
+import { terminalSocketUrl } from "../api/transport";
 import { createTerminalRenderer, selectedTerminalRenderer, type TerminalRenderer, type TerminalRendererId } from "./terminal-renderer";
 
 type Pty = {
@@ -164,8 +165,7 @@ export function TerminalPane(props: { projectId: string }) {
     if (generation !== connectionGeneration || activeProjectId !== record.projectId) return;
 
     const startedAt = performance.now();
-    const url = `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/v0/ptys/${record.id}/attach`;
-    const connection = new WebSocket(url);
+    const connection = new WebSocket(terminalSocketUrl(record.id));
     socket = connection;
     connection.binaryType = "arraybuffer";
     let replaying = true;

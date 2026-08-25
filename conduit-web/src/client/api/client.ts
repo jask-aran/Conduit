@@ -1,3 +1,5 @@
+import { httpUrl, loginUrl } from "./transport";
+
 export interface ApiRequestMetadata {
   method: string;
   path: string;
@@ -9,9 +11,10 @@ export async function api<T>(url: string, options: RequestInit = {}): Promise<T>
   if (options.body && !headers.has("content-type") && !(options.body instanceof FormData)) {
     headers.set("content-type", "application/json");
   }
-  const response = await fetch(url, { ...options, headers });
+  const requestUrl = httpUrl(url);
+  const response = await fetch(requestUrl, { ...options, headers });
   if (response.status === 401) {
-    location.href = `/login?after=${encodeURIComponent(location.pathname + location.search)}`;
+    location.href = loginUrl(location.pathname + location.search);
   }
   const text = await response.text();
   let body: unknown = {};
@@ -20,7 +23,7 @@ export async function api<T>(url: string, options: RequestInit = {}): Promise<T>
   }
   if (!response.ok) {
     const detail = body && typeof body === "object" ? body as Record<string, unknown> : {};
-    const request = new URL(url, location.href);
+    const request = new URL(requestUrl, location.href);
     throw Object.assign(new Error(String(detail.message || detail.error || "Request failed")), detail, {
       apiRequest: {
         method: String(options.method || "GET").toUpperCase(),

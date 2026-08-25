@@ -1,6 +1,7 @@
 import { batch, createMemo, createSignal, onCleanup } from "solid-js";
 import { deriveFineActivity } from "../../activity.js";
 import { api, asList } from "../api/client";
+import { webSocketUrl } from "../api/transport";
 import { isStructuredGenerationEvent, normalizeLiveEvent } from "../api/live-events";
 import type { LiveEvent, RuntimeStateEvent, StructuredGenerationEvent } from "../api/live-events";
 import type {
@@ -425,7 +426,7 @@ export function createActiveChat(options: ActiveChatOptions) {
   const connect = (record: LiveRecord, chatId: string, selection: number) => {
     cancelReconnect();
     socket?.close();
-    const next = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}${record.streamUrl || `/v0/live-sessions/${record.id}/stream`}`);
+    const next = new WebSocket(webSocketUrl(record.streamUrl || `/v0/live-sessions/${record.id}/stream`));
     socket = next;
     next.onmessage = ({ data }) => {
       if (socket !== next || selection !== selectionToken || selectedId() !== chatId) return;

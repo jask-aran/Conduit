@@ -1,6 +1,7 @@
 /// <reference types="vite-plugin-pwa/client" />
 import { batch, createEffect, createMemo, createSignal, ErrorBoundary, lazy, onCleanup, onMount, Show } from "solid-js";
 import { render } from "solid-js/web";
+import { Capacitor } from "@capacitor/core";
 import {
   EllipsisIcon, MessageSquarePlusIcon, PanelLeftIcon, PanelRightIcon, PencilIcon, RefreshCwIcon, SearchIcon, ShareIcon, TerminalIcon, Trash2Icon, TriangleAlertIcon,
 } from "lucide-solid";
@@ -11,6 +12,7 @@ import { DefaultMeteorShower } from "@jask-aran/solid-components/meteor-shower";
 import "@jask-aran/solid-components/meteor-shower.css";
 import { Button, Dialog, DialogContent, Menu, MenuContent, MenuGroup, MenuItem, MenuLabel, MenuSeparator, MenuTrigger } from "@/components/primitives";
 import { api, asList, pathChatId, pathProjectId, projectPath } from "./api/client";
+import { buildHttpUrl, clearServerOrigin, configuredServerOrigin, loginUrl, logoutUrl, normalizeServerOrigin, saveServerOrigin, transcriptUrl } from "./api/transport";
 import type { ChatSummary, DashboardChat, Installation, Project, RuntimeIdentity, Template, TranscriptDetail, WorkspaceAppearance, WorkspacePolicy, WorkspaceSuggestion, WorkspaceSuggestionsPayload } from "./api/contracts";
 import { createErrorDiagnostic, formatRuntimeDiagnosticPrompt, type ErrorDiagnostic, type ErrorDiagnosticContext } from "./error-diagnostics";
 import { Composer, SPINNING_ACTIVITY, type ComposerStatus } from "./chat/composer";
@@ -44,7 +46,8 @@ import "./project/dashboard.css";
 import "./chat/composer-geometry.css";
 import "./styles.css";
 
-if (import.meta.env.PROD) registerSW({ immediate: true, onRegisteredSW: (_url, registration) => rememberPwaRegistration(registration) });
+const nativeApp = Capacitor.isNativePlatform();
+if (import.meta.env.PROD && !nativeApp) registerSW({ immediate: true, onRegisteredSW: (_url, registration) => rememberPwaRegistration(registration) });
 
 type SettingsSection = "general" | "ui" | "shortcuts" | "models" | "profiles" | "runtime" | "workspaces" | "voice" | "search" | "auth";
 type WorkspaceView = "files" | "diff" | "artifacts" | "terminal";
@@ -52,6 +55,45 @@ const METEOR_FIELD_STORAGE_KEY = "conduit:meteor-field";
 const selectedMeteorField = () => localStorage.getItem(METEOR_FIELD_STORAGE_KEY) !== "false";
 const WorkspacePanel = lazy(() => import("./workspace/workspace-panel"));
 const ProjectDashboard = lazy(() => import("./project/dashboard"));
+
+function NativeServerSetup() {
+  const [address, setAddress] = createSignal(configuredServerOrigin() || "");
+  const [error, setError] = createSignal("");
+  const [checking, setChecking] = createSignal(false);
+  const connect = async (event: SubmitEvent) => {
+    event.preventDefault();
+    setError("");
+    let origin: string;
+    try { origin = normalizeServerOrigin(address()); }
+    catch (cause) { setError((cause as Error).message); return; }
+    setChecking(true);
+    try {
+      const response = await fetch(buildHttpUrl("/healthz", origin), { cache: "no-store" });
+      const health = response.ok ? await response.json() as { ok?: boolean } : null;
+      if (!response.ok || !health?.ok) throw new Error(`Server health check failed (${response.status}).`);
+      saveServerOrigin(origin);
+      location.reload();
+    } catch (cause) {
+      setError(cause instanceof TypeError
+        ? "Could not reach this Conduit server. Check Tailscale, HTTPS, and the server address."
+        : (cause as Error).message);
+    } finally {
+      setChecking(false);
+    }
+  };
+  return <main class="native-server-setup">
+    <form class="native-server-card" onSubmit={connect}>
+      <span class="native-server-brand">Conduit</span>
+      <h1>Connect to your server</h1>
+      <p>Enter the HTTPS address for your Conduit server.</p>
+      <label for="native-server-address">Server address</label>
+      <input id="native-server-address" type="text" inputMode="url" autocomplete="url" autocapitalize="none" spellcheck={false}
+        placeholder="https://conduit.your-tailnet.ts.net" value={address()} onInput={(event) => setAddress(event.currentTarget.value)} disabled={checking()} />
+      <Show when={error()}><p class="native-server-error" role="alert">{error()}</p></Show>
+      <Button type="submit" disabled={checking()}>{checking() ? "Checking…" : "Connect"}</Button>
+    </form>
+  </main>;
+}
 
 function ChatHeader(props: {
   project?: Project;
@@ -193,7 +235,7 @@ function ChatHeader(props: {
               </MenuGroup>
             </Show>
             <MenuSeparator />
-            <Show when={!props.dashboard}>
+            <Show when={!props.dashboard && !nativeApp}>
               <MenuItem disabled={props.pwaUpdating()} onSelect={props.onUpdatePwa}><RefreshCwIcon class={props.pwaUpdating() ? "pwa-update-icon pwa-update-icon-active" : "pwa-update-icon"} />{props.pwaUpdating() ? "Updating app…" : "Update app"}</MenuItem>
               <MenuSeparator />
             </Show>
@@ -649,7 +691,7 @@ function App() {
     catch (error) { showError(error); }
   };
   const copyTranscript = async (target: ChatSummary) => {
-    try { const response = await fetch(`/v0/sessions/${target.id}/transcript`); if (!response.ok) throw new Error("Could not load the transcript"); await navigator.clipboard.writeText(await response.text()); }
+    try { const response = await fetch(transcriptUrl(target.id)); if (!response.ok) throw new Error("Could not load the transcript"); await navigator.clipboard.writeText(await response.text()); }
     catch (error) { showError(error); }
   };
   const copyChatLinks = async (targets: Array<{ chat: ChatSummary; project: Project }>) => {
@@ -816,6 +858,7 @@ function App() {
   const thinkingLevels = createMemo(() => models.models().find((item) => item.spec === models.model())?.thinkingLevels ?? []);
 
   const paletteContext = createMemo<PaletteContext>(() => ({
+    nativeApp,
     chatId: catalogue.selectedId(),
     project: selectedProject(),
     projects: catalogue.projects(),
@@ -832,7 +875,7 @@ function App() {
   }));
 
   const paletteActions: PaletteActions = {
-    logout: () => { void fetch("/v0/auth/logout", { method: "POST" }).finally(() => { location.href = "/login"; }); },
+    logout: () => { void fetch(logoutUrl(), { method: "POST" }).finally(() => { location.href = loginUrl(); }); },
     newChat: (project, launch) => void createChat(project ?? undefined, launch ?? {}),
     newFolder: () => runSidebar("new-folder"),
     newWorkspace: () => runSidebar("new-workspace"),
@@ -1038,7 +1081,8 @@ function App() {
       onMoveChat={moveChat} onMoveChats={moveChats} onMoveProjectChats={moveProjectChats} onCopyTranscript={copyTranscript} onCopyChatLinks={copyChatLinks}
       onDeleteChat={deleteChat} onDeleteChats={deleteChats} onDeleteProject={deleteProject}
       onOpenTerminal={(target, project) => { void openChat(target, project).then(() => openWorkspaceView("terminal")); }}
-      onOpenWorkspaceIdentity={openWorkspaceIdentity} onOpenSettings={openSettings} onOpenPalette={(page, initialQuery) => openPalette(page || null, initialQuery || "", page === "chat-search")} />
+      onOpenWorkspaceIdentity={openWorkspaceIdentity} onOpenSettings={openSettings} onOpenPalette={(page, initialQuery) => openPalette(page || null, initialQuery || "", page === "chat-search")}
+      onChangeServer={nativeApp ? () => { clearServerOrigin(); location.reload(); } : undefined} />
     <main data-slot="sidebar-inset" class={`chat-main${routeKind() === "chat" && emptyChat() ? " chat-main-empty" : ""}`} {...(routeKind() === "chat" ? dropHandlers : {})}>
       <Show when={routeBootstrap() === "ready"} fallback={<div class="chat-bootstrap" role={routeBootstrap() === "error" ? "alert" : "status"}>{routeBootstrap() === "error"
         ? routeBootstrapError() || (routeKind() === "project" ? "This project could not be loaded." : "This chat could not be loaded.")
@@ -1075,4 +1119,6 @@ function App() {
   </>;
 }
 
-render(() => <ErrorBoundary fallback={(error) => <div class="crash-screen"><div class="crash-card"><h1>Conduit hit a UI error</h1><p>{error instanceof Error ? error.message : "Unknown interface error"}</p><Button onClick={() => location.reload()}>Reload Conduit</Button></div></div>}><App /></ErrorBoundary>, document.getElementById("root")!);
+render(() => <ErrorBoundary fallback={(error) => <div class="crash-screen"><div class="crash-card"><h1>Conduit hit a UI error</h1><p>{error instanceof Error ? error.message : "Unknown interface error"}</p><Button onClick={() => location.reload()}>Reload Conduit</Button></div></div>}>
+  {nativeApp && !configuredServerOrigin() ? <NativeServerSetup /> : <App />}
+</ErrorBoundary>, document.getElementById("root")!);

@@ -2,6 +2,7 @@ import { createMemo, createSignal, onCleanup } from "solid-js";
 import type { Accessor } from "solid-js";
 import { api, asList } from "../api/client";
 import type { Attachment } from "../api/contracts";
+import { attachmentUrl } from "../api/transport";
 
 export interface UploadAttachment extends Attachment {
   file?: File;
@@ -64,7 +65,7 @@ export function createAttachments(
     update(item.id, { status: "uploading", progress: 0 });
     const request = new XMLHttpRequest();
     requests.set(item.id, request);
-    request.open("PUT", `/v0/chats/${encodeURIComponent(owner)}/attachments/${item.id}?name=${encodeURIComponent(item.name)}`);
+    request.open("PUT", attachmentUrl(owner, item.id, `?name=${encodeURIComponent(item.name)}`));
     request.setRequestHeader("Content-Type", item.file.type || "application/octet-stream");
     let finished = false;
     const finish = () => {
