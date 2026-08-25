@@ -21,6 +21,7 @@ export function createModelSettings(onError: ErrorHandler, onThinkingLevelRecove
   let activeProjectId = "";
   let activeChatId = "";
   let requestSequence = 0;
+  let initialCatalogRefresh = true;
   const pendingThinkingLevels = new Map<string, string>();
   const notifiedRecoveryChats = new Set<string>();
 
@@ -39,17 +40,24 @@ export function createModelSettings(onError: ErrorHandler, onThinkingLevelRecove
     if (catalog) setNotice(catalog.requiresAuthentication ? "Authenticate with conduit-pi, then run /login." : "");
   };
 
-  const reload = async (projectId = activeProjectId) => {
+  const reload = async (projectId = activeProjectId, refreshCatalog = false) => {
     if (!projectId) return;
     activeProjectId = projectId;
     setSettingsLoading(true);
     setSettingsError("");
     try {
+      const refresh = initialCatalogRefresh || refreshCatalog;
       const [settings, catalog] = await Promise.all([
         api<ModelState>(`/v0/settings?projectId=${encodeURIComponent(projectId)}`),
         api<ModelState>(`/v0/models?projectId=${encodeURIComponent(projectId)}`),
       ]);
       if (activeProjectId === projectId) applySettings(settings, catalog);
+      if (refresh) void (async () => {
+        const refreshedCatalog = await api<ModelState>(`/v0/models?projectId=${encodeURIComponent(projectId)}&refresh=true`);
+        const refreshedSettings = await api<ModelState>(`/v0/settings?projectId=${encodeURIComponent(projectId)}`);
+        initialCatalogRefresh = false;
+        if (activeProjectId === projectId) applySettings(refreshedSettings, refreshedCatalog);
+      })().catch(onError);
     } catch (error) { setSettingsError((error as Error).message); onError(error); }
     finally { if (activeProjectId === projectId) setSettingsLoading(false); }
   };

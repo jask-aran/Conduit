@@ -128,6 +128,60 @@ test("browser-local overrides drive root dispatch and palette keycaps", async ({
   await expect(dialog).toHaveCount(0);
 });
 
+test("Control-X opens and closes the model selector", async ({ page }) => {
+  const refreshRequest = page.waitForRequest((request) => {
+    const url = new URL(request.url());
+    return url.pathname === "/v0/models" && url.searchParams.get("refresh") === "true";
+  });
+  await page.goto("/");
+  await refreshRequest;
+  await page.keyboard.press("Control+x");
+  const dialog = page.getByRole("dialog", { name: "Model selector" });
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByRole("option", { name: /Reasoner/ })).toBeVisible();
+  await page.keyboard.press("Control+x");
+  await expect(dialog).toHaveCount(0);
+});
+
+test("removing a provider updates the model selector without a page reload", async ({ page }) => {
+  const anthropic = { provider: "anthropic", id: "claude", spec: "anthropic/claude", label: "Claude", thinkingLevels: ["off"] };
+  let configured = true;
+  const availableModels = () => configured ? [model, plainModel, anthropic] : [model, plainModel];
+  await page.route("**/v0/models?**", (route) => route.fulfill({ json: {
+    models: availableModels(), defaultModel: model.spec, defaultThinkingLevel: "medium", requiresAuthentication: false,
+  } }));
+  await page.route("**/v0/settings?**", (route) => route.fulfill({ json: {
+    models: availableModels(), enabledModels: availableModels().map((item) => item.spec), defaultModel: model.spec,
+  } }));
+  await page.route("**/v0/pi-auth/attempt", (route) => route.fulfill({ json: { attempt: null } }));
+  await page.route("**/v0/pi-auth", (route) => route.fulfill({ json: {
+    providers: [{
+      id: "anthropic", label: "Anthropic", oauth: false,
+      auth: { configured, source: configured ? "stored" : null, removable: configured },
+    }],
+  } }));
+  await page.route("**/v0/pi-auth/anthropic", (route) => {
+    configured = false;
+    return route.fulfill({ json: { removed: true } });
+  });
+
+  await page.goto("/");
+  await page.keyboard.press("Control+x");
+  await expect(page.getByRole("dialog", { name: "Model selector" }).getByRole("option", { name: /Claude/ })).toBeVisible();
+  await page.keyboard.press("Control+x");
+
+  await page.keyboard.press("Control+k");
+  await page.getByRole("option", { name: /^Settings…/ }).click();
+  await page.getByRole("option", { name: /^Auth/ }).click();
+  const settings = page.getByRole("dialog", { name: "Settings" });
+  await settings.getByRole("button", { name: "Remove credential" }).click();
+  await expect(settings.getByRole("button", { name: "Remove credential" })).toHaveCount(0);
+  await settings.getByRole("button", { name: "Close" }).click();
+
+  await page.keyboard.press("Control+x");
+  await expect(page.getByRole("dialog", { name: "Model selector" }).getByRole("option", { name: /Claude/ })).toHaveCount(0);
+});
+
 test("ranks search results and hides non-matches", async ({ page }) => {
   await page.goto("/");
   await openPalette(page);

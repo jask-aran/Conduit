@@ -2,7 +2,7 @@
 import { batch, createEffect, createMemo, createSignal, ErrorBoundary, lazy, onCleanup, onMount, Show } from "solid-js";
 import { render } from "solid-js/web";
 import {
-  EllipsisIcon, PanelLeftIcon, PanelRightIcon, PencilIcon, RefreshCwIcon, SearchIcon, ShareIcon, TerminalIcon, Trash2Icon, TriangleAlertIcon,
+  EllipsisIcon, MessageSquarePlusIcon, PanelLeftIcon, PanelRightIcon, PencilIcon, RefreshCwIcon, SearchIcon, ShareIcon, TerminalIcon, Trash2Icon, TriangleAlertIcon,
 } from "lucide-solid";
 import { registerSW } from "virtual:pwa-register";
 import { Toaster, toast } from "solid-sonner";
@@ -26,6 +26,7 @@ import { COMMAND_IDS, commandRegistry } from "./commands/command-registry";
 import { CommandMenu } from "./navigation/command-menu";
 import type { PaletteActions, PaletteContext } from "./palette/command-registry";
 import { bindVisualViewportShell, isMobileLayout, MOBILE_LAYOUT_QUERY, setMobileOverlayKind } from "./navigation/mobile-layout";
+import { mobileSwipeAction } from "./navigation/mobile-swipe";
 import { Sidebar } from "./navigation/sidebar";
 import { clampSidebarChatLimit, selectedSidebarChatLimit, SIDEBAR_CHAT_LIMIT_STORAGE_KEY } from "./navigation/sidebar-preferences";
 import { WorkspaceAppearanceEditor } from "./project/workspace-appearance-editor";
@@ -65,6 +66,7 @@ function ChatHeader(props: {
   panelOpen: boolean;
   mobileSidebarOpen: boolean;
   onToggleMobileSidebar: () => void;
+  onNewChat: () => void;
   onOpenPalette: () => void;
   onOpenSearch: () => void;
   onTogglePanel: () => void;
@@ -137,7 +139,10 @@ function ChatHeader(props: {
   return <>
     <header class="chat-header">
       <Show when={!props.mobileSidebarOpen}>
-        <Button variant="ghost" size="icon-sm" class="mobile-sidebar-trigger" data-mobile-open="false" aria-label="Toggle Sidebar" aria-expanded={false} onClick={props.onToggleMobileSidebar}><PanelLeftIcon /></Button>
+        <div class="mobile-header-leading">
+          <Button variant="ghost" size="icon-sm" class="mobile-sidebar-trigger" data-mobile-open="false" aria-label="Toggle Sidebar" aria-expanded={false} onClick={props.onToggleMobileSidebar}><PanelLeftIcon /></Button>
+          <Button variant="ghost" size="icon-sm" class="mobile-new-chat-trigger" aria-label="New chat" title="New chat" onClick={props.onNewChat}><MessageSquarePlusIcon /></Button>
+        </div>
       </Show>
       <nav aria-label="breadcrumb" class="chat-header-title"><span>{projectLabel()}</span><span class="breadcrumb-separator" aria-hidden="true" /><strong>{props.title}</strong></nav>
       <Show when={!props.dashboard && props.chat}>
@@ -395,6 +400,43 @@ function App() {
     setMobileSidebarOpen(open);
   };
 
+  onMount(() => {
+    let swipe: { id: number; x: number; y: number } | null = null;
+    const start = (event: TouchEvent) => {
+      if (!isMobileLayout() || event.touches.length !== 1) return;
+      const touch = event.touches[0]!;
+      swipe = { id: touch.identifier, x: touch.clientX, y: touch.clientY };
+    };
+    const end = (event: TouchEvent) => {
+      const touch = swipe && [...event.changedTouches].find((item) => item.identifier === swipe!.id);
+      if (!swipe || !touch) return;
+      const action = mobileSwipeAction({
+        startX: swipe.x,
+        startY: swipe.y,
+        endX: touch.clientX,
+        endY: touch.clientY,
+        sidebarOpen: mobileSidebarOpen(),
+        workspaceOpen: panelOpen(),
+      });
+      swipe = null;
+      if (action === "open-sidebar") setMobileSidebar(true);
+      else if (action === "close-sidebar") setMobileSidebar(false);
+      else if (action === "open-workspace" && workspacePanelScope()) {
+        setMobileSidebar(false);
+        setPanelOpenForChat(true);
+      } else if (action === "close-workspace") setPanelOpenForChat(false);
+    };
+    const cancel = () => { swipe = null; };
+    window.addEventListener("touchstart", start, { passive: true });
+    window.addEventListener("touchend", end, { passive: true });
+    window.addEventListener("touchcancel", cancel, { passive: true });
+    onCleanup(() => {
+      window.removeEventListener("touchstart", start);
+      window.removeEventListener("touchend", end);
+      window.removeEventListener("touchcancel", cancel);
+    });
+  });
+
   const currentDraftId = () => chat.status() === "draft" ? catalogue.selectedId() : null;
 
   const discardDraft = async (id = currentDraftId()) => {
@@ -561,6 +603,16 @@ function App() {
   const renameChat = async (target: ChatSummary, _project: Project, name: string) => {
     try { const saved = await api<ChatSummary>(`/v0/sessions/${target.id}`, { method: "PATCH", body: JSON.stringify({ name }) }); if (catalogue.selectedId() === target.id) chat.setTitle(saved.title); await refresh(); return true; }
     catch (error) { showError(error); return false; }
+  };
+  const autoNameChat = async () => {
+    const id = catalogue.selectedId();
+    if (!id) return;
+    try {
+      const saved = await api<ChatSummary>(`/v0/sessions/${id}/auto-name`, { method: "POST" });
+      chat.setTitle(saved.title);
+      await refresh();
+      toast.success(`Renamed chat to ${saved.title}`);
+    } catch (error) { showError(error); }
   };
   const renameProject = async (target: Project, name: string) => {
     try { await api(`/v0/projects/${target.id}`, { method: "PATCH", body: JSON.stringify({ name }) }); await refresh(); return true; }
@@ -792,6 +844,7 @@ function App() {
     openWorkspaceView,
     copyTranscript: () => { const id = catalogue.selectedId(); if (id) void copyTranscript({ id } as ChatSummary); },
     rename: () => runSidebar("rename-chat"),
+    autoName: () => void autoNameChat(),
     move: () => runSidebar("move-chat"),
     renameFolder: () => runSidebar("rename-folder"),
     stop: () => chat.stop(),
@@ -997,7 +1050,7 @@ function App() {
         </Show>
         <Show when={routeKind() === "project" && selectedProject()} fallback={<>
           <Show when={dropActive()}><div class="chat-drop-overlay"><div>Drop files to attach</div></div></Show>
-          <ChatHeader project={selectedProject()} title={chat.title()} profile={activeProfile()} runtime={chat.runtimeIdentity()} live={chat.live() as unknown as Record<string, unknown>} chat={chat} contextMetrics={contextMetrics} composerStatus={composerStatus()} connectivity={runtime.connectivity()} panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={() => void shareChat()} onRename={() => runSidebar("rename-chat")} onDelete={() => runSidebar("delete-chat")} onUpdatePwa={() => void runPwaUpdate()} pwaUpdating={pwaUpdating} />
+          <ChatHeader project={selectedProject()} title={chat.title() || (chat.status() === "active" ? "Untitled chat" : "New chat")} profile={activeProfile()} runtime={chat.runtimeIdentity()} live={chat.live() as unknown as Record<string, unknown>} chat={chat} contextMetrics={contextMetrics} composerStatus={composerStatus()} connectivity={runtime.connectivity()} panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onNewChat={() => void createChat()} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={() => void shareChat()} onRename={() => runSidebar("rename-chat")} onDelete={() => runSidebar("delete-chat")} onUpdatePwa={() => void runPwaUpdate()} pwaUpdating={pwaUpdating} />
           <Show when={selectedProject()?.kind === "workspace" && [...runtime.processes().values()].some((process) => process.chatId !== catalogue.selectedId() && process.active)}><div class="workspace-warning"><TriangleAlertIcon /><div><strong>Another chat is working in this Workspace</strong><p>Both agents can edit the same files. Conduit does not lock the Workspace or create worktrees automatically.</p></div></div></Show>
           <div class="work-area">
             <section class="work-area-conversation" aria-label="Conversation">
@@ -1007,7 +1060,7 @@ function App() {
             </section>
           </div>
         </>}>
-          <ChatHeader project={selectedProject()} title="Dashboard" panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={() => void shareProject()} onRename={() => runSidebar("rename-folder")} onDelete={() => runSidebar("delete-project")} onUpdatePwa={() => void runPwaUpdate()} pwaUpdating={pwaUpdating} dashboard />
+          <ChatHeader project={selectedProject()} title="Dashboard" panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onNewChat={() => void createChat()} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={() => void shareProject()} onRename={() => runSidebar("rename-folder")} onDelete={() => runSidebar("delete-project")} onUpdatePwa={() => void runPwaUpdate()} pwaUpdating={pwaUpdating} dashboard />
           <ProjectDashboard project={selectedProject()!} templates={templates()} runtime={runtime}
             onNewChat={async (project) => { await createChat(project); }} onOpenChat={(target: DashboardChat, project) => openChat(target, project)}
             onRename={() => runSidebar("rename-folder")} onDelete={() => runSidebar("delete-project")}

@@ -292,10 +292,17 @@ exit 0
     const prefsPatch = await fetch(`${origin}/v0/preferences`, {
       method: "PATCH",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ defaultTemplateId: "workspace" }),
+      body: JSON.stringify({
+        defaultTemplateId: "workspace",
+        sessionNameModel: "example/cheap",
+        sessionNameThinkingLevel: "low",
+      }),
     });
     assert.equal(prefsPatch.status, 200);
-    assert.equal((await prefsPatch.json()).defaultTemplateId, "workspace");
+    const savedPreferences = await prefsPatch.json();
+    assert.equal(savedPreferences.defaultTemplateId, "workspace");
+    assert.equal(savedPreferences.sessionNameModel, "example/cheap");
+    assert.equal(savedPreferences.sessionNameThinkingLevel, "low");
 
     const inheritedWorkspaceChat = await fetch(`${origin}/v0/chats`, {
       method: "POST",

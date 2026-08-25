@@ -126,9 +126,11 @@ test.beforeEach(async ({ page }) => {
   await page.route("**/v0/workspaces/suggestions", async (route) => {
     await route.fulfill({ json: { ...nativeWorkspaceSuggestions, folders: [] } });
   });
+  let preferences = { defaultTemplateId: "chat", sessionNameModel: "", sessionNameThinkingLevel: "off" };
   await page.route("**/v0/preferences", async (route) => {
     const body = route.request().postDataJSON?.() || {};
-    await route.fulfill({ json: { defaultTemplateId: body.defaultTemplateId || "chat" } });
+    preferences = { ...preferences, ...body };
+    await route.fulfill({ json: preferences });
   });
   await page.route("**/v0/runtime/settings", async (route) => {
     await route.fulfill({ json: {
@@ -1363,8 +1365,28 @@ test("mobile sidebar and workspace overlays are full-bleed and exclusive", async
   test.skip(testInfo.project.name !== "mobile-chromium", "phone overlay chrome only");
   await page.goto("/");
 
+  const swipe = (fromX, toX) => page.evaluate(({ fromX, toX }) => {
+    const target = document.body;
+    const start = new Touch({ identifier: 1, target, clientX: fromX, clientY: innerHeight / 2 });
+    window.dispatchEvent(new TouchEvent("touchstart", { bubbles: true, touches: [start], changedTouches: [start] }));
+    const end = new Touch({ identifier: 1, target, clientX: toX, clientY: innerHeight / 2 });
+    window.dispatchEvent(new TouchEvent("touchend", { bubbles: true, touches: [], changedTouches: [end] }));
+  }, { fromX, toX });
+
+  const [headerBox, leadingBox, statusBox, actionsBox] = await Promise.all([
+    page.locator(".chat-header").boundingBox(),
+    page.locator(".mobile-header-leading").boundingBox(),
+    page.locator(".chat-status-line").boundingBox(),
+    page.locator(".chat-header-actions").boundingBox(),
+  ]);
+  expect(leadingBox.x).toBeGreaterThanOrEqual(headerBox.x);
+  expect(statusBox.x).toBeGreaterThanOrEqual(leadingBox.x + leadingBox.width - 1);
+  expect(actionsBox.x).toBeGreaterThanOrEqual(statusBox.x + statusBox.width - 1);
+  expect(actionsBox.x + actionsBox.width).toBeLessThanOrEqual(headerBox.x + headerBox.width + 1);
+  await expect(page.getByRole("button", { name: "New chat" })).toBeVisible();
+
   const openSidebar = page.locator(".mobile-sidebar-trigger");
-  await openSidebar.click();
+  await swipe(100, 190);
   const sidebar = page.locator(".conduit-sidebar");
   await expect(sidebar).toHaveAttribute("data-mobile-open", "true");
   await expect(page.locator("html")).toHaveAttribute("data-mobile-overlay", "sidebar");
@@ -1372,28 +1394,24 @@ test("mobile sidebar and workspace overlays are full-bleed and exclusive", async
   expect(Math.abs(sidebarBox.width - page.viewportSize().width)).toBeLessThanOrEqual(2);
   // Open control leaves the chat header while the drawer owns dismiss.
   await expect(openSidebar).toHaveCount(0);
-  await sidebar.locator('[data-sidebar="trigger"]').click();
+  await swipe(190, 100);
   await expect(sidebar).toHaveAttribute("data-mobile-open", "false");
   await expect(page.locator("html")).not.toHaveAttribute("data-mobile-overlay", "sidebar");
   await expect(page.locator(".mobile-sidebar-trigger")).toBeVisible();
 
-  await page.getByRole("button", { name: "Toggle workspace panel" }).click();
+  await swipe(190, 100);
   const panel = page.getByRole("complementary", { name: "Workspace panel" });
   await expect(panel).toBeVisible();
   await expect(page.locator("html")).toHaveAttribute("data-mobile-overlay", "workspace");
   const panelBox = await panel.boundingBox();
   expect(Math.abs(panelBox.width - page.viewportSize().width)).toBeLessThanOrEqual(2);
-  // Workspace open control hides; close is the panel X only.
-  await expect(page.getByRole("button", { name: "Toggle workspace panel" })).toHaveCount(0);
-  await page.getByRole("button", { name: "Close workspace panel" }).click();
+  await swipe(100, 190);
   await expect(panel).toBeHidden();
-  await expect(page.getByRole("button", { name: "Toggle workspace panel" })).toBeVisible();
 
-  await page.getByRole("button", { name: "Toggle workspace panel" }).click();
+  await swipe(190, 100);
   await expect(panel).toBeVisible();
-  // Full-bleed workspace covers the chat header — close it, then open sidebar.
-  await page.getByRole("button", { name: "Close workspace panel" }).click();
-  await page.locator(".mobile-sidebar-trigger").click();
+  await swipe(100, 190);
+  await swipe(100, 190);
   await expect(sidebar).toHaveAttribute("data-mobile-open", "true");
   await expect(page.locator("html")).toHaveAttribute("data-mobile-overlay", "sidebar");
 
@@ -4084,6 +4102,28 @@ test("settings remains centered with a persistent vertical rail at narrow widths
     expect(tabBoxes[index].y).toBeGreaterThan(tabBoxes[index - 1].y);
     expect(tabBoxes[index].width).toBeCloseTo(tabBoxes[0].width, 0);
   }
+});
+
+test("general settings selects the session naming model and thinking level", async ({ page }, testInfo) => {
+  await page.goto("/");
+  await openSidebar(page, testInfo);
+  await page.locator('[data-sidebar="footer"]').getByRole("button", { name: /Conduit/ }).click();
+  await page.getByRole("menuitem", { name: "Manage settings" }).click();
+  const dialog = page.getByRole("dialog", { name: "Settings" });
+  await dialog.getByRole("tab", { name: "General" }).click();
+  const trigger = dialog.getByRole("button", { name: "Model off" });
+  await expect(trigger).toBeVisible();
+
+  const modelRequest = page.waitForRequest((request) => request.method() === "PATCH" && new URL(request.url()).pathname === "/v0/preferences");
+  await trigger.click();
+  await page.getByRole("menuitemradio").filter({ hasText: "Reasoner" }).click();
+  expect((await modelRequest).postDataJSON()).toEqual({ sessionNameModel: model.spec, sessionNameThinkingLevel: "off" });
+  await expect(dialog.getByRole("button", { name: "Reasoner off" })).toBeVisible();
+
+  const thinkingRequest = page.waitForRequest((request) => request.method() === "PATCH" && new URL(request.url()).pathname === "/v0/preferences");
+  await dialog.getByRole("button", { name: "Reasoner off" }).click();
+  await page.getByRole("menuitemradio", { name: "High" }).click();
+  expect((await thinkingRequest).postDataJSON()).toEqual({ sessionNameModel: model.spec, sessionNameThinkingLevel: "high" });
 });
 
 test("generation_limit bounce surfaces an error and keeps the composer usable", async ({ page }) => {

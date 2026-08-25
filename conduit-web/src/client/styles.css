@@ -665,7 +665,7 @@ svg { stroke-width: 1.5; }
     height: calc(38.4px + env(safe-area-inset-top, 0px));
     min-height: 38.4px;
     padding: calc(3.2px + env(safe-area-inset-top, 0px)) 8px 3.2px;
-    gap: 3.2px;
+    gap: 0;
     background: linear-gradient(to bottom, var(--background) 0 50%, transparent 100%);
   }
   .chat-header-title { display: none; }
@@ -675,11 +675,11 @@ svg { stroke-width: 1.5; }
     display: inline-flex;
     min-width: 0;
     min-height: 32px;
-    flex: 0 0 auto;
+    flex: 1 1 0;
     align-items: center;
     justify-content: flex-start;
     gap: 3.2px;
-    overflow: visible;
+    overflow: hidden;
     border-radius: var(--radius-md);
     background: transparent;
     padding: 0 3.2px;
@@ -691,7 +691,7 @@ svg { stroke-width: 1.5; }
   .chat-status-line[data-state="ready"] { color: var(--muted-foreground); }
   .chat-status-line[data-state="error"] { color: var(--destructive); }
   .chat-status-line[data-state="listening"], .chat-status-line[data-state="active"] { color: var(--muted-foreground); }
-  .chat-status-line[data-state="listening"] { min-width: 0; flex: 1 1 auto; }
+  .chat-status-line[data-state="listening"] { min-width: 0; }
   .chat-status-line[data-state="listening"] .chat-status-waveform.voice-waveform { width: auto; height: 22.4px; min-width: 0; flex: 1 1 auto; padding: 0 1.6px; }
   /* The collapsed mobile composer is one quiet, centred row. Text can grow
      when it wraps, but the empty state stays at the same visual baseline as
@@ -755,7 +755,8 @@ svg { stroke-width: 1.5; }
     transform: none !important;
   }
   body:has(.composer-options-submenu) [data-popper-positioner]:has(> [data-slot="menu-content"].composer-options-menu) { visibility: hidden; }
-  .chat-header > .mobile-sidebar-trigger,
+  .mobile-header-leading > .mobile-sidebar-trigger,
+  .mobile-header-leading > .mobile-new-chat-trigger,
   .chat-header-actions > [data-slot="button"],
   .chat-header-actions > .chat-header-more {
     width: 32px;
@@ -763,7 +764,8 @@ svg { stroke-width: 1.5; }
     height: 32px;
     min-height: 32px;
   }
-  .chat-header-actions { gap: 0; }
+  .mobile-header-leading, .chat-header-actions { gap: 0; }
+  .chat-header-actions { margin-left: auto; justify-content: flex-end; padding: 0; }
   .chat-header-more { display: inline-flex; flex: none; align-items: center; justify-content: center; border: 0; border-radius: var(--radius-md); background: transparent; color: inherit; }
   .chat-header-more:hover { background: var(--accent); }
   .chat-header-menu {
@@ -1435,11 +1437,11 @@ svg { stroke-width: 1.5; }
     display: inline-flex;
     min-width: 0;
     min-height: 40px;
-    flex: 0 0 auto;
+    flex: 1 1 0;
     align-items: center;
     justify-content: flex-start;
     gap: 4px;
-    overflow: visible;
+    overflow: hidden;
     border-radius: var(--radius-md);
     background: transparent;
     padding: 0 4px;
@@ -1451,7 +1453,7 @@ svg { stroke-width: 1.5; }
   .chat-status-line[data-state="ready"] { color: var(--muted-foreground); }
   .chat-status-line[data-state="error"] { color: var(--destructive); }
   .chat-status-line[data-state="listening"], .chat-status-line[data-state="active"] { color: var(--muted-foreground); }
-  .chat-status-line[data-state="listening"] { min-width: 0; flex: 1 1 auto; }
+  .chat-status-line[data-state="listening"] { min-width: 0; }
   .chat-status-line[data-state="listening"] .chat-status-waveform.voice-waveform { width: auto; height: 28px; min-width: 0; flex: 1 1 auto; padding: 0 2px; }
   /* The collapsed mobile composer is one quiet, centred row. Text can grow
      when it wraps, but the empty state stays at the same visual baseline as
@@ -1515,7 +1517,8 @@ svg { stroke-width: 1.5; }
     transform: none !important;
   }
   body:has(.composer-options-submenu) [data-popper-positioner]:has(> [data-slot="menu-content"].composer-options-menu) { visibility: hidden; }
-  .chat-header > .mobile-sidebar-trigger,
+  .mobile-header-leading > .mobile-sidebar-trigger,
+  .mobile-header-leading > .mobile-new-chat-trigger,
   .chat-header-actions > [data-slot="button"],
   .chat-header-actions > .chat-header-more {
     width: 40px;
@@ -1523,7 +1526,8 @@ svg { stroke-width: 1.5; }
     height: 40px;
     min-height: 40px;
   }
-  .chat-header-actions { gap: 0; }
+  .mobile-header-leading, .chat-header-actions { gap: 0; }
+  .chat-header-actions { margin-left: auto; justify-content: flex-end; padding: 0; }
   .chat-header-more { display: inline-flex; flex: none; align-items: center; justify-content: center; border: 0; border-radius: var(--radius-md); background: transparent; color: inherit; }
   .chat-header-more:hover { background: var(--accent); }
   .chat-header-menu {
