@@ -102,8 +102,7 @@ export const commandRegistry: ShortcutCommandDefinition[] = [
     group: "commands",
     icon: "model",
     keywords: ["model", "models", "provider", "scope", "enable"],
-    contexts: ["palette.root", "palette.page"],
-    palette: true,
+    contexts: ["application"],
   }),
   command({
     id: COMMAND_IDS.toggleModelScope,
