@@ -402,7 +402,7 @@ export function createActiveChat(options: ActiveChatOptions) {
     const turnOpen = Boolean(session.generation && !session.generation.closed && !session.generation.settled);
     if (session.stopping) setGeneration("stopping");
     else if (turnOpen || session.active) setGeneration("active");
-    else setGeneration((current) => current === "stopping" ? current : "idle");
+    else setGeneration((current) => ["stopping", "interrupted"].includes(current) ? current : "idle");
   };
 
   const scheduleReconnect = (record: LiveRecord, chatId: string, selection: number) => {
