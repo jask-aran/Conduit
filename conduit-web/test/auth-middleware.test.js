@@ -13,6 +13,7 @@ function mockConfig(host, allowInsecure = false) {
 test("isAllowlistedPath allows login, health and PWA bootstrap assets only", () => {
   assert.equal(isAllowlistedPath("GET", "/login"), true);
   assert.equal(isAllowlistedPath("POST", "/v0/auth/login"), true);
+  assert.equal(isAllowlistedPath("POST", "/v0/auth/native-login"), true);
   assert.equal(isAllowlistedPath("GET", "/healthz"), true);
   assert.equal(isAllowlistedPath("GET", "/manifest.webmanifest"), true);
   assert.equal(isAllowlistedPath("GET", "/manifest-abc123.webmanifest"), true);

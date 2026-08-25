@@ -14,7 +14,6 @@ export function registerRuntimeRoutes(app, {
   projects,
 }) {
   app.get("/healthz", (request, response) => {
-    if (request.get("origin") === "https://localhost") response.set("Access-Control-Allow-Origin", "https://localhost");
     response.status(isShuttingDown() ? 503 : 200).json({
       ok: !isShuttingDown(),
       status: isShuttingDown() ? "stopping" : "ready",

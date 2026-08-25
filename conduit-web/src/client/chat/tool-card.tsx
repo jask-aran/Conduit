@@ -3,6 +3,7 @@ import { CheckIcon, ChevronDownIcon, ChevronUpIcon } from "lucide-solid";
 import { Button, Spinner } from "@/components/primitives";
 import type { ToolItem } from "../api/contracts";
 import { httpUrl } from "../api/transport";
+import { authorizedFetch } from "../api/native-auth-client";
 
 const MAX_PREVIEW = 8_000;
 const commandTools = new Set(["bash", "shell", "exec", "terminal", "run_command"]);
@@ -55,7 +56,7 @@ export function ToolCard(props: { tool?: ToolItem; sessionId?: string | null }) 
     if (!next || !current.resultDeferred || loaded() !== undefined || loading() || !props.sessionId) return;
     setLoading(true);
     try {
-      const response = await fetch(httpUrl(`/v0/sessions/${encodeURIComponent(props.sessionId)}/tools/${encodeURIComponent(current.id)}`));
+      const response = await authorizedFetch(httpUrl(`/v0/sessions/${encodeURIComponent(props.sessionId)}/tools/${encodeURIComponent(current.id)}`));
       if (!response.ok) throw new Error("Could not load tool output");
       const payload = await response.json() as { result?: unknown };
       setLoaded(payload.result ?? "");

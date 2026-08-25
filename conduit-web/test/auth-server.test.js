@@ -222,6 +222,137 @@ test("login flow issues a cookie; logout clears it; rate limiting kicks in", asy
   }
 });
 
+test("native auth uses exact-origin bearer sessions and single-use socket tickets", async () => {
+  const server = await spawnServer({}, { password: "fixture-pw" });
+  const { origin } = server;
+  const nativeHeaders = { origin: "https://localhost" };
+  try {
+    const preflight = await fetch(`${origin}/v0/projects`, {
+      method: "OPTIONS",
+      headers: {
+        ...nativeHeaders,
+        "access-control-request-method": "GET",
+        "access-control-request-headers": "authorization",
+      },
+    });
+    assert.equal(preflight.status, 204);
+    assert.equal(preflight.headers.get("access-control-allow-origin"), "https://localhost");
+    assert.equal(preflight.headers.get("access-control-allow-credentials"), null);
+
+    const rejectedPreflight = await fetch(`${origin}/v0/projects`, {
+      method: "OPTIONS",
+      headers: {
+        ...nativeHeaders,
+        "access-control-request-method": "TRACE",
+        "access-control-request-headers": "x-unsafe",
+      },
+    });
+    assert.equal(rejectedPreflight.status, 403);
+
+    const wrongOrigin = await fetch(`${origin}/v0/auth/native-login`, {
+      method: "POST",
+      headers: { origin: "https://example.com", "x-forwarded-proto": "https", "content-type": "application/json" },
+      body: JSON.stringify({ password: "fixture-pw" }),
+    });
+    assert.equal(wrongOrigin.status, 403);
+    const insecureLogin = await fetch(`${origin}/v0/auth/native-login`, {
+      method: "POST",
+      headers: { ...nativeHeaders, "content-type": "application/json" },
+      body: JSON.stringify({ password: "fixture-pw" }),
+    });
+    assert.equal(insecureLogin.status, 400);
+    const wrongPassword = await fetch(`${origin}/v0/auth/native-login`, {
+      method: "POST",
+      headers: { ...nativeHeaders, "x-forwarded-proto": "https", "content-type": "application/json" },
+      body: JSON.stringify({ password: "fixture-wrong" }),
+    });
+    assert.equal(wrongPassword.status, 401);
+
+    const login = await fetch(`${origin}/v0/auth/native-login`, {
+      method: "POST",
+      headers: { ...nativeHeaders, "x-forwarded-proto": "https", "content-type": "application/json" },
+      body: JSON.stringify({ password: "fixture-pw" }),
+    });
+    assert.equal(login.status, 200);
+    const { token } = await login.json();
+    assert.match(token, /^[A-Za-z0-9_-]{32,}$/);
+    const authFile = await fs.readFile(path.join(server.root, "auth.json"), "utf8");
+    assert.equal(authFile.includes(token), false);
+    assert.match(authFile, /"kind": "native"/);
+
+    const authorized = await fetch(`${origin}/v0/projects`, {
+      headers: { ...nativeHeaders, authorization: `Bearer ${token}` },
+    });
+    assert.equal(authorized.status, 200);
+    const missingOrigin = await fetch(`${origin}/v0/projects`, {
+      headers: { authorization: `Bearer ${token}` },
+    });
+    assert.equal(missingOrigin.status, 401);
+    const nativeTokenAsCookie = await fetch(`${origin}/v0/projects`, {
+      headers: { cookie: `conduit_session=${token}` },
+    });
+    assert.equal(nativeTokenAsCookie.status, 401);
+
+    const ticketResponse = await fetch(`${origin}/v0/auth/socket-ticket`, {
+      method: "POST",
+      headers: { ...nativeHeaders, authorization: `Bearer ${token}` },
+    });
+    assert.equal(ticketResponse.status, 200);
+    const { ticket } = await ticketResponse.json();
+    const ticketAsBearer = await fetch(`${origin}/v0/projects`, {
+      headers: { ...nativeHeaders, authorization: `Bearer ${ticket}` },
+    });
+    assert.equal(ticketAsBearer.status, 401);
+
+    const opened = await new Promise((resolve) => {
+      const ws = new WebSocket(`${origin.replace("http", "ws")}/v0/dictation/stream?ticket=${ticket}`, { headers: { Origin: "https://localhost" } });
+      ws.once("open", () => { ws.close(); resolve(true); });
+      ws.once("error", () => resolve(false));
+    });
+    assert.equal(opened, true);
+    const reused = await new Promise((resolve) => {
+      const ws = new WebSocket(`${origin.replace("http", "ws")}/v0/dictation/stream?ticket=${ticket}`, { headers: { Origin: "https://localhost" } });
+      ws.once("open", () => { ws.close(); resolve(true); });
+      ws.once("error", () => resolve(false));
+    });
+    assert.equal(reused, false);
+
+    const logout = await fetch(`${origin}/v0/auth/logout`, {
+      method: "POST",
+      headers: { ...nativeHeaders, authorization: `Bearer ${token}` },
+    });
+    assert.equal(logout.status, 200);
+    const revoked = await fetch(`${origin}/v0/projects`, {
+      headers: { ...nativeHeaders, authorization: `Bearer ${token}` },
+    });
+    assert.equal(revoked.status, 401);
+
+    const secondNativeLogin = await fetch(`${origin}/v0/auth/native-login`, {
+      method: "POST",
+      headers: { ...nativeHeaders, "x-forwarded-proto": "https", "content-type": "application/json" },
+      body: JSON.stringify({ password: "fixture-pw" }),
+    });
+    const secondToken = (await secondNativeLogin.json()).token;
+    const browserLogin = await fetch(`${origin}/v0/auth/login`, {
+      method: "POST",
+      headers: { "content-type": "application/json", accept: "application/json" },
+      body: JSON.stringify({ password: "fixture-pw" }),
+    });
+    const browserCookie = browserLogin.headers.get("set-cookie").split(";")[0];
+    const reset = await fetch(`${origin}/v0/auth/reset-sessions`, {
+      method: "POST",
+      headers: { cookie: browserCookie },
+    });
+    assert.equal(reset.status, 200);
+    const resetNative = await fetch(`${origin}/v0/projects`, {
+      headers: { ...nativeHeaders, authorization: `Bearer ${secondToken}` },
+    });
+    assert.equal(resetNative.status, 401);
+  } finally {
+    await stop(server);
+  }
+});
+
 test("a non-loopback bind with no password and no override rejects startup", async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-auth-startup-"));
   const port = await availablePort();

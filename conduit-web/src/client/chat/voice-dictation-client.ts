@@ -520,7 +520,7 @@ export function createVoiceDictationClient(callbacks: VoiceDictationCallbacks, o
   };
   requestStop = stop;
 
-  const beginStart = (acceptedAt: number) => {
+  const beginStart = async (acceptedAt: number) => {
     if (state !== "starting") return;
     explicitlyClosed = false;
     stopRequested = false;
@@ -575,7 +575,7 @@ export function createVoiceDictationClient(callbacks: VoiceDictationCallbacks, o
           fail(formatted);
         },
       );
-      socket = new WebSocket(dictationSocketUrl());
+      socket = new WebSocket(await dictationSocketUrl());
       socket.binaryType = "arraybuffer";
       socket.onmessage = (event) => {
         try {
@@ -657,7 +657,7 @@ export function createVoiceDictationClient(callbacks: VoiceDictationCallbacks, o
     catch { /* beginStart reports unsupported or failed context creation. */ }
     // Telemetry is optional. Do not wait for its lazy chunk before opening the
     // microphone and transport path.
-    if (state === "starting") beginStart(acceptedAt);
+    if (state === "starting") void beginStart(acceptedAt).catch(fail);
   };
 
   const dispose = () => {

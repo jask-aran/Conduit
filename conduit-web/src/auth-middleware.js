@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import { NATIVE_APP_ORIGIN } from "./native-auth.js";
 
 const COOKIE_NAME = "conduit_session";
 const COOKIE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
@@ -77,7 +78,7 @@ function isBrowserNavigation(request) {
 }
 
 export function isAllowlistedPath(method, pathname) {
-  if (method !== "GET") return method === "POST" && pathname === "/v0/auth/login";
+  if (method !== "GET") return method === "POST" && ["/v0/auth/login", "/v0/auth/native-login"].includes(pathname);
   if (UNAUTHENTICATED_EXACT.has(pathname)) return true;
   return UNAUTHENTICATED_PWA_PATTERNS.some((pattern) => pattern.test(pathname));
 }
@@ -108,9 +109,44 @@ export async function validateSession(authStore, request) {
   const token = readCookie(request);
   if (!token) return null;
   const session = await authStore.findSession(token);
-  if (!session) return null;
+  if (!session || session.kind === "native") return null;
   const touched = await authStore.touchSession(session);
   return { token, session, touched };
+}
+
+export function isNativeRequest(request) {
+  return request.headers?.origin === NATIVE_APP_ORIGIN;
+}
+
+export async function validateNativeSession(authStore, request) {
+  if (!isNativeRequest(request)) return null;
+  const match = String(request.headers?.authorization || "").match(/^Bearer ([A-Za-z0-9_-]{32,256})$/);
+  if (!match) return null;
+  const token = match[1];
+  const session = await authStore.findSession(token);
+  if (!session || session.kind !== "native") return null;
+  const touched = await authStore.touchSession(session);
+  return { token, session, touched, native: true };
+}
+
+const NATIVE_METHODS = new Set(["GET", "POST", "PUT", "PATCH", "DELETE"]);
+const NATIVE_HEADERS = new Set(["authorization", "content-type"]);
+
+export function nativeCors(request, response, next) {
+  if (!isNativeRequest(request)) return next();
+  response.set("Access-Control-Allow-Origin", NATIVE_APP_ORIGIN);
+  response.set("Vary", "Origin");
+  if (request.method !== "OPTIONS") return next();
+  const method = String(request.headers["access-control-request-method"] || "").toUpperCase();
+  const headers = String(request.headers["access-control-request-headers"] || "")
+    .split(",").map((value) => value.trim().toLowerCase()).filter(Boolean);
+  if (!NATIVE_METHODS.has(method) || headers.some((header) => !NATIVE_HEADERS.has(header))) {
+    return response.status(403).json({ error: "native_cors_rejected" });
+  }
+  response.set("Access-Control-Allow-Methods", [...NATIVE_METHODS].join(", "));
+  response.set("Access-Control-Allow-Headers", [...NATIVE_HEADERS].join(", "));
+  response.set("Access-Control-Max-Age", "600");
+  return response.status(204).end();
 }
 
 export function issueSessionCookie(response, token, { secure }) {
@@ -152,13 +188,13 @@ export function prepareAuthMiddleware(authStore) {
       }
       if (!authStore.hasPassword()) return next();
     }
-    const context = await validateSession(authStore, request);
+    const context = await validateNativeSession(authStore, request) || await validateSession(authStore, request);
     if (context) {
       request.conduitAuth = context;
       // Rolling expiry: when touchSession actually advanced lastSeenAt
       // (throttled to once per LAST_SEEN_REFRESH_MS), re-issue the cookie so
       // the browser's 30-day window restarts from this request.
-      if (context.touched) issueSessionCookie(response, context.token, { secure: isSecureRequest(request) });
+      if (context.touched && !context.native) issueSessionCookie(response, context.token, { secure: isSecureRequest(request) });
       return next();
     }
     if (isBrowserNavigation(request) && !UNAUTHENTICATED_API_PREFIXES.some((prefix) => request.path.startsWith(prefix))) {

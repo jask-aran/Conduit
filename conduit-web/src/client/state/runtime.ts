@@ -1,6 +1,8 @@
 import { createSignal, onCleanup, onMount } from "solid-js";
+import { Capacitor } from "@capacitor/core";
 import type { RuntimeProcess } from "../api/contracts";
 import { eventSourceUrl } from "../api/transport";
+import { authorizedFetch } from "../api/native-auth-client";
 
 export type Connectivity = "connecting" | "online" | "reconnecting" | "offline";
 
@@ -8,7 +10,7 @@ export function createRuntimeStore() {
   const [processes, setProcesses] = createSignal(new Map<string, RuntimeProcess>());
   const [connectivity, setConnectivity] = createSignal<Connectivity>("connecting");
   const [stale, setStale] = createSignal(false);
-  let source: EventSource | undefined;
+  let source: { close: () => void } | undefined;
   let reconnectTimer: ReturnType<typeof setTimeout> | undefined;
   let attempts = 0;
 
@@ -40,11 +42,9 @@ export function createRuntimeStore() {
     source = undefined;
     setConnectivity(attempts ? "reconnecting" : "connecting");
     setStale(attempts > 0);
-    const next = new EventSource(eventSourceUrl("/v0/runtime/stream"));
-    source = next;
-    next.onmessage = (message) => {
+    const onMessage = (data: string) => {
       try {
-        const event = JSON.parse(message.data) as Record<string, unknown>;
+        const event = JSON.parse(data) as Record<string, unknown>;
         if (event.type === "runtime_global_snapshot") {
           replaceAll((event.processes || []) as RuntimeProcess[]);
           attempts = 0;
@@ -59,7 +59,7 @@ export function createRuntimeStore() {
         // A malformed global update must not take the app down.
       }
     };
-    next.onerror = () => {
+    const onError = (next: { close: () => void }) => {
       if (source !== next) return;
       next.close();
       source = undefined;
@@ -70,6 +70,37 @@ export function createRuntimeStore() {
       if (reconnectTimer) clearTimeout(reconnectTimer);
       reconnectTimer = setTimeout(connect, offline ? 10_000 : Math.min(1000 * 2 ** Math.min(attempts, 4), 8000));
     };
+    if (Capacitor.isNativePlatform()) {
+      const controller = new AbortController();
+      const next = { close: () => controller.abort() };
+      source = next;
+      void authorizedFetch(eventSourceUrl("/v0/runtime/stream"), {
+        headers: { accept: "text/event-stream" },
+        signal: controller.signal,
+      }).then(async (response) => {
+        if (!response.ok || !response.body) throw new Error("Runtime stream unavailable");
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let pending = "";
+        for (;;) {
+          const { done, value } = await reader.read();
+          if (done) throw new Error("Runtime stream closed");
+          pending += decoder.decode(value, { stream: true }).replace(/\r\n/g, "\n");
+          let boundary;
+          while ((boundary = pending.indexOf("\n\n")) >= 0) {
+            const frame = pending.slice(0, boundary);
+            pending = pending.slice(boundary + 2);
+            const data = frame.split("\n").filter((line) => line.startsWith("data:")).map((line) => line.slice(5).trimStart()).join("\n");
+            if (data) onMessage(data);
+          }
+        }
+      }).catch(() => { if (!controller.signal.aborted) onError(next); });
+    } else {
+      const next = new EventSource(eventSourceUrl("/v0/runtime/stream"));
+      source = next;
+      next.onmessage = (message) => onMessage(message.data);
+      next.onerror = () => onError(next);
+    }
   };
 
   const resume = () => {

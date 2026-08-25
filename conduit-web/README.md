@@ -380,6 +380,15 @@ cookie (`HttpOnly`, `SameSite=Lax`, `Secure` over HTTPS/X-Forwarded-Proto),
 30-day rolling expiry, capped at 20 stored sessions. The hashed session row
 (SHA-256) is the only thing persisted server-side.
 
+The Android shell uses a separate native session. It sends the password only
+to the configured HTTPS server, stores the returned bearer token through
+Android Keystore-backed secure storage, and sends it in the `Authorization`
+header. Native requests are accepted only from the exact Capacitor
+`https://localhost` origin. CORS does not permit wildcard origins,
+cross-origin cookies, or headers other than `Authorization` and
+`Content-Type`. WebSockets use a random 30-second ticket that expires after one
+upgrade; the bearer token never enters a URL.
+
 Enforcement is a single `requireAuth` middleware mounted before every other
 route and static handler, plus the WebSocket upgrade validator. The allowlist
 is `GET /login`, `POST /v0/auth/login`, `GET /healthz`, and the PWA bootstrap
@@ -398,6 +407,10 @@ so timing reveals nothing.
   cookie and returns `303 → after` (form) or `{ ok, redirect }` (JSON). Wrong
   password re-renders the page with an inline error (form) or returns `401`
   JSON (fetch).
+- `POST /v0/auth/native-login` — accepts the password from the exact Capacitor
+  origin over HTTPS and returns one native bearer token
+- `POST /v0/auth/socket-ticket` — exchanges a native bearer token for one
+  short-lived, single-use WebSocket ticket
 - `POST /v0/auth/logout` — clears the current session row and cookie
 - `GET /v0/auth/status` — `{ hasPassword, authenticated, sessionCount }`
 - `POST /v0/auth/reset-sessions` — keeps the caller's token, signs out everyone
@@ -841,6 +854,21 @@ The Capacitor 8 project in `android/` packages the production `dist/` bundle
 under the application ID `com.jaskaran.conduit`. It uses the secure local
 WebView origin and does not load a production `server.url`. Native builds do not
 register the PWA service worker or show its update and cache-reset actions.
+First launch requests one HTTPS Conduit server origin and checks `/healthz`.
+The same form then reveals the normal Conduit password field. The server
+origin stays in local storage because it is not secret; the bearer token stays
+in Android Keystore-backed storage. Change server clears both values.
+
+Versioned tags build the Android app in
+`.github/workflows/publish-container.yml`. A tag such as `v0.6.0-rc.1`
+creates a GitHub prerelease with `conduit-v0.6.0-rc.1.apk` and its SHA-256
+file. A stable tag such as `v0.6.0` creates the latest release. Add the
+required `docs/releases/<tag>.md` changelog, then push the tag. Release
+candidates do not update the container `latest` tag. The workflow signs every
+APK with the persistent key in the `ANDROID_KEYSTORE_BASE64`,
+`ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, and `ANDROID_KEY_PASSWORD`
+GitHub Actions secrets. Keep that key permanently: Android rejects an update
+signed with a different key.
 
 ```bash
 npm run cap:sync       # build the web bundle and copy it into Android
@@ -850,8 +878,7 @@ npm run android:run    # sync and select a connected device or emulator
 ```
 
 Capacitor 8 requires Node 22 or newer, Android Studio 2025.2.1 or newer, and an
-installed Android SDK. Server selection and native authentication arrive in the
-next implementation slices; Slice 1 proves only the bundled shell.
+installed Android SDK.
 
 ## Verification
 

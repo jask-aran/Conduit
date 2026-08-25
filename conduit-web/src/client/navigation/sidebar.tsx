@@ -49,7 +49,6 @@ import {
 } from "@/components/primitives";
 import type { ChatSummary, Project, RuntimeProcess, WorkspacePolicy, WorkspaceSuggestion } from "../api/contracts";
 import { api } from "../api/client";
-import { loginUrl, logoutUrl } from "../api/transport";
 import { WorkspaceGlyph } from "../project/workspace-appearance";
 import type { RuntimeStore } from "../state/runtime";
 import { focusFirst, isMobileLayout, MOBILE_LAYOUT_QUERY, restoreFocus } from "./mobile-layout";
@@ -149,6 +148,7 @@ export function Sidebar(props: {
   onOpenSettings: (section?: string, workspaceId?: string | null) => void;
   onOpenPalette: (page?: string | null, initialQuery?: string | null) => void;
   onChangeServer?: () => void;
+  onLogout?: () => void;
   chatLimit: number;
   mobileOpen: boolean;
   onMobileOpenChange: (open: boolean) => void;
@@ -792,7 +792,7 @@ export function Sidebar(props: {
           <MenuItem onSelect={() => { closeMobile(); props.onOpenSettings("models"); }}>Manage settings</MenuItem>
           <MenuItem onSelect={() => { closeMobile(); props.onOpenPalette(); }}>Command Palette</MenuItem>
           <Show when={props.onChangeServer}><MenuItem onSelect={() => props.onChangeServer?.()}>Change server</MenuItem></Show>
-          <MenuItem onSelect={() => fetch(logoutUrl(), { method: "POST" }).finally(() => { location.href = loginUrl(); })}>Sign out</MenuItem>
+          <MenuItem onSelect={() => props.onLogout?.()}>Sign out</MenuItem>
         </MenuContent></Menu></div>
         <button data-sidebar="rail" aria-hidden="true" tabIndex={-1} onClick={toggleSidebar} />
       </div>

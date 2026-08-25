@@ -13,6 +13,7 @@ import "@jask-aran/solid-components/meteor-shower.css";
 import { Button, Dialog, DialogContent, Menu, MenuContent, MenuGroup, MenuItem, MenuLabel, MenuSeparator, MenuTrigger } from "@/components/primitives";
 import { api, asList, pathChatId, pathProjectId, projectPath } from "./api/client";
 import { buildHttpUrl, clearServerOrigin, configuredServerOrigin, loginUrl, logoutUrl, normalizeServerOrigin, saveServerOrigin, transcriptUrl } from "./api/transport";
+import { authorizedFetch, clearNativeBearerToken, nativeBearerToken, NATIVE_AUTH_REQUIRED_EVENT, saveNativeBearerToken } from "./api/native-auth-client";
 import type { ChatSummary, DashboardChat, Installation, Project, RuntimeIdentity, Template, TranscriptDetail, WorkspaceAppearance, WorkspacePolicy, WorkspaceSuggestion, WorkspaceSuggestionsPayload } from "./api/contracts";
 import { createErrorDiagnostic, formatRuntimeDiagnosticPrompt, type ErrorDiagnostic, type ErrorDiagnosticContext } from "./error-diagnostics";
 import { Composer, SPINNING_ACTIVITY, type ComposerStatus } from "./chat/composer";
@@ -56,43 +57,94 @@ const selectedMeteorField = () => localStorage.getItem(METEOR_FIELD_STORAGE_KEY)
 const WorkspacePanel = lazy(() => import("./workspace/workspace-panel"));
 const ProjectDashboard = lazy(() => import("./project/dashboard"));
 
-function NativeServerSetup() {
+function NativeServerSetup(props: { onAuthenticated: () => void }) {
   const [address, setAddress] = createSignal(configuredServerOrigin() || "");
+  const [verifiedOrigin, setVerifiedOrigin] = createSignal(configuredServerOrigin());
+  const [password, setPassword] = createSignal("");
   const [error, setError] = createSignal("");
-  const [checking, setChecking] = createSignal(false);
-  const connect = async (event: SubmitEvent) => {
+  const [submitting, setSubmitting] = createSignal(false);
+  const submit = async (event: SubmitEvent) => {
     event.preventDefault();
     setError("");
-    let origin: string;
-    try { origin = normalizeServerOrigin(address()); }
-    catch (cause) { setError((cause as Error).message); return; }
-    setChecking(true);
+    setSubmitting(true);
     try {
-      const response = await fetch(buildHttpUrl("/healthz", origin), { cache: "no-store" });
-      const health = response.ok ? await response.json() as { ok?: boolean } : null;
-      if (!response.ok || !health?.ok) throw new Error(`Server health check failed (${response.status}).`);
-      saveServerOrigin(origin);
-      location.reload();
+      if (!verifiedOrigin()) {
+        const origin = normalizeServerOrigin(address());
+        const response = await fetch(buildHttpUrl("/healthz", origin), { cache: "no-store" });
+        const health = response.ok ? await response.json() as { ok?: boolean } : null;
+        if (!response.ok || !health?.ok) throw new Error(`Server health check failed (${response.status}).`);
+        saveServerOrigin(origin);
+        setAddress(origin);
+        setVerifiedOrigin(origin);
+        return;
+      }
+      const response = await fetch(buildHttpUrl("/v0/auth/native-login", verifiedOrigin()!), {
+        method: "POST",
+        headers: { "content-type": "application/json", accept: "application/json" },
+        body: JSON.stringify({ password: password() }),
+      });
+      const body = await response.json().catch(() => ({})) as { token?: string; message?: string };
+      if (!response.ok || !body.token) throw new Error(body.message || "Could not sign in.");
+      await saveNativeBearerToken(body.token);
+      props.onAuthenticated();
     } catch (cause) {
       setError(cause instanceof TypeError
         ? "Could not reach this Conduit server. Check Tailscale, HTTPS, and the server address."
         : (cause as Error).message);
     } finally {
-      setChecking(false);
+      setSubmitting(false);
     }
   };
   return <main class="native-server-setup">
-    <form class="native-server-card" onSubmit={connect}>
+    <form class="native-server-card" onSubmit={submit}>
       <span class="native-server-brand">Conduit</span>
       <h1>Connect to your server</h1>
-      <p>Enter the HTTPS address for your Conduit server.</p>
+      <p>{verifiedOrigin() ? "Server confirmed. Enter your Conduit password." : "Enter the HTTPS address for your Conduit server."}</p>
       <label for="native-server-address">Server address</label>
       <input id="native-server-address" type="text" inputMode="url" autocomplete="url" autocapitalize="none" spellcheck={false}
-        placeholder="https://conduit.your-tailnet.ts.net" value={address()} onInput={(event) => setAddress(event.currentTarget.value)} disabled={checking()} />
+        placeholder="https://conduit.your-tailnet.ts.net" value={address()} onInput={(event) => setAddress(event.currentTarget.value)}
+        disabled={submitting() || Boolean(verifiedOrigin())} />
+      <Show when={verifiedOrigin()}>
+        <label for="native-password">Password</label>
+        <input id="native-password" type="password" autocomplete="current-password" value={password()}
+          onInput={(event) => setPassword(event.currentTarget.value)} disabled={submitting()} autofocus />
+      </Show>
       <Show when={error()}><p class="native-server-error" role="alert">{error()}</p></Show>
-      <Button type="submit" disabled={checking()}>{checking() ? "Checking…" : "Connect"}</Button>
+      <Button type="submit" disabled={submitting() || Boolean(verifiedOrigin() && !password())}>
+        {submitting() ? (verifiedOrigin() ? "Signing in…" : "Checking…") : (verifiedOrigin() ? "Sign in" : "Connect")}
+      </Button>
+      <Show when={verifiedOrigin()}><Button type="button" variant="ghost" onClick={() => {
+        void clearNativeBearerToken().finally(() => {
+          clearServerOrigin();
+          setVerifiedOrigin(null);
+          setPassword("");
+          setError("");
+        });
+      }}>Change server</Button></Show>
     </form>
   </main>;
+}
+
+function NativeRoot() {
+  const [state, setState] = createSignal<"loading" | "login" | "app">("loading");
+  onMount(() => {
+    const requireLogin = () => setState("login");
+    window.addEventListener(NATIVE_AUTH_REQUIRED_EVENT, requireLogin);
+    onCleanup(() => window.removeEventListener(NATIVE_AUTH_REQUIRED_EVENT, requireLogin));
+    void nativeBearerToken().then(async (token) => {
+      const origin = configuredServerOrigin();
+      if (!token || !origin) return setState("login");
+      try {
+        const response = await authorizedFetch(buildHttpUrl("/v0/auth/status", origin));
+        setState(response.status === 401 ? "login" : "app");
+      } catch {
+        setState("app");
+      }
+    }).catch(() => setState("login"));
+  });
+  return <Show when={state() !== "loading"} fallback={<main class="native-server-setup"><span class="native-server-brand">Conduit</span></main>}>
+    {state() === "app" ? <App /> : <NativeServerSetup onAuthenticated={() => setState("app")} />}
+  </Show>;
 }
 
 function ChatHeader(props: {
@@ -255,6 +307,15 @@ function ChatHeader(props: {
 }
 
 function App() {
+  const logout = async () => {
+    if (nativeApp) {
+      try { await authorizedFetch(logoutUrl(), { method: "POST" }); } catch {}
+      await clearNativeBearerToken();
+      window.dispatchEvent(new Event(NATIVE_AUTH_REQUIRED_EVENT));
+      return;
+    }
+    await fetch(logoutUrl(), { method: "POST" }).finally(() => { location.href = loginUrl(); });
+  };
   const shortcutManager = new ShortcutManager({
     commands: commandRegistry,
     environment: browserShortcutEnvironmentProvider.detect(),
@@ -691,7 +752,7 @@ function App() {
     catch (error) { showError(error); }
   };
   const copyTranscript = async (target: ChatSummary) => {
-    try { const response = await fetch(transcriptUrl(target.id)); if (!response.ok) throw new Error("Could not load the transcript"); await navigator.clipboard.writeText(await response.text()); }
+    try { const response = await authorizedFetch(transcriptUrl(target.id)); if (!response.ok) throw new Error("Could not load the transcript"); await navigator.clipboard.writeText(await response.text()); }
     catch (error) { showError(error); }
   };
   const copyChatLinks = async (targets: Array<{ chat: ChatSummary; project: Project }>) => {
@@ -875,7 +936,7 @@ function App() {
   }));
 
   const paletteActions: PaletteActions = {
-    logout: () => { void fetch(logoutUrl(), { method: "POST" }).finally(() => { location.href = loginUrl(); }); },
+    logout: () => { void logout(); },
     newChat: (project, launch) => void createChat(project ?? undefined, launch ?? {}),
     newFolder: () => runSidebar("new-folder"),
     newWorkspace: () => runSidebar("new-workspace"),
@@ -1082,7 +1143,8 @@ function App() {
       onDeleteChat={deleteChat} onDeleteChats={deleteChats} onDeleteProject={deleteProject}
       onOpenTerminal={(target, project) => { void openChat(target, project).then(() => openWorkspaceView("terminal")); }}
       onOpenWorkspaceIdentity={openWorkspaceIdentity} onOpenSettings={openSettings} onOpenPalette={(page, initialQuery) => openPalette(page || null, initialQuery || "", page === "chat-search")}
-      onChangeServer={nativeApp ? () => { clearServerOrigin(); location.reload(); } : undefined} />
+      onChangeServer={nativeApp ? () => { void clearNativeBearerToken().finally(() => { clearServerOrigin(); location.reload(); }); } : undefined}
+      onLogout={() => void logout()} />
     <main data-slot="sidebar-inset" class={`chat-main${routeKind() === "chat" && emptyChat() ? " chat-main-empty" : ""}`} {...(routeKind() === "chat" ? dropHandlers : {})}>
       <Show when={routeBootstrap() === "ready"} fallback={<div class="chat-bootstrap" role={routeBootstrap() === "error" ? "alert" : "status"}>{routeBootstrap() === "error"
         ? routeBootstrapError() || (routeKind() === "project" ? "This project could not be loaded." : "This chat could not be loaded.")
@@ -1120,5 +1182,5 @@ function App() {
 }
 
 render(() => <ErrorBoundary fallback={(error) => <div class="crash-screen"><div class="crash-card"><h1>Conduit hit a UI error</h1><p>{error instanceof Error ? error.message : "Unknown interface error"}</p><Button onClick={() => location.reload()}>Reload Conduit</Button></div></div>}>
-  {nativeApp && !configuredServerOrigin() ? <NativeServerSetup /> : <App />}
+  {nativeApp ? <NativeRoot /> : <App />}
 </ErrorBoundary>, document.getElementById("root")!);

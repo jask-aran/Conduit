@@ -423,10 +423,10 @@ export function createActiveChat(options: ActiveChatOptions) {
     }, delay);
   };
 
-  const connect = (record: LiveRecord, chatId: string, selection: number) => {
+  const connect = async (record: LiveRecord, chatId: string, selection: number) => {
     cancelReconnect();
     socket?.close();
-    const next = new WebSocket(webSocketUrl(record.streamUrl || `/v0/live-sessions/${record.id}/stream`));
+    const next = new WebSocket(await webSocketUrl(record.streamUrl || `/v0/live-sessions/${record.id}/stream`));
     socket = next;
     next.onmessage = ({ data }) => {
       if (socket !== next || selection !== selectionToken || selectedId() !== chatId) return;
@@ -465,7 +465,7 @@ export function createActiveChat(options: ActiveChatOptions) {
       if (record.contextUsage) setContextUsage(record.contextUsage);
       if (record.sessionStats) setSessionStats(record.sessionStats);
       if (record.cacheStats) setCacheStats(record.cacheStats);
-      connect(record, chatId, selection);
+      await connect(record, chatId, selection);
       await new Promise<void>((resolve, reject) => {
         const current = socket;
         if (!current) return reject(new Error("Could not connect to Pi"));
@@ -517,7 +517,7 @@ export function createActiveChat(options: ActiveChatOptions) {
     if (document.visibilityState === "hidden") return;
     const record = live();
     const chatId = selectedId();
-    if (record && chatId && record.chatId === chatId) connect(record, chatId, selectionToken);
+    if (record && chatId && record.chatId === chatId) void connect(record, chatId, selectionToken).catch(onError);
   };
   const restoreLive = (event: PageTransitionEvent) => {
     if (event.persisted) resumeLive();
