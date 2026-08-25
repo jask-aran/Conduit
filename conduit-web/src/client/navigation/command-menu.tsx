@@ -637,7 +637,7 @@ export function CommandMenu(props: {
     } as const;
     if (row.type === "model") {
       if (modelSelectorPage()) return <div {...commonProps} class="command-option command-model-option" data-highlighted={selected() || undefined} data-scoped={row.scoped || undefined}>
-        <strong class="command-model-label">{row.model.label}</strong><small class="command-model-spec">{row.model.spec}</small>
+        <span class="command-model-label">{row.model.label}</span><small class="command-model-spec">{row.model.spec}</small>
       </div>;
       const Icon = icons.model!;
       return <div {...commonProps} data-highlighted={selected() || undefined}>
