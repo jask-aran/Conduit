@@ -3479,7 +3479,14 @@ test("stop freezes the visible response and rejects late generation deltas", asy
         if (command.type === "stop_generation") {
           window.__stopCommand = command;
           this.onmessage?.({ data: JSON.stringify({ type: "content_block_delta", generationId: "g1", seq: 5, messageId: "m1", blockType: "text", contentIndex: 0, delta: "LATE OUTPUT" }) });
-          setTimeout(() => this.onmessage?.({ data: JSON.stringify({ type: "generation_stopped", generationId: "g1", seq: 6, status: "stopped", processTerminated: false }) }), 150);
+          setTimeout(() => {
+            this.onmessage?.({ data: JSON.stringify({ type: "generation_stopped", generationId: "g1", seq: 6, status: "stopped", processTerminated: false }) });
+            this.onmessage?.({ data: JSON.stringify({
+              type: "runtime_state",
+              generationId: "g1",
+              session: { active: false, stopping: false, generation: { id: "g1", closed: true, settled: true } },
+            }) });
+          }, 150);
         }
       }
     }
