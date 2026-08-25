@@ -71,7 +71,7 @@ const BACK_COMMAND: PaletteCommand = {
 type Row =
   | { type: "heading"; key: string; label: string }
   | { type: "command"; key: string; index: number; command: PaletteCommand }
-  | { type: "model"; key: string; index: number; model: ModelOption }
+  | { type: "model"; key: string; index: number; model: ModelOption; scoped?: boolean }
   | { type: "destination"; key: string; index: number; project: Project };
 
 type SelectableRow = Exclude<Row, { type: "heading" }>;
@@ -237,7 +237,13 @@ export function CommandMenu(props: {
           commands: [], models: props.scopeModels, query: parsedQuery().text, currentModel: "",
         }) || []).flatMap((row) => row.model ? [row.model] : [])
         : props.scopeModels;
-      for (const group of groupModels(models)) {
+      const scoped = models.filter((model) => props.enabledModelSpecs.includes(model.spec));
+      const unscoped = models.filter((model) => !props.enabledModelSpecs.includes(model.spec));
+      if (scoped.length) {
+        push({ type: "heading", key: "scoped", label: "Scoped" });
+        for (const model of scoped) push({ type: "model", key: `scoped:${model.spec}`, index: index++, model, scoped: true });
+      }
+      for (const group of groupModels(unscoped)) {
         push({ type: "heading", key: `m-${group.provider}`, label: group.provider });
         for (const model of group.items) push({ type: "model", key: `model:${model.spec}`, index: index++, model });
       }
@@ -483,6 +489,7 @@ export function CommandMenu(props: {
     ...palettePageCommands.map(([commandId, targetPage]) =>
       props.shortcuts.registerHandler(commandId, "palette.page", () =>
         openPalettePage(targetPage, commandId === COMMAND_IDS.searchChats))),
+    props.shortcuts.registerHandler(COMMAND_IDS.toggleModelScope, "model-selector", toggleActiveModelScope),
     props.shortcuts.registerHandler(COMMAND_IDS.toggleChatEdit, "chat-search.browse", toggleSelection),
     props.shortcuts.registerHandler(COMMAND_IDS.searchChats, "chat-search.browse", close),
     props.shortcuts.registerHandler(COMMAND_IDS.renameHighlightedChat, "chat-search.browse", startRename),
@@ -512,6 +519,9 @@ export function CommandMenu(props: {
       exclusive = true;
     } else if (chatPage()) {
       context = selectionMode() ? "chat-search.edit" : "chat-search.browse";
+    } else if (modelSelectorPage()) {
+      context = "model-selector";
+      exclusive = true;
     } else {
       context = page() ? "palette.page" : "palette.root";
     }
@@ -522,8 +532,11 @@ export function CommandMenu(props: {
   const runRow = (row?: SelectableRow) => {
     if (!row) return;
     if (row.type === "model") {
-      if (modelSelectorPage()) props.onToggleModelScope(row.model.spec);
-      else { close(); requestAnimationFrame(() => props.onChooseModel(row.model.spec)); }
+      if (modelSelectorPage()) {
+        if (row.scoped) { close(); requestAnimationFrame(() => props.onChooseModel(row.model.spec)); }
+        return;
+      }
+      close(); requestAnimationFrame(() => props.onChooseModel(row.model.spec));
       return;
     }
     if (row.type === "destination") { void chooseDestination(row.project); return; }
@@ -555,6 +568,17 @@ export function CommandMenu(props: {
     if (!count) return;
     setActive((current) => (current + delta + count) % count);
   };
+
+  function toggleActiveModelScope() {
+    const row = selectable()[active()];
+    if (!modelSelectorPage() || row?.type !== "model") return;
+    const spec = row.model.spec;
+    props.onToggleModelScope(spec);
+    queueMicrotask(() => {
+      const index = selectable().findIndex((candidate) => candidate.type === "model" && candidate.model.spec === spec);
+      if (index >= 0) setActive(index);
+    });
+  }
 
   const keydown = (event: KeyboardEvent) => {
     const key = event.key.toLowerCase();
@@ -612,12 +636,13 @@ export function CommandMenu(props: {
       onClick: (event: MouseEvent) => runPointerRow(row, event),
     } as const;
     if (row.type === "model") {
+      if (modelSelectorPage()) return <div {...commonProps} class="command-option command-model-option" data-highlighted={selected() || undefined} data-scoped={row.scoped || undefined}>
+        <strong class="command-model-label">{row.model.label}</strong><small class="command-model-spec">{row.model.spec}</small>
+      </div>;
       const Icon = icons.model!;
-      const enabled = () => props.enabledModelSpecs.includes(row.model.spec);
-      return <div {...commonProps} data-highlighted={selected() || undefined} data-model-scope={modelSelectorPage() || undefined}>
+      return <div {...commonProps} data-highlighted={selected() || undefined}>
         <Icon class="command-icon" />
         <span class="command-copy"><span class="command-label">{row.model.label}</span><small>{row.model.spec}</small></span>
-        <Show when={modelSelectorPage() && enabled()}><CheckIcon class="command-model-check" /></Show>
       </div>;
     }
     if (row.type === "destination") {

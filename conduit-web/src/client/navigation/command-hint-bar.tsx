@@ -103,7 +103,8 @@ export function CommandHintBar(props: {
     ];
     if (props.mode === "model-selector") return [
       fixedHint("Navigate", "↑", "↓"),
-      fixedHint("Select / deselect", "Enter"),
+      commandHint(COMMAND_IDS.toggleModelScope, "Scope / un-scope"),
+      fixedHint("Select model", "Enter"),
       fixedHint("Close", "Esc"),
     ];
     if (props.context === "chat") return [
@@ -121,6 +122,8 @@ export function CommandHintBar(props: {
     ? resolvedHints().length
     : props.mode === "edit"
       ? 5
+      : props.mode === "model-selector"
+        ? 4
       : props.mode === "browse" && props.context === "chat"
         ? 4
         : 2;
