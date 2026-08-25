@@ -5,7 +5,7 @@
 .chat-markdown h1 { font-size: 1.6rem; } .chat-markdown h2 { font-size: 1.35rem; }
 .chat-markdown ul, .chat-markdown ol { margin: 0.8em 0; padding-left: 1.6em; }
 .chat-markdown ul { list-style: disc; } .chat-markdown ol { list-style: decimal; }
-.chat-markdown blockquote { margin: 1em 0; padding-left: 1em; border-left: 2.4px solid var(--border); color: var(--muted-foreground); }
+.chat-markdown blockquote { margin: 1em 0; padding-left: 1em; border-left: 1px solid var(--border); color: var(--muted-foreground); }
 .chat-markdown table { width: 100%; margin: 1em 0; border-collapse: collapse; }
 .chat-markdown[data-renderer^="incremark"] table { table-layout: auto; }
 @container chat-main (--conduit-wide-chat) {
@@ -14,12 +14,12 @@
     margin-left: calc((100% - min(150%, 100cqw)) / 2);
   }
 }
-.chat-markdown th, .chat-markdown td { padding: 5.6px 7.2px; border: 0.8px solid var(--border); text-align: left; }
+.chat-markdown th, .chat-markdown td { padding: 5.6px 7.2px; border: 1px solid var(--border); text-align: left; }
 .chat-markdown[data-renderer^="incremark"] th, .chat-markdown[data-renderer^="incremark"] td { vertical-align: top; }
 .chat-markdown :not(pre) > code { border-radius: 3.2px; background: var(--muted); padding: 0.12em 0.35em; font-family: ui-monospace, monospace; }
 .external-markdown-link { border: 0; background: none; padding: 0; color: oklch(0.7 0.16 250); text-decoration: underline; }
 .artifact { margin: 1em 0; overflow: hidden; border: 0.8px solid var(--border); border-radius: 8px; background: var(--card); }
-.artifact-header { display: flex; align-items: center; justify-content: space-between; padding: 5.6px 8px; border-bottom: 0.8px solid var(--border); color: var(--muted-foreground); font-size: 9.6px; }
+.artifact-header { display: flex; align-items: center; justify-content: space-between; padding: 5.6px 8px; border-bottom: 1px solid var(--border); color: var(--muted-foreground); font-size: 9.6px; }
 .artifact-header button { border: 0; background: transparent; color: inherit; }
 .artifact pre { margin: 0; overflow: auto; padding: 11.2px; font: 10.4px/1.55 ui-monospace, monospace; }
 .streaming-pending { color: var(--muted-foreground); }
