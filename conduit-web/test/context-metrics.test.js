@@ -104,6 +104,15 @@ test("derives context remaining values when Pi omits the percentage", () => {
   }), "Context used 40% · remaining 600 · remaining 60%");
 });
 
+test("keeps Pi context percentages below one percent in percentage units", () => {
+  assert.equal(contextUsagePercent({ tokens: 8276, contextWindow: 1048576, percent: 0.7893 }), 0.7893);
+  assert.equal(formatContextMetrics({
+    enabled: ["contextPercentUsed", "contextPercentRemaining"],
+    contextUsage: { tokens: 8276, contextWindow: 1048576, percent: 0.7893 },
+    sessionStats: null,
+  }), "Context used 1% · remaining 99%");
+});
+
 test("formats cumulative eligible cache-hit measures", () => {
   assert.equal(formatContextMetrics({
     enabled: ["sessionCacheEligibleTokens", "sessionCacheHits", "sessionCacheMissedTokens", "sessionCacheEligibleHitPercent"],
