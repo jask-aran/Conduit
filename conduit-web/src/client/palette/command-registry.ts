@@ -165,6 +165,11 @@ export const PALETTE_PAGES: Record<string, PalettePage> = {
     placeholder: "Search workspace views…",
     heading: "Workspace views",
   }),
+  "model-selector": palettePage("model-selector", COMMAND_IDS.openModelSelector, {
+    prefix: "Models ›",
+    placeholder: "Find models…",
+    heading: "Models",
+  }),
 };
 
 const hasChat = (context: PaletteContext) => Boolean(context.chatId);
