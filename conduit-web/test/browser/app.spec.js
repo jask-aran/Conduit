@@ -3115,7 +3115,7 @@ test("selects a chat model through the runtime-aware model route", async ({ page
   await expect(page.getByRole("button", { name: /Plain off/ })).toBeVisible();
 });
 
-test("model scope settings searches and toggles multiple checked models", async ({ page }, testInfo) => {
+test("model scope settings groups, searches, and saves each toggle immediately", async ({ page }, testInfo) => {
   await page.goto("/");
   await openSidebar(page, testInfo);
 
@@ -3125,6 +3125,10 @@ test("model scope settings searches and toggles multiple checked models", async 
   await expect(dialog).toBeVisible();
   const search = page.getByRole("combobox", { name: "Search available models" });
   await expect(search).toBeFocused();
+  await expect(dialog.getByText("example", { exact: true })).toBeVisible();
+  const hints = dialog.getByRole("note", { name: "Keyboard shortcuts" });
+  await expect(hints).toContainText("Select / deselect");
+  await expect(hints).toContainText("Close");
   await search.fill("example plain");
   await expect(search).toHaveValue("example plain");
   await search.press("Space");
@@ -3134,21 +3138,19 @@ test("model scope settings searches and toggles multiple checked models", async 
   const plain = page.getByRole("option", { name: /Plain example\/plain/ });
   await expect(reasoner).toHaveAttribute("aria-selected", "true");
   await expect(reasoner.locator("svg")).toBeVisible();
+  const removedRequest = page.waitForRequest((request) => new URL(request.url()).pathname === "/v0/settings" && request.method() === "PATCH");
   await reasoner.click();
+  expect((await removedRequest).postDataJSON()).toEqual({ projectId: "project_chat", enabledModels: [plainModel.spec], defaultModel: plainModel.spec });
   await expect(reasoner).toBeVisible();
   await expect(reasoner).toHaveAttribute("aria-selected", "false");
   await search.fill("reasoner");
   await search.press("ArrowDown");
   await expect(page.locator('[data-slot="combobox-item"][data-highlighted]')).toBeVisible();
+  const restoredRequest = page.waitForRequest((request) => new URL(request.url()).pathname === "/v0/settings" && request.method() === "PATCH");
   await search.press("Enter");
+  expect((await restoredRequest).postDataJSON()).toEqual({ projectId: "project_chat", enabledModels: [plainModel.spec, model.spec], defaultModel: plainModel.spec });
   await expect(reasoner).toHaveAttribute("aria-selected", "true");
   await expect(search).toBeVisible();
-  await search.fill("");
-  await search.press("ArrowDown");
-  await expect(page.locator('[data-slot="combobox-item"][data-highlighted]')).toBeVisible();
-  await reasoner.click();
-  await plain.click();
-  await expect(page.getByRole("button", { name: "Save changes" })).toBeDisabled();
   await search.press("Escape");
   await expect(dialog).toHaveCount(0);
 });
@@ -3186,7 +3188,7 @@ test("model scope search auto-focuses and its long result list scrolls", async (
   await expect(page.getByRole("option", { name: /Model 31 beta\/model-31/ })).toBeVisible();
 });
 
-test("settings adopts a delayed model scope until the user edits", async ({ page }, testInfo) => {
+test("settings renders a delayed model scope with selector hints", async ({ page }, testInfo) => {
   let releaseSettings;
   const settingsReady = new Promise((resolve) => { releaseSettings = resolve; });
   await page.route("**/v0/settings?**", async (route) => {
@@ -3207,8 +3209,7 @@ test("settings adopts a delayed model scope until the user edits", async ({ page
   releaseSettings();
   await expect(dialog.getByRole("option", { name: /Reasoner example\/reasoner/ })).toHaveAttribute("aria-selected", "true");
   await expect(dialog.getByRole("option", { name: /Plain example\/plain/ })).toHaveAttribute("aria-selected", "true");
-  await expect(dialog.getByText("2 enabled")).toBeVisible();
-  await expect(dialog.getByRole("button", { name: "Save changes" })).toBeDisabled();
+  await expect(dialog.getByRole("note", { name: "Keyboard shortcuts" })).toContainText("Select / deselect");
 });
 
 test("uploads picker and dropped files through the same attachment surface", async ({ page }, testInfo) => {
