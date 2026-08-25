@@ -61,7 +61,6 @@ const GROUP_HEADINGS: Record<string, string> = {
   profiles: "Profiles",
   thinking: "Thinking level",
   danger: "Danger zone",
-  models: "Models",
 };
 
 const BACK_COMMAND: PaletteCommand = {
@@ -105,8 +104,6 @@ export function CommandMenu(props: {
   initialQuery?: string | null;
   context: PaletteContext;
   actions: PaletteActions;
-  models: ModelOption[];
-  currentModel: string;
   onChooseModel: (spec: string) => void;
   scopeModels: ModelOption[];
   enabledModelSpecs: string[];
@@ -253,9 +250,8 @@ export function CommandMenu(props: {
     if (searching()) {
       const ranked = rankPaletteResults<PaletteCommand, ModelOption>({
         commands: source,
-        models: currentPage ? [] : props.models,
+        models: [],
         query: parsedQuery().text,
-        currentModel: props.currentModel,
       }) || [];
       let lastGroup = "";
       for (const row of ranked) {
@@ -294,10 +290,6 @@ export function CommandMenu(props: {
     for (const group of groupPaletteCommands(source)) {
       push({ type: "heading", key: `g-${group.id}`, label: group.heading });
       for (const command of group.items) push({ type: "command", key: command.id, index: index++, command });
-    }
-    for (const group of groupModels(props.models)) {
-      push({ type: "heading", key: `m-${group.provider}`, label: `Models · ${group.provider}` });
-      for (const model of group.items) push({ type: "model", key: `model:${model.spec}`, index: index++, model });
     }
     return out;
   });
@@ -480,7 +472,6 @@ export function CommandMenu(props: {
   const palettePageCommands = [
     [COMMAND_IDS.searchChats, "chat-search"],
     [COMMAND_IDS.openSettings, "settings"],
-    [COMMAND_IDS.openModelSelector, "model-selector"],
     [COMMAND_IDS.openWorkspaceViews, "workspace"],
   ] as const;
   const releaseShortcutHandlers = [
