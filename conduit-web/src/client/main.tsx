@@ -695,7 +695,10 @@ function App() {
     }
     openPalette("chat-search", "", true);
   };
-  const openModelSelector = () => openPalette("model-selector", "", true);
+  const openModelSelector = () => {
+    if (paletteOpen() && palettePage() === "model-selector") setPaletteOpen(false);
+    else openPalette("model-selector", "", true);
+  };
   const togglePanel = () => {
     const next = !panelOpen();
     if (next && isMobileLayout()) setMobileSidebarOpen(false);
