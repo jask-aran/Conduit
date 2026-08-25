@@ -16,8 +16,6 @@ import { createVoiceWaveformController, VoiceWaveform } from "../chat/voice-wave
 import type { Installation, ModelOption, Project, Template, VoiceExecutionCatalogueView, VoiceExecutionProfile, VoiceLocalModel, VoiceLocalSelection, VoiceServerSettings } from "../api/contracts";
 import type { ModelSettings } from "../state/model-settings";
 import { MAX_SIDEBAR_CHAT_LIMIT, MIN_SIDEBAR_CHAT_LIMIT } from "../navigation/sidebar-preferences";
-import { CommandHintBar } from "../navigation/command-hint-bar";
-import { modelMatchParts, scorePaletteMatch } from "../palette/palette-search";
 import type { ShortcutManager } from "../shortcuts/shortcut-manager";
 import { ShortcutsSettings } from "./shortcuts-settings";
 
@@ -73,11 +71,6 @@ interface SearchSettings {
   providers: SearchProvider[];
 }
 
-interface ModelGroup {
-  provider: string;
-  models: ModelOption[];
-}
-
 const voiceSelectionFromProfile = (profile: VoiceExecutionProfile): VoiceLocalSelection => ({
   modelId: profile.modelId,
   artifactId: profile.artifactId,
@@ -102,6 +95,7 @@ const sameVoiceSelection = (left: VoiceLocalSelection | null | undefined, right:
   && left.runtimeId === right.runtimeId
   && left.execution === right.execution
   && left.segmentation === right.segmentation);
+const sameScope = (left: string[], right: string[]) => [...left].sort().join("\n") === [...right].sort().join("\n");
 const sameVoiceDraft = (left: VoiceDictationSettings, right: VoiceDictationSettings) => left.shortcut === right.shortcut
   && left.activation === right.activation
   && left.autoSend === right.autoSend
@@ -157,9 +151,12 @@ export function Settings(props: {
   onSidebarChatLimitChange: (limit: number) => void;
   contextMetrics: ContextMetricId[];
   onContextMetricsChange: (metrics: ContextMetricId[]) => void;
+  onOpenModelSelector: () => void;
   shortcuts: ShortcutManager;
 }) {
   const [section, setSection] = createSignal<Section>(props.initialSection || "models");
+  const [scope, setScope] = createSignal<string[]>([]);
+  const [scopeEdited, setScopeEdited] = createSignal(false);
   const [runtime, setRuntime] = createSignal<RuntimeSettings | null>(null);
   const [runtimeBaseline, setRuntimeBaseline] = createSignal<RuntimeSettings | null>(null);
   const [runtimeStatus, setRuntimeStatus] = createSignal<"idle" | "loading" | "ready" | "error">("idle");
@@ -262,6 +259,8 @@ export function Settings(props: {
   const focusSearch = () => requestAnimationFrame(() => requestAnimationFrame(() => search?.focus()));
   const dismissEscape = (event: KeyboardEvent) => {
     if (event.key !== "Escape") return;
+    const target = event.target instanceof Element ? event.target : null;
+    if (target && !target.closest(".settings-dialog")) return;
     if (props.shortcuts.isContextActive("shortcut-recorder")) {
       event.preventDefault();
       return;
@@ -294,6 +293,7 @@ export function Settings(props: {
     const initial = props.initialSection || "models";
     setSection(initial);
     setWorkspaceId(props.initialWorkspaceId || props.projects.find((project) => project.kind === "workspace" || ["linked", "created", "cloned"].includes(project.origin || ""))?.id || null);
+    setScopeEdited(false);
     if (initial === "models") focusSearch();
   }));
 
@@ -309,6 +309,12 @@ export function Settings(props: {
     };
     window.addEventListener("conduit:warm-microphone-state", onWarmMicrophoneState);
     onCleanup(() => window.removeEventListener("conduit:warm-microphone-state", onWarmMicrophoneState));
+  });
+
+  // Remote model settings remain authoritative until the user actually edits.
+  createEffect(() => {
+    if (!props.open || section() !== "models" || scopeEdited()) return;
+    setScope([...props.models.enabledModels()]);
   });
 
   createEffect(() => {
@@ -767,29 +773,21 @@ export function Settings(props: {
     finally { setVoiceBusy(false); }
   };
 
-  const selectedModels = createMemo(() => props.models.allModels().filter((model) => props.models.enabledModels().includes(model.spec)));
-  const modelGroups = createMemo<ModelGroup[]>(() => {
-    const groups = new Map<string, ModelOption[]>();
-    for (const model of props.models.allModels()) {
-      const provider = model.provider || "Other";
-      const current = groups.get(provider) || [];
-      current.push(model);
-      groups.set(provider, current);
-    }
-    return [...groups.entries()]
-      .sort(([left], [right]) => left.localeCompare(right))
-      .map(([provider, models]) => ({
-        provider,
-        models: [...models].sort((left, right) => left.label.localeCompare(right.label) || left.spec.localeCompare(right.spec)),
-      }));
-  });
+  const selectedModels = createMemo(() => props.models.allModels().filter((model) => scope().includes(model.spec)));
+  const scopeDirty = createMemo(() => scopeEdited() && !sameScope(scope(), props.models.enabledModels()));
   const modelFilter = (model: ModelOption, input: string) => {
-    if (!input.trim()) return true;
-    return scorePaletteMatch({ ...modelMatchParts(model), query: input }) > 0;
+    const words = input.toLowerCase().trim().split(/\s+/).filter(Boolean);
+    return words.every((word) => `${model.label} ${model.spec} ${model.provider}`.toLowerCase().includes(word));
   };
   const updateScope = (models: ModelOption[]) => {
-    if (props.models.saving()) return;
-    void props.models.saveScope(models.map((model) => model.spec));
+    setScope(models.map((model) => model.spec));
+    setScopeEdited(true);
+  };
+  const saveScope = async () => {
+    if (await props.models.saveScope(scope())) {
+      setScope([...props.models.enabledModels()]);
+      setScopeEdited(false);
+    }
   };
 
   const workspaceProjects = createMemo(() => props.projects
@@ -915,25 +913,22 @@ export function Settings(props: {
             <div class="model-scope">
               <Show when={props.models.settingsError()}><div role="alert" class="settings-error"><span>{props.models.settingsError()}</span><Button variant="outline" size="sm" onClick={() => void props.models.reload()}>Retry</Button></div></Show>
               <Show when={!props.models.settingsLoading() || props.models.allModels().length} fallback={<div class="settings-loading"><Spinner /><span>Loading models…</span></div>}>
-                <KCombobox<ModelOption, ModelGroup>
+                <KCombobox<ModelOption>
                   multiple
-                  options={modelGroups()}
+                  options={props.models.allModels()}
                   value={selectedModels()}
                   onChange={updateScope}
                   optionValue="spec"
                   optionTextValue={(model) => `${model.label} ${model.spec} ${model.provider}`}
                   optionLabel="label"
-                  optionGroupChildren="models"
-                  optionDisabled={() => props.models.saving()}
                   defaultFilter={modelFilter}
                   open
                   closeOnSelection={false}
                   selectionBehavior="toggle"
                   modal={false}
-                  sectionComponent={(sectionProps) => <KCombobox.Section class="model-provider-heading">{sectionProps.section.rawValue.provider}</KCombobox.Section>}
                   itemComponent={(itemProps) => <KCombobox.Item item={itemProps.item} data-slot="combobox-item">
-                    <span class="model-check"><Show when={props.models.enabledModels().includes(itemProps.item.rawValue.spec)}><CheckIcon /></Show></span>
-                    <span class="model-row-label"><strong>{itemProps.item.rawValue.label}</strong><small>{itemProps.item.rawValue.spec}</small></span>
+                    <span class="model-check"><KCombobox.ItemIndicator><CheckIcon /></KCombobox.ItemIndicator></span>
+                    <span><strong>{itemProps.item.rawValue.label}</strong><small>{itemProps.item.rawValue.spec}</small></span>
                   </KCombobox.Item>}
                 >
                   <KCombobox.Control class="model-search"><SearchIcon /><KCombobox.Input ref={search} aria-label="Search available models" onKeyDown={(event) => {
@@ -945,7 +940,7 @@ export function Settings(props: {
                   <KCombobox.Content class="model-scope-list" data-slot="combobox-list"><KCombobox.Listbox /></KCombobox.Content>
                 </KCombobox>
               </Show>
-              <CommandHintBar context="generic" mode="model-selector" shortcuts={props.shortcuts} />
+              <div class="settings-actions"><span>{scope().length} enabled</span><Button variant="outline" onClick={props.onOpenModelSelector}>Open model selector</Button><Button disabled={!scopeDirty() || !scope().length || props.models.saving()} onClick={() => void saveScope()}>{props.models.saving() ? <Spinner /> : null}Save changes</Button></div>
             </div>
           </Show>
           <Show when={section() === "profiles"}><Show when={!props.templatesLoading} fallback={<div class="settings-loading"><Spinner /><span>Loading profiles…</span></div>}><div class="settings-cards"><For each={props.templates}>{(item) => <article><h3>{item.label}</h3><p>{item.description || item.posture || item.tools?.join(" · ")}</p></article>}</For></div></Show></Show>

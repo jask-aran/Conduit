@@ -108,6 +108,9 @@ export function CommandMenu(props: {
   models: ModelOption[];
   currentModel: string;
   onChooseModel: (spec: string) => void;
+  scopeModels: ModelOption[];
+  enabledModelSpecs: string[];
+  onToggleModelScope: (spec: string) => void;
   shortcuts: ShortcutManager;
   onPageChange?: (page: string | null) => void;
   details?: JSX.Element;
@@ -150,6 +153,7 @@ export function CommandMenu(props: {
   const parsedQuery = createMemo(() => parseChatQuery(query()));
   const searching = createMemo(() => Boolean(parsedQuery().text));
   const chatPage = createMemo(() => page() === "chat-search");
+  const modelSelectorPage = createMemo(() => page() === "model-selector");
   const chatScope = createMemo(() => resolveChatQueryScope(parsedQuery(), props.context.projects || []));
   const hintContext = createMemo<CommandHintContext>(() => chatPage() ? "chat" : "generic");
   const pendingActionSequence = createMemo(() => {
@@ -223,6 +227,19 @@ export function CommandMenu(props: {
       push({ type: "heading", key: "move-heading", label: "Move selected chats to" });
       for (const project of props.context.projects || []) {
         push({ type: "destination", key: `destination:${project.id}`, index: index++, project });
+      }
+      return out;
+    }
+
+    if (modelSelectorPage()) {
+      const models = searching()
+        ? (rankPaletteResults<PaletteCommand, ModelOption>({
+          commands: [], models: props.scopeModels, query: parsedQuery().text, currentModel: "",
+        }) || []).flatMap((row) => row.model ? [row.model] : [])
+        : props.scopeModels;
+      for (const group of groupModels(models)) {
+        push({ type: "heading", key: `m-${group.provider}`, label: group.provider });
+        for (const model of group.items) push({ type: "model", key: `model:${model.spec}`, index: index++, model });
       }
       return out;
     }
@@ -346,6 +363,7 @@ export function CommandMenu(props: {
     focusInput();
   };
   const emptyMessage = () => {
+    if (modelSelectorPage()) return "No matching models.";
     const scope = chatScope();
     if (scope.kind === "unresolved") return `No chats in “${scope.value}”.`;
     if (chatPage() && parsedQuery().filters.length) return "No chats match this filter.";
@@ -456,6 +474,7 @@ export function CommandMenu(props: {
   const palettePageCommands = [
     [COMMAND_IDS.searchChats, "chat-search"],
     [COMMAND_IDS.openSettings, "settings"],
+    [COMMAND_IDS.openModelSelector, "model-selector"],
     [COMMAND_IDS.openWorkspaceViews, "workspace"],
   ] as const;
   const releaseShortcutHandlers = [
@@ -502,7 +521,11 @@ export function CommandMenu(props: {
 
   const runRow = (row?: SelectableRow) => {
     if (!row) return;
-    if (row.type === "model") { close(); requestAnimationFrame(() => props.onChooseModel(row.model.spec)); return; }
+    if (row.type === "model") {
+      if (modelSelectorPage()) props.onToggleModelScope(row.model.spec);
+      else { close(); requestAnimationFrame(() => props.onChooseModel(row.model.spec)); }
+      return;
+    }
     if (row.type === "destination") { void chooseDestination(row.project); return; }
     const command = row.command;
     if (command.id === "page-back") { goBack(); return; }
@@ -590,9 +613,11 @@ export function CommandMenu(props: {
     } as const;
     if (row.type === "model") {
       const Icon = icons.model!;
-      return <div {...commonProps} data-highlighted={selected() || undefined}>
+      const enabled = () => props.enabledModelSpecs.includes(row.model.spec);
+      return <div {...commonProps} data-highlighted={selected() || undefined} data-model-scope={modelSelectorPage() || undefined}>
         <Icon class="command-icon" />
         <span class="command-copy"><span class="command-label">{row.model.label}</span><small>{row.model.spec}</small></span>
+        <Show when={modelSelectorPage() && enabled()}><CheckIcon class="command-model-check" /></Show>
       </div>;
     }
     if (row.type === "destination") {
@@ -626,14 +651,14 @@ export function CommandMenu(props: {
     <KDialog.Root open={props.open} onOpenChange={changeOpen}>
       <KDialog.Portal>
         <KDialog.Content
-          class={`command-dialog${chatPage() ? " command-dialog-chat-search" : ""}`}
+          class={`command-dialog${chatPage() ? " command-dialog-chat-search" : ""}${modelSelectorPage() ? " command-dialog-model-selector" : ""}`}
           onOpenAutoFocus={(event) => { event.preventDefault(); focusInput(); }}
           onCloseAutoFocus={(event) => { event.preventDefault(); if (returnFocus?.isConnected) returnFocus.focus(); returnFocus = null; }}
           onPointerDown={(event) => { if (event.target === event.currentTarget) close(); }}
         >
           <div class="command-shell">
-            <KDialog.Title class="sr-only">Command Palette</KDialog.Title>
-            <KDialog.Description class="sr-only">Search commands, chats, settings, and models.</KDialog.Description>
+            <KDialog.Title class="sr-only">{modelSelectorPage() ? "Model selector" : "Command Palette"}</KDialog.Title>
+            <KDialog.Description class="sr-only">{modelSelectorPage() ? "Choose the models available in this project." : "Search commands, chats, settings, and models."}</KDialog.Description>
             <div class="command-input-row">
               <Show when={pageMeta()}><span class="command-page-prefix">{pageMeta()!.prefix}</span></Show>
               <Show when={chatPage()}>
@@ -652,7 +677,7 @@ export function CommandMenu(props: {
                 aria-controls="command-listbox"
                 aria-autocomplete="list"
                 aria-activedescendant={selectable().length ? optionId(active()) : undefined}
-                aria-label="Search commands"
+                aria-label={modelSelectorPage() ? "Find models" : "Search commands"}
                 placeholder={pageMeta()?.placeholder || "Search commands…"}
                 value={parsedQuery().text}
                 onInput={(event) => setQuery(serializeChatQuery(parsedQuery().filters, event.currentTarget.value))}
@@ -672,13 +697,13 @@ export function CommandMenu(props: {
                 <XIcon />
               </Button>
             </div>
-            <div id="command-listbox" ref={listbox} role="listbox" aria-label={chatPage() ? "Chats" : "Commands"} class="command-list" data-mode-focus={selectionMode() || moveMode() || undefined} tabIndex={selectionMode() || moveMode() ? 0 : -1} onKeyDown={keydown}>
+            <div id="command-listbox" ref={listbox} role="listbox" aria-label={modelSelectorPage() ? "Models" : chatPage() ? "Chats" : "Commands"} class="command-list" data-mode-focus={selectionMode() || moveMode() || undefined} tabIndex={selectionMode() || moveMode() ? 0 : -1} onKeyDown={keydown}>
               <Show when={!selectable().length}><p class="command-empty">{emptyMessage()}</p></Show>
               <For each={rows()}>{renderRow}</For>
             </div>
             <CommandHintBar
               context={hintContext()}
-              mode={hintMode()}
+              mode={modelSelectorPage() ? "model-selector" : hintMode()}
               pendingSequence={pendingActionSequence()}
               shortcuts={props.shortcuts}
               onToggleEdit={toggleSelection}
