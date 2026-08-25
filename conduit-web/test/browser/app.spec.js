@@ -3502,6 +3502,7 @@ test("stop freezes the visible response and rejects late generation deltas", asy
   await expect(page.getByText(/Stopping…|Stopped/)).toBeVisible();
   await expect(page.getByText("LATE OUTPUT")).toHaveCount(0);
   await expect(page.getByText("Stopped", { exact: true })).toBeVisible();
+  await expect(page.locator(".composer-status-state")).toHaveText("Interrupted · Ready");
   expect(await page.evaluate(() => window.__stopCommand)).toEqual({ type: "stop_generation", generationId: "g1" });
 });
 

@@ -195,6 +195,7 @@ export function deriveFineActivity({
 } = {}) {
   if (coarse === "failed" || processStatus === "failed") return { kind: "runtime_failed", label: "Pi failed" };
   if (generation === "failed") return { kind: "request_failed", label: "Request failed · Ready to retry" };
+  if (generation === "interrupted") return { kind: "interrupted", label: "Interrupted · Ready" };
   if (generation === "stopping" || coarse === "stopping") return { kind: "stopping", label: "Stopping" };
   if (coarse === "waiting_for_user") return { kind: "waiting_for_user", label: "Waiting for your confirmation" };
   if (coarse === "compacting") return { kind: "compacting", label: "Compacting context" };

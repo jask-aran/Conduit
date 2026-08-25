@@ -338,23 +338,31 @@ export function createActiveChat(options: ActiveChatOptions) {
       });
     }
     currentGeneration = next.id;
-    const blocks = next.assistantMessages.flatMap((message) => message.blocks);
-    const latest = blocks.at(-1);
-    setThinking(latest?.type === "thinking" && latest.status === "streaming");
-    setResponding(latest?.type === "text" && latest.status === "streaming");
-    const runningTool = Object.values(next.toolExecutions).find((tool) => tool.status === "running");
-    setActiveToolName(runningTool?.name || null);
-    setRetry((next as { retry?: RetryState | null }).retry || null);
+    const terminal = ["stopped", "complete", "failed"].includes(next.status);
+    if (terminal) {
+      resetLiveFlags();
+    } else {
+      const blocks = next.assistantMessages.flatMap((message) => message.blocks);
+      const latest = blocks.at(-1);
+      setThinking(latest?.type === "thinking" && latest.status === "streaming");
+      setResponding(latest?.type === "text" && latest.status === "streaming");
+      const runningTool = Object.values(next.toolExecutions).find((tool) => tool.status === "running");
+      setActiveToolName(runningTool?.name || null);
+      setRetry((next as { retry?: RetryState | null }).retry || null);
+    }
     if (next.status === "stopping") setGeneration("stopping");
     else if (next.status === "failed") setGeneration("failed");
-    else if (["stopped", "complete"].includes(next.status)) {
+    else if (next.status === "stopped") {
       stopPending = false;
-      setGeneration("idle");
+      setGeneration("interrupted");
       if (event.type === "generation_stopped" && Boolean(event.processTerminated)) {
         setLive(null);
         cancelReconnect();
         socket?.close();
       }
+    } else if (next.status === "complete") {
+      stopPending = false;
+      setGeneration("idle");
     } else {
       stopPending = false;
       setGeneration("active");
