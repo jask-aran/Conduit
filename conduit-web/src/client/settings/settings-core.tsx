@@ -139,6 +139,8 @@ export function Settings(props: {
   onWorkspaceDefaultChange: (id: string, templateId: string | null) => Promise<Project>;
   markdownRenderer: MarkdownRendererId;
   onMarkdownRendererChange: (renderer: MarkdownRendererId) => void;
+  rendererControlsVisible: boolean;
+  onRendererControlsVisibleChange: (visible: boolean) => void;
   meteorField: boolean;
   onMeteorFieldChange: (enabled: boolean) => void;
   composerSurface: ComposerSurfaceMode;
@@ -846,6 +848,12 @@ export function Settings(props: {
                <strong>Performance note</strong>
                <p>For smooth animations, backdrop blur, and high-refresh-rate rendering, enable <em>Use graphics acceleration when available</em> in your browser settings, then relaunch the browser. Disabled hardware acceleration can cause severe frame drops even when Conduit and the server are healthy.</p>
              </div>
+             <Field>
+               <label class="settings-toggle">
+                 <input type="checkbox" aria-label="Show renderer controls" checked={props.rendererControlsVisible} onChange={(event) => props.onRendererControlsVisibleChange(event.currentTarget.checked)} />
+                 <span><strong>Show renderer controls</strong><small>Show the Composer renderer, Transcript renderer, and Typewriter pacing dropdowns above the transcript.</small></span>
+               </label>
+             </Field>
              <Field>
                 <FieldLabel for="markdown-renderer">Markdown renderer</FieldLabel>
                 <select id="markdown-renderer" aria-label="Markdown renderer" value={props.markdownRenderer} onChange={(event) => props.onMarkdownRendererChange(event.currentTarget.value as MarkdownRendererId)}>
