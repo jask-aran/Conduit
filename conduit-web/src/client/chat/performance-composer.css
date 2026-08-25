@@ -6,6 +6,54 @@
    panel-motion subtree. */
 .work-area-conversation { position: relative; }
 .transcript { position: relative; z-index: 1; }
+.chat-main:not(.chat-main-empty) .thread { padding-bottom: 147.2px; }
+.chat-main:not(.chat-main-empty) .composer-stack {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 2;
+  width: 100%;
+  margin: 0;
+  padding: 14.4px 35.2px 19.2px;
+  background: transparent;
+  pointer-events: none;
+}
+.chat-main:not(.chat-main-empty) .composer-stack > * { pointer-events: auto; }
+
+.composer-wrap { position: relative; width: min(var(--composer-desktop-reference-width), 100%); margin-inline: auto; }
+.composer-surface-shell { position: relative; width: 100%; border-radius: var(--composer-radius); }
+.composer[data-composer-surface] {
+  position: relative;
+  width: 100%;
+  border-radius: var(--composer-radius);
+}
+.composer[data-composer-surface]::before,
+.composer[data-composer-surface]::after { content: none; }
+.composer-content { position: relative; z-index: 1; }
+.composer textarea,
+.composer-actions { position: relative; z-index: 2; }
+
+@media (--conduit-mobile-layout) {
+  .chat-main:not(.chat-main-empty) .thread { padding-bottom: 128px; }
+  .composer-stack,
+  .chat-main-empty .composer-stack { background: transparent; }
+  .chat-main:not(.chat-main-empty) .composer-stack {
+    padding: 8px 9.6px calc(9.6px + env(safe-area-inset-bottom, 0px));
+  }
+  .composer-content { display: contents; }
+}
+
+
+/* Mobile retains v0.5.2 density. */
+@media (--conduit-mobile-layout) {
+
+/* Performance rebuild: keep the composer as a later-painted sibling of the
+   transcript. The transcript remains the v0.4.7 layout/paint island while the
+   composer overlays its bottom edge without becoming part of the scroll or
+   panel-motion subtree. */
+.work-area-conversation { position: relative; }
+.transcript { position: relative; z-index: 1; }
 .chat-main:not(.chat-main-empty) .thread { padding-bottom: 184px; }
 .chat-main:not(.chat-main-empty) .composer-stack {
   position: absolute;
@@ -42,4 +90,6 @@
     padding: 10px 12px calc(12px + env(safe-area-inset-bottom, 0px));
   }
   .composer-content { display: contents; }
+}
+
 }

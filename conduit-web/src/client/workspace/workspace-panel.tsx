@@ -23,6 +23,18 @@ interface WorkspaceCacheEntry {
 
 const MAX_CACHED_WORKSPACES = 6;
 const workspaceCache = new Map<string, WorkspaceCacheEntry>();
+const COMPACT_UI_MIGRATION_KEY = "conduit:compact-ui-v2";
+
+function migrateWorkspaceGeometry() {
+  if (localStorage.getItem(COMPACT_UI_MIGRATION_KEY) === "true") return;
+  for (let index = 0; index < localStorage.length; index += 1) {
+    const key = localStorage.key(index);
+    if (!key || !/^conduit:workspace-panel:.*:(width|detail-height)$/.test(key)) continue;
+    const value = Number(localStorage.getItem(key));
+    if (Number.isFinite(value) && value > 0) localStorage.setItem(key, String(Math.round(value * 8) / 10));
+  }
+  localStorage.setItem(COMPACT_UI_MIGRATION_KEY, "true");
+}
 
 function cachedWorkspace(projectId: string) {
   const cached = workspaceCache.get(projectId);
@@ -40,6 +52,7 @@ function cacheWorkspace(projectId: string, patch: Partial<WorkspaceCacheEntry>) 
 }
 
 export default function WorkspacePanel(props: { projectId: Accessor<string>; chatId: Accessor<string>; open: Accessor<boolean>; requestedTab?: Accessor<{ tab: PanelTab; nonce: number } | null>; onClose: () => void }) {
+  migrateWorkspaceGeometry();
   let projectGeneration = 0;
   let requestVersion = 0;
   let projectController = new AbortController();
@@ -63,15 +76,15 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
   const [diff, setDiff] = createSignal<DiffPayload | null>(null);
   const [error, setError] = createSignal("");
   const widthKey = () => `conduit:workspace-panel:${props.chatId()}:width`;
-  const [width, setWidth] = createSignal(Math.max(320, Math.min(620, Number(localStorage.getItem(widthKey())) || 420)));
+  const [width, setWidth] = createSignal(Math.max(256, Math.min(496, Number(localStorage.getItem(widthKey())) || 336)));
   const [shellWidth, setShellWidth] = createSignal(props.open() ? width() : 0);
-  const [shellGap, setShellGap] = createSignal(props.open() && !isMobileLayout() ? 10 : 0);
+  const [shellGap, setShellGap] = createSignal(props.open() && !isMobileLayout() ? 8 : 0);
   const [artifactMode, setArtifactMode] = createSignal<ArtifactMode>("outputs");
   const detailOpenKey = () => `conduit:workspace-panel:${props.chatId()}:${tab()}:detail-open`;
   const detailHeightKey = () => `conduit:workspace-panel:${props.chatId()}:${tab()}:detail-height`;
   const detailOpenFor = (nextTab: PanelTab) => localStorage.getItem(`conduit:workspace-panel:${props.chatId()}:${nextTab}:detail-open`) ?? (nextTab === "diff" ? "false" : "true");
   const [detailOpen, setDetailOpen] = createSignal(detailOpenFor(tab()) === "true");
-  const [detailHeight, setDetailHeight] = createSignal(Math.max(160, Number(localStorage.getItem(detailHeightKey())) || 360));
+  const [detailHeight, setDetailHeight] = createSignal(Math.max(128, Number(localStorage.getItem(detailHeightKey())) || 288));
   const hasPending = (operation?: string) => [...pending().keys()].some((version) => !operation || requests.get(operation)?.version === version);
   const diffLoading = () => hasPending("diff");
   const filesLoading = () => [...requests.keys()].some((operation) => operation.startsWith("directory:") && hasPending(operation));
@@ -156,7 +169,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
     const startWidth = shellWidth();
     const startGap = shellGap();
     const targetWidth = open ? width() : 0;
-    const targetGap = open && !mobile ? 10 : 0;
+    const targetGap = open && !mobile ? 8 : 0;
     const startSize = startWidth + startGap;
     const targetSize = targetWidth + targetGap;
     const surfaceWidth = panelSurface?.getBoundingClientRect().width || width();
@@ -231,7 +244,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
 
   const selectTab = (next: PanelTab) => {
     setDetailOpen(detailOpenFor(next) === "true");
-    setDetailHeight(Math.max(160, Number(localStorage.getItem(`conduit:workspace-panel:${props.chatId()}:${next}:detail-height`)) || 360));
+    setDetailHeight(Math.max(128, Number(localStorage.getItem(`conduit:workspace-panel:${props.chatId()}:${next}:detail-height`)) || 288));
     setTab(next);
     localStorage.setItem(storageKey(), next);
   };
@@ -249,7 +262,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
     const startHeight = detailHeight();
     let pendingHeight = startHeight;
     let frame = 0;
-    const clampHeight = (value: number) => Math.max(160, Math.min(window.innerHeight - 230, value));
+    const clampHeight = (value: number) => Math.max(128, Math.min(window.innerHeight - 184, value));
     const apply = () => {
       frame = 0;
       setDetailHeight(clampHeight(pendingHeight));
@@ -278,7 +291,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
   const resizeDetailByKey = (event: KeyboardEvent) => {
     if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
     event.preventDefault();
-    const next = Math.max(160, Math.min(window.innerHeight - 230, detailHeight() + (event.key === "ArrowUp" ? 20 : -20)));
+    const next = Math.max(128, Math.min(window.innerHeight - 184, detailHeight() + (event.key === "ArrowUp" ? 16 : -16)));
     setDetailHeight(next);
     localStorage.setItem(detailHeightKey(), String(next));
   };
@@ -339,7 +352,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
     }
   };
   const copy = (value?: string) => { if (value) void navigator.clipboard.writeText(value); };
-  const clampWidth = (next: number) => Math.max(300, Math.min(Math.floor(window.innerWidth * 0.65), next));
+  const clampWidth = (next: number) => Math.max(240, Math.min(Math.floor(window.innerWidth * 0.65), next));
   const saveWidth = (next: number) => {
     const value = clampWidth(next);
     batch(() => {
@@ -444,8 +457,8 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
     const nextTab = (localStorage.getItem(storageKey()) as PanelTab) || "files";
     batch(() => {
       setDetailOpen(detailOpenFor(nextTab) === "true");
-      setDetailHeight(Math.max(160, Number(localStorage.getItem(`conduit:workspace-panel:${props.chatId()}:${nextTab}:detail-height`)) || 360));
-      const nextWidth = Math.max(320, Math.min(620, Number(localStorage.getItem(widthKey())) || 420));
+      setDetailHeight(Math.max(128, Number(localStorage.getItem(`conduit:workspace-panel:${props.chatId()}:${nextTab}:detail-height`)) || 288));
+      const nextWidth = Math.max(256, Math.min(496, Number(localStorage.getItem(widthKey())) || 336));
       setWidth(nextWidth);
       if (props.open()) setShellWidth(nextWidth);
       setTab(nextTab);
@@ -481,7 +494,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
 
   const Tree = (treeProps: { directory: string; depth?: number }) => <>
     <For each={directories()[treeProps.directory]?.entries || []}>{(entry) => <div>
-    <button class="workspace-tree-row" style={{ "padding-left": `${10 + (treeProps.depth || 0) * 14}px` }} data-selected={preview()?.path === entry.path} onClick={() => entry.type === "directory" ? void toggleDirectory(entry.path) : entry.type === "file" ? void loadFile(entry.path) : undefined}>
+    <button class="workspace-tree-row" style={{ "padding-left": `${8 + (treeProps.depth || 0) * 11.2}px` }} data-selected={preview()?.path === entry.path} onClick={() => entry.type === "directory" ? void toggleDirectory(entry.path) : entry.type === "file" ? void loadFile(entry.path) : undefined}>
       <Show when={entry.type === "directory"} fallback={<FileCode2Icon />}><ChevronRightIcon class="workspace-tree-chevron" data-open={expanded().has(entry.path)} /><FolderIcon /></Show><span>{entry.name}</span>
     </button>
     <Show when={entry.type === "directory" && expanded().has(entry.path)}><Tree directory={entry.path} depth={(treeProps.depth || 0) + 1} /></Show>
@@ -494,7 +507,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
       <button type="button" class="mobile-panel-backdrop" data-mobile-backdrop="workspace" data-for="workspace" aria-label="Dismiss workspace panel" onClick={props.onClose} />
     </Show>
     <aside ref={panelRoot} class="workspace-panel" classList={{ "workspace-panel-open": props.open() || shellWidth() > 0.5 }} aria-label="Workspace panel" aria-hidden={!props.open()} inert={!props.open()} style={{ "--workspace-panel-width": `${width()}px`, "--workspace-shell-width": `${shellWidth()}px`, width: `${shellWidth()}px`, "margin-right": `${shellGap()}px` }}>
-    <div ref={resizeHandle} class="workspace-resize-handle" role="separator" aria-label="Resize workspace panel" aria-orientation="vertical" aria-valuemin="300" aria-valuemax={Math.floor(window.innerWidth * 0.65)} aria-valuenow={width()} tabIndex={0} onPointerDown={startResize} onKeyDown={(event) => { if (event.key === "ArrowLeft") saveWidth(width() + 20); if (event.key === "ArrowRight") saveWidth(width() - 20); }} />
+    <div ref={resizeHandle} class="workspace-resize-handle" role="separator" aria-label="Resize workspace panel" aria-orientation="vertical" aria-valuemin="240" aria-valuemax={Math.floor(window.innerWidth * 0.65)} aria-valuenow={width()} tabIndex={0} onPointerDown={startResize} onKeyDown={(event) => { if (event.key === "ArrowLeft") saveWidth(width() + 16); if (event.key === "ArrowRight") saveWidth(width() - 16); }} />
     <div ref={panelSurface} class="workspace-panel-surface">
     <header class="workspace-panel-header"><div><strong>Workspace</strong><small>Project context and tools</small></div><Button variant="ghost" size="icon-sm" aria-label="Close workspace panel" onClick={props.onClose}><XIcon /></Button></header>
     <div class="workspace-panel-tabs" role="tablist" aria-label="Workspace views">
@@ -507,7 +520,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
     <Show when={tab() === "files"}>
       <div class="workspace-files"><nav aria-label="Project files" class="workspace-tree"><Tree directory="" /></nav>
         <div class="workspace-detail-toggle"><button aria-expanded={detailOpen()} onClick={toggleDetail}><ChevronDownIcon data-open={detailOpen()} /><span>File preview</span><Show when={preview()}><small>{preview()!.path} · {preview()!.size.toLocaleString()} bytes</small></Show></button></div>
-        <Show when={detailOpen()}><><div class="workspace-detail-resize-handle" role="separator" aria-label="Resize file preview" aria-orientation="horizontal" aria-valuemin="160" aria-valuemax={Math.max(160, window.innerHeight - 230)} aria-valuenow={detailHeight()} tabIndex={0} onPointerDown={startDetailResize} onKeyDown={resizeDetailByKey} /><section class="workspace-preview" aria-label="File preview" style={{ height: `${detailHeight()}px` }}><Show when={preview()} fallback={<div class="workspace-panel-empty">Select a text file to preview it.</div>}>{(file) => <pre><code>{file().content}</code></pre>}</Show></section></></Show>
+        <Show when={detailOpen()}><><div class="workspace-detail-resize-handle" role="separator" aria-label="Resize file preview" aria-orientation="horizontal" aria-valuemin="128" aria-valuemax={Math.max(128, window.innerHeight - 184)} aria-valuenow={detailHeight()} tabIndex={0} onPointerDown={startDetailResize} onKeyDown={resizeDetailByKey} /><section class="workspace-preview" aria-label="File preview" style={{ height: `${detailHeight()}px` }}><Show when={preview()} fallback={<div class="workspace-panel-empty">Select a text file to preview it.</div>}>{(file) => <pre><code>{file().content}</code></pre>}</Show></section></></Show>
       </div>
     </Show>
     <Show when={tab() === "diff"}><section class="workspace-diff">
@@ -518,7 +531,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
       <Show when={diff()?.repository && diff()?.commits?.length}><div class="workspace-git-graph" aria-label="Recent commits"><For each={diff()!.commits}>{(commit) => <div class="workspace-commit"><code class="workspace-graph-rail">{commit.graph || "*"}</code><button title={`${commit.author} · ${new Date(commit.authoredAt).toLocaleString()}`} onClick={() => copy(commit.hash)}><span>{commit.subject}</span><code>{commit.shortHash}</code></button></div>}</For></div></Show>
       </div>
       <div class="workspace-detail-toggle"><button aria-expanded={detailOpen()} onClick={toggleDetail}><ChevronDownIcon data-open={detailOpen()} /><span>Working tree patch</span><small>{diff()?.files.length || 0} changed</small></button></div>
-      <Show when={detailOpen()}><><div class="workspace-detail-resize-handle" role="separator" aria-label="Resize working tree patch" aria-orientation="horizontal" aria-valuemin="160" aria-valuemax={Math.max(160, window.innerHeight - 230)} aria-valuenow={detailHeight()} tabIndex={0} onPointerDown={startDetailResize} onKeyDown={resizeDetailByKey} /><div class="workspace-patch" style={{ height: `${detailHeight()}px` }}><Show when={diff()?.diff} fallback={<div class="workspace-panel-empty">{diff()?.repository ? "Working tree is clean." : "Diff is available for Git projects."}</div>}>{(content) => <pre class="workspace-diff-content"><code>{content()}</code></pre>}</Show></div></></Show>
+      <Show when={detailOpen()}><><div class="workspace-detail-resize-handle" role="separator" aria-label="Resize working tree patch" aria-orientation="horizontal" aria-valuemin="128" aria-valuemax={Math.max(128, window.innerHeight - 184)} aria-valuenow={detailHeight()} tabIndex={0} onPointerDown={startDetailResize} onKeyDown={resizeDetailByKey} /><div class="workspace-patch" style={{ height: `${detailHeight()}px` }}><Show when={diff()?.diff} fallback={<div class="workspace-panel-empty">{diff()?.repository ? "Working tree is clean." : "Diff is available for Git projects."}</div>}>{(content) => <pre class="workspace-diff-content"><code>{content()}</code></pre>}</Show></div></></Show>
     </section></Show>
     <Show when={tab() === "artifacts"}><section class="workspace-artifacts">
       <div class="workspace-artifact-modes" role="radiogroup" aria-label="Artifact modality"><button role="radio" aria-checked={artifactMode() === "outputs"} onClick={() => setArtifactMode("outputs")}>Outputs</button><button role="radio" aria-checked={artifactMode() === "interactive"} onClick={() => setArtifactMode("interactive")}>Interactive UI</button></div>

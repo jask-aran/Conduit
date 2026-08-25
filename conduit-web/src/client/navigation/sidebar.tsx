@@ -137,7 +137,7 @@ export function Sidebar(props: {
 }) {
   const [collapsed, setCollapsed] = createSignal(localStorage.getItem("conduit.sidebar") === "collapsed");
   const [visualCollapsed, setVisualCollapsed] = createSignal(collapsed());
-  const [shellWidth, setShellWidth] = createSignal(collapsed() ? 52 : 244);
+  const [shellWidth, setShellWidth] = createSignal(collapsed() ? 41.6 : 195.2);
   const [collapsedProjectIds, setCollapsedProjectIds] = createSignal(storedCollapsedProjects());
   const [selectedChatIds, setSelectedChatIds] = createSignal<Set<string>>(new Set());
   const [newKind, setNewKind] = createSignal<"folder" | "workspace" | null>(null);
@@ -161,7 +161,7 @@ export function Sidebar(props: {
   const toggleSidebar = () => {
     const nextCollapsed = !collapsed();
     const startWidth = shellWidth();
-    const targetWidth = nextCollapsed ? 52 : 244;
+    const targetWidth = nextCollapsed ? 41.6 : 195.2;
     cancelSidebarEdgeMotion();
     if (isMobileLayout()) {
       batch(() => {
