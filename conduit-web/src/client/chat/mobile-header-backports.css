@@ -1,7 +1,7 @@
 .pwa-update-icon-active { animation: pwa-update-spin .8s linear infinite; }
 @keyframes pwa-update-spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .pwa-update-icon-active { animation: none; } }
-.chat-header-menu-context { display: grid; gap: 4.8px; margin-top: 8px; padding: 8px 9.6px 1.6px; border-top: 0.8px solid var(--border); }
+.chat-header-menu-context { display: grid; gap: 4.8px; margin-top: 8px; padding: 8px 9.6px 1.6px; border-top: 1px solid var(--border); }
 .chat-header-menu-section-label { padding: 0; color: var(--muted-foreground); font: 8px/1.2 ui-monospace, SFMono-Regular, Consolas, monospace; letter-spacing: .07em; text-transform: uppercase; }
 .chat-header-menu-context-values { overflow-wrap: anywhere; color: var(--foreground); font: 8.8px/1.5 ui-monospace, SFMono-Regular, Consolas, monospace; }
 

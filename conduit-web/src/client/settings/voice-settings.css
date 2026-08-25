@@ -10,26 +10,26 @@
 .voice-settings-intro { margin: 0; color: var(--muted-foreground); font-size: 9.6px; line-height: 1.4; }
 .voice-settings .dictation-auto-send { padding: 7.2px 8px; }
 .voice-input-test { gap: 6.4px; padding: 8px; }
-.voice-input-playback { display: grid; gap: 6.4px; border-left: 1.6px solid var(--accent-cool); background: color-mix(in oklch, var(--accent-cool), transparent 94%); padding: 6.4px 8px; color: var(--muted-foreground); font-size: 10.4px; }
-.voice-input-playback-error { margin: 0; border-left: 1.6px solid var(--muted-foreground); background: var(--muted); padding: 6.4px 8px; color: var(--muted-foreground); font-size: 10.4px; }
+.voice-input-playback { display: grid; gap: 6.4px; border-left: 1px solid var(--accent-cool); background: color-mix(in oklch, var(--accent-cool), transparent 94%); padding: 6.4px 8px; color: var(--muted-foreground); font-size: 10.4px; }
+.voice-input-playback-error { margin: 0; border-left: 1px solid var(--muted-foreground); background: var(--muted); padding: 6.4px 8px; color: var(--muted-foreground); font-size: 10.4px; }
 .voice-card { display: grid; gap: 8px; padding: 8px; border: 0.8px solid var(--border); border-radius: var(--radius); background: var(--card); }
 .voice-card h3, .voice-card p { margin: 0; }
 .voice-card p, .voice-notice { color: var(--muted-foreground); font-size: 9.6px; line-height: 1.4; }
 .voice-model-kicker { color: var(--muted-foreground); font-size: 8px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
 .voice-draft-state { color: var(--muted-foreground); font-size: 8.8px; white-space: nowrap; }
 .voice-draft-state[data-dirty="true"] { color: var(--primary); }
-.voice-local-catalogue { border-left: 1.6px solid var(--accent-cool); }
+.voice-local-catalogue { border-left: 1px solid var(--accent-cool); }
 .voice-selection-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 9.6px; }
 .voice-selection-heading > div { display: grid; min-width: 0; gap: 1.6px; }
 .voice-selection-heading strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .voice-selection-heading small { overflow-wrap: anywhere; color: var(--muted-foreground); line-height: 1.35; }
 .voice-selection-guide { color: var(--muted-foreground); font-size: 8.8px; line-height: 1.35; }
-.voice-install-panel { display: grid; gap: 6.4px; border-top: 0.8px solid var(--border); padding-top: 8px; }
+.voice-install-panel { display: grid; gap: 6.4px; border-top: 1px solid var(--border); padding-top: 8px; }
 .voice-install-panel > p { margin: 0; }
 .voice-install-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .voice-install-heading h3 { margin: 0; font-size: 10.4px; }
 .voice-backend-facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6.4px; }
-.voice-backend-facts > div { display: grid; min-width: 0; gap: 2.4px; border-left: 1.6px solid var(--border); padding: 5.6px 7.2px; }
+.voice-backend-facts > div { display: grid; min-width: 0; gap: 2.4px; border-left: 1px solid var(--border); padding: 5.6px 7.2px; }
 .voice-backend-facts span { color: var(--muted-foreground); font-size: 8px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
 .voice-backend-facts strong, .voice-backend-facts small { overflow-wrap: anywhere; }
 .voice-backend-facts strong { font-size: 9.6px; }
@@ -40,7 +40,7 @@
 .voice-advanced summary::before { content: "⌄"; flex: none; color: var(--accent-cool); font-size: 12px; line-height: 1; transform: rotate(-90deg); transition: transform 140ms ease; }
 .voice-advanced[open] summary::before { transform: rotate(0deg); }
 .voice-advanced summary small { color: var(--muted-foreground); font-size: 8.8px; text-align: right; }
-.voice-advanced > [data-slot="field-group"] { border-top: 0.8px solid var(--border); padding: 8px 8.8px 8.8px; }
+.voice-advanced > [data-slot="field-group"] { border-top: 1px solid var(--border); padding: 8px 8.8px 8.8px; }
 .voice-advanced-heading { display: grid; gap: 1.6px; }
 .voice-advanced-heading h3 { margin: 0; font-size: 10.4px; }
 .voice-advanced-heading p { margin: 0; color: var(--muted-foreground); font-size: 8.8px; line-height: 1.35; }
