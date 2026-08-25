@@ -517,6 +517,7 @@ svg { stroke-width: 1.5; }
 .command-copy small { overflow: hidden; color: var(--muted-foreground); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
 .command-model-option { gap: 16px; }
 .command-model-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.command-model-option[data-scoped] .command-model-label { font-weight: 700; }
 .command-model-spec { min-width: 0; margin-left: auto; overflow: hidden; color: var(--muted-foreground); font: 12px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace; text-align: right; text-overflow: ellipsis; white-space: nowrap; }
 .command-chevron { width: 15px; height: 15px; flex: none; color: var(--muted-foreground); }
 .command-shortcut { flex: none; color: var(--muted-foreground); font-size: 11px; font-family: inherit; }
