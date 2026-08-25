@@ -1,4 +1,104 @@
 /* Workspace panel geometry, file views, and artifact surfaces. */
+.workspace-panel { position: relative; display: flex; width: 0; height: calc(100dvh - 12.8px); margin: 6.4px 0 6.4px 0; flex: none; overflow: visible; pointer-events: none; border-radius: 12.8px; transition: width var(--panel-motion-duration) var(--panel-motion-easing), margin-right var(--panel-motion-duration) var(--panel-motion-easing); }
+.workspace-panel.workspace-panel-open { pointer-events: auto; background: var(--background); }
+.workspace-panel[data-edge-instant="true"],
+body.workspace-resizing .workspace-panel { transition: none !important; }
+/* Surface keeps settled panel width, right-anchored inside the shell. */
+.workspace-panel-surface { position: absolute; top: 0; right: 0; display: flex; width: var(--workspace-panel-width); min-width: 0; height: 100%; contain: layout paint; flex: none; flex-direction: column; overflow: hidden; border: 0.8px solid transparent; border-radius: 12.8px; background: var(--background); opacity: 0; transform: translateX(100%); }
+.workspace-panel-open .workspace-panel-surface { border-color: var(--border); opacity: 1; transform: translateX(0); }
+.workspace-panel-surface > * { max-width: 100%; }
+.workspace-panel-header { display: flex; min-height: 32px; flex: none; align-items: center; justify-content: space-between; padding: 3.2px 6.4px 3.2px 11.2px; border-bottom: 0.8px solid var(--border); }
+.workspace-panel-header > div { display: flex; min-width: 0; align-items: baseline; gap: 6.4px; }
+.workspace-panel-header strong { font-size: 11.2px; }
+.workspace-panel-header small { color: var(--muted-foreground); font-size: 8.8px; }
+.workspace-panel-tabs { display: grid; grid-template-columns: repeat(4, 1fr); padding: 2.4px 4.8px; border-bottom: 0.8px solid var(--border); }
+.workspace-panel-tabs button { display: flex; min-height: 22.4px; align-items: center; justify-content: center; gap: 4.8px; border: 0; border-radius: 4.8px; background: transparent; color: var(--muted-foreground); font-size: 8.8px; }
+.workspace-panel-tabs button[aria-selected="true"] { background: var(--accent); color: var(--foreground); }
+.workspace-panel-tabs svg, .workspace-panel-header svg, .workspace-status-strip svg { width: 12px; height: 12px; }
+.workspace-files { display: flex; min-height: 0; flex: 1; flex-direction: column; }
+.workspace-tree { min-height: 80px; flex: 1; overflow: auto; padding: 4.8px; }
+.workspace-tree-row { display: flex; width: 100%; min-height: 22.4px; align-items: center; gap: 4.8px; border: 0; border-radius: 4.8px; background: transparent; color: var(--muted-foreground); padding-block: 3.2px; padding-right: 6.4px; text-align: left; }
+.workspace-tree-row:hover, .workspace-tree-row[data-selected="true"] { background: var(--accent); color: var(--foreground); }
+.workspace-tree-row svg { width: 11.2px; height: 11.2px; flex: none; }
+.workspace-tree-row span { min-width: 0; overflow: hidden; font-size: 9.6px; text-overflow: ellipsis; white-space: nowrap; }
+.workspace-tree-chevron { margin-right: -4px; transition: transform 120ms ease; }
+.workspace-tree-chevron[data-open="true"] { transform: rotate(90deg); }
+.workspace-tree-notice { padding: 5.6px 6.4px 5.6px 19.2px; color: var(--muted-foreground); font-size: 8.8px; }
+.workspace-preview, .workspace-diff { display: flex; min-height: 0; flex: 1; flex-direction: column; overflow: hidden; }
+.workspace-preview { flex: none; }
+.workspace-preview pre, .workspace-diff-content { min-height: 0; flex: 1; margin: 0; overflow: auto; padding: 9.6px; font: 9.2px/1.55 ui-monospace, SFMono-Regular, Consolas, monospace; tab-size: 2; white-space: pre; }
+.workspace-status-strip { display: flex; min-height: 38.4px; flex: none; align-items: center; justify-content: space-between; gap: 6.4px; padding: 4px 6.4px 4px 9.6px; background: color-mix(in oklch, var(--accent-cool), transparent 88%); color: var(--foreground); font: 8.8px ui-monospace, SFMono-Regular, Consolas, monospace; }
+.workspace-status-strip > div { display: flex; min-width: 0; align-items: center; gap: 5.6px; }
+.workspace-status-strip strong, .workspace-status-strip small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.workspace-status-strip small { color: var(--muted-foreground); }
+.workspace-git-summary { display: flex; min-height: 24px; flex: none; align-items: center; justify-content: space-between; padding: 4px 8px; border-bottom: 0.8px solid var(--border); color: var(--muted-foreground); font-size: 8px; }
+.workspace-changes { min-height: 64px; flex: 1; overflow: auto; padding: 4.8px 8px; border-bottom: 0.8px solid var(--border); }
+.workspace-changes > div { display: flex; min-height: 19.2px; align-items: center; gap: 6.4px; font-size: 8.8px; }
+.workspace-changes code { width: 16px; flex: none; color: var(--accent-cool); }
+.workspace-changes span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.workspace-git-graph { max-height: 176px; overflow: auto; padding: 4.8px 6.4px; border-bottom: 0.8px solid var(--border); }
+.workspace-commit { display: grid; min-height: 23.2px; grid-template-columns: minmax(14.4px, auto) 1fr; align-items: center; }
+.workspace-graph-rail { overflow: hidden; color: var(--accent-cool); font-size: 8.8px; white-space: pre; }
+.workspace-commit button { display: flex; min-width: 0; align-items: center; gap: 6.4px; border: 0; border-radius: 4px; background: transparent; padding: 3.2px 4.8px; color: inherit; text-align: left; }
+.workspace-commit button:hover { background: var(--accent); }
+.workspace-commit button span { min-width: 0; flex: 1; overflow: hidden; font-size: 8.8px; text-overflow: ellipsis; white-space: nowrap; }
+.workspace-commit button code { color: var(--muted-foreground); font-size: 8px; }
+.workspace-diff-overview { display: flex; min-height: 80px; flex: 1; flex-direction: column; overflow: hidden; }
+.workspace-patch { display: flex; min-height: 0; flex: none; flex-direction: column; overflow: hidden; }
+.workspace-detail-toggle { flex: none; border-top: 0.8px solid var(--border); background: color-mix(in oklch, var(--background), var(--accent) 28%); }
+.workspace-detail-toggle button { display: flex; width: 100%; min-height: 25.6px; align-items: center; gap: 5.6px; border: 0; background: transparent; padding: 4px 8px; color: var(--muted-foreground); font-size: 8.8px; text-align: left; }
+.workspace-detail-toggle button:hover { background: var(--accent); color: var(--foreground); }
+.workspace-detail-toggle svg { width: 11.2px; height: 11.2px; flex: none; transform: rotate(-90deg); transition: transform 120ms ease; }
+.workspace-detail-toggle svg[data-open="true"] { transform: rotate(0); }
+.workspace-detail-toggle span { flex: none; color: var(--foreground); font-weight: 600; }
+.workspace-detail-toggle small { min-width: 0; margin-left: auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.workspace-detail-resize-handle { position: relative; z-index: 5; height: 6.4px; flex: none; cursor: row-resize; touch-action: none; }
+.workspace-detail-resize-handle::after { content: ""; position: absolute; inset: 0; border-top: 0.8px solid transparent; transition: border-color 120ms; }
+.workspace-detail-resize-handle:hover::after, .workspace-detail-resize-handle:focus-visible::after, .workspace-detail-resizing .workspace-detail-resize-handle::after { border-color: var(--accent-cool); }
+.workspace-panel-empty { display: grid; min-height: 96px; flex: 1; place-items: center; padding: 16px; color: var(--muted-foreground); font-size: 9.6px; text-align: center; }
+.workspace-panel-error { padding: 7.2px 9.6px; border-bottom: 0.8px solid color-mix(in oklch, var(--destructive), transparent 45%); color: var(--destructive); font-size: 9.6px; }
+.workspace-panel-loading { position: absolute; inset: auto 9.6px 9.6px auto; display: flex; align-items: center; gap: 5.6px; padding: 4.8px 7.2px; border: 0.8px solid var(--border); border-radius: 799.2px; background: var(--popover); color: var(--muted-foreground); font-size: 8.8px; box-shadow: 0 6.4px 19.2px rgb(0 0 0 / 25%); }
+/* 19.2px hit target centered on the gap between chat-main and the panel edge. */
+.workspace-resize-handle { position: absolute; inset-block: 0; left: -12px; z-index: 40; width: 19.2px; cursor: col-resize; touch-action: none; }
+.workspace-resizing { cursor: col-resize; user-select: none; }
+.workspace-detail-resizing { cursor: row-resize; user-select: none; }
+.workspace-artifacts { display: flex; min-height: 0; flex: 1; flex-direction: column; }
+.workspace-artifact-modes { display: grid; grid-template-columns: 1fr 1fr; gap: 3.2px; padding: 4.8px; border-bottom: 0.8px solid var(--border); }
+.workspace-artifact-modes button { min-height: 24px; border: 0; border-radius: 4.8px; background: transparent; color: var(--muted-foreground); font-size: 8.8px; }
+.workspace-artifact-modes button[aria-checked="true"] { background: var(--accent); color: var(--foreground); }
+.workspace-artifacts .workspace-panel-empty > div { display: grid; max-width: 224px; justify-items: center; gap: 5.6px; }
+.workspace-artifacts .workspace-panel-empty svg { width: 19.2px; height: 19.2px; }
+.workspace-artifacts .workspace-panel-empty strong { color: var(--foreground); }
+.workspace-artifacts .workspace-panel-empty p { margin: 0; line-height: 1.5; }
+
+@media (--conduit-mobile-layout) {
+  .workspace-panel {
+    position: fixed;
+    inset: 0;
+    z-index: 70;
+    width: 100vw !important;
+    height: 100dvh;
+    margin: 0;
+    transform: translateX(100%);
+    transition: transform var(--panel-motion-duration) var(--panel-motion-easing);
+  }
+  .workspace-panel.workspace-panel-open { margin: 0; transform: translateX(0); }
+  .workspace-panel-surface { width: 100%; border: 0; border-radius: 0; overscroll-behavior: contain; opacity: 1; transform: none; }
+  .workspace-tree, .workspace-preview, .workspace-diff, .workspace-changes, .workspace-git-graph, .workspace-diff-content { overscroll-behavior: contain; }
+  .workspace-resize-handle { display: none; }
+  .workspace-files { grid-template-rows: minmax(128px, 42%) 1fr; }
+  html[data-vv-shell] .workspace-panel { height: var(--app-height, 100dvh); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .workspace-panel, .workspace-panel-surface { transition-duration: 0.01ms !important; }
+  .workspace-panel-open .workspace-panel-surface { transform: none; }
+}
+
+
+/* Mobile retains v0.5.2 density. */
+@media (--conduit-mobile-layout) {
+/* Workspace panel geometry, file views, and artifact surfaces. */
 .workspace-panel { position: relative; display: flex; width: 0; height: calc(100dvh - 16px); margin: 8px 0 8px 0; flex: none; overflow: visible; pointer-events: none; border-radius: 16px; transition: width var(--panel-motion-duration) var(--panel-motion-easing), margin-right var(--panel-motion-duration) var(--panel-motion-easing); }
 .workspace-panel.workspace-panel-open { pointer-events: auto; background: var(--background); }
 .workspace-panel[data-edge-instant="true"],
@@ -93,4 +193,6 @@ body.workspace-resizing .workspace-panel { transition: none !important; }
 @media (prefers-reduced-motion: reduce) {
   .workspace-panel, .workspace-panel-surface { transition-duration: 0.01ms !important; }
   .workspace-panel-open .workspace-panel-surface { transform: none; }
+}
+
 }

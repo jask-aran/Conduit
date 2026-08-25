@@ -1,4 +1,5 @@
 import terminalFontUrl from "../assets/MesloLGSNerdFontMono-Regular.ttf";
+import { isMobileLayout } from "../navigation/mobile-layout";
 import "./terminal-pane.css";
 
 export type TerminalRendererId = "ghostty" | "xterm";
@@ -144,7 +145,7 @@ async function createGhosttyRenderer(host: HTMLElement): Promise<TerminalRendere
   const { init, Terminal, FitAddon } = await import("ghostty-web");
   await init();
   const terminal = new Terminal({
-    fontSize: 13,
+    fontSize: isMobileLayout() ? 13 : 10.4,
     fontFamily: '"Conduit Terminal Font", monospace',
     cursorBlink: false,
     theme: CONDUIT_TERMINAL_THEME,
@@ -175,7 +176,7 @@ async function createXtermRenderer(host: HTMLElement): Promise<TerminalRenderer>
     import("@xterm/xterm/css/xterm.css"),
   ]);
   const terminal = new Terminal({
-    fontSize: 13,
+    fontSize: isMobileLayout() ? 13 : 10.4,
     fontFamily: '"Conduit Terminal Font", monospace',
     cursorBlink: false,
     theme: CONDUIT_TERMINAL_THEME,

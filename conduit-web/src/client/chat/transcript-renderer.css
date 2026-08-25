@@ -1,3 +1,45 @@
+.composer-renderer-switch { display: flex; align-items: center; gap: 8px; }
+.composer-renderer-switch label { flex: none; }
+
+/* Direct Incremark renderers get the same definite-width contract as the
+   Advanced renderer. The direct-child selector leaves Advanced's wrapper and
+   its inline-size containment completely unchanged. */
+.message-assistant [data-slot="bubble-content"] > .chat-markdown[data-renderer^="incremark"] {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+}
+.message-assistant [data-slot="bubble-content"] > .chat-markdown[data-renderer^="incremark"] > .incremark {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+}
+
+@media (max-width: 576px) {
+  .chat-main .composer-renderer-switch {
+    top: calc(38.4px + env(safe-area-inset-top, 0px) + 6.4px);
+    right: 9.6px;
+    left: 9.6px;
+    width: auto;
+    max-width: none;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 4.8px;
+  }
+  .composer-renderer-switch label {
+    width: min(100%, 272px);
+    min-width: 0;
+    justify-content: flex-end;
+  }
+  .composer-renderer-switch select {
+    min-width: 0;
+    max-width: calc(100% - 84.8px);
+  }
+}
+
+
+/* Mobile retains v0.5.2 density. */
+@media (--conduit-mobile-layout) {
 .composer-renderer-switch { display: flex; align-items: center; gap: 10px; }
 .composer-renderer-switch label { flex: none; }
 
@@ -35,4 +77,6 @@
     min-width: 0;
     max-width: calc(100% - 106px);
   }
+}
+
 }

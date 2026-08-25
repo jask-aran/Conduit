@@ -12,6 +12,7 @@ import { saveTranscriptRenderer, selectedTranscriptRenderer, TRANSCRIPT_RENDERER
 import { INCREMARK_PACING_OPTIONS, saveIncremarkPacing, selectedIncremarkPacing, type IncremarkPacingMode } from "./incremark-pacing";
 import { mountTranscriptPanelMotion } from "./transcript-motion";
 import { mountTranscriptVisibility } from "./transcript-visibility";
+import { isMobileLayout } from "../navigation/mobile-layout";
 import { getHarnessRecorder, recordHarnessMetric } from "../harness-metrics";
 import {
   advanceTailFollow,
@@ -391,7 +392,7 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
       const shellRect = motionShell.getBoundingClientRect();
       const composerRect = composerShell.getBoundingClientRect();
       if (shellRect.width <= 0 || shellRect.height <= 0 || composerRect.width <= 0 || composerRect.height <= 0) return;
-      const bottom = `${Math.max(8, shellRect.bottom - composerRect.top + 10)}px`;
+      const bottom = `${Math.max(isMobileLayout() ? 8 : 6.4, shellRect.bottom - composerRect.top + (isMobileLayout() ? 10 : 8))}px`;
       if (latestButton.style.getPropertyValue("--message-scroller-button-bottom") !== bottom) {
         latestButton.style.setProperty("--message-scroller-button-bottom", bottom);
       }

@@ -1,3 +1,54 @@
+.chat-markdown { width: 100%; font-size: 12px; line-height: 1.66; overflow-wrap: anywhere; }
+.chat-markdown > :first-child { margin-top: 0; }
+.chat-markdown > :last-child { margin-bottom: 0; }
+.chat-markdown h1, .chat-markdown h2, .chat-markdown h3 { margin: 1.25em 0 0.5em; line-height: 1.25; letter-spacing: -0.02em; }
+.chat-markdown h1 { font-size: 1.6rem; } .chat-markdown h2 { font-size: 1.35rem; }
+.chat-markdown ul, .chat-markdown ol { margin: 0.8em 0; padding-left: 1.6em; }
+.chat-markdown ul { list-style: disc; } .chat-markdown ol { list-style: decimal; }
+.chat-markdown blockquote { margin: 1em 0; padding-left: 1em; border-left: 2.4px solid var(--border); color: var(--muted-foreground); }
+.chat-markdown table { width: 100%; margin: 1em 0; border-collapse: collapse; }
+.chat-markdown[data-renderer^="incremark"] table { table-layout: auto; }
+@container chat-main (--conduit-wide-chat) {
+  .chat-markdown[data-renderer^="incremark"] table {
+    width: min(150%, 100cqw);
+    margin-left: calc((100% - min(150%, 100cqw)) / 2);
+  }
+}
+.chat-markdown th, .chat-markdown td { padding: 5.6px 7.2px; border: 0.8px solid var(--border); text-align: left; }
+.chat-markdown[data-renderer^="incremark"] th, .chat-markdown[data-renderer^="incremark"] td { vertical-align: top; }
+.chat-markdown :not(pre) > code { border-radius: 3.2px; background: var(--muted); padding: 0.12em 0.35em; font-family: ui-monospace, monospace; }
+.external-markdown-link { border: 0; background: none; padding: 0; color: oklch(0.7 0.16 250); text-decoration: underline; }
+.artifact { margin: 1em 0; overflow: hidden; border: 0.8px solid var(--border); border-radius: 8px; background: var(--card); }
+.artifact-header { display: flex; align-items: center; justify-content: space-between; padding: 5.6px 8px; border-bottom: 0.8px solid var(--border); color: var(--muted-foreground); font-size: 9.6px; }
+.artifact-header button { border: 0; background: transparent; color: inherit; }
+.artifact pre { margin: 0; overflow: auto; padding: 11.2px; font: 10.4px/1.55 ui-monospace, monospace; }
+.streaming-pending { color: var(--muted-foreground); }
+.streaming-pending-math-block { display: block; min-height: 2.2em; margin: 1em 0; visibility: hidden; pointer-events: none; user-select: none; }
+.streaming-pending-math-inline { display: inline-block; width: 0; height: 1em; overflow: hidden; vertical-align: baseline; visibility: hidden; pointer-events: none; user-select: none; }
+.streaming-pending-fence { opacity: 0.92; }
+.chat-markdown .katex-display { display: flex; min-height: 2.2em; margin: 1em 0; align-items: center; justify-content: center; }
+.chat-markdown .incremark-math-block { display: block; min-height: 2.2em; margin: 1em 0; }
+
+/* KaTeX does not wrap a display formula. Keep the formula inside the phone
+   column and expose the excess width as a local touch scroll instead of
+   widening the transcript or clipping both ends of the equation. */
+.chat-markdown .katex-display,
+.chat-markdown .incremark-math-block {
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+}
+.chat-markdown .katex-display::-webkit-scrollbar,
+.chat-markdown .incremark-math-block::-webkit-scrollbar { display: none; }
+@media (max-width: 576px) {
+  .chat-markdown .katex-display { justify-content: flex-start; }
+  .chat-markdown .katex-display > .katex { flex: 0 0 auto; }
+}
+
+
+/* Mobile retains v0.5.2 density. */
+@media (--conduit-mobile-layout) {
 .chat-markdown { width: 100%; font-size: 15px; line-height: 1.66; overflow-wrap: anywhere; }
 .chat-markdown > :first-child { margin-top: 0; }
 .chat-markdown > :last-child { margin-bottom: 0; }
@@ -44,4 +95,6 @@
 @media (max-width: 720px) {
   .chat-markdown .katex-display { justify-content: flex-start; }
   .chat-markdown .katex-display > .katex { flex: 0 0 auto; }
+}
+
 }
