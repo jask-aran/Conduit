@@ -480,6 +480,7 @@ export function CommandMenu(props: {
     ...palettePageCommands.map(([commandId, targetPage]) =>
       props.shortcuts.registerHandler(commandId, "palette.page", () =>
         openPalettePage(targetPage, commandId === COMMAND_IDS.searchChats))),
+    props.shortcuts.registerHandler(COMMAND_IDS.openModelSelector, "model-selector", close),
     props.shortcuts.registerHandler(COMMAND_IDS.toggleModelScope, "model-selector", toggleActiveModelScope),
     props.shortcuts.registerHandler(COMMAND_IDS.toggleChatEdit, "chat-search.browse", toggleSelection),
     props.shortcuts.registerHandler(COMMAND_IDS.searchChats, "chat-search.browse", close),

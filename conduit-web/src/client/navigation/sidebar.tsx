@@ -65,6 +65,23 @@ type DeleteTarget = { type: "chat"; chat: ChatSummary; project: Project }
   | { type: "chats"; targets: ChatTarget[] };
 const COLLAPSED_PROJECTS_KEY = "conduit.sidebar.collapsed-projects";
 
+function SidebarChatTitle(props: { title: string; animate: boolean }) {
+  let element!: HTMLSpanElement;
+  let animation: Animation | undefined;
+  onMount(() => {
+    if (!props.animate || matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    animation = element.animate([
+      { clipPath: "inset(0 100% 0 0)" },
+      { clipPath: "inset(0 0 0 0)" },
+    ], {
+      duration: Math.min(1400, Math.max(360, props.title.length * 38)),
+      easing: `steps(${Math.max(1, props.title.length)}, end)`,
+    });
+  });
+  onCleanup(() => animation?.cancel());
+  return <span ref={element}>{props.title}</span>;
+}
+
 function storedCollapsedProjects(): Set<string> {
   try {
     const value = JSON.parse(localStorage.getItem(COLLAPSED_PROJECTS_KEY) || "[]");
@@ -254,6 +271,7 @@ export function Sidebar(props: {
   const [workspacePreview, setWorkspacePreview] = createSignal<WorkspacePreview | null>(null);
   const [previewError, setPreviewError] = createSignal("");
   const [submitting, setSubmitting] = createSignal(false);
+  const renderedChatTitles = new Map<string, string>();
   const [rename, setRename] = createSignal<{ type: "chat"; chat: ChatSummary; project: Project } | { type: "project"; project: Project } | null>(null);
   const [renameValue, setRenameValue] = createSignal("");
   const [deleting, setDeleting] = createSignal<DeleteTarget | null>(null);
@@ -265,6 +283,7 @@ export function Sidebar(props: {
     || props.projects.find((item) => item.id === props.projectId);
   const currentChat = (project = currentProject()): ChatSummary | null => project?.sessions.find((item) => item.id === props.selectedId)
     || (project && props.selectedId ? { id: props.selectedId, projectId: project.id, status: "draft" as const, title: "New chat" } : null);
+  const chatTitle = (chat: ChatSummary) => chat.title || (chat.status === "active" ? "Untitled chat" : "New chat");
 
   createEffect(() => {
     const command = props.command;
@@ -547,13 +566,17 @@ export function Sidebar(props: {
   const ChatMenu = (menuProps: { chat: ChatSummary; project: Project }) => {
     const guard = guardFor(menuProps.chat);
     const selected = () => selectedChatIds().has(menuProps.chat.id);
+    const title = chatTitle(menuProps.chat);
+    const previousTitle = renderedChatTitles.get(menuProps.chat.id);
+    const animateTitle = previousTitle !== undefined && previousTitle !== title && Boolean(menuProps.chat.title);
+    renderedChatTitles.set(menuProps.chat.id, title);
     return <ContextMenu placement={phoneLayout() ? "bottom-start" : "right-start"} onOpenChange={(open) => { if (open) guard.suppressClick = true; }}>
     <ContextMenuTrigger
       as="button"
       class="sidebar-row sidebar-chat"
       data-chat-id={menuProps.chat.id}
       aria-current={props.selectedId === menuProps.chat.id ? "page" : undefined}
-      aria-label={`${menuProps.chat.title || "New chat"}${selected() ? ", selected" : ""}`}
+      aria-label={`${chatTitle(menuProps.chat)}${selected() ? ", selected" : ""}`}
       data-selected={selected() ? "true" : undefined}
       onContextMenu={() => { if (!selected()) clearSelection(); }}
       onClick={(event: MouseEvent) => {
@@ -569,7 +592,7 @@ export function Sidebar(props: {
       }}
     >
       <RuntimeIndicator process={processFor(menuProps.chat)} stale={props.runtime.stale()} />
-      <span>{menuProps.chat.title || "New chat"}</span>
+      <SidebarChatTitle title={title} animate={animateTitle} />
     </ContextMenuTrigger>
     <ContextMenuContent class="w-60 sidebar-context-menu">
       <Show when={selected()} fallback={<>
@@ -730,7 +753,7 @@ export function Sidebar(props: {
             <div data-sidebar="rail-section" data-sidebar-section="chats" class="sidebar-rail-section">
               <RailAction label="New chat" onClick={() => startNewChat()}><MessageSquarePlusIcon /></RailAction>
               <For each={railChats()}>{(item) => <RailAction
-                label={`Chat: ${item.chat.title || "New chat"}`}
+                label={`Chat: ${chatTitle(item.chat)}`}
                 current={props.selectedId === item.chat.id}
                 live={Boolean(processFor(item.chat))}
                 onClick={() => { closeMobile(); void props.onOpenChat(item.chat, item.project); }}
@@ -797,7 +820,7 @@ export function Sidebar(props: {
     </Modal>
 
     <Modal open={Boolean(rename())} title={rename()?.type === "chat" ? "Rename chat" : "Rename folder"}
-      description={rename()?.type === "chat" ? "Set the display name stored in the Pi session." : "Change the folder's display name without changing its working-directory path."}
+      description={rename()?.type === "chat" ? "Set the display name stored by Conduit." : "Change the folder's display name without changing its working-directory path."}
       onClose={() => setRename(null)}>
       <form onSubmit={submitRename}><Field><FieldLabel for="rename-name">Name</FieldLabel><Input id="rename-name" value={renameValue()} onInput={(event) => setRenameValue(event.currentTarget.value)} /></Field><div class="mt-4 flex justify-end gap-2"><Button type="button" variant="outline" onClick={() => setRename(null)}>Cancel</Button><Button type="submit" disabled={!renameValue().trim()}>Rename</Button></div></form>
     </Modal>

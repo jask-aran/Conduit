@@ -66,6 +66,7 @@ export function loadConfig(env = process.env) {
     filesRoot,
     catalogFile: absolute(env.CONDUIT_CATALOG_FILE || path.join(dataRoot, "conduit.json")),
     sessionRegistryFile: absolute(env.CONDUIT_SESSION_REGISTRY_FILE || path.join(dataRoot, "sessions.json")),
+    sessionNameLogFile: absolute(env.CONDUIT_SESSION_NAME_LOG_FILE || path.join(dataRoot, "session-name-requests.jsonl")),
     preferencesFile: absolute(env.CONDUIT_PREFERENCES_FILE || path.join(dataRoot, "preferences.json")),
     piAgentDir,
     modelProfilesFile,

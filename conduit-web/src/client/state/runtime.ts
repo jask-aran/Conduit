@@ -33,6 +33,8 @@ export function createRuntimeStore() {
   };
 
   const connect = () => {
+    if (reconnectTimer) clearTimeout(reconnectTimer);
+    reconnectTimer = undefined;
     source?.close();
     source = undefined;
     setConnectivity(attempts ? "reconnecting" : "connecting");
@@ -69,10 +71,25 @@ export function createRuntimeStore() {
     };
   };
 
-  onMount(connect);
+  const resume = () => {
+    if (document.visibilityState !== "hidden") connect();
+  };
+  const restore = (event: PageTransitionEvent) => {
+    if (event.persisted) resume();
+  };
+
+  onMount(() => {
+    connect();
+    document.addEventListener("visibilitychange", resume);
+    window.addEventListener("pageshow", restore);
+    window.addEventListener("online", resume);
+  });
   onCleanup(() => {
     if (reconnectTimer) clearTimeout(reconnectTimer);
     source?.close();
+    document.removeEventListener("visibilitychange", resume);
+    window.removeEventListener("pageshow", restore);
+    window.removeEventListener("online", resume);
   });
 
   return {
@@ -85,4 +102,3 @@ export function createRuntimeStore() {
 }
 
 export type RuntimeStore = ReturnType<typeof createRuntimeStore>;
-

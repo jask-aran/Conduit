@@ -13,6 +13,7 @@ import { shortcutFromKeyboardEvent } from "../chat/voice-dictation";
 import type { VoiceDictationSettings } from "../chat/voice-dictation-types";
 import { isWarmMicrophoneActive, stopWarmMicrophone } from "../chat/voice-dictation-client";
 import { createVoiceWaveformController, VoiceWaveform } from "../chat/voice-waveform";
+import { ModelSelector } from "../chat/model-selector";
 import type { Installation, ModelOption, Project, Template, VoiceExecutionCatalogueView, VoiceExecutionProfile, VoiceLocalModel, VoiceLocalSelection, VoiceServerSettings } from "../api/contracts";
 import type { ModelSettings } from "../state/model-settings";
 import { MAX_SIDEBAR_CHAT_LIMIT, MIN_SIDEBAR_CHAT_LIMIT } from "../navigation/sidebar-preferences";
@@ -28,6 +29,12 @@ interface RuntimeSettings {
   idleProcessTtlMs: number;
   liveCount?: number;
   generatingCount?: number;
+}
+
+interface GeneralPreferences {
+  defaultTemplateId: string;
+  sessionNameModel: string;
+  sessionNameThinkingLevel: string;
 }
 
 interface PiAuthProvider {
@@ -163,6 +170,9 @@ export function Settings(props: {
   const [runtimeError, setRuntimeError] = createSignal("");
   const [runtimeEdited, setRuntimeEdited] = createSignal(false);
   const [runtimeSaving, setRuntimeSaving] = createSignal(false);
+  const [sessionNameModel, setSessionNameModel] = createSignal("");
+  const [sessionNameThinkingLevel, setSessionNameThinkingLevel] = createSignal("off");
+  const [generalLoading, setGeneralLoading] = createSignal(false);
   const [detecting, setDetecting] = createSignal(false);
   const [workspaceId, setWorkspaceId] = createSignal<string | null>(null);
   const [authProviders, setAuthProviders] = createSignal<PiAuthProvider[]>([]);
@@ -208,6 +218,7 @@ export function Settings(props: {
   let voiceLoadRequest = 0;
   let voiceSettingsGeneration = 0;
   let voiceSaveInFlight = 0;
+  let authProvidersLoaded = false;
   const stopAudioInputPlayback = () => {
     const audio = playbackAudio;
     playbackAudio = null;
@@ -355,6 +366,17 @@ export function Settings(props: {
   };
   createEffect(() => { if (props.open && section() === "runtime") void loadRuntime(); });
 
+  const applyAuthProviders = (next: PiAuthProvider[]) => {
+    const configured = (providers: PiAuthProvider[]) => providers
+      .filter((provider) => provider.auth.configured)
+      .map((provider) => provider.id)
+      .sort()
+      .join("\n");
+    const changed = authProvidersLoaded && configured(authProviders()) !== configured(next);
+    setAuthProviders(next);
+    authProvidersLoaded = true;
+    if (changed) void props.models.reload(undefined, true);
+  };
   const loadPiAuth = async () => {
     setAuthLoading(true);
     try {
@@ -362,7 +384,7 @@ export function Settings(props: {
         api<{ providers: PiAuthProvider[] }>("/v0/pi-auth"),
         api<{ attempt: PiAuthAttempt | null }>("/v0/pi-auth/attempt"),
       ]);
-      setAuthProviders(status.providers);
+      applyAuthProviders(status.providers);
       setAuthAttempt(attempt.attempt);
       if (!authProviderId()) setAuthProviderId(status.providers[0]?.id || "");
       setAuthError("");
@@ -381,7 +403,7 @@ export function Settings(props: {
         .then((result) => {
           setAuthAttempt(result.attempt);
           if (!result.attempt?.active) return api<{ providers: PiAuthProvider[] }>("/v0/pi-auth")
-            .then((status) => setAuthProviders(status.providers));
+            .then((status) => applyAuthProviders(status.providers));
         })
         .catch((error) => setAuthError((error as Error).message));
     }, 1000);
@@ -774,6 +796,7 @@ export function Settings(props: {
   };
 
   const selectedModels = createMemo(() => props.models.allModels().filter((model) => scope().includes(model.spec)));
+  const namingModels = createMemo(() => props.models.allModels().filter((model) => props.models.enabledModels().includes(model.spec)));
   const scopeDirty = createMemo(() => scopeEdited() && !sameScope(scope(), props.models.enabledModels()));
   const modelFilter = (model: ModelOption, input: string) => {
     const words = input.toLowerCase().trim().split(/\s+/).filter(Boolean);
@@ -789,6 +812,42 @@ export function Settings(props: {
       setScopeEdited(false);
     }
   };
+  const loadGeneralPreferences = async () => {
+    setGeneralLoading(true);
+    try {
+      const loaded = await api<GeneralPreferences>("/v0/preferences");
+      const model = loaded.sessionNameModel;
+      const levels = namingModels().find((item) => item.spec === model)?.thinkingLevels || ["off"];
+      setSessionNameModel(model);
+      setSessionNameThinkingLevel(levels.includes(loaded.sessionNameThinkingLevel) ? loaded.sessionNameThinkingLevel : levels[0] || "off");
+    } catch (error) { toast.error((error as Error).message); }
+    finally { setGeneralLoading(false); }
+  };
+  const saveSessionNaming = async (model: string, thinkingLevel: string) => {
+    setSessionNameModel(model);
+    setSessionNameThinkingLevel(thinkingLevel);
+    try {
+      const saved = await api<GeneralPreferences>("/v0/preferences", {
+        method: "PATCH",
+        body: JSON.stringify({ sessionNameModel: model, sessionNameThinkingLevel: thinkingLevel }),
+      });
+      setSessionNameModel(saved.sessionNameModel);
+      setSessionNameThinkingLevel(saved.sessionNameThinkingLevel);
+    } catch (error) {
+      toast.error((error as Error).message);
+      void loadGeneralPreferences();
+    }
+  };
+  const chooseSessionNameModel = (model: string) => {
+    const levels = namingModels().find((item) => item.spec === model)?.thinkingLevels || ["off"];
+    const thinkingLevel = levels.includes(sessionNameThinkingLevel()) ? sessionNameThinkingLevel() : levels.includes("off") ? "off" : levels[0] || "off";
+    void saveSessionNaming(model, thinkingLevel);
+  };
+  createEffect(() => {
+    if (!props.open || section() !== "general") return;
+    props.models.enabledModels().join("\n");
+    void loadGeneralPreferences();
+  });
 
   const workspaceProjects = createMemo(() => props.projects
     .filter((project) => project.kind === "workspace" || ["linked", "created", "cloned"].includes(project.origin || ""))
@@ -844,6 +903,19 @@ export function Settings(props: {
           <header><h2>{label(section())}</h2><Button variant="ghost" size="icon-sm" aria-label="Close" onClick={() => props.onOpenChange(false)}>×</Button></header>
           <Show when={section() === "general"}><Show when={!props.templatesLoading} fallback={<div class="settings-loading"><Spinner /><span>Loading profiles…</span></div>}><FieldGroup>
             <Field><FieldLabel for="default-profile">Default profile</FieldLabel><select id="default-profile" value={props.defaultTemplateId} onChange={(event) => void props.onDefaultTemplateChange(event.currentTarget.value)}><For each={props.templates.filter((item) => item.defaultable !== false)}>{(item) => <option value={item.id}>{item.label}</option>}</For></select></Field>
+            <Field>
+              <FieldLabel>Session naming</FieldLabel>
+              <ModelSelector
+                models={namingModels()}
+                model={sessionNameModel()}
+                thinkingLevel={sessionNameThinkingLevel()}
+                disabled={generalLoading() || !namingModels().length}
+                onModelChange={chooseSessionNameModel}
+                onThinkingLevelChange={(level) => void saveSessionNaming(sessionNameModel(), level)}
+                onManageModels={() => { setSection("models"); focusSearch(); }}
+              />
+              <small class="text-muted-foreground">Select a scoped model to name new chats from the first user message with one request.</small>
+            </Field>
           </FieldGroup></Show></Show>
           <Show when={section() === "ui"}>
            <FieldGroup>

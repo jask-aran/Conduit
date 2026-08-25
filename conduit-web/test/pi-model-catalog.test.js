@@ -1,11 +1,43 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { PiModelCatalog, resolveThinkingLevel } from "../src/pi-model-catalog.js";
+import { PiModelCatalog, resolveThinkingLevel, sanitizeSessionName } from "../src/pi-model-catalog.js";
 
 test("thinking level recovery keeps supported values and falls back to the current default", () => {
   assert.equal(resolveThinkingLevel("max", ["medium", "max"], "medium"), "max");
   assert.equal(resolveThinkingLevel("off", ["medium", "max"], "medium"), "medium");
   assert.equal(resolveThinkingLevel("off", ["max"], "medium"), "max");
+});
+
+test("session naming uses one scoped completion and sanitizes its title", async () => {
+  const calls = [];
+  const model = { provider: "example", id: "cheap", reasoning: true };
+  const catalog = new PiModelCatalog({
+    modelRegistry: {
+      refresh() {},
+      getAvailable: () => [model],
+      async completeSimple(selected, context, options) {
+        calls.push({ selected, context, options });
+        return { stopReason: "stop", content: [{ type: "text", text: "\"Fix Session Names!\"\nignored" }] };
+      },
+    },
+    settingsFactory: () => ({
+      getEnabledModels: () => ["example/cheap"],
+      getDefaultProvider: () => "example",
+      getDefaultModel: () => "cheap",
+      getDefaultThinkingLevel: () => "off",
+      drainErrors: () => [],
+    }),
+  });
+
+  assert.equal(await catalog.generateSessionName("/tmp/project", "example/cheap", "low", "Please fix names"), "Fix Session Names");
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].options.reasoning, "low");
+  assert.equal(calls[0].options.maxTokens, 1024);
+  assert.equal(calls[0].context.messages[0].content[0].text, "Please fix names");
+  const fullContext = "x".repeat(5000);
+  await catalog.generateSessionName("/tmp/project", "example/cheap", "off", fullContext);
+  assert.equal(calls[1].context.messages[0].content[0].text, fullContext);
+  assert.equal(sanitizeSessionName("  `A   useful title.`  "), "A useful title");
 });
 
 test("model catalog exposes Pi-native thinking levels and configured defaults", async () => {
@@ -68,6 +100,23 @@ test("model catalog reloads isolated credentials before refreshing models", asyn
   await catalog.list("/tmp/project");
 
   assert.deepEqual(calls, ["auth", "models"]);
+});
+
+test("network catalog refresh uses Pi's bounded refresh API", async () => {
+  let options;
+  const catalog = new PiModelCatalog({
+    modelRegistry: {
+      refresh: (value) => { options = value; return { aborted: false, errors: new Map() }; },
+      getAvailable: () => [],
+    },
+  });
+
+  await catalog.refreshFromNetwork({ providers: ["xai"] });
+
+  assert.equal(options.allowNetwork, true);
+  assert.equal(options.force, false);
+  assert.deepEqual(options.providers, ["xai"]);
+  assert.ok(options.signal instanceof AbortSignal);
 });
 
 test("model settings persist an allowed scope and replace a disabled default", async () => {

@@ -41,8 +41,15 @@ also contain `.conduit/chats/<chat-id>/{attachments,.partial}`. Pi runs from the
 project root and native JSONL remains outside the working tree. Ignored
 `data/sessions.json` holds the atomic lightweight Conduit chat registry. Draft
 chats exist before Pi; the first message attaches a private Pi mapping and makes
-the same public chat ID active. Active mappings are checkpointed after completed
+the same public chat ID active. When a session naming model is selected under
+Settings → General, Conduit sends that first message to it and stores its short
+response as the authoritative title in `data/sessions.json`. A live Pi title is
+not changed. The request uses the selected thinking level and does not delay
+the chat response. The command palette can regenerate a title
+from the full persisted transcript, including for older chats. Active mappings are checkpointed after completed
 responses and explicit mutations and reconciled with native files at startup.
+Conduit appends naming request and outcome metadata to
+`data/session-name-requests.jsonl`; it does not store prompt content there.
 Pi records each fork's `parentSession`; startup uses that family to keep
 superseded regeneration branches attached to one sidebar chat while preserving
 their JSONL files.
@@ -454,11 +461,14 @@ starting, and browser-attached processes remain resident.
 - `POST /v0/pi-installations/host/detect` re-detects the host Pi executable
 - `POST /v0/runtime/chats` creates a fresh special Runtime management chat
 - `GET /v0/models`
+- `GET|PATCH /v0/preferences` reads and updates the default profile plus the
+  scoped model and thinking level used to name new chats
 - `GET|PATCH /v0/settings` reads and updates Pi's shared global model scope;
   terminal and web saves use the same isolated settings file.
 - `GET|PATCH /v0/chats/:id/models` resolves the selected installation's scoped
   models and changes the draft/live chat model through the server-owned runtime.
 - `GET|PATCH|DELETE /v0/sessions/:id` (`DELETE` removes the session's complete in-project Pi fork family)
+- `POST /v0/sessions/:id/auto-name` replaces the Conduit title from the full persisted chat context
 - `GET /v0/sessions/:id?before=<entry-index>` returns a ten-turn transcript page
 - `GET /v0/sessions/:id/transcript`
 - `GET /v0/sessions/:id/tools/:tool-id` fetches deferred large tool output

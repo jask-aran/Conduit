@@ -174,7 +174,7 @@ export class ChatStore {
         id,
         projectId: project.id,
         status: active ? "active" : "draft",
-        title: String(item.title || "New chat"),
+        title: String(item.title ?? "New chat"),
         templateId: typeof item.templateId === "string" && item.templateId.trim() ? item.templateId.trim() : null,
         templateVersion: typeof item.templateVersion === "string" && item.templateVersion.trim()
           ? item.templateVersion.trim()
@@ -327,7 +327,7 @@ export class ChatStore {
       id: crypto.randomUUID(),
       projectId: project.id,
       status: "draft",
-      title: "New chat",
+      title: "",
       templateId: typeof templateId === "string" && templateId.trim() ? templateId.trim() : null,
       templateVersion: typeof templateVersion === "string" && templateVersion.trim()
         ? templateVersion.trim()
@@ -350,13 +350,21 @@ export class ChatStore {
     if (!chat) return null;
     Object.assign(chat, {
       status: "active",
-      title: session.title || chat.title,
       piSessionId: session.nativeId || session.id || chat.piSessionId,
       piSessionFile: path.resolve(session.file),
       updatedAt: session.updatedAt || new Date(this.now()).toISOString(),
     });
     await this.flush();
     return chat;
+  }
+
+  async fallbackTitle(chatId, title) {
+    const chat = this.metadata(chatId);
+    const name = String(title || "").trim();
+    if (!chat || chat.title || !name || name === "New chat") return false;
+    chat.title = name;
+    await this.flush();
+    return true;
   }
 
   async syncFile(chatId, file, project, { waitForFileMs = 0 } = {}) {

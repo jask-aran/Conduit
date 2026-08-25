@@ -15,6 +15,7 @@ import { AttachmentStore } from "./attachment-store.js";
 import { RuntimeHub } from "./runtime-hub.js";
 import { defaultsFromEnv, RuntimeSettingsStore } from "./runtime-settings.js";
 import { PreferencesStore } from "./preferences-store.js";
+import { SessionNameService } from "./session-name-service.js";
 import { templatePublicView } from "../../scripts/pi-runtime.mjs";
 import { formatWorkspacePath, isPathInside, listDirectorySuggestions } from "./workspace-paths.js";
 import { hasTrustRequiringProjectResources, ProjectTrustStore } from "@earendil-works/pi-coding-agent";
@@ -137,6 +138,12 @@ manager.on("process_removed", ({ id, chatId }) => {
 });
 const modelCatalog = new PiModelCatalog({ agentDir: config.piAgentDir, modelPatterns: config.piTemplate.models });
 await modelCatalog.ready();
+const sessionNames = new SessionNameService({
+  file: config.sessionNameLogFile,
+  modelCatalog,
+  preferences,
+});
+const sessionNameTasks = new Map();
 const piAuth = new PiAuthBroker({
   modelRuntime: modelCatalog.modelRuntime,
   authFile: modelCatalog.authFile,
@@ -389,8 +396,12 @@ manager.on("event", ({ record, event }) => {
   setTimeout(() => {
     projects.get(record.projectId)
       .then((project) => project && registry.syncFile(record.chatId, record.sessionFile, project, { waitForFileMs: 2000 }))
-      .then((session) => {
+      .then(async (session) => {
         if (!session) return null;
+        await sessionNameTasks.get(record.chatId)?.catch(() => {});
+        if (await registry.fallbackTitle(record.chatId, session.title)) {
+          await sessionNames.recordFallback({ chatId: record.chatId, name: session.title });
+        }
         record.lastCheckpoint = {
           type: "session_checkpoint",
           generationId: checkpoint.id,
@@ -440,6 +451,8 @@ registerProjectRoutes(app, {
   config,
   listWorkspaceDirectory,
   manager,
+  modelCatalog,
+  preferences,
   projects,
   readSessionPage,
   readWorkspaceDiff,
@@ -483,6 +496,7 @@ registerSessionRoutes(app, {
   findRegisteredSession,
   lifecycle,
   manager,
+  sessionNames,
   projects,
   readSessionPage,
   registry,
@@ -503,7 +517,7 @@ app.use((error, _request, response, _next) => {
   let status = error.status || 500;
   if (["reserved_project", "workspace_already_linked", "clone_target_reserved", "clone_reservation_lost", "workspace_cloning"].includes(error.code)) status = 409;
   if (error.code === "workspace_identity_changed") status = 409;
-  if (["chat_move_not_supported", "live_session_starting", "runtime_locked", "session_writer_conflict"].includes(error.code)) status = 409;
+  if (["chat_move_not_supported", "live_session_starting", "runtime_locked", "session_writer_conflict", "session_name_model_required"].includes(error.code)) status = 409;
   if (error.code === "live_process_limit" || error.code === "generation_limit" || error.code === "pty_capacity_reached") status = 429;
   if (["attachment_not_found", "path_not_found", "pty_project_not_found"].includes(error.code)) status = 404;
   if (error.code === "attachment_too_large") status = 413;
@@ -588,6 +602,32 @@ const liveSessionStream = createLiveSessionStream({
   findChatContext,
   findRegisteredSession,
   chatModelView,
+  async autoNameSession(record, context, message) {
+    const task = sessionNames.run({
+      chatId: context.chat.id,
+      cwd: context.project.path,
+      source: "first_prompt",
+      message,
+      apply: async (name) => {
+        const currentTitle = registry.metadata(context.chat.id)?.title;
+        if (currentTitle && currentTitle !== "New chat") return "not_applied_title_already_set";
+        await registry.update(context.chat.id, { title: name });
+        manager.publish(record, {
+          type: "session_checkpoint",
+          chat: chatView(registry.metadata(context.chat.id)),
+          generationId: record.generation?.id || null,
+          generationSeq: record.generation?.seq || null,
+        });
+        return "applied";
+      },
+    });
+    sessionNameTasks.set(context.chat.id, task);
+    try {
+      await task;
+    } finally {
+      if (sessionNameTasks.get(context.chat.id) === task) sessionNameTasks.delete(context.chat.id);
+    }
+  },
 });
 
 server.on("upgrade", async (request, socket, head) => {

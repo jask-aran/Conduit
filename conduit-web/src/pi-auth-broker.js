@@ -254,7 +254,7 @@ export class PiAuthBroker {
       attempt.deviceCode = null;
       attempt.prompt = null;
       attempt.expiresAt = this.now() + COMPLETED_ATTEMPT_TTL_MS;
-      await this.onCredentialsChanged();
+      await this.onCredentialsChanged(attempt.providerId);
     } catch (failure) {
       if (this.attempt !== attempt) return;
       attempt.state = attempt.controller.signal.aborted ? "cancelled" : "failed";
@@ -302,7 +302,7 @@ export class PiAuthBroker {
       auth[providerId] = { type: "api_key", key: literalApiKey(value) };
       await writeAuthFile(this.authFile, auth);
       await this.modelRuntime.refresh({ allowNetwork: false });
-      await this.onCredentialsChanged();
+      await this.onCredentialsChanged(providerId);
       return;
     }
     this.authStorage.reload();
@@ -312,7 +312,7 @@ export class PiAuthBroker {
     const value = String(key || "");
     if (!value.trim()) throw error("api_key_required", "API key cannot be empty");
     this.authStorage.set(providerId, { type: "api_key", key: literalApiKey(value) });
-    await this.onCredentialsChanged();
+    await this.onCredentialsChanged(providerId);
   }
 
   async remove(providerId) {
@@ -323,13 +323,13 @@ export class PiAuthBroker {
       delete auth[providerId];
       await writeAuthFile(this.authFile, auth);
       await this.modelRuntime.refresh({ allowNetwork: false });
-      await this.onCredentialsChanged();
+      await this.onCredentialsChanged(providerId);
       return true;
     }
     this.authStorage.reload();
     if (!this.authStorage.has(providerId)) return false;
     this.authStorage.logout(providerId);
-    await this.onCredentialsChanged();
+    await this.onCredentialsChanged(providerId);
     return true;
   }
 }

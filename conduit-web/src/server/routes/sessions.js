@@ -3,7 +3,6 @@ import { chatView, isChatId } from "../../chat-store.js";
 import {
   messagesFromEntries,
   removeSessionFamily,
-  renameSession,
   sessionFamilyFiles,
   toolsFromEntries,
   transcriptFromEntries,
@@ -23,6 +22,7 @@ export function registerSessionRoutes(app, {
   findRegisteredSession,
   lifecycle,
   manager,
+  sessionNames,
   projects,
   readSessionPage,
   registry,
@@ -78,26 +78,37 @@ export function registerSessionRoutes(app, {
     try {
       const name = String(request.body?.name || "").trim();
       if (!name) return response.status(400).json({ error: "session_name_required" });
-      const projectList = await projects.list();
       const context = await findChatContext(request.params.id);
       if (!context) return response.status(404).json({ error: "chat_not_found" });
-      const live = manager.list().find((item) => (
-        item.chatId === context.chat.id && ["starting", "running"].includes(item.status)
-      ));
-      if (live?.status === "running") {
-        await manager.setSessionName(live.id, name);
-        await registry.update(context.chat.id, { title: name });
-      } else if (live) {
-        await registry.update(context.chat.id, { title: name });
-      } else {
-        const session = await registry.find(projectList, request.params.id);
-        if (session) {
-          const renamed = await renameSession(session, context.project, name);
-          await registry.commitSession(context.chat.id, renamed);
-        } else {
+      await registry.update(context.chat.id, { title: name });
+      response.json(chatView(registry.metadata(context.chat.id)));
+    } catch (error) { next(error); }
+  });
+
+  app.post("/v0/sessions/:id/auto-name", async (request, response, next) => {
+    try {
+      const context = await findChatContext(request.params.id);
+      if (!context) return response.status(404).json({ error: "chat_not_found" });
+      const session = await findRegisteredSession(context.chat.id);
+      if (!session) return response.status(409).json({
+        error: "session_context_required",
+        message: "This chat has no persisted context to name.",
+      });
+      const transcript = transcriptFromEntries(session.entries).trim();
+      if (!transcript) return response.status(409).json({
+        error: "session_context_required",
+        message: "This chat has no persisted context to name.",
+      });
+      await sessionNames.run({
+        chatId: context.chat.id,
+        cwd: context.project.path,
+        source: "command",
+        message: transcript,
+        apply: async (name) => {
           await registry.update(context.chat.id, { title: name });
-        }
-      }
+          return "applied";
+        },
+      });
       response.json(chatView(registry.metadata(context.chat.id)));
     } catch (error) { next(error); }
   });

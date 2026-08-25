@@ -71,7 +71,7 @@ interface ActiveChatOptions {
 export function createActiveChat(options: ActiveChatOptions) {
   const { catalogue, models, attachments, onError } = options;
   const [status, setStatus] = createSignal<ChatStatus>("draft");
-  const [title, setTitle] = createSignal("New chat");
+  const [title, setTitle] = createSignal("");
   const [templateId, setTemplateId] = createSignal<string | null>(null);
   const [runtimeIdentity, setRuntimeIdentity] = createSignal<RuntimeIdentity | null>(null);
   const [live, setLive] = createSignal<LiveRecord | null>(null);
@@ -378,7 +378,7 @@ export function createActiveChat(options: ActiveChatOptions) {
       setTools(nextTools);
       setPageBefore(detail.page?.before || null);
       setStatus(detail.status || "draft");
-      setTitle(detail.title || "New chat");
+      setTitle(detail.title ?? "");
       if (detail.templateId) setTemplateId(detail.templateId);
       if (detail.runtime) setRuntimeIdentity(detail.runtime);
     });
@@ -511,6 +511,19 @@ export function createActiveChat(options: ActiveChatOptions) {
     if (!record) throw new Error("Chat switched before Pi was ready");
     return record;
   };
+
+  const resumeLive = () => {
+    if (document.visibilityState === "hidden") return;
+    const record = live();
+    const chatId = selectedId();
+    if (record && chatId && record.chatId === chatId) connect(record, chatId, selectionToken);
+  };
+  const restoreLive = (event: PageTransitionEvent) => {
+    if (event.persisted) resumeLive();
+  };
+  document.addEventListener("visibilitychange", resumeLive);
+  window.addEventListener("pageshow", restoreLive);
+  window.addEventListener("online", resumeLive);
 
   function applyLiveEvent(event: LiveEvent) {
     if (isStructuredGenerationEvent(event)) {
@@ -807,7 +820,13 @@ export function createActiveChat(options: ActiveChatOptions) {
     return derived.kind === "starting" ? { kind: "idle", label: null } : derived;
   });
 
-  onCleanup(() => { cancelReconnect(); socket?.close(); });
+  onCleanup(() => {
+    cancelReconnect();
+    socket?.close();
+    document.removeEventListener("visibilitychange", resumeLive);
+    window.removeEventListener("pageshow", restoreLive);
+    window.removeEventListener("online", resumeLive);
+  });
 
   return {
     status, setStatus, title, setTitle, templateId, setTemplateId, runtimeIdentity, setRuntimeIdentity,

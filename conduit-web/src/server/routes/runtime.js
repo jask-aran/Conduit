@@ -105,8 +105,18 @@ export function registerRuntimeRoutes(app, {
       const template = requested == null ? null : resolveTemplate(config, requested);
       if (requested != null && !template) return response.status(400).json({ error: "unknown_template", templateId: requested });
       if (template?.defaultable === false) return response.status(400).json({ error: "special_template", templateId: requested });
+      const model = request.body?.sessionNameModel;
+      const thinkingLevel = request.body?.sessionNameThinkingLevel;
+      if (model != null && (typeof model !== "string" || !/^[^/\s]+\/\S+$/.test(model.trim()))) {
+        return response.status(400).json({ error: "invalid_session_name_model" });
+      }
+      if (thinkingLevel != null && !new Set(["off", "minimal", "low", "medium", "high", "max", "xhigh"]).has(thinkingLevel)) {
+        return response.status(400).json({ error: "invalid_session_name_thinking_level" });
+      }
       const saved = await preferences.save({
         defaultTemplateId: requested ?? preferences.get().defaultTemplateId,
+        ...(model != null ? { sessionNameModel: model } : {}),
+        ...(thinkingLevel != null ? { sessionNameThinkingLevel: thinkingLevel } : {}),
       });
       response.json(saved);
     } catch (error) { next(error); }

@@ -127,6 +127,9 @@ test("classifies known browser conflicts and exact Conduit context conflicts", (
   assert.equal(formatShortcutBinding(searchChats, windowsChrome), "Ctrl Shift K");
   assert.equal(browserShortcutConflicts(searchChats, windowsChrome).length, 0);
   assert.equal(browserShortcutConflicts(searchChats, windowsFirefox)[0]?.action, "Open Web Console");
+  const modelSelector = getCommandDefinition(COMMAND_IDS.openModelSelector);
+  assert.equal(formatShortcutBinding(modelSelector.defaultBindings[0], windowsChrome), "Ctrl X");
+  assert.deepEqual(modelSelector.contexts, ["application", "model-selector"]);
 
   const candidate = shortcutBinding(shortcutStroke("KeyX", "X", ["primary"]));
   const commands = [{

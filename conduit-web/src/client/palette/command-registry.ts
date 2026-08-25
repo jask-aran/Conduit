@@ -47,6 +47,7 @@ export interface PaletteActions {
   openWorkspaceView: (view: "files" | "diff" | "artifacts" | "terminal") => void;
   copyTranscript: () => void;
   rename: () => void;
+  autoName: () => void;
   move: () => void;
   renameFolder: () => void;
   stop: () => void;
@@ -187,6 +188,10 @@ const paletteCommandRuntime: Record<string, PaletteCommandRuntime> = {
   [COMMAND_IDS.toggleWorkspacePanel]: { isAvailable: hasChat, run: (actions) => actions.toggleWorkspacePanel() },
   [COMMAND_IDS.copyTranscript]: { isAvailable: hasChat, run: (actions) => actions.copyTranscript() },
   [COMMAND_IDS.renameChat]: { isAvailable: hasChat, run: (actions) => actions.rename() },
+  [COMMAND_IDS.autoNameChat]: {
+    isAvailable: hasChat,
+    run: (actions) => actions.autoName(),
+  },
   [COMMAND_IDS.moveChat]: { isAvailable: hasChat, run: (actions) => actions.move() },
   [COMMAND_IDS.renameFolder]: { isAvailable: isNamedFolder, run: (actions) => actions.renameFolder() },
   [COMMAND_IDS.stopResponse]: { isAvailable: (context) => context.streaming, run: (actions) => actions.stop() },
