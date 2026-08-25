@@ -39,7 +39,7 @@
   .composer-stack,
   .chat-main-empty .composer-stack { background: transparent; }
   .chat-main:not(.chat-main-empty) .composer-stack {
-    padding: 8px 9.6px calc(9.6px + env(safe-area-inset-bottom, 0px));
+    padding: 8px 9.6px calc(9.6px + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)));
   }
   .composer-content { display: contents; }
 }
@@ -87,7 +87,7 @@
   .composer-stack,
   .chat-main-empty .composer-stack { background: transparent; }
   .chat-main:not(.chat-main-empty) .composer-stack {
-    padding: 10px 12px calc(12px + env(safe-area-inset-bottom, 0px));
+    padding: 10px 12px calc(12px + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)));
   }
   .composer-content { display: contents; }
 }

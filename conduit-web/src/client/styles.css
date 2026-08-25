@@ -616,7 +616,7 @@ svg { stroke-width: 1.5; }
   .message-scroller-button[data-slot="button"] { right: 9.6px; }
   .composer-stack {
     flex: none;
-    padding: 8px 9.6px calc(9.6px + env(safe-area-inset-bottom, 0px));
+    padding: 8px 9.6px calc(9.6px + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)));
     background: var(--background);
   }
   /* Empty chat: bottom-anchored composer (not mid-screen absolute), no rubber-band scroll. */
@@ -651,7 +651,7 @@ svg { stroke-width: 1.5; }
     z-index: 2;
     width: 100%;
     margin: 0;
-    padding: 8px 9.6px calc(9.6px + env(safe-area-inset-bottom, 0px));
+    padding: 8px 9.6px calc(9.6px + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)));
     transform: none;
     background: var(--background);
   }
@@ -662,9 +662,9 @@ svg { stroke-width: 1.5; }
     top: 0;
     right: 0;
     left: 0;
-    height: calc(38.4px + env(safe-area-inset-top, 0px));
+    height: calc(38.4px + var(--safe-area-inset-top, env(safe-area-inset-top, 0px)));
     min-height: 38.4px;
-    padding: calc(3.2px + env(safe-area-inset-top, 0px)) 8px 3.2px;
+    padding: calc(3.2px + var(--safe-area-inset-top, env(safe-area-inset-top, 0px))) 8px 3.2px;
     gap: 0;
     background: linear-gradient(to bottom, var(--background) 0 50%, transparent 100%);
   }
@@ -750,7 +750,7 @@ svg { stroke-width: 1.5; }
     position: fixed !important;
     top: auto !important;
     right: 12.8px !important;
-    bottom: calc(44.8px + env(safe-area-inset-bottom, 0px)) !important;
+    bottom: calc(44.8px + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px))) !important;
     left: auto !important;
     transform: none !important;
   }
@@ -799,7 +799,7 @@ svg { stroke-width: 1.5; }
 /* Very narrow phones retain the inset shell but use denser inner gutters. */
 @media (max-width: 384px) {
   .command-input-row { padding-inline: 11.2px; }
-  .command-list { padding: 6.4px 8px calc(9.6px + env(safe-area-inset-bottom, 0px)); }
+  .command-list { padding: 6.4px 8px calc(9.6px + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px))); }
 }
 
 @media (max-width: 416px) {
@@ -1378,7 +1378,7 @@ svg { stroke-width: 1.5; }
   .message-scroller-button[data-slot="button"] { right: 12px; }
   .composer-stack {
     flex: none;
-    padding: 10px 12px calc(12px + env(safe-area-inset-bottom, 0px));
+    padding: 10px 12px calc(12px + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)));
     background: var(--background);
   }
   /* Empty chat: bottom-anchored composer (not mid-screen absolute), no rubber-band scroll. */
@@ -1413,7 +1413,7 @@ svg { stroke-width: 1.5; }
     z-index: 2;
     width: 100%;
     margin: 0;
-    padding: 10px 12px calc(12px + env(safe-area-inset-bottom, 0px));
+    padding: 10px 12px calc(12px + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)));
     transform: none;
     background: var(--background);
   }
@@ -1424,9 +1424,9 @@ svg { stroke-width: 1.5; }
     top: 0;
     right: 0;
     left: 0;
-    height: calc(48px + env(safe-area-inset-top, 0px));
+    height: calc(48px + var(--safe-area-inset-top, env(safe-area-inset-top, 0px)));
     min-height: 48px;
-    padding: calc(4px + env(safe-area-inset-top, 0px)) 10px 4px;
+    padding: calc(4px + var(--safe-area-inset-top, env(safe-area-inset-top, 0px))) 10px 4px;
     gap: 4px;
     background: linear-gradient(to bottom, var(--background) 0 50%, transparent 100%);
   }
@@ -1512,7 +1512,7 @@ svg { stroke-width: 1.5; }
     position: fixed !important;
     top: auto !important;
     right: 16px !important;
-    bottom: calc(56px + env(safe-area-inset-bottom, 0px)) !important;
+    bottom: calc(56px + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px))) !important;
     left: auto !important;
     transform: none !important;
   }
@@ -1561,7 +1561,7 @@ svg { stroke-width: 1.5; }
 /* Very narrow phones retain the inset shell but use denser inner gutters. */
 @media (max-width: 480px) {
   .command-input-row { padding-inline: 14px; }
-  .command-list { padding: 8px 10px calc(12px + env(safe-area-inset-bottom, 0px)); }
+  .command-list { padding: 8px 10px calc(12px + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px))); }
 }
 
 @media (max-width: 520px) {
@@ -1590,3 +1590,26 @@ svg { stroke-width: 1.5; }
 }
 
 }
+/* Capacitor first-launch server selection. */
+.native-server-setup {
+  min-height: var(--app-height, 100dvh);
+  display: grid;
+  place-items: center;
+  padding: calc(24px + var(--safe-area-inset-top, env(safe-area-inset-top, 0px))) 20px calc(24px + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)));
+  background: var(--background);
+}
+.native-server-card { display: grid; gap: 12px; width: min(100%, 420px); }
+.native-server-brand { font-family: var(--font-serif); font-size: 42px; line-height: 1; }
+.native-server-card h1 { margin: 20px 0 0; font-size: 24px; }
+.native-server-card p { margin: 0; color: var(--muted-foreground); }
+.native-server-card label { margin-top: 12px; font-size: 13px; font-weight: 600; }
+.native-server-card input {
+  width: 100%;
+  min-height: 44px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0 12px;
+  color: var(--foreground);
+  background: var(--background);
+}
+.native-server-card .native-server-error { color: var(--destructive); }

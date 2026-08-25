@@ -1,5 +1,6 @@
 import { createSignal, onCleanup, onMount } from "solid-js";
 import type { RuntimeProcess } from "../api/contracts";
+import { eventSourceUrl } from "../api/transport";
 
 export type Connectivity = "connecting" | "online" | "reconnecting" | "offline";
 
@@ -39,7 +40,7 @@ export function createRuntimeStore() {
     source = undefined;
     setConnectivity(attempts ? "reconnecting" : "connecting");
     setStale(attempts > 0);
-    const next = new EventSource("/v0/runtime/stream");
+    const next = new EventSource(eventSourceUrl("/v0/runtime/stream"));
     source = next;
     next.onmessage = (message) => {
       try {

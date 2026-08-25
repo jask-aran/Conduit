@@ -17,7 +17,7 @@
 
 @media (max-width: 576px) {
   .chat-main .composer-renderer-switch {
-    top: calc(38.4px + env(safe-area-inset-top, 0px) + 6.4px);
+    top: calc(38.4px + var(--safe-area-inset-top, env(safe-area-inset-top, 0px)) + 6.4px);
     right: 9.6px;
     left: 9.6px;
     width: auto;
@@ -59,7 +59,7 @@
 
 @media (max-width: 720px) {
   .chat-main .composer-renderer-switch {
-    top: calc(48px + env(safe-area-inset-top, 0px) + 8px);
+    top: calc(48px + var(--safe-area-inset-top, env(safe-area-inset-top, 0px)) + 8px);
     right: 12px;
     left: 12px;
     width: auto;

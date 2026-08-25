@@ -835,6 +835,24 @@ Phone chrome (full-bleed drawers, header palette entry, long-press menus) is
 covered by `test/browser/pwa-mobile.spec.js` on the Playwright
 `mobile-chromium` and `desktop-chromium` projects.
 
+## Android shell
+
+The Capacitor 8 project in `android/` packages the production `dist/` bundle
+under the application ID `com.jaskaran.conduit`. It uses the secure local
+WebView origin and does not load a production `server.url`. Native builds do not
+register the PWA service worker or show its update and cache-reset actions.
+
+```bash
+npm run cap:sync       # build the web bundle and copy it into Android
+npm run android:build  # produce android/app/build/outputs/apk/debug/app-debug.apk
+npm run android:open   # open the generated project in Android Studio
+npm run android:run    # sync and select a connected device or emulator
+```
+
+Capacitor 8 requires Node 22 or newer, Android Studio 2025.2.1 or newer, and an
+installed Android SDK. Server selection and native authentication arrive in the
+next implementation slices; Slice 1 proves only the bundled shell.
+
 ## Verification
 
 Use [`../docs/testing.md`](../docs/testing.md) as the
