@@ -154,14 +154,16 @@ function installClipboardShortcuts(terminal: ClipboardTerminal) {
     const key = event.key.toLowerCase();
     const isApple = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
     const copy = key === "c" && (isApple ? event.metaKey && !event.ctrlKey : event.ctrlKey && event.shiftKey);
-    const paste = key === "v" && (isApple ? event.metaKey && !event.ctrlKey : event.ctrlKey && event.shiftKey);
+    const paste = key === "v" && (isApple ? event.metaKey && !event.ctrlKey : event.ctrlKey);
 
     if (copy && terminal.hasSelection?.()) {
+      event.preventDefault();
       const selection = terminal.getSelection?.() || "";
       if (selection) void navigator.clipboard.writeText(selection).catch(() => {});
       return false;
     }
     if (paste && terminal.paste) {
+      event.preventDefault();
       void navigator.clipboard.readText()
         .then((text) => { if (text) terminal.paste?.(text); })
         .catch(() => {});
@@ -204,10 +206,11 @@ async function createGhosttyRenderer(host: HTMLElement): Promise<TerminalRendere
 }
 
 async function createXtermRenderer(host: HTMLElement): Promise<TerminalRenderer> {
-  const [{ Terminal }, { FitAddon }, { ClipboardAddon, Base64 }] = await Promise.all([
+  const [{ Terminal }, { FitAddon }, { ClipboardAddon, Base64 }, { WebglAddon }] = await Promise.all([
     import("@xterm/xterm"),
     import("@xterm/addon-fit"),
     import("@xterm/addon-clipboard"),
+    import("@xterm/addon-webgl"),
     import("@xterm/xterm/css/xterm.css"),
   ]);
   const terminal = new Terminal({
@@ -231,6 +234,13 @@ async function createXtermRenderer(host: HTMLElement): Promise<TerminalRenderer>
   terminal.loadAddon(fit);
   terminal.loadAddon(clipboard);
   terminal.open(host);
+  const webgl = new WebglAddon();
+  const contextLoss = webgl.onContextLoss(() => webgl.dispose());
+  try {
+    terminal.loadAddon(webgl);
+  } catch {
+    webgl.dispose();
+  }
   installClipboardShortcuts(terminal);
   const stopObservingHost = observeHostSize(host, terminal, fit);
   return {
@@ -245,6 +255,6 @@ async function createXtermRenderer(host: HTMLElement): Promise<TerminalRenderer>
     resize: (cols, rows) => resizeTerminal(terminal, cols, rows),
     onData: (listener) => { const subscription = terminal.onData(listener); return () => subscription.dispose(); },
     onResize: (listener) => { const subscription = terminal.onResize(listener); return () => subscription.dispose(); },
-    dispose: () => { stopObservingHost(); clipboard.dispose(); fit.dispose?.(); terminal.dispose(); },
+    dispose: () => { stopObservingHost(); contextLoss.dispose(); webgl.dispose(); clipboard.dispose(); fit.dispose?.(); terminal.dispose(); },
   };
 }

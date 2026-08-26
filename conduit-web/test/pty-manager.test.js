@@ -166,6 +166,12 @@ test("PTY manager serializes creation so concurrent requests cannot exceed capac
 
 test("PTY manager only tolerates known missing-session tmux failures", async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-pty-errors-"));
+  const missing = new PtyManager({
+    filePath: path.join(root, "missing.json"),
+    run: async () => { throw Object.assign(new Error("missing socket"), { code: 1, stderr: "error connecting to /tmp/tmux-1000/conduit-test (No such file or directory)" }); },
+  });
+  assert.equal(await missing.invokeTmux(["kill-server"], { tolerateMissingServer: true }), null);
+
   const unavailable = new PtyManager({
     filePath: path.join(root, "unavailable.json"),
     run: async () => { throw Object.assign(new Error("spawn tmux ENOENT"), { code: "ENOENT" }); },

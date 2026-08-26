@@ -134,6 +134,13 @@ Add an entry through `$tacit-knowledge` after explicit approval or validated rep
 - **Scope:** Chat-search and future command-palette keyboard actions in browser-hosted Conduit.
 - **Evidence:** Chrome consumed the single-chat delete chord and could consume it again after an escaped confirmation. Playwright clearing the search composer in edit mode also sent Delete and opened the bulk-delete dialog. The accepted palette tests cover the action prefix, focus restoration, filtered selection retention, and safe query clearing.
 
+### Keep browser terminal paste and cell rendering host-owned
+
+- **Type:** Invariant.
+- **Rule:** Treat browser paste as separate from OSC 52: consume each supported paste chord with `preventDefault()` and send clipboard text once. Render xterm through WebGL for full-screen TUI cell continuity, but retain automatic DOM fallback after WebGL failure or context loss.
+- **Scope:** `terminal-renderer.ts` clipboard shortcuts and xterm renderer setup.
+- **Evidence:** The focused desktop Chromium test sends `Ctrl+V` and `Ctrl+Shift+V` exactly once. User validation confirmed WebGL removed OpenCode's fixed-position cell seams at every browser scale.
+
 ### Capture voice shortcuts before browser handling
 
 - **Type:** Gotcha.

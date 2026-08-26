@@ -144,7 +144,7 @@ export class PtyManager extends EventEmitter {
       return await this.run(this.tmuxPath, this.tmuxArgs(...args), { env: cleanEnvironment(), maxBuffer: 1024 * 1024 });
     } catch (error) {
       const detail = String(error?.stderr || error?.message || "");
-      if (tolerateMissingServer && /no server running|can't find session|no sessions/i.test(detail)) return null;
+      if (tolerateMissingServer && /no server running|can't find session|no sessions|error connecting to .+ \(No such file or directory\)/i.test(detail)) return null;
       if (error?.code === "ENOENT") throw failure("pty_tmux_unavailable", "tmux 3.3 or newer is required for Workspace terminals");
       throw error;
     }

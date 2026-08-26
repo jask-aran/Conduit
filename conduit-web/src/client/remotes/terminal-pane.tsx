@@ -4,6 +4,7 @@ import {
   Button,
   Menu,
   MenuContent,
+  MenuGroup,
   MenuItem,
   MenuLabel,
   MenuSeparator,
@@ -539,27 +540,29 @@ export function TerminalPane(props: { projectId: string; active?: boolean }) {
             <TerminalIcon /><span>{sessions().length}</span><ChevronDownIcon />
           </MenuTrigger>
           <MenuContent class="terminal-sessions-menu">
-            <MenuLabel>Active terminals</MenuLabel>
-            <Show when={sessions().length > 0} fallback={<div class="terminal-session-empty">No active terminals in this Workspace.</div>}>
-              <For each={sessions()}>{(session) => <>
-                <MenuItem class="terminal-session-item" onSelect={() => void attachSession(session)}>
-                  <CheckIcon class={pty()?.id === session.id ? "terminal-session-check" : "terminal-session-check terminal-session-check-hidden"} />
-                  <span class="terminal-session-copy">
-                    <strong>{session.title || "Shell"}</strong>
-                    <small>{sessionTimestamp(session)}</small>
-                  </span>
-                </MenuItem>
-                <MenuItem
-                  class="terminal-session-destroy"
-                  variant="destructive"
-                  closeOnSelect={false}
-                  disabled={sessionBusy() === session.id}
-                  onSelect={() => void removeSession(session)}
-                >
-                  <Trash2Icon /><span>{sessionBusy() === session.id ? "Destroying…" : `Destroy ${session.title || "terminal"}`}</span>
-                </MenuItem>
-              </>}</For>
-            </Show>
+            <MenuGroup>
+              <MenuLabel>Active terminals</MenuLabel>
+              <Show when={sessions().length > 0} fallback={<div class="terminal-session-empty">No active terminals in this Workspace.</div>}>
+                <For each={sessions()}>{(session) => <>
+                  <MenuItem class="terminal-session-item" onSelect={() => void attachSession(session)}>
+                    <CheckIcon class={pty()?.id === session.id ? "terminal-session-check" : "terminal-session-check terminal-session-check-hidden"} />
+                    <span class="terminal-session-copy">
+                      <strong>{session.title || "Shell"}</strong>
+                      <small>{sessionTimestamp(session)}</small>
+                    </span>
+                  </MenuItem>
+                  <MenuItem
+                    class="terminal-session-destroy"
+                    variant="destructive"
+                    closeOnSelect={false}
+                    disabled={sessionBusy() === session.id}
+                    onSelect={() => void removeSession(session)}
+                  >
+                    <Trash2Icon /><span>{sessionBusy() === session.id ? "Destroying…" : `Destroy ${session.title || "terminal"}`}</span>
+                  </MenuItem>
+                </>}</For>
+              </Show>
+            </MenuGroup>
             <MenuSeparator />
             <MenuItem disabled={starting()} onSelect={() => void start()}>
               <PlusIcon /><span>{starting() ? "Starting…" : "New terminal"}</span>

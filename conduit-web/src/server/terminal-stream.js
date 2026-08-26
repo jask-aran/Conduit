@@ -61,7 +61,7 @@ export function createTerminalStream({ terminals }) {
 
   terminals.on("removed", ({ id }) => {
     const ws = terminalClients.get(id);
-    if (ws?.readyState === ws.OPEN) ws.close(1001, "Terminal was removed");
+    if (ws && ws.readyState === ws.OPEN) ws.close(1001, "Terminal was removed");
     terminalClients.delete(id);
   });
 
