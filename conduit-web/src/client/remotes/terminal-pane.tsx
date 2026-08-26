@@ -117,6 +117,15 @@ export function TerminalPane(props: { projectId: string; active?: boolean }) {
     // window-level shortcuts from turning terminal chords into app commands.
     if (terminalFocused() && isTerminalTarget(event.target)) event.stopPropagation();
   };
+  const zoomTerminal = (event: WheelEvent) => {
+    if ((!event.ctrlKey && !event.metaKey) || !terminal) return;
+    event.preventDefault();
+    const current = Number(localStorage.getItem("conduit:terminal-font-size")) || (window.matchMedia("(max-width: 560px)").matches ? 13 : 10.4);
+    const next = Math.max(8, Math.min(24, current + (event.deltaY < 0 ? 1 : -1)));
+    localStorage.setItem("conduit:terminal-font-size", String(next));
+    terminal.setFontSize(next);
+    syncGeometry?.();
+  };
 
   const disposeRenderer = () => {
     terminal?.dispose();
@@ -349,7 +358,11 @@ export function TerminalPane(props: { projectId: string; active?: boolean }) {
   const refreshSessions = async (projectId = activeProjectId) => {
     const { ptys = [] } = await api<{ ptys: Pty[] }>(`/v0/ptys?projectId=${encodeURIComponent(projectId)}`);
     const running = ptys.filter((item) => item.projectId === projectId && item.status === "running");
-    if (projectId === activeProjectId) setSessions(running);
+    if (projectId === activeProjectId) {
+      setSessions(running);
+      const selected = running.find((item) => item.id === pty()?.id);
+      if (selected) setPty(selected);
+    }
     return running;
   };
 
@@ -545,7 +558,7 @@ export function TerminalPane(props: { projectId: string; active?: boolean }) {
     if (connectionState() === "disconnected") return "Disconnected";
     if (connectionState() === "exited") return "Exited";
     if (connectionState() === "attached" && !writable()) return "Read only";
-    if (connectionState() === "attached") return "Attached";
+    if (connectionState() === "attached") return "Active Now";
     return "Idle";
   };
 
@@ -619,7 +632,12 @@ export function TerminalPane(props: { projectId: string; active?: boolean }) {
     </Dialog>
     <section class="terminal-pane" aria-label="Terminal pane" data-terminal-focused={terminalFocused() ? "true" : "false"} onKeyDown={scopeTerminalKeyboard}>
     <header class="terminal-pane-header">
-      <div><TerminalIcon /><strong>Terminal</strong><span>{statusLabel()}</span></div>
+      <div class="terminal-pane-identity">
+        <TerminalIcon /><strong>Terminal</strong>
+        <Show when={pty()?.title}><span class="terminal-header-title">{pty()!.title}</span></Show>
+        <Show when={pty()?.currentCommand}><span class="terminal-header-command">{pty()!.currentCommand}</span></Show>
+        <span class="terminal-header-status">{statusLabel()}</span>
+      </div>
       <div class="terminal-pane-actions">
         <Menu onOpenChange={(open) => { if (open) void refreshSessions().catch((cause) => setError((cause as Error).message)); }}>
           <MenuTrigger class="terminal-sessions-trigger" aria-label="Active terminal sessions" title="Active terminal sessions">
@@ -712,6 +730,7 @@ export function TerminalPane(props: { projectId: string; active?: boolean }) {
         data-active={pty() ? "true" : "false"}
         data-renderer={rendererId()}
         onClick={() => focusActiveTerminal()}
+        onWheel={zoomTerminal}
         onFocusIn={handleTerminalFocusIn}
         onFocusOut={handleTerminalFocusOut}
       />

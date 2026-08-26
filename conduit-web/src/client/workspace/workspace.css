@@ -7,13 +7,12 @@ body.workspace-resizing .workspace-panel { transition: none !important; }
 .workspace-panel-surface { position: absolute; top: 0; right: 0; display: flex; width: var(--workspace-panel-width); min-width: 0; height: 100%; contain: layout paint; flex: none; flex-direction: column; overflow: hidden; border: 0.8px solid transparent; border-radius: 12.8px; background: var(--background); opacity: 0; transform: translateX(100%); }
 .workspace-panel-open .workspace-panel-surface { border-color: var(--border); opacity: 1; transform: translateX(0); }
 .workspace-panel-surface > * { max-width: 100%; }
-.workspace-panel-header { display: flex; min-height: 32px; flex: none; align-items: center; justify-content: space-between; padding: 3.2px 6.4px 3.2px 11.2px; border-bottom: 1px solid var(--border); }
-.workspace-panel-header > div { display: flex; min-width: 0; align-items: baseline; gap: 6.4px; }
+.workspace-panel-header { display: flex; min-height: 32px; flex: none; align-items: center; gap: 6.4px; padding: 3.2px 6.4px 3.2px 11.2px; border-bottom: 1px solid var(--border); }
 .workspace-panel-header strong { font-size: 11.2px; }
-.workspace-panel-header small { color: var(--muted-foreground); font-size: 8.8px; }
-.workspace-panel-tabs { display: grid; grid-template-columns: repeat(4, 1fr); padding: 2.4px 4.8px; border-bottom: 1px solid var(--border); }
+.workspace-panel-tabs { display: grid; min-width: 0; flex: 1; grid-template-columns: repeat(4, minmax(0, 1fr)); }
 .workspace-panel-tabs button { display: flex; min-height: 22.4px; align-items: center; justify-content: center; gap: 4.8px; border: 0; border-radius: 4.8px; background: transparent; color: var(--muted-foreground); font-size: 8.8px; }
 .workspace-panel-tabs button[aria-selected="true"] { background: var(--accent); color: var(--foreground); }
+.workspace-panel-tabs span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .workspace-panel-tabs svg, .workspace-panel-header svg, .workspace-status-strip svg { width: 12px; height: 12px; }
 .workspace-files { display: flex; min-height: 0; flex: 1; flex-direction: column; }
 .workspace-tree { min-height: 80px; flex: 1; overflow: auto; padding: 4.8px; }
