@@ -1110,6 +1110,10 @@ function App() {
         setRouteKind("chat");
       }
     })().catch((error) => {
+      if (initialRouteId && (error as { error?: string }).error === "chat_not_found") {
+        location.replace("/");
+        return;
+      }
       const message = (error as Error).message;
       if (initialRouteId || initialProjectRouteId) {
         setRouteBootstrapError(message);
