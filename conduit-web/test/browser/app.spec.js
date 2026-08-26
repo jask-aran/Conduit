@@ -1071,14 +1071,41 @@ test("the terminal renderer can use the xterm baseline over the same PTY transpo
     origin: "linked",
     sessions: [{ id: "session_terminal", projectId: "project_terminal", status: "active", title: "Terminal work" }],
   };
-  await page.addInitScript(() => localStorage.setItem("conduit:terminal-renderer", "xterm"));
+  await page.addInitScript(() => {
+    localStorage.setItem("conduit:terminal-renderer", "xterm");
+    window.__terminalSends = [];
+    class RecordingTerminalWebSocket extends EventTarget {
+      static OPEN = 1;
+      constructor() {
+        super();
+        this.readyState = 0;
+        queueMicrotask(() => {
+          this.readyState = RecordingTerminalWebSocket.OPEN;
+          this.onopen?.(new Event("open"));
+          this.onmessage?.({ data: JSON.stringify({ type: "control", writable: true }) });
+        });
+      }
+      send(payload) {
+        if (typeof payload !== "string") window.__terminalSends.push(Array.from(new Uint8Array(payload)));
+      }
+      close() {
+        this.readyState = 3;
+        this.onclose?.(new CloseEvent("close"));
+      }
+    }
+    Object.defineProperty(window, "WebSocket", { configurable: true, value: RecordingTerminalWebSocket });
+  });
   await page.unroute("**/v0/projects");
   await page.route("**/v0/projects", (route) => route.fulfill({ json: { projects: [...projects, workspace] } }));
   await page.route("**/v0/chats/session_terminal", (route) => route.fulfill({ json: workspace.sessions[0] }));
   await page.route("**/v0/sessions/session_terminal", (route) => route.fulfill({ json: { ...workspace.sessions[0], messages: [], tools: [] } }));
-  await page.route("**/v0/ptys", (route) => route.fulfill(route.request().method() === "GET"
-    ? { json: { ptys: [] } }
-    : { status: 201, json: { id: "550e8400-e29b-41d4-a716-446655440055", projectId: workspace.id, status: "running" } }));
+  const terminalRecord = { id: "550e8400-e29b-41d4-a716-446655440055", projectId: workspace.id, status: "running" };
+  let terminalCreated = false;
+  await page.route("**/v0/ptys*", (route) => {
+    if (route.request().method() === "GET") return route.fulfill({ json: { ptys: terminalCreated ? [terminalRecord] : [] } });
+    terminalCreated = true;
+    return route.fulfill({ status: 201, json: terminalRecord });
+  });
 
   await page.goto("/chat/session_terminal");
   await page.keyboard.press(process.platform === "darwin" ? "Meta+K" : "Control+K");
@@ -1091,6 +1118,18 @@ test("the terminal renderer can use the xterm baseline over the same PTY transpo
   await canvas.click();
   await page.keyboard.press(process.platform === "darwin" ? "Meta+K" : "Control+K");
   await expect(page.getByRole("dialog", { name: "Command Palette" })).toHaveCount(0);
+
+  await page.context().grantPermissions(["clipboard-read", "clipboard-write"], { origin: new URL(page.url()).origin });
+  await page.evaluate(() => navigator.clipboard.writeText("terminal-paste-once"));
+  for (const shortcut of ["Control+V", "Control+Shift+V"]) {
+    await page.evaluate(() => { window.__terminalSends = []; });
+    await canvas.locator("textarea").focus();
+    await page.keyboard.press(shortcut);
+    await expect.poll(() => page.evaluate(() => window.__terminalSends
+      .map((bytes) => new TextDecoder().decode(Uint8Array.from(bytes)))
+      .join("")
+      .split("terminal-paste-once").length - 1)).toBe(1);
+  }
 });
 
 test("the terminal renderer can use Ghostty over the same PTY transport", async ({ page }) => {

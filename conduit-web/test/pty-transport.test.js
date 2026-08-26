@@ -78,7 +78,8 @@ tmuxTest("PTY API attaches a thin binary WebSocket to a tmux-owned terminal sess
 
     const listed = await (await harness.request("/v0/ptys")).json();
     assert.equal(listed.ptys[0].status, "running");
-    assert.equal((await harness.request(`/v0/ptys/${terminal.id}`, { method: "DELETE" })).status, 204);
+    const removed = await harness.request(`/v0/ptys/${terminal.id}`, { method: "DELETE" });
+    assert.equal(removed.status, 204, await removed.text());
     stream.socket.close();
   } finally {
     await harness.stop();
@@ -220,7 +221,7 @@ tmuxTest("deleting a Project tears down and removes its resident tmux sessions",
     assert.equal(first.status, "running");
     assert.equal(second.status, "running");
     const removed = await harness.request(`/v0/projects/${project.id}`, { method: "DELETE" });
-    assert.equal(removed.status, 204);
+    assert.equal(removed.status, 204, await removed.text());
     const listed = await (await harness.request("/v0/ptys")).json();
     assert.equal(listed.ptys.some((item) => item.projectId === project.id), false);
   } finally {
