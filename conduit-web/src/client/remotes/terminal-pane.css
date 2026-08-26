@@ -295,10 +295,13 @@
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: stretch;
+  overflow: hidden;
+  border-radius: 5px;
 }
 
 .terminal-session-item {
   align-items: flex-start;
+  border-radius: 5px 0 0 5px;
 }
 
 .terminal-session-check {
@@ -333,11 +336,14 @@
 }
 
 .terminal-session-destroy {
-  align-self: center;
-  width: 30px;
-  min-width: 30px;
+  align-self: stretch;
+  width: 38px;
+  min-width: 38px;
+  height: auto;
   padding: 0;
   justify-content: center;
+  border-left: 1px solid var(--border);
+  border-radius: 0 5px 5px 0;
 }
 
 .terminal-session-destroy svg {
