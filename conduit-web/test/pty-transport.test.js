@@ -270,7 +270,9 @@ tmuxTest("one browser owns a terminal while unrelated terminals may stream concu
 
     owner.socket.close();
     await waitClosed(owner);
-    const replacement = await openWritableTerminal(harness.origin, firstTerminal.id);
+    const replacement = openTerminal(harness.origin, firstTerminal.id);
+    await replacement.opened;
+    await waitWritable(replacement);
     replacement.socket.send(Buffer.from("printf 'replacement-owner-input\\n'\n"));
     await replacement.outputIncludes("replacement-owner-input");
 
