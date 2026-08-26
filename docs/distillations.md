@@ -13,6 +13,13 @@ Add an entry through `$tacit-knowledge` after explicit approval or validated rep
 
 ## Architecture and safety invariants
 
+### Treat development terminals as disposable
+
+- **Type:** Preference.
+- **Rule:** Restart a development Conduit server when validation requires it, even when the restart ends running Workspace terminal sessions; do not pause for confirmation only because development terminals are active.
+- **Scope:** Local development and branch-validation servers only. This permission does not apply to production services or other user data.
+- **Evidence:** The operator explicitly approved unconditional development restarts after a terminal session blocked deployment of the validated reconnect fix.
+
 ### Keep transcript and catalog ownership singular
 
 - **Type:** Invariant.
