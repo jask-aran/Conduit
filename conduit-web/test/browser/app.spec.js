@@ -295,6 +295,14 @@ test("workspace panel previews files, shows diff, and persists per chat", async 
   await page.getByRole("button", { name: "Toggle workspace panel" }).click();
   const panel = page.getByRole("complementary", { name: "Workspace panel" });
   await expect(panel).toBeVisible();
+  if (page.viewportSize().width <= 760) {
+    const tabCenters = await panel.getByRole("tab").evaluateAll((tabs) =>
+      tabs.map((tab) => {
+        const box = tab.getBoundingClientRect();
+        return box.left + box.width / 2;
+      }));
+    expect(tabCenters.at(-1) - tabCenters[0]).toBeGreaterThan(180);
+  }
   if (page.viewportSize().width > 760) {
     const main = page.locator('[data-slot="sidebar-inset"]');
     const thread = page.locator(".thread");
@@ -397,6 +405,12 @@ test("workspace panel previews files, shows diff, and persists per chat", async 
   await panel.getByRole("button", { name: "src" }).click();
   await panel.getByRole("button", { name: "main.ts" }).click();
   await expect(panel.getByText("export function startConduit() {}" )).toBeVisible();
+  const previewHandle = panel.getByRole("separator", { name: "Resize file preview" });
+  await previewHandle.focus();
+  await page.keyboard.press("Home");
+  await expect(previewHandle).toHaveAttribute("aria-valuenow", "32");
+  await page.keyboard.press("End");
+  await expect(previewHandle).toHaveAttribute("aria-valuenow", await previewHandle.getAttribute("aria-valuemax"));
   await panel.getByRole("button", { name: /File preview/ }).click();
   await expect(panel.getByRole("region", { name: "File preview" })).toHaveCount(0);
   await panel.getByRole("button", { name: /File preview/ }).click();
