@@ -38,6 +38,13 @@
   overflow: hidden;
 }
 
+.terminal-pane-identity > strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .terminal-pane-identity span {
   overflow: hidden;
   letter-spacing: normal;
@@ -48,10 +55,6 @@
 
 @container (max-width: 620px) {
   .terminal-header-command { display: none; }
-}
-
-@container (max-width: 480px) {
-  .terminal-header-title { display: none; }
 }
 
 .terminal-pane[data-terminal-focused="true"] .terminal-canvas[data-active="true"] {

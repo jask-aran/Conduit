@@ -1116,8 +1116,10 @@ test("the terminal renderer can use the xterm baseline over the same PTY transpo
   await expect(canvas).toHaveAttribute("data-terminal-renderer", "xterm");
   await expect(canvas.locator(".xterm")).toBeVisible();
   await canvas.click();
+  await page.evaluate(() => { window.__terminalSends = []; });
   await canvas.dispatchEvent("wheel", { ctrlKey: true, deltaY: -100 });
   await expect.poll(() => page.evaluate(() => localStorage.getItem("conduit:terminal-font-size"))).toBe("11.4");
+  expect(await page.evaluate(() => window.__terminalSends)).toEqual([]);
   await page.keyboard.press(process.platform === "darwin" ? "Meta+K" : "Control+K");
   await expect(page.getByRole("dialog", { name: "Command Palette" })).toHaveCount(0);
 
