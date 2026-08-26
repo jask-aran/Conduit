@@ -24,6 +24,7 @@ interface WorkspaceCacheEntry {
 const MAX_CACHED_WORKSPACES = 6;
 const workspaceCache = new Map<string, WorkspaceCacheEntry>();
 const COMPACT_UI_MIGRATION_KEY = "conduit:compact-ui-v2";
+const MIN_DETAIL_HEIGHT = 32;
 
 function migrateWorkspaceGeometry() {
   if (localStorage.getItem(COMPACT_UI_MIGRATION_KEY) === "true") return;
@@ -61,6 +62,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
   let panelRoot: HTMLElement | undefined;
   let panelSurface: HTMLDivElement | undefined;
   let resizeHandle: HTMLDivElement | undefined;
+  let detailHost: HTMLElement | undefined;
   let panelEdgeMotionId: number | null = null;
   let panelMotionId = 0;
   let panelEdgeRaf = 0;
@@ -244,7 +246,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
 
   const selectTab = (next: PanelTab) => {
     setDetailOpen(detailOpenFor(next) === "true");
-    setDetailHeight(Math.max(128, Number(localStorage.getItem(`conduit:workspace-panel:${props.chatId()}:${next}:detail-height`)) || 288));
+    setDetailHeight(Math.max(MIN_DETAIL_HEIGHT, Number(localStorage.getItem(`conduit:workspace-panel:${props.chatId()}:${next}:detail-height`)) || 288));
     setTab(next);
     localStorage.setItem(storageKey(), next);
   };
@@ -255,6 +257,11 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
     if (next && tab() === "diff") void loadDiff(true, true);
   };
   let stopDetailResize: (() => void) | undefined;
+  const maxDetailHeight = () => Math.max(MIN_DETAIL_HEIGHT, (detailHost?.clientHeight || window.innerHeight) -
+    (detailHost?.querySelector<HTMLElement>(".workspace-detail-toggle")?.offsetHeight || 32) -
+    (detailHost?.querySelector<HTMLElement>(".workspace-detail-resize-handle")?.offsetHeight || 12) -
+    MIN_DETAIL_HEIGHT);
+  const clampDetailHeight = (value: number) => Math.max(MIN_DETAIL_HEIGHT, Math.min(maxDetailHeight(), value));
   const startDetailResize = (event: PointerEvent) => {
     stopDetailResize?.();
     event.preventDefault();
@@ -262,10 +269,9 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
     const startHeight = detailHeight();
     let pendingHeight = startHeight;
     let frame = 0;
-    const clampHeight = (value: number) => Math.max(128, Math.min(window.innerHeight - 184, value));
     const apply = () => {
       frame = 0;
-      setDetailHeight(clampHeight(pendingHeight));
+      setDetailHeight(clampDetailHeight(pendingHeight));
     };
     const move = (moveEvent: PointerEvent) => {
       pendingHeight = startHeight + startY - moveEvent.clientY;
@@ -273,7 +279,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
     };
     const stop = () => {
       if (frame) cancelAnimationFrame(frame);
-      const next = clampHeight(pendingHeight);
+      const next = clampDetailHeight(pendingHeight);
       setDetailHeight(next);
       localStorage.setItem(detailHeightKey(), String(next));
       window.removeEventListener("pointermove", move);
@@ -289,9 +295,13 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
     window.addEventListener("pointercancel", stop, { once: true });
   };
   const resizeDetailByKey = (event: KeyboardEvent) => {
-    if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
+    if (!["ArrowUp", "ArrowDown", "Home", "End"].includes(event.key)) return;
     event.preventDefault();
-    const next = Math.max(128, Math.min(window.innerHeight - 184, detailHeight() + (event.key === "ArrowUp" ? 16 : -16)));
+    const next = event.key === "Home"
+      ? MIN_DETAIL_HEIGHT
+      : event.key === "End"
+        ? maxDetailHeight()
+        : clampDetailHeight(detailHeight() + (event.key === "ArrowUp" ? 16 : -16));
     setDetailHeight(next);
     localStorage.setItem(detailHeightKey(), String(next));
   };
@@ -457,7 +467,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
     const nextTab = (localStorage.getItem(storageKey()) as PanelTab) || "files";
     batch(() => {
       setDetailOpen(detailOpenFor(nextTab) === "true");
-      setDetailHeight(Math.max(128, Number(localStorage.getItem(`conduit:workspace-panel:${props.chatId()}:${nextTab}:detail-height`)) || 288));
+      setDetailHeight(Math.max(MIN_DETAIL_HEIGHT, Number(localStorage.getItem(`conduit:workspace-panel:${props.chatId()}:${nextTab}:detail-height`)) || 288));
       const nextWidth = Math.max(256, Math.min(496, Number(localStorage.getItem(widthKey())) || 336));
       setWidth(nextWidth);
       if (props.open()) setShellWidth(nextWidth);
@@ -524,12 +534,12 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
     </header>
     <Show when={error()}><div class="workspace-panel-error">{error()}</div></Show>
     <Show when={tab() === "files"}>
-      <div class="workspace-files"><nav aria-label="Project files" class="workspace-tree"><Tree directory="" /></nav>
+      <div ref={(element) => { detailHost = element; }} class="workspace-files"><nav aria-label="Project files" class="workspace-tree"><Tree directory="" /></nav>
         <div class="workspace-detail-toggle"><button aria-expanded={detailOpen()} onClick={toggleDetail}><ChevronDownIcon data-open={detailOpen()} /><span>File preview</span><Show when={preview()}><small>{preview()!.path} · {preview()!.size.toLocaleString()} bytes</small></Show></button></div>
-        <Show when={detailOpen()}><><div class="workspace-detail-resize-handle" role="separator" aria-label="Resize file preview" aria-orientation="horizontal" aria-valuemin="128" aria-valuemax={Math.max(128, window.innerHeight - 184)} aria-valuenow={detailHeight()} tabIndex={0} onPointerDown={startDetailResize} onKeyDown={resizeDetailByKey} /><section class="workspace-preview" aria-label="File preview" style={{ height: `${detailHeight()}px` }}><Show when={preview()} fallback={<div class="workspace-panel-empty">Select a text file to preview it.</div>}>{(file) => <pre><code>{file().content}</code></pre>}</Show></section></></Show>
+        <Show when={detailOpen()}><><div class="workspace-detail-resize-handle" role="separator" aria-label="Resize file preview" aria-orientation="horizontal" aria-valuemin={MIN_DETAIL_HEIGHT} aria-valuemax={maxDetailHeight()} aria-valuenow={detailHeight()} tabIndex={0} onPointerDown={startDetailResize} onKeyDown={resizeDetailByKey} /><section class="workspace-preview" aria-label="File preview" style={{ height: `${detailHeight()}px` }}><Show when={preview()} fallback={<div class="workspace-panel-empty">Select a text file to preview it.</div>}>{(file) => <pre><code>{file().content}</code></pre>}</Show></section></></Show>
       </div>
     </Show>
-    <Show when={tab() === "diff"}><section class="workspace-diff">
+    <Show when={tab() === "diff"}><section ref={(element) => { detailHost = element; }} class="workspace-diff">
       <div class="workspace-diff-overview">
       <div class="workspace-status-strip"><div><GitBranchIcon /><strong>{diff() ? diff()!.repository ? diff()!.branch : "Not a Git repository" : "Loading Git status…"}</strong><Show when={diff()?.upstream}><small>{diff()?.upstream}</small></Show><Show when={diff()?.ahead || diff()?.behind}><span>↑{diff()?.ahead || 0} ↓{diff()?.behind || 0}</span></Show></div><div><Button variant="ghost" size="icon-sm" aria-label="Copy branch name" disabled={!diff()?.branch} onClick={() => copy(diff()?.branch)}><CopyIcon /></Button><Button variant="ghost" size="icon-sm" aria-label="Refresh Git status" disabled={diffLoading()} onClick={() => void loadDiff(detailOpen())}><RefreshCwIcon /></Button></div></div>
       <Show when={diff()?.repository}><div class="workspace-git-summary"><span>{diff()?.files.length || 0} changed {(diff()?.files.length || 0) === 1 ? "file" : "files"}</span><span>{diff()?.commits?.length || 0} recent commits</span></div></Show>
@@ -537,7 +547,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
       <Show when={diff()?.repository && diff()?.commits?.length}><div class="workspace-git-graph" aria-label="Recent commits"><For each={diff()!.commits}>{(commit) => <div class="workspace-commit"><code class="workspace-graph-rail">{commit.graph || "*"}</code><button title={`${commit.author} · ${new Date(commit.authoredAt).toLocaleString()}`} onClick={() => copy(commit.hash)}><span>{commit.subject}</span><code>{commit.shortHash}</code></button></div>}</For></div></Show>
       </div>
       <div class="workspace-detail-toggle"><button aria-expanded={detailOpen()} onClick={toggleDetail}><ChevronDownIcon data-open={detailOpen()} /><span>Working tree patch</span><small>{diff()?.files.length || 0} changed</small></button></div>
-      <Show when={detailOpen()}><><div class="workspace-detail-resize-handle" role="separator" aria-label="Resize working tree patch" aria-orientation="horizontal" aria-valuemin="128" aria-valuemax={Math.max(128, window.innerHeight - 184)} aria-valuenow={detailHeight()} tabIndex={0} onPointerDown={startDetailResize} onKeyDown={resizeDetailByKey} /><div class="workspace-patch" style={{ height: `${detailHeight()}px` }}><Show when={diff()?.diff} fallback={<div class="workspace-panel-empty">{diff()?.repository ? "Working tree is clean." : "Diff is available for Git projects."}</div>}>{(content) => <pre class="workspace-diff-content"><code>{content()}</code></pre>}</Show></div></></Show>
+      <Show when={detailOpen()}><><div class="workspace-detail-resize-handle" role="separator" aria-label="Resize working tree patch" aria-orientation="horizontal" aria-valuemin={MIN_DETAIL_HEIGHT} aria-valuemax={maxDetailHeight()} aria-valuenow={detailHeight()} tabIndex={0} onPointerDown={startDetailResize} onKeyDown={resizeDetailByKey} /><div class="workspace-patch" style={{ height: `${detailHeight()}px` }}><Show when={diff()?.diff} fallback={<div class="workspace-panel-empty">{diff()?.repository ? "Working tree is clean." : "Diff is available for Git projects."}</div>}>{(content) => <pre class="workspace-diff-content"><code>{content()}</code></pre>}</Show></div></></Show>
     </section></Show>
     <Show when={tab() === "artifacts"}><section class="workspace-artifacts">
       <div class="workspace-artifact-modes" role="radiogroup" aria-label="Artifact modality"><button role="radio" aria-checked={artifactMode() === "outputs"} onClick={() => setArtifactMode("outputs")}>Outputs</button><button role="radio" aria-checked={artifactMode() === "interactive"} onClick={() => setArtifactMode("interactive")}>Interactive UI</button></div>
