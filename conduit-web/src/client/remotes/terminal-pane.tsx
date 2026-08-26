@@ -427,7 +427,7 @@ export function TerminalPane(props: { projectId: string; active?: boolean }) {
     const record = pty();
     if (!record || record.status !== "running") return;
     reconnectAttempts = 0;
-    await connect(record, rendererId(), { freshRenderer: true, takeover: ownershipConflict() });
+    await connect(record, rendererId(), { freshRenderer: true, takeover: true });
   };
 
   const removeSession = async (record: Pty) => {
@@ -724,7 +724,7 @@ export function TerminalPane(props: { projectId: string; active?: boolean }) {
         </div>
       </Show>
       <Show when={pty() && connectionState() === "disconnected"}>
-        <div class="terminal-pane-state"><strong>{ownershipConflict() ? "Terminal in use" : "Terminal disconnected"}</strong><Button onClick={() => void reconnect()}>{ownershipConflict() ? "Take control" : "Reconnect"}</Button></div>
+        <div class="terminal-pane-state"><strong>Terminal available</strong><Button onClick={() => void reconnect()}>Take control</Button></div>
       </Show>
       <Show when={pty() && connectionState() === "exited"}>
         <div class="terminal-pane-state"><strong>Terminal exited</strong><Button onClick={() => void restart()}>Start new terminal</Button></div>
