@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import fs from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 
@@ -64,4 +66,49 @@ test("deployment and exact-commit packaging scripts remain executable", async ()
     const stats = await fs.stat(path.join(root, relative));
     assert.ok(stats.mode & 0o111, `${relative} must be executable`);
   }
+});
+
+test("restart skips pulling latest when the published release is already running", async (t) => {
+  const fixture = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-deploy-"));
+  t.after(() => fs.rm(fixture, { recursive: true, force: true }));
+  await fs.mkdir(path.join(fixture, "scripts"));
+  await fs.mkdir(path.join(fixture, "bin"));
+  await fs.copyFile(path.join(root, "scripts/deploy.sh"), path.join(fixture, "scripts/deploy.sh"));
+  await fs.chmod(path.join(fixture, "scripts/deploy.sh"), 0o755);
+  await fs.writeFile(path.join(fixture, "compose.yaml"), "services: {}\n");
+  await fs.writeFile(path.join(fixture, ".env"), [
+    "CONDUIT_IMAGE=ghcr.io/jask-aran/conduit",
+    "CONDUIT_RELEASE=latest",
+    "CONDUIT_DEPLOY_MODE=image",
+    "CONDUIT_DOMAIN=conduit.test.example",
+    "CONDUIT_DATA_DIR=./data",
+    "CONDUIT_WORKSPACES_DIR=./workspaces",
+    "",
+  ].join("\n"));
+  await fs.writeFile(path.join(fixture, "bin/curl"), "#!/bin/sh\nprintf '%s\\n' '  \"tag_name\": \"v0.5.4\",'\n");
+  await fs.chmod(path.join(fixture, "bin/curl"), 0o755);
+  await fs.writeFile(path.join(fixture, "bin/docker"), `#!/bin/sh
+printf '%s\n' "$*" >>"${path.join(fixture, "docker.log")}"
+if [ "$1 $2" = "compose version" ]; then exit 0; fi
+if [ "$1" = "inspect" ]; then printf '%s\n' "v0.5.4"; exit 0; fi
+case "$*" in
+  *" ps -q conduit") printf '%s\n' "container-id" ;;
+esac
+`);
+  await fs.chmod(path.join(fixture, "bin/docker"), 0o755);
+
+  const result = spawnSync(path.join(fixture, "scripts/deploy.sh"), ["restart"], {
+    cwd: fixture,
+    encoding: "utf8",
+    env: {
+      ...process.env,
+      CONDUIT_DOMAIN: "conduit.test.example",
+      PATH: `${path.join(fixture, "bin")}:${process.env.PATH}`,
+    },
+  });
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /Conduit v0\.5\.4 is already running; skipping the image pull\./);
+  const dockerLog = await fs.readFile(path.join(fixture, "docker.log"), "utf8");
+  assert.doesNotMatch(dockerLog, /\spull(?:\s|$)/);
+  assert.match(dockerLog, /\sup -d --force-recreate --remove-orphans$/m);
 });
