@@ -3,8 +3,10 @@ import { execFile as execFileCallback } from "node:child_process";
 import { EventEmitter } from "node:events";
 import fs from "node:fs/promises";
 import path from "node:path";
+import { StringDecoder } from "node:string_decoder";
 import { promisify } from "node:util";
 import nodePty from "node-pty";
+import { terminalSocketName } from "../../scripts/terminal-lifecycle.mjs";
 
 const execFileAsync = promisify(execFileCallback);
 
@@ -118,8 +120,7 @@ export class PtyManager extends EventEmitter {
     this.createQueue = Promise.resolve();
     this.tmuxReady = false;
     this.stopping = false;
-    const namespace = crypto.createHash("sha256").update(path.resolve(filePath)).digest("hex").slice(0, 12);
-    this.tmuxSocketName = `conduit-${namespace}`;
+    this.tmuxSocketName = terminalSocketName(filePath);
     this.tmuxConfigPath = `${filePath}.tmux.conf`;
   }
 
@@ -175,13 +176,15 @@ export class PtyManager extends EventEmitter {
 
     for (const item of Array.isArray(persisted.sessions) ? persisted.sessions : []) {
       if (!item?.id || !item.projectId || !TEMPLATES[item.templateId]) continue;
-      this.records.set(item.id, {
-        ...item,
-        status: "exited",
-        exitCode: null,
-        signal: "server_restart",
-        updatedAt: new Date().toISOString(),
-      });
+      this.records.set(item.id, item.status === "running"
+        ? {
+          ...item,
+          status: "exited",
+          exitCode: null,
+          signal: "server_restart",
+          updatedAt: new Date().toISOString(),
+        }
+        : { ...item, status: "exited" });
     }
     await this.persist();
     return this.list();
@@ -245,11 +248,6 @@ export class PtyManager extends EventEmitter {
       throw failure("pty_capacity_reached", "The terminal session limit has been reached");
     }
     await this.ensureTmux();
-
-    for (const item of [...this.records.values()]) {
-      if (item.projectId !== project.id || item.status === "running") continue;
-      this.records.delete(item.id);
-    }
 
     const width = boundedDimension(cols, 80);
     const height = boundedDimension(rows, 24);
@@ -318,6 +316,7 @@ export class PtyManager extends EventEmitter {
 
       let exited = false;
       let exitEvent = null;
+      const inputDecoder = new StringDecoder("utf8");
       const exitListeners = new Set();
       const dataListeners = new Set();
       const earlyData = [];
@@ -352,7 +351,10 @@ export class PtyManager extends EventEmitter {
         write(bytes) {
           const value = Buffer.isBuffer(bytes) ? bytes : Buffer.from(bytes);
           if (value.length > PTY_MAX_INPUT_BYTES) throw failure("pty_input_too_large", `Terminal input exceeds ${PTY_MAX_INPUT_BYTES} bytes`);
-          if (!exited) handle.write(value.toString("utf8"));
+          if (!exited) {
+            const decoded = inputDecoder.write(value);
+            if (decoded) handle.write(decoded);
+          }
         },
         resize(nextCols, nextRows) {
           if (!exited) handle.resize(boundedDimension(nextCols, width), boundedDimension(nextRows, height));

@@ -32,7 +32,7 @@ Commands:
   build                 Compile the production client bundle.
   start                 Start an existing production build.
   dev                   Start the server watcher and Vite hot reload.
-  stop                  Stop Vite, Conduit, and resident Pi processes.
+  stop                  Stop Vite, Conduit, resident Pi, and terminal processes.
   restart               Rebuild if sources changed, then restart (default).
   status                Report the managed process and health endpoint.
   logs [server|vite] [-f]
@@ -215,7 +215,12 @@ stop() {
   local pid
   if pid="$(managed_vite_pid)"; then stop_managed "Vite" "$pid" "$VITE_PID_FILE"; fi
   if pid="$(managed_pid)"; then stop_managed "Conduit" "$pid" "$PID_FILE";
+  elif is_healthy; then
+    echo "A healthy Conduit server is running on port ${CONDUIT_PORT}, but this launcher does not manage it." >&2
+    echo "Stop that server before using this launcher." >&2
+    return 1
   else echo "Conduit is not running."; fi
+  node "$ROOT/scripts/terminal-lifecycle.mjs"
 }
 
 status() {
@@ -249,14 +254,14 @@ case "$COMMAND" in
   start) guard_component_mode; start_server false ;;
   dev)
     guard_component_mode
-    stop || true
+    stop
     start_server true
     if ! start_vite; then stop || true; exit 1; fi
     ;;
   stop) stop ;;
   restart)
     guard_component_mode
-    stop || true
+    stop
     build_if_needed
     start_server false
     ;;
@@ -266,7 +271,7 @@ case "$COMMAND" in
     guard_component_mode
     setup
     build
-    stop || true
+    stop
     start_server false
     ;;
   help|-h|--help) usage ;;
