@@ -4,6 +4,8 @@ import { PTY_MAX_INPUT_BYTES } from "../pty-manager.js";
 
 const TERMINAL_PENDING_LIMIT = 1024 * 1024;
 const PTY_IN_USE_CLOSE_CODE = 4009;
+const PTY_TAKEN_OVER_CLOSE_CODE = 4010;
+const DISPOSE_TERMINAL_ATTACHMENT = Symbol("disposeTerminalAttachment");
 
 function boundedDimension(value, fallback) {
   const next = Math.trunc(Number(value));
@@ -69,13 +71,22 @@ export function createTerminalStream({ terminals }) {
   const handleUpgrade = (id, request, socket, head) => {
     if (shuttingDown) return socket.destroy();
     return wss.handleUpgrade(request, socket, head, (ws) => {
+    const requestUrl = new URL(request.url || "/", "http://localhost");
+    const takeover = requestUrl.searchParams.get("takeover") === "1";
     // Reserve synchronously before terminals.attach() does asynchronous tmux
     // work. This is transport-level defense in depth for the manager lease.
-    if (terminalClients.has(id)) {
+    const current = terminalClients.get(id);
+    if (current && !takeover) {
       const error = Object.assign(new Error("Terminal is attached in another Conduit client"), { code: "pty_in_use" });
       sendClientError(ws, error);
       ws.close(PTY_IN_USE_CLOSE_CODE, "pty_in_use");
       return;
+    }
+    if (current) {
+      detachClient(id, current);
+      current[DISPOSE_TERMINAL_ATTACHMENT]?.();
+      sendClientError(current, Object.assign(new Error("Another Conduit client took control of this terminal"), { code: "pty_taken_over" }));
+      current.close(PTY_TAKEN_OVER_CLOSE_CODE, "pty_taken_over");
     }
     terminalClients.set(id, ws);
 
@@ -84,7 +95,6 @@ export function createTerminalStream({ terminals }) {
     let removeData = () => {};
     let removeExit = () => {};
     const output = new PtyOutputBatcher((_id, bytes) => sendOutput(ws, bytes));
-    const requestUrl = new URL(request.url || "/", "http://localhost");
     const initialCols = boundedDimension(requestUrl.searchParams.get("cols"), 80);
     const initialRows = boundedDimension(requestUrl.searchParams.get("rows"), 24);
 
@@ -94,9 +104,13 @@ export function createTerminalStream({ terminals }) {
       output.flushAll();
       removeData();
       removeExit();
-      try { attachment?.kill(); } catch {}
+      try {
+        if (attachment) attachment.kill();
+        else terminals.killAttachment(id);
+      } catch {}
       attachment = undefined;
     };
+    ws[DISPOSE_TERMINAL_ATTACHMENT] = disposeAttachment;
 
     ws.on("message", (data, isBinary) => {
       if (!attachment) return;

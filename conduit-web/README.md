@@ -762,7 +762,10 @@ The server sends binary terminal output plus JSON `status`, `control`, and
 attachment; Conduit does not keep or replay an output journal. One browser may
 attach to each terminal id at a time. A second attachment receives
 `client_error.code = "pty_in_use"` and closes with code `4009`; different
-terminal ids can stream at the same time. The browser owns VT parsing and
+terminal ids can stream at the same time. An explicit `takeover=1` query closes
+the current owner with `client_error.code = "pty_taken_over"` and code `4010`,
+then transfers the attachment to the requesting client. Clients do not retry
+either ownership close code automatically. The browser owns VT parsing and
 rendering. Conduit brokers bounded process I/O and closes a slow client with
 code `1013`.
 
