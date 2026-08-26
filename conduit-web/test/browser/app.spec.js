@@ -424,6 +424,27 @@ test("workspace panel previews files, shows diff, and persists per chat", async 
   await expect(page.getByRole("complementary", { name: "Workspace panel" })).toHaveCount(0);
 });
 
+test("desktop workspace can replace the chat pane without changing the sidebar", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop-chromium");
+  await page.goto("/");
+  await page.getByRole("button", { name: "Toggle workspace panel" }).click();
+  const panel = page.getByRole("complementary", { name: "Workspace panel" });
+  const chat = page.locator('[data-slot="sidebar-inset"]');
+  const sidebar = page.locator(".conduit-sidebar");
+  const sidebarBox = await sidebar.boundingBox();
+
+  await panel.getByRole("button", { name: "Expand Workspace" }).click();
+  await expect(chat).toBeHidden();
+  await expect(panel.getByRole("button", { name: "Restore split view" })).toBeVisible();
+  expect((await panel.boundingBox()).width).toBeGreaterThan(page.viewportSize().width - sidebarBox.width - 32);
+  expect((await sidebar.boundingBox()).width).toBe(sidebarBox.width);
+
+  await page.keyboard.press("Escape");
+  await expect(chat).toBeHidden();
+  await panel.getByRole("button", { name: "Restore split view" }).click();
+  await expect(chat).toBeVisible();
+});
+
 test("desktop workspace shell and surface ease open and close together", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "desktop-chromium");
   await page.goto("/");
