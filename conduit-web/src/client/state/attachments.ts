@@ -2,6 +2,8 @@ import { createMemo, createSignal, onCleanup } from "solid-js";
 import type { Accessor } from "solid-js";
 import { api, asList } from "../api/client";
 import type { Attachment } from "../api/contracts";
+import { attachmentUrl } from "../api/transport";
+import { nativeAuthorizationHeader } from "../api/native-auth-client";
 
 export interface UploadAttachment extends Attachment {
   file?: File;
@@ -52,19 +54,23 @@ export function createAttachments(
   const drain = () => {
     while (active < MAX_CONCURRENT_UPLOADS && queue.length) {
       const item = queue.shift();
-      if (item) upload(item);
+      if (item) void upload(item);
     }
   };
 
-  const upload = (item: UploadAttachment) => {
+  const upload = async (item: UploadAttachment) => {
     const owner = chatId();
     if (!owner || !item.file) return;
+    let authorization: string | null;
+    try { authorization = await nativeAuthorizationHeader(); }
+    catch (error) { update(item.id, { status: "error", error: "Secure storage unavailable" }); onError(error); return; }
     const epoch = uploadEpoch;
     active += 1;
     update(item.id, { status: "uploading", progress: 0 });
     const request = new XMLHttpRequest();
     requests.set(item.id, request);
-    request.open("PUT", `/v0/chats/${encodeURIComponent(owner)}/attachments/${item.id}?name=${encodeURIComponent(item.name)}`);
+    request.open("PUT", attachmentUrl(owner, item.id, `?name=${encodeURIComponent(item.name)}`));
+    if (authorization) request.setRequestHeader("Authorization", authorization);
     request.setRequestHeader("Content-Type", item.file.type || "application/octet-stream");
     let finished = false;
     const finish = () => {

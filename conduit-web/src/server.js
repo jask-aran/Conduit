@@ -15,6 +15,7 @@ import { AttachmentStore } from "./attachment-store.js";
 import { RuntimeHub } from "./runtime-hub.js";
 import { defaultsFromEnv, RuntimeSettingsStore } from "./runtime-settings.js";
 import { PreferencesStore } from "./preferences-store.js";
+import { SessionNameService } from "./session-name-service.js";
 import { templatePublicView } from "../../scripts/pi-runtime.mjs";
 import { formatWorkspacePath, isPathInside, listDirectorySuggestions } from "./workspace-paths.js";
 import { hasTrustRequiringProjectResources, ProjectTrustStore } from "@earendil-works/pi-coding-agent";
@@ -26,9 +27,11 @@ import { PiAuthBroker } from "./pi-auth-broker.js";
 import { ChatLifecycle } from "./chat-lifecycle.js";
 import {
   authStartupViolation,
+  nativeCors,
   prepareAuthMiddleware,
   validateSession,
 } from "./auth-middleware.js";
+import { NATIVE_APP_ORIGIN, SocketTicketStore } from "./native-auth.js";
 import { listWorkspaceDirectory, readWorkspaceDiff, readWorkspaceFile } from "./workspace-inspector.js";
 import { currentMagicDnsOrigin } from "./tailscale-share.js";
 import { buildProjectDashboard } from "./project-dashboard.js";
@@ -107,6 +110,7 @@ await preferences.load();
 const authStore = new AuthStore(config.authFile);
 await authStore.load();
 await authStore.pruneExpired();
+const socketTickets = new SocketTicketStore();
 const startupViolation = authStartupViolation(config, authStore);
 if (startupViolation) {
   console.error(startupViolation.message);
@@ -137,6 +141,12 @@ manager.on("process_removed", ({ id, chatId }) => {
 });
 const modelCatalog = new PiModelCatalog({ agentDir: config.piAgentDir, modelPatterns: config.piTemplate.models });
 await modelCatalog.ready();
+const sessionNames = new SessionNameService({
+  file: config.sessionNameLogFile,
+  modelCatalog,
+  preferences,
+});
+const sessionNameTasks = new Map();
 const piAuth = new PiAuthBroker({
   modelRuntime: modelCatalog.modelRuntime,
   authFile: modelCatalog.authFile,
@@ -348,6 +358,7 @@ async function ensureChatTemplate(chat, project = null) {
 }
 
 app.use(compression());
+app.use(nativeCors);
 
 const requireAuth = prepareAuthMiddleware(authStore);
 app.use(requireAuth);
@@ -372,7 +383,7 @@ registerAttachmentRoutes(app, { attachments, findChatContext });
 app.use(express.json({ limit: "128kb" }));
 app.use(express.urlencoded({ extended: false, limit: "32kb" }));
 
-registerAuthRoutes(app, { authStore });
+registerAuthRoutes(app, { authStore, socketTickets });
 
 const pendingCheckpoints = new Set();
 let shuttingDown = false;
@@ -389,8 +400,12 @@ manager.on("event", ({ record, event }) => {
   setTimeout(() => {
     projects.get(record.projectId)
       .then((project) => project && registry.syncFile(record.chatId, record.sessionFile, project, { waitForFileMs: 2000 }))
-      .then((session) => {
+      .then(async (session) => {
         if (!session) return null;
+        await sessionNameTasks.get(record.chatId)?.catch(() => {});
+        if (await registry.fallbackTitle(record.chatId, session.title)) {
+          await sessionNames.recordFallback({ chatId: record.chatId, name: session.title });
+        }
         record.lastCheckpoint = {
           type: "session_checkpoint",
           generationId: checkpoint.id,
@@ -440,6 +455,8 @@ registerProjectRoutes(app, {
   config,
   listWorkspaceDirectory,
   manager,
+  modelCatalog,
+  preferences,
   projects,
   readSessionPage,
   readWorkspaceDiff,
@@ -483,6 +500,7 @@ registerSessionRoutes(app, {
   findRegisteredSession,
   lifecycle,
   manager,
+  sessionNames,
   projects,
   readSessionPage,
   registry,
@@ -503,7 +521,7 @@ app.use((error, _request, response, _next) => {
   let status = error.status || 500;
   if (["reserved_project", "workspace_already_linked", "clone_target_reserved", "clone_reservation_lost", "workspace_cloning"].includes(error.code)) status = 409;
   if (error.code === "workspace_identity_changed") status = 409;
-  if (["chat_move_not_supported", "live_session_starting", "runtime_locked", "session_writer_conflict"].includes(error.code)) status = 409;
+  if (["chat_move_not_supported", "live_session_starting", "runtime_locked", "session_writer_conflict", "session_name_model_required"].includes(error.code)) status = 409;
   if (error.code === "live_process_limit" || error.code === "generation_limit" || error.code === "pty_capacity_reached") status = 429;
   if (["attachment_not_found", "path_not_found", "pty_project_not_found"].includes(error.code)) status = 404;
   if (error.code === "attachment_too_large") status = 413;
@@ -588,18 +606,54 @@ const liveSessionStream = createLiveSessionStream({
   findChatContext,
   findRegisteredSession,
   chatModelView,
+  async autoNameSession(record, context, message) {
+    const task = sessionNames.run({
+      chatId: context.chat.id,
+      cwd: context.project.path,
+      source: "first_prompt",
+      message,
+      apply: async (name) => {
+        const currentTitle = registry.metadata(context.chat.id)?.title;
+        if (currentTitle && currentTitle !== "New chat") return "not_applied_title_already_set";
+        await registry.update(context.chat.id, { title: name });
+        manager.publish(record, {
+          type: "session_checkpoint",
+          chat: chatView(registry.metadata(context.chat.id)),
+          generationId: record.generation?.id || null,
+          generationSeq: record.generation?.seq || null,
+        });
+        return "applied";
+      },
+    });
+    sessionNameTasks.set(context.chat.id, task);
+    try {
+      await task;
+    } finally {
+      if (sessionNameTasks.get(context.chat.id) === task) sessionNameTasks.delete(context.chat.id);
+    }
+  },
 });
 
 server.on("upgrade", async (request, socket, head) => {
-  const pathname = new URL(request.url, "http://localhost").pathname;
+  const requestUrl = new URL(request.url, "http://localhost");
+  const pathname = requestUrl.pathname;
   const match = pathname.match(/^\/v0\/live-sessions\/([a-f0-9]{24})\/stream$/);
   const ptyMatch = pathname.match(/^\/v0\/ptys\/([a-f0-9-]{36})\/attach$/);
   const dictationMatch = pathname === "/v0/dictation/stream";
   if ((!match || !manager.get(match[1])) && (!ptyMatch || !terminals.get(ptyMatch[1])) && !dictationMatch) return socket.destroy();
   try {
     if (authStore.hasPassword()) {
-      const context = await validateSession(authStore, request);
-      if (!context) return socket.destroy();
+      const ticket = requestUrl.searchParams.get("ticket");
+      if (ticket) {
+        if (request.headers.origin !== NATIVE_APP_ORIGIN) return socket.destroy();
+        const sessionHash = socketTickets.consume(ticket);
+        const session = await authStore.findSessionHash(sessionHash);
+        if (!session || session.kind !== "native") return socket.destroy();
+        await authStore.touchSession(session);
+      } else {
+        const context = await validateSession(authStore, request);
+        if (!context) return socket.destroy();
+      }
     }
   } catch (error) {
     console.error("WebSocket session validation failed", error);
@@ -616,14 +670,15 @@ async function shutdown(signal) {
   console.log(`Conduit received ${signal}; stopping`);
   runtimeHub.close();
   await dictationStream.shutdown?.({ timeoutMs: 1_000 });
+  await terminalStream.shutdown?.({ timeoutMs: 1_000 });
   for (const socket of wss.clients) socket.close(1012, "Conduit is restarting");
   const archiveDrain = voiceRecordingStore.drain({ timeoutMs: VOICE_ARCHIVE_SHUTDOWN_TIMEOUT_MS });
   const closed = new Promise((resolve) => server.close(resolve));
   server.closeIdleConnections?.();
+  server.closeAllConnections?.();
   const stoppedProcesses = await manager.shutdown();
   await terminals.stopAll();
   await voiceModel.stop();
-  server.closeAllConnections?.();
   await closed;
   const archiveResult = await archiveDrain;
   console.log(JSON.stringify({ type: "conduit.voice-archive-drain", ...archiveResult }));

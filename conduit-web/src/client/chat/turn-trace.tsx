@@ -4,6 +4,7 @@ import type { Message } from "../api/contracts";
 import type { TraceSegment, TurnTraceData } from "../turn-rows";
 import { ToolCard } from "./tool-card";
 import type { MarkdownRendererId } from "./markdown-settings";
+import type { IncremarkPacingMode } from "./incremark-pacing";
 
 const ChatMarkdown = lazy(() => import("./markdown").then((module) => ({ default: module.ChatMarkdown })));
 const fullDateTime = (value?: string) => {
@@ -42,6 +43,7 @@ function TraceSegmentRow(props: {
   segment: () => TraceSegment;
   sessionId: string | null;
   renderer?: MarkdownRendererId;
+  pacing?: IncremarkPacingMode;
   profileLabel?: string;
 }) {
   const tool = () => {
@@ -63,7 +65,7 @@ function TraceSegmentRow(props: {
   return <Show when={tool()} fallback={
     <Show when={error()} fallback={
       <div class="turn-trace-text" data-kind={props.segment().kind}>
-        <Suspense fallback={<div class="markdown-skeleton" />}><ChatMarkdown streaming={live()} renderer={props.renderer}>{text()}</ChatMarkdown></Suspense>
+        <Suspense fallback={<div class="markdown-skeleton" />}><ChatMarkdown streaming={live()} renderer={props.renderer} pacing={props.pacing}>{text()}</ChatMarkdown></Suspense>
       </div>
     }>
       {(message) => <TraceError message={message()} profileLabel={props.profileLabel} />}
@@ -99,21 +101,21 @@ function previewOf(trace: TurnTraceData): { text: string; counters: string } {
   return { text: clipped, counters };
 }
 
-export function TurnTrace(props: { trace: TurnTraceData; sessionId: string | null; renderer?: MarkdownRendererId; profileLabel?: string }) {
+export function TurnTrace(props: { trace: TurnTraceData; sessionId: string | null; renderer?: MarkdownRendererId; pacing?: IncremarkPacingMode; profileLabel?: string }) {
   const [open, setOpen] = createSignal(false);
   return <div class="turn-trace" data-active={props.trace.active ? "true" : "false"}>
     <button type="button" class="turn-trace-header" aria-expanded={open()} onClick={() => setOpen(!open())}>
       <BrainIcon />
       <div class="turn-trace-preview">
-        <Suspense fallback={<span>{previewOf(props.trace).text}</span>}><ChatMarkdown inline renderer={props.renderer}>{previewOf(props.trace).text}</ChatMarkdown></Suspense>
+        <Suspense fallback={<span>{previewOf(props.trace).text}</span>}><ChatMarkdown inline renderer={props.renderer} pacing={props.pacing}>{previewOf(props.trace).text}</ChatMarkdown></Suspense>
         <Show when={previewOf(props.trace).counters}><span class="turn-trace-counter"> · {previewOf(props.trace).counters}</span></Show>
       </div>
       <ChevronDownIcon class="turn-trace-chevron" data-open={open() ? "true" : "false"} />
     </button>
     <Show when={open()}>
       <div class="turn-trace-body">
-        <Index each={props.trace.segments}>{(segment) =>
-          <TraceSegmentRow segment={segment} sessionId={props.sessionId} renderer={props.renderer} profileLabel={props.profileLabel} />
+          <Index each={props.trace.segments}>{(segment) =>
+          <TraceSegmentRow segment={segment} sessionId={props.sessionId} renderer={props.renderer} pacing={props.pacing} profileLabel={props.profileLabel} />
         }</Index>
       </div>
     </Show>

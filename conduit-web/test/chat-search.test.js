@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { COMMAND_IDS } from "../src/client/commands/command-registry.ts";
 import { chatDateSection, resolvePaletteCommands } from "../src/client/palette/command-registry.ts";
 import {
   parseChatQuery, removeChatQueryFilter, resolveChatQueryScope, serializeChatQuery,
@@ -7,6 +8,7 @@ import {
 
 function context(projects, chatId = null) {
   return {
+    nativeApp: false,
     chatId,
     projects,
     templates: [],
@@ -46,6 +48,27 @@ test("Go to remains an alias for the first-class chat search source", () => {
   const direct = resolvePaletteCommands(context(projects), { page: "chat-search" });
   const legacy = resolvePaletteCommands(context(projects), { page: "goto" });
   assert.deepEqual(legacy.map((command) => command.id), direct.map((command) => command.id));
+});
+
+test("root palette exposes app update and cache reset actions", () => {
+  const commands = resolvePaletteCommands(context([]));
+  const update = commands.find((command) => command.id === COMMAND_IDS.updateApp);
+  const reset = commands.find((command) => command.id === COMMAND_IDS.resetAppCache);
+  let updates = 0;
+  let resets = 0;
+  assert.equal(update?.label, "Update app");
+  assert.equal(reset?.label, "Reset app cache");
+  update?.run({ updateApp: () => { updates += 1; } });
+  reset?.run({ resetAppCache: () => { resets += 1; } });
+  assert.equal(updates, 1);
+  assert.equal(resets, 1);
+});
+
+test("native palette hides service-worker actions", () => {
+  const nativeContext = { ...context([]), nativeApp: true };
+  const ids = resolvePaletteCommands(nativeContext).map((command) => command.id);
+  assert.ok(!ids.includes(COMMAND_IDS.updateApp));
+  assert.ok(!ids.includes(COMMAND_IDS.resetAppCache));
 });
 
 test("chat date sections use local calendar boundaries", () => {

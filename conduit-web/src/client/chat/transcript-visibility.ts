@@ -7,6 +7,8 @@ import {
 const VISIBILITY_ATTRIBUTE = "data-transcript-visibility";
 const INTRINSIC_SIZE_PROPERTY = "contain-intrinsic-block-size";
 const OVERSCAN_PX = 120;
+const DISPLAY_MATH_SELECTOR = ".incremark-math-block, .katex-display";
+const ADVANCED_SETTLED_SELECTOR = '.incremark-advanced-shell[data-incremark-advanced-state="settled"]';
 
 interface TableLock {
   table: HTMLTableElement;
@@ -18,6 +20,10 @@ function blockSize(entry: ResizeObserverEntry) {
   const borderBox = entry.borderBoxSize;
   if (borderBox[0]) return borderBox[0].blockSize;
   return entry.contentRect.height;
+}
+
+function containsDisplayMath(element: HTMLElement) {
+  return element.matches(DISPLAY_MATH_SELECTOR) || Boolean(element.querySelector(DISPLAY_MATH_SELECTOR));
 }
 
 export function mountTranscriptVisibility(
@@ -34,13 +40,21 @@ export function mountTranscriptVisibility(
   let fontsReady = document.fonts.status === "loaded";
 
   const setIntrinsicSize = (element: HTMLElement, height: number) => {
-    if (height > 0) element.style.setProperty(INTRINSIC_SIZE_PROPERTY, `auto ${height}px`);
+    if (height <= 0) return;
+    const value = `auto ${height}px`;
+    if (element.style.getPropertyValue(INTRINSIC_SIZE_PROPERTY) !== value) {
+      element.style.setProperty(INTRINSIC_SIZE_PROPERTY, value);
+    }
   };
   const show = (element: HTMLElement) => {
-    element.removeAttribute(VISIBILITY_ATTRIBUTE);
+    if (element.hasAttribute(VISIBILITY_ATTRIBUTE)) {
+      element.removeAttribute(VISIBILITY_ATTRIBUTE);
+    }
   };
   const hide = (element: HTMLElement) => {
-    element.setAttribute(VISIBILITY_ATTRIBUTE, "hidden");
+    if (element.getAttribute(VISIBILITY_ATTRIBUTE) !== "hidden") {
+      element.setAttribute(VISIBILITY_ATTRIBUTE, "hidden");
+    }
   };
   const clear = (element: HTMLElement) => {
     show(element);
@@ -71,13 +85,23 @@ export function mountTranscriptVisibility(
     const top = viewportRect.top - OVERSCAN_PX;
     const bottom = viewportRect.bottom + OVERSCAN_PX;
     const next = new Set<HTMLElement>();
+    const stableIncremarkBlocks = new Set<HTMLElement>();
+    const advancedIncremarkBlocks = new Set<HTMLElement>();
     const rows = [...thread.querySelectorAll<HTMLElement>('[data-slot="message-scroller-item"]')];
 
     for (const row of rows) {
       const blocks = [...row.querySelectorAll<HTMLElement>(".chat-markdown > .incremark > *")];
       if (blocks.length) {
         show(row);
-        for (const block of blocks) next.add(block);
+        const hasDisplayMath = blocks.some(containsDisplayMath);
+        for (const block of blocks) {
+          next.add(block);
+          if (block.closest(ADVANCED_SETTLED_SELECTOR)) {
+            advancedIncremarkBlocks.add(block);
+          } else if (hasDisplayMath) {
+            stableIncremarkBlocks.add(block);
+          }
+        }
       } else {
         next.add(row);
       }
@@ -87,8 +111,23 @@ export function mountTranscriptVisibility(
       element,
       rect: element.getBoundingClientRect(),
     }));
+    const virtualized = new Set<HTMLElement>();
     let revealed = false;
     for (const { element, rect } of measurements) {
+      // The current Incremark path keeps a whole math-containing root laid out:
+      // content-visibility on either the KaTeX block or a sibling was observed
+      // changing the root's intrinsic inline geometry and shifting equations.
+      // Incremark Advanced gives the settled root explicit inline-size
+      // containment, so every top-level block (including display math) can be
+      // managed independently after settlement without changing its centring
+      // basis. Streaming Advanced messages retain the conservative old policy.
+      if (!advancedIncremarkBlocks.has(element)
+        && (stableIncremarkBlocks.has(element) || containsDisplayMath(element))) {
+        clear(element);
+        sizeObserver.unobserve(element);
+        continue;
+      }
+      virtualized.add(element);
       setIntrinsicSize(element, rect.height);
       const visible = rect.bottom >= top && rect.top <= bottom;
       if (visible) {
@@ -100,12 +139,12 @@ export function mountTranscriptVisibility(
       if (!managed.has(element)) sizeObserver.observe(element);
     }
     for (const element of managed) {
-      if (next.has(element)) continue;
+      if (virtualized.has(element)) continue;
       sizeObserver.unobserve(element);
       clear(element);
     }
     managed.clear();
-    for (const element of next) managed.add(element);
+    for (const element of virtualized) managed.add(element);
     if (revealed) refreshFrame = requestAnimationFrame(refresh);
   };
 
@@ -192,7 +231,12 @@ export function mountTranscriptVisibility(
   window.addEventListener("blur", onPageLeave);
   document.addEventListener("visibilitychange", onVisibility);
   viewport.addEventListener("scroll", onScroll, { passive: true });
-  mutationObserver.observe(thread, { childList: true, subtree: true });
+  mutationObserver.observe(thread, {
+    childList: true,
+    subtree: true,
+    attributes: true,
+    attributeFilter: ["data-incremark-advanced-state"],
+  });
   viewportObserver.observe(viewport);
   void document.fonts.ready.then(() => {
     fontsReady = true;

@@ -5,6 +5,7 @@ export const SHORTCUT_CONTEXT_PRIORITY = [
   "chat-search.move",
   "chat-search.edit",
   "chat-search.browse",
+  "model-selector",
   "palette.page",
   "palette.root",
   "settings",

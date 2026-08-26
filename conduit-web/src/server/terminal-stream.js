@@ -14,6 +14,7 @@ export function createTerminalStream({ terminals }) {
   // Keep terminal payload limits isolated from chat/dictation WebSockets. ws
   // rejects oversized terminal frames before buffering them for application code.
   const wss = new WebSocketServer({ noServer: true, maxPayload: PTY_MAX_INPUT_BYTES });
+  let shuttingDown = false;
 
   // One browser owns one terminal id at a time. There is deliberately no
   // global lease: unrelated tmux sessions may stream concurrently.
@@ -65,7 +66,9 @@ export function createTerminalStream({ terminals }) {
     terminalClients.delete(id);
   });
 
-  const handleUpgrade = (id, request, socket, head) => wss.handleUpgrade(request, socket, head, (ws) => {
+  const handleUpgrade = (id, request, socket, head) => {
+    if (shuttingDown) return socket.destroy();
+    return wss.handleUpgrade(request, socket, head, (ws) => {
     // Reserve synchronously before terminals.attach() does asynchronous tmux
     // work. This is transport-level defense in depth for the manager lease.
     if (terminalClients.has(id)) {
@@ -165,7 +168,27 @@ export function createTerminalStream({ terminals }) {
         }
       }
     })();
-  });
+    });
+  };
 
-  return { handleUpgrade };
+  const shutdown = async ({ timeoutMs = 1_000 } = {}) => {
+    shuttingDown = true;
+    const clients = [...wss.clients];
+    const closed = clients.map((ws) => new Promise((resolve) => {
+      if (ws.readyState === ws.CLOSED) return resolve();
+      ws.once("close", resolve);
+    }));
+    for (const ws of clients) {
+      try { ws.close(1012, "Conduit is restarting"); }
+      catch { ws.terminate?.(); }
+    }
+    await Promise.race([
+      Promise.all(closed),
+      new Promise((resolve) => setTimeout(resolve, Math.max(0, Number(timeoutMs) || 0))),
+    ]);
+    for (const ws of wss.clients) ws.terminate?.();
+    return { closed: wss.clients.size === 0 };
+  };
+
+  return { handleUpgrade, shutdown };
 }

@@ -40,7 +40,9 @@ function summarizeHarnessMetrics(metrics = []) {
   const typewriterSamples = [];
   const typewriterTerminalSamples = [];
   const typewriterSteadyStateSamples = [];
+  const typewriterSchedulerModes = new Set();
   const transcriptScrollSamples = [];
+  const mathQueueSamples = [];
   const changedBlocks = new Set();
   const changedBlockLengths = new Set();
   const projectionModes = {};
@@ -95,6 +97,7 @@ function summarizeHarnessMetrics(metrics = []) {
     }
     if (metric.stage === "markdown-typewriter") {
       typewriterSamples.push(metric);
+      if (typeof metric.scheduler === "string") typewriterSchedulerModes.add(metric.scheduler);
       if (metric.terminal === true) typewriterTerminalSamples.push(metric);
       if (metric.sourceVisibleCharacters >= 500 && metric.displayedVisibleCharacters > 0) {
         typewriterSteadyStateSamples.push(metric);
@@ -103,6 +106,7 @@ function summarizeHarnessMetrics(metrics = []) {
     if (metric.stage === "transcript-scroll" && metric.owner === "typewriter-tail-inertial") {
       transcriptScrollSamples.push(metric);
     }
+    if (metric.stage === "markdown-math-queue") mathQueueSamples.push(metric);
     if (metric.renderer?.startsWith("incremark") && metric.tableAst) {
       const signature = JSON.stringify(metric.tableAst);
       if (signature !== lastTableAstSignature) {
@@ -162,45 +166,35 @@ function summarizeHarnessMetrics(metrics = []) {
     katexHtmlCharacters: summary(katexHtmlLengths),
     katexRenderWindowMs: katexTimes.length ? Math.max(...katexTimes) - Math.min(...katexTimes) : null,
     katexTimingBlockers: [...katexTimingBlockers],
+    mathQueue: {
+      sampleCount: mathQueueSamples.length,
+      queueDepth: summarizeNumbers(mathQueueSamples.map((metric) => metric.queueDepth).filter((value) => typeof value === "number")),
+      oldestJobAgeMs: summarizeNumbers(mathQueueSamples.map((metric) => metric.oldestJobAgeMs).filter((value) => typeof value === "number")),
+      processedJobs: summarizeNumbers(mathQueueSamples.map((metric) => metric.processedJobs).filter((value) => typeof value === "number")),
+      cancelledJobs: Math.max(0, ...mathQueueSamples.map((metric) => Number(metric.cancelledJobs) || 0)),
+      policies: [...new Set(mathQueueSamples.map((metric) => metric.queuePolicy).filter((value) => typeof value === "string"))],
+    },
     changedRowKeyEventCount: changedRowKeys.length,
     uniqueChangedRowKeyCount: changedRowKeySet.size,
     changedRowKeyLengthEvidence: redactChangedKeys(changedRowKeys),
     tableAstTransitions,
     typewriter: {
       sampleCount: typewriterSamples.length,
+      schedulerModes: [...typewriterSchedulerModes],
       sourceVisibleCharacters: summarizeNumbers(typewriterSamples.map((metric) => metric.sourceVisibleCharacters).filter((value) => typeof value === "number")),
       displayedVisibleCharacters: summarizeNumbers(typewriterSamples.map((metric) => metric.displayedVisibleCharacters).filter((value) => typeof value === "number")),
       backlogCharacters: summarizeNumbers(typewriterSamples.map((metric) => metric.backlogCharacters).filter((value) => typeof value === "number")),
       backlogAgeMs: summarizeNumbers(typewriterSamples.map((metric) => metric.backlogAgeMs).filter((value) => typeof value === "number")),
-      observedRate: summarizeNumbers(typewriterSamples.map((metric) => metric.observedRate).filter((value) => typeof value === "number")),
-      targetRate: summarizeNumbers(typewriterSamples.map((metric) => metric.targetRate).filter((value) => typeof value === "number")),
-      controlRate: summarizeNumbers(typewriterSamples.map((metric) => metric.controlRate).filter((value) => typeof value === "number")),
-      displayRate: summarizeNumbers(typewriterSamples.map((metric) => metric.displayRate).filter((value) => typeof value === "number")),
-      relativeLag: summarizeNumbers(typewriterSamples.map((metric) => metric.relativeLag).filter((value) => typeof value === "number")),
-      charsPerTick: summarizeNumbers(typewriterSamples.map((metric) => metric.charsPerTick).filter((value) => typeof value === "number")),
+      pendingBlockCount: summarizeNumbers(typewriterSamples.map((metric) => metric.pendingBlockCount).filter((value) => typeof value === "number")),
+      completedBlockCount: summarizeNumbers(typewriterSamples.map((metric) => metric.completedBlockCount).filter((value) => typeof value === "number")),
+      charsPerFrame: summarizeNumbers(typewriterSamples.map((metric) => metric.charsPerFrame).filter((value) => typeof value === "number")),
       frameIntervalMs: summarizeNumbers(typewriterSamples.map((metric) => metric.frameIntervalMs).filter((value) => typeof value === "number")),
-      tickInterval: summarizeNumbers(typewriterSamples.map((metric) => metric.tickInterval).filter((value) => typeof value === "number")),
+      frameBudgetMs: summarizeNumbers(typewriterSamples.map((metric) => metric.frameBudgetMs).filter((value) => typeof value === "number")),
       frameWorkMs: summarizeNumbers(typewriterSamples.map((metric) => metric.frameWorkMs).filter((value) => typeof value === "number")),
       frameWorkEmaMs: summarizeNumbers(typewriterSamples.map((metric) => metric.frameWorkEmaMs).filter((value) => typeof value === "number")),
-      frameGapMs: summarizeNumbers(typewriterSamples.map((metric) => metric.frameGapMs).filter((value) => typeof value === "number")),
-      commitToNextFrameMs: summarizeNumbers(typewriterSamples.map((metric) => metric.commitToNextFrameMs).filter((value) => typeof value === "number")),
-      saturationMs: summarizeNumbers(typewriterSamples.map((metric) => metric.saturationMs).filter((value) => typeof value === "number")),
-      frameHealthyFalseCount: typewriterSamples.filter((metric) => metric.frameHealthy === false).length,
-      stepChangedCount: typewriterSamples.filter((metric) => metric.stepChanged === true).length,
-      stepIncreaseMax: Math.max(0, ...typewriterSamples.map((metric) => {
-        if (typeof metric.previousCharsPerTick !== "number" || typeof metric.charsPerTick !== "number") return 0;
-        return Math.max(0, metric.charsPerTick - metric.previousCharsPerTick);
-      })),
-      fallbackModes: Object.fromEntries(typewriterSamples.reduce((counts, metric) => {
-        if (typeof metric.fallbackMode === "string") counts.set(metric.fallbackMode, (counts.get(metric.fallbackMode) || 0) + 1);
-        return counts;
-      }, new Map())),
-      lagTargetMisses: typewriterSamples.filter((metric) => metric.lagTargetMet === false).length,
-      warmupSourceCharacterThreshold: 500,
+      terminalBacklogCharacters: typewriterTerminalSamples.at(-1)?.backlogCharacters ?? null,
       steadyStateSampleCount: typewriterSteadyStateSamples.length,
-      steadyStateRelativeLag: summarizeNumbers(typewriterSteadyStateSamples.map((metric) => metric.relativeLag).filter((value) => typeof value === "number")),
       steadyStateBacklogAgeMs: summarizeNumbers(typewriterSteadyStateSamples.map((metric) => metric.backlogAgeMs).filter((value) => typeof value === "number")),
-      steadyStateLagTargetMisses: typewriterSteadyStateSamples.filter((metric) => metric.lagTargetMet === false).length,
       last: typewriterSamples.at(-1) || null,
       terminalSampleCount: typewriterTerminalSamples.length,
       terminal: typewriterTerminalSamples.at(-1) || null,
@@ -250,11 +244,12 @@ function summarizeHarnessMetrics(metrics = []) {
   };
 }
 
-function rendererPath(renderer, typewriter = false) {
+function rendererPath(renderer, typewriter = false, pacing = "buffered") {
   const selectedRenderer = typewriter && renderer === "incremark" ? "incremark-typewriter" : renderer;
   const params = new URLSearchParams({
     markdownRenderer: selectedRenderer,
   });
+  if (typewriter) params.set("incremarkPacing", pacing);
   return `/?${params.toString()}`;
 }
 
@@ -1564,7 +1559,7 @@ export async function runBrowserStreamingScenario(page, scenario) {
     browserErrors.push(`${response.status()} ${request.method()} ${new URL(response.url()).pathname}`);
   });
   await installBrowserProtocol(page, scenario);
-  await page.goto(rendererPath(renderer, Boolean(scenario.typewriter)));
+  await page.goto(rendererPath(renderer, Boolean(scenario.typewriter), scenario.pacing));
   await page.getByRole("textbox", { name: "Message Pi" }).fill(scenario.prompt || `Run ${scenario.name}`);
   await page.getByRole("button", { name: "Send message" }).click();
   const sourceText = scenario.cadence.deltas.join("");
@@ -1741,6 +1736,7 @@ export async function runBrowserStreamingScenario(page, scenario) {
       profile: scenario.profile || "fixed",
       renderer,
       typewriter: Boolean(scenario.typewriter),
+      pacing: scenario.pacing || "buffered",
       runtime,
       command: "npm run test:harness:browser",
     },
@@ -1749,6 +1745,7 @@ export async function runBrowserStreamingScenario(page, scenario) {
     browser: {
       renderer,
       typewriter: Boolean(scenario.typewriter),
+      pacing: scenario.pacing || "buffered",
       sourceCharacters: sourceText.length,
       sourceDeltaCount: scenario.cadence.deltas.length,
       sourceEvidence: { length: sourceText.length, digest: raw.sourceDigest || null },
@@ -1850,7 +1847,7 @@ export async function runBrowserReconnectScenario(page, scenario) {
     },
     instrumentation: scenario.instrumentation !== false,
   });
-  await page.goto(rendererPath(renderer, Boolean(scenario.typewriter)));
+  await page.goto(rendererPath(renderer, Boolean(scenario.typewriter), scenario.pacing));
   await page.getByRole("textbox", { name: "Message Pi" }).fill(scenario.prompt || `Run ${scenario.name}`);
   await page.getByRole("button", { name: "Send message" }).click();
   const expectedText = scenario.initialText + scenario.recoveredDelta;
@@ -1902,8 +1899,9 @@ export async function runBrowserReconnectScenario(page, scenario) {
     metadata: {
       commit: process.env.CONDUIT_RELEASE || "working-tree",
       profile: "reconnect",
-        renderer,
-        typewriter: Boolean(scenario.typewriter),
+      renderer,
+      typewriter: Boolean(scenario.typewriter),
+      pacing: scenario.pacing || "buffered",
       runtime,
       command: "npm run test:harness:browser",
     },
@@ -1918,6 +1916,7 @@ export async function runBrowserReconnectScenario(page, scenario) {
       recoveryMs: raw.resumedAt - raw.disconnectedAt,
       displayCompletionDelayMs: displayCompletedAt == null ? null : displayCompletedAt - raw.completedAt,
       typewriter: Boolean(scenario.typewriter),
+      pacing: scenario.pacing || "buffered",
       finalSemanticTextEvidence: { length: normalizeSemanticText(raw.finalSemanticText).length, digest: raw.finalSemanticTextDigest || null },
       finalSemanticTextLength: normalizeSemanticText(raw.finalSemanticText).length,
       structuralFingerprint,

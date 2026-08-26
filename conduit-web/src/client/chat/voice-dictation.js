@@ -68,6 +68,9 @@ export function releasesShortcut(event, shortcut) {
     || (released === "shift" && parts.modifiers.has("Shift"));
 }
 
+/** @typedef {import("./voice-dictation-types.ts").VoiceDictationSettings} VoiceDictationSettings */
+
+/** @param {Storage=} storage @returns {VoiceDictationSettings} */
 export function loadVoiceDictationSettings(storage = globalThis.localStorage) {
   try {
     const stored = JSON.parse(storage?.getItem(VOICE_DICTATION_STORAGE_KEY) || "null");
@@ -85,6 +88,7 @@ export function loadVoiceDictationSettings(storage = globalThis.localStorage) {
   }
 }
 
+/** @param {VoiceDictationSettings} settings @param {Storage=} storage @returns {VoiceDictationSettings} */
 export function saveVoiceDictationSettings(settings, storage = globalThis.localStorage) {
   const normalized = {
     shortcut: normalizeShortcut(settings.shortcut),

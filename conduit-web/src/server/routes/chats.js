@@ -23,6 +23,7 @@ export function registerChatRoutes(app, {
     try {
       const project = await projects.get(request.query.projectId || "chat");
       if (!project) return response.status(404).json({ error: "project_not_found" });
+      if (request.query.refresh === "true") await modelCatalog.refreshFromNetwork();
       response.json({ installationId: "conduit-pinned", runtimeKind: "conduit_profile", ...await modelCatalog.list(project.path) });
     } catch (error) {
       next(error);

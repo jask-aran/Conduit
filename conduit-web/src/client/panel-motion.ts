@@ -10,7 +10,7 @@ export type PanelGeometryMotionDetail = {
   id: number;
   source: PanelGeometryMotionSource;
   size: number;
-  /** When set, transcript uses inverse-translate mode. Omit for edge/resize preview. */
+  /** When set, transcript uses inverse-translate mode around one layout commit. */
   targetSize?: number;
   duration?: number;
   easing?: string;
@@ -30,10 +30,7 @@ export type PanelEdgeAnimation = {
   cancel: () => void;
 };
 
-/**
- * Animate a scalar edge on animation frames at the display refresh rate.
- * Used for sidebar/workspace open-close so the real flex shell moves continuously.
- */
+/** Animate a scalar edge on animation frames at the display refresh rate. */
 export function animatePanelEdge(options: {
   from: number;
   to: number;
@@ -45,7 +42,6 @@ export function animatePanelEdge(options: {
   const { from, to, onUpdate, onComplete } = options;
   let frame = 0;
   let cancelled = false;
-  // First paint is the start edge so open/close is never a single end-state frame.
   onUpdate(from, 0);
   const startedAt = performance.now();
 

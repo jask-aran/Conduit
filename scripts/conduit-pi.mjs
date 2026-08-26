@@ -8,6 +8,7 @@ import {
   buildPiResourceArgs,
   loadPiModelPatterns,
   loadPiTemplate,
+  resolvePiProcess,
 } from "./pi-runtime.mjs";
 
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -18,10 +19,11 @@ const bundledPi = path.join(repositoryRoot, "conduit-web/node_modules/@earendil-
 
 await fs.mkdir(agentDir, { recursive: true });
 const models = loadPiModelPatterns(agentDir, template.models);
-const child = spawn(process.env.CONDUIT_PI_COMMAND || bundledPi, [
+const processSpec = resolvePiProcess(process.env.CONDUIT_PI_COMMAND || bundledPi, [
   ...buildPiResourceArgs({ ...template, models }),
   ...process.argv.slice(2),
-], {
+]);
+const child = spawn(processSpec.command, processSpec.args, {
   cwd: process.cwd(),
   env: buildPiEnvironment(agentDir),
   stdio: "inherit",

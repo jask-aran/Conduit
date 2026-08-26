@@ -1,5 +1,6 @@
 import { audioInputConstraints, formatMicrophoneError, hasAudioSignal, isUnavailableAudioInputError, normalizeVoiceCaptureProfile, type AudioSignalLevel, type VoiceCaptureProfile } from "./voice-audio";
 import type { VoiceDictationClientDiagnostics, VoiceDictationDiagnostics } from "./voice-dictation-diagnostics";
+import { dictationSocketUrl } from "../api/transport";
 
 export type VoiceDictationState = "idle" | "starting" | "listening" | "finishing" | "waiting" | "transcribing" | "completed" | "failed";
 
@@ -138,11 +139,6 @@ void import("./voice-dictation-diagnostics").then(({ createVoiceDictationDiagnos
 }).catch((error) => {
   console.warn("Voice dictation diagnostics are unavailable; capture will continue without telemetry", error);
 });
-
-function socketUrl() {
-  const protocol = location.protocol === "https:" ? "wss:" : "ws:";
-  return `${protocol}//${location.host}/v0/dictation/stream`;
-}
 
 export function createVoiceDictationClient(callbacks: VoiceDictationCallbacks, options: VoiceDictationOptions = {}) {
   let state: VoiceDictationState = "idle";
@@ -524,7 +520,7 @@ export function createVoiceDictationClient(callbacks: VoiceDictationCallbacks, o
   };
   requestStop = stop;
 
-  const beginStart = (acceptedAt: number) => {
+  const beginStart = async (acceptedAt: number) => {
     if (state !== "starting") return;
     explicitlyClosed = false;
     stopRequested = false;
@@ -579,7 +575,7 @@ export function createVoiceDictationClient(callbacks: VoiceDictationCallbacks, o
           fail(formatted);
         },
       );
-      socket = new WebSocket(socketUrl());
+      socket = new WebSocket(await dictationSocketUrl());
       socket.binaryType = "arraybuffer";
       socket.onmessage = (event) => {
         try {
@@ -661,7 +657,7 @@ export function createVoiceDictationClient(callbacks: VoiceDictationCallbacks, o
     catch { /* beginStart reports unsupported or failed context creation. */ }
     // Telemetry is optional. Do not wait for its lazy chunk before opening the
     // microphone and transport path.
-    if (state === "starting") beginStart(acceptedAt);
+    if (state === "starting") void beginStart(acceptedAt).catch(fail);
   };
 
   const dispose = () => {

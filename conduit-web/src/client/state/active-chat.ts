@@ -1,6 +1,7 @@
 import { batch, createMemo, createSignal, onCleanup } from "solid-js";
 import { deriveFineActivity } from "../../activity.js";
 import { api, asList } from "../api/client";
+import { webSocketUrl } from "../api/transport";
 import { isStructuredGenerationEvent, normalizeLiveEvent } from "../api/live-events";
 import type { LiveEvent, RuntimeStateEvent, StructuredGenerationEvent } from "../api/live-events";
 import type {
@@ -71,7 +72,7 @@ interface ActiveChatOptions {
 export function createActiveChat(options: ActiveChatOptions) {
   const { catalogue, models, attachments, onError } = options;
   const [status, setStatus] = createSignal<ChatStatus>("draft");
-  const [title, setTitle] = createSignal("New chat");
+  const [title, setTitle] = createSignal("");
   const [templateId, setTemplateId] = createSignal<string | null>(null);
   const [runtimeIdentity, setRuntimeIdentity] = createSignal<RuntimeIdentity | null>(null);
   const [live, setLive] = createSignal<LiveRecord | null>(null);
@@ -338,23 +339,31 @@ export function createActiveChat(options: ActiveChatOptions) {
       });
     }
     currentGeneration = next.id;
-    const blocks = next.assistantMessages.flatMap((message) => message.blocks);
-    const latest = blocks.at(-1);
-    setThinking(latest?.type === "thinking" && latest.status === "streaming");
-    setResponding(latest?.type === "text" && latest.status === "streaming");
-    const runningTool = Object.values(next.toolExecutions).find((tool) => tool.status === "running");
-    setActiveToolName(runningTool?.name || null);
-    setRetry((next as { retry?: RetryState | null }).retry || null);
+    const terminal = ["stopped", "complete", "failed"].includes(next.status);
+    if (terminal) {
+      resetLiveFlags();
+    } else {
+      const blocks = next.assistantMessages.flatMap((message) => message.blocks);
+      const latest = blocks.at(-1);
+      setThinking(latest?.type === "thinking" && latest.status === "streaming");
+      setResponding(latest?.type === "text" && latest.status === "streaming");
+      const runningTool = Object.values(next.toolExecutions).find((tool) => tool.status === "running");
+      setActiveToolName(runningTool?.name || null);
+      setRetry((next as { retry?: RetryState | null }).retry || null);
+    }
     if (next.status === "stopping") setGeneration("stopping");
     else if (next.status === "failed") setGeneration("failed");
-    else if (["stopped", "complete"].includes(next.status)) {
+    else if (next.status === "stopped") {
       stopPending = false;
-      setGeneration("idle");
+      setGeneration("interrupted");
       if (event.type === "generation_stopped" && Boolean(event.processTerminated)) {
         setLive(null);
         cancelReconnect();
         socket?.close();
       }
+    } else if (next.status === "complete") {
+      stopPending = false;
+      setGeneration("idle");
     } else {
       stopPending = false;
       setGeneration("active");
@@ -370,7 +379,7 @@ export function createActiveChat(options: ActiveChatOptions) {
       setTools(nextTools);
       setPageBefore(detail.page?.before || null);
       setStatus(detail.status || "draft");
-      setTitle(detail.title || "New chat");
+      setTitle(detail.title ?? "");
       if (detail.templateId) setTemplateId(detail.templateId);
       if (detail.runtime) setRuntimeIdentity(detail.runtime);
     });
@@ -394,7 +403,7 @@ export function createActiveChat(options: ActiveChatOptions) {
     const turnOpen = Boolean(session.generation && !session.generation.closed && !session.generation.settled);
     if (session.stopping) setGeneration("stopping");
     else if (turnOpen || session.active) setGeneration("active");
-    else setGeneration((current) => current === "stopping" ? current : "idle");
+    else setGeneration((current) => ["stopping", "interrupted"].includes(current) ? current : "idle");
   };
 
   const scheduleReconnect = (record: LiveRecord, chatId: string, selection: number) => {
@@ -414,10 +423,10 @@ export function createActiveChat(options: ActiveChatOptions) {
     }, delay);
   };
 
-  const connect = (record: LiveRecord, chatId: string, selection: number) => {
+  const connect = async (record: LiveRecord, chatId: string, selection: number) => {
     cancelReconnect();
     socket?.close();
-    const next = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}${record.streamUrl || `/v0/live-sessions/${record.id}/stream`}`);
+    const next = new WebSocket(await webSocketUrl(record.streamUrl || `/v0/live-sessions/${record.id}/stream`));
     socket = next;
     next.onmessage = ({ data }) => {
       if (socket !== next || selection !== selectionToken || selectedId() !== chatId) return;
@@ -456,7 +465,7 @@ export function createActiveChat(options: ActiveChatOptions) {
       if (record.contextUsage) setContextUsage(record.contextUsage);
       if (record.sessionStats) setSessionStats(record.sessionStats);
       if (record.cacheStats) setCacheStats(record.cacheStats);
-      connect(record, chatId, selection);
+      await connect(record, chatId, selection);
       await new Promise<void>((resolve, reject) => {
         const current = socket;
         if (!current) return reject(new Error("Could not connect to Pi"));
@@ -503,6 +512,19 @@ export function createActiveChat(options: ActiveChatOptions) {
     if (!record) throw new Error("Chat switched before Pi was ready");
     return record;
   };
+
+  const resumeLive = () => {
+    if (document.visibilityState === "hidden") return;
+    const record = live();
+    const chatId = selectedId();
+    if (record && chatId && record.chatId === chatId) void connect(record, chatId, selectionToken).catch(onError);
+  };
+  const restoreLive = (event: PageTransitionEvent) => {
+    if (event.persisted) resumeLive();
+  };
+  document.addEventListener("visibilitychange", resumeLive);
+  window.addEventListener("pageshow", restoreLive);
+  window.addEventListener("online", resumeLive);
 
   function applyLiveEvent(event: LiveEvent) {
     if (isStructuredGenerationEvent(event)) {
@@ -799,7 +821,13 @@ export function createActiveChat(options: ActiveChatOptions) {
     return derived.kind === "starting" ? { kind: "idle", label: null } : derived;
   });
 
-  onCleanup(() => { cancelReconnect(); socket?.close(); });
+  onCleanup(() => {
+    cancelReconnect();
+    socket?.close();
+    document.removeEventListener("visibilitychange", resumeLive);
+    window.removeEventListener("pageshow", restoreLive);
+    window.removeEventListener("online", resumeLive);
+  });
 
   return {
     status, setStatus, title, setTitle, templateId, setTemplateId, runtimeIdentity, setRuntimeIdentity,

@@ -1,35 +1,9 @@
 let registeredServiceWorker: ServiceWorkerRegistration | null = null;
 let updateRequest: Promise<void> | null = null;
+let resetRequest: Promise<void> | null = null;
 
 export function rememberPwaRegistration(registration: ServiceWorkerRegistration | undefined) {
   registeredServiceWorker = registration || null;
-}
-
-function observeControllerChange(serviceWorker: ServiceWorkerContainer) {
-  let timer: number | undefined;
-  let finishObservation: (() => void) | undefined;
-  let stopped = false;
-  const changed = new Promise<void>((resolve, reject) => {
-    const finish = () => {
-      if (stopped) return;
-      stopped = true;
-      if (timer !== undefined) window.clearTimeout(timer);
-      serviceWorker.removeEventListener("controllerchange", finish);
-      resolve();
-    };
-    serviceWorker.addEventListener("controllerchange", finish, { once: true });
-    timer = window.setTimeout(() => {
-      if (stopped) return;
-      stopped = true;
-      serviceWorker.removeEventListener("controllerchange", finish);
-      reject(new Error("The app update did not activate within 60 seconds."));
-    }, 60_000);
-    finishObservation = finish;
-  });
-  return {
-    changed,
-    stop: () => finishObservation?.(),
-  };
 }
 
 async function performPwaUpdate(reloadPage: () => void) {
@@ -45,17 +19,7 @@ async function performPwaUpdate(reloadPage: () => void) {
     return;
   }
 
-  const hadPendingWorker = Boolean(registration.installing || registration.waiting);
-  const controllerChange = observeControllerChange(serviceWorker);
-  try {
-    await registration.update();
-    const waitingWorker = registration.waiting;
-    waitingWorker?.postMessage({ type: "SKIP_WAITING" });
-    if (hadPendingWorker || registration.installing || waitingWorker) await controllerChange.changed;
-  } finally {
-    controllerChange.stop();
-  }
-
+  await registration.update();
   reloadPage();
 }
 
@@ -66,4 +30,29 @@ export function forcePwaUpdate(reloadPage: () => void = () => window.location.re
     });
   }
   return updateRequest;
+}
+
+async function performPwaCacheReset(reloadPage: () => void) {
+  if ("serviceWorker" in navigator) {
+    const registrations = await navigator.serviceWorker.getRegistrations();
+    await Promise.all(registrations.map((registration) => registration.unregister()));
+    registeredServiceWorker = null;
+  }
+
+  if ("caches" in globalThis) {
+    const cacheNames = await globalThis.caches.keys();
+    const precacheNames = cacheNames.filter((cacheName) => cacheName.includes("-precache-"));
+    await Promise.all(precacheNames.map((cacheName) => globalThis.caches.delete(cacheName)));
+  }
+
+  reloadPage();
+}
+
+export function resetPwaAppCache(reloadPage: () => void = () => window.location.reload()) {
+  if (!resetRequest) {
+    resetRequest = performPwaCacheReset(reloadPage).finally(() => {
+      resetRequest = null;
+    });
+  }
+  return resetRequest;
 }

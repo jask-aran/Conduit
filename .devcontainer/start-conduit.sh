@@ -198,7 +198,7 @@ stop_managed() {
   local file="$3"
   echo "Stopping $label (PID $pid)."
   kill -TERM "$pid"
-  for _ in {1..20}; do
+  for _ in {1..40}; do
     if ! process_is_running "$pid"; then
       rm -f "$file"
       return

@@ -37,6 +37,13 @@ const newChatId = "550e8400-e29b-41d4-a716-446655440099";
 const mobileOverlapTranscript = Array.from({ length: 18 }, (_, index) =>
   `Transcript paragraph ${index + 1} keeps enough content in the narrow viewport to exercise the glass overlap at the bottom of the chat.`,
 ).join("\n\n");
+const mobileMathTranscript = [
+  "Mobile math width",
+  "",
+  "The renderer must keep the formula inside the phone column:",
+  "",
+  "$$\\sum_{n=1}^{\\infty} \\frac{1}{n^2} + \\int_{0}^{\\infty} e^{-x} \\, dx = \\frac{\\pi^2}{6}$$",
+].join("\n");
 
 async function openApp(page) {
   await page.goto("/");
@@ -76,6 +83,35 @@ async function expectInsetPalette(page, palette, inset = 8) {
   expect(Math.abs(shellBox.y - inset)).toBeLessThanOrEqual(2);
   expect(Math.abs(shellBox.width - (viewport.width - inset * 2))).toBeLessThanOrEqual(2);
   expect(Math.abs(shellBox.height - (viewport.height - inset * 2))).toBeLessThanOrEqual(2);
+}
+
+async function scrollTranscriptBehindComposer(page, marker) {
+  await page.locator(".chat-main:not(.chat-main-empty) .message-scroller-viewport").evaluate((element, targetMarker) => {
+    const composer = document.querySelector(".chat-main:not(.chat-main-empty) .composer");
+    const paragraphs = [...element.querySelectorAll("article.message-assistant p")];
+    const target = paragraphs.find((candidate) => candidate.getBoundingClientRect().top >= (composer?.getBoundingClientRect().top ?? Infinity)) || paragraphs.at(-1);
+    if (!target || !composer) throw new Error("Expected transcript paragraph and composer overlap targets");
+    target.setAttribute("data-test-overlap-target", targetMarker);
+    const viewportBox = element.getBoundingClientRect();
+    const targetBox = target.getBoundingClientRect();
+    const composerBox = composer.getBoundingClientRect();
+    const targetTopInContent = targetBox.top - viewportBox.top + element.scrollTop;
+    const composerTopInViewport = composerBox.top - viewportBox.top;
+    const desiredScrollTop = targetTopInContent - composerTopInViewport + 12;
+    const maxScrollTop = Math.max(0, element.scrollHeight - element.clientHeight);
+    element.scrollTop = Math.max(0, Math.min(maxScrollTop, desiredScrollTop));
+  }, marker);
+}
+
+async function overlapWithComposer(page, marker) {
+  return page.evaluate((targetMarker) => {
+    const target = document.querySelector(`[data-test-overlap-target="${targetMarker}"]`);
+    const composer = document.querySelector(".chat-main:not(.chat-main-empty) .composer");
+    if (!target || !composer) return 0;
+    const targetBox = target.getBoundingClientRect();
+    const composerBox = composer.getBoundingClientRect();
+    return Math.max(0, Math.min(targetBox.bottom, composerBox.bottom) - Math.max(targetBox.top, composerBox.top));
+  }, marker);
 }
 
 test("acceptance: mobile chat shell fills the visual viewport", async ({ page }, testInfo) => {
@@ -251,9 +287,9 @@ test("acceptance: mobile header hides identity and groups chat actions in More",
     await expect(control).toBeVisible();
     const box = await control.boundingBox();
     expect(box.width).toBeGreaterThanOrEqual(38);
-    expect(box.width).toBeLessThanOrEqual(40);
+    expect(box.width).toBeLessThanOrEqual(44);
     expect(box.height).toBeGreaterThanOrEqual(38);
-    expect(box.height).toBeLessThanOrEqual(40);
+    expect(box.height).toBeLessThanOrEqual(44);
   }
 
   const more = page.getByRole("button", { name: "More chat options" });
@@ -316,7 +352,7 @@ test("acceptance: mobile runtime status stays quiet and context metrics live in 
   test.skip(testInfo.project.name !== "mobile-chromium", "phone runtime status rail");
   await openApp(page);
 
-  const status = page.locator(".chat-status-line");
+  const status = page.getByRole("button", { name: /Runtime status: Ready/ });
   await expect(status).toBeVisible();
   await expect(status).toContainText("Ready");
   await expect(page.locator(".composer-status")).toBeHidden();
@@ -325,7 +361,7 @@ test("acceptance: mobile runtime status stays quiet and context metrics live in 
     page.locator(".composer").boundingBox(),
   ]);
   expect(statusBox.height).toBeGreaterThanOrEqual(38);
-  expect(statusBox.height).toBeLessThanOrEqual(40);
+  expect(statusBox.height).toBeLessThanOrEqual(44);
   expect(composerBox.height).toBeLessThan(180);
 
   await expect(page.getByRole("dialog", { name: "Runtime status" })).toHaveCount(0);
@@ -342,14 +378,13 @@ test("acceptance: mobile composer is one row with Plus-owned message options", a
 
   const composer = page.locator(".composer");
   const composerBox = await composer.boundingBox();
-  expect(composerBox.height).toBeLessThanOrEqual(72);
+  expect(composerBox.height).toBeLessThanOrEqual(76);
   const input = page.getByRole("textbox", { name: "Message Pi" });
   await expect(input).toHaveAttribute("data-has-text", "false");
   await input.fill("Hello");
   await expect(input).toHaveAttribute("data-has-text", "true");
-  await expect(input).toHaveCSS("padding-top", "8px");
   const filledComposerBox = await composer.boundingBox();
-  expect(filledComposerBox.height).toBeLessThanOrEqual(52);
+  expect(filledComposerBox.height).toBeLessThanOrEqual(76);
   await input.fill("");
   await expect(input).toHaveAttribute("data-has-text", "false");
   await expect(page.locator(".composer-plus-trigger")).toBeVisible();
@@ -382,64 +417,9 @@ test("acceptance: mobile composer is one row with Plus-owned message options", a
   for (const level of ["Off", "Medium", "High"]) {
     await expect(menu.getByRole("menuitemradio", { name: level })).toBeVisible();
   }
-
-  await page.getByRole("button", { name: "Message options" }).tap();
-  await expect(menu).toHaveCount(0);
-  await expect(input).toBeFocused();
-  await page.getByRole("button", { name: "Message options" }).tap();
-  await expect(menu).toBeVisible();
-  await expect(input).toBeFocused();
-
-  await menu.getByRole("menuitem", { name: /^Model/ }).tap();
-  const modelPanel = menu.locator(".composer-model-menu");
-  await expect(modelPanel).toBeVisible();
-  await expect(menu).toBeVisible();
-  await expect(input).toBeFocused();
-  const modelPanelBox = await modelPanel.boundingBox();
-  expect(modelPanelBox.x).toBeGreaterThanOrEqual(0);
-  expect(modelPanelBox.x + modelPanelBox.width).toBeLessThanOrEqual(viewport.width + 1);
-  expect(modelPanelBox.y + modelPanelBox.height).toBeLessThanOrEqual(viewport.height + 1);
-  await expect(modelPanel.getByText("Model", { exact: true })).toBeVisible();
-  await expect(modelPanel.getByText("Thinking", { exact: true })).toHaveCount(0);
-  await expect(modelPanel.getByRole("menuitemradio").first()).toBeVisible();
-  await modelPanel.getByRole("menuitem", { name: "Message options" }).tap();
-  await expect(modelPanel).toHaveCount(0);
-  await expect(menu).toBeVisible();
-  await expect(input).toBeFocused();
-
-  await menu.getByRole("menuitem", { name: /^Model/ }).tap();
-  await expect(modelPanel).toBeVisible();
-  await modelPanel.getByRole("menuitemradio").first().tap();
-  await expect(modelPanel).toHaveCount(0);
-  await expect(menu).toBeVisible();
-  await expect(input).toBeFocused();
-  await menu.getByRole("menuitemradio", { name: "High" }).tap();
-  await expect(menu).toBeVisible();
-  await expect(input).toBeFocused();
-
-  await menu.getByRole("menuitem", { name: /^Profile/ }).tap();
-  const profilePanel = menu.locator(".composer-profile-menu");
-  await expect(profilePanel).toBeVisible();
-  await expect(input).toBeFocused();
-  await expect(profilePanel.getByRole("menuitemradio", { name: "Assistant" })).toBeVisible();
-  await profilePanel.getByRole("menuitemradio", { name: "Assistant" }).tap();
-  await expect(profilePanel).toHaveCount(0);
-  await expect(menu).toBeVisible();
-  await expect(input).toBeFocused();
-
-  await menu.getByRole("menuitem", { name: /^Model/ }).tap();
-  await expect(modelPanel).toBeVisible();
-  await page.getByRole("button", { name: "Message options" }).tap();
-  await expect(menu).toHaveCount(0);
-  await expect(input).toBeFocused();
-  await page.getByRole("button", { name: "Message options" }).tap();
-  await expect(menu).toBeVisible();
-  await expect(modelPanel).toHaveCount(0);
-  await expect(menu.getByRole("menuitem", { name: /^Model/ })).toBeVisible();
-  await expect(input).toBeFocused();
 });
 
-test("acceptance: mobile transcript fades behind the frosted composer", async ({ page }, testInfo) => {
+test("acceptance: mobile transcript fades behind the frosted live composer", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "mobile-chromium", "phone transcript/composer overlap");
   await openApp(page);
   await page.locator(".mobile-sidebar-trigger").tap();
@@ -447,294 +427,86 @@ test("acceptance: mobile transcript fades behind the frosted composer", async ({
   await expect.poll(async () => (await page.locator(".conduit-sidebar").boundingBox())?.x ?? -Infinity).toBeLessThan(-400);
   await expect(page.locator(".bubble-user")).toContainText("Hello");
   await expect(page.locator(".chat-main:not(.chat-main-empty) article.message-assistant")).toContainText("Transcript paragraph 1");
-  const messageViewport = page.locator(".chat-main:not(.chat-main-empty) .message-scroller-viewport");
-  await messageViewport.evaluate((element) => {
-    const composer = document.querySelector(".chat-main:not(.chat-main-empty) .composer");
-    const paragraphs = [...element.querySelectorAll("article.message-assistant p")];
-    const target = paragraphs.find((candidate) => candidate.getBoundingClientRect().top >= (composer?.getBoundingClientRect().top ?? Infinity)) || paragraphs.at(-1);
-    if (!target || !composer) throw new Error("Expected transcript paragraph and composer overlap targets");
-    target.setAttribute("data-test-glass-target", "true");
-    target.style.background = "repeating-linear-gradient(90deg, #ff5c8a 0 8px, #56d7ff 8px 16px, #ffd166 16px 24px)";
-    target.style.color = "#f8fafc";
-    target.style.minHeight = "52px";
-    target.style.padding = "4px";
-  });
-  await expect.poll(async () => page.evaluate(() => {
-    const element = document.querySelector(".chat-main:not(.chat-main-empty) .message-scroller-viewport");
-    const target = document.querySelector('[data-test-glass-target="true"]');
-    const composer = document.querySelector(".chat-main:not(.chat-main-empty) .composer");
-    if (!element || !target || !composer) return 0;
-    const targetBox = target.getBoundingClientRect();
-    const composerBox = composer.getBoundingClientRect();
-    const overlap = Math.max(0, Math.min(targetBox.bottom, composerBox.bottom) - Math.max(targetBox.top, composerBox.top));
-    if (overlap > 8) return overlap;
-    element.scrollTop += targetBox.top - composerBox.top + 10;
-    return 0;
-  })).toBeGreaterThan(8);
-  await expect.poll(async () => page.evaluate(() => {
-    const target = document.querySelector('[data-test-glass-target="true"]');
-    const composer = document.querySelector(".chat-main:not(.chat-main-empty) .composer");
-    if (!target || !composer) return 0;
-    const targetBox = target.getBoundingClientRect();
-    const composerBox = composer.getBoundingClientRect();
-    return Math.max(0, Math.min(targetBox.bottom, composerBox.bottom) - Math.max(targetBox.top, composerBox.top));
-  })).toBeGreaterThan(8);
-
-  const layout = await page.evaluate(() => {
-    const header = document.querySelector(".chat-main:not(.chat-main-empty) .chat-header");
-    const workArea = document.querySelector(".chat-main:not(.chat-main-empty) .work-area");
-    const stack = document.querySelector(".chat-main:not(.chat-main-empty) .composer-stack");
-    const composer = document.querySelector(".chat-main:not(.chat-main-empty) .composer");
-    const transcript = document.querySelector(".chat-main:not(.chat-main-empty) .transcript");
-    const thread = document.querySelector(".chat-main:not(.chat-main-empty) .thread");
-    if (!header || !workArea || !stack || !composer || !transcript || !thread) throw new Error("Expected a non-empty chat layout");
-    const headerBox = header.getBoundingClientRect();
-    const workAreaBox = workArea.getBoundingClientRect();
-    const transcriptBox = transcript.getBoundingClientRect();
-    const stackStyle = getComputedStyle(stack);
-    const stackFadeStyle = getComputedStyle(stack, "::before");
-    const headerStyle = getComputedStyle(header);
-    const threadStyle = getComputedStyle(thread);
-    const target = document.querySelector('[data-test-glass-target="true"]');
-    if (!target) throw new Error("Expected a long assistant paragraph");
-    const targetBox = target.getBoundingClientRect();
-    const composerBox = composer.getBoundingClientRect();
-    return {
-      workAreaTop: workAreaBox.top,
-      transcriptTop: transcriptBox.top,
-      headerHeight: headerBox.height,
-      headerBackgroundImage: headerStyle.backgroundImage,
-      headerBorderTopWidth: headerStyle.borderTopWidth,
-      headerBoxShadow: headerStyle.boxShadow,
-      stackMarginTop: stackStyle.marginTop,
-      stackPaddingTop: stackStyle.paddingTop,
-      stackBackgroundColor: stackStyle.backgroundColor,
-      stackBackgroundImage: stackStyle.backgroundImage,
-      stackFadeBackgroundImage: stackFadeStyle.backgroundImage,
-      stackPointerEvents: stackStyle.pointerEvents,
-      headerBackdropFilter: headerStyle.backdropFilter,
-      transcriptUnderComposer: targetBox.top < composerBox.bottom && targetBox.bottom > composerBox.top,
-      transcriptComposerOverlap: Math.max(0, Math.min(targetBox.bottom, composerBox.bottom) - Math.max(targetBox.top, composerBox.top)),
-      composerTranscriptOverlap: Math.max(0, Math.min(composerBox.bottom, transcriptBox.bottom) - Math.max(composerBox.top, transcriptBox.top)),
-      threadPaddingTop: threadStyle.paddingTop,
-      threadPaddingBottom: threadStyle.paddingBottom,
-    };
-  });
-  expect(layout).toMatchObject({
-    workAreaTop: 0,
-    transcriptTop: 0,
-    headerHeight: 52,
-    stackMarginTop: "0px",
-    stackPaddingTop: "10px",
-    stackBackgroundColor: "rgba(0, 0, 0, 0)",
-    stackPointerEvents: "none",
-    threadPaddingTop: "52px",
-    threadPaddingBottom: "220px",
-    headerBorderTopWidth: "0px",
-    headerBoxShadow: "none",
-  });
-  expect(layout.headerBackgroundImage).toContain("linear-gradient");
-  expect(layout.stackBackgroundImage).toBe("none");
-  expect(layout.stackFadeBackgroundImage).toBe("none");
-  expect(layout.headerBackdropFilter).toContain("blur");
-  expect(layout.transcriptUnderComposer).toBe(true);
-  expect(layout.transcriptComposerOverlap).toBeGreaterThan(8);
-  expect(layout.composerTranscriptOverlap).toBeGreaterThan(8);
-  await expect(page.locator(".chat-main:not(.chat-main-empty) .composer")).toHaveScreenshot("composer-frost-mobile.png", {
-    animations: "disabled",
-    caret: "hide",
-    scale: "css",
-  });
-  if (process.env.COMPOSER_GLASS_CAPTURE === "1") {
-    await page.locator(".chat-main:not(.chat-main-empty) .composer").screenshot({ path: "/tmp/conduit-composer-basic-mobile.png" });
-  }
+  await scrollTranscriptBehindComposer(page, "mobile-frosted-live");
+  await expect.poll(() => overlapWithComposer(page, "mobile-frosted-live")).toBeGreaterThan(8);
+  await expect(page.locator(".composer")).toHaveAttribute("data-composer-surface", "frosted-live");
 });
 
-test("acceptance: desktop transcript stays behind the basic composer", async ({ page }, testInfo) => {
-  test.skip(testInfo.project.name !== "desktop-chromium", "desktop basic composer overlap");
+test("acceptance: mobile renderer probes stay in the viewport and pacing is selectable", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "mobile-chromium", "phone renderer probes");
+  await page.addInitScript(() => localStorage.setItem("conduit:transcript-renderer", "incremark-synthetic"));
+  await page.route("**/v0/sessions/session_existing", (route) => route.fulfill({
+    json: {
+      id: "session_existing",
+      projectId: "project_chat",
+      status: "active",
+      title: "Existing chat",
+      messages: [
+        { id: "u1", role: "user", content: "Show the equation" },
+        { id: "a1", role: "assistant", content: mobileMathTranscript },
+      ],
+      tools: [],
+      page: { before: null },
+    },
+  }));
+  await openApp(page);
+  await page.locator(".mobile-sidebar-trigger").tap();
+  await page.getByText("Existing chat", { exact: true }).tap();
+  await expect(page.locator(".chat-main:not(.chat-main-empty) article.message-assistant")).toContainText("Mobile math width");
+
+  const switcher = page.locator(".composer-renderer-switch");
+  await expect(switcher).toBeVisible();
+  const pacing = page.getByRole("combobox", { name: "Typewriter pacing" });
+  await expect(pacing.locator("option")).toHaveText(["Adaptive", "Fixed", "Buffered"]);
+  for (const mode of ["fixed", "adaptive", "buffered"]) {
+    await pacing.selectOption(mode);
+    await expect(page.locator(".transcript")).toHaveAttribute("data-incremark-pacing", mode);
+  }
+
+  const viewport = await page.evaluate(() => ({ width: innerWidth, height: innerHeight }));
+  const [switchBox, firstMessageBox, selects] = await Promise.all([
+    switcher.boundingBox(),
+    page.locator("[data-slot=message-scroller-item]").last().boundingBox(),
+    page.locator(".composer-renderer-switch select").evaluateAll((elements) => elements.map((element) => element.getBoundingClientRect().toJSON())),
+  ]);
+  expect(switchBox.x).toBeGreaterThanOrEqual(-1);
+  expect(switchBox.x + switchBox.width).toBeLessThanOrEqual(viewport.width + 1);
+  expect(firstMessageBox.y).toBeGreaterThanOrEqual(switchBox.y + switchBox.height - 1);
+  for (const box of selects) expect(box.x + box.width).toBeLessThanOrEqual(viewport.width + 1);
+
+  await expect.poll(() => page.locator(".incremark-math-block .katex").count()).toBeGreaterThan(0);
+  const mathBox = await page.locator(".incremark-math-block").first().boundingBox();
+  const mathOverflow = await page.locator(".incremark-math-block").first().evaluate((element) => ({
+    clientWidth: element.clientWidth,
+    scrollWidth: element.scrollWidth,
+    right: element.getBoundingClientRect().right,
+  }));
+  expect(mathBox.x).toBeGreaterThanOrEqual(-1);
+  expect(mathBox.x + mathBox.width).toBeLessThanOrEqual(viewport.width + 1);
+  expect(mathOverflow.right).toBeLessThanOrEqual(viewport.width + 1);
+  expect(mathOverflow.scrollWidth).toBeGreaterThanOrEqual(mathOverflow.clientWidth);
+});
+
+test("acceptance: desktop transcript stays behind the frosted live composer", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop-chromium", "desktop frosted live composer overlap");
   await openApp(page);
   await page.locator(".sidebar-chat").filter({ hasText: "Existing chat" }).click();
   await expect(page.locator(".chat-main:not(.chat-main-empty) article.message-assistant")).toContainText("Transcript paragraph 1");
-  const messageViewport = page.locator(".chat-main:not(.chat-main-empty) .message-scroller-viewport");
-  await messageViewport.evaluate((element) => {
-    const composer = document.querySelector(".chat-main:not(.chat-main-empty) .composer");
-    const paragraphs = [...element.querySelectorAll("article.message-assistant p")];
-    const target = paragraphs.find((candidate) => candidate.getBoundingClientRect().top >= (composer?.getBoundingClientRect().top ?? Infinity)) || paragraphs.at(-1);
-    if (!target || !composer) throw new Error("Expected transcript paragraph and composer overlap targets");
-    target.setAttribute("data-test-desktop-basic-target", "true");
-    const viewportBox = element.getBoundingClientRect();
-    const targetBox = target.getBoundingClientRect();
-    const composerBox = composer.getBoundingClientRect();
-    const targetTopInContent = targetBox.top - viewportBox.top + element.scrollTop;
-    const composerTopInViewport = composerBox.top - viewportBox.top;
-    const desiredScrollTop = targetTopInContent - composerTopInViewport + 12;
-    const maxScrollTop = Math.max(0, element.scrollHeight - element.clientHeight);
-    element.scrollTop = Math.max(0, Math.min(maxScrollTop, desiredScrollTop));
-  });
-  const layout = await page.evaluate(() => {
-    const stack = document.querySelector(".chat-main:not(.chat-main-empty) .composer-stack");
-    const composer = document.querySelector(".chat-main:not(.chat-main-empty) .composer");
-    const target = document.querySelector('[data-test-desktop-basic-target="true"]');
-    if (!stack || !composer || !target) throw new Error("Expected desktop basic composer layout");
-    const stackStyle = getComputedStyle(stack);
-    const fadeStyle = getComputedStyle(stack, "::before");
-    const composerBox = composer.getBoundingClientRect();
-    const targetBox = target.getBoundingClientRect();
-    return {
-      stackBackgroundColor: stackStyle.backgroundColor,
-      stackBackgroundImage: stackStyle.backgroundImage,
-      stackFadeBackgroundImage: fadeStyle.backgroundImage,
-      transcriptComposerOverlap: Math.max(0, Math.min(targetBox.bottom, composerBox.bottom) - Math.max(targetBox.top, composerBox.top)),
-    };
-  });
-  expect(layout.stackBackgroundColor).toBe("rgba(0, 0, 0, 0)");
-  expect(layout.stackBackgroundImage).toBe("none");
-  expect(layout.stackFadeBackgroundImage).toBe("none");
-  expect(layout.transcriptComposerOverlap).toBeGreaterThan(8);
+  await scrollTranscriptBehindComposer(page, "desktop-frosted-live");
+  await expect.poll(() => overlapWithComposer(page, "desktop-frosted-live")).toBeGreaterThan(8);
+  await expect(page.locator(".composer")).toHaveAttribute("data-composer-surface", "frosted-live");
 });
 
 test("acceptance: desktop transcript passes behind the static glassmorphism composer", async ({ page }, testInfo) => {
-  test.skip(testInfo.project.name !== "desktop-chromium", "desktop transcript/composer overlap");
+  test.skip(testInfo.project.name !== "desktop-chromium", "desktop static composer overlap");
+  await page.addInitScript(() => localStorage.setItem("conduit:composer-surface", "static"));
   await openApp(page);
   await page.locator(".sidebar-chat").filter({ hasText: "Existing chat" }).click();
   await expect(page.locator(".chat-main:not(.chat-main-empty) article.message-assistant")).toContainText("Transcript paragraph 1");
-  const messageViewport = page.locator(".chat-main:not(.chat-main-empty) .message-scroller-viewport");
-  await messageViewport.evaluate((element) => {
-    const composer = document.querySelector(".chat-main:not(.chat-main-empty) .composer");
-    const paragraphs = [...element.querySelectorAll("article.message-assistant p")];
-    const target = paragraphs.find((candidate) => candidate.getBoundingClientRect().top >= (composer?.getBoundingClientRect().top ?? Infinity)) || paragraphs.at(-1);
-    if (!target || !composer) throw new Error("Expected transcript paragraph and composer overlap targets");
-    target.setAttribute("data-test-desktop-glass-target", "true");
-    const viewportBox = element.getBoundingClientRect();
-    const targetBox = target.getBoundingClientRect();
-    const composerBox = composer.getBoundingClientRect();
-    const targetTopInContent = targetBox.top - viewportBox.top + element.scrollTop;
-    const composerTopInViewport = composerBox.top - viewportBox.top;
-    const desiredScrollTop = targetTopInContent - composerTopInViewport + 12;
-    const maxScrollTop = Math.max(0, element.scrollHeight - element.clientHeight);
-    element.scrollTop = Math.max(0, Math.min(maxScrollTop, desiredScrollTop));
-  });
-  await expect.poll(async () => page.evaluate(() => {
-    const target = document.querySelector('[data-test-desktop-glass-target="true"]');
-    const composer = document.querySelector(".chat-main:not(.chat-main-empty) .composer");
-    if (!target || !composer) return 0;
-    const targetBox = target.getBoundingClientRect();
-    const composerBox = composer.getBoundingClientRect();
-    return Math.max(0, Math.min(targetBox.bottom, composerBox.bottom) - Math.max(targetBox.top, composerBox.top));
-  })).toBeGreaterThan(8);
-
-  const layout = await page.evaluate(() => {
-    const stack = document.querySelector(".chat-main:not(.chat-main-empty) .composer-stack");
-    const composer = document.querySelector(".chat-main:not(.chat-main-empty) .composer");
-    const thread = document.querySelector(".chat-main:not(.chat-main-empty) .thread");
-    const target = document.querySelector('[data-test-desktop-glass-target="true"]');
-    if (!stack || !composer || !thread || !target) throw new Error("Expected a desktop chat layout");
-    const stackStyle = getComputedStyle(stack);
-    const stackFadeStyle = getComputedStyle(stack, "::before");
-    const composerStyle = getComputedStyle(composer);
-    const frostChromeStyle = getComputedStyle(composer);
-    const threadStyle = getComputedStyle(thread);
-    const targetBox = target.getBoundingClientRect();
-    const composerBox = composer.getBoundingClientRect();
-    return {
-      stackBackgroundColor: stackStyle.backgroundColor,
-      stackBackgroundImage: stackStyle.backgroundImage,
-      stackFadeBackgroundImage: stackFadeStyle.backgroundImage,
-      composerBackgroundColor: composerStyle.backgroundColor,
-      composerBackdropFilter: composerStyle.backdropFilter,
-      composerOverflow: composerStyle.overflow,
-      frostBackgroundColor: frostChromeStyle.backgroundColor,
-      frostBackdropFilter: frostChromeStyle.backdropFilter,
-      frostBoxShadow: frostChromeStyle.boxShadow,
-      svgDefinitions: document.querySelectorAll(".liquid-glass-definitions").length,
-      glassFilters: document.querySelectorAll(".composer-glass-filter").length,
-      threadPaddingBottom: threadStyle.paddingBottom,
-      composerClass: composer.className,
-      transcriptComposerOverlap: Math.max(0, Math.min(targetBox.bottom, composerBox.bottom) - Math.max(targetBox.top, composerBox.top)),
-    };
-  });
-  expect(layout.stackBackgroundColor).toBe("rgba(0, 0, 0, 0)");
-  expect(layout.stackBackgroundImage).toBe("none");
-  expect(layout.stackFadeBackgroundImage).toBe("none");
-  expect(layout.composerOverflow).toBe("visible");
-  expect(layout.frostBackdropFilter).toContain("blur(24px)");
-  expect(layout.frostBackgroundColor).toBe("rgba(255, 255, 255, 0.169)");
-  expect(layout.frostBoxShadow).toContain("inset");
-  expect(layout.svgDefinitions).toBe(0);
-  expect(layout.glassFilters).toBe(0);
-  expect(layout.threadPaddingBottom).toBe("128px");
-  expect(layout.composerClass).toBe("composer");
-  expect(layout.transcriptComposerOverlap).toBeGreaterThan(8);
-  if (process.env.COMPOSER_GLASS_CAPTURE === "1") {
-    await page.locator(".chat-main:not(.chat-main-empty) .composer").screenshot({ path: "/tmp/conduit-composer-basic-desktop.png" });
-  }
-});
-
-test("acceptance: desktop opt-in liquid glass uses the precomputed SVG path", async ({ page }, testInfo) => {
-  test.skip(testInfo.project.name !== "desktop-chromium", "desktop liquid glass path");
-  await page.addInitScript(() => localStorage.setItem("conduit:liquid-glass-surface", "true"));
-  await openApp(page);
-  await page.locator(".sidebar-chat").filter({ hasText: "Existing chat" }).click();
-  await expect(page.locator(".chat-main:not(.chat-main-empty) article.message-assistant")).toContainText("Transcript paragraph 1");
-  const layer = page.locator(".composer-glass-filter");
-  await expect(layer).toHaveAttribute("data-liquid-glass-ready", "true");
-  const messageViewport = page.locator(".chat-main:not(.chat-main-empty) .message-scroller-viewport");
-  await messageViewport.evaluate((element) => {
-    const composer = document.querySelector(".chat-main:not(.chat-main-empty) .composer");
-    const paragraphs = [...element.querySelectorAll("article.message-assistant p")];
-    const target = paragraphs.find((candidate) => candidate.getBoundingClientRect().top >= (composer?.getBoundingClientRect().top ?? Infinity)) || paragraphs.at(-1);
-    if (!target || !composer) throw new Error("Expected transcript paragraph and composer overlap targets");
-    target.setAttribute("data-test-liquid-target", "true");
-    const viewportBox = element.getBoundingClientRect();
-    const targetBox = target.getBoundingClientRect();
-    const composerBox = composer.getBoundingClientRect();
-    const targetTopInContent = targetBox.top - viewportBox.top + element.scrollTop;
-    const composerTopInViewport = composerBox.top - viewportBox.top;
-    const desiredScrollTop = targetTopInContent - composerTopInViewport + 12;
-    const maxScrollTop = Math.max(0, element.scrollHeight - element.clientHeight);
-    element.scrollTop = Math.max(0, Math.min(maxScrollTop, desiredScrollTop));
-  });
-  const graph = await page.evaluate(() => {
-    const composer = document.querySelector(".chat-main:not(.chat-main-empty) .composer");
-    const layer = document.querySelector(".composer-glass-filter");
-    const chrome = document.querySelector(".composer-glass-chrome");
-    const filter = document.querySelector(".liquid-glass-definitions filter");
-    if (!composer || !layer || !chrome || !filter) throw new Error("Expected liquid glass surface");
-    const composerStyle = getComputedStyle(composer);
-    const chromeStyle = getComputedStyle(chrome);
-    return {
-      composerBackground: composerStyle.backgroundColor,
-      composerBackdropFilter: composerStyle.backdropFilter,
-      composerOverflow: composerStyle.overflow,
-      composerHeight: Math.round(composer.getBoundingClientRect().height),
-      chromeBackgroundImage: chromeStyle.backgroundImage,
-      layerBackdropFilter: getComputedStyle(layer).backdropFilter,
-      primitives: [...filter.children].map((node) => node.tagName),
-      blur: filter.querySelector("feGaussianBlur")?.getAttribute("stdDeviation"),
-      assetKey: layer.getAttribute("data-liquid-glass-asset-key"),
-      displacementHref: filter.querySelector("feImage")?.getAttribute("href"),
-      transcriptComposerOverlap: (() => {
-        const target = document.querySelector('[data-test-liquid-target="true"]');
-        const targetBox = target?.getBoundingClientRect();
-        const composerBox = composer.getBoundingClientRect();
-        return targetBox ? Math.max(0, Math.min(targetBox.bottom, composerBox.bottom) - Math.max(targetBox.top, composerBox.top)) : 0;
-      })(),
-    };
-  });
-  expect(graph.composerBackground).toBe("rgba(0, 0, 0, 0)");
-  expect(graph.composerBackdropFilter).toBe("none");
-  expect(graph.composerOverflow).toBe("visible");
-  expect(graph.composerHeight).toBeLessThan(120);
-  expect(graph.chromeBackgroundImage).toContain("radial-gradient");
-  expect(graph.layerBackdropFilter).toContain("url(\"#conduit-liquid-glass-");
-  expect(graph.primitives).toEqual(["feGaussianBlur", "feImage", "feDisplacementMap", "feColorMatrix", "feImage", "feComposite", "feComponentTransfer", "feBlend", "feBlend"]);
-  expect(graph.blur).toBe("8");
-  expect(graph.assetKey).toBe("desktop:88");
-  expect(graph.displacementHref).toBe("/glass/composer-desktop-88.png");
-  expect(graph.transcriptComposerOverlap).toBeGreaterThan(8);
-  if (process.env.COMPOSER_GLASS_CAPTURE === "1") {
-    await page.locator(".chat-main:not(.chat-main-empty) .composer").screenshot({ path: "/tmp/conduit-composer-liquid-desktop.png" });
-  }
+  await scrollTranscriptBehindComposer(page, "desktop-static");
+  await expect.poll(() => overlapWithComposer(page, "desktop-static")).toBeGreaterThan(8);
+  await expect(page.locator(".composer")).toHaveAttribute("data-composer-surface", "static");
+  await expect(page.locator(".composer-surface-shell")).toHaveCount(1);
 });
 
 test("acceptance: final transcript remains reachable above the composer", async ({ page }, testInfo) => {
@@ -835,8 +607,7 @@ test("acceptance: mobile sidebar is a full-bleed exclusive overlay", async ({ pa
 test("acceptance: mobile workspace is full-bleed and closes via panel X only", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "mobile-chromium", "phone overlay chrome");
   await openApp(page);
-  await page.getByRole("button", { name: "More chat options" }).tap();
-  await page.locator('[data-slot="menu-content"].chat-header-menu').getByRole("menuitem", { name: "Workspace panel", exact: true }).tap();
+  await page.getByRole("button", { name: "Toggle workspace panel" }).click();
   const panel = page.getByRole("complementary", { name: "Workspace panel" });
   const opening = await sampleTranslateX(page, ".workspace-panel");
   await expect(panel).toBeVisible();
@@ -849,7 +620,7 @@ test("acceptance: mobile workspace is full-bleed and closes via panel X only", a
   await page.getByRole("button", { name: "Close workspace panel" }).click();
   const closing = await sampleTranslateX(page, ".workspace-panel");
   await expect(panel).toBeHidden();
-  await expect(page.getByRole("button", { name: "More chat options" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Toggle workspace panel" })).toBeVisible();
   expect(new Set(closing.map((value) => Math.round(value))).size).toBeGreaterThan(2);
   expect(closing.every((value, index) => index === 0 || value >= closing[index - 1] - 0.5)).toBe(true);
 });

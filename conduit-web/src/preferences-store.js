@@ -3,6 +3,8 @@ import path from "node:path";
 
 const DEFAULTS = {
   defaultTemplateId: "chat",
+  sessionNameModel: "",
+  sessionNameThinkingLevel: "off",
 };
 
 export function normalizePreferences(input = {}, fallback = DEFAULTS, knownTemplateIds = null) {
@@ -15,7 +17,15 @@ export function normalizePreferences(input = {}, fallback = DEFAULTS, knownTempl
   if (Array.isArray(knownTemplateIds) && knownTemplateIds.length > 0 && !knownTemplateIds.includes(defaultTemplateId)) {
     defaultTemplateId = knownTemplateIds.includes(fallbackId) ? fallbackId : knownTemplateIds[0];
   }
-  return { defaultTemplateId };
+  const sessionNameModel = typeof input.sessionNameModel === "string"
+    ? input.sessionNameModel.trim()
+    : typeof fallback.sessionNameModel === "string" ? fallback.sessionNameModel.trim() : "";
+  const sessionNameThinkingLevel = typeof input.sessionNameThinkingLevel === "string" && input.sessionNameThinkingLevel.trim()
+    ? input.sessionNameThinkingLevel.trim()
+    : typeof fallback.sessionNameThinkingLevel === "string" && fallback.sessionNameThinkingLevel.trim()
+      ? fallback.sessionNameThinkingLevel.trim()
+      : DEFAULTS.sessionNameThinkingLevel;
+  return { defaultTemplateId, sessionNameModel, sessionNameThinkingLevel };
 }
 
 export class PreferencesStore {

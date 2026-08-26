@@ -57,18 +57,6 @@ function view(record) {
   };
 }
 
-function latestPerProject(items) {
-  const latest = new Map();
-  for (const item of items) {
-    if (!item?.id || !item.projectId || !TEMPLATES[item.templateId]) continue;
-    const previous = latest.get(item.projectId);
-    const previousAt = String(previous?.updatedAt || previous?.createdAt || "");
-    const itemAt = String(item.updatedAt || item.createdAt || "");
-    if (!previous || itemAt >= previousAt) latest.set(item.projectId, item);
-  }
-  return [...latest.values()];
-}
-
 function nextTerminalTitle(records, projectId, baseTitle) {
   const used = new Set(records
     .filter((item) => item.projectId === projectId && item.status === "running")
@@ -185,7 +173,8 @@ export class PtyManager extends EventEmitter {
       this.tmuxReady = false;
     }
 
-    for (const item of latestPerProject(Array.isArray(persisted.sessions) ? persisted.sessions : [])) {
+    for (const item of Array.isArray(persisted.sessions) ? persisted.sessions : []) {
+      if (!item?.id || !item.projectId || !TEMPLATES[item.templateId]) continue;
       this.records.set(item.id, {
         ...item,
         status: "exited",

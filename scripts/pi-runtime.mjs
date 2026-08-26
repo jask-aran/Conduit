@@ -140,3 +140,10 @@ export function buildPiEnvironment(agentDir, env = process.env) {
     PI_CODING_AGENT_DIR: resolvedAgentDir,
   };
 }
+
+export function resolvePiProcess(command, args = [], { platform = process.platform, nodePath = process.execPath } = {}) {
+  if (platform === "win32" && /\.(?:c|m)?js$/i.test(String(command || ""))) {
+    return { command: nodePath, args: [command, ...args] };
+  }
+  return { command, args };
+}

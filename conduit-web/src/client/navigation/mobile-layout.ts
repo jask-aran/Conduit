@@ -1,5 +1,7 @@
-/** Shared mobile layout breakpoint — keep in sync with `@media (max-width: 760px)`. */
-export const MOBILE_LAYOUT_QUERY = "(max-width: 760px)";
+import { MOBILE_LAYOUT_BREAKPOINT_PX } from "../layout-geometry";
+
+/** Shared mobile layout breakpoint. CSS expands the matching source token at build time. */
+export const MOBILE_LAYOUT_QUERY = `(max-width: ${MOBILE_LAYOUT_BREAKPOINT_PX}px)`;
 
 export function isMobileLayout(): boolean {
   return typeof matchMedia === "function" && matchMedia(MOBILE_LAYOUT_QUERY).matches;

@@ -7,7 +7,8 @@ import type { ChatMarkdownProps } from "./markdown";
 import { ExternalLinkDialog } from "./external-link-dialog";
 import { createExternalLinkController } from "./markdown-actions";
 import { createSyntheticMathPreviewNode, repairSyntheticMathSource } from "./incremark-synthetic-math";
-import { AdaptiveIncremarkTypewriter, visibleAstCharacters } from "./incremark-typewriter";
+import { BufferedIncremarkTypewriter, visibleAstCharacters } from "./incremark-typewriter";
+import { MathRenderQueue, type MathRenderPolicy } from "./incremark-math-queue";
 import { resolveMarkdownUrl } from "./markdown-security";
 import { projectTableMathSource, promoteTableCellDisplayMath, restoreTableMathAst, restoreTableMathSentinel } from "./table-math";
 import type { StreamingPending } from "./streaming-markdown";
@@ -21,6 +22,7 @@ type RendererContext = {
   inline: boolean;
   requestExternalLink: (url: string, trigger?: HTMLElement) => void;
   deferMath: () => boolean;
+  mathRenderPolicy: () => MathRenderPolicy;
   syntheticMath: () => boolean;
   rendererId: () => string;
   pendingInlineBlockId: () => string | null;
@@ -229,9 +231,23 @@ function LinkNode(props: { node: MarkdownNode | NodeAccessor; context: RendererC
 
 const MATH_HTML_CACHE_LIMIT = 512;
 const mathHtmlCache = new Map<string, string>();
-type MathRenderJob = { cancelled: boolean; run: () => void };
-const mathRenderQueue: MathRenderJob[] = [];
-let mathRenderFrame: number | null = null;
+const mathRenderQueue = new MathRenderQueue({
+  onMetrics: (metrics) => {
+    const recorder = getHarnessRecorder();
+    if (!recorder) return;
+    recordHarnessMetric(recorder, {
+      stage: "markdown-math-queue",
+      renderer: "incremark-math",
+      queuePolicy: metrics.policy,
+      queueEvent: metrics.event,
+      queueDepth: metrics.queueDepth,
+      oldestJobAgeMs: metrics.oldestJobAgeMs,
+      processedJobs: metrics.processedJobs,
+      cancelledJobs: metrics.cancelledJobs,
+      frameBudgetMs: metrics.frameBudgetMs,
+    });
+  },
+});
 
 function mathCacheKey(node: MarkdownNode, source: string, synthetic: boolean) {
   return `${node?.type === "math" ? "display" : "inline"}\u0000${synthetic ? `synthetic\u0000${source}` : source}`;
@@ -251,31 +267,11 @@ function cacheMathHtml(node: MarkdownNode, source: string, html: string, synthet
   mathHtmlCache.set(key, html);
 }
 
-function requestMathRenderFrame() {
-  if (mathRenderFrame != null || !mathRenderQueue.length) return;
-  mathRenderFrame = requestAnimationFrame(() => {
-    mathRenderFrame = null;
-    const startedAt = performance.now();
-    let processed = 0;
-    while (mathRenderQueue.length && processed < 1 && performance.now() - startedAt < 4) {
-      const next = mathRenderQueue.shift()!;
-      if (!next.cancelled) {
-        next.run();
-        processed += 1;
-      }
-    }
-    requestMathRenderFrame();
-  });
+function scheduleMathRender(run: () => void, policy: MathRenderPolicy) {
+  return mathRenderQueue.enqueue(run, policy);
 }
 
-function scheduleMathRender(run: () => void) {
-  const job: MathRenderJob = { cancelled: false, run };
-  mathRenderQueue.push(job);
-  requestMathRenderFrame();
-  return () => { job.cancelled = true; };
-}
-
-function MathNode(props: { node: MarkdownNode | NodeAccessor; defer?: () => boolean; preview?: () => boolean; renderer?: () => string; onBusyChange?: (busy: boolean) => void }) {
+function MathNode(props: { node: MarkdownNode | NodeAccessor; defer?: () => boolean; policy?: () => MathRenderPolicy; preview?: () => boolean; renderer?: () => string; onBusyChange?: (busy: boolean) => void }) {
   const node = () => readNode(props.node);
   const [html, setHtml] = createSignal("");
   const [type, setType] = createSignal<string | undefined>();
@@ -399,9 +395,12 @@ function MathNode(props: { node: MarkdownNode | NodeAccessor; defer?: () => bool
     // the transcript. Display equations remain queued to protect the frame
     // budget when a response contains many large formulas.
     if (props.defer?.() && current?.type === "math") {
-      setHtml("");
+      // Keep the last valid formula in place while the replacement render is
+      // queued. Clearing the span here makes every streamed partial flash
+      // blank before KaTeX completes, which is most visible on mobile.
+      if (!lastValidHtml && html() === "") setHtml(fallbackHtml);
       setBusy(true);
-      cancelJob = scheduleMathRender(() => renderCurrent(current, source, version));
+      cancelJob = scheduleMathRender(() => renderCurrent(current, source, version), props.policy?.() || "stream");
       return;
     }
     renderCurrent(current, source, version);
@@ -503,7 +502,7 @@ function AstNodeContent(props: { node: NodeAccessor; context: RendererContext })
     case "delete": return <del><InlineNodes nodes={() => node()?.children || []} context={props.context} /></del>;
     case "inlineCode": return <code>{node()?.value || ""}</code>;
     case "inlineMath":
-    case "math": return <MathNode node={node} defer={props.context.deferMath} preview={props.context.syntheticMath} renderer={props.context.rendererId} onBusyChange={props.context.onMathBusyChange} />;
+    case "math": return <MathNode node={node} defer={props.context.deferMath} policy={props.context.mathRenderPolicy} preview={props.context.syntheticMath} renderer={props.context.rendererId} onBusyChange={props.context.onMathBusyChange} />;
     case PENDING_INLINE_MATH_NODE: return <PendingInlineMathPlaceholder />;
     case "break": return <br />;
     case "link": return <LinkNode node={node} context={props.context} />;
@@ -571,8 +570,7 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
   const setDisplayBlocks = (next: DisplayBlock[]) => {
     setDisplayBlockStore("items", reconcile(next, { key: "id", merge: true }));
   };
-  const typewriterController = new AdaptiveIncremarkTypewriter({
-    adaptive: Boolean(props.typewriter && !props.inline),
+  const typewriterController = new BufferedIncremarkTypewriter({
     onChange: (next) => {
       setDisplayBlocks(next);
       queueMicrotask(() => props.onRendered?.());
@@ -587,31 +585,19 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
         stage: "markdown-typewriter",
         renderer: rendererId(),
         typewriter: true,
+        scheduler: metrics.scheduler,
         sourceVisibleCharacters: metrics.sourceVisibleCharacters,
         displayedVisibleCharacters: metrics.displayedVisibleCharacters,
         backlogCharacters: metrics.backlogCharacters,
         backlogAgeMs: metrics.backlogAgeMs,
-        observedRate: metrics.observedRate,
-        targetRate: metrics.targetRate,
-        controlRate: metrics.controlRate,
-        displayRate: metrics.displayRate,
-        relativeLag: metrics.relativeLag,
-        charsPerTick: metrics.charsPerTick,
+        pendingBlockCount: metrics.pendingBlockCount,
+        completedBlockCount: metrics.completedBlockCount,
+        charsPerFrame: metrics.charsPerFrame,
         frameIntervalMs: metrics.frameIntervalMs,
-        tickInterval: metrics.tickInterval,
+        frameBudgetMs: metrics.frameBudgetMs,
         frameWorkMs: metrics.frameWorkMs,
         frameWorkEmaMs: metrics.frameWorkEmaMs,
-        fallbackMode: metrics.fallbackMode,
-        lagTargetMet: metrics.lagTargetMet,
         terminal: metrics.terminal,
-        ...(metrics.frameGapMs !== undefined ? {
-          frameGapMs: metrics.frameGapMs,
-          commitToNextFrameMs: metrics.commitToNextFrameMs,
-          frameHealthy: metrics.frameHealthy,
-          saturationMs: metrics.saturationMs,
-          stepChanged: metrics.stepChanged,
-          previousCharsPerTick: metrics.previousCharsPerTick,
-        } : {}),
         nativeTransformer: typewriterController.getDebugState(),
       });
     },
@@ -786,6 +772,7 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
     }
 
     const enabled = typewriter();
+    typewriterController.setPacing(props.pacing || "buffered");
     typewriterController.setEnabled(enabled);
     if (previousTypewriter === true && !enabled) {
       typewriterController.flush();
@@ -816,7 +803,6 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
       typewriterController.setBaselineCharacters(visibleAstCharacters(seededRoot));
       typewriterController.observeSource(animated);
       typewriterController.push(animated);
-      setDisplayBlocks(typewriterController.getDisplayBlocks());
       if (animated.length === 0 && currentBlocks.length > 0) typewriterController.completeSeeded();
     }
     previousTypewriter = enabled;
@@ -864,6 +850,7 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
     inline: Boolean(props.inline),
     requestExternalLink: external.request,
     deferMath: () => typewriter(),
+    mathRenderPolicy: () => props.streaming ? "stream" : "reattach",
     syntheticMath: () => Boolean(props.syntheticMath),
     rendererId,
     pendingInlineBlockId,

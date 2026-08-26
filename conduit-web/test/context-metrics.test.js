@@ -6,6 +6,7 @@ import {
   CONTEXT_METRIC_PRESETS,
   DEFAULT_CONTEXT_METRICS,
   contextMetricPreset,
+  contextUsagePercent,
   formatContextMetrics,
   metricsForContextMetricPreset,
   normalizeContextMetrics,
@@ -95,11 +96,21 @@ test("unknown context values remain visible as unknown", () => {
 });
 
 test("derives context remaining values when Pi omits the percentage", () => {
+  assert.equal(contextUsagePercent({ tokens: 400, contextWindow: 1000, percent: null }), 40);
   assert.equal(formatContextMetrics({
     enabled: ["contextPercentUsed", "contextTokensRemaining", "contextPercentRemaining"],
     contextUsage: { tokens: 400, contextWindow: 1000, percent: null },
     sessionStats: null,
   }), "Context used 40% · remaining 600 · remaining 60%");
+});
+
+test("keeps Pi context percentages below one percent in percentage units", () => {
+  assert.equal(contextUsagePercent({ tokens: 8276, contextWindow: 1048576, percent: 0.7893 }), 0.7893);
+  assert.equal(formatContextMetrics({
+    enabled: ["contextPercentUsed", "contextPercentRemaining"],
+    contextUsage: { tokens: 8276, contextWindow: 1048576, percent: 0.7893 },
+    sessionStats: null,
+  }), "Context used 1% · remaining 99%");
 });
 
 test("formats cumulative eligible cache-hit measures", () => {

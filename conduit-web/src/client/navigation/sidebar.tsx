@@ -65,6 +65,23 @@ type DeleteTarget = { type: "chat"; chat: ChatSummary; project: Project }
   | { type: "chats"; targets: ChatTarget[] };
 const COLLAPSED_PROJECTS_KEY = "conduit.sidebar.collapsed-projects";
 
+function SidebarChatTitle(props: { title: string; animate: boolean }) {
+  let element!: HTMLSpanElement;
+  let animation: Animation | undefined;
+  onMount(() => {
+    if (!props.animate || matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    animation = element.animate([
+      { clipPath: "inset(0 100% 0 0)" },
+      { clipPath: "inset(0 0 0 0)" },
+    ], {
+      duration: Math.min(1400, Math.max(360, props.title.length * 38)),
+      easing: `steps(${Math.max(1, props.title.length)}, end)`,
+    });
+  });
+  onCleanup(() => animation?.cancel());
+  return <span ref={element}>{props.title}</span>;
+}
+
 function storedCollapsedProjects(): Set<string> {
   try {
     const value = JSON.parse(localStorage.getItem(COLLAPSED_PROJECTS_KEY) || "[]");
@@ -130,6 +147,8 @@ export function Sidebar(props: {
   onOpenWorkspaceIdentity: (project: Project) => void;
   onOpenSettings: (section?: string, workspaceId?: string | null) => void;
   onOpenPalette: (page?: string | null, initialQuery?: string | null) => void;
+  onChangeServer?: () => void;
+  onLogout?: () => void;
   chatLimit: number;
   mobileOpen: boolean;
   onMobileOpenChange: (open: boolean) => void;
@@ -137,13 +156,14 @@ export function Sidebar(props: {
 }) {
   const [collapsed, setCollapsed] = createSignal(localStorage.getItem("conduit.sidebar") === "collapsed");
   const [visualCollapsed, setVisualCollapsed] = createSignal(collapsed());
-  const [shellWidth, setShellWidth] = createSignal(collapsed() ? 52 : 244);
+  const [shellWidth, setShellWidth] = createSignal(collapsed() ? 41.6 : 195.2);
   const [collapsedProjectIds, setCollapsedProjectIds] = createSignal(storedCollapsedProjects());
   const [selectedChatIds, setSelectedChatIds] = createSignal<Set<string>>(new Set());
   const [newKind, setNewKind] = createSignal<"folder" | "workspace" | null>(null);
   let sidebarRoot: HTMLElement | undefined;
   let sidebarSurface: HTMLDivElement | undefined;
   let sidebarMotionId = 0;
+  let sidebarEdgeMotionId: number | null = null;
   let sidebarEdgeRaf = 0;
   let mobileReturnFocus: HTMLElement | null = null;
   let mobileWasOpen = false;
@@ -152,12 +172,15 @@ export function Sidebar(props: {
       cancelAnimationFrame(sidebarEdgeRaf);
       sidebarEdgeRaf = 0;
     }
+    const id = sidebarEdgeMotionId;
+    sidebarEdgeMotionId = null;
     sidebarRoot?.removeAttribute("data-edge-instant");
+    if (id != null) dispatchPanelGeometryMotion({ phase: "end", id, source: "sidebar", size: shellWidth() });
   };
   const toggleSidebar = () => {
     const nextCollapsed = !collapsed();
     const startWidth = shellWidth();
-    const targetWidth = nextCollapsed ? 52 : 244;
+    const targetWidth = nextCollapsed ? 41.6 : 195.2;
     cancelSidebarEdgeMotion();
     if (isMobileLayout()) {
       batch(() => {
@@ -178,12 +201,14 @@ export function Sidebar(props: {
       return;
     }
     const id = ++sidebarMotionId;
+    sidebarEdgeMotionId = id;
     batch(() => {
       setCollapsed(nextCollapsed);
       if (!nextCollapsed) setVisualCollapsed(false);
     });
-    // No targetSize: pin transcript width like resize. Sample CSS-eased shell
-    // each frame so content tracks the edge (avoids jump then WAAPI slide).
+    // Keep the v0.4.7 sidebar contract: the real shell follows its CSS width
+    // transition, while the transcript motion shell tracks that edge once per
+    // display frame. This keeps the composer in the same geometry path.
     dispatchPanelGeometryMotion({
       phase: "begin",
       id,
@@ -193,9 +218,7 @@ export function Sidebar(props: {
     setShellWidth(targetWidth);
     const startedAt = performance.now();
     const sampleEdge = () => {
-      if (!sidebarRoot) return;
-      // Ignore stale rAF after a newer toggle.
-      if (sidebarMotionId !== id) return;
+      if (!sidebarRoot || sidebarMotionId !== id || sidebarEdgeMotionId !== id) return;
       dispatchPanelGeometryMotion({
         phase: "change",
         id,
@@ -207,13 +230,9 @@ export function Sidebar(props: {
         return;
       }
       sidebarEdgeRaf = 0;
+      sidebarEdgeMotionId = null;
       setVisualCollapsed(nextCollapsed);
-      dispatchPanelGeometryMotion({
-        phase: "end",
-        id,
-        source: "sidebar",
-        size: targetWidth,
-      });
+      dispatchPanelGeometryMotion({ phase: "end", id, source: "sidebar", size: targetWidth });
     };
     sidebarEdgeRaf = requestAnimationFrame(sampleEdge);
   };
@@ -254,6 +273,7 @@ export function Sidebar(props: {
   const [workspacePreview, setWorkspacePreview] = createSignal<WorkspacePreview | null>(null);
   const [previewError, setPreviewError] = createSignal("");
   const [submitting, setSubmitting] = createSignal(false);
+  const renderedChatTitles = new Map<string, string>();
   const [rename, setRename] = createSignal<{ type: "chat"; chat: ChatSummary; project: Project } | { type: "project"; project: Project } | null>(null);
   const [renameValue, setRenameValue] = createSignal("");
   const [deleting, setDeleting] = createSignal<DeleteTarget | null>(null);
@@ -265,6 +285,7 @@ export function Sidebar(props: {
     || props.projects.find((item) => item.id === props.projectId);
   const currentChat = (project = currentProject()): ChatSummary | null => project?.sessions.find((item) => item.id === props.selectedId)
     || (project && props.selectedId ? { id: props.selectedId, projectId: project.id, status: "draft" as const, title: "New chat" } : null);
+  const chatTitle = (chat: ChatSummary) => chat.title || (chat.status === "active" ? "Untitled chat" : "New chat");
 
   createEffect(() => {
     const command = props.command;
@@ -547,13 +568,17 @@ export function Sidebar(props: {
   const ChatMenu = (menuProps: { chat: ChatSummary; project: Project }) => {
     const guard = guardFor(menuProps.chat);
     const selected = () => selectedChatIds().has(menuProps.chat.id);
+    const title = chatTitle(menuProps.chat);
+    const previousTitle = renderedChatTitles.get(menuProps.chat.id);
+    const animateTitle = previousTitle !== undefined && previousTitle !== title && Boolean(menuProps.chat.title);
+    renderedChatTitles.set(menuProps.chat.id, title);
     return <ContextMenu placement={phoneLayout() ? "bottom-start" : "right-start"} onOpenChange={(open) => { if (open) guard.suppressClick = true; }}>
     <ContextMenuTrigger
       as="button"
       class="sidebar-row sidebar-chat"
       data-chat-id={menuProps.chat.id}
       aria-current={props.selectedId === menuProps.chat.id ? "page" : undefined}
-      aria-label={`${menuProps.chat.title || "New chat"}${selected() ? ", selected" : ""}`}
+      aria-label={`${chatTitle(menuProps.chat)}${selected() ? ", selected" : ""}`}
       data-selected={selected() ? "true" : undefined}
       onContextMenu={() => { if (!selected()) clearSelection(); }}
       onClick={(event: MouseEvent) => {
@@ -569,7 +594,7 @@ export function Sidebar(props: {
       }}
     >
       <RuntimeIndicator process={processFor(menuProps.chat)} stale={props.runtime.stale()} />
-      <span>{menuProps.chat.title || "New chat"}</span>
+      <SidebarChatTitle title={title} animate={animateTitle} />
     </ContextMenuTrigger>
     <ContextMenuContent class="w-60 sidebar-context-menu">
       <Show when={selected()} fallback={<>
@@ -730,7 +755,7 @@ export function Sidebar(props: {
             <div data-sidebar="rail-section" data-sidebar-section="chats" class="sidebar-rail-section">
               <RailAction label="New chat" onClick={() => startNewChat()}><MessageSquarePlusIcon /></RailAction>
               <For each={railChats()}>{(item) => <RailAction
-                label={`Chat: ${item.chat.title || "New chat"}`}
+                label={`Chat: ${chatTitle(item.chat)}`}
                 current={props.selectedId === item.chat.id}
                 live={Boolean(processFor(item.chat))}
                 onClick={() => { closeMobile(); void props.onOpenChat(item.chat, item.project); }}
@@ -766,7 +791,8 @@ export function Sidebar(props: {
         <div data-sidebar="footer"><Menu><MenuTrigger class="sidebar-user" aria-label={`Conduit · ${connectionLabel()}`} title={connectionLabel()}><CableIcon /><span><strong>Conduit</strong><small>{connectionLabel()}</small></span><span class={`server-status-indicator runtime-indicator runtime-indicator-${connectionTone()}`} aria-hidden="true"><Show when={props.connectivity === "connecting" || props.connectivity === "reconnecting"} fallback={<span class="runtime-indicator-dot" />}><Spinner class="size-3" /></Show></span></MenuTrigger><MenuContent>
           <MenuItem onSelect={() => { closeMobile(); props.onOpenSettings("models"); }}>Manage settings</MenuItem>
           <MenuItem onSelect={() => { closeMobile(); props.onOpenPalette(); }}>Command Palette</MenuItem>
-          <MenuItem onSelect={() => fetch("/v0/auth/logout", { method: "POST" }).finally(() => { location.href = "/login"; })}>Sign out</MenuItem>
+          <Show when={props.onChangeServer}><MenuItem onSelect={() => props.onChangeServer?.()}>Change server</MenuItem></Show>
+          <MenuItem onSelect={() => props.onLogout?.()}>Sign out</MenuItem>
         </MenuContent></Menu></div>
         <button data-sidebar="rail" aria-hidden="true" tabIndex={-1} onClick={toggleSidebar} />
       </div>
@@ -797,7 +823,7 @@ export function Sidebar(props: {
     </Modal>
 
     <Modal open={Boolean(rename())} title={rename()?.type === "chat" ? "Rename chat" : "Rename folder"}
-      description={rename()?.type === "chat" ? "Set the display name stored in the Pi session." : "Change the folder's display name without changing its working-directory path."}
+      description={rename()?.type === "chat" ? "Set the display name stored by Conduit." : "Change the folder's display name without changing its working-directory path."}
       onClose={() => setRename(null)}>
       <form onSubmit={submitRename}><Field><FieldLabel for="rename-name">Name</FieldLabel><Input id="rename-name" value={renameValue()} onInput={(event) => setRenameValue(event.currentTarget.value)} /></Field><div class="mt-4 flex justify-end gap-2"><Button type="button" variant="outline" onClick={() => setRename(null)}>Cancel</Button><Button type="submit" disabled={!renameValue().trim()}>Rename</Button></div></form>
     </Modal>

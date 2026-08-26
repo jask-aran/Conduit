@@ -15,6 +15,7 @@ import {
   selectedMarkdownRenderer,
   type MarkdownRendererId,
 } from "./markdown-settings";
+import type { IncremarkPacingMode } from "./incremark-pacing";
 
 export {
   MARKDOWN_RENDERER_STORAGE_KEY,
@@ -309,6 +310,7 @@ export type ChatMarkdownProps = {
   onRendered?: () => void;
   typewriter?: boolean;
   syntheticMath?: boolean;
+  pacing?: IncremarkPacingMode;
   displayKey?: string;
   renderer?: MarkdownRendererId;
 };

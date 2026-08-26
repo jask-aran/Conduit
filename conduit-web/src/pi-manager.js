@@ -3,7 +3,7 @@ import { spawn } from "node:child_process";
 import crypto from "node:crypto";
 import path from "node:path";
 import { SessionManager } from "@earendil-works/pi-coding-agent";
-import { buildPiEnvironment, buildPiResourceArgs } from "../../scripts/pi-runtime.mjs";
+import { buildPiEnvironment, buildPiResourceArgs, resolvePiProcess } from "../../scripts/pi-runtime.mjs";
 import {
   applyActivityEvent,
   deriveCoarseActivity,
@@ -435,8 +435,9 @@ export class PiManager extends EventEmitter {
     const launchTemplate = launchSpec ? template : (template || this.template);
     if (!launchSpec && !launchTemplate) throw new Error("PiManager.create requires a template or launch specification");
     const args = launchSpec?.args || buildPiArgs({ sessionFile: resolvedFile, model, thinkingLevel, models, template: launchTemplate });
+    const processSpec = resolvePiProcess(launchSpec?.command || this.command, args);
     const restoredCache = restoreCacheStats(resolvedFile, launchSpec?.cwd || project.path);
-    const child = this.spawnImpl(launchSpec?.command || this.command, args, {
+    const child = this.spawnImpl(processSpec.command, processSpec.args, {
       cwd: launchSpec?.cwd || project.path,
       stdio: ["pipe", "pipe", "pipe"],
       env: launchSpec?.env || buildPiEnvironment(this.agentDir),

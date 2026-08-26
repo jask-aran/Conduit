@@ -24,12 +24,15 @@ function fixture({ login } = {}) {
 
 test("Pi auth status is redacted and GUI API keys are stored as literal values", async () => {
   const { stored, authStorage, modelRegistry } = fixture();
-  const broker = new PiAuthBroker({ authStorage, modelRegistry });
+  const changes = [];
+  const broker = new PiAuthBroker({ authStorage, modelRegistry, onCredentialsChanged: async (providerId) => changes.push(providerId) });
   assert.deepEqual(broker.providers().map((item) => item.id), ["openai", "openai-codex"]);
   await broker.setApiKey("openai", "!literal-$key");
   assert.deepEqual(stored.get("openai"), { type: "api_key", key: "$!literal-$$key" });
   assert.equal(JSON.stringify(broker.providers()).includes("literal"), false);
   assert.equal(broker.providers().find((item) => item.id === "openai").auth.removable, true);
+  await broker.remove("openai");
+  assert.deepEqual(changes, ["openai", "openai"]);
 });
 
 test("only the browser that started an OAuth attempt can read its URL or answer its prompt", async () => {

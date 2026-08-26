@@ -1,11 +1,12 @@
-import { For, Show, createSignal, createUniqueId, onCleanup } from "solid-js";
+import { For, Show, createUniqueId, onCleanup } from "solid-js";
+import type { ParentProps } from "solid-js";
 // Kobalte's public dropdown-menu entrypoint does not expose this hook, but its
 // menu content uses the same context. The compiled chunk keeps the context
 // identity shared with the public component.
 // @ts-expect-error Kobalte does not publish declarations for this internal chunk.
 import { useMenuContext } from "../../../node_modules/@kobalte/core/dist/chunk/L544S5A4.jsx";
 import type { FocusOutsideEvent } from "@kobalte/core";
-import { ChevronLeftIcon, ChevronRightIcon, PaperclipIcon, PlusIcon, SlidersHorizontalIcon, UserRoundIcon } from "lucide-solid";
+import { PaperclipIcon, PlusIcon, SlidersHorizontalIcon, UserRoundIcon } from "lucide-solid";
 import {
   Menu,
   MenuContent,
@@ -15,13 +16,14 @@ import {
   MenuRadioGroup,
   MenuRadioItem,
   MenuSeparator,
+  MenuSub,
+  MenuSubTrigger,
 } from "@/components/primitives";
 import type { Template } from "../api/contracts";
 import type { ActiveChatStore } from "../state/active-chat";
 import type { ModelSettings } from "../state/model-settings";
 
 const thinkingLabel = (value: string) => value ? value[0]!.toUpperCase() + value.slice(1) : "Off";
-type OptionsView = "root" | "model" | "profile";
 
 export function MobileComposerOptions(props: {
   composer: {
@@ -41,7 +43,6 @@ export function MobileComposerOptions(props: {
   const selectedProfileLabel = () => composer.activeProfile?.label || composer.activeProfile?.id || "General";
   const levels = () => selectedModel()?.thinkingLevels || ["off"];
   const profileLocked = () => composer.chat.status() !== "draft";
-  const [view, setView] = createSignal<OptionsView>("root");
   let composerFocusBeforeOpen: HTMLTextAreaElement | null = null;
   let keyboardOpenBeforeOpen = false;
   let restoreFocusOnClose = false;
@@ -95,16 +96,13 @@ export function MobileComposerOptions(props: {
     keyboardOpenBeforeOpen = false;
   };
 
-  const captureComposerFocusOnPointerDown = (_event: PointerEvent) => {
+  const preserveComposerFocusOnPointerDown = (_event: PointerEvent) => {
     captureComposerFocus();
   };
 
-  const preserveComposerFocusOnPointerDown = (event: PointerEvent) => {
-    captureComposerFocus();
-    if (keyboardOpenBeforeOpen) event.preventDefault();
-  };
-
-  const restoreComposerFocusAfterInteraction = (_event: MouseEvent) => {
+  const restoreComposerFocusAfterInteraction = (event: MouseEvent) => {
+    const target = event.target;
+    if (target instanceof Element && target.closest('[aria-haspopup="true"]')) return;
     requestAnimationFrame(focusComposer);
   };
 
@@ -114,12 +112,11 @@ export function MobileComposerOptions(props: {
   };
 
   return <div class="composer-mobile-plus">
-    <Menu modal={false} onOpenChange={(open) => { if (!open) setView("root"); }}>
+    <Menu modal={false}>
       <MobileComposerPlusTrigger
         serverOnline={composer.serverOnline}
         captureComposerFocus={captureComposerFocus}
         onToggle={(wasOpen) => {
-          if (!wasOpen) setView("root");
           restoreFocusOnClose = wasOpen;
           if (wasOpen) {
             requestAnimationFrame(() => { if (restoreFocusOnClose) focusComposer(); });
@@ -127,66 +124,56 @@ export function MobileComposerOptions(props: {
           }
         }}
       />
-      <MenuContent class="composer-options-menu" onOpenAutoFocus={preserveComposerFocus} onCloseAutoFocus={preserveComposerFocusOnClose} onFocusOutside={keepComposerFocusInsideMenu} onPointerDown={captureComposerFocusOnPointerDown} onClick={restoreComposerFocusAfterInteraction}>
-        <Show when={view() === "root"}>
+      <MenuContent class="composer-options-menu" onOpenAutoFocus={preserveComposerFocus} onCloseAutoFocus={preserveComposerFocusOnClose} onFocusOutside={keepComposerFocusInsideMenu} onPointerDown={preserveComposerFocusOnPointerDown} onClick={restoreComposerFocusAfterInteraction}>
+        <MenuGroup>
+          <MenuLabel class="composer-options-label">Message options</MenuLabel>
+          <MenuSub>
+            <MobileComposerSubTrigger disabled={!composer.serverOnline} captureComposerFocus={captureComposerFocus} restoreComposerFocus={() => requestAnimationFrame(focusComposer)}>
+              <SlidersHorizontalIcon /><span>Model</span><span class="composer-options-preview ml-auto max-w-28 truncate text-right text-xs italic text-muted-foreground">{selectedModelLabel()}</span>
+            </MobileComposerSubTrigger>
+            <MenuContent class="composer-options-submenu composer-model-menu" onOpenAutoFocus={(event) => event.preventDefault()} onCloseAutoFocus={(event) => event.preventDefault()} onFocusOutside={keepComposerFocusInsideMenu} onPointerDown={preserveComposerFocusOnPointerDown} onClick={restoreComposerFocusAfterInteraction}>
+              <MenuGroup>
+                <MenuLabel class="composer-options-label">Model</MenuLabel>
+                <Show when={composer.models.notice()}><div class="composer-option-note">{composer.models.notice()}</div></Show>
+                <MenuRadioGroup value={composer.models.model()} onChange={(value) => void composer.models.chooseModel(value)}>
+                  <For each={composer.models.models()}>{(item) => <MobileComposerSubmenuRadioItem value={item.spec} restoreComposerFocus={() => requestAnimationFrame(focusComposer)}><span class="truncate">{item.label}</span><span class="ml-auto text-xs text-muted-foreground">{item.provider}</span></MobileComposerSubmenuRadioItem>}</For>
+                </MenuRadioGroup>
+              </MenuGroup>
+              <MenuSeparator />
+              <MenuItem onSelect={() => composer.onOpenSettings("models")}>Manage models…</MenuItem>
+            </MenuContent>
+          </MenuSub>
+          <MenuSeparator />
           <MenuGroup>
-            <MenuLabel class="composer-options-label">Message options</MenuLabel>
-            <MenuItem disabled={!composer.serverOnline} closeOnSelect={false} onPointerDown={preserveComposerFocusOnPointerDown} onSelect={() => setView("model")}>
-              <SlidersHorizontalIcon /><span>Model</span><span class="composer-options-preview ml-auto max-w-28 truncate text-right text-xs italic text-muted-foreground">{selectedModelLabel()}</span><ChevronRightIcon class="menu-chevron" />
-            </MenuItem>
-            <MenuSeparator />
-            <MenuGroup>
-              <MenuLabel class="composer-options-label">Effort</MenuLabel>
-              <MenuRadioGroup value={composer.models.effort()} onChange={(value) => void composer.models.chooseEffort(value)}>
-                <For each={levels()}>{(level) => <MenuRadioItem value={level} closeOnSelect={false} onPointerDown={preserveComposerFocusOnPointerDown}>{thinkingLabel(level)}</MenuRadioItem>}</For>
-              </MenuRadioGroup>
-            </MenuGroup>
-            <Show when={composer.profiles.length}>
-              <MenuSeparator />
-              <MenuItem closeOnSelect={false} onPointerDown={preserveComposerFocusOnPointerDown} onSelect={() => setView("profile")}>
-                <UserRoundIcon /><span>Profile</span><span class="composer-options-preview ml-auto max-w-28 truncate text-right text-xs italic text-muted-foreground">{selectedProfileLabel()}</span><ChevronRightIcon class="menu-chevron" />
-              </MenuItem>
-            </Show>
-            <MenuSeparator />
-            <MenuItem disabled={!composer.serverOnline} onSelect={composer.onOpenAttachments}>
-              <PaperclipIcon /><span>Attach files</span>
-            </MenuItem>
+            <MenuLabel class="composer-options-label">Effort</MenuLabel>
+            <MenuRadioGroup value={composer.models.effort()} onChange={(value) => void composer.models.chooseEffort(value)}>
+              <For each={levels()}>{(level) => <MenuRadioItem value={level} closeOnSelect={false}>{thinkingLabel(level)}</MenuRadioItem>}</For>
+            </MenuRadioGroup>
           </MenuGroup>
-        </Show>
-        <Show when={view() === "model"}>
-          <div class="composer-options-panel composer-model-menu">
-            <MenuGroup>
-              <MenuItem closeOnSelect={false} onPointerDown={preserveComposerFocusOnPointerDown} onSelect={() => setView("root")} textValue="Back to message options">
-                <ChevronLeftIcon /><span>Message options</span>
-              </MenuItem>
-              <MenuSeparator />
-              <MenuLabel class="composer-options-label">Model</MenuLabel>
-              <Show when={composer.models.notice()}><div class="composer-option-note">{composer.models.notice()}</div></Show>
-              <MenuRadioGroup value={composer.models.model()} onChange={(value) => void composer.models.chooseModel(value)}>
-                <For each={composer.models.models()}>{(item) => <MenuRadioItem value={item.spec} closeOnSelect={false} onPointerDown={preserveComposerFocusOnPointerDown} onSelect={() => setView("root")}><span class="truncate">{item.label}</span><span class="ml-auto text-xs text-muted-foreground">{item.provider}</span></MenuRadioItem>}</For>
-              </MenuRadioGroup>
-            </MenuGroup>
+          <Show when={composer.profiles.length}>
             <MenuSeparator />
-            <MenuItem onSelect={() => composer.onOpenSettings("models")}>Manage models…</MenuItem>
-          </div>
-        </Show>
-        <Show when={view() === "profile"}>
-          <div class="composer-options-panel composer-profile-menu">
-            <MenuGroup>
-              <MenuItem closeOnSelect={false} onPointerDown={preserveComposerFocusOnPointerDown} onSelect={() => setView("root")} textValue="Back to message options">
-                <ChevronLeftIcon /><span>Message options</span>
-              </MenuItem>
-              <MenuSeparator />
-              <MenuLabel class="composer-options-label">Profile</MenuLabel>
-              <Show when={profileLocked()}><div class="composer-option-note">Locked after the first message.</div></Show>
-              <MenuRadioGroup value={composer.activeProfile?.id || ""} onChange={composer.onChooseProfile}>
-                <For each={composer.profiles}>{(item) => <MenuRadioItem value={item.id} disabled={profileLocked() || item.disabled} closeOnSelect={false} onPointerDown={preserveComposerFocusOnPointerDown} onSelect={() => setView("root")}>{item.label}</MenuRadioItem>}</For>
-              </MenuRadioGroup>
-            </MenuGroup>
-            <MenuSeparator />
-            <MenuItem onSelect={() => composer.onOpenSettings("profiles")}>Manage profiles…</MenuItem>
-          </div>
-        </Show>
+            <MenuSub>
+              <MobileComposerSubTrigger captureComposerFocus={captureComposerFocus} restoreComposerFocus={() => requestAnimationFrame(focusComposer)}>
+                <UserRoundIcon /><span>Profile</span><span class="composer-options-preview ml-auto max-w-28 truncate text-right text-xs italic text-muted-foreground">{selectedProfileLabel()}</span>
+              </MobileComposerSubTrigger>
+              <MenuContent class="composer-options-submenu composer-profile-menu" onOpenAutoFocus={(event) => event.preventDefault()} onCloseAutoFocus={(event) => event.preventDefault()} onFocusOutside={keepComposerFocusInsideMenu} onPointerDown={preserveComposerFocusOnPointerDown} onClick={restoreComposerFocusAfterInteraction}>
+                <MenuGroup>
+                  <MenuLabel class="composer-options-label">Profile</MenuLabel>
+                  <Show when={profileLocked()}><div class="composer-option-note">Locked after the first message.</div></Show>
+                  <MenuRadioGroup value={composer.activeProfile?.id || ""} onChange={composer.onChooseProfile}>
+                    <For each={composer.profiles}>{(item) => <MobileComposerSubmenuRadioItem value={item.id} disabled={profileLocked() || item.disabled} restoreComposerFocus={() => requestAnimationFrame(focusComposer)}>{item.label}</MobileComposerSubmenuRadioItem>}</For>
+                  </MenuRadioGroup>
+                </MenuGroup>
+                <MenuSeparator />
+                <MenuItem onSelect={() => composer.onOpenSettings("profiles")}>Manage profiles…</MenuItem>
+              </MenuContent>
+            </MenuSub>
+          </Show>
+          <MenuSeparator />
+          <MenuItem disabled={!composer.serverOnline} onSelect={composer.onOpenAttachments}>
+            <PaperclipIcon /><span>Attach files</span>
+          </MenuItem>
+        </MenuGroup>
       </MenuContent>
     </Menu>
   </div>;
@@ -216,6 +203,35 @@ function MobileComposerPlusTrigger(props: {
     onTouchStart={props.captureComposerFocus}
     onClick={(event) => { event.preventDefault(); props.onToggle(menu.isOpen()); menu.toggle(false); }}
   ><PlusIcon /></button>;
+}
+
+function MobileComposerSubTrigger(props: ParentProps<{
+  disabled?: boolean;
+  captureComposerFocus: () => void;
+  restoreComposerFocus: () => void;
+}>) {
+  const menu = useMenuContext();
+  return <MenuSubTrigger
+    disabled={props.disabled}
+    onPointerDown={(event) => {
+      props.captureComposerFocus();
+      event.preventDefault();
+      if (!props.disabled) menu.open(true);
+      requestAnimationFrame(props.restoreComposerFocus);
+    }}
+    onPointerUp={(event) => { event.preventDefault(); }}
+    onClick={() => props.restoreComposerFocus()}
+    class="composer-options-subtrigger"
+  >{props.children}</MenuSubTrigger>;
+}
+
+function MobileComposerSubmenuRadioItem(props: ParentProps<{
+  value: string;
+  disabled?: boolean;
+  restoreComposerFocus: () => void;
+}>) {
+  const menu = useMenuContext();
+  return <MenuRadioItem value={props.value} disabled={props.disabled} closeOnSelect={false} onSelect={() => { menu.close(false); requestAnimationFrame(props.restoreComposerFocus); }}>{props.children}</MenuRadioItem>;
 }
 
 export default MobileComposerOptions;

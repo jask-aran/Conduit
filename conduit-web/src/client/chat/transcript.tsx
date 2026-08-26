@@ -1,5 +1,5 @@
-import { createEffect, createMemo, createRenderEffect, createSignal, For, lazy, onCleanup, onMount, Show, Suspense, type JSX } from "solid-js";
-import { CopyIcon, PencilIcon, PlayIcon, RefreshCwIcon, TriangleAlertIcon } from "lucide-solid";
+import { createEffect, createMemo, createRenderEffect, createSignal, For, lazy, onCleanup, onMount, Show, Suspense } from "solid-js";
+import { ArrowDownIcon, CopyIcon, PencilIcon, PlayIcon, RefreshCwIcon, TriangleAlertIcon } from "lucide-solid";
 import { Button, Spinner } from "@/components/primitives";
 import type { Message, RuntimeActivity, ToolItem } from "../api/contracts";
 import type { ActiveChatStore } from "../state/active-chat";
@@ -7,8 +7,12 @@ import { AttachmentCards } from "./attachments";
 import { TurnTrace } from "./turn-trace";
 import { createTimelineStore } from "../state/timeline-store";
 import type { MarkdownRendererId } from "./markdown-settings";
+import { COMPOSER_SURFACE_CHANGE_EVENT, COMPOSER_SURFACE_OPTIONS, saveComposerSurface, selectedComposerSurface, type ComposerSurfaceMode } from "./composer-surface";
+import { saveTranscriptRenderer, selectedTranscriptRenderer, TRANSCRIPT_RENDERER_OPTIONS, type TranscriptRendererMode } from "./transcript-renderer";
+import { INCREMARK_PACING_OPTIONS, saveIncremarkPacing, selectedIncremarkPacing, type IncremarkPacingMode } from "./incremark-pacing";
 import { mountTranscriptPanelMotion } from "./transcript-motion";
 import { mountTranscriptVisibility } from "./transcript-visibility";
+import { isMobileLayout } from "../navigation/mobile-layout";
 import { getHarnessRecorder, recordHarnessMetric } from "../harness-metrics";
 import {
   advanceTailFollow,
@@ -19,6 +23,7 @@ import {
 } from "./transcript-tail-follow";
 
 const ChatMarkdown = lazy(() => import("./markdown").then((module) => ({ default: module.ChatMarkdown })));
+const IncremarkAdvancedMarkdown = lazy(() => import("./incremark-advanced").then((module) => ({ default: module.IncremarkAdvancedMarkdown })));
 const fullDateTime = (value?: string) => {
   if (!value) return "";
   const date = new Date(value);
@@ -49,20 +54,37 @@ function Actions(props: { message: Message; precedingUserId?: string; chat: Acti
   </div>;
 }
 
-export function Transcript(props: { chat: ActiveChatStore; partialContinue: boolean; markdownRenderer: MarkdownRendererId; profileLabel?: string; footer?: JSX.Element }) {
+export function Transcript(props: { chat: ActiveChatStore; partialContinue: boolean; markdownRenderer: MarkdownRendererId; rendererControlsVisible: boolean; profileLabel?: string }) {
   let transcriptRoot!: HTMLDivElement;
   let motionShell!: HTMLDivElement;
   let viewport!: HTMLDivElement;
   let thread!: HTMLDivElement;
+  let latestButton: HTMLButtonElement | undefined;
+  let scheduleLatestButtonAnchor = () => {};
   let panelMotion: ReturnType<typeof mountTranscriptPanelMotion> | null = null;
   let transcriptVisibility: ReturnType<typeof mountTranscriptVisibility> | null = null;
   let previousLoaded: string | null = null;
   let historyLoad: Promise<void> | null = null;
   let layoutEpoch = 0;
+  let previousMarkdownRenderer = props.markdownRenderer;
   const [following, setFollowing] = createSignal(true);
-  const markdownRenderer = () => props.markdownRenderer;
+  const [composerSurface, setComposerSurface] = createSignal<ComposerSurfaceMode>(selectedComposerSurface());
+  const [transcriptRenderer, setTranscriptRenderer] = createSignal<TranscriptRendererMode>(selectedTranscriptRenderer(props.markdownRenderer));
+  const [incremarkPacing, setIncremarkPacing] = createSignal<IncremarkPacingMode>(selectedIncremarkPacing());
+  const markdownRenderer = (): MarkdownRendererId => transcriptRenderer() === "incremark-advanced"
+    ? "incremark-synthetic"
+    : transcriptRenderer() as MarkdownRendererId;
+  const switchComposerSurface = (next: ComposerSurfaceMode) => setComposerSurface(saveComposerSurface(next));
+  const switchTranscriptRenderer = (next: TranscriptRendererMode) => {
+    const crossesAdvancedBoundary = transcriptRenderer() === "incremark-advanced" || next === "incremark-advanced";
+    setTranscriptRenderer(saveTranscriptRenderer(next));
+    if (crossesAdvancedBoundary) queueMicrotask(() => transcriptVisibility?.reset());
+  };
+  const switchIncremarkPacing = (next: IncremarkPacingMode) => setIncremarkPacing(saveIncremarkPacing(next));
+  const advancedTranscript = () => transcriptRenderer() === "incremark-advanced";
   const rendererUsesTypewriter = () => markdownRenderer() === "incremark-typewriter" || markdownRenderer() === "incremark-synthetic";
-  const rendererUsesInertialTailFollow = () => markdownRenderer() === "incremark-typewriter" || markdownRenderer() === "incremark-synthetic";
+  const rendererUsesInertialTailFollow = () => rendererUsesTypewriter();
+  const rendererMetric = () => advancedTranscript() ? "incremark-advanced" : markdownRenderer();
   const timeline = createTimelineStore(
     props.chat.messages,
     props.chat.tools,
@@ -81,7 +103,7 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
   let typewriterTailLastExpected: number | null = null;
   let typewriterTailTargetDeltaEma = 0;
   let programmaticScrollTop: number | null = null;
-  let previousRenderer: MarkdownRendererId | null = null;
+  let previousRenderer: TranscriptRendererMode | null = null;
   const currentViewportScrollTop = () => viewport?.scrollTop ?? 0;
   const cancelTypewriterTailFrame = () => {
     if (typewriterTailFrame == null) return;
@@ -204,7 +226,7 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
       if (recorder) {
         recordHarnessMetric(recorder, {
           stage: "transcript-scroll",
-          renderer: markdownRenderer(),
+          renderer: rendererMetric(),
           owner: "typewriter-tail-inertial",
           ownership: typewriterTailState.owner,
           reasons,
@@ -329,13 +351,22 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
     else if (following() && !rendererUsesTypewriter()) scrollBottom();
   });
   createEffect(() => {
-    const renderer = markdownRenderer();
-    if (previousRenderer == null) {
+    const next = props.markdownRenderer;
+    if (next === previousMarkdownRenderer) return;
+    previousMarkdownRenderer = next;
+    if (advancedTranscript()) return;
+    setTranscriptRenderer(saveTranscriptRenderer(next));
+  });
+  createEffect(() => {
+    const renderer = transcriptRenderer();
+    const previous = previousRenderer;
+    if (previous == null) {
       previousRenderer = renderer;
       return;
     }
-    if (renderer === previousRenderer) return;
+    if (renderer === previous) return;
     previousRenderer = renderer;
+    if (renderer === "incremark-advanced" || previous === "incremark-advanced") transcriptVisibility?.reset();
     if (rendererUsesInertialTailFollow()) resumeTypewriterTailFollow("renderer-switch");
     else {
       cancelTypewriterTailRejoin();
@@ -345,15 +376,48 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
     }
   });
 
-  const [pullDistance, setPullDistance] = createSignal(0);
-  const [pullArmed, setPullArmed] = createSignal(false);
-  let pullStartY = 0;
-  let pulling = false;
-
   onMount(() => {
+    const syncComposerSurface = () => setComposerSurface(selectedComposerSurface());
+    let latestButtonAnchorFrame: number | null = null;
+    let composerBlockSize = -1;
+    const syncLatestButtonAnchor = () => {
+      latestButtonAnchorFrame = null;
+      // The horizontal anchor follows the centred composer through CSS. Only
+      // its dynamic height needs measurement, and that style belongs on the
+      // button rather than the inherited transcript root.
+      if (!latestButton?.isConnected) return;
+      const conversation = transcriptRoot.closest<HTMLElement>(".work-area-conversation");
+      const composerShell = conversation?.querySelector<HTMLElement>(".composer-surface-shell");
+      if (!conversation || !composerShell) return;
+      const shellRect = motionShell.getBoundingClientRect();
+      const composerRect = composerShell.getBoundingClientRect();
+      if (shellRect.width <= 0 || shellRect.height <= 0 || composerRect.width <= 0 || composerRect.height <= 0) return;
+      const bottom = `${Math.max(isMobileLayout() ? 8 : 6.4, shellRect.bottom - composerRect.top + (isMobileLayout() ? 10 : 8))}px`;
+      if (latestButton.style.getPropertyValue("--message-scroller-button-bottom") !== bottom) {
+        latestButton.style.setProperty("--message-scroller-button-bottom", bottom);
+      }
+    };
+    scheduleLatestButtonAnchor = () => {
+      if (latestButtonAnchorFrame != null) return;
+      latestButtonAnchorFrame = requestAnimationFrame(syncLatestButtonAnchor);
+    };
+    const composerStack = transcriptRoot.closest<HTMLElement>(".work-area-conversation")?.querySelector<HTMLElement>(".composer-stack");
+    const composerResizeObserver = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      const blockSize = entry?.borderBoxSize[0]?.blockSize ?? entry?.contentRect.height ?? 0;
+      if (Math.abs(blockSize - composerBlockSize) < 0.5) return;
+      composerBlockSize = blockSize;
+      scheduleLatestButtonAnchor();
+    });
+    if (composerStack) composerResizeObserver.observe(composerStack);
+    const visualViewport = window.visualViewport;
+    window.addEventListener("resize", scheduleLatestButtonAnchor);
+    visualViewport?.addEventListener("resize", scheduleLatestButtonAnchor);
+    scheduleLatestButtonAnchor();
     panelMotion = mountTranscriptPanelMotion(transcriptRoot, motionShell);
     transcriptVisibility = mountTranscriptVisibility(transcriptRoot, viewport, thread);
     const claimUserScroll = () => {
+      if (empty()) return;
       if (!rendererUsesInertialTailFollow()) return;
       const changedOwner = typewriterTailState.owner !== "user";
       programmaticScrollTop = null;
@@ -364,7 +428,7 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
         if (recorder) {
           recordHarnessMetric(recorder, {
             stage: "transcript-scroll",
-            renderer: markdownRenderer(),
+            renderer: rendererMetric(),
             owner: "typewriter-tail-inertial",
             ownership: "user",
             reasons: ["user-input"],
@@ -378,6 +442,10 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
       }
     };
     const onScroll = () => {
+      if (empty()) {
+        setFollowing(true);
+        return;
+      }
       if (programmaticScrollTop != null && Math.abs(viewport.scrollTop - programmaticScrollTop) < 1) {
         programmaticScrollTop = null;
         return;
@@ -392,44 +460,11 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
       }
       if (viewport.scrollTop < 240) loadEarlier();
     };
-    // Empty-state pull-to-refresh: hard reload so a stuck PWA shell or live
-    // socket can recover without hunting browser menus.
-    const onTouchStart = (event: TouchEvent) => {
-      claimUserScroll();
-      if (!empty() || event.touches.length !== 1) return;
-      pullStartY = event.touches[0]!.clientY;
-      pulling = true;
-      setPullArmed(false);
-      setPullDistance(0);
-    };
-    const onTouchMove = (event: TouchEvent) => {
-      if (!pulling || !empty() || event.touches.length !== 1) return;
-      const delta = event.touches[0]!.clientY - pullStartY;
-      if (delta <= 0) {
-        setPullDistance(0);
-        setPullArmed(false);
-        return;
-      }
-      // Resist the drag so the welcome card barely moves.
-      const resisted = Math.min(96, delta * 0.35);
-      setPullDistance(resisted);
-      setPullArmed(resisted >= 56);
-      if (delta > 8) event.preventDefault();
-    };
-    const onTouchEnd = () => {
-      if (!pulling) return;
-      pulling = false;
-      const shouldReload = pullArmed();
-      setPullDistance(0);
-      setPullArmed(false);
-      if (shouldReload) location.reload();
-    };
+    const onTouchStart = () => claimUserScroll();
     viewport.addEventListener("scroll", onScroll, { passive: true });
     viewport.addEventListener("wheel", claimUserScroll, { passive: true });
     viewport.addEventListener("touchstart", onTouchStart, { passive: true });
-    viewport.addEventListener("touchmove", onTouchMove, { passive: false });
-    viewport.addEventListener("touchend", onTouchEnd);
-    viewport.addEventListener("touchcancel", onTouchEnd);
+    window.addEventListener(COMPOSER_SURFACE_CHANGE_EVENT, syncComposerSurface);
     const resizeObserver = new ResizeObserver(() => {
       if (!following()) return;
       if (rendererUsesInertialTailFollow()) requestTypewriterTailFollow("resize");
@@ -442,9 +477,13 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
       viewport.removeEventListener("scroll", onScroll);
       viewport.removeEventListener("wheel", claimUserScroll);
       viewport.removeEventListener("touchstart", onTouchStart);
-      viewport.removeEventListener("touchmove", onTouchMove);
-      viewport.removeEventListener("touchend", onTouchEnd);
-      viewport.removeEventListener("touchcancel", onTouchEnd);
+      window.removeEventListener(COMPOSER_SURFACE_CHANGE_EVENT, syncComposerSurface);
+      composerResizeObserver.disconnect();
+      window.removeEventListener("resize", scheduleLatestButtonAnchor);
+      visualViewport?.removeEventListener("resize", scheduleLatestButtonAnchor);
+      if (latestButtonAnchorFrame != null) cancelAnimationFrame(latestButtonAnchorFrame);
+      latestButton?.style.removeProperty("--message-scroller-button-bottom");
+      scheduleLatestButtonAnchor = () => {};
       if (scrollFrame != null) cancelAnimationFrame(scrollFrame);
       cancelTypewriterTailFrame();
       cancelTypewriterTailRejoin();
@@ -456,21 +495,31 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
     });
   });
 
-  return <div ref={transcriptRoot} class="transcript" data-slot="message-scroller" data-markdown-renderer={markdownRenderer()} data-markdown-typewriter={rendererUsesTypewriter() ? "true" : undefined} data-markdown-synthetic-math={markdownRenderer() === "incremark-synthetic" ? "true" : undefined}>
-    <Show when={empty() && pullDistance() > 8}>
-      <div class="empty-pull-hint" data-visible="true" data-armed={pullArmed() ? "true" : "false"} aria-hidden="true">
-        {pullArmed() ? "Release to refresh" : "Pull to refresh"}
+  return <div ref={transcriptRoot} class="transcript" data-slot="message-scroller" data-markdown-renderer={markdownRenderer()} data-transcript-renderer={transcriptRenderer()} data-markdown-typewriter={rendererUsesTypewriter() ? "true" : undefined} data-incremark-pacing={rendererUsesTypewriter() ? incremarkPacing() : undefined} data-markdown-synthetic-math={markdownRenderer() === "incremark-synthetic" ? "true" : undefined}>
+    <Show when={props.rendererControlsVisible}>
+      <div class="composer-renderer-switch">
+        <label>Composer renderer<select aria-label="Composer renderer" title="Composer renderer" value={composerSurface()} onChange={(event) => switchComposerSurface(event.currentTarget.value as ComposerSurfaceMode)}>
+          <For each={COMPOSER_SURFACE_OPTIONS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
+        </select></label>
+        <label>Transcript renderer<select aria-label="Transcript renderer" title="Transcript renderer" value={transcriptRenderer()} onChange={(event) => switchTranscriptRenderer(event.currentTarget.value as TranscriptRendererMode)}>
+          <For each={TRANSCRIPT_RENDERER_OPTIONS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
+        </select></label>
+        <Show when={rendererUsesTypewriter()}>
+          <label>Typewriter pacing<select aria-label="Typewriter pacing" title="Typewriter pacing" value={incremarkPacing()} onChange={(event) => switchIncremarkPacing(event.currentTarget.value as IncremarkPacingMode)}>
+            <For each={INCREMARK_PACING_OPTIONS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
+          </select></label>
+        </Show>
       </div>
     </Show>
     <div ref={motionShell} class="transcript-motion-shell">
       <div ref={viewport} class="message-scroller-viewport" data-slot="message-scroller-viewport">
-        <div ref={thread} class="thread" data-slot="message-scroller-content" style={empty() && pullDistance() > 0 ? { transform: `translateY(${pullDistance()}px)` } : undefined}>
+        <div ref={thread} class="thread" data-slot="message-scroller-content">
         <Show when={props.chat.loadingOlder()}>
           <div data-slot="message-scroller-item" class="flex justify-center" role="status" aria-label="Loading earlier messages"><Spinner /></div>
         </Show>
         <Show when={empty()}><div class="empty-thread" data-slot="message-scroller-item"><div class="welcome"><h1>How can I help you today?</h1></div></div></Show>
         <For each={timeline}>{(item) => {
-          if (item.type === "trace") return <div data-slot="message-scroller-item"><TurnTrace trace={item.value} sessionId={props.chat.loadedId()} renderer={markdownRenderer()} profileLabel={props.profileLabel} /></div>;
+          if (item.type === "trace") return <div data-slot="message-scroller-item"><TurnTrace trace={item.value} sessionId={props.chat.loadedId()} renderer={markdownRenderer()} pacing={incremarkPacing()} profileLabel={props.profileLabel} /></div>;
           const message = createMemo(() => item.value);
           const user = createMemo(() => message().role === "user");
           const failed = createMemo(() => !user() && message().stopReason === "error");
@@ -487,7 +536,11 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
                 <div data-slot="bubble" data-align={user() ? "end" : "start"} data-error={failed() ? "true" : undefined} data-editing={props.chat.editingEntryId() === message().id ? "true" : "false"} class={user() ? "bubble bubble-user" : "bubble bubble-assistant"}>
                   <div data-slot="bubble-content">
                     <Show when={user()} fallback={<>
-                      <Show when={message().content}><Suspense fallback={<div class="markdown-skeleton" />}><ChatMarkdown renderer={markdownRenderer()} typewriter={rendererUsesTypewriter()} syntheticMath={markdownRenderer() === "incremark-synthetic"} displayKey={item.displayKey} streaming={live()} streamVersion={item.streamVersion} onRendered={settleAfterMarkdown}>{message().content || ""}</ChatMarkdown></Suspense></Show>
+                      <Show when={message().content}><Suspense fallback={<div class="markdown-skeleton" />}>
+                        <Show when={advancedTranscript()} fallback={<ChatMarkdown renderer={markdownRenderer()} typewriter={rendererUsesTypewriter()} syntheticMath={markdownRenderer() === "incremark-synthetic"} pacing={incremarkPacing()} displayKey={item.displayKey} streaming={live()} streamVersion={item.streamVersion} onRendered={settleAfterMarkdown}>{message().content || ""}</ChatMarkdown>}>
+                          <IncremarkAdvancedMarkdown renderer="incremark-synthetic" pacing={incremarkPacing()} displayKey={item.displayKey} streaming={live()} streamVersion={item.streamVersion} onRendered={settleAfterMarkdown}>{message().content || ""}</IncremarkAdvancedMarkdown>
+                        </Show>
+                      </Suspense></Show>
                       <Show when={failed()}>
                         <details class="assistant-error" open role="alert">
                           <summary><TriangleAlertIcon aria-hidden="true" /><strong>Request failed</strong></summary>
@@ -512,9 +565,8 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
           </div>;
         }}</For>
         </div>
-        {props.footer}
       </div>
-      <Show when={!following()}><Button class="message-scroller-button" aria-label="Scroll to latest" onClick={() => { if (rendererUsesInertialTailFollow()) resumeTypewriterTailFollow("user-scroll-to-latest"); else { setFollowing(true); scrollBottom(); } }}>↓</Button></Show>
+      <Show when={!following()}><Button ref={(element) => { latestButton = element; scheduleLatestButtonAnchor(); }} variant="ghost" size="icon-sm" class="message-scroller-button composer-surface-material" data-composer-surface={composerSurface()} aria-label="Scroll to latest" title="Scroll to latest" onClick={() => { if (rendererUsesInertialTailFollow()) resumeTypewriterTailFollow("user-scroll-to-latest"); else { setFollowing(true); scrollBottom(); } }}><ArrowDownIcon /></Button></Show>
     </div>
   </div>;
 }
