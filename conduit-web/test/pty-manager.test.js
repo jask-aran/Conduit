@@ -52,7 +52,10 @@ function fakeTmux() {
     }
     if (action === "list-panes") {
       if (!sessions.size) throw Object.assign(new Error("no server running"), { code: 1, stderr: "no server running" });
-      return { stdout: [...sessions].map((name) => `${name}\tsh\t1770000000\t0`).join("\n") + "\n", stderr: "" };
+      const format = tail[tail.indexOf("-F") + 1];
+      assert.equal(format, "#{session_name}__CONDUIT_FIELD__#{pane_current_command}__CONDUIT_FIELD__#{window_activity}__CONDUIT_FIELD__#{pane_dead}");
+      assert.doesNotMatch(format, /[\u0000-\u001f]/, "tmux 3.5 sanitizes control characters in format strings");
+      return { stdout: [...sessions].map((name) => `${name}__CONDUIT_FIELD__sh__CONDUIT_FIELD__1770000000__CONDUIT_FIELD__0`).join("\n") + "\n", stderr: "" };
     }
     if (action === "rename-window") {
       const target = tail[tail.indexOf("-t") + 1].replace(/:0$/, "");
