@@ -30,6 +30,30 @@
   height: 0 !important;
 }
 
+.terminal-pane-header {
+  container-type: inline-size;
+}
+
+.terminal-pane-identity {
+  overflow: hidden;
+}
+
+.terminal-pane-identity span {
+  overflow: hidden;
+  letter-spacing: normal;
+  text-overflow: ellipsis;
+  text-transform: none;
+  white-space: nowrap;
+}
+
+@container (max-width: 620px) {
+  .terminal-header-command { display: none; }
+}
+
+@container (max-width: 480px) {
+  .terminal-header-title { display: none; }
+}
+
 .terminal-pane[data-terminal-focused="true"] .terminal-canvas[data-active="true"] {
   outline: 1px solid color-mix(in oklch, var(--accent-cool), transparent 42%);
   outline-offset: -1px;

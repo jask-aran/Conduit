@@ -509,13 +509,16 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
     <aside ref={panelRoot} class="workspace-panel" classList={{ "workspace-panel-open": props.open() || shellWidth() > 0.5 }} aria-label="Workspace panel" aria-hidden={!props.open()} inert={!props.open()} style={{ "--workspace-panel-width": `${width()}px`, "--workspace-shell-width": `${shellWidth()}px`, width: `${shellWidth()}px`, "margin-right": `${shellGap()}px` }}>
     <div ref={resizeHandle} class="workspace-resize-handle" role="separator" aria-label="Resize workspace panel" aria-orientation="vertical" aria-valuemin="240" aria-valuemax={Math.floor(window.innerWidth * 0.65)} aria-valuenow={width()} tabIndex={0} onPointerDown={startResize} onKeyDown={(event) => { if (event.key === "ArrowLeft") saveWidth(width() + 16); if (event.key === "ArrowRight") saveWidth(width() - 16); }} />
     <div ref={panelSurface} class="workspace-panel-surface">
-    <header class="workspace-panel-header"><div><strong>Workspace</strong><small>Project context and tools</small></div><Button variant="ghost" size="icon-sm" aria-label="Close workspace panel" onClick={props.onClose}><XIcon /></Button></header>
-    <div class="workspace-panel-tabs" role="tablist" aria-label="Workspace views">
-      <button role="tab" aria-selected={tab() === "files"} onClick={() => { selectTab("files"); if (!directories()[""]) void loadDirectory(); }}><FolderIcon />Files</button>
-      <button role="tab" aria-selected={tab() === "diff"} onClick={() => selectTab("diff")}><GitCompareArrowsIcon />Source Control</button>
-      <button role="tab" aria-selected={tab() === "artifacts"} onClick={() => selectTab("artifacts")}><BoxesIcon />Artifacts</button>
-      <button role="tab" aria-selected={tab() === "terminal"} onClick={() => selectTab("terminal")}><TerminalIcon />Terminal</button>
-    </div>
+    <header class="workspace-panel-header">
+      <strong>Workspace</strong>
+      <div class="workspace-panel-tabs" role="tablist" aria-label="Workspace views">
+        <button role="tab" aria-selected={tab() === "files"} onClick={() => { selectTab("files"); if (!directories()[""]) void loadDirectory(); }}><FolderIcon /><span>Files</span></button>
+        <button role="tab" aria-selected={tab() === "diff"} onClick={() => selectTab("diff")}><GitCompareArrowsIcon /><span>Source Control</span></button>
+        <button role="tab" aria-selected={tab() === "artifacts"} onClick={() => selectTab("artifacts")}><BoxesIcon /><span>Artifacts</span></button>
+        <button role="tab" aria-selected={tab() === "terminal"} onClick={() => selectTab("terminal")}><TerminalIcon /><span>Terminal</span></button>
+      </div>
+      <Button variant="ghost" size="icon-sm" aria-label="Close workspace panel" onClick={props.onClose}><XIcon /></Button>
+    </header>
     <Show when={error()}><div class="workspace-panel-error">{error()}</div></Show>
     <Show when={tab() === "files"}>
       <div class="workspace-files"><nav aria-label="Project files" class="workspace-tree"><Tree directory="" /></nav>

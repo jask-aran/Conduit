@@ -11,6 +11,7 @@ export type TerminalRenderer = {
   write: (bytes: Uint8Array) => void;
   focus: () => void;
   fit: () => void;
+  setFontSize: (fontSize: number) => void;
   repaint: () => void;
   resize: (cols: number, rows: number) => void;
   onData: (listener: (data: string) => void) => () => void;
@@ -109,6 +110,11 @@ function applyFit(fit: TerminalFit) {
   fit.fit();
 }
 
+function terminalFontSize() {
+  const fallback = isMobileLayout() ? 13 : 10.4;
+  return Math.max(8, Math.min(24, Number(localStorage.getItem("conduit:terminal-font-size")) || fallback));
+}
+
 function observeHostSize(host: HTMLElement, terminal: ResizableTerminal & RefreshableTerminal, fit: TerminalFit) {
   let frame: number | undefined;
   let disposed = false;
@@ -173,7 +179,7 @@ async function createGhosttyRenderer(host: HTMLElement): Promise<TerminalRendere
   const { init, Terminal, FitAddon } = await import("ghostty-web");
   await init();
   const terminal = new Terminal({
-    fontSize: isMobileLayout() ? 13 : 10.4,
+    fontSize: terminalFontSize(),
     fontFamily: '"Conduit Terminal Font", monospace',
     cursorBlink: false,
     theme: CONDUIT_TERMINAL_THEME,
@@ -192,6 +198,7 @@ async function createGhosttyRenderer(host: HTMLElement): Promise<TerminalRendere
     write: (bytes) => writeTerminal(terminal as unknown as WritableTerminal, bytes),
     focus: () => terminal.focus(),
     fit: () => applyFit(fit),
+    setFontSize: (fontSize) => { terminal.options.fontSize = fontSize; applyFit(fit); },
     repaint: () => repaintTerminal(refreshable),
     resize: (cols, rows) => resizeTerminal(terminal, cols, rows),
     onData: (listener) => { const subscription = terminal.onData(listener); return () => subscription.dispose(); },
@@ -209,7 +216,7 @@ async function createXtermRenderer(host: HTMLElement): Promise<TerminalRenderer>
     import("@xterm/xterm/css/xterm.css"),
   ]);
   const terminal = new Terminal({
-    fontSize: isMobileLayout() ? 13 : 10.4,
+    fontSize: terminalFontSize(),
     fontFamily: '"Conduit Terminal Font", monospace',
     cursorBlink: false,
     scrollback: 1000,
@@ -245,6 +252,7 @@ async function createXtermRenderer(host: HTMLElement): Promise<TerminalRenderer>
     write: (bytes) => writeTerminal(terminal, bytes),
     focus: () => terminal.focus(),
     fit: () => applyFit(fit),
+    setFontSize: (fontSize) => { terminal.options.fontSize = fontSize; applyFit(fit); },
     repaint: () => repaintTerminal(terminal),
     resize: (cols, rows) => resizeTerminal(terminal, cols, rows),
     onData: (listener) => { const subscription = terminal.onData(listener); return () => subscription.dispose(); },
