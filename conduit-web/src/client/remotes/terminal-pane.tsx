@@ -247,6 +247,7 @@ export function TerminalPane(props: { projectId: string; active?: boolean }) {
               setConnectionState("disconnected");
               setError("Terminal is attached in another Conduit client.");
             } else if (message.code === "pty_taken_over") {
+              setOwnershipConflict(true);
               setWritable(false);
               setTerminalFocused(false);
               setConnectionState("disconnected");
@@ -298,6 +299,7 @@ export function TerminalPane(props: { projectId: string; active?: boolean }) {
       if (generation !== connectionGeneration || intentionallyClosed) return;
       setWritable(false);
       setTerminalFocused(false);
+      if (event.code === PTY_IN_USE_CLOSE_CODE || event.code === PTY_TAKEN_OVER_CLOSE_CODE) setOwnershipConflict(true);
       if (pty()?.status === "exited") {
         setConnectionState("exited");
         return;
