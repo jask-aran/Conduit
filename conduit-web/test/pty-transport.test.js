@@ -18,8 +18,8 @@ function tmuxAvailable() {
 
 const tmuxTest = tmuxAvailable() ? test : test.skip;
 
-function openTerminal(origin, id, { cols = 100, rows = 30 } = {}) {
-  const socket = new WebSocket(`${origin.replace("http", "ws")}/v0/ptys/${id}/attach?cols=${cols}&rows=${rows}`);
+function openTerminal(origin, id, { cols = 100, rows = 30, takeover = false } = {}) {
+  const socket = new WebSocket(`${origin.replace("http", "ws")}/v0/ptys/${id}/attach?cols=${cols}&rows=${rows}${takeover ? "&takeover=1" : ""}`);
   const messages = [];
   socket.on("message", (data, isBinary) => messages.push({ data: Buffer.from(data), isBinary }));
   return {
@@ -252,6 +252,7 @@ tmuxTest("one browser owns a terminal while unrelated terminals may stream concu
     const project = await harness.createProject("Exclusive terminal leases");
     const firstTerminal = await (await harness.request("/v0/ptys", { method: "POST", body: JSON.stringify({ projectId: project.id }) })).json();
     const secondTerminal = await (await harness.request("/v0/ptys", { method: "POST", body: JSON.stringify({ projectId: project.id }) })).json();
+    const pendingTerminal = await (await harness.request("/v0/ptys", { method: "POST", body: JSON.stringify({ projectId: project.id }) })).json();
 
     const owner = openTerminal(harness.origin, firstTerminal.id);
     const unrelated = openTerminal(harness.origin, secondTerminal.id);
@@ -268,16 +269,24 @@ tmuxTest("one browser owns a terminal while unrelated terminals may stream concu
     unrelated.socket.send(Buffer.from("printf 'unrelated-terminal-input\\n'\n"));
     await Promise.all([owner.outputIncludes("owner-terminal-input"), unrelated.outputIncludes("unrelated-terminal-input")]);
 
-    owner.socket.close();
-    await waitClosed(owner);
-    const replacement = openTerminal(harness.origin, firstTerminal.id);
+    const replacement = openTerminal(harness.origin, firstTerminal.id, { takeover: true });
     await replacement.opened;
     await waitWritable(replacement);
+    assert.equal((await waitClosed(owner)).code, 4010);
     replacement.socket.send(Buffer.from("printf 'replacement-owner-input\\n'\n"));
     await replacement.outputIncludes("replacement-owner-input");
 
+    const cancelled = openTerminal(harness.origin, pendingTerminal.id);
+    await cancelled.opened;
+    cancelled.socket.close();
+    await waitClosed(cancelled);
+    const pendingReplacement = openTerminal(harness.origin, pendingTerminal.id);
+    await pendingReplacement.opened;
+    await waitWritable(pendingReplacement);
+
     replacement.socket.close();
     unrelated.socket.close();
+    pendingReplacement.socket.close();
   } finally {
     await harness.stop();
   }

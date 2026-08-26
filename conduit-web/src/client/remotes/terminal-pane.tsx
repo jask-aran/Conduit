@@ -28,6 +28,7 @@ type Pty = {
 };
 type ConnectionState = "idle" | "connecting" | "attached" | "disconnected" | "exited";
 const PTY_IN_USE_CLOSE_CODE = 4009;
+const PTY_TAKEN_OVER_CLOSE_CODE = 4010;
 
 function notifyPtyChange() {
   window.dispatchEvent(new Event("conduit:ptys-changed"));
@@ -47,6 +48,7 @@ export function TerminalPane(props: { projectId: string; active?: boolean }) {
   const [starting, setStarting] = createSignal(false);
   const [stopping, setStopping] = createSignal(false);
   const [sessionBusy, setSessionBusy] = createSignal("");
+  const [ownershipConflict, setOwnershipConflict] = createSignal(false);
   const [connectionState, setConnectionState] = createSignal<ConnectionState>("idle");
   const [writable, setWritable] = createSignal(false);
   const [terminalFocused, setTerminalFocused] = createSignal(false);
@@ -140,6 +142,8 @@ export function TerminalPane(props: { projectId: string; active?: boolean }) {
   const scheduleReconnect = (record: Pty, renderer: TerminalRendererId, closeCode: number) => {
     if (
       record.status !== "running"
+      || closeCode === PTY_IN_USE_CLOSE_CODE
+      || closeCode === PTY_TAKEN_OVER_CLOSE_CODE
       || closeCode === 1012
       || closeCode === 1013
       || reconnectAttempts >= 3
@@ -152,7 +156,7 @@ export function TerminalPane(props: { projectId: string; active?: boolean }) {
     reconnectTimer = window.setTimeout(() => {
       reconnectTimer = undefined;
       void connect(record, renderer, {
-        freshRenderer: closeCode !== PTY_IN_USE_CLOSE_CODE,
+        freshRenderer: true,
         retrying: true,
       });
     }, delay);
@@ -161,11 +165,12 @@ export function TerminalPane(props: { projectId: string; active?: boolean }) {
   const connect = async (
     record: Pty,
     renderer = rendererId(),
-    { freshRenderer = false, retrying = false }: { freshRenderer?: boolean; retrying?: boolean } = {},
+    { freshRenderer = false, retrying = false, takeover = false }: { freshRenderer?: boolean; retrying?: boolean; takeover?: boolean } = {},
   ) => {
     const generation = ++connectionGeneration;
     closeConnection();
     setError("");
+    setOwnershipConflict(false);
     if (!retrying) reconnectAttempts = 0;
     setConnectionState("connecting");
     const activeTerminal = await ensureRenderer(renderer, { fresh: freshRenderer });
@@ -181,6 +186,7 @@ export function TerminalPane(props: { projectId: string; active?: boolean }) {
     const url = new URL(await terminalSocketUrl(record.id));
     url.searchParams.set("cols", String(initialCols));
     url.searchParams.set("rows", String(initialRows));
+    if (takeover) url.searchParams.set("takeover", "1");
     const connection = new WebSocket(url);
     socket = connection;
     connection.binaryType = "arraybuffer";
@@ -235,10 +241,16 @@ export function TerminalPane(props: { projectId: string; active?: boolean }) {
           }
           if (message.type === "client_error") {
             if (message.code === "pty_in_use") {
+              setOwnershipConflict(true);
               setWritable(false);
               setTerminalFocused(false);
               setConnectionState("disconnected");
               setError("Terminal is attached in another Conduit client.");
+            } else if (message.code === "pty_taken_over") {
+              setWritable(false);
+              setTerminalFocused(false);
+              setConnectionState("disconnected");
+              setError("Another Conduit client took control of this terminal.");
             } else {
               setError(message.message || "Terminal control failed");
             }
@@ -293,6 +305,8 @@ export function TerminalPane(props: { projectId: string; active?: boolean }) {
       setConnectionState("disconnected");
       const reason = event.code === PTY_IN_USE_CLOSE_CODE
         ? "Terminal is attached in another Conduit client."
+        : event.code === PTY_TAKEN_OVER_CLOSE_CODE
+          ? "Another Conduit client took control of this terminal."
         : event.code === 1013
           ? "Terminal connection was closed because this browser could not keep up with output."
           : "Terminal connection was interrupted.";
@@ -394,7 +408,7 @@ export function TerminalPane(props: { projectId: string; active?: boolean }) {
     const record = pty();
     if (!record || record.status !== "running") return;
     reconnectAttempts = 0;
-    await connect(record, rendererId(), { freshRenderer: true });
+    await connect(record, rendererId(), { freshRenderer: true, takeover: ownershipConflict() });
   };
 
   const removeSession = async (record: Pty) => {
@@ -629,7 +643,7 @@ export function TerminalPane(props: { projectId: string; active?: boolean }) {
         </div>
       </Show>
       <Show when={pty() && connectionState() === "disconnected"}>
-        <div class="terminal-pane-state"><strong>Terminal disconnected</strong><Button onClick={() => void reconnect()}>Reconnect</Button></div>
+        <div class="terminal-pane-state"><strong>{ownershipConflict() ? "Terminal in use" : "Terminal disconnected"}</strong><Button onClick={() => void reconnect()}>{ownershipConflict() ? "Take control" : "Reconnect"}</Button></div>
       </Show>
       <Show when={pty() && connectionState() === "exited"}>
         <div class="terminal-pane-state"><strong>Terminal exited</strong><Button onClick={() => void restart()}>Start new terminal</Button></div>
