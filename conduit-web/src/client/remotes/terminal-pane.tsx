@@ -120,6 +120,7 @@ export function TerminalPane(props: { projectId: string; active?: boolean }) {
   const zoomTerminal = (event: WheelEvent) => {
     if ((!event.ctrlKey && !event.metaKey) || !terminal) return;
     event.preventDefault();
+    event.stopPropagation();
     const current = Number(localStorage.getItem("conduit:terminal-font-size")) || (window.matchMedia("(max-width: 560px)").matches ? 13 : 10.4);
     const next = Math.max(8, Math.min(24, current + (event.deltaY < 0 ? 1 : -1)));
     localStorage.setItem("conduit:terminal-font-size", String(next));
@@ -565,6 +566,7 @@ export function TerminalPane(props: { projectId: string; active?: boolean }) {
   onMount(() => {
     mounted = true;
     activeProjectId = props.projectId;
+    host?.addEventListener("wheel", zoomTerminal, { capture: true, passive: false });
     ptyChangeListener = () => {
       void refreshSessions(activeProjectId).catch(() => {});
     };
@@ -608,6 +610,7 @@ export function TerminalPane(props: { projectId: string; active?: boolean }) {
 
   onCleanup(() => {
     mounted = false;
+    host?.removeEventListener("wheel", zoomTerminal, { capture: true });
     if (ptyChangeListener) window.removeEventListener("conduit:ptys-changed", ptyChangeListener);
     connectionGeneration += 1;
     closeConnection();
@@ -633,8 +636,7 @@ export function TerminalPane(props: { projectId: string; active?: boolean }) {
     <section class="terminal-pane" aria-label="Terminal pane" data-terminal-focused={terminalFocused() ? "true" : "false"} onKeyDown={scopeTerminalKeyboard}>
     <header class="terminal-pane-header">
       <div class="terminal-pane-identity">
-        <TerminalIcon /><strong>Terminal</strong>
-        <Show when={pty()?.title}><span class="terminal-header-title">{pty()!.title}</span></Show>
+        <Show when={pty()?.title}><strong>{pty()!.title}</strong></Show>
         <Show when={pty()?.currentCommand}><span class="terminal-header-command">{pty()!.currentCommand}</span></Show>
         <span class="terminal-header-status">{statusLabel()}</span>
       </div>
@@ -730,7 +732,6 @@ export function TerminalPane(props: { projectId: string; active?: boolean }) {
         data-active={pty() ? "true" : "false"}
         data-renderer={rendererId()}
         onClick={() => focusActiveTerminal()}
-        onWheel={zoomTerminal}
         onFocusIn={handleTerminalFocusIn}
         onFocusOut={handleTerminalFocusOut}
       />
