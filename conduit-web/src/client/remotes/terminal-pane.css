@@ -335,11 +335,12 @@
   font: 10px ui-monospace, SFMono-Regular, Consolas, monospace;
 }
 
-.terminal-session-destroy-wrap {
+.terminal-session-action-wrap {
   display: flex;
   align-self: stretch;
 }
 
+.terminal-session-action,
 .terminal-session-destroy {
   align-self: stretch;
   width: 38px;
@@ -347,9 +348,14 @@
   height: auto;
   padding: 0;
   justify-content: center;
+  border-radius: 0;
+}
+
+.terminal-session-destroy {
   border-radius: 0 5px 5px 0;
 }
 
+.terminal-session-action svg,
 .terminal-session-destroy svg {
   width: 12px;
   height: 12px;

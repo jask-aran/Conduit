@@ -1,7 +1,12 @@
 import { createEffect, createSignal, For, onCleanup, onMount, Show } from "solid-js";
-import { CheckIcon, ChevronDownIcon, FocusIcon, PlusIcon, TerminalIcon, Trash2Icon } from "lucide-solid";
+import { CheckIcon, ChevronDownIcon, FocusIcon, PencilIcon, PlusIcon, TerminalIcon, Trash2Icon, UnplugIcon } from "lucide-solid";
 import {
   Button,
+  Dialog,
+  DialogContent,
+  Field,
+  FieldLabel,
+  Input,
   Menu,
   MenuContent,
   MenuGroup,
@@ -50,6 +55,8 @@ export function TerminalPane(props: { projectId: string; active?: boolean }) {
   const [error, setError] = createSignal("");
   const [starting, setStarting] = createSignal(false);
   const [sessionBusy, setSessionBusy] = createSignal("");
+  const [renameSession, setRenameSession] = createSignal<Pty | null>(null);
+  const [renameValue, setRenameValue] = createSignal("");
   const [ownershipConflict, setOwnershipConflict] = createSignal(false);
   const [connectionState, setConnectionState] = createSignal<ConnectionState>("idle");
   const [writable, setWritable] = createSignal(false);
@@ -461,6 +468,44 @@ export function TerminalPane(props: { projectId: string; active?: boolean }) {
     }
   };
 
+  const detachSession = (record: Pty) => {
+    if (pty()?.id !== record.id) return;
+    connectionGeneration += 1;
+    reconnectAttempts = 0;
+    closeConnection();
+    disposeRenderer();
+    setOwnershipConflict(false);
+    setError("");
+    setConnectionState("disconnected");
+  };
+
+  const requestRename = (record: Pty) => {
+    setRenameSession(record);
+    setRenameValue(record.title || "Shell");
+  };
+
+  const submitRename = async (event: SubmitEvent) => {
+    event.preventDefault();
+    const record = renameSession();
+    const title = renameValue().trim();
+    if (!record || !title || sessionBusy()) return;
+    setSessionBusy(record.id);
+    try {
+      const renamed = await api<Pty>(`/v0/ptys/${encodeURIComponent(record.id)}/rename`, {
+        method: "POST",
+        body: JSON.stringify({ title }),
+      });
+      setSessions((current) => current.map((item) => item.id === renamed.id ? renamed : item));
+      if (pty()?.id === renamed.id) setPty(renamed);
+      setRenameSession(null);
+      notifyPtyChange();
+    } catch (cause) {
+      setError((cause as Error).message);
+    } finally {
+      if (sessionBusy() === record.id) setSessionBusy("");
+    }
+  };
+
   const restart = async () => {
     connectionGeneration += 1;
     closeConnection();
@@ -548,7 +593,23 @@ export function TerminalPane(props: { projectId: string; active?: boolean }) {
     disposeRenderer();
   });
 
-  return <section class="terminal-pane" aria-label="Terminal pane" data-terminal-focused={terminalFocused() ? "true" : "false"} onKeyDown={scopeTerminalKeyboard}>
+  return <>
+    <Dialog open={Boolean(renameSession())} onOpenChange={(open) => { if (!open) setRenameSession(null); }}>
+      <DialogContent title="Rename terminal" description="Choose the label shown in this Workspace terminal list.">
+        <form onSubmit={(event) => void submitRename(event)}>
+          <Field>
+            <FieldLabel for="terminal-rename-title">Name</FieldLabel>
+            <Input id="terminal-rename-title" value={renameValue()} maxlength={80} autofocus
+              onInput={(event) => setRenameValue(event.currentTarget.value)} />
+          </Field>
+          <div class="mt-4 flex justify-end gap-2">
+            <Button type="button" variant="outline" onClick={() => setRenameSession(null)}>Cancel</Button>
+            <Button type="submit" disabled={!renameValue().trim() || Boolean(sessionBusy())}>Rename</Button>
+          </div>
+        </form>
+      </DialogContent>
+    </Dialog>
+    <section class="terminal-pane" aria-label="Terminal pane" data-terminal-focused={terminalFocused() ? "true" : "false"} onKeyDown={scopeTerminalKeyboard}>
     <header class="terminal-pane-header">
       <div><TerminalIcon /><strong>Terminal</strong><span>{statusLabel()}</span></div>
       <div class="terminal-pane-actions">
@@ -570,7 +631,27 @@ export function TerminalPane(props: { projectId: string; active?: boolean }) {
                       </span>
                     </MenuItem>
                     <Tooltip>
-                      <TooltipTrigger as="div" class="terminal-session-destroy-wrap">
+                      <TooltipTrigger as="div" class="terminal-session-action-wrap">
+                        <MenuItem class="terminal-session-action" aria-label={`Rename ${session.title || "terminal"}`}
+                          textValue={`Rename ${session.title || "terminal"}`} onSelect={() => requestRename(session)}>
+                          <PencilIcon />
+                        </MenuItem>
+                      </TooltipTrigger>
+                      <TooltipContent>Rename {session.title || "terminal"}</TooltipContent>
+                    </Tooltip>
+                    <Tooltip>
+                      <TooltipTrigger as="div" class="terminal-session-action-wrap">
+                        <MenuItem class="terminal-session-action" aria-label={`Detach from ${session.title || "terminal"}`}
+                          textValue={`Detach from ${session.title || "terminal"}`}
+                          disabled={pty()?.id !== session.id || connectionState() !== "attached"}
+                          onSelect={() => detachSession(session)}>
+                          <UnplugIcon />
+                        </MenuItem>
+                      </TooltipTrigger>
+                      <TooltipContent>Detach from {session.title || "terminal"}</TooltipContent>
+                    </Tooltip>
+                    <Tooltip>
+                      <TooltipTrigger as="div" class="terminal-session-action-wrap">
                         <MenuItem
                           class="terminal-session-destroy"
                           variant="destructive"
@@ -642,5 +723,6 @@ export function TerminalPane(props: { projectId: string; active?: boolean }) {
       </Show>
       <Show when={error()}><p class="terminal-pane-error" role="alert">{error()}</p></Show>
     </div>
-  </section>;
+  </section>
+  </>;
 }
