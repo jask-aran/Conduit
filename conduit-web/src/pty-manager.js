@@ -35,7 +35,7 @@ set -g focus-events on
 set -g mouse off
 set -g set-titles off
 set -wg automatic-rename off
-set -wg allow-passthrough on
+set -wg allow-passthrough off
 set -wg history-limit 10000
 set -wg window-size latest
 set -wg remain-on-exit off

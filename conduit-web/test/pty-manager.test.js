@@ -105,6 +105,7 @@ test("PTY manager uses tmux as session authority with one browser lease per term
   assert.ok(newSession.args.includes(manager.tmuxConfigPath));
   assert.ok(newSession.args.includes(workspace));
   assert.ok(newSession.args.includes("Shell"));
+  assert.match(await fs.readFile(manager.tmuxConfigPath, "utf8"), /allow-passthrough off/);
 
   const attachment = await manager.attach(record.id, { cols: 120, rows: 40 });
   assert.equal(pty.handles.length, 1);
