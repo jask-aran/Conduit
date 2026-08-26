@@ -320,6 +320,9 @@ export class PtyManager extends EventEmitter {
       const exitListeners = new Set();
       const dataListeners = new Set();
       const earlyData = [];
+      const releaseLease = () => {
+        if (this.attachments.get(id) === lease) this.attachments.delete(id);
+      };
       handle.onData((value) => {
         // tmux may redraw immediately after attach. Do not lose that authoritative
         // initial screen in the small interval before terminal-stream subscribes.
@@ -330,7 +333,7 @@ export class PtyManager extends EventEmitter {
         if (exited) return;
         exited = true;
         exitEvent = event;
-        if (this.attachments.get(id) === lease) this.attachments.delete(id);
+        releaseLease();
         for (const listener of exitListeners) listener(event);
         if (!this.stopping) void this.reconcile().catch(() => {});
       });
@@ -361,6 +364,9 @@ export class PtyManager extends EventEmitter {
         },
         kill() {
           if (exited) return;
+          // The owning browser is already gone. Release its lease before the
+          // outer tmux client finishes exiting so a replacement can attach.
+          releaseLease();
           try { handle.kill(); } catch {}
         },
       };

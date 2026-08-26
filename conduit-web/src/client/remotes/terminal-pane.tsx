@@ -151,7 +151,10 @@ export function TerminalPane(props: { projectId: string; active?: boolean }) {
     clearReconnect();
     reconnectTimer = window.setTimeout(() => {
       reconnectTimer = undefined;
-      void connect(record, renderer, { freshRenderer: true, retrying: true });
+      void connect(record, renderer, {
+        freshRenderer: closeCode !== PTY_IN_USE_CLOSE_CODE,
+        retrying: true,
+      });
     }, delay);
   };
 

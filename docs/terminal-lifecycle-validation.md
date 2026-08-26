@@ -42,6 +42,7 @@ Completed:
 - Server tests: 560 pass, one skip and no failures.
 - Real-tmux transport tests: ten pass. They include service restart `1012`, disposable-client recovery through `1011`, transient `pty_in_use` retry, parser-level input rejection, multiple sessions and TUI control sequences.
 - Split UTF-8 input now uses one streaming decoder per attachment. Parser-level oversized input closes only the browser attachment and leaves the tmux session available for reattach.
+- Closing an owning browser socket now releases its attachment lease before the disposable tmux client finishes exiting. An immediate replacement attach no longer receives transient `pty_in_use`. A `4009` retry also keeps the current renderer instead of recreating it on each attempt.
 - Production build and typecheck pass. The focused Chromium Workspace, xterm paste/WebGL and resident-reattach tests pass.
 - Browser validation passes for terminal creation, input, hidden-panel detach/reattach, screen restoration, second-terminal creation and switching between terminals.
 
