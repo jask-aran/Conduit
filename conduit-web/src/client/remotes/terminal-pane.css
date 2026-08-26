@@ -335,6 +335,11 @@
   font: 10px ui-monospace, SFMono-Regular, Consolas, monospace;
 }
 
+.terminal-session-destroy-wrap {
+  display: flex;
+  align-self: stretch;
+}
+
 .terminal-session-destroy {
   align-self: stretch;
   width: 38px;
@@ -342,7 +347,6 @@
   height: auto;
   padding: 0;
   justify-content: center;
-  border-left: 1px solid var(--border);
   border-radius: 0 5px 5px 0;
 }
 

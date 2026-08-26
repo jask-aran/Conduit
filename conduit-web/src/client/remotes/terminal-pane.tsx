@@ -10,6 +10,9 @@ import {
   MenuSeparator,
   MenuTrigger,
   Spinner,
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
 } from "@/components/primitives";
 import { api } from "../api/client";
 import { terminalSocketUrl } from "../api/transport";
@@ -566,16 +569,21 @@ export function TerminalPane(props: { projectId: string; active?: boolean }) {
                         <small>{sessionTimestamp(session)}</small>
                       </span>
                     </MenuItem>
-                    <MenuItem
-                      class="terminal-session-destroy"
-                      variant="destructive"
-                      aria-label={`Destroy ${session.title || "terminal"}`}
-                      textValue={`Destroy ${session.title || "terminal"}`}
-                      disabled={sessionBusy() === session.id}
-                      onSelect={() => void removeSession(session)}
-                    >
-                      <Show when={sessionBusy() === session.id} fallback={<Trash2Icon />}><Spinner /></Show>
-                    </MenuItem>
+                    <Tooltip>
+                      <TooltipTrigger as="div" class="terminal-session-destroy-wrap">
+                        <MenuItem
+                          class="terminal-session-destroy"
+                          variant="destructive"
+                          aria-label={`Destroy ${session.title || "terminal"}`}
+                          textValue={`Destroy ${session.title || "terminal"}`}
+                          disabled={sessionBusy() === session.id}
+                          onSelect={() => void removeSession(session)}
+                        >
+                          <Show when={sessionBusy() === session.id} fallback={<Trash2Icon />}><Spinner /></Show>
+                        </MenuItem>
+                      </TooltipTrigger>
+                      <TooltipContent>Destroy {session.title || "terminal"}</TooltipContent>
+                    </Tooltip>
                   </div>
                 </>}</For>
               </Show>
