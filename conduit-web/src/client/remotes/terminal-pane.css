@@ -51,7 +51,6 @@
   text-transform: none;
 }
 
-.terminal-pane-actions .terminal-stop-action svg,
 .terminal-pane-actions .terminal-focus-action svg {
   width: 11.2px;
   height: 11.2px;
@@ -182,7 +181,6 @@
   text-transform: none;
 }
 
-.terminal-pane-actions .terminal-stop-action svg,
 .terminal-pane-actions .terminal-focus-action svg {
   width: 14px;
   height: 14px;
@@ -293,6 +291,12 @@
   width: min(300px, calc(100vw - 24px));
 }
 
+.terminal-session-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: stretch;
+}
+
 .terminal-session-item {
   align-items: flex-start;
 }
@@ -329,9 +333,11 @@
 }
 
 .terminal-session-destroy {
-  margin-top: -1px;
-  padding-left: 27px;
-  font-size: 11px;
+  align-self: center;
+  width: 30px;
+  min-width: 30px;
+  padding: 0;
+  justify-content: center;
 }
 
 .terminal-session-destroy svg {

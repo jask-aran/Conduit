@@ -1,5 +1,5 @@
 import { createEffect, createSignal, For, onCleanup, onMount, Show } from "solid-js";
-import { CheckIcon, ChevronDownIcon, FocusIcon, PlusIcon, SquareIcon, TerminalIcon, Trash2Icon } from "lucide-solid";
+import { CheckIcon, ChevronDownIcon, FocusIcon, PlusIcon, TerminalIcon, Trash2Icon } from "lucide-solid";
 import {
   Button,
   Menu,
@@ -46,7 +46,6 @@ export function TerminalPane(props: { projectId: string; active?: boolean }) {
   const [sessions, setSessions] = createSignal<Pty[]>([]);
   const [error, setError] = createSignal("");
   const [starting, setStarting] = createSignal(false);
-  const [stopping, setStopping] = createSignal(false);
   const [sessionBusy, setSessionBusy] = createSignal("");
   const [ownershipConflict, setOwnershipConflict] = createSignal(false);
   const [connectionState, setConnectionState] = createSignal<ConnectionState>("idle");
@@ -459,14 +458,6 @@ export function TerminalPane(props: { projectId: string; active?: boolean }) {
     }
   };
 
-  const stop = async () => {
-    const record = pty();
-    if (!record || stopping()) return;
-    setStopping(true);
-    try { await removeSession(record); }
-    finally { setStopping(false); }
-  };
-
   const restart = async () => {
     connectionGeneration += 1;
     closeConnection();
@@ -567,21 +558,25 @@ export function TerminalPane(props: { projectId: string; active?: boolean }) {
               <MenuLabel>Active terminals</MenuLabel>
               <Show when={sessions().length > 0} fallback={<div class="terminal-session-empty">No active terminals in this Workspace.</div>}>
                 <For each={sessions()}>{(session) => <>
-                  <MenuItem class="terminal-session-item" onSelect={() => void attachSession(session)}>
-                    <CheckIcon class={pty()?.id === session.id ? "terminal-session-check" : "terminal-session-check terminal-session-check-hidden"} />
-                    <span class="terminal-session-copy">
-                      <strong>{session.title || "Shell"}</strong>
-                      <small>{sessionTimestamp(session)}</small>
-                    </span>
-                  </MenuItem>
-                  <MenuItem
-                    class="terminal-session-destroy"
-                    variant="destructive"
-                    disabled={sessionBusy() === session.id}
-                    onSelect={() => void removeSession(session)}
-                  >
-                    <Trash2Icon /><span>{sessionBusy() === session.id ? "Destroying…" : `Destroy ${session.title || "terminal"}`}</span>
-                  </MenuItem>
+                  <div class="terminal-session-row">
+                    <MenuItem class="terminal-session-item" onSelect={() => void attachSession(session)}>
+                      <CheckIcon class={pty()?.id === session.id ? "terminal-session-check" : "terminal-session-check terminal-session-check-hidden"} />
+                      <span class="terminal-session-copy">
+                        <strong>{session.title || "Shell"}</strong>
+                        <small>{sessionTimestamp(session)}</small>
+                      </span>
+                    </MenuItem>
+                    <MenuItem
+                      class="terminal-session-destroy"
+                      variant="destructive"
+                      aria-label={`Destroy ${session.title || "terminal"}`}
+                      textValue={`Destroy ${session.title || "terminal"}`}
+                      disabled={sessionBusy() === session.id}
+                      onSelect={() => void removeSession(session)}
+                    >
+                      <Show when={sessionBusy() === session.id} fallback={<Trash2Icon />}><Spinner /></Show>
+                    </MenuItem>
+                  </div>
                 </>}</For>
               </Show>
             </MenuGroup>
@@ -604,19 +599,6 @@ export function TerminalPane(props: { projectId: string; active?: boolean }) {
             onClick={focusActiveTerminal}
           >
             <FocusIcon /><span class="terminal-action-label">{terminalFocused() ? "Focused" : "Focus"}</span>
-          </Button>
-          <Button
-            type="button"
-            variant="destructive"
-            size="sm"
-            class="terminal-stop-action"
-            aria-label="Stop terminal"
-            title="Destroy this terminal process"
-            disabled={stopping() || sessionBusy() === pty()?.id}
-            onClick={() => void stop()}
-          >
-            <Show when={stopping()} fallback={<SquareIcon />}><Spinner /></Show>
-            <span class="terminal-action-label">{stopping() ? "Stopping…" : "Stop"}</span>
           </Button>
         </Show>
         <select aria-label="Terminal renderer" value={rendererId()} onChange={(event) => void switchRenderer(event.currentTarget.value as TerminalRendererId)}>
