@@ -1215,6 +1215,26 @@ test("reloading a durable new-chat URL does not create another chat", async ({ p
   expect(creates).toBe(1);
 });
 
+test("a removed draft route recovers by creating one new chat", async ({ page }) => {
+  const staleId = "550e8400-e29b-41d4-a716-446655440088";
+  const replacement = {
+    id: "550e8400-e29b-41d4-a716-446655440099", projectId: "project_chat", status: "draft", title: "New chat",
+  };
+  let creates = 0;
+  await page.route(`**/v0/chats/${staleId}`, (route) => route.fulfill({ status: 404, json: { error: "chat_not_found" } }));
+  await page.route(`**/v0/sessions/${staleId}`, (route) => route.fulfill({ status: 404, json: { error: "chat_not_found" } }));
+  await page.route("**/v0/chats", async (route) => {
+    creates += 1;
+    await route.fulfill({ status: 201, json: replacement });
+  });
+
+  await page.goto(`/chat/${staleId}`);
+
+  await expect(page).toHaveURL(`/chat/${replacement.id}`);
+  await expect(page.getByRole("textbox", { name: "Message Pi" })).toBeVisible();
+  expect(creates).toBe(1);
+});
+
 test("hydrates the durable model without reloading it after live attachment", async ({ page }) => {
   let modelReads = 0;
   let releaseFirstModelRead;
