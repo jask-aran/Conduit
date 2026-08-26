@@ -8,7 +8,6 @@
   },
   "scripts": {
     "build": "vite build && node scripts/check-bundle.mjs",
-    "generate:liquid-glass": "node scripts/generate-liquid-glass-assets.mjs",
     "dev": "vite --host 0.0.0.0",
     "dev:server": "node --watch src/server.js",
     "start": "node src/server.js",
@@ -25,9 +24,16 @@
     "test:terminal-performance": "PERF=1 playwright test test/browser/terminal-performance.spec.js --project=desktop-chromium --workers=1",
     "test:terminal-performance:throttled": "PERF=1 PERF_CPU_RATE=4 playwright test test/browser/terminal-performance.spec.js --project=desktop-chromium --workers=1",
     "test:browser:headed": "playwright test --headed",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "cap:sync": "npm run build && cap sync android",
+    "android:build": "npm run cap:sync && cd android && ./gradlew assembleDebug",
+    "android:open": "cap open android",
+    "android:run": "npm run cap:sync && cap run android"
   },
   "dependencies": {
+    "@aparajita/capacitor-secure-storage": "^8.0.0",
+    "@capacitor/android": "8.5.0",
+    "@capacitor/core": "8.5.0",
     "@earendil-works/pi-ai": "0.84.1",
     "@earendil-works/pi-coding-agent": "0.84.1",
     "@fontsource-variable/geist": "^5.2.9",
@@ -59,6 +65,7 @@
     "ws": "^8.21.1"
   },
   "devDependencies": {
+    "@capacitor/cli": "8.5.0",
     "@playwright/test": "^1.61.1",
     "@tailwindcss/vite": "^4.3.2",
     "tailwindcss": "^4.3.2",

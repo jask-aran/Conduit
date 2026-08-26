@@ -128,6 +128,60 @@ test("browser-local overrides drive root dispatch and palette keycaps", async ({
   await expect(dialog).toHaveCount(0);
 });
 
+test("Control-X opens and closes the model selector", async ({ page }) => {
+  const refreshRequest = page.waitForRequest((request) => {
+    const url = new URL(request.url());
+    return url.pathname === "/v0/models" && url.searchParams.get("refresh") === "true";
+  });
+  await page.goto("/");
+  await refreshRequest;
+  await page.keyboard.press("Control+x");
+  const dialog = page.getByRole("dialog", { name: "Model selector" });
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByRole("option", { name: /Reasoner/ })).toBeVisible();
+  await page.keyboard.press("Control+x");
+  await expect(dialog).toHaveCount(0);
+});
+
+test("removing a provider updates the model selector without a page reload", async ({ page }) => {
+  const anthropic = { provider: "anthropic", id: "claude", spec: "anthropic/claude", label: "Claude", thinkingLevels: ["off"] };
+  let configured = true;
+  const availableModels = () => configured ? [model, plainModel, anthropic] : [model, plainModel];
+  await page.route("**/v0/models?**", (route) => route.fulfill({ json: {
+    models: availableModels(), defaultModel: model.spec, defaultThinkingLevel: "medium", requiresAuthentication: false,
+  } }));
+  await page.route("**/v0/settings?**", (route) => route.fulfill({ json: {
+    models: availableModels(), enabledModels: availableModels().map((item) => item.spec), defaultModel: model.spec,
+  } }));
+  await page.route("**/v0/pi-auth/attempt", (route) => route.fulfill({ json: { attempt: null } }));
+  await page.route("**/v0/pi-auth", (route) => route.fulfill({ json: {
+    providers: [{
+      id: "anthropic", label: "Anthropic", oauth: false,
+      auth: { configured, source: configured ? "stored" : null, removable: configured },
+    }],
+  } }));
+  await page.route("**/v0/pi-auth/anthropic", (route) => {
+    configured = false;
+    return route.fulfill({ json: { removed: true } });
+  });
+
+  await page.goto("/");
+  await page.keyboard.press("Control+x");
+  await expect(page.getByRole("dialog", { name: "Model selector" }).getByRole("option", { name: /Claude/ })).toBeVisible();
+  await page.keyboard.press("Control+x");
+
+  await page.keyboard.press("Control+k");
+  await page.getByRole("option", { name: /^Settings…/ }).click();
+  await page.getByRole("option", { name: /^Auth/ }).click();
+  const settings = page.getByRole("dialog", { name: "Settings" });
+  await settings.getByRole("button", { name: "Remove credential" }).click();
+  await expect(settings.getByRole("button", { name: "Remove credential" })).toHaveCount(0);
+  await settings.getByRole("button", { name: "Close" }).click();
+
+  await page.keyboard.press("Control+x");
+  await expect(page.getByRole("dialog", { name: "Model selector" }).getByRole("option", { name: /Claude/ })).toHaveCount(0);
+});
+
 test("ranks search results and hides non-matches", async ({ page }) => {
   await page.goto("/");
   await openPalette(page);
@@ -449,33 +503,36 @@ test("Settings UI toggles and persists the ambient meteor field", async ({ page 
   await expect(page.locator(".chat-meteors")).toHaveCount(1);
 });
 
-test("Settings UI toggles and persists the liquid glass composer surface", async ({ page }) => {
+test("Settings UI selects and persists the two composer surfaces", async ({ page }) => {
   await page.addInitScript(() => {
-    if (sessionStorage.getItem("conduit:liquid-glass-surface-test-initialized") === "true") return;
-    localStorage.removeItem("conduit:liquid-glass-surface");
-    sessionStorage.setItem("conduit:liquid-glass-surface-test-initialized", "true");
+    if (sessionStorage.getItem("conduit:composer-surface-test-initialized") === "true") return;
+    localStorage.removeItem("conduit:composer-surface");
+    sessionStorage.setItem("conduit:composer-surface-test-initialized", "true");
   });
   await page.goto("/");
   await expect(page.getByRole("textbox", { name: "Message Pi" })).toBeVisible();
-  await expect(page.locator(".composer")).toHaveAttribute("data-liquid-glass", "false");
+  await expect(page.locator(".composer")).toHaveAttribute("data-composer-surface", "frosted-live");
 
   await openPalette(page);
   await page.getByRole("option", { name: /^Settings…/ }).click();
   await page.getByRole("option", { name: /^UI$/ }).click();
   const settings = page.getByRole("dialog", { name: "Settings" });
-  const toggle = settings.getByLabel("Liquid glass surface");
-  await expect(toggle).not.toBeChecked();
-  await toggle.check();
-  await expect(toggle).toBeChecked();
-  await expect(page.locator(".composer")).toHaveAttribute("data-liquid-glass", "true");
-  const layer = page.locator(".composer-glass-filter");
-  await expect(layer).toHaveAttribute("data-liquid-glass-ready", "true");
-  await expect(page.locator(".liquid-glass-definitions feGaussianBlur")).toHaveCount(1);
+  const surface = settings.getByLabel("Composer material");
+  await expect(surface).toHaveValue("frosted-live");
 
+  await surface.selectOption("static");
+  await expect(page.locator(".composer")).toHaveAttribute("data-composer-surface", "static");
+  await expect(page.locator(".composer-surface-shell[data-composer-surface=static]")).toHaveCount(1);
+
+  await surface.selectOption("frosted-live");
+  await expect(page.locator(".composer")).toHaveAttribute("data-composer-surface", "frosted-live");
+
+  await surface.selectOption("static");
   await settings.getByRole("button", { name: "Close" }).click();
   await page.reload();
   await expect(page.getByRole("textbox", { name: "Message Pi" })).toBeVisible();
-  await expect(page.locator(".composer")).toHaveAttribute("data-liquid-glass", "true");
+  await expect(page.locator(".composer")).toHaveAttribute("data-composer-surface", "static");
+  await expect(page.locator(".composer-surface-shell[data-composer-surface=static]")).toHaveCount(1);
 });
 
 test("shortcut recording suppresses commands and updates chat-search hints immediately", async ({ page }) => {

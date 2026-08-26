@@ -222,7 +222,7 @@ export interface Installation {
 }
 
 export type ProcessState = "absent" | "starting" | "ready" | "failed";
-export type GenerationState = "idle" | "submitting" | "active" | "running" | "stopping" | "failed";
+export type GenerationState = "idle" | "submitting" | "active" | "running" | "stopping" | "interrupted" | "failed";
 
 export interface UsageCost {
   input?: number | null;

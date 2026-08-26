@@ -160,17 +160,29 @@ test("sidebar list keeps creation order when a rename bumps updatedAt", async ()
   await store.initialize([project]);
   assert.deepEqual(store.listProject(project.id).map((chat) => chat.id), ["chat-newer", "chat-older"]);
 
-  // Simulate rename: title + fresh updatedAt (as commitSession does after appendSessionInfo).
+  // Pi metadata can advance the checkpoint, but Conduit owns the title.
   await store.commitSession("chat-older", {
-    title: "Renamed older",
+    title: "Pi title",
     nativeId: "session-older",
     id: "session-older",
     file: olderFile,
     updatedAt: "2026-07-18T12:00:00Z",
   });
-  assert.equal(store.metadata("chat-older").title, "Renamed older");
+  assert.equal(store.metadata("chat-older").title, "Older");
   assert.equal(store.metadata("chat-older").updatedAt, "2026-07-18T12:00:00Z");
   assert.deepEqual(store.listProject(project.id).map((chat) => chat.id), ["chat-newer", "chat-older"]);
+  await fs.rm(root, { recursive: true, force: true });
+});
+
+test("checkpoint title fallback fills only an empty Conduit title", async () => {
+  const { root, project, registryFile } = await fixture();
+  const store = new ChatStore(registryFile);
+  await store.initialize([project]);
+  const chat = await store.create(project);
+  assert.equal(await store.fallbackTitle(chat.id, "Pi fallback"), true);
+  assert.equal(store.metadata(chat.id).title, "Pi fallback");
+  assert.equal(await store.fallbackTitle(chat.id, "Later Pi title"), false);
+  assert.equal(store.metadata(chat.id).title, "Pi fallback");
   await fs.rm(root, { recursive: true, force: true });
 });
 
@@ -199,6 +211,7 @@ test("waits for a newly reported fork file before checkpointing it", async () =>
   const store = new ChatStore(registryFile);
   await store.initialize([project]);
   const chat = await store.create(project);
+  assert.equal(chat.title, "");
   const forkFile = path.join(project.sessionsDir, "delayed-fork.jsonl");
   const write = new Promise((resolve, reject) => setTimeout(() => {
     fs.writeFile(forkFile, `${JSON.stringify({

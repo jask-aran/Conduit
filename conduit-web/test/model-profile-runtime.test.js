@@ -32,10 +32,12 @@ test("model profile runtime materializes only derived search state and links can
     const profile = resolveModelProfile(item.profiles, "openai-codex/gpt-5.6-luna");
     const result = await runtime.materialize({ template, profile });
     assert.equal(result.agentDir, path.join(item.agentDir, "model-profiles", "openai-search"));
-    assert.equal(await fs.readlink(path.join(result.agentDir, "auth.json")), "../../auth.json");
-    assert.equal(await fs.readlink(path.join(result.agentDir, "models.json")), "../../models.json");
-    assert.equal((await fs.stat(result.agentDir)).mode & 0o777, 0o700);
-    assert.equal((await fs.stat(path.join(result.agentDir, "web-search.json"))).mode & 0o777, 0o600);
+    assert.equal(await fs.readlink(path.join(result.agentDir, "auth.json")), path.relative(result.agentDir, path.join(item.agentDir, "auth.json")));
+    assert.equal(await fs.readlink(path.join(result.agentDir, "models.json")), path.relative(result.agentDir, path.join(item.agentDir, "models.json")));
+    if (process.platform !== "win32") {
+      assert.equal((await fs.stat(result.agentDir)).mode & 0o777, 0o700);
+      assert.equal((await fs.stat(path.join(result.agentDir, "web-search.json"))).mode & 0o777, 0o600);
+    }
     const derived = JSON.parse(await fs.readFile(path.join(result.agentDir, "web-search.json"), "utf8"));
     assert.equal("provider" in derived, false);
     assert.equal(derived.braveApiKey, "BSA-test-key");
@@ -75,7 +77,7 @@ test("model profile runtime tolerates concurrent materialization", async () => {
       runtime.materialize({ template, profile }),
     ]);
     assert.equal(results[0].overlayDir, results[1].overlayDir);
-    assert.equal(await fs.readlink(path.join(results[0].overlayDir, "auth.json")), "../../auth.json");
+    assert.equal(await fs.readlink(path.join(results[0].overlayDir, "auth.json")), path.relative(results[0].overlayDir, path.join(item.agentDir, "auth.json")));
   } finally {
     await fs.rm(item.root, { recursive: true, force: true });
   }

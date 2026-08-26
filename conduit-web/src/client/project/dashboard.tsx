@@ -378,7 +378,7 @@ export function ProjectDashboard(props: {
                 return <button class="project-chat-row" onClick={() => void props.onOpenChat(item, props.project)}>
                   <span class="project-chat-runtime"><RuntimeIndicator process={process()} stale={props.runtime.stale()} /></span>
                   <span class="project-chat-copy">
-                    <strong>{item.title || "New chat"}</strong>
+                    <strong>{item.title || (item.status === "active" ? "Untitled chat" : "New chat")}</strong>
                     <small>{item.lastMessagePreview || "Open chat to continue the conversation"}</small>
                   </span>
                   <time dateTime={item.lastMessageAt || item.updatedAt}>{relativeDate(item.lastMessageAt || item.updatedAt)}</time>

@@ -46,6 +46,22 @@ async function waitWritable(stream) {
   return stream.next((frame) => !frame.isBinary && jsonFrame(frame).type === "control" && jsonFrame(frame).writable === true);
 }
 
+async function openWritableTerminal(origin, id, options) {
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    const stream = openTerminal(origin, id, options);
+    await stream.opened;
+    await waitFor(
+      () => stream.messages.some((frame) => !frame.isBinary && jsonFrame(frame).type === "control" && jsonFrame(frame).writable === true)
+        || stream.socket.readyState === WebSocket.CLOSED,
+      "Timed out waiting for a writable terminal or attachment rejection",
+    );
+    if (stream.socket.readyState !== WebSocket.CLOSED) return stream;
+    if (stream.socket._closeCode !== 4009) throw new Error(`Terminal attachment closed with ${stream.socket._closeCode}`);
+    await new Promise((resolve) => setTimeout(resolve, 50 * (2 ** attempt)));
+  }
+  throw new Error("Terminal lease was not released after the previous browser detached");
+}
+
 async function waitClosed(stream) {
   if (stream.socket.readyState === WebSocket.CLOSED) return { code: stream.socket._closeCode };
   return new Promise((resolve) => stream.socket.once("close", (code, reason) => resolve({ code, reason: reason.toString() })));
@@ -109,6 +125,26 @@ tmuxTest("detaching and reattaching a browser preserves the tmux-owned current t
     second.socket.send(Buffer.from("printf 'reattach-input-ready\\n'\n"));
     await second.outputIncludes("reattach-input-ready");
     second.socket.close();
+  } finally {
+    await harness.stop();
+  }
+});
+
+tmuxTest("Conduit shutdown closes attached terminal sockets as a service restart", async () => {
+  const harness = await startConduitHarness({ env: { SHELL: "sh" } });
+  try {
+    const project = await harness.createProject("Terminal shutdown");
+    const created = await (await harness.request("/v0/ptys", {
+      method: "POST",
+      body: JSON.stringify({ projectId: project.id }),
+    })).json();
+    const stream = openTerminal(harness.origin, created.id);
+    await stream.opened;
+    await waitWritable(stream);
+
+    const stopped = harness.terminate();
+    assert.deepEqual(await waitClosed(stream), { code: 1012, reason: "Conduit is restarting" });
+    await stopped;
   } finally {
     await harness.stop();
   }
@@ -179,9 +215,7 @@ tmuxTest("one browser owns a terminal while unrelated terminals may stream concu
 
     owner.socket.close();
     await waitClosed(owner);
-    const replacement = openTerminal(harness.origin, firstTerminal.id);
-    await replacement.opened;
-    await waitWritable(replacement);
+    const replacement = await openWritableTerminal(harness.origin, firstTerminal.id);
     replacement.socket.send(Buffer.from("printf 'replacement-owner-input\\n'\n"));
     await replacement.outputIncludes("replacement-owner-input");
 

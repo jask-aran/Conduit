@@ -151,6 +151,11 @@ const percentText = (value: unknown) => {
   return percent == null ? "?%" : `${Math.round(percent)}%`;
 };
 
+const percentageText = (value: unknown) => {
+  const percent = numberValue(value);
+  return percent == null ? "?%" : `${Math.round(percent)}%`;
+};
+
 const costText = (value: unknown) => {
   const number = numberValue(value);
   return number == null ? "?" : `$${number.toFixed(3)}`;
@@ -173,13 +178,13 @@ const sessionInputParts = (stats: SessionStats | null) => [stats?.tokens.input, 
 const contextTokens = (usage: ContextUsage | null) => numberValue(usage?.tokens ?? usage?.used);
 const contextWindow = (usage: ContextUsage | null) => numberValue(usage?.contextWindow ?? usage?.limit);
 
-const contextUsedPercent = (usage: ContextUsage | null) => {
-  const reported = percentValue(usage?.percent);
+export function contextUsagePercent(usage: ContextUsage | null) {
+  const reported = numberValue(usage?.percent);
   if (reported != null) return reported;
   const tokens = contextTokens(usage);
   const window = contextWindow(usage);
   return tokens != null && window != null && window > 0 ? (tokens / window) * 100 : null;
-};
+}
 
 const contextRemainingTokens = (usage: ContextUsage | null) => {
   const tokens = contextTokens(usage);
@@ -188,7 +193,7 @@ const contextRemainingTokens = (usage: ContextUsage | null) => {
 };
 
 const contextRemainingPercent = (usage: ContextUsage | null) => {
-  const used = contextUsedPercent(usage);
+  const used = contextUsagePercent(usage);
   return used == null ? null : Math.max(0, 100 - used);
 };
 
@@ -206,9 +211,9 @@ function formatMetric(id: ContextMetricId, contextUsage: ContextUsage | null, se
   switch (id) {
     case "contextTokens": return `used ${numberText(contextTokens(contextUsage))}`;
     case "contextWindow": return `window ${numberText(contextWindow(contextUsage))}`;
-    case "contextPercentUsed": return `used ${percentText(contextUsedPercent(contextUsage))}`;
+    case "contextPercentUsed": return `used ${percentageText(contextUsagePercent(contextUsage))}`;
     case "contextTokensRemaining": return `remaining ${numberText(contextRemainingTokens(contextUsage))}`;
-    case "contextPercentRemaining": return `remaining ${percentText(contextRemainingPercent(contextUsage))}`;
+    case "contextPercentRemaining": return `remaining ${percentageText(contextRemainingPercent(contextUsage))}`;
     case "lastInputTokens": return `input ${numberText(request?.input)}`;
     case "lastOutputTokens": return `output ${numberText(request?.output)}`;
     case "lastCacheReadTokens": return `cache-read ${numberText(request?.cacheRead)}`;

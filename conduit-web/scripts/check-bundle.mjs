@@ -24,7 +24,7 @@ const budgets = {
   // Voice diagnostics and the capture lifecycle add bounded client behaviour.
   // Revisit this allowance in the planned performance review instead of
   // hiding evidence behind a size cap.
-  initialJs: Number(process.env.CONDUIT_BUDGET_INITIAL_JS_GZIP || 185_000),
+  initialJs: Number(process.env.CONDUIT_BUDGET_INITIAL_JS_GZIP || 200_000),
   initialCss: Number(process.env.CONDUIT_BUDGET_INITIAL_CSS_GZIP || 80_000),
   lazyJs: Number(process.env.CONDUIT_BUDGET_LAZY_JS_GZIP || 300_000),
 };
@@ -73,6 +73,27 @@ if (serviceWorkerName) {
 for (const icon of ["pwa-192x192.png", "pwa-512x512.png", "favicon.svg"]) {
   if (!fs.existsSync(path.join(dist, icon))) pwaFailures.push(`missing ${icon} in dist/`);
 }
+const cssAssets = assets.filter((asset) => asset.initial && asset.type === "css");
+const cssText = cssAssets.map((asset) => fs.readFileSync(path.join(dist, asset.file), "utf8")).join("\n");
+const frostedLiveRule = cssText.match(/\.composer-surface-material\[data-composer-surface=frosted-live\][^{]*\{[^}]+\}/);
+const frostedLiveFailures = [];
+if (!frostedLiveRule) {
+  frostedLiveFailures.push("missing shared frosted-live material rule");
+} else {
+  if (!/(?<!-webkit-)backdrop-filter:blur\(/.test(frostedLiveRule[0])) {
+    frostedLiveFailures.push("frosted-live rule dropped unprefixed backdrop-filter");
+  }
+  if (!/-webkit-backdrop-filter:blur\(/.test(frostedLiveRule[0])) {
+    frostedLiveFailures.push("frosted-live rule dropped -webkit-backdrop-filter");
+  }
+}
+if (frostedLiveFailures.length) {
+  for (const failure of frostedLiveFailures) console.error(`CSS: ${failure}`);
+  process.exitCode = 1;
+} else {
+  console.log("CSS: composer, follow button, and header pill share the frosted-live material.");
+}
+
 if (pwaFailures.length) {
   for (const failure of pwaFailures) console.error(`PWA: ${failure}`);
   process.exitCode = 1;

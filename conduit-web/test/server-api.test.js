@@ -103,6 +103,10 @@ exit 0
 
   try {
     await waitForServer(origin, child);
+    const nativeHealth = await fetch(`${origin}/healthz`, { headers: { origin: "https://localhost" } });
+    assert.equal(nativeHealth.headers.get("access-control-allow-origin"), "https://localhost");
+    const externalHealth = await fetch(`${origin}/healthz`, { headers: { origin: "https://example.com" } });
+    assert.equal(externalHealth.headers.get("access-control-allow-origin"), null);
     const workspacePolicy = await fetch(`${origin}/v0/workspaces/policy`).then((response) => response.json());
     assert.deepEqual(workspacePolicy.defaultRoot, workspaceParent);
     assert.deepEqual(workspacePolicy.defaultInputPath, workspaceParent);
@@ -292,10 +296,17 @@ exit 0
     const prefsPatch = await fetch(`${origin}/v0/preferences`, {
       method: "PATCH",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ defaultTemplateId: "workspace" }),
+      body: JSON.stringify({
+        defaultTemplateId: "workspace",
+        sessionNameModel: "example/cheap",
+        sessionNameThinkingLevel: "low",
+      }),
     });
     assert.equal(prefsPatch.status, 200);
-    assert.equal((await prefsPatch.json()).defaultTemplateId, "workspace");
+    const savedPreferences = await prefsPatch.json();
+    assert.equal(savedPreferences.defaultTemplateId, "workspace");
+    assert.equal(savedPreferences.sessionNameModel, "example/cheap");
+    assert.equal(savedPreferences.sessionNameThinkingLevel, "low");
 
     const inheritedWorkspaceChat = await fetch(`${origin}/v0/chats`, {
       method: "POST",

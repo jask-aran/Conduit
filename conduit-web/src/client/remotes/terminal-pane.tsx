@@ -12,6 +12,7 @@ import {
   Spinner,
 } from "@/components/primitives";
 import { api } from "../api/client";
+import { terminalSocketUrl } from "../api/transport";
 import { createTerminalRenderer, selectedTerminalRenderer, type TerminalRenderer, type TerminalRendererId } from "./terminal-renderer";
 
 type Pty = {
@@ -139,6 +140,7 @@ export function TerminalPane(props: { projectId: string; active?: boolean }) {
   const scheduleReconnect = (record: Pty, renderer: TerminalRendererId, closeCode: number) => {
     if (
       record.status !== "running"
+      || closeCode === 1012
       || closeCode === 1013
       || reconnectAttempts >= 3
       || activeProjectId !== record.projectId
@@ -173,7 +175,9 @@ export function TerminalPane(props: { projectId: string; active?: boolean }) {
     const initialCols = activeTerminal.cols();
     const initialRows = activeTerminal.rows();
     const startedAt = performance.now();
-    const url = `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/v0/ptys/${record.id}/attach?cols=${initialCols}&rows=${initialRows}`;
+    const url = new URL(await terminalSocketUrl(record.id));
+    url.searchParams.set("cols", String(initialCols));
+    url.searchParams.set("rows", String(initialRows));
     const connection = new WebSocket(url);
     socket = connection;
     connection.binaryType = "arraybuffer";
@@ -554,7 +558,6 @@ export function TerminalPane(props: { projectId: string; active?: boolean }) {
                   <MenuItem
                     class="terminal-session-destroy"
                     variant="destructive"
-                    closeOnSelect={false}
                     disabled={sessionBusy() === session.id}
                     onSelect={() => void removeSession(session)}
                   >

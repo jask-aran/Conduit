@@ -19,6 +19,18 @@ export function resolveThinkingLevel(level, supportedLevels = [], fallbackLevel 
   return fallback && levels.includes(fallback) ? fallback : levels[0];
 }
 
+export function sanitizeSessionName(value) {
+  return String(value || "")
+    .trim()
+    .split(/\r?\n/, 1)[0]
+    .replace(/^["'`]+|["'`]+$/g, "")
+    .replace(/\s+/g, " ")
+    .replace(/[.!?:;]+$/, "")
+    .trim()
+    .slice(0, 80)
+    .trimEnd();
+}
+
 export class PiModelCatalog {
   constructor({
     agentDir = getAgentDir(),
@@ -49,6 +61,16 @@ export class PiModelCatalog {
     this.modelRegistry = new ModelRegistry(this.modelRuntime);
     this.runtimePromise = null;
     return this;
+  }
+
+  async refreshFromNetwork({ providers, force = false, timeoutMs = 15_000 } = {}) {
+    await this.ready();
+    return this.modelRegistry.refresh({
+      allowNetwork: true,
+      force,
+      ...(providers?.length ? { providers } : {}),
+      signal: AbortSignal.timeout(timeoutMs),
+    });
   }
 
   async snapshot(cwd) {
@@ -187,6 +209,30 @@ export class PiModelCatalog {
     const writeErrors = snapshot.settings.drainErrors();
     if (writeErrors.length) throw writeErrors[0].error;
     return this.list(cwd);
+  }
+
+  async generateSessionName(cwd, spec, thinkingLevel, message) {
+    const snapshot = await this.snapshot(cwd);
+    const entry = snapshot.entries.find(({ model }) => `${model.provider}/${model.id}` === spec);
+    if (!entry) throw Object.assign(new Error("The session naming model is not in this Pi profile's enabled scope"), { code: "invalid_model" });
+    const effectiveThinkingLevel = clampThinkingLevel(entry.model, thinkingLevel || "off");
+    const response = await (this.modelRuntime || this.modelRegistry).completeSimple(entry.model, {
+      systemPrompt: "Create a short descriptive name for this chat. Use 2-6 words in Title Case. Respond with only the name.",
+      messages: [{
+        role: "user",
+        content: [{ type: "text", text: String(message || "").trim() }],
+        timestamp: Date.now(),
+      }],
+    }, {
+      maxTokens: 1024,
+      signal: AbortSignal.timeout(10_000),
+      ...(entry.model.reasoning && effectiveThinkingLevel !== "off" ? { reasoning: effectiveThinkingLevel } : {}),
+    });
+    if (response.stopReason === "error") throw new Error(response.errorMessage || "Session naming request failed");
+    return sanitizeSessionName(response.content
+      .filter((block) => block.type === "text")
+      .map((block) => block.text)
+      .join("\n"));
   }
 
   getLaunchModels(cwd) {

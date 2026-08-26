@@ -41,8 +41,15 @@ also contain `.conduit/chats/<chat-id>/{attachments,.partial}`. Pi runs from the
 project root and native JSONL remains outside the working tree. Ignored
 `data/sessions.json` holds the atomic lightweight Conduit chat registry. Draft
 chats exist before Pi; the first message attaches a private Pi mapping and makes
-the same public chat ID active. Active mappings are checkpointed after completed
+the same public chat ID active. When a session naming model is selected under
+Settings → General, Conduit sends that first message to it and stores its short
+response as the authoritative title in `data/sessions.json`. A live Pi title is
+not changed. The request uses the selected thinking level and does not delay
+the chat response. The command palette can regenerate a title
+from the full persisted transcript, including for older chats. Active mappings are checkpointed after completed
 responses and explicit mutations and reconciled with native files at startup.
+Conduit appends naming request and outcome metadata to
+`data/session-name-requests.jsonl`; it does not store prompt content there.
 Pi records each fork's `parentSession`; startup uses that family to keep
 superseded regeneration branches attached to one sidebar chat while preserving
 their JSONL files.
@@ -364,6 +371,7 @@ Provision one user, one password from the CLI:
 node scripts/conduit-auth.mjs set-password     # hidden prompt, twice
 node scripts/conduit-auth.mjs reset-sessions   # sign out every device
 node scripts/conduit-auth.mjs status           # password set? session count?
+node scripts/conduit-auth.mjs mint-session     # local agent session; no password
 ```
 
 Credentials live in `data/auth.json` (mode `0600`, atomic writes). Tokens are
@@ -371,6 +379,15 @@ Credentials live in `data/auth.json` (mode `0600`, atomic writes). Tokens are
 cookie (`HttpOnly`, `SameSite=Lax`, `Secure` over HTTPS/X-Forwarded-Proto),
 30-day rolling expiry, capped at 20 stored sessions. The hashed session row
 (SHA-256) is the only thing persisted server-side.
+
+The Android shell uses a separate native session. It sends the password only
+to the configured HTTPS server, stores the returned bearer token through
+Android Keystore-backed secure storage, and sends it in the `Authorization`
+header. Native requests are accepted only from the exact Capacitor
+`https://localhost` origin. CORS does not permit wildcard origins,
+cross-origin cookies, or headers other than `Authorization` and
+`Content-Type`. WebSockets use a random 30-second ticket that expires after one
+upgrade; the bearer token never enters a URL.
 
 Enforcement is a single `requireAuth` middleware mounted before every other
 route and static handler, plus the WebSocket upgrade validator. The allowlist
@@ -390,6 +407,10 @@ so timing reveals nothing.
   cookie and returns `303 → after` (form) or `{ ok, redirect }` (JSON). Wrong
   password re-renders the page with an inline error (form) or returns `401`
   JSON (fetch).
+- `POST /v0/auth/native-login` — accepts the password from the exact Capacitor
+  origin over HTTPS and returns one native bearer token
+- `POST /v0/auth/socket-ticket` — exchanges a native bearer token for one
+  short-lived, single-use WebSocket ticket
 - `POST /v0/auth/logout` — clears the current session row and cookie
 - `GET /v0/auth/status` — `{ hasPassword, authenticated, sessionCount }`
 - `POST /v0/auth/reset-sessions` — keeps the caller's token, signs out everyone
@@ -453,11 +474,14 @@ starting, and browser-attached processes remain resident.
 - `POST /v0/pi-installations/host/detect` re-detects the host Pi executable
 - `POST /v0/runtime/chats` creates a fresh special Runtime management chat
 - `GET /v0/models`
+- `GET|PATCH /v0/preferences` reads and updates the default profile plus the
+  scoped model and thinking level used to name new chats
 - `GET|PATCH /v0/settings` reads and updates Pi's shared global model scope;
   terminal and web saves use the same isolated settings file.
 - `GET|PATCH /v0/chats/:id/models` resolves the selected installation's scoped
   models and changes the draft/live chat model through the server-owned runtime.
 - `GET|PATCH|DELETE /v0/sessions/:id` (`DELETE` removes the session's complete in-project Pi fork family)
+- `POST /v0/sessions/:id/auto-name` replaces the Conduit title from the full persisted chat context
 - `GET /v0/sessions/:id?before=<entry-index>` returns a ten-turn transcript page
 - `GET /v0/sessions/:id/transcript`
 - `GET /v0/sessions/:id/tools/:tool-id` fetches deferred large tool output
@@ -723,26 +747,24 @@ and do not contain credentials or Pi JSONL content.
 
 ## Workspace terminal protocol
 
-Terminal processes are server-owned `node-pty` shells. The server derives their
+Terminal processes run in a dedicated tmux server. Conduit uses disposable
+`node-pty` clients to attach browsers to those sessions. The server derives each
 cwd: a validated Workspace root for Workspace chats, otherwise Conduit's home
 directory. The browser supplies only a project id and cannot select a path.
-Their lightweight records persist in
-`data/remotes.json`; the shell itself does not survive a server restart. The
-browser may detach without stopping it, and the server retains a 256 KiB output
-tail for a later attachment.
+Lightweight records persist in `data/remotes.json`. A terminal survives browser
+and network detach, but it does not survive a Conduit server restart.
 
 `WS /v0/ptys/:id/attach` is authenticated like every other upgrade. Binary client
 frames are stdin bytes, and client JSON frames are `{ "type": "resize", "cols",
-"rows" }`. On attach, the server sends `replay_start` with a `complete` flag,
-then an optional binary replay frame prefixed with `CONDUIT-PTY-REPLAY/1\n`, and
-then `replay_end`, `status`, and `control` frames. A complete replay payload is
-an array of `{ "type": "resize", "cols", "rows" }` and `{ "type": "data",
-"data": "<base64>" }` events. The server skips replay when the bounded journal
-is incomplete. `control.writable` identifies the one attached browser that may
-send input and resize; other browsers receive output but get `client_error` with
-`pty_read_only`. The browser owns VT parsing and rendering, while Conduit only
-brokers process I/O and applies the same slow-client protection as other live
-connections.
+"rows" }`. Query parameters `cols` and `rows` set the initial attachment size.
+The server sends binary terminal output plus JSON `status`, `control`, and
+`client_error` frames. tmux redraws its current terminal state after a new
+attachment; Conduit does not keep or replay an output journal. One browser may
+attach to each terminal id at a time. A second attachment receives
+`client_error.code = "pty_in_use"` and closes with code `4009`; different
+terminal ids can stream at the same time. The browser owns VT parsing and
+rendering. Conduit brokers bounded process I/O and closes a slow client with
+code `1013`.
 
 Server events. When a generation is open, connect first sends one
 `generation_resume` containing the complete current reduced generation and its
@@ -824,8 +846,40 @@ Phone chrome (full-bleed drawers, header palette entry, long-press menus) is
 covered by `test/browser/pwa-mobile.spec.js` on the Playwright
 `mobile-chromium` and `desktop-chromium` projects.
 
+## Android shell
+
+The Capacitor 8 project in `android/` packages the production `dist/` bundle
+under the application ID `com.jaskaran.conduit`. It uses the secure local
+WebView origin and does not load a production `server.url`. Native builds do not
+register the PWA service worker or show its update and cache-reset actions.
+First launch requests one HTTPS Conduit server origin and checks `/healthz`.
+The same form then reveals the normal Conduit password field. The server
+origin stays in local storage because it is not secret; the bearer token stays
+in Android Keystore-backed storage. Change server clears both values.
+
+Versioned tags build the Android app in
+`.github/workflows/publish-container.yml`. A tag such as `v0.6.0-rc.1`
+creates a GitHub prerelease with `conduit-v0.6.0-rc.1.apk` and its SHA-256
+file. A stable tag such as `v0.6.0` creates the latest release. Add the
+required `docs/releases/<tag>.md` changelog, then push the tag. Release
+candidates do not update the container `latest` tag. The workflow signs every
+APK with the persistent key in the `ANDROID_KEYSTORE_BASE64`,
+`ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, and `ANDROID_KEY_PASSWORD`
+GitHub Actions secrets. Keep that key permanently: Android rejects an update
+signed with a different key.
+
+```bash
+npm run cap:sync       # build the web bundle and copy it into Android
+npm run android:build  # produce android/app/build/outputs/apk/debug/app-debug.apk
+npm run android:open   # open the generated project in Android Studio
+npm run android:run    # sync and select a connected device or emulator
+```
+
+Capacitor 8 requires Node 22 or newer, Android Studio 2025.2.1 or newer, and an
+installed Android SDK.
+
 ## Verification
 
-Use [`../docs/operations/testing.md`](../docs/operations/testing.md) as the
+Use [`../docs/testing.md`](../docs/testing.md) as the
 single source of truth for fast checks, deterministic harnesses, browser QA,
 Playwright canaries, live transport measurements, and deployment proof.

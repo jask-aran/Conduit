@@ -1,4 +1,5 @@
 import terminalFontUrl from "../assets/MesloLGSNerdFontMono-Regular.ttf";
+import { isMobileLayout } from "../navigation/mobile-layout";
 import "./terminal-pane.css";
 
 export type TerminalRendererId = "ghostty" | "xterm";
@@ -8,7 +9,6 @@ export type TerminalRenderer = {
   cols: () => number;
   rows: () => number;
   write: (bytes: Uint8Array) => void;
-  drain: () => Promise<void>;
   focus: () => void;
   fit: () => void;
   repaint: () => void;
@@ -99,10 +99,6 @@ function writeTerminal(terminal: WritableTerminal, bytes: Uint8Array) {
   terminal.write(bytes);
 }
 
-function drainTerminal(terminal: WritableTerminal) {
-  return new Promise<void>((resolve) => terminal.write(new Uint8Array(0), resolve));
-}
-
 function repaintTerminal(terminal?: ResizableTerminal & RefreshableTerminal) {
   terminal?.refresh?.(0, Math.max(0, terminal.rows - 1));
 }
@@ -177,7 +173,7 @@ async function createGhosttyRenderer(host: HTMLElement): Promise<TerminalRendere
   const { init, Terminal, FitAddon } = await import("ghostty-web");
   await init();
   const terminal = new Terminal({
-    fontSize: 13,
+    fontSize: isMobileLayout() ? 13 : 10.4,
     fontFamily: '"Conduit Terminal Font", monospace',
     cursorBlink: false,
     theme: CONDUIT_TERMINAL_THEME,
@@ -194,7 +190,6 @@ async function createGhosttyRenderer(host: HTMLElement): Promise<TerminalRendere
     cols: () => terminal.cols,
     rows: () => terminal.rows,
     write: (bytes) => writeTerminal(terminal as unknown as WritableTerminal, bytes),
-    drain: () => drainTerminal(terminal as unknown as WritableTerminal),
     focus: () => terminal.focus(),
     fit: () => applyFit(fit),
     repaint: () => repaintTerminal(refreshable),
@@ -214,7 +209,7 @@ async function createXtermRenderer(host: HTMLElement): Promise<TerminalRenderer>
     import("@xterm/xterm/css/xterm.css"),
   ]);
   const terminal = new Terminal({
-    fontSize: 13,
+    fontSize: isMobileLayout() ? 13 : 10.4,
     fontFamily: '"Conduit Terminal Font", monospace',
     cursorBlink: false,
     scrollback: 1000,
@@ -248,7 +243,6 @@ async function createXtermRenderer(host: HTMLElement): Promise<TerminalRenderer>
     cols: () => terminal.cols,
     rows: () => terminal.rows,
     write: (bytes) => writeTerminal(terminal, bytes),
-    drain: () => drainTerminal(terminal),
     focus: () => terminal.focus(),
     fit: () => applyFit(fit),
     repaint: () => repaintTerminal(terminal),

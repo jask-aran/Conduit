@@ -186,7 +186,7 @@ test("PTY manager only tolerates known missing-session tmux failures", async () 
   await fs.rm(root, { recursive: true, force: true });
 });
 
-test("PTY manager compacts persisted rows and treats Conduit restart as a terminal-session boundary", async () => {
+test("PTY manager retains persisted rows and treats Conduit restart as a terminal-session boundary", async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-pty-load-"));
   const filePath = path.join(root, "remotes.json");
   await fs.writeFile(filePath, JSON.stringify({
@@ -203,12 +203,14 @@ test("PTY manager compacts persisted rows and treats Conduit restart as a termin
   const manager = new PtyManager({ filePath, pty, run: tmux.run });
   await manager.load();
   assert.equal(tmux.sessions.size, 0, "load should kill a stale dedicated Conduit tmux server");
-  assert.deepEqual(manager.list().map((item) => item.id).sort(), ["new", "other"]);
+  assert.deepEqual(manager.list().map((item) => item.id).sort(), ["new", "old", "other"]);
+  assert.equal(manager.get("old").status, "exited");
+  assert.equal(manager.get("old").signal, "server_restart");
   assert.equal(manager.get("new").status, "exited");
   assert.equal(manager.get("new").signal, "server_restart");
   const persisted = JSON.parse(await fs.readFile(filePath, "utf8"));
   assert.equal(persisted.version, 2);
-  assert.equal(persisted.sessions.length, 2);
+  assert.equal(persisted.sessions.length, 3);
   assert.equal((await fs.stat(filePath)).mode & 0o777, 0o600);
   await fs.rm(root, { recursive: true, force: true });
 });

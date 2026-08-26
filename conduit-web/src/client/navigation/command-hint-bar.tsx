@@ -6,7 +6,7 @@ import {
 } from "../shortcuts/shortcut-normalize";
 import type { PendingShortcutSequence } from "../shortcuts/shortcut-types";
 
-export type CommandHintMode = "browse" | "edit" | "rename" | "move" | "action-prefix";
+export type CommandHintMode = "browse" | "edit" | "rename" | "move" | "action-prefix" | "model-selector";
 export type CommandHintContext = "chat" | "generic";
 
 type Hint = {
@@ -101,6 +101,12 @@ export function CommandHintBar(props: {
       fixedHint("Back", "Esc"),
       fixedHint("Navigate", "↑", "↓"),
     ];
+    if (props.mode === "model-selector") return [
+      fixedHint("Navigate", "↑", "↓"),
+      commandHint(COMMAND_IDS.toggleModelScope, "Scope / un-scope"),
+      fixedHint("Select model", "Enter"),
+      fixedHint("Close", "Esc"),
+    ];
     if (props.context === "chat") return [
       commandHint(COMMAND_IDS.toggleChatEdit, "Edit chats"),
       commandHint(COMMAND_IDS.renameHighlightedChat, "Rename"),
@@ -116,6 +122,8 @@ export function CommandHintBar(props: {
     ? resolvedHints().length
     : props.mode === "edit"
       ? 5
+      : props.mode === "model-selector"
+        ? 4
       : props.mode === "browse" && props.context === "chat"
         ? 4
         : 2;

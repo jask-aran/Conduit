@@ -1,31 +1,39 @@
 /// <reference types="vite-plugin-pwa/client" />
 import { batch, createEffect, createMemo, createSignal, ErrorBoundary, lazy, onCleanup, onMount, Show } from "solid-js";
 import { render } from "solid-js/web";
+import { Capacitor } from "@capacitor/core";
 import {
-  EllipsisIcon, PanelLeftIcon, PanelRightIcon, PencilIcon, RefreshCwIcon, SearchIcon, ShareIcon, TerminalIcon, Trash2Icon, TriangleAlertIcon,
+  EllipsisIcon, MessageSquarePlusIcon, PanelLeftIcon, PanelRightIcon, PencilIcon, RefreshCwIcon, SearchIcon, ShareIcon, TerminalIcon, Trash2Icon, TriangleAlertIcon,
 } from "lucide-solid";
 import { registerSW } from "virtual:pwa-register";
 import { Toaster, toast } from "solid-sonner";
 import "solid-sonner/styles.css";
 import { DefaultMeteorShower } from "@jask-aran/solid-components/meteor-shower";
 import "@jask-aran/solid-components/meteor-shower.css";
-import { Button, Dialog, DialogContent, Menu, MenuContent, MenuGroup, MenuItem, MenuLabel, MenuSeparator, MenuTrigger, Spinner } from "@/components/primitives";
+import { Button, Dialog, DialogContent, Menu, MenuContent, MenuGroup, MenuItem, MenuLabel, MenuSeparator, MenuTrigger } from "@/components/primitives";
 import { api, asList, pathChatId, pathProjectId, projectPath } from "./api/client";
+import { buildHttpUrl, clearServerOrigin, configuredServerOrigin, loginUrl, logoutUrl, normalizeServerOrigin, saveServerOrigin, transcriptUrl } from "./api/transport";
+import { authorizedFetch, clearNativeBearerToken, nativeBearerToken, NATIVE_AUTH_REQUIRED_EVENT, saveNativeBearerToken } from "./api/native-auth-client";
 import type { ChatSummary, DashboardChat, Installation, Project, RuntimeIdentity, Template, TranscriptDetail, WorkspaceAppearance, WorkspacePolicy, WorkspaceSuggestion, WorkspaceSuggestionsPayload } from "./api/contracts";
 import { createErrorDiagnostic, formatRuntimeDiagnosticPrompt, type ErrorDiagnostic, type ErrorDiagnosticContext } from "./error-diagnostics";
 import { Composer, SPINNING_ACTIVITY, type ComposerStatus } from "./chat/composer";
-import { formatContextMetrics, saveContextMetrics, selectedContextMetrics, type ContextMetricId } from "./chat/context-metrics";
+import { COMPOSER_SURFACE_CHANGE_EVENT, selectedComposerSurface, type ComposerSurfaceMode } from "./chat/composer-surface";
+import type { VoiceDictationSettings } from "./chat/voice-dictation-types";
+import { contextUsagePercent, formatContextMetrics, saveContextMetrics, selectedContextMetrics, type ContextMetricId } from "./chat/context-metrics";
 import { HostUiRequests } from "./chat/host-ui-card";
 import { MARKDOWN_RENDERER_STORAGE_KEY, selectedMarkdownRenderer, type MarkdownRendererId } from "./chat/markdown-settings";
+import { saveRendererControlsVisible, selectedRendererControlsVisible } from "./chat/transcript-renderer";
 import { loadVoiceDictationSettings, saveVoiceDictationSettings } from "./chat/voice-dictation";
 import { Transcript } from "./chat/transcript";
 import { COMMAND_IDS, commandRegistry } from "./commands/command-registry";
 import { CommandMenu } from "./navigation/command-menu";
 import type { PaletteActions, PaletteContext } from "./palette/command-registry";
 import { bindVisualViewportShell, isMobileLayout, MOBILE_LAYOUT_QUERY, setMobileOverlayKind } from "./navigation/mobile-layout";
+import { mobileSwipeAction } from "./navigation/mobile-swipe";
 import { Sidebar } from "./navigation/sidebar";
 import { clampSidebarChatLimit, selectedSidebarChatLimit, SIDEBAR_CHAT_LIMIT_STORAGE_KEY } from "./navigation/sidebar-preferences";
 import { WorkspaceAppearanceEditor } from "./project/workspace-appearance-editor";
+import { forcePwaUpdate, rememberPwaRegistration, resetPwaAppCache } from "./pwa-update";
 import { Settings } from "./settings/settings";
 import { createActiveChat, type ActiveChatStore } from "./state/active-chat";
 import { createAttachments, DEFAULT_MAX_ATTACHMENT_BYTES, filesFromDataTransfer } from "./state/attachments";
@@ -33,24 +41,111 @@ import { createCatalogueStore } from "./state/catalogue";
 import { createModelSettings } from "./state/model-settings";
 import { createRuntimeStore } from "./state/runtime";
 import { VoiceWaveform } from "./chat/voice-waveform";
-import { preloadVoiceCaptureWorklet } from "./chat/voice-dictation-client";
-import { forcePwaUpdate, rememberPwaRegistration } from "./pwa-update";
 import { browserShortcutEnvironmentProvider } from "./shortcuts/shortcut-environment";
 import { ShortcutManager } from "./shortcuts/shortcut-manager";
 import "./project/dashboard.css";
+import "./chat/composer-geometry.css";
 import "./styles.css";
 
-if (import.meta.env.PROD) registerSW({ immediate: true, onRegisteredSW: (_url, registration) => rememberPwaRegistration(registration) });
+const nativeApp = Capacitor.isNativePlatform();
+if (import.meta.env.PROD && !nativeApp) registerSW({ immediate: true, onRegisteredSW: (_url, registration) => rememberPwaRegistration(registration) });
 
 type SettingsSection = "general" | "ui" | "shortcuts" | "models" | "profiles" | "runtime" | "workspaces" | "voice" | "search" | "auth";
 type WorkspaceView = "files" | "diff" | "artifacts" | "terminal";
-type VoiceDictationSettings = { shortcut: string; activation: "push_to_talk" | "toggle"; autoSend: boolean; inputDeviceId: string; captureProfile: "raw" | "processed"; warmMicrophone: boolean };
 const METEOR_FIELD_STORAGE_KEY = "conduit:meteor-field";
 const selectedMeteorField = () => localStorage.getItem(METEOR_FIELD_STORAGE_KEY) !== "false";
-const LIQUID_GLASS_SURFACE_STORAGE_KEY = "conduit:liquid-glass-surface";
-const selectedLiquidGlassSurface = () => localStorage.getItem(LIQUID_GLASS_SURFACE_STORAGE_KEY) === "true";
 const WorkspacePanel = lazy(() => import("./workspace/workspace-panel"));
 const ProjectDashboard = lazy(() => import("./project/dashboard"));
+
+function NativeServerSetup(props: { onAuthenticated: () => void }) {
+  const [address, setAddress] = createSignal(configuredServerOrigin() || "");
+  const [verifiedOrigin, setVerifiedOrigin] = createSignal(configuredServerOrigin());
+  const [password, setPassword] = createSignal("");
+  const [error, setError] = createSignal("");
+  const [submitting, setSubmitting] = createSignal(false);
+  const submit = async (event: SubmitEvent) => {
+    event.preventDefault();
+    setError("");
+    setSubmitting(true);
+    try {
+      if (!verifiedOrigin()) {
+        const origin = normalizeServerOrigin(address());
+        const response = await fetch(buildHttpUrl("/healthz", origin), { cache: "no-store" });
+        const health = response.ok ? await response.json() as { ok?: boolean } : null;
+        if (!response.ok || !health?.ok) throw new Error(`Server health check failed (${response.status}).`);
+        saveServerOrigin(origin);
+        setAddress(origin);
+        setVerifiedOrigin(origin);
+        return;
+      }
+      const response = await fetch(buildHttpUrl("/v0/auth/native-login", verifiedOrigin()!), {
+        method: "POST",
+        headers: { "content-type": "application/json", accept: "application/json" },
+        body: JSON.stringify({ password: password() }),
+      });
+      const body = await response.json().catch(() => ({})) as { token?: string; message?: string };
+      if (!response.ok || !body.token) throw new Error(body.message || "Could not sign in.");
+      await saveNativeBearerToken(body.token);
+      props.onAuthenticated();
+    } catch (cause) {
+      setError(cause instanceof TypeError
+        ? "Could not reach this Conduit server. Check Tailscale, HTTPS, and the server address."
+        : (cause as Error).message);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+  return <main class="native-server-setup">
+    <form class="native-server-card" onSubmit={submit}>
+      <span class="native-server-brand">Conduit</span>
+      <h1>Connect to your server</h1>
+      <p>{verifiedOrigin() ? "Server confirmed. Enter your Conduit password." : "Enter the HTTPS address for your Conduit server."}</p>
+      <label for="native-server-address">Server address</label>
+      <input id="native-server-address" type="text" inputMode="url" autocomplete="url" autocapitalize="none" spellcheck={false}
+        placeholder="https://conduit.your-tailnet.ts.net" value={address()} onInput={(event) => setAddress(event.currentTarget.value)}
+        disabled={submitting() || Boolean(verifiedOrigin())} />
+      <Show when={verifiedOrigin()}>
+        <label for="native-password">Password</label>
+        <input id="native-password" type="password" autocomplete="current-password" value={password()}
+          onInput={(event) => setPassword(event.currentTarget.value)} disabled={submitting()} autofocus />
+      </Show>
+      <Show when={error()}><p class="native-server-error" role="alert">{error()}</p></Show>
+      <Button type="submit" disabled={submitting() || Boolean(verifiedOrigin() && !password())}>
+        {submitting() ? (verifiedOrigin() ? "Signing in…" : "Checking…") : (verifiedOrigin() ? "Sign in" : "Connect")}
+      </Button>
+      <Show when={verifiedOrigin()}><Button type="button" variant="ghost" onClick={() => {
+        void clearNativeBearerToken().finally(() => {
+          clearServerOrigin();
+          setVerifiedOrigin(null);
+          setPassword("");
+          setError("");
+        });
+      }}>Change server</Button></Show>
+    </form>
+  </main>;
+}
+
+function NativeRoot() {
+  const [state, setState] = createSignal<"loading" | "login" | "app">("loading");
+  onMount(() => {
+    const requireLogin = () => setState("login");
+    window.addEventListener(NATIVE_AUTH_REQUIRED_EVENT, requireLogin);
+    onCleanup(() => window.removeEventListener(NATIVE_AUTH_REQUIRED_EVENT, requireLogin));
+    void nativeBearerToken().then(async (token) => {
+      const origin = configuredServerOrigin();
+      if (!token || !origin) return setState("login");
+      try {
+        const response = await authorizedFetch(buildHttpUrl("/v0/auth/status", origin));
+        setState(response.status === 401 ? "login" : "app");
+      } catch {
+        setState("app");
+      }
+    }).catch(() => setState("login"));
+  });
+  return <Show when={state() !== "loading"} fallback={<main class="native-server-setup"><span class="native-server-brand">Conduit</span></main>}>
+    {state() === "app" ? <App /> : <NativeServerSetup onAuthenticated={() => setState("app")} />}
+  </Show>;
+}
 
 function ChatHeader(props: {
   project?: Project;
@@ -65,6 +160,7 @@ function ChatHeader(props: {
   panelOpen: boolean;
   mobileSidebarOpen: boolean;
   onToggleMobileSidebar: () => void;
+  onNewChat: () => void;
   onOpenPalette: () => void;
   onOpenSearch: () => void;
   onTogglePanel: () => void;
@@ -75,6 +171,7 @@ function ChatHeader(props: {
   pwaUpdating: () => boolean;
   dashboard?: boolean;
 }) {
+  const [composerSurface, setComposerSurface] = createSignal<ComposerSurfaceMode>(selectedComposerSurface());
   const projectLabel = () => props.project?.slug === "chat" ? "Chats" : props.project?.slug || props.project?.name || "Chats";
   const runtimeLabel = () => !props.runtime ? null : props.runtime.kind === "native_pi" ? "Host Pi" : "Isolated Pi";
   const profileLabel = () => props.runtime?.kind === "native_pi" ? null : props.profile?.label || props.profile?.id;
@@ -92,9 +189,23 @@ function ChatHeader(props: {
       cacheStats: props.chat.cacheStats(),
     })
     : "";
+  const contextPercent = () => {
+    const value = props.chat ? contextUsagePercent(props.chat.contextUsage()) : null;
+    return value == null ? 0 : Math.max(0, Math.min(100, value));
+  };
+  const contextTone = () => {
+    const value = contextPercent();
+    if (value >= 90) return "critical";
+    if (value >= 70) return "warning";
+    return "normal";
+  };
+  const contextLabel = () => {
+    const value = contextPercent();
+    return `Context usage: ${Math.round(value)}%`;
+  };
+  const contextDashArray = () => `${contextPercent() || 0} 100`;
   const dictationLabel = () => props.composerStatus?.dictationLabel() || "";
   const dictating = () => Boolean(props.composerStatus?.dictating());
-  const recording = () => Boolean(props.composerStatus?.recording());
   const statusLabel = () => {
     const currentDictation = dictationLabel();
     if (currentDictation) return currentDictation;
@@ -105,6 +216,7 @@ function ChatHeader(props: {
     if (props.connectivity === "connecting") return "Connecting…";
     return "Ready";
   };
+  const recording = () => Boolean(props.composerStatus?.recording());
   const activityKind = () => activity()?.kind || (props.connectivity === "offline" ? "runtime_failed" : "idle");
   const statusBusy = () => dictating() || SPINNING_ACTIVITY.has(activityKind()) || ["connecting", "reconnecting"].includes(props.connectivity || "");
   const statusFailure = () => props.connectivity === "offline" || ["request_failed", "runtime_failed"].includes(activityKind());
@@ -113,28 +225,55 @@ function ChatHeader(props: {
   const waveformLevel = () => props.composerStatus?.waveform.level() || 0;
   const waveformPeak = () => props.composerStatus?.waveform.peak() || 0;
   const waveformState = () => props.composerStatus?.recorderMonitorState() || "stopped";
+  onMount(() => {
+    const syncComposerSurface = (event: Event) => setComposerSurface((event as CustomEvent<ComposerSurfaceMode>).detail);
+    window.addEventListener(COMPOSER_SURFACE_CHANGE_EVENT, syncComposerSurface);
+    onCleanup(() => window.removeEventListener(COMPOSER_SURFACE_CHANGE_EVENT, syncComposerSurface));
+  });
   return <>
     <header class="chat-header">
       <Show when={!props.mobileSidebarOpen}>
-        <Button variant="ghost" size="icon-sm" class="mobile-sidebar-trigger" data-mobile-open="false" aria-label="Toggle Sidebar" aria-expanded={false} onClick={props.onToggleMobileSidebar}><PanelLeftIcon /></Button>
+        <div class="mobile-header-leading">
+          <Button variant="ghost" size="icon-sm" class="mobile-sidebar-trigger" data-mobile-open="false" aria-label="Toggle Sidebar" aria-expanded={false} onClick={props.onToggleMobileSidebar}><PanelLeftIcon /></Button>
+          <Button variant="ghost" size="icon-sm" class="mobile-new-chat-trigger" aria-label="New chat" title="New chat" onClick={props.onNewChat}><MessageSquarePlusIcon /></Button>
+        </div>
       </Show>
       <nav aria-label="breadcrumb" class="chat-header-title"><span>{projectLabel()}</span><span class="breadcrumb-separator" aria-hidden="true" /><strong>{props.title}</strong></nav>
-      <Show when={line()}><span class="chat-profile-posture" title={line()}>{line()}</span></Show>
       <Show when={!props.dashboard && props.chat}>
         <span class="chat-status-line" data-state={statusTone()} role="status" aria-label={`Runtime status: ${statusLabel()}`} aria-live="polite">
           <Show when={recording()} fallback={<span class="chat-status-label">{statusLabel()}</span>}>
-            <VoiceWaveform class="chat-status-waveform" history={waveformHistory} level={waveformLevel} peak={waveformPeak} state={waveformState()} variant="compact" barDensity={3.5} ariaLabel="Microphone input level" />
+            <VoiceWaveform class="chat-status-waveform" history={waveformHistory} level={waveformLevel} peak={waveformPeak} state={waveformState()} variant="compact" barDensity={3} ariaLabel="Microphone input level" />
           </Show>
         </span>
       </Show>
-      <div class="chat-header-actions">
+      <div class="chat-header-actions composer-surface-material" data-composer-surface={composerSurface()}>
         <Button variant="ghost" size="icon-sm" class="search-trigger" aria-label="Search chats" title="Search chats" onClick={props.onOpenSearch}><SearchIcon /></Button>
         <Button variant="ghost" size="icon-sm" class="palette-trigger" aria-label="Open command palette" title="Command palette" onClick={props.onOpenPalette}><TerminalIcon /></Button>
         <Button variant="ghost" size="icon-sm" class="chat-header-desktop-action" aria-label={props.dashboard ? "Copy Tailscale workspace link" : "Copy Tailscale chat link"} title={props.dashboard ? "Copy Tailscale workspace link" : "Copy Tailscale chat link"} onClick={props.onShare}><ShareIcon /></Button>
-        <Show when={!props.panelOpen}>
-          <Button variant="ghost" size="icon-sm" class="chat-header-desktop-action" aria-label="Toggle workspace panel" aria-expanded={false} onClick={props.onTogglePanel}><PanelRightIcon /></Button>
+        <Show when={!props.dashboard && props.chat}>
+          <Menu modal={false}>
+            <MenuTrigger class="chat-context-trigger" data-state={contextTone()} aria-label={contextLabel()} title={contextLabel()}>
+              <svg class="chat-context-gauge" viewBox="0 0 24 24" aria-hidden="true">
+                <circle class="chat-context-gauge-track" cx="12" cy="12" r="9" pathLength="100" />
+                <circle class="chat-context-gauge-value" cx="12" cy="12" r="9" pathLength="100" style={`stroke-dasharray: ${contextDashArray()}`} />
+              </svg>
+            </MenuTrigger>
+            <MenuContent class="chat-context-menu">
+              <Show when={line()}>
+                <MenuGroup>
+                  <MenuLabel class="chat-context-menu-meta">{line()}</MenuLabel>
+                </MenuGroup>
+                <MenuSeparator />
+              </Show>
+              <MenuGroup aria-label="Context metrics">
+                <MenuLabel>Context metrics</MenuLabel>
+                <div class="chat-context-menu-values">{contextDetail() || "No context metrics selected."}</div>
+              </MenuGroup>
+            </MenuContent>
+          </Menu>
         </Show>
-        <Menu>
+        <Button variant="ghost" size="icon-sm" class="chat-header-desktop-action" aria-label="Toggle workspace panel" aria-expanded={props.panelOpen} onClick={props.onTogglePanel}><PanelRightIcon /></Button>
+        <Menu modal={false}>
           <MenuTrigger class="chat-header-more" aria-label="More chat options" title="More chat options"><EllipsisIcon /></MenuTrigger>
           <MenuContent class="chat-header-menu">
             <MenuGroup>
@@ -148,7 +287,7 @@ function ChatHeader(props: {
               </MenuGroup>
             </Show>
             <MenuSeparator />
-            <Show when={!props.dashboard}>
+            <Show when={!props.dashboard && !nativeApp}>
               <MenuItem disabled={props.pwaUpdating()} onSelect={props.onUpdatePwa}><RefreshCwIcon class={props.pwaUpdating() ? "pwa-update-icon pwa-update-icon-active" : "pwa-update-icon"} />{props.pwaUpdating() ? "Updating app…" : "Update app"}</MenuItem>
               <MenuSeparator />
             </Show>
@@ -168,6 +307,15 @@ function ChatHeader(props: {
 }
 
 function App() {
+  const logout = async () => {
+    if (nativeApp) {
+      try { await authorizedFetch(logoutUrl(), { method: "POST" }); } catch {}
+      await clearNativeBearerToken();
+      window.dispatchEvent(new Event(NATIVE_AUTH_REQUIRED_EVENT));
+      return;
+    }
+    await fetch(logoutUrl(), { method: "POST" }).finally(() => { location.href = loginUrl(); });
+  };
   const shortcutManager = new ShortcutManager({
     commands: commandRegistry,
     environment: browserShortcutEnvironmentProvider.detect(),
@@ -179,13 +327,13 @@ function App() {
   const [workspaceSuggestions, setWorkspaceSuggestions] = createSignal<WorkspaceSuggestion[]>([]);
   const [workspacePolicy, setWorkspacePolicy] = createSignal<WorkspacePolicy | null>(null);
   const [defaultTemplateId, setDefaultTemplateId] = createSignal("chat");
-  const [voiceSettings, setVoiceSettings] = createSignal<VoiceDictationSettings>(loadVoiceDictationSettings() as VoiceDictationSettings);
-  const updateVoiceSettings = (next: VoiceDictationSettings) => setVoiceSettings(saveVoiceDictationSettings(next) as VoiceDictationSettings);
+  const [voiceSettings, setVoiceSettings] = createSignal<VoiceDictationSettings>(loadVoiceDictationSettings());
+  const updateVoiceSettings = (next: VoiceDictationSettings) => setVoiceSettings(saveVoiceDictationSettings(next));
   const [partialContinue, setPartialContinue] = createSignal(true);
   const [maxAttachmentBytes, setMaxAttachmentBytes] = createSignal(DEFAULT_MAX_ATTACHMENT_BYTES);
   const [markdownRenderer, setMarkdownRenderer] = createSignal<MarkdownRendererId>(selectedMarkdownRenderer());
+  const [rendererControlsVisible, setRendererControlsVisible] = createSignal(selectedRendererControlsVisible());
   const [meteorField, setMeteorField] = createSignal(selectedMeteorField());
-  const [liquidGlassSurface, setLiquidGlassSurface] = createSignal(selectedLiquidGlassSurface());
   const [sidebarChatLimit, setSidebarChatLimit] = createSignal(selectedSidebarChatLimit());
   const [contextMetrics, setContextMetrics] = createSignal<ContextMetricId[]>(selectedContextMetrics());
   const [settingsOpen, setSettingsOpen] = createSignal(false);
@@ -232,7 +380,17 @@ function App() {
       await forcePwaUpdate();
     } catch (error) {
       setPwaUpdating(false);
-      toast.error("Could not update the app", { description: error instanceof Error ? error.message : "Reload Conduit and try again." });
+      showError(error);
+    }
+  };
+  const runPwaCacheReset = async () => {
+    if (pwaUpdating()) return;
+    setPwaUpdating(true);
+    try {
+      await resetPwaAppCache();
+    } catch (error) {
+      setPwaUpdating(false);
+      showError(error);
     }
   };
   const catalogue = createCatalogueStore();
@@ -331,6 +489,9 @@ function App() {
   });
 
   const setPanelOpenForChat = (next: boolean) => {
+    if (!next && document.activeElement instanceof HTMLElement && document.activeElement.closest(".workspace-panel")) {
+      document.querySelector<HTMLElement>(".chat-header [aria-label='Toggle workspace panel']")?.focus({ preventScroll: true });
+    }
     const id = workspacePanelScope();
     setPanelOpen(next);
     if (id) localStorage.setItem(`conduit:workspace-panel:${id}:open`, String(next));
@@ -341,6 +502,43 @@ function App() {
     if (open && panelOpen() && isMobileLayout()) setPanelOpenForChat(false);
     setMobileSidebarOpen(open);
   };
+
+  onMount(() => {
+    let swipe: { id: number; x: number; y: number } | null = null;
+    const start = (event: TouchEvent) => {
+      if (!isMobileLayout() || event.touches.length !== 1) return;
+      const touch = event.touches[0]!;
+      swipe = { id: touch.identifier, x: touch.clientX, y: touch.clientY };
+    };
+    const end = (event: TouchEvent) => {
+      const touch = swipe && [...event.changedTouches].find((item) => item.identifier === swipe!.id);
+      if (!swipe || !touch) return;
+      const action = mobileSwipeAction({
+        startX: swipe.x,
+        startY: swipe.y,
+        endX: touch.clientX,
+        endY: touch.clientY,
+        sidebarOpen: mobileSidebarOpen(),
+        workspaceOpen: panelOpen(),
+      });
+      swipe = null;
+      if (action === "open-sidebar") setMobileSidebar(true);
+      else if (action === "close-sidebar") setMobileSidebar(false);
+      else if (action === "open-workspace" && workspacePanelScope()) {
+        setMobileSidebar(false);
+        setPanelOpenForChat(true);
+      } else if (action === "close-workspace") setPanelOpenForChat(false);
+    };
+    const cancel = () => { swipe = null; };
+    window.addEventListener("touchstart", start, { passive: true });
+    window.addEventListener("touchend", end, { passive: true });
+    window.addEventListener("touchcancel", cancel, { passive: true });
+    onCleanup(() => {
+      window.removeEventListener("touchstart", start);
+      window.removeEventListener("touchend", end);
+      window.removeEventListener("touchcancel", cancel);
+    });
+  });
 
   const currentDraftId = () => chat.status() === "draft" ? catalogue.selectedId() : null;
 
@@ -509,6 +707,16 @@ function App() {
     try { const saved = await api<ChatSummary>(`/v0/sessions/${target.id}`, { method: "PATCH", body: JSON.stringify({ name }) }); if (catalogue.selectedId() === target.id) chat.setTitle(saved.title); await refresh(); return true; }
     catch (error) { showError(error); return false; }
   };
+  const autoNameChat = async () => {
+    const id = catalogue.selectedId();
+    if (!id) return;
+    try {
+      const saved = await api<ChatSummary>(`/v0/sessions/${id}/auto-name`, { method: "POST" });
+      chat.setTitle(saved.title);
+      await refresh();
+      toast.success(`Renamed chat to ${saved.title}`);
+    } catch (error) { showError(error); }
+  };
   const renameProject = async (target: Project, name: string) => {
     try { await api(`/v0/projects/${target.id}`, { method: "PATCH", body: JSON.stringify({ name }) }); await refresh(); return true; }
     catch (error) { showError(error); return false; }
@@ -544,7 +752,7 @@ function App() {
     catch (error) { showError(error); }
   };
   const copyTranscript = async (target: ChatSummary) => {
-    try { const response = await fetch(`/v0/sessions/${target.id}/transcript`); if (!response.ok) throw new Error("Could not load the transcript"); await navigator.clipboard.writeText(await response.text()); }
+    try { const response = await authorizedFetch(transcriptUrl(target.id)); if (!response.ok) throw new Error("Could not load the transcript"); await navigator.clipboard.writeText(await response.text()); }
     catch (error) { showError(error); }
   };
   const copyChatLinks = async (targets: Array<{ chat: ChatSummary; project: Project }>) => {
@@ -612,13 +820,10 @@ function App() {
     setMarkdownRenderer(next);
     localStorage.setItem(MARKDOWN_RENDERER_STORAGE_KEY, next);
   };
+  const switchRendererControlsVisible = (visible: boolean) => setRendererControlsVisible(saveRendererControlsVisible(visible));
   const switchMeteorField = (enabled: boolean) => {
     setMeteorField(enabled);
     localStorage.setItem(METEOR_FIELD_STORAGE_KEY, String(enabled));
-  };
-  const switchLiquidGlassSurface = (enabled: boolean) => {
-    setLiquidGlassSurface(enabled);
-    localStorage.setItem(LIQUID_GLASS_SURFACE_STORAGE_KEY, String(enabled));
   };
   const switchSidebarChatLimit = (next: number) => {
     const value = clampSidebarChatLimit(next);
@@ -644,6 +849,10 @@ function App() {
       return;
     }
     openPalette("chat-search", "", true);
+  };
+  const openModelSelector = () => {
+    if (paletteOpen() && palettePage() === "model-selector") setPaletteOpen(false);
+    else openPalette("model-selector", "", true);
   };
   const togglePanel = () => {
     const next = !panelOpen();
@@ -710,6 +919,7 @@ function App() {
   const thinkingLevels = createMemo(() => models.models().find((item) => item.spec === models.model())?.thinkingLevels ?? []);
 
   const paletteContext = createMemo<PaletteContext>(() => ({
+    nativeApp,
     chatId: catalogue.selectedId(),
     project: selectedProject(),
     projects: catalogue.projects(),
@@ -726,7 +936,7 @@ function App() {
   }));
 
   const paletteActions: PaletteActions = {
-    logout: () => { void fetch("/v0/auth/logout", { method: "POST" }).finally(() => { location.href = "/login"; }); },
+    logout: () => { void logout(); },
     newChat: (project, launch) => void createChat(project ?? undefined, launch ?? {}),
     newFolder: () => runSidebar("new-folder"),
     newWorkspace: () => runSidebar("new-workspace"),
@@ -738,6 +948,7 @@ function App() {
     openWorkspaceView,
     copyTranscript: () => { const id = catalogue.selectedId(); if (id) void copyTranscript({ id } as ChatSummary); },
     rename: () => runSidebar("rename-chat"),
+    autoName: () => void autoNameChat(),
     move: () => runSidebar("move-chat"),
     renameFolder: () => runSidebar("rename-folder"),
     stop: () => chat.stop(),
@@ -746,6 +957,8 @@ function App() {
     copy: () => { const content = lastAssistant()?.content; if (content) void navigator.clipboard.writeText(content); },
     retryConnection: () => runtime.retry(),
     reload: () => location.reload(),
+    updateApp: () => void runPwaUpdate(),
+    resetAppCache: () => void runPwaCacheReset(),
     delete: () => runSidebar("delete-chat"),
     deleteFolder: () => runSidebar("delete-project"),
     settings: (section) => openSettings(section),
@@ -771,7 +984,6 @@ function App() {
   };
 
   onMount(() => {
-    void preloadVoiceCaptureWorklet().catch(() => {});
     const releaseApplicationContext = shortcutManager.activateContext("application");
     const releaseShortcutHandlers = [
       shortcutManager.registerHandler(COMMAND_IDS.openCommandPalette, "application", () => {
@@ -780,6 +992,7 @@ function App() {
       }),
       shortcutManager.registerHandler(COMMAND_IDS.searchChats, "application", toggleSearchPalette),
       shortcutManager.registerHandler(COMMAND_IDS.openSettings, "application", () => openSettings("general")),
+      shortcutManager.registerHandler(COMMAND_IDS.openModelSelector, "application", openModelSelector),
       shortcutManager.registerHandler(COMMAND_IDS.newChat, "application", () => {
         setMobileSidebarOpen(false);
         void createChat();
@@ -929,8 +1142,10 @@ function App() {
       onMoveChat={moveChat} onMoveChats={moveChats} onMoveProjectChats={moveProjectChats} onCopyTranscript={copyTranscript} onCopyChatLinks={copyChatLinks}
       onDeleteChat={deleteChat} onDeleteChats={deleteChats} onDeleteProject={deleteProject}
       onOpenTerminal={(target, project) => { void openChat(target, project).then(() => openWorkspaceView("terminal")); }}
-      onOpenWorkspaceIdentity={openWorkspaceIdentity} onOpenSettings={openSettings} onOpenPalette={(page, initialQuery) => openPalette(page || null, initialQuery || "", page === "chat-search")} />
-    <main data-slot="sidebar-inset" data-liquid-glass={routeKind() === "chat" && liquidGlassSurface() ? "true" : undefined} class={`chat-main${routeKind() === "chat" && emptyChat() ? " chat-main-empty" : ""}`} {...(routeKind() === "chat" ? dropHandlers : {})}>
+      onOpenWorkspaceIdentity={openWorkspaceIdentity} onOpenSettings={openSettings} onOpenPalette={(page, initialQuery) => openPalette(page || null, initialQuery || "", page === "chat-search")}
+      onChangeServer={nativeApp ? () => { void clearNativeBearerToken().finally(() => { clearServerOrigin(); location.reload(); }); } : undefined}
+      onLogout={() => void logout()} />
+    <main data-slot="sidebar-inset" class={`chat-main${routeKind() === "chat" && emptyChat() ? " chat-main-empty" : ""}`} {...(routeKind() === "chat" ? dropHandlers : {})}>
       <Show when={routeBootstrap() === "ready"} fallback={<div class="chat-bootstrap" role={routeBootstrap() === "error" ? "alert" : "status"}>{routeBootstrap() === "error"
         ? routeBootstrapError() || (routeKind() === "project" ? "This project could not be loaded." : "This chat could not be loaded.")
         : routeKind() === "project" ? "Loading project…" : "Loading chat…"}</div>}>
@@ -941,16 +1156,17 @@ function App() {
         </Show>
         <Show when={routeKind() === "project" && selectedProject()} fallback={<>
           <Show when={dropActive()}><div class="chat-drop-overlay"><div>Drop files to attach</div></div></Show>
-          <ChatHeader project={selectedProject()} title={chat.title()} profile={activeProfile()} runtime={chat.runtimeIdentity()} live={chat.live() as unknown as Record<string, unknown>} chat={chat} contextMetrics={contextMetrics} composerStatus={composerStatus()} connectivity={runtime.connectivity()} panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={() => void shareChat()} onRename={() => runSidebar("rename-chat")} onDelete={() => runSidebar("delete-chat")} onUpdatePwa={() => void runPwaUpdate()} pwaUpdating={pwaUpdating} />
+          <ChatHeader project={selectedProject()} title={chat.title() || (chat.status() === "active" ? "Untitled chat" : "New chat")} profile={activeProfile()} runtime={chat.runtimeIdentity()} live={chat.live() as unknown as Record<string, unknown>} chat={chat} contextMetrics={contextMetrics} composerStatus={composerStatus()} connectivity={runtime.connectivity()} panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onNewChat={() => void createChat()} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={() => void shareChat()} onRename={() => runSidebar("rename-chat")} onDelete={() => runSidebar("delete-chat")} onUpdatePwa={() => void runPwaUpdate()} pwaUpdating={pwaUpdating} />
           <Show when={selectedProject()?.kind === "workspace" && [...runtime.processes().values()].some((process) => process.chatId !== catalogue.selectedId() && process.active)}><div class="workspace-warning"><TriangleAlertIcon /><div><strong>Another chat is working in this Workspace</strong><p>Both agents can edit the same files. Conduit does not lock the Workspace or create worktrees automatically.</p></div></div></Show>
           <div class="work-area">
             <section class="work-area-conversation" aria-label="Conversation">
-              <Transcript chat={chat} partialContinue={partialContinue()} markdownRenderer={markdownRenderer()} profileLabel={activeProfile()?.label || activeProfile()?.id || chat.templateId() || undefined} footer={<div class="composer-stack"><HostUiRequests requests={chat.hostUiRequests()} onRespond={chat.respondHostUi} />
-                <Composer chat={chat} attachments={attachments} models={models} profiles={profiles()} activeProfile={activeProfile()} serverOnline={runtime.connectivity() === "online"} liquidGlassSurface={liquidGlassSurface()} voiceSettings={voiceSettings()} onChooseProfile={(id) => void switchProfile(id)} onOpenSettings={openSettings} onOpenAttachments={() => attachFileInput?.click()} onStatusChange={setComposerStatus} /></div>} />
+              <Transcript chat={chat} partialContinue={partialContinue()} markdownRenderer={markdownRenderer()} rendererControlsVisible={rendererControlsVisible()} profileLabel={activeProfile()?.label || activeProfile()?.id || chat.templateId() || undefined} />
+              <div class="composer-stack"><HostUiRequests requests={chat.hostUiRequests()} onRespond={chat.respondHostUi} />
+                <Composer chat={chat} attachments={attachments} models={models} profiles={profiles()} activeProfile={activeProfile()} serverOnline={runtime.connectivity() === "online"} voiceSettings={voiceSettings()} onChooseProfile={(id) => void switchProfile(id)} onOpenSettings={openSettings} onOpenAttachments={() => attachFileInput?.click()} onStatusChange={setComposerStatus} /></div>
             </section>
           </div>
         </>}>
-          <ChatHeader project={selectedProject()} title="Dashboard" panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={() => void shareProject()} onRename={() => runSidebar("rename-folder")} onDelete={() => runSidebar("delete-project")} onUpdatePwa={() => void runPwaUpdate()} pwaUpdating={pwaUpdating} dashboard />
+          <ChatHeader project={selectedProject()} title="Dashboard" panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onNewChat={() => void createChat()} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={() => void shareProject()} onRename={() => runSidebar("rename-folder")} onDelete={() => runSidebar("delete-project")} onUpdatePwa={() => void runPwaUpdate()} pwaUpdating={pwaUpdating} dashboard />
           <ProjectDashboard project={selectedProject()!} templates={templates()} runtime={runtime}
             onNewChat={async (project) => { await createChat(project); }} onOpenChat={(target: DashboardChat, project) => openChat(target, project)}
             onRename={() => runSidebar("rename-folder")} onDelete={() => runSidebar("delete-project")}
@@ -960,9 +1176,11 @@ function App() {
     </main>
     <Show when={Boolean(selectedProject()) && Boolean(workspacePanelScope())}><WorkspacePanel projectId={() => selectedProject()!.id} chatId={() => workspacePanelScope()!} open={panelOpen} requestedTab={workspaceViewRequest} onClose={togglePanel} /></Show>
     <CommandMenu open={paletteOpen()} onOpenChange={setPaletteOpen} onPageChange={setPalettePage} initialPage={palettePage()} initialQuery={paletteInitialQuery()} launchNonce={paletteNonce()} directLaunch={paletteDirectLaunch()}
-      context={paletteContext()} actions={paletteActions} models={models.models()} currentModel={models.model()} onChooseModel={(spec) => void models.chooseModel(spec)} shortcuts={shortcutManager} />
-                <Settings open={settingsOpen()} initialSection={settingsSection()} initialWorkspaceId={settingsWorkspaceId()} onOpenChange={setSettingsOpen} models={models} templates={templates()} templatesLoading={templatesLoading()} defaultTemplateId={defaultTemplateId()} projects={catalogue.projects()} installations={installations()} installationsLoading={installationsLoading()} onInstallationsChange={setInstallations} onDefaultTemplateChange={saveDefaultTemplate} onWorkspaceDefaultChange={saveWorkspaceDefault} markdownRenderer={markdownRenderer()} onMarkdownRendererChange={switchMarkdownRenderer} meteorField={meteorField()} onMeteorFieldChange={switchMeteorField} liquidGlassSurface={liquidGlassSurface()} onLiquidGlassSurfaceChange={switchLiquidGlassSurface} voiceSettings={voiceSettings()} onVoiceSettingsSave={updateVoiceSettings} sidebarChatLimit={sidebarChatLimit()} onSidebarChatLimitChange={switchSidebarChatLimit} contextMetrics={contextMetrics()} onContextMetricsChange={switchContextMetrics} shortcuts={shortcutManager} />
+      context={paletteContext()} actions={paletteActions} onChooseModel={(spec) => void models.chooseModel(spec)} scopeModels={models.allModels()} enabledModelSpecs={models.enabledModels()} onToggleModelScope={(spec) => { const enabled = models.enabledModels(); void models.saveScope(enabled.includes(spec) ? enabled.filter((item) => item !== spec) : [...enabled, spec]); }} shortcuts={shortcutManager} />
+                <Settings open={settingsOpen()} initialSection={settingsSection()} initialWorkspaceId={settingsWorkspaceId()} onOpenChange={setSettingsOpen} models={models} templates={templates()} templatesLoading={templatesLoading()} defaultTemplateId={defaultTemplateId()} projects={catalogue.projects()} installations={installations()} installationsLoading={installationsLoading()} onInstallationsChange={setInstallations} onDefaultTemplateChange={saveDefaultTemplate} onWorkspaceDefaultChange={saveWorkspaceDefault} markdownRenderer={markdownRenderer()} onMarkdownRendererChange={switchMarkdownRenderer} rendererControlsVisible={rendererControlsVisible()} onRendererControlsVisibleChange={switchRendererControlsVisible} meteorField={meteorField()} onMeteorFieldChange={switchMeteorField} voiceSettings={voiceSettings()} onVoiceSettingsSave={updateVoiceSettings} sidebarChatLimit={sidebarChatLimit()} onSidebarChatLimitChange={switchSidebarChatLimit} contextMetrics={contextMetrics()} onContextMetricsChange={switchContextMetrics} onOpenModelSelector={openModelSelector} shortcuts={shortcutManager} />
   </>;
 }
 
-render(() => <ErrorBoundary fallback={(error) => <div class="crash-screen"><div class="crash-card"><h1>Conduit hit a UI error</h1><p>{error instanceof Error ? error.message : "Unknown interface error"}</p><Button onClick={() => location.reload()}>Reload Conduit</Button></div></div>}><App /></ErrorBoundary>, document.getElementById("root")!);
+render(() => <ErrorBoundary fallback={(error) => <div class="crash-screen"><div class="crash-card"><h1>Conduit hit a UI error</h1><p>{error instanceof Error ? error.message : "Unknown interface error"}</p><Button onClick={() => location.reload()}>Reload Conduit</Button></div></div>}>
+  {nativeApp ? <NativeRoot /> : <App />}
+</ErrorBoundary>, document.getElementById("root")!);

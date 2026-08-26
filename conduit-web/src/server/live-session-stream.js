@@ -12,16 +12,20 @@ export function createLiveSessionStream({
   findChatContext,
   findRegisteredSession,
   chatModelView,
+  autoNameSession = async () => {},
 }) {
+  const namingChats = new Set();
+
   async function promptForChat(record, command, message) {
     const context = await findChatContext(record.chatId);
     if (!context) throw new Error("Chat no longer exists");
     const selectedAttachments = await attachments.resolveMany(context.project, context.chat.id, command.attachmentIds);
     const prompt = serializeAttachmentEnvelope({ chatId: context.chat.id, attachments: selectedAttachments, message });
-    return { context, prompt };
+    return { context, prompt, message };
   }
 
   async function sendPrompt(record, prepared, options) {
+    const needsName = !prepared.context.chat.title && !namingChats.has(prepared.context.chat.id);
     const generationId = await manager.promptAccepted(record.id, prepared.prompt, options);
     if (prepared.context.chat.status === "draft") {
       await registry.update(prepared.context.chat.id, {
@@ -29,6 +33,12 @@ export function createLiveSessionStream({
         piSessionId: record.sessionId || null,
         piSessionFile: record.sessionFile,
       });
+    }
+    if (needsName) {
+      namingChats.add(prepared.context.chat.id);
+      void autoNameSession(record, prepared.context, prepared.message).catch((error) => {
+        console.warn("Could not name chat automatically", error.message);
+      }).finally(() => namingChats.delete(prepared.context.chat.id));
     }
     return generationId;
   }

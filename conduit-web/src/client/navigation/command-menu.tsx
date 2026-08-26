@@ -61,7 +61,6 @@ const GROUP_HEADINGS: Record<string, string> = {
   profiles: "Profiles",
   thinking: "Thinking level",
   danger: "Danger zone",
-  models: "Models",
 };
 
 const BACK_COMMAND: PaletteCommand = {
@@ -71,7 +70,7 @@ const BACK_COMMAND: PaletteCommand = {
 type Row =
   | { type: "heading"; key: string; label: string }
   | { type: "command"; key: string; index: number; command: PaletteCommand }
-  | { type: "model"; key: string; index: number; model: ModelOption }
+  | { type: "model"; key: string; index: number; model: ModelOption; scoped?: boolean }
   | { type: "destination"; key: string; index: number; project: Project };
 
 type SelectableRow = Exclude<Row, { type: "heading" }>;
@@ -105,9 +104,10 @@ export function CommandMenu(props: {
   initialQuery?: string | null;
   context: PaletteContext;
   actions: PaletteActions;
-  models: ModelOption[];
-  currentModel: string;
   onChooseModel: (spec: string) => void;
+  scopeModels: ModelOption[];
+  enabledModelSpecs: string[];
+  onToggleModelScope: (spec: string) => void;
   shortcuts: ShortcutManager;
   onPageChange?: (page: string | null) => void;
   details?: JSX.Element;
@@ -150,6 +150,7 @@ export function CommandMenu(props: {
   const parsedQuery = createMemo(() => parseChatQuery(query()));
   const searching = createMemo(() => Boolean(parsedQuery().text));
   const chatPage = createMemo(() => page() === "chat-search");
+  const modelSelectorPage = createMemo(() => page() === "model-selector");
   const chatScope = createMemo(() => resolveChatQueryScope(parsedQuery(), props.context.projects || []));
   const hintContext = createMemo<CommandHintContext>(() => chatPage() ? "chat" : "generic");
   const pendingActionSequence = createMemo(() => {
@@ -227,12 +228,30 @@ export function CommandMenu(props: {
       return out;
     }
 
+    if (modelSelectorPage()) {
+      const models = searching()
+        ? (rankPaletteResults<PaletteCommand, ModelOption>({
+          commands: [], models: props.scopeModels, query: parsedQuery().text, currentModel: "",
+        }) || []).flatMap((row) => row.model ? [row.model] : [])
+        : props.scopeModels;
+      const scoped = models.filter((model) => props.enabledModelSpecs.includes(model.spec));
+      const unscoped = models.filter((model) => !props.enabledModelSpecs.includes(model.spec));
+      if (scoped.length) {
+        push({ type: "heading", key: "scoped", label: "Scoped" });
+        for (const model of scoped) push({ type: "model", key: `scoped:${model.spec}`, index: index++, model, scoped: true });
+      }
+      for (const group of groupModels(unscoped)) {
+        push({ type: "heading", key: `m-${group.provider}`, label: group.provider });
+        for (const model of group.items) push({ type: "model", key: `model:${model.spec}`, index: index++, model });
+      }
+      return out;
+    }
+
     if (searching()) {
       const ranked = rankPaletteResults<PaletteCommand, ModelOption>({
         commands: source,
-        models: currentPage ? [] : props.models,
+        models: [],
         query: parsedQuery().text,
-        currentModel: props.currentModel,
       }) || [];
       let lastGroup = "";
       for (const row of ranked) {
@@ -271,10 +290,6 @@ export function CommandMenu(props: {
     for (const group of groupPaletteCommands(source)) {
       push({ type: "heading", key: `g-${group.id}`, label: group.heading });
       for (const command of group.items) push({ type: "command", key: command.id, index: index++, command });
-    }
-    for (const group of groupModels(props.models)) {
-      push({ type: "heading", key: `m-${group.provider}`, label: `Models · ${group.provider}` });
-      for (const model of group.items) push({ type: "model", key: `model:${model.spec}`, index: index++, model });
     }
     return out;
   });
@@ -346,6 +361,7 @@ export function CommandMenu(props: {
     focusInput();
   };
   const emptyMessage = () => {
+    if (modelSelectorPage()) return "No matching models.";
     const scope = chatScope();
     if (scope.kind === "unresolved") return `No chats in “${scope.value}”.`;
     if (chatPage() && parsedQuery().filters.length) return "No chats match this filter.";
@@ -464,6 +480,8 @@ export function CommandMenu(props: {
     ...palettePageCommands.map(([commandId, targetPage]) =>
       props.shortcuts.registerHandler(commandId, "palette.page", () =>
         openPalettePage(targetPage, commandId === COMMAND_IDS.searchChats))),
+    props.shortcuts.registerHandler(COMMAND_IDS.openModelSelector, "model-selector", close),
+    props.shortcuts.registerHandler(COMMAND_IDS.toggleModelScope, "model-selector", toggleActiveModelScope),
     props.shortcuts.registerHandler(COMMAND_IDS.toggleChatEdit, "chat-search.browse", toggleSelection),
     props.shortcuts.registerHandler(COMMAND_IDS.searchChats, "chat-search.browse", close),
     props.shortcuts.registerHandler(COMMAND_IDS.renameHighlightedChat, "chat-search.browse", startRename),
@@ -493,6 +511,9 @@ export function CommandMenu(props: {
       exclusive = true;
     } else if (chatPage()) {
       context = selectionMode() ? "chat-search.edit" : "chat-search.browse";
+    } else if (modelSelectorPage()) {
+      context = "model-selector";
+      exclusive = true;
     } else {
       context = page() ? "palette.page" : "palette.root";
     }
@@ -502,7 +523,14 @@ export function CommandMenu(props: {
 
   const runRow = (row?: SelectableRow) => {
     if (!row) return;
-    if (row.type === "model") { close(); requestAnimationFrame(() => props.onChooseModel(row.model.spec)); return; }
+    if (row.type === "model") {
+      if (modelSelectorPage()) {
+        if (row.scoped) { close(); requestAnimationFrame(() => props.onChooseModel(row.model.spec)); }
+        return;
+      }
+      close(); requestAnimationFrame(() => props.onChooseModel(row.model.spec));
+      return;
+    }
     if (row.type === "destination") { void chooseDestination(row.project); return; }
     const command = row.command;
     if (command.id === "page-back") { goBack(); return; }
@@ -532,6 +560,17 @@ export function CommandMenu(props: {
     if (!count) return;
     setActive((current) => (current + delta + count) % count);
   };
+
+  function toggleActiveModelScope() {
+    const row = selectable()[active()];
+    if (!modelSelectorPage() || row?.type !== "model") return;
+    const spec = row.model.spec;
+    props.onToggleModelScope(spec);
+    queueMicrotask(() => {
+      const index = selectable().findIndex((candidate) => candidate.type === "model" && candidate.model.spec === spec);
+      if (index >= 0) setActive(index);
+    });
+  }
 
   const keydown = (event: KeyboardEvent) => {
     const key = event.key.toLowerCase();
@@ -589,6 +628,9 @@ export function CommandMenu(props: {
       onClick: (event: MouseEvent) => runPointerRow(row, event),
     } as const;
     if (row.type === "model") {
+      if (modelSelectorPage()) return <div {...commonProps} class="command-option command-model-option" data-highlighted={selected() || undefined} data-scoped={row.scoped || undefined}>
+        <span class="command-model-label">{row.model.label}</span><small class="command-model-spec">{row.model.spec}</small>
+      </div>;
       const Icon = icons.model!;
       return <div {...commonProps} data-highlighted={selected() || undefined}>
         <Icon class="command-icon" />
@@ -626,14 +668,14 @@ export function CommandMenu(props: {
     <KDialog.Root open={props.open} onOpenChange={changeOpen}>
       <KDialog.Portal>
         <KDialog.Content
-          class={`command-dialog${chatPage() ? " command-dialog-chat-search" : ""}`}
+          class={`command-dialog${chatPage() ? " command-dialog-chat-search" : ""}${modelSelectorPage() ? " command-dialog-model-selector" : ""}`}
           onOpenAutoFocus={(event) => { event.preventDefault(); focusInput(); }}
           onCloseAutoFocus={(event) => { event.preventDefault(); if (returnFocus?.isConnected) returnFocus.focus(); returnFocus = null; }}
           onPointerDown={(event) => { if (event.target === event.currentTarget) close(); }}
         >
           <div class="command-shell">
-            <KDialog.Title class="sr-only">Command Palette</KDialog.Title>
-            <KDialog.Description class="sr-only">Search commands, chats, settings, and models.</KDialog.Description>
+            <KDialog.Title class="sr-only">{modelSelectorPage() ? "Model selector" : "Command Palette"}</KDialog.Title>
+            <KDialog.Description class="sr-only">{modelSelectorPage() ? "Choose the models available in this project." : "Search commands, chats, settings, and models."}</KDialog.Description>
             <div class="command-input-row">
               <Show when={pageMeta()}><span class="command-page-prefix">{pageMeta()!.prefix}</span></Show>
               <Show when={chatPage()}>
@@ -652,7 +694,7 @@ export function CommandMenu(props: {
                 aria-controls="command-listbox"
                 aria-autocomplete="list"
                 aria-activedescendant={selectable().length ? optionId(active()) : undefined}
-                aria-label="Search commands"
+                aria-label={modelSelectorPage() ? "Find models" : "Search commands"}
                 placeholder={pageMeta()?.placeholder || "Search commands…"}
                 value={parsedQuery().text}
                 onInput={(event) => setQuery(serializeChatQuery(parsedQuery().filters, event.currentTarget.value))}
@@ -672,13 +714,13 @@ export function CommandMenu(props: {
                 <XIcon />
               </Button>
             </div>
-            <div id="command-listbox" ref={listbox} role="listbox" aria-label={chatPage() ? "Chats" : "Commands"} class="command-list" data-mode-focus={selectionMode() || moveMode() || undefined} tabIndex={selectionMode() || moveMode() ? 0 : -1} onKeyDown={keydown}>
+            <div id="command-listbox" ref={listbox} role="listbox" aria-label={modelSelectorPage() ? "Models" : chatPage() ? "Chats" : "Commands"} class="command-list" data-mode-focus={selectionMode() || moveMode() || undefined} tabIndex={selectionMode() || moveMode() ? 0 : -1} onKeyDown={keydown}>
               <Show when={!selectable().length}><p class="command-empty">{emptyMessage()}</p></Show>
               <For each={rows()}>{renderRow}</For>
             </div>
             <CommandHintBar
               context={hintContext()}
-              mode={hintMode()}
+              mode={modelSelectorPage() ? "model-selector" : hintMode()}
               pendingSequence={pendingActionSequence()}
               shortcuts={props.shortcuts}
               onToggleEdit={toggleSelection}
