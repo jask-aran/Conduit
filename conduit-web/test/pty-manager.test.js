@@ -3,7 +3,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { PTY_MAX_INPUT_BYTES, PtyManager } from "../src/pty-manager.js";
+import { cleanEnvironment, PTY_MAX_INPUT_BYTES, PtyManager } from "../src/pty-manager.js";
 
 function fakePty() {
   const handles = [];
@@ -75,6 +75,17 @@ function fakeTmux() {
   };
   return { sessions, windowNames, calls, run };
 }
+
+test("PTY environment removes parent terminal-manager context", () => {
+  const env = cleanEnvironment({
+    PATH: "/usr/bin",
+    HERDR_ENV: "1",
+    HERDR_PANE: "parent",
+    TMUX: "parent",
+    TMUX_PANE: "%1",
+  });
+  assert.deepEqual(env, { PATH: "/usr/bin", TERM: "xterm-256color", COLORTERM: "truecolor" });
+});
 
 test("PTY manager uses tmux as session authority with one browser lease per terminal", async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-pty-manager-"));

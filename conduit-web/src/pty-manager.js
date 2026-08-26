@@ -80,11 +80,14 @@ function boundedDimension(value, fallback) {
   return Number.isInteger(next) && next >= 1 && next <= 500 ? next : fallback;
 }
 
-function cleanEnvironment(source = process.env) {
+export function cleanEnvironment(source = process.env) {
   const env = { ...source, TERM: "xterm-256color", COLORTERM: "truecolor" };
   delete env.TMUX;
   delete env.TMUX_PANE;
   delete env.NO_COLOR;
+  for (const key of Object.keys(env)) {
+    if (key.startsWith("HERDR_")) delete env[key];
+  }
   return env;
 }
 
