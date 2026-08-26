@@ -96,6 +96,19 @@ tmuxTest("PTY API attaches a thin binary WebSocket to a tmux-owned terminal sess
 
     const listed = await (await harness.request("/v0/ptys")).json();
     assert.equal(listed.ptys[0].status, "running");
+    assert.equal(typeof listed.ptys[0].currentCommand, "string");
+    assert.equal(Number.isNaN(Date.parse(listed.ptys[0].lastActivityAt)), false);
+    const renamed = await (await harness.request(`/v0/ptys/${terminal.id}/rename`, {
+      method: "POST",
+      body: JSON.stringify({ title: "Renamed shell" }),
+    })).json();
+    assert.equal(renamed.title, "Renamed shell");
+    const windowName = execFileSync("tmux", [
+      "-L", terminalSocketName(path.join(harness.root, "remotes.json")),
+      "-f", path.join(harness.root, "remotes.json.tmux.conf"),
+      "display-message", "-p", "-t", `c_${terminal.id.replaceAll("-", "")}:0`, "#{window_name}",
+    ], { encoding: "utf8" }).trim();
+    assert.equal(windowName, "Renamed shell");
     const removed = await harness.request(`/v0/ptys/${terminal.id}`, { method: "DELETE" });
     assert.equal(removed.status, 204, await removed.text());
     stream.socket.close();

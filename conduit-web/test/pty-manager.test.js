@@ -36,34 +36,44 @@ function fakePty() {
 
 function fakeTmux() {
   const sessions = new Set();
+  const windowNames = new Map();
   const calls = [];
   const run = async (command, args) => {
     calls.push({ command, args: [...args] });
     if (args.length === 1 && args[0] === "-V") return { stdout: "tmux 3.3a\n", stderr: "" };
-    const commandIndex = args.findIndex((value) => ["new-session", "list-sessions", "kill-session", "kill-server"].includes(value));
+    const commandIndex = args.findIndex((value) => ["new-session", "list-panes", "rename-window", "kill-session", "kill-server"].includes(value));
     const action = args[commandIndex];
     const tail = args.slice(commandIndex + 1);
     if (action === "new-session") {
-      sessions.add(tail[tail.indexOf("-s") + 1]);
+      const name = tail[tail.indexOf("-s") + 1];
+      sessions.add(name);
+      windowNames.set(name, tail[tail.indexOf("-n") + 1]);
       return { stdout: "", stderr: "" };
     }
-    if (action === "list-sessions") {
+    if (action === "list-panes") {
       if (!sessions.size) throw Object.assign(new Error("no server running"), { code: 1, stderr: "no server running" });
-      return { stdout: [...sessions].join("\n") + "\n", stderr: "" };
+      return { stdout: [...sessions].map((name) => `${name}\tsh\t1770000000\t0`).join("\n") + "\n", stderr: "" };
+    }
+    if (action === "rename-window") {
+      const target = tail[tail.indexOf("-t") + 1].replace(/:0$/, "");
+      windowNames.set(target, tail.at(-1));
+      return { stdout: "", stderr: "" };
     }
     if (action === "kill-session") {
       const name = tail[tail.indexOf("-t") + 1];
       if (!sessions.delete(name)) throw Object.assign(new Error("can't find session"), { code: 1, stderr: "can't find session" });
+      windowNames.delete(name);
       return { stdout: "", stderr: "" };
     }
     if (action === "kill-server") {
       if (!sessions.size) throw Object.assign(new Error("no server running"), { code: 1, stderr: "no server running" });
       sessions.clear();
+      windowNames.clear();
       return { stdout: "", stderr: "" };
     }
     throw new Error(`Unexpected tmux command: ${args.join(" ")}`);
   };
-  return { sessions, calls, run };
+  return { sessions, windowNames, calls, run };
 }
 
 test("PTY manager uses tmux as session authority with one browser lease per terminal", async () => {
@@ -83,6 +93,7 @@ test("PTY manager uses tmux as session authority with one browser lease per term
   const sibling = await manager.create({ project: { id: "workspace" }, cwd: workspace });
   assert.notEqual(sibling.id, record.id);
   assert.equal(sibling.title, "Shell 2");
+  assert.equal(record.currentCommand, path.basename(process.env.SHELL || "/bin/sh"));
   assert.equal(tmux.sessions.size, 2);
   assert.equal(pty.handles.length, 0, "detached tmux sessions must not retain a browser PTY attachment");
 
@@ -93,6 +104,7 @@ test("PTY manager uses tmux as session authority with one browser lease per term
   assert.ok(newSession.args.includes("-f"));
   assert.ok(newSession.args.includes(manager.tmuxConfigPath));
   assert.ok(newSession.args.includes(workspace));
+  assert.ok(newSession.args.includes("Shell"));
 
   const attachment = await manager.attach(record.id, { cols: 120, rows: 40 });
   assert.equal(pty.handles.length, 1);
@@ -129,6 +141,7 @@ test("PTY manager uses tmux as session authority with one browser lease per term
   const reattached = await manager.attach(record.id);
   reattached.kill();
   assert.equal((await manager.rename(record.id, "Agent shell")).title, "Agent shell");
+  assert.equal(tmux.windowNames.get([...tmux.sessions][0]), "Agent shell");
   assert.equal(await manager.remove(sibling.id), true);
   assert.equal(tmux.sessions.size, 1);
 

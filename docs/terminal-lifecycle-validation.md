@@ -43,6 +43,7 @@ Completed:
 - Real-tmux transport tests include service restart `1012`, disposable-client recovery through `1011`, exclusive ownership and explicit takeover through `4010`, parser-level input rejection, multiple sessions and TUI control sequences. `pty_in_use` remains stable until the user chooses **Take control**; neither ownership close code starts an automatic reconnect loop.
 - Split UTF-8 input now uses one streaming decoder per attachment. Parser-level oversized input closes only the browser attachment and leaves the tmux session available for reattach.
 - Closing an owning browser socket now releases its established or pending attachment lease before the disposable tmux client finishes exiting. An immediate replacement attach no longer receives transient `pty_in_use`.
+- Conduit keeps its generated UUID-derived tmux session name immutable, mirrors the mutable terminal title to the tmux window name, and exposes non-persisted tmux command, activity, and pane-state metadata in terminal list rows.
 - Production build and typecheck pass. The focused Chromium Workspace, xterm paste/WebGL and resident-reattach tests pass.
 - Browser validation passes for terminal creation, input, hidden-panel detach/reattach, screen restoration, second-terminal creation and switching between terminals.
 

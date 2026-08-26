@@ -33,6 +33,9 @@ type Pty = {
   updatedAt?: string;
   exitCode?: number | null;
   signal?: string | null;
+  currentCommand?: string | null;
+  lastActivityAt?: string | null;
+  paneDead?: boolean;
 };
 type ConnectionState = "idle" | "connecting" | "attached" | "disconnected" | "exited";
 const PTY_IN_USE_CLOSE_CODE = 4009;
@@ -42,11 +45,16 @@ function notifyPtyChange() {
   window.dispatchEvent(new Event("conduit:ptys-changed"));
 }
 
-function sessionTimestamp(record: Pty) {
-  if (!record.createdAt) return record.id.slice(0, 8);
-  const date = new Date(record.createdAt);
-  if (Number.isNaN(date.getTime())) return record.id.slice(0, 8);
-  return `${date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} · ${record.id.slice(0, 8)}`;
+function sessionMetadata(record: Pty) {
+  const command = record.currentCommand || "shell";
+  if (record.paneDead) return `${command} · exited`;
+  const activity = new Date(record.lastActivityAt || "");
+  if (Number.isNaN(activity.getTime())) return command;
+  const seconds = Math.max(0, Math.round((Date.now() - activity.getTime()) / 1000));
+  if (seconds < 5) return `${command} · active now`;
+  if (seconds < 60) return `${command} · active ${seconds}s ago`;
+  if (seconds < 3600) return `${command} · active ${Math.floor(seconds / 60)}m ago`;
+  return `${command} · active ${activity.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
 }
 
 export function TerminalPane(props: { projectId: string; active?: boolean }) {
@@ -627,7 +635,7 @@ export function TerminalPane(props: { projectId: string; active?: boolean }) {
                       <CheckIcon class={pty()?.id === session.id ? "terminal-session-check" : "terminal-session-check terminal-session-check-hidden"} />
                       <span class="terminal-session-copy">
                         <strong>{session.title || "Shell"}</strong>
-                        <small>{sessionTimestamp(session)}</small>
+                        <small>{sessionMetadata(session)}</small>
                       </span>
                     </MenuItem>
                     <Tooltip>

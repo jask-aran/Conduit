@@ -753,6 +753,10 @@ cwd: a validated Workspace root for Workspace chats, otherwise Conduit's home
 directory. The browser supplies only a project id and cannot select a path.
 Lightweight records persist in `data/remotes.json`. A terminal survives browser
 and network detach, but it does not survive a Conduit server restart.
+Conduit generates each terminal UUID and derives an immutable tmux session name
+from it. The mutable Conduit title is also the tmux window name. Terminal list
+responses add live `currentCommand`, `lastActivityAt`, and `paneDead` metadata
+from tmux; these observations are not persisted.
 
 `WS /v0/ptys/:id/attach` is authenticated like every other upgrade. Binary client
 frames are stdin bytes, and client JSON frames are `{ "type": "resize", "cols",

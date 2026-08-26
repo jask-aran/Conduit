@@ -45,7 +45,7 @@ function failure(code, message) {
   return Object.assign(new Error(message), { code });
 }
 
-function view(record) {
+function view(record, metadata = {}) {
   return {
     id: record.id,
     projectId: record.projectId,
@@ -56,6 +56,9 @@ function view(record) {
     updatedAt: record.updatedAt,
     exitCode: record.exitCode ?? null,
     signal: record.signal ?? null,
+    currentCommand: metadata.currentCommand || null,
+    lastActivityAt: metadata.lastActivityAt || null,
+    paneDead: metadata.paneDead === true,
   };
 }
 
@@ -113,6 +116,7 @@ export class PtyManager extends EventEmitter {
     this.tmuxPath = tmuxPath;
     this.run = run;
     this.records = new Map();
+    this.metadata = new Map();
     // One disposable tmux client may own a terminal at a time. Different
     // terminal ids remain completely independent and may stream concurrently.
     this.attachments = new Map();
@@ -190,14 +194,27 @@ export class PtyManager extends EventEmitter {
     return this.list();
   }
 
-  list() { return [...this.records.values()].map(view).sort((a, b) => b.createdAt.localeCompare(a.createdAt)); }
-  get(id) { const record = this.records.get(id); return record ? view(record) : null; }
+  list() { return [...this.records.values()].map((record) => view(record, this.metadata.get(record.id))).sort((a, b) => b.createdAt.localeCompare(a.createdAt)); }
+  get(id) { const record = this.records.get(id); return record ? view(record, this.metadata.get(id)) : null; }
 
-  async activeSessionNames() {
-    if (![...this.records.values()].some((item) => item.status === "running")) return new Set();
+  async activeSessionMetadata() {
+    if (![...this.records.values()].some((item) => item.status === "running")) return new Map();
     await this.ensureTmux();
-    const result = await this.invokeTmux(["list-sessions", "-F", "#{session_name}"], { tolerateMissingServer: true });
-    return new Set(String(result?.stdout || "").split(/\r?\n/).filter(Boolean));
+    const result = await this.invokeTmux([
+      "list-panes", "-a", "-F",
+      "#{session_name}\t#{pane_current_command}\t#{window_activity}\t#{pane_dead}",
+    ], { tolerateMissingServer: true });
+    const metadata = new Map();
+    for (const line of String(result?.stdout || "").split(/\r?\n/).filter(Boolean)) {
+      const [sessionName, currentCommand, activity, paneDead] = line.split("\t");
+      const activitySeconds = Number(activity);
+      metadata.set(sessionName, {
+        currentCommand: currentCommand || null,
+        lastActivityAt: Number.isFinite(activitySeconds) && activitySeconds > 0 ? new Date(activitySeconds * 1000).toISOString() : null,
+        paneDead: paneDead === "1",
+      });
+    }
+    return metadata;
   }
 
   async reconcile() {
@@ -206,10 +223,15 @@ export class PtyManager extends EventEmitter {
     // A missing dedicated server legitimately means every tracked session is
     // gone. Other tmux failures are operational errors and must not silently
     // rewrite every running terminal as exited.
-    const names = await this.activeSessionNames();
+    const active = await this.activeSessionMetadata();
     let changed = false;
     for (const record of running) {
-      if (names.has(record.tmuxSession || terminalSessionName(record.id))) continue;
+      const metadata = active.get(record.tmuxSession || terminalSessionName(record.id));
+      if (metadata) {
+        this.metadata.set(record.id, metadata);
+        continue;
+      }
+      this.metadata.delete(record.id);
       record.status = "exited";
       record.exitCode = 0;
       record.signal = "tmux_session_ended";
@@ -257,7 +279,7 @@ export class PtyManager extends EventEmitter {
     const title = nextTerminalTitle([...this.records.values()], project.id, template.title);
     const args = [
       "new-session", "-d", "-s", tmuxSession, "-c", cwd,
-      "-x", String(width), "-y", String(height),
+      "-n", title, "-x", String(width), "-y", String(height),
       template.command, ...template.args,
     ];
     await this.invokeTmux(args);
@@ -268,9 +290,14 @@ export class PtyManager extends EventEmitter {
       tmuxSession,
     };
     this.records.set(id, record);
+    this.metadata.set(id, {
+      currentCommand: path.basename(template.command),
+      lastActivityAt: now,
+      paneDead: false,
+    });
     await this.persist();
-    this.emit("created", view(record));
-    return view(record);
+    this.emit("created", view(record, this.metadata.get(id)));
+    return view(record, this.metadata.get(id));
   }
 
   async attach(id, { cols = 80, rows = 24 } = {}) {
@@ -285,7 +312,7 @@ export class PtyManager extends EventEmitter {
     this.attachments.set(id, lease);
     try {
       await this.ensureTmux();
-      const names = await this.activeSessionNames();
+      const names = new Set((await this.activeSessionMetadata()).keys());
       if (this.attachments.get(id) !== lease || lease.cancelled) throw failure("pty_not_running", "Terminal is no longer available");
       if (!names.has(record.tmuxSession || terminalSessionName(id))) {
         this.attachments.delete(id);
@@ -381,11 +408,15 @@ export class PtyManager extends EventEmitter {
     if (!record) throw failure("pty_not_found", "Terminal was not found");
     const next = String(title || "").trim();
     if (!next || next.length > 80) throw failure("pty_title_invalid", "Terminal title must be between 1 and 80 characters");
+    if (record.status === "running") {
+      await this.ensureTmux();
+      await this.invokeTmux(["rename-window", "-t", `${record.tmuxSession || terminalSessionName(id)}:0`, next]);
+    }
     record.title = next;
     record.updatedAt = new Date().toISOString();
     await this.persist();
-    this.emit("updated", view(record));
-    return view(record);
+    this.emit("updated", view(record, this.metadata.get(id)));
+    return view(record, this.metadata.get(id));
   }
 
   async killTmuxSession(record) {
@@ -422,6 +453,7 @@ export class PtyManager extends EventEmitter {
     try {
       if (record.status === "running") await this.killTmuxSession(record);
       this.records.delete(id);
+      this.metadata.delete(id);
       await this.persist();
       this.emit("removed", { id, projectId: record.projectId });
       return true;
