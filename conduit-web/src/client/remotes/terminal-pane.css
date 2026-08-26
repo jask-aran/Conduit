@@ -293,7 +293,7 @@
 
 .terminal-session-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) repeat(3, 38px);
   align-items: stretch;
   overflow: hidden;
   border-radius: 5px;
