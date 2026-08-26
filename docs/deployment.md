@@ -128,7 +128,11 @@ Set `CONDUIT_DATA_DIR` and `CONDUIT_WORKSPACES_DIR` to fixed absolute paths
 outside the versioned release directory before the first packaged deployment;
 the defaults are appropriate only for a stable checkout directory. Copy that
 same `.env` configuration into each later release directory before
-`./scripts/deploy.sh restart` or `up`. An upgrade then builds another exact
+`./scripts/deploy.sh restart` or `up`. For the default `latest` image, Conduit
+checks the latest GitHub Release first and skips the image pull when that
+release is already running. A GitHub Release is created only after its
+container image is published, so an incomplete release cannot replace the
+running deployment. An upgrade then builds another exact
 release against the same durable directories and replaces only the application
 container. Schema changes must remain forward-compatible or add an idempotent
 startup migration before they are released; the current JSON stores already

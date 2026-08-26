@@ -122,11 +122,49 @@ compose() {
   (cd "$ROOT" && docker compose --project-name "${CONDUIT_COMPOSE_PROJECT_NAME:-conduit}" --env-file "$ENV_FILE" "${files[@]}" "$@")
 }
 
+latest_published_release() {
+  curl -fsSL \
+    -H "Accept: application/vnd.github+json" \
+    -H "X-GitHub-Api-Version: 2022-11-28" \
+    "https://api.github.com/repos/jask-aran/Conduit/releases/latest" |
+    sed -n 's/^[[:space:]]*"tag_name":[[:space:]]*"\([^"]*\)".*/\1/p' |
+    head -n 1
+}
+
+running_release() {
+  local container_id
+  container_id="$(compose ps -q conduit)"
+  [[ -n "$container_id" ]] || return 0
+  docker inspect --format '{{ index .Config.Labels "org.opencontainers.image.version" }}' "$container_id"
+}
+
+should_pull_latest_release() {
+  if [[ "${CONDUIT_IMAGE:-ghcr.io/jask-aran/conduit}" != "ghcr.io/jask-aran/conduit" ||
+        "${CONDUIT_RELEASE:-latest}" != "latest" ]]; then
+    return 0
+  fi
+
+  local published running
+  published="$(latest_published_release)"
+  [[ -n "$published" ]] || {
+    echo "Could not identify the latest published Conduit release. No image was pulled." >&2
+    exit 1
+  }
+  running="$(running_release)"
+  if [[ "$running" == "$published" ]]; then
+    echo "Conduit $published is already running; skipping the image pull."
+    return 1
+  fi
+  echo "Conduit ${running:-not installed} -> $published is ready; pulling the published image."
+}
+
 prepare_release() {
   load_env
   case "${CONDUIT_DEPLOY_MODE:-image}" in
     image)
-      compose pull
+      if should_pull_latest_release; then
+        compose pull
+      fi
       ;;
     build)
       [[ -f "$ROOT/compose.build.yaml" && -f "$ROOT/Dockerfile" ]] || {
