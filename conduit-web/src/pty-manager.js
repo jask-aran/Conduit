@@ -13,6 +13,7 @@ const execFileAsync = promisify(execFileCallback);
 export const PTY_MAX_SESSIONS = 32;
 export const PTY_MAX_INPUT_BYTES = 4 * 1024 * 1024;
 export const PTY_TMUX_MIN_VERSION = [3, 3];
+const TMUX_METADATA_SEPARATOR = "__CONDUIT_FIELD__";
 
 const TEMPLATES = {
   shell: {
@@ -205,11 +206,11 @@ export class PtyManager extends EventEmitter {
     await this.ensureTmux();
     const result = await this.invokeTmux([
       "list-panes", "-a", "-F",
-      "#{session_name}\t#{pane_current_command}\t#{window_activity}\t#{pane_dead}",
+      ["#{session_name}", "#{pane_current_command}", "#{window_activity}", "#{pane_dead}"].join(TMUX_METADATA_SEPARATOR),
     ], { tolerateMissingServer: true });
     const metadata = new Map();
     for (const line of String(result?.stdout || "").split(/\r?\n/).filter(Boolean)) {
-      const [sessionName, currentCommand, activity, paneDead] = line.split("\t");
+      const [sessionName, currentCommand, activity, paneDead] = line.split(TMUX_METADATA_SEPARATOR);
       const activitySeconds = Number(activity);
       metadata.set(sessionName, {
         currentCommand: currentCommand || null,
