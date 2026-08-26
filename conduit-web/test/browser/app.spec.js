@@ -434,6 +434,16 @@ test("desktop workspace can replace the chat pane without changing the sidebar",
   const sidebarBox = await sidebar.boundingBox();
 
   await panel.getByRole("button", { name: "Expand Workspace" }).click();
+  const expansionWidths = await page.evaluate(() => new Promise((resolve) => {
+    const widths = [];
+    const sample = () => {
+      widths.push(document.querySelector("aside.workspace-panel").getBoundingClientRect().width);
+      if (widths.length === 8) resolve(widths);
+      else requestAnimationFrame(sample);
+    };
+    requestAnimationFrame(sample);
+  }));
+  expect(new Set(expansionWidths.map(Math.round)).size).toBeGreaterThan(3);
   await expect(chat).toBeHidden();
   await expect(panel.getByRole("button", { name: "Restore split view" })).toBeVisible();
   expect((await panel.boundingBox()).width).toBeGreaterThan(page.viewportSize().width - sidebarBox.width - 32);
