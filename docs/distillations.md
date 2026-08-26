@@ -13,6 +13,13 @@ Add an entry through `$tacit-knowledge` after explicit approval or validated rep
 
 ## Architecture and safety invariants
 
+### Require explicit release authority
+
+- **Type:** Invariant.
+- **Rule:** Do not create or push a version tag, create a GitHub Release, or start a release workflow unless the operator explicitly requests that release action. Treat fix, commit, and push requests as unreleased work.
+- **Scope:** All release publication and version-tag operations.
+- **Evidence:** The operator explicitly separated ordinary commits from release authority after the v0.5.5 publication.
+
 ### Treat development terminals as disposable
 
 - **Type:** Preference.
