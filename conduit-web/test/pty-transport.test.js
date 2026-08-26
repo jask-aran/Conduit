@@ -4,6 +4,8 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
 import { WebSocket } from "ws";
+import { terminalSocketName } from "../../scripts/terminal-lifecycle.mjs";
+import { PTY_MAX_INPUT_BYTES } from "../src/pty-manager.js";
 import { startConduitHarness, waitFor } from "./helpers/conduit-harness.js";
 
 function tmuxAvailable() {
@@ -102,6 +104,29 @@ tmuxTest("PTY API attaches a thin binary WebSocket to a tmux-owned terminal sess
   }
 });
 
+tmuxTest("the WebSocket parser rejects oversized terminal input without killing the tmux session", async () => {
+  const harness = await startConduitHarness({ env: { SHELL: "sh" } });
+  try {
+    const project = await harness.createProject("Bounded terminal input");
+    const created = await (await harness.request("/v0/ptys", {
+      method: "POST",
+      body: JSON.stringify({ projectId: project.id }),
+    })).json();
+    const stream = openTerminal(harness.origin, created.id);
+    await stream.opened;
+    await waitWritable(stream);
+    stream.socket.send(Buffer.alloc(PTY_MAX_INPUT_BYTES + 1));
+    assert.equal((await waitClosed(stream)).code, 1009);
+
+    const replacement = await openWritableTerminal(harness.origin, created.id);
+    replacement.socket.send(Buffer.from("printf 'oversize-recovered\\n'\n"));
+    await replacement.outputIncludes("oversize-recovered");
+    replacement.socket.close();
+  } finally {
+    await harness.stop();
+  }
+});
+
 tmuxTest("detaching and reattaching a browser preserves the tmux-owned current terminal screen", async () => {
   const harness = await startConduitHarness({ env: { SHELL: "sh" } });
   try {
@@ -125,6 +150,36 @@ tmuxTest("detaching and reattaching a browser preserves the tmux-owned current t
     second.socket.send(Buffer.from("printf 'reattach-input-ready\\n'\n"));
     await second.outputIncludes("reattach-input-ready");
     second.socket.close();
+  } finally {
+    await harness.stop();
+  }
+});
+
+tmuxTest("a failed disposable tmux client remains retriable while its session survives", async () => {
+  const harness = await startConduitHarness({ env: { SHELL: "sh" } });
+  try {
+    const project = await harness.createProject("Disposable client recovery");
+    const created = await (await harness.request("/v0/ptys", {
+      method: "POST",
+      body: JSON.stringify({ projectId: project.id }),
+    })).json();
+    const stream = openTerminal(harness.origin, created.id);
+    await stream.opened;
+    await waitWritable(stream);
+
+    const socketName = terminalSocketName(path.join(harness.root, "remotes.json"));
+    const clients = execFileSync("tmux", ["-L", socketName, "list-clients", "-F", "#{client_pid}"], { encoding: "utf8" })
+      .trim()
+      .split(/\s+/)
+      .filter(Boolean);
+    assert.equal(clients.length, 1);
+    process.kill(Number(clients[0]), "SIGTERM");
+    assert.deepEqual(await waitClosed(stream), { code: 1011, reason: "Terminal attachment ended" });
+
+    const replacement = await openWritableTerminal(harness.origin, created.id);
+    replacement.socket.send(Buffer.from("printf 'client-recovered\\n'\n"));
+    await replacement.outputIncludes("client-recovered");
+    replacement.socket.close();
   } finally {
     await harness.stop();
   }

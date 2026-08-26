@@ -116,6 +116,10 @@ test("PTY manager uses tmux as session authority with one browser lease per term
   assert.equal(output, "advanced-tui-output");
   attachment.write(Buffer.from("ls\n"));
   assert.equal(pty.handles[0].input, "ls\n");
+  const emoji = Buffer.from("🙂");
+  attachment.write(emoji.subarray(0, 2));
+  attachment.write(emoji.subarray(2));
+  assert.equal(pty.handles[0].input, "ls\n🙂");
   attachment.resize(132, 44);
   assert.deepEqual(pty.handles[0].size, { cols: 132, rows: 44 });
   assert.throws(() => attachment.write(Buffer.alloc(PTY_MAX_INPUT_BYTES + 1)), { code: "pty_input_too_large" });
@@ -139,8 +143,8 @@ test("PTY manager uses tmux as session authority with one browser lease per term
 
   const replacement = await manager.create({ project: { id: "workspace" }, cwd: workspace });
   assert.notEqual(replacement.id, record.id);
-  assert.equal(manager.get(record.id), null);
-  assert.equal(await manager.removeProject("workspace"), 1);
+  assert.equal(manager.get(record.id)?.status, "exited");
+  assert.equal(await manager.removeProject("workspace"), 2);
   assert.equal(manager.list().length, 0);
   await fs.rm(root, { recursive: true, force: true });
 });
@@ -195,6 +199,7 @@ test("PTY manager retains persisted rows and treats Conduit restart as a termina
       { id: "old", projectId: "project-a", templateId: "shell", title: "Old", status: "running", createdAt: "2026-01-01T00:00:00.000Z", updatedAt: "2026-01-01T00:00:00.000Z", tmuxSession: "c_old" },
       { id: "new", projectId: "project-a", templateId: "shell", title: "New", status: "running", createdAt: "2026-01-02T00:00:00.000Z", updatedAt: "2026-01-02T00:00:00.000Z", tmuxSession: "c_new" },
       { id: "other", projectId: "project-b", templateId: "shell", title: "Other", status: "running", createdAt: "2026-01-03T00:00:00.000Z", updatedAt: "2026-01-03T00:00:00.000Z", tmuxSession: "c_other" },
+      { id: "exited", projectId: "project-a", templateId: "shell", title: "Exited", status: "exited", createdAt: "2025-12-31T00:00:00.000Z", updatedAt: "2026-01-01T12:00:00.000Z", exitCode: 7, signal: "tmux_session_ended", tmuxSession: "c_exited" },
     ],
   }));
   const pty = fakePty();
@@ -203,14 +208,25 @@ test("PTY manager retains persisted rows and treats Conduit restart as a termina
   const manager = new PtyManager({ filePath, pty, run: tmux.run });
   await manager.load();
   assert.equal(tmux.sessions.size, 0, "load should kill a stale dedicated Conduit tmux server");
-  assert.deepEqual(manager.list().map((item) => item.id).sort(), ["new", "old", "other"]);
+  assert.deepEqual(manager.list().map((item) => item.id).sort(), ["exited", "new", "old", "other"]);
+  assert.equal(manager.get("exited").exitCode, 7);
+  assert.equal(manager.get("exited").signal, "tmux_session_ended");
+  assert.equal(manager.get("exited").updatedAt, "2026-01-01T12:00:00.000Z");
   assert.equal(manager.get("old").status, "exited");
   assert.equal(manager.get("old").signal, "server_restart");
   assert.equal(manager.get("new").status, "exited");
   assert.equal(manager.get("new").signal, "server_restart");
   const persisted = JSON.parse(await fs.readFile(filePath, "utf8"));
   assert.equal(persisted.version, 2);
-  assert.equal(persisted.sessions.length, 3);
+  assert.equal(persisted.sessions.length, 4);
   assert.equal((await fs.stat(filePath)).mode & 0o777, 0o600);
+
+  const workspace = path.join(root, "workspace");
+  await fs.mkdir(workspace);
+  const replacement = await manager.create({ project: { id: "project-a" }, cwd: workspace });
+  assert.deepEqual(
+    manager.list().filter((item) => item.projectId === "project-a").map((item) => item.id).sort(),
+    ["exited", "new", "old", replacement.id].sort(),
+  );
   await fs.rm(root, { recursive: true, force: true });
 });

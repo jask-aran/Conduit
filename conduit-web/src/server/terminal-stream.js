@@ -152,7 +152,7 @@ export function createTerminalStream({ terminals }) {
             } else {
               // Only the disposable tmux client died; keep the tmux session and
               // let the browser reconnect to a fresh attachment.
-              ws.close(1012, "Terminal attachment ended");
+              ws.close(1011, "Terminal attachment ended");
             }
           }).catch(() => ws.close(1011, "Terminal attachment failed"));
         });

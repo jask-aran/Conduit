@@ -284,8 +284,14 @@ function Stop-All {
   $server = Get-ProcessRecord $pidFile "server"
   if ($server) {
     Stop-ManagedProcess "Conduit" $server.ProcessId $pidFile
+  } elseif (Test-Healthy) {
+    throw "A healthy Conduit server is running on port $($env:CONDUIT_PORT), but this launcher does not manage it. Stop that server before using this launcher."
   } else {
     Write-Output "Conduit is not running."
+  }
+  & $nodeCommand (Join-Path $root "scripts\terminal-lifecycle.mjs")
+  if ($LASTEXITCODE -ne 0) {
+    throw "Terminal session cleanup failed with exit code $LASTEXITCODE."
   }
 }
 
@@ -374,7 +380,7 @@ Commands:
   build                 Compile the production client bundle.
   start                 Start an existing production build.
   dev                   Start the server watcher and Vite hot reload.
-  stop                  Stop Vite, Conduit, and resident Pi processes.
+  stop                  Stop Vite, Conduit, resident Pi, and terminal processes.
   restart               Rebuild if sources changed, then restart (default).
   status                Report the managed process and health endpoint.
   logs [server|vite] [-f]
