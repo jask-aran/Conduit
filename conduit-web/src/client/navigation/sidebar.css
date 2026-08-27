@@ -110,6 +110,7 @@
 
 @media (--conduit-wide-layout) {
   .chat-header .mobile-header-leading { display: none; }
+  .conduit-sidebar[data-visual-state="collapsed"] .sidebar-dashboard { display: none; }
   .conduit-sidebar[data-visual-state="collapsed"] .sidebar-content { align-items: center; padding-inline: 6.4px; }
   .conduit-sidebar[data-visual-state="collapsed"] .sidebar-content > .sidebar-group { display: none; }
   .conduit-sidebar[data-visual-state="collapsed"] .sidebar-rail-actions { display: flex; width: 28.8px; margin-left: auto; align-items: center; }

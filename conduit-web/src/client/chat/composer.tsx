@@ -55,6 +55,7 @@ export function Composer(props: {
   onOpenSettings: (section: string) => void;
   onOpenAttachments: () => void;
   onStatusChange?: (status: ComposerStatus | null) => void;
+  onSendDraft?: (text: string) => Promise<void>;
 }) {
   let input!: HTMLTextAreaElement;
   let mobileActions!: HTMLDivElement;
@@ -203,7 +204,10 @@ export function Composer(props: {
       }
       if (!dictationCancelled && completion.completionReason !== "duration_limit" && shouldAutoSend({ enabled: props.voiceSettings.autoSend, ...completion }) && transcript) {
         setDictatedRange(null);
-        queueMicrotask(() => void props.chat.send());
+        queueMicrotask(() => {
+          if (props.onSendDraft) void props.onSendDraft(props.chat.draft());
+          else void props.chat.send();
+        });
       }
     },
     onError: (error) => {
@@ -251,11 +255,12 @@ export function Composer(props: {
     else if (!["finishing", "waiting", "transcribing"].includes(dictationState())) startDictation();
   };
 
-  const sendMessage = (mode?: "steer" | "follow_up") => {
+  const sendMessage = async (mode?: "steer" | "follow_up") => {
     setDictatedRange(null);
     setDictationSelectionOwned(false);
     setDictationError("");
-    void props.chat.send(mode);
+    if (props.onSendDraft) await props.onSendDraft(props.chat.draft());
+    else await props.chat.send(mode);
   };
 
   const attach = () => {

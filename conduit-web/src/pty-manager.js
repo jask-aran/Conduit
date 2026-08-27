@@ -52,6 +52,7 @@ function view(record, metadata = {}) {
     projectId: record.projectId,
     templateId: record.templateId,
     title: record.title,
+    cwd: record.cwd || null,
     status: record.status,
     createdAt: record.createdAt,
     updatedAt: record.updatedAt,
@@ -293,7 +294,7 @@ export class PtyManager extends EventEmitter {
     await this.invokeTmux(args);
 
     const record = {
-      id, projectId: project.id, templateId, title, status: "running",
+      id, projectId: project.id, templateId, title, cwd, status: "running",
       createdAt: now, updatedAt: now, exitCode: null, signal: null,
       tmuxSession,
     };

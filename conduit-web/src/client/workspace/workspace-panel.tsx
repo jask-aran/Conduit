@@ -52,7 +52,7 @@ function cacheWorkspace(projectId: string, patch: Partial<WorkspaceCacheEntry>) 
   while (workspaceCache.size > MAX_CACHED_WORKSPACES) workspaceCache.delete(workspaceCache.keys().next().value!);
 }
 
-export default function WorkspacePanel(props: { projectId: Accessor<string>; chatId: Accessor<string>; open: Accessor<boolean>; expanded: Accessor<boolean>; requestedTab?: Accessor<{ tab: PanelTab; nonce: number } | null>; onToggleExpanded: () => void; onClose: () => void }) {
+export default function WorkspacePanel(props: { projectId: Accessor<string>; chatId: Accessor<string>; open: Accessor<boolean>; expanded: Accessor<boolean>; requestedTab?: Accessor<{ tab: PanelTab; terminalId?: string; nonce: number } | null>; onToggleExpanded: () => void; onClose: () => void }) {
   migrateWorkspaceGeometry();
   let projectGeneration = 0;
   let requestVersion = 0;
@@ -553,7 +553,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
       <div class="workspace-artifact-modes" role="radiogroup" aria-label="Artifact modality"><button role="radio" aria-checked={artifactMode() === "outputs"} onClick={() => setArtifactMode("outputs")}>Outputs</button><button role="radio" aria-checked={artifactMode() === "interactive"} onClick={() => setArtifactMode("interactive")}>Interactive UI</button></div>
       <div class="workspace-panel-empty"><div><BoxesIcon /><strong>{artifactMode() === "outputs" ? "No artifacts in the loaded transcript" : "Interactive artifacts are not enabled"}</strong><p>{artifactMode() === "outputs" ? "Code blocks and file outputs will appear here as transcript artifact projection lands." : "This boundary is reserved for sandboxed, explicitly trusted generated interfaces."}</p></div></div>
     </section></Show>
-    <Show when={tab() === "terminal"}><TerminalPane projectId={props.projectId()} /></Show>
+    <Show when={tab() === "terminal"}><TerminalPane projectId={props.projectId()} terminalId={props.requestedTab?.()?.terminalId} /></Show>
     <Show when={loading()}><div class="workspace-panel-loading"><Spinner /><span>Loading workspace</span></div></Show>
     </div>
   </aside>
