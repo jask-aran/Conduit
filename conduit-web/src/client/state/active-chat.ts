@@ -118,6 +118,28 @@ export function createActiveChat(options: ActiveChatOptions) {
   let reconnectToken = 0;
   let pendingTextDelta: StructuredGenerationEvent | null = null;
   let pendingTextDeltaTimer: ReturnType<typeof setTimeout> | null = null;
+  const transcriptPrefetches = new Map<string, {
+    revision: string;
+    expiresAt: number;
+    request: Promise<TranscriptDetail>;
+  }>();
+
+  const loadTranscript = (chat: ChatSummary) => {
+    const revision = chat.updatedAt || chat.createdAt || "";
+    const cached = transcriptPrefetches.get(chat.id);
+    if (cached && cached.revision === revision && cached.expiresAt > Date.now()) return cached.request;
+    const request = api<TranscriptDetail>(`/v0/sessions/${encodeURIComponent(chat.id)}`);
+    transcriptPrefetches.set(chat.id, { revision, expiresAt: Date.now() + 30_000, request });
+    request.catch(() => {
+      if (transcriptPrefetches.get(chat.id)?.request === request) transcriptPrefetches.delete(chat.id);
+    });
+    while (transcriptPrefetches.size > 10) transcriptPrefetches.delete(transcriptPrefetches.keys().next().value!);
+    return request;
+  };
+
+  const prefetch = (chat: ChatSummary) => {
+    if (!chat.liveActive) void loadTranscript(chat).catch(() => {});
+  };
   let overflowLiveEvents: LiveEvent[] = [];
   let overflowLiveEventFrame: number | null = null;
   let overflowLiveEventTimer: ReturnType<typeof setTimeout> | null = null;
@@ -646,7 +668,8 @@ export function createActiveChat(options: ActiveChatOptions) {
     // Load first, commit once: failed or superseded navigation leaves the
     // current chat, URL, socket, and selection intact.
     const navigation = ++navigationToken;
-    const detail = await api<TranscriptDetail>(`/v0/sessions/${encodeURIComponent(chat.id)}`);
+    const detail = await loadTranscript(chat);
+    transcriptPrefetches.delete(chat.id);
     if (navigation !== navigationToken) return;
     reset();
     const selection = selectionToken;
@@ -823,6 +846,7 @@ export function createActiveChat(options: ActiveChatOptions) {
 
   onCleanup(() => {
     cancelReconnect();
+    transcriptPrefetches.clear();
     socket?.close();
     document.removeEventListener("visibilitychange", resumeLive);
     window.removeEventListener("pageshow", restoreLive);
@@ -834,7 +858,7 @@ export function createActiveChat(options: ActiveChatOptions) {
     live, messages, setMessages, tools, loadedId, pageBefore, loadingOlder, draft, setDraft,
     generation, editingEntryId, contextUsage, sessionStats, cacheStats, compacting, hostUiRequests, queue, activeGeneration, activeGenerationChange,
     connectingId, streaming, stopping, activity,
-    initialize, select, loadDetail, openLive, ensureLive, reset, send, stop, regenerate,
+    initialize, select, prefetch, loadDetail, openLive, ensureLive, reset, send, stop, regenerate,
     continueResponse, loadOlder, edit, respondHostUi, clearQueue,
   };
 }

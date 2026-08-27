@@ -1,21 +1,8 @@
-const COLOR_TOKENS = {
-  background: "#111114",
-  foreground: "#fafafa",
-  card: "rgba(48,48,54,0.52)",
-  cardForeground: "#fafafa",
-  border: "rgba(255,255,255,0.10)",
-  primary: "#f3f3f4",
-  primaryForeground: "#242428",
-  mutedForeground: "#b5b5be",
-  destructive: "#f97161",
-  input: "rgba(255,255,255,0.15)",
-  ring: "#8d8d96",
-};
-
 export function renderLoginPage({ error = null, after = "/" } = {}) {
   const errorTag = error
-    ? `<p class="login-error" role="alert">${escapeHtml(error)}</p>`
+    ? `<p id="login-error" class="login-error" role="alert">${escapeHtml(error)}</p>`
     : "";
+  const errorAttributes = error ? ` aria-invalid="true" aria-describedby="login-error"` : "";
   return `<!doctype html>
 <html lang="en" class="dark">
   <head>
@@ -27,105 +14,80 @@ export function renderLoginPage({ error = null, after = "/" } = {}) {
       html, body {
         margin: 0;
         min-height: 100vh;
-        background: ${COLOR_TOKENS.background};
-        color: ${COLOR_TOKENS.foreground};
+        background: #000;
+        color: #f5f5f5;
         font-family: "Geist Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
         -webkit-font-smoothing: antialiased;
       }
       body {
-        display: flex;
-        align-items: center;
-        justify-content: center;
+        display: grid;
+        place-items: center;
         padding: 24px;
       }
-      .login-card {
-        position: relative;
-        background: linear-gradient(180deg, rgba(255,255,255,0.09), rgba(255,255,255,0.02) 58%), ${COLOR_TOKENS.card};
-        color: ${COLOR_TOKENS.cardForeground};
-        width: 100%;
-        max-width: 390px;
-        border-radius: 24px;
-        border: 1px solid ${COLOR_TOKENS.border};
-        padding: 30px 28px 28px;
-        backdrop-filter: blur(30px) saturate(168%) brightness(1.05);
-        -webkit-backdrop-filter: blur(30px) saturate(168%) brightness(1.05);
-        box-shadow: inset 0 1px 0 rgba(255,255,255,0.28), inset 0 -1px 1px rgba(0,0,0,0.20), 0 28px 58px -22px rgba(0,0,0,0.72);
+      .login-shell { width: min(300px, 100%); }
+      form { display: grid; gap: 9px; }
+      .login-field {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 42px;
+        align-items: center;
       }
-      .login-card h1 {
-        font-family: Georgia, "Times New Roman", serif;
-        font-size: 32px;
-        font-weight: 500;
-        letter-spacing: -0.035em;
-        line-height: 34px;
-        margin: 0 0 6px;
+      .visually-hidden {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip: rect(0 0 0 0);
+        clip-path: inset(50%);
+        white-space: nowrap;
       }
-      .login-card p.label {
-        margin: 0 0 20px;
-        color: ${COLOR_TOKENS.mutedForeground};
-        font-size: 13px;
-      }
-      form { display: flex; flex-direction: column; gap: 14px; }
-      label { display: flex; flex-direction: column; gap: 6px; font-size: 12px; color: ${COLOR_TOKENS.mutedForeground}; letter-spacing: 0.02em; }
       input[type="password"] {
-        background: linear-gradient(180deg, rgba(255,255,255,0.07), rgba(255,255,255,0.015)), rgba(22,22,26,0.72);
-        color: ${COLOR_TOKENS.foreground};
-        border: 1px solid rgba(255,255,255,0.13);
-        border-radius: 14px;
-        padding: 12px 14px;
-        font-size: 15px;
+        min-width: 0;
+        height: 42px;
+        border: 0;
+        background: transparent;
+        color: #f5f5f5;
+        padding: 0 0 0 13px;
+        font-size: 14px;
         outline: none;
         font-family: inherit;
-        box-shadow: inset 0 1px 0 rgba(255,255,255,0.10), inset 0 -1px 1px rgba(0,0,0,0.24);
       }
-      input[type="password"]:focus {
-        border-color: rgba(255,255,255,0.36);
-        box-shadow: inset 0 1px 0 rgba(255,255,255,0.16), 0 0 0 3px rgba(255,255,255,0.08);
-      }
+      input::placeholder { color: #686868; }
       button {
-        background: ${COLOR_TOKENS.primary};
-        color: ${COLOR_TOKENS.primaryForeground};
-        border: none;
-        border-radius: 12px;
-        padding: 11px 16px;
-        font-size: 14px;
-        font-weight: 600;
+        display: grid;
+        width: 42px;
+        height: 42px;
+        place-items: center;
+        border: 0;
+        border-radius: 6px;
+        background: transparent;
+        color: #747474;
+        padding: 0;
+        font-size: 18px;
         font-family: inherit;
-        letter-spacing: 0.01em;
         cursor: pointer;
-        box-shadow: inset 0 1px 0 rgba(255,255,255,0.62), 0 8px 20px -10px rgba(0,0,0,0.65);
       }
-      button:hover { filter: brightness(1.08); }
+      button:hover { color: #f5f5f5; }
+      button:focus-visible { outline: 1px solid #686868; outline-offset: -4px; }
       .login-error {
         margin: 0;
-        padding: 10px 12px;
-        background: color-mix(in oklch, ${COLOR_TOKENS.destructive}, transparent 80%);
-        color: ${COLOR_TOKENS.destructive};
-        border: 1px solid color-mix(in oklch, ${COLOR_TOKENS.destructive}, transparent 70%);
-        border-radius: 10px;
-        font-size: 13px;
+        color: #e06c64;
+        font-size: 12px;
+        line-height: 1.4;
       }
-      .login-foot { margin-top: 18px; color: ${COLOR_TOKENS.mutedForeground}; font-size: 12px; }
-      .login-foot code { color: ${COLOR_TOKENS.foreground}; }
       input[name="after"] { display: none; }
-      @media (max-width: 520px) {
-        body { padding: 18px; }
-        .login-card { padding: 26px 22px 24px; }
-      }
     </style>
   </head>
   <body>
-    <main class="login-card">
-      <h1>Conduit</h1>
-      <p class="label">Sign in to continue.</p>
+    <main class="login-shell">
       <form action="/v0/auth/login" method="POST" autocomplete="on">
-        <label>Password
-          <input name="password" type="password" autocomplete="current-password" autofocus required />
-        </label>
+        <label class="visually-hidden" for="password">Password</label>
+        <div class="login-field">
+          <input id="password" name="password" type="password" autocomplete="current-password" placeholder="Password" autofocus required${errorAttributes} />
+          <button type="submit" aria-label="Sign in" title="Sign in">&rarr;</button>
+        </div>
         <input name="after" type="hidden" value="${escapeHtml(after)}" />
         ${errorTag}
-        <button type="submit">Sign in</button>
       </form>
-      <p class="login-foot">Change the password from the server with <code>node scripts/conduit-auth.mjs set-password</code>.</p>
     </main>
   </body>
 </html>`;

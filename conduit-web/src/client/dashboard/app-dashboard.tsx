@@ -1,4 +1,4 @@
-import { createMemo, createSignal, For, onCleanup, onMount, Show, type JSX } from "solid-js";
+import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show, type JSX } from "solid-js";
 import { ArrowRightIcon, SearchIcon, TerminalIcon } from "lucide-solid";
 import { Spinner } from "@/components/primitives";
 import { api, projectPath } from "../api/client";
@@ -38,6 +38,7 @@ export function AppDashboard(props: {
   composer: JSX.Element;
   runtime: RuntimeStore;
   onOpenChat: (chat: ChatSummary, project: Project) => void;
+  onPrefetchChat: (chat: ChatSummary) => void;
   onOpenProject: (project: Project) => void;
   onOpenTerminal: (terminal: Pty) => void;
   onOpenTerminalView: () => void;
@@ -68,6 +69,10 @@ export function AppDashboard(props: {
       setLoading(false);
     }
   };
+
+  createEffect(() => {
+    for (const { chat } of chats()) props.onPrefetchChat(chat);
+  });
 
   onMount(() => {
     const changed = () => void refresh();
@@ -126,7 +131,7 @@ export function AppDashboard(props: {
         <Show when={chats().length} fallback={<div class="app-dashboard-empty">No recent chats.</div>}>
           <div class="project-chat-list">
             <For each={chats()}>{({ chat, project }) =>
-              <button class="project-chat-row" onClick={() => props.onOpenChat(chat, project)}>
+              <button class="project-chat-row" onPointerEnter={() => props.onPrefetchChat(chat)} onFocus={() => props.onPrefetchChat(chat)} onClick={() => props.onOpenChat(chat, project)}>
                 <span class="project-chat-runtime"><RuntimeIndicator process={props.runtime.getProcess(chat.id)} stale={props.runtime.stale()} /></span>
                 <span class="project-chat-copy">
                   <strong>{chat.title || "Untitled chat"}</strong>

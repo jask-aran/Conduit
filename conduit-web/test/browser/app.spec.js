@@ -1041,6 +1041,29 @@ test("initializes the dashboard as a model-ready new chat", async ({ page }) => 
   await expect(page.getByRole("heading", { name: "Start where the work is." })).toBeVisible();
 });
 
+test("prefetches recent chat transcripts and reuses them on navigation", async ({ page }) => {
+  let transcriptLoads = 0;
+  await page.route("**/v0/sessions/session_existing", async (route) => {
+    transcriptLoads += 1;
+    await route.fulfill({ json: {
+      id: "session_existing",
+      projectId: "project_chat",
+      status: "active",
+      title: "Existing chat",
+      model: model.spec,
+      thinkingLevel: "medium",
+      messages: [],
+      tools: [],
+    } });
+  });
+
+  await page.goto("/");
+  await expect.poll(() => transcriptLoads).toBe(1);
+  await page.getByRole("button", { name: "Existing chat" }).click();
+  await expect(page).toHaveURL(/\/chat\/session_existing$/);
+  expect(transcriptLoads).toBe(1);
+});
+
 test("opens a full-screen home terminal without an extra route bar", async ({ page }, testInfo) => {
   await page.addInitScript(() => {
     window.__keyboardLocks = [];

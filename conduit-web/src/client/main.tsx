@@ -623,20 +623,33 @@ function App() {
 
   let dashboardDraftRequest: Promise<void> | null = null;
   const ensureDashboardDraft = () => {
-    if (dashboardDraftRequest || routeKind() !== "dashboard" || chat.loadedId() || templatesLoading()) return;
-    const project = catalogue.projects().find((item) => item.slug === "chat") || catalogue.projects()[0];
-    if (!project) return;
-    const templateId = project.defaultTemplateId || defaultTemplateId() || "chat";
+    const route = routeKind();
+    if (dashboardDraftRequest || !["dashboard", "project"].includes(route) || chat.loadedId() || templatesLoading()) return;
+    const project = route === "project"
+      ? selectedProject()
+      : catalogue.projects().find((item) => item.slug === "chat") || catalogue.projects()[0];
+    if (!project || project.state === "cloning") return;
+    const hostDefault = project.defaultTemplateId === "host-pi";
+    const templateId = hostDefault ? defaultTemplateId() || "chat" : project.defaultTemplateId || defaultTemplateId() || "chat";
+    const expectedRoute = route;
+    const expectedProjectId = project.id;
+    let scopeChanged = false;
     dashboardDraftRequest = api<ChatSummary>("/v0/chats", {
       method: "POST",
-      body: JSON.stringify({ projectId: project.id, templateId, runtimeKind: "conduit_profile" }),
+      body: JSON.stringify(hostDefault
+        ? { projectId: project.id }
+        : { projectId: project.id, templateId, runtimeKind: "conduit_profile" }),
     }).then(async (created) => {
-      if (routeKind() !== "dashboard") {
+      if (routeKind() !== expectedRoute || (expectedRoute === "project" && selectedProject()?.id !== expectedProjectId)) {
+        scopeChanged = true;
         await api(`/v0/chats/${encodeURIComponent(created.id)}?ifEmpty=true`, { method: "DELETE" });
         return;
       }
       chat.initialize({ ...created, templateId: created.templateId || templateId }, project);
-    }).catch((error) => { showError(error); }).finally(() => { dashboardDraftRequest = null; });
+    }).catch((error) => { showError(error); }).finally(() => {
+      dashboardDraftRequest = null;
+      if (scopeChanged) ensureDashboardDraft();
+    });
   };
 
   createEffect(() => {
@@ -1266,6 +1279,7 @@ function App() {
             />}
             runtime={runtime}
             onOpenChat={(target, project) => void openChat(target, project)}
+            onPrefetchChat={chat.prefetch}
             onOpenProject={(project) => void openProject(project)}
             onOpenTerminalView={() => openTerminalRoute()}
             onSearchChats={(scope) => openPalette("chat-search", scope === "unscoped" ? "scope:chats " : "", true)}
@@ -1297,10 +1311,39 @@ function App() {
           </div>
         </>}>
           <ChatHeader project={selectedProject()} title="Dashboard" panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onNewChat={() => void createChat()} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={() => void shareProject()} onRename={() => runSidebar("rename-folder")} onDelete={() => runSidebar("delete-project")} onUpdatePwa={() => void runPwaUpdate()} pwaUpdating={pwaUpdating} dashboard />
-          <ProjectDashboard project={selectedProject()!} templates={templates()} runtime={runtime}
-            onNewChat={async (project) => { await createChat(project); }} onOpenChat={(target: DashboardChat, project) => openChat(target, project)}
+          <ProjectDashboard project={selectedProject()!} runtime={runtime}
+            composer={<Composer
+              chat={chat}
+              attachments={attachments}
+              models={models}
+              profiles={profiles()}
+              activeProfile={activeProfile()}
+              serverOnline={runtime.connectivity() === "online"}
+              voiceSettings={voiceSettings()}
+              onChooseProfile={(id) => void switchProfile(id)}
+              onOpenSettings={openSettings}
+              onOpenAttachments={() => attachFileInput?.click()}
+              onStatusChange={setComposerStatus}
+              onSendDraft={async (prompt) => {
+                const project = selectedProject();
+                const id = chat.loadedId();
+                if (!project || !id) return;
+                catalogue.setProjects((current) => current.map((item) => item.id === project.id
+                  ? { ...item, sessions: [{ id, projectId: project.id, status: "draft", title: chat.title() || "New chat", templateId: chat.templateId() || undefined, pinned: true }, ...item.sessions.filter((session) => session.id !== id)] }
+                  : item));
+                history.pushState({}, "", `/chat/${id}`);
+                setRouteKind("chat");
+                chat.setDraft(prompt);
+                await chat.send();
+              }}
+            />}
+            onOpenChat={(target: DashboardChat, project) => openChat(target, project)}
+            onPrefetchChat={chat.prefetch}
+            onOpenView={(view) => openWorkspaceView(view)}
+            onOpenTerminal={(terminal) => openWorkspaceView("terminal", terminal.id)}
+            onSearchChats={() => openPalette("chat-search", `in:${selectedProject()!.id} `, true)}
             onRename={() => runSidebar("rename-folder")} onDelete={() => runSidebar("delete-project")}
-            onOpenSettings={openSettings} onSaveDefault={saveWorkspaceDefault} onSaveAppearance={saveWorkspaceAppearance} onRefresh={refresh} onCancelClone={cancelClone} onDestroyWorkspace={(confirmation) => destroyWorkspace(selectedProject()!, confirmation)} onError={showError} />
+            onOpenSettings={openSettings} onSaveAppearance={saveWorkspaceAppearance} onRefresh={refresh} onCancelClone={cancelClone} onDestroyWorkspace={(confirmation) => destroyWorkspace(selectedProject()!, confirmation)} onError={showError} />
         </Show>
         </Show>
       </Show>
