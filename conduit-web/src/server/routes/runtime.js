@@ -1,4 +1,4 @@
-import { validTerminalShortcuts } from "../../preferences-store.js";
+import { validSidebarPins, validTerminalShortcuts } from "../../preferences-store.js";
 
 export function registerRuntimeRoutes(app, {
   attachments,
@@ -121,11 +121,16 @@ export function registerRuntimeRoutes(app, {
       if (terminalShortcuts != null && !validTerminalShortcuts(terminalShortcuts)) {
         return response.status(400).json({ error: "invalid_terminal_shortcuts" });
       }
+      const sidebarPins = request.body?.sidebarPins;
+      if (sidebarPins != null && !validSidebarPins(sidebarPins)) {
+        return response.status(400).json({ error: "invalid_sidebar_pins" });
+      }
       const saved = await preferences.save({
         defaultTemplateId: requested ?? preferences.get().defaultTemplateId,
         ...(model != null ? { sessionNameModel: model } : {}),
         ...(thinkingLevel != null ? { sessionNameThinkingLevel: thinkingLevel } : {}),
         ...(terminalShortcuts != null ? { terminalShortcuts } : {}),
+        ...(sidebarPins != null ? { sidebarPins } : {}),
       });
       response.json(saved);
     } catch (error) { next(error); }

@@ -6,7 +6,26 @@ const DEFAULTS = {
   sessionNameModel: "",
   sessionNameThinkingLevel: "off",
   terminalShortcuts: [],
+  sidebarPins: [],
 };
+
+const SIDEBAR_PIN_PATTERN = /^(chat|project|terminal):[^\s:][^\s]*$/;
+
+export function normalizeSidebarPins(input) {
+  if (!Array.isArray(input)) return [];
+  return [...new Set(input.filter((item) => typeof item === "string"
+    && item.length <= 200
+    && SIDEBAR_PIN_PATTERN.test(item)))].slice(0, 50);
+}
+
+export function validSidebarPins(input) {
+  return Array.isArray(input)
+    && input.length <= 50
+    && input.every((item) => typeof item === "string"
+      && item.length <= 200
+      && SIDEBAR_PIN_PATTERN.test(item))
+    && new Set(input).size === input.length;
+}
 
 export function normalizeTerminalShortcuts(input) {
   if (!Array.isArray(input)) return [];
@@ -49,7 +68,10 @@ export function normalizePreferences(input = {}, fallback = DEFAULTS, knownTempl
   const terminalShortcuts = Array.isArray(input.terminalShortcuts)
     ? normalizeTerminalShortcuts(input.terminalShortcuts)
     : normalizeTerminalShortcuts(fallback.terminalShortcuts);
-  return { defaultTemplateId, sessionNameModel, sessionNameThinkingLevel, terminalShortcuts };
+  const sidebarPins = Array.isArray(input.sidebarPins)
+    ? normalizeSidebarPins(input.sidebarPins)
+    : normalizeSidebarPins(fallback.sidebarPins);
+  return { defaultTemplateId, sessionNameModel, sessionNameThinkingLevel, terminalShortcuts, sidebarPins };
 }
 
 export class PreferencesStore {

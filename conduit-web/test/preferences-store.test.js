@@ -3,16 +3,16 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { PreferencesStore, normalizePreferences, validTerminalShortcuts } from "../src/preferences-store.js";
+import { PreferencesStore, normalizePreferences, validSidebarPins, validTerminalShortcuts } from "../src/preferences-store.js";
 
 test("normalizePreferences falls back when the default template is unknown", () => {
   assert.deepEqual(
     normalizePreferences({ defaultTemplateId: "missing" }, { defaultTemplateId: "chat" }, ["chat", "workspace"]),
-    { defaultTemplateId: "chat", sessionNameModel: "", sessionNameThinkingLevel: "off", terminalShortcuts: [] },
+    { defaultTemplateId: "chat", sessionNameModel: "", sessionNameThinkingLevel: "off", terminalShortcuts: [], sidebarPins: [] },
   );
   assert.deepEqual(
     normalizePreferences({}, { defaultTemplateId: "gone" }, ["workspace"]),
-    { defaultTemplateId: "workspace", sessionNameModel: "", sessionNameThinkingLevel: "off", terminalShortcuts: [] },
+    { defaultTemplateId: "workspace", sessionNameModel: "", sessionNameThinkingLevel: "off", terminalShortcuts: [], sidebarPins: [] },
   );
 });
 
@@ -29,6 +29,7 @@ test("preferences store persists general settings", async () => {
     sessionNameModel: "example/cheap",
     sessionNameThinkingLevel: "low",
     terminalShortcuts: [{ id: "herdr", label: "Herdr", command: "herdr", target: "new" }],
+    sidebarPins: ["chat:one", "project:two", "terminal:three"],
   });
   const restored = new PreferencesStore(file, { defaultTemplateId: "chat" }, {
     knownTemplateIds: ["chat", "workspace"],
@@ -38,7 +39,11 @@ test("preferences store persists general settings", async () => {
   assert.equal(restored.get().sessionNameModel, "example/cheap");
   assert.equal(restored.get().sessionNameThinkingLevel, "low");
   assert.deepEqual(restored.get().terminalShortcuts, [{ id: "herdr", label: "Herdr", command: "herdr", target: "new" }]);
+  assert.deepEqual(restored.get().sidebarPins, ["chat:one", "project:two", "terminal:three"]);
   assert.equal(validTerminalShortcuts(restored.get().terminalShortcuts), true);
   assert.equal(validTerminalShortcuts([{ id: "bad", label: "", command: "pwd", target: "current" }]), false);
+  assert.equal(validSidebarPins(restored.get().sidebarPins), true);
+  assert.equal(validSidebarPins(["chat:one", "chat:one"]), false);
+  assert.equal(validSidebarPins(["unknown:one"]), false);
   await fs.rm(root, { recursive: true, force: true });
 });

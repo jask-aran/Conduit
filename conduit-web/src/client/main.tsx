@@ -1240,6 +1240,13 @@ function App() {
       onMoveChat={moveChat} onMoveChats={moveChats} onMoveProjectChats={moveProjectChats} onCopyTranscript={copyTranscript} onCopyChatLinks={copyChatLinks}
       onDeleteChat={deleteChat} onDeleteChats={deleteChats} onDeleteProject={deleteProject}
       onOpenTerminal={(target, project) => { void openChat(target, project).then(() => openWorkspaceView("terminal")); }}
+      onOpenPty={(terminal) => {
+        const project = catalogue.projects().find((item) => item.id === terminal.projectId);
+        if (!project) return showError("The terminal scope is no longer available.");
+        void createChat(project).then((created) => {
+          if (created) openWorkspaceView("terminal", terminal.id);
+        });
+      }}
       onOpenDashboard={() => openDashboard()}
       onOpenWorkspaceIdentity={openWorkspaceIdentity} onOpenSettings={openSettings} onOpenPalette={(page, initialQuery) => openPalette(page || null, initialQuery || "", page === "chat-search")}
       onChangeServer={nativeApp ? () => { void clearNativeBearerToken().finally(() => { clearServerOrigin(); location.reload(); }); } : undefined}
