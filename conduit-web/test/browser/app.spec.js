@@ -1031,7 +1031,7 @@ test("uses the dashboard as the default landing without creating a chat", async 
   await expect(page.getByRole("heading", { name: "What do you want to open?" })).toBeVisible();
 });
 
-test("opens a full-screen home terminal without an extra route bar", async ({ page }) => {
+test("opens a full-screen home terminal without an extra route bar", async ({ page }, testInfo) => {
   await page.addInitScript(() => {
     window.__keyboardLocks = [];
     let fullscreenElement = null;
@@ -1072,6 +1072,10 @@ test("opens a full-screen home terminal without an extra route bar", async ({ pa
   await expect(page.locator(".terminal-route")).toBeVisible();
   await expect(page.getByRole("region", { name: "Terminal pane" })).toBeVisible();
   await expect(page.locator(".terminal-route-header")).toHaveCount(0);
+  if (testInfo.project.name === "mobile-chromium") {
+    await expect(page.getByRole("toolbar", { name: "Terminal keys" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Hide terminal keys" })).toBeVisible();
+  }
   await page.getByRole("button", { name: "Enter fullscreen and capture browser keys" }).click();
   await expect(page.getByRole("button", { name: "Exit fullscreen" })).toBeVisible();
   expect(await page.evaluate(() => window.__keyboardLocks)).toEqual([["KeyW"]]);
@@ -1187,7 +1191,7 @@ test("Workspace views use the nested palette page and terminal lives in the Work
   await expect(terminal).toBeVisible();
 });
 
-test("the terminal renderer can use the xterm baseline over the same PTY transport", async ({ page }) => {
+test("the terminal renderer can use the xterm baseline over the same PTY transport", async ({ page }, testInfo) => {
   const workspace = {
     id: "project_terminal",
     slug: "terminal",
@@ -1243,10 +1247,32 @@ test("the terminal renderer can use the xterm baseline over the same PTY transpo
   await canvas.click();
   await page.evaluate(() => { window.__terminalSends = []; });
   await canvas.dispatchEvent("wheel", { ctrlKey: true, deltaY: -100 });
-  await expect.poll(() => page.evaluate(() => localStorage.getItem("conduit:terminal-font-size"))).toBe("11.4");
+  await expect.poll(() => page.evaluate(() => localStorage.getItem("conduit:terminal-font-size")))
+    .toBe(testInfo.project.name === "mobile-chromium" ? "14" : "11.4");
   expect(await page.evaluate(() => window.__terminalSends)).toEqual([]);
   await page.keyboard.press(process.platform === "darwin" ? "Meta+K" : "Control+K");
   await expect(page.getByRole("dialog", { name: "Command Palette" })).toHaveCount(0);
+
+  if (testInfo.project.name === "mobile-chromium") {
+    const keys = page.getByRole("toolbar", { name: "Terminal keys" });
+    await expect(keys).toBeVisible();
+    await keys.evaluate((node) => {
+      const start = new Touch({ identifier: 1, target: node, clientX: 80, clientY: 700 });
+      const end = new Touch({ identifier: 1, target: node, clientX: 180, clientY: 700 });
+      node.dispatchEvent(new TouchEvent("touchstart", { bubbles: true, touches: [start], changedTouches: [start] }));
+      node.dispatchEvent(new TouchEvent("touchend", { bubbles: true, touches: [], changedTouches: [end] }));
+    });
+    await expect(page.getByRole("complementary", { name: "Workspace panel" })).toBeVisible();
+    await keys.getByRole("button", { name: "Ctrl" }).click();
+    await page.keyboard.press("c");
+    await expect.poll(() => page.evaluate(() => window.__terminalSends.at(-1))).toEqual([3]);
+    await keys.getByRole("button", { name: "Left arrow" }).click();
+    await expect.poll(() => page.evaluate(() => window.__terminalSends.at(-1))).toEqual([27, 91, 68]);
+    await page.getByRole("button", { name: "Hide terminal keys" }).click();
+    await expect(keys).toHaveCount(0);
+    await page.getByRole("button", { name: "Show terminal keys" }).click();
+    await expect(page.getByRole("toolbar", { name: "Terminal keys" })).toBeVisible();
+  }
 
   await page.context().grantPermissions(["clipboard-read", "clipboard-write"], { origin: new URL(page.url()).origin });
   await page.evaluate(() => navigator.clipboard.writeText("terminal-paste-once"));
