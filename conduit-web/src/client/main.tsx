@@ -17,6 +17,7 @@ import { authorizedFetch, clearNativeBearerToken, nativeBearerToken, NATIVE_AUTH
 import type { ChatSummary, DashboardChat, Installation, Project, RuntimeIdentity, Template, TranscriptDetail, WorkspaceAppearance, WorkspacePolicy, WorkspaceSuggestion, WorkspaceSuggestionsPayload } from "./api/contracts";
 import { createErrorDiagnostic, formatRuntimeDiagnosticPrompt, type ErrorDiagnostic, type ErrorDiagnosticContext } from "./error-diagnostics";
 import { Composer, SPINNING_ACTIVITY, type ComposerStatus } from "./chat/composer";
+import { AppDashboard } from "./dashboard/app-dashboard";
 import { COMPOSER_SURFACE_CHANGE_EVENT, selectedComposerSurface, type ComposerSurfaceMode } from "./chat/composer-surface";
 import type { VoiceDictationSettings } from "./chat/voice-dictation-types";
 import { contextUsagePercent, formatContextMetrics, saveContextMetrics, selectedContextMetrics, type ContextMetricId } from "./chat/context-metrics";
@@ -56,6 +57,7 @@ const METEOR_FIELD_STORAGE_KEY = "conduit:meteor-field";
 const selectedMeteorField = () => localStorage.getItem(METEOR_FIELD_STORAGE_KEY) !== "false";
 const WorkspacePanel = lazy(() => import("./workspace/workspace-panel"));
 const ProjectDashboard = lazy(() => import("./project/dashboard"));
+const TerminalRoute = lazy(() => import("./remotes/terminal-route").then((module) => ({ default: module.TerminalRoute })));
 
 function NativeServerSetup(props: { onAuthenticated: () => void }) {
   const [address, setAddress] = createSignal(configuredServerOrigin() || "");
@@ -354,8 +356,12 @@ function App() {
   const [mobileSidebarOpen, setMobileSidebarOpen] = createSignal(false);
   const initialRouteId = pathChatId();
   const initialProjectRouteId = pathProjectId();
-  const [routeKind, setRouteKind] = createSignal<"chat" | "project">(initialProjectRouteId ? "project" : "chat");
-  const [routeBootstrap, setRouteBootstrap] = createSignal<"loading" | "ready" | "error">(initialRouteId || initialProjectRouteId ? "loading" : "ready");
+  const initialTerminalRoute = location.pathname === "/terminal";
+  const initialDashboardRoute = location.pathname === "/";
+  const [routeKind, setRouteKind] = createSignal<"chat" | "project" | "dashboard" | "terminal">(
+    initialTerminalRoute ? "terminal" : initialDashboardRoute ? "dashboard" : initialProjectRouteId ? "project" : "chat",
+  );
+  const [routeBootstrap, setRouteBootstrap] = createSignal<"loading" | "ready" | "error">("loading");
   const [routeBootstrapError, setRouteBootstrapError] = createSignal("");
   let dragDepth = 0;
   let attachFileInput: HTMLInputElement | undefined;
@@ -553,7 +559,7 @@ function App() {
     const project = target || selectedProject() || catalogue.projects().find((item) => item.slug === "chat") || catalogue.projects()[0];
     if (!project) return null;
     const replacedDraftId = currentDraftId();
-    const fromDashboard = routeKind() === "project";
+    const fromDashboard = routeKind() === "project" || routeKind() === "dashboard";
     try {
       const hostDefault = project.defaultTemplateId === "host-pi" && !launch.templateId && !launch.runtimeKind;
       const profileId = launch.templateId || (project.defaultTemplateId === "host-pi" ? null : project.defaultTemplateId) || defaultTemplateId() || "chat";
@@ -603,6 +609,27 @@ function App() {
       else throw error;
       return null;
     }
+  };
+
+  const openDashboard = (historyMode: "push" | "replace" | "none" = "push") => {
+    chat.reset();
+    setPanelOpenForChat(false);
+    setMobileSidebarOpen(false);
+    setRouteKind("dashboard");
+    setRouteBootstrapError("");
+    setRouteBootstrap("ready");
+    if (historyMode === "push") history.pushState({}, "", "/");
+    else if (historyMode === "replace") history.replaceState({}, "", "/");
+  };
+
+  const openTerminalRoute = (historyMode: "push" | "replace" | "none" = "push") => {
+    setPanelOpenForChat(false);
+    setMobileSidebarOpen(false);
+    setRouteKind("terminal");
+    setRouteBootstrapError("");
+    setRouteBootstrap("ready");
+    if (historyMode === "push") history.pushState({}, "", "/terminal");
+    else if (historyMode === "replace") history.replaceState({}, "", "/terminal");
   };
 
   askRuntimeForError = async (diagnostic) => {
@@ -1024,6 +1051,14 @@ function App() {
     onCleanup(() => media?.removeEventListener("change", onViewportChange));
     const onPopState = () => {
       void (async () => {
+        if (location.pathname === "/") {
+          openDashboard("none");
+          return;
+        }
+        if (location.pathname === "/terminal") {
+          openTerminalRoute("none");
+          return;
+        }
         const projectRouteId = pathProjectId();
         if (projectRouteId) {
           let project = catalogue.projects().find((item) => item.id === projectRouteId);
@@ -1103,6 +1138,12 @@ function App() {
         catalogue.selectProject(project);
         setRouteKind("project");
         setRouteBootstrap("ready");
+      } else if (initialTerminalRoute) {
+        setRouteKind("terminal");
+        setRouteBootstrap("ready");
+      } else if (initialDashboardRoute) {
+        setRouteKind("dashboard");
+        setRouteBootstrap("ready");
       } else {
         const templatePayload = await templateRequest;
         const project = projects.find((item) => item.slug === "chat") || projects[0];
@@ -1141,6 +1182,7 @@ function App() {
         <Show when={workspaceIdentityProject()}>{(project) => <WorkspaceAppearanceEditor compact value={project().workspaceAppearance} saving={workspaceIdentitySaving()} onSave={(appearance) => void saveWorkspaceIdentity(appearance)} />}</Show>
       </DialogContent>
     </Dialog>
+    <Show when={routeKind() !== "terminal"}>
     <Sidebar projects={catalogue.projects()} projectId={catalogue.projectId()} selectedId={catalogue.selectedId()} runtime={runtime} chatLimit={sidebarChatLimit()}
       connectivity={runtime.connectivity()} workspaceSuggestions={workspaceSuggestions()} workspacePolicy={workspacePolicy()} command={sidebarCommand()}
       mobileOpen={mobileSidebarOpen()} onMobileOpenChange={setMobileSidebar}
@@ -1149,13 +1191,21 @@ function App() {
       onMoveChat={moveChat} onMoveChats={moveChats} onMoveProjectChats={moveProjectChats} onCopyTranscript={copyTranscript} onCopyChatLinks={copyChatLinks}
       onDeleteChat={deleteChat} onDeleteChats={deleteChats} onDeleteProject={deleteProject}
       onOpenTerminal={(target, project) => { void openChat(target, project).then(() => openWorkspaceView("terminal")); }}
+      onOpenDashboard={() => openDashboard()}
       onOpenWorkspaceIdentity={openWorkspaceIdentity} onOpenSettings={openSettings} onOpenPalette={(page, initialQuery) => openPalette(page || null, initialQuery || "", page === "chat-search")}
       onChangeServer={nativeApp ? () => { void clearNativeBearerToken().finally(() => { clearServerOrigin(); location.reload(); }); } : undefined}
       onLogout={() => void logout()} />
     <main data-slot="sidebar-inset" class={`chat-main${routeKind() === "chat" && emptyChat() ? " chat-main-empty" : ""}${workspaceExpanded() ? " workspace-expanded" : ""}`} {...(routeKind() === "chat" ? dropHandlers : {})}>
       <Show when={routeBootstrap() === "ready"} fallback={<div class="chat-bootstrap" role={routeBootstrap() === "error" ? "alert" : "status"}>{routeBootstrap() === "error"
         ? routeBootstrapError() || (routeKind() === "project" ? "This project could not be loaded." : "This chat could not be loaded.")
-        : routeKind() === "project" ? "Loading project…" : "Loading chat…"}</div>}>
+        : routeKind() === "project" ? "Loading project…" : routeKind() === "dashboard" ? "Loading Conduit…" : "Loading chat…"}</div>}>
+        <Show when={routeKind() === "dashboard"}>
+          <AppDashboard
+            onNewChat={() => void createChat(catalogue.projects().find((project) => project.slug === "chat"))}
+            onOpenTerminal={() => openTerminalRoute()}
+          />
+        </Show>
+        <Show when={routeKind() !== "dashboard"}>
         <Show when={routeKind() === "chat" && meteorField()}>
           <div class="chat-meteors" aria-hidden="true">
             <DefaultMeteorShower />
@@ -1179,9 +1229,14 @@ function App() {
             onRename={() => runSidebar("rename-folder")} onDelete={() => runSidebar("delete-project")}
             onOpenSettings={openSettings} onSaveDefault={saveWorkspaceDefault} onSaveAppearance={saveWorkspaceAppearance} onRefresh={refresh} onCancelClone={cancelClone} onDestroyWorkspace={(confirmation) => destroyWorkspace(selectedProject()!, confirmation)} onError={showError} />
         </Show>
+        </Show>
       </Show>
     </main>
-    <Show when={Boolean(selectedProject()) && Boolean(workspacePanelScope())}><WorkspacePanel projectId={() => selectedProject()!.id} chatId={() => workspacePanelScope()!} open={panelOpen} expanded={workspaceExpanded} requestedTab={workspaceViewRequest} onToggleExpanded={() => setWorkspaceExpanded((value) => !value)} onClose={togglePanel} /></Show>
+    <Show when={["chat", "project"].includes(routeKind()) && Boolean(selectedProject()) && Boolean(workspacePanelScope())}><WorkspacePanel projectId={() => selectedProject()!.id} chatId={() => workspacePanelScope()!} open={panelOpen} expanded={workspaceExpanded} requestedTab={workspaceViewRequest} onToggleExpanded={() => setWorkspaceExpanded((value) => !value)} onClose={togglePanel} /></Show>
+    </Show>
+    <Show when={routeKind() === "terminal" && routeBootstrap() === "ready"}>
+      <TerminalRoute onOpenConduit={() => openDashboard()} />
+    </Show>
     <CommandMenu open={paletteOpen()} onOpenChange={setPaletteOpen} onPageChange={setPalettePage} initialPage={palettePage()} initialQuery={paletteInitialQuery()} launchNonce={paletteNonce()} directLaunch={paletteDirectLaunch()}
       context={paletteContext()} actions={paletteActions} onChooseModel={(spec) => void models.chooseModel(spec)} scopeModels={models.allModels()} enabledModelSpecs={models.enabledModels()} onToggleModelScope={(spec) => { const enabled = models.enabledModels(); void models.saveScope(enabled.includes(spec) ? enabled.filter((item) => item !== spec) : [...enabled, spec]); }} shortcuts={shortcutManager} />
                 <Settings open={settingsOpen()} initialSection={settingsSection()} initialWorkspaceId={settingsWorkspaceId()} onOpenChange={setSettingsOpen} models={models} templates={templates()} templatesLoading={templatesLoading()} defaultTemplateId={defaultTemplateId()} projects={catalogue.projects()} installations={installations()} installationsLoading={installationsLoading()} onInstallationsChange={setInstallations} onDefaultTemplateChange={saveDefaultTemplate} onWorkspaceDefaultChange={saveWorkspaceDefault} markdownRenderer={markdownRenderer()} onMarkdownRendererChange={switchMarkdownRenderer} rendererControlsVisible={rendererControlsVisible()} onRendererControlsVisibleChange={switchRendererControlsVisible} meteorField={meteorField()} onMeteorFieldChange={switchMeteorField} voiceSettings={voiceSettings()} onVoiceSettingsSave={updateVoiceSettings} sidebarChatLimit={sidebarChatLimit()} onSidebarChatLimitChange={switchSidebarChatLimit} contextMetrics={contextMetrics()} onContextMetricsChange={switchContextMetrics} onOpenModelSelector={openModelSelector} shortcuts={shortcutManager} />
