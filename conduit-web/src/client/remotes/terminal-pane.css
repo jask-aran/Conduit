@@ -35,7 +35,26 @@
 }
 
 .terminal-pane-identity {
+  margin-right: auto;
   overflow: hidden;
+}
+
+.terminal-pane-route-actions {
+  flex: none;
+  margin-right: 4.8px;
+}
+
+.terminal-pane-route-actions [data-slot="button"] {
+  width: 20.8px;
+  min-width: 20.8px;
+  height: 20.8px;
+  padding: 0;
+}
+
+.terminal-pane-route-actions svg {
+  width: 11.2px;
+  height: 11.2px;
+  color: var(--muted-foreground);
 }
 
 .terminal-pane-identity > strong {

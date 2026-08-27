@@ -144,6 +144,7 @@ export function Sidebar(props: {
   onDeleteChats: (targets: ChatTarget[]) => Promise<string[]>;
   onDeleteProject: (project: Project) => Promise<void>;
   onOpenTerminal: (chat: ChatSummary, project: Project) => void;
+  onOpenDashboard: () => void;
   onOpenWorkspaceIdentity: (project: Project) => void;
   onOpenSettings: (section?: string, workspaceId?: string | null) => void;
   onOpenPalette: (page?: string | null, initialQuery?: string | null) => void;
@@ -748,7 +749,7 @@ export function Sidebar(props: {
       <div ref={sidebarSurface} data-slot="sidebar-container" class="sidebar-container">
         <div data-sidebar="header">
           <Button variant="ghost" size="icon-sm" data-sidebar="trigger" aria-label="Toggle Sidebar" aria-expanded={isMobileLayout() ? props.mobileOpen : !collapsed()} onClick={onSidebarTrigger}><PanelLeftIcon /></Button>
-          <button data-sidebar="brand" aria-label="Conduit" onClick={() => startNewChat()}><span>Conduit</span></button>
+          <button data-sidebar="brand" aria-label="Conduit" onClick={() => { closeMobile(); props.onOpenDashboard(); }}><span>Conduit</span></button>
         </div>
         <div data-sidebar="content" class="sidebar-content">
           <div data-sidebar="rail-actions" class="sidebar-rail-actions" aria-label="Quick navigation">

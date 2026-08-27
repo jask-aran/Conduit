@@ -1,5 +1,5 @@
 import { createEffect, createSignal, For, onCleanup, onMount, Show } from "solid-js";
-import { CheckIcon, ChevronDownIcon, FocusIcon, PencilIcon, PlusIcon, TerminalIcon, Trash2Icon, UnplugIcon } from "lucide-solid";
+import { ArrowLeftIcon, CheckIcon, ChevronDownIcon, FocusIcon, Maximize2Icon, Minimize2Icon, PencilIcon, PlusIcon, TerminalIcon, Trash2Icon, UnplugIcon } from "lucide-solid";
 import {
   Button,
   Dialog,
@@ -23,7 +23,7 @@ import { api } from "../api/client";
 import { terminalSocketUrl } from "../api/transport";
 import { createTerminalRenderer, selectedTerminalRenderer, type TerminalRenderer, type TerminalRendererId } from "./terminal-renderer";
 
-type Pty = {
+export type Pty = {
   id: string;
   projectId: string;
   templateId?: string;
@@ -57,7 +57,10 @@ function sessionMetadata(record: Pty) {
   return `${command} · active ${activity.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
 }
 
-export function TerminalPane(props: { projectId: string; active?: boolean }) {
+type StandaloneTerminalControls = { onOpenConduit: () => void };
+type KeyboardLockNavigator = Navigator & { keyboard?: { lock?: (codes?: string[]) => Promise<void>; unlock?: () => void } };
+
+export function TerminalPane(props: { projectId: string; active?: boolean; autoStart?: boolean; standaloneControls?: StandaloneTerminalControls }) {
   const [pty, setPty] = createSignal<Pty | null>(null);
   const [sessions, setSessions] = createSignal<Pty[]>([]);
   const [error, setError] = createSignal("");
@@ -70,7 +73,9 @@ export function TerminalPane(props: { projectId: string; active?: boolean }) {
   const [writable, setWritable] = createSignal(false);
   const [terminalFocused, setTerminalFocused] = createSignal(false);
   const [rendererId, setRendererId] = createSignal<TerminalRendererId>(selectedTerminalRenderer());
+  const [fullscreen, setFullscreen] = createSignal(false);
   let host: HTMLDivElement | undefined;
+  let pane: HTMLElement | undefined;
   let terminal: TerminalRenderer | undefined;
   let socket: WebSocket | undefined;
   let disposeConnection: (() => void) | undefined;
@@ -115,7 +120,29 @@ export function TerminalPane(props: { projectId: string; active?: boolean }) {
   const scopeTerminalKeyboard = (event: KeyboardEvent) => {
     // Let the terminal renderer handle the key first, then stop Conduit's
     // window-level shortcuts from turning terminal chords into app commands.
-    if (terminalFocused() && isTerminalTarget(event.target)) event.stopPropagation();
+    if (!terminalFocused() || !isTerminalTarget(event.target)) return;
+    event.stopPropagation();
+  };
+  const toggleFullscreen = async () => {
+    try {
+      if (document.fullscreenElement === pane) {
+        await document.exitFullscreen();
+        return;
+      }
+      if (!pane) throw new Error("Terminal surface is unavailable");
+      await pane.requestFullscreen();
+      const keyboard = (navigator as KeyboardLockNavigator).keyboard;
+      if (!keyboard?.lock) throw new Error("This browser does not support terminal key capture");
+      await keyboard.lock(["KeyW"]);
+      setFullscreen(true);
+    } catch (cause) {
+      setError((cause as Error).message);
+    }
+  };
+  const fullscreenChanged = () => {
+    const active = document.fullscreenElement === pane;
+    setFullscreen(active);
+    if (!active) (navigator as KeyboardLockNavigator).keyboard?.unlock?.();
   };
   const zoomTerminal = (event: WheelEvent) => {
     if ((!event.ctrlKey && !event.metaKey) || !terminal) return;
@@ -381,7 +408,10 @@ export function TerminalPane(props: { projectId: string; active?: boolean }) {
       const running = await refreshSessions(projectId);
       if (projectId !== activeProjectId || pty()) return;
       const record = running[0];
-      if (!record) return;
+      if (!record) {
+        if (props.autoStart) queueMicrotask(() => void start());
+        return;
+      }
       setPty(record);
       notifyPtyChange();
       await connect(record);
@@ -566,6 +596,7 @@ export function TerminalPane(props: { projectId: string; active?: boolean }) {
   onMount(() => {
     mounted = true;
     activeProjectId = props.projectId;
+    document.addEventListener("fullscreenchange", fullscreenChanged);
     host?.addEventListener("wheel", zoomTerminal, { capture: true, passive: false });
     ptyChangeListener = () => {
       void refreshSessions(activeProjectId).catch(() => {});
@@ -610,6 +641,8 @@ export function TerminalPane(props: { projectId: string; active?: boolean }) {
 
   onCleanup(() => {
     mounted = false;
+    document.removeEventListener("fullscreenchange", fullscreenChanged);
+    (navigator as KeyboardLockNavigator).keyboard?.unlock?.();
     host?.removeEventListener("wheel", zoomTerminal, { capture: true });
     if (ptyChangeListener) window.removeEventListener("conduit:ptys-changed", ptyChangeListener);
     connectionGeneration += 1;
@@ -633,8 +666,16 @@ export function TerminalPane(props: { projectId: string; active?: boolean }) {
         </form>
       </DialogContent>
     </Dialog>
-    <section class="terminal-pane" aria-label="Terminal pane" data-terminal-focused={terminalFocused() ? "true" : "false"} onKeyDown={scopeTerminalKeyboard}>
+    <section ref={pane} class="terminal-pane" aria-label="Terminal pane" data-terminal-focused={terminalFocused() ? "true" : "false"} onKeyDown={scopeTerminalKeyboard}>
     <header class="terminal-pane-header">
+      <Show when={props.standaloneControls}>
+        <div class="terminal-pane-route-actions">
+          <Button variant="ghost" size="icon-sm" aria-label="Open Conduit" title="Open Conduit" onClick={() => props.standaloneControls!.onOpenConduit()}><ArrowLeftIcon /></Button>
+          <Button variant="ghost" size="icon-sm" aria-label={fullscreen() ? "Exit fullscreen" : "Enter fullscreen and capture browser keys"} title={fullscreen() ? "Exit fullscreen" : "Enter fullscreen and capture browser keys"} aria-pressed={fullscreen()} onClick={() => void toggleFullscreen()}>
+            <Show when={fullscreen()} fallback={<Maximize2Icon />}><Minimize2Icon /></Show>
+          </Button>
+        </div>
+      </Show>
       <div class="terminal-pane-identity">
         <Show when={pty()?.title}><strong>{pty()!.title}</strong></Show>
         <Show when={pty()?.currentCommand}><span class="terminal-header-command">{pty()!.currentCommand}</span></Show>

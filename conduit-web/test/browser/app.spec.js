@@ -63,6 +63,11 @@ async function openSidebar(page, testInfo) {
   }
 }
 
+async function openChatSurface(page) {
+  await page.goto("/");
+  await page.locator(".app-dashboard-action").filter({ hasText: "New chat" }).click();
+}
+
 test.beforeEach(async ({ page }) => {
   if (process.env.CONDUIT_TEST_MARKDOWN_RENDERER) {
     await page.addInitScript((renderer) => {
@@ -144,7 +149,7 @@ test.beforeEach(async ({ page }) => {
   await page.route("**/v0/capabilities", async (route) => {
     await route.fulfill({ json: { partialContinue: true, globalRuntime: "sse" } });
   });
-  await page.route("**/v0/ptys", async (route) => {
+  await page.route("**/v0/ptys*", async (route) => {
     if (route.request().method() === "GET") return route.fulfill({ json: { ptys: [] } });
     await route.fulfill({ status: 501, json: { error: "unhandled_browser_test_api" } });
   });
@@ -291,7 +296,7 @@ test.beforeEach(async ({ page }) => {
 });
 
 test("workspace panel previews files, shows diff, and persists per chat", async ({ page }) => {
-  await page.goto("/");
+  await openChatSurface(page);
   await page.getByRole("button", { name: "Toggle workspace panel" }).click();
   const panel = page.getByRole("complementary", { name: "Workspace panel" });
   await expect(panel).toBeVisible();
@@ -440,7 +445,7 @@ test("workspace panel previews files, shows diff, and persists per chat", async 
 
 test("desktop workspace can replace the chat pane without changing the sidebar", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "desktop-chromium");
-  await page.goto("/");
+  await openChatSurface(page);
   await page.getByRole("button", { name: "Toggle workspace panel" }).click();
   const panel = page.getByRole("complementary", { name: "Workspace panel" });
   const chat = page.locator('[data-slot="sidebar-inset"]');
@@ -471,7 +476,7 @@ test("desktop workspace can replace the chat pane without changing the sidebar",
 
 test("desktop workspace shell and surface ease open and close together", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "desktop-chromium");
-  await page.goto("/");
+  await openChatSurface(page);
   const panel = page.locator("aside.workspace-panel");
   const surface = panel.locator(".workspace-panel-surface");
   const sampleShellGeometry = () => page.evaluate(() => new Promise((resolve, reject) => {
@@ -573,7 +578,7 @@ test("desktop workspace shell and surface ease open and close together", async (
 
 test("rapid panel reversals continue from rendered geometry and release transcript locks", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "desktop-chromium");
-  await page.goto("/");
+  await openChatSurface(page);
   const sidebar = page.locator(".conduit-sidebar");
   const sidebarTrigger = sidebar.locator('[data-sidebar="trigger"]');
   const workspace = page.locator("aside.workspace-panel");
@@ -659,7 +664,7 @@ test("rapid panel reversals continue from rendered geometry and release transcri
 
 test("overlapping resize and panel motion cannot retain transcript preview geometry", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "desktop-chromium");
-  await page.goto("/");
+  await openChatSurface(page);
   await page.getByRole("button", { name: "Toggle workspace panel" }).click();
   const workspace = page.locator("aside.workspace-panel");
   const handle = workspace.getByRole("separator", { name: "Resize workspace panel" });
@@ -778,7 +783,7 @@ test("explicit transcript visibility preserves offscreen geometry and reveals sc
 test("desktop panel surfaces settle immediately with reduced motion", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "desktop-chromium");
   await page.emulateMedia({ reducedMotion: "reduce" });
-  await page.goto("/");
+  await openChatSurface(page);
   const sidebar = page.locator(".conduit-sidebar");
   await page.locator('[data-sidebar="trigger"]').click();
   await expect(sidebar).toHaveAttribute("data-state", "collapsed");
@@ -794,7 +799,7 @@ test("desktop panel surfaces settle immediately with reduced motion", async ({ p
 });
 
 test("reselecting the active chat does not reload its transcript or workspace", async ({ page }, testInfo) => {
-  await page.goto("/");
+  await openChatSurface(page);
   await openSidebar(page, testInfo);
   await page.getByRole("button", { name: "Existing chat" }).click();
   await expect(page.getByText("Previous question")).toBeVisible();
@@ -828,7 +833,7 @@ test("keeps the workspace panel mounted and warm between chats in one project", 
     await route.fulfill({ json: { repository: true, branch: "agent/rhs-panel-mvp", files: [], commits: [], diff: "" } });
   });
 
-  await page.goto("/");
+  await openChatSurface(page);
   await openSidebar(page, testInfo);
   await page.getByRole("button", { name: "Existing chat" }).click();
   await page.getByRole("button", { name: "Toggle workspace panel" }).click();
@@ -866,7 +871,7 @@ test("restores cached Git status when returning to a workspace", async ({ page }
     await route.fulfill({ json: { repository: true, branch, files: [], commits: [], diff: "" } });
   });
 
-  await page.goto("/");
+  await openChatSurface(page);
   await openSidebar(page, testInfo);
   await page.getByRole("button", { name: "Existing chat" }).click();
   await page.getByRole("button", { name: "Toggle workspace panel" }).click();
@@ -913,7 +918,7 @@ test("does not commit a stale workspace response after project navigation", asyn
     await route.fulfill({ json: { entries: [{ name: "research-only.md", path: "research-only.md", type: "file" }] } });
   });
 
-  await page.goto("/");
+  await openChatSurface(page);
   await openSidebar(page, testInfo);
   await page.getByRole("button", { name: "Existing chat" }).click();
   await page.getByRole("button", { name: "Toggle workspace panel" }).click();
@@ -959,7 +964,7 @@ test("closing the workspace panel cancels hidden tree, file, and diff work", asy
     await route.fulfill({ json: { repository: true, branch: requestNumber === 1 ? "cancelled-branch" : "fresh-branch", files: [], commits: [], diff: "" } }).catch(() => {});
   });
 
-  await page.goto("/");
+  await openChatSurface(page);
   await openSidebar(page, testInfo);
   await page.getByRole("button", { name: "Existing chat" }).click();
   await page.getByRole("button", { name: "Toggle workspace panel" }).click();
@@ -1000,9 +1005,84 @@ test.afterEach(async ({ page }) => {
   expect(unhandledApiRequests.get(page) || [], "all browser API requests must use deterministic mocks").toEqual([]);
 });
 
+test("uses the dashboard as the default landing without creating a chat", async ({ page }) => {
+  let chatCreates = 0;
+  await page.route("**/v0/chats", async (route) => {
+    chatCreates += 1;
+    await route.fulfill({ status: 201, json: {
+      id: "550e8400-e29b-41d4-a716-446655440099",
+      projectId: "project_chat",
+      status: "draft",
+      title: "New chat",
+    } });
+  });
+
+  await page.goto("/");
+  await expect(page).toHaveURL(/\/$/);
+  await expect(page.getByRole("heading", { name: "What do you want to open?" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Home terminals" })).toBeVisible();
+  expect(chatCreates).toBe(0);
+
+  await page.locator(".app-dashboard-action").filter({ hasText: "New chat" }).click();
+  await expect(page).toHaveURL(/\/chat\/550e8400-e29b-41d4-a716-446655440099$/);
+  expect(chatCreates).toBe(1);
+  await page.getByRole("button", { name: "Conduit", exact: true }).click();
+  await expect(page).toHaveURL(/\/$/);
+  await expect(page.getByRole("heading", { name: "What do you want to open?" })).toBeVisible();
+});
+
+test("opens a full-screen home terminal without an extra route bar", async ({ page }) => {
+  await page.addInitScript(() => {
+    window.__keyboardLocks = [];
+    let fullscreenElement = null;
+    Object.defineProperty(document, "fullscreenElement", { configurable: true, get: () => fullscreenElement });
+    Object.defineProperty(navigator, "keyboard", { configurable: true, value: {
+      lock: async (codes) => { window.__keyboardLocks.push(codes); },
+      unlock: () => {},
+    } });
+    HTMLElement.prototype.requestFullscreen = async function requestFullscreen() {
+      fullscreenElement = this;
+      document.dispatchEvent(new Event("fullscreenchange"));
+    };
+    document.exitFullscreen = async () => {
+      fullscreenElement = null;
+      document.dispatchEvent(new Event("fullscreenchange"));
+    };
+  });
+  const terminal = {
+    id: "pty_home",
+    projectId: "project_chat",
+    status: "running",
+    title: "Shell",
+    currentCommand: "zsh",
+    createdAt: new Date().toISOString(),
+    lastActivityAt: new Date().toISOString(),
+  };
+  let listed = false;
+  await page.route("**/v0/ptys*", async (route) => {
+    if (route.request().method() === "POST") return route.fulfill({ status: 201, json: terminal });
+    await route.fulfill({ json: { ptys: listed ? [terminal] : [] } });
+    listed = true;
+  });
+
+  const createRequest = page.waitForRequest((request) => new URL(request.url()).pathname === "/v0/ptys" && request.method() === "POST");
+  await page.goto("/terminal");
+  const request = await createRequest;
+  expect(request.postDataJSON().projectId).toBe("project_chat");
+  await expect(page.locator(".terminal-route")).toBeVisible();
+  await expect(page.getByRole("region", { name: "Terminal pane" })).toBeVisible();
+  await expect(page.locator(".terminal-route-header")).toHaveCount(0);
+  await page.getByRole("button", { name: "Enter fullscreen and capture browser keys" }).click();
+  await expect(page.getByRole("button", { name: "Exit fullscreen" })).toBeVisible();
+  expect(await page.evaluate(() => window.__keyboardLocks)).toEqual([["KeyW"]]);
+  await page.getByRole("button", { name: "Open Conduit" }).click();
+  await expect(page).toHaveURL(/\/$/);
+  await expect(page.getByRole("heading", { name: "What do you want to open?" })).toBeVisible();
+});
+
 test("creates a durable chat route and renders the primary surface", async ({ page }) => {
   const createRequest = page.waitForRequest((request) => request.url().endsWith("/v0/chats") && request.method() === "POST");
-  await page.goto("/");
+  await openChatSurface(page);
   await createRequest;
   await expect(page).toHaveURL(/\/chat\/550e8400-e29b-41d4-a716-446655440099$/);
   await expect(page.getByRole("navigation", { name: "breadcrumb" })).toContainText("ChatsNew chat");
@@ -1257,7 +1337,7 @@ test("reloading a durable new-chat URL does not create another chat", async ({ p
       id: "550e8400-e29b-41d4-a716-446655440099", projectId: "project_chat", status: "draft", title: "New chat",
     } });
   });
-  await page.goto("/");
+  await openChatSurface(page);
   await expect(page).toHaveURL(/\/chat\/550e8400-e29b-41d4-a716-446655440099$/);
   await page.reload();
   await expect(page.getByRole("textbox", { name: "Message Pi" })).toBeVisible();
@@ -1339,7 +1419,7 @@ test("commits a new chat even if disposal of the replaced draft fails visibly", 
   await page.route("**/v0/chats/*?ifEmpty=true", async (route) => {
     await route.fulfill({ status: 500, json: { message: "Draft cleanup failed" } });
   });
-  await page.goto("/");
+  await openChatSurface(page);
   await expect(page).toHaveURL(/\/chat\/550e8400-e29b-41d4-a716-446655440099$/);
 
   await page.route("**/v0/chats", async (route) => {
@@ -1367,7 +1447,7 @@ test("new project chats identify their owning project in the header", async ({ p
       title: "New chat",
     } });
   });
-  await page.goto("/");
+  await openChatSurface(page);
   await openSidebar(page, testInfo);
   await page.getByRole("button", { name: /Research/ }).click({ button: "right" });
   await page.getByRole("menuitem", { name: "New chat" }).click();
@@ -1377,7 +1457,7 @@ test("new project chats identify their owning project in the header", async ({ p
 });
 
 test("opens and dismisses the new folder dialog", async ({ page }, testInfo) => {
-  await page.goto("/");
+  await openChatSurface(page);
 
   await openSidebar(page, testInfo);
   await page.getByRole("button", { name: "New folder" }).click();
@@ -1389,7 +1469,7 @@ test("opens and dismisses the new folder dialog", async ({ page }, testInfo) => 
 });
 
 test("keeps the workspace panel open while Escape dismisses sidebar dialogs and Settings", async ({ page }, testInfo) => {
-  await page.goto("/");
+  await openChatSurface(page);
   await page.getByRole("button", { name: "Toggle workspace panel" }).click();
   const panel = page.getByRole("complementary", { name: "Workspace panel" });
   await expect(panel).toBeVisible();
@@ -1424,7 +1504,7 @@ test("keeps the workspace panel open while Escape dismisses sidebar dialogs and 
 
 test("long-press opens a sidebar context menu without navigating the chat", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "mobile-chromium", "touch long-press coverage");
-  await page.goto("/");
+  await openChatSurface(page);
   await openSidebar(page, testInfo);
   const chat = page.getByRole("button", { name: "Existing chat" });
   await expect(chat).toBeVisible();
@@ -1451,7 +1531,7 @@ test("long-press opens a sidebar context menu without navigating the chat", asyn
 });
 
 test("header command button opens the command palette and the close control dismisses it", async ({ page }, testInfo) => {
-  await page.goto("/");
+  await openChatSurface(page);
   await expect(page.locator(".palette-trigger")).toBeVisible();
   await page.locator(".palette-trigger").click();
   const palette = page.getByRole("dialog", { name: "Command Palette" });
@@ -1472,7 +1552,7 @@ test("header command button opens the command palette and the close control dism
 
 test("mobile sidebar and workspace overlays are full-bleed and exclusive", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "mobile-chromium", "phone overlay chrome only");
-  await page.goto("/");
+  await openChatSurface(page);
 
   const swipe = (fromX, toX) => page.evaluate(({ fromX, toX }) => {
     const target = document.body;
@@ -1559,7 +1639,7 @@ test("keeps the initial draft route stable across reload", async ({ page }) => {
     } });
   });
 
-  await page.goto("/");
+  await openChatSurface(page);
   await expect(page).toHaveURL(/\/chat\/550e8400-e29b-41d4-a716-446655440099$/);
   await page.reload();
   await expect(page).toHaveURL(/\/chat\/550e8400-e29b-41d4-a716-446655440099$/);
@@ -1567,7 +1647,7 @@ test("keeps the initial draft route stable across reload", async ({ page }) => {
 });
 
 test("keeps the native textarea composer bounded in a thread", async ({ page }, testInfo) => {
-  await page.goto("/");
+  await openChatSurface(page);
   await openSidebar(page, testInfo);
   await page.getByRole("button", { name: "Existing chat" }).click();
   await expect(page.getByText("Previous question")).toBeVisible();
@@ -1630,7 +1710,7 @@ test("renders persisted assistant Markdown with safe interactive controls", asyn
       tools: [],
     } });
   });
-  await page.goto("/");
+  await openChatSurface(page);
   await openSidebar(page, testInfo);
   await page.getByRole("button", { name: "Existing chat" }).click();
 
@@ -1735,7 +1815,7 @@ test("repairs unfinished Markdown while an assistant response streams", async ({
   await page.route("**/v0/live-sessions", async (route) => {
     await route.fulfill({ status: 201, json: { id: "live_stream", chatId: "550e8400-e29b-41d4-a716-446655440099", streamUrl: "/v0/live-sessions/live_stream/stream" } });
   });
-  await page.goto("/");
+  await openChatSurface(page);
   await page.getByRole("textbox", { name: "Message Pi" }).fill("Start streaming");
   const checkpointReload = page.waitForRequest((request) =>
     request.url().endsWith("/v0/sessions/550e8400-e29b-41d4-a716-446655440099"));
@@ -1816,7 +1896,7 @@ test("renders and answers every blocking host UI request kind", async ({ page },
     }
     Object.defineProperty(window, "WebSocket", { configurable: true, value: HostUiWebSocket });
   });
-  await page.goto("/");
+  await openChatSurface(page);
   await openSidebar(page, testInfo);
   await page.getByRole("button", { name: "Existing chat" }).click();
 
@@ -1878,7 +1958,7 @@ test("switches threads atomically without flashing the welcome screen", async ({
       tools: [], page: { before: null },
     } });
   });
-  await page.goto("/");
+  await openChatSurface(page);
   await openSidebar(page, testInfo);
 
   await page.getByRole("button", { name: "First chat" }).click();
@@ -1925,7 +2005,7 @@ test("does not launch an abandoned active chat during rapid switching", async ({
     await route.fulfill({ json: { id: `live_${body.chatId}`, streamUrl: `/v0/live-sessions/live_${body.chatId}/stream` } });
   });
 
-  await page.goto("/");
+  await openChatSurface(page);
   await openSidebar(page, testInfo);
   await page.getByRole("button", { name: "First chat" }).click();
   await openSidebar(page, testInfo);
@@ -1971,7 +2051,7 @@ test("ignores queued events from the previous chat socket", async ({ page }, tes
     await route.fulfill({ json: { id: `live_${chatId}`, streamUrl: `/v0/live-sessions/live_${chatId}/stream` } });
   });
 
-  await page.goto("/");
+  await openChatSurface(page);
   await openSidebar(page, testInfo);
   await page.getByRole("button", { name: "First chat" }).click();
   await expect(page.getByText("First body")).toBeVisible();
@@ -2066,7 +2146,7 @@ test("uses the container workspace namespace for defaults and suggestions", asyn
     modes: ["managed", "linked", "created", "cloned"],
     folders: [{ name: "existing-repo", path: "/workspaces/existing-repo", displayPath: "/workspaces/existing-repo" }],
   } }));
-  await page.goto("/");
+  await openChatSurface(page);
   await openSidebar(page, testInfo);
   await page.getByRole("button", { name: "New workspace" }).click();
   const dialog = page.getByRole("dialog", { name: "Add workspace" });
@@ -2173,7 +2253,7 @@ test("hides transient new chats and provides complete right-click menus", async 
       value: { writeText: async (text) => { window.__copiedTranscript = text; } },
     });
   });
-  await page.goto("/");
+  await openChatSurface(page);
   await openSidebar(page, testInfo);
 
   await expect(page.locator('[data-sidebar="content"]').getByText("New chat", { exact: true })).toHaveCount(0);
@@ -2355,7 +2435,7 @@ test("keeps folder expansion state through chat refreshes and reloads", async ({
     }));
   }
 
-  await page.goto("/");
+  await openChatSurface(page);
   const toggles = page.locator(".sidebar-project-toggle");
   await expect(toggles).toHaveCount(2);
   await expect(toggles.first()).toHaveAttribute("aria-expanded", "true");
@@ -2433,7 +2513,7 @@ test("selects chats without navigation and applies bulk context actions", async 
     await route.fulfill({ status: 204, body: "" });
   });
 
-  await page.goto("/");
+  await openChatSurface(page);
   await page.getByRole("button", { name: "First chat" }).click();
   await expect(page.getByText("First thread body")).toBeVisible();
   const firstUrl = page.url();
@@ -2487,7 +2567,7 @@ test("selects chats without navigation and applies bulk context actions", async 
 
 test("uses compact sidebar groups and preserves a useful desktop rail", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "desktop-chromium");
-  await page.goto("/");
+  await openChatSurface(page);
   const sidebar = page.locator('[data-slot="sidebar"][data-state]');
   const main = page.locator('[data-slot="sidebar-inset"]');
   const sampleShellGeometry = () => page.evaluate(() => new Promise((resolve) => {
@@ -2592,7 +2672,7 @@ test("keeps linked workspaces in their own sidebar group", async ({ page }, test
       }],
     } });
   });
-  await page.goto("/");
+  await openChatSurface(page);
   await openSidebar(page, testInfo);
   if (testInfo.project.name === "mobile-chromium") {
     const drawer = page.locator(".conduit-sidebar");
@@ -2638,7 +2718,7 @@ test("opens a targeted Workspace settings card from its context menu", async ({ 
       workspaceAppearance: Object.hasOwn(body, "workspaceAppearance") ? body.workspaceAppearance : workspace.workspaceAppearance,
     } });
   });
-  await page.goto("/");
+  await openChatSurface(page);
   await openSidebar(page, testInfo);
   await page.getByRole("button", { name: "JaskFish" }).click({ button: "right" });
   await page.getByRole("menuitem", { name: "Identity", exact: true }).click();
@@ -2729,7 +2809,7 @@ test("workspace draft chooses Host Pi and automatically trusts project resources
       trustPosture: "native_saved_trust",
     } });
   });
-  await page.goto("/");
+  await openChatSurface(page);
   await openSidebar(page, testInfo);
   const createRequest = page.waitForRequest((request) => request.url().endsWith("/v0/chats")
     && request.method() === "POST" && request.postDataJSON()?.projectId === "project_workspace");
@@ -2810,7 +2890,7 @@ test("Host Pi default falls back to global when launch becomes unavailable", asy
     if (attempts === 1) await route.fulfill({ status: 409, json: { error: "native_pi_unavailable", message: "Host Pi disappeared" } });
     else await route.fulfill({ status: 201, json: { id: "live_fallback", streamUrl: "/v0/live-sessions/live_fallback/stream", runtime: { kind: "conduit_profile", installationId: "conduit-pinned" } } });
   });
-  await page.goto("/");
+  await openChatSurface(page);
   await openSidebar(page, testInfo);
   await page.getByRole("button", { name: "JaskFish" }).click({ button: "right" });
   await page.getByRole("menuitem", { name: "New chat" }).click();
@@ -2855,7 +2935,7 @@ test("clone workspace derives a repository folder inside the chosen parent", asy
   await page.route("**/v0/workspace-operations/operation_clone", (route) => route.fulfill({
     json: { id: "operation_clone", projectId: "project_clone", state: "cloning", diagnostic: "Receiving objects: 42%" },
   }));
-  await page.goto("/");
+  await openChatSurface(page);
   await openSidebar(page, testInfo);
   await page.getByRole("button", { name: "New workspace" }).click();
   const dialog = page.getByRole("dialog", { name: "Add workspace" });
@@ -2928,7 +3008,7 @@ test("creates an explicit external Workspace only after the server resolves its 
     }
     await route.fulfill({ json: { projects } });
   });
-  await page.goto("/");
+  await openChatSurface(page);
   await openSidebar(page, testInfo);
   await page.getByRole("button", { name: "New workspace" }).click();
   const dialog = page.getByRole("dialog", { name: "Add workspace" });
@@ -2946,7 +3026,7 @@ test("creates an explicit external Workspace only after the server resolves its 
 
 test("the meteor field fills the chat main surface without intercepting input", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "desktop-chromium");
-  await page.goto("/");
+  await openChatSurface(page);
 
   const main = page.locator('[data-slot="sidebar-inset"]');
   const meteors = page.locator(".chat-meteors");
@@ -2981,7 +3061,7 @@ test("the meteor field fills the chat main surface without intercepting input", 
 
 test("the meteor field remains animated when reduced motion is enabled", async ({ page }) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
-  await page.goto("/");
+  await openChatSurface(page);
 
   const meteor = page.locator(".chat-meteors .solid-meteor").first();
   await expect(meteor).toBeAttached();
@@ -2990,7 +3070,7 @@ test("the meteor field remains animated when reduced motion is enabled", async (
 });
 
 test("composer model picker exposes model and thinking selectors", async ({ page }) => {
-  await page.goto("/");
+  await openChatSurface(page);
 
   await page.getByRole("button", { name: /Reasoner medium/ }).click();
   await expect(page.getByText("Model", { exact: true })).toBeVisible();
@@ -3000,7 +3080,7 @@ test("composer model picker exposes model and thinking selectors", async ({ page
 });
 
 test("choosing a model closes the menu and restores page pointer events", async ({ page }) => {
-  await page.goto("/");
+  await openChatSurface(page);
 
   await page.getByRole("button", { name: /Reasoner medium/ }).click();
   await expect(page.getByRole("menu")).toBeVisible();
@@ -3009,7 +3089,7 @@ test("choosing a model closes the menu and restores page pointer events", async 
 });
 
 test("shows a newly created chat in the sidebar immediately", async ({ page }, testInfo) => {
-  await page.goto("/");
+  await openChatSurface(page);
   await openSidebar(page, testInfo);
 
   await expect(page.locator('[data-sidebar="content"]').getByText("New chat", { exact: true })).toHaveCount(0);
@@ -3021,7 +3101,7 @@ test("leaves an uncommitted new chat without blocking target navigation when cle
   await page.route("**/v0/chats/550e8400-e29b-41d4-a716-446655440099?ifEmpty=true", async (route) => {
     await route.fulfill({ status: 404, json: { error: "chat_not_found" } });
   });
-  await page.goto("/");
+  await openChatSurface(page);
   await openSidebar(page, testInfo);
   await page.getByRole("button", { name: "New chat" }).click();
   await page.waitForURL(/\/chat\/550e8400-e29b-41d4-a716-446655440099/);
@@ -3065,7 +3145,7 @@ test("a prompt sent from a brand-new chat never travels over the previous chat's
     return route.fulfill({ json: { sessions: [] } });
   });
 
-  await page.goto("/");
+  await openChatSurface(page);
   await openSidebar(page, testInfo);
   await page.getByRole("button", { name: "Existing chat" }).click();
   await expect.poll(() => livePosts.length).toBe(1);
@@ -3129,7 +3209,7 @@ test("collapses a turn's thinking, narration, and tools into one trace", async (
     } });
   });
 
-  await page.goto("/");
+  await openChatSurface(page);
   await openSidebar(page, testInfo);
   await page.getByRole("button", { name: "Thinking chat" }).click();
 
@@ -3201,7 +3281,7 @@ test("previews the latest trace activity while a turn runs and keeps it after co
     await route.fulfill({ status: 201, json: { id: "live_trace", chatId: body.chatId, streamUrl: "/v0/live-sessions/live_trace/stream" } });
   });
 
-  await page.goto("/");
+  await openChatSurface(page);
   const composer = page.getByRole("textbox", { name: "Message Pi" });
   await composer.fill("hi");
   await composer.press("Enter");
@@ -3231,7 +3311,7 @@ test("previews the latest trace activity while a turn runs and keeps it after co
 test("selects a chat model through the runtime-aware model route", async ({ page }) => {
   const settingsRequest = page.waitForRequest((request) =>
     /\/v0\/chats\/[^/]+\/models$/.test(new URL(request.url()).pathname) && request.method() === "PATCH");
-  await page.goto("/");
+  await openChatSurface(page);
 
   await page.getByRole("button", { name: /Reasoner medium/ }).click();
   await page.getByRole("menuitemradio", { name: "Plain example" }).click();
@@ -3243,7 +3323,7 @@ test("selects a chat model through the runtime-aware model route", async ({ page
 });
 
 test("model scope settings groups, searches, and saves each toggle immediately", async ({ page }, testInfo) => {
-  await page.goto("/");
+  await openChatSurface(page);
   await openSidebar(page, testInfo);
 
   await page.locator('[data-sidebar="footer"]').getByRole("button", { name: /Conduit/ }).click();
@@ -3297,7 +3377,7 @@ test("model scope search auto-focuses and its long result list scrolls", async (
       defaultModel: manyModels[0].spec,
     } });
   });
-  await page.goto("/");
+  await openChatSurface(page);
   await openSidebar(page, testInfo);
   await page.locator('[data-sidebar="footer"]').getByRole("button", { name: /Conduit/ }).click();
   await page.getByRole("menuitem", { name: "Manage settings" }).click();
@@ -3326,7 +3406,7 @@ test("settings renders a delayed model scope with selector hints", async ({ page
       defaultModel: model.spec,
     } });
   });
-  await page.goto("/");
+  await openChatSurface(page);
   await openSidebar(page, testInfo);
   await page.locator('[data-sidebar="footer"]').getByRole("button", { name: /Conduit/ }).click();
   await page.getByRole("menuitem", { name: "Manage settings" }).click();
@@ -3348,7 +3428,7 @@ test("uploads picker and dropped files through the same attachment surface", asy
     uploads.push({ id, name, body: route.request().postDataBuffer()?.toString() });
     await route.fulfill({ status: 201, json: { id, name, storedName: `${id}--${name}`, size: route.request().postDataBuffer()?.length || 0, type: "text/plain" } });
   });
-  await page.goto("/");
+  await openChatSurface(page);
   const attachmentButton = page.getByRole("button", { name: /^Attach files/ });
   await attachmentButton.click();
   await page.locator('input[type="file"]').setInputFiles({ name: "picker.txt", mimeType: "text/plain", buffer: Buffer.from("picker") });
@@ -3411,7 +3491,7 @@ test("shared DataTransfer extraction preserves item-only and files-only attachme
     uploads.push({ id, name, body: route.request().postDataBuffer()?.toString() });
     await route.fulfill({ status: 201, json: { id, name, storedName: `${id}--${name}`, size: route.request().postDataBuffer()?.length || 0, type: name?.endsWith(".png") ? "image/png" : "text/plain" } });
   });
-  await page.goto("/");
+  await openChatSurface(page);
   const dropTarget = page.locator(".chat-main");
 
   await dropTarget.evaluate((target) => {
@@ -3470,7 +3550,7 @@ test("pastes files into the composer without changing draft text or selection", 
     uploads.push({ id, name });
     await route.fulfill({ status: 201, json: { id, name, storedName: `${id}--${name}`, size: route.request().postDataBuffer()?.length || 0, type: "image/png" } });
   });
-  await page.goto("/");
+  await openChatSurface(page);
   const composer = page.getByRole("textbox", { name: "Message Pi" });
   await composer.fill("Review these files");
   await composer.evaluate((element) => { element.focus(); element.setSelectionRange(7, 12); });
@@ -3556,7 +3636,7 @@ test("editing from history abandons the current attachment draft cleanly", async
     }
   });
 
-  await page.goto("/");
+  await openChatSurface(page);
   await openSidebar(page, testInfo);
   await page.getByRole("button", { name: "Existing chat" }).click();
   const picker = page.locator('input[type="file"]');
@@ -3620,7 +3700,7 @@ test("stop freezes the visible response and rejects late generation deltas", asy
     }
     Object.defineProperty(window, "WebSocket", { configurable: true, value: StopWebSocket });
   });
-  await page.goto("/");
+  await openChatSurface(page);
   await page.getByRole("textbox", { name: "Message Pi" }).fill("Start");
   await page.getByRole("button", { name: "Send message" }).click();
   await expect(page.getByText("partial")).toBeVisible();
@@ -3714,7 +3794,7 @@ test("shows settled provider errors as assistant messages without a busy spinner
     await route.fulfill({ status: 201, json: { id: "live_error", chatId: body.chatId, streamUrl: "/v0/live-sessions/live_error/stream" } });
   });
 
-  await page.goto("/");
+  await openChatSurface(page);
   await page.getByRole("textbox", { name: "Message Pi" }).fill("Trigger an error");
   await page.getByRole("button", { name: "Send message" }).click();
 
@@ -3733,7 +3813,7 @@ test("shows settled provider errors as assistant messages without a busy spinner
   await page.getByRole("textbox", { name: "Message Pi" }).fill("Try another request");
   await expect(page.getByRole("button", { name: "Send message" })).toBeEnabled();
 
-  await page.goto("/");
+  await openChatSurface(page);
   await page.goto("/chat/550e8400-e29b-41d4-a716-446655440099");
   await expect(page.locator(".assistant-error")).toContainText("429: Free usage limit reached");
   await expect(page.locator(".composer-status-state")).toContainText("Request failed · Ready to retry");
@@ -3782,7 +3862,7 @@ test("keeps streaming visible when a user checkpoint replaces the live placehold
       page: { before: null },
     } });
   });
-  await page.goto("/");
+  await openChatSurface(page);
   await page.getByRole("textbox", { name: "Message Pi" }).fill("Start");
   await page.getByRole("button", { name: "Send message" }).click();
   await expect(page.getByText("Visible after checkpoint")).toBeVisible();
@@ -3835,7 +3915,7 @@ test("a delayed terminal checkpoint cannot clear the next generation", async ({ 
       messages: [{ id: "durable-a", role: "assistant", content: "Generation A" }], tools: [], page: { before: null },
     } });
   });
-  await page.goto("/");
+  await openChatSurface(page);
   const composer = page.getByRole("textbox", { name: "Message Pi" });
   await composer.fill("First");
   await page.getByRole("button", { name: "Send message" }).click();
@@ -3964,7 +4044,7 @@ for (const phase of ["thinking", "tool", "answer", "settlement"]) {
       } });
     });
 
-    await page.goto("/");
+    await openChatSurface(page);
     await page.getByRole("textbox", { name: "Message Pi" }).fill(`Reconnect during ${phase}`);
     await page.getByRole("button", { name: "Send message" }).click();
     await expect.poll(() => page.evaluate(() => window.__reconnectSockets.length)).toBe(2);
@@ -3980,7 +4060,7 @@ for (const phase of ["thinking", "tool", "answer", "settlement"]) {
 }
 
 test("global commands and slash suggestions preserve their intended focus models", async ({ page }, testInfo) => {
-  await page.goto("/");
+  await openChatSurface(page);
   const composer = page.getByRole("textbox", { name: "Message Pi" });
   await composer.fill("/");
   const slashList = page.getByRole("listbox", { name: "Suggestions" });
@@ -4157,7 +4237,7 @@ test("message actions copy source, edit from a Pi entry, and regenerate via fork
       ),
     });
   });
-  await page.goto("/");
+  await openChatSurface(page);
   await openSidebar(page, testInfo);
   await page.getByRole("button", { name: "Existing chat" }).click();
   await expect(page.getByLabel("Message attachments")).toContainText("source-notes.md");
@@ -4190,7 +4270,7 @@ test("message actions copy source, edit from a Pi entry, and regenerate via fork
 });
 
 test("settings remains centered with a persistent vertical rail at narrow widths", async ({ page }, testInfo) => {
-  await page.goto("/");
+  await openChatSurface(page);
   await openSidebar(page, testInfo);
   await page.locator('[data-sidebar="footer"]').getByRole("button", { name: /Conduit/ }).click();
   await page.getByRole("menuitem", { name: "Manage settings" }).click();
@@ -4214,7 +4294,7 @@ test("settings remains centered with a persistent vertical rail at narrow widths
 });
 
 test("general settings selects the session naming model and thinking level", async ({ page }, testInfo) => {
-  await page.goto("/");
+  await openChatSurface(page);
   await openSidebar(page, testInfo);
   await page.locator('[data-sidebar="footer"]').getByRole("button", { name: /Conduit/ }).click();
   await page.getByRole("menuitem", { name: "Manage settings" }).click();
@@ -4263,7 +4343,7 @@ test("generation_limit bounce surfaces an error and keeps the composer usable", 
     }
     Object.defineProperty(window, "WebSocket", { configurable: true, value: LimitWebSocket });
   });
-  await page.goto("/");
+  await openChatSurface(page);
   const composer = page.getByRole("textbox", { name: "Message Pi" });
   await composer.fill("Should bounce");
   await page.getByRole("button", { name: "Send message" }).click();
@@ -4297,7 +4377,7 @@ test("runtime settings exposes warm pool and concurrent generation caps", async 
     }
     await route.fallback();
   });
-  await page.goto("/");
+  await openChatSurface(page);
   await openSidebar(page, testInfo);
   await page.locator('[data-sidebar="footer"]').getByRole("button", { name: /Conduit/ }).click();
   await page.getByRole("menuitem", { name: "Manage settings" }).click();
@@ -4322,7 +4402,7 @@ test("runtime settings reports load failures and recovers on retry", async ({ pa
       generatingCount: 0,
     } });
   });
-  await page.goto("/");
+  await openChatSurface(page);
   await openSidebar(page, testInfo);
   await page.locator('[data-sidebar="footer"]').getByRole("button", { name: /Conduit/ }).click();
   await page.getByRole("menuitem", { name: "Manage settings" }).click();
@@ -4369,7 +4449,7 @@ test("host Pi re-detection immediately updates the Workspace profile menu", asyn
       runtime: { kind: body.runtimeKind, installationId: "conduit-pinned", profileId: body.templateId },
     } });
   });
-  await page.goto("/");
+  await openChatSurface(page);
   await openSidebar(page, testInfo);
   await page.locator('[data-sidebar="footer"]').getByRole("button", { name: /Conduit/ }).click();
   await page.getByRole("menuitem", { name: "Manage settings" }).click();
@@ -4673,7 +4753,7 @@ test("voice dictation keeps capturing after a speech-end pause and preserves nat
     Object.defineProperty(navigator, "mediaDevices", { configurable: true, value: { getUserMedia: async (constraints) => { window.__voiceConstraints = constraints; return { getTracks: () => [{ stop() {} }] }; } } });
   });
 
-  await page.goto("/");
+  await openChatSurface(page);
   const composer = page.getByRole("textbox", { name: "Message Pi" });
   await composer.fill("askplease");
   await composer.evaluate((element) => element.setSelectionRange(3, 3));
@@ -4830,7 +4910,7 @@ test("Ctrl+Shift+D captures in the page and buffers microphone audio until the s
     Object.defineProperty(navigator, "mediaDevices", { configurable: true, value: { getUserMedia: async () => ({ getTracks: () => [{ stop() {} }] }) } });
   });
 
-  await page.goto("/");
+  await openChatSurface(page);
   const composer = page.getByRole("textbox", { name: "Message Pi" });
   await composer.focus();
   await page.keyboard.down("Control");
@@ -4972,7 +5052,7 @@ test("Toggle activation starts and stops on separate shortcut presses", async ({
     Object.defineProperty(navigator, "mediaDevices", { configurable: true, value: { getUserMedia: async () => ({ getTracks: () => [{ stop() {} }] }) } });
   });
 
-  await page.goto("/");
+  await openChatSurface(page);
   const composer = page.getByRole("textbox", { name: "Message Pi" });
   const trigger = page.locator(".dictation-trigger");
   await composer.focus();
@@ -5060,7 +5140,7 @@ test("healthy audio resources are reused between dictation sessions", async ({ p
     localStorage.setItem("conduit:voice-dictation", JSON.stringify({ shortcut: "Ctrl+Shift+D", activation: "toggle", autoSend: false, inputDeviceId: "", warmMicrophone: false }));
   });
 
-  await page.goto("/");
+  await openChatSurface(page);
   const trigger = page.locator(".dictation-trigger");
   const composer = page.getByRole("textbox", { name: "Message Pi" });
   await trigger.click();
@@ -5128,7 +5208,7 @@ test("mobile dictation appends when the composer is not focused", async ({ page 
     localStorage.setItem("conduit:voice-dictation", JSON.stringify({ shortcut: "Ctrl+Shift+D", activation: "toggle", autoSend: false, inputDeviceId: "" }));
   });
 
-  await page.goto("/");
+  await openChatSurface(page);
   const composer = page.getByRole("textbox", { name: "Message Pi" });
   const trigger = page.locator(".dictation-trigger");
   await composer.fill("");
@@ -5191,7 +5271,7 @@ test("silent microphone input does not insert a hallucinated transcript", async 
     Object.defineProperty(navigator, "mediaDevices", { configurable: true, value: { getUserMedia: async () => ({ getTracks: () => [{ stop() {} }] }) } });
   });
 
-  await page.goto("/");
+  await openChatSurface(page);
   const composer = page.getByRole("textbox", { name: "Message Pi" });
   await page.getByRole("button", { name: "Start voice dictation" }).click();
   await page.getByRole("button", { name: "Stop voice dictation" }).click();
@@ -5249,7 +5329,7 @@ test("empty transcription results do not report a successful dictation", async (
     Object.defineProperty(navigator, "mediaDevices", { configurable: true, value: { getUserMedia: async () => ({ getTracks: () => [{ stop() {} }] }) } });
   });
 
-  await page.goto("/");
+  await openChatSurface(page);
   const composer = page.getByRole("textbox", { name: "Message Pi" });
   await page.getByRole("button", { name: "Start voice dictation" }).click();
   await page.getByRole("button", { name: "Stop voice dictation" }).click();
@@ -5330,7 +5410,7 @@ test("Voice microphone test shows the shared live recorder monitor", async ({ pa
     } });
   });
 
-  await page.goto("/");
+  await openChatSurface(page);
   await page.keyboard.press("Control+,");
   const dialog = page.getByRole("dialog", { name: "Settings" });
   await dialog.getByRole("tab", { name: "Voice" }).click();
@@ -5524,7 +5604,7 @@ test("voice catalogue selects the transcribe-rs backend and timing on mobile", a
     Object.defineProperty(navigator, "mediaDevices", { configurable: true, value: { enumerateDevices: async () => [] } });
   });
 
-  await page.goto("/");
+  await openChatSurface(page);
   await page.keyboard.press("Control+,");
   const dialog = page.getByRole("dialog", { name: "Settings" });
   await dialog.getByRole("tab", { name: "Voice" }).click();
@@ -5623,7 +5703,7 @@ test("managed model installation preserves the unsaved local source during serve
     Object.defineProperty(navigator, "mediaDevices", { configurable: true, value: { enumerateDevices: async () => [] } });
   });
 
-  await page.goto("/");
+  await openChatSurface(page);
   await page.keyboard.press("Control+,");
   const dialog = page.getByRole("dialog", { name: "Settings" });
   await dialog.getByRole("tab", { name: "Voice" }).click();
@@ -5669,7 +5749,7 @@ test("stopping dictation releases a microphone stream that resolves after cancel
     } });
   });
 
-  await page.goto("/");
+  await openChatSurface(page);
   await page.getByRole("button", { name: "Start voice dictation" }).click();
   await page.getByRole("button", { name: "Stop voice dictation" }).click();
   await page.evaluate(() => window.__resolveVoicePermission());
@@ -5712,7 +5792,7 @@ test("Voice credential tests persist the displayed provider before testing it", 
     await route.fulfill({ json: { ok: true } });
   });
 
-  await page.goto("/");
+  await openChatSurface(page);
   await page.keyboard.press("Control+,");
   const dialog = page.getByRole("dialog", { name: "Settings" });
   await dialog.getByRole("tab", { name: "Voice" }).click();

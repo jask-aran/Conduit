@@ -47,6 +47,7 @@ const mobileMathTranscript = [
 
 async function openApp(page) {
   await page.goto("/");
+  await page.locator(".app-dashboard-action").filter({ hasText: "New chat" }).click();
   await expect(page.getByRole("textbox", { name: "Message Pi" })).toBeVisible();
 }
 
