@@ -21,10 +21,10 @@ fs.writeFileSync(path.join(dist, "bundle-report.json"), `${JSON.stringify(report
 console.log(`Bundle: initial JS ${initialJs} B gzip, initial CSS ${initialCss} B gzip, largest lazy JS ${report.largestLazyJsGzip} B gzip.`);
 
 const budgets = {
-  // Voice diagnostics and the capture lifecycle add bounded client behaviour.
-  // Revisit this allowance in the planned performance review instead of
-  // hiding evidence behind a size cap.
-  initialJs: Number(process.env.CONDUIT_BUDGET_INITIAL_JS_GZIP || 200_000),
+  // Voice diagnostics, capture lifecycle, and persistent sidebar state add
+  // bounded client behaviour. Revisit this allowance in the planned
+  // performance review instead of hiding evidence behind a size cap.
+  initialJs: Number(process.env.CONDUIT_BUDGET_INITIAL_JS_GZIP || 202_000),
   initialCss: Number(process.env.CONDUIT_BUDGET_INITIAL_CSS_GZIP || 80_000),
   lazyJs: Number(process.env.CONDUIT_BUDGET_LAZY_JS_GZIP || 300_000),
 };
