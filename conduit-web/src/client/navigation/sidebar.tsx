@@ -14,6 +14,8 @@ import {
   PanelLeftIcon,
   PaletteIcon,
   PencilIcon,
+  PinIcon,
+  PinOffIcon,
   PlusIcon,
   SearchIcon,
   Settings2Icon,
@@ -51,6 +53,7 @@ import {
 import type { ChatSummary, Project, RuntimeProcess, WorkspacePolicy, WorkspaceSuggestion } from "../api/contracts";
 import { api } from "../api/client";
 import { WorkspaceGlyph } from "../project/workspace-appearance";
+import type { Pty } from "../remotes/terminal-pane";
 import type { RuntimeStore } from "../state/runtime";
 import { focusFirst, isMobileLayout, MOBILE_LAYOUT_QUERY, restoreFocus } from "./mobile-layout";
 import { ProjectActivityIndicator, RuntimeIndicator } from "./runtime-indicator";
@@ -61,6 +64,9 @@ type WorkspaceMode = "linked" | "created" | "cloned";
 type ProjectInput = { mode: string; name?: string; path?: string; directoryName?: string; cloneUrl?: string; cloneParentPath?: string; cloneDirectoryName?: string };
 type WorkspacePreview = { key: string; path: string; ownership: string };
 type ChatTarget = { chat: ChatSummary; project: Project };
+type PinnedItem = { ref: string; type: "chat"; chat: ChatSummary; project: Project }
+  | { ref: string; type: "project"; project: Project }
+  | { ref: string; type: "terminal"; terminal: Pty };
 type DeleteTarget = { type: "chat"; chat: ChatSummary; project: Project }
   | { type: "project"; project: Project }
   | { type: "chats"; targets: ChatTarget[] };
@@ -146,6 +152,7 @@ export function Sidebar(props: {
   onDeleteChats: (targets: ChatTarget[]) => Promise<string[]>;
   onDeleteProject: (project: Project) => Promise<void>;
   onOpenTerminal: (chat: ChatSummary, project: Project) => void;
+  onOpenPty: (terminal: Pty) => void;
   onOpenDashboard: () => void;
   onOpenWorkspaceIdentity: (project: Project) => void;
   onOpenSettings: (section?: string, workspaceId?: string | null) => void;
@@ -162,6 +169,9 @@ export function Sidebar(props: {
   const [shellWidth, setShellWidth] = createSignal(collapsed() ? 41.6 : 195.2);
   const [collapsedProjectIds, setCollapsedProjectIds] = createSignal(storedCollapsedProjects());
   const [selectedChatIds, setSelectedChatIds] = createSignal<Set<string>>(new Set());
+  const [sidebarPins, setSidebarPins] = createSignal<string[]>([]);
+  const [terminals, setTerminals] = createSignal<Pty[]>([]);
+  const [activityClock, setActivityClock] = createSignal(Date.now());
   const [newKind, setNewKind] = createSignal<"folder" | "workspace" | null>(null);
   let sidebarRoot: HTMLElement | undefined;
   let sidebarSurface: HTMLDivElement | undefined;
@@ -250,6 +260,25 @@ export function Sidebar(props: {
     sync();
     media.addEventListener("change", sync);
     onCleanup(() => media.removeEventListener("change", sync));
+  });
+  onMount(() => {
+    const loadPins = () => void api<{ sidebarPins?: unknown }>("/v0/preferences")
+      .then((preferences) => setSidebarPins(Array.isArray(preferences.sidebarPins)
+        ? preferences.sidebarPins.filter((item): item is string => typeof item === "string")
+        : []))
+      .catch(() => {});
+    const loadTerminals = () => void api<{ ptys: Pty[] }>("/v0/ptys")
+      .then(({ ptys }) => setTerminals(ptys.filter((item) => item.status === "running" && !item.paneDead)))
+      .catch(() => {});
+    const onPtysChanged = () => loadTerminals();
+    loadPins();
+    loadTerminals();
+    window.addEventListener("conduit:ptys-changed", onPtysChanged);
+    const timer = window.setInterval(() => setActivityClock(Date.now()), 30_000);
+    onCleanup(() => {
+      window.removeEventListener("conduit:ptys-changed", onPtysChanged);
+      window.clearInterval(timer);
+    });
   });
   onMount(() => {
     const keydown = (event: KeyboardEvent) => {
@@ -354,6 +383,52 @@ export function Sidebar(props: {
   const chats = () => props.projects.find((project) => project.slug === "chat") || props.projects[0];
   const folders = () => props.projects.filter((project) => project.slug !== "chat" && project.origin !== "linked" && project.origin !== "created" && project.origin !== "cloned" && project.kind !== "workspace");
   const workspaces = () => props.projects.filter((project) => project.origin === "linked" || project.origin === "created" || project.origin === "cloned" || project.kind === "workspace");
+  const pinRef = (type: PinnedItem["type"], id: string) => `${type}:${id}`;
+  const isPinned = (type: PinnedItem["type"], id: string) => sidebarPins().includes(pinRef(type, id));
+  const togglePin = async (type: PinnedItem["type"], id: string) => {
+    const ref = pinRef(type, id);
+    const previous = sidebarPins();
+    const next = previous.includes(ref) ? previous.filter((item) => item !== ref) : [...previous, ref];
+    setSidebarPins(next);
+    try {
+      const saved = await api<{ sidebarPins?: unknown }>("/v0/preferences", {
+        method: "PATCH",
+        body: JSON.stringify({ sidebarPins: next }),
+      });
+      if (Array.isArray(saved.sidebarPins)) setSidebarPins(saved.sidebarPins.filter((item): item is string => typeof item === "string"));
+    } catch {
+      setSidebarPins(previous);
+    }
+  };
+  const pinnedItems = createMemo<PinnedItem[]>(() => {
+    const resolved: PinnedItem[] = [];
+    for (const ref of sidebarPins()) {
+      const separator = ref.indexOf(":");
+      const type = ref.slice(0, separator);
+      const id = ref.slice(separator + 1);
+      if (type === "chat") {
+        const project = props.projects.find((item) => item.sessions.some((chat) => chat.id === id));
+        const chat = project?.sessions.find((item) => item.id === id);
+        if (project && chat) resolved.push({ ref, type, project, chat });
+      } else if (type === "project") {
+        const project = props.projects.find((item) => item.id === id);
+        if (project) resolved.push({ ref, type, project });
+      } else if (type === "terminal") {
+        const terminal = terminals().find((item) => item.id === id);
+        if (terminal) resolved.push({ ref, type, terminal });
+      }
+    }
+    return resolved;
+  });
+  const terminalActivity = (terminal: Pty) => {
+    const value = new Date(terminal.lastActivityAt || terminal.updatedAt || terminal.createdAt || "");
+    if (Number.isNaN(value.getTime())) return "Running";
+    const seconds = Math.max(0, Math.round((activityClock() - value.getTime()) / 1000));
+    if (seconds < 60) return "Active now";
+    if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
+    if (seconds < 86_400) return `${Math.floor(seconds / 3600)}h ago`;
+    return `${Math.floor(seconds / 86_400)}d ago`;
+  };
   const selectedTargets = createMemo<ChatTarget[]>(() => props.projects.flatMap((project) =>
     project.sessions.filter((chat) => selectedChatIds().has(chat.id)).map((chat) => ({ chat, project }))));
   const clearSelection = () => setSelectedChatIds(new Set<string>());
@@ -613,6 +688,9 @@ export function Sidebar(props: {
           </ContextMenuSub>
           <ContextMenuItem onSelect={() => void props.onCopyTranscript(menuProps.chat)}><ClipboardCopyIcon />Copy transcript</ContextMenuItem>
           <ContextMenuItem onSelect={() => props.onOpenTerminal(menuProps.chat, menuProps.project)}><TerminalIcon />Open terminal</ContextMenuItem>
+          <ContextMenuItem onSelect={() => void togglePin("chat", menuProps.chat.id)}>
+            <Show when={isPinned("chat", menuProps.chat.id)} fallback={<><PinIcon />Pin to sidebar</>}><PinOffIcon />Unpin</Show>
+          </ContextMenuItem>
         </ContextMenuGroup>
         <ContextMenuSeparator />
         <ContextMenuGroup>
@@ -674,6 +752,9 @@ export function Sidebar(props: {
             <ContextMenuGroup>
               <ContextMenuItem onSelect={() => startNewChat(blockProps.project)}><MessageSquarePlusIcon />New chat</ContextMenuItem>
               <ContextMenuItem onSelect={() => requestRenameProject(blockProps.project)}><PencilIcon />Rename {blockProps.workspace ? "workspace" : "folder"}</ContextMenuItem>
+              <ContextMenuItem onSelect={() => void togglePin("project", blockProps.project.id)}>
+                <Show when={isPinned("project", blockProps.project.id)} fallback={<><PinIcon />Pin to sidebar</>}><PinOffIcon />Unpin</Show>
+              </ContextMenuItem>
               <Show when={blockProps.workspace}><ContextMenuItem onSelect={() => { closeMobile(); props.onOpenWorkspaceIdentity(blockProps.project); }}><PaletteIcon />Identity</ContextMenuItem></Show>
               <Show when={blockProps.workspace}><ContextMenuItem onSelect={() => props.onOpenSettings("workspaces", blockProps.project.id)}><Settings2Icon />Workspace settings</ContextMenuItem></Show>
               <ContextMenuSub>
@@ -700,6 +781,57 @@ export function Sidebar(props: {
       </Show>
     </div>;
   };
+
+  const PinnedRow = (rowProps: { item: PinnedItem }) => {
+    const item = rowProps.item;
+    const open = () => {
+      closeMobile();
+      if (item.type === "chat") void props.onOpenChat(item.chat, item.project);
+      else if (item.type === "project") void props.onOpenProject(item.project);
+      else props.onOpenPty(item.terminal);
+    };
+    const label = () => item.type === "chat" ? chatTitle(item.chat)
+      : item.type === "project" ? item.project.name
+        : item.terminal.title || "Shell";
+    const current = () => item.type === "chat" ? props.selectedId === item.chat.id
+      : item.type === "project" ? props.selectedId == null && props.projectId === item.project.id
+        : false;
+    return <ContextMenu placement={phoneLayout() ? "bottom-start" : "right-start"}>
+      <ContextMenuTrigger as="button" type="button" class="sidebar-row sidebar-pinned" aria-current={current() ? "page" : undefined} onClick={open}>
+        <Show when={item.type === "chat"}><MessageSquareIcon /></Show>
+        <Show when={item.type === "project"}>
+          <Show when={item.type === "project" && workspaces().some((project) => project.id === item.project.id)} fallback={<FolderIcon />}>
+            <WorkspaceGlyph appearance={item.type === "project" ? item.project.workspaceAppearance : undefined} />
+          </Show>
+        </Show>
+        <Show when={item.type === "terminal"}><TerminalIcon /></Show>
+        <span>{label()}</span>
+      </ContextMenuTrigger>
+      <ContextMenuContent class="w-48 sidebar-context-menu">
+        <ContextMenuItem onSelect={() => void togglePin(item.type, item.type === "chat" ? item.chat.id : item.type === "project" ? item.project.id : item.terminal.id)}>
+          <PinOffIcon />Unpin
+        </ContextMenuItem>
+      </ContextMenuContent>
+    </ContextMenu>;
+  };
+
+  const TerminalRow = (rowProps: { terminal: Pty }) => <ContextMenu placement={phoneLayout() ? "bottom-start" : "right-start"}>
+    <ContextMenuTrigger as="button" type="button" class="sidebar-row sidebar-terminal" onClick={() => {
+      closeMobile();
+      props.onOpenPty(rowProps.terminal);
+    }}>
+      <span class="sidebar-terminal-status" aria-hidden="true" />
+      <span class="sidebar-terminal-copy">
+        <strong>{rowProps.terminal.title || "Shell"}</strong>
+        <small>{rowProps.terminal.currentCommand || "shell"} · {terminalActivity(rowProps.terminal)}</small>
+      </span>
+    </ContextMenuTrigger>
+    <ContextMenuContent class="w-48 sidebar-context-menu">
+      <ContextMenuItem onSelect={() => void togglePin("terminal", rowProps.terminal.id)}>
+        <Show when={isPinned("terminal", rowProps.terminal.id)} fallback={<><PinIcon />Pin to sidebar</>}><PinOffIcon />Unpin</Show>
+      </ContextMenuItem>
+    </ContextMenuContent>
+  </ContextMenu>;
 
   const Group = (groupProps: { label: string; projects: Project[]; chatRoot?: Project; workspace?: boolean; emptyLabel?: string; onAdd?: () => void; addLabel?: string }) => {
     const allChats = () => groupProps.chatRoot?.sessions.filter((chat) => chat.status !== "draft" || chat.id !== props.selectedId || chat.pinned || Boolean(props.runtime.getProcess(chat.id))) || [];
@@ -792,9 +924,20 @@ export function Sidebar(props: {
             <LayoutDashboardIcon />
             <span>Dashboard</span>
           </button>
+          <Show when={pinnedItems().length}>
+            <section class="sidebar-group">
+              <div class="sidebar-group-header"><div data-sidebar="group-label">Pinned</div></div>
+              <For each={pinnedItems()}>{(item) => <PinnedRow item={item} />}</For>
+            </section>
+          </Show>
           <Group label="Chats" projects={[]} chatRoot={chats()} addLabel="New chat" onAdd={() => startNewChat()} />
           <Group label="Projects" projects={folders()} emptyLabel="No projects" addLabel="New folder" onAdd={() => openNewDialog("folder")} />
           <Group label="Workspaces" projects={workspaces()} workspace emptyLabel="No workspaces" addLabel="New workspace" onAdd={() => openNewDialog("workspace")} />
+          <section class="sidebar-group">
+            <div class="sidebar-group-header"><div data-sidebar="group-label">Terminals</div></div>
+            <For each={terminals()}>{(terminal) => <TerminalRow terminal={terminal} />}</For>
+            <Show when={!terminals().length}><div class="sidebar-empty">No live terminals</div></Show>
+          </section>
         </div>
         <div data-sidebar="footer"><Menu><MenuTrigger class="sidebar-user" aria-label={`Conduit · ${connectionLabel()}`} title={connectionLabel()}><CableIcon /><span><strong>Conduit</strong><small>{connectionLabel()}</small></span><span class={`server-status-indicator runtime-indicator runtime-indicator-${connectionTone()}`} aria-hidden="true"><Show when={props.connectivity === "connecting" || props.connectivity === "reconnecting"} fallback={<span class="runtime-indicator-dot" />}><Spinner class="size-3" /></Show></span></MenuTrigger><MenuContent>
           <MenuItem onSelect={() => { closeMobile(); props.onOpenSettings("models"); }}>Manage settings</MenuItem>

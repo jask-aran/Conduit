@@ -301,6 +301,7 @@ exit 0
         sessionNameModel: "example/cheap",
         sessionNameThinkingLevel: "low",
         terminalShortcuts: [{ id: "herdr", label: "Herdr", command: "herdr", target: "new" }],
+        sidebarPins: ["chat:one", "project:two", "terminal:three"],
       }),
     });
     assert.equal(prefsPatch.status, 200);
@@ -309,6 +310,7 @@ exit 0
     assert.equal(savedPreferences.sessionNameModel, "example/cheap");
     assert.equal(savedPreferences.sessionNameThinkingLevel, "low");
     assert.deepEqual(savedPreferences.terminalShortcuts, [{ id: "herdr", label: "Herdr", command: "herdr", target: "new" }]);
+    assert.deepEqual(savedPreferences.sidebarPins, ["chat:one", "project:two", "terminal:three"]);
     const invalidTerminalShortcuts = await fetch(`${origin}/v0/preferences`, {
       method: "PATCH",
       headers: { "content-type": "application/json" },
@@ -316,6 +318,13 @@ exit 0
     });
     assert.equal(invalidTerminalShortcuts.status, 400);
     assert.equal((await invalidTerminalShortcuts.json()).error, "invalid_terminal_shortcuts");
+    const invalidSidebarPins = await fetch(`${origin}/v0/preferences`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ sidebarPins: ["chat:one", "chat:one"] }),
+    });
+    assert.equal(invalidSidebarPins.status, 400);
+    assert.equal((await invalidSidebarPins.json()).error, "invalid_sidebar_pins");
 
     const inheritedWorkspaceChat = await fetch(`${origin}/v0/chats`, {
       method: "POST",
