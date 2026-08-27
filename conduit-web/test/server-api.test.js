@@ -300,6 +300,7 @@ exit 0
         defaultTemplateId: "workspace",
         sessionNameModel: "example/cheap",
         sessionNameThinkingLevel: "low",
+        terminalShortcuts: [{ id: "herdr", label: "Herdr", command: "herdr", target: "new" }],
       }),
     });
     assert.equal(prefsPatch.status, 200);
@@ -307,6 +308,14 @@ exit 0
     assert.equal(savedPreferences.defaultTemplateId, "workspace");
     assert.equal(savedPreferences.sessionNameModel, "example/cheap");
     assert.equal(savedPreferences.sessionNameThinkingLevel, "low");
+    assert.deepEqual(savedPreferences.terminalShortcuts, [{ id: "herdr", label: "Herdr", command: "herdr", target: "new" }]);
+    const invalidTerminalShortcuts = await fetch(`${origin}/v0/preferences`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ terminalShortcuts: [{ id: "bad", label: "", command: "pwd", target: "current" }] }),
+    });
+    assert.equal(invalidTerminalShortcuts.status, 400);
+    assert.equal((await invalidTerminalShortcuts.json()).error, "invalid_terminal_shortcuts");
 
     const inheritedWorkspaceChat = await fetch(`${origin}/v0/chats`, {
       method: "POST",

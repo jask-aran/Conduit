@@ -256,7 +256,7 @@ export class PtyManager extends EventEmitter {
     return operation;
   }
 
-  async createSerialized({ project, cwd, templateId = "shell", cols = 80, rows = 24 }) {
+  async createSerialized({ project, cwd, templateId = "shell", title: requestedTitle, cols = 80, rows = 24 }) {
     const template = TEMPLATES[templateId];
     if (!template) throw failure("pty_template_not_allowed", "That terminal template is not available");
     if (!project?.id) throw failure("pty_project_required", "A terminal must belong to a project");
@@ -280,7 +280,11 @@ export class PtyManager extends EventEmitter {
     const id = crypto.randomUUID();
     const tmuxSession = terminalSessionName(id);
     const now = new Date().toISOString();
-    const title = nextTerminalTitle([...this.records.values()], project.id, template.title);
+    const customTitle = requestedTitle == null ? "" : String(requestedTitle).trim();
+    if (requestedTitle != null && (!customTitle || customTitle.length > 80)) {
+      throw failure("pty_title_invalid", "Terminal title must be between 1 and 80 characters");
+    }
+    const title = customTitle || nextTerminalTitle([...this.records.values()], project.id, template.title);
     const args = [
       "new-session", "-d", "-s", tmuxSession, "-c", cwd,
       "-n", title, "-x", String(width), "-y", String(height),

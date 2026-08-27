@@ -105,10 +105,13 @@ test("PTY manager uses tmux as session authority with one browser lease per term
 
   const record = await manager.create({ project: { id: "workspace" }, cwd: workspace, cols: 100, rows: 30 });
   const sibling = await manager.create({ project: { id: "workspace" }, cwd: workspace });
+  const named = await manager.create({ project: { id: "workspace" }, cwd: workspace, title: "Herdr" });
   assert.notEqual(sibling.id, record.id);
   assert.equal(sibling.title, "Shell 2");
+  assert.equal(named.title, "Herdr");
+  await assert.rejects(manager.create({ project: { id: "workspace" }, cwd: workspace, title: "" }), { code: "pty_title_invalid" });
   assert.equal(record.currentCommand, path.basename(process.env.SHELL || "/bin/sh"));
-  assert.equal(tmux.sessions.size, 2);
+  assert.equal(tmux.sessions.size, 3);
   assert.equal(pty.handles.length, 0, "detached tmux sessions must not retain a browser PTY attachment");
 
   const newSession = tmux.calls.find((call) => call.args.includes("new-session") && call.args.includes("100"));
@@ -158,7 +161,7 @@ test("PTY manager uses tmux as session authority with one browser lease per term
   assert.equal((await manager.rename(record.id, "Agent shell")).title, "Agent shell");
   assert.equal(tmux.windowNames.get([...tmux.sessions][0]), "Agent shell");
   assert.equal(await manager.remove(sibling.id), true);
-  assert.equal(tmux.sessions.size, 1);
+  assert.equal(tmux.sessions.size, 2);
 
   const mode = (await fs.stat(filePath)).mode & 0o777;
   assert.equal(mode, 0o600, "terminal registry must be private to the Conduit OS user");
@@ -172,7 +175,7 @@ test("PTY manager uses tmux as session authority with one browser lease per term
   const replacement = await manager.create({ project: { id: "workspace" }, cwd: workspace });
   assert.notEqual(replacement.id, record.id);
   assert.equal(manager.get(record.id)?.status, "exited");
-  assert.equal(await manager.removeProject("workspace"), 2);
+  assert.equal(await manager.removeProject("workspace"), 3);
   assert.equal(manager.list().length, 0);
   await fs.rm(root, { recursive: true, force: true });
 });

@@ -77,6 +77,162 @@
   white-space: nowrap;
 }
 
+.terminal-shortcuts {
+  display: flex;
+  min-width: 0;
+  max-width: 42%;
+  flex: none;
+  gap: 2px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.terminal-shortcuts::-webkit-scrollbar {
+  display: none;
+}
+
+.terminal-shortcuts [data-slot="button"] {
+  min-height: 20.8px;
+  height: 20.8px;
+  flex: none;
+  padding-inline: 6.4px;
+  font-size: 8.8px;
+}
+
+.terminal-shortcuts [data-slot="button"]:last-child {
+  width: 20.8px;
+  padding: 0;
+}
+
+.terminal-shortcuts svg {
+  width: 11.2px;
+  height: 11.2px;
+}
+
+.terminal-shortcut-dialog {
+  max-width: 640px;
+}
+
+.terminal-shortcut-editor {
+  display: grid;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  container-type: inline-size;
+}
+
+.terminal-shortcut-editor-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  min-width: 0;
+  align-items: stretch;
+  border-bottom: 1px solid var(--border);
+  background: color-mix(in oklch, var(--card), var(--background) 45%);
+}
+
+.terminal-shortcut-editor-row:focus-within {
+  background: color-mix(in oklch, var(--accent-cool), var(--card) 95%);
+}
+
+.terminal-shortcut-editor-copy {
+  display: grid;
+  min-width: 0;
+  gap: 1px;
+  padding: 8px 10px;
+}
+
+.terminal-shortcut-editor-copy input {
+  height: 24px;
+  min-width: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  padding: 0 5px;
+  box-shadow: none;
+}
+
+.terminal-shortcut-editor-copy input:focus {
+  background: color-mix(in oklch, var(--background), transparent 38%);
+  box-shadow: none;
+}
+
+.terminal-shortcut-editor-copy .terminal-shortcut-name {
+  color: var(--foreground);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.terminal-shortcut-command {
+  display: grid;
+  grid-template-columns: 12px minmax(0, 1fr);
+  align-items: center;
+  color: var(--muted-foreground);
+  font: 10px ui-monospace, SFMono-Regular, Consolas, monospace;
+}
+
+.terminal-shortcut-command > span {
+  text-align: center;
+}
+
+.terminal-shortcut-command input {
+  color: var(--muted-foreground);
+  font: inherit;
+}
+
+.terminal-shortcut-row-actions {
+  display: flex;
+  align-items: stretch;
+}
+
+.terminal-shortcut-row-actions [data-slot="button"] {
+  width: 32px;
+  min-width: 32px;
+  height: auto;
+  min-height: 52px;
+  border-radius: 0;
+  padding: 0;
+  color: var(--muted-foreground);
+}
+
+.terminal-shortcut-row-actions [data-slot="button"]:hover {
+  background: var(--accent);
+  color: var(--foreground);
+}
+
+.terminal-shortcut-row-actions .terminal-shortcut-target {
+  width: 88px;
+  gap: 5px;
+  padding-inline: 7px;
+  font-size: 10px;
+}
+
+.terminal-shortcut-row-actions .terminal-shortcut-target[data-active="true"] {
+  background: color-mix(in oklch, var(--accent-cool), transparent 84%);
+  color: var(--accent-cool);
+}
+
+.terminal-shortcut-row-actions svg {
+  width: 12px;
+  height: 12px;
+}
+
+.terminal-shortcut-add {
+  min-height: 34px;
+  justify-content: flex-start;
+  border-radius: 0;
+  padding-inline: 11px;
+  color: var(--muted-foreground);
+  font-size: 11px;
+}
+
+.terminal-shortcut-editor-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+  padding: 10px;
+  background: var(--background);
+}
+
 @container (max-width: 620px) {
   .terminal-header-command { display: none; }
 }
@@ -162,6 +318,10 @@
 }
 
 @media (max-width: 448px) {
+  .terminal-shortcuts {
+    max-width: 38%;
+  }
+
   .terminal-pane-actions [data-slot="button"] {
     width: 24px;
     padding-inline: 0;
@@ -169,6 +329,28 @@
 
   .terminal-action-label {
     display: none;
+  }
+}
+
+@container (max-width: 440px) {
+  .terminal-shortcut-editor-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .terminal-shortcut-row-actions {
+    min-height: 38px;
+    border-top: 1px solid color-mix(in oklch, var(--border), transparent 35%);
+  }
+
+  .terminal-shortcut-row-actions [data-slot="button"] {
+    min-height: 38px;
+  }
+
+  .terminal-shortcut-row-actions .terminal-shortcut-target {
+    width: auto;
+    flex: 1;
+    justify-content: flex-start;
+    padding-inline: 11px;
   }
 }
 

@@ -1059,6 +1059,10 @@ test("opens a full-screen home terminal without an extra route bar", async ({ pa
     lastActivityAt: new Date().toISOString(),
   };
   let listed = false;
+  await page.route("**/v0/preferences", (route) => route.fulfill({ json: {
+    defaultTemplateId: "chat",
+    terminalShortcuts: [{ id: "herdr", label: "Herdr", command: "herdr", target: "new" }],
+  } }));
   await page.route("**/v0/ptys*", async (route) => {
     if (route.request().method() === "POST") return route.fulfill({ status: 201, json: terminal });
     await route.fulfill({ json: { ptys: listed ? [terminal] : [] } });
@@ -1071,14 +1075,43 @@ test("opens a full-screen home terminal without an extra route bar", async ({ pa
   expect(request.postDataJSON().projectId).toBe("project_chat");
   await expect(page.locator(".terminal-route")).toBeVisible();
   await expect(page.getByRole("region", { name: "Terminal pane" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Herdr", exact: true })).toBeVisible();
   await expect(page.locator(".terminal-route-header")).toHaveCount(0);
   if (testInfo.project.name === "mobile-chromium") {
     await expect(page.getByRole("toolbar", { name: "Terminal keys" })).toBeVisible();
     await expect(page.getByRole("button", { name: "Hide terminal keys" })).toBeVisible();
   }
+  await page.getByRole("button", { name: "Edit terminal shortcuts" }).click();
+  const shortcutDialog = page.getByRole("dialog", { name: "Terminal shortcuts" });
+  await expect(shortcutDialog).toBeVisible();
+  expect(await shortcutDialog.evaluate((node) => Boolean(node.closest(".terminal-pane")))).toBe(false);
+  await page.getByRole("button", { name: "Close" }).click();
+  await page.getByRole("button", { name: "Active terminal sessions" }).click();
+  await page.getByRole("menuitem", { name: "Rename Shell" }).click();
+  const renameDialog = page.getByRole("dialog", { name: "Rename terminal" });
+  await expect(renameDialog).toBeVisible();
+  await page.getByRole("button", { name: "Close" }).click();
+
   await page.getByRole("button", { name: "Enter fullscreen and capture browser keys" }).click();
   await expect(page.getByRole("button", { name: "Exit fullscreen" })).toBeVisible();
   expect(await page.evaluate(() => window.__keyboardLocks)).toEqual([["KeyW"]]);
+  await page.getByRole("button", { name: "Edit terminal shortcuts" }).click();
+  await expect(shortcutDialog).toBeVisible();
+  expect(await shortcutDialog.evaluate((node) => Boolean(node.closest(".terminal-pane")))).toBe(true);
+  for (let index = 0; index < 5; index += 1) await page.getByRole("button", { name: "Add shortcut" }).click();
+  const bounds = await shortcutDialog.evaluate((node) => {
+    const dialog = node.getBoundingClientRect();
+    const children = [...node.querySelectorAll(".terminal-shortcut-editor-row")].map((child) => child.getBoundingClientRect());
+    return {
+      dialog: { top: dialog.top, right: dialog.right, bottom: dialog.bottom, left: dialog.left },
+      children: children.map((child) => ({ right: child.right, left: child.left })),
+      viewport: { width: innerWidth, height: innerHeight },
+    };
+  });
+  expect(bounds.dialog.top).toBeGreaterThanOrEqual(0);
+  expect(bounds.dialog.bottom).toBeLessThanOrEqual(bounds.viewport.height);
+  expect(bounds.children.every((child) => child.left >= bounds.dialog.left && child.right <= bounds.dialog.right)).toBe(true);
+  await page.getByRole("button", { name: "Close" }).click();
   await page.getByRole("button", { name: "Open Conduit" }).click();
   await expect(page).toHaveURL(/\/$/);
   await expect(page.getByRole("heading", { name: "What do you want to open?" })).toBeVisible();
@@ -1230,9 +1263,11 @@ test("the terminal renderer can use the xterm baseline over the same PTY transpo
   await page.route("**/v0/sessions/session_terminal", (route) => route.fulfill({ json: { ...workspace.sessions[0], messages: [], tools: [] } }));
   const terminalRecord = { id: "550e8400-e29b-41d4-a716-446655440055", projectId: workspace.id, status: "running" };
   let terminalCreated = false;
+  let terminalCreates = 0;
   await page.route("**/v0/ptys*", (route) => {
     if (route.request().method() === "GET") return route.fulfill({ json: { ptys: terminalCreated ? [terminalRecord] : [] } });
     terminalCreated = true;
+    terminalCreates += 1;
     return route.fulfill({ status: 201, json: terminalRecord });
   });
 
@@ -1244,6 +1279,40 @@ test("the terminal renderer can use the xterm baseline over the same PTY transpo
   const canvas = page.locator(".terminal-canvas");
   await expect(canvas).toHaveAttribute("data-terminal-renderer", "xterm");
   await expect(canvas.locator(".xterm")).toBeVisible();
+  await page.getByRole("button", { name: "Edit terminal shortcuts" }).click();
+  await page.getByRole("button", { name: "Add shortcut" }).click();
+  const shortcutName = page.getByRole("textbox", { name: "Shortcut 1 name" });
+  await shortcutName.pressSequentially("List");
+  await expect(shortcutName).toHaveValue("List");
+  await expect(shortcutName).toBeFocused();
+  const shortcutCommand = page.getByRole("textbox", { name: "Shortcut 1 command" });
+  await shortcutCommand.pressSequentially("ls -la");
+  await expect(shortcutCommand).toHaveValue("ls -la");
+  await expect(shortcutCommand).toBeFocused();
+  await page.getByRole("button", { name: "Add shortcut" }).click();
+  await page.getByRole("textbox", { name: "Shortcut 2 name" }).fill("Herdr");
+  const targetToggle = page.getByRole("button", { name: "Run Herdr in this shell" });
+  await targetToggle.click();
+  await expect(page.getByRole("button", { name: "Run Herdr in a new shell" })).toHaveAttribute("aria-pressed", "true");
+  await page.getByRole("textbox", { name: "Shortcut 2 command" }).fill("herdr");
+  await page.getByRole("button", { name: "Move shortcut 2 up" }).click();
+  await page.getByRole("button", { name: "Move shortcut 1 down" }).click();
+  const shortcutSave = page.waitForRequest((request) => new URL(request.url()).pathname === "/v0/preferences"
+    && request.method() === "PATCH" && Array.isArray(request.postDataJSON()?.terminalShortcuts));
+  await page.getByRole("button", { name: "Save" }).click();
+  expect((await shortcutSave).postDataJSON().terminalShortcuts).toEqual([
+    { id: expect.any(String), label: "List", command: "ls -la", target: "current" },
+    { id: expect.any(String), label: "Herdr", command: "herdr", target: "new" },
+  ]);
+  await page.evaluate(() => { window.__terminalSends = []; });
+  await page.getByRole("button", { name: "List", exact: true }).click();
+  await expect.poll(() => page.evaluate(() => new TextDecoder().decode(Uint8Array.from(window.__terminalSends.at(-1) || [])))).toBe("ls -la\r");
+  const namedTerminal = page.waitForRequest((request) => new URL(request.url()).pathname === "/v0/ptys"
+    && request.method() === "POST" && request.postDataJSON()?.title === "Herdr");
+  await page.getByRole("button", { name: "Herdr", exact: true }).click();
+  expect((await namedTerminal).postDataJSON().title).toBe("Herdr");
+  await expect.poll(() => terminalCreates).toBe(2);
+  await expect.poll(() => page.evaluate(() => new TextDecoder().decode(Uint8Array.from(window.__terminalSends.at(-1) || [])))).toBe("herdr\r");
   await canvas.click();
   await page.evaluate(() => { window.__terminalSends = []; });
   await canvas.dispatchEvent("wheel", { ctrlKey: true, deltaY: -100 });
