@@ -44,6 +44,11 @@
   margin-right: 4.8px;
 }
 
+.terminal-pane-mobile-actions {
+  display: none !important;
+  flex: none;
+}
+
 .terminal-pane-route-actions [data-slot="button"] {
   width: 20.8px;
   min-width: 20.8px;
@@ -169,6 +174,55 @@
 
 .terminal-pane-warning + .terminal-pane-error {
   bottom: 46.4px;
+}
+
+@media (pointer: coarse) {
+  .terminal-pane-mobile-actions {
+    display: flex !important;
+  }
+
+  .terminal-pane-mobile-actions [data-slot="button"] {
+    width: 30px;
+    min-width: 30px;
+    height: 30px;
+    padding: 0;
+  }
+
+  .terminal-mobile-keys {
+    display: flex;
+    flex: none;
+    gap: 6px;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    padding: 6px 8px calc(6px + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)));
+    border-top: 1px solid var(--border);
+    background: color-mix(in oklch, var(--background), black 6%);
+    scrollbar-width: none;
+    touch-action: pan-x;
+  }
+
+  .terminal-mobile-keys::-webkit-scrollbar {
+    display: none;
+  }
+
+  .terminal-mobile-keys button {
+    min-width: 44px;
+    height: 38px;
+    flex: none;
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    background: var(--accent);
+    color: var(--foreground);
+    font: 12px ui-monospace, SFMono-Regular, Consolas, monospace;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .terminal-mobile-keys button:active,
+  .terminal-mobile-keys .terminal-mobile-modifier[data-active="true"] {
+    border-color: color-mix(in oklch, var(--accent-cool), transparent 30%);
+    background: color-mix(in oklch, var(--accent-cool), transparent 75%);
+    color: var(--accent-cool);
+  }
 }
 
 

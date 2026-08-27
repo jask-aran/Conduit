@@ -515,6 +515,7 @@ function App() {
     let swipe: { id: number; x: number; y: number } | null = null;
     const start = (event: TouchEvent) => {
       if (!isMobileLayout() || event.touches.length !== 1) return;
+      if (event.target instanceof Element && event.target.closest("[data-mobile-swipe-ignore]")) return;
       const touch = event.touches[0]!;
       swipe = { id: touch.identifier, x: touch.clientX, y: touch.clientY };
     };

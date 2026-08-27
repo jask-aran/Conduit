@@ -1,5 +1,5 @@
 import { createEffect, createSignal, For, onCleanup, onMount, Show } from "solid-js";
-import { ArrowLeftIcon, CheckIcon, ChevronDownIcon, FocusIcon, Maximize2Icon, Minimize2Icon, PencilIcon, PlusIcon, TerminalIcon, Trash2Icon, UnplugIcon } from "lucide-solid";
+import { ArrowLeftIcon, CheckIcon, ChevronDownIcon, FocusIcon, KeyboardIcon, Maximize2Icon, Minimize2Icon, PencilIcon, PlusIcon, TerminalIcon, Trash2Icon, UnplugIcon } from "lucide-solid";
 import {
   Button,
   Dialog,
@@ -40,6 +40,7 @@ export type Pty = {
 type ConnectionState = "idle" | "connecting" | "attached" | "disconnected" | "exited";
 const PTY_IN_USE_CLOSE_CODE = 4009;
 const PTY_TAKEN_OVER_CLOSE_CODE = 4010;
+const MOBILE_KEYS_STORAGE_KEY = "conduit:terminal-mobile-keys";
 
 function notifyPtyChange() {
   window.dispatchEvent(new Event("conduit:ptys-changed"));
@@ -74,6 +75,10 @@ export function TerminalPane(props: { projectId: string; active?: boolean; autoS
   const [terminalFocused, setTerminalFocused] = createSignal(false);
   const [rendererId, setRendererId] = createSignal<TerminalRendererId>(selectedTerminalRenderer());
   const [fullscreen, setFullscreen] = createSignal(false);
+  const [coarseInput, setCoarseInput] = createSignal(false);
+  const [mobileKeysVisible, setMobileKeysVisible] = createSignal(localStorage.getItem(MOBILE_KEYS_STORAGE_KEY) !== "false");
+  const [controlArmed, setControlArmed] = createSignal(false);
+  const [altArmed, setAltArmed] = createSignal(false);
   let host: HTMLDivElement | undefined;
   let pane: HTMLElement | undefined;
   let terminal: TerminalRenderer | undefined;
@@ -87,6 +92,69 @@ export function TerminalPane(props: { projectId: string; active?: boolean; autoS
   let activeProjectId = "";
   let ptyChangeListener: (() => void) | undefined;
   const encoder = new TextEncoder();
+
+  const clearMobileModifiers = () => {
+    setControlArmed(false);
+    setAltArmed(false);
+  };
+  const applyMobileModifiers = (data: string) => {
+    if (!controlArmed() && !altArmed()) return data;
+    let result = data;
+    if (controlArmed() && data.length === 1) {
+      const code = data.toUpperCase().charCodeAt(0);
+      if (code >= 64 && code <= 95) result = String.fromCharCode(code & 31);
+      else if (data === "?") result = "\x7f";
+      else if (data === " ") result = "\0";
+    }
+    if (altArmed()) result = `\x1b${result}`;
+    clearMobileModifiers();
+    return result;
+  };
+  const inputTerminal = (data: string, applyModifiers = true) => {
+    if (!terminal || !writable()) return;
+    const input = applyModifiers ? applyMobileModifiers(data) : data;
+    terminal.input(input);
+    queueMicrotask(focusActiveTerminal);
+  };
+  const inputArrow = (final: "A" | "B" | "C" | "D") => {
+    const modifier = 1 + (altArmed() ? 2 : 0) + (controlArmed() ? 4 : 0);
+    const sequence = modifier === 1 ? `\x1b[${final}` : `\x1b[1;${modifier}${final}`;
+    clearMobileModifiers();
+    inputTerminal(sequence, false);
+  };
+  const pasteFromClipboard = async () => {
+    clearMobileModifiers();
+    try {
+      const text = await navigator.clipboard.readText();
+      if (text) inputTerminal(text, false);
+    } catch {
+      setError("Clipboard access was denied");
+    }
+  };
+  const changeMobileFontSize = (delta: number) => {
+    if (!terminal) return;
+    const current = Number(localStorage.getItem("conduit:terminal-font-size")) || 13;
+    const next = Math.max(8, Math.min(24, current + delta));
+    localStorage.setItem("conduit:terminal-font-size", String(next));
+    terminal.setFontSize(next);
+    syncGeometry?.();
+    queueMicrotask(focusActiveTerminal);
+  };
+  const toggleMobileKeys = () => {
+    const visible = !mobileKeysVisible();
+    setMobileKeysVisible(visible);
+    localStorage.setItem(MOBILE_KEYS_STORAGE_KEY, String(visible));
+    if (!visible) clearMobileModifiers();
+    queueMicrotask(() => {
+      syncGeometry?.();
+      focusActiveTerminal();
+    });
+  };
+  const toggleMobileModifier = (modifier: "control" | "alt") => {
+    if (modifier === "control") setControlArmed((active) => !active);
+    else setAltArmed((active) => !active);
+    queueMicrotask(focusActiveTerminal);
+  };
 
   const clearReconnect = () => {
     if (reconnectTimer !== undefined) window.clearTimeout(reconnectTimer);
@@ -341,7 +409,7 @@ export function TerminalPane(props: { projectId: string; active?: boolean; autoS
       // but generated protocol replies still need to reach tmux.
       const acceptsTerminalData = writable() || connectionState() === "connecting";
       if (acceptsTerminalData && data && generation === connectionGeneration && connection.readyState === WebSocket.OPEN) {
-        connection.send(encoder.encode(data));
+        connection.send(encoder.encode(applyMobileModifiers(data)));
       }
     });
     const removeResize = activeTerminal.onResize(() => sendResize());
@@ -596,6 +664,11 @@ export function TerminalPane(props: { projectId: string; active?: boolean; autoS
   onMount(() => {
     mounted = true;
     activeProjectId = props.projectId;
+    const coarsePointer = matchMedia("(pointer: coarse)");
+    const syncCoarseInput = () => setCoarseInput(coarsePointer.matches);
+    syncCoarseInput();
+    coarsePointer.addEventListener("change", syncCoarseInput);
+    onCleanup(() => coarsePointer.removeEventListener("change", syncCoarseInput));
     document.addEventListener("fullscreenchange", fullscreenChanged);
     host?.addEventListener("wheel", zoomTerminal, { capture: true, passive: false });
     ptyChangeListener = () => {
@@ -668,6 +741,14 @@ export function TerminalPane(props: { projectId: string; active?: boolean; autoS
     </Dialog>
     <section ref={pane} class="terminal-pane" aria-label="Terminal pane" data-terminal-focused={terminalFocused() ? "true" : "false"} onKeyDown={scopeTerminalKeyboard}>
     <header class="terminal-pane-header">
+      <Show when={coarseInput()}>
+        <div class="terminal-pane-mobile-actions">
+          <Button variant="ghost" size="icon-sm" aria-label={mobileKeysVisible() ? "Hide terminal keys" : "Show terminal keys"}
+            title={mobileKeysVisible() ? "Hide terminal keys" : "Show terminal keys"} aria-pressed={mobileKeysVisible()} onClick={toggleMobileKeys}>
+            <KeyboardIcon />
+          </Button>
+        </div>
+      </Show>
       <Show when={props.standaloneControls}>
         <div class="terminal-pane-route-actions">
           <Button variant="ghost" size="icon-sm" aria-label="Open Conduit" title="Open Conduit" onClick={() => props.standaloneControls!.onOpenConduit()}><ArrowLeftIcon /></Button>
@@ -792,6 +873,29 @@ export function TerminalPane(props: { projectId: string; active?: boolean; autoS
       </Show>
       <Show when={error()}><p class="terminal-pane-error" role="alert">{error()}</p></Show>
     </div>
+    <Show when={coarseInput() && mobileKeysVisible()}>
+      <div class="terminal-mobile-keys" role="toolbar" aria-label="Terminal keys" data-mobile-swipe-ignore
+        onMouseDown={(event) => event.preventDefault()}>
+        <button type="button" onClick={() => inputTerminal("\x1b")}>Esc</button>
+        <button type="button" onClick={() => inputTerminal("\t")}>Tab</button>
+        <button type="button" class="terminal-mobile-modifier" data-active={controlArmed() ? "true" : "false"}
+          aria-pressed={controlArmed()} onClick={() => toggleMobileModifier("control")}>Ctrl</button>
+        <button type="button" class="terminal-mobile-modifier" data-active={altArmed() ? "true" : "false"}
+          aria-pressed={altArmed()} onClick={() => toggleMobileModifier("alt")}>Alt</button>
+        <button type="button" aria-label="Left arrow" onClick={() => inputArrow("D")}>←</button>
+        <button type="button" aria-label="Down arrow" onClick={() => inputArrow("B")}>↓</button>
+        <button type="button" aria-label="Up arrow" onClick={() => inputArrow("A")}>↑</button>
+        <button type="button" aria-label="Right arrow" onClick={() => inputArrow("C")}>→</button>
+        <button type="button" aria-label="Control C" onClick={() => { clearMobileModifiers(); inputTerminal("\x03", false); }}>^C</button>
+        <button type="button" onClick={() => inputTerminal("/")}>/</button>
+        <button type="button" onClick={() => inputTerminal("-")}>-</button>
+        <button type="button" onClick={() => inputTerminal("|")}>|</button>
+        <button type="button" onClick={() => inputTerminal("~")}>~</button>
+        <button type="button" aria-label="Decrease terminal font size" onClick={() => changeMobileFontSize(-1)}>A−</button>
+        <button type="button" aria-label="Increase terminal font size" onClick={() => changeMobileFontSize(1)}>A+</button>
+        <button type="button" onClick={() => void pasteFromClipboard()}>Paste</button>
+      </div>
+    </Show>
   </section>
   </>;
 }

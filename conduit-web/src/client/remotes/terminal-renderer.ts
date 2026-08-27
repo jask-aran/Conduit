@@ -9,6 +9,7 @@ export type TerminalRenderer = {
   cols: () => number;
   rows: () => number;
   write: (bytes: Uint8Array) => void;
+  input: (data: string) => void;
   focus: () => void;
   fit: () => void;
   setFontSize: (fontSize: number) => void;
@@ -196,6 +197,7 @@ async function createGhosttyRenderer(host: HTMLElement): Promise<TerminalRendere
     cols: () => terminal.cols,
     rows: () => terminal.rows,
     write: (bytes) => writeTerminal(terminal as unknown as WritableTerminal, bytes),
+    input: (data) => terminal.input(data),
     focus: () => terminal.focus(),
     fit: () => applyFit(fit),
     setFontSize: (fontSize) => { terminal.options.fontSize = fontSize; applyFit(fit); },
@@ -250,6 +252,7 @@ async function createXtermRenderer(host: HTMLElement): Promise<TerminalRenderer>
     cols: () => terminal.cols,
     rows: () => terminal.rows,
     write: (bytes) => writeTerminal(terminal, bytes),
+    input: (data) => terminal.input(data),
     focus: () => terminal.focus(),
     fit: () => applyFit(fit),
     setFontSize: (fontSize) => { terminal.options.fontSize = fontSize; applyFit(fit); },

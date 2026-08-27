@@ -1,8 +1,11 @@
 .terminal-route {
   position: fixed;
-  inset: 0;
+  top: var(--vv-offset-top, 0);
+  right: 0;
+  left: 0;
   z-index: 100;
   display: flex;
+  height: var(--app-height, 100dvh);
   min-width: 0;
   min-height: 0;
   flex-direction: column;
