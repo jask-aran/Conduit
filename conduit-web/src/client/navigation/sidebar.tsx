@@ -8,6 +8,7 @@ import {
   FolderIcon,
   FolderInputIcon,
   FolderPlusIcon,
+  LayoutDashboardIcon,
   MessageSquareIcon,
   MessageSquarePlusIcon,
   PanelLeftIcon,
@@ -124,6 +125,7 @@ export function Sidebar(props: {
   projects: Project[];
   projectId: string;
   selectedId: string | null;
+  dashboard: boolean;
   runtime: RuntimeStore;
   connectivity: string;
   workspaceSuggestions: WorkspaceSuggestion[];
@@ -753,6 +755,7 @@ export function Sidebar(props: {
         </div>
         <div data-sidebar="content" class="sidebar-content">
           <div data-sidebar="rail-actions" class="sidebar-rail-actions" aria-label="Quick navigation">
+            <RailAction label="Dashboard" current={props.dashboard} onClick={() => { closeMobile(); props.onOpenDashboard(); }}><LayoutDashboardIcon /></RailAction>
             <div data-sidebar="rail-section" data-sidebar-section="chats" class="sidebar-rail-section">
               <RailAction label="New chat" onClick={() => startNewChat()}><MessageSquarePlusIcon /></RailAction>
               <For each={railChats()}>{(item) => <RailAction
@@ -785,6 +788,10 @@ export function Sidebar(props: {
               </div>
             </Show>
           </div>
+          <button type="button" class="sidebar-row sidebar-dashboard" aria-current={props.dashboard ? "page" : undefined} onClick={() => { closeMobile(); props.onOpenDashboard(); }}>
+            <LayoutDashboardIcon />
+            <span>Dashboard</span>
+          </button>
           <Group label="Chats" projects={[]} chatRoot={chats()} addLabel="New chat" onAdd={() => startNewChat()} />
           <Group label="Projects" projects={folders()} emptyLabel="No projects" addLabel="New folder" onAdd={() => openNewDialog("folder")} />
           <Group label="Workspaces" projects={workspaces()} workspace emptyLabel="No workspaces" addLabel="New workspace" onAdd={() => openNewDialog("workspace")} />

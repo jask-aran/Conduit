@@ -1,4 +1,4 @@
-import { createEffect, createSignal, For, Index, onCleanup, onMount, Show } from "solid-js";
+import { createEffect, createSignal, For, Index, on, onCleanup, onMount, Show } from "solid-js";
 import { ArrowDownIcon, ArrowLeftIcon, ArrowUpIcon, CheckIcon, ChevronDownIcon, FocusIcon, KeyboardIcon, Maximize2Icon, Minimize2Icon, PencilIcon, PlusIcon, Settings2Icon, TerminalIcon, Trash2Icon, UnplugIcon } from "lucide-solid";
 import {
   Button,
@@ -29,6 +29,7 @@ export type Pty = {
   projectId: string;
   templateId?: string;
   title?: string;
+  cwd?: string | null;
   status: string;
   createdAt?: string;
   updatedAt?: string;
@@ -62,7 +63,7 @@ function sessionMetadata(record: Pty) {
 type StandaloneTerminalControls = { onOpenConduit: () => void };
 type KeyboardLockNavigator = Navigator & { keyboard?: { lock?: (codes?: string[]) => Promise<void>; unlock?: () => void } };
 
-export function TerminalPane(props: { projectId: string; active?: boolean; autoStart?: boolean; standaloneControls?: StandaloneTerminalControls }) {
+export function TerminalPane(props: { projectId: string; terminalId?: string; active?: boolean; autoStart?: boolean; standaloneControls?: StandaloneTerminalControls }) {
   const [pty, setPty] = createSignal<Pty | null>(null);
   const [sessions, setSessions] = createSignal<Pty[]>([]);
   const [error, setError] = createSignal("");
@@ -485,7 +486,7 @@ export function TerminalPane(props: { projectId: string; active?: boolean; autoS
     try {
       const running = await refreshSessions(projectId);
       if (projectId !== activeProjectId || pty()) return;
-      const record = running[0];
+      const record = running.find((item) => item.id === props.terminalId) || running[0];
       if (!record) {
         if (props.autoStart) queueMicrotask(() => void start());
         return;
@@ -769,6 +770,16 @@ export function TerminalPane(props: { projectId: string; active?: boolean; autoS
     activeProjectId = projectId;
     if (props.active !== false) void attachExisting(projectId);
   });
+
+  createEffect(on(() => props.terminalId, (terminalId) => {
+    if (!mounted || !terminalId || props.active === false || pty()?.id === terminalId) return;
+    void refreshSessions(activeProjectId)
+      .then((running) => {
+        const record = running.find((item) => item.id === terminalId);
+        if (record) return attachSession(record);
+      })
+      .catch((cause) => setError((cause as Error).message));
+  }));
 
   createEffect(() => {
     const active = props.active !== false;

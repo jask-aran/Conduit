@@ -1,5 +1,5 @@
 /// <reference types="vite-plugin-pwa/client" />
-import { batch, createEffect, createMemo, createSignal, ErrorBoundary, lazy, onCleanup, onMount, Show } from "solid-js";
+import { batch, createEffect, createMemo, createSignal, ErrorBoundary, lazy, onCleanup, onMount, Show, type JSX } from "solid-js";
 import { render } from "solid-js/web";
 import { Capacitor } from "@capacitor/core";
 import {
@@ -172,9 +172,10 @@ function ChatHeader(props: {
   onUpdatePwa: () => void;
   pwaUpdating: () => boolean;
   dashboard?: boolean;
+  appDashboard?: boolean;
 }) {
   const [composerSurface, setComposerSurface] = createSignal<ComposerSurfaceMode>(selectedComposerSurface());
-  const projectLabel = () => props.project?.slug === "chat" ? "Chats" : props.project?.slug || props.project?.name || "Chats";
+  const projectLabel = () => props.appDashboard ? "Conduit" : props.project?.slug === "chat" ? "Chats" : props.project?.slug || props.project?.name || "Chats";
   const runtimeLabel = () => !props.runtime ? null : props.runtime.kind === "native_pi" ? "Host Pi" : "Isolated Pi";
   const profileLabel = () => props.runtime?.kind === "native_pi" ? null : props.profile?.label || props.profile?.id;
   const posture = () => props.runtime?.kind === "native_pi"
@@ -248,10 +249,12 @@ function ChatHeader(props: {
           </Show>
         </span>
       </Show>
-      <div class="chat-header-actions composer-surface-material" data-composer-surface={composerSurface()}>
+      <HeaderActions composerSurface={composerSurface()}>
         <Button variant="ghost" size="icon-sm" class="search-trigger" aria-label="Search chats" title="Search chats" onClick={props.onOpenSearch}><SearchIcon /></Button>
         <Button variant="ghost" size="icon-sm" class="palette-trigger" aria-label="Open command palette" title="Command palette" onClick={props.onOpenPalette}><TerminalIcon /></Button>
-        <Button variant="ghost" size="icon-sm" class="chat-header-desktop-action" aria-label={props.dashboard ? "Copy Tailscale workspace link" : "Copy Tailscale chat link"} title={props.dashboard ? "Copy Tailscale workspace link" : "Copy Tailscale chat link"} onClick={props.onShare}><ShareIcon /></Button>
+        <Show when={!props.appDashboard}>
+          <Button variant="ghost" size="icon-sm" class="chat-header-desktop-action" aria-label={props.dashboard ? "Copy Tailscale workspace link" : "Copy Tailscale chat link"} title={props.dashboard ? "Copy Tailscale workspace link" : "Copy Tailscale chat link"} onClick={props.onShare}><ShareIcon /></Button>
+        </Show>
         <Show when={!props.dashboard && props.chat}>
           <Menu modal={false}>
             <MenuTrigger class="chat-context-trigger" data-state={contextTone()} aria-label={contextLabel()} title={contextLabel()}>
@@ -275,7 +278,7 @@ function ChatHeader(props: {
           </Menu>
         </Show>
         <Button variant="ghost" size="icon-sm" class="chat-header-desktop-action" aria-label="Toggle workspace panel" aria-expanded={props.panelOpen} onClick={props.onTogglePanel}><PanelRightIcon /></Button>
-        <Menu modal={false}>
+        <Show when={!props.appDashboard}><Menu modal={false}>
           <MenuTrigger class="chat-header-more" aria-label="More chat options" title="More chat options"><EllipsisIcon /></MenuTrigger>
           <MenuContent class="chat-header-menu">
             <MenuGroup>
@@ -302,10 +305,16 @@ function ChatHeader(props: {
               <MenuItem variant="destructive" onSelect={() => props.onDelete?.()}><Trash2Icon />{props.dashboard ? "Delete workspace" : "Delete"}</MenuItem>
             </Show>
           </MenuContent>
-        </Menu>
-      </div>
+        </Menu></Show>
+      </HeaderActions>
     </header>
   </>;
+}
+
+function HeaderActions(props: { composerSurface: ComposerSurfaceMode; children: JSX.Element }) {
+  return <div class="chat-header-actions composer-surface-material" data-composer-surface={props.composerSurface}>
+    {props.children}
+  </div>;
 }
 
 function App() {
@@ -352,7 +361,7 @@ function App() {
   const [dropActive, setDropActive] = createSignal(false);
   const [panelOpen, setPanelOpen] = createSignal(false);
   const [workspaceExpanded, setWorkspaceExpanded] = createSignal(false);
-  const [workspaceViewRequest, setWorkspaceViewRequest] = createSignal<{ tab: WorkspaceView; nonce: number } | null>(null);
+  const [workspaceViewRequest, setWorkspaceViewRequest] = createSignal<{ tab: WorkspaceView; terminalId?: string; nonce: number } | null>(null);
   const [mobileSidebarOpen, setMobileSidebarOpen] = createSignal(false);
   const initialRouteId = pathChatId();
   const initialProjectRouteId = pathProjectId();
@@ -611,6 +620,32 @@ function App() {
       return null;
     }
   };
+
+  let dashboardDraftRequest: Promise<void> | null = null;
+  const ensureDashboardDraft = () => {
+    if (dashboardDraftRequest || routeKind() !== "dashboard" || chat.loadedId() || templatesLoading()) return;
+    const project = catalogue.projects().find((item) => item.slug === "chat") || catalogue.projects()[0];
+    if (!project) return;
+    const templateId = project.defaultTemplateId || defaultTemplateId() || "chat";
+    dashboardDraftRequest = api<ChatSummary>("/v0/chats", {
+      method: "POST",
+      body: JSON.stringify({ projectId: project.id, templateId, runtimeKind: "conduit_profile" }),
+    }).then(async (created) => {
+      if (routeKind() !== "dashboard") {
+        await api(`/v0/chats/${encodeURIComponent(created.id)}?ifEmpty=true`, { method: "DELETE" });
+        return;
+      }
+      chat.initialize({ ...created, templateId: created.templateId || templateId }, project);
+    }).catch((error) => { showError(error); }).finally(() => { dashboardDraftRequest = null; });
+  };
+
+  createEffect(() => {
+    routeKind();
+    chat.loadedId();
+    templatesLoading();
+    catalogue.projects();
+    ensureDashboardDraft();
+  });
 
   const openDashboard = (historyMode: "push" | "replace" | "none" = "push") => {
     chat.reset();
@@ -889,9 +924,9 @@ function App() {
     if (next && isMobileLayout()) setMobileSidebarOpen(false);
     setPanelOpenForChat(next);
   };
-  const openWorkspaceView = (view: WorkspaceView) => {
+  const openWorkspaceView = (view: WorkspaceView, terminalId?: string) => {
     if (!workspacePanelScope()) return;
-    setWorkspaceViewRequest({ tab: view, nonce: Date.now() });
+    setWorkspaceViewRequest({ tab: view, ...(terminalId ? { terminalId } : {}), nonce: Date.now() });
     if (isMobileLayout()) setMobileSidebarOpen(false);
     setPanelOpenForChat(true);
   };
@@ -1184,7 +1219,7 @@ function App() {
       </DialogContent>
     </Dialog>
     <Show when={routeKind() !== "terminal"}>
-    <Sidebar projects={catalogue.projects()} projectId={catalogue.projectId()} selectedId={catalogue.selectedId()} runtime={runtime} chatLimit={sidebarChatLimit()}
+    <Sidebar projects={catalogue.projects()} projectId={catalogue.projectId()} selectedId={catalogue.selectedId()} dashboard={routeKind() === "dashboard"} runtime={runtime} chatLimit={sidebarChatLimit()}
       connectivity={runtime.connectivity()} workspaceSuggestions={workspaceSuggestions()} workspacePolicy={workspacePolicy()} command={sidebarCommand()}
       mobileOpen={mobileSidebarOpen()} onMobileOpenChange={setMobileSidebar}
       onWorkspaceSuggestionsNeeded={() => void loadWorkspaceSuggestions()}
@@ -1201,9 +1236,46 @@ function App() {
         ? routeBootstrapError() || (routeKind() === "project" ? "This project could not be loaded." : "This chat could not be loaded.")
         : routeKind() === "project" ? "Loading project…" : routeKind() === "dashboard" ? "Loading Conduit…" : "Loading chat…"}</div>}>
         <Show when={routeKind() === "dashboard"}>
+          <ChatHeader title="Dashboard" panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onNewChat={() => void createChat()} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={() => {}} onUpdatePwa={() => void runPwaUpdate()} pwaUpdating={pwaUpdating} appDashboard />
           <AppDashboard
-            onNewChat={() => void createChat(catalogue.projects().find((project) => project.slug === "chat"))}
-            onOpenTerminal={() => openTerminalRoute()}
+            projects={catalogue.projects()}
+            composer={<Composer
+              chat={chat}
+              attachments={attachments}
+              models={models}
+              profiles={templates().filter((item) => item.defaultable !== false)}
+              activeProfile={templates().find((item) => item.id === chat.templateId()) || templates().find((item) => item.id === defaultTemplateId()) || null}
+              serverOnline={runtime.connectivity() === "online"}
+              voiceSettings={voiceSettings()}
+              onChooseProfile={(id) => chat.setTemplateId(id)}
+              onOpenSettings={openSettings}
+              onOpenAttachments={() => attachFileInput?.click()}
+              onStatusChange={setComposerStatus}
+              onSendDraft={async (prompt) => {
+                const project = catalogue.projects().find((item) => item.slug === "chat");
+                const id = chat.loadedId();
+                if (!project || !id) return;
+                catalogue.setProjects((current) => current.map((item) => item.id === project.id
+                  ? { ...item, sessions: [{ id, projectId: project.id, status: "draft", title: chat.title() || "New chat", templateId: chat.templateId() || undefined, pinned: true }, ...item.sessions.filter((session) => session.id !== id)] }
+                  : item));
+                history.pushState({}, "", `/chat/${id}`);
+                setRouteKind("chat");
+                chat.setDraft(prompt);
+                await chat.send();
+              }}
+            />}
+            runtime={runtime}
+            onOpenChat={(target, project) => void openChat(target, project)}
+            onOpenProject={(project) => void openProject(project)}
+            onOpenTerminalView={() => openTerminalRoute()}
+            onSearchChats={(scope) => openPalette("chat-search", scope === "unscoped" ? "scope:chats " : "", true)}
+            onOpenTerminal={(terminal) => {
+              const project = catalogue.projects().find((item) => item.id === terminal.projectId);
+              if (!project) return showError("The terminal scope is no longer available.");
+              void createChat(project).then((created) => {
+                if (created) openWorkspaceView("terminal", terminal.id);
+              });
+            }}
           />
         </Show>
         <Show when={routeKind() !== "dashboard"}>
@@ -1233,7 +1305,7 @@ function App() {
         </Show>
       </Show>
     </main>
-    <Show when={["chat", "project"].includes(routeKind()) && Boolean(selectedProject()) && Boolean(workspacePanelScope())}><WorkspacePanel projectId={() => selectedProject()!.id} chatId={() => workspacePanelScope()!} open={panelOpen} expanded={workspaceExpanded} requestedTab={workspaceViewRequest} onToggleExpanded={() => setWorkspaceExpanded((value) => !value)} onClose={togglePanel} /></Show>
+    <Show when={["chat", "project", "dashboard"].includes(routeKind()) && Boolean(selectedProject()) && Boolean(workspacePanelScope())}><WorkspacePanel projectId={() => selectedProject()!.id} chatId={() => workspacePanelScope()!} open={panelOpen} expanded={workspaceExpanded} requestedTab={workspaceViewRequest} onToggleExpanded={() => setWorkspaceExpanded((value) => !value)} onClose={togglePanel} /></Show>
     </Show>
     <Show when={routeKind() === "terminal" && routeBootstrap() === "ready"}>
       <TerminalRoute onOpenConduit={() => openDashboard()} />

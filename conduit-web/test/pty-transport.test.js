@@ -245,6 +245,8 @@ tmuxTest("PTY API uses a linked Workspace root or the server home directory, nev
     const ordinary = await (await harness.request("/v0/projects", { method: "POST", body: JSON.stringify({ name: "Ordinary project" }) })).json();
     const workspaceTerminal = await (await harness.request("/v0/ptys", { method: "POST", body: JSON.stringify({ projectId: linked.id }) })).json();
     const homeTerminal = await (await harness.request("/v0/ptys", { method: "POST", body: JSON.stringify({ projectId: ordinary.id, cwd: "/browser-supplied-path" }) })).json();
+    assert.equal(workspaceTerminal.cwd, workspacePath);
+    assert.equal(homeTerminal.cwd, harness.root);
     const workspaceStream = openTerminal(harness.origin, workspaceTerminal.id);
     const homeStream = openTerminal(harness.origin, homeTerminal.id);
     await Promise.all([workspaceStream.opened, homeStream.opened]);

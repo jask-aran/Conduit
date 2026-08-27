@@ -65,7 +65,7 @@ async function openSidebar(page, testInfo) {
 
 async function openChatSurface(page) {
   await page.goto("/");
-  await page.locator(".app-dashboard-action").filter({ hasText: "New chat" }).click();
+  await page.getByRole("button", { name: "New chat", exact: true }).click();
 }
 
 test.beforeEach(async ({ page }) => {
@@ -1005,7 +1005,7 @@ test.afterEach(async ({ page }) => {
   expect(unhandledApiRequests.get(page) || [], "all browser API requests must use deterministic mocks").toEqual([]);
 });
 
-test("uses the dashboard as the default landing without creating a chat", async ({ page }) => {
+test("initializes the dashboard as a model-ready new chat", async ({ page }) => {
   let chatCreates = 0;
   await page.route("**/v0/chats", async (route) => {
     chatCreates += 1;
@@ -1019,16 +1019,26 @@ test("uses the dashboard as the default landing without creating a chat", async 
 
   await page.goto("/");
   await expect(page).toHaveURL(/\/$/);
-  await expect(page.getByRole("heading", { name: "What do you want to open?" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Home terminals" })).toBeVisible();
-  expect(chatCreates).toBe(0);
+  await expect(page.getByRole("heading", { name: "Start where the work is." })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Live terminals" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Recent chats" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Existing chat" })).toBeVisible();
+  const chatScope = page.getByRole("group", { name: "Recent chat scope" });
+  await expect(chatScope.getByRole("button", { name: "Unscoped" })).toHaveAttribute("aria-pressed", "true");
+  await chatScope.getByRole("button", { name: "All" }).click();
+  await expect(chatScope.getByRole("button", { name: "All" })).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByRole("heading", { name: "Recent Workspaces" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Terminal View" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Reasoner medium" })).toBeVisible();
+  expect(chatCreates).toBe(1);
 
-  await page.locator(".app-dashboard-action").filter({ hasText: "New chat" }).click();
+  await page.getByRole("textbox", { name: "Message Pi" }).fill("Check this Workspace");
+  await page.getByRole("button", { name: "Send message" }).click();
   await expect(page).toHaveURL(/\/chat\/550e8400-e29b-41d4-a716-446655440099$/);
   expect(chatCreates).toBe(1);
   await page.getByRole("button", { name: "Conduit", exact: true }).click();
   await expect(page).toHaveURL(/\/$/);
-  await expect(page.getByRole("heading", { name: "What do you want to open?" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Start where the work is." })).toBeVisible();
 });
 
 test("opens a full-screen home terminal without an extra route bar", async ({ page }, testInfo) => {
@@ -1114,7 +1124,7 @@ test("opens a full-screen home terminal without an extra route bar", async ({ pa
   await page.getByRole("button", { name: "Close" }).click();
   await page.getByRole("button", { name: "Open Conduit" }).click();
   await expect(page).toHaveURL(/\/$/);
-  await expect(page.getByRole("heading", { name: "What do you want to open?" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Start where the work is." })).toBeVisible();
 });
 
 test("creates a durable chat route and renders the primary surface", async ({ page }) => {

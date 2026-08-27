@@ -1,135 +1,84 @@
 .app-dashboard {
-  width: min(760px, calc(100% - 32px));
-  margin: auto;
-  padding: 48px 0;
-}
-
-.app-dashboard-heading > span {
-  color: var(--accent-cool);
-  font: 600 11px ui-monospace, SFMono-Regular, Consolas, monospace;
-  letter-spacing: .12em;
-  text-transform: uppercase;
-}
-
-.app-dashboard-heading h1 {
-  max-width: 520px;
-  margin: 10px 0 28px;
-  font-size: clamp(28px, 5vw, 48px);
-  font-weight: 560;
-  letter-spacing: -.04em;
-  line-height: 1.02;
-}
-
-.app-dashboard-actions {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
-}
-
-.app-dashboard-action {
-  display: flex;
-  min-height: 112px;
-  align-items: flex-start;
-  gap: 14px;
-  border: 1px solid var(--border);
-  border-radius: 14px;
-  background: color-mix(in oklch, var(--card), transparent 8%);
-  padding: 20px;
-  color: var(--foreground);
-  text-align: left;
-  transition: border-color 120ms ease, background 120ms ease, transform 120ms ease;
-}
-
-.app-dashboard-action:hover {
-  border-color: color-mix(in oklch, var(--accent-cool), var(--border) 45%);
-  background: color-mix(in oklch, var(--accent-cool), var(--card) 94%);
-  transform: translateY(-1px);
-}
-
-.app-dashboard-action:focus-visible {
-  outline: 2px solid var(--ring);
-  outline-offset: 2px;
-}
-
-.app-dashboard-action > svg {
-  width: 22px;
-  height: 22px;
-  flex: none;
-  color: var(--accent-cool);
-}
-
-.app-dashboard-action span,
-.app-dashboard-terminal-list span {
-  display: grid;
-  min-width: 0;
-  gap: 5px;
-}
-
-.app-dashboard-action strong { font-size: 16px; }
-.app-dashboard-action small,
-.app-dashboard-terminal-list small,
-.app-dashboard-section-heading p {
-  color: var(--muted-foreground);
-  font-size: 12px;
-}
-
-.app-dashboard-terminals {
-  margin-top: 28px;
+  width: min(880px, calc(100% - 40px));
+  margin: 0 auto;
   overflow: hidden;
-  border: 1px solid var(--border);
-  border-radius: 14px;
-  background: color-mix(in oklch, var(--card), transparent 18%);
+  padding: 28px 0 40px;
 }
-
-.app-dashboard-section-heading {
-  display: flex;
-  min-height: 68px;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 14px 16px;
-  border-bottom: 1px solid var(--border);
-}
-
-.app-dashboard-section-heading h2,
-.app-dashboard-section-heading p { margin: 0; }
-.app-dashboard-section-heading h2 { font-size: 14px; }
-.app-dashboard-section-heading p { margin-top: 3px; }
-
-.app-dashboard-empty {
-  display: flex;
-  min-height: 92px;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  color: var(--muted-foreground);
-  font-size: 12px;
-}
-
-.app-dashboard-terminal-list { padding: 6px; }
-.app-dashboard-terminal-list > button {
-  display: grid;
-  width: 100%;
-  min-height: 52px;
-  grid-template-columns: auto 1fr auto;
-  align-items: center;
-  gap: 10px;
-  border: 0;
-  border-radius: 8px;
-  background: transparent;
-  padding: 8px 10px;
-  color: inherit;
-  text-align: left;
-}
-.app-dashboard-terminal-list > button:hover { background: var(--accent); }
-.app-dashboard-terminal-list svg { width: 16px; height: 16px; color: var(--accent-cool); }
-.app-dashboard-terminal-list strong { overflow: hidden; font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
-
+.app-dashboard-intro h1 { margin: 0 0 18px; font-size: clamp(22px, 3vw, 31px); font-weight: 560; letter-spacing: -.035em; line-height: 1.05; }
+.app-dashboard-launch-row, .app-dashboard-grid { display: grid; grid-template-columns: minmax(0, var(--composer-desktop-reference-width)) minmax(224px, 1fr); gap: 14px; }
+.app-dashboard-composer-slot .composer-wrap { width: 100%; margin-inline: 0; }
+.app-dashboard-quick-actions { display: grid; min-width: 0; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: auto 1fr; gap: 6px; }
+.app-dashboard-quick-actions > span { grid-column: 1 / -1; color: var(--muted-foreground); font-size: 9px; }
+.app-dashboard-quick-actions button { display: grid; min-width: 0; grid-template-columns: 16px minmax(0, 1fr) 12px; align-items: center; gap: 7px; border: 1px solid var(--border); border-radius: 9px; background: transparent; padding: 8px; color: var(--foreground); text-align: left; }
+.app-dashboard-quick-actions button:hover { background: var(--accent); }
+.app-dashboard-quick-actions button:focus-visible { outline: 2px solid var(--ring); outline-offset: 1px; }
+.app-dashboard-quick-actions button svg { width: 13px; height: 13px; color: var(--muted-foreground); }
+.app-dashboard-quick-actions button strong { overflow: hidden; font-size: 9.5px; font-weight: 560; text-overflow: ellipsis; white-space: nowrap; }
+.app-dashboard-grid { margin-top: 20px; }
+.app-dashboard-section { min-width: 0; overflow: hidden; border: 1px solid var(--border); border-radius: 10px; }
+.app-dashboard-chats { display: flex; grid-row: 1 / span 2; flex-direction: column; }
+.app-dashboard-workspaces { grid-column: 2; grid-row: 1; }
+.app-dashboard-terminals { grid-column: 2; grid-row: 2; }
+.app-dashboard-section-heading { display: flex; min-height: 48px; align-items: center; justify-content: space-between; gap: 12px; padding: 9px 11px; border-bottom: 1px solid var(--border); }
+.app-dashboard-section-heading h2, .app-dashboard-section-heading p { margin: 0; }
+.app-dashboard-section-heading h2 { font-size: 12px; font-weight: 620; }
+.app-dashboard-section-heading p { margin-top: 2px; color: var(--muted-foreground); font-size: 9px; }
+.app-dashboard-section-heading > button { border: 0; background: transparent; padding: 4px; color: var(--muted-foreground); font-size: 9px; }
+.app-dashboard-section-heading > button:hover { color: var(--foreground); }
+.app-dashboard-chat-actions { display: flex; flex: none; align-items: center; gap: 6px; }
+.app-dashboard-scope-toggle { display: flex; flex: none; align-items: center; gap: 2px; border: 1px solid var(--border); border-radius: 7px; padding: 2px; }
+.app-dashboard-scope-toggle button { min-height: 20px; border: 0; border-radius: 5px; background: transparent; padding: 2px 6px; color: var(--muted-foreground); font-size: 8.5px; }
+.app-dashboard-scope-toggle button[aria-pressed="true"] { background: var(--accent); color: var(--foreground); }
+.app-dashboard-scope-toggle button:focus-visible { outline: 2px solid var(--ring); outline-offset: 1px; }
+.app-dashboard-chat-search { display: grid; width: 26px; height: 26px; place-items: center; border: 1px solid var(--border); border-radius: 7px; background: transparent; color: var(--muted-foreground); }
+.app-dashboard-chat-search:hover { background: var(--accent); color: var(--foreground); }
+.app-dashboard-chat-search:focus-visible { outline: 2px solid var(--ring); outline-offset: 1px; }
+.app-dashboard-chat-search svg { width: 12px; height: 12px; }
+.app-dashboard-empty { display: flex; min-height: 76px; align-items: center; justify-content: center; gap: 7px; color: var(--muted-foreground); font-size: 10px; }
+.app-dashboard-list { padding: 4px; }
+.app-dashboard-list > button, .app-dashboard-list > a { display: grid; width: 100%; min-height: 43px; grid-template-columns: 18px minmax(0, 1fr) 12px; align-items: center; gap: 8px; border: 0; border-radius: 7px; background: transparent; padding: 6px 8px; color: inherit; text-align: left; text-decoration: none; }
+.app-dashboard-list > button:hover, .app-dashboard-list > a:hover { background: var(--accent); }
+.app-dashboard-list > button:focus-visible, .app-dashboard-list > a:focus-visible { outline: 2px solid var(--ring); outline-offset: -2px; }
+.app-dashboard-list > button > svg:first-child { color: var(--muted-foreground); }
+.app-dashboard-list svg { width: 13px; height: 13px; }
+.app-dashboard-list > button > svg:last-child, .app-dashboard-list > a > svg:last-child { color: var(--muted-foreground); }
+.app-dashboard-list > button > span:not(.app-dashboard-workspace-glyph), .app-dashboard-list > a > span:not(.app-dashboard-workspace-glyph) { display: grid; min-width: 0; gap: 2px; }
+.app-dashboard-list strong, .app-dashboard-list small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.app-dashboard-list strong { font-size: 10.5px; font-weight: 580; }
+.app-dashboard-list small { color: var(--muted-foreground); font-size: 9px; }
+.app-dashboard-terminal-list { display: grid; grid-template-columns: 1fr; }
+.app-dashboard-terminal-list > button { min-height: 47px; }
+.app-dashboard-terminal-copy { overflow: hidden; }
+.app-dashboard-terminal-title { display: flex; min-width: 0; align-items: baseline; justify-content: space-between; gap: 8px; }
+.app-dashboard-terminal-title em { overflow: hidden; color: var(--muted-foreground); font-size: 8px; font-style: normal; text-overflow: ellipsis; white-space: nowrap; }
+.app-dashboard-terminal-copy small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.app-dashboard-terminal-copy code { color: inherit; font: inherit; }
+.app-dashboard-workspace-glyph { display: grid; width: 18px; height: 18px; place-items: center; color: var(--muted-foreground); }
+.app-dashboard-workspace-glyph .workspace-glyph { width: 15px; height: 15px; font-size: 8px; }
+.app-dashboard .project-chat-list { border: 0; border-radius: 0; }
+.app-dashboard .project-chat-row { min-height: 43px; grid-template-columns: 14px minmax(0, 1fr) auto 12px; gap: 8px; padding: 6px 8px; }
+.app-dashboard .project-chat-runtime { width: 14px; height: 14px; }
+.app-dashboard .project-chat-copy { gap: 2px; }
+.app-dashboard .project-chat-copy strong { font-size: 10.5px; }
+.app-dashboard .project-chat-copy small, .app-dashboard .project-chat-row time { font-size: 9px; }
+.app-dashboard .project-chat-row > svg { width: 13px; height: 13px; }
 @media (--conduit-mobile-layout) {
-  .app-dashboard {
-    width: min(100% - 24px, 560px);
-    padding: 32px 0 max(32px, env(safe-area-inset-bottom));
+  .app-dashboard { width: calc(100% - 24px); overflow-y: auto; padding: calc(52px + var(--safe-area-inset-top, env(safe-area-inset-top, 0px))) 0 calc(88px + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px))); }
+  .app-dashboard-intro h1 { font-size: 24px; }
+  .app-dashboard-launch-row { display: block; }
+  .app-dashboard-composer-slot {
+    position: fixed;
+    right: 12px;
+    bottom: calc(10px + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)));
+    left: 12px;
+    z-index: 4;
   }
-  .app-dashboard-actions { grid-template-columns: 1fr; }
-  .app-dashboard-action { min-height: 92px; }
+  .app-dashboard-quick-actions { display: flex; margin-bottom: 14px; }
+  .app-dashboard-quick-actions > span { display: none; }
+  .app-dashboard-quick-actions button { min-height: 38px; flex: 1; }
+  .app-dashboard-grid { grid-template-columns: 1fr; }
+  .app-dashboard-chats, .app-dashboard-workspaces, .app-dashboard-terminals { grid-column: auto; grid-row: auto; }
+  .app-dashboard .project-chat-row { min-height: 50px; grid-template-columns: 16px minmax(0, 1fr) 14px; padding: 7px 10px; }
+  .app-dashboard .project-chat-row time { display: none; }
+  .app-dashboard-list > button, .app-dashboard-list > a { min-height: 52px; }
 }

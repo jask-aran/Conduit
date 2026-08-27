@@ -77,7 +77,7 @@ test.beforeEach(async ({ page }) => {
 async function openChatSurface(page) {
   await page.goto("/");
   const modelsLoaded = page.waitForResponse((response) => new URL(response.url()).pathname.endsWith("/models"));
-  await page.locator(".app-dashboard-action").filter({ hasText: "New chat" }).click();
+  await page.getByRole("button", { name: "New chat", exact: true }).click();
   await modelsLoaded;
 }
 
