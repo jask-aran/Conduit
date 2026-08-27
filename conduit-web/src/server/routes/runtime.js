@@ -1,3 +1,5 @@
+import { validTerminalShortcuts } from "../../preferences-store.js";
+
 export function registerRuntimeRoutes(app, {
   attachments,
   config,
@@ -115,10 +117,15 @@ export function registerRuntimeRoutes(app, {
       if (thinkingLevel != null && !new Set(["off", "minimal", "low", "medium", "high", "max", "xhigh"]).has(thinkingLevel)) {
         return response.status(400).json({ error: "invalid_session_name_thinking_level" });
       }
+      const terminalShortcuts = request.body?.terminalShortcuts;
+      if (terminalShortcuts != null && !validTerminalShortcuts(terminalShortcuts)) {
+        return response.status(400).json({ error: "invalid_terminal_shortcuts" });
+      }
       const saved = await preferences.save({
         defaultTemplateId: requested ?? preferences.get().defaultTemplateId,
         ...(model != null ? { sessionNameModel: model } : {}),
         ...(thinkingLevel != null ? { sessionNameThinkingLevel: thinkingLevel } : {}),
+        ...(terminalShortcuts != null ? { terminalShortcuts } : {}),
       });
       response.json(saved);
     } catch (error) { next(error); }

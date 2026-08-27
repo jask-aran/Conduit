@@ -5,7 +5,28 @@ const DEFAULTS = {
   defaultTemplateId: "chat",
   sessionNameModel: "",
   sessionNameThinkingLevel: "off",
+  terminalShortcuts: [],
 };
+
+export function normalizeTerminalShortcuts(input) {
+  if (!Array.isArray(input)) return [];
+  return input.slice(0, 12).flatMap((item) => {
+    const id = typeof item?.id === "string" ? item.id.trim().slice(0, 80) : "";
+    const label = typeof item?.label === "string" ? item.label.trim().slice(0, 32) : "";
+    const command = typeof item?.command === "string" ? item.command.trim().slice(0, 2048) : "";
+    const target = item?.target === "current" || item?.target === "new" ? item.target : null;
+    return id && label && command && target ? [{ id, label, command, target }] : [];
+  });
+}
+
+export function validTerminalShortcuts(input) {
+  return Array.isArray(input)
+    && input.length <= 12
+    && input.every((item) => typeof item?.id === "string" && item.id.trim().length > 0 && item.id.length <= 80
+      && typeof item.label === "string" && item.label.trim().length > 0 && item.label.length <= 32
+      && typeof item.command === "string" && item.command.trim().length > 0 && item.command.length <= 2048
+      && (item.target === "current" || item.target === "new"));
+}
 
 export function normalizePreferences(input = {}, fallback = DEFAULTS, knownTemplateIds = null) {
   const fallbackId = typeof fallback.defaultTemplateId === "string" && fallback.defaultTemplateId.trim()
@@ -25,7 +46,10 @@ export function normalizePreferences(input = {}, fallback = DEFAULTS, knownTempl
     : typeof fallback.sessionNameThinkingLevel === "string" && fallback.sessionNameThinkingLevel.trim()
       ? fallback.sessionNameThinkingLevel.trim()
       : DEFAULTS.sessionNameThinkingLevel;
-  return { defaultTemplateId, sessionNameModel, sessionNameThinkingLevel };
+  const terminalShortcuts = Array.isArray(input.terminalShortcuts)
+    ? normalizeTerminalShortcuts(input.terminalShortcuts)
+    : normalizeTerminalShortcuts(fallback.terminalShortcuts);
+  return { defaultTemplateId, sessionNameModel, sessionNameThinkingLevel, terminalShortcuts };
 }
 
 export class PreferencesStore {

@@ -117,7 +117,12 @@ panel. Files and Source Control are read-only: the lazy directory API hides
 Git controls only refresh and copy branch/commit IDs. Terminal is available for
 every chat, starts at the validated Workspace root for Workspace chats and the
 server home directory otherwise, and remains server-owned after the browser
-leaves its tab.
+leaves its tab. The terminal header can store up to 12 server-persisted command
+buttons. A button sends its command and Enter to the attached terminal, or
+starts a new resident terminal and sends the command when that attachment is
+writable. New-terminal shortcuts use the shortcut name as the terminal window
+name. The editor controls shortcut order and whether each command runs in the
+current shell or a new shell.
 
 Every Isolated Pi profile process receives:
 
@@ -474,8 +479,8 @@ starting, and browser-attached processes remain resident.
 - `POST /v0/pi-installations/host/detect` re-detects the host Pi executable
 - `POST /v0/runtime/chats` creates a fresh special Runtime management chat
 - `GET /v0/models`
-- `GET|PATCH /v0/preferences` reads and updates the default profile plus the
-  scoped model and thinking level used to name new chats
+- `GET|PATCH /v0/preferences` reads and updates the default profile, the scoped
+  model and thinking level used to name new chats, and terminal command buttons
 - `GET|PATCH /v0/settings` reads and updates Pi's shared global model scope;
   terminal and web saves use the same isolated settings file.
 - `GET|PATCH /v0/chats/:id/models` resolves the selected installation's scoped

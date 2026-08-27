@@ -1,6 +1,6 @@
 import type { JSX, ParentProps } from "solid-js";
 import type { FocusOutsideEvent } from "@kobalte/core";
-import { Show, splitProps } from "solid-js";
+import { createSignal, onCleanup, onMount, Show, splitProps } from "solid-js";
 import * as KDialog from "@kobalte/core/dialog";
 import { DropdownMenu as KMenu } from "@kobalte/core/dropdown-menu";
 import { ContextMenu as KContextMenu } from "@kobalte/core/context-menu";
@@ -49,10 +49,22 @@ export function DialogTrigger(props: ParentProps<{ as?: keyof JSX.IntrinsicEleme
   return <KDialog.Trigger as={props.as || "button"} class={props.class}>{props.children}</KDialog.Trigger>;
 }
 
+function createFullscreenPortalMount() {
+  const [mount, setMount] = createSignal<HTMLElement>();
+  const sync = () => setMount(document.fullscreenElement instanceof HTMLElement ? document.fullscreenElement : undefined);
+  onMount(() => {
+    sync();
+    document.addEventListener("fullscreenchange", sync);
+  });
+  onCleanup(() => document.removeEventListener("fullscreenchange", sync));
+  return mount;
+}
+
 export function DialogContent(props: ParentProps<{ class?: string; title?: string; description?: string; closeLabel?: string }>) {
-  return <KDialog.Portal>
-    <KDialog.Overlay class="fixed inset-0 z-50 bg-black/50 data-[expanded]:animate-in data-[closed]:animate-out" />
-    <KDialog.Content class={cn("fixed left-1/2 top-1/2 z-50 grid w-[calc(100%-2rem)] max-w-lg -translate-x-1/2 -translate-y-1/2 gap-4 rounded-lg border bg-background p-6 shadow-lg outline-none", props.class)}>
+  const portalMount = createFullscreenPortalMount();
+  return <KDialog.Portal mount={portalMount()}>
+    <KDialog.Overlay class="fixed inset-0 z-[150] bg-black/50 data-[expanded]:animate-in data-[closed]:animate-out" />
+    <KDialog.Content class={cn("fixed left-1/2 top-1/2 z-[150] grid max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-lg -translate-x-1/2 -translate-y-1/2 gap-4 overflow-y-auto rounded-lg border bg-background p-6 shadow-lg outline-none", props.class)}>
       <Show when={props.title}><KDialog.Title class="text-lg font-semibold">{props.title}</KDialog.Title></Show>
       <Show when={props.description}><KDialog.Description class="text-sm text-muted-foreground">{props.description}</KDialog.Description></Show>
       {props.children}
@@ -89,10 +101,11 @@ export const MenuRadioGroup = KMenu.RadioGroup;
 export const MenuSub = KMenu.Sub;
 
 export function MenuContent(props: ParentProps<{ class?: string; onOpenAutoFocus?: (event: Event) => void; onCloseAutoFocus?: (event: Event) => void; onFocusOutside?: (event: FocusOutsideEvent) => void; onPointerDown?: (event: PointerEvent) => void; onClick?: (event: MouseEvent) => void }>) {
-  return <KMenu.Portal><KMenu.Content data-slot="menu-content" onOpenAutoFocus={props.onOpenAutoFocus} onCloseAutoFocus={props.onCloseAutoFocus} onFocusOutside={props.onFocusOutside} onPointerDown={props.onPointerDown} onClick={props.onClick} class={cn(menuContentClass, props.class)}>{props.children}</KMenu.Content></KMenu.Portal>;
+  const portalMount = createFullscreenPortalMount();
+  return <KMenu.Portal mount={portalMount()}><KMenu.Content data-slot="menu-content" onOpenAutoFocus={props.onOpenAutoFocus} onCloseAutoFocus={props.onCloseAutoFocus} onFocusOutside={props.onFocusOutside} onPointerDown={props.onPointerDown} onClick={props.onClick} class={cn(menuContentClass, props.class)}>{props.children}</KMenu.Content></KMenu.Portal>;
 }
-export function MenuItem(props: ParentProps<{ class?: string; disabled?: boolean; variant?: "destructive"; onSelect?: () => void; textValue?: string }>) {
-  return <KMenu.Item disabled={props.disabled} onSelect={props.onSelect} textValue={props.textValue} data-variant={props.variant} class={cn(menuItemClass, props.class)}>{props.children}</KMenu.Item>;
+export function MenuItem(props: ParentProps<{ class?: string; disabled?: boolean; variant?: "destructive"; onSelect?: () => void; textValue?: string; "aria-label"?: string }>) {
+  return <KMenu.Item disabled={props.disabled} onSelect={props.onSelect} textValue={props.textValue} aria-label={props["aria-label"]} data-variant={props.variant} class={cn(menuItemClass, props.class)}>{props.children}</KMenu.Item>;
 }
 export function MenuRadioItem(props: ParentProps<{ class?: string; value: string; disabled?: boolean; closeOnSelect?: boolean; onSelect?: () => void }>) {
   /* Conduit menus close after a selection by default; persistent pickers can

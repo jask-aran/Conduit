@@ -1,5 +1,5 @@
-import { createEffect, createSignal, For, onCleanup, onMount, Show } from "solid-js";
-import { ArrowLeftIcon, CheckIcon, ChevronDownIcon, FocusIcon, KeyboardIcon, Maximize2Icon, Minimize2Icon, PencilIcon, PlusIcon, TerminalIcon, Trash2Icon, UnplugIcon } from "lucide-solid";
+import { createEffect, createSignal, For, Index, onCleanup, onMount, Show } from "solid-js";
+import { ArrowDownIcon, ArrowLeftIcon, ArrowUpIcon, CheckIcon, ChevronDownIcon, FocusIcon, KeyboardIcon, Maximize2Icon, Minimize2Icon, PencilIcon, PlusIcon, Settings2Icon, TerminalIcon, Trash2Icon, UnplugIcon } from "lucide-solid";
 import {
   Button,
   Dialog,
@@ -22,6 +22,7 @@ import {
 import { api } from "../api/client";
 import { terminalSocketUrl } from "../api/transport";
 import { createTerminalRenderer, selectedTerminalRenderer, type TerminalRenderer, type TerminalRendererId } from "./terminal-renderer";
+import { LEGACY_TERMINAL_SHORTCUTS_STORAGE_KEY, normalizeTerminalShortcuts, readLegacyTerminalShortcuts, type TerminalShortcut } from "./terminal-shortcuts";
 
 export type Pty = {
   id: string;
@@ -79,6 +80,10 @@ export function TerminalPane(props: { projectId: string; active?: boolean; autoS
   const [mobileKeysVisible, setMobileKeysVisible] = createSignal(localStorage.getItem(MOBILE_KEYS_STORAGE_KEY) !== "false");
   const [controlArmed, setControlArmed] = createSignal(false);
   const [altArmed, setAltArmed] = createSignal(false);
+  const [shortcuts, setShortcuts] = createSignal<TerminalShortcut[]>([]);
+  const [shortcutEditorOpen, setShortcutEditorOpen] = createSignal(false);
+  const [shortcutDraft, setShortcutDraft] = createSignal<TerminalShortcut[]>([]);
+  const [shortcutSaving, setShortcutSaving] = createSignal(false);
   let host: HTMLDivElement | undefined;
   let pane: HTMLElement | undefined;
   let terminal: TerminalRenderer | undefined;
@@ -287,7 +292,7 @@ export function TerminalPane(props: { projectId: string; active?: boolean; autoS
   const connect = async (
     record: Pty,
     renderer = rendererId(),
-    { freshRenderer = false, retrying = false, takeover = false }: { freshRenderer?: boolean; retrying?: boolean; takeover?: boolean } = {},
+    { freshRenderer = false, retrying = false, takeover = false, initialInput }: { freshRenderer?: boolean; retrying?: boolean; takeover?: boolean; initialInput?: string } = {},
   ) => {
     const generation = ++connectionGeneration;
     closeConnection();
@@ -316,6 +321,7 @@ export function TerminalPane(props: { projectId: string; active?: boolean; autoS
     let intentionallyClosed = false;
     let lastSentCols = initialCols;
     let lastSentRows = initialRows;
+    let pendingInitialInput = initialInput;
 
     const sendResize = () => {
       if (generation !== connectionGeneration || !writable() || connection.readyState !== WebSocket.OPEN) return;
@@ -343,6 +349,10 @@ export function TerminalPane(props: { projectId: string; active?: boolean; autoS
               // browser host, then publish a geometry change if one occurred.
               activeTerminal.fit();
               sendResize();
+              if (pendingInitialInput) {
+                connection.send(encoder.encode(`${pendingInitialInput}\r`));
+                pendingInitialInput = undefined;
+              }
               focusActiveTerminal();
             }
             return;
@@ -506,7 +516,7 @@ export function TerminalPane(props: { projectId: string; active?: boolean; autoS
     catch (cause) { setError((cause as Error).message); }
   };
 
-  const start = async () => {
+  const start = async (initialInput?: string, title?: string) => {
     if (starting()) return;
     const projectId = activeProjectId;
     setStarting(true);
@@ -519,6 +529,7 @@ export function TerminalPane(props: { projectId: string; active?: boolean; autoS
         method: "POST",
         body: JSON.stringify({
           projectId,
+          ...(title ? { title } : {}),
           cols: activeTerminal.cols(),
           rows: activeTerminal.rows(),
         }),
@@ -527,12 +538,72 @@ export function TerminalPane(props: { projectId: string; active?: boolean; autoS
       setPty(record);
       notifyPtyChange();
       await refreshSessions(projectId);
-      await connect(record, rendererId(), { freshRenderer: true });
+      await connect(record, rendererId(), { freshRenderer: true, initialInput });
     } catch (cause) {
       if (projectId === activeProjectId) setError((cause as Error).message);
     } finally {
       if (projectId === activeProjectId) setStarting(false);
     }
+  };
+
+  const openShortcutEditor = () => {
+    setShortcutDraft(shortcuts().map((shortcut) => ({ ...shortcut })));
+    setShortcutEditorOpen(true);
+  };
+  const addShortcutDraft = () => {
+    setShortcutDraft((current) => current.length >= 12 ? current : [...current, {
+      id: crypto.randomUUID(),
+      label: "",
+      command: "",
+      target: "current",
+    }]);
+  };
+  const updateShortcutDraft = (id: string, patch: Partial<TerminalShortcut>) => {
+    setShortcutDraft((current) => current.map((shortcut) => shortcut.id === id ? { ...shortcut, ...patch } : shortcut));
+  };
+  const moveShortcutDraft = (index: number, delta: -1 | 1) => {
+    setShortcutDraft((current) => {
+      const target = index + delta;
+      if (target < 0 || target >= current.length) return current;
+      const item = current[index];
+      const targetItem = current[target];
+      if (!item || !targetItem) return current;
+      const next = [...current];
+      next[index] = targetItem;
+      next[target] = item;
+      return next;
+    });
+  };
+  const saveShortcutDraft = async () => {
+    const next = shortcutDraft()
+      .map((shortcut) => ({ ...shortcut, label: shortcut.label.trim(), command: shortcut.command.trim() }))
+      .filter((shortcut) => shortcut.label && shortcut.command);
+    setShortcutSaving(true);
+    setError("");
+    try {
+      const saved = await api<{ terminalShortcuts?: unknown }>("/v0/preferences", {
+        method: "PATCH",
+        body: JSON.stringify({ terminalShortcuts: next }),
+      });
+      setShortcuts(normalizeTerminalShortcuts(saved.terminalShortcuts));
+      setShortcutEditorOpen(false);
+    } catch (cause) {
+      setError((cause as Error).message);
+    } finally {
+      setShortcutSaving(false);
+    }
+  };
+  const runShortcut = (shortcut: TerminalShortcut) => {
+    setError("");
+    if (shortcut.target === "new") {
+      void start(shortcut.command, shortcut.label);
+      return;
+    }
+    if (!writable()) {
+      setError("Attach to a writable terminal before you run this shortcut");
+      return;
+    }
+    inputTerminal(`${shortcut.command}\r`, false);
   };
 
   const reconnect = async () => {
@@ -675,6 +746,19 @@ export function TerminalPane(props: { projectId: string; active?: boolean; autoS
       void refreshSessions(activeProjectId).catch(() => {});
     };
     window.addEventListener("conduit:ptys-changed", ptyChangeListener);
+    void api<{ terminalShortcuts?: unknown }>("/v0/preferences")
+      .then(async (saved) => {
+        const persisted = normalizeTerminalShortcuts(saved.terminalShortcuts);
+        const legacy = persisted.length ? [] : readLegacyTerminalShortcuts();
+        if (!legacy.length) return setShortcuts(persisted);
+        const migrated = await api<{ terminalShortcuts?: unknown }>("/v0/preferences", {
+          method: "PATCH",
+          body: JSON.stringify({ terminalShortcuts: legacy }),
+        });
+        setShortcuts(normalizeTerminalShortcuts(migrated.terminalShortcuts));
+        localStorage.removeItem(LEGACY_TERMINAL_SHORTCUTS_STORAGE_KEY);
+      })
+      .catch((cause) => setError((cause as Error).message));
     if (props.active !== false) void attachExisting(activeProjectId);
   });
 
@@ -739,6 +823,44 @@ export function TerminalPane(props: { projectId: string; active?: boolean; autoS
         </form>
       </DialogContent>
     </Dialog>
+    <Dialog open={shortcutEditorOpen()} onOpenChange={setShortcutEditorOpen}>
+      <DialogContent class="terminal-shortcut-dialog" title="Terminal shortcuts" description="Keep useful shell commands one click away on every Conduit client.">
+        <div class="terminal-shortcut-editor">
+          <Index each={shortcutDraft()}>{(shortcut, index) =>
+            <div class="terminal-shortcut-editor-row">
+              <div class="terminal-shortcut-editor-copy">
+                <Input class="terminal-shortcut-name" aria-label={`Shortcut ${index + 1} name`} placeholder="Shortcut name" maxlength={32} value={shortcut().label}
+                  onInput={(event) => updateShortcutDraft(shortcut().id, { label: event.currentTarget.value })} />
+                <div class="terminal-shortcut-command">
+                  <span aria-hidden="true">$</span>
+                  <Input aria-label={`Shortcut ${index + 1} command`} placeholder="command" maxlength={2048} value={shortcut().command}
+                    onInput={(event) => updateShortcutDraft(shortcut().id, { command: event.currentTarget.value })} />
+                </div>
+              </div>
+              <div class="terminal-shortcut-row-actions">
+                <Button type="button" variant="ghost" class="terminal-shortcut-target" data-active={shortcut().target === "new" ? "true" : "false"}
+                  aria-label={`Run ${shortcut().label || `shortcut ${index + 1}`} in ${shortcut().target === "new" ? "a new shell" : "this shell"}`}
+                  aria-pressed={shortcut().target === "new"} title="Toggle between this shell and a new shell"
+                  onClick={() => updateShortcutDraft(shortcut().id, { target: shortcut().target === "new" ? "current" : "new" })}>
+                  <TerminalIcon /><span>{shortcut().target === "new" ? "New shell" : "This shell"}</span>
+                </Button>
+                <Button type="button" variant="ghost" size="icon-sm" disabled={index === 0} aria-label={`Move shortcut ${index + 1} up`}
+                  onClick={() => moveShortcutDraft(index, -1)}><ArrowUpIcon /></Button>
+                <Button type="button" variant="ghost" size="icon-sm" disabled={index === shortcutDraft().length - 1} aria-label={`Move shortcut ${index + 1} down`}
+                  onClick={() => moveShortcutDraft(index, 1)}><ArrowDownIcon /></Button>
+                <Button type="button" variant="ghost" size="icon-sm" aria-label={`Remove shortcut ${index + 1}`}
+                  onClick={() => setShortcutDraft((current) => current.filter((item) => item.id !== shortcut().id))}><Trash2Icon /></Button>
+              </div>
+            </div>
+          }</Index>
+          <Button type="button" variant="ghost" class="terminal-shortcut-add" disabled={shortcutDraft().length >= 12} onClick={addShortcutDraft}><PlusIcon />Add shortcut</Button>
+          <div class="terminal-shortcut-editor-actions">
+            <Button type="button" variant="outline" disabled={shortcutSaving()} onClick={() => setShortcutEditorOpen(false)}>Cancel</Button>
+            <Button type="button" disabled={shortcutSaving()} onClick={() => void saveShortcutDraft()}>{shortcutSaving() ? "Saving…" : "Save"}</Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
     <section ref={pane} class="terminal-pane" aria-label="Terminal pane" data-terminal-focused={terminalFocused() ? "true" : "false"} onKeyDown={scopeTerminalKeyboard}>
     <header class="terminal-pane-header">
       <Show when={coarseInput()}>
@@ -761,6 +883,17 @@ export function TerminalPane(props: { projectId: string; active?: boolean; autoS
         <Show when={pty()?.title}><strong>{pty()!.title}</strong></Show>
         <Show when={pty()?.currentCommand}><span class="terminal-header-command">{pty()!.currentCommand}</span></Show>
         <span class="terminal-header-status">{statusLabel()}</span>
+      </div>
+      <div class="terminal-shortcuts" aria-label="Terminal shortcuts">
+        <For each={shortcuts()}>{(shortcut) =>
+          <Button type="button" variant="ghost" size="sm" title={`${shortcut.target === "new" ? "New terminal" : "Current terminal"}: ${shortcut.command}`}
+            disabled={starting() || (shortcut.target === "current" && !writable())} onClick={() => runShortcut(shortcut)}>
+            {shortcut.label}
+          </Button>
+        }</For>
+        <Button type="button" variant="ghost" size="icon-sm" aria-label="Edit terminal shortcuts" title="Edit terminal shortcuts" onClick={openShortcutEditor}>
+          <Settings2Icon />
+        </Button>
       </div>
       <div class="terminal-pane-actions">
         <Menu onOpenChange={(open) => { if (open) void refreshSessions().catch((cause) => setError((cause as Error).message)); }}>
