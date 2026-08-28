@@ -37,7 +37,7 @@ export function createLiveSessionLauncher({
       throw launchError("session_project_mismatch", "The requested project does not own this chat", 409);
     }
     const resident = manager.getByChatId(context.chat.id);
-    if (resident) return resident;
+    if (resident) return { live: resident, modelRecovery: null };
 
     const template = templateForChat(context.chat, context.project);
     const runtime = context.chat.runtime || runtimeFor({ runtimeKind: "conduit_profile", template });
@@ -65,10 +65,20 @@ export function createLiveSessionLauncher({
     const catalogView = await runtimeCatalog.list(context.project.path);
     const requestedModel = text(model);
     const requestedThinkingLevel = text(thinkingLevel);
+    const persistedModel = context.chat.piSessionFile ? text(persisted?.model) : "";
+    const persistedOutsideScope = runtime.kind === "conduit_profile"
+      && Boolean(persistedModel)
+      && !catalogView.models.some((item) => item.spec === persistedModel);
+    const fallbackModel = catalogView.defaultModel || catalogView.models[0]?.spec || "";
+    if (persistedOutsideScope && !fallbackModel) {
+      throw launchError("no_scoped_model", "The previous model is no longer scoped and no scoped model is available", 409);
+    }
     const seedModel = forceModel
       ? requestedModel
-      : context.chat.piSessionFile
-        ? text(persisted?.model)
+      : persistedOutsideScope
+        ? fallbackModel
+        : context.chat.piSessionFile
+          ? persistedModel
         : requestedModel;
     const seedThinkingLevel = forceModel
       ? requestedThinkingLevel
@@ -148,6 +158,7 @@ export function createLiveSessionLauncher({
       });
       await manager.waitForSession(live.id);
       lifecycle.assertAvailable(context.chat.id, context.project.id);
+      if (persistedOutsideScope) await manager.setModel(live.id, processModel);
       if (runtime.kind === "native_pi" && seedModel) {
         await manager.setModel(live.id, seedModel);
         if (effectiveThinkingLevel) await manager.setThinkingLevel(live.id, effectiveThinkingLevel);
@@ -169,7 +180,14 @@ export function createLiveSessionLauncher({
         mapping.piSessionFile = live.sessionFile;
       }
       await registry.update(context.chat.id, mapping);
-      return live;
+      return {
+        live,
+        modelRecovery: persistedOutsideScope ? {
+          from: persistedModel,
+          to: processModel,
+          reason: "outside_scope",
+        } : null,
+      };
     } catch (error) {
       if (live && ["starting", "running"].includes(live.status)) await manager.stopAndWait(live.id).catch(() => {});
       throw error;

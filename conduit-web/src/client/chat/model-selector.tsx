@@ -26,6 +26,7 @@ export function ModelSelector(props: {
   onManageModels?: () => void;
 }) {
   const selected = createMemo(() => props.models.find((item) => item.spec === props.model));
+  const selectableModels = createMemo(() => props.models.filter((item) => !item.outsideScope));
   const levels = createMemo(() => selected()?.thinkingLevels || ["off"]);
 
   return <Menu>
@@ -39,7 +40,7 @@ export function ModelSelector(props: {
         <MenuLabel>Model</MenuLabel>
         <Show when={props.notice}><div class="px-2 pb-2 text-xs text-muted-foreground">{props.notice}</div></Show>
         <MenuRadioGroup value={props.model} onChange={props.onModelChange}>
-          <For each={props.models}>{(item) => <MenuRadioItem value={item.spec}><span class="truncate">{item.label}</span><span class="ml-auto text-xs text-muted-foreground">{item.provider}</span></MenuRadioItem>}</For>
+          <For each={selectableModels()}>{(item) => <MenuRadioItem value={item.spec}><span class="truncate">{item.label}</span><span class="ml-auto text-xs text-muted-foreground">{item.provider}</span></MenuRadioItem>}</For>
         </MenuRadioGroup>
       </MenuGroup>
       <Show when={selected()}><MenuSeparator />

@@ -455,7 +455,19 @@ function App() {
     }
   };
 
-  const chat = createActiveChat({ catalogue, runtime, models, attachments, onError: showError, defaultTemplateId, saveWorkspaceDefault });
+  const chat = createActiveChat({
+    catalogue,
+    runtime,
+    models,
+    attachments,
+    onError: showError,
+    onModelRecovered: ({ from, to }) => toast.warning(`This chat's previous model ${from} is no longer scoped. It resumed with ${to}.`, {
+      id: "model-scope-recovery",
+      duration: 6_000,
+    }),
+    defaultTemplateId,
+    saveWorkspaceDefault,
+  });
   const selectedProject = createMemo(() => catalogue.projects().find((project) => project.id === catalogue.projectId()));
   const hostInstallation = createMemo(() => installations().find((item) => item.id === "host-pi"));
   const profiles = createMemo<Template[]>(() => {

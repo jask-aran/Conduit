@@ -173,6 +173,7 @@ export interface ModelOption {
   spec: string;
   label: string;
   thinkingLevels: string[];
+  outsideScope?: boolean;
 }
 
 export interface ModelProfileView {
@@ -331,6 +332,11 @@ export interface LiveRecord {
   trustPosture?: string;
   sessionFile?: string;
   modelProfile?: ModelProfileView | null;
+  modelRecovery?: {
+    from: string;
+    to: string;
+    reason: "outside_scope";
+  };
 }
 
 export type VoiceExecution = "stop" | "eager" | "live";

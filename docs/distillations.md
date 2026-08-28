@@ -69,6 +69,13 @@ Add an entry through `$tacit-knowledge` after explicit approval or validated rep
 - **Scope:** Changes shared by Isolated Pi and Host Pi.
 - **Evidence:** The two-runtime boundary depends on the installed package contract, while upstream documentation describes a moving target.
 
+### Repair persisted models through Pi
+
+- **Type:** Gotcha.
+- **Rule:** When an isolated Pi session persists a model outside its current scope, launch the same JSONL with the scoped fallback, then call Pi `set_model`; do not rely on `--model` to record the replacement for an existing session. Return recovery metadata and do not make the historical model selectable.
+- **Scope:** Isolated Pi live-session resume, chat-model API, and model selector.
+- **Evidence:** `live-session-launcher.test.js` verifies fallback launch, Pi model-change persistence, and recovery metadata; `app.spec.js` covers the warning and picker exclusion.
+
 ### Keep one authentication boundary
 
 - **Type:** Invariant.
