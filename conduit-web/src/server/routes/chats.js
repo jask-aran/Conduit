@@ -163,7 +163,7 @@ export function registerChatRoutes(app, {
       const spec = String(request.body?.model || "").trim();
       const thinkingLevel = String(request.body?.thinkingLevel || "").trim();
       const current = await chatModelView(context);
-      if (spec && !current.models.some((item) => item.spec === spec)) {
+      if (spec && !current.models.some((item) => item.spec === spec && !item.outsideScope)) {
         return response.status(400).json({ error: "invalid_model" });
       }
       const targetModel = spec || current.model;

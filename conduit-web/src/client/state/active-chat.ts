@@ -65,6 +65,7 @@ interface ActiveChatOptions {
   models: ModelSettings;
   attachments: AttachmentsStore;
   onError: ErrorHandler;
+  onModelRecovered: (details: { from: string; to: string }) => void;
   defaultTemplateId: () => string;
   saveWorkspaceDefault: (workspaceId: string, templateId: string | null) => Promise<unknown>;
 }
@@ -483,6 +484,7 @@ export function createActiveChat(options: ActiveChatOptions) {
       });
       if (token !== openToken || selection !== selectionToken || selectedId() !== chatId) return null;
       setLive(record);
+      if (record.modelRecovery) options.onModelRecovered(record.modelRecovery);
       if (record.runtime) setRuntimeIdentity(record.runtime);
       if (record.contextUsage) setContextUsage(record.contextUsage);
       if (record.sessionStats) setSessionStats(record.sessionStats);

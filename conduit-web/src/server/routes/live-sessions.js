@@ -49,13 +49,17 @@ export function registerLiveSessionRoutes(app, {
   app.post("/v0/live-sessions", async (request, response, next) => {
     try {
       const chatId = request.body?.chatId || request.body?.resumeSessionId;
-      const live = await launchLiveSession({
+      const { live, modelRecovery } = await launchLiveSession({
         chatId,
         requestedProject: request.body?.projectId || "",
         model: request.body?.model || "",
         thinkingLevel: request.body?.thinkingLevel || "",
       });
-      response.status(201).json({ ...manager.view(live), streamUrl: `/v0/live-sessions/${live.id}/stream` });
+      response.status(201).json({
+        ...manager.view(live),
+        streamUrl: `/v0/live-sessions/${live.id}/stream`,
+        ...(modelRecovery ? { modelRecovery } : {}),
+      });
     } catch (error) {
       next(error);
     }

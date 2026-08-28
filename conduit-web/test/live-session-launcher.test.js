@@ -100,7 +100,8 @@ test("live session launcher selects and materializes the model profile before Pi
 
   try {
     const result = await launcher({ chatId });
-    assert.equal(result, live);
+    assert.equal(result.live, live);
+    assert.equal(result.modelRecovery, null);
     assert.equal(launchCalls.length, 1);
     assert.equal(launchCalls[0].model, "openai-codex/test-model");
     assert.equal(launchCalls[0].launchSpec.env.PI_CODING_AGENT_DIR, path.join(agentDir, "model-profiles", "openai-search"));
@@ -188,6 +189,87 @@ test("live session launcher repairs an obsolete persisted thinking level", async
       { code: "invalid_thinking_level" },
     );
     assert.equal(launchCalls.length, 1);
+  } finally {
+    await fs.rm(root, { recursive: true, force: true });
+  }
+});
+
+test("live session launcher recovers an out-of-scope persisted model", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-launcher-model-recovery-"));
+  const agentDir = path.join(root, "pi");
+  const workspace = path.join(root, "workspace");
+  const sessionFile = path.join(root, "sessions", "chat.jsonl");
+  await fs.mkdir(workspace, { recursive: true });
+  await fs.mkdir(path.dirname(sessionFile), { recursive: true });
+  await fs.writeFile(sessionFile, [
+    { type: "session", id: "session-recovery", cwd: workspace },
+    { type: "model_change", provider: "example", modelId: "retired" },
+    { type: "thinking_level_change", thinkingLevel: "high" },
+  ].map((entry) => JSON.stringify(entry)).join("\n") + "\n");
+
+  const chatId = "m".repeat(24);
+  const project = { id: "project_recovery", slug: "recovery", path: workspace };
+  const chat = {
+    id: chatId,
+    status: "active",
+    runtime: { kind: "conduit_profile", installationId: "conduit-pinned", profileId: "chat", profileVersion: "7" },
+    piSessionFile: sessionFile,
+    modelThinkingLevels: {},
+  };
+  const template = {
+    id: "chat",
+    version: "7",
+    systemPrompt: path.join(root, "SYSTEM.md"),
+    tools: ["read"],
+    models: ["example/reasoner"],
+    extensions: [],
+    skills: [],
+    promptTemplates: [],
+  };
+  const launchCalls = [];
+  const modelChanges = [];
+  const live = { id: "live-recovery", status: "running", sessionFile, sessionId: "session-recovery" };
+  const launcher = createLiveSessionLauncher({
+    catalogFor: () => ({
+      list: async () => ({
+        models: [{ spec: "example/reasoner", thinkingLevels: ["medium", "high"] }],
+        defaultModel: "example/reasoner",
+        defaultThinkingLevel: "medium",
+      }),
+      getLaunchModels: () => [...template.models],
+    }),
+    config: {
+      bridgeSystemPrompt: path.join(root, "bridge-system.md"),
+      bridgeSkill: path.join(root, "bridge-skill.md"),
+      modelProfiles: {},
+      installations: { get: () => ({ id: "conduit-pinned", available: true, command: "/opt/conduit/pi", commandArgs: [], agentDir, version: "0.84.1" }) },
+    },
+    findChatContext: async () => ({ chat, project }),
+    lifecycle: { assertAvailable: () => {}, runLaunch: (_id, work) => work(), withProjects: (_ids, work) => work() },
+    manager: {
+      getByChatId: () => null,
+      createWithCapacity: async (options) => { launchCalls.push(options); return live; },
+      waitForSession: async () => {},
+      setModel: async (id, spec) => modelChanges.push({ id, spec }),
+      stopAndWait: async () => {},
+    },
+    modelProfileRuntime: { materialize: async () => ({ agentDir }) },
+    nativePreflight: async () => ({ available: true }),
+    registry: { update: async () => {} },
+    runtimeFor: () => chat.runtime,
+    templateForChat: () => template,
+  });
+
+  try {
+    const result = await launcher({ chatId });
+    assert.equal(launchCalls[0].model, "example/reasoner");
+    assert.equal(launchCalls[0].thinkingLevel, "high");
+    assert.deepEqual(modelChanges, [{ id: live.id, spec: "example/reasoner" }]);
+    assert.deepEqual(result.modelRecovery, {
+      from: "example/retired",
+      to: "example/reasoner",
+      reason: "outside_scope",
+    });
   } finally {
     await fs.rm(root, { recursive: true, force: true });
   }

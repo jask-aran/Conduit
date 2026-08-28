@@ -1213,6 +1213,46 @@ test("shows one toast when an obsolete thinking level is recovered", async ({ pa
   await expect(recoveryToast).toHaveCount(1);
 });
 
+test("recovers an out-of-scope model and hides it from the picker", async ({ page }) => {
+  const recoveryChat = { id: "model_scope_recovery", projectId: "project_chat", status: "active", title: "Recovery chat" };
+  const retiredModel = { ...model, id: "retired", spec: "example/retired", label: "Retired", outsideScope: true };
+  await page.unroute("**/v0/projects");
+  await page.route("**/v0/projects", (route) => route.fulfill({ json: { projects: [{ ...projects[0], sessions: [recoveryChat] }, projects[1]] } }));
+  await page.route("**/v0/chats/model_scope_recovery", (route) => route.fulfill({ json: recoveryChat }));
+  await page.route("**/v0/sessions/model_scope_recovery", (route) => route.fulfill({ json: {
+    ...recoveryChat,
+    model: retiredModel.spec,
+    thinkingLevel: "medium",
+    messages: [],
+    tools: [],
+    page: { before: null },
+  } }));
+  await page.unroute("**/v0/chats/*/models");
+  await page.route("**/v0/chats/*/models", (route) => route.fulfill({ json: {
+    installationId: "conduit-pinned",
+    runtimeKind: "conduit_profile",
+    models: [retiredModel, model],
+    model: model.spec,
+    thinkingLevel: "medium",
+    defaultModel: model.spec,
+    defaultThinkingLevel: "medium",
+    requiresAuthentication: false,
+    warnings: [],
+  } }));
+  await page.route("**/v0/live-sessions", (route) => route.fulfill({ status: 201, json: {
+    id: "live-model-scope-recovery",
+    chatId: recoveryChat.id,
+    streamUrl: "/v0/live-sessions/live-model-scope-recovery/stream",
+    modelRecovery: { from: retiredModel.spec, to: model.spec, reason: "outside_scope" },
+  } }));
+
+  await page.goto("/chat/model_scope_recovery");
+  await expect(page.locator('[data-sonner-toast]').filter({ hasText: "This chat's previous model example/retired is no longer scoped. It resumed with example/reasoner." })).toHaveCount(1);
+  await page.getByRole("button", { name: /Reasoner medium/ }).click();
+  await expect(page.getByRole("menuitemradio", { name: "Retired example" })).toHaveCount(0);
+  await expect(page.getByRole("menuitemradio", { name: "Reasoner example" })).toBeVisible();
+});
+
 test("Workspace views use the nested palette page and terminal lives in the Workspace panel", async ({ page }, testInfo) => {
   const workspace = {
     id: "project_conduit",
