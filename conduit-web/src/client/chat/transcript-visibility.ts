@@ -16,10 +16,17 @@ interface TableLock {
   marginLeft: string;
 }
 
+function intrinsicBlockSize(element: HTMLElement, borderBoxSize: number) {
+  const style = getComputedStyle(element);
+  const border = Number.parseFloat(style.borderBlockStartWidth)
+    + Number.parseFloat(style.borderBlockEndWidth);
+  return Math.max(0, borderBoxSize - border);
+}
+
 function blockSize(entry: ResizeObserverEntry) {
   const borderBox = entry.borderBoxSize;
-  if (borderBox[0]) return borderBox[0].blockSize;
-  return entry.contentRect.height;
+  const size = borderBox[0]?.blockSize ?? entry.target.getBoundingClientRect().height;
+  return intrinsicBlockSize(entry.target as HTMLElement, size);
 }
 
 function containsDisplayMath(element: HTMLElement) {
@@ -128,7 +135,7 @@ export function mountTranscriptVisibility(
         continue;
       }
       virtualized.add(element);
-      setIntrinsicSize(element, rect.height);
+      setIntrinsicSize(element, intrinsicBlockSize(element, rect.height));
       const visible = rect.bottom >= top && rect.top <= bottom;
       if (visible) {
         revealed ||= element.getAttribute(VISIBILITY_ATTRIBUTE) === "hidden";
