@@ -6,14 +6,19 @@ export function rememberPwaRegistration(registration: ServiceWorkerRegistration 
   registeredServiceWorker = registration || null;
 }
 
+export async function checkForPwaUpdate() {
+  if (!("serviceWorker" in navigator)) return;
+  const registration = registeredServiceWorker || await navigator.serviceWorker.getRegistration();
+  await registration?.update();
+}
+
 async function performPwaUpdate(reloadPage: () => void) {
   if (!("serviceWorker" in navigator)) {
     reloadPage();
     return;
   }
 
-  const serviceWorker = navigator.serviceWorker;
-  const registration = registeredServiceWorker || await serviceWorker.getRegistration();
+  const registration = registeredServiceWorker || await navigator.serviceWorker.getRegistration();
   if (!registration) {
     reloadPage();
     return;
