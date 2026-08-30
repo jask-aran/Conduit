@@ -302,6 +302,11 @@ exit 0
         sessionNameThinkingLevel: "low",
         terminalShortcuts: [{ id: "herdr", label: "Herdr", command: "herdr", target: "new" }],
         sidebarPins: ["chat:one", "project:two", "terminal:three"],
+        sidebarChatLimit: 45,
+        collapsedProjectIds: ["project_chat"],
+        rendererControlsVisible: false,
+        transcriptRenderer: "incremark-advanced",
+        voicePreferences: { shortcut: "Ctrl+Shift+D", activation: "toggle", autoSend: true, captureProfile: "processed" },
       }),
     });
     assert.equal(prefsPatch.status, 200);
@@ -311,6 +316,10 @@ exit 0
     assert.equal(savedPreferences.sessionNameThinkingLevel, "low");
     assert.deepEqual(savedPreferences.terminalShortcuts, [{ id: "herdr", label: "Herdr", command: "herdr", target: "new" }]);
     assert.deepEqual(savedPreferences.sidebarPins, ["chat:one", "project:two", "terminal:three"]);
+    assert.equal(savedPreferences.sidebarChatLimit, 45);
+    assert.deepEqual(savedPreferences.collapsedProjectIds, ["project_chat"]);
+    assert.equal(savedPreferences.rendererControlsVisible, false);
+    assert.equal(savedPreferences.transcriptRenderer, "incremark-advanced");
     const invalidTerminalShortcuts = await fetch(`${origin}/v0/preferences`, {
       method: "PATCH",
       headers: { "content-type": "application/json" },
@@ -325,6 +334,13 @@ exit 0
     });
     assert.equal(invalidSidebarPins.status, 400);
     assert.equal((await invalidSidebarPins.json()).error, "invalid_sidebar_pins");
+    const invalidUiPreferences = await fetch(`${origin}/v0/preferences`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ sidebarChatLimit: 4 }),
+    });
+    assert.equal(invalidUiPreferences.status, 400);
+    assert.equal((await invalidUiPreferences.json()).error, "invalid_ui_preferences");
 
     const inheritedWorkspaceChat = await fetch(`${origin}/v0/chats`, {
       method: "POST",

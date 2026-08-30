@@ -58,6 +58,7 @@ import type { RuntimeStore } from "../state/runtime";
 import { focusFirst, isMobileLayout, MOBILE_LAYOUT_QUERY, restoreFocus } from "./mobile-layout";
 import { ProjectActivityIndicator, RuntimeIndicator } from "./runtime-indicator";
 import { dispatchPanelGeometryMotion, PANEL_MOTION_DURATION_MS } from "../panel-motion";
+import { publishUiPreference, UI_PREFERENCE_CHANGE_EVENT } from "../preferences/ui-preferences";
 import "./sidebar.css";
 
 type WorkspaceMode = "linked" | "created" | "cloned";
@@ -192,6 +193,7 @@ export function Sidebar(props: {
   };
   const toggleSidebar = () => {
     const nextCollapsed = !collapsed();
+    publishUiPreference("sidebarCollapsed", nextCollapsed);
     const startWidth = shellWidth();
     const targetWidth = nextCollapsed ? 41.6 : 195.2;
     cancelSidebarEdgeMotion();
@@ -251,6 +253,20 @@ export function Sidebar(props: {
   };
   onCleanup(() => {
     cancelSidebarEdgeMotion();
+  });
+  onMount(() => {
+    const syncPreferences = (event: Event) => {
+      const detail = (event as CustomEvent<{ key?: string; value?: unknown }>).detail;
+      if (detail?.key === "sidebarCollapsed" && typeof detail.value === "boolean") {
+        setCollapsed(detail.value);
+        setVisualCollapsed(detail.value);
+        setShellWidth(detail.value ? 41.6 : 195.2);
+      } else if (detail?.key === "collapsedProjectIds" && Array.isArray(detail.value)) {
+        setCollapsedProjectIds(new Set(detail.value.filter((item): item is string => typeof item === "string")));
+      }
+    };
+    window.addEventListener(UI_PREFERENCE_CHANGE_EVENT, syncPreferences);
+    onCleanup(() => window.removeEventListener(UI_PREFERENCE_CHANGE_EVENT, syncPreferences));
   });
   const [phoneLayout, setPhoneLayout] = createSignal(isMobileLayout());
   onMount(() => {
@@ -361,6 +377,7 @@ export function Sidebar(props: {
       if (!current.has(owner.id)) return current;
       const next = new Set(current);
       next.delete(owner.id);
+      publishUiPreference("collapsedProjectIds", [...next]);
       return next;
     });
     queueMicrotask(() => {
@@ -446,6 +463,7 @@ export function Sidebar(props: {
       const next = new Set(current);
       if (next.has(projectId)) next.delete(projectId);
       else next.add(projectId);
+      publishUiPreference("collapsedProjectIds", [...next]);
       return next;
     });
   };

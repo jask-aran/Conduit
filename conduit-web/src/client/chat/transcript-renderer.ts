@@ -17,6 +17,7 @@ export function saveRendererControlsVisible(
   storage: Pick<Storage, "setItem"> = localStorage,
 ): boolean {
   storage.setItem(RENDERER_CONTROLS_VISIBLE_STORAGE_KEY, String(visible));
+  if (typeof window !== "undefined") window.dispatchEvent(new CustomEvent("conduit:ui-preference-change", { detail: { key: "rendererControlsVisible", value: visible } }));
   return visible;
 }
 
@@ -60,5 +61,9 @@ export function saveTranscriptRenderer(
 ): TranscriptRendererMode {
   storage.setItem(TRANSCRIPT_RENDERER_STORAGE_KEY, renderer);
   if (renderer !== "incremark-advanced") storage.setItem(MARKDOWN_RENDERER_STORAGE_KEY, renderer);
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent("conduit:ui-preference-change", { detail: { key: "transcriptRenderer", value: renderer } }));
+    if (renderer !== "incremark-advanced") window.dispatchEvent(new CustomEvent("conduit:ui-preference-change", { detail: { key: "markdownRenderer", value: renderer } }));
+  }
   return renderer;
 }

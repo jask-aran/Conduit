@@ -295,6 +295,57 @@ test.beforeEach(async ({ page }) => {
   });
 });
 
+test("durable UI preferences migrate once and restore after browser storage loss", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop-chromium");
+  let preferences = {
+    defaultTemplateId: "chat",
+    sidebarChatLimit: null,
+    collapsedProjectIds: null,
+    sidebarCollapsed: null,
+    markdownRenderer: null,
+    transcriptRenderer: null,
+    rendererControlsVisible: null,
+    composerSurface: null,
+    contextMetrics: null,
+    meteorField: null,
+    incremarkPacing: null,
+    shortcutOverrides: null,
+    voicePreferences: null,
+  };
+  await page.route("**/v0/preferences", async (route) => {
+    const body = route.request().postDataJSON?.() || {};
+    preferences = { ...preferences, ...body };
+    await route.fulfill({ json: preferences });
+  });
+  await page.addInitScript(() => {
+    if (sessionStorage.getItem("conduit:ui-preference-migration-test") === "ready") return;
+    sessionStorage.setItem("conduit:ui-preference-migration-test", "ready");
+    localStorage.setItem("conduit:sidebar-chat-limit", "37");
+    localStorage.setItem("conduit.sidebar.collapsed-projects", JSON.stringify(["project_chat"]));
+    localStorage.setItem("conduit:renderer-controls-visible", "false");
+  });
+  const migration = page.waitForRequest((request) => request.method() === "PATCH"
+    && new URL(request.url()).pathname === "/v0/preferences"
+    && request.postDataJSON()?.sidebarChatLimit === 37);
+  await page.goto("/");
+  const migrated = (await migration).postDataJSON();
+  expect(migrated.sidebarChatLimit).toBe(37);
+  expect(migrated.collapsedProjectIds).toEqual(["project_chat"]);
+  expect(migrated.rendererControlsVisible).toBe(false);
+
+  await page.evaluate(() => {
+    localStorage.removeItem("conduit:sidebar-chat-limit");
+    localStorage.removeItem("conduit.sidebar.collapsed-projects");
+    localStorage.removeItem("conduit:renderer-controls-visible");
+  });
+  await page.reload();
+  await expect.poll(() => page.evaluate(() => ({
+    limit: localStorage.getItem("conduit:sidebar-chat-limit"),
+    folders: localStorage.getItem("conduit.sidebar.collapsed-projects"),
+    controls: localStorage.getItem("conduit:renderer-controls-visible"),
+  }))).toEqual({ limit: "37", folders: JSON.stringify(["project_chat"]), controls: "false" });
+});
+
 test("workspace panel previews files, shows diff, and persists per chat", async ({ page }) => {
   await openChatSurface(page);
   await page.getByRole("button", { name: "Toggle workspace panel" }).click();

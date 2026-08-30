@@ -53,7 +53,7 @@ test("surface selection persists and dispatches the shared change event", () => 
   }
 
   assert.deepEqual(storage.snapshot(), { "conduit:composer-surface": "frosted-live" });
-  assert.deepEqual(events.map(({ type, detail }) => ({ type, detail })), [
+  assert.deepEqual(events.filter(({ type }) => type === "conduit:composer-surface-change").map(({ type, detail }) => ({ type, detail })), [
     { type: "conduit:composer-surface-change", detail: "static" },
     { type: "conduit:composer-surface-change", detail: "frosted-live" },
   ]);

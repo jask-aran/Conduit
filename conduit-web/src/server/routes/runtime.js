@@ -1,4 +1,4 @@
-import { validSidebarPins, validTerminalShortcuts } from "../../preferences-store.js";
+import { validSidebarPins, validTerminalShortcuts, validUiPreferencePatch } from "../../preferences-store.js";
 
 export function registerRuntimeRoutes(app, {
   attachments,
@@ -125,12 +125,24 @@ export function registerRuntimeRoutes(app, {
       if (sidebarPins != null && !validSidebarPins(sidebarPins)) {
         return response.status(400).json({ error: "invalid_sidebar_pins" });
       }
+      if (!validUiPreferencePatch(request.body)) {
+        return response.status(400).json({ error: "invalid_ui_preferences" });
+      }
+      const uiKeys = [
+        "sidebarChatLimit", "collapsedProjectIds", "sidebarCollapsed", "markdownRenderer",
+        "transcriptRenderer", "rendererControlsVisible", "composerSurface", "contextMetrics",
+        "meteorField", "incremarkPacing", "shortcutOverrides", "voicePreferences",
+      ];
+      const uiPatch = Object.fromEntries(uiKeys
+        .filter((key) => Object.hasOwn(request.body || {}, key))
+        .map((key) => [key, request.body[key]]));
       const saved = await preferences.save({
         defaultTemplateId: requested ?? preferences.get().defaultTemplateId,
         ...(model != null ? { sessionNameModel: model } : {}),
         ...(thinkingLevel != null ? { sessionNameThinkingLevel: thinkingLevel } : {}),
         ...(terminalShortcuts != null ? { terminalShortcuts } : {}),
         ...(sidebarPins != null ? { sidebarPins } : {}),
+        ...uiPatch,
       });
       response.json(saved);
     } catch (error) { next(error); }

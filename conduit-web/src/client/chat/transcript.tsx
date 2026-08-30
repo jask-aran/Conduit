@@ -10,6 +10,7 @@ import type { MarkdownRendererId } from "./markdown-settings";
 import { COMPOSER_SURFACE_CHANGE_EVENT, COMPOSER_SURFACE_OPTIONS, saveComposerSurface, selectedComposerSurface, type ComposerSurfaceMode } from "./composer-surface";
 import { saveTranscriptRenderer, selectedTranscriptRenderer, TRANSCRIPT_RENDERER_OPTIONS, type TranscriptRendererMode } from "./transcript-renderer";
 import { INCREMARK_PACING_OPTIONS, saveIncremarkPacing, selectedIncremarkPacing, type IncremarkPacingMode } from "./incremark-pacing";
+import { UI_PREFERENCE_CHANGE_EVENT } from "../preferences/ui-preferences";
 import { mountTranscriptPanelMotion } from "./transcript-motion";
 import { mountTranscriptVisibility } from "./transcript-visibility";
 import { isMobileLayout } from "../navigation/mobile-layout";
@@ -378,6 +379,19 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
 
   onMount(() => {
     const syncComposerSurface = () => setComposerSurface(selectedComposerSurface());
+    const syncUiPreference = (event: Event) => {
+      const detail = (event as CustomEvent<{ key?: string; value?: unknown }>).detail;
+      const params = new URLSearchParams(location.search);
+      if (detail?.key === "composerSurface") setComposerSurface(selectedComposerSurface());
+      else if (detail?.key === "transcriptRenderer" && typeof detail.value === "string"
+        && !params.has("transcriptRenderer") && !params.has("markdownRenderer")) {
+        setTranscriptRenderer(detail.value as TranscriptRendererMode);
+      } else if (detail?.key === "incremarkPacing" && typeof detail.value === "string"
+        && !params.has("incremarkPacing") && !params.has("adaptivePacing")) {
+        setIncremarkPacing(detail.value as IncremarkPacingMode);
+      }
+    };
+    window.addEventListener(UI_PREFERENCE_CHANGE_EVENT, syncUiPreference);
     let latestButtonAnchorFrame: number | null = null;
     let composerBlockSize = -1;
     const syncLatestButtonAnchor = () => {
@@ -472,6 +486,7 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
     });
     resizeObserver.observe(thread);
     onCleanup(() => {
+      window.removeEventListener(UI_PREFERENCE_CHANGE_EVENT, syncUiPreference);
       layoutEpoch += 1;
       resizeObserver.disconnect();
       viewport.removeEventListener("scroll", onScroll);
