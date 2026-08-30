@@ -33,5 +33,6 @@ export function saveIncremarkPacing(
 ): IncremarkPacingMode {
   const selected = mode === "adaptive" || mode === "fixed" ? mode : "buffered";
   storage.setItem(INCREMARK_PACING_STORAGE_KEY, selected);
+  if (typeof window !== "undefined") window.dispatchEvent(new CustomEvent("conduit:ui-preference-change", { detail: { key: "incremarkPacing", value: selected } }));
   return selected;
 }

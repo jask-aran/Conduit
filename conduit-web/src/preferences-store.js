@@ -7,6 +7,18 @@ const DEFAULTS = {
   sessionNameThinkingLevel: "off",
   terminalShortcuts: [],
   sidebarPins: [],
+  sidebarChatLimit: null,
+  collapsedProjectIds: null,
+  sidebarCollapsed: null,
+  markdownRenderer: null,
+  transcriptRenderer: null,
+  rendererControlsVisible: null,
+  composerSurface: null,
+  contextMetrics: null,
+  meteorField: null,
+  incremarkPacing: null,
+  shortcutOverrides: null,
+  voicePreferences: null,
 };
 
 const SIDEBAR_PIN_PATTERN = /^(chat|project|terminal):[^\s:][^\s]*$/;
@@ -25,6 +37,47 @@ export function validSidebarPins(input) {
       && item.length <= 200
       && SIDEBAR_PIN_PATTERN.test(item))
     && new Set(input).size === input.length;
+}
+
+const UI_PREFERENCE_KEYS = new Set([
+  "sidebarChatLimit", "collapsedProjectIds", "sidebarCollapsed", "markdownRenderer",
+  "transcriptRenderer", "rendererControlsVisible", "composerSurface", "contextMetrics",
+  "meteorField", "incremarkPacing", "shortcutOverrides", "voicePreferences",
+]);
+const stringList = (value, limit) => Array.isArray(value) && value.length <= limit
+  && value.every((item) => typeof item === "string" && item.length <= 200);
+const oneOf = (value, choices) => typeof value === "string" && choices.includes(value);
+const validShortcutOverrides = (value) => {
+  if (!value || typeof value !== "object" || Array.isArray(value) || Object.keys(value).length > 100) return false;
+  return Object.entries(value).every(([commandId, bindings]) => commandId.length <= 100
+    && Array.isArray(bindings) && bindings.length <= 4
+    && bindings.every((binding) => Array.isArray(binding?.strokes) && binding.strokes.length >= 1 && binding.strokes.length <= 2
+      && binding.strokes.every((stroke) => typeof stroke?.code === "string" && stroke.code.length <= 40
+        && typeof stroke.key === "string" && stroke.key.length <= 40
+        && stringList(stroke.modifiers, 4))));
+};
+const validVoicePreferences = (value) => value && typeof value === "object" && !Array.isArray(value)
+  && typeof value.shortcut === "string" && value.shortcut.length <= 100
+  && oneOf(value.activation, ["push_to_talk", "toggle"])
+  && typeof value.autoSend === "boolean"
+  && oneOf(value.captureProfile, ["raw", "processed"]);
+
+export function validUiPreferencePatch(input = {}) {
+  return Object.entries(input).every(([key, value]) => {
+    if (!UI_PREFERENCE_KEYS.has(key)) return true;
+    if (value == null) return false;
+    if (key === "sidebarChatLimit") return Number.isInteger(value) && value >= 5 && value <= 100;
+    if (key === "collapsedProjectIds") return stringList(value, 200);
+    if (["sidebarCollapsed", "rendererControlsVisible", "meteorField"].includes(key)) return typeof value === "boolean";
+    if (key === "markdownRenderer") return oneOf(value, ["marked-stable", "marked", "incremark", "incremark-typewriter", "incremark-synthetic"]);
+    if (key === "transcriptRenderer") return oneOf(value, ["marked-stable", "marked", "incremark", "incremark-typewriter", "incremark-synthetic", "incremark-advanced"]);
+    if (key === "composerSurface") return oneOf(value, ["static", "frosted-live"]);
+    if (key === "contextMetrics") return stringList(value, 40);
+    if (key === "incremarkPacing") return oneOf(value, ["adaptive", "fixed", "buffered"]);
+    if (key === "shortcutOverrides") return validShortcutOverrides(value);
+    if (key === "voicePreferences") return validVoicePreferences(value);
+    return false;
+  });
 }
 
 export function normalizeTerminalShortcuts(input) {
@@ -71,7 +124,38 @@ export function normalizePreferences(input = {}, fallback = DEFAULTS, knownTempl
   const sidebarPins = Array.isArray(input.sidebarPins)
     ? normalizeSidebarPins(input.sidebarPins)
     : normalizeSidebarPins(fallback.sidebarPins);
-  return { defaultTemplateId, sessionNameModel, sessionNameThinkingLevel, terminalShortcuts, sidebarPins };
+  const nullable = (key, normalize) => input[key] == null
+    ? (fallback[key] == null ? null : normalize(fallback[key]))
+    : normalize(input[key]);
+  const boolean = (value) => typeof value === "boolean" ? value : null;
+  const choice = (values) => (value) => values.includes(value) ? value : null;
+  const stringArray = (limit = 100) => (value) => Array.isArray(value)
+    ? [...new Set(value.filter((item) => typeof item === "string" && item.length <= 200))].slice(0, limit)
+    : null;
+  const plainObject = (value) => value && typeof value === "object" && !Array.isArray(value)
+    ? structuredClone(value)
+    : null;
+  return {
+    defaultTemplateId,
+    sessionNameModel,
+    sessionNameThinkingLevel,
+    terminalShortcuts,
+    sidebarPins,
+    sidebarChatLimit: nullable("sidebarChatLimit", (value) => Number.isFinite(Number(value))
+      ? Math.min(100, Math.max(5, Math.round(Number(value))))
+      : null),
+    collapsedProjectIds: nullable("collapsedProjectIds", stringArray(200)),
+    sidebarCollapsed: nullable("sidebarCollapsed", boolean),
+    markdownRenderer: nullable("markdownRenderer", choice(["marked-stable", "marked", "incremark", "incremark-typewriter", "incremark-synthetic"])),
+    transcriptRenderer: nullable("transcriptRenderer", choice(["marked-stable", "marked", "incremark", "incremark-typewriter", "incremark-synthetic", "incremark-advanced"])),
+    rendererControlsVisible: nullable("rendererControlsVisible", boolean),
+    composerSurface: nullable("composerSurface", choice(["static", "frosted-live"])),
+    contextMetrics: nullable("contextMetrics", stringArray(40)),
+    meteorField: nullable("meteorField", boolean),
+    incremarkPacing: nullable("incremarkPacing", choice(["adaptive", "fixed", "buffered"])),
+    shortcutOverrides: nullable("shortcutOverrides", (value) => validShortcutOverrides(value) ? plainObject(value) : null),
+    voicePreferences: nullable("voicePreferences", (value) => validVoicePreferences(value) ? plainObject(value) : null),
+  };
 }
 
 export class PreferencesStore {

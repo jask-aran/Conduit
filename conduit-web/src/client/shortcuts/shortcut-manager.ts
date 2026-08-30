@@ -169,9 +169,17 @@ export class ShortcutManager {
     return Object.fromEntries(Object.entries(this.overrides).map(([commandId, bindings]) => [commandId, [...bindings]]));
   }
 
+  replaceOverrides(overrides: ShortcutOverrides): void {
+    this.overrides = Object.fromEntries(Object.entries(overrides).map(([commandId, bindings]) => [commandId, [...bindings]]));
+    writeShortcutOverrides(this.overrides, this.storage);
+    this.clearPendingSequence();
+    this.emit();
+  }
+
   setOverride(commandId: string, bindings: ShortcutBinding[]): void {
     this.overrides = { ...this.overrides, [commandId]: bindings };
     writeShortcutOverrides(this.overrides, this.storage);
+    if (typeof window !== "undefined") window.dispatchEvent(new CustomEvent("conduit:ui-preference-change", { detail: { key: "shortcutOverrides", value: this.shortcutOverrides() } }));
     this.clearPendingSequence();
     this.emit();
   }
@@ -181,6 +189,7 @@ export class ShortcutManager {
     const { [commandId]: _removed, ...remaining } = this.overrides;
     this.overrides = remaining;
     writeShortcutOverrides(this.overrides, this.storage);
+    if (typeof window !== "undefined") window.dispatchEvent(new CustomEvent("conduit:ui-preference-change", { detail: { key: "shortcutOverrides", value: this.shortcutOverrides() } }));
     this.clearPendingSequence();
     this.emit();
   }
@@ -188,6 +197,7 @@ export class ShortcutManager {
   resetAllOverrides(): void {
     this.overrides = {};
     clearShortcutOverrides(this.storage);
+    if (typeof window !== "undefined") window.dispatchEvent(new CustomEvent("conduit:ui-preference-change", { detail: { key: "shortcutOverrides", value: {} } }));
     this.clearPendingSequence();
     this.emit();
   }

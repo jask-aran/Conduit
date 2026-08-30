@@ -126,6 +126,7 @@ export function saveContextMetrics(value: unknown): ContextMetricId[] {
   if (typeof localStorage !== "undefined") {
     try { localStorage.setItem(CONTEXT_METRIC_STORAGE_KEY, JSON.stringify(normalized)); } catch { /* Browser storage can be unavailable. */ }
   }
+  if (typeof window !== "undefined") window.dispatchEvent(new CustomEvent("conduit:ui-preference-change", { detail: { key: "contextMetrics", value: normalized } }));
   return normalized;
 }
 

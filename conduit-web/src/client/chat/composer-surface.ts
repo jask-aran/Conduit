@@ -32,6 +32,7 @@ export function saveComposerSurface(
   storage: Pick<Storage, "setItem"> = localStorage,
 ): ComposerSurfaceMode {
   storage.setItem(COMPOSER_SURFACE_STORAGE_KEY, surface);
+  if (typeof window !== "undefined") window.dispatchEvent(new CustomEvent("conduit:ui-preference-change", { detail: { key: "composerSurface", value: surface } }));
   if (typeof window !== "undefined") window.dispatchEvent(new CustomEvent<ComposerSurfaceMode>(COMPOSER_SURFACE_CHANGE_EVENT, { detail: surface }));
   return surface;
 }

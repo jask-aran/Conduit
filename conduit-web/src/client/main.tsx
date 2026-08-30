@@ -18,13 +18,13 @@ import type { ChatSummary, DashboardChat, Installation, Project, RuntimeIdentity
 import { createErrorDiagnostic, formatRuntimeDiagnosticPrompt, type ErrorDiagnostic, type ErrorDiagnosticContext } from "./error-diagnostics";
 import { Composer, SPINNING_ACTIVITY, type ComposerStatus } from "./chat/composer";
 import { AppDashboard } from "./dashboard/app-dashboard";
-import { COMPOSER_SURFACE_CHANGE_EVENT, selectedComposerSurface, type ComposerSurfaceMode } from "./chat/composer-surface";
+import { COMPOSER_SURFACE_CHANGE_EVENT, COMPOSER_SURFACE_STORAGE_KEY, selectedComposerSurface, type ComposerSurfaceMode } from "./chat/composer-surface";
 import type { VoiceDictationSettings } from "./chat/voice-dictation-types";
-import { contextUsagePercent, formatContextMetrics, saveContextMetrics, selectedContextMetrics, type ContextMetricId } from "./chat/context-metrics";
+import { CONTEXT_METRIC_STORAGE_KEY, contextUsagePercent, formatContextMetrics, saveContextMetrics, selectedContextMetrics, type ContextMetricId } from "./chat/context-metrics";
 import { HostUiRequests } from "./chat/host-ui-card";
 import { MARKDOWN_RENDERER_STORAGE_KEY, selectedMarkdownRenderer, type MarkdownRendererId } from "./chat/markdown-settings";
-import { saveRendererControlsVisible, selectedRendererControlsVisible } from "./chat/transcript-renderer";
-import { loadVoiceDictationSettings, saveVoiceDictationSettings } from "./chat/voice-dictation";
+import { RENDERER_CONTROLS_VISIBLE_STORAGE_KEY, saveRendererControlsVisible, selectedRendererControlsVisible, TRANSCRIPT_RENDERER_STORAGE_KEY } from "./chat/transcript-renderer";
+import { loadVoiceDictationSettings, saveVoiceDictationSettings, VOICE_DICTATION_STORAGE_KEY } from "./chat/voice-dictation";
 import { Transcript } from "./chat/transcript";
 import { COMMAND_IDS, commandRegistry } from "./commands/command-registry";
 import { CommandMenu } from "./navigation/command-menu";
@@ -44,6 +44,8 @@ import { createRuntimeStore } from "./state/runtime";
 import { VoiceWaveform } from "./chat/voice-waveform";
 import { browserShortcutEnvironmentProvider } from "./shortcuts/shortcut-environment";
 import { ShortcutManager } from "./shortcuts/shortcut-manager";
+import { publishUiPreference, saveUiPreference, UI_PREFERENCE_CHANGE_EVENT, type UiPreferenceKey, type UiPreferences } from "./preferences/ui-preferences";
+import { INCREMARK_PACING_STORAGE_KEY } from "./chat/incremark-pacing";
 import "./project/dashboard.css";
 import "./chat/composer-geometry.css";
 import "./styles.css";
@@ -909,16 +911,19 @@ function App() {
   const switchMarkdownRenderer = (next: MarkdownRendererId) => {
     setMarkdownRenderer(next);
     localStorage.setItem(MARKDOWN_RENDERER_STORAGE_KEY, next);
+    publishUiPreference("markdownRenderer", next);
   };
   const switchRendererControlsVisible = (visible: boolean) => setRendererControlsVisible(saveRendererControlsVisible(visible));
   const switchMeteorField = (enabled: boolean) => {
     setMeteorField(enabled);
     localStorage.setItem(METEOR_FIELD_STORAGE_KEY, String(enabled));
+    publishUiPreference("meteorField", enabled);
   };
   const switchSidebarChatLimit = (next: number) => {
     const value = clampSidebarChatLimit(next);
     setSidebarChatLimit(value);
     localStorage.setItem(SIDEBAR_CHAT_LIMIT_STORAGE_KEY, String(value));
+    publishUiPreference("sidebarChatLimit", value);
   };
   const switchContextMetrics = (next: ContextMetricId[]) => setContextMetrics(saveContextMetrics(next));
   const saveDefaultTemplate = async (id: string) => {
@@ -1075,6 +1080,98 @@ function App() {
   };
 
   onMount(() => {
+    let hydratingUiPreferences = false;
+    let preferenceSave = Promise.resolve<unknown>(undefined);
+    const persistUiPreference = (event: Event) => {
+      if (hydratingUiPreferences) return;
+      const detail = (event as CustomEvent<{ key?: UiPreferenceKey; value?: UiPreferences[UiPreferenceKey] }>).detail;
+      if (!detail?.key) return;
+      preferenceSave = preferenceSave
+        .then(() => saveUiPreference(detail.key!, detail.value!))
+        .catch((error) => { showError(error); });
+    };
+    window.addEventListener(UI_PREFERENCE_CHANGE_EVENT, persistUiPreference);
+    onCleanup(() => window.removeEventListener(UI_PREFERENCE_CHANGE_EVENT, persistUiPreference));
+
+    const localVoice = loadVoiceDictationSettings();
+    const parseStringArray = (key: string) => {
+      try {
+        const value = JSON.parse(localStorage.getItem(key) || "null");
+        return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+      } catch {
+        return [];
+      }
+    };
+    const localPreferences: UiPreferences = {
+      sidebarChatLimit: selectedSidebarChatLimit(),
+      collapsedProjectIds: parseStringArray("conduit.sidebar.collapsed-projects"),
+      sidebarCollapsed: localStorage.getItem("conduit.sidebar") === "collapsed",
+      markdownRenderer: localStorage.getItem(MARKDOWN_RENDERER_STORAGE_KEY) || selectedMarkdownRenderer(),
+      transcriptRenderer: localStorage.getItem(TRANSCRIPT_RENDERER_STORAGE_KEY) || localStorage.getItem(MARKDOWN_RENDERER_STORAGE_KEY) || selectedMarkdownRenderer(),
+      rendererControlsVisible: selectedRendererControlsVisible(),
+      composerSurface: selectedComposerSurface(),
+      contextMetrics: selectedContextMetrics(),
+      meteorField: selectedMeteorField(),
+      incremarkPacing: localStorage.getItem(INCREMARK_PACING_STORAGE_KEY) || "buffered",
+      shortcutOverrides: shortcutManager.shortcutOverrides(),
+      voicePreferences: {
+        shortcut: localVoice.shortcut,
+        activation: localVoice.activation,
+        autoSend: localVoice.autoSend,
+        captureProfile: localVoice.captureProfile,
+      },
+    };
+    const storageKeys: Partial<Record<UiPreferenceKey, string>> = {
+      sidebarChatLimit: SIDEBAR_CHAT_LIMIT_STORAGE_KEY,
+      collapsedProjectIds: "conduit.sidebar.collapsed-projects",
+      sidebarCollapsed: "conduit.sidebar",
+      markdownRenderer: MARKDOWN_RENDERER_STORAGE_KEY,
+      transcriptRenderer: TRANSCRIPT_RENDERER_STORAGE_KEY,
+      rendererControlsVisible: RENDERER_CONTROLS_VISIBLE_STORAGE_KEY,
+      composerSurface: COMPOSER_SURFACE_STORAGE_KEY,
+      contextMetrics: CONTEXT_METRIC_STORAGE_KEY,
+      meteorField: METEOR_FIELD_STORAGE_KEY,
+      incremarkPacing: INCREMARK_PACING_STORAGE_KEY,
+    };
+    const applyPreference = (key: UiPreferenceKey, value: UiPreferences[UiPreferenceKey]) => {
+      const storageKey = storageKeys[key];
+      if (storageKey) localStorage.setItem(storageKey, key === "sidebarCollapsed"
+        ? value ? "collapsed" : "expanded"
+        : Array.isArray(value) ? JSON.stringify(value) : String(value));
+      if (key === "sidebarChatLimit" && typeof value === "number") setSidebarChatLimit(clampSidebarChatLimit(value));
+      else if (key === "markdownRenderer" && typeof value === "string" && !new URLSearchParams(location.search).has("markdownRenderer")) setMarkdownRenderer(value as MarkdownRendererId);
+      else if (key === "rendererControlsVisible" && typeof value === "boolean") setRendererControlsVisible(value);
+      else if (key === "contextMetrics" && Array.isArray(value)) setContextMetrics(selectedContextMetrics());
+      else if (key === "meteorField" && typeof value === "boolean") setMeteorField(value);
+      else if (key === "shortcutOverrides" && value && typeof value === "object" && !Array.isArray(value)) {
+        shortcutManager.replaceOverrides(value as ReturnType<ShortcutManager["shortcutOverrides"]>);
+      } else if (key === "voicePreferences" && value && typeof value === "object" && !Array.isArray(value)) {
+        const next = { ...localVoice, ...value } as VoiceDictationSettings;
+        localStorage.setItem(VOICE_DICTATION_STORAGE_KEY, JSON.stringify(next));
+        setVoiceSettings(next);
+      }
+      window.dispatchEvent(new CustomEvent(UI_PREFERENCE_CHANGE_EVENT, { detail: { key, value } }));
+      if (key === "composerSurface") {
+        window.dispatchEvent(new CustomEvent(COMPOSER_SURFACE_CHANGE_EVENT, { detail: value }));
+      }
+    };
+    void api<UiPreferences>("/v0/preferences").then(async (serverPreferences) => {
+      const migration: Partial<UiPreferences> = {};
+      hydratingUiPreferences = true;
+      try {
+        for (const key of Object.keys(localPreferences) as UiPreferenceKey[]) {
+          const value = serverPreferences[key] == null ? localPreferences[key] : serverPreferences[key];
+          if (serverPreferences[key] === null) Object.assign(migration, { [key]: value });
+          applyPreference(key, value as never);
+        }
+      } finally {
+        hydratingUiPreferences = false;
+      }
+      if (Object.keys(migration).length) {
+        await api("/v0/preferences", { method: "PATCH", body: JSON.stringify(migration) });
+      }
+    }).catch((error) => showError(error));
+
     const releaseApplicationContext = shortcutManager.activateContext("application");
     const releaseShortcutHandlers = [
       shortcutManager.registerHandler(COMMAND_IDS.openCommandPalette, "application", () => {
