@@ -34,7 +34,7 @@ import { mobileSwipeAction } from "./navigation/mobile-swipe";
 import { Sidebar } from "./navigation/sidebar";
 import { clampSidebarChatLimit, selectedSidebarChatLimit, SIDEBAR_CHAT_LIMIT_STORAGE_KEY } from "./navigation/sidebar-preferences";
 import { WorkspaceAppearanceEditor } from "./project/workspace-appearance-editor";
-import { forcePwaUpdate, rememberPwaRegistration, resetPwaAppCache } from "./pwa-update";
+import { checkForPwaUpdate, forcePwaUpdate, rememberPwaRegistration, resetPwaAppCache } from "./pwa-update";
 import { Settings } from "./settings/settings";
 import { createActiveChat, type ActiveChatStore } from "./state/active-chat";
 import { createAttachments, DEFAULT_MAX_ATTACHMENT_BYTES, filesFromDataTransfer } from "./state/attachments";
@@ -413,6 +413,12 @@ function App() {
   };
   const catalogue = createCatalogueStore();
   const runtime = createRuntimeStore();
+  let hasConnected = false;
+  createEffect(() => {
+    if (runtime.connectivity() !== "online") return;
+    if (hasConnected) void checkForPwaUpdate().catch(() => {});
+    hasConnected = true;
+  });
   const [composerStatus, setComposerStatus] = createSignal<ComposerStatus | null>(null);
   const models = createModelSettings(showError, ({ from, to }) => {
     const label = (level: string) => level ? level[0]!.toUpperCase() + level.slice(1) : "Off";
