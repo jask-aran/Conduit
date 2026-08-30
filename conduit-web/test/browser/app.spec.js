@@ -731,7 +731,7 @@ test("overlapping resize and panel motion cannot retain transcript preview geome
 test("explicit transcript visibility preserves offscreen geometry and reveals scrolled blocks", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "desktop-chromium");
   const content = Array.from({ length: 24 }, (_, index) =>
-    `## Section ${index + 1}\n\n${"This section has enough text to occupy several wrapped lines while the transcript width changes. ".repeat(4)}`).join("\n\n");
+    `## Section ${index + 1}\n\n${"This section has enough text to occupy several wrapped lines while the transcript width changes. ".repeat(4)}\n\n\`\`\`text\nbordered block ${index + 1}\n\`\`\``).join("\n\n");
   await page.route("**/v0/sessions/session_existing", (route) => route.fulfill({ json: {
     id: "session_existing",
     projectId: "project_chat",
@@ -746,15 +746,18 @@ test("explicit transcript visibility preserves offscreen geometry and reveals sc
     tools: [],
   } }));
   await page.goto("/?markdownRenderer=incremark");
-  await page.getByRole("button", { name: "Existing chat" }).click();
+  await page.getByRole("button", { name: "Existing chat", exact: true }).click();
   const blocks = page.locator(".chat-markdown > .incremark > *");
-  await expect(blocks).toHaveCount(48);
+  await expect(blocks).toHaveCount(72);
   await expect.poll(() => page.locator('[data-transcript-visibility="hidden"]').count()).toBeGreaterThan(20);
 
   const before = await page.evaluate(() => {
     const viewport = document.querySelector(".message-scroller-viewport");
     return { scrollHeight: viewport.scrollHeight, clientHeight: viewport.clientHeight };
   });
+  await page.waitForTimeout(500);
+  const settledHeight = await page.locator(".message-scroller-viewport").evaluate((viewport) => viewport.scrollHeight);
+  expect(Math.abs(settledHeight - before.scrollHeight)).toBeLessThan(1);
   await page.evaluate(() => {
     const viewport = document.querySelector(".message-scroller-viewport");
     viewport.scrollTop = Math.round(viewport.scrollHeight * 0.45);
