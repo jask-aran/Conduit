@@ -2969,7 +2969,8 @@ test("opens a targeted Workspace settings card from its context menu", async ({ 
   await page.getByRole("button", { name: "JaskFish" }).click({ button: "right" });
   await page.getByRole("menuitem", { name: "Workspace settings" }).click();
   const settings = page.getByRole("dialog", { name: "Settings" });
-  await expect(settings.getByRole("tab", { name: /Workspaces/ })).toHaveAttribute("aria-selected", "true");
+  await expect(settings.getByRole("heading", { name: "Workspace profile" })).toBeVisible();
+  await expect(settings.getByRole("tab", { name: /Workspaces/ })).toHaveCount(0);
   await expect(settings.getByText("/home/user/JaskFish")).toBeVisible();
   const updateRequest = page.waitForRequest((request) => request.url().endsWith("/v0/projects/project_workspace")
     && request.method() === "PATCH");
@@ -3554,7 +3555,7 @@ test("selects a chat model through the runtime-aware model route", async ({ page
   await expect(page.getByRole("button", { name: /Plain off/ })).toBeVisible();
 });
 
-test("model scope settings groups, searches, and saves each toggle immediately", async ({ page }, testInfo) => {
+test("model settings opens the dedicated model selector", async ({ page }, testInfo) => {
   await openChatSurface(page);
   await openSidebar(page, testInfo);
 
@@ -3562,93 +3563,11 @@ test("model scope settings groups, searches, and saves each toggle immediately",
   await page.getByRole("menuitem", { name: "Manage settings" }).click();
   const dialog = page.getByRole("dialog", { name: "Settings" });
   await expect(dialog).toBeVisible();
-  const search = page.getByRole("combobox", { name: "Search available models" });
-  await expect(search).toBeFocused();
-  await expect(dialog.getByText("example", { exact: true })).toBeVisible();
-  const hints = dialog.getByRole("note", { name: "Keyboard shortcuts" });
-  await expect(hints).toContainText("Select / deselect");
-  await expect(hints).toContainText("Close");
-  await search.fill("example plain");
-  await expect(search).toHaveValue("example plain");
-  await search.press("Space");
-  await expect(search).toHaveValue("example plain ");
-  await search.fill("");
-  const reasoner = page.getByRole("option", { name: /Reasoner example\/reasoner/ });
-  const plain = page.getByRole("option", { name: /Plain example\/plain/ });
-  await expect(reasoner).toHaveAttribute("aria-selected", "true");
-  await expect(reasoner.locator("svg")).toBeVisible();
-  const removedRequest = page.waitForRequest((request) => new URL(request.url()).pathname === "/v0/settings" && request.method() === "PATCH");
-  await reasoner.click();
-  expect((await removedRequest).postDataJSON()).toEqual({ projectId: "project_chat", enabledModels: [plainModel.spec], defaultModel: plainModel.spec });
-  await expect(reasoner).toBeVisible();
-  await expect(reasoner).toHaveAttribute("aria-selected", "false");
-  await search.fill("reasoner");
-  await search.press("ArrowDown");
-  await expect(page.locator('[data-slot="combobox-item"][data-highlighted]')).toBeVisible();
-  const restoredRequest = page.waitForRequest((request) => new URL(request.url()).pathname === "/v0/settings" && request.method() === "PATCH");
-  await search.press("Enter");
-  expect((await restoredRequest).postDataJSON()).toEqual({ projectId: "project_chat", enabledModels: [plainModel.spec, model.spec], defaultModel: plainModel.spec });
-  await expect(reasoner).toHaveAttribute("aria-selected", "true");
-  await expect(search).toBeVisible();
-  await search.press("Escape");
+  await expect(dialog.getByRole("heading", { name: "Model defaults" })).toBeVisible();
+  await expect(dialog.getByRole("heading", { name: "Provider accounts" })).toBeVisible();
+  await dialog.getByRole("button", { name: "Open model selector" }).click();
   await expect(dialog).toHaveCount(0);
-});
-
-test("model scope search auto-focuses and its long result list scrolls", async ({ page }, testInfo) => {
-  const manyModels = Array.from({ length: 36 }, (_, index) => ({
-    provider: index < 18 ? "alpha" : "beta",
-    id: `model-${index + 1}`,
-    spec: `${index < 18 ? "alpha" : "beta"}/model-${index + 1}`,
-    label: `Model ${String(index + 1).padStart(2, "0")}`,
-    thinkingLevels: ["off"],
-  }));
-  await page.route("**/v0/settings?**", async (route) => {
-    await route.fulfill({ json: {
-      models: manyModels,
-      enabledModels: manyModels.map((item) => item.spec),
-      defaultModel: manyModels[0].spec,
-    } });
-  });
-  await openChatSurface(page);
-  await openSidebar(page, testInfo);
-  await page.locator('[data-sidebar="footer"]').getByRole("button", { name: /Conduit/ }).click();
-  await page.getByRole("menuitem", { name: "Manage settings" }).click();
-
-  const search = page.getByRole("combobox", { name: "Search available models" });
-  const list = page.locator('[data-slot="combobox-list"]');
-  await expect(search).toBeFocused();
-  await expect(list).toBeVisible();
-  expect(await list.evaluate((element) => element.scrollHeight > element.clientHeight)).toBe(true);
-  await list.hover();
-  await page.mouse.wheel(0, 600);
-  await expect.poll(() => list.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
-  await search.click();
-  await search.fill("model 31");
-  await expect(page.getByRole("option", { name: /Model 31 beta\/model-31/ })).toBeVisible();
-});
-
-test("settings renders a delayed model scope with selector hints", async ({ page }, testInfo) => {
-  let releaseSettings;
-  const settingsReady = new Promise((resolve) => { releaseSettings = resolve; });
-  await page.route("**/v0/settings?**", async (route) => {
-    await settingsReady;
-    await route.fulfill({ json: {
-      models: [model, plainModel],
-      enabledModels: [model.spec, plainModel.spec],
-      defaultModel: model.spec,
-    } });
-  });
-  await openChatSurface(page);
-  await openSidebar(page, testInfo);
-  await page.locator('[data-sidebar="footer"]').getByRole("button", { name: /Conduit/ }).click();
-  await page.getByRole("menuitem", { name: "Manage settings" }).click();
-  const dialog = page.getByRole("dialog", { name: "Settings" });
-  await expect(dialog.getByText("Loading models…")).toBeVisible();
-
-  releaseSettings();
-  await expect(dialog.getByRole("option", { name: /Reasoner example\/reasoner/ })).toHaveAttribute("aria-selected", "true");
-  await expect(dialog.getByRole("option", { name: /Plain example\/plain/ })).toHaveAttribute("aria-selected", "true");
-  await expect(dialog.getByRole("note", { name: "Keyboard shortcuts" })).toContainText("Select / deselect");
+  await expect(page.getByRole("dialog", { name: /model/i })).toBeVisible();
 });
 
 test("uploads picker and dropped files through the same attachment surface", async ({ page }, testInfo) => {
@@ -4358,11 +4277,11 @@ test("global commands and slash suggestions preserve their intended focus models
   await expect(palette.getByRole("option", { name: /^Runtime$/ })).toHaveCount(0);
   await palette.getByRole("option", { name: /^Settings…/ }).click();
   await expect(palette.getByText("Settings ›")).toBeVisible();
-  await expect(palette.getByRole("option", { name: /^General/ })).toBeVisible();
-  await palette.getByRole("option", { name: /^General/ }).click();
+  await expect(palette.getByRole("option", { name: /^Models & accounts/ })).toBeVisible();
+  await palette.getByRole("option", { name: /^Models & accounts/ }).click();
   let settingsDialog = page.getByRole("dialog", { name: "Settings" });
   await expect(settingsDialog).toBeVisible();
-  await expect(settingsDialog.getByRole("tab", { name: /General/ })).toHaveAttribute("aria-selected", "true");
+  await expect(settingsDialog.getByRole("tab", { name: /Models & accounts/ })).toHaveAttribute("aria-selected", "true");
   await page.keyboard.press("Escape");
 
   // Markdown renderer selection belongs in Settings → UI and updates the
@@ -4370,9 +4289,9 @@ test("global commands and slash suggestions preserve their intended focus models
   await page.keyboard.press("Control+k");
   await palette.getByRole("option", { name: /^Settings…/ }).click();
   await palette.getByRole("combobox").fill("ui");
-  await palette.getByRole("option", { name: /^UI$/ }).click();
+  await palette.getByRole("option", { name: /^Appearance$/ }).click();
   settingsDialog = page.getByRole("dialog", { name: "Settings" });
-  await expect(settingsDialog.getByRole("tab", { name: /^UI$/ })).toHaveAttribute("aria-selected", "true");
+  await expect(settingsDialog.getByRole("tab", { name: /^Appearance$/ })).toHaveAttribute("aria-selected", "true");
   const markdownRenderer = settingsDialog.getByRole("combobox", { name: "Markdown renderer" });
   await expect(markdownRenderer).toHaveValue("incremark-synthetic");
   await markdownRenderer.selectOption("incremark-typewriter");
@@ -4525,13 +4444,13 @@ test("settings remains centered with a persistent vertical rail at narrow widths
   }
 });
 
-test("general settings selects the session naming model and thinking level", async ({ page }, testInfo) => {
+test("model settings selects the session naming model and thinking level", async ({ page }, testInfo) => {
   await openChatSurface(page);
   await openSidebar(page, testInfo);
   await page.locator('[data-sidebar="footer"]').getByRole("button", { name: /Conduit/ }).click();
   await page.getByRole("menuitem", { name: "Manage settings" }).click();
   const dialog = page.getByRole("dialog", { name: "Settings" });
-  await dialog.getByRole("tab", { name: "General" }).click();
+  await dialog.getByRole("tab", { name: "Models & accounts" }).click();
   const trigger = dialog.getByRole("button", { name: "Model off" });
   await expect(trigger).toBeVisible();
 

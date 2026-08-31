@@ -541,6 +541,7 @@ export function createActiveChat(options: ActiveChatOptions) {
 
   const resumeLive = () => {
     if (document.visibilityState === "hidden") return;
+    if (socket && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)) return;
     const record = live();
     const chatId = selectedId();
     if (record && chatId && record.chatId === chatId) void connect(record, chatId, selectionToken).catch(onError);

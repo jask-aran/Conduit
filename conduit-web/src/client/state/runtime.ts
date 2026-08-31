@@ -104,7 +104,7 @@ export function createRuntimeStore() {
   };
 
   const resume = () => {
-    if (document.visibilityState !== "hidden") connect();
+    if (document.visibilityState !== "hidden" && !source) connect();
   };
   const restore = (event: PageTransitionEvent) => {
     if (event.persisted) resume();

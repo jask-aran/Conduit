@@ -446,6 +446,10 @@ export const commandRegistry: ShortcutCommandDefinition[] = [
   }),
 ];
 
+export function commandLabel(id: string) {
+  return commandRegistry.find((item) => item.id === id)?.label || id;
+}
+
 const commandById = new Map(commandRegistry.map((definition) => [definition.id, definition]));
 
 export function getCommandDefinition(commandId: string): ShortcutCommandDefinition {
