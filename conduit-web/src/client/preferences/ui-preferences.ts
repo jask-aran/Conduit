@@ -15,6 +15,7 @@ export interface UiPreferences {
   incremarkPacing: string | null;
   shortcutOverrides: Record<string, unknown> | null;
   voicePreferences: Record<string, unknown> | null;
+  sidebarPins: string[] | null;
 }
 
 export type UiPreferenceKey = keyof UiPreferences;

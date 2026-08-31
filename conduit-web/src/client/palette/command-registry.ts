@@ -121,15 +121,12 @@ export const PALETTE_GROUPS: PaletteGroup[] = [
 /** Only sections the Solid Settings surface renders. Target's `diagnostics` is
  *  omitted (no Solid surface yet) to avoid a dead drill-down entry. */
 export const SETTINGS_SECTIONS = [
-  { id: "ui", label: "UI", keywords: ["interface", "appearance", "renderer", "markdown", "sidebar", "chats"] },
+  { id: "ui", label: "Appearance", keywords: ["interface", "ui", "renderer", "markdown", "sidebar", "chats"] },
   { id: "shortcuts", label: "Shortcuts", keywords: ["keyboard", "keys", "bindings", "commands", "browser"] },
-  { id: "profiles", label: "Profiles", keywords: ["template", "tools", "workspace", "general", "agent"] },
-  { id: "workspaces", label: "Workspaces", keywords: ["workspace", "folder", "default", "profile"] },
-  { id: "models", label: "Models", keywords: ["model", "llm", "provider"] },
+  { id: "models", label: "Models & accounts", keywords: ["model", "llm", "provider", "auth", "account", "profile", "session naming"] },
   { id: "runtime", label: "Runtime", keywords: ["processes", "pool", "idle", "generation"] },
-  { id: "search", label: "Search", keywords: ["web", "brave", "exa", "research", "provider", "api key"] },
-  { id: "auth", label: "Auth", keywords: ["password", "login", "sessions", "logout", "security"] },
-  { id: "general", label: "General", keywords: ["preferences", "default", "profile"] },
+  { id: "voice", label: "Voice", keywords: ["dictation", "microphone", "transcription", "speech"] },
+  { id: "search", label: "Web search", keywords: ["web", "brave", "exa", "research", "provider", "api key"] },
 ];
 
 function palettePage(

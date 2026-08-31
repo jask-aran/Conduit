@@ -1,12 +1,14 @@
 import { createMemo, createSignal, For, onCleanup, onMount, Show, type JSX } from "solid-js";
-import { ArrowRightIcon, SearchIcon, TerminalIcon } from "lucide-solid";
-import { Spinner } from "@/components/primitives";
+import { ArrowRightIcon, ClipboardCopyIcon, FolderInputIcon, MessageSquarePlusIcon, PaletteIcon, PencilIcon, PinIcon, PinOffIcon, SearchIcon, Settings2Icon, TerminalIcon, Trash2Icon } from "lucide-solid";
+import { ContextMenu, ContextMenuContent, ContextMenuGroup, ContextMenuItem, ContextMenuSeparator, ContextMenuSub, ContextMenuSubContent, ContextMenuSubTrigger, ContextMenuTrigger, Spinner } from "@/components/primitives";
 import { api, projectPath } from "../api/client";
 import type { ChatSummary, Project } from "../api/contracts";
 import { RuntimeIndicator } from "../navigation/runtime-indicator";
 import type { Pty } from "../remotes/terminal-pane";
 import { WorkspaceGlyph } from "../project/workspace-appearance";
 import type { RuntimeStore } from "../state/runtime";
+import type { SidebarCommand } from "../navigation/sidebar";
+import { COMMAND_IDS, commandLabel } from "../commands/command-registry";
 import "./app-dashboard.css";
 
 function latestActivity(project: Project) {
@@ -40,8 +42,19 @@ export function AppDashboard(props: {
   onOpenChat: (chat: ChatSummary, project: Project) => void;
   onPrefetchChat: (chat: ChatSummary) => void;
   onOpenProject: (project: Project) => void;
+  onPrefetchProject: (project: Project) => void;
+  onContextAction: (type: string, target: Omit<SidebarCommand, "type" | "nonce">) => void;
+  isPinned: (type: "chat" | "project" | "terminal", id: string) => boolean;
+  onNewChat: (project: Project) => void;
+  onOpenWorkspaceIdentity: (project: Project) => void;
+  onOpenWorkspaceSettings: (project: Project) => void;
+  onMoveProjectChats: (source: Project, target: Project) => void;
+  onOpenChatTerminal: (chat: ChatSummary, project: Project) => void;
   onOpenTerminal: (terminal: Pty) => void;
+  onOpenTerminalMaximized: (terminal: Pty) => void;
+  onPrefetchTerminal: () => void;
   onOpenTerminalView: () => void;
+  onPrefetchTerminalView: () => void;
   onSearchChats: (scope: "unscoped" | "all") => void;
 }) {
   const [terminals, setTerminals] = createSignal<Pty[]>([]);
@@ -97,7 +110,7 @@ export function AppDashboard(props: {
       <div class="app-dashboard-composer-slot">{props.composer}</div>
       <aside class="app-dashboard-quick-actions" aria-label="Quick actions">
         <span>Quick actions</span>
-        <button type="button" onClick={props.onOpenTerminalView}>
+        <button type="button" onPointerEnter={props.onPrefetchTerminalView} onFocus={props.onPrefetchTerminalView} onClick={props.onOpenTerminalView}>
           <TerminalIcon />
           <strong>Terminal View</strong>
           <ArrowRightIcon />
@@ -127,7 +140,7 @@ export function AppDashboard(props: {
         <Show when={chats().length} fallback={<div class="app-dashboard-empty">No recent chats.</div>}>
           <div class="project-chat-list">
             <For each={chats()}>{({ chat, project }) =>
-              <button class="project-chat-row" onPointerEnter={() => props.onPrefetchChat(chat)} onFocus={() => props.onPrefetchChat(chat)} onClick={() => props.onOpenChat(chat, project)}>
+              <ContextMenu><ContextMenuTrigger as="button" class="project-chat-row" onPointerEnter={() => props.onPrefetchChat(chat)} onFocus={() => props.onPrefetchChat(chat)} onClick={() => props.onOpenChat(chat, project)}>
                 <span class="project-chat-runtime"><RuntimeIndicator process={props.runtime.getProcess(chat.id)} stale={props.runtime.stale()} /></span>
                 <span class="project-chat-copy">
                   <strong>{chat.title || "Untitled chat"}</strong>
@@ -135,7 +148,13 @@ export function AppDashboard(props: {
                 </span>
                 <time dateTime={chat.updatedAt || chat.createdAt}>{relativeActivity(Date.parse(chat.updatedAt || chat.createdAt || "") || 0)}</time>
                 <ArrowRightIcon />
-              </button>}
+              </ContextMenuTrigger><ContextMenuContent class="w-60 sidebar-context-menu"><ContextMenuGroup>
+                <ContextMenuItem onSelect={() => props.onContextAction("rename-chat", { chat, project })}><PencilIcon />{commandLabel(COMMAND_IDS.renameChat)}</ContextMenuItem>
+                <ContextMenuItem onSelect={() => props.onContextAction("move-chat", { chat, project })}><FolderInputIcon />Move to folder…</ContextMenuItem>
+                <ContextMenuItem onSelect={() => props.onContextAction("copy-chat", { chat })}><ClipboardCopyIcon />{commandLabel(COMMAND_IDS.copyTranscript)}</ContextMenuItem>
+                <ContextMenuItem onSelect={() => props.onOpenChatTerminal(chat, project)}><TerminalIcon />Open terminal</ContextMenuItem>
+                <ContextMenuItem onSelect={() => props.onContextAction("pin-chat", { chat })}><Show when={props.isPinned("chat", chat.id)} fallback={<><PinIcon />Pin to sidebar</>}><PinOffIcon />Unpin</Show></ContextMenuItem>
+              </ContextMenuGroup><ContextMenuSeparator /><ContextMenuItem variant="destructive" onSelect={() => props.onContextAction("delete-chat", { chat, project })}><Trash2Icon />{commandLabel(COMMAND_IDS.deleteChat)}</ContextMenuItem></ContextMenuContent></ContextMenu>}
             </For>
           </div>
         </Show>
@@ -148,11 +167,25 @@ export function AppDashboard(props: {
         <Show when={workspaces().length} fallback={<div class="app-dashboard-empty">No Workspaces yet.</div>}>
           <div class="app-dashboard-list">
             <For each={workspaces()}>{(project) =>
-              <a href={projectPath(project)} onClick={(event) => { event.preventDefault(); props.onOpenProject(project); }}>
+              <ContextMenu><ContextMenuTrigger as="a" href={projectPath(project)} onPointerEnter={() => props.onPrefetchProject(project)} onFocus={() => props.onPrefetchProject(project)} onClick={(event: MouseEvent) => { event.preventDefault(); props.onOpenProject(project); }}>
                 <span class="app-dashboard-workspace-glyph"><WorkspaceGlyph appearance={project.workspaceAppearance} /></span>
                 <span><strong>{project.name}</strong><small>{relativeActivity(latestActivity(project))}</small></span>
                 <ArrowRightIcon />
-              </a>}
+              </ContextMenuTrigger><ContextMenuContent class="w-60 sidebar-context-menu"><ContextMenuGroup>
+                <ContextMenuItem onSelect={() => props.onNewChat(project)}><MessageSquarePlusIcon />{commandLabel(COMMAND_IDS.newChat)}</ContextMenuItem>
+                <ContextMenuItem onSelect={() => props.onContextAction("rename-folder", { project })}><PencilIcon />Rename workspace</ContextMenuItem>
+                <ContextMenuItem onSelect={() => props.onContextAction("pin-project", { project })}><Show when={props.isPinned("project", project.id)} fallback={<><PinIcon />Pin to sidebar</>}><PinOffIcon />Unpin</Show></ContextMenuItem>
+                <ContextMenuItem onSelect={() => props.onOpenWorkspaceIdentity(project)}><PaletteIcon />Identity</ContextMenuItem>
+                <ContextMenuItem onSelect={() => props.onOpenWorkspaceSettings(project)}><Settings2Icon />Workspace settings</ContextMenuItem>
+                <ContextMenuSub>
+                  <ContextMenuSubTrigger disabled={!project.sessions.length}><FolderInputIcon />Move chats to…</ContextMenuSubTrigger>
+                  <ContextMenuSubContent class="w-48 sidebar-context-menu">
+                    <For each={props.projects.filter((target) => target.id !== project.id)}>{(target) =>
+                      <ContextMenuItem onSelect={() => props.onMoveProjectChats(project, target)}>{target.name}</ContextMenuItem>}
+                    </For>
+                  </ContextMenuSubContent>
+                </ContextMenuSub>
+              </ContextMenuGroup><ContextMenuSeparator /><ContextMenuItem variant="destructive" onSelect={() => props.onContextAction("delete-project", { project })}><Trash2Icon />Unlink workspace</ContextMenuItem></ContextMenuContent></ContextMenu>}
             </For>
           </div>
         </Show>
@@ -166,7 +199,7 @@ export function AppDashboard(props: {
           <Show when={terminals().length} fallback={<div class="app-dashboard-empty">No live terminals.</div>}>
             <div class="app-dashboard-list app-dashboard-terminal-list">
               <For each={terminals()}>{(terminal) =>
-                <button onClick={() => props.onOpenTerminal(terminal)}>
+                <ContextMenu><ContextMenuTrigger as="button" onPointerEnter={props.onPrefetchTerminal} onFocus={props.onPrefetchTerminal} onClick={() => props.onOpenTerminal(terminal)}>
                   <TerminalIcon />
                   <span class="app-dashboard-terminal-copy">
                     <span class="app-dashboard-terminal-title">
@@ -178,7 +211,11 @@ export function AppDashboard(props: {
                     </small>
                   </span>
                   <ArrowRightIcon />
-                </button>}
+                </ContextMenuTrigger><ContextMenuContent class="w-52 sidebar-context-menu"><ContextMenuGroup>
+                  <ContextMenuItem onSelect={() => props.onOpenTerminalMaximized(terminal)}><TerminalIcon />Open maximized</ContextMenuItem>
+                  <ContextMenuItem onSelect={() => props.onContextAction("rename-terminal", { terminal })}><PencilIcon />Rename</ContextMenuItem>
+                  <ContextMenuItem onSelect={() => props.onContextAction("pin-terminal", { terminal })}><Show when={props.isPinned("terminal", terminal.id)} fallback={<><PinIcon />Pin to sidebar</>}><PinOffIcon />Unpin</Show></ContextMenuItem>
+                </ContextMenuGroup><ContextMenuSeparator /><ContextMenuItem variant="destructive" onSelect={() => props.onContextAction("delete-terminal", { terminal })}><Trash2Icon />Destroy shell</ContextMenuItem></ContextMenuContent></ContextMenu>}
               </For>
             </div>
           </Show>

@@ -31,7 +31,7 @@ import { CommandMenu } from "./navigation/command-menu";
 import type { PaletteActions, PaletteContext } from "./palette/command-registry";
 import { bindVisualViewportShell, isMobileLayout, MOBILE_LAYOUT_QUERY, setMobileOverlayKind } from "./navigation/mobile-layout";
 import { mobileSwipeAction } from "./navigation/mobile-swipe";
-import { Sidebar } from "./navigation/sidebar";
+import { Sidebar, type SidebarCommand } from "./navigation/sidebar";
 import { clampSidebarChatLimit, selectedSidebarChatLimit, SIDEBAR_CHAT_LIMIT_STORAGE_KEY } from "./navigation/sidebar-preferences";
 import { WorkspaceAppearanceEditor } from "./project/workspace-appearance-editor";
 import { checkForPwaUpdate, forcePwaUpdate, rememberPwaRegistration, resetPwaAppCache } from "./pwa-update";
@@ -52,7 +52,7 @@ import "./styles.css";
 const nativeApp = Capacitor.isNativePlatform();
 if (import.meta.env.PROD && !nativeApp) registerSW({ immediate: true, onRegisteredSW: (_url, registration) => rememberPwaRegistration(registration) });
 
-type SettingsSection = "general" | "ui" | "shortcuts" | "models" | "profiles" | "runtime" | "workspaces" | "voice" | "search" | "auth";
+type SettingsSection = "ui" | "shortcuts" | "models" | "runtime" | "workspaces" | "voice" | "search";
 type WorkspaceView = "files" | "diff" | "artifacts" | "terminal";
 const METEOR_FIELD_STORAGE_KEY = "conduit:meteor-field";
 const selectedMeteorField = () => localStorage.getItem(METEOR_FIELD_STORAGE_KEY) !== "false";
@@ -60,6 +60,9 @@ const WorkspacePanel = lazy(() => import("./workspace/workspace-panel"));
 const ProjectDashboard = lazy(() => import("./project/dashboard"));
 const TerminalRoute = lazy(() => import("./remotes/terminal-route").then((module) => ({ default: module.TerminalRoute })));
 const Settings = lazy(() => import("./settings/settings").then((module) => ({ default: module.Settings })));
+const prefetchProjectDashboard = (project: Project) => void import("./project/dashboard").then((module) => module.prefetchProjectDashboard(project)).catch(() => {});
+const prefetchTerminalRoute = () => void import("./remotes/terminal-route");
+const prefetchWorkspaceTerminal = () => void import("./workspace/workspace-panel");
 
 function NativeServerSetup(props: { onAuthenticated: () => void }) {
   const [address, setAddress] = createSignal(configuredServerOrigin() || "");
@@ -350,6 +353,7 @@ function App() {
   const [sidebarChatLimit, setSidebarChatLimit] = createSignal(selectedSidebarChatLimit());
   const [contextMetrics, setContextMetrics] = createSignal<ContextMetricId[]>(selectedContextMetrics());
   const [settingsOpen, setSettingsOpen] = createSignal(false);
+  const [sidebarPins, setSidebarPins] = createSignal<string[]>([]);
   const [settingsLoaded, setSettingsLoaded] = createSignal(false);
   const [settingsSection, setSettingsSection] = createSignal<SettingsSection>("models");
   const [settingsWorkspaceId, setSettingsWorkspaceId] = createSignal<string | null>(null);
@@ -360,7 +364,7 @@ function App() {
   const [paletteDirectLaunch, setPaletteDirectLaunch] = createSignal(false);
   const [paletteInitialQuery, setPaletteInitialQuery] = createSignal("");
   const [paletteNonce, setPaletteNonce] = createSignal(0);
-  const [sidebarCommand, setSidebarCommand] = createSignal<{ type: string; nonce: number } | null>(null);
+  const [sidebarCommand, setSidebarCommand] = createSignal<SidebarCommand | null>(null);
   const [dropActive, setDropActive] = createSignal(false);
   const [panelOpen, setPanelOpen] = createSignal(false);
   const [workspaceExpanded, setWorkspaceExpanded] = createSignal(false);
@@ -988,7 +992,22 @@ function App() {
       toast.success("Tailscale workspace link copied");
     } catch (error) { showError(error); }
   };
-  const runSidebar = (type: string) => setSidebarCommand({ type, nonce: Date.now() });
+  const runSidebar = (type: string, target: Omit<SidebarCommand, "type" | "nonce"> = {}) => setSidebarCommand({ type, nonce: Date.now(), ...target });
+  const pinRef = (type: "chat" | "project" | "terminal", id: string) => `${type}:${id}`;
+  const isSidebarPinned = (type: "chat" | "project" | "terminal", id: string) => sidebarPins().includes(pinRef(type, id));
+  const toggleSidebarPin = async (type: "chat" | "project" | "terminal", id: string) => {
+    const ref = pinRef(type, id);
+    const previous = sidebarPins();
+    const next = previous.includes(ref) ? previous.filter((item) => item !== ref) : [...previous, ref];
+    setSidebarPins(next);
+    try {
+      const saved = await api<{ sidebarPins?: unknown }>("/v0/preferences", { method: "PATCH", body: JSON.stringify({ sidebarPins: next }) });
+      if (Array.isArray(saved.sidebarPins)) setSidebarPins(saved.sidebarPins.filter((item): item is string => typeof item === "string"));
+    } catch (error) {
+      setSidebarPins(previous);
+      showError(error);
+    }
+  };
   const loadWorkspaceSuggestions = () => {
     if (workspaceSuggestionsRequest) return workspaceSuggestionsRequest;
     workspaceSuggestionsRequest = api<WorkspaceSuggestionsPayload>("/v0/workspaces/suggestions")
@@ -1122,6 +1141,7 @@ function App() {
       meteorField: selectedMeteorField(),
       incremarkPacing: localStorage.getItem(INCREMARK_PACING_STORAGE_KEY) || "buffered",
       shortcutOverrides: shortcutManager.shortcutOverrides(),
+      sidebarPins: [],
       voicePreferences: {
         shortcut: localVoice.shortcut,
         activation: localVoice.activation,
@@ -1147,6 +1167,7 @@ function App() {
         ? value ? "collapsed" : "expanded"
         : Array.isArray(value) ? JSON.stringify(value) : String(value));
       if (key === "sidebarChatLimit" && typeof value === "number") setSidebarChatLimit(clampSidebarChatLimit(value));
+      else if (key === "sidebarPins" && Array.isArray(value)) setSidebarPins(value.filter((item): item is string => typeof item === "string"));
       else if (key === "markdownRenderer" && typeof value === "string" && !new URLSearchParams(location.search).has("markdownRenderer")) setMarkdownRenderer(value as MarkdownRendererId);
       else if (key === "rendererControlsVisible" && typeof value === "boolean") setRendererControlsVisible(value);
       else if (key === "contextMetrics" && Array.isArray(value)) setContextMetrics(selectedContextMetrics());
@@ -1164,6 +1185,7 @@ function App() {
       }
     };
     void api<UiPreferences>("/v0/preferences").then(async (serverPreferences) => {
+      setSidebarPins(Array.isArray(serverPreferences.sidebarPins) ? serverPreferences.sidebarPins : []);
       const migration: Partial<UiPreferences> = {};
       hydratingUiPreferences = true;
       try {
@@ -1187,7 +1209,7 @@ function App() {
         else openPalette(null);
       }),
       shortcutManager.registerHandler(COMMAND_IDS.searchChats, "application", toggleSearchPalette),
-      shortcutManager.registerHandler(COMMAND_IDS.openSettings, "application", () => openSettings("general")),
+      shortcutManager.registerHandler(COMMAND_IDS.openSettings, "application", () => openSettings("models")),
       shortcutManager.registerHandler(COMMAND_IDS.openModelSelector, "application", openModelSelector),
       shortcutManager.registerHandler(COMMAND_IDS.newChat, "application", () => {
         setMobileSidebarOpen(false);
@@ -1351,6 +1373,7 @@ function App() {
     <Show when={routeKind() !== "terminal"}>
     <Sidebar projects={catalogue.projects()} projectId={catalogue.projectId()} selectedId={catalogue.selectedId()} dashboard={routeKind() === "dashboard"} runtime={runtime} chatLimit={sidebarChatLimit()}
       connectivity={runtime.connectivity()} workspaceSuggestions={workspaceSuggestions()} workspacePolicy={workspacePolicy()} command={sidebarCommand()}
+      sidebarPins={sidebarPins()} onTogglePin={toggleSidebarPin}
       mobileOpen={mobileSidebarOpen()} onMobileOpenChange={setMobileSidebar}
       onWorkspaceSuggestionsNeeded={() => void loadWorkspaceSuggestions()}
       onNewChat={async (project) => { await createChat(project); }} onPrefetchChat={chat.prefetch} onOpenChat={openChat} onOpenProject={openProject} onAddProject={addProject} onRenameChat={renameChat} onRenameProject={renameProject}
@@ -1405,7 +1428,16 @@ function App() {
             onOpenChat={(target, project) => void openChat(target, project)}
             onPrefetchChat={chat.prefetch}
             onOpenProject={(project) => void openProject(project)}
+            onPrefetchProject={prefetchProjectDashboard}
+            onContextAction={(type, target) => runSidebar(type, target)}
+            isPinned={isSidebarPinned}
+            onNewChat={(project) => void createChat(project)}
+            onOpenWorkspaceIdentity={openWorkspaceIdentity}
+            onOpenWorkspaceSettings={(project) => openSettings("workspaces", project.id)}
+            onMoveProjectChats={(source, target) => void moveProjectChats(source, target)}
+            onPrefetchTerminalView={prefetchTerminalRoute}
             onOpenTerminalView={() => openTerminalRoute()}
+            onOpenChatTerminal={(target, project) => { void openChat(target, project).then(() => openWorkspaceView("terminal")); }}
             onSearchChats={(scope) => openPalette("chat-search", scope === "unscoped" ? "scope:chats " : "", true)}
             onOpenTerminal={(terminal) => {
               const project = catalogue.projects().find((item) => item.id === terminal.projectId);
@@ -1414,6 +1446,16 @@ function App() {
                 if (created) openWorkspaceView("terminal", terminal.id);
               });
             }}
+            onOpenTerminalMaximized={(terminal) => {
+              const project = catalogue.projects().find((item) => item.id === terminal.projectId);
+              if (!project) return showError("The terminal scope is no longer available.");
+              void createChat(project).then((created) => {
+                if (!created) return;
+                openWorkspaceView("terminal", terminal.id);
+                setWorkspaceExpanded(true);
+              });
+            }}
+            onPrefetchTerminal={prefetchWorkspaceTerminal}
           />
         </Show>
         <Show when={routeKind() !== "dashboard"}>
@@ -1462,9 +1504,14 @@ function App() {
               }}
             />}
             onOpenChat={(target: DashboardChat, project) => openChat(target, project)}
+            onOpenChatTerminal={(target, project) => { void openChat(target, project).then(() => openWorkspaceView("terminal")); }}
             onPrefetchChat={chat.prefetch}
+            onContextAction={(type, target) => runSidebar(type, target)}
+            isPinned={isSidebarPinned}
             onOpenView={(view) => openWorkspaceView(view)}
             onOpenTerminal={(terminal) => openWorkspaceView("terminal", terminal.id)}
+            onOpenTerminalMaximized={(terminal) => { openWorkspaceView("terminal", terminal.id); setWorkspaceExpanded(true); }}
+            onPrefetchTerminal={prefetchWorkspaceTerminal}
             onSearchChats={() => openPalette("chat-search", `in:${selectedProject()!.id} `, true)}
             onRename={() => runSidebar("rename-folder")} onDelete={() => runSidebar("delete-project")}
             onOpenSettings={openSettings} onSaveAppearance={saveWorkspaceAppearance} onRefresh={refresh} onCancelClone={cancelClone} onDestroyWorkspace={(confirmation) => destroyWorkspace(selectedProject()!, confirmation)} onError={showError} />

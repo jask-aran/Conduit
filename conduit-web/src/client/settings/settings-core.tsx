@@ -1,7 +1,6 @@
 import { createEffect, createMemo, createSignal, For, lazy, on, onCleanup, onMount, Show } from "solid-js";
-import { Combobox as KCombobox } from "@kobalte/core/combobox";
 import * as KDialog from "@kobalte/core/dialog";
-import { CheckIcon, SearchIcon } from "lucide-solid";
+import { ActivityIcon, BotIcon, KeyboardIcon, Mic2Icon, MonitorIcon, SearchIcon } from "lucide-solid";
 import { toast } from "solid-sonner";
 import { Button, Field, FieldGroup, FieldLabel, Input, Spinner } from "@/components/primitives";
 import { api } from "../api/client";
@@ -14,15 +13,39 @@ import type { VoiceDictationSettings } from "../chat/voice-dictation-types";
 import { isWarmMicrophoneActive, stopWarmMicrophone } from "../chat/voice-dictation-client";
 import { createVoiceWaveformController, VoiceWaveform } from "../chat/voice-waveform";
 import { ModelSelector } from "../chat/model-selector";
-import type { Installation, ModelOption, Project, Template, VoiceExecutionCatalogueView, VoiceExecutionProfile, VoiceLocalModel, VoiceLocalSelection, VoiceServerSettings } from "../api/contracts";
+import type { Installation, Project, Template, VoiceExecutionCatalogueView, VoiceExecutionProfile, VoiceLocalModel, VoiceLocalSelection, VoiceServerSettings } from "../api/contracts";
 import type { ModelSettings } from "../state/model-settings";
 import { MAX_SIDEBAR_CHAT_LIMIT, MIN_SIDEBAR_CHAT_LIMIT } from "../navigation/sidebar-preferences";
 import type { ShortcutManager } from "../shortcuts/shortcut-manager";
 import { ShortcutsSettings } from "./shortcuts-settings";
 
-const sections = ["general", "ui", "shortcuts", "models", "profiles", "runtime", "workspaces", "voice", "search", "auth"] as const;
-type Section = typeof sections[number];
-const label = (section: Section) => section === "ui" ? "UI" : section[0]!.toUpperCase() + section.slice(1);
+const sectionGroups = [
+  { label: "Personal", sections: [{ id: "ui", label: "Appearance", icon: MonitorIcon }, { id: "shortcuts", label: "Shortcuts", icon: KeyboardIcon }] },
+  { label: "AI", sections: [{ id: "models", label: "Models & accounts", icon: BotIcon }] },
+  { label: "System", sections: [{ id: "runtime", label: "Runtime", icon: ActivityIcon }] },
+  { label: "Services", sections: [{ id: "voice", label: "Voice", icon: Mic2Icon }, { id: "search", label: "Web search", icon: SearchIcon }] },
+] as const;
+type VisibleSection = typeof sectionGroups[number]["sections"][number]["id"];
+type Section = VisibleSection | "workspaces";
+const sectionLabels: Record<Section, string> = {
+  ui: "Appearance",
+  shortcuts: "Shortcuts",
+  models: "Models & accounts",
+  runtime: "Runtime",
+  workspaces: "Workspace profile",
+  voice: "Voice",
+  search: "Web search",
+};
+const label = (section: Section) => sectionLabels[section];
+const sectionDescriptions: Record<Section, string> = {
+  ui: "Shape Conduit around how you read, write, and navigate.",
+  shortcuts: "Make frequent actions immediate.",
+  models: "Choose the models, defaults, and accounts that power your sessions.",
+  runtime: "Control process capacity and inspect this server.",
+  workspaces: "Choose how this workspace starts new sessions.",
+  voice: "Configure dictation, audio input, and transcription.",
+  search: "Connect external search providers.",
+};
 interface RuntimeSettings {
   maxLiveProcesses: number;
   maxGeneratingProcesses: number;
@@ -102,7 +125,6 @@ const sameVoiceSelection = (left: VoiceLocalSelection | null | undefined, right:
   && left.runtimeId === right.runtimeId
   && left.execution === right.execution
   && left.segmentation === right.segmentation);
-const sameScope = (left: string[], right: string[]) => [...left].sort().join("\n") === [...right].sort().join("\n");
 const sameVoiceDraft = (left: VoiceDictationSettings, right: VoiceDictationSettings) => left.shortcut === right.shortcut
   && left.activation === right.activation
   && left.autoSend === right.autoSend
@@ -162,8 +184,6 @@ export function Settings(props: {
   shortcuts: ShortcutManager;
 }) {
   const [section, setSection] = createSignal<Section>(props.initialSection || "models");
-  const [scope, setScope] = createSignal<string[]>([]);
-  const [scopeEdited, setScopeEdited] = createSignal(false);
   const [runtime, setRuntime] = createSignal<RuntimeSettings | null>(null);
   const [runtimeBaseline, setRuntimeBaseline] = createSignal<RuntimeSettings | null>(null);
   const [runtimeStatus, setRuntimeStatus] = createSignal<"idle" | "loading" | "ready" | "error">("idle");
@@ -211,7 +231,6 @@ export function Settings(props: {
   let playbackAudio: HTMLAudioElement | null = null;
   let runtimeRequest = 0;
   let searchRequest = 0;
-  let search!: HTMLInputElement;
   let voiceInputSelect!: HTMLSelectElement;
   let returnFocus: HTMLElement | null = null;
   let wasOpen = false;
@@ -267,7 +286,6 @@ export function Settings(props: {
     }
   };
   const stopAudioInputTest = () => audioInputSession?.stop();
-  const focusSearch = () => requestAnimationFrame(() => requestAnimationFrame(() => search?.focus()));
   const dismissEscape = (event: KeyboardEvent) => {
     if (event.key !== "Escape") return;
     const target = event.target instanceof Element ? event.target : null;
@@ -279,6 +297,19 @@ export function Settings(props: {
     event.preventDefault();
     event.stopPropagation();
     props.onOpenChange(false);
+  };
+  const navigateSettingsTabs = (event: KeyboardEvent) => {
+    if (!["ArrowUp", "ArrowDown", "Home", "End"].includes(event.key)) return;
+    const nav = event.currentTarget instanceof HTMLElement ? event.currentTarget.closest("nav") : null;
+    const tabs = nav ? Array.from(nav.querySelectorAll<HTMLButtonElement>('[role="tab"]')) : [];
+    const current = event.currentTarget instanceof HTMLButtonElement ? tabs.indexOf(event.currentTarget) : -1;
+    if (current < 0 || !tabs.length) return;
+    event.preventDefault();
+    const index = event.key === "Home" ? 0
+      : event.key === "End" ? tabs.length - 1
+        : (current + (event.key === "ArrowDown" ? 1 : -1) + tabs.length) % tabs.length;
+    tabs[index]?.click();
+    tabs[index]?.focus();
   };
 
   createEffect(on(() => props.open, (open) => {
@@ -304,8 +335,6 @@ export function Settings(props: {
     const initial = props.initialSection || "models";
     setSection(initial);
     setWorkspaceId(props.initialWorkspaceId || props.projects.find((project) => project.kind === "workspace" || ["linked", "created", "cloned"].includes(project.origin || ""))?.id || null);
-    setScopeEdited(false);
-    if (initial === "models") focusSearch();
   }));
 
   onCleanup(() => {
@@ -322,12 +351,6 @@ export function Settings(props: {
     onCleanup(() => window.removeEventListener("conduit:warm-microphone-state", onWarmMicrophoneState));
   });
 
-  // Remote model settings remain authoritative until the user actually edits.
-  createEffect(() => {
-    if (!props.open || section() !== "models" || scopeEdited()) return;
-    setScope([...props.models.enabledModels()]);
-  });
-
   createEffect(() => {
     if (!props.open) return;
     const releaseSettingsContext = props.shortcuts.activateContext("settings");
@@ -336,15 +359,6 @@ export function Settings(props: {
       releaseSettingsContext();
       document.removeEventListener("keydown", dismissEscape, true);
     });
-  });
-
-  createEffect(() => {
-    if (!props.open || section() !== "models") return;
-    props.models.allModels().length;
-    const timers = [40, 180].map((delay) => window.setTimeout(() => {
-      if (props.open && section() === "models") search?.focus();
-    }, delay));
-    onCleanup(() => timers.forEach((timer) => window.clearTimeout(timer)));
   });
 
   const loadRuntime = async () => {
@@ -395,9 +409,9 @@ export function Settings(props: {
       setAuthError(response.message);
     } finally { setAuthLoading(false); }
   };
-  createEffect(() => { if (props.open && section() === "auth") void loadPiAuth(); });
+  createEffect(() => { if (props.open && section() === "models") void loadPiAuth(); });
   createEffect(() => {
-    if (!props.open || section() !== "auth" || !authAttempt()?.active) return;
+    if (!props.open || section() !== "models" || !authAttempt()?.active) return;
     const timer = window.setInterval(() => {
       api<{ attempt: PiAuthAttempt | null }>("/v0/pi-auth/attempt")
         .then((result) => {
@@ -795,23 +809,7 @@ export function Settings(props: {
     finally { setVoiceBusy(false); }
   };
 
-  const selectedModels = createMemo(() => props.models.allModels().filter((model) => scope().includes(model.spec)));
   const namingModels = createMemo(() => props.models.allModels().filter((model) => props.models.enabledModels().includes(model.spec)));
-  const scopeDirty = createMemo(() => scopeEdited() && !sameScope(scope(), props.models.enabledModels()));
-  const modelFilter = (model: ModelOption, input: string) => {
-    const words = input.toLowerCase().trim().split(/\s+/).filter(Boolean);
-    return words.every((word) => `${model.label} ${model.spec} ${model.provider}`.toLowerCase().includes(word));
-  };
-  const updateScope = (models: ModelOption[]) => {
-    setScope(models.map((model) => model.spec));
-    setScopeEdited(true);
-  };
-  const saveScope = async () => {
-    if (await props.models.saveScope(scope())) {
-      setScope([...props.models.enabledModels()]);
-      setScopeEdited(false);
-    }
-  };
   const loadGeneralPreferences = async () => {
     setGeneralLoading(true);
     try {
@@ -844,7 +842,7 @@ export function Settings(props: {
     void saveSessionNaming(model, thinkingLevel);
   };
   createEffect(() => {
-    if (!props.open || section() !== "general") return;
+    if (!props.open || section() !== "models") return;
     props.models.enabledModels().join("\n");
     void loadGeneralPreferences();
   });
@@ -896,12 +894,24 @@ export function Settings(props: {
         <div class="settings-rail">
           <KDialog.Title>Settings</KDialog.Title>
           <nav data-slot="tabs-list" role="tablist" aria-label="Settings sections" aria-orientation="vertical">
-            <For each={sections}>{(item) => <button role="tab" aria-selected={section() === item} onClick={() => { setSection(item); if (item === "models") focusSearch(); }}>{label(item)}</button>}</For>
+            <For each={sectionGroups}>{(group) => <section role="presentation" class="settings-nav-group">
+              <h3 role="presentation">{group.label}</h3>
+              <For each={group.sections}>{(item) => <div role="presentation" class="settings-nav-item"><button role="tab" tabIndex={section() === item.id ? 0 : -1} aria-selected={section() === item.id} onClick={() => setSection(item.id)} onKeyDown={navigateSettingsTabs}><item.icon aria-hidden="true" /><span>{item.label}</span></button></div>}</For>
+            </section>}</For>
           </nav>
         </div>
         <main class="settings-content" data-section={section()}>
-          <header><h2>{label(section())}</h2><Button variant="ghost" size="icon-sm" aria-label="Close" onClick={() => props.onOpenChange(false)}>×</Button></header>
-          <Show when={section() === "general"}><Show when={!props.templatesLoading} fallback={<div class="settings-loading"><Spinner /><span>Loading profiles…</span></div>}><FieldGroup>
+          <header><div><h2>{label(section())}</h2><p>{sectionDescriptions[section()]}</p></div><Button variant="ghost" size="icon-sm" aria-label="Close" onClick={() => props.onOpenChange(false)}>×</Button></header>
+          <div class="settings-status-strip">
+            <Show when={section() === "models"}><BotIcon /><strong>{props.models.enabledModels().length} models</strong><span>{authProviders().filter((provider) => provider.auth.configured).length} accounts connected</span><Button variant="outline" size="sm" onClick={props.onOpenModelSelector}>Choose models</Button></Show>
+            <Show when={section() === "runtime"}><ActivityIcon /><strong>{runtime()?.liveCount || 0} warm</strong><span>{runtime()?.generatingCount || 0} generating</span><span>{props.installations.filter((item) => item.available).length} Pi installations ready</span></Show>
+            <Show when={section() === "ui"}><MonitorIcon /><strong>{props.sidebarChatLimit} sidebar chats</strong><span>{MARKDOWN_RENDERER_OPTIONS.find((option) => option.value === props.markdownRenderer)?.label} renderer</span></Show>
+            <Show when={section() === "shortcuts"}><KeyboardIcon /><strong>Keyboard first</strong><span>Search, edit, and restore bindings here.</span></Show>
+            <Show when={section() === "voice"}><Mic2Icon /><strong>{voiceServerSettings()?.mode && voiceServerSettings()?.mode !== "off" ? "Voice ready" : "Voice off"}</strong><span>{props.voiceSettings.inputDeviceId ? "Custom input selected" : "Default audio input"}</span></Show>
+            <Show when={section() === "search"}><SearchIcon /><strong>{searchSettings()?.providers.filter((provider) => provider.configured).length || 0} providers ready</strong><span>Native provider search remains automatic.</span></Show>
+            <Show when={section() === "workspaces" && workspaceProjects().find((workspace) => workspace.id === workspaceId())}>{(workspace) => <><BotIcon /><strong>{workspace().name}</strong><span>{workspaceDefaultLabel(workspace())}</span></>}</Show>
+          </div>
+          <Show when={section() === "models"}><Show when={!props.templatesLoading} fallback={<div class="settings-loading"><Spinner /><span>Loading profiles…</span></div>}><section class="settings-section-block"><h3>Model defaults</h3><FieldGroup>
             <Field><FieldLabel for="default-profile">Default profile</FieldLabel><select id="default-profile" value={props.defaultTemplateId} onChange={(event) => void props.onDefaultTemplateChange(event.currentTarget.value)}><For each={props.templates.filter((item) => item.defaultable !== false)}>{(item) => <option value={item.id}>{item.label}</option>}</For></select></Field>
             <Field>
               <FieldLabel>Session naming</FieldLabel>
@@ -912,17 +922,25 @@ export function Settings(props: {
                 disabled={generalLoading() || !namingModels().length}
                 onModelChange={chooseSessionNameModel}
                 onThinkingLevelChange={(level) => void saveSessionNaming(sessionNameModel(), level)}
-                onManageModels={() => { setSection("models"); focusSearch(); }}
+                onManageModels={props.onOpenModelSelector}
               />
               <small class="text-muted-foreground">Select a scoped model to name new chats from the first user message with one request.</small>
             </Field>
-          </FieldGroup></Show></Show>
+            <Field>
+              <FieldLabel>Available models</FieldLabel>
+              <div class="settings-inline-action">
+                <span>{props.models.enabledModels().length} models enabled</span>
+                <Button variant="outline" onClick={props.onOpenModelSelector}>Open model selector</Button>
+              </div>
+              <small>Choose the models that appear in chat model controls.</small>
+            </Field>
+          </FieldGroup></section></Show></Show>
           <Show when={section() === "ui"}>
-           <FieldGroup>
-             <div class="settings-performance-warning" role="note">
-               <strong>Performance note</strong>
-               <p>For smooth animations, backdrop blur, and high-refresh-rate rendering, enable <em>Use graphics acceleration when available</em> in your browser settings, then relaunch the browser. Disabled hardware acceleration can cause severe frame drops even when Conduit and the server are healthy.</p>
-             </div>
+           <FieldGroup class="settings-appearance-grid">
+             <details class="settings-disclosure settings-grid-wide">
+               <summary><span><MonitorIcon /><strong>Graphics performance</strong><small>Hardware acceleration recommended</small></span></summary>
+               <div class="settings-disclosure-content" role="note">For smooth animations, backdrop blur, and high-refresh-rate rendering, enable <em>Use graphics acceleration when available</em> in your browser settings, then relaunch the browser.</div>
+             </details>
              <Field>
                <label class="settings-toggle">
                  <input type="checkbox" aria-label="Show renderer controls" checked={props.rendererControlsVisible} onChange={(event) => props.onRendererControlsVisibleChange(event.currentTarget.checked)} />
@@ -954,8 +972,9 @@ export function Settings(props: {
                   <span><strong>Ambient meteor field</strong><small>Show the animated meteor field behind chat surfaces.</small></span>
                 </label>
               </Field>
-              <Field>
-                <FieldLabel>Composer context metrics</FieldLabel>
+              <details class="settings-disclosure settings-grid-wide">
+                <summary><span><ActivityIcon /><strong>Composer context metrics</strong><small>{contextMetricPreset(props.contextMetrics) === "custom" ? "Custom selection" : CONTEXT_METRIC_PRESETS.find((preset) => preset.id === contextMetricPreset(props.contextMetrics))?.label}</small></span></summary>
+                <div class="settings-disclosure-content">
                 <Field>
                   <FieldLabel for="context-metric-preset">Preset</FieldLabel>
                   <select id="context-metric-preset" aria-label="Composer context metric preset" value={contextMetricPreset(props.contextMetrics)} onChange={(event) => {
@@ -977,65 +996,31 @@ export function Settings(props: {
                   </fieldset>}</For>
                 </div>
                 <small>Choose a preset or adjust individual measures. Manual changes use Custom. The line keeps canonical order and wraps when needed.</small>
-              </Field>
+                </div>
+              </details>
             </FieldGroup>
           </Show>
           <Show when={section() === "shortcuts"}><ShortcutsSettings manager={props.shortcuts} /></Show>
-          <Show when={props.open && section() === "models"}>
-            <div class="model-scope">
-              <Show when={props.models.settingsError()}><div role="alert" class="settings-error"><span>{props.models.settingsError()}</span><Button variant="outline" size="sm" onClick={() => void props.models.reload()}>Retry</Button></div></Show>
-              <Show when={!props.models.settingsLoading() || props.models.allModels().length} fallback={<div class="settings-loading"><Spinner /><span>Loading models…</span></div>}>
-                <KCombobox<ModelOption>
-                  multiple
-                  options={props.models.allModels()}
-                  value={selectedModels()}
-                  onChange={updateScope}
-                  optionValue="spec"
-                  optionTextValue={(model) => `${model.label} ${model.spec} ${model.provider}`}
-                  optionLabel="label"
-                  defaultFilter={modelFilter}
-                  open
-                  closeOnSelection={false}
-                  selectionBehavior="toggle"
-                  modal={false}
-                  itemComponent={(itemProps) => <KCombobox.Item item={itemProps.item} data-slot="combobox-item">
-                    <span class="model-check"><KCombobox.ItemIndicator><CheckIcon /></KCombobox.ItemIndicator></span>
-                    <span><strong>{itemProps.item.rawValue.label}</strong><small>{itemProps.item.rawValue.spec}</small></span>
-                  </KCombobox.Item>}
-                >
-                  <KCombobox.Control class="model-search"><SearchIcon /><KCombobox.Input ref={search} aria-label="Search available models" onKeyDown={(event) => {
-                    if (event.key !== "Escape") return;
-                    event.preventDefault();
-                    event.stopPropagation();
-                    props.onOpenChange(false);
-                  }} /></KCombobox.Control>
-                  <KCombobox.Content class="model-scope-list" data-slot="combobox-list"><KCombobox.Listbox /></KCombobox.Content>
-                </KCombobox>
-              </Show>
-              <div class="settings-actions"><span>{scope().length} enabled</span><Button variant="outline" onClick={props.onOpenModelSelector}>Open model selector</Button><Button disabled={!scopeDirty() || !scope().length || props.models.saving()} onClick={() => void saveScope()}>{props.models.saving() ? <Spinner /> : null}Save changes</Button></div>
-            </div>
-          </Show>
-          <Show when={section() === "profiles"}><Show when={!props.templatesLoading} fallback={<div class="settings-loading"><Spinner /><span>Loading profiles…</span></div>}><div class="settings-cards"><For each={props.templates}>{(item) => <article><h3>{item.label}</h3><p>{item.description || item.posture || item.tools?.join(" · ")}</p></article>}</For></div></Show></Show>
           <Show when={section() === "runtime"}>
             <Show when={runtimeStatus() === "ready" && runtime()} fallback={<Show when={runtimeStatus() === "error"} fallback={<div class="settings-loading"><Spinner /><span>Loading runtime settings…</span></div>}><div role="alert" class="settings-error"><span>{runtimeError() || "Runtime settings could not be loaded."}</span><Button variant="outline" size="sm" onClick={() => void loadRuntime()}>Retry</Button></div></Show>}>
-              <FieldGroup>
+              <FieldGroup class="settings-control-grid">
                 <Field><FieldLabel for="warm-processes">Max warm Pi processes</FieldLabel><Input id="warm-processes" type="number" value={runtime()!.maxLiveProcesses} onInput={(event) => updateRuntime({ ...runtime()!, maxLiveProcesses: Number(event.currentTarget.value) })} /><small>{runtime()!.liveCount || 0} live now</small></Field>
                 <Field><FieldLabel for="generations">Max concurrent generations</FieldLabel><Input id="generations" type="number" value={runtime()!.maxGeneratingProcesses} onInput={(event) => updateRuntime({ ...runtime()!, maxGeneratingProcesses: Number(event.currentTarget.value) })} /><small>{runtime()!.generatingCount || 0} generating</small></Field>
                 <Field><FieldLabel for="idle-ttl">Idle process TTL (seconds)</FieldLabel><Input id="idle-ttl" type="number" value={Math.round(runtime()!.idleProcessTtlMs / 1000)} onInput={(event) => updateRuntime({ ...runtime()!, idleProcessTtlMs: Number(event.currentTarget.value) * 1000 })} /></Field>
                 <Show when={runtimeError()}><p role="alert" class="settings-inline-error">{runtimeError()}</p></Show>
-                <Button disabled={!runtimeDirty() || runtimeSaving()} onClick={() => void saveRuntime()}>{runtimeSaving() ? <Spinner /> : null}Save runtime settings</Button>
+                <Button variant="outline" disabled={!runtimeDirty() || runtimeSaving()} onClick={() => void saveRuntime()}>{runtimeSaving() ? <Spinner /> : null}Save runtime settings</Button>
               </FieldGroup>
             </Show>
-            <Show when={!props.installationsLoading} fallback={<div class="settings-loading"><Spinner /><span>Loading Pi installations…</span></div>}><div class="installations"><For each={props.installations}>{(item) => <article><h3>{item.label}</h3><p>{item.available ? item.version ? `Pi ${item.version}` : "Available" : item.reason || (item as Installation & { error?: string }).error || "Unavailable"}</p></article>}</For><Button variant="outline" disabled={detecting()} onClick={() => void redetect()}>{detecting() ? <Spinner /> : null}Re-detect Host Pi</Button></div></Show>
+            <details class="settings-disclosure"><summary><span><ActivityIcon /><strong>Pi installations</strong><small>{props.installations.filter((item) => item.available).length} ready on this server</small></span></summary><Show when={!props.installationsLoading} fallback={<div class="settings-loading"><Spinner /><span>Loading Pi installations…</span></div>}><div class="installations"><For each={props.installations}>{(item) => <article><h3>{item.label}</h3><p>{item.available ? item.version ? `Pi ${item.version}` : "Available" : item.reason || (item as Installation & { error?: string }).error || "Unavailable"}</p></article>}</For><Button variant="outline" disabled={detecting()} onClick={() => void redetect()}>{detecting() ? <Spinner /> : null}Re-detect Host Pi</Button></div></Show></details>
           </Show>
           <Show when={section() === "workspaces"}>
-            <Show when={!props.templatesLoading && !props.installationsLoading} fallback={<div class="settings-loading"><Spinner /><span>Loading workspace settings…</span></div>}><Show when={workspaceProjects().length} fallback={<p>No workspaces registered.</p>}><For each={workspaceProjects()}>{(workspace) => <div class="workspace-settings-card" data-current={workspace.id === workspaceId()}><h3>{workspace.name}</h3><p>{workspace.path || workspace.externalPath}</p><p>Override: {workspaceDefaultLabel(workspace).startsWith("Inherit") ? "None" : workspaceDefaultLabel(workspace)}</p>
-              <Field><FieldLabel for={`workspace-default-profile-${workspace.id}`}>Default profile</FieldLabel><select id={`workspace-default-profile-${workspace.id}`} aria-label={`${workspace.name} default profile`} value={workspace.defaultTemplateId || ""} onChange={(event) => void saveWorkspace(workspace, event.currentTarget.value || null)}>
+            <Show when={!props.templatesLoading && !props.installationsLoading} fallback={<div class="settings-loading"><Spinner /><span>Loading workspace settings…</span></div>}><Show when={workspaceProjects().find((workspace) => workspace.id === workspaceId())} fallback={<p>This workspace is not available.</p>}>{(workspace) => <div class="workspace-settings-card" data-current="true"><h3>{workspace().name}</h3><p>{workspace().path || workspace().externalPath}</p><p>Override: {workspaceDefaultLabel(workspace()).startsWith("Inherit") ? "None" : workspaceDefaultLabel(workspace())}</p>
+              <Field><FieldLabel for={`workspace-default-profile-${workspace().id}`}>Default profile</FieldLabel><select id={`workspace-default-profile-${workspace().id}`} aria-label={`${workspace().name} default profile`} value={workspace().defaultTemplateId || ""} onChange={(event) => void saveWorkspace(workspace(), event.currentTarget.value || null)}>
                 <option value="">Inherit global ({props.templates.find((item) => item.id === props.defaultTemplateId)?.label || "General"})</option>
                 <For each={props.templates.filter((item) => item.defaultable !== false)}>{(item) => <option value={item.id}>{item.label}</option>}</For>
                 <option value="host-pi" disabled={!props.installations.find((item) => item.id === "host-pi")?.available}>Host Pi</option>
               </select></Field>
-            </div>}</For></Show></Show>
+            </div>}</Show></Show>
           </Show>
           <Show when={section() === "voice"}>
             <Show when={voiceStatus() === "ready" && voiceServerSettings()} fallback={<Show when={voiceStatus() === "error"} fallback={<div class="settings-loading"><Spinner /><span>Loading voice settings…</span></div>}><div role="alert" class="settings-error"><span>{voiceError() || "Voice settings could not be loaded."}</span><Button variant="outline" size="sm" onClick={() => void loadVoiceSettings()}>Retry</Button></div></Show>}>
@@ -1072,8 +1057,9 @@ export function Settings(props: {
                   onUninstall={() => void uninstallVoiceModel(selectedVoiceInstallModelId())}
                 />}</Show>
                 <Show when={voiceServerSettings()!.mode === "remote"}>
-                  <div class="voice-card">
-                    <h3>Cloud transcription</h3>
+                  <details class="settings-disclosure voice-backend-disclosure">
+                    <summary><span><Mic2Icon /><strong>Cloud transcription</strong><small>{selectedVoiceProvider()?.label} · {selectedVoiceProvider()?.models.find((model) => model.id === voiceServerSettings()!.model)?.label || voiceServerSettings()!.model}</small></span></summary>
+                    <div class="voice-card">
                     <FieldGroup>
                       <Field><FieldLabel for="voice-provider">Provider</FieldLabel><select id="voice-provider" disabled={voiceBusy()} value={voiceServerSettings()!.provider} onChange={(event) => {
                         const provider = voiceServerSettings()!.providers.find((candidate) => candidate.id === event.currentTarget.value)!;
@@ -1098,7 +1084,8 @@ export function Settings(props: {
                       <div><span>When to transcribe</span><strong>{cloudTiming().label}</strong><small>{cloudTiming().description}</small></div>
                     </div>
                     <div class="voice-actions"><Button variant="outline" disabled={voiceBusy()} onClick={() => void testVoiceServer()}>Test credentials</Button><Show when={voiceServerSettings()!.auth.removable}><Button variant="outline" disabled={voiceBusy()} onClick={() => void removeVoiceCredential()}>Remove credential</Button></Show></div>
-                  </div>
+                    </div>
+                  </details>
                 </Show>
 
                 <details class="voice-advanced" id="voice-advanced">
@@ -1174,12 +1161,12 @@ export function Settings(props: {
                   </div>
                 </FieldGroup>
                 <Show when={searchError()}><p role="alert" class="settings-inline-error">{searchError()}</p></Show>
-                <div class="search-provider-list"><For each={searchSettings()!.providers.filter((provider) => !provider.enabled)}>{(provider) => <article class="search-provider-card" data-disabled="true"><div><h3>{provider.label}<span>Coming later</span></h3><p>{provider.description}</p><a href={provider.docsUrl} target="_blank" rel="noreferrer">Provider documentation</a></div><Input type="password" disabled placeholder="Configuration not enabled yet" aria-label={`${provider.label} API key`} /></article>}</For></div>
+                <details class="settings-disclosure"><summary><span><SearchIcon /><strong>More providers</strong><small>{searchSettings()!.providers.filter((provider) => !provider.enabled).length} planned integrations</small></span></summary><div class="search-provider-list"><For each={searchSettings()!.providers.filter((provider) => !provider.enabled)}>{(provider) => <article class="search-provider-card" data-disabled="true"><div><h3>{provider.label}<span>Coming later</span></h3><p>{provider.description}</p><a href={provider.docsUrl} target="_blank" rel="noreferrer">Provider documentation</a></div><Input type="password" disabled placeholder="Configuration not enabled yet" aria-label={`${provider.label} API key`} /></article>}</For></div></details>
               </div>
             </Show>
           </Show>
-          <Show when={section() === "auth"}>
-            <div class="pi-auth-panel">
+          <Show when={section() === "models"}>
+            <details class="settings-disclosure"><summary><span><BotIcon /><strong>Provider accounts</strong><small>{authProviders().filter((provider) => provider.auth.configured).length} connected</small></span></summary><div class="pi-auth-panel">
               <p>Credentials are stored only in the Isolated Pi runtime. Host Pi accounts and environment credentials are never exposed or changed here.</p>
               <Show when={authUnavailable()}><p role="alert" class="settings-inline-error">Set a Conduit password with <code>node scripts/conduit-auth.mjs set-password</code>, then sign in to manage Pi credentials here.</p></Show>
               <Show when={authError() && !authUnavailable()}><p role="alert" class="settings-inline-error">{authError()}</p></Show>
@@ -1202,7 +1189,7 @@ export function Settings(props: {
                 </Show>
                 <div class="settings-cards"><For each={authProviders().filter((provider) => provider.auth.configured)}>{(provider) => <article><h3>{provider.label}</h3><p>{provider.auth.source === "stored" ? "Credential stored in Isolated Pi" : provider.auth.source === "environment" ? "Credential available from the server environment" : "Credential managed by Pi configuration"}</p><Show when={provider.auth.removable}><Button variant="outline" size="sm" disabled={authLoading()} onClick={() => void removePiAuth(provider.id)}>Remove credential</Button></Show></article>}</For></div>
               </Show>}><div class="settings-loading"><Spinner /><span>Loading Pi authentication…</span></div></Show>
-            </div>
+            </div></details>
           </Show>
         </main>
       </div>

@@ -59,17 +59,26 @@ import { focusFirst, isMobileLayout, MOBILE_LAYOUT_QUERY, restoreFocus } from ".
 import { ProjectActivityIndicator, RuntimeIndicator } from "./runtime-indicator";
 import { dispatchPanelGeometryMotion, PANEL_MOTION_DURATION_MS } from "../panel-motion";
 import { publishUiPreference, UI_PREFERENCE_CHANGE_EVENT } from "../preferences/ui-preferences";
+import { COMMAND_IDS, commandLabel } from "../commands/command-registry";
 import "./sidebar.css";
 
 type WorkspaceMode = "linked" | "created" | "cloned";
 type ProjectInput = { mode: string; name?: string; path?: string; directoryName?: string; cloneUrl?: string; cloneParentPath?: string; cloneDirectoryName?: string };
 type WorkspacePreview = { key: string; path: string; ownership: string };
-type ChatTarget = { chat: ChatSummary; project: Project };
+export type ChatTarget = { chat: ChatSummary; project: Project };
+export type SidebarCommand = {
+  type: string;
+  nonce: number;
+  chat?: ChatSummary;
+  project?: Project;
+  terminal?: Pty;
+};
 type PinnedItem = { ref: string; type: "chat"; chat: ChatSummary; project: Project }
   | { ref: string; type: "project"; project: Project }
   | { ref: string; type: "terminal"; terminal: Pty };
 type DeleteTarget = { type: "chat"; chat: ChatSummary; project: Project }
   | { type: "project"; project: Project }
+  | { type: "terminal"; terminal: Pty }
   | { type: "chats"; targets: ChatTarget[] };
 const COLLAPSED_PROJECTS_KEY = "conduit.sidebar.collapsed-projects";
 
@@ -161,17 +170,18 @@ export function Sidebar(props: {
   onOpenPalette: (page?: string | null, initialQuery?: string | null) => void;
   onChangeServer?: () => void;
   onLogout?: () => void;
+  sidebarPins: string[];
+  onTogglePin: (type: PinnedItem["type"], id: string) => Promise<void>;
   chatLimit: number;
   mobileOpen: boolean;
   onMobileOpenChange: (open: boolean) => void;
-  command?: { type: string; nonce: number } | null;
+  command?: SidebarCommand | null;
 }) {
   const [collapsed, setCollapsed] = createSignal(localStorage.getItem("conduit.sidebar") === "collapsed");
   const [visualCollapsed, setVisualCollapsed] = createSignal(collapsed());
   const [shellWidth, setShellWidth] = createSignal(collapsed() ? 41.6 : 195.2);
   const [collapsedProjectIds, setCollapsedProjectIds] = createSignal(storedCollapsedProjects());
   const [selectedChatIds, setSelectedChatIds] = createSignal<Set<string>>(new Set());
-  const [sidebarPins, setSidebarPins] = createSignal<string[]>([]);
   const [terminals, setTerminals] = createSignal<Pty[]>([]);
   const [activityClock, setActivityClock] = createSignal(Date.now());
   const [newKind, setNewKind] = createSignal<"folder" | "workspace" | null>(null);
@@ -279,16 +289,10 @@ export function Sidebar(props: {
     onCleanup(() => media.removeEventListener("change", sync));
   });
   onMount(() => {
-    const loadPins = () => void api<{ sidebarPins?: unknown }>("/v0/preferences")
-      .then((preferences) => setSidebarPins(Array.isArray(preferences.sidebarPins)
-        ? preferences.sidebarPins.filter((item): item is string => typeof item === "string")
-        : []))
-      .catch(() => {});
     const loadTerminals = () => void api<{ ptys: Pty[] }>("/v0/ptys")
       .then(({ ptys }) => setTerminals(ptys.filter((item) => item.status === "running" && !item.paneDead)))
       .catch(() => {});
     const onPtysChanged = () => loadTerminals();
-    loadPins();
     loadTerminals();
     window.addEventListener("conduit:ptys-changed", onPtysChanged);
     const timer = window.setInterval(() => setActivityClock(Date.now()), 30_000);
@@ -323,7 +327,7 @@ export function Sidebar(props: {
   const [previewError, setPreviewError] = createSignal("");
   const [submitting, setSubmitting] = createSignal(false);
   const renderedChatTitles = new Map<string, string>();
-  const [rename, setRename] = createSignal<{ type: "chat"; chat: ChatSummary; project: Project } | { type: "project"; project: Project } | null>(null);
+  const [rename, setRename] = createSignal<{ type: "chat"; chat: ChatSummary; project: Project } | { type: "project"; project: Project } | { type: "terminal"; terminal: Pty } | null>(null);
   const [renameValue, setRenameValue] = createSignal("");
   const [deleting, setDeleting] = createSignal<DeleteTarget | null>(null);
   const [moving, setMoving] = createSignal<{ chat: ChatSummary; project: Project } | null>(null);
@@ -344,22 +348,32 @@ export function Sidebar(props: {
     if (command.type === "new-workspace") openNewDialog("workspace");
     if (command.type === "toggle-sidebar") toggleSidebar();
     if (command.type === "delete-chat") {
-      const project = currentProject();
-      const chat = currentChat(project);
+      const project = command.project || currentProject();
+      const chat = command.chat || currentChat(project);
       if (project && chat) setDeleting({ type: "chat", project, chat });
     }
     if (command.type === "rename-chat") {
-      const project = currentProject();
-      const chat = currentChat(project);
+      const project = command.project || currentProject();
+      const chat = command.chat || currentChat(project);
       if (project && chat) requestRenameChat(chat, project);
     }
     if (command.type === "move-chat") {
-      const project = currentProject();
-      const chat = currentChat(project);
+      const project = command.project || currentProject();
+      const chat = command.chat || currentChat(project);
       if (project && chat) setMoving({ chat, project });
     }
-    if (command.type === "rename-folder") { const project = currentProject(); if (project && project.slug !== "chat") requestRenameProject(project); }
-    if (command.type === "delete-project") { const project = currentProject(); if (project && project.slug !== "chat") setDeleting({ type: "project", project }); }
+    if (command.type === "rename-folder") { const project = command.project || currentProject(); if (project && project.slug !== "chat") requestRenameProject(project); }
+    if (command.type === "delete-project") { const project = command.project || currentProject(); if (project && project.slug !== "chat") setDeleting({ type: "project", project }); }
+    if (command.type === "rename-terminal" && command.terminal) {
+      setRename({ type: "terminal", terminal: command.terminal });
+      setRenameValue(command.terminal.title || "Shell");
+    }
+    if (command.type === "delete-terminal" && command.terminal) setDeleting({ type: "terminal", terminal: command.terminal });
+    if (command.type === "pin-chat" && command.chat) void togglePin("chat", command.chat.id);
+    if (command.type === "pin-project" && command.project) void togglePin("project", command.project.id);
+    if (command.type === "pin-terminal" && command.terminal) void togglePin("terminal", command.terminal.id);
+    if (command.type === "copy-chat" && command.chat) void props.onCopyTranscript(command.chat);
+    if (command.type === "open-chat-terminal" && command.chat && command.project) props.onOpenTerminal(command.chat, command.project);
   });
 
   createEffect(() => localStorage.setItem("conduit.sidebar", collapsed() ? "collapsed" : "expanded"));
@@ -402,25 +416,11 @@ export function Sidebar(props: {
   const folders = () => props.projects.filter((project) => project.slug !== "chat" && project.origin !== "linked" && project.origin !== "created" && project.origin !== "cloned" && project.kind !== "workspace");
   const workspaces = () => props.projects.filter((project) => project.origin === "linked" || project.origin === "created" || project.origin === "cloned" || project.kind === "workspace");
   const pinRef = (type: PinnedItem["type"], id: string) => `${type}:${id}`;
-  const isPinned = (type: PinnedItem["type"], id: string) => sidebarPins().includes(pinRef(type, id));
-  const togglePin = async (type: PinnedItem["type"], id: string) => {
-    const ref = pinRef(type, id);
-    const previous = sidebarPins();
-    const next = previous.includes(ref) ? previous.filter((item) => item !== ref) : [...previous, ref];
-    setSidebarPins(next);
-    try {
-      const saved = await api<{ sidebarPins?: unknown }>("/v0/preferences", {
-        method: "PATCH",
-        body: JSON.stringify({ sidebarPins: next }),
-      });
-      if (Array.isArray(saved.sidebarPins)) setSidebarPins(saved.sidebarPins.filter((item): item is string => typeof item === "string"));
-    } catch {
-      setSidebarPins(previous);
-    }
-  };
+  const isPinned = (type: PinnedItem["type"], id: string) => props.sidebarPins.includes(pinRef(type, id));
+  const togglePin = props.onTogglePin;
   const pinnedItems = createMemo<PinnedItem[]>(() => {
     const resolved: PinnedItem[] = [];
-    for (const ref of sidebarPins()) {
+    for (const ref of props.sidebarPins) {
       const separator = ref.indexOf(":");
       const type = ref.slice(0, separator);
       const id = ref.slice(separator + 1);
@@ -594,7 +594,11 @@ export function Sidebar(props: {
     const target = rename();
     const value = renameValue().trim();
     if (!target || !value) return;
-    const saved = target.type === "chat" ? await props.onRenameChat(target.chat, target.project, value) : await props.onRenameProject(target.project, value);
+    const saved = target.type === "chat" ? await props.onRenameChat(target.chat, target.project, value)
+      : target.type === "project" ? await props.onRenameProject(target.project, value)
+        : await api<Pty>(`/v0/ptys/${encodeURIComponent(target.terminal.id)}/rename`, { method: "POST", body: JSON.stringify({ title: value }) })
+          .then(() => { window.dispatchEvent(new Event("conduit:ptys-changed")); return true; })
+          .catch(() => false);
     if (saved) setRename(null);
   };
 
@@ -622,7 +626,11 @@ export function Sidebar(props: {
     setDeleting(null);
     if (target.type === "chat") await props.onDeleteChat(target.chat, target.project);
     else if (target.type === "chats") applyBulkFailures(await props.onDeleteChats(target.targets));
-    else await props.onDeleteProject(target.project);
+    else if (target.type === "project") await props.onDeleteProject(target.project);
+    else {
+      await api(`/v0/ptys/${encodeURIComponent(target.terminal.id)}`, { method: "DELETE" });
+      window.dispatchEvent(new Event("conduit:ptys-changed"));
+    }
   };
 
   const deleteCopy = () => {
@@ -634,6 +642,7 @@ export function Sidebar(props: {
         description: `This permanently deletes ${count} Pi session transcripts and their attached files.`,
       };
     }
+    if (target?.type === "terminal") return { title: "Destroy this shell?", description: `This permanently stops ${target.terminal.title || "Shell"} and removes its terminal session.` };
     if (target?.type !== "project") return { title: "Delete this chat?", description: "This permanently deletes the Pi session transcript and this chat's attached files." };
     if (target.project.origin === "linked") return { title: "Unlink this workspace?", description: `This unregisters ${target.project.name} and deletes its Conduit chats. The linked directory on disk is kept.` };
     if (target.project.origin === "created") return { title: "Unlink this workspace?", description: `This unregisters ${target.project.name} and deletes its Conduit chats. The created directory on disk is kept.` };
@@ -698,7 +707,7 @@ export function Sidebar(props: {
     <ContextMenuContent class="w-60 sidebar-context-menu">
       <Show when={selected()} fallback={<>
         <ContextMenuGroup>
-          <ContextMenuItem onSelect={() => requestRenameChat(menuProps.chat, menuProps.project)}><PencilIcon />Rename</ContextMenuItem>
+          <ContextMenuItem onSelect={() => requestRenameChat(menuProps.chat, menuProps.project)}><PencilIcon />{commandLabel(COMMAND_IDS.renameChat)}</ContextMenuItem>
           <ContextMenuSub>
             <ContextMenuSubTrigger><FolderInputIcon />Move to folder…</ContextMenuSubTrigger>
             <ContextMenuSubContent class="w-48 sidebar-context-menu">
@@ -707,7 +716,7 @@ export function Sidebar(props: {
               </ContextMenuRadioGroup>
             </ContextMenuSubContent>
           </ContextMenuSub>
-          <ContextMenuItem onSelect={() => void props.onCopyTranscript(menuProps.chat)}><ClipboardCopyIcon />Copy transcript</ContextMenuItem>
+          <ContextMenuItem onSelect={() => void props.onCopyTranscript(menuProps.chat)}><ClipboardCopyIcon />{commandLabel(COMMAND_IDS.copyTranscript)}</ContextMenuItem>
           <ContextMenuItem onSelect={() => props.onOpenTerminal(menuProps.chat, menuProps.project)}><TerminalIcon />Open terminal</ContextMenuItem>
           <ContextMenuItem onSelect={() => void togglePin("chat", menuProps.chat.id)}>
             <Show when={isPinned("chat", menuProps.chat.id)} fallback={<><PinIcon />Pin to sidebar</>}><PinOffIcon />Unpin</Show>
@@ -715,7 +724,7 @@ export function Sidebar(props: {
         </ContextMenuGroup>
         <ContextMenuSeparator />
         <ContextMenuGroup>
-          <ContextMenuItem variant="destructive" onSelect={() => setDeleting({ type: "chat", ...menuProps })}><Trash2Icon />Delete chat</ContextMenuItem>
+          <ContextMenuItem variant="destructive" onSelect={() => setDeleting({ type: "chat", ...menuProps })}><Trash2Icon />{commandLabel(COMMAND_IDS.deleteChat)}</ContextMenuItem>
         </ContextMenuGroup>
       </>}>
         <ContextMenuGroup>
@@ -771,7 +780,7 @@ export function Sidebar(props: {
         <ContextMenuContent class="w-60 sidebar-context-menu">
           <Show when={cloning()} fallback={<>
             <ContextMenuGroup>
-              <ContextMenuItem onSelect={() => startNewChat(blockProps.project)}><MessageSquarePlusIcon />New chat</ContextMenuItem>
+              <ContextMenuItem onSelect={() => startNewChat(blockProps.project)}><MessageSquarePlusIcon />{commandLabel(COMMAND_IDS.newChat)}</ContextMenuItem>
               <ContextMenuItem onSelect={() => requestRenameProject(blockProps.project)}><PencilIcon />Rename {blockProps.workspace ? "workspace" : "folder"}</ContextMenuItem>
               <ContextMenuItem onSelect={() => void togglePin("project", blockProps.project.id)}>
                 <Show when={isPinned("project", blockProps.project.id)} fallback={<><PinIcon />Pin to sidebar</>}><PinOffIcon />Unpin</Show>
@@ -994,8 +1003,8 @@ export function Sidebar(props: {
       </FieldGroup></form>
     </Modal>
 
-    <Modal open={Boolean(rename())} title={rename()?.type === "chat" ? "Rename chat" : "Rename folder"}
-      description={rename()?.type === "chat" ? "Set the display name stored by Conduit." : "Change the folder's display name without changing its working-directory path."}
+    <Modal open={Boolean(rename())} title={rename()?.type === "chat" ? "Rename chat" : rename()?.type === "terminal" ? "Rename terminal" : "Rename folder"}
+      description={rename()?.type === "chat" ? "Set the display name stored by Conduit." : rename()?.type === "terminal" ? "Set the terminal session name." : "Change the folder's display name without changing its working-directory path."}
       onClose={() => setRename(null)}>
       <form onSubmit={submitRename}><Field><FieldLabel for="rename-name">Name</FieldLabel><Input id="rename-name" value={renameValue()} onInput={(event) => setRenameValue(event.currentTarget.value)} /></Field><div class="mt-4 flex justify-end gap-2"><Button type="button" variant="outline" onClick={() => setRename(null)}>Cancel</Button><Button type="submit" disabled={!renameValue().trim()}>Rename</Button></div></form>
     </Modal>
