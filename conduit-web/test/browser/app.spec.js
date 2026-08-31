@@ -295,6 +295,36 @@ test.beforeEach(async ({ page }) => {
   });
 });
 
+test("one coefficient scales the app and portalled overlays on 1440p displays", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name === "mobile-chromium", "desktop display scaling only");
+  await page.setViewportSize({ width: 1920, height: 1080 });
+  await page.goto("/");
+  await expect.poll(() => page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue("--ui-scale").trim())).toBe("1");
+
+  await page.setViewportSize({ width: 2560, height: 1440 });
+  const metrics = await page.evaluate(() => {
+    const measure = (parent) => {
+      const probe = document.createElement("div");
+      probe.style.cssText = "position:absolute;width:100px;height:100px";
+      parent.append(probe);
+      const rect = probe.getBoundingClientRect();
+      probe.remove();
+      return [rect.width, rect.height];
+    };
+    return {
+      scale: getComputedStyle(document.documentElement).getPropertyValue("--ui-scale").trim(),
+      appProbe: measure(document.getElementById("root")),
+      portalProbe: measure(document.body),
+      body: document.body.getBoundingClientRect().toJSON(),
+    };
+  });
+  expect(metrics.scale).toBe("1.25");
+  expect(metrics.appProbe).toEqual([125, 125]);
+  expect(metrics.portalProbe).toEqual([125, 125]);
+  expect(metrics.body.width).toBe(2560);
+  expect(metrics.body.height).toBe(1440);
+});
+
 test("durable UI preferences migrate once and restore after browser storage loss", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "desktop-chromium");
   let preferences = {
