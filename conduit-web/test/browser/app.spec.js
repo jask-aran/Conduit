@@ -566,9 +566,11 @@ test("desktop workspace can replace the chat pane without changing the sidebar",
   const panel = page.getByRole("complementary", { name: "Workspace panel" });
   const chat = page.locator('[data-slot="sidebar-inset"]');
   const sidebar = page.locator(".conduit-sidebar");
+  const transcriptShell = page.locator(".transcript-motion-shell");
   const sidebarBox = await sidebar.boundingBox();
 
   await panel.getByRole("button", { name: "Expand Workspace" }).click();
+  await expect.poll(() => transcriptShell.evaluate((element) => getComputedStyle(element).contentVisibility)).toBe("hidden");
   const expansionWidths = await page.evaluate(() => new Promise((resolve) => {
     const widths = [];
     const sample = () => {
@@ -588,6 +590,7 @@ test("desktop workspace can replace the chat pane without changing the sidebar",
   await expect(chat).toBeHidden();
   await panel.getByRole("button", { name: "Restore split view" }).click();
   await expect(chat).toBeVisible();
+  await expect.poll(() => transcriptShell.evaluate((element) => getComputedStyle(element).contentVisibility)).toBe("visible");
 });
 
 test("desktop workspace shell and surface ease open and close together", async ({ page }, testInfo) => {

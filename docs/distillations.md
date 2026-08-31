@@ -268,6 +268,13 @@ Add an entry through `$tacit-knowledge` after explicit approval or validated rep
 - **Scope:** Resizable Solid surfaces, beginning with `WorkspacePanel`, panel-driven transcript/composer motion, and overlay controls such as the scroll-to-latest button. A visible panel surface may clip its contents; its edge-spanning resize target must not be clipped with them.
 - **Evidence:** The shared 160ms width transition was continuously retargeted during drag, causing cursor-to-panel lag; `overflow: hidden` cut the `left: -12px; width: 24px` workspace gutter in half. A later composer `ResizeObserver` wrote two inherited variables on `.transcript`, and Chrome then walked 10,588 elements for 30–42ms during panel motion. Button-local geometry and shared conversation motion passed the focused panel contract plus workspace resize and open/close browser checks; manual review found the result substantially smoother.
 
+### Freeze transcript descendants during workspace expansion
+
+- **Type:** Heuristic.
+- **Rule:** Mark desktop Workspace expansion before changing `workspaceExpanded`, and apply `content-visibility: hidden` to `.transcript-motion-shell` for the shared 160ms motion in both directions. Keep the outer shell, Workspace surface, and composer live; do not guard only the expanded state, because restore also changes flex geometry and can restart scroll-follow.
+- **Scope:** `workspaceExpanded` in `main.tsx`, Workspace panel motion, and transcript scroll-follow.
+- **Evidence:** A native Chrome trace changed expand from 199 layouts and 47.5ms layout time with seven scroll events to 54 layouts and 26.8ms with one short event. Restore changed from 365 layouts and 79.0ms with 13 scroll events to 61 layouts and 13.7ms with ten short post-release events. The focused expansion regression and both scroll harnesses passed.
+
 ## Streaming Markdown renderer invariants
 
 ### Preserve native display identity across transient slices

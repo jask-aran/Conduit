@@ -46,6 +46,7 @@ import { ShortcutManager } from "./shortcuts/shortcut-manager";
 import { publishUiPreference, saveUiPreference, UI_PREFERENCE_CHANGE_EVENT, type UiPreferenceKey, type UiPreferences } from "./preferences/ui-preferences";
 import { applyUiScale, selectedUiScale } from "./preferences/ui-scale";
 import { INCREMARK_PACING_STORAGE_KEY } from "./chat/incremark-pacing";
+import { PANEL_MOTION_DURATION_MS } from "./panel-motion";
 import {
   applyTranscriptAppearance,
   CODE_BLOCK_COLLAPSE_LINES_STORAGE_KEY,
@@ -396,7 +397,24 @@ function App() {
   const [sidebarCommand, setSidebarCommand] = createSignal<SidebarCommand | null>(null);
   const [dropActive, setDropActive] = createSignal(false);
   const [panelOpen, setPanelOpen] = createSignal(false);
-  const [workspaceExpanded, setWorkspaceExpanded] = createSignal(false);
+  const [workspaceExpanded, setWorkspaceExpandedState] = createSignal(false);
+  let workspaceExpansionMotionTimer: number | undefined;
+  const setWorkspaceExpanded = (next: boolean) => {
+    if (next === workspaceExpanded()) return;
+    if (workspaceExpansionMotionTimer != null) window.clearTimeout(workspaceExpansionMotionTimer);
+    workspaceExpansionMotionTimer = undefined;
+    const main = document.querySelector<HTMLElement>('[data-slot="sidebar-inset"]');
+    if (!isMobileLayout() && !matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      main?.setAttribute("data-workspace-expansion-motion", "true");
+      workspaceExpansionMotionTimer = window.setTimeout(() => {
+        main?.removeAttribute("data-workspace-expansion-motion");
+        workspaceExpansionMotionTimer = undefined;
+      }, PANEL_MOTION_DURATION_MS + 32);
+    } else {
+      main?.removeAttribute("data-workspace-expansion-motion");
+    }
+    setWorkspaceExpandedState(next);
+  };
   const [workspaceViewRequest, setWorkspaceViewRequest] = createSignal<{ tab: WorkspaceView; terminalId?: string; nonce: number } | null>(null);
   const [mobileSidebarOpen, setMobileSidebarOpen] = createSignal(false);
   const initialRouteId = pathChatId();
@@ -1563,7 +1581,7 @@ function App() {
         </Show>
       </Show>
     </main>
-    <Show when={["chat", "project", "dashboard"].includes(routeKind()) && Boolean(selectedProject()) && Boolean(workspacePanelScope())}><WorkspacePanel projectId={() => selectedProject()!.id} chatId={() => workspacePanelScope()!} open={panelOpen} expanded={workspaceExpanded} requestedTab={workspaceViewRequest} onToggleExpanded={() => setWorkspaceExpanded((value) => !value)} onClose={togglePanel} /></Show>
+    <Show when={["chat", "project", "dashboard"].includes(routeKind()) && Boolean(selectedProject()) && Boolean(workspacePanelScope())}><WorkspacePanel projectId={() => selectedProject()!.id} chatId={() => workspacePanelScope()!} open={panelOpen} expanded={workspaceExpanded} requestedTab={workspaceViewRequest} onToggleExpanded={() => setWorkspaceExpanded(!workspaceExpanded())} onClose={togglePanel} /></Show>
     </Show>
     <Show when={routeKind() === "terminal" && routeBootstrap() === "ready"}>
       <TerminalRoute onOpenConduit={() => openDashboard()} />

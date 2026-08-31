@@ -11,6 +11,7 @@ body.workspace-resizing .workspace-panel { transition: none !important; }
 .workspace-panel-header strong { font-size: 11.2px; }
 .chat-main { transition: flex-grow var(--panel-motion-duration) var(--panel-motion-easing), margin var(--panel-motion-duration) var(--panel-motion-easing), opacity var(--panel-motion-duration) var(--panel-motion-easing); }
 .chat-main.workspace-expanded { margin-inline: 0; flex-grow: 0; opacity: 0; pointer-events: none; }
+.chat-main[data-workspace-expansion-motion="true"] .transcript-motion-shell { content-visibility: hidden; }
 .workspace-panel.workspace-panel-expanded { flex-grow: 1; flex-shrink: 1; }
 .workspace-panel-expanded .workspace-panel-surface { width: 100%; }
 .workspace-panel-expanded .workspace-resize-handle { display: none; }
