@@ -35,6 +35,7 @@ const failures = [
 ].filter(([, actual, budget]) => actual > budget);
 if (failures.length) {
   for (const [label, actual, budget] of failures) console.error(`${label} is ${actual} B gzip; budget is ${budget} B.`);
+  console.error("Bundle budget check failed, so restart will not start the server. Review the payload growth and update the budget assumptions if the increase is justified.");
   process.exitCode = 1;
 }
 

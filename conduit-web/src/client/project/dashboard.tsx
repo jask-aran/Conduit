@@ -130,10 +130,6 @@ export function ProjectDashboard(props: {
     .filter((terminal) => terminal.projectId === projectId() && terminal.status === "running"));
   const liveTerminals = createMemo(() => scopedTerminals().slice(0, 4));
 
-  createEffect(() => {
-    for (const chat of visibleChats()) props.onPrefetchChat(chat);
-  });
-
   const refreshTerminals = async () => {
     try {
       const result = await api<{ ptys: Pty[] }>("/v0/ptys");
