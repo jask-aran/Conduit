@@ -8,17 +8,26 @@
 .chat-markdown blockquote { margin: 1em 0; padding-left: 1em; border-left: 1px solid var(--border); color: var(--muted-foreground); }
 .chat-markdown table { width: 100%; margin: 1em 0; border-collapse: collapse; }
 .chat-markdown[data-renderer^="incremark"] table { table-layout: auto; }
+/* Tables and code blocks are the two constructs that can want more room than
+   the reading measure. They bleed symmetrically out of the column up to
+   --transcript-wide-scale, clamped to the chat container so the negative margin
+   can never escape .chat-main's overflow.
+
+   A table has no choice -- its columns are what they are. A code block does:
+   left wide by default it dominates the page, so it stays in the reading column
+   unless the reader opts in with the Wide code blocks setting. */
 @container chat-main (--conduit-wide-chat) {
-  .chat-markdown[data-renderer^="incremark"] table {
-    width: min(150%, 100cqw);
-    margin-left: calc((100% - min(150%, 100cqw)) / 2);
+  .chat-markdown[data-renderer^="incremark"] table,
+  :root[data-code-width="wide"] .chat-markdown[data-renderer^="incremark"] .artifact {
+    width: min(var(--transcript-wide-scale), var(--transcript-wide-max));
+    margin-left: calc((100% - min(var(--transcript-wide-scale), var(--transcript-wide-max))) / 2);
   }
 }
 .chat-markdown th, .chat-markdown td { padding: 5.6px 7.2px; border: 1px solid var(--border); text-align: left; }
 .chat-markdown[data-renderer^="incremark"] th, .chat-markdown[data-renderer^="incremark"] td { vertical-align: top; }
 .chat-markdown :not(pre) > code { border-radius: 3.2px; background: var(--muted); padding: 0.12em 0.35em; font-family: ui-monospace, monospace; }
 .external-markdown-link { border: 0; background: none; padding: 0; color: oklch(0.7 0.16 250); text-decoration: underline; }
-.artifact { margin: 1em 0; overflow: hidden; border: 0.8px solid var(--border); border-radius: 8px; background: var(--card); }
+.artifact { margin: 1em 0; border: 0.8px solid var(--border); border-radius: 8px; background: var(--card); }
 .artifact-header { display: flex; align-items: center; justify-content: space-between; padding: 5.6px 8px; border-bottom: 1px solid var(--border); color: var(--muted-foreground); font-size: 9.6px; }
 .artifact-header button { border: 0; background: transparent; color: inherit; }
 .artifact pre { margin: 0; overflow: auto; padding: 11.2px; font: 10.4px/1.55 ui-monospace, monospace; }
@@ -59,17 +68,26 @@
 .chat-markdown blockquote { margin: 1em 0; padding-left: 1em; border-left: 3px solid var(--border); color: var(--muted-foreground); }
 .chat-markdown table { width: 100%; margin: 1em 0; border-collapse: collapse; }
 .chat-markdown[data-renderer^="incremark"] table { table-layout: auto; }
+/* Tables and code blocks are the two constructs that can want more room than
+   the reading measure. They bleed symmetrically out of the column up to
+   --transcript-wide-scale, clamped to the chat container so the negative margin
+   can never escape .chat-main's overflow.
+
+   A table has no choice -- its columns are what they are. A code block does:
+   left wide by default it dominates the page, so it stays in the reading column
+   unless the reader opts in with the Wide code blocks setting. */
 @container chat-main (--conduit-wide-chat) {
-  .chat-markdown[data-renderer^="incremark"] table {
-    width: min(150%, 100cqw);
-    margin-left: calc((100% - min(150%, 100cqw)) / 2);
+  .chat-markdown[data-renderer^="incremark"] table,
+  :root[data-code-width="wide"] .chat-markdown[data-renderer^="incremark"] .artifact {
+    width: min(var(--transcript-wide-scale), var(--transcript-wide-max));
+    margin-left: calc((100% - min(var(--transcript-wide-scale), var(--transcript-wide-max))) / 2);
   }
 }
 .chat-markdown th, .chat-markdown td { padding: 7px 9px; border: 1px solid var(--border); text-align: left; }
 .chat-markdown[data-renderer^="incremark"] th, .chat-markdown[data-renderer^="incremark"] td { vertical-align: top; }
 .chat-markdown :not(pre) > code { border-radius: 4px; background: var(--muted); padding: 0.12em 0.35em; font-family: ui-monospace, monospace; }
 .external-markdown-link { border: 0; background: none; padding: 0; color: oklch(0.7 0.16 250); text-decoration: underline; }
-.artifact { margin: 1em 0; overflow: hidden; border: 1px solid var(--border); border-radius: 10px; background: var(--card); }
+.artifact { margin: 1em 0; border: 1px solid var(--border); border-radius: 10px; background: var(--card); }
 .artifact-header { display: flex; align-items: center; justify-content: space-between; padding: 7px 10px; border-bottom: 1px solid var(--border); color: var(--muted-foreground); font-size: 12px; }
 .artifact-header button { border: 0; background: transparent; color: inherit; }
 .artifact pre { margin: 0; overflow: auto; padding: 14px; font: 13px/1.55 ui-monospace, monospace; }

@@ -1,0 +1,47 @@
+/* Transcript column presets.
+
+   The transcript column used to be welded to --composer-desktop-reference-width,
+   so widening the reading measure also widened the composer. They are separate
+   concerns: a wider column means less scrolling for the same answer, while the
+   composer has its own comfortable typing measure. --transcript-column-width is
+   the reading column; --transcript-wide-scale is how far a block that genuinely
+   needs the room (a table, a code block) may bleed past it.
+
+   Both are chosen from presets rather than free pixel values because the shell
+   already scales its whole geometry by density, and a raw pixel preference
+   would not survive that scaling or a narrow window. */
+:root {
+  --transcript-column-width: var(--composer-desktop-reference-width);
+  --transcript-column-gutter: 38.4px;
+  --transcript-wide-scale: 150%;
+}
+
+:root[data-transcript-width="compact"] { --transcript-column-width: 528px; }
+:root[data-transcript-width="default"] { --transcript-column-width: var(--composer-desktop-reference-width); }
+:root[data-transcript-width="wide"] { --transcript-column-width: 760px; }
+:root[data-transcript-width="full"] { --transcript-column-width: 100%; }
+
+/* The bleed is centred on the assistant column, which sits a little left of the
+   chat surface's centre. Clamping to the raw container width therefore pushes
+   the left edge outside it. Reserve the thread's own gutter on both sides: it
+   is wider than that asymmetry, so the card always lands inside with the same
+   breathing room the column already has. */
+:root { --transcript-wide-max: calc(100cqw - 2 * var(--transcript-column-gutter)); }
+:root[data-transcript-wide="off"] { --transcript-wide-scale: 100%; }
+:root[data-transcript-wide="default"] { --transcript-wide-scale: 150%; }
+:root[data-transcript-wide="wider"] { --transcript-wide-scale: 200%; }
+:root[data-transcript-wide="full"] { --transcript-wide-scale: var(--transcript-wide-max); }
+
+/* Mobile retains v0.5.2 density. */
+@media (--conduit-mobile-layout) {
+:root {
+  --transcript-column-width: var(--composer-desktop-reference-width);
+  --transcript-column-gutter: 48px;
+  --transcript-wide-scale: 150%;
+}
+
+:root[data-transcript-width="compact"] { --transcript-column-width: 660px; }
+:root[data-transcript-width="default"] { --transcript-column-width: var(--composer-desktop-reference-width); }
+:root[data-transcript-width="wide"] { --transcript-column-width: 950px; }
+:root[data-transcript-width="full"] { --transcript-column-width: 100%; }
+}

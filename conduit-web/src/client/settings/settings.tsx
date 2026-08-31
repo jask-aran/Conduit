@@ -7,10 +7,36 @@ import {
   type ComposerSurfaceMode,
 } from "../chat/composer-surface";
 import type { VoiceDictationSettings } from "../chat/voice-dictation-types";
+import { saveUiScale, selectedUiScale, type UiScale } from "../preferences/ui-scale";
+import {
+  applyTranscriptAppearance,
+  saveCodeBlockCollapse,
+  saveCodeBlockCollapseLines,
+  saveCodeBlockWidth,
+  selectedCodeBlockWidth,
+  type CodeBlockWidthMode,
+  saveTranscriptWideBlocks,
+  saveTranscriptWidth,
+  selectedCodeBlockCollapse,
+  selectedCodeBlockCollapseLines,
+  selectedTranscriptWideBlocks,
+  selectedTranscriptWidth,
+  type TranscriptWideBlocksMode,
+  type TranscriptWidthMode,
+} from "../chat/transcript-appearance";
+import type { CodeBlockCollapseMode } from "../chat/code-block";
 import "./voice-settings.css";
 
 type CoreProps = Parameters<typeof SettingsCore>[0];
-type SettingsProps = Omit<CoreProps, "composerSurface" | "onComposerSurfaceChange" | "voiceSettings"> & {
+type SettingsProps = Omit<CoreProps,
+  "composerSurface" | "onComposerSurfaceChange"
+  | "interfaceScale" | "onInterfaceScaleChange"
+  | "transcriptWidth" | "onTranscriptWidthChange"
+  | "transcriptWideBlocks" | "onTranscriptWideBlocksChange"
+  | "codeBlockCollapse" | "onCodeBlockCollapseChange"
+  | "codeBlockCollapseLines" | "onCodeBlockCollapseLinesChange"
+  | "codeBlockWidth" | "onCodeBlockWidthChange"
+  | "voiceSettings"> & {
   voiceSettings: VoiceDictationSettings;
 };
 
@@ -19,6 +45,12 @@ type SettingsProps = Omit<CoreProps, "composerSurface" | "onComposerSurfaceChang
 // never swaps Settings trees and performs no Voice lifecycle translation.
 export function Settings(props: SettingsProps) {
   const [composerSurface, setComposerSurface] = createSignal<ComposerSurfaceMode>(selectedComposerSurface());
+  const [interfaceScale, setInterfaceScale] = createSignal<UiScale>(selectedUiScale());
+  const [transcriptWidth, setTranscriptWidth] = createSignal<TranscriptWidthMode>(selectedTranscriptWidth());
+  const [transcriptWideBlocks, setTranscriptWideBlocks] = createSignal<TranscriptWideBlocksMode>(selectedTranscriptWideBlocks());
+  const [codeBlockCollapse, setCodeBlockCollapse] = createSignal<CodeBlockCollapseMode>(selectedCodeBlockCollapse());
+  const [codeBlockCollapseLines, setCodeBlockCollapseLines] = createSignal(selectedCodeBlockCollapseLines());
+  const [codeBlockWidth, setCodeBlockWidth] = createSignal<CodeBlockWidthMode>(selectedCodeBlockWidth());
 
   createEffect(() => {
     if (!props.open) return;
@@ -35,11 +67,47 @@ export function Settings(props: SettingsProps) {
   const updateComposerSurface = (surface: ComposerSurfaceMode) => {
     setComposerSurface(saveComposerSurface(surface));
   };
+  const updateInterfaceScale = (scale: UiScale) => setInterfaceScale(saveUiScale(scale));
+  // Each save writes localStorage and publishes the change; main.tsx mirrors it
+  // to the server and stamps the document root, so the open transcript reflows
+  // immediately without the dialog reaching into it.
+  const updateTranscriptWidth = (mode: TranscriptWidthMode) => {
+    const next = setTranscriptWidth(saveTranscriptWidth(mode));
+    applyTranscriptAppearance({ width: next });
+  };
+  const updateTranscriptWideBlocks = (mode: TranscriptWideBlocksMode) => {
+    const next = setTranscriptWideBlocks(saveTranscriptWideBlocks(mode));
+    applyTranscriptAppearance({ wideBlocks: next });
+  };
+  const updateCodeBlockCollapse = (mode: CodeBlockCollapseMode) => {
+    const next = setCodeBlockCollapse(saveCodeBlockCollapse(mode));
+    applyTranscriptAppearance({ collapse: next });
+  };
+  const updateCodeBlockCollapseLines = (lines: number) => {
+    const next = setCodeBlockCollapseLines(saveCodeBlockCollapseLines(lines));
+    applyTranscriptAppearance({ collapseLines: next });
+  };
+  const updateCodeBlockWidth = (mode: CodeBlockWidthMode) => {
+    const next = setCodeBlockWidth(saveCodeBlockWidth(mode));
+    applyTranscriptAppearance({ codeWidth: next });
+  };
 
   return <SettingsCore
       {...props}
       composerSurface={composerSurface()}
       onComposerSurfaceChange={updateComposerSurface}
+      interfaceScale={interfaceScale()}
+      onInterfaceScaleChange={updateInterfaceScale}
+      transcriptWidth={transcriptWidth()}
+      onTranscriptWidthChange={updateTranscriptWidth}
+      transcriptWideBlocks={transcriptWideBlocks()}
+      onTranscriptWideBlocksChange={updateTranscriptWideBlocks}
+      codeBlockCollapse={codeBlockCollapse()}
+      onCodeBlockCollapseChange={updateCodeBlockCollapse}
+      codeBlockCollapseLines={codeBlockCollapseLines()}
+      onCodeBlockCollapseLinesChange={updateCodeBlockCollapseLines}
+      codeBlockWidth={codeBlockWidth()}
+      onCodeBlockWidthChange={updateCodeBlockWidth}
       voiceSettings={props.voiceSettings}
     />;
 }

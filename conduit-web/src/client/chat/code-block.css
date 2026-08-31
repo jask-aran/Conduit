@@ -1,0 +1,168 @@
+/* Code block card: sticky header, collapse, and copy feedback.
+
+   .artifact previously carried overflow:hidden, which made the card a scroll
+   container and so made position:sticky on its header resolve against the card
+   itself -- the header scrolled away with the code, and copying a long block
+   meant scrolling back to its top. overflow:clip clips identically but is not a
+   scroll container, so the header can pin against the transcript viewport. */
+.chat-markdown .artifact { position: relative; overflow: clip; }
+
+.chat-markdown .artifact-header {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  gap: 8px;
+  background: var(--card);
+}
+
+.chat-markdown .artifact-actions { display: inline-flex; align-items: center; gap: 3.2px; }
+
+/* Chevron drawn in CSS: three of the four emitters build this card as an HTML
+   string and have no icon component to reach for. */
+.chat-markdown .artifact-toggle {
+  display: inline-flex;
+  width: 16px;
+  height: 16px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  color: inherit;
+  cursor: pointer;
+}
+.chat-markdown .artifact-toggle::before {
+  /* An inline pseudo-element ignores width/height, which left the chevron
+     invisible and the header toggle looking absent. */
+  display: block;
+  width: 6px;
+  height: 6px;
+  border-right: 1.2px solid currentColor;
+  border-bottom: 1.2px solid currentColor;
+  margin-top: -3px;
+  content: "";
+  transform: rotate(45deg);
+  transition: transform 140ms ease-out, margin-top 140ms ease-out;
+}
+.chat-markdown .artifact-toggle[aria-expanded="true"]::before {
+  margin-top: 3px;
+  transform: rotate(225deg);
+}
+.chat-markdown .artifact-toggle:hover { background: var(--muted); color: var(--foreground); }
+
+.chat-markdown .artifact-copy {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border-radius: 4px;
+  padding: 1.6px 4.8px;
+  color: inherit;
+  cursor: pointer;
+  transition: color 120ms ease-out, background-color 120ms ease-out;
+}
+.chat-markdown .artifact-copy:hover { background: var(--muted); color: var(--foreground); }
+.chat-markdown .artifact-copy[data-copied="true"] { color: var(--foreground); }
+
+/* Collapse. The clamp is a max-height on the pre so the code keeps its own
+   horizontal scroll; the mask fades the cut line instead of ending it abruptly
+   mid-glyph. */
+.chat-markdown .artifact[data-collapsed="true"] > pre {
+  max-height: calc(var(--code-collapse-lines, 15) * 1.55em + 22.4px);
+  overflow-y: hidden;
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 2.4em), transparent);
+  -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 2.4em), transparent);
+}
+
+.chat-markdown .artifact-expand {
+  display: block;
+  width: 100%;
+  border: 0;
+  border-top: 0.8px solid var(--border);
+  padding: 5.6px 8px;
+  background: transparent;
+  color: var(--muted-foreground);
+  font-size: 9.6px;
+  text-align: center;
+  cursor: pointer;
+  transition: color 120ms ease-out, background-color 120ms ease-out;
+}
+.chat-markdown .artifact-expand:hover { background: var(--muted); color: var(--foreground); }
+
+/* Line numbers.
+
+   Drawn as a counter on each line rather than a parallel gutter column: the
+   numbers then clip with the code when a block is collapsed, stay aligned when
+   the code scrolls sideways, and cost no second element per line. They are
+   ::before content, so they never land in a copied selection. */
+.chat-markdown .artifact pre code { display: block; counter-reset: code-line; }
+.chat-markdown .artifact .code-line { display: block; counter-increment: code-line; }
+.chat-markdown .artifact .code-line::before {
+  display: inline-block;
+  width: 2.2em;
+  margin-right: 1.2em;
+  color: var(--muted-foreground);
+  content: counter(code-line);
+  opacity: 0.55;
+  text-align: right;
+  user-select: none;
+  -webkit-user-select: none;
+}
+/* Highlight palette. Built from the interface tokens rather than importing a
+   highlight.js stylesheet, so code sits in the same colour world as the rest of
+   the app and follows the theme. */
+.chat-markdown .artifact .hljs-comment,
+.chat-markdown .artifact .hljs-quote { color: var(--muted-foreground); font-style: italic; }
+.chat-markdown .artifact .hljs-keyword,
+.chat-markdown .artifact .hljs-selector-tag,
+.chat-markdown .artifact .hljs-literal,
+.chat-markdown .artifact .hljs-doctag { color: oklch(0.72 0.15 305); }
+.chat-markdown .artifact .hljs-string,
+.chat-markdown .artifact .hljs-regexp,
+.chat-markdown .artifact .hljs-addition { color: oklch(0.75 0.14 145); }
+.chat-markdown .artifact .hljs-number,
+.chat-markdown .artifact .hljs-symbol,
+.chat-markdown .artifact .hljs-bullet { color: oklch(0.78 0.13 65); }
+.chat-markdown .artifact .hljs-title,
+.chat-markdown .artifact .hljs-name,
+.chat-markdown .artifact .hljs-section,
+.chat-markdown .artifact .hljs-title.function_ { color: oklch(0.78 0.13 240); }
+.chat-markdown .artifact .hljs-attr,
+.chat-markdown .artifact .hljs-attribute,
+.chat-markdown .artifact .hljs-variable,
+.chat-markdown .artifact .hljs-template-variable { color: oklch(0.8 0.09 200); }
+.chat-markdown .artifact .hljs-type,
+.chat-markdown .artifact .hljs-built_in,
+.chat-markdown .artifact .hljs-class .hljs-title { color: oklch(0.8 0.11 90); }
+.chat-markdown .artifact .hljs-meta { color: oklch(0.68 0.07 260); }
+.chat-markdown .artifact .hljs-deletion { color: var(--destructive); }
+.chat-markdown .artifact .hljs-emphasis { font-style: italic; }
+.chat-markdown .artifact .hljs-strong { font-weight: 600; }
+
+/* Copy confirmation. A one-shot ring rather than a toast: copying happens often
+   enough that a stacking notification would be noise. */
+@keyframes conduit-copy-flash {
+  from { box-shadow: inset 0 0 0 1.6px var(--ring); }
+  to { box-shadow: inset 0 0 0 1.6px transparent; }
+}
+[data-copy-flash="true"] {
+  animation: conduit-copy-flash 620ms ease-out;
+  border-radius: 8px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-copy-flash="true"] { animation: none; }
+  .chat-markdown .artifact-copy,
+  .chat-markdown .artifact-toggle::before,
+  .chat-markdown .artifact-expand { transition: none; }
+}
+
+/* Mobile retains v0.5.2 density. */
+@media (--conduit-mobile-layout) {
+.chat-markdown .artifact-copy { border-radius: 5px; padding: 2px 6px; }
+.chat-markdown .artifact-actions { gap: 4px; }
+.chat-markdown .artifact-toggle { width: 20px; height: 20px; border-radius: 5px; }
+.chat-markdown .artifact-toggle::before { width: 7px; height: 7px; border-width: 1.5px; }
+.chat-markdown .artifact[data-collapsed="true"] > pre {
+  max-height: calc(var(--code-collapse-lines, 15) * 1.55em + 28px);
+}
+.chat-markdown .artifact-expand { padding: 7px 10px; font-size: 12px; }
+[data-copy-flash="true"] { border-radius: 10px; }
+}

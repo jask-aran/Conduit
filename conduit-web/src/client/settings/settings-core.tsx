@@ -17,6 +17,18 @@ import type { Installation, Project, Template, VoiceExecutionCatalogueView, Voic
 import type { ModelSettings } from "../state/model-settings";
 import { MAX_SIDEBAR_CHAT_LIMIT, MIN_SIDEBAR_CHAT_LIMIT } from "../navigation/sidebar-preferences";
 import type { ShortcutManager } from "../shortcuts/shortcut-manager";
+import { parseUiScale, UI_SCALE_OPTIONS, type UiScale } from "../preferences/ui-scale";
+import {
+  CODE_BLOCK_COLLAPSE_LINE_CHOICES,
+  CODE_BLOCK_COLLAPSE_OPTIONS,
+  CODE_BLOCK_WIDTH_OPTIONS,
+  type CodeBlockWidthMode,
+  TRANSCRIPT_WIDE_BLOCKS_OPTIONS,
+  TRANSCRIPT_WIDTH_OPTIONS,
+  type TranscriptWideBlocksMode,
+  type TranscriptWidthMode,
+} from "../chat/transcript-appearance";
+import type { CodeBlockCollapseMode } from "../chat/code-block";
 import { ShortcutsSettings } from "./shortcuts-settings";
 
 const sectionGroups = [
@@ -172,8 +184,20 @@ export function Settings(props: {
   onRendererControlsVisibleChange: (visible: boolean) => void;
   meteorField: boolean;
   onMeteorFieldChange: (enabled: boolean) => void;
+  transcriptWidth: TranscriptWidthMode;
+  onTranscriptWidthChange: (mode: TranscriptWidthMode) => void;
+  transcriptWideBlocks: TranscriptWideBlocksMode;
+  onTranscriptWideBlocksChange: (mode: TranscriptWideBlocksMode) => void;
+  codeBlockCollapse: CodeBlockCollapseMode;
+  onCodeBlockCollapseChange: (mode: CodeBlockCollapseMode) => void;
+  codeBlockCollapseLines: number;
+  onCodeBlockCollapseLinesChange: (lines: number) => void;
+  codeBlockWidth: CodeBlockWidthMode;
+  onCodeBlockWidthChange: (mode: CodeBlockWidthMode) => void;
   composerSurface: ComposerSurfaceMode;
   onComposerSurfaceChange: (surface: ComposerSurfaceMode) => void;
+  interfaceScale: UiScale;
+  onInterfaceScaleChange: (scale: UiScale) => void;
   voiceSettings: VoiceDictationSettings;
   onVoiceSettingsSave: (settings: VoiceDictationSettings) => void;
   sidebarChatLimit: number;
@@ -905,7 +929,7 @@ export function Settings(props: {
           <div class="settings-status-strip">
             <Show when={section() === "models"}><BotIcon /><strong>{props.models.enabledModels().length} models</strong><span>{authProviders().filter((provider) => provider.auth.configured).length} accounts connected</span><Button variant="outline" size="sm" onClick={props.onOpenModelSelector}>Choose models</Button></Show>
             <Show when={section() === "runtime"}><ActivityIcon /><strong>{runtime()?.liveCount || 0} warm</strong><span>{runtime()?.generatingCount || 0} generating</span><span>{props.installations.filter((item) => item.available).length} Pi installations ready</span></Show>
-            <Show when={section() === "ui"}><MonitorIcon /><strong>{props.sidebarChatLimit} sidebar chats</strong><span>{MARKDOWN_RENDERER_OPTIONS.find((option) => option.value === props.markdownRenderer)?.label} renderer</span></Show>
+            <Show when={section() === "ui"}><MonitorIcon /><strong>{Math.round(props.interfaceScale * 100)}% scale</strong><span>{TRANSCRIPT_WIDTH_OPTIONS.find((option) => option.value === props.transcriptWidth)?.label} transcript · {MARKDOWN_RENDERER_OPTIONS.find((option) => option.value === props.markdownRenderer)?.label} renderer</span></Show>
             <Show when={section() === "shortcuts"}><KeyboardIcon /><strong>Keyboard first</strong><span>Search, edit, and restore bindings here.</span></Show>
             <Show when={section() === "voice"}><Mic2Icon /><strong>{voiceServerSettings()?.mode && voiceServerSettings()?.mode !== "off" ? "Voice ready" : "Voice off"}</strong><span>{props.voiceSettings.inputDeviceId ? "Custom input selected" : "Default audio input"}</span></Show>
             <Show when={section() === "search"}><SearchIcon /><strong>{searchSettings()?.providers.filter((provider) => provider.configured).length || 0} providers ready</strong><span>Native provider search remains automatic.</span></Show>
@@ -960,6 +984,13 @@ export function Settings(props: {
                 <small>Show this many recent chats in the Chats group. Use View all chats to search older chats.</small>
               </Field>
               <Field>
+                <FieldLabel for="interface-scale">Interface scale</FieldLabel>
+                <select id="interface-scale" aria-label="Interface scale" value={props.interfaceScale} onChange={(event) => props.onInterfaceScaleChange(parseUiScale(event.currentTarget.value))}>
+                  <For each={UI_SCALE_OPTIONS}>{(scale) => <option value={scale}>{Math.round(scale * 100)}%</option>}</For>
+                </select>
+                <small>Scale this browser without changing settings on other devices.</small>
+              </Field>
+              <Field>
                 <FieldLabel for="composer-surface-mode">Composer material</FieldLabel>
                 <select id="composer-surface-mode" aria-label="Composer material" value={props.composerSurface} onChange={(event) => props.onComposerSurfaceChange(event.currentTarget.value as ComposerSurfaceMode)}>
                   <For each={COMPOSER_SURFACE_OPTIONS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
@@ -971,6 +1002,41 @@ export function Settings(props: {
                   <input type="checkbox" aria-label="Ambient meteor field" checked={props.meteorField} onChange={(event) => props.onMeteorFieldChange(event.currentTarget.checked)} />
                   <span><strong>Ambient meteor field</strong><small>Show the animated meteor field behind chat surfaces.</small></span>
                 </label>
+              </Field>
+              <Field>
+                <FieldLabel for="transcript-width">Transcript width</FieldLabel>
+                <select id="transcript-width" aria-label="Transcript width" value={props.transcriptWidth} onChange={(event) => props.onTranscriptWidthChange(event.currentTarget.value as TranscriptWidthMode)}>
+                  <For each={TRANSCRIPT_WIDTH_OPTIONS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
+                </select>
+                <small>How wide the reading column is. A wider transcript means less scrolling; the composer keeps its own width.</small>
+              </Field>
+              <Field>
+                <FieldLabel for="transcript-wide-blocks">Wide blocks</FieldLabel>
+                <select id="transcript-wide-blocks" aria-label="Wide blocks" value={props.transcriptWideBlocks} onChange={(event) => props.onTranscriptWideBlocksChange(event.currentTarget.value as TranscriptWideBlocksMode)}>
+                  <For each={TRANSCRIPT_WIDE_BLOCKS_OPTIONS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
+                </select>
+                <small>How far tables and code blocks may extend past the reading column when there is room.</small>
+              </Field>
+              <Field>
+                <FieldLabel for="code-block-width">Code block width</FieldLabel>
+                <select id="code-block-width" aria-label="Code block width" value={props.codeBlockWidth} onChange={(event) => props.onCodeBlockWidthChange(event.currentTarget.value as CodeBlockWidthMode)}>
+                  <For each={CODE_BLOCK_WIDTH_OPTIONS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
+                </select>
+                <small>Keep code in the reading column, or let it use the wide-block width alongside tables.</small>
+              </Field>
+              <Field>
+                <FieldLabel for="code-block-collapse">Collapse code blocks</FieldLabel>
+                <select id="code-block-collapse" aria-label="Collapse code blocks" value={props.codeBlockCollapse} onChange={(event) => props.onCodeBlockCollapseChange(event.currentTarget.value as CodeBlockCollapseMode)}>
+                  <For each={CODE_BLOCK_COLLAPSE_OPTIONS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
+                </select>
+                <small>Long code blocks start folded to a preview. A block still streaming always stays open.</small>
+              </Field>
+              <Field>
+                <FieldLabel for="code-block-collapse-lines">Collapse over</FieldLabel>
+                <select id="code-block-collapse-lines" aria-label="Collapse code blocks over" disabled={props.codeBlockCollapse === "off"} value={props.codeBlockCollapseLines} onChange={(event) => props.onCodeBlockCollapseLinesChange(Number(event.currentTarget.value))}>
+                  <For each={CODE_BLOCK_COLLAPSE_LINE_CHOICES}>{(lines) => <option value={lines}>{lines} lines</option>}</For>
+                </select>
+                <small>Blocks longer than this fold; shorter ones always render in full.</small>
               </Field>
               <details class="settings-disclosure settings-grid-wide">
                 <summary><span><ActivityIcon /><strong>Composer context metrics</strong><small>{contextMetricPreset(props.contextMetrics) === "custom" ? "Custom selection" : CONTEXT_METRIC_PRESETS.find((preset) => preset.id === contextMetricPreset(props.contextMetrics))?.label}</small></span></summary>

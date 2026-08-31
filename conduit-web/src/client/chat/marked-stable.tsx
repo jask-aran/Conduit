@@ -7,6 +7,8 @@ import { getHarnessRecorder, recordHarnessMetric } from "../harness-metrics";
 import { ExternalLinkDialog } from "./external-link-dialog";
 import { createExternalLinkController, handleMarkdownClick } from "./markdown-actions";
 import { escapeHtml, renderMarkdownLink, sanitizeMarkdownFragment } from "./markdown-security";
+import { codeBlockMarkup, codeBlockState } from "./code-block";
+import { selectedCodeBlockCollapse, selectedCodeBlockCollapseLines } from "./transcript-appearance";
 
 // This instance is isolated from the current Marked Experimental extensions.
 // It intentionally keeps the old reference path: GFM, marked-katex, and the
@@ -32,8 +34,13 @@ markedStable.use({
       });
     },
     code({ text, lang }) {
-      const language = String(lang || "text").split(/\s+/)[0]!.toLowerCase();
-      return `<div class="artifact" data-language="${escapeHtml(language)}"><div class="artifact-header"><span>${escapeHtml(language)}</span><button type="button" aria-label="Copy code" data-copy-code>Copy</button></div><pre><code>${escapeHtml(text)}</code></pre></div>`;
+      const mode = selectedCodeBlockCollapse();
+      const threshold = selectedCodeBlockCollapseLines();
+      return codeBlockMarkup({
+        language: String(lang || "text"),
+        text,
+        state: codeBlockState(text, mode, threshold, false),
+      });
     },
   },
 });

@@ -17,6 +17,11 @@ const DEFAULTS = {
   contextMetrics: null,
   meteorField: null,
   incremarkPacing: null,
+  transcriptWidth: null,
+  transcriptWideBlocks: null,
+  codeBlockCollapse: null,
+  codeBlockCollapseLines: null,
+  codeBlockWidth: null,
   shortcutOverrides: null,
   voicePreferences: null,
 };
@@ -42,8 +47,18 @@ export function validSidebarPins(input) {
 const UI_PREFERENCE_KEYS = new Set([
   "sidebarChatLimit", "collapsedProjectIds", "sidebarCollapsed", "markdownRenderer",
   "transcriptRenderer", "rendererControlsVisible", "composerSurface", "contextMetrics",
-  "meteorField", "incremarkPacing", "shortcutOverrides", "voicePreferences",
+  "meteorField", "incremarkPacing", "transcriptWidth", "transcriptWideBlocks",
+  "codeBlockCollapse", "codeBlockCollapseLines", "codeBlockWidth",
+  "shortcutOverrides", "voicePreferences",
 ]);
+// Reading-surface presets. Free pixel values are deliberately not accepted: the
+// shell scales its geometry by density and container width, so only a named
+// preset stays correct across devices.
+const TRANSCRIPT_WIDTHS = ["compact", "default", "wide", "full"];
+const TRANSCRIPT_WIDE_BLOCKS = ["off", "default", "wider", "full"];
+const CODE_BLOCK_COLLAPSE_MODES = ["off", "long", "all"];
+const CODE_BLOCK_COLLAPSE_LINES = [10, 15, 25, 50];
+const CODE_BLOCK_WIDTHS = ["column", "wide"];
 const stringList = (value, limit) => Array.isArray(value) && value.length <= limit
   && value.every((item) => typeof item === "string" && item.length <= 200);
 const oneOf = (value, choices) => typeof value === "string" && choices.includes(value);
@@ -74,6 +89,11 @@ export function validUiPreferencePatch(input = {}) {
     if (key === "composerSurface") return oneOf(value, ["static", "frosted-live"]);
     if (key === "contextMetrics") return stringList(value, 40);
     if (key === "incremarkPacing") return oneOf(value, ["adaptive", "fixed", "buffered"]);
+    if (key === "transcriptWidth") return oneOf(value, TRANSCRIPT_WIDTHS);
+    if (key === "transcriptWideBlocks") return oneOf(value, TRANSCRIPT_WIDE_BLOCKS);
+    if (key === "codeBlockCollapse") return oneOf(value, CODE_BLOCK_COLLAPSE_MODES);
+    if (key === "codeBlockCollapseLines") return CODE_BLOCK_COLLAPSE_LINES.includes(value);
+    if (key === "codeBlockWidth") return oneOf(value, CODE_BLOCK_WIDTHS);
     if (key === "shortcutOverrides") return validShortcutOverrides(value);
     if (key === "voicePreferences") return validVoicePreferences(value);
     return false;
@@ -153,6 +173,12 @@ export function normalizePreferences(input = {}, fallback = DEFAULTS, knownTempl
     contextMetrics: nullable("contextMetrics", stringArray(40)),
     meteorField: nullable("meteorField", boolean),
     incremarkPacing: nullable("incremarkPacing", choice(["adaptive", "fixed", "buffered"])),
+    transcriptWidth: nullable("transcriptWidth", choice(TRANSCRIPT_WIDTHS)),
+    transcriptWideBlocks: nullable("transcriptWideBlocks", choice(TRANSCRIPT_WIDE_BLOCKS)),
+    codeBlockCollapse: nullable("codeBlockCollapse", choice(CODE_BLOCK_COLLAPSE_MODES)),
+    codeBlockCollapseLines: nullable("codeBlockCollapseLines", (value) =>
+      CODE_BLOCK_COLLAPSE_LINES.includes(value) ? value : null),
+    codeBlockWidth: nullable("codeBlockWidth", choice(CODE_BLOCK_WIDTHS)),
     shortcutOverrides: nullable("shortcutOverrides", (value) => validShortcutOverrides(value) ? plainObject(value) : null),
     voicePreferences: nullable("voicePreferences", (value) => validVoicePreferences(value) ? plainObject(value) : null),
   };

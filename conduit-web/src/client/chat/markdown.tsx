@@ -8,6 +8,8 @@ import { getHarnessRecorder, recordHarnessMetric } from "../harness-metrics";
 import { ExternalLinkDialog } from "./external-link-dialog";
 import { createExternalLinkController, handleMarkdownClick } from "./markdown-actions";
 import { escapeHtml, renderMarkdownLink, sanitizeMarkdownFragment } from "./markdown-security";
+import { codeBlockMarkup, codeBlockState } from "./code-block";
+import { selectedCodeBlockCollapse, selectedCodeBlockCollapseLines } from "./transcript-appearance";
 import { splitStreamingMarkdown, type StreamingPending } from "./streaming-markdown";
 import {
   MARKDOWN_RENDERER_STORAGE_KEY,
@@ -27,8 +29,15 @@ export type { MarkdownRendererId } from "./markdown-settings";
 
 function pendingMarkup(pending: StreamingPending, streaming: boolean) {
   if (pending.kind === "fence") {
-    const language = escapeHtml(pending.language || "text");
-    return `<div class="artifact${streaming ? " streaming-pending streaming-pending-fence" : ""}" data-language="${language}"${streaming ? " data-streaming-pending=\"fence\"" : ""}><div class="artifact-header"><span>${language}</span><button type="button" aria-label="Copy code" data-copy-code>Copy</button></div><pre><code>${escapeHtml(pending.body)}</code></pre></div>`;
+    const mode = selectedCodeBlockCollapse();
+    const threshold = selectedCodeBlockCollapseLines();
+    return codeBlockMarkup({
+      language: pending.language || "text",
+      text: pending.body,
+      streaming,
+      pending: true,
+      state: codeBlockState(pending.body, mode, threshold, streaming),
+    });
   }
   const className = `streaming-pending ${pending.kind === "math-block" ? "streaming-pending-math-block" : "streaming-pending-math-inline"}`;
   const tag = pending.kind === "math-block" ? "div" : "span";
@@ -114,8 +123,13 @@ marked.use({
       });
     },
     code({ text, lang }) {
-      const language = String(lang || "text").split(/\s+/)[0]!.toLowerCase();
-      return `<div class="artifact" data-language="${escapeHtml(language)}"><div class="artifact-header"><span>${escapeHtml(language)}</span><button type="button" aria-label="Copy code" data-copy-code>Copy</button></div><pre><code>${escapeHtml(text)}</code></pre></div>`;
+      const mode = selectedCodeBlockCollapse();
+      const threshold = selectedCodeBlockCollapseLines();
+      return codeBlockMarkup({
+        language: String(lang || "text"),
+        text,
+        state: codeBlockState(text, mode, threshold, false),
+      });
     },
   },
 });

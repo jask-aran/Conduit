@@ -13,6 +13,11 @@ export interface UiPreferences {
   contextMetrics: string[] | null;
   meteorField: boolean | null;
   incremarkPacing: string | null;
+  transcriptWidth: string | null;
+  transcriptWideBlocks: string | null;
+  codeBlockCollapse: string | null;
+  codeBlockCollapseLines: number | null;
+  codeBlockWidth: string | null;
   shortcutOverrides: Record<string, unknown> | null;
   voicePreferences: Record<string, unknown> | null;
   sidebarPins: string[] | null;

@@ -35,7 +35,13 @@ export function renderMarkdownLink(options: {
   return `<button type="button" class="external-markdown-link" data-external-url="${escapeHtml(target.href)}" aria-label="${escapeHtml(options.labelText || target.href)}">${options.label}</button>`;
 }
 
-const baseAttributes = ["aria-label", "data-copy-code", "data-external-url", "data-language", "data-markdown", "class"];
+const baseAttributes = [
+  "aria-label", "data-copy-code", "data-external-url", "data-language", "data-markdown", "class",
+  // Code-block card contract: collapse state and the expander are driven by
+  // attributes so delegated listeners can toggle them without re-rendering.
+  "data-lines", "data-collapsible", "data-collapsed", "data-user-expanded",
+  "data-expand-code", "data-expand-label",
+];
 const forbiddenTags = ["img", "script", "style", "iframe", "object", "embed"];
 
 export function sanitizeMarkdownFragment(

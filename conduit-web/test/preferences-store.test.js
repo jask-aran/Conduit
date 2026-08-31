@@ -16,6 +16,11 @@ const emptyUiPreferences = {
   contextMetrics: null,
   meteorField: null,
   incremarkPacing: null,
+  transcriptWidth: null,
+  transcriptWideBlocks: null,
+  codeBlockCollapse: null,
+  codeBlockCollapseLines: null,
+  codeBlockWidth: null,
   shortcutOverrides: null,
   voicePreferences: null,
 };
@@ -55,6 +60,11 @@ test("preferences store persists general settings", async () => {
     contextMetrics: ["contextTokens", "sessionCost"],
     meteorField: false,
     incremarkPacing: "adaptive",
+    transcriptWidth: "wide",
+    transcriptWideBlocks: "wider",
+    codeBlockCollapse: "all",
+    codeBlockCollapseLines: 25,
+    codeBlockWidth: "wide",
     shortcutOverrides: {
       "open-command-palette": [{ strokes: [{ code: "KeyK", key: "K", modifiers: ["primary"] }] }],
     },
@@ -73,6 +83,11 @@ test("preferences store persists general settings", async () => {
   assert.deepEqual(restored.get().collapsedProjectIds, ["project:one"]);
   assert.equal(restored.get().rendererControlsVisible, false);
   assert.equal(restored.get().transcriptRenderer, "incremark-advanced");
+  assert.equal(restored.get().transcriptWidth, "wide");
+  assert.equal(restored.get().transcriptWideBlocks, "wider");
+  assert.equal(restored.get().codeBlockCollapse, "all");
+  assert.equal(restored.get().codeBlockCollapseLines, 25);
+  assert.equal(restored.get().codeBlockWidth, "wide");
   assert.deepEqual(restored.get().voicePreferences, { shortcut: "Ctrl+Shift+D", activation: "toggle", autoSend: true, captureProfile: "processed" });
   assert.equal(validTerminalShortcuts(restored.get().terminalShortcuts), true);
   assert.equal(validTerminalShortcuts([{ id: "bad", label: "", command: "pwd", target: "current" }]), false);
@@ -83,4 +98,34 @@ test("preferences store persists general settings", async () => {
   assert.equal(validUiPreferencePatch({ sidebarChatLimit: 4 }), false);
   assert.equal(validUiPreferencePatch({ voicePreferences: { shortcut: "Ctrl+D" } }), false);
   await fs.rm(root, { recursive: true, force: true });
+});
+
+test("reading-surface preferences round-trip and reject values outside their presets", () => {
+  assert.equal(validUiPreferencePatch({ transcriptWidth: "wide" }), true);
+  assert.equal(validUiPreferencePatch({ transcriptWidth: "widest" }), false);
+  assert.equal(validUiPreferencePatch({ transcriptWideBlocks: "off" }), true);
+  assert.equal(validUiPreferencePatch({ transcriptWideBlocks: "150%" }), false);
+  assert.equal(validUiPreferencePatch({ codeBlockCollapse: "long" }), true);
+  assert.equal(validUiPreferencePatch({ codeBlockCollapse: "sometimes" }), false);
+  assert.equal(validUiPreferencePatch({ codeBlockCollapseLines: 25 }), true);
+  // Free pixel/line values are refused on purpose: the surface is preset-only
+  // so it stays correct across densities and window sizes.
+  assert.equal(validUiPreferencePatch({ codeBlockCollapseLines: 17 }), false);
+  assert.equal(validUiPreferencePatch({ codeBlockCollapseLines: "25" }), false);
+  assert.equal(validUiPreferencePatch({ codeBlockWidth: "wide" }), true);
+  assert.equal(validUiPreferencePatch({ codeBlockWidth: "full" }), false);
+  assert.equal(validUiPreferencePatch({ transcriptWidth: null }), false);
+});
+
+test("normalizePreferences drops reading-surface values it does not recognise", () => {
+  const normalized = normalizePreferences({
+    transcriptWidth: "wide",
+    transcriptWideBlocks: "nonsense",
+    codeBlockCollapse: "all",
+    codeBlockCollapseLines: 999,
+  });
+  assert.equal(normalized.transcriptWidth, "wide");
+  assert.equal(normalized.transcriptWideBlocks, null);
+  assert.equal(normalized.codeBlockCollapse, "all");
+  assert.equal(normalized.codeBlockCollapseLines, null);
 });
