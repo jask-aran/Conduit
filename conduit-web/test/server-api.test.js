@@ -341,6 +341,29 @@ exit 0
     });
     assert.equal(invalidUiPreferences.status, 400);
     assert.equal((await invalidUiPreferences.json()).error, "invalid_ui_preferences");
+    const invalidTranscriptWidth = await fetch(`${origin}/v0/preferences`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ transcriptWidth: "980px" }),
+    });
+    assert.equal(invalidTranscriptWidth.status, 400);
+    assert.equal((await invalidTranscriptWidth.json()).error, "invalid_ui_preferences");
+    const readingSurface = await fetch(`${origin}/v0/preferences`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        transcriptWidth: "wide",
+        transcriptWideBlocks: "wider",
+        codeBlockCollapse: "long",
+        codeBlockCollapseLines: 25,
+      }),
+    });
+    assert.equal(readingSurface.status, 200);
+    const savedSurface = await readingSurface.json();
+    assert.equal(savedSurface.transcriptWidth, "wide");
+    assert.equal(savedSurface.transcriptWideBlocks, "wider");
+    assert.equal(savedSurface.codeBlockCollapse, "long");
+    assert.equal(savedSurface.codeBlockCollapseLines, 25);
 
     const inheritedWorkspaceChat = await fetch(`${origin}/v0/chats`, {
       method: "POST",

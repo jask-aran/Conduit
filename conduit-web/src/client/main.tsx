@@ -44,12 +44,41 @@ import { VoiceWaveform } from "./chat/voice-waveform";
 import { browserShortcutEnvironmentProvider } from "./shortcuts/shortcut-environment";
 import { ShortcutManager } from "./shortcuts/shortcut-manager";
 import { publishUiPreference, saveUiPreference, UI_PREFERENCE_CHANGE_EVENT, type UiPreferenceKey, type UiPreferences } from "./preferences/ui-preferences";
+import { applyUiScale, selectedUiScale } from "./preferences/ui-scale";
 import { INCREMARK_PACING_STORAGE_KEY } from "./chat/incremark-pacing";
+import {
+  applyTranscriptAppearance,
+  CODE_BLOCK_COLLAPSE_LINES_STORAGE_KEY,
+  CODE_BLOCK_COLLAPSE_STORAGE_KEY,
+  isCodeBlockCollapseLines,
+  isCodeBlockCollapseMode,
+  isTranscriptWideBlocksMode,
+  isTranscriptWidthMode,
+  selectedCodeBlockCollapse,
+  selectedCodeBlockCollapseLines,
+  selectedCodeBlockWidth,
+  isCodeBlockWidthMode,
+  CODE_BLOCK_WIDTH_STORAGE_KEY,
+  selectedTranscriptWideBlocks,
+  selectedTranscriptWidth,
+  TRANSCRIPT_WIDE_BLOCKS_STORAGE_KEY,
+  TRANSCRIPT_WIDTH_STORAGE_KEY,
+} from "./chat/transcript-appearance";
 import "./project/dashboard.css";
 import "./chat/composer-geometry.css";
 import "./styles.css";
 
 const nativeApp = Capacitor.isNativePlatform();
+applyUiScale(selectedUiScale());
+// Stamp the reading-surface presets before first paint so the transcript is
+// never laid out at the default width and then reflowed to the chosen one.
+applyTranscriptAppearance({
+  width: selectedTranscriptWidth(),
+  wideBlocks: selectedTranscriptWideBlocks(),
+  collapse: selectedCodeBlockCollapse(),
+  collapseLines: selectedCodeBlockCollapseLines(),
+  codeWidth: selectedCodeBlockWidth(),
+});
 if (import.meta.env.PROD && !nativeApp) registerSW({ immediate: true, onRegisteredSW: (_url, registration) => rememberPwaRegistration(registration) });
 
 type SettingsSection = "ui" | "shortcuts" | "models" | "runtime" | "workspaces" | "voice" | "search";
@@ -1140,6 +1169,11 @@ function App() {
       contextMetrics: selectedContextMetrics(),
       meteorField: selectedMeteorField(),
       incremarkPacing: localStorage.getItem(INCREMARK_PACING_STORAGE_KEY) || "buffered",
+      transcriptWidth: selectedTranscriptWidth(),
+      transcriptWideBlocks: selectedTranscriptWideBlocks(),
+      codeBlockCollapse: selectedCodeBlockCollapse(),
+      codeBlockCollapseLines: selectedCodeBlockCollapseLines(),
+      codeBlockWidth: selectedCodeBlockWidth(),
       shortcutOverrides: shortcutManager.shortcutOverrides(),
       sidebarPins: [],
       voicePreferences: {
@@ -1160,6 +1194,11 @@ function App() {
       contextMetrics: CONTEXT_METRIC_STORAGE_KEY,
       meteorField: METEOR_FIELD_STORAGE_KEY,
       incremarkPacing: INCREMARK_PACING_STORAGE_KEY,
+      transcriptWidth: TRANSCRIPT_WIDTH_STORAGE_KEY,
+      transcriptWideBlocks: TRANSCRIPT_WIDE_BLOCKS_STORAGE_KEY,
+      codeBlockCollapse: CODE_BLOCK_COLLAPSE_STORAGE_KEY,
+      codeBlockCollapseLines: CODE_BLOCK_COLLAPSE_LINES_STORAGE_KEY,
+      codeBlockWidth: CODE_BLOCK_WIDTH_STORAGE_KEY,
     };
     const applyPreference = (key: UiPreferenceKey, value: UiPreferences[UiPreferenceKey]) => {
       const storageKey = storageKeys[key];
@@ -1172,6 +1211,11 @@ function App() {
       else if (key === "rendererControlsVisible" && typeof value === "boolean") setRendererControlsVisible(value);
       else if (key === "contextMetrics" && Array.isArray(value)) setContextMetrics(selectedContextMetrics());
       else if (key === "meteorField" && typeof value === "boolean") setMeteorField(value);
+      else if (key === "transcriptWidth" && isTranscriptWidthMode(value)) applyTranscriptAppearance({ width: value });
+      else if (key === "transcriptWideBlocks" && isTranscriptWideBlocksMode(value)) applyTranscriptAppearance({ wideBlocks: value });
+      else if (key === "codeBlockCollapse" && isCodeBlockCollapseMode(value)) applyTranscriptAppearance({ collapse: value });
+      else if (key === "codeBlockCollapseLines" && isCodeBlockCollapseLines(value)) applyTranscriptAppearance({ collapseLines: value });
+      else if (key === "codeBlockWidth" && isCodeBlockWidthMode(value)) applyTranscriptAppearance({ codeWidth: value });
       else if (key === "shortcutOverrides" && value && typeof value === "object" && !Array.isArray(value)) {
         shortcutManager.replaceOverrides(value as ReturnType<ShortcutManager["shortcutOverrides"]>);
       } else if (key === "voicePreferences" && value && typeof value === "object" && !Array.isArray(value)) {

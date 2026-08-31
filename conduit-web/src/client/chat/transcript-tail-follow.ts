@@ -126,3 +126,89 @@ export function advanceTailFollow(
     rebased: false,
   };
 }
+
+/** Distance from the bottom within which the scroll-to-latest button hides. */
+export const TAIL_NEAR_LATEST_PX = 80;
+/**
+ * Distance within which the app may take the tail back from the user. It is far
+ * tighter than TAIL_NEAR_LATEST_PX on purpose: merely being close to the bottom
+ * is not consent to be pulled to it.
+ */
+export const TAIL_REJOIN_PX = 8;
+export const HISTORY_LOAD_TOP_PX = 240;
+
+export function usedMaxScrollTop(input: {
+  scrollHeight: number;
+  clientHeight: number;
+  scrollTop: number;
+}) {
+  const naive = Math.max(0, input.scrollHeight - input.clientHeight);
+  const gap = naive - input.scrollTop;
+  return gap > 0 && gap <= 1 ? input.scrollTop : naive;
+}
+
+export function shouldLoadEarlierHistory(input: {
+  following: boolean;
+  maxScrollTop: number;
+  scrollTop: number;
+}) {
+  if (input.following || input.maxScrollTop <= 0) return false;
+  return input.scrollTop < HISTORY_LOAD_TOP_PX;
+}
+
+export function shouldRestoreHistoryAnchor(following: boolean) {
+  return !following;
+}
+
+export function shouldFollowAfterHistoryRestore(distanceFromBottom: number) {
+  return distanceFromBottom <= TAIL_NEAR_LATEST_PX;
+}
+
+export type TailScrollInput = {
+  scrollTop: number;
+  previousScrollTop: number | null;
+  maxScrollTop: number;
+  /** True once the user, not the spring, owns the scroll position. */
+  userOwned: boolean;
+  following: boolean;
+};
+
+export type TailScrollDecision = {
+  direction: "up" | "down" | "none";
+  distanceFromBottom: number;
+  nearLatest: boolean;
+  atBottom: boolean;
+  /** Whether `following` should change, and to what. */
+  following: boolean;
+  /** Schedule the idle handoff back to the spring. */
+  rejoin: boolean;
+};
+
+/**
+ * Decide what a scroll event means for tail following.
+ *
+ * Direction is the signal the earlier version lacked. Scrolling *up* out of the
+ * bottom passes through the near-latest band, and treating that band as "still
+ * following" let an idle rejoin -- or the next content resize -- spring the
+ * viewport back down while the user was reading. An upward move now drops
+ * following immediately and never schedules a rejoin, however close to the
+ * bottom it happens to end.
+ */
+export function decideTailScroll(input: TailScrollInput): TailScrollDecision {
+  const distanceFromBottom = Math.max(0, input.maxScrollTop - input.scrollTop);
+  const nearLatest = distanceFromBottom < TAIL_NEAR_LATEST_PX;
+  const atBottom = distanceFromBottom <= TAIL_REJOIN_PX;
+  const delta = input.previousScrollTop == null ? 0 : input.scrollTop - input.previousScrollTop;
+  const direction = delta < -0.5 ? "up" : delta > 0.5 ? "down" : "none";
+  if (direction === "up") {
+    return { direction, distanceFromBottom, nearLatest, atBottom, following: false, rejoin: false };
+  }
+  return {
+    direction,
+    distanceFromBottom,
+    nearLatest,
+    atBottom,
+    following: input.following ? nearLatest : atBottom,
+    rejoin: input.userOwned && atBottom,
+  };
+}

@@ -125,7 +125,9 @@ export function mountTranscriptPanelMotion(
     }
   };
 
-  const onPageLeave = () => reset();
+  // Only a genuinely hidden document needs the pinned preview width released; window
+  // "blur" also fires for devtools and a second window, where the shell is
+  // still on screen and resetting it forces a needless relayout.
   const onVisibility = () => {
     if (document.visibilityState === "hidden") reset();
   };
@@ -133,14 +135,12 @@ export function mountTranscriptPanelMotion(
     if (!activeIds.size && !edgeStarts.size && motionShell.style.width) releasePreviewWidth();
   });
   window.addEventListener(PANEL_GEOMETRY_MOTION_EVENT, onMotion);
-  window.addEventListener("blur", onPageLeave);
   document.addEventListener("visibilitychange", onVisibility);
   orphanObserver.observe(transcript);
   return {
     reset,
     destroy: () => {
       window.removeEventListener(PANEL_GEOMETRY_MOTION_EVENT, onMotion);
-      window.removeEventListener("blur", onPageLeave);
       document.removeEventListener("visibilitychange", onVisibility);
       orphanObserver.disconnect();
       cancelRelease();

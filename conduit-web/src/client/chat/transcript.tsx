@@ -1,5 +1,5 @@
 import { createEffect, createMemo, createRenderEffect, createSignal, For, lazy, onCleanup, onMount, Show, Suspense } from "solid-js";
-import { ArrowDownIcon, CopyIcon, PencilIcon, PlayIcon, RefreshCwIcon, TriangleAlertIcon } from "lucide-solid";
+import { ArrowDownIcon, CheckIcon, CopyIcon, PencilIcon, PlayIcon, RefreshCwIcon, TriangleAlertIcon } from "lucide-solid";
 import { Button, Spinner } from "@/components/primitives";
 import type { Message, RuntimeActivity, ToolItem } from "../api/contracts";
 import type { ActiveChatStore } from "../state/active-chat";
@@ -11,6 +11,15 @@ import { COMPOSER_SURFACE_CHANGE_EVENT, COMPOSER_SURFACE_OPTIONS, saveComposerSu
 import { saveTranscriptRenderer, selectedTranscriptRenderer, TRANSCRIPT_RENDERER_OPTIONS, type TranscriptRendererMode } from "./transcript-renderer";
 import { INCREMARK_PACING_OPTIONS, saveIncremarkPacing, selectedIncremarkPacing, type IncremarkPacingMode } from "./incremark-pacing";
 import { UI_PREFERENCE_CHANGE_EVENT } from "../preferences/ui-preferences";
+import { copyWithFeedback } from "./markdown-actions";
+import { CODE_BLOCK_TOGGLE_EVENT, syncCodeBlockCollapse } from "./code-block";
+import { highlightCodeBlocks } from "./code-highlight";
+import {
+  selectedCodeBlockCollapse,
+  selectedCodeBlockCollapseLines,
+  isCodeBlockCollapseMode,
+  isCodeBlockCollapseLines,
+} from "./transcript-appearance";
 import { mountTranscriptPanelMotion } from "./transcript-motion";
 import { mountTranscriptVisibility } from "./transcript-visibility";
 import { isMobileLayout } from "../navigation/mobile-layout";
@@ -18,10 +27,16 @@ import { getHarnessRecorder, recordHarnessMetric } from "../harness-metrics";
 import {
   advanceTailFollow,
   createTailFollowState,
+  decideTailScroll,
   rebaseTailFollowState,
+  shouldFollowAfterHistoryRestore,
+  shouldLoadEarlierHistory,
+  shouldRestoreHistoryAnchor,
+  usedMaxScrollTop,
   type TailFollowOwner,
   type TailFollowState,
 } from "./transcript-tail-follow";
+import { captureTranscriptAnchor, restoreTranscriptAnchor } from "./transcript-anchor";
 
 const ChatMarkdown = lazy(() => import("./markdown").then((module) => ({ default: module.ChatMarkdown })));
 const IncremarkAdvancedMarkdown = lazy(() => import("./incremark-advanced").then((module) => ({ default: module.IncremarkAdvancedMarkdown })));
@@ -42,13 +57,27 @@ const fullDateTime = (value?: string) => {
 
 function Actions(props: { message: Message; precedingUserId?: string; chat: ActiveChatStore; partialContinue: boolean }) {
   const [copied, setCopied] = createSignal(false);
+  let copyButton: HTMLButtonElement | undefined;
   const assistant = () => props.message.role !== "user";
   return <div class="response-actions">
     <Show when={!assistant() && !props.message.id.startsWith("user_")}>
       <Button variant="ghost" size="icon-sm" aria-label={props.chat.editingEntryId() === props.message.id ? "Cancel editing" : "Edit from here"} onClick={() => props.chat.edit(props.message)}><PencilIcon /></Button>
     </Show>
     <Show when={assistant()}>
-      <Button variant="ghost" size="icon-sm" aria-label={copied() ? "Copied" : "Copy Markdown"} onClick={async () => { await navigator.clipboard.writeText(props.message.content || props.message.errorMessage || ""); setCopied(true); setTimeout(() => setCopied(false), 1600); }}><CopyIcon /></Button>
+      <Button
+        ref={(element: HTMLButtonElement) => { copyButton = element; }}
+        variant="ghost"
+        size="icon-sm"
+        aria-label={copied() ? "Copied" : "Copy Markdown"}
+        data-copied={copied() ? "true" : undefined}
+        onClick={async () => {
+          const region = copyButton?.closest<HTMLElement>('[data-slot="message-content"]')
+            ?.querySelector<HTMLElement>('[data-slot="bubble-content"]');
+          if (!await copyWithFeedback(props.message.content || props.message.errorMessage || "", null, region)) return;
+          setCopied(true);
+          setTimeout(() => setCopied(false), 1600);
+        }}
+      >{copied() ? <CheckIcon /> : <CopyIcon />}</Button>
       <Show when={props.precedingUserId}><Button variant="ghost" size="icon-sm" aria-label="Regenerate response" onClick={() => void props.chat.regenerate(props.precedingUserId!)}><RefreshCwIcon /></Button></Show>
       <Show when={props.partialContinue && props.message.stopped}><Button variant="ghost" size="icon-sm" aria-label="Continue stopped response" onClick={() => void props.chat.continueResponse()}><PlayIcon /></Button></Show>
     </Show>
@@ -76,10 +105,18 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
     ? "incremark-synthetic"
     : transcriptRenderer() as MarkdownRendererId;
   const switchComposerSurface = (next: ComposerSurfaceMode) => setComposerSurface(saveComposerSurface(next));
+  // A reset relays out every managed block, so hold the reading position across
+  // it rather than letting the height changes settle wherever they land.
+  const resetVisibilityPreservingPosition = () => {
+    if (!transcriptVisibility || !viewport || !thread) return;
+    const anchor = captureTranscriptAnchor(viewport, thread);
+    transcriptVisibility.reset();
+    requestAnimationFrame(() => restoreTranscriptAnchor(viewport, anchor, setViewportScrollTop));
+  };
   const switchTranscriptRenderer = (next: TranscriptRendererMode) => {
     const crossesAdvancedBoundary = transcriptRenderer() === "incremark-advanced" || next === "incremark-advanced";
     setTranscriptRenderer(saveTranscriptRenderer(next));
-    if (crossesAdvancedBoundary) queueMicrotask(() => transcriptVisibility?.reset());
+    if (crossesAdvancedBoundary) queueMicrotask(resetVisibilityPreservingPosition);
   };
   const switchIncremarkPacing = (next: IncremarkPacingMode) => setIncremarkPacing(saveIncremarkPacing(next));
   const advancedTranscript = () => transcriptRenderer() === "incremark-advanced";
@@ -104,6 +141,8 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
   let typewriterTailLastExpected: number | null = null;
   let typewriterTailTargetDeltaEma = 0;
   let programmaticScrollTop: number | null = null;
+  let previousScrollTop: number | null = null;
+  let previousUserMessageId: string | null = null;
   let previousRenderer: TranscriptRendererMode | null = null;
   const currentViewportScrollTop = () => viewport?.scrollTop ?? 0;
   const cancelTypewriterTailFrame = () => {
@@ -125,6 +164,9 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
       typewriterTailReasons.clear();
     }
   };
+  // Handing the tail back is only ever allowed after a downward scroll that
+  // actually reached the bottom. decideTailScroll gates the call site; this
+  // timer just waits for the gesture to go quiet before the spring resumes.
   const scheduleTypewriterTailRejoin = () => {
     cancelTypewriterTailRejoin();
     if (!rendererUsesInertialTailFollow() || !following()) return;
@@ -136,17 +178,22 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
     }, 120);
   };
   const setViewportScrollTop = (next: number) => {
-    programmaticScrollTop = next;
-    viewport.scrollTop = next;
+    viewport.scrollTop = Math.round(next);
     programmaticScrollTop = viewport.scrollTop;
+    previousScrollTop = viewport.scrollTop;
   };
+  const viewportMaxScrollTop = () => usedMaxScrollTop({
+    scrollHeight: viewport.scrollHeight,
+    clientHeight: viewport.clientHeight,
+    scrollTop: viewport.scrollTop,
+  });
   const scrollBottomNow = () => {
     if (scrollFrame != null) {
       cancelAnimationFrame(scrollFrame);
       scrollFrame = null;
     }
     setViewportScrollTop(viewport.scrollHeight);
-    if (viewport.scrollTop < 240) loadEarlier();
+    loadEarlier();
   };
   const scrollBottom = () => {
     if (scrollFrame != null) return;
@@ -169,7 +216,7 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
   const requestTypewriterTailFollow = (reason: string) => {
     if (!rendererUsesInertialTailFollow() || !following() || typewriterTailState.owner !== "app") return;
     if (!props.chat.activeGeneration()) {
-      const targetScrollTop = Math.max(0, viewport.scrollHeight - viewport.clientHeight);
+      const targetScrollTop = viewportMaxScrollTop();
       setViewportScrollTop(targetScrollTop);
       typewriterTailState = rebaseTailFollowState(typewriterTailState, targetScrollTop, "app");
     }
@@ -186,7 +233,11 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
       if (!rendererUsesInertialTailFollow() || !following() || typewriterTailState.owner !== "app") return;
 
       const scrollHeight = viewport.scrollHeight;
-      const maxScrollTop = Math.max(0, scrollHeight - viewport.clientHeight);
+      const maxScrollTop = usedMaxScrollTop({
+        scrollHeight,
+        clientHeight: viewport.clientHeight,
+        scrollTop: viewport.scrollTop,
+      });
       const overflow = maxScrollTop > 0;
       const targetScrollTop = maxScrollTop;
       // A persisted transcript is already complete. Keep its tail pinned while
@@ -254,7 +305,7 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
           nextScrollTop,
         });
       }
-      if (viewport.scrollTop < 240) loadEarlier(scrollHeight, viewport.scrollTop);
+      loadEarlier();
 
       typewriterTailLastHeight = scrollHeight;
       typewriterTailLastTarget = targetScrollTop;
@@ -270,8 +321,20 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
     if (rendererUsesInertialTailFollow()) requestTypewriterTailFollow("initial-layout");
     else scrollBottomNow();
   };
+  // Highlighting is a settled-content concern, so it runs off the idle queue and
+  // only ever touches cards it has not already done. Coalesced because
+  // onRendered fires on every streaming frame.
+  let highlightIdle: number | null = null;
+  const scheduleHighlight = () => {
+    if (highlightIdle != null || !thread) return;
+    highlightIdle = requestIdleCallback(() => {
+      highlightIdle = null;
+      void highlightCodeBlocks(thread);
+    }, { timeout: 600 });
+  };
   let displayScrollQueued = false;
   const settleAfterMarkdown = () => {
+    scheduleHighlight();
     if (rendererUsesInertialTailFollow()) {
       requestTypewriterTailFollow("markdown-render");
       return;
@@ -285,33 +348,33 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
       settleInitialLayout(epoch);
     });
   };
-  const loadEarlier = (knownHeight?: number, knownTop?: number) => {
-    const userRequested = knownHeight == null && knownTop == null;
-    if (userRequested && rendererUsesInertialTailFollow()) {
+  const loadEarlier = () => {
+    const maxScrollTop = viewportMaxScrollTop();
+    if (!shouldLoadEarlierHistory({
+      following: following(),
+      maxScrollTop,
+      scrollTop: viewport.scrollTop,
+    })) return;
+    if (rendererUsesInertialTailFollow()) {
       cancelTypewriterTailRejoin();
       setTypewriterTailOwner("user", true);
       setFollowing(false);
     }
     if (historyLoad || !props.chat.pageBefore() || props.chat.loadingOlder()) return;
-    const previousHeight = knownHeight ?? viewport.scrollHeight;
-    const previousTop = knownTop ?? viewport.scrollTop;
-    const anchor = thread.querySelector<HTMLElement>('[data-message-id]');
-    const anchorTop = anchor?.getBoundingClientRect().top ?? null;
+    const anchor = captureTranscriptAnchor(viewport, thread);
     const previousOverflowAnchor = viewport.style.overflowAnchor;
     viewport.style.overflowAnchor = "none";
     const restoreAnchor = () => {
-      if (anchor?.isConnected && anchorTop != null) {
-        const delta = anchor.getBoundingClientRect().top - anchorTop;
-        if (Math.abs(delta) > 0.05) setViewportScrollTop(viewport.scrollTop + delta);
-        return;
+      if (!shouldRestoreHistoryAnchor(following())) return;
+      restoreTranscriptAnchor(viewport, anchor, setViewportScrollTop);
+      const distanceFromBottom = Math.max(0, viewportMaxScrollTop() - viewport.scrollTop);
+      if (!shouldFollowAfterHistoryRestore(distanceFromBottom)) {
+        setFollowing(false);
+        setTypewriterTailOwner("user", true);
       }
-      setViewportScrollTop(previousTop + viewport.scrollHeight - previousHeight);
     };
     historyLoad = props.chat.loadOlder().then((loaded) => {
       if (!loaded) return;
-      // Solid commits the prepended rows before the microtask queue drains,
-      // while lazy Markdown can finish one frame later. Restore at both points
-      // so the new rows never expose an uncorrected anchor to the browser.
       queueMicrotask(restoreAnchor);
       return new Promise<void>((resolve) => requestAnimationFrame(() => {
         restoreAnchor();
@@ -339,8 +402,12 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
     props.chat.messages().length;
     props.chat.activeGeneration();
     props.chat.tools();
+    const messages = props.chat.messages();
+    const trailingUser = messages.at(-1)?.role === "user" ? messages.at(-1)! : null;
+    const trailingUserId = trailingUser ? trailingUser.key || trailingUser.id : null;
     if (loaded !== previousLoaded) {
       previousLoaded = loaded;
+      previousUserMessageId = trailingUserId;
       const epoch = layoutEpoch;
       if (rendererUsesInertialTailFollow()) resumeTypewriterTailFollow("loaded");
       else {
@@ -348,8 +415,22 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
         scrollBottom();
       }
       void document.fonts.ready.then(() => settleInitialLayout(epoch));
+      return;
     }
-    else if (following() && !rendererUsesTypewriter()) scrollBottom();
+    // Sending is an unambiguous request to watch the answer arrive, so a new
+    // trailing user message always retakes the tail -- previously only a chat
+    // switch did, and sending while scrolled up left the view where it was.
+    if (trailingUserId && trailingUserId !== previousUserMessageId) {
+      previousUserMessageId = trailingUserId;
+      if (rendererUsesInertialTailFollow()) resumeTypewriterTailFollow("user-send");
+      else {
+        setFollowing(true);
+        scrollBottom();
+      }
+      return;
+    }
+    previousUserMessageId = trailingUserId;
+    if (following() && !rendererUsesTypewriter()) scrollBottom();
   });
   createEffect(() => {
     const next = props.markdownRenderer;
@@ -367,7 +448,7 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
     }
     if (renderer === previous) return;
     previousRenderer = renderer;
-    if (renderer === "incremark-advanced" || previous === "incremark-advanced") transcriptVisibility?.reset();
+    if (renderer === "incremark-advanced" || previous === "incremark-advanced") resetVisibilityPreservingPosition();
     if (rendererUsesInertialTailFollow()) resumeTypewriterTailFollow("renderer-switch");
     else {
       cancelTypewriterTailRejoin();
@@ -389,8 +470,49 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
       } else if (detail?.key === "incremarkPacing" && typeof detail.value === "string"
         && !params.has("incremarkPacing") && !params.has("adaptivePacing")) {
         setIncremarkPacing(detail.value as IncremarkPacingMode);
+      } else if (isCodeBlockCollapseMode(detail?.value) && detail?.key === "codeBlockCollapse") {
+        resyncCodeBlocks();
+        resetVisibilityPreservingPosition();
+      } else if (isCodeBlockCollapseLines(detail?.value) && detail?.key === "codeBlockCollapseLines") {
+        resyncCodeBlocks();
+        resetVisibilityPreservingPosition();
+      } else if (detail?.key === "transcriptWidth" || detail?.key === "transcriptWideBlocks") {
+        // A width preset relays out every block, so the cached intrinsic sizes
+        // the virtualizer is holding are all stale. Re-measure from scratch and
+        // keep the reader where they were.
+        resetVisibilityPreservingPosition();
       }
     };
+    // The marked renderers bake collapse state into emitted HTML, so a
+    // preference change needs one restamping pass over what is already on
+    // screen. It runs only on an explicit settings change, never while
+    // streaming, and Incremark cards ignore it because they track the
+    // preference reactively.
+    const resyncCodeBlocks = () => {
+      syncCodeBlockCollapse(thread, selectedCodeBlockCollapse(), selectedCodeBlockCollapseLines());
+    };
+    // Collapsing a long block can remove a thousand pixels from the thread.
+    // Keep the card the user acted on exactly where it is and re-measure the
+    // virtualizer in the same frame, so the transcript never shows the stale
+    // placeholders that used to appear as blank space for several seconds.
+    const onCodeBlockToggle = (event: Event) => {
+      const detail = (event as CustomEvent<{ card?: HTMLElement; previousTop?: number }>).detail;
+      const card = detail?.card;
+      if (!card?.isConnected || !thread.contains(card) || detail?.previousTop == null) return;
+      const cardTop = detail.previousTop;
+      // Folding shortens the content; stop following so the tail spring does
+      // not read the shrink as a reason to chase the bottom.
+      if (following() && rendererUsesInertialTailFollow()) setTypewriterTailOwner("user", true);
+      const previousOverflowAnchor = viewport.style.overflowAnchor;
+      viewport.style.overflowAnchor = "none";
+      requestAnimationFrame(() => {
+        transcriptVisibility?.refreshNow();
+        const delta = card.getBoundingClientRect().top - cardTop;
+        if (Math.abs(delta) > 0.5) setViewportScrollTop(viewport.scrollTop + delta);
+        viewport.style.overflowAnchor = previousOverflowAnchor;
+      });
+    };
+    window.addEventListener(CODE_BLOCK_TOGGLE_EVENT, onCodeBlockToggle);
     window.addEventListener(UI_PREFERENCE_CHANGE_EVENT, syncUiPreference);
     let latestButtonAnchorFrame: number | null = null;
     let composerBlockSize = -1;
@@ -458,40 +580,77 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
     const onScroll = () => {
       if (empty()) {
         setFollowing(true);
+        previousScrollTop = viewport.scrollTop;
         return;
       }
       if (programmaticScrollTop != null && Math.abs(viewport.scrollTop - programmaticScrollTop) < 1) {
         programmaticScrollTop = null;
+        previousScrollTop = viewport.scrollTop;
         return;
       }
+      const wasProgrammatic = programmaticScrollTop != null;
       programmaticScrollTop = null;
-      const nearLatest = viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight < 80;
+      const decision = decideTailScroll({
+        scrollTop: viewport.scrollTop,
+        previousScrollTop,
+        maxScrollTop: viewportMaxScrollTop(),
+        userOwned: typewriterTailState.owner === "user",
+        following: following(),
+      });
+      previousScrollTop = viewport.scrollTop;
+      // An unrequested upward move is always a user: the spring only ever
+      // travels toward the bottom, and browser scroll anchoring only pushes the
+      // position down as content grows above. wheel and touchstart catch just
+      // two ways a user produces one -- scrollbar drags, PageUp/Home, and
+      // trackpad momentum arriving after wheel-end land here instead, and used
+      // to leave the spring believing it still owned the viewport.
+      if (decision.direction === "up") {
+        cancelTypewriterTailRejoin();
+        if (!wasProgrammatic) claimUserScroll();
+      }
       if (!rendererUsesInertialTailFollow() || typewriterTailState.owner === "user" || !following()) {
-        setFollowing(nearLatest);
+        setFollowing(decision.following);
+      } else if (decision.direction === "up") {
+        setFollowing(false);
       }
-      if (rendererUsesInertialTailFollow() && typewriterTailState.owner === "user" && nearLatest) {
-        scheduleTypewriterTailRejoin();
-      }
-      if (viewport.scrollTop < 240) loadEarlier();
+      if (rendererUsesInertialTailFollow() && decision.rejoin) scheduleTypewriterTailRejoin();
+      loadEarlier();
     };
     const onTouchStart = () => claimUserScroll();
+    const onPointerDown = (event: PointerEvent) => {
+      // A scrollbar drag lands on the viewport itself, outside any content box.
+      if (event.target === viewport) claimUserScroll();
+    };
+    const SCROLL_KEYS = new Set(["ArrowUp", "ArrowDown", "PageUp", "PageDown", "Home", "End", " "]);
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (SCROLL_KEYS.has(event.key)) claimUserScroll();
+    };
     viewport.addEventListener("scroll", onScroll, { passive: true });
     viewport.addEventListener("wheel", claimUserScroll, { passive: true });
     viewport.addEventListener("touchstart", onTouchStart, { passive: true });
+    viewport.addEventListener("pointerdown", onPointerDown, { passive: true });
+    viewport.addEventListener("keydown", onKeyDown, { passive: true });
     window.addEventListener(COMPOSER_SURFACE_CHANGE_EVENT, syncComposerSurface);
     const resizeObserver = new ResizeObserver(() => {
       if (!following()) return;
+      // Hiding and showing blocks resizes the thread. Chasing the tail on those
+      // is a feedback loop: the scroll write changes what is in the overscan
+      // band, which toggles more blocks, which resizes the thread again.
+      if (transcriptVisibility?.refreshing()) return;
       if (rendererUsesInertialTailFollow()) requestTypewriterTailFollow("resize");
       else scrollBottom();
     });
     resizeObserver.observe(thread);
     onCleanup(() => {
+      window.removeEventListener(CODE_BLOCK_TOGGLE_EVENT, onCodeBlockToggle);
       window.removeEventListener(UI_PREFERENCE_CHANGE_EVENT, syncUiPreference);
       layoutEpoch += 1;
       resizeObserver.disconnect();
       viewport.removeEventListener("scroll", onScroll);
       viewport.removeEventListener("wheel", claimUserScroll);
       viewport.removeEventListener("touchstart", onTouchStart);
+      viewport.removeEventListener("pointerdown", onPointerDown);
+      viewport.removeEventListener("keydown", onKeyDown);
       window.removeEventListener(COMPOSER_SURFACE_CHANGE_EVENT, syncComposerSurface);
       composerResizeObserver.disconnect();
       window.removeEventListener("resize", scheduleLatestButtonAnchor);
@@ -500,6 +659,7 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
       latestButton?.style.removeProperty("--message-scroller-button-bottom");
       scheduleLatestButtonAnchor = () => {};
       if (scrollFrame != null) cancelAnimationFrame(scrollFrame);
+      if (highlightIdle != null) cancelIdleCallback(highlightIdle);
       cancelTypewriterTailFrame();
       cancelTypewriterTailRejoin();
       typewriterTailReasons.clear();

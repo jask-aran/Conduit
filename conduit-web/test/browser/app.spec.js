@@ -295,13 +295,26 @@ test.beforeEach(async ({ page }) => {
   });
 });
 
-test("one coefficient scales the app and portalled overlays on 1440p displays", async ({ page }, testInfo) => {
-  test.skip(testInfo.project.name === "mobile-chromium", "desktop display scaling only");
+test("browser interface scale persists locally and scales app and portalled overlays", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name === "mobile-chromium", "desktop interface scaling only");
   await page.setViewportSize({ width: 1920, height: 1080 });
   await page.goto("/");
   await expect.poll(() => page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue("--ui-scale").trim())).toBe("1");
 
-  await page.setViewportSize({ width: 2560, height: 1440 });
+  // Settings opens on the Models section, which loads Pi accounts on the way to
+  // the Appearance tab.
+  await page.route("**/v0/pi-auth/attempt", (route) => route.fulfill({ json: { attempt: null } }));
+  await page.route("**/v0/pi-auth", (route) => route.fulfill({ json: {
+    providers: [{ id: "anthropic", label: "Anthropic", oauth: false, auth: { configured: true, source: "stored", removable: true } }],
+  } }));
+
+  await page.locator('[data-sidebar="footer"]').getByRole("button", { name: /Conduit/ }).click();
+  await page.getByRole("menuitem", { name: "Manage settings" }).click();
+  await page.getByRole("tab", { name: "Appearance" }).click();
+  await page.getByRole("combobox", { name: "Interface scale" }).selectOption("1.25");
+  await expect.poll(() => page.evaluate(() => localStorage.getItem("conduit:ui-scale"))).toBe("1.25");
+  await page.reload();
+
   const metrics = await page.evaluate(() => {
     const measure = (parent) => {
       const probe = document.createElement("div");
@@ -316,13 +329,19 @@ test("one coefficient scales the app and portalled overlays on 1440p displays", 
       appProbe: measure(document.getElementById("root")),
       portalProbe: measure(document.body),
       body: document.body.getBoundingClientRect().toJSON(),
+      bodyCss: [getComputedStyle(document.body).width, getComputedStyle(document.body).height],
+      window: [window.innerWidth, window.innerHeight],
     };
   });
   expect(metrics.scale).toBe("1.25");
+  // Everything inside the app and inside portalled overlays is 25% larger.
   expect(metrics.appProbe).toEqual([125, 125]);
   expect(metrics.portalProbe).toEqual([125, 125]);
-  expect(metrics.body.width).toBe(2560);
-  expect(metrics.body.height).toBe(1440);
+  // Scaling up trades logical space for size: the shell lays out in fewer CSS
+  // pixels (1920 / 1.25) and, once zoomed, still fills the window exactly --
+  // no letterboxing and no overflow.
+  expect(metrics.bodyCss).toEqual(["1536px", "864px"]);
+  expect([metrics.body.width, metrics.body.height]).toEqual(metrics.window);
 });
 
 test("durable UI preferences migrate once and restore after browser storage loss", async ({ page }, testInfo) => {
@@ -339,6 +358,11 @@ test("durable UI preferences migrate once and restore after browser storage loss
     contextMetrics: null,
     meteorField: null,
     incremarkPacing: null,
+    transcriptWidth: null,
+    transcriptWideBlocks: null,
+    codeBlockCollapse: null,
+    codeBlockCollapseLines: null,
+    codeBlockWidth: null,
     shortcutOverrides: null,
     voicePreferences: null,
   };
@@ -2493,6 +2517,7 @@ test("loads earlier history at the top without exposing pagination or moving the
   await page.goto("/chat/session_existing");
   await expect(page.getByText("Recent answer 9", { exact: false })).toBeVisible();
   await expect(page.getByRole("button", { name: "Load earlier messages" })).toHaveCount(0);
+  expect(historyRequests).toBe(0);
   const anchor = page.locator('[data-message-id="recent-user-0"]');
   const viewport = page.locator('[data-slot="message-scroller-viewport"]');
   const beforeY = await viewport.evaluate((element) => {
@@ -6000,4 +6025,555 @@ test("Voice credential tests persist the displayed provider before testing it", 
   await expect(dialog).not.toContainText("cloud-secret-value");
   await expect(dialog.getByText("Stored on this server")).toBeVisible();
   await expect(dialog.getByText("Connection successful")).toBeVisible();
+});
+
+// --- Transcript reading surface -------------------------------------------
+// Covers the ergonomics work: the code-block card contract, the width presets,
+// and the scroll behaviours that used to yank a reader back to the bottom.
+
+const longCode = Array.from({ length: 60 }, (_, index) => `const line${index + 1} = ${index + 1};`).join("\n");
+
+async function openTranscriptFixture(page, { body } = {}) {
+  // Filler first, code last: the transcript opens pinned to the tail, so this
+  // puts the cards on screen while still leaving plenty of room to scroll up.
+  const content = body ?? [
+    ...Array.from({ length: 60 }, (_, index) => `Filler paragraph ${index + 1} giving the transcript room to scroll.`),
+    "Here is a long block.",
+    ["```ts", longCode, "```"].join("\n"),
+    "And a short one.",
+    ["```sh", "echo hi", "```"].join("\n"),
+  ].join("\n\n");
+  await page.unroute("**/v0/sessions/session_existing");
+  await page.route("**/v0/sessions/session_existing", async (route) => {
+    await route.fulfill({ json: {
+      id: "session_existing",
+      projectId: "project_chat",
+      status: "active",
+      title: "Existing chat",
+      model: model.spec,
+      thinkingLevel: "medium",
+      messages: [
+        { id: "message_q", role: "user", content: "Show me some code" },
+        { id: "message_a", role: "assistant", content, timestamp: "2026-07-15T06:49:27.768Z" },
+      ],
+      tools: [],
+      page: { before: null },
+    } });
+  });
+  await page.goto("/chat/session_existing");
+  await expect(page.locator(".chat-markdown .artifact").first()).toBeVisible();
+  // Blocks outside the overscan band are virtualized away with
+  // content-visibility, so bring the cards into view before interacting.
+  await page.locator(".chat-markdown .artifact").first().scrollIntoViewIfNeeded();
+  await expect(page.locator(".chat-markdown .artifact .artifact-header").first()).toBeVisible();
+}
+
+test("long code blocks collapse, short ones do not, and the header stays reachable", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop-chromium");
+  await openTranscriptFixture(page);
+
+  const long = page.locator(".chat-markdown .artifact").first();
+  const short = page.locator(".chat-markdown .artifact").nth(1);
+  await expect(long).toHaveAttribute("data-lines", "60");
+  await expect(long).toHaveAttribute("data-collapsed", "true");
+  await expect(short).not.toHaveAttribute("data-collapsed", "true");
+
+  const expander = long.locator("[data-expand-label]");
+  await expect(expander).toHaveText("Show 45 more lines");
+  // Both controls are offered: the footer button and the header toggle.
+  await expect(long.locator(".artifact-toggle")).toHaveCount(1);
+  // A short block must not offer either.
+  await expect(short.locator("[data-expand-code]")).toHaveCount(0);
+
+  const collapsedHeight = (await long.boundingBox()).height;
+  await expander.scrollIntoViewIfNeeded();
+  await expander.click();
+  await expect(long).not.toHaveAttribute("data-collapsed", "true");
+  expect((await long.boundingBox()).height).toBeGreaterThan(collapsedHeight);
+
+  // The header pins while the block scrolls past, so Copy never needs the user
+  // to scroll back to the top of a long block.
+  const viewport = page.locator(".message-scroller-viewport");
+  const header = long.locator(".artifact-header");
+  await expect(header).toHaveCSS("position", "sticky");
+
+  // Scroll until the card's own top is above the fold, then the header must
+  // still be on screen rather than having scrolled away with it.
+  await viewport.evaluate((element) => {
+    const card = element.querySelector(".chat-markdown .artifact");
+    const viewportTop = element.getBoundingClientRect().top;
+    element.scrollTop += card.getBoundingClientRect().top - viewportTop + 120;
+  });
+  await page.waitForTimeout(200);
+  const viewportBox = await viewport.boundingBox();
+  const cardBox = await long.boundingBox();
+  const headerBox = await header.boundingBox();
+  expect(cardBox.y).toBeLessThan(viewportBox.y);
+  expect(headerBox.y).toBeGreaterThanOrEqual(viewportBox.y - 1);
+  expect(headerBox.y).toBeLessThan(viewportBox.y + 40);
+  await expect(header.locator("[data-copy-code]")).toBeVisible();
+});
+
+test("copying a code block confirms in place", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop-chromium");
+  await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
+  await openTranscriptFixture(page);
+
+  const card = page.locator(".chat-markdown .artifact").nth(1);
+  const copy = card.locator("[data-copy-code]");
+  await copy.scrollIntoViewIfNeeded();
+  await copy.click();
+  await expect(copy).toHaveAttribute("data-copied", "true");
+  await expect(copy).toHaveAttribute("aria-label", "Copied");
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toContain("echo hi");
+  // The confirmation is transient, not a permanent state change.
+  await expect(copy).not.toHaveAttribute("data-copied", "true", { timeout: 4000 });
+});
+
+test("scrolling up never snaps the transcript back to the bottom", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop-chromium");
+  await openTranscriptFixture(page);
+  const viewport = page.locator(".message-scroller-viewport");
+  await page.waitForTimeout(400);
+
+  const atBottom = await viewport.evaluate((element) => {
+    element.scrollTop = element.scrollHeight;
+    return element.scrollTop;
+  });
+  expect(atBottom).toBeGreaterThan(0);
+
+  // Stop 40px up: inside the old 80px "near latest" band, which used to let the
+  // idle rejoin spring the reader straight back down.
+  await viewport.evaluate((element) => { element.scrollTop = element.scrollTop - 40; });
+  await page.waitForTimeout(600);
+  const afterShortScroll = await viewport.evaluate((element) => element.scrollTop);
+  expect(Math.abs(afterShortScroll - (atBottom - 40))).toBeLessThan(4);
+
+  // And a longer upward scroll must hold across several animation frames.
+  await viewport.evaluate((element) => { element.scrollTop = element.scrollTop - 400; });
+  const settled = await viewport.evaluate((element) => element.scrollTop);
+  await page.waitForTimeout(800);
+  expect(Math.abs(await viewport.evaluate((element) => element.scrollTop) - settled)).toBeLessThan(4);
+  await expect(page.getByRole("button", { name: "Scroll to latest" })).toBeVisible();
+});
+
+test("backgrounding the tab preserves the reading position", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop-chromium");
+  await openTranscriptFixture(page);
+  const viewport = page.locator(".message-scroller-viewport");
+  await page.waitForTimeout(400);
+
+  const parked = await viewport.evaluate((element) => {
+    element.scrollTop = Math.round(element.scrollHeight / 2);
+    return element.scrollTop;
+  });
+  await page.waitForTimeout(300);
+
+  // window blur alone must not disturb anything: it fires for devtools and for
+  // a second window, where the transcript is still fully on screen.
+  await page.evaluate(() => window.dispatchEvent(new Event("blur")));
+  await page.waitForTimeout(200);
+  expect(Math.abs(await viewport.evaluate((element) => element.scrollTop) - parked)).toBeLessThan(4);
+
+  await page.evaluate(() => {
+    Object.defineProperty(document, "visibilityState", { configurable: true, get: () => "hidden" });
+    document.dispatchEvent(new Event("visibilitychange"));
+  });
+  await page.waitForTimeout(300);
+  await page.evaluate(() => {
+    Object.defineProperty(document, "visibilityState", { configurable: true, get: () => "visible" });
+    document.dispatchEvent(new Event("visibilitychange"));
+  });
+  await page.waitForTimeout(400);
+  expect(Math.abs(await viewport.evaluate((element) => element.scrollTop) - parked)).toBeLessThan(4);
+});
+
+test("code blocks keep a stable width while the transcript scrolls", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop-chromium");
+  await openTranscriptFixture(page);
+  const viewport = page.locator(".message-scroller-viewport");
+  const card = page.locator(".chat-markdown .artifact").first();
+  await page.waitForTimeout(300);
+
+  const widths = [];
+  for (const fraction of [0, 0.2, 0.5, 0.2, 0.8, 0]) {
+    await viewport.evaluate((element, value) => {
+      element.scrollTop = Math.round(element.scrollHeight * value);
+    }, fraction);
+    await page.waitForTimeout(150);
+    const box = await card.boundingBox();
+    if (box) widths.push(Math.round(box.width));
+  }
+  // Virtualized blocks used to contribute zero intrinsic inline size when
+  // hidden, rewidening their ancestors as they crossed the overscan band.
+  expect(new Set(widths).size).toBe(1);
+});
+
+test("the transcript width preset widens the reading column without moving the composer", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop-chromium");
+  await openTranscriptFixture(page);
+  const thread = page.locator(".thread");
+  const composer = page.locator(".composer-wrap");
+
+  const before = { thread: (await thread.boundingBox()).width, composer: (await composer.boundingBox()).width };
+  await page.evaluate(() => { document.documentElement.dataset.transcriptWidth = "wide"; });
+  await page.waitForTimeout(150);
+  const after = { thread: (await thread.boundingBox()).width, composer: (await composer.boundingBox()).width };
+
+  expect(after.thread).toBeGreaterThan(before.thread);
+  expect(after.composer).toBe(before.composer);
+
+  await page.evaluate(() => { document.documentElement.dataset.transcriptWidth = "compact"; });
+  await page.waitForTimeout(150);
+  expect((await thread.boundingBox()).width).toBeLessThan(before.thread);
+});
+
+test("wide blocks bleed past the column but never past the chat surface", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop-chromium");
+  await page.setViewportSize({ width: 1600, height: 900 });
+  await openTranscriptFixture(page);
+  const card = page.locator(".chat-markdown .artifact").first();
+  const surface = page.locator(".chat-main");
+
+  // Code blocks only bleed when the reader opts in; tables always do.
+  await page.evaluate(() => { document.documentElement.dataset.codeWidth = "wide"; });
+  await page.evaluate(() => { document.documentElement.dataset.transcriptWide = "off"; });
+  await page.waitForTimeout(150);
+  const narrow = (await card.boundingBox()).width;
+
+  for (const preset of ["default", "wider", "full"]) {
+    await page.evaluate((value) => { document.documentElement.dataset.transcriptWide = value; }, preset);
+    await page.waitForTimeout(150);
+    const box = await card.boundingBox();
+    const surfaceBox = await surface.boundingBox();
+    expect(box.width).toBeGreaterThanOrEqual(narrow);
+    // The negative margin must stay clamped inside the chat container.
+    expect(box.x).toBeGreaterThanOrEqual(surfaceBox.x - 1);
+    expect(box.x + box.width).toBeLessThanOrEqual(surfaceBox.x + surfaceBox.width + 1);
+  }
+});
+
+test("the Appearance section drives the reading surface and persists it", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop-chromium");
+  const patches = [];
+  await page.route("**/v0/preferences", async (route) => {
+    if (route.request().method() === "PATCH") patches.push(route.request().postDataJSON());
+    await route.fulfill({ json: Object.assign({ defaultTemplateId: "chat" }, ...patches) });
+  });
+  // Settings opens on the Models section, which loads Pi accounts before the
+  // Appearance tab is reachable.
+  await page.route("**/v0/pi-auth/attempt", (route) => route.fulfill({ json: { attempt: null } }));
+  await page.route("**/v0/pi-auth", (route) => route.fulfill({ json: {
+    providers: [{ id: "anthropic", label: "Anthropic", oauth: false, auth: { configured: true, source: "stored", removable: true } }],
+  } }));
+  await page.setViewportSize({ width: 1920, height: 1080 });
+  await openTranscriptFixture(page);
+
+  await page.locator('[data-sidebar="footer"]').getByRole("button", { name: /Conduit/ }).click();
+  await page.getByRole("menuitem", { name: "Manage settings" }).click();
+  await page.getByRole("tab", { name: "Appearance" }).click();
+
+  await page.getByRole("combobox", { name: "Transcript width" }).selectOption("wide");
+  await expect.poll(() => page.evaluate(() => document.documentElement.dataset.transcriptWidth)).toBe("wide");
+
+  await page.getByRole("combobox", { name: "Wide blocks" }).selectOption("wider");
+  await expect.poll(() => page.evaluate(() => document.documentElement.dataset.transcriptWide)).toBe("wider");
+
+  await page.getByRole("combobox", { name: "Collapse code blocks over" }).selectOption("25");
+  await expect.poll(() => page.evaluate(() =>
+    getComputedStyle(document.documentElement).getPropertyValue("--code-collapse-lines").trim())).toBe("25");
+
+  // Turning collapse off disables the threshold control rather than leaving a
+  // setting that silently does nothing.
+  await page.getByRole("combobox", { name: "Collapse code blocks", exact: true }).selectOption("off");
+  await expect(page.getByRole("combobox", { name: "Collapse code blocks over" })).toBeDisabled();
+  await expect.poll(() => page.evaluate(() => document.documentElement.dataset.codeCollapse)).toBe("off");
+
+  // Each choice is mirrored to the server so it follows the user to another device.
+  await expect.poll(() => Object.assign({}, ...patches)).toMatchObject({
+    transcriptWidth: "wide",
+    transcriptWideBlocks: "wider",
+    codeBlockCollapseLines: 25,
+    codeBlockCollapse: "off",
+  });
+
+  await expect.poll(() => page.evaluate(() => localStorage.getItem("conduit:transcript-width"))).toBe("wide");
+});
+
+test("sending a message retakes the tail even when scrolled up", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop-chromium");
+  await openTranscriptFixture(page);
+  const viewport = page.locator(".message-scroller-viewport");
+  await page.waitForTimeout(400);
+
+  const parked = await viewport.evaluate((element) => {
+    element.scrollTop = Math.round(element.scrollHeight / 3);
+    return element.scrollTop;
+  });
+  await page.waitForTimeout(300);
+  expect(Math.abs(await viewport.evaluate((element) => element.scrollTop) - parked)).toBeLessThan(4);
+  await expect(page.getByRole("button", { name: "Scroll to latest" })).toBeVisible();
+
+  await page.getByRole("textbox", { name: "Message Pi" }).fill("another question");
+  await page.getByRole("button", { name: "Send message" }).click();
+
+  // Sending is an unambiguous request to watch the answer arrive.
+  await expect.poll(async () => viewport.evaluate((element) =>
+    element.scrollHeight - element.scrollTop - element.clientHeight < 80), { timeout: 5000 }).toBe(true);
+});
+
+for (const renderer of ["incremark-advanced", "incremark-synthetic", "marked-stable"]) {
+  test(`the reading surface behaves under ${renderer}`, async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name !== "desktop-chromium");
+    await page.addInitScript((value) => {
+      localStorage.setItem("conduit:transcript-renderer", value);
+    }, renderer);
+    await openTranscriptFixture(page);
+    const viewport = page.locator(".message-scroller-viewport");
+    const card = page.locator(".chat-markdown .artifact").first();
+    await page.waitForTimeout(500);
+
+    // Every renderer emits the same card contract.
+    await expect(card).toHaveAttribute("data-lines", "60");
+    await expect(card).toHaveAttribute("data-collapsed", "true");
+    await expect(card.locator("[data-expand-label]")).toHaveText("Show 45 more lines");
+    await expect(card.locator(".artifact-header")).toHaveCSS("position", "sticky");
+    await expect(card.locator(".artifact-toggle")).toHaveAttribute("aria-expanded", "false");
+
+    // Expanding works whether it is a component or a delegated attribute flip.
+    await card.locator("[data-expand-label]").scrollIntoViewIfNeeded();
+    await card.locator("[data-expand-label]").click();
+    await expect(card).not.toHaveAttribute("data-collapsed", "true");
+
+    // And scrolling up still holds position.
+    await viewport.evaluate((element) => { element.scrollTop = element.scrollHeight; });
+    await page.waitForTimeout(200);
+    const bottom = await viewport.evaluate((element) => element.scrollTop);
+    await viewport.evaluate((element) => { element.scrollTop -= 300; });
+    const settled = await viewport.evaluate((element) => element.scrollTop);
+    expect(settled).toBeLessThan(bottom);
+    await page.waitForTimeout(700);
+    expect(Math.abs(await viewport.evaluate((element) => element.scrollTop) - settled)).toBeLessThan(4);
+  });
+}
+
+test("collapsing a long block from the pinned header keeps the transcript rendered", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop-chromium");
+  // A block long enough that folding it removes most of the thread's height.
+  const veryLongCode = Array.from({ length: 220 }, (_, i) => `const line${i + 1} = ${i + 1};`).join("\n");
+  await openTranscriptFixture(page, { body: [
+    ...Array.from({ length: 30 }, (_, i) => `Filler paragraph ${i + 1} with enough words to occupy a line or two of the transcript.`),
+    "Here is a very long block.",
+    ["```ts", veryLongCode, "```"].join("\n"),
+    ...Array.from({ length: 30 }, (_, i) => `Trailing paragraph ${i + 1} that must stay rendered throughout.`),
+  ].join("\n\n") });
+
+  const card = page.locator(".chat-markdown .artifact").first();
+  await card.locator("[data-expand-label]").click();
+  await expect(card).not.toHaveAttribute("data-collapsed", "true");
+  await page.waitForTimeout(300);
+
+  // Scroll into the middle of the expanded block so the header is pinned and
+  // the footer control is far below the fold.
+  await page.locator(".message-scroller-viewport").evaluate((element) => {
+    const c = element.querySelector(".chat-markdown .artifact");
+    element.scrollTop += c.getBoundingClientRect().top - element.getBoundingClientRect().top + 400;
+  });
+  await page.waitForTimeout(200);
+
+  const headerToggle = card.locator(".artifact-toggle");
+  await expect(headerToggle).toBeVisible();
+  await expect(headerToggle).toHaveAttribute("aria-expanded", "true");
+  // The chevron is a pseudo-element; an inline one would ignore its box and
+  // leave the control looking like empty space.
+  const chevron = await headerToggle.evaluate((el) => {
+    const style = getComputedStyle(el, "::before");
+    return { display: style.display, width: style.width, height: style.height };
+  });
+  expect(chevron.display).not.toBe("inline");
+  expect(Number.parseFloat(chevron.width)).toBeGreaterThan(0);
+  expect(Number.parseFloat(chevron.height)).toBeGreaterThan(0);
+  await headerToggle.click();
+  await expect(card).toHaveAttribute("data-collapsed", "true");
+  await expect(headerToggle).toHaveAttribute("aria-expanded", "false");
+
+  // Immediately after the fold -- and for the seconds that used to be blank --
+  // real text must be on screen, not empty virtualization placeholders.
+  for (const wait of [0, 250, 800, 2000]) {
+    if (wait) await page.waitForTimeout(wait - (wait === 250 ? 0 : 0));
+    const visibleText = await page.evaluate(() => {
+      const vp = document.querySelector(".message-scroller-viewport").getBoundingClientRect();
+      return [...document.querySelectorAll(".chat-markdown p, .chat-markdown .artifact")]
+        .filter((el) => {
+          const b = el.getBoundingClientRect();
+          return b.height > 0 && b.bottom > vp.top && b.top < vp.bottom;
+        })
+        .map((el) => (el.textContent || "").trim())
+        .filter(Boolean).length;
+    });
+    expect(visibleText, `no rendered content ${wait}ms after collapsing`).toBeGreaterThan(0);
+  }
+});
+
+test("folding a block keeps it under the reader rather than jumping the viewport", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop-chromium");
+  // Needs content below the block: with nothing after it, scrollTop is clamped
+  // by the shortened page and the card legitimately has to move.
+  await openTranscriptFixture(page, { body: [
+    ...Array.from({ length: 30 }, (_, i) => `Filler paragraph ${i + 1} giving the transcript room to scroll.`),
+    "Here is a long block.",
+    ["```ts", longCode, "```"].join("\n"),
+    // Comfortably more than a viewport of content below the block, so folding
+    // it cannot run the scroll position into the bottom clamp.
+    ...Array.from({ length: 200 }, (_, i) => `Trailing paragraph ${i + 1} keeping the page taller than the viewport.`),
+  ].join("\n\n") });
+  const card = page.locator(".chat-markdown .artifact").first();
+  const viewport = page.locator(".message-scroller-viewport");
+
+  await card.locator("[data-expand-label]").click();
+  await expect(card).not.toHaveAttribute("data-collapsed", "true");
+  await page.waitForTimeout(300);
+  await card.scrollIntoViewIfNeeded();
+  await page.waitForTimeout(200);
+
+  // Hover first: clicking scrolls the control into view, and the header is
+  // sticky, so its layout position is far above where it is painted. Measure
+  // after that scroll so the assertion is about the fold, not about Playwright
+  // moving the page to reach the button.
+  const headerToggle = card.locator(".artifact-toggle");
+  await headerToggle.hover();
+  await page.waitForTimeout(200);
+  const before = (await card.boundingBox()).y;
+  await headerToggle.click();
+  await page.waitForTimeout(400);
+  const after = (await card.boundingBox()).y;
+  expect(Math.abs(after - before)).toBeLessThan(8);
+});
+
+test("code blocks stay in the reading column until wide is opted into", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop-chromium");
+  await page.setViewportSize({ width: 1600, height: 900 });
+  await openTranscriptFixture(page);
+  const card = page.locator(".chat-markdown .artifact").first();
+  const column = page.locator(".chat-markdown").first();
+  const table = page.locator(".chat-markdown table").first();
+
+  // Default: a code block is exactly the reading measure, unlike a table.
+  await expect.poll(async () => (await card.boundingBox()).width).toBe((await column.boundingBox()).width);
+
+  await page.evaluate(() => { document.documentElement.dataset.codeWidth = "wide"; });
+  await expect.poll(async () => (await card.boundingBox()).width)
+    .toBeGreaterThan((await column.boundingBox()).width);
+  await expect(table).toHaveCount(0);
+});
+
+test("settled code blocks get line numbers and highlighting, and copy keeps the newlines", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop-chromium");
+  await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
+  await openTranscriptFixture(page, { body: [
+    "Here is some code.",
+    ["```ts", [
+      "// a comment that runs",
+      "// across two lines",
+      'const greeting = "hello";',
+      "function add(a: number, b: number) {",
+      "  return a + b;",
+      "}",
+    ].join("\n"), "```"].join("\n"),
+  ].join("\n\n") });
+
+  const card = page.locator(".chat-markdown .artifact").first();
+  // Line spans are the contract; the renderer that produced them (component or
+  // post-pass) is an implementation detail.
+  await expect(card.locator(".code-line")).toHaveCount(6, { timeout: 10000 });
+
+  // Numbers are generated content, so they are visible but never selected.
+  const gutter = await card.locator(".code-line").first().evaluate((el) =>
+    getComputedStyle(el, "::before").content);
+  expect(gutter).toContain("counter(code-line)");
+
+  // Highlighting produced real tokens, including a comment spanning two lines
+  // that must not have been merged into one.
+  await expect(card.locator(".hljs-comment").first()).toBeVisible();
+  expect(await card.locator(".code-line").nth(0).textContent()).toBe("// a comment that runs");
+  expect(await card.locator(".code-line").nth(1).textContent()).toBe("// across two lines");
+  await expect(card.locator(".hljs-string").first()).toHaveText('"hello"');
+
+  // Splitting the code into per-line elements removes the newline characters,
+  // so copy has to put them back.
+  await card.locator("[data-copy-code]").scrollIntoViewIfNeeded();
+  await card.locator("[data-copy-code]").click();
+  const copied = await page.evaluate(() => navigator.clipboard.readText());
+  expect(copied.split("\n")).toHaveLength(6);
+  expect(copied).toContain('const greeting = "hello";');
+  expect(copied).not.toContain("1//");
+});
+
+test("an unknown language still gets numbered lines", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop-chromium");
+  await openTranscriptFixture(page, { body: [
+    "Plain text block.",
+    ["```wingdings", "alpha\nbeta\ngamma", "```"].join("\n"),
+  ].join("\n\n") });
+  const card = page.locator(".chat-markdown .artifact").first();
+  await expect(card.locator(".code-line")).toHaveCount(3, { timeout: 10000 });
+});
+
+test("highlighting applies while a fence is still streaming, one completed line at a time", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop-chromium");
+  await openTranscriptFixture(page);
+
+  const result = await page.evaluate(async () => {
+    const module = await import("/src/client/chat/code-highlight.ts");
+    const highlighter = new module.StreamingCodeHighlighter();
+    // Load the grammars up front so this measures the streaming policy rather
+    // than the lazy import.
+    module.primeHighlighter();
+    const started = Date.now();
+    while (!module.highlighterReady() && Date.now() - started < 8000) {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+
+    const full = 'const a = "one";\nconst b = "two";\nconst c = "three";';
+    const wait = () => new Promise((resolve) => setTimeout(resolve, 130));
+    const frames = [];
+    // Feed the block the way a stream would: a few characters at a time.
+    for (let end = 1; end <= full.length; end += 7) {
+      const html = highlighter.render(full.slice(0, end), "ts", true);
+      frames.push({ end, html });
+      await wait();
+    }
+    const settled = highlighter.render(full, "ts", false);
+    return { ready: module.highlighterReady(), frames, settled, full };
+  });
+
+  expect(result.ready).toBe(true);
+
+  // Mid-stream, completed lines are already coloured -- highlighting does not
+  // wait for the fence to close.
+  const midStream = result.frames.filter((frame) => frame.end > 20);
+  expect(midStream.some((frame) => frame.html.includes("hljs-string"))).toBe(true);
+
+  // The line still being written is never coloured: its tokenization is not yet
+  // decided, and colours that change under the reader are worse than none.
+  for (const frame of result.frames) {
+    const partial = result.full.slice(0, frame.end);
+    const tail = partial.slice(partial.lastIndexOf("\n") + 1);
+    if (!tail || tail.includes("\n")) continue;
+    const lines = [...frame.html.matchAll(/<span class="code-line">([\s\S]*?)<\/span>(?=<span class="code-line">|$)/g)];
+    const lastLine = lines.at(-1)?.[1] ?? "";
+    if (tail.includes('"') && !tail.endsWith('";')) {
+      expect(lastLine, `tail "${tail}" was coloured before it was complete`).not.toContain("hljs-string");
+    }
+  }
+
+  // Text is never withheld: every frame renders everything received so far.
+  for (const frame of result.frames) {
+    const rendered = frame.html.replace(/<[^>]+>/g, "").replaceAll("&quot;", '"').replaceAll("&amp;", "&");
+    expect(rendered.replaceAll("\n", "")).toBe(result.full.slice(0, frame.end).replaceAll("\n", ""));
+  }
+
+  // And the settled block is fully highlighted across all three lines.
+  expect(result.settled.match(/class="code-line"/g)).toHaveLength(3);
+  expect(result.settled.match(/hljs-string/g).length).toBeGreaterThanOrEqual(3);
 });

@@ -1,11 +1,14 @@
-import { createEffect, createSignal, For, Index, onCleanup, Show } from "solid-js";
+import { createEffect, createMemo, createSignal, For, Index, onCleanup, Show } from "solid-js";
 import { createStore, reconcile } from "solid-js/store";
 import { createIncremarkParser, type DisplayBlock, type ParsedBlock } from "@incremark/core";
 import katex from "katex";
 import { getHarnessRecorder, recordHarnessMetric } from "@/client/harness-metrics";
 import type { ChatMarkdownProps } from "./markdown";
 import { ExternalLinkDialog } from "./external-link-dialog";
-import { createExternalLinkController } from "./markdown-actions";
+import { copyWithFeedback, createExternalLinkController } from "./markdown-actions";
+import { codeBlockCollapseLabel, codeBlockState, countCodeLines, normalizeCodeLanguage, publishCodeBlockToggle } from "./code-block";
+import { useCodeBlockCollapse } from "./transcript-appearance";
+import { highlighterReady, StreamingCodeHighlighter } from "./code-highlight";
 import { createSyntheticMathPreviewNode, repairSyntheticMathSource } from "./incremark-synthetic-math";
 import { BufferedIncremarkTypewriter, visibleAstCharacters } from "./incremark-typewriter";
 import { MathRenderQueue, type MathRenderPolicy } from "./incremark-math-queue";
@@ -414,27 +417,106 @@ function MathNode(props: { node: MarkdownNode | NodeAccessor; defer?: () => bool
 
 function CodeNode(props: { node: MarkdownNode | NodeAccessor }) {
   const node = () => readNode(props.node);
-  const language = () => String(node()?.lang || "text").split(/\s+/)[0]!.toLowerCase();
-  const copy = () => {
-    if (navigator.clipboard) void navigator.clipboard.writeText(String(node()?.value || ""));
+  const language = () => normalizeCodeLanguage(node()?.lang);
+  const text = () => String(node()?.value || "");
+  // Expanding by hand is a decision about this block, so it outlives later
+  // preference changes and any re-evaluation of the collapse default.
+  const [userExpanded, setUserExpanded] = createSignal(false);
+  const collapse = useCodeBlockCollapse();
+  const state = createMemo(() => codeBlockState(text(), collapse.mode(), collapse.threshold(), false));
+  const collapsed = () => state().collapsed && !userExpanded();
+  const highlighter = new StreamingCodeHighlighter();
+  const highlighted = createMemo(() => {
+    highlighterReady();
+    return highlighter.render(text(), language(), false);
+  });
+  // Folding removes a lot of height at once. Tell the transcript so it can hold
+  // this card still and re-measure, instead of leaving stale placeholders.
+  const toggle = (control: HTMLElement) => {
+    const card = control.closest<HTMLElement>(".artifact");
+    const previousTop = card?.getBoundingClientRect().top ?? 0;
+    setUserExpanded((value) => !value);
+    if (card) queueMicrotask(() => publishCodeBlockToggle(card, previousTop));
   };
-  return <div class="artifact" data-language={language()}>
-    <div class="artifact-header"><span>{language()}</span><button type="button" aria-label="Copy code" data-copy-code onClick={copy}>Copy</button></div>
-    <pre><code>{String(node()?.value || "")}</code></pre>
+  return <div
+    class="artifact"
+    data-language={language()}
+    data-lines={state().lines}
+    data-collapsible={state().collapsible ? "true" : undefined}
+    data-collapsed={collapsed() ? "true" : undefined}
+    data-user-expanded={userExpanded() ? "true" : undefined}
+  >
+    <div class="artifact-header">
+      <span>{language()}</span>
+      <span class="artifact-actions">
+        <CodeCopyButton text={text} />
+        <Show when={state().collapsible}>
+          {/* Pinned with the header, so it stays reachable part-way down a
+              block the footer button has long since scrolled past. */}
+          <button
+            type="button"
+            class="artifact-toggle"
+            data-expand-code
+            aria-label={collapsed() ? "Expand code" : "Collapse code"}
+            aria-expanded={collapsed() ? "false" : "true"}
+            onClick={(event) => toggle(event.currentTarget)}
+          />
+        </Show>
+      </span>
+    </div>
+    {/* innerHTML rather than a post-hoc DOM rewrite: the renderer keeps
+        ownership of the node, so a later render cannot wipe the highlighting. */}
+    <pre><code innerHTML={highlighted()} /></pre>
+    <Show when={state().collapsible}>
+      <button type="button" class="artifact-expand" data-expand-code data-expand-label onClick={(event) => toggle(event.currentTarget)}>
+        {collapsed() ? state().expandLabel : codeBlockCollapseLabel()}
+      </button>
+    </Show>
   </div>;
+}
+
+/**
+ * Copy control shared by the settled and streaming code cards.
+ *
+ * The confirmation is left entirely to copyWithFeedback, which drives it
+ * through attributes. Mirroring it in a signal here would have two owners
+ * writing the same label, and the marked renderers -- which have no component
+ * to hold that signal -- would still need the attribute path anyway.
+ */
+function CodeCopyButton(props: { text: () => string }) {
+  let button!: HTMLButtonElement;
+  return <button
+    ref={button}
+    type="button"
+    class="artifact-copy"
+    aria-label="Copy code"
+    data-copy-code
+    onClick={() => void copyWithFeedback(props.text(), button)}
+  ><span class="artifact-copy-label">Copy</span></button>;
 }
 
 function PendingConstruct(props: { pending: StreamingPending; streaming: boolean }) {
   const pending = () => props.pending;
   if (pending().kind === "fence") {
-    const language = () => String(pending().language || "text").split(/\s+/)[0]!.toLowerCase();
+    const language = () => normalizeCodeLanguage(pending().language);
+    // Whole lines colour as they complete; the line still being written stays
+    // plain so its colours do not change under the reader.
+    const highlighter = new StreamingCodeHighlighter();
+    const highlighted = createMemo(() => {
+      highlighterReady();
+      return highlighter.render(pending().body, language(), props.streaming);
+    });
+    // A fence still being written stays open: collapsing the text as it arrives
+    // would hide exactly what the reader is watching. The settled CodeNode that
+    // replaces it re-takes the collapse decision.
     return <div
       class={props.streaming ? "artifact streaming-pending streaming-pending-fence" : "artifact"}
       data-language={language()}
       data-streaming-pending={props.streaming ? "fence" : undefined}
+      data-lines={countCodeLines(pending().body)}
     >
-      <div class="artifact-header"><span>{language()}</span><button type="button" aria-label="Copy code" data-copy-code onClick={() => { if (navigator.clipboard) void navigator.clipboard.writeText(pending().body); }}>Copy</button></div>
-      <pre><code>{pending().body}</code></pre>
+      <div class="artifact-header"><span>{language()}</span><CodeCopyButton text={() => pending().body} /></div>
+      <pre><code innerHTML={highlighted()} /></pre>
     </div>;
   }
   const className = () => `streaming-pending ${pending().kind === "math-block" ? "streaming-pending-math-block" : "streaming-pending-math-inline"}`;
