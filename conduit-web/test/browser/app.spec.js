@@ -1095,7 +1095,7 @@ test("initializes the dashboard as a model-ready new chat", async ({ page }) => 
   await expect(page.getByRole("heading", { name: "Start where the work is." })).toBeVisible();
 });
 
-test("prefetches recent chat transcripts and reuses them on navigation", async ({ page }) => {
+test("prefetches only approached chats and retains a revision-matched transcript", async ({ page }) => {
   let transcriptLoads = 0;
   await page.route("**/v0/sessions/session_existing", async (route) => {
     transcriptLoads += 1;
@@ -1112,8 +1112,18 @@ test("prefetches recent chat transcripts and reuses them on navigation", async (
   });
 
   await page.goto("/");
+  const chat = page.getByRole("button", { name: "Existing chat" });
+  await expect(chat).toBeVisible();
+  expect(transcriptLoads).toBe(0);
+  await page.locator('[data-chat-id="session_existing"]').dispatchEvent("pointerenter");
   await expect.poll(() => transcriptLoads).toBe(1);
-  await page.getByRole("button", { name: "Existing chat" }).click();
+  await chat.click();
+  await expect(page).toHaveURL(/\/chat\/session_existing$/);
+  expect(transcriptLoads).toBe(1);
+
+  await page.getByRole("button", { name: "Conduit", exact: true }).click();
+  await expect(page).toHaveURL(/\/$/);
+  await page.locator('[data-chat-id="session_existing"]').evaluate((element) => element.click());
   await expect(page).toHaveURL(/\/chat\/session_existing$/);
   expect(transcriptLoads).toBe(1);
 });

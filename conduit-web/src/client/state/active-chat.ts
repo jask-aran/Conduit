@@ -125,10 +125,12 @@ export function createActiveChat(options: ActiveChatOptions) {
     request: Promise<TranscriptDetail>;
   }>();
 
+  const chatIsLive = (chat: ChatSummary) => chat.liveActive || Boolean(options.runtime.getProcess(chat.id)?.active);
   const loadTranscript = (chat: ChatSummary) => {
     const revision = chat.updatedAt || chat.createdAt || "";
     const cached = transcriptPrefetches.get(chat.id);
-    if (cached && cached.revision === revision && cached.expiresAt > Date.now()) return cached.request;
+    if (!chatIsLive(chat) && cached && cached.revision === revision && cached.expiresAt > Date.now()) return cached.request;
+    transcriptPrefetches.delete(chat.id);
     const request = api<TranscriptDetail>(`/v0/sessions/${encodeURIComponent(chat.id)}`);
     transcriptPrefetches.set(chat.id, { revision, expiresAt: Date.now() + 30_000, request });
     request.catch(() => {
@@ -139,7 +141,7 @@ export function createActiveChat(options: ActiveChatOptions) {
   };
 
   const prefetch = (chat: ChatSummary) => {
-    if (!chat.liveActive) void loadTranscript(chat).catch(() => {});
+    if (!chatIsLive(chat)) void loadTranscript(chat).catch(() => {});
   };
   let overflowLiveEvents: LiveEvent[] = [];
   let overflowLiveEventFrame: number | null = null;
@@ -671,7 +673,7 @@ export function createActiveChat(options: ActiveChatOptions) {
     // current chat, URL, socket, and selection intact.
     const navigation = ++navigationToken;
     const detail = await loadTranscript(chat);
-    transcriptPrefetches.delete(chat.id);
+    if (chatIsLive(chat)) transcriptPrefetches.delete(chat.id);
     if (navigation !== navigationToken) return;
     reset();
     const selection = selectionToken;

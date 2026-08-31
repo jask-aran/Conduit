@@ -1,4 +1,4 @@
-import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show, type JSX } from "solid-js";
+import { createMemo, createSignal, For, onCleanup, onMount, Show, type JSX } from "solid-js";
 import { ArrowRightIcon, SearchIcon, TerminalIcon } from "lucide-solid";
 import { Spinner } from "@/components/primitives";
 import { api, projectPath } from "../api/client";
@@ -69,10 +69,6 @@ export function AppDashboard(props: {
       setLoading(false);
     }
   };
-
-  createEffect(() => {
-    for (const { chat } of chats()) props.onPrefetchChat(chat);
-  });
 
   onMount(() => {
     const changed = () => void refresh();

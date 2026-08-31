@@ -35,7 +35,6 @@ import { Sidebar } from "./navigation/sidebar";
 import { clampSidebarChatLimit, selectedSidebarChatLimit, SIDEBAR_CHAT_LIMIT_STORAGE_KEY } from "./navigation/sidebar-preferences";
 import { WorkspaceAppearanceEditor } from "./project/workspace-appearance-editor";
 import { checkForPwaUpdate, forcePwaUpdate, rememberPwaRegistration, resetPwaAppCache } from "./pwa-update";
-import { Settings } from "./settings/settings";
 import { createActiveChat, type ActiveChatStore } from "./state/active-chat";
 import { createAttachments, DEFAULT_MAX_ATTACHMENT_BYTES, filesFromDataTransfer } from "./state/attachments";
 import { createCatalogueStore } from "./state/catalogue";
@@ -60,6 +59,7 @@ const selectedMeteorField = () => localStorage.getItem(METEOR_FIELD_STORAGE_KEY)
 const WorkspacePanel = lazy(() => import("./workspace/workspace-panel"));
 const ProjectDashboard = lazy(() => import("./project/dashboard"));
 const TerminalRoute = lazy(() => import("./remotes/terminal-route").then((module) => ({ default: module.TerminalRoute })));
+const Settings = lazy(() => import("./settings/settings").then((module) => ({ default: module.Settings })));
 
 function NativeServerSetup(props: { onAuthenticated: () => void }) {
   const [address, setAddress] = createSignal(configuredServerOrigin() || "");
@@ -350,6 +350,7 @@ function App() {
   const [sidebarChatLimit, setSidebarChatLimit] = createSignal(selectedSidebarChatLimit());
   const [contextMetrics, setContextMetrics] = createSignal<ContextMetricId[]>(selectedContextMetrics());
   const [settingsOpen, setSettingsOpen] = createSignal(false);
+  const [settingsLoaded, setSettingsLoaded] = createSignal(false);
   const [settingsSection, setSettingsSection] = createSignal<SettingsSection>("models");
   const [settingsWorkspaceId, setSettingsWorkspaceId] = createSignal<string | null>(null);
   const [workspaceIdentityId, setWorkspaceIdentityId] = createSignal<string | null>(null);
@@ -912,6 +913,7 @@ function App() {
   const openSettings = (section: string = "models", workspaceId: string | null = null) => {
     setSettingsSection(section as SettingsSection);
     setSettingsWorkspaceId(workspaceId);
+    setSettingsLoaded(true);
     setSettingsOpen(true);
   };
   const switchMarkdownRenderer = (next: MarkdownRendererId) => {
@@ -1351,7 +1353,7 @@ function App() {
       connectivity={runtime.connectivity()} workspaceSuggestions={workspaceSuggestions()} workspacePolicy={workspacePolicy()} command={sidebarCommand()}
       mobileOpen={mobileSidebarOpen()} onMobileOpenChange={setMobileSidebar}
       onWorkspaceSuggestionsNeeded={() => void loadWorkspaceSuggestions()}
-      onNewChat={async (project) => { await createChat(project); }} onOpenChat={openChat} onOpenProject={openProject} onAddProject={addProject} onRenameChat={renameChat} onRenameProject={renameProject}
+      onNewChat={async (project) => { await createChat(project); }} onPrefetchChat={chat.prefetch} onOpenChat={openChat} onOpenProject={openProject} onAddProject={addProject} onRenameChat={renameChat} onRenameProject={renameProject}
       onMoveChat={moveChat} onMoveChats={moveChats} onMoveProjectChats={moveProjectChats} onCopyTranscript={copyTranscript} onCopyChatLinks={copyChatLinks}
       onDeleteChat={deleteChat} onDeleteChats={deleteChats} onDeleteProject={deleteProject}
       onOpenTerminal={(target, project) => { void openChat(target, project).then(() => openWorkspaceView("terminal")); }}
@@ -1477,7 +1479,9 @@ function App() {
     </Show>
     <CommandMenu open={paletteOpen()} onOpenChange={setPaletteOpen} onPageChange={setPalettePage} initialPage={palettePage()} initialQuery={paletteInitialQuery()} launchNonce={paletteNonce()} directLaunch={paletteDirectLaunch()}
       context={paletteContext()} actions={paletteActions} onChooseModel={(spec) => void models.chooseModel(spec)} scopeModels={models.allModels()} enabledModelSpecs={models.enabledModels()} onToggleModelScope={(spec) => { const enabled = models.enabledModels(); void models.saveScope(enabled.includes(spec) ? enabled.filter((item) => item !== spec) : [...enabled, spec]); }} shortcuts={shortcutManager} />
-                <Settings open={settingsOpen()} initialSection={settingsSection()} initialWorkspaceId={settingsWorkspaceId()} onOpenChange={setSettingsOpen} models={models} templates={templates()} templatesLoading={templatesLoading()} defaultTemplateId={defaultTemplateId()} projects={catalogue.projects()} installations={installations()} installationsLoading={installationsLoading()} onInstallationsChange={setInstallations} onDefaultTemplateChange={saveDefaultTemplate} onWorkspaceDefaultChange={saveWorkspaceDefault} markdownRenderer={markdownRenderer()} onMarkdownRendererChange={switchMarkdownRenderer} rendererControlsVisible={rendererControlsVisible()} onRendererControlsVisibleChange={switchRendererControlsVisible} meteorField={meteorField()} onMeteorFieldChange={switchMeteorField} voiceSettings={voiceSettings()} onVoiceSettingsSave={updateVoiceSettings} sidebarChatLimit={sidebarChatLimit()} onSidebarChatLimitChange={switchSidebarChatLimit} contextMetrics={contextMetrics()} onContextMetricsChange={switchContextMetrics} onOpenModelSelector={openModelSelector} shortcuts={shortcutManager} />
+    <Show when={settingsLoaded()}>
+      <Settings open={settingsOpen()} initialSection={settingsSection()} initialWorkspaceId={settingsWorkspaceId()} onOpenChange={setSettingsOpen} models={models} templates={templates()} templatesLoading={templatesLoading()} defaultTemplateId={defaultTemplateId()} projects={catalogue.projects()} installations={installations()} installationsLoading={installationsLoading()} onInstallationsChange={setInstallations} onDefaultTemplateChange={saveDefaultTemplate} onWorkspaceDefaultChange={saveWorkspaceDefault} markdownRenderer={markdownRenderer()} onMarkdownRendererChange={switchMarkdownRenderer} rendererControlsVisible={rendererControlsVisible()} onRendererControlsVisibleChange={switchRendererControlsVisible} meteorField={meteorField()} onMeteorFieldChange={switchMeteorField} voiceSettings={voiceSettings()} onVoiceSettingsSave={updateVoiceSettings} sidebarChatLimit={sidebarChatLimit()} onSidebarChatLimitChange={switchSidebarChatLimit} contextMetrics={contextMetrics()} onContextMetricsChange={switchContextMetrics} onOpenModelSelector={openModelSelector} shortcuts={shortcutManager} />
+    </Show>
   </>;
 }
 

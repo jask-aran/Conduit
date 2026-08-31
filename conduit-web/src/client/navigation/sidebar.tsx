@@ -139,6 +139,7 @@ export function Sidebar(props: {
   workspacePolicy: WorkspacePolicy | null;
   onWorkspaceSuggestionsNeeded: () => void;
   onNewChat: (project: Project) => Promise<void>;
+  onPrefetchChat: (chat: ChatSummary) => void;
   onOpenChat: (chat: ChatSummary, project: Project) => Promise<void>;
   onOpenProject: (project: Project) => Promise<void>;
   onAddProject: (input: ProjectInput) => Promise<boolean>;
@@ -676,6 +677,8 @@ export function Sidebar(props: {
       aria-current={props.selectedId === menuProps.chat.id ? "page" : undefined}
       aria-label={`${chatTitle(menuProps.chat)}${selected() ? ", selected" : ""}`}
       data-selected={selected() ? "true" : undefined}
+      onPointerEnter={() => props.onPrefetchChat(menuProps.chat)}
+      onFocus={() => props.onPrefetchChat(menuProps.chat)}
       onContextMenu={() => { if (!selected()) clearSelection(); }}
       onClick={(event: MouseEvent) => {
         if (guard.suppressClick) { guard.suppressClick = false; return; }
