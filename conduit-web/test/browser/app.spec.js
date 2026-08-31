@@ -316,32 +316,43 @@ test("browser interface scale persists locally and scales app and portalled over
   await page.reload();
 
   const metrics = await page.evaluate(() => {
-    const measure = (parent) => {
+    const remProbe = (parent) => {
       const probe = document.createElement("div");
-      probe.style.cssText = "position:absolute;width:100px;height:100px";
+      probe.style.cssText = "position:absolute;width:10rem;height:10rem";
       parent.append(probe);
       const rect = probe.getBoundingClientRect();
       probe.remove();
       return [rect.width, rect.height];
     };
+    const body = document.body.getBoundingClientRect();
+    const root = document.getElementById("root").getBoundingClientRect();
     return {
       scale: getComputedStyle(document.documentElement).getPropertyValue("--ui-scale").trim(),
-      appProbe: measure(document.getElementById("root")),
-      portalProbe: measure(document.body),
-      body: document.body.getBoundingClientRect().toJSON(),
-      bodyCss: [getComputedStyle(document.body).width, getComputedStyle(document.body).height],
+      fontSize: getComputedStyle(document.documentElement).fontSize,
+      zoom: getComputedStyle(document.body).zoom,
+      appRem: remProbe(document.getElementById("root")),
+      portalRem: remProbe(document.body),
+      body: [body.width, body.height],
+      root: [root.width, root.height],
       window: [window.innerWidth, window.innerHeight],
     };
   });
   expect(metrics.scale).toBe("1.25");
-  // Everything inside the app and inside portalled overlays is 25% larger.
-  expect(metrics.appProbe).toEqual([125, 125]);
-  expect(metrics.portalProbe).toEqual([125, 125]);
-  // Scaling up trades logical space for size: the shell lays out in fewer CSS
-  // pixels (1920 / 1.25) and, once zoomed, still fills the window exactly --
-  // no letterboxing and no overflow.
-  expect(metrics.bodyCss).toEqual(["1536px", "864px"]);
-  expect([metrics.body.width, metrics.body.height]).toEqual(metrics.window);
+  expect(metrics.zoom).toBe("1");
+  // Root type is 25% larger. Explicit px layout is unchanged, so the shell
+  // still fills the window and popovers stay in the same coordinate space.
+  expect(metrics.fontSize).toBe("16px");
+  expect(metrics.appRem).toEqual([160, 160]);
+  expect(metrics.portalRem).toEqual([160, 160]);
+  expect(metrics.body).toEqual(metrics.window);
+  expect(metrics.root[0]).toBe(metrics.body[0]);
+
+  await page.locator('[data-sidebar="footer"]').getByRole("button", { name: /Conduit/ }).click();
+  const menu = page.getByRole("menu");
+  await expect(menu).toBeVisible();
+  const menuBox = await menu.boundingBox();
+  expect(menuBox.y).toBeGreaterThanOrEqual(0);
+  expect(menuBox.y + menuBox.height).toBeLessThanOrEqual(1080 + 1);
 });
 
 test("durable UI preferences migrate once and restore after browser storage loss", async ({ page }, testInfo) => {
