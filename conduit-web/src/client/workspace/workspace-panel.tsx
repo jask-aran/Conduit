@@ -29,10 +29,7 @@ const MAX_CACHED_WORKSPACES = 6;
 const workspaceCache = new Map<string, WorkspaceCacheEntry>();
 const COMPACT_UI_MIGRATION_KEY = "conduit:compact-ui-v2";
 const MIN_DETAIL_HEIGHT = 32;
-const GENERATED_DIRECTORIES = new Set([
-  ".cache", ".git", ".mypy_cache", ".next", ".nuxt", ".pytest_cache", ".ruff_cache", ".svelte-kit", ".turbo",
-  ".venv", "__pycache__", "build", "coverage", "dist", "node_modules", "target", "venv",
-]);
+const WIDE_FILES_MIN_WIDTH = 560;
 
 function migrateWorkspaceGeometry() {
   if (localStorage.getItem(COMPACT_UI_MIGRATION_KEY) === "true") return;
@@ -72,6 +69,8 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
   let resizeHandle: HTMLDivElement | undefined;
   let detailHost: HTMLElement | undefined;
   let treeElement: HTMLElement | undefined;
+  let fileFilterInput: HTMLInputElement | undefined;
+  let filesResizeObserver: ResizeObserver | undefined;
   let panelEdgeMotionId: number | null = null;
   let panelMotionId = 0;
   let panelEdgeRaf = 0;
@@ -89,11 +88,12 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
   const [preview, setPreview] = createSignal<FilePreview | null>(null);
   const [fileFilter, setFileFilter] = createSignal("");
   const [treeFocusPath, setTreeFocusPath] = createSignal("");
-  const [showGenerated, setShowGenerated] = createSignal(false);
+  const [showHidden, setShowHidden] = createSignal(false);
+  const [filesWide, setFilesWide] = createSignal(false);
   const [diff, setDiff] = createSignal<DiffPayload | null>(null);
   const [error, setError] = createSignal("");
   const widthKey = () => `conduit:workspace-panel:${props.projectId()}:width`;
-  const showGeneratedKey = () => `conduit:workspace-panel:${props.projectId()}:show-generated`;
+  const showHiddenKey = () => `conduit:workspace-panel:${props.projectId()}:show-hidden`;
   const [width, setWidth] = createSignal(Math.max(256, Math.min(496, Number(localStorage.getItem(widthKey())) || 336)));
   const [shellWidth, setShellWidth] = createSignal(props.open() ? width() : 0);
   const [shellGap, setShellGap] = createSignal(props.open() && !isMobileLayout() ? 8 : 0);
@@ -265,6 +265,11 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
     setDetailHeight(Math.max(MIN_DETAIL_HEIGHT, Number(localStorage.getItem(`conduit:workspace-panel:${props.chatId()}:${next}:detail-height`)) || 288));
     setTab(next);
     localStorage.setItem(storageKey(), next);
+  };
+  const selectFilesTab = () => {
+    selectTab("files");
+    if (!directories()[""]) void loadDirectory();
+    queueMicrotask(() => fileFilterInput?.focus());
   };
   const toggleDetail = () => {
     const next = !detailOpen();
@@ -495,6 +500,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
     clearPanelSurfaceMotion();
     stopResize?.();
     stopDetailResize?.();
+    filesResizeObserver?.disconnect();
     if (treeScrollRaf) cancelAnimationFrame(treeScrollRaf);
     if (treeTypeaheadTimer) window.clearTimeout(treeTypeaheadTimer);
     document.body.classList.remove("workspace-resizing");
@@ -511,7 +517,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
       const nextWidth = Math.max(256, Math.min(496, Number(localStorage.getItem(widthKey())) || 336));
       setWidth(nextWidth);
       if (props.open()) setShellWidth(nextWidth);
-      setShowGenerated(localStorage.getItem(showGeneratedKey()) === "true");
+      setShowHidden(localStorage.getItem(showHiddenKey()) === "true");
       setTab(nextTab);
     });
   }));
@@ -549,7 +555,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
     }));
 
   function entryMatchesFilter(entry: TreeEntry, query: string): boolean {
-    if (!showGenerated() && entry.type === "directory" && GENERATED_DIRECTORIES.has(entry.name.toLowerCase())) return false;
+    if (!showHidden() && entry.name.startsWith(".")) return false;
     if (!query || entry.name.toLowerCase().includes(query)) return true;
     return entry.type === "directory" && (directories()[entry.path]?.entries || []).some((child) => entryMatchesFilter(child, query));
   }
@@ -618,6 +624,24 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
     } else return;
     event.preventDefault();
   };
+  const focusTreeBoundary = (last: boolean) => {
+    const items = [...(treeElement?.querySelectorAll<HTMLButtonElement>('[role="treeitem"]') || [])];
+    const item = last ? items.at(-1) : items[0];
+    if (!item) return false;
+    setTreeFocusPath(item.dataset.path || "");
+    item.focus();
+    return true;
+  };
+  const onFileFilterKeyDown = (event: KeyboardEvent & { currentTarget: HTMLInputElement }) => {
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      if (focusTreeBoundary(event.key === "ArrowUp")) event.preventDefault();
+      return;
+    }
+    if (event.key === "Escape" && fileFilter()) {
+      event.preventDefault();
+      setFileFilter("");
+    }
+  };
   const saveTreeScroll = (event: Event & { currentTarget: HTMLElement }) => {
     const scrollTop = event.currentTarget.scrollTop;
     const projectId = props.projectId();
@@ -627,10 +651,10 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
       cacheWorkspace(projectId, { treeScrollTop: scrollTop });
     });
   };
-  const toggleGenerated = () => {
-    const next = !showGenerated();
-    setShowGenerated(next);
-    localStorage.setItem(showGeneratedKey(), String(next));
+  const toggleHidden = () => {
+    const next = !showHidden();
+    setShowHidden(next);
+    localStorage.setItem(showHiddenKey(), String(next));
   };
   const collapseTree = () => {
     const next = new Set<string>();
@@ -686,7 +710,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
         <Show when={props.expanded()} fallback={<Maximize2Icon />}><Minimize2Icon /></Show>
       </Button>
       <div class="workspace-panel-tabs" role="tablist" aria-label="Workspace views">
-        <button role="tab" aria-label="Files" aria-selected={tab() === "files"} onClick={() => { selectTab("files"); if (!directories()[""]) void loadDirectory(); }}><FolderIcon /><span>Files</span></button>
+        <button role="tab" aria-label="Files" aria-selected={tab() === "files"} onClick={selectFilesTab}><FolderIcon /><span>Files</span></button>
         <button role="tab" aria-label="Source Control" aria-selected={tab() === "diff"} onClick={() => selectTab("diff")}><GitCompareArrowsIcon /><span>Source Control</span></button>
         <button role="tab" aria-label="Artifacts" aria-selected={tab() === "artifacts"} onClick={() => selectTab("artifacts")}><BoxesIcon /><span>Artifacts</span></button>
         <button role="tab" aria-label="Terminal" aria-selected={tab() === "terminal"} onClick={() => selectTab("terminal")}><TerminalIcon /><span>Terminal</span></button>
@@ -695,24 +719,36 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
     </header>
     <Show when={error()}><div class="workspace-panel-error">{error()}</div></Show>
     <Show when={tab() === "files"}>
-      <div ref={(element) => { detailHost = element; }} class="workspace-files">
+      <div
+        ref={(element) => {
+          detailHost = element;
+          filesResizeObserver?.disconnect();
+          const updateWideState = () => setFilesWide(!isMobileLayout() && element.clientWidth >= WIDE_FILES_MIN_WIDTH);
+          updateWideState();
+          filesResizeObserver = new ResizeObserver(updateWideState);
+          filesResizeObserver.observe(element);
+        }}
+        class="workspace-files"
+        data-wide={filesWide()}
+      >
         <div class="workspace-tree-pane">
           <div class="workspace-tree-tools">
             <label class="workspace-tree-filter">
               <SearchIcon />
               <input
+                ref={fileFilterInput}
                 type="search"
                 aria-label="Filter files"
                 placeholder="Filter files"
                 title="Filter loaded files and folders"
                 value={fileFilter()}
                 onInput={(event) => setFileFilter(event.currentTarget.value)}
-                onKeyDown={(event) => { if (event.key === "Escape" && fileFilter()) { event.preventDefault(); setFileFilter(""); } }}
+                onKeyDown={onFileFilterKeyDown}
               />
             </label>
             <button type="button" aria-label="Collapse all folders" title="Collapse all folders" onClick={collapseTree}><ChevronsUpIcon /></button>
-            <button type="button" aria-label={showGenerated() ? "Hide generated folders" : "Show generated folders"} title={showGenerated() ? "Hide generated folders" : "Show generated folders"} aria-pressed={showGenerated()} onClick={toggleGenerated}>
-              <Show when={showGenerated()} fallback={<EyeOffIcon />}><EyeIcon /></Show>
+            <button type="button" aria-label={showHidden() ? "Hide hidden files" : "Show hidden files"} title={showHidden() ? "Hide hidden files" : "Show hidden files"} aria-pressed={showHidden()} onClick={toggleHidden}>
+              <Show when={showHidden()} fallback={<EyeOffIcon />}><EyeIcon /></Show>
             </button>
             <button type="button" aria-label="Refresh files" title="Refresh files" disabled={filesLoading()} onClick={() => void refreshFiles()}><RefreshCwIcon /></button>
           </div>
@@ -724,8 +760,25 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
             <Show when={directories()[""] && visibleEntries("").length === 0}><div class="workspace-tree-empty">{fileFilter() ? "No loaded files match this filter." : "No files to show."}</div></Show>
           </nav>
         </div>
-        <div class="workspace-detail-toggle"><button aria-expanded={detailOpen()} onClick={toggleDetail}><ChevronDownIcon data-open={detailOpen()} /><span>File preview</span><Show when={preview()}><small>{preview()!.path} · {preview()!.size.toLocaleString()} bytes</small></Show></button></div>
-        <Show when={detailOpen()}><><div class="workspace-detail-resize-handle" role="separator" aria-label="Resize file preview" aria-orientation="horizontal" aria-valuemin={MIN_DETAIL_HEIGHT} aria-valuemax={maxDetailHeight()} aria-valuenow={detailHeight()} tabIndex={0} onPointerDown={startDetailResize} onKeyDown={resizeDetailByKey} /><section class="workspace-preview" aria-label="File preview" style={{ height: `${detailHeight()}px` }}><Show when={preview()} fallback={<div class="workspace-panel-empty">Select a text file to preview it.</div>}>{(file) => <pre><code>{file().content}</code></pre>}</Show></section></></Show>
+        <Show when={!filesWide()}>
+          <div class="workspace-detail-toggle"><button aria-expanded={detailOpen()} onClick={toggleDetail}><ChevronDownIcon data-open={detailOpen()} /><span>File preview</span><Show when={preview()}><small>{preview()!.path} · {preview()!.size.toLocaleString()} bytes</small></Show></button></div>
+        </Show>
+        <Show when={filesWide() || detailOpen()}><>
+          <Show when={!filesWide()}><div class="workspace-detail-resize-handle" role="separator" aria-label="Resize file preview" aria-orientation="horizontal" aria-valuemin={MIN_DETAIL_HEIGHT} aria-valuemax={maxDetailHeight()} aria-valuenow={detailHeight()} tabIndex={0} onPointerDown={startDetailResize} onKeyDown={resizeDetailByKey} /></Show>
+          <section class="workspace-preview" aria-label="File preview" style={{ height: filesWide() ? "auto" : `${detailHeight()}px` }}>
+            <Show when={preview()} fallback={<div class="workspace-panel-empty">Select a text file to preview it.</div>}>{(file) => <>
+              <header class="workspace-preview-header">
+                <div class="workspace-preview-file" title={file().path}><FileTypeIcon name={file().path} /><span>{file().path}</span></div>
+                <small>{file().size.toLocaleString()} bytes</small>
+                <button type="button" class="workspace-preview-copy" aria-label="Copy file contents" title="Copy file contents" onClick={() => copy(file().content)}><CopyIcon /></button>
+              </header>
+              <div class="workspace-preview-editor">
+                <pre class="workspace-preview-lines" aria-hidden="true">{Array.from({ length: file().content.split("\n").length }, (_, index) => index + 1).join("\n")}</pre>
+                <pre class="workspace-preview-code"><code>{file().content}</code></pre>
+              </div>
+            </>}</Show>
+          </section>
+        </></Show>
       </div>
     </Show>
     <Show when={tab() === "diff"}><section ref={(element) => { detailHost = element; }} class="workspace-diff">
