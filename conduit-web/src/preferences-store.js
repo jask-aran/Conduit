@@ -11,7 +11,6 @@ const DEFAULTS = {
   collapsedProjectIds: null,
   sidebarCollapsed: null,
   markdownRenderer: null,
-  transcriptRenderer: null,
   rendererControlsVisible: null,
   composerSurface: null,
   contextMetrics: null,
@@ -22,6 +21,7 @@ const DEFAULTS = {
   codeBlockCollapse: null,
   codeBlockCollapseLines: null,
   codeBlockWidth: null,
+  userMessageCollapse: null,
   shortcutOverrides: null,
   voicePreferences: null,
 };
@@ -46,9 +46,10 @@ export function validSidebarPins(input) {
 
 const UI_PREFERENCE_KEYS = new Set([
   "sidebarChatLimit", "collapsedProjectIds", "sidebarCollapsed", "markdownRenderer",
-  "transcriptRenderer", "rendererControlsVisible", "composerSurface", "contextMetrics",
+  "rendererControlsVisible", "composerSurface", "contextMetrics",
   "meteorField", "incremarkPacing", "transcriptWidth", "transcriptWideBlocks",
   "codeBlockCollapse", "codeBlockCollapseLines", "codeBlockWidth",
+  "userMessageCollapse",
   "shortcutOverrides", "voicePreferences",
 ]);
 // Reading-surface presets. Free pixel values are deliberately not accepted: the
@@ -59,6 +60,12 @@ const TRANSCRIPT_WIDE_BLOCKS = ["off", "default", "wider", "full"];
 const CODE_BLOCK_COLLAPSE_MODES = ["off", "long", "all"];
 const CODE_BLOCK_COLLAPSE_LINES = [10, 15, 25, 50];
 const CODE_BLOCK_WIDTHS = ["column", "wide"];
+// The retired ids -- marked-stable, incremark, incremark-typewriter,
+// incremark-synthetic, incremark-fast -- are deliberately absent. A stored value that is no
+// longer a renderer normalizes to null, and the client falls back to its
+// default rather than asking for something that no longer exists.
+const MARKDOWN_RENDERERS = ["incremark", "marked"];
+const USER_MESSAGE_COLLAPSE = ["off", "6", "10", "15", "25"];
 const stringList = (value, limit) => Array.isArray(value) && value.length <= limit
   && value.every((item) => typeof item === "string" && item.length <= 200);
 const oneOf = (value, choices) => typeof value === "string" && choices.includes(value);
@@ -84,8 +91,7 @@ export function validUiPreferencePatch(input = {}) {
     if (key === "sidebarChatLimit") return Number.isInteger(value) && value >= 5 && value <= 100;
     if (key === "collapsedProjectIds") return stringList(value, 200);
     if (["sidebarCollapsed", "rendererControlsVisible", "meteorField"].includes(key)) return typeof value === "boolean";
-    if (key === "markdownRenderer") return oneOf(value, ["marked-stable", "marked", "incremark", "incremark-typewriter", "incremark-synthetic"]);
-    if (key === "transcriptRenderer") return oneOf(value, ["marked-stable", "marked", "incremark", "incremark-typewriter", "incremark-synthetic", "incremark-advanced"]);
+    if (key === "markdownRenderer") return oneOf(value, MARKDOWN_RENDERERS);
     if (key === "composerSurface") return oneOf(value, ["static", "frosted-live"]);
     if (key === "contextMetrics") return stringList(value, 40);
     if (key === "incremarkPacing") return oneOf(value, ["adaptive", "fixed", "buffered"]);
@@ -94,6 +100,7 @@ export function validUiPreferencePatch(input = {}) {
     if (key === "codeBlockCollapse") return oneOf(value, CODE_BLOCK_COLLAPSE_MODES);
     if (key === "codeBlockCollapseLines") return CODE_BLOCK_COLLAPSE_LINES.includes(value);
     if (key === "codeBlockWidth") return oneOf(value, CODE_BLOCK_WIDTHS);
+    if (key === "userMessageCollapse") return oneOf(value, USER_MESSAGE_COLLAPSE);
     if (key === "shortcutOverrides") return validShortcutOverrides(value);
     if (key === "voicePreferences") return validVoicePreferences(value);
     return false;
@@ -166,8 +173,7 @@ export function normalizePreferences(input = {}, fallback = DEFAULTS, knownTempl
       : null),
     collapsedProjectIds: nullable("collapsedProjectIds", stringArray(200)),
     sidebarCollapsed: nullable("sidebarCollapsed", boolean),
-    markdownRenderer: nullable("markdownRenderer", choice(["marked-stable", "marked", "incremark", "incremark-typewriter", "incremark-synthetic"])),
-    transcriptRenderer: nullable("transcriptRenderer", choice(["marked-stable", "marked", "incremark", "incremark-typewriter", "incremark-synthetic", "incremark-advanced"])),
+    markdownRenderer: nullable("markdownRenderer", choice(MARKDOWN_RENDERERS)),
     rendererControlsVisible: nullable("rendererControlsVisible", boolean),
     composerSurface: nullable("composerSurface", choice(["static", "frosted-live"])),
     contextMetrics: nullable("contextMetrics", stringArray(40)),
@@ -179,6 +185,7 @@ export function normalizePreferences(input = {}, fallback = DEFAULTS, knownTempl
     codeBlockCollapseLines: nullable("codeBlockCollapseLines", (value) =>
       CODE_BLOCK_COLLAPSE_LINES.includes(value) ? value : null),
     codeBlockWidth: nullable("codeBlockWidth", choice(CODE_BLOCK_WIDTHS)),
+    userMessageCollapse: nullable("userMessageCollapse", choice(USER_MESSAGE_COLLAPSE)),
     shortcutOverrides: nullable("shortcutOverrides", (value) => validShortcutOverrides(value) ? plainObject(value) : null),
     voicePreferences: nullable("voicePreferences", (value) => validVoicePreferences(value) ? plainObject(value) : null),
   };

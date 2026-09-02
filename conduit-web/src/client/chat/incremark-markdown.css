@@ -1,0 +1,20 @@
+/* A message-level Incremark root is the only thing allowed to change this
+   sizing contract. The assistant message-content node is otherwise
+   intrinsically sized; an inline-size-contained descendant contributes zero
+   intrinsic inline size and collapses that ancestor. Give the message a
+   definite containing width first, then isolate only its Incremark root. An
+   inline preview and the Marked renderer never match these selectors. */
+.message-assistant [data-slot="message-content"]:has(.chat-markdown[data-renderer="incremark"]:not([data-inline])) {
+  width: 100%;
+}
+
+.chat-markdown[data-renderer="incremark"]:not([data-inline]),
+.chat-markdown[data-renderer="incremark"]:not([data-inline]) > .incremark {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.chat-markdown[data-renderer="incremark"]:not([data-inline]) > .incremark {
+  contain: inline-size;
+}

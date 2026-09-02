@@ -66,9 +66,13 @@ function scanFences(source: string) {
       };
       continue;
     }
+    // The opening pattern already consumed the whole marker run and the
+    // leading indent, so a closing fence is one whose remainder is blank.
+    // Building a RegExp per candidate line re-compiled it for every streamed
+    // update of every fence in the message.
     const closes = marker[0] === open.marker[0]
       && marker.length >= open.marker.length
-      && new RegExp(`^ {0,3}${marker[0]}{${open.marker.length},}\\s*$`).test(line.text);
+      && match[2]!.trim() === "";
     if (closes) {
       ranges.push({ start: open.start, end: line.end });
       open = null;

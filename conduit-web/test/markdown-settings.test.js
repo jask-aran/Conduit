@@ -1,88 +1,57 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { markdownRendererSwitchEnabled, selectedMarkdownRenderer, selectedMarkdownTypewriter } from "../src/client/chat/markdown-settings.ts";
+import {
+  isMarkdownRendererId,
+  MARKDOWN_RENDERER_DEFAULT,
+  MARKDOWN_RENDERER_OPTIONS,
+  selectedMarkdownRenderer,
+} from "../src/client/chat/markdown-settings.ts";
 
-function withBrowserSettings(search, stored, run) {
-  const previousLocation = globalThis.location;
-  const previousStorage = globalThis.localStorage;
+function withSearch(search, run) {
+  const previous = globalThis.location;
   globalThis.location = { search };
-  globalThis.localStorage = { getItem: (key) => stored[key] ?? null };
   try {
     return run();
   } finally {
-    if (previousLocation === undefined) delete globalThis.location;
-    else globalThis.location = previousLocation;
-    if (previousStorage === undefined) delete globalThis.localStorage;
-    else globalThis.localStorage = previousStorage;
+    if (previous === undefined) delete globalThis.location;
+    else globalThis.location = previous;
   }
 }
 
-test("new users default to the Incremark Synthetic renderer", () => {
-  withBrowserSettings("", {}, () => {
-    assert.equal(selectedMarkdownRenderer(), "incremark-synthetic");
-    assert.equal(selectedMarkdownTypewriter(), true);
+const stored = (value) => ({ getItem: () => value });
+
+test("new users get Incremark", () => {
+  withSearch("", () => {
+    assert.equal(selectedMarkdownRenderer(stored(null)), "incremark");
+    assert.equal(MARKDOWN_RENDERER_DEFAULT, "incremark");
   });
 });
 
-test("development renderer controls stay available on tunneled origins", () => {
-  withBrowserSettings("", {}, () => {
-    assert.equal(markdownRendererSwitchEnabled(), true);
+test("both offered renderers round-trip", () => {
+  withSearch("", () => {
+    for (const option of MARKDOWN_RENDERER_OPTIONS) {
+      assert.ok(isMarkdownRendererId(option.value), option.value);
+      assert.equal(selectedMarkdownRenderer(stored(option.value)), option.value);
+    }
+  });
+  assert.equal(MARKDOWN_RENDERER_OPTIONS.length, 2);
+});
+
+test("a retired renderer id falls back instead of stranding the reader", () => {
+  // These were selectable before the renderer surface collapsed to two. Nobody
+  // should be left pointing at a renderer that no longer exists.
+  withSearch("", () => {
+    for (const retired of ["marked-stable", "incremark-advanced", "incremark-typewriter", "incremark-synthetic", "incremark-fast", "current", ""]) {
+      assert.equal(selectedMarkdownRenderer(stored(retired)), "incremark", retired);
+    }
   });
 });
 
-test("the five renderer preferences stay distinct", () => {
-  for (const renderer of ["marked-stable", "marked", "incremark", "incremark-typewriter", "incremark-synthetic"]) {
-    withBrowserSettings("", { "conduit:markdown-renderer": renderer, "conduit:incremark-typewriter": renderer === "incremark" ? "0" : "1" }, () => {
-      assert.equal(selectedMarkdownRenderer(), renderer);
-    });
-  }
-});
-
-test("Immediate remains distinct from the retired Typewriter storage key", () => {
-  withBrowserSettings("", { "conduit:markdown-renderer": "incremark", "conduit:incremark-typewriter": "0" }, () => {
-    assert.equal(selectedMarkdownRenderer(), "incremark");
-    assert.equal(selectedMarkdownTypewriter(), false);
+test("the query override wins over storage, and a bad one is ignored", () => {
+  withSearch("?markdownRenderer=marked", () => {
+    assert.equal(selectedMarkdownRenderer(stored("incremark")), "marked");
   });
-  withBrowserSettings("", { "conduit:markdown-renderer": "incremark", "conduit:incremark-typewriter": "1" }, () => {
-    assert.equal(selectedMarkdownRenderer(), "incremark");
-    assert.equal(selectedMarkdownTypewriter(), false);
-  });
-});
-
-test("the legacy URL override still selects the explicit renderer when no renderer is stored", () => {
-  withBrowserSettings("?markdownTypewriter=0", {}, () => {
-    assert.equal(selectedMarkdownRenderer(), "incremark");
-    assert.equal(selectedMarkdownTypewriter(), false);
-  });
-  withBrowserSettings("?markdownTypewriter=1", {}, () => {
-    assert.equal(selectedMarkdownRenderer(), "incremark-typewriter");
-    assert.equal(selectedMarkdownTypewriter(), true);
-  });
-});
-
-test("explicit renderer and Typewriter preferences remain authoritative", () => {
-  withBrowserSettings("", {
-    "conduit:markdown-renderer": "marked",
-    "conduit:incremark-typewriter": "0",
-  }, () => {
-    assert.equal(selectedMarkdownRenderer(), "marked");
-    assert.equal(selectedMarkdownTypewriter(), false);
-  });
-});
-
-test("Synthetic uses the Typewriter display queue", () => {
-  withBrowserSettings("", { "conduit:markdown-renderer": "incremark-synthetic" }, () => {
-    assert.equal(selectedMarkdownRenderer(), "incremark-synthetic");
-    assert.equal(selectedMarkdownTypewriter(), true);
-  });
-});
-
-test("URL overrides take precedence over stored defaults", () => {
-  withBrowserSettings("?markdownRenderer=marked&markdownTypewriter=0", {
-    "conduit:markdown-renderer": "incremark",
-    "conduit:incremark-typewriter": "1",
-  }, () => {
-    assert.equal(selectedMarkdownRenderer(), "marked");
-    assert.equal(selectedMarkdownTypewriter(), false);
+  withSearch("?markdownRenderer=incremark-synthetic", () => {
+    assert.equal(selectedMarkdownRenderer(stored("marked")), "marked");
   });
 });
