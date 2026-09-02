@@ -164,17 +164,25 @@ export function shouldFollowAfterHistoryRestore(distanceFromBottom: number) {
   return distanceFromBottom <= TAIL_NEAR_LATEST_PX;
 }
 
+/**
+ * How close to the new bottom a clamped position has to land before an upward
+ * move is read as the content shrinking rather than as a reader scrolling.
+ */
+export const TAIL_CLAMP_TOLERANCE_PX = 1;
+
 export type TailScrollInput = {
   scrollTop: number;
   previousScrollTop: number | null;
   maxScrollTop: number;
+  /** The scrollable distance at the previous scroll observation. */
+  previousMaxScrollTop?: number | null;
   /** True once the user, not the spring, owns the scroll position. */
   userOwned: boolean;
   following: boolean;
 };
 
 export type TailScrollDecision = {
-  direction: "up" | "down" | "none";
+  direction: "up" | "down" | "none" | "clamp";
   distanceFromBottom: number;
   nearLatest: boolean;
   atBottom: boolean;
@@ -193,13 +201,28 @@ export type TailScrollDecision = {
  * viewport back down while the user was reading. An upward move now drops
  * following immediately and never schedules a rejoin, however close to the
  * bottom it happens to end.
+ *
+ * Not every upward move is a reader, though. Content above the viewport can get
+ * *shorter* mid-generation -- a KaTeX block replacing a taller placeholder is
+ * the common one -- and when it does the browser clamps scrollTop down to the
+ * new bottom on its own. That arrives as an unrequested upward move and used to
+ * hand the tail to a reader who never touched anything, which is a follow that
+ * detaches for good. A move up that is no larger than the shrink and lands on
+ * the new bottom is that clamp, and is not a handoff.
  */
 export function decideTailScroll(input: TailScrollInput): TailScrollDecision {
   const distanceFromBottom = Math.max(0, input.maxScrollTop - input.scrollTop);
   const nearLatest = distanceFromBottom < TAIL_NEAR_LATEST_PX;
   const atBottom = distanceFromBottom <= TAIL_REJOIN_PX;
   const delta = input.previousScrollTop == null ? 0 : input.scrollTop - input.previousScrollTop;
-  const direction = delta < -0.5 ? "up" : delta > 0.5 ? "down" : "none";
+  const shrinkPx = input.previousMaxScrollTop == null
+    ? 0
+    : Math.max(0, input.previousMaxScrollTop - input.maxScrollTop);
+  const clamped = delta < -0.5
+    && shrinkPx > 0
+    && -delta <= shrinkPx + TAIL_CLAMP_TOLERANCE_PX
+    && distanceFromBottom <= TAIL_CLAMP_TOLERANCE_PX;
+  const direction = clamped ? "clamp" : delta < -0.5 ? "up" : delta > 0.5 ? "down" : "none";
   if (direction === "up") {
     return { direction, distanceFromBottom, nearLatest, atBottom, following: false, rejoin: false };
   }

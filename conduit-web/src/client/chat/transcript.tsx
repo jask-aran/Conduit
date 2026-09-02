@@ -8,17 +8,21 @@ import { TurnTrace } from "./turn-trace";
 import { createTimelineStore } from "../state/timeline-store";
 import type { MarkdownRendererId } from "./markdown-settings";
 import { COMPOSER_SURFACE_CHANGE_EVENT, COMPOSER_SURFACE_OPTIONS, saveComposerSurface, selectedComposerSurface, type ComposerSurfaceMode } from "./composer-surface";
-import { saveTranscriptRenderer, selectedTranscriptRenderer, TRANSCRIPT_RENDERER_OPTIONS, type TranscriptRendererMode } from "./transcript-renderer";
+import { isIncremarkRenderer, MARKDOWN_RENDERER_OPTIONS, saveMarkdownRenderer, selectedMarkdownRenderer } from "./markdown-settings";
+import "./transcript-renderer.css";
 import { INCREMARK_PACING_OPTIONS, saveIncremarkPacing, selectedIncremarkPacing, type IncremarkPacingMode } from "./incremark-pacing";
 import { UI_PREFERENCE_CHANGE_EVENT } from "../preferences/ui-preferences";
 import { copyWithFeedback } from "./markdown-actions";
-import { CODE_BLOCK_TOGGLE_EVENT, syncCodeBlockCollapse } from "./code-block";
+import { CODE_BLOCK_TOGGLE_EVENT, publishCodeBlockToggle, syncCodeBlockCollapse } from "./code-block";
 import { highlightCodeBlocks } from "./code-highlight";
 import {
   selectedCodeBlockCollapse,
   selectedCodeBlockCollapseLines,
   isCodeBlockCollapseMode,
   isCodeBlockCollapseLines,
+  isUserMessageCollapseMode,
+  useUserMessageCollapse,
+  userMessageCollapseLines,
 } from "./transcript-appearance";
 import { mountTranscriptPanelMotion } from "./transcript-motion";
 import { mountTranscriptVisibility } from "./transcript-visibility";
@@ -39,7 +43,6 @@ import {
 import { captureTranscriptAnchor, restoreTranscriptAnchor } from "./transcript-anchor";
 
 const ChatMarkdown = lazy(() => import("./markdown").then((module) => ({ default: module.ChatMarkdown })));
-const IncremarkAdvancedMarkdown = lazy(() => import("./incremark-advanced").then((module) => ({ default: module.IncremarkAdvancedMarkdown })));
 const fullDateTime = (value?: string) => {
   if (!value) return "";
   const date = new Date(value);
@@ -54,6 +57,78 @@ const fullDateTime = (value?: string) => {
     timeZoneName: "short",
   }).format(date);
 };
+
+/**
+ * A user message, folded when it is long enough to push the answer off screen.
+ *
+ * The fold is a line clamp rather than a character budget, because what costs
+ * the reader is screen height, not text length -- one pasted 300-character
+ * paragraph is two lines, and twelve short lines is twelve. Whether a message
+ * actually exceeds the fold is therefore a measured fact.
+ *
+ * Measuring every bubble on load would be a forced layout per message, so the
+ * cheap arithmetic test runs first: a message that cannot reach the fold even
+ * at a pessimistic 24 characters per line is never measured at all, which is
+ * almost every message anyone sends.
+ */
+function UserMessageText(props: { text: string }) {
+  let text!: HTMLSpanElement;
+  const preference = useUserMessageCollapse();
+  const lines = () => userMessageCollapseLines(preference.mode());
+  // Starts false so the first paint is already folded: measuring an unfolded
+  // box would compare the content against itself and always report a fit.
+  const [fits, setFits] = createSignal(false);
+  const [expanded, setExpanded] = createSignal(false);
+  // Pessimistic: assume a line holds only 24 characters. A message under that
+  // budget cannot fill the fold at any column width, so it never gets measured.
+  const mayOverflow = () => {
+    const limit = lines();
+    if (!limit) return false;
+    let breaks = 1;
+    for (let index = 0; index < props.text.length; index += 1) {
+      if (props.text[index] === "\n") breaks += 1;
+    }
+    return breaks > limit || props.text.length > limit * 24;
+  };
+  const foldable = () => mayOverflow() && !fits();
+  const collapsed = () => foldable() && !expanded();
+  const measure = () => {
+    // Valid only while the clamp is applied, which is what collapsed() gates.
+    if (!collapsed()) return;
+    setFits(text.scrollHeight - text.clientHeight <= 1);
+  };
+
+  onMount(measure);
+  createEffect(() => {
+    // The fold moved or the column resized, so the previous verdict is stale.
+    // Re-fold first, then measure on the next frame once that has committed --
+    // reading in this tick would measure the box as it still is.
+    lines();
+    preference.readingWidthVersion();
+    if (!mayOverflow() || expanded()) return;
+    setFits(false);
+    requestAnimationFrame(measure);
+  });
+
+  const toggle = (event: MouseEvent) => {
+    const row = (event.currentTarget as HTMLElement).closest<HTMLElement>('[data-slot="message-scroller-item"]');
+    const previousTop = row?.getBoundingClientRect().top;
+    setExpanded((value) => !value);
+    // Unfolding a long message adds real height above everything below it.
+    // Reuse the code card's hold-and-re-measure path rather than leaving the
+    // reading position to browser scroll anchoring.
+    if (row && previousTop != null) publishCodeBlockToggle(row, previousTop);
+  };
+
+  return <>
+    <span ref={text} class="user-message-text" data-collapsed={collapsed() ? "true" : undefined}>{props.text}</span>
+    <Show when={foldable()}>
+      <button type="button" class="user-message-expand" aria-expanded={expanded()} onClick={toggle}>
+        {expanded() ? "Show less" : "Show more"}
+      </button>
+    </Show>
+  </>;
+}
 
 function Actions(props: { message: Message; precedingUserId?: string; chat: ActiveChatStore; partialContinue: boolean }) {
   const [copied, setCopied] = createSignal(false);
@@ -99,11 +174,8 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
   let previousMarkdownRenderer = props.markdownRenderer;
   const [following, setFollowing] = createSignal(true);
   const [composerSurface, setComposerSurface] = createSignal<ComposerSurfaceMode>(selectedComposerSurface());
-  const [transcriptRenderer, setTranscriptRenderer] = createSignal<TranscriptRendererMode>(selectedTranscriptRenderer(props.markdownRenderer));
+  const [markdownRenderer, setMarkdownRenderer] = createSignal<MarkdownRendererId>(selectedMarkdownRenderer());
   const [incremarkPacing, setIncremarkPacing] = createSignal<IncremarkPacingMode>(selectedIncremarkPacing());
-  const markdownRenderer = (): MarkdownRendererId => transcriptRenderer() === "incremark-advanced"
-    ? "incremark-synthetic"
-    : transcriptRenderer() as MarkdownRendererId;
   const switchComposerSurface = (next: ComposerSurfaceMode) => setComposerSurface(saveComposerSurface(next));
   // A reset relays out every managed block, so hold the reading position across
   // it rather than letting the height changes settle wherever they land.
@@ -113,16 +185,13 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
     transcriptVisibility.reset();
     requestAnimationFrame(() => restoreTranscriptAnchor(viewport, anchor, setViewportScrollTop));
   };
-  const switchTranscriptRenderer = (next: TranscriptRendererMode) => {
-    const crossesAdvancedBoundary = transcriptRenderer() === "incremark-advanced" || next === "incremark-advanced";
-    setTranscriptRenderer(saveTranscriptRenderer(next));
-    if (crossesAdvancedBoundary) queueMicrotask(resetVisibilityPreservingPosition);
-  };
+  const switchMarkdownRenderer = (next: MarkdownRendererId) => setMarkdownRenderer(saveMarkdownRenderer(next));
   const switchIncremarkPacing = (next: IncremarkPacingMode) => setIncremarkPacing(saveIncremarkPacing(next));
-  const advancedTranscript = () => transcriptRenderer() === "incremark-advanced";
-  const rendererUsesTypewriter = () => markdownRenderer() === "incremark-typewriter" || markdownRenderer() === "incremark-synthetic";
+  // Only Incremark reveals a message block by block, and only that reveal needs
+  // the tail to be followed by a spring rather than pinned to the bottom.
+  const rendererUsesTypewriter = () => isIncremarkRenderer(markdownRenderer());
   const rendererUsesInertialTailFollow = () => rendererUsesTypewriter();
-  const rendererMetric = () => advancedTranscript() ? "incremark-advanced" : markdownRenderer();
+  const rendererMetric = () => markdownRenderer();
   const timeline = createTimelineStore(
     props.chat.messages,
     props.chat.tools,
@@ -142,8 +211,11 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
   let typewriterTailTargetDeltaEma = 0;
   let programmaticScrollTop: number | null = null;
   let previousScrollTop: number | null = null;
+  // Paired with previousScrollTop: an upward move is only a reader if the
+  // scrollable distance did not shrink out from under it.
+  let previousMaxScrollTop: number | null = null;
   let previousUserMessageId: string | null = null;
-  let previousRenderer: TranscriptRendererMode | null = null;
+  let previousRenderer: MarkdownRendererId | null = null;
   const currentViewportScrollTop = () => viewport?.scrollTop ?? 0;
   const cancelTypewriterTailFrame = () => {
     if (typewriterTailFrame == null) return;
@@ -181,6 +253,7 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
     viewport.scrollTop = Math.round(next);
     programmaticScrollTop = viewport.scrollTop;
     previousScrollTop = viewport.scrollTop;
+    previousMaxScrollTop = viewportMaxScrollTop();
   };
   const viewportMaxScrollTop = () => usedMaxScrollTop({
     scrollHeight: viewport.scrollHeight,
@@ -324,17 +397,32 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
   // Highlighting is a settled-content concern, so it runs off the idle queue and
   // only ever touches cards it has not already done. Coalesced because
   // onRendered fires on every streaming frame.
+  //
+  // Scoped to the messages that actually re-rendered. Sweeping the whole thread
+  // meant every settle walked every code card in the chat to ask whether it had
+  // already been highlighted -- work proportional to the transcript, repeated
+  // for a change confined to the message at the bottom of it.
   let highlightIdle: number | null = null;
-  const scheduleHighlight = () => {
-    if (highlightIdle != null || !thread) return;
+  const highlightPending = new Set<HTMLElement>();
+  const scheduleHighlight = (root?: HTMLElement) => {
+    if (!thread) return;
+    // A caller with no root (a preference change, a renderer switch) means the
+    // whole thread is suspect and the sweep has to be broad.
+    if (root && root.isConnected) highlightPending.add(root);
+    else highlightPending.clear();
+    if (highlightIdle != null) return;
     highlightIdle = requestIdleCallback(() => {
       highlightIdle = null;
-      void highlightCodeBlocks(thread);
+      const roots = highlightPending.size
+        ? [...highlightPending].filter((element) => element.isConnected)
+        : [thread];
+      highlightPending.clear();
+      for (const element of roots) void highlightCodeBlocks(element);
     }, { timeout: 600 });
   };
   let displayScrollQueued = false;
-  const settleAfterMarkdown = () => {
-    scheduleHighlight();
+  const settleAfterMarkdown = (root?: HTMLElement) => {
+    scheduleHighlight(root);
     if (rendererUsesInertialTailFollow()) {
       requestTypewriterTailFollow("markdown-render");
       return;
@@ -432,15 +520,16 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
     previousUserMessageId = trailingUserId;
     if (following() && !rendererUsesTypewriter()) scrollBottom();
   });
+  // main owns the preference; the transcript mirrors it so a change made in
+  // Settings and one made in the picker above the transcript take the same path.
   createEffect(() => {
     const next = props.markdownRenderer;
     if (next === previousMarkdownRenderer) return;
     previousMarkdownRenderer = next;
-    if (advancedTranscript()) return;
-    setTranscriptRenderer(saveTranscriptRenderer(next));
+    setMarkdownRenderer(next);
   });
   createEffect(() => {
-    const renderer = transcriptRenderer();
+    const renderer = markdownRenderer();
     const previous = previousRenderer;
     if (previous == null) {
       previousRenderer = renderer;
@@ -448,7 +537,9 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
     }
     if (renderer === previous) return;
     previousRenderer = renderer;
-    if (renderer === "incremark-advanced" || previous === "incremark-advanced") resetVisibilityPreservingPosition();
+    // The two renderers lay a message out differently, so every cached block
+    // size the virtualizer is holding is stale.
+    resetVisibilityPreservingPosition();
     if (rendererUsesInertialTailFollow()) resumeTypewriterTailFollow("renderer-switch");
     else {
       cancelTypewriterTailRejoin();
@@ -464,9 +555,9 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
       const detail = (event as CustomEvent<{ key?: string; value?: unknown }>).detail;
       const params = new URLSearchParams(location.search);
       if (detail?.key === "composerSurface") setComposerSurface(selectedComposerSurface());
-      else if (detail?.key === "transcriptRenderer" && typeof detail.value === "string"
-        && !params.has("transcriptRenderer") && !params.has("markdownRenderer")) {
-        setTranscriptRenderer(detail.value as TranscriptRendererMode);
+      else if (detail?.key === "markdownRenderer" && typeof detail.value === "string"
+        && !params.has("markdownRenderer")) {
+        setMarkdownRenderer(detail.value as MarkdownRendererId);
       } else if (detail?.key === "incremarkPacing" && typeof detail.value === "string"
         && !params.has("incremarkPacing") && !params.has("adaptivePacing")) {
         setIncremarkPacing(detail.value as IncremarkPacingMode);
@@ -578,14 +669,17 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
       }
     };
     const onScroll = () => {
+      const maxScrollTop = viewportMaxScrollTop();
       if (empty()) {
         setFollowing(true);
         previousScrollTop = viewport.scrollTop;
+        previousMaxScrollTop = maxScrollTop;
         return;
       }
       if (programmaticScrollTop != null && Math.abs(viewport.scrollTop - programmaticScrollTop) < 1) {
         programmaticScrollTop = null;
         previousScrollTop = viewport.scrollTop;
+        previousMaxScrollTop = maxScrollTop;
         return;
       }
       const wasProgrammatic = programmaticScrollTop != null;
@@ -593,11 +687,13 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
       const decision = decideTailScroll({
         scrollTop: viewport.scrollTop,
         previousScrollTop,
-        maxScrollTop: viewportMaxScrollTop(),
+        maxScrollTop,
+        previousMaxScrollTop,
         userOwned: typewriterTailState.owner === "user",
         following: following(),
       });
       previousScrollTop = viewport.scrollTop;
+      previousMaxScrollTop = maxScrollTop;
       // An unrequested upward move is always a user: the spring only ever
       // travels toward the bottom, and browser scroll anchoring only pushes the
       // position down as content grows above. wheel and touchstart catch just
@@ -670,14 +766,14 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
     });
   });
 
-  return <div ref={transcriptRoot} class="transcript" data-slot="message-scroller" data-markdown-renderer={markdownRenderer()} data-transcript-renderer={transcriptRenderer()} data-markdown-typewriter={rendererUsesTypewriter() ? "true" : undefined} data-incremark-pacing={rendererUsesTypewriter() ? incremarkPacing() : undefined} data-markdown-synthetic-math={markdownRenderer() === "incremark-synthetic" ? "true" : undefined}>
+  return <div ref={transcriptRoot} class="transcript" data-slot="message-scroller" data-markdown-renderer={markdownRenderer()} data-markdown-typewriter={rendererUsesTypewriter() ? "true" : undefined} data-incremark-pacing={rendererUsesTypewriter() ? incremarkPacing() : undefined}>
     <Show when={props.rendererControlsVisible}>
       <div class="composer-renderer-switch">
         <label>Composer renderer<select aria-label="Composer renderer" title="Composer renderer" value={composerSurface()} onChange={(event) => switchComposerSurface(event.currentTarget.value as ComposerSurfaceMode)}>
           <For each={COMPOSER_SURFACE_OPTIONS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
         </select></label>
-        <label>Transcript renderer<select aria-label="Transcript renderer" title="Transcript renderer" value={transcriptRenderer()} onChange={(event) => switchTranscriptRenderer(event.currentTarget.value as TranscriptRendererMode)}>
-          <For each={TRANSCRIPT_RENDERER_OPTIONS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
+        <label>Transcript renderer<select aria-label="Transcript renderer" title="Transcript renderer" value={markdownRenderer()} onChange={(event) => switchMarkdownRenderer(event.currentTarget.value as MarkdownRendererId)}>
+          <For each={MARKDOWN_RENDERER_OPTIONS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
         </select></label>
         <Show when={rendererUsesTypewriter()}>
           <label>Typewriter pacing<select aria-label="Typewriter pacing" title="Typewriter pacing" value={incremarkPacing()} onChange={(event) => switchIncremarkPacing(event.currentTarget.value as IncremarkPacingMode)}>
@@ -694,7 +790,10 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
         </Show>
         <Show when={empty()}><div class="empty-thread" data-slot="message-scroller-item"><div class="welcome"><h1>How can I help you today?</h1></div></div></Show>
         <For each={timeline}>{(item) => {
-          if (item.type === "trace") return <div data-slot="message-scroller-item"><TurnTrace trace={item.value} sessionId={props.chat.loadedId()} renderer={markdownRenderer()} pacing={incremarkPacing()} profileLabel={props.profileLabel} /></div>;
+          if (item.type === "trace") {
+            let traceRow!: HTMLDivElement;
+            return <div ref={traceRow} data-slot="message-scroller-item"><TurnTrace trace={item.value} sessionId={props.chat.loadedId()} renderer={markdownRenderer()} pacing={incremarkPacing()} profileLabel={props.profileLabel} onRendered={() => settleAfterMarkdown(traceRow)} /></div>;
+          }
           const message = createMemo(() => item.value);
           const user = createMemo(() => message().role === "user");
           const failed = createMemo(() => !user() && message().stopReason === "error");
@@ -703,8 +802,9 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
             const last = props.chat.messages().at(-1);
             return props.chat.streaming() && !user() && Boolean(last && (message().key || message().id) === (last.key || last.id));
           });
-          const preceding = createMemo(() => !user() ? props.chat.messages().slice(0, item.index).findLast((candidate) => candidate.role === "user") : undefined);
-          return <div data-slot="message-scroller-item" data-message-id={message().id}>
+          const precedingUserId = () => user() ? undefined : item.precedingUserId;
+          let row!: HTMLDivElement;
+          return <div ref={row} data-slot="message-scroller-item" data-message-id={message().id}>
             <article data-slot="message" data-align={user() ? "end" : "start"} class={user() ? "message-user" : "message-assistant"}>
               <div data-slot="message-content">
                 <Show when={message().timestamp}><time>{new Date(message().timestamp!).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</time></Show>
@@ -712,9 +812,7 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
                   <div data-slot="bubble-content">
                     <Show when={user()} fallback={<>
                       <Show when={message().content}><Suspense fallback={<div class="markdown-skeleton" />}>
-                        <Show when={advancedTranscript()} fallback={<ChatMarkdown renderer={markdownRenderer()} typewriter={rendererUsesTypewriter()} syntheticMath={markdownRenderer() === "incremark-synthetic"} pacing={incremarkPacing()} displayKey={item.displayKey} streaming={live()} streamVersion={item.streamVersion} onRendered={settleAfterMarkdown}>{message().content || ""}</ChatMarkdown>}>
-                          <IncremarkAdvancedMarkdown renderer="incremark-synthetic" pacing={incremarkPacing()} displayKey={item.displayKey} streaming={live()} streamVersion={item.streamVersion} onRendered={settleAfterMarkdown}>{message().content || ""}</IncremarkAdvancedMarkdown>
-                        </Show>
+                        <ChatMarkdown renderer={markdownRenderer()} pacing={incremarkPacing()} displayKey={item.displayKey} streaming={live()} streamVersion={item.streamVersion} onRendered={() => settleAfterMarkdown(row)}>{message().content || ""}</ChatMarkdown>
                       </Suspense></Show>
                       <Show when={failed()}>
                         <details class="assistant-error" open role="alert">
@@ -728,13 +826,13 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
                           <pre>{message().errorMessage || "The model request failed."}</pre>
                         </details>
                       </Show>
-                    </>}><span class="user-message-text">{message().content || ""}</span></Show>
+                    </>}><UserMessageText text={message().content || ""} /></Show>
                   </div>
                 </div>
                 <Show when={user() && message().pending}><div class="marker">{message().queueMode === "steer" ? "Queued · steer (after tools)" : "Queued · follow-up (after turn)"}</div></Show>
                 <Show when={user() && message().attachments?.length}><AttachmentCards items={message().attachments!} chatId={props.chat.loadedId()} label="Message attachments" /></Show>
                 <Show when={message().stopped}><div class="marker">{message().status === "stopping" ? "Stopping…" : "Stopped"}</div></Show>
-                <Actions message={message()} precedingUserId={preceding()?.id} chat={props.chat} partialContinue={props.partialContinue} />
+                <Actions message={message()} precedingUserId={precedingUserId()} chat={props.chat} partialContinue={props.partialContinue} />
               </div>
             </article>
           </div>;
