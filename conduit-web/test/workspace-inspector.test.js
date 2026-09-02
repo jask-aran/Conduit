@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { promisify } from "node:util";
-import { listWorkspaceDirectory, readWorkspaceDiff, readWorkspaceFile, runBoundedGit } from "../src/workspace-inspector.js";
+import { listWorkspaceDirectory, readWorkspaceDiff, readWorkspaceFile, runBoundedGit, writeWorkspaceFile } from "../src/workspace-inspector.js";
 
 const run = promisify(execFile);
 
@@ -41,6 +41,20 @@ test("workspace tree bounds accepted entries after filtering hidden and symlinke
   assert.deepEqual([...listing.entries].sort((left, right) => left.type === right.type ? left.name.localeCompare(right.name) : left.type === "directory" ? -1 : 1), listing.entries);
   assert.equal(listing.entries.some((entry) => entry.name === ".conduit"), false);
   assert.equal(listing.entries.some((entry) => entry.name === "symlinked"), false);
+});
+
+test("workspace writes create files and reject stale or implicit overwrites", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-inspector-write-"));
+  await fs.mkdir(path.join(root, "src"));
+  await fs.writeFile(path.join(root, "src", "main.js"), "one\n");
+  const current = await readWorkspaceFile(root, "src/main.js");
+  const saved = await writeWorkspaceFile(root, "src/main.js", Buffer.from("two\n"), { expectedRevision: current.revision });
+  assert.equal((await readWorkspaceFile(root, "src/main.js")).content, "two\n");
+  assert.notEqual(saved.revision, current.revision);
+  await assert.rejects(writeWorkspaceFile(root, "src/main.js", Buffer.from("stale\n"), { expectedRevision: current.revision }), { code: "workspace_file_changed" });
+  await writeWorkspaceFile(root, "src/new.txt", Buffer.from("new\n"));
+  await assert.rejects(writeWorkspaceFile(root, "src/new.txt", Buffer.from("replace\n")), { code: "workspace_file_exists" });
+  await assert.rejects(writeWorkspaceFile(root, ".conduit/private.txt", Buffer.from("no\n")), { code: "hidden_workspace_path" });
 });
 
 test("workspace diff reports clean, dirty, staged, and non-git roots", async () => {

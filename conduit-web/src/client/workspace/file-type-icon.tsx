@@ -128,6 +128,41 @@ function fileIconKind(name: string): FileIconKind | null {
   return extensionKinds[separator >= 0 ? lower.slice(separator + 1) : ""] || null;
 }
 
+const highlightLanguages: Partial<Record<FileIconKind, string>> = {
+  c: "cpp",
+  cpp: "cpp",
+  csharp: "csharp",
+  css: "css",
+  docker: "dockerfile",
+  env: "bash",
+  git: "bash",
+  go: "go",
+  html: "xml",
+  java: "java",
+  javascript: "javascript",
+  json: "json",
+  markdown: "markdown",
+  notebook: "json",
+  php: "php",
+  python: "python",
+  ruby: "ruby",
+  rust: "rust",
+  shell: "bash",
+  sql: "sql",
+  svelte: "xml",
+  typescript: "typescript",
+  vue: "xml",
+  yaml: "yaml",
+};
+
+export function fileHighlightLanguage(name: string) {
+  const extension = name.toLowerCase().split(".").at(-1);
+  if (extension === "json" || extension === "jsonc") return "json";
+  if (extension === "yaml" || extension === "yml") return "yaml";
+  const kind = fileIconKind(name);
+  return kind ? highlightLanguages[kind] || "" : "";
+}
+
 export function FileTypeIcon(props: { name: string }) {
   const kind = () => fileIconKind(props.name);
   return <Show when={kind()} fallback={<FileIcon class="workspace-file-icon-generic" aria-hidden="true" />}>
