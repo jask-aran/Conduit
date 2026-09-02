@@ -217,6 +217,32 @@ export async function writeWorkspaceFile(root, relativePath, content, { expected
   return { path: segments.join("/"), size: content.byteLength, revision: fileRevision(content) };
 }
 
+export async function runWorkspaceGitAction(root, { action, relativePath, message }) {
+  const resolved = await resolveInspectorPath(root, "", { kind: "directory" });
+  await runBoundedGit(resolved.path, ["rev-parse", "--is-inside-work-tree"]);
+  const gitPath = () => {
+    const value = safeSegments(relativePath).join("/");
+    if (!value) throw inspectorError("invalid_workspace_path", "The requested path is invalid");
+    return value;
+  };
+  let args;
+  if (action === "stage") args = ["add", "--", gitPath()];
+  else if (action === "stage-all") args = ["add", "-A"];
+  else if (action === "unstage") args = ["reset", "--", gitPath()];
+  else if (action === "unstage-all") args = ["reset"];
+  else if (action === "commit") {
+    const subject = String(message || "").trim();
+    if (!subject || subject.length > 5000 || subject.includes("\0")) throw inspectorError("workspace_git_message_invalid", "Commit message must contain 1 to 5000 characters");
+    args = ["commit", "-m", subject];
+  } else if (action === "push") args = ["push"];
+  else if (action === "fetch") args = ["fetch", "--all"];
+  else if (action === "pull") args = ["pull", "--ff-only"];
+  else throw inspectorError("workspace_git_action_invalid", "Git action is not supported");
+  const result = await runBoundedGit(resolved.path, args, { maxBuffer: 512 * 1024, timeoutMs: ["fetch", "pull", "push"].includes(action) ? 60_000 : GIT_COMMAND_TIMEOUT_MS });
+  inspections.delete(resolved.path);
+  return { ok: true, output: [result.stdout, result.stderr].filter(Boolean).join("\n").trim() };
+}
+
 function parseStatus(output) {
   return output.split("\0").filter(Boolean).map((record) => ({ status: record.slice(0, 2), path: record.slice(3) }));
 }
@@ -228,16 +254,29 @@ function parseLog(output) {
   });
 }
 
+function parseRefs(output) {
+  return output.split("\n").filter((line) => line && !line.split("\0", 1)[0].endsWith("/HEAD")).map((line) => {
+    const [fullName, name, hash, upstream] = line.split("\0");
+    return {
+      name,
+      hash,
+      upstream: upstream || null,
+      kind: fullName.startsWith("refs/heads/") ? "local" : fullName.startsWith("refs/remotes/") ? "remote" : "tag",
+    };
+  });
+}
+
 async function inspectOverview(root, { signal, runGit }) {
   try { await runGit(root, ["rev-parse", "--is-inside-work-tree"], { signal }); }
   catch (error) {
     if (isAbort(error)) throw error;
     return { repository: false, files: [], diff: "" };
   }
-  const [{ stdout: status }, { stdout: branch }, { stdout: log }] = await Promise.all([
+  const [{ stdout: status }, { stdout: branch }, { stdout: log }, { stdout: refs }] = await Promise.all([
     runGit(root, ["status", "--porcelain=v1", "-z", "--no-renames", "--untracked-files=all"], { signal, maxBuffer: 2 * 1024 * 1024 }),
     runGit(root, ["branch", "--show-current"], { signal }),
-    runGit(root, ["log", "--graph", "-12", "--pretty=format:%x1f%H%x1f%h%x1f%s%x1f%an%x1f%aI"], { signal, maxBuffer: 512 * 1024 }).catch((error) => isAbort(error) ? Promise.reject(error) : { stdout: "" }),
+    runGit(root, ["log", "--all", "--graph", "-30", "--pretty=format:%x1f%H%x1f%h%x1f%s%x1f%an%x1f%aI"], { signal, maxBuffer: 512 * 1024 }).catch((error) => isAbort(error) ? Promise.reject(error) : { stdout: "" }),
+    runGit(root, ["for-each-ref", "--format=%(refname)%00%(refname:short)%00%(objectname)%00%(upstream:short)", "refs/heads", "refs/remotes", "refs/tags"], { signal, maxBuffer: 512 * 1024 }).catch((error) => isAbort(error) ? Promise.reject(error) : { stdout: "" }),
   ]);
   let upstream = null;
   let ahead = 0;
@@ -256,6 +295,7 @@ async function inspectOverview(root, { signal, runGit }) {
     ahead,
     behind,
     commits: parseLog(log),
+    refs: parseRefs(refs),
     files: parseStatus(status),
     diff: "",
   };

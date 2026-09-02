@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { promisify } from "node:util";
-import { listWorkspaceDirectory, readWorkspaceDiff, readWorkspaceFile, runBoundedGit, writeWorkspaceFile } from "../src/workspace-inspector.js";
+import { listWorkspaceDirectory, readWorkspaceDiff, readWorkspaceFile, runBoundedGit, runWorkspaceGitAction, writeWorkspaceFile } from "../src/workspace-inspector.js";
 
 const run = promisify(execFile);
 
@@ -71,6 +71,7 @@ test("workspace diff reports clean, dirty, staged, and non-git roots", async () 
   assert.ok(result.branch);
   assert.equal(result.files.length, 0);
   assert.equal(result.commits[0].subject, "fixture");
+  assert.equal(result.refs.some((ref) => ref.kind === "local" && ref.hash === result.commits[0].hash), true);
   await fs.writeFile(path.join(root, "tracked.txt"), "one\ntwo\n");
   result = await readWorkspaceDiff(root, { includePatch: true });
   assert.equal(result.files[0].status, " M");
@@ -79,6 +80,48 @@ test("workspace diff reports clean, dirty, staged, and non-git roots", async () 
   result = await readWorkspaceDiff(root, { includePatch: true });
   assert.equal(result.files[0].status, "M ");
   assert.match(result.diff, /Staged/);
+});
+
+test("workspace Git actions stage, unstage, and commit without changing file contents", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-git-actions-"));
+  await run("git", ["init", "-q"], { cwd: root });
+  await run("git", ["config", "user.email", "test@conduit.local"], { cwd: root });
+  await run("git", ["config", "user.name", "Conduit Test"], { cwd: root });
+  await fs.writeFile(path.join(root, "tracked.txt"), "one\n");
+  await runWorkspaceGitAction(root, { action: "stage", relativePath: "tracked.txt" });
+  assert.equal((await readWorkspaceDiff(root)).files[0].status, "A ");
+  await runWorkspaceGitAction(root, { action: "commit", message: "Initial commit" });
+  await fs.writeFile(path.join(root, "tracked.txt"), "two\n");
+  await runWorkspaceGitAction(root, { action: "stage-all" });
+  assert.equal((await readWorkspaceDiff(root)).files[0].status, "M ");
+  await runWorkspaceGitAction(root, { action: "unstage-all" });
+  assert.equal((await readWorkspaceDiff(root)).files[0].status, " M");
+  assert.equal(await fs.readFile(path.join(root, "tracked.txt"), "utf8"), "two\n");
+});
+
+test("workspace Git actions fetch and fast-forward the current branch", async () => {
+  const parent = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-git-sync-"));
+  const remote = path.join(parent, "remote.git");
+  const local = path.join(parent, "local");
+  const peer = path.join(parent, "peer");
+  await run("git", ["init", "--bare", "-q", remote]);
+  await run("git", ["clone", "-q", remote, local]);
+  await run("git", ["config", "user.email", "test@conduit.local"], { cwd: local });
+  await run("git", ["config", "user.name", "Conduit Test"], { cwd: local });
+  await fs.writeFile(path.join(local, "tracked.txt"), "one\n");
+  await run("git", ["add", "tracked.txt"], { cwd: local });
+  await run("git", ["commit", "-qm", "fixture"], { cwd: local });
+  await run("git", ["push", "-qu", "origin", "HEAD"], { cwd: local });
+  await run("git", ["clone", "-q", remote, peer]);
+  await run("git", ["config", "user.email", "peer@conduit.local"], { cwd: peer });
+  await run("git", ["config", "user.name", "Conduit Peer"], { cwd: peer });
+  await fs.writeFile(path.join(peer, "tracked.txt"), "two\n");
+  await run("git", ["commit", "-qam", "remote change"], { cwd: peer });
+  await run("git", ["push", "-q"], { cwd: peer });
+
+  await runWorkspaceGitAction(local, { action: "fetch" });
+  await runWorkspaceGitAction(local, { action: "pull" });
+  assert.equal(await fs.readFile(path.join(local, "tracked.txt"), "utf8"), "two\n");
 });
 
 test("workspace inspection shares active overview work and defers patch commands", async () => {

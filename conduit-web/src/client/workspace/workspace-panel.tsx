@@ -1,25 +1,31 @@
-import { batch, createEffect, createMemo, createSignal, For, on, onCleanup, Show, type Accessor } from "solid-js";
-import { BoxesIcon, ChevronsUpIcon, ChevronDownIcon, ChevronRightIcon, CopyIcon, DownloadIcon, EyeIcon, EyeOffIcon, FolderIcon, GitBranchIcon, GitCompareArrowsIcon, Maximize2Icon, Minimize2Icon, PencilIcon, PinIcon, PinOffIcon, RefreshCwIcon, SaveIcon, SearchIcon, TerminalIcon, UploadIcon, XIcon } from "lucide-solid";
+import { batch, createEffect, createMemo, createSignal, For, lazy, on, onCleanup, Show, Suspense, type Accessor } from "solid-js";
+import { BoxesIcon, CheckIcon, ChevronsUpIcon, ChevronDownIcon, ChevronRightIcon, CirclePlusIcon, CopyIcon, DownloadIcon, EyeIcon, EyeOffIcon, FileDiffIcon, FolderIcon, GitBranchIcon, GitCommitHorizontalIcon, GitCompareArrowsIcon, Maximize2Icon, Minimize2Icon, PanelLeftCloseIcon, PanelLeftOpenIcon, PencilIcon, PinIcon, PinOffIcon, RefreshCwIcon, SaveIcon, SearchIcon, SendIcon, TerminalIcon, Undo2Icon, UploadIcon, WrapTextIcon, XIcon } from "lucide-solid";
 import { Button, ContextMenu, ContextMenuContent, ContextMenuGroup, ContextMenuItem, ContextMenuSeparator, ContextMenuTrigger, Spinner } from "@/components/primitives";
 import { api, asList } from "../api/client";
 import { authorizedFetch } from "../api/native-auth-client";
 import { httpUrl } from "../api/transport";
-import { highlighterReady, highlightToHtml, primeHighlighter } from "../chat/code-highlight";
 import { focusFirst, isMobileLayout, restoreFocus } from "../navigation/mobile-layout";
 import { ownsWorkspaceRequest, type WorkspaceRequest } from "./request-ownership";
 import { TerminalPane } from "../remotes/terminal-pane";
 import { dispatchPanelGeometryMotion, PANEL_MOTION_DURATION_MS } from "../panel-motion";
-import { fileHighlightLanguage, FileTypeIcon } from "./file-type-icon";
+import { FileTypeIcon } from "./file-type-icon";
 import "./workspace.css";
 
 interface TreeEntry { name: string; path: string; type: "directory" | "file" | "other"; }
 interface DirectoryListing { entries: TreeEntry[]; truncated: boolean; }
 interface FilePreview { path: string; size: number; revision: string; content: string; }
 interface FileWriteResult { path: string; size: number; revision: string; }
+interface GitActionResult { ok: true; output?: string; }
 interface GitCommit { graph: string; hash: string; shortHash: string; subject: string; author: string; authoredAt: string; }
-interface DiffPayload { repository: boolean; branch?: string; upstream?: string | null; ahead?: number; behind?: number; commits?: GitCommit[]; files: { status: string; path: string }[]; diff: string; }
+interface GitRef { name: string; hash: string; upstream: string | null; kind: "local" | "remote" | "tag"; }
+interface DiffPayload { repository: boolean; branch?: string; upstream?: string | null; ahead?: number; behind?: number; commits?: GitCommit[]; refs?: GitRef[]; files: { status: string; path: string }[]; diff: string; }
 type PanelTab = "files" | "diff" | "artifacts" | "terminal";
 type ArtifactMode = "outputs" | "interactive";
+type GitAction = "stage" | "stage-all" | "unstage" | "unstage-all" | "commit" | "fetch" | "pull" | "push";
+
+function isPanelTab(value: string): value is PanelTab {
+  return value === "files" || value === "diff" || value === "artifacts" || value === "terminal";
+}
 
 interface WorkspaceCacheEntry {
   directories: Record<string, DirectoryListing>;
@@ -33,7 +39,36 @@ const MAX_CACHED_WORKSPACES = 6;
 const workspaceCache = new Map<string, WorkspaceCacheEntry>();
 const COMPACT_UI_MIGRATION_KEY = "conduit:compact-ui-v2";
 const MIN_DETAIL_HEIGHT = 32;
-const WIDE_FILES_MIN_WIDTH = 560;
+const WIDE_FILES_MIN_WIDTH = 720;
+const DEFAULT_TREE_WIDTH = 160;
+const MIN_TREE_WIDTH = 128;
+const MAX_TREE_WIDTH = 320;
+const WRAP_LINES_KEY = "conduit:workspace:wrap-lines";
+const WorkspaceEditor = lazy(() => import("./workspace-editor"));
+
+function CommitHistory(props: { commits: GitCommit[]; refs: GitRef[]; branch?: string; onCopy: (hash: string) => void; labelled?: boolean }) {
+  return <section class="workspace-history">
+    <Show when={props.labelled}><header><div><GitCommitHorizontalIcon /><span>History</span></div><small>{props.commits.length} recent</small></header></Show>
+    <div class="workspace-history-list">
+      <For each={props.commits}>{(commit) =>
+        <div class="workspace-commit">
+          <code class="workspace-graph-rail" aria-hidden="true">{commit.graph || "*"}</code>
+          <button type="button" title={`Copy ${commit.hash} · ${commit.author} · ${new Date(commit.authoredAt).toLocaleString()}`} onClick={() => props.onCopy(commit.hash)}>
+            <div class="workspace-commit-copy"><span>{commit.subject}</span><Show when={props.refs.some((ref) => ref.hash === commit.hash)}><div class="workspace-commit-refs"><For each={props.refs.filter((ref) => ref.hash === commit.hash)}>{(ref) => <code data-kind={ref.kind} data-current={ref.kind === "local" && ref.name === props.branch}>{ref.kind === "local" && ref.name === props.branch ? `HEAD · ${ref.name}` : ref.name}</code>}</For></div></Show></div>
+            <small>{commit.author}</small>
+            <code>{commit.shortHash}</code>
+          </button>
+        </div>
+      }</For>
+    </div>
+  </section>;
+}
+
+function PatchView(props: { content: string }) {
+  return <pre class="workspace-diff-content"><code><For each={props.content.split("\n")}>{(line) =>
+    <span class="workspace-patch-line" data-kind={line.startsWith("+") && !line.startsWith("+++") ? "addition" : line.startsWith("-") && !line.startsWith("---") ? "deletion" : line.startsWith("@@") ? "hunk" : line.startsWith("# ") || line.startsWith("diff ") ? "heading" : "context"}>{line || " "}</span>
+  }</For></code></pre>;
+}
 
 function storedPaths(key: string) {
   try {
@@ -44,10 +79,12 @@ function storedPaths(key: string) {
   }
 }
 
-function lineNumbers(content: string) {
-  let lines = 1;
-  for (const character of content) if (character === "\n") lines += 1;
-  return Array.from({ length: lines }, (_, index) => index + 1).join("\n");
+function formatFileSize(bytes: number) {
+  if (bytes < 1024) return `${bytes} B`;
+  const units = ["KB", "MB", "GB", "TB"];
+  const unit = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)) - 1, units.length - 1);
+  const value = bytes / 1024 ** (unit + 1);
+  return `${new Intl.NumberFormat(undefined, { maximumFractionDigits: value < 10 ? 1 : 0 }).format(value)} ${units[unit]}`;
 }
 
 function migrateWorkspaceGeometry() {
@@ -88,9 +125,10 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
   let resizeHandle: HTMLDivElement | undefined;
   let detailHost: HTMLElement | undefined;
   let treeElement: HTMLElement | undefined;
+  let treeResizeHandle: HTMLDivElement | undefined;
+  let splitHost: HTMLElement | undefined;
   let fileFilterInput: HTMLInputElement | undefined;
   let fileUploadInput: HTMLInputElement | undefined;
-  let editorTextarea: HTMLTextAreaElement | undefined;
   let filesResizeObserver: ResizeObserver | undefined;
   let panelEdgeMotionId: number | null = null;
   let panelMotionId = 0;
@@ -104,6 +142,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
   const [pending, setPending] = createSignal(new Map<number, { foreground: boolean }>());
   const storageKey = () => `conduit:workspace-panel:${props.chatId()}:tab`;
   const [tab, setTab] = createSignal<PanelTab>((localStorage.getItem(storageKey()) as PanelTab) || "files");
+  const [secondaryTab, setSecondaryTab] = createSignal<PanelTab | null>(null);
   const [directories, setDirectories] = createSignal<Record<string, DirectoryListing>>({});
   const [expanded, setExpanded] = createSignal<Set<string>>(new Set());
   const [preview, setPreview] = createSignal<FilePreview | null>(null);
@@ -117,32 +156,39 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
   const [saving, setSaving] = createSignal(false);
   const [uploading, setUploading] = createSignal(false);
   const [uploadDirectory, setUploadDirectory] = createSignal("");
+  const [wrapLines, setWrapLines] = createSignal(localStorage.getItem(WRAP_LINES_KEY) === "true");
   const [diff, setDiff] = createSignal<DiffPayload | null>(null);
+  const [commitMessage, setCommitMessage] = createSignal("");
+  const [gitAction, setGitAction] = createSignal("");
+  const [stagedOpen, setStagedOpen] = createSignal(true);
+  const [changesOpen, setChangesOpen] = createSignal(true);
   const [error, setError] = createSignal("");
   const widthKey = () => `conduit:workspace-panel:${props.projectId()}:width`;
   const showHiddenKey = () => `conduit:workspace-panel:${props.projectId()}:show-hidden`;
   const keptVisibleKey = () => `conduit:workspace-panel:${props.projectId()}:kept-visible`;
+  const treeWidthKey = () => `conduit:workspace-panel:${props.projectId()}:tree-width`;
+  const treeCollapsedKey = () => `conduit:workspace-panel:${props.projectId()}:tree-collapsed`;
+  const splitRatioKey = () => `conduit:workspace-panel:${props.projectId()}:split-ratio`;
   const [width, setWidth] = createSignal(Math.max(256, Math.min(496, Number(localStorage.getItem(widthKey())) || 336)));
   const [shellWidth, setShellWidth] = createSignal(props.open() ? width() : 0);
   const [shellGap, setShellGap] = createSignal(props.open() && !isMobileLayout() ? 8 : 0);
+  const [treeWidth, setTreeWidth] = createSignal(Math.max(MIN_TREE_WIDTH, Math.min(MAX_TREE_WIDTH, Number(localStorage.getItem(treeWidthKey())) || DEFAULT_TREE_WIDTH)));
+  const [treeCollapsed, setTreeCollapsed] = createSignal(localStorage.getItem(treeCollapsedKey()) === "true");
+  const [splitRatio, setSplitRatio] = createSignal(Math.max(25, Math.min(75, Number(localStorage.getItem(splitRatioKey())) || 50)));
   const [artifactMode, setArtifactMode] = createSignal<ArtifactMode>("outputs");
   const detailOpenKey = () => `conduit:workspace-panel:${props.chatId()}:${tab()}:detail-open`;
   const detailHeightKey = () => `conduit:workspace-panel:${props.chatId()}:${tab()}:detail-height`;
   const detailOpenFor = (nextTab: PanelTab) => localStorage.getItem(`conduit:workspace-panel:${props.chatId()}:${nextTab}:detail-open`) ?? (nextTab === "diff" ? "false" : "true");
   const [detailOpen, setDetailOpen] = createSignal(detailOpenFor(tab()) === "true");
+  const [diffDetailOpen, setDiffDetailOpen] = createSignal(detailOpenFor("diff") === "true");
   const [detailHeight, setDetailHeight] = createSignal(Math.max(128, Number(localStorage.getItem(detailHeightKey())) || 288));
   const hasPending = (operation?: string) => [...pending().keys()].some((version) => !operation || requests.get(operation)?.version === version);
   const diffLoading = () => hasPending("diff");
   const filesLoading = () => [...requests.keys()].some((operation) => operation.startsWith("directory:") && hasPending(operation));
   const loading = () => [...pending().values()].some((entry) => entry.foreground);
   const hasUnsavedChanges = () => Boolean(preview() && draft() !== preview()!.content);
-  const highlightedPreview = createMemo(() => {
-    const file = preview();
-    highlighterReady();
-    if (!file || editing()) return "";
-    primeHighlighter();
-    return highlightToHtml(draft(), fileHighlightLanguage(file.path));
-  });
+  const stagedFiles = createMemo(() => (diff()?.files || []).filter((file) => file.status[0] !== " " && file.status[0] !== "?"));
+  const unstagedFiles = createMemo(() => (diff()?.files || []).filter((file) => file.status[1] !== " " || file.status === "??"));
 
   const ownsRequest = (request: WorkspaceRequest) => ownsWorkspaceRequest({
     projectId: props.projectId(),
@@ -302,8 +348,39 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
     setTab(next);
     localStorage.setItem(storageKey(), next);
   };
+  const tabVisible = (candidate: PanelTab) => tab() === candidate || (props.expanded() && secondaryTab() === candidate);
+  const panePosition = (candidate: PanelTab) => tab() === candidate ? "left" : secondaryTab() === candidate ? "right" : undefined;
+  const tabLabel = (candidate: PanelTab) => candidate === "files" ? "Files" : candidate === "diff" ? "Source Control" : candidate === "artifacts" ? "Artifacts" : "Terminal";
+  const setPaneTab = (side: "left" | "right", next: PanelTab) => {
+    const left = tab();
+    const right = secondaryTab() || (left === "files" ? "diff" : "files");
+    if (side === "left") {
+      if (next === right) setSecondaryTab(left);
+      selectTab(next);
+    } else if (next === left) {
+      selectTab(right);
+      setSecondaryTab(left);
+    } else {
+      setSecondaryTab(next);
+    }
+  };
+  const changePaneTab = (side: "left" | "right", value: string) => {
+    if (isPanelTab(value)) setPaneTab(side, value);
+  };
+  const activateTab = (next: PanelTab) => {
+    if (!props.expanded()) {
+      setSecondaryTab(null);
+      selectTab(next);
+      return;
+    }
+    if (next === tab()) {
+      setSecondaryTab(null);
+      return;
+    }
+    setSecondaryTab(secondaryTab() === next ? null : next);
+  };
   const selectFilesTab = () => {
-    selectTab("files");
+    activateTab("files");
     if (!directories()[""]) void loadDirectory();
     queueMicrotask(() => fileFilterInput?.focus());
   };
@@ -311,7 +388,11 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
     const next = !detailOpen();
     setDetailOpen(next);
     localStorage.setItem(detailOpenKey(), String(next));
-    if (next && tab() === "diff") void loadDiff(true, true);
+  };
+  const selectSourceDetail = (patch: boolean) => {
+    setDiffDetailOpen(patch);
+    localStorage.setItem(`conduit:workspace-panel:${props.chatId()}:diff:detail-open`, String(patch));
+    if (patch && !diff()?.diff) void loadDiff(true, true);
   };
   let stopDetailResize: (() => void) | undefined;
   const maxDetailHeight = () => Math.max(MIN_DETAIL_HEIGHT, (detailHost?.clientHeight || window.innerHeight) -
@@ -425,11 +506,6 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
     const opened = preview()?.path === file ? preview() : await openFile(file);
     if (!opened) return;
     setEditing(true);
-    queueMicrotask(() => {
-      editorTextarea?.focus();
-      editorTextarea?.setSelectionRange(0, 0);
-      if (editorTextarea) editorTextarea.scrollTop = 0;
-    });
   };
   const saveFile = async () => {
     const file = preview();
@@ -507,7 +583,6 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
     if (selected && !hasUnsavedChanges()) await loadFile(selected, true);
   };
   const loadDiff = async (includePatch = false, reuse = false, background = false) => {
-    if (diffLoading()) return;
     const { request, controller } = startRequest("diff", !background);
     setError("");
     try {
@@ -525,6 +600,26 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
     }
     finally {
       finishRequest(request);
+    }
+  };
+  const runGitAction = async (action: GitAction, path?: string) => {
+    if (gitAction()) return;
+    if (action === "commit" && !commitMessage().trim()) return;
+    if (action === "push" && !window.confirm(`Push ${diff()?.branch || "the current branch"} to its configured remote?`)) return;
+    setGitAction(action);
+    setError("");
+    try {
+      await api<GitActionResult>(`/v0/projects/${encodeURIComponent(props.projectId())}/git`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ action, path, message: action === "commit" ? commitMessage().trim() : undefined }),
+      });
+      if (action === "commit") setCommitMessage("");
+      await loadDiff(diffDetailOpen());
+    } catch (cause) {
+      setError((cause as Error).message);
+    } finally {
+      setGitAction("");
     }
   };
   const copy = (value?: string) => { if (value) void navigator.clipboard.writeText(value); };
@@ -545,6 +640,10 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
       animatePanelGeometry(open);
     }
     panelWasOpen = open;
+  });
+  createEffect(() => {
+    if (props.expanded() && !secondaryTab()) setSecondaryTab(tab() === "files" ? "diff" : "files");
+    if (!props.expanded()) setSecondaryTab(null);
   });
   createEffect(() => {
     const open = props.open() && isMobileLayout();
@@ -636,20 +735,33 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
     if (treeTypeaheadTimer) window.clearTimeout(treeTypeaheadTimer);
     document.body.classList.remove("workspace-resizing");
     document.body.classList.remove("workspace-detail-resizing");
+    document.body.classList.remove("workspace-tree-resizing");
+    document.body.classList.remove("workspace-split-resizing");
   });
 
   let loadedProjectId = "";
+  let geometryProjectId = "";
   createEffect(on(() => [props.chatId(), props.projectId()] as const, () => {
-    stopResize?.();
     const nextTab = (localStorage.getItem(storageKey()) as PanelTab) || "files";
+    const projectChanged = geometryProjectId !== props.projectId();
+    if (projectChanged) {
+      geometryProjectId = props.projectId();
+      stopResize?.();
+    }
     batch(() => {
       setDetailOpen(detailOpenFor(nextTab) === "true");
+      setDiffDetailOpen(detailOpenFor("diff") === "true");
       setDetailHeight(Math.max(MIN_DETAIL_HEIGHT, Number(localStorage.getItem(`conduit:workspace-panel:${props.chatId()}:${nextTab}:detail-height`)) || 288));
-      const nextWidth = Math.max(256, Math.min(496, Number(localStorage.getItem(widthKey())) || 336));
-      setWidth(nextWidth);
-      if (props.open()) setShellWidth(nextWidth);
-      setShowHidden(localStorage.getItem(showHiddenKey()) === "true");
-      setKeptVisible(storedPaths(keptVisibleKey()));
+      if (projectChanged) {
+        const nextWidth = Math.max(256, Math.min(496, Number(localStorage.getItem(widthKey())) || 336));
+        setWidth(nextWidth);
+        if (props.open()) setShellWidth(nextWidth);
+        setTreeWidth(Math.max(MIN_TREE_WIDTH, Math.min(MAX_TREE_WIDTH, Number(localStorage.getItem(treeWidthKey())) || DEFAULT_TREE_WIDTH)));
+        setTreeCollapsed(localStorage.getItem(treeCollapsedKey()) === "true");
+        setSplitRatio(Math.max(25, Math.min(75, Number(localStorage.getItem(splitRatioKey())) || 50)));
+        setShowHidden(localStorage.getItem(showHiddenKey()) === "true");
+        setKeptVisible(storedPaths(keptVisibleKey()));
+      }
       setTab(nextTab);
     });
   }));
@@ -657,8 +769,8 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
     if (next) selectTab(next.tab);
   }));
   createEffect(on(
-    () => [props.projectId(), tab(), props.open()] as const,
-    ([projectId, activeTab, open]) => {
+    () => [props.projectId(), tab(), secondaryTab(), props.open(), props.expanded(), diffDetailOpen()] as const,
+    ([projectId, activeTab, companionTab, open, panelExpanded]) => {
       if (!open) return;
       const projectChanged = loadedProjectId !== projectId;
       if (projectChanged) {
@@ -680,11 +792,14 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
           if (treeElement) treeElement.scrollTop = cached?.treeScrollTop || 0;
         });
       }
-      if (activeTab === "files" && !directories()[""] && !filesLoading()) void loadDirectory("", false);
-      if (activeTab === "diff") {
-        const includePatch = detailOpenFor("diff") === "true";
+      const filesVisible = activeTab === "files" || (panelExpanded && companionTab === "files");
+      const diffVisible = activeTab === "diff" || (panelExpanded && companionTab === "diff");
+      if (filesVisible && !directories()[""] && !filesLoading()) void loadDirectory("", false);
+      if (diffVisible) {
+        const includePatch = diffDetailOpen();
         const current = diff();
-        if ((!current || (includePatch && !current.diff)) && !diffLoading()) void loadDiff(includePatch, false, Boolean(current));
+        const needsPatch = diffVisible && includePatch;
+        if (!current || (needsPatch && !current.diff)) void loadDiff(needsPatch, false, Boolean(current));
       }
     }));
 
@@ -791,6 +906,59 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
     setShowHidden(next);
     localStorage.setItem(showHiddenKey(), String(next));
   };
+  const toggleWrapLines = () => {
+    const next = !wrapLines();
+    setWrapLines(next);
+    localStorage.setItem(WRAP_LINES_KEY, String(next));
+  };
+  const saveTreeWidth = (next: number) => {
+    const value = Math.max(MIN_TREE_WIDTH, Math.min(MAX_TREE_WIDTH, next));
+    setTreeWidth(value);
+    localStorage.setItem(treeWidthKey(), String(value));
+  };
+  const toggleTreeCollapsed = () => {
+    const next = !treeCollapsed();
+    setTreeCollapsed(next);
+    localStorage.setItem(treeCollapsedKey(), String(next));
+  };
+  const saveSplitRatio = (next: number) => {
+    const value = Math.max(25, Math.min(75, next));
+    setSplitRatio(value);
+    localStorage.setItem(splitRatioKey(), String(value));
+  };
+  const startSplitResize = (event: PointerEvent) => {
+    if (!splitHost) return;
+    event.preventDefault();
+    const bounds = splitHost.getBoundingClientRect();
+    const move = (moveEvent: PointerEvent) => saveSplitRatio(((moveEvent.clientX - bounds.left) / bounds.width) * 100);
+    const stop = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", stop);
+      window.removeEventListener("pointercancel", stop);
+      document.body.classList.remove("workspace-split-resizing");
+    };
+    document.body.classList.add("workspace-split-resizing");
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", stop, { once: true });
+    window.addEventListener("pointercancel", stop, { once: true });
+  };
+  const startTreeResize = (event: PointerEvent) => {
+    event.preventDefault();
+    treeResizeHandle?.setPointerCapture(event.pointerId);
+    const startX = event.clientX;
+    const startWidth = treeWidth();
+    const move = (moveEvent: PointerEvent) => saveTreeWidth(startWidth + moveEvent.clientX - startX);
+    const stop = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", stop);
+      window.removeEventListener("pointercancel", stop);
+      document.body.classList.remove("workspace-tree-resizing");
+    };
+    document.body.classList.add("workspace-tree-resizing");
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", stop, { once: true });
+    window.addEventListener("pointercancel", stop, { once: true });
+  };
   const toggleKeptVisible = (path: string) => {
     const next = new Set(keptVisible());
     if (next.has(path)) next.delete(path);
@@ -819,7 +987,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
             aria-setsize={visibleEntries(treeProps.directory).length}
             aria-selected={preview()?.path === entry.path}
             class="workspace-tree-row"
-            style={{ "padding-left": `${8 + depth() * 11.2}px` }}
+            style={{ "padding-left": `${4 + depth() * 11.2}px` }}
             data-name={entry.name.toLowerCase()}
             data-path={entry.path}
             data-selected={preview()?.path === entry.path}
@@ -874,28 +1042,50 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
       <Button variant="ghost" size="icon-sm" class="workspace-expand-toggle" title={props.expanded() ? "Restore split view" : "Expand Workspace"} aria-label={props.expanded() ? "Restore split view" : "Expand Workspace"} aria-pressed={props.expanded()} onClick={props.onToggleExpanded}>
         <Show when={props.expanded()} fallback={<Maximize2Icon />}><Minimize2Icon /></Show>
       </Button>
-      <div class="workspace-panel-tabs" role="tablist" aria-label="Workspace views">
-        <button role="tab" aria-label="Files" aria-selected={tab() === "files"} onClick={selectFilesTab}><FolderIcon /><span>Files</span></button>
-        <button role="tab" aria-label="Source Control" aria-selected={tab() === "diff"} onClick={() => selectTab("diff")}><GitCompareArrowsIcon /><span>Source Control</span></button>
-        <button role="tab" aria-label="Artifacts" aria-selected={tab() === "artifacts"} onClick={() => selectTab("artifacts")}><BoxesIcon /><span>Artifacts</span></button>
-        <button role="tab" aria-label="Terminal" aria-selected={tab() === "terminal"} onClick={() => selectTab("terminal")}><TerminalIcon /><span>Terminal</span></button>
-      </div>
+      <Show when={props.expanded()} fallback={<div class="workspace-panel-tabs" role="toolbar" aria-label="Workspace views">
+        <button type="button" role="tab" aria-label="Files" aria-selected={tab() === "files"} onClick={selectFilesTab}><FolderIcon /><span>Files</span></button>
+        <button type="button" role="tab" aria-label="Source Control" aria-selected={tab() === "diff"} onClick={() => activateTab("diff")}><GitCompareArrowsIcon /><span>Source Control</span></button>
+        <button type="button" role="tab" aria-label="Artifacts" aria-selected={tab() === "artifacts"} onClick={() => activateTab("artifacts")}><BoxesIcon /><span>Artifacts</span></button>
+        <button type="button" role="tab" aria-label="Terminal" aria-selected={tab() === "terminal"} onClick={() => activateTab("terminal")}><TerminalIcon /><span>Terminal</span></button>
+      </div>}>
+        <div class="workspace-pane-selectors" aria-label="Expanded workspace panes">
+          <label><span>Left</span><select aria-label="Left workspace pane" value={tab()} onChange={(event) => changePaneTab("left", event.currentTarget.value)}><For each={["files", "diff", "artifacts", "terminal"] satisfies PanelTab[]}>{(item) => <option value={item}>{tabLabel(item)}</option>}</For></select></label>
+          <label><span>Right</span><select aria-label="Right workspace pane" value={secondaryTab() || "diff"} onChange={(event) => changePaneTab("right", event.currentTarget.value)}><For each={["files", "diff", "artifacts", "terminal"] satisfies PanelTab[]}>{(item) => <option value={item}>{tabLabel(item)}</option>}</For></select></label>
+        </div>
+      </Show>
       <Button variant="ghost" size="icon-sm" aria-label="Close workspace panel" onClick={props.onClose}><XIcon /></Button>
     </header>
     <Show when={error()}><div class="workspace-panel-error">{error()}</div></Show>
-    <Show when={tab() === "files"}>
+    <main ref={splitHost} class="workspace-panel-content" data-split={props.expanded() && secondaryTab() !== null} style={{ "--workspace-split-ratio": `${splitRatio()}%` }}>
+    <Show when={props.expanded() && secondaryTab()}>
+      <div class="workspace-split-resize-handle" role="separator" aria-label="Resize workspace panes" aria-orientation="vertical" aria-valuemin="25" aria-valuemax="75" aria-valuenow={splitRatio()} tabIndex={0} onPointerDown={startSplitResize} onKeyDown={(event) => {
+        if (event.key === "ArrowLeft") saveSplitRatio(splitRatio() - 2);
+        else if (event.key === "ArrowRight") saveSplitRatio(splitRatio() + 2);
+        else if (event.key === "Home") saveSplitRatio(25);
+        else if (event.key === "End") saveSplitRatio(75);
+        else return;
+        event.preventDefault();
+      }} />
+    </Show>
+    <Show when={tabVisible("files")}>
       <div
         ref={(element) => {
           detailHost = element;
           filesResizeObserver?.disconnect();
-          const updateWideState = () => setFilesWide(!isMobileLayout() && element.clientWidth >= WIDE_FILES_MIN_WIDTH);
+          const updateWideState = () => setFilesWide(!isMobileLayout() && element.clientWidth >= (props.expanded() ? 480 : WIDE_FILES_MIN_WIDTH));
           updateWideState();
           filesResizeObserver = new ResizeObserver(updateWideState);
           filesResizeObserver.observe(element);
         }}
         class="workspace-files"
+        data-position={panePosition("files")}
         data-wide={filesWide()}
+        data-tree-collapsed={treeCollapsed()}
+        style={{ "--workspace-tree-width": `${treeWidth()}px` }}
       >
+        <Show when={filesWide() && treeCollapsed()}>
+          <div class="workspace-tree-collapsed-rail"><button type="button" aria-label="Show file tree" title="Show file tree" onClick={toggleTreeCollapsed}><PanelLeftOpenIcon /></button></div>
+        </Show>
         <div class="workspace-tree-pane">
           <div class="workspace-tree-tools">
             <label class="workspace-tree-filter">
@@ -917,6 +1107,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
             </button>
             <button type="button" aria-label="Upload files" title="Upload files to workspace root" disabled={uploading()} onClick={() => chooseUpload()}><Show when={uploading()} fallback={<UploadIcon />}><Spinner /></Show></button>
             <button type="button" aria-label="Refresh files" title="Refresh files" disabled={filesLoading()} onClick={() => void refreshFiles()}><RefreshCwIcon /></button>
+            <Show when={filesWide()}><button type="button" aria-label="Hide file tree" title="Hide file tree" onClick={toggleTreeCollapsed}><PanelLeftCloseIcon /></button></Show>
             <input ref={fileUploadInput} class="workspace-file-input" type="file" multiple onChange={(event) => void uploadFiles(event.currentTarget.files)} />
           </div>
           <nav ref={(element) => {
@@ -927,8 +1118,26 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
             <Show when={directories()[""] && visibleEntries("").length === 0}><div class="workspace-tree-empty">{fileFilter() ? "No loaded files match this filter." : "No files to show."}</div></Show>
           </nav>
         </div>
+        <Show when={filesWide()}>
+          <div
+            ref={treeResizeHandle}
+            class="workspace-tree-resize-handle"
+            role="separator"
+            aria-label="Resize file tree"
+            aria-orientation="vertical"
+            aria-valuemin={MIN_TREE_WIDTH}
+            aria-valuemax={MAX_TREE_WIDTH}
+            aria-valuenow={treeWidth()}
+            tabIndex={0}
+            onPointerDown={startTreeResize}
+            onKeyDown={(event) => {
+              if (event.key === "ArrowLeft") saveTreeWidth(treeWidth() - 8);
+              if (event.key === "ArrowRight") saveTreeWidth(treeWidth() + 8);
+            }}
+          />
+        </Show>
         <Show when={!filesWide()}>
-          <div class="workspace-detail-toggle"><button aria-expanded={detailOpen()} onClick={toggleDetail}><ChevronDownIcon data-open={detailOpen()} /><span>File preview</span><Show when={preview()}><small>{preview()!.path} · {preview()!.size.toLocaleString()} bytes</small></Show></button></div>
+          <div class="workspace-detail-toggle"><button aria-expanded={detailOpen()} onClick={toggleDetail}><ChevronDownIcon data-open={detailOpen()} /><span>File preview</span><Show when={preview()}><small>{preview()!.path} · {formatFileSize(preview()!.size)}</small></Show></button></div>
         </Show>
         <Show when={filesWide() || detailOpen()}><>
           <Show when={!filesWide()}><div class="workspace-detail-resize-handle" role="separator" aria-label="Resize file preview" aria-orientation="horizontal" aria-valuemin={MIN_DETAIL_HEIGHT} aria-valuemax={maxDetailHeight()} aria-valuenow={detailHeight()} tabIndex={0} onPointerDown={startDetailResize} onKeyDown={resizeDetailByKey} /></Show>
@@ -937,30 +1146,19 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
             <Show when={preview()} fallback={<div class="workspace-panel-empty">Select a text file to preview it.</div>}>{(file) => <>
               <header class="workspace-preview-header">
                 <div class="workspace-preview-file" title={file().path}><FileTypeIcon name={file().path} /><span>{file().path}</span></div>
-                <small>{hasUnsavedChanges() ? "Unsaved" : `${file().size.toLocaleString()} bytes`}</small>
-                <button type="button" class="workspace-preview-action" aria-label={editing() ? "Close editor" : "Edit file"} title={editing() ? "Close editor" : "Edit file"} onClick={() => editing() ? setEditing(false) : void editFile()}><Show when={editing()} fallback={<PencilIcon />}><XIcon /></Show></button>
+                <small>{hasUnsavedChanges() ? "Unsaved" : formatFileSize(file().size)}</small>
+                <button type="button" class="workspace-preview-action" aria-label={wrapLines() ? "Disable line wrapping" : "Enable line wrapping"} title={wrapLines() ? "Disable line wrapping" : "Enable line wrapping"} aria-pressed={wrapLines()} onClick={toggleWrapLines}><WrapTextIcon /></button>
+                <button type="button" class="workspace-preview-action" aria-label={editing() ? "Close editor" : "Edit file"} title={editing() ? "Close editor" : "Edit file"} aria-pressed={editing()} onClick={() => editing() ? setEditing(false) : void editFile()}><Show when={editing()} fallback={<PencilIcon />}><XIcon /></Show></button>
                 <button type="button" class="workspace-preview-action" aria-label="Save file" title="Save file (Ctrl+S)" disabled={!hasUnsavedChanges() || saving()} onClick={() => void saveFile()}><Show when={saving()} fallback={<SaveIcon />}><Spinner /></Show></button>
                 <button type="button" class="workspace-preview-action" aria-label="Download file" title="Download file" onClick={() => void downloadFile()}><DownloadIcon /></button>
                 <button type="button" class="workspace-preview-copy" aria-label="Copy file contents" title="Copy file contents" onClick={() => copy(draft())}><CopyIcon /></button>
               </header>
-              <div class="workspace-preview-editor" data-editing={editing()}>
-                <Show when={!editing()}><pre class="workspace-preview-lines" aria-hidden="true">{lineNumbers(draft())}</pre></Show>
-                <Show when={editing()} fallback={<pre class="workspace-preview-code"><code innerHTML={highlightedPreview()} /></pre>}>
-                  <textarea
-                    ref={editorTextarea}
-                    class="workspace-preview-textarea"
-                    aria-label={`Edit ${file().path}`}
-                    value={draft()}
-                    spellcheck={false}
-                    onInput={(event) => setDraft(event.currentTarget.value)}
-                    onKeyDown={(event) => {
-                      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") {
-                        event.preventDefault();
-                        void saveFile();
-                      }
-                    }}
-                  />
-                </Show>
+              <div class="workspace-preview-editor" data-editing={editing()} data-wrap={wrapLines()}>
+                <Show when={file().path} keyed>{(path) =>
+                  <Suspense fallback={<div class="workspace-panel-empty">Loading preview…</div>}>
+                    <WorkspaceEditor path={path} value={draft()} wrap={wrapLines()} editable={editing()} onInput={setDraft} onSave={() => void saveFile()} />
+                  </Suspense>
+                }</Show>
               </div>
             </>}</Show>
           </ContextMenuTrigger>
@@ -979,21 +1177,61 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
         </></Show>
       </div>
     </Show>
-    <Show when={tab() === "diff"}><section ref={(element) => { detailHost = element; }} class="workspace-diff">
+    <Show when={tabVisible("diff")}><section ref={(element) => { detailHost = element; }} class="workspace-diff" data-position={panePosition("diff")}>
       <div class="workspace-diff-overview">
-      <div class="workspace-status-strip"><div><GitBranchIcon /><strong>{diff() ? diff()!.repository ? diff()!.branch : "Not a Git repository" : "Loading Git status…"}</strong><Show when={diff()?.upstream}><small>{diff()?.upstream}</small></Show><Show when={diff()?.ahead || diff()?.behind}><span>↑{diff()?.ahead || 0} ↓{diff()?.behind || 0}</span></Show></div><div><Button variant="ghost" size="icon-sm" aria-label="Copy branch name" disabled={!diff()?.branch} onClick={() => copy(diff()?.branch)}><CopyIcon /></Button><Button variant="ghost" size="icon-sm" aria-label="Refresh Git status" disabled={diffLoading()} onClick={() => void loadDiff(detailOpen())}><RefreshCwIcon /></Button></div></div>
-      <Show when={diff()?.repository}><div class="workspace-git-summary"><span>{diff()?.files.length || 0} changed {(diff()?.files.length || 0) === 1 ? "file" : "files"}</span><span>{diff()?.commits?.length || 0} recent commits</span></div></Show>
-      <Show when={diff()?.repository && diff()!.files.length}><div class="workspace-changes"><For each={diff()!.files}>{(file) => <div><code>{file.status}</code><span>{file.path}</span></div>}</For></div></Show>
-      <Show when={diff()?.repository && diff()?.commits?.length}><div class="workspace-git-graph" aria-label="Recent commits"><For each={diff()!.commits}>{(commit) => <div class="workspace-commit"><code class="workspace-graph-rail">{commit.graph || "*"}</code><button title={`${commit.author} · ${new Date(commit.authoredAt).toLocaleString()}`} onClick={() => copy(commit.hash)}><span>{commit.subject}</span><code>{commit.shortHash}</code></button></div>}</For></div></Show>
+      <div class="workspace-status-strip">
+        <div><GitBranchIcon /><strong>{diff() ? diff()!.repository ? diff()!.branch : "Not a Git repository" : "Loading Git status…"}</strong><Show when={diff()?.upstream}><small>{diff()?.upstream}</small></Show></div>
+        <div><Show when={diff()?.ahead || diff()?.behind}><span class="workspace-sync-state">↑ {diff()?.ahead || 0} ↓ {diff()?.behind || 0}</span></Show><Button variant="ghost" size="icon-sm" aria-label="Copy branch name" disabled={!diff()?.branch} onClick={() => copy(diff()?.branch)}><CopyIcon /></Button><Button variant="ghost" size="icon-sm" aria-label="Refresh Git status" disabled={diffLoading()} onClick={() => void loadDiff(diffDetailOpen())}><RefreshCwIcon /></Button></div>
       </div>
-      <div class="workspace-detail-toggle"><button aria-expanded={detailOpen()} onClick={toggleDetail}><ChevronDownIcon data-open={detailOpen()} /><span>Working tree patch</span><small>{diff()?.files.length || 0} changed</small></button></div>
-      <Show when={detailOpen()}><><div class="workspace-detail-resize-handle" role="separator" aria-label="Resize working tree patch" aria-orientation="horizontal" aria-valuemin={MIN_DETAIL_HEIGHT} aria-valuemax={maxDetailHeight()} aria-valuenow={detailHeight()} tabIndex={0} onPointerDown={startDetailResize} onKeyDown={resizeDetailByKey} /><div class="workspace-patch" style={{ height: `${detailHeight()}px` }}><Show when={diff()?.diff} fallback={<div class="workspace-panel-empty">{diff()?.repository ? "Working tree is clean." : "Diff is available for Git projects."}</div>}>{(content) => <pre class="workspace-diff-content"><code>{content()}</code></pre>}</Show></div></></Show>
+      <Show when={diff()?.repository}>
+        <form class="workspace-commit-composer" onSubmit={(event) => { event.preventDefault(); void runGitAction("commit"); }}>
+          <textarea aria-label="Commit message" placeholder="Message (Ctrl+Enter to commit)" rows="1" value={commitMessage()} onInput={(event) => { const input = event.currentTarget; setCommitMessage(input.value); input.style.height = "auto"; input.style.height = `${input.scrollHeight}px`; }} onKeyDown={(event) => { if (event.key === "Enter" && event.ctrlKey) { event.preventDefault(); event.currentTarget.form?.requestSubmit(); } }} />
+          <button type="submit" disabled={!commitMessage().trim() || !stagedFiles().length || Boolean(gitAction())}><Show when={gitAction() === "commit"} fallback={<CheckIcon />}><Spinner /></Show><span>Commit</span><small>{stagedFiles().length || ""}</small></button>
+        </form>
+        <div class="workspace-change-ledger">
+          <section class="workspace-change-section" data-open={stagedOpen()}>
+            <header><button type="button" class="workspace-change-disclosure" aria-expanded={stagedOpen()} onClick={() => setStagedOpen((open) => !open)}><ChevronRightIcon /><CheckIcon /><span>Staged changes</span><small>{stagedFiles().length}</small></button><button type="button" aria-label="Unstage all" title="Unstage all" disabled={!stagedFiles().length || Boolean(gitAction())} onClick={() => void runGitAction("unstage-all")}><Undo2Icon /></button></header>
+            <Show when={stagedOpen()}><Show when={stagedFiles().length} fallback={<div class="workspace-clean-state">No staged changes</div>}>
+              <div class="workspace-changes"><For each={stagedFiles()}>{(file) =>
+                <div class="workspace-change-row"><button type="button" title={`Open ${file.path}`} onClick={() => { if (props.expanded()) setPaneTab(panePosition("diff") === "left" ? "right" : "left", "files"); else selectTab("files"); void openFile(file.path); }}><code data-status={file.status[0]}>{file.status[0]}</code><span>{file.path}</span></button><button type="button" class="workspace-change-action" aria-label={`Unstage ${file.path}`} title="Unstage" disabled={Boolean(gitAction())} onClick={() => void runGitAction("unstage", file.path)}><Undo2Icon /></button></div>
+              }</For></div>
+            </Show></Show>
+          </section>
+          <section class="workspace-change-section" data-open={changesOpen()}>
+            <header><button type="button" class="workspace-change-disclosure" aria-expanded={changesOpen()} onClick={() => setChangesOpen((open) => !open)}><ChevronRightIcon /><FileDiffIcon /><span>Changes</span><small>{unstagedFiles().length}</small></button><button type="button" aria-label="Stage all" title="Stage all" disabled={!unstagedFiles().length || Boolean(gitAction())} onClick={() => void runGitAction("stage-all")}><CirclePlusIcon /></button></header>
+            <Show when={changesOpen()}><Show when={unstagedFiles().length} fallback={<div class="workspace-clean-state">Working tree clean</div>}>
+              <div class="workspace-changes"><For each={unstagedFiles()}>{(file) =>
+                <div class="workspace-change-row"><button type="button" title={`Open ${file.path}`} onClick={() => { if (props.expanded()) setPaneTab(panePosition("diff") === "left" ? "right" : "left", "files"); else selectTab("files"); void openFile(file.path); }}><code data-status={file.status[1] === " " ? "?" : file.status[1]}>{file.status[1] === " " ? "?" : file.status[1]}</code><span>{file.path}</span></button><button type="button" class="workspace-change-action" aria-label={`Stage ${file.path}`} title="Stage" disabled={Boolean(gitAction())} onClick={() => void runGitAction("stage", file.path)}><CirclePlusIcon /></button></div>
+              }</For></div>
+            </Show></Show>
+          </section>
+        </div>
+      </Show>
+      </div>
+      <section class="workspace-source-workbench">
+        <header>
+          <div class="workspace-source-modes" role="tablist" aria-label="Source Control detail">
+            <button type="button" role="tab" aria-selected={!diffDetailOpen()} onClick={() => selectSourceDetail(false)}><GitCommitHorizontalIcon />Graph</button>
+            <button type="button" role="tab" aria-selected={diffDetailOpen()} onClick={() => selectSourceDetail(true)}><FileDiffIcon />Patch</button>
+          </div>
+          <small>{diffDetailOpen() ? `${diff()?.files.length || 0} changed` : `${diff()?.commits?.length || 0} recent`}</small>
+          <div class="workspace-source-actions">
+            <button type="button" aria-label="Fetch all remotes" title="Fetch all remotes" disabled={Boolean(gitAction())} onClick={() => void runGitAction("fetch")}><Show when={gitAction() === "fetch"} fallback={<RefreshCwIcon />}><Spinner /></Show><span>Fetch</span></button>
+            <button type="button" aria-label="Pull current branch" title="Pull current branch (fast-forward only)" disabled={!diff()?.upstream || Boolean(gitAction())} onClick={() => void runGitAction("pull")}><DownloadIcon /><span>Pull</span></button>
+            <button type="button" aria-label="Push current branch" title="Push current branch" disabled={!diff()?.upstream || Boolean(gitAction())} onClick={() => void runGitAction("push")}><SendIcon /><span>Push</span></button>
+          </div>
+        </header>
+        <Show when={diffDetailOpen()} fallback={<Show when={Boolean(diff()?.commits?.length)} fallback={<div class="workspace-panel-empty">No commit history available.</div>}><CommitHistory commits={diff()?.commits || []} refs={diff()?.refs || []} branch={diff()?.branch} onCopy={copy} /></Show>}>
+          <div class="workspace-patch"><Show when={diff()?.diff} fallback={<div class="workspace-panel-empty">{diff()?.repository ? "Working tree is clean." : "Diff is available for Git projects."}</div>}>{(content) => <PatchView content={content()} />}</Show></div>
+        </Show>
+      </section>
     </section></Show>
-    <Show when={tab() === "artifacts"}><section class="workspace-artifacts">
+    <Show when={tabVisible("artifacts")}><section class="workspace-artifacts" data-position={panePosition("artifacts")}>
       <div class="workspace-artifact-modes" role="radiogroup" aria-label="Artifact modality"><button role="radio" aria-checked={artifactMode() === "outputs"} onClick={() => setArtifactMode("outputs")}>Outputs</button><button role="radio" aria-checked={artifactMode() === "interactive"} onClick={() => setArtifactMode("interactive")}>Interactive UI</button></div>
       <div class="workspace-panel-empty"><div><BoxesIcon /><strong>{artifactMode() === "outputs" ? "No artifacts in the loaded transcript" : "Interactive artifacts are not enabled"}</strong><p>{artifactMode() === "outputs" ? "Code blocks and file outputs will appear here as transcript artifact projection lands." : "This boundary is reserved for sandboxed, explicitly trusted generated interfaces."}</p></div></div>
     </section></Show>
-    <Show when={tab() === "terminal"}><TerminalPane projectId={props.projectId()} terminalId={props.requestedTab?.()?.terminalId} /></Show>
+    <Show when={tabVisible("terminal")}><section class="workspace-terminal-slot" data-position={panePosition("terminal")}><TerminalPane projectId={props.projectId()} terminalId={props.requestedTab?.()?.terminalId} /></section></Show>
+    </main>
     <Show when={loading()}><div class="workspace-panel-loading"><Spinner /><span>Loading workspace</span></div></Show>
     </div>
   </aside>
