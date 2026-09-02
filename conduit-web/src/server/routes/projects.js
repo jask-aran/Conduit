@@ -74,6 +74,7 @@ export function registerProjectRoutes(app, {
   readSessionPage,
   readWorkspaceDiff,
   readWorkspaceFile,
+  runWorkspaceGitAction,
   registry,
   terminals,
   lifecycle,
@@ -284,6 +285,19 @@ export function registerProjectRoutes(app, {
       request.removeListener("aborted", abort);
       response.removeListener("close", close);
     }
+  });
+
+  app.post("/v0/projects/:id/git", async (request, response, next) => {
+    try {
+      const project = await projects.get(request.params.id);
+      if (!project) return response.status(404).json({ error: "project_not_found" });
+      await projects.validate(project);
+      response.json(await runWorkspaceGitAction(project.path, {
+        action: request.body?.action,
+        relativePath: request.body?.path,
+        message: request.body?.message,
+      }));
+    } catch (error) { next(error); }
   });
 
   app.post("/v0/projects/:id/move-sessions", async (request, response, next) => {
