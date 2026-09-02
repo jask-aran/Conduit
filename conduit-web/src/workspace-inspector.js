@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { createHash } from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
 
@@ -12,6 +13,10 @@ const inspections = new Map();
 
 function inspectorError(code, message) {
   return Object.assign(new Error(message), { code });
+}
+
+function fileRevision(content) {
+  return createHash("sha256").update(content).digest("hex");
 }
 
 function abortError() {
@@ -179,7 +184,37 @@ export async function readWorkspaceFile(root, relativePath) {
   if (resolved.stat.size > MAX_PREVIEW_BYTES) throw inspectorError("file_too_large", "File is larger than the 1 MiB preview limit");
   const content = await fs.readFile(resolved.path);
   if (content.includes(0)) throw inspectorError("file_not_text", "Binary files cannot be previewed");
-  return { path: resolved.relativePath, size: resolved.stat.size, content: content.toString("utf8") };
+  return { path: resolved.relativePath, size: resolved.stat.size, revision: fileRevision(content), content: content.toString("utf8") };
+}
+
+export async function writeWorkspaceFile(root, relativePath, content, { expectedRevision = null } = {}) {
+  const segments = safeSegments(relativePath);
+  if (!segments.length) throw inspectorError("invalid_workspace_path", "The requested path is invalid");
+  const name = segments.at(-1);
+  const parent = await resolveInspectorPath(root, segments.slice(0, -1).join("/"), { kind: "directory" });
+  const target = path.join(parent.path, name);
+  let existing = null;
+  try {
+    existing = await fs.lstat(target);
+  } catch (error) {
+    if (error.code !== "ENOENT") throw error;
+  }
+  if (existing?.isSymbolicLink()) throw inspectorError("workspace_path_symlink", "Symlinked paths are not available");
+  if (existing && !existing.isFile()) throw inspectorError("path_not_file", "The requested path is not a file");
+  if (expectedRevision == null && existing) {
+    throw Object.assign(inspectorError("workspace_file_exists", "A file with this name already exists"), { status: 409 });
+  }
+  if (expectedRevision != null && !existing) {
+    throw Object.assign(inspectorError("workspace_file_changed", "The file changed or was removed before it could be saved"), { status: 409 });
+  }
+  if (existing) {
+    const current = await fs.readFile(target);
+    if (fileRevision(current) !== expectedRevision) {
+      throw Object.assign(inspectorError("workspace_file_changed", "The file changed before it could be saved"), { status: 409 });
+    }
+  }
+  await fs.writeFile(target, content, existing ? undefined : { flag: "wx" });
+  return { path: segments.join("/"), size: content.byteLength, revision: fileRevision(content) };
 }
 
 function parseStatus(output) {

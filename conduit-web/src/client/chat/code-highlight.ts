@@ -229,7 +229,7 @@ function lineSpans(html: string) {
   return splitHighlightedLines(html).map((line) => line.outerHTML).join("");
 }
 
-function highlightToHtml(text: string, language: string) {
+export function highlightToHtml(text: string, language: string) {
   const hljs = loaded;
   if (!hljs) return escapeForLines(text);
   const resolved = resolveHighlightLanguage(language);

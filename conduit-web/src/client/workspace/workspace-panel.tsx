@@ -1,17 +1,21 @@
 import { batch, createEffect, createMemo, createSignal, For, on, onCleanup, Show, type Accessor } from "solid-js";
-import { BoxesIcon, ChevronsUpIcon, ChevronDownIcon, ChevronRightIcon, CopyIcon, EyeIcon, EyeOffIcon, FolderIcon, GitBranchIcon, GitCompareArrowsIcon, Maximize2Icon, Minimize2Icon, RefreshCwIcon, SearchIcon, TerminalIcon, XIcon } from "lucide-solid";
-import { Button, Spinner } from "@/components/primitives";
+import { BoxesIcon, ChevronsUpIcon, ChevronDownIcon, ChevronRightIcon, CopyIcon, DownloadIcon, EyeIcon, EyeOffIcon, FolderIcon, GitBranchIcon, GitCompareArrowsIcon, Maximize2Icon, Minimize2Icon, PencilIcon, PinIcon, PinOffIcon, RefreshCwIcon, SaveIcon, SearchIcon, TerminalIcon, UploadIcon, XIcon } from "lucide-solid";
+import { Button, ContextMenu, ContextMenuContent, ContextMenuGroup, ContextMenuItem, ContextMenuSeparator, ContextMenuTrigger, Spinner } from "@/components/primitives";
 import { api, asList } from "../api/client";
+import { authorizedFetch } from "../api/native-auth-client";
+import { httpUrl } from "../api/transport";
+import { highlighterReady, highlightToHtml, primeHighlighter } from "../chat/code-highlight";
 import { focusFirst, isMobileLayout, restoreFocus } from "../navigation/mobile-layout";
 import { ownsWorkspaceRequest, type WorkspaceRequest } from "./request-ownership";
 import { TerminalPane } from "../remotes/terminal-pane";
 import { dispatchPanelGeometryMotion, PANEL_MOTION_DURATION_MS } from "../panel-motion";
-import { FileTypeIcon } from "./file-type-icon";
+import { fileHighlightLanguage, FileTypeIcon } from "./file-type-icon";
 import "./workspace.css";
 
 interface TreeEntry { name: string; path: string; type: "directory" | "file" | "other"; }
 interface DirectoryListing { entries: TreeEntry[]; truncated: boolean; }
-interface FilePreview { path: string; size: number; content: string; }
+interface FilePreview { path: string; size: number; revision: string; content: string; }
+interface FileWriteResult { path: string; size: number; revision: string; }
 interface GitCommit { graph: string; hash: string; shortHash: string; subject: string; author: string; authoredAt: string; }
 interface DiffPayload { repository: boolean; branch?: string; upstream?: string | null; ahead?: number; behind?: number; commits?: GitCommit[]; files: { status: string; path: string }[]; diff: string; }
 type PanelTab = "files" | "diff" | "artifacts" | "terminal";
@@ -30,6 +34,21 @@ const workspaceCache = new Map<string, WorkspaceCacheEntry>();
 const COMPACT_UI_MIGRATION_KEY = "conduit:compact-ui-v2";
 const MIN_DETAIL_HEIGHT = 32;
 const WIDE_FILES_MIN_WIDTH = 560;
+
+function storedPaths(key: string) {
+  try {
+    const value: unknown = JSON.parse(localStorage.getItem(key) || "[]");
+    return new Set(Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : []);
+  } catch {
+    return new Set<string>();
+  }
+}
+
+function lineNumbers(content: string) {
+  let lines = 1;
+  for (const character of content) if (character === "\n") lines += 1;
+  return Array.from({ length: lines }, (_, index) => index + 1).join("\n");
+}
 
 function migrateWorkspaceGeometry() {
   if (localStorage.getItem(COMPACT_UI_MIGRATION_KEY) === "true") return;
@@ -70,6 +89,8 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
   let detailHost: HTMLElement | undefined;
   let treeElement: HTMLElement | undefined;
   let fileFilterInput: HTMLInputElement | undefined;
+  let fileUploadInput: HTMLInputElement | undefined;
+  let editorTextarea: HTMLTextAreaElement | undefined;
   let filesResizeObserver: ResizeObserver | undefined;
   let panelEdgeMotionId: number | null = null;
   let panelMotionId = 0;
@@ -89,11 +110,18 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
   const [fileFilter, setFileFilter] = createSignal("");
   const [treeFocusPath, setTreeFocusPath] = createSignal("");
   const [showHidden, setShowHidden] = createSignal(false);
+  const [keptVisible, setKeptVisible] = createSignal(new Set<string>());
   const [filesWide, setFilesWide] = createSignal(false);
+  const [editing, setEditing] = createSignal(false);
+  const [draft, setDraft] = createSignal("");
+  const [saving, setSaving] = createSignal(false);
+  const [uploading, setUploading] = createSignal(false);
+  const [uploadDirectory, setUploadDirectory] = createSignal("");
   const [diff, setDiff] = createSignal<DiffPayload | null>(null);
   const [error, setError] = createSignal("");
   const widthKey = () => `conduit:workspace-panel:${props.projectId()}:width`;
   const showHiddenKey = () => `conduit:workspace-panel:${props.projectId()}:show-hidden`;
+  const keptVisibleKey = () => `conduit:workspace-panel:${props.projectId()}:kept-visible`;
   const [width, setWidth] = createSignal(Math.max(256, Math.min(496, Number(localStorage.getItem(widthKey())) || 336)));
   const [shellWidth, setShellWidth] = createSignal(props.open() ? width() : 0);
   const [shellGap, setShellGap] = createSignal(props.open() && !isMobileLayout() ? 8 : 0);
@@ -107,6 +135,14 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
   const diffLoading = () => hasPending("diff");
   const filesLoading = () => [...requests.keys()].some((operation) => operation.startsWith("directory:") && hasPending(operation));
   const loading = () => [...pending().values()].some((entry) => entry.foreground);
+  const hasUnsavedChanges = () => Boolean(preview() && draft() !== preview()!.content);
+  const highlightedPreview = createMemo(() => {
+    const file = preview();
+    highlighterReady();
+    if (!file || editing()) return "";
+    primeHighlighter();
+    return highlightToHtml(draft(), fileHighlightLanguage(file.path));
+  });
 
   const ownsRequest = (request: WorkspaceRequest) => ownsWorkspaceRequest({
     projectId: props.projectId(),
@@ -356,24 +392,119 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
     try {
       const payload = await api<FilePreview>(`/v0/projects/${encodeURIComponent(request.projectId)}/file?path=${encodeURIComponent(file)}`, { signal: controller.signal });
       if (ownsRequest(request)) {
-        setPreview(payload);
+        batch(() => {
+          setPreview(payload);
+          setDraft(payload.content);
+        });
         cacheWorkspace(request.projectId, { preview: payload });
+        return payload;
       }
     } catch (cause) {
       if (ownsRequest(request) && !wasAborted(cause)) {
-        setPreview(null);
+        batch(() => {
+          setPreview(null);
+          setDraft("");
+          setEditing(false);
+        });
         cacheWorkspace(request.projectId, { preview: null });
         setError((cause as Error).message);
       }
     } finally {
       finishRequest(request);
     }
+    return null;
+  };
+  const openFile = async (file: string) => {
+    if (preview()?.path === file) return preview();
+    if (preview()?.path !== file && hasUnsavedChanges() && !window.confirm("Discard unsaved changes and open another file?")) return null;
+    setEditing(false);
+    return loadFile(file);
+  };
+  const editFile = async (file = preview()?.path) => {
+    if (!file) return;
+    const opened = preview()?.path === file ? preview() : await openFile(file);
+    if (!opened) return;
+    setEditing(true);
+    queueMicrotask(() => {
+      editorTextarea?.focus();
+      editorTextarea?.setSelectionRange(0, 0);
+      if (editorTextarea) editorTextarea.scrollTop = 0;
+    });
+  };
+  const saveFile = async () => {
+    const file = preview();
+    if (!file || !hasUnsavedChanges() || saving()) return;
+    setSaving(true);
+    setError("");
+    try {
+      const written = await api<FileWriteResult>(`/v0/projects/${encodeURIComponent(props.projectId())}/file?path=${encodeURIComponent(file.path)}`, {
+        method: "PUT",
+        headers: { "content-type": "application/octet-stream", "if-match": file.revision },
+        body: draft(),
+      });
+      const next = { ...file, ...written, content: draft() };
+      setPreview(next);
+      cacheWorkspace(props.projectId(), { preview: next });
+    } catch (cause) {
+      setError((cause as Error).message);
+    } finally {
+      setSaving(false);
+    }
+  };
+  const downloadFile = async (file = preview()?.path) => {
+    if (!file) return;
+    setError("");
+    try {
+      const response = await authorizedFetch(httpUrl(`/v0/projects/${encodeURIComponent(props.projectId())}/file?path=${encodeURIComponent(file)}&download=1`));
+      if (!response.ok) {
+        const body: unknown = await response.json().catch(() => ({}));
+        const message = body && typeof body === "object" && "message" in body ? String(body.message) : "Download failed";
+        throw new Error(message);
+      }
+      const url = URL.createObjectURL(await response.blob());
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = file.split("/").at(-1) || "download";
+      link.click();
+      window.setTimeout(() => URL.revokeObjectURL(url), 0);
+    } catch (cause) {
+      setError((cause as Error).message);
+    }
+  };
+  const chooseUpload = (directory = "") => {
+    setUploadDirectory(directory);
+    if (fileUploadInput) {
+      fileUploadInput.value = "";
+      fileUploadInput.click();
+    }
+  };
+  const uploadFiles = async (files: FileList | null) => {
+    if (!files?.length) return;
+    const directory = uploadDirectory();
+    setUploading(true);
+    setError("");
+    try {
+      for (const file of files) {
+        const target = directory ? `${directory}/${file.name}` : file.name;
+        await api<FileWriteResult>(`/v0/projects/${encodeURIComponent(props.projectId())}/file?path=${encodeURIComponent(target)}`, {
+          method: "PUT",
+          headers: { "content-type": "application/octet-stream" },
+          body: file,
+        });
+      }
+      await loadDirectory(directory, true);
+    } catch (cause) {
+      setError((cause as Error).message);
+      await loadDirectory(directory, true);
+    } finally {
+      setUploading(false);
+    }
   };
   const refreshFiles = async () => {
     const loaded = Object.keys(directories());
     for (const directory of loaded.length ? loaded : [""]) await loadDirectory(directory, true);
     const selected = preview()?.path;
-    if (selected) await loadFile(selected, true);
+    if (selected && !hasUnsavedChanges()) await loadFile(selected, true);
   };
   const loadDiff = async (includePatch = false, reuse = false, background = false) => {
     if (diffLoading()) return;
@@ -518,6 +649,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
       setWidth(nextWidth);
       if (props.open()) setShellWidth(nextWidth);
       setShowHidden(localStorage.getItem(showHiddenKey()) === "true");
+      setKeptVisible(storedPaths(keptVisibleKey()));
       setTab(nextTab);
     });
   }));
@@ -537,6 +669,8 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
           setDirectories(cached?.directories || {});
           setExpanded(cached?.expanded || new Set<string>());
           setPreview(cached?.preview || null);
+          setDraft(cached?.preview?.content || "");
+          setEditing(false);
           setFileFilter("");
           setTreeFocusPath(cached?.preview?.path || "");
           setDiff(cached?.diff || null);
@@ -555,7 +689,8 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
     }));
 
   function entryMatchesFilter(entry: TreeEntry, query: string): boolean {
-    if (!showHidden() && entry.name.startsWith(".")) return false;
+    const kept = [...keptVisible()].some((path) => path === entry.path || path.startsWith(`${entry.path}/`));
+    if (!showHidden() && entry.name.startsWith(".") && !kept) return false;
     if (!query || entry.name.toLowerCase().includes(query)) return true;
     return entry.type === "directory" && (directories()[entry.path]?.entries || []).some((child) => entryMatchesFilter(child, query));
   }
@@ -656,6 +791,13 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
     setShowHidden(next);
     localStorage.setItem(showHiddenKey(), String(next));
   };
+  const toggleKeptVisible = (path: string) => {
+    const next = new Set(keptVisible());
+    if (next.has(path)) next.delete(path);
+    else next.add(path);
+    setKeptVisible(next);
+    localStorage.setItem(keptVisibleKey(), JSON.stringify([...next]));
+  };
   const collapseTree = () => {
     const next = new Set<string>();
     setExpanded(next);
@@ -666,29 +808,52 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
     const depth = () => treeProps.depth || 0;
     return <>
       <For each={visibleEntries(treeProps.directory)}>{(entry, index) => <div class="workspace-tree-node">
-        <button
-          type="button"
-          role="treeitem"
-          aria-expanded={entry.type === "directory" ? directoryIsOpen(entry.path) : undefined}
-          aria-level={depth() + 1}
-          aria-posinset={index() + 1}
-          aria-setsize={visibleEntries(treeProps.directory).length}
-          aria-selected={preview()?.path === entry.path}
-          class="workspace-tree-row"
-          style={{ "padding-left": `${8 + depth() * 11.2}px` }}
-          data-name={entry.name.toLowerCase()}
-          data-path={entry.path}
-          data-selected={preview()?.path === entry.path}
-          tabIndex={treeTabStop() === entry.path ? 0 : -1}
-          onFocus={() => setTreeFocusPath(entry.path)}
-          onKeyDown={onTreeKeyDown}
-          onClick={() => entry.type === "directory" ? void toggleDirectory(entry.path) : entry.type === "file" ? void loadFile(entry.path) : undefined}
-        >
-          <Show when={entry.type === "directory"} fallback={<><span class="workspace-tree-chevron-placeholder" /><FileTypeIcon name={entry.name} /></>}>
-            <ChevronRightIcon class="workspace-tree-chevron" data-open={directoryIsOpen(entry.path)} /><FolderIcon />
-          </Show>
-          <span>{entry.name}</span>
-        </button>
+        <ContextMenu>
+          <ContextMenuTrigger
+            as="button"
+            type="button"
+            role="treeitem"
+            aria-expanded={entry.type === "directory" ? directoryIsOpen(entry.path) : undefined}
+            aria-level={depth() + 1}
+            aria-posinset={index() + 1}
+            aria-setsize={visibleEntries(treeProps.directory).length}
+            aria-selected={preview()?.path === entry.path}
+            class="workspace-tree-row"
+            style={{ "padding-left": `${8 + depth() * 11.2}px` }}
+            data-name={entry.name.toLowerCase()}
+            data-path={entry.path}
+            data-selected={preview()?.path === entry.path}
+            tabIndex={treeTabStop() === entry.path ? 0 : -1}
+            onFocus={() => setTreeFocusPath(entry.path)}
+            onKeyDown={onTreeKeyDown}
+            onClick={() => entry.type === "directory" ? void toggleDirectory(entry.path) : entry.type === "file" ? void openFile(entry.path) : undefined}
+          >
+            <Show when={entry.type === "directory"} fallback={<><span class="workspace-tree-chevron-placeholder" /><FileTypeIcon name={entry.name} /></>}>
+              <ChevronRightIcon class="workspace-tree-chevron" data-open={directoryIsOpen(entry.path)} /><FolderIcon />
+            </Show>
+            <span>{entry.name}</span>
+            <Show when={keptVisible().has(entry.path)}><PinIcon class="workspace-tree-kept" aria-label="Always visible" /></Show>
+          </ContextMenuTrigger>
+          <ContextMenuContent class="w-48 workspace-file-menu">
+            <ContextMenuGroup>
+              <Show when={entry.type === "file"}>
+                <ContextMenuItem onSelect={() => void openFile(entry.path)}><FileTypeIcon name={entry.name} />Open preview</ContextMenuItem>
+                <ContextMenuItem onSelect={() => void editFile(entry.path)}><PencilIcon />Edit</ContextMenuItem>
+                <ContextMenuItem onSelect={() => void downloadFile(entry.path)}><DownloadIcon />Download</ContextMenuItem>
+              </Show>
+              <Show when={entry.type === "directory"}>
+                <ContextMenuItem onSelect={() => chooseUpload(entry.path)}><UploadIcon />Upload files here</ContextMenuItem>
+              </Show>
+              <ContextMenuItem onSelect={() => copy(entry.path)}><CopyIcon />Copy path</ContextMenuItem>
+            </ContextMenuGroup>
+            <Show when={entry.name.startsWith(".") || keptVisible().has(entry.path)}>
+              <ContextMenuSeparator />
+              <ContextMenuItem onSelect={() => toggleKeptVisible(entry.path)}>
+                <Show when={keptVisible().has(entry.path)} fallback={<><PinIcon />Keep visible</>}><PinOffIcon />Stop keeping visible</Show>
+              </ContextMenuItem>
+            </Show>
+          </ContextMenuContent>
+        </ContextMenu>
         <Show when={entry.type === "directory" && directoryIsOpen(entry.path)}>
           <div role="group"><Tree directory={entry.path} depth={depth() + 1} /></div>
         </Show>
@@ -750,7 +915,9 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
             <button type="button" aria-label={showHidden() ? "Hide hidden files" : "Show hidden files"} title={showHidden() ? "Hide hidden files" : "Show hidden files"} aria-pressed={showHidden()} onClick={toggleHidden}>
               <Show when={showHidden()} fallback={<EyeOffIcon />}><EyeIcon /></Show>
             </button>
+            <button type="button" aria-label="Upload files" title="Upload files to workspace root" disabled={uploading()} onClick={() => chooseUpload()}><Show when={uploading()} fallback={<UploadIcon />}><Spinner /></Show></button>
             <button type="button" aria-label="Refresh files" title="Refresh files" disabled={filesLoading()} onClick={() => void refreshFiles()}><RefreshCwIcon /></button>
+            <input ref={fileUploadInput} class="workspace-file-input" type="file" multiple onChange={(event) => void uploadFiles(event.currentTarget.files)} />
           </div>
           <nav ref={(element) => {
             treeElement = element;
@@ -765,19 +932,50 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
         </Show>
         <Show when={filesWide() || detailOpen()}><>
           <Show when={!filesWide()}><div class="workspace-detail-resize-handle" role="separator" aria-label="Resize file preview" aria-orientation="horizontal" aria-valuemin={MIN_DETAIL_HEIGHT} aria-valuemax={maxDetailHeight()} aria-valuenow={detailHeight()} tabIndex={0} onPointerDown={startDetailResize} onKeyDown={resizeDetailByKey} /></Show>
-          <section class="workspace-preview" aria-label="File preview" style={{ height: filesWide() ? "auto" : `${detailHeight()}px` }}>
+          <ContextMenu>
+          <ContextMenuTrigger as="section" class="workspace-preview" aria-label="File preview" style={{ height: filesWide() ? "auto" : `${detailHeight()}px` }}>
             <Show when={preview()} fallback={<div class="workspace-panel-empty">Select a text file to preview it.</div>}>{(file) => <>
               <header class="workspace-preview-header">
                 <div class="workspace-preview-file" title={file().path}><FileTypeIcon name={file().path} /><span>{file().path}</span></div>
-                <small>{file().size.toLocaleString()} bytes</small>
-                <button type="button" class="workspace-preview-copy" aria-label="Copy file contents" title="Copy file contents" onClick={() => copy(file().content)}><CopyIcon /></button>
+                <small>{hasUnsavedChanges() ? "Unsaved" : `${file().size.toLocaleString()} bytes`}</small>
+                <button type="button" class="workspace-preview-action" aria-label={editing() ? "Close editor" : "Edit file"} title={editing() ? "Close editor" : "Edit file"} onClick={() => editing() ? setEditing(false) : void editFile()}><Show when={editing()} fallback={<PencilIcon />}><XIcon /></Show></button>
+                <button type="button" class="workspace-preview-action" aria-label="Save file" title="Save file (Ctrl+S)" disabled={!hasUnsavedChanges() || saving()} onClick={() => void saveFile()}><Show when={saving()} fallback={<SaveIcon />}><Spinner /></Show></button>
+                <button type="button" class="workspace-preview-action" aria-label="Download file" title="Download file" onClick={() => void downloadFile()}><DownloadIcon /></button>
+                <button type="button" class="workspace-preview-copy" aria-label="Copy file contents" title="Copy file contents" onClick={() => copy(draft())}><CopyIcon /></button>
               </header>
-              <div class="workspace-preview-editor">
-                <pre class="workspace-preview-lines" aria-hidden="true">{Array.from({ length: file().content.split("\n").length }, (_, index) => index + 1).join("\n")}</pre>
-                <pre class="workspace-preview-code"><code>{file().content}</code></pre>
+              <div class="workspace-preview-editor" data-editing={editing()}>
+                <Show when={!editing()}><pre class="workspace-preview-lines" aria-hidden="true">{lineNumbers(draft())}</pre></Show>
+                <Show when={editing()} fallback={<pre class="workspace-preview-code"><code innerHTML={highlightedPreview()} /></pre>}>
+                  <textarea
+                    ref={editorTextarea}
+                    class="workspace-preview-textarea"
+                    aria-label={`Edit ${file().path}`}
+                    value={draft()}
+                    spellcheck={false}
+                    onInput={(event) => setDraft(event.currentTarget.value)}
+                    onKeyDown={(event) => {
+                      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") {
+                        event.preventDefault();
+                        void saveFile();
+                      }
+                    }}
+                  />
+                </Show>
               </div>
             </>}</Show>
-          </section>
+          </ContextMenuTrigger>
+          <Show when={preview()}>{(file) =>
+            <ContextMenuContent class="w-48 workspace-file-menu">
+              <ContextMenuGroup>
+                <ContextMenuItem onSelect={() => void editFile()}><PencilIcon />Edit</ContextMenuItem>
+                <ContextMenuItem disabled={!hasUnsavedChanges() || saving()} onSelect={() => void saveFile()}><SaveIcon />Save</ContextMenuItem>
+                <ContextMenuItem onSelect={() => void downloadFile()}><DownloadIcon />Download</ContextMenuItem>
+                <ContextMenuItem onSelect={() => copy(draft())}><CopyIcon />Copy contents</ContextMenuItem>
+                <ContextMenuItem onSelect={() => copy(file().path)}><CopyIcon />Copy path</ContextMenuItem>
+              </ContextMenuGroup>
+            </ContextMenuContent>
+          }</Show>
+          </ContextMenu>
         </></Show>
       </div>
     </Show>

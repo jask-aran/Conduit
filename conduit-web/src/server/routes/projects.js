@@ -1,7 +1,10 @@
+import path from "node:path";
 import fs from "node:fs/promises";
+import express from "express";
 import { resolveTemplate } from "../../config.js";
 import { chatView } from "../../chat-store.js";
 import { removeProjectSessions, removeSession } from "../../session-store.js";
+import { resolveInspectorPath, writeWorkspaceFile } from "../../workspace-inspector.js";
 import {
   findDeletableSession,
   moveRegisteredChat,
@@ -238,7 +241,29 @@ export function registerProjectRoutes(app, {
       if (!project) return response.status(404).json({ error: "project_not_found" });
       if (!request.query.path) return response.status(400).json({ error: "workspace_path_required" });
       await projects.validate(project);
+      if (request.query.download === "1") {
+        const resolved = await resolveInspectorPath(project.path, request.query.path, { kind: "file" });
+        const downloadName = encodeURIComponent(path.basename(resolved.relativePath)).replace(/[!'()*]/g, (character) => `%${character.charCodeAt(0).toString(16).toUpperCase()}`);
+        response.setHeader("Content-Type", "application/octet-stream");
+        response.setHeader("X-Content-Type-Options", "nosniff");
+        response.setHeader("Cache-Control", "private, no-cache");
+        response.setHeader("Content-Disposition", `attachment; filename*=UTF-8''${downloadName}`);
+        return response.sendFile(resolved.path);
+      }
       response.json(await readWorkspaceFile(project.path, request.query.path));
+    } catch (error) { next(error); }
+  });
+
+  app.put("/v0/projects/:id/file", express.raw({ type: "application/octet-stream", limit: config.maxAttachmentBytes }), async (request, response, next) => {
+    try {
+      const project = await projects.get(request.params.id);
+      if (!project) return response.status(404).json({ error: "project_not_found" });
+      if (!request.query.path) return response.status(400).json({ error: "workspace_path_required" });
+      await projects.validate(project);
+      const expectedRevision = typeof request.headers["if-match"] === "string" ? request.headers["if-match"] : null;
+      const content = Buffer.isBuffer(request.body) ? request.body : Buffer.alloc(0);
+      const written = await writeWorkspaceFile(project.path, request.query.path, content, { expectedRevision });
+      response.status(expectedRevision == null ? 201 : 200).json(written);
     } catch (error) { next(error); }
   });
 
