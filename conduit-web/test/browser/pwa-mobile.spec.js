@@ -353,7 +353,8 @@ test("acceptance: mobile runtime status stays quiet and context metrics live in 
   test.skip(testInfo.project.name !== "mobile-chromium", "phone runtime status rail");
   await openApp(page);
 
-  const status = page.getByRole("button", { name: /Runtime status: Ready/ });
+  // "Stays quiet" is the point: the rail is a live region now, not a control.
+  const status = page.getByRole("status", { name: /Runtime status: Ready/ });
   await expect(status).toBeVisible();
   await expect(status).toContainText("Ready");
   await expect(page.locator(".composer-status")).toBeHidden();
@@ -435,7 +436,7 @@ test("acceptance: mobile transcript fades behind the frosted live composer", asy
 
 test("acceptance: mobile renderer probes stay in the viewport and pacing is selectable", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "mobile-chromium", "phone renderer probes");
-  await page.addInitScript(() => localStorage.setItem("conduit:transcript-renderer", "incremark-synthetic"));
+  await page.addInitScript(() => localStorage.setItem("conduit:markdown-renderer", "incremark"));
   await page.route("**/v0/sessions/session_existing", (route) => route.fulfill({
     json: {
       id: "session_existing",
@@ -608,7 +609,9 @@ test("acceptance: mobile sidebar is a full-bleed exclusive overlay", async ({ pa
 test("acceptance: mobile workspace is full-bleed and closes via panel X only", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "mobile-chromium", "phone overlay chrome");
   await openApp(page);
-  await page.getByRole("button", { name: "Toggle workspace panel" }).click();
+  // The phone header carries no panel toggle; the palette command is the way in.
+  await page.locator(".palette-trigger").click();
+  await page.getByRole("option", { name: /^Toggle workspace panel/ }).click();
   const panel = page.getByRole("complementary", { name: "Workspace panel" });
   const opening = await sampleTranslateX(page, ".workspace-panel");
   await expect(panel).toBeVisible();
@@ -621,7 +624,8 @@ test("acceptance: mobile workspace is full-bleed and closes via panel X only", a
   await page.getByRole("button", { name: "Close workspace panel" }).click();
   const closing = await sampleTranslateX(page, ".workspace-panel");
   await expect(panel).toBeHidden();
-  await expect(page.getByRole("button", { name: "Toggle workspace panel" })).toBeVisible();
+  // Closed or open, the phone never grows a header toggle: the X is the only exit.
+  await expect(page.getByRole("button", { name: "Toggle workspace panel" })).toHaveCount(0);
   expect(new Set(closing.map((value) => Math.round(value))).size).toBeGreaterThan(2);
   expect(closing.every((value, index) => index === 0 || value >= closing[index - 1] - 0.5)).toBe(true);
 });

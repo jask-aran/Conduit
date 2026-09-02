@@ -5,6 +5,7 @@
   boundaries and evidence requirements for every testing approach.
 - `conduit-web/README.md` — runtime model, HTTP API, auth mechanism, process
   residency and caps, and the live-session WebSocket protocol.
+- `DESIGN.md` — in-app visual language for user-facing UI.
 - `docs/references/distillations.md` — concise project-specific invariants and
   heuristics. ALWAYS read it once before starting a sprint or series of planned
   commits/ work, and reread it when repeatedly stuck on an issue; update it

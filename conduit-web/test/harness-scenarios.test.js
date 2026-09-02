@@ -14,17 +14,6 @@ test("the harness CLI documents named scenario execution", () => {
   assert.match(result.stdout, /versioned JSON/);
 });
 
-test("the browser harness CLI documents deterministic render profiles", () => {
-  const result = spawnSync(process.execPath, ["scripts/run-browser-harness.mjs", "--help"], {
-    cwd: new URL("..", import.meta.url),
-    encoding: "utf8",
-  });
-  assert.equal(result.status, 0, result.stderr);
-  assert.match(result.stdout, /--scenario <name>/);
-  assert.match(result.stdout, /--profile <steady\|burst\|jitter>/);
-  assert.match(result.stdout, /production client/);
-});
-
 test("built-in cadence profiles are declarative and seeded jitter is reproducible", () => {
   const steady = createCadence("steady", { text: "abcd", chunkSize: 2, intervalMs: 16 });
   assert.deepEqual(steady, { delaysMs: [0, 16], deltas: ["ab", "cd"] });

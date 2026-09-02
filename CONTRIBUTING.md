@@ -104,6 +104,26 @@ Task-specific execution plans may deliberately require a particular recorded
 working-tree state. Those stricter checks apply only to that task or handoff;
 they do not establish a repository-wide clean-tree requirement for future work.
 
+## Testing
+
+- `npm test` — the default gate: Node unit and integration tests, about forty
+  seconds. Run it for every change.
+- `npm run typecheck` — for any TypeScript change.
+- `npm run build` — Vite build plus bundle checks, when output size or the PWA
+  artefacts could move.
+- `npm run test:harness` — deterministic transport scenario emitting versioned
+  JSON, for streaming, batching or reconnect work.
+- `npm run test:setpieces` — optional Playwright run over a small curated set of
+  browser behaviours, about two and a half minutes. Run it when navigation,
+  settings, the sidebar, the workspace panel or phone chrome change.
+- `npm run qa:agent-browser` — drive a real browser when a change needs to be
+  seen rather than asserted.
+
+Keep the setpieces small and green. A setpiece asserts something a reader would
+notice, not a pixel constant that moves when the interface is rescaled. Fix or
+delete one that fails while the app is right: a suite expected to fail is not a
+gate.
+
 ## Commits and history
 
 Keep Git history intentional and reviewable.
@@ -127,60 +147,40 @@ Keep Git history intentional and reviewable.
 
 ### Performance observations
 
-When checks already run for a change produce useful quantitative performance
-data, preserve relevant headline values in the commit body. This is a recording
-convention, not a testing requirement: do not run additional builds, harnesses,
-or benchmarks solely to populate commit metrics, and omit `Metrics:` entirely
-when the work produced no useful measurements.
+When checks already run produce useful quantitative data, preserve the headline
+values in the commit body. This is a recording convention, not a testing
+requirement: never run extra builds or harnesses solely to populate metrics, and
+omit `Metrics:` when the work produced none.
 
-When `npm run build` has already been run, record its three standard bundle
-observations:
+`npm run build` yields three standard bundle observations:
 
 - `bundle.initial_js_gzip_bytes`
 - `bundle.initial_css_gzip_bytes`
 - `bundle.largest_lazy_js_gzip_bytes`
 
-When a performance harness has already been run, record the scenario or flow
-that produced the measurement plus one to three headline observations relevant
-to the changed boundary. Prefer metrics that remain useful as project history:
+A harness run yields its scenario plus one to three observations relevant to the
+changed boundary: first-delta latency, gap percentiles or coalescing ratio for
+transport work; recovery time, socket count or duplicate characters for
+reconnect work. Keep any parity observation that qualifies the result.
 
-- transport work: first-delta latency, gap percentiles, coalescing ratio or
-  throughput;
-- rendering work: frame-gap percentiles, long-task count, DOM mutations or
-  visible-text cadence;
-- reconnect work: recovery time, socket count or duplicate characters;
-- live/deployed-path work: first-visible-delta latency, gap percentiles or large
-  gap counts, with target/model/scenario context;
-- terminal work: the relevant headline values emitted by the terminal
-  performance test when it was already run.
-
-When a harness also emits a correctness or parity observation that materially
-qualifies the performance result, retain it alongside the headline metrics—for
-example final-text parity or zero duplicate characters after reconnect.
-
-Use lowercase dotted names and explicit units where practical, for example
-`browser.frame_gap_p95_ms`, `transport.coalescing_ratio` or
-`reconnect.recovery_ms`. Record absolute observations rather than manually
-calculated percentage deltas; a later history tool can derive comparable deltas
-from Git. Do not treat a metric as evidence of a regression or improvement
-without a comparable scenario or baseline.
+Use lowercase dotted names with explicit units. Record absolute observations
+rather than hand-calculated deltas, and do not call a number a regression or an
+improvement without a comparable baseline.
 
 A typical non-trivial commit body may therefore end with:
 
 ```text
 Checks:
 - npm run typecheck
-- npm run build
-- npm run test:harness:browser -- --scenario browser-burst ...
+- npm test
+- npm run test:harness -- --scenario streaming-burst
 
 Metrics:
 - bundle.initial_js_gzip_bytes=143281
-- bundle.initial_css_gzip_bytes=38142
-- bundle.largest_lazy_js_gzip_bytes=247901
-- browser.scenario=browser-burst
-- browser.frame_gap_p95_ms=18.4
-- browser.long_tasks=0
+- transport.scenario=streaming-burst
+- transport.first_delta_ms=48
+- transport.gap_p95_ms=18.4
 ```
 
-Detailed reports remain testing evidence rather than Git-history payloads. The
-commit body should preserve only the observations worth comparing later.
+Detailed reports remain testing evidence rather than Git-history payloads: the
+commit body preserves only the observations worth comparing later.

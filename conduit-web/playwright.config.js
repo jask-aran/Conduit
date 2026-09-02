@@ -16,9 +16,15 @@ export default defineConfig({
   reporter: "line",
   use: {
     baseURL: "http://127.0.0.1:4173",
-    launchOptions: process.env.PLAYWRIGHT_EXECUTABLE_PATH
-      ? { executablePath: process.env.PLAYWRIGHT_EXECUTABLE_PATH }
-      : {},
+    launchOptions: {
+      ...(process.env.PLAYWRIGHT_EXECUTABLE_PATH ? { executablePath: process.env.PLAYWRIGHT_EXECUTABLE_PATH } : {}),
+      // Opt-in for the drag/frame benchmarks. Without it rAF is pinned to the
+      // 60Hz compositor, so every stall reads as a flat 33.3ms and per-frame
+      // work below one vsync is invisible -- useless for a 144Hz target.
+      ...(process.env.CONDUIT_UNTHROTTLE_FRAMES === "1"
+        ? { args: ["--disable-frame-rate-limit", "--disable-gpu-vsync"] }
+        : {}),
+    },
     screenshot: "only-on-failure",
     trace: "retain-on-failure",
     video: "off",
