@@ -211,4 +211,3 @@ export function rankPaletteResults<C extends MatchableCommand, M extends Matchab
   return rows;
 }
 
-export const PALETTE_SCORE_THRESHOLD = SCORE_THRESHOLD;

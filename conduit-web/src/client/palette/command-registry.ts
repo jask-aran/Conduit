@@ -45,6 +45,7 @@ export interface PaletteActions {
   toggleDictation: () => void;
   toggleSidebar: () => void;
   toggleWorkspacePanel: () => void;
+  maximizeWorkspacePanel: () => void;
   openWorkspaceView: (view: "files" | "diff" | "artifacts" | "terminal") => void;
   copyTranscript: () => void;
   rename: () => void;
@@ -184,6 +185,7 @@ const paletteCommandRuntime: Record<string, PaletteCommandRuntime> = {
   [COMMAND_IDS.toggleDictation]: { isAvailable: hasChat, run: (actions) => actions.toggleDictation() },
   [COMMAND_IDS.toggleSidebar]: { isAvailable: () => true, run: (actions) => actions.toggleSidebar() },
   [COMMAND_IDS.toggleWorkspacePanel]: { isAvailable: hasChat, run: (actions) => actions.toggleWorkspacePanel() },
+  [COMMAND_IDS.maximizeWorkspacePanel]: { isAvailable: hasChat, run: (actions) => actions.maximizeWorkspacePanel() },
   [COMMAND_IDS.copyTranscript]: { isAvailable: hasChat, run: (actions) => actions.copyTranscript() },
   [COMMAND_IDS.renameChat]: { isAvailable: hasChat, run: (actions) => actions.rename() },
   [COMMAND_IDS.autoNameChat]: {
@@ -471,9 +473,4 @@ export function groupPaletteCommands(commands: PaletteCommand[]): (PaletteGroup 
   return PALETTE_GROUPS
     .map((group) => ({ ...group, items: buckets.get(group.id) || [] }))
     .filter((group) => group.items.length > 0);
-}
-
-export function commandSearchValue(command: PaletteCommand): string {
-  if (command.searchValue) return command.searchValue;
-  return [command.id, command.label, ...(command.keywords || [])].filter(Boolean).join(" ");
 }

@@ -62,7 +62,11 @@ export interface TurnTraceData {
 }
 
 export type TurnRow =
-  | { key: string; type: "message"; value: Message; index: number; live?: boolean; streamVersion?: number; displayKey?: string }
+  // precedingUserId is carried on the row rather than looked up per render.
+  // The projection already knows which user message opened the turn; making
+  // each row rediscover it meant a backwards scan of the whole message list
+  // per assistant row, which is quadratic in a long chat.
+  | { key: string; type: "message"; value: Message; index: number; live?: boolean; streamVersion?: number; displayKey?: string; precedingUserId?: string }
   | { key: string; type: "trace"; value: TurnTraceData };
 
 const thinkingOf = (message: Message): string => (message.blocks || [])
@@ -159,6 +163,7 @@ export function buildLiveAnswerRow(
   assistantId: string,
   index: LiveProjectionIndex,
   messageIndex: number,
+  precedingUserId?: string,
 ): Extract<TurnRow, { type: "message" }> | null {
   const assistant = generation.assistantMessages.find((message) => message.id === assistantId);
   const answerIdentities = index.answerBlockIdentities.get(assistantId);
@@ -181,6 +186,7 @@ export function buildLiveAnswerRow(
     index: messageIndex,
     live: active(generation),
     streamVersion: generation.lastSeq,
+    precedingUserId,
     value: {
       id: `live:${generation.id}:${assistantId}`,
       key: `live:${generation.id}:${assistantId}`,
@@ -259,6 +265,7 @@ function liveRows(generation: ActiveGenerationView, owner: Message | null, index
         index,
         live: active(generation),
         streamVersion: generation.lastSeq,
+        precedingUserId: owner?.id,
         value: {
           id: `live:${generation.id}:${assistant.id}`,
           key: `live:${generation.id}:${assistant.id}`,
@@ -368,6 +375,7 @@ export function buildTurnRows(
           type: "message",
           value: answerAssistants.length === 1 ? answer : { ...answer, content: answerText },
           index: messages.indexOf(answer),
+          precedingUserId: turn.userMessage?.id,
         });
       }
     }

@@ -45,10 +45,6 @@ export function Dialog(props: ParentProps<{ open: boolean; onOpenChange: (open: 
   return <KDialog.Root open={props.open} onOpenChange={props.onOpenChange}>{props.children}</KDialog.Root>;
 }
 
-export function DialogTrigger(props: ParentProps<{ as?: keyof JSX.IntrinsicElements; class?: string }>) {
-  return <KDialog.Trigger as={props.as || "button"} class={props.class}>{props.children}</KDialog.Trigger>;
-}
-
 function createFullscreenPortalMount() {
   const [mount, setMount] = createSignal<HTMLElement>();
   const sync = () => setMount(document.fullscreenElement instanceof HTMLElement ? document.fullscreenElement : undefined);
@@ -71,18 +67,6 @@ export function DialogContent(props: ParentProps<{ class?: string; title?: strin
       <KDialog.CloseButton class="absolute right-4 top-4 rounded-sm opacity-70 hover:opacity-100" aria-label={props.closeLabel || "Close"}><XIcon class="size-4" /></KDialog.CloseButton>
     </KDialog.Content>
   </KDialog.Portal>;
-}
-
-export function DialogTitle(props: ParentProps<{ class?: string }>) {
-  return <KDialog.Title class={cn("text-lg font-semibold", props.class)}>{props.children}</KDialog.Title>;
-}
-
-export function DialogDescription(props: ParentProps<{ class?: string }>) {
-  return <KDialog.Description class={cn("text-sm text-muted-foreground", props.class)}>{props.children}</KDialog.Description>;
-}
-
-export function DialogClose(props: ParentProps<{ class?: string }>) {
-  return <KDialog.CloseButton class={props.class}>{props.children}</KDialog.CloseButton>;
 }
 
 /* Menus share one dark, solid surface profile: --popover ground, hairline ring,
@@ -115,7 +99,6 @@ export function MenuRadioItem(props: ParentProps<{ class?: string; value: string
 export function MenuLabel(props: ParentProps<{ class?: string }>) { return <KMenu.GroupLabel class={cn("px-1.5 py-1.5 text-xs font-medium text-muted-foreground", props.class)}>{props.children}</KMenu.GroupLabel>; }
 export function MenuSeparator() { return <KMenu.Separator class="-mx-1 my-1 h-px bg-border" />; }
 export function MenuSubTrigger(props: ParentProps<{ class?: string; disabled?: boolean; onPointerDown?: (event: PointerEvent) => void; onPointerUp?: (event: PointerEvent) => void; onClick?: (event: MouseEvent) => void }>) { return <KMenu.SubTrigger disabled={props.disabled} onPointerDown={props.onPointerDown} onPointerUp={props.onPointerUp} onClick={props.onClick} class={cn(menuItemClass, "data-[expanded]:bg-accent", props.class)}>{props.children}<ChevronRightIcon class="menu-chevron" /></KMenu.SubTrigger>; }
-export function MenuSubContent(props: ParentProps<{ class?: string; onPointerDown?: (event: PointerEvent) => void; onClick?: (event: MouseEvent) => void }>) { return <KMenu.Portal><KMenu.SubContent data-slot="menu-content" onPointerDown={props.onPointerDown} onClick={props.onClick} class={cn(menuSubContentClass, props.class)}>{props.children}</KMenu.SubContent></KMenu.Portal>; }
 
 export function ContextMenu(props: ParentProps<{ onOpenChange?: (open: boolean) => void; placement?: "bottom-start" | "right-start" }>) {
   return <KContextMenu modal={false} fitViewport overflowPadding={8} placement={props.placement || "right-start"} onOpenChange={props.onOpenChange}>{props.children}</KContextMenu>;

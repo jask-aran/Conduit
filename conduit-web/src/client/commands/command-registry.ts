@@ -25,6 +25,7 @@ export const COMMAND_IDS = {
   toggleDictation: "voice-dictation",
   toggleSidebar: "toggle-sidebar",
   toggleWorkspacePanel: "toggle-workspace-panel",
+  maximizeWorkspacePanel: "maximize-workspace-panel",
   copyTranscript: "copy-transcript",
   renameChat: "rename",
   autoNameChat: "rename-from-context",
@@ -218,6 +219,17 @@ export const commandRegistry: ShortcutCommandDefinition[] = [
     keywords: ["files", "diff", "inspector", "right panel"],
     contexts: ["application", "palette.root"],
     defaultBindings: [binding(stroke("Period", ".", ["primary"]))],
+    palette: true,
+  }),
+  command({
+    id: COMMAND_IDS.maximizeWorkspacePanel,
+    label: "Open maximized workspace panel",
+    description: "Open the workspace panel at full width",
+    group: "commands",
+    icon: "workspace-panel",
+    keywords: ["files", "workspace", "maximize", "full width"],
+    contexts: ["application", "palette.root"],
+    defaultBindings: [binding(stroke("Period", ".", ["primary", "shift"]))],
     palette: true,
   }),
   command({
@@ -456,18 +468,6 @@ export function getCommandDefinition(commandId: string): ShortcutCommandDefiniti
   const definition = commandById.get(commandId);
   if (!definition) throw new Error(`Unknown command: ${commandId}`);
   return definition;
-}
-
-export function commandDefaultBindings(commandId: string): ShortcutBinding[] {
-  return getCommandDefinition(commandId).defaultBindings;
-}
-
-export function commandDefaultShortcut(
-  commandId: string,
-  environment: ShortcutEnvironment = detectShortcutEnvironment(),
-): string | null {
-  const bindingValue = commandDefaultBindings(commandId)[0];
-  return bindingValue ? formatShortcutBinding(bindingValue, environment) : null;
 }
 
 export const paletteStableCommandIds = commandRegistry

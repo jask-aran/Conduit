@@ -84,13 +84,6 @@ export function assignToolSeq(tools: ToolItem[] = []): ToolItem[] {
   return tools.map((tool, index) => ({ ...tool, seq: tool.seq == null ? index : tool.seq }));
 }
 
-export function maxToolSeq(tools: ToolItem[] = []): number {
-  return tools.reduce((max, tool) => {
-    const seq = Number(tool.seq);
-    return Number.isFinite(seq) ? Math.max(max, seq) : max;
-  }, -1);
-}
-
 export function buildTimeline(messages: Message[] = [], tools: ToolItem[] = [], { streaming = false }: { streaming?: boolean } = {}): TimelineItem[] {
   const lastMessage = messages.at(-1);
   const messageItems: TimelineItem[] = messages.flatMap((message, index) => {

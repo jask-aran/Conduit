@@ -7,7 +7,6 @@ export interface UiPreferences {
   collapsedProjectIds: string[] | null;
   sidebarCollapsed: boolean | null;
   markdownRenderer: string | null;
-  transcriptRenderer: string | null;
   rendererControlsVisible: boolean | null;
   composerSurface: string | null;
   contextMetrics: string[] | null;
@@ -18,6 +17,7 @@ export interface UiPreferences {
   codeBlockCollapse: string | null;
   codeBlockCollapseLines: number | null;
   codeBlockWidth: string | null;
+  userMessageCollapse: string | null;
   shortcutOverrides: Record<string, unknown> | null;
   voicePreferences: Record<string, unknown> | null;
   sidebarPins: string[] | null;

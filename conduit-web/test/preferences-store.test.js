@@ -10,7 +10,6 @@ const emptyUiPreferences = {
   collapsedProjectIds: null,
   sidebarCollapsed: null,
   markdownRenderer: null,
-  transcriptRenderer: null,
   rendererControlsVisible: null,
   composerSurface: null,
   contextMetrics: null,
@@ -21,6 +20,7 @@ const emptyUiPreferences = {
   codeBlockCollapse: null,
   codeBlockCollapseLines: null,
   codeBlockWidth: null,
+  userMessageCollapse: null,
   shortcutOverrides: null,
   voicePreferences: null,
 };
@@ -54,7 +54,6 @@ test("preferences store persists general settings", async () => {
     collapsedProjectIds: ["project:one"],
     sidebarCollapsed: true,
     markdownRenderer: "incremark",
-    transcriptRenderer: "incremark-advanced",
     rendererControlsVisible: false,
     composerSurface: "static",
     contextMetrics: ["contextTokens", "sessionCost"],
@@ -65,6 +64,7 @@ test("preferences store persists general settings", async () => {
     codeBlockCollapse: "all",
     codeBlockCollapseLines: 25,
     codeBlockWidth: "wide",
+    userMessageCollapse: "25",
     shortcutOverrides: {
       "open-command-palette": [{ strokes: [{ code: "KeyK", key: "K", modifiers: ["primary"] }] }],
     },
@@ -82,12 +82,12 @@ test("preferences store persists general settings", async () => {
   assert.equal(restored.get().sidebarChatLimit, 45);
   assert.deepEqual(restored.get().collapsedProjectIds, ["project:one"]);
   assert.equal(restored.get().rendererControlsVisible, false);
-  assert.equal(restored.get().transcriptRenderer, "incremark-advanced");
   assert.equal(restored.get().transcriptWidth, "wide");
   assert.equal(restored.get().transcriptWideBlocks, "wider");
   assert.equal(restored.get().codeBlockCollapse, "all");
   assert.equal(restored.get().codeBlockCollapseLines, 25);
   assert.equal(restored.get().codeBlockWidth, "wide");
+  assert.equal(restored.get().userMessageCollapse, "25");
   assert.deepEqual(restored.get().voicePreferences, { shortcut: "Ctrl+Shift+D", activation: "toggle", autoSend: true, captureProfile: "processed" });
   assert.equal(validTerminalShortcuts(restored.get().terminalShortcuts), true);
   assert.equal(validTerminalShortcuts([{ id: "bad", label: "", command: "pwd", target: "current" }]), false);
@@ -114,6 +114,9 @@ test("reading-surface preferences round-trip and reject values outside their pre
   assert.equal(validUiPreferencePatch({ codeBlockCollapseLines: "25" }), false);
   assert.equal(validUiPreferencePatch({ codeBlockWidth: "wide" }), true);
   assert.equal(validUiPreferencePatch({ codeBlockWidth: "full" }), false);
+  assert.equal(validUiPreferencePatch({ userMessageCollapse: "15" }), true);
+  assert.equal(validUiPreferencePatch({ userMessageCollapse: 15 }), false);
+  assert.equal(validUiPreferencePatch({ userMessageCollapse: "12" }), false);
   assert.equal(validUiPreferencePatch({ transcriptWidth: null }), false);
 });
 

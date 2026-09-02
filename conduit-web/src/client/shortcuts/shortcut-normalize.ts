@@ -154,6 +154,3 @@ export function normalizeStoredBinding(value: unknown): ShortcutBinding | null {
   return shortcutBinding(...normalized as ShortcutStroke[]);
 }
 
-export function isPrintableUnmodifiedStroke(stroke: ShortcutStroke): boolean {
-  return stroke.modifiers.length === 0 && (stroke.key.length === 1 || stroke.code === "Space");
-}
