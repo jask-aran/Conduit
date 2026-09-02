@@ -10,6 +10,18 @@ import {
   TAIL_REJOIN_PX,
 } from "../src/client/chat/transcript-tail-follow.ts";
 
+// A shrink-clamp: content above the viewport got `shrinkPx` shorter, so the
+// browser pulled scrollTop down to the new bottom without anyone touching it.
+const clamped = (shrinkPx, overrides = {}) => decideTailScroll({
+  scrollTop: 1000 - shrinkPx,
+  previousScrollTop: 1000,
+  maxScrollTop: 1000 - shrinkPx,
+  previousMaxScrollTop: 1000,
+  userOwned: false,
+  following: true,
+  ...overrides,
+});
+
 const at = (scrollTop, previousScrollTop, overrides = {}) => decideTailScroll({
   scrollTop,
   previousScrollTop,
@@ -109,4 +121,58 @@ test("a restore that leaves the tail shows scroll-to-latest", () => {
 
 test("the used max scroll prefers a clamped scrollTop over the naive integer max", () => {
   assert.equal(usedMaxScrollTop({ scrollHeight: 2418.2, clientHeight: 1727, scrollTop: 691 }), 691);
+});
+
+test("content shrinking under a followed tail is not a reader scrolling up", () => {
+  // The reported detach: a KaTeX block replaces a taller placeholder, the
+  // document gets shorter, the browser clamps scrollTop to the new bottom, and
+  // that unrequested upward move used to hand the tail over for good.
+  for (const shrinkPx of [1, 4, 20, 47, 120]) {
+    const decision = clamped(shrinkPx);
+    assert.equal(decision.direction, "clamp", `shrink ${shrinkPx}`);
+    assert.equal(decision.following, true, `stopped following after a ${shrinkPx}px shrink`);
+    assert.equal(decision.atBottom, true, `not at the bottom after a ${shrinkPx}px shrink`);
+  }
+});
+
+test("a reader scrolling up during a shrink is still a reader", () => {
+  // Same shrink, but the position lands well above the new bottom: that is more
+  // upward movement than the shrink explains, so it is a real scroll.
+  const decision = decideTailScroll({
+    scrollTop: 600,
+    previousScrollTop: 1000,
+    maxScrollTop: 980,
+    previousMaxScrollTop: 1000,
+    userOwned: false,
+    following: true,
+  });
+  assert.equal(decision.direction, "up");
+  assert.equal(decision.following, false);
+  assert.equal(decision.rejoin, false);
+});
+
+test("an upward move with no shrink behind it stays a handoff", () => {
+  const decision = decideTailScroll({
+    scrollTop: 999,
+    previousScrollTop: 1000,
+    maxScrollTop: 1000,
+    previousMaxScrollTop: 1000,
+    userOwned: false,
+    following: true,
+  });
+  assert.equal(decision.direction, "up");
+  assert.equal(decision.following, false);
+});
+
+test("a first scroll observation has no shrink to reason from", () => {
+  const decision = decideTailScroll({
+    scrollTop: 980,
+    previousScrollTop: 1000,
+    maxScrollTop: 980,
+    previousMaxScrollTop: null,
+    userOwned: false,
+    following: true,
+  });
+  assert.equal(decision.direction, "up");
+  assert.equal(decision.following, false);
 });

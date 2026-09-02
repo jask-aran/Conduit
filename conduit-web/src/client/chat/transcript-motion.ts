@@ -19,7 +19,7 @@ export function mountTranscriptPanelMotion(
   const activeIds = new Map<PanelGeometryMotionSource, number>();
   // Edge motions (resize + open/close shell easing) pin a preview width so the
   // heavy transcript does not take natural flex width on every frame.
-  const edgeStarts = new Map<PanelGeometryMotionSource, { size: number; width: number }>();
+  const edgeStarts = new Map<PanelGeometryMotionSource, { size: number; width: number; shift: number }>();
   let transformSource: PanelGeometryMotionSource | null = null;
 
   const cancelRelease = () => {
@@ -95,6 +95,7 @@ export function mountTranscriptPanelMotion(
       edgeStarts.set(detail.source, {
         size: detail.size,
         width,
+        shift: 0,
       });
       transcript.dataset.panelMotion = "edge";
       setTransform(0);
@@ -105,7 +106,25 @@ export function mountTranscriptPanelMotion(
       const start = edgeStarts.get(detail.source);
       if (!start) return;
       const delta = detail.size - start.size;
-      motionShell.style.width = `${Math.max(0, start.width - delta)}px`;
+      if (detail.source !== "workspace") {
+        // The sidebar eases over a fixed distance, so it keeps taking real
+        // width: the transcript is meant to fill the space as the rail
+        // collapses, and freezing it leaves the thread visually static for the
+        // whole animation.
+        motionShell.style.width = `${Math.max(0, start.width - delta)}px`;
+        return;
+      }
+      // A pointer drag is unbounded and commits a new width every frame. Every
+      // one of those re-laid out the whole transcript, and a long answer is
+      // many independent layout roots -- each Incremark message root, each
+      // scrolling KaTeX block, each code card. Measured on a 143Hz display
+      // against a formula-heavy answer that was 20.8ms a frame, every frame
+      // over budget. The shell keeps its width and moves on the compositor
+      // instead; the real width is committed once, on release.
+      start.shift = -delta / 2;
+      let shift = 0;
+      for (const entry of edgeStarts.values()) shift += entry.shift;
+      setTransform(shift);
       return;
     }
     const wasEdge = edgeStarts.has(detail.source);
