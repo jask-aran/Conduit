@@ -13,8 +13,6 @@ export interface BrowserShortcutConflictRecord {
   binding: ShortcutBinding;
 }
 
-export const BROWSER_SHORTCUT_CONFLICTS_VERSION = 1;
-
 const primary = (code: string, key: string, shift = false) =>
   shortcutBinding(shortcutStroke(code, key, shift ? ["primary", "shift"] : ["primary"]));
 

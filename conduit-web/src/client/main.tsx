@@ -22,8 +22,15 @@ import { COMPOSER_SURFACE_CHANGE_EVENT, COMPOSER_SURFACE_STORAGE_KEY, selectedCo
 import type { VoiceDictationSettings } from "./chat/voice-dictation-types";
 import { CONTEXT_METRIC_STORAGE_KEY, contextUsagePercent, formatContextMetrics, saveContextMetrics, selectedContextMetrics, type ContextMetricId } from "./chat/context-metrics";
 import { HostUiRequests } from "./chat/host-ui-card";
-import { MARKDOWN_RENDERER_STORAGE_KEY, selectedMarkdownRenderer, type MarkdownRendererId } from "./chat/markdown-settings";
-import { RENDERER_CONTROLS_VISIBLE_STORAGE_KEY, saveRendererControlsVisible, selectedRendererControlsVisible, TRANSCRIPT_RENDERER_STORAGE_KEY } from "./chat/transcript-renderer";
+import {
+  MARKDOWN_RENDERER_STORAGE_KEY,
+  RENDERER_CONTROLS_VISIBLE_STORAGE_KEY,
+  saveMarkdownRenderer,
+  saveRendererControlsVisible,
+  selectedMarkdownRenderer,
+  selectedRendererControlsVisible,
+  type MarkdownRendererId,
+} from "./chat/markdown-settings";
 import { loadVoiceDictationSettings, saveVoiceDictationSettings, VOICE_DICTATION_STORAGE_KEY } from "./chat/voice-dictation";
 import { Transcript } from "./chat/transcript";
 import { COMMAND_IDS, commandRegistry } from "./commands/command-registry";
@@ -60,6 +67,9 @@ import {
   selectedCodeBlockWidth,
   isCodeBlockWidthMode,
   CODE_BLOCK_WIDTH_STORAGE_KEY,
+  isUserMessageCollapseMode,
+  selectedUserMessageCollapse,
+  USER_MESSAGE_COLLAPSE_STORAGE_KEY,
   selectedTranscriptWideBlocks,
   selectedTranscriptWidth,
   TRANSCRIPT_WIDE_BLOCKS_STORAGE_KEY,
@@ -79,6 +89,7 @@ applyTranscriptAppearance({
   collapse: selectedCodeBlockCollapse(),
   collapseLines: selectedCodeBlockCollapseLines(),
   codeWidth: selectedCodeBlockWidth(),
+  userMessageCollapse: selectedUserMessageCollapse(),
 });
 if (import.meta.env.PROD && !nativeApp) registerSW({ immediate: true, onRegisteredSW: (_url, registration) => rememberPwaRegistration(registration) });
 
@@ -541,7 +552,7 @@ function App() {
     ? profiles().find((item) => item.id === "host-pi")
     : templates().find((item) => item.id === chat.templateId()) || templates().find((item) => item.id === defaultTemplateId()) || null);
   const emptyChat = createMemo(() => chat.loadedId() === catalogue.selectedId() && !chat.messages().length && !chat.tools().length && !chat.activity()?.label);
-  const workspacePanelScope = createMemo(() => catalogue.selectedId() || (routeKind() === "project" && catalogue.projectId() ? `project:${catalogue.projectId()}` : null));
+  const workspacePanelScope = createMemo(() => catalogue.projectId() ? `project:${catalogue.projectId()}` : null);
 
   diagnosticContext = () => {
     const identity = chat.runtimeIdentity();
@@ -967,11 +978,7 @@ function App() {
     setSettingsLoaded(true);
     setSettingsOpen(true);
   };
-  const switchMarkdownRenderer = (next: MarkdownRendererId) => {
-    setMarkdownRenderer(next);
-    localStorage.setItem(MARKDOWN_RENDERER_STORAGE_KEY, next);
-    publishUiPreference("markdownRenderer", next);
-  };
+  const switchMarkdownRenderer = (next: MarkdownRendererId) => setMarkdownRenderer(saveMarkdownRenderer(next));
   const switchRendererControlsVisible = (visible: boolean) => setRendererControlsVisible(saveRendererControlsVisible(visible));
   const switchMeteorField = (enabled: boolean) => {
     setMeteorField(enabled);
@@ -1012,6 +1019,12 @@ function App() {
     const next = !panelOpen();
     if (next && isMobileLayout()) setMobileSidebarOpen(false);
     setPanelOpenForChat(next);
+  };
+  const maximizeWorkspacePanel = () => {
+    if (!workspacePanelScope()) return;
+    if (isMobileLayout()) setMobileSidebarOpen(false);
+    setPanelOpenForChat(true);
+    setWorkspaceExpanded(true);
   };
   const openWorkspaceView = (view: WorkspaceView, terminalId?: string) => {
     if (!workspacePanelScope()) return;
@@ -1114,6 +1127,7 @@ function App() {
     toggleDictation: () => window.dispatchEvent(new Event("conduit:toggle-dictation")),
     toggleSidebar: () => runSidebar("toggle-sidebar"),
     toggleWorkspacePanel: togglePanel,
+    maximizeWorkspacePanel,
     openWorkspaceView,
     copyTranscript: () => { const id = catalogue.selectedId(); if (id) void copyTranscript({ id } as ChatSummary); },
     rename: () => runSidebar("rename-chat"),
@@ -1181,7 +1195,6 @@ function App() {
       collapsedProjectIds: parseStringArray("conduit.sidebar.collapsed-projects"),
       sidebarCollapsed: localStorage.getItem("conduit.sidebar") === "collapsed",
       markdownRenderer: localStorage.getItem(MARKDOWN_RENDERER_STORAGE_KEY) || selectedMarkdownRenderer(),
-      transcriptRenderer: localStorage.getItem(TRANSCRIPT_RENDERER_STORAGE_KEY) || localStorage.getItem(MARKDOWN_RENDERER_STORAGE_KEY) || selectedMarkdownRenderer(),
       rendererControlsVisible: selectedRendererControlsVisible(),
       composerSurface: selectedComposerSurface(),
       contextMetrics: selectedContextMetrics(),
@@ -1192,6 +1205,7 @@ function App() {
       codeBlockCollapse: selectedCodeBlockCollapse(),
       codeBlockCollapseLines: selectedCodeBlockCollapseLines(),
       codeBlockWidth: selectedCodeBlockWidth(),
+      userMessageCollapse: selectedUserMessageCollapse(),
       shortcutOverrides: shortcutManager.shortcutOverrides(),
       sidebarPins: [],
       voicePreferences: {
@@ -1206,7 +1220,6 @@ function App() {
       collapsedProjectIds: "conduit.sidebar.collapsed-projects",
       sidebarCollapsed: "conduit.sidebar",
       markdownRenderer: MARKDOWN_RENDERER_STORAGE_KEY,
-      transcriptRenderer: TRANSCRIPT_RENDERER_STORAGE_KEY,
       rendererControlsVisible: RENDERER_CONTROLS_VISIBLE_STORAGE_KEY,
       composerSurface: COMPOSER_SURFACE_STORAGE_KEY,
       contextMetrics: CONTEXT_METRIC_STORAGE_KEY,
@@ -1217,6 +1230,7 @@ function App() {
       codeBlockCollapse: CODE_BLOCK_COLLAPSE_STORAGE_KEY,
       codeBlockCollapseLines: CODE_BLOCK_COLLAPSE_LINES_STORAGE_KEY,
       codeBlockWidth: CODE_BLOCK_WIDTH_STORAGE_KEY,
+      userMessageCollapse: USER_MESSAGE_COLLAPSE_STORAGE_KEY,
     };
     const applyPreference = (key: UiPreferenceKey, value: UiPreferences[UiPreferenceKey]) => {
       const storageKey = storageKeys[key];
@@ -1234,6 +1248,7 @@ function App() {
       else if (key === "codeBlockCollapse" && isCodeBlockCollapseMode(value)) applyTranscriptAppearance({ collapse: value });
       else if (key === "codeBlockCollapseLines" && isCodeBlockCollapseLines(value)) applyTranscriptAppearance({ collapseLines: value });
       else if (key === "codeBlockWidth" && isCodeBlockWidthMode(value)) applyTranscriptAppearance({ codeWidth: value });
+      else if (key === "userMessageCollapse" && isUserMessageCollapseMode(value)) applyTranscriptAppearance({ userMessageCollapse: value });
       else if (key === "shortcutOverrides" && value && typeof value === "object" && !Array.isArray(value)) {
         shortcutManager.replaceOverrides(value as ReturnType<ShortcutManager["shortcutOverrides"]>);
       } else if (key === "voicePreferences" && value && typeof value === "object" && !Array.isArray(value)) {
@@ -1279,6 +1294,7 @@ function App() {
       }),
       shortcutManager.registerHandler(COMMAND_IDS.toggleSidebar, "application", () => runSidebar("toggle-sidebar")),
       shortcutManager.registerHandler(COMMAND_IDS.toggleWorkspacePanel, "application", togglePanel),
+      shortcutManager.registerHandler(COMMAND_IDS.maximizeWorkspacePanel, "application", maximizeWorkspacePanel),
     ];
     const uninstallShortcuts = shortcutManager.install(window);
     window.addEventListener("keydown", dismissOpenLayer, { capture: true });

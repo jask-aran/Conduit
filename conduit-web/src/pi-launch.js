@@ -89,13 +89,3 @@ export function resolvePiLaunch({
   };
 }
 
-export function publicRuntime(runtime) {
-  if (!runtime) return null;
-  return {
-    kind: runtime.kind,
-    installationId: runtime.installationId,
-    binaryVersion: runtime.binaryVersion,
-    profileId: runtime.profileId,
-    profileVersion: runtime.profileVersion,
-  };
-}

@@ -221,6 +221,3 @@ export class AttachmentStore {
   }
 }
 
-export function newAttachmentId() {
-  return crypto.randomUUID();
-}

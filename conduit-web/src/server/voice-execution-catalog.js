@@ -275,7 +275,6 @@ export const VOICE_EXECUTION_CATALOG = deepFreeze({
   defaultProfileId: defaultProfileForLegacyModel("whisper-tiny-en-q8").id,
 });
 
-export const VOICE_CATALOG = VOICE_EXECUTION_CATALOG;
 export const LOCAL_VOICE_MODELS = deepFreeze(LEGACY_MODEL_DEFINITIONS);
 export const LEGACY_LOCAL_VOICE_MODELS = LOCAL_VOICE_MODELS;
 

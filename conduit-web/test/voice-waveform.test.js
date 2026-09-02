@@ -4,7 +4,7 @@ import test from "node:test";
 import fs from "node:fs/promises";
 
 const source = await fs.readFile(new URL("../src/client/chat/voice-waveform-model.ts", import.meta.url), "utf8");
-const compiled = stripTypeScriptTypes(source, { mode: "transform" });
+const compiled = stripTypeScriptTypes(source);
 const waveform = await import(`data:text/javascript;base64,${Buffer.from(compiled).toString("base64")}`);
 
 test("compact waveforms size bars from plot width without exceeding history capacity", () => {

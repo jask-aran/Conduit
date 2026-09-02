@@ -40,10 +40,6 @@ export function authStartupViolation(config, authStore) {
   return null;
 }
 
-export function cookieName() {
-  return COOKIE_NAME;
-}
-
 export function createRateLimiter() {
   let failures = 0;
   let nextAllowedAt = 0;

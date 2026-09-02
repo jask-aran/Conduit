@@ -15,6 +15,9 @@ import {
   saveCodeBlockWidth,
   selectedCodeBlockWidth,
   type CodeBlockWidthMode,
+  saveUserMessageCollapse,
+  selectedUserMessageCollapse,
+  type UserMessageCollapseMode,
   saveTranscriptWideBlocks,
   saveTranscriptWidth,
   selectedCodeBlockCollapse,
@@ -36,6 +39,7 @@ type SettingsProps = Omit<CoreProps,
   | "codeBlockCollapse" | "onCodeBlockCollapseChange"
   | "codeBlockCollapseLines" | "onCodeBlockCollapseLinesChange"
   | "codeBlockWidth" | "onCodeBlockWidthChange"
+  | "userMessageCollapse" | "onUserMessageCollapseChange"
   | "voiceSettings"> & {
   voiceSettings: VoiceDictationSettings;
 };
@@ -51,6 +55,7 @@ export function Settings(props: SettingsProps) {
   const [codeBlockCollapse, setCodeBlockCollapse] = createSignal<CodeBlockCollapseMode>(selectedCodeBlockCollapse());
   const [codeBlockCollapseLines, setCodeBlockCollapseLines] = createSignal(selectedCodeBlockCollapseLines());
   const [codeBlockWidth, setCodeBlockWidth] = createSignal<CodeBlockWidthMode>(selectedCodeBlockWidth());
+  const [userMessageCollapse, setUserMessageCollapse] = createSignal<UserMessageCollapseMode>(selectedUserMessageCollapse());
 
   createEffect(() => {
     if (!props.open) return;
@@ -91,6 +96,10 @@ export function Settings(props: SettingsProps) {
     const next = setCodeBlockWidth(saveCodeBlockWidth(mode));
     applyTranscriptAppearance({ codeWidth: next });
   };
+  const updateUserMessageCollapse = (mode: UserMessageCollapseMode) => {
+    const next = setUserMessageCollapse(saveUserMessageCollapse(mode));
+    applyTranscriptAppearance({ userMessageCollapse: next });
+  };
 
   return <SettingsCore
       {...props}
@@ -108,6 +117,8 @@ export function Settings(props: SettingsProps) {
       onCodeBlockCollapseLinesChange={updateCodeBlockCollapseLines}
       codeBlockWidth={codeBlockWidth()}
       onCodeBlockWidthChange={updateCodeBlockWidth}
+      userMessageCollapse={userMessageCollapse()}
+      onUserMessageCollapseChange={updateUserMessageCollapse}
       voiceSettings={props.voiceSettings}
     />;
 }

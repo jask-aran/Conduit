@@ -25,6 +25,8 @@ import {
   type CodeBlockWidthMode,
   TRANSCRIPT_WIDE_BLOCKS_OPTIONS,
   TRANSCRIPT_WIDTH_OPTIONS,
+  USER_MESSAGE_COLLAPSE_OPTIONS,
+  type UserMessageCollapseMode,
   type TranscriptWideBlocksMode,
   type TranscriptWidthMode,
 } from "../chat/transcript-appearance";
@@ -194,6 +196,8 @@ export function Settings(props: {
   onCodeBlockCollapseLinesChange: (lines: number) => void;
   codeBlockWidth: CodeBlockWidthMode;
   onCodeBlockWidthChange: (mode: CodeBlockWidthMode) => void;
+  userMessageCollapse: UserMessageCollapseMode;
+  onUserMessageCollapseChange: (mode: UserMessageCollapseMode) => void;
   composerSurface: ComposerSurfaceMode;
   onComposerSurfaceChange: (surface: ComposerSurfaceMode) => void;
   interfaceScale: UiScale;
@@ -976,7 +980,7 @@ export function Settings(props: {
                 <select id="markdown-renderer" aria-label="Markdown renderer" value={props.markdownRenderer} onChange={(event) => props.onMarkdownRendererChange(event.currentTarget.value as MarkdownRendererId)}>
                   <For each={MARKDOWN_RENDERER_OPTIONS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
                 </select>
-                <small>Choose the Markdown renderer used for complete and streaming answers.</small>
+                <small>{MARKDOWN_RENDERER_OPTIONS.find((option) => option.value === props.markdownRenderer)?.description}</small>
               </Field>
               <Field>
                 <FieldLabel for="sidebar-chat-limit">Chats shown in sidebar</FieldLabel>
@@ -1037,6 +1041,13 @@ export function Settings(props: {
                   <For each={CODE_BLOCK_COLLAPSE_LINE_CHOICES}>{(lines) => <option value={lines}>{lines} lines</option>}</For>
                 </select>
                 <small>Blocks longer than this fold; shorter ones always render in full.</small>
+              </Field>
+              <Field>
+                <FieldLabel for="user-message-collapse">Collapse your messages</FieldLabel>
+                <select id="user-message-collapse" aria-label="Collapse your messages" value={props.userMessageCollapse} onChange={(event) => props.onUserMessageCollapseChange(event.currentTarget.value as UserMessageCollapseMode)}>
+                  <For each={USER_MESSAGE_COLLAPSE_OPTIONS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
+                </select>
+                <small>A long prompt folds to a preview so the answer stays on screen. Only messages that actually exceed the fold get a control.</small>
               </Field>
               <details class="settings-disclosure settings-grid-wide">
                 <summary><span><ActivityIcon /><strong>Composer context metrics</strong><small>{contextMetricPreset(props.contextMetrics) === "custom" ? "Custom selection" : CONTEXT_METRIC_PRESETS.find((preset) => preset.id === contextMetricPreset(props.contextMetrics))?.label}</small></span></summary>

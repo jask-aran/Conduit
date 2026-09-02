@@ -130,9 +130,10 @@ export function registerRuntimeRoutes(app, {
       }
       const uiKeys = [
         "sidebarChatLimit", "collapsedProjectIds", "sidebarCollapsed", "markdownRenderer",
-        "transcriptRenderer", "rendererControlsVisible", "composerSurface", "contextMetrics",
+        "rendererControlsVisible", "composerSurface", "contextMetrics",
         "meteorField", "incremarkPacing", "transcriptWidth", "transcriptWideBlocks",
         "codeBlockCollapse", "codeBlockCollapseLines", "codeBlockWidth",
+        "userMessageCollapse",
         "shortcutOverrides", "voicePreferences",
       ];
       const uiPatch = Object.fromEntries(uiKeys

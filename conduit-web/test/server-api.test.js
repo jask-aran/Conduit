@@ -305,7 +305,6 @@ exit 0
         sidebarChatLimit: 45,
         collapsedProjectIds: ["project_chat"],
         rendererControlsVisible: false,
-        transcriptRenderer: "incremark-advanced",
         voicePreferences: { shortcut: "Ctrl+Shift+D", activation: "toggle", autoSend: true, captureProfile: "processed" },
       }),
     });
@@ -319,7 +318,6 @@ exit 0
     assert.equal(savedPreferences.sidebarChatLimit, 45);
     assert.deepEqual(savedPreferences.collapsedProjectIds, ["project_chat"]);
     assert.equal(savedPreferences.rendererControlsVisible, false);
-    assert.equal(savedPreferences.transcriptRenderer, "incremark-advanced");
     const invalidTerminalShortcuts = await fetch(`${origin}/v0/preferences`, {
       method: "PATCH",
       headers: { "content-type": "application/json" },

@@ -512,11 +512,6 @@ export async function removeProjectSessions(project) {
   }
 }
 
-export function projectSessionView(session) {
-  const { file, entries, ...safe } = session;
-  return safe;
-}
-
 export function messagesFromEntries(entries) {
   const messages = [];
   let continuation = false;
