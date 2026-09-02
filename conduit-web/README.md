@@ -854,9 +854,10 @@ worker, or icons are missing, or if generated worker code appears to
 runtime-cache `/v0`. After a build, `npm test` also runs
 `test/pwa-artifacts.test.js` against `dist/` (skipped when `dist/` is absent).
 
-Phone chrome (full-bleed drawers, header palette entry, long-press menus) is
-covered by `test/browser/pwa-mobile.spec.js` on the Playwright
-`mobile-chromium` and `desktop-chromium` projects.
+Phone chrome (full-bleed drawers, header palette entry, long-press menus) has
+no automated coverage. The Playwright suite that used to assert it was removed:
+it took over twelve minutes, most of it was failing, and none of the failures
+told us anything about the app. Rebuild it deliberately if it earns its place.
 
 ## Android shell
 
