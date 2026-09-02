@@ -95,13 +95,37 @@ export function chooseAdaptiveStep(
   return Math.min(available, Math.max(1, Math.min(TYPEWRITER_MAX_STEP, Math.ceil(targetRate * interval / 1000))));
 }
 
+// AST nodes are immutable once produced: every transform in this renderer
+// returns a fresh object rather than editing one in place, so a node's
+// character counts and its prepared form are cached against the node itself.
+// That is what stops a streaming frame from re-walking the whole message for
+// every accepted chunk, which is what made frame cost grow with message length.
+const visibleCharacterCache = new WeakMap<object, number>();
+const totalCharacterCache = new WeakMap<object, number>();
+const preparedNodeCache = new WeakMap<object, any>();
+
 export function visibleAstCharacters(node: any): number {
-  if (!node) return 0;
-  if (node.type === "math" || node.type === "inlineMath") return 1;
-  if (node.type === "image" || node.type === "imageReference") return 0;
-  if (typeof node.value === "string") return node.value.length;
-  if (!Array.isArray(node.children)) return 0;
-  return node.children.reduce((total: number, child: any) => total + visibleAstCharacters(child), 0);
+  if (!node || typeof node !== "object") return 0;
+  const cached = visibleCharacterCache.get(node);
+  if (cached !== undefined) return cached;
+  let total = 0;
+  if (node.type === "math" || node.type === "inlineMath") total = 1;
+  else if (node.type === "image" || node.type === "imageReference") total = 0;
+  else if (typeof node.value === "string") total = node.value.length;
+  else if (Array.isArray(node.children)) {
+    for (const child of node.children) total += visibleAstCharacters(child);
+  }
+  visibleCharacterCache.set(node, total);
+  return total;
+}
+
+function totalAstCharacters(node: any): number {
+  if (!node || typeof node !== "object") return Math.max(1, countChars(node));
+  const cached = totalCharacterCache.get(node);
+  if (cached !== undefined) return cached;
+  const total = Math.max(1, countChars(node));
+  totalCharacterCache.set(node, total);
+  return total;
 }
 
 /**
@@ -111,6 +135,16 @@ export function visibleAstCharacters(node: any): number {
  */
 export function prepareTypewriterNode(node: any): any {
   if (!node || typeof node !== "object") return node;
+  const cached = preparedNodeCache.get(node);
+  if (cached !== undefined) return cached;
+  const prepared = computePreparedTypewriterNode(node);
+  preparedNodeCache.set(node, prepared);
+  // The result is already in prepared form, so re-preparing it is a lookup.
+  if (prepared !== node) preparedNodeCache.set(prepared, prepared);
+  return prepared;
+}
+
+function computePreparedTypewriterNode(node: any): any {
   if (node.type === "math" || node.type === "inlineMath") {
     if (Object.prototype.hasOwnProperty.call(node, TYPEWRITER_MATH_SOURCE)) return node;
     const { value, ...rest } = node;
@@ -134,7 +168,9 @@ export function prepareTypewriterBlocks<T extends { node: any }>(blocks: T[]): T
 }
 
 function countVisibleBlocks(blocks: Array<{ node?: any; displayNode?: any }>, display = false) {
-  return blocks.reduce((total, block) => total + visibleAstCharacters(display ? block.displayNode : block.node), 0);
+  let total = 0;
+  for (const block of blocks) total += visibleAstCharacters(display ? block.displayNode : block.node);
+  return total;
 }
 
 function smartMergeAst(baseNode: any, fullSlice: any): any {
@@ -225,8 +261,23 @@ export class BufferedIncremarkTypewriter {
     frameWorkEmaMs: 0,
     terminal: false,
   };
-  private publishedBlocks = new Map<string, DisplayBlock>();
+  private readonly publishedBlocks = new Map<string, DisplayBlock>();
   private terminalEmitted = false;
+  // Blocks complete in order, so everything before this index is finished and
+  // can never change again unless setSourceBlocks rewinds it. Keeping the
+  // finished prefix as retained results -- rather than rebuilding, re-walking
+  // and re-summing it on every frame -- is what stops per-frame cost growing
+  // with message length. A long answer draws O(n) frames; when each of those
+  // frames also touched all n blocks the total was quadratic.
+  private completedPrefix = 0;
+  /** The array as handed in, so an unchanged leading run can be recognised. */
+  private sourceInputs: ParsedBlock[] = [];
+  /** Running sums of visible characters over sourceBlocks. */
+  private readonly sourceVisibleSums: number[] = [];
+  private readonly completedDisplay: DisplayBlock[] = [];
+  /** Running sums of visible characters over completedDisplay, for O(1) rewind. */
+  private readonly completedVisibleSums: number[] = [];
+  private sourceVisibleCharacters = 0;
 
   constructor(callbacks: BufferedIncremarkTypewriterOptions) {
     this.callbacks = callbacks;
@@ -276,6 +327,10 @@ export class BufferedIncremarkTypewriter {
     this.progress.clear();
     this.cachedDisplay.clear();
     this.publishedBlocks.clear();
+    this.rewindCompleted(0);
+    this.sourceInputs = [];
+    this.sourceVisibleSums.length = 0;
+    this.sourceVisibleCharacters = 0;
     this.baselineCharacters = 0;
     this.lastFrameAt = null;
     this.frameIntervalMs = TYPEWRITER_DEFAULT_FRAME_INTERVAL_MS;
@@ -336,26 +391,75 @@ export class BufferedIncremarkTypewriter {
   destroy() {
     this.cancelFrame();
     this.publishedBlocks.clear();
+    this.rewindCompleted(0);
+    this.sourceInputs = [];
+    this.sourceVisibleSums.length = 0;
+    this.sourceVisibleCharacters = 0;
     this.sourceBlocks = [];
     this.progress.clear();
     this.cachedDisplay.clear();
     this.setBusy(false);
   }
 
+  /**
+   * Take a parser update.
+   *
+   * A delta changes the tail of the document, so the blocks before it arrive as
+   * the very same objects the previous call was given. Recognising that run and
+   * leaving it alone is what makes this cost the size of the change rather than
+   * the size of the message -- the difference between a long answer costing
+   * O(n) and O(n^2) overall.
+   */
   private setSourceBlocks(blocks: ParsedBlock[]) {
-    const prepared = prepareTypewriterBlocks(blocks);
-    const ids = new Set(prepared.map((block) => block.id));
-    for (const id of this.progress.keys()) if (!ids.has(id)) this.progress.delete(id);
-    for (const id of this.cachedDisplay.keys()) if (!ids.has(id)) this.cachedDisplay.delete(id);
-    for (const block of prepared) {
-      const previous = this.sourceBlocks.find((entry) => entry.id === block.id);
+    let shared = 0;
+    const limit = Math.min(blocks.length, this.sourceInputs.length);
+    while (shared < limit && blocks[shared] === this.sourceInputs[shared]) shared += 1;
+
+    const changedIds = new Set<string>();
+    for (let index = shared; index < blocks.length; index += 1) changedIds.add(blocks[index]!.id);
+    // Only a block that has left the tail can be dropped: the shared run keeps
+    // every id it had.
+    for (let index = shared; index < this.sourceBlocks.length; index += 1) {
+      const id = this.sourceBlocks[index]!.id;
+      if (changedIds.has(id)) continue;
+      this.progress.delete(id);
+      this.cachedDisplay.delete(id);
+      this.publishedBlocks.delete(id);
+    }
+
+    let firstChangedIndex = blocks.length < this.sourceBlocks.length ? blocks.length : -1;
+    const previousById = new Map<string, ParsedBlock>();
+    for (let index = shared; index < this.sourceBlocks.length; index += 1) {
+      const entry = this.sourceBlocks[index]!;
+      previousById.set(entry.id, entry);
+    }
+    const prepared = this.sourceBlocks.slice(0, shared);
+    prepared.length = blocks.length;
+    this.sourceVisibleSums.length = blocks.length;
+    for (let index = shared; index < blocks.length; index += 1) {
+      const input = blocks[index]!;
+      const node = prepareTypewriterNode(input.node);
+      const block = node === input.node ? input : { ...input, node } as ParsedBlock;
+      prepared[index] = block;
+      this.sourceVisibleSums[index] = (index > 0 ? this.sourceVisibleSums[index - 1]! : 0)
+        + visibleAstCharacters(block.node);
+      const previous = previousById.get(block.id);
       if (!previous || previous.node !== block.node) {
         const previousProgress = this.progress.get(block.id) || 0;
         this.progress.set(block.id, Math.min(previousProgress, this.blockCharacters(block)));
         this.cachedDisplay.delete(block.id);
+        if (firstChangedIndex < 0) firstChangedIndex = index;
       }
+      // A block that kept its id and node can still have moved. The retained
+      // prefix is positional, so a reorder has to rewind it too.
+      if (firstChangedIndex < 0 && this.sourceBlocks[index]?.id !== block.id) firstChangedIndex = index;
     }
-    this.sourceBlocks = prepared;
+    this.sourceVisibleCharacters = blocks.length ? this.sourceVisibleSums[blocks.length - 1]! : 0;
+    this.sourceInputs = blocks;
+    this.sourceBlocks = prepared as ParsedBlock[];
+    if (firstChangedIndex >= 0 && firstChangedIndex < this.completedPrefix) {
+      this.rewindCompleted(firstChangedIndex);
+    }
     const active = this.firstIncompleteIndex() >= 0;
     if (active && this.backlogStartedAt == null) this.backlogStartedAt = performance.now();
     if (!active) this.backlogStartedAt = null;
@@ -387,8 +491,8 @@ export class BufferedIncremarkTypewriter {
     const frameBudgetMs = chooseFrameBudget(this.frameIntervalMs);
     const startedAt = performance.now();
     let accepted = this.getDisplayBlocks();
-    const sourceCharacters = this.baselineCharacters + countVisibleBlocks(this.sourceBlocks);
-    let displayedCharacters = this.baselineCharacters + countVisibleBlocks(accepted, true);
+    const sourceCharacters = this.baselineCharacters + this.sourceVisibleCharacters;
+    let displayedCharacters = this.baselineCharacters + this.displayedVisibleCharacters(accepted);
     let processedCharacters = 0;
     let processedBlocks = 0;
     let acceptedProgress = false;
@@ -417,7 +521,7 @@ export class BufferedIncremarkTypewriter {
         break;
       }
       accepted = candidate;
-      displayedCharacters = this.baselineCharacters + countVisibleBlocks(accepted, true);
+      displayedCharacters = this.baselineCharacters + this.displayedVisibleCharacters(accepted);
       acceptedProgress = true;
       processedCharacters += step;
       if (nextProgress >= total) processedBlocks += 1;
@@ -470,8 +574,8 @@ export class BufferedIncremarkTypewriter {
     display: DisplayBlock[],
     frameBudgetMs = chooseFrameBudget(this.frameIntervalMs),
   ) {
-    const sourceVisibleCharacters = this.baselineCharacters + countVisibleBlocks(this.sourceBlocks);
-    const displayedVisibleCharacters = this.baselineCharacters + countVisibleBlocks(display, true);
+    const sourceVisibleCharacters = this.baselineCharacters + this.sourceVisibleCharacters;
+    const displayedVisibleCharacters = this.baselineCharacters + this.displayedVisibleCharacters(display);
     const backlogCharacters = Math.max(0, sourceVisibleCharacters - displayedVisibleCharacters);
     const activeIndex = this.firstIncompleteIndex();
     this.lastMetrics = {
@@ -492,24 +596,65 @@ export class BufferedIncremarkTypewriter {
     this.callbacks.onMetrics?.(this.lastMetrics);
   }
 
-  private firstIncompleteIndex() {
-    return this.sourceBlocks.findIndex((block) => (this.progress.get(block.id) || 0) < this.blockCharacters(block));
+  private rewindCompleted(index: number) {
+    this.completedPrefix = index;
+    this.completedDisplay.length = index;
+    this.completedVisibleSums.length = index;
   }
 
-  private blockCharacters(block: ParsedBlock) {
-    return Math.max(1, countChars(block.node));
+  private completedVisibleCharacters() {
+    return this.completedVisibleSums[this.completedVisibleSums.length - 1] ?? 0;
   }
 
-  private buildDisplayBlocks(): DisplayBlock[] {
-    const activeIndex = this.firstIncompleteIndex();
-    const completed = activeIndex < 0 ? this.sourceBlocks : this.sourceBlocks.slice(0, activeIndex);
-    const display = completed.map((block) => ({
+  /**
+   * Freeze a finished block's published result.
+   *
+   * Its node cannot change again, so the stabilise decision it would get on
+   * every later frame is the one it gets here, once.
+   */
+  private retireCompletedBlock(block: ParsedBlock) {
+    const display = this.stabilizeDisplayBlock({
       ...block,
       status: "completed",
       displayNode: block.node,
       progress: 1,
       isDisplayComplete: true,
-    } as DisplayBlock));
+    } as DisplayBlock);
+    this.completedDisplay.push(display);
+    this.completedVisibleSums.push(this.completedVisibleCharacters() + visibleAstCharacters(display.displayNode));
+  }
+
+  private firstIncompleteIndex() {
+    while (this.completedPrefix < this.sourceBlocks.length) {
+      const block = this.sourceBlocks[this.completedPrefix]!;
+      if ((this.progress.get(block.id) || 0) < this.blockCharacters(block)) return this.completedPrefix;
+      this.retireCompletedBlock(block);
+      this.completedPrefix += 1;
+    }
+    return -1;
+  }
+
+  /**
+   * The retained prefix already knows its own total, so only the active block
+   * -- the one entry that changes between frames -- has to be walked.
+   */
+  private displayedVisibleCharacters(display: DisplayBlock[]) {
+    if (!display.length) return 0;
+    const last = display[display.length - 1]!;
+    const activeCharacters = last.isDisplayComplete ? 0 : visibleAstCharacters(last.displayNode);
+    const retained = last.isDisplayComplete
+      ? this.completedVisibleSums[display.length - 1] ?? 0
+      : this.completedVisibleSums[display.length - 2] ?? 0;
+    return retained + activeCharacters;
+  }
+
+  private blockCharacters(block: ParsedBlock) {
+    return totalAstCharacters(block.node);
+  }
+
+  private buildDisplayBlocks(): DisplayBlock[] {
+    const activeIndex = this.firstIncompleteIndex();
+    const display = this.completedDisplay.slice();
     if (activeIndex < 0) return display;
     const active = this.sourceBlocks[activeIndex]!;
     const total = this.blockCharacters(active);
@@ -534,27 +679,42 @@ export class BufferedIncremarkTypewriter {
     return display;
   }
 
-  private stabilizeDisplayBlocks(blocks: DisplayBlock[]) {
-    const next = blocks.map((block) => {
-      const previous = this.publishedBlocks.get(block.id);
-      const previousNode = previous?.displayNode;
-      const currentNode = block.displayNode;
-      const previousCharacters = visibleAstCharacters(previousNode);
-      const currentCharacters = visibleAstCharacters(currentNode);
-      const previousRawText = String((previous as DisplayBlock & { rawText?: string })?.rawText ?? "");
-      const currentRawText = String((block as DisplayBlock & { rawText?: string })?.rawText ?? "");
-      const sourceDidNotShrink = !previousRawText || !currentRawText || currentRawText.length >= previousRawText.length;
-      const sameStructuralNode = previousNode?.type === currentNode?.type;
-      const preservesEmptyStructuralNode = sameStructuralNode
-        && ["paragraph", "heading", "table"].includes(String(previousNode?.type));
-      if (previous && previousNode && currentCharacters === 0 && sourceDidNotShrink
-        && (previousCharacters > 0 || preservesEmptyStructuralNode)) {
-        return { ...block, displayNode: previousNode };
-      }
-      return block;
-    });
-    this.publishedBlocks = new Map(next.map((block) => [block.id, block]));
+  /**
+   * Hold the last non-empty render of a block that momentarily slices to
+   * nothing, so a reparse cannot blank a paragraph that is already on screen.
+   */
+  private stabilizeDisplayBlock(block: DisplayBlock) {
+    const previous = this.publishedBlocks.get(block.id);
+    const previousNode = previous?.displayNode;
+    const currentNode = block.displayNode;
+    const previousCharacters = visibleAstCharacters(previousNode);
+    const currentCharacters = visibleAstCharacters(currentNode);
+    const previousRawText = String((previous as DisplayBlock & { rawText?: string })?.rawText ?? "");
+    const currentRawText = String((block as DisplayBlock & { rawText?: string })?.rawText ?? "");
+    const sourceDidNotShrink = !previousRawText || !currentRawText || currentRawText.length >= previousRawText.length;
+    const sameStructuralNode = previousNode?.type === currentNode?.type;
+    const preservesEmptyStructuralNode = sameStructuralNode
+      && ["paragraph", "heading", "table"].includes(String(previousNode?.type));
+    const next = previous && previousNode && currentCharacters === 0 && sourceDidNotShrink
+      && (previousCharacters > 0 || preservesEmptyStructuralNode)
+      ? { ...block, displayNode: previousNode } as DisplayBlock
+      : block;
+    this.publishedBlocks.set(next.id, next);
     return next;
+  }
+
+  /**
+   * Only the last entry can be new. Everything before it was stabilised and
+   * published when it was retired, and re-deciding it each frame produced the
+   * same answer at a cost that grew with the message.
+   */
+  private stabilizeDisplayBlocks(blocks: DisplayBlock[]) {
+    const last = blocks.length - 1;
+    if (last < 0) return blocks;
+    const active = blocks[last]!;
+    if (active.isDisplayComplete) return blocks;
+    blocks[last] = this.stabilizeDisplayBlock(active);
+    return blocks;
   }
 
   private setBusy(next: boolean) {

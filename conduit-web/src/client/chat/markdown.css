@@ -9,24 +9,76 @@
 .chat-markdown table { width: 100%; margin: 1em 0; border-collapse: collapse; }
 .chat-markdown[data-renderer^="incremark"] table { table-layout: auto; }
 /* Tables and code blocks are the two constructs that can want more room than
-   the reading measure. They bleed symmetrically out of the column up to
-   --transcript-wide-scale, clamped to the chat container so the negative margin
-   can never escape .chat-main's overflow.
+   the reading measure, so they may bleed symmetrically out of the column up to
+   --transcript-wide-scale, clamped to the chat container so the bleed can never
+   escape .chat-main's overflow.
 
-   A table has no choice -- its columns are what they are. A code block does:
-   left wide by default it dominates the page, so it stays in the reading column
-   unless the reader opts in with the Wide code blocks setting. */
+   "May", not "does". The bleed used to be a fixed width plus a matching
+   negative margin, which widened every table to the full allowance whether or
+   not its columns wanted the room -- a two-column table sat at 150% with the
+   space padded out inside it. It had to: in block flow an element wider than
+   its containing block cannot be centred, because auto margins are treated as
+   zero the moment the box is over-constrained, so the margin has to be a
+   constant and the width has to match it.
+
+   Grid lifts that. justify-self centres an item that overflows its track
+   symmetrically, so the width no longer has to be known in advance: max-content
+   asks for what the content actually needs, min-width holds a block that needs
+   less at the reading measure, and max-width is the ceiling. A block that fits
+   the column does not move at all.
+
+   A table has no choice about its natural width. A code block does: left wide
+   by default it dominates the page, so it stays in the reading column unless
+   the reader opts in with the Wide code blocks setting. */
 @container chat-main (--conduit-wide-chat) {
-  .chat-markdown[data-renderer^="incremark"] table,
-  :root[data-code-width="wide"] .chat-markdown[data-renderer^="incremark"] .artifact {
-    width: min(var(--transcript-wide-scale), var(--transcript-wide-max));
-    margin-left: calc((100% - min(var(--transcript-wide-scale), var(--transcript-wide-max))) / 2);
+  /* minmax(0, 1fr) keeps the track at the reading measure. A plain 1fr track
+     would grow to fit a max-content item and take the bleed with it. */
+  .chat-markdown[data-renderer^="incremark"]:not([data-inline]) > .incremark,
+  .chat-markdown[data-renderer^="marked"]:not([data-inline]) {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+  }
+  /* Direct children only: a table nested in a list or a blockquote is not a
+     grid item, and giving it max-content sizing there would over-constrain it
+     into the same off-centre overflow this replaces. */
+  .chat-markdown[data-renderer^="incremark"]:not([data-inline]) > .incremark > table,
+  .chat-markdown[data-renderer^="marked"]:not([data-inline]) > table,
+  :root[data-code-width="wide"] .chat-markdown[data-renderer^="incremark"]:not([data-inline]) > .incremark > .artifact,
+  :root[data-code-width="wide"] .chat-markdown[data-renderer^="marked"]:not([data-inline]) > .artifact {
+    justify-self: center;
+    width: max-content;
+    min-width: 100%;
+    max-width: min(var(--transcript-wide-scale), var(--transcript-wide-max));
   }
 }
 .chat-markdown th, .chat-markdown td { padding: 5.6px 7.2px; border: 1px solid var(--border); text-align: left; }
 .chat-markdown[data-renderer^="incremark"] th, .chat-markdown[data-renderer^="incremark"] td { vertical-align: top; }
 .chat-markdown :not(pre) > code { border-radius: 3.2px; background: var(--muted); padding: 0.12em 0.35em; font-family: ui-monospace, monospace; }
 .external-markdown-link { border: 0; background: none; padding: 0; color: oklch(0.7 0.16 250); text-decoration: underline; }
+/* Citation chip. A link whose visible text is its own URL is a reference, not
+   prose: shown in full it sets the paragraph's line length and buries the
+   sentence it supports. The chip carries the host, which is the part a reader
+   scans for, and keeps the full URL on the title and the accessible name. */
+.chat-markdown [data-citation] {
+  display: inline-flex;
+  max-width: 14em;
+  align-items: baseline;
+  overflow: hidden;
+  border: 0.8px solid var(--border);
+  border-radius: 999px;
+  padding: 0 5.6px;
+  background: var(--muted);
+  color: var(--muted-foreground);
+  font-size: 0.82em;
+  line-height: 1.55;
+  text-decoration: none;
+  text-overflow: ellipsis;
+  vertical-align: baseline;
+  white-space: nowrap;
+}
+.chat-markdown [data-citation]:hover { background: var(--accent); color: var(--foreground); }
+/* A run of citations after one claim reads as a single cluster. */
+.chat-markdown [data-citation] + [data-citation] { margin-left: 2.4px; }
 .artifact { margin: 1em 0; border: 0.8px solid var(--border); border-radius: 8px; background: var(--card); }
 .artifact-header { display: flex; align-items: center; justify-content: space-between; padding: 5.6px 8px; border-bottom: 1px solid var(--border); color: var(--muted-foreground); font-size: 9.6px; }
 .artifact-header button { border: 0; background: transparent; color: inherit; }
@@ -69,24 +121,76 @@
 .chat-markdown table { width: 100%; margin: 1em 0; border-collapse: collapse; }
 .chat-markdown[data-renderer^="incremark"] table { table-layout: auto; }
 /* Tables and code blocks are the two constructs that can want more room than
-   the reading measure. They bleed symmetrically out of the column up to
-   --transcript-wide-scale, clamped to the chat container so the negative margin
-   can never escape .chat-main's overflow.
+   the reading measure, so they may bleed symmetrically out of the column up to
+   --transcript-wide-scale, clamped to the chat container so the bleed can never
+   escape .chat-main's overflow.
 
-   A table has no choice -- its columns are what they are. A code block does:
-   left wide by default it dominates the page, so it stays in the reading column
-   unless the reader opts in with the Wide code blocks setting. */
+   "May", not "does". The bleed used to be a fixed width plus a matching
+   negative margin, which widened every table to the full allowance whether or
+   not its columns wanted the room -- a two-column table sat at 150% with the
+   space padded out inside it. It had to: in block flow an element wider than
+   its containing block cannot be centred, because auto margins are treated as
+   zero the moment the box is over-constrained, so the margin has to be a
+   constant and the width has to match it.
+
+   Grid lifts that. justify-self centres an item that overflows its track
+   symmetrically, so the width no longer has to be known in advance: max-content
+   asks for what the content actually needs, min-width holds a block that needs
+   less at the reading measure, and max-width is the ceiling. A block that fits
+   the column does not move at all.
+
+   A table has no choice about its natural width. A code block does: left wide
+   by default it dominates the page, so it stays in the reading column unless
+   the reader opts in with the Wide code blocks setting. */
 @container chat-main (--conduit-wide-chat) {
-  .chat-markdown[data-renderer^="incremark"] table,
-  :root[data-code-width="wide"] .chat-markdown[data-renderer^="incremark"] .artifact {
-    width: min(var(--transcript-wide-scale), var(--transcript-wide-max));
-    margin-left: calc((100% - min(var(--transcript-wide-scale), var(--transcript-wide-max))) / 2);
+  /* minmax(0, 1fr) keeps the track at the reading measure. A plain 1fr track
+     would grow to fit a max-content item and take the bleed with it. */
+  .chat-markdown[data-renderer^="incremark"]:not([data-inline]) > .incremark,
+  .chat-markdown[data-renderer^="marked"]:not([data-inline]) {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+  }
+  /* Direct children only: a table nested in a list or a blockquote is not a
+     grid item, and giving it max-content sizing there would over-constrain it
+     into the same off-centre overflow this replaces. */
+  .chat-markdown[data-renderer^="incremark"]:not([data-inline]) > .incremark > table,
+  .chat-markdown[data-renderer^="marked"]:not([data-inline]) > table,
+  :root[data-code-width="wide"] .chat-markdown[data-renderer^="incremark"]:not([data-inline]) > .incremark > .artifact,
+  :root[data-code-width="wide"] .chat-markdown[data-renderer^="marked"]:not([data-inline]) > .artifact {
+    justify-self: center;
+    width: max-content;
+    min-width: 100%;
+    max-width: min(var(--transcript-wide-scale), var(--transcript-wide-max));
   }
 }
 .chat-markdown th, .chat-markdown td { padding: 7px 9px; border: 1px solid var(--border); text-align: left; }
 .chat-markdown[data-renderer^="incremark"] th, .chat-markdown[data-renderer^="incremark"] td { vertical-align: top; }
 .chat-markdown :not(pre) > code { border-radius: 4px; background: var(--muted); padding: 0.12em 0.35em; font-family: ui-monospace, monospace; }
 .external-markdown-link { border: 0; background: none; padding: 0; color: oklch(0.7 0.16 250); text-decoration: underline; }
+/* Citation chip. A link whose visible text is its own URL is a reference, not
+   prose: shown in full it sets the paragraph's line length and buries the
+   sentence it supports. The chip carries the host, which is the part a reader
+   scans for, and keeps the full URL on the title and the accessible name. */
+.chat-markdown [data-citation] {
+  display: inline-flex;
+  max-width: 14em;
+  align-items: baseline;
+  overflow: hidden;
+  border: 0.8px solid var(--border);
+  border-radius: 999px;
+  padding: 0 5.6px;
+  background: var(--muted);
+  color: var(--muted-foreground);
+  font-size: 0.82em;
+  line-height: 1.55;
+  text-decoration: none;
+  text-overflow: ellipsis;
+  vertical-align: baseline;
+  white-space: nowrap;
+}
+.chat-markdown [data-citation]:hover { background: var(--accent); color: var(--foreground); }
+/* A run of citations after one claim reads as a single cluster. */
+.chat-markdown [data-citation] + [data-citation] { margin-left: 2.4px; }
 .artifact { margin: 1em 0; border: 1px solid var(--border); border-radius: 10px; background: var(--card); }
 .artifact-header { display: flex; align-items: center; justify-content: space-between; padding: 7px 10px; border-bottom: 1px solid var(--border); color: var(--muted-foreground); font-size: 12px; }
 .artifact-header button { border: 0; background: transparent; color: inherit; }

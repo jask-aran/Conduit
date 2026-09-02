@@ -1,4 +1,4 @@
-import { createEffect, createMemo, createSignal, For, Index, onCleanup, Show } from "solid-js";
+import { createEffect, createMemo, createSignal, For, Index, onCleanup, onMount, Show } from "solid-js";
 import { createStore, reconcile } from "solid-js/store";
 import { createIncremarkParser, type DisplayBlock, type ParsedBlock } from "@incremark/core";
 import katex from "katex";
@@ -12,13 +12,17 @@ import { highlighterReady, StreamingCodeHighlighter } from "./code-highlight";
 import { createSyntheticMathPreviewNode, repairSyntheticMathSource } from "./incremark-synthetic-math";
 import { BufferedIncremarkTypewriter, visibleAstCharacters } from "./incremark-typewriter";
 import { MathRenderQueue, type MathRenderPolicy } from "./incremark-math-queue";
-import { resolveMarkdownUrl } from "./markdown-security";
+import { citationHost, resolveMarkdownUrl } from "./markdown-security";
 import { projectTableMathSource, promoteTableCellDisplayMath, restoreTableMathAst, restoreTableMathSentinel } from "./table-math";
 import type { StreamingPending } from "./streaming-markdown";
 import { splitStreamingMarkdown } from "./streaming-markdown";
+import "./incremark-markdown.css";
 
 type MarkdownNode = any;
 type Definition = { url?: string; title?: string | null };
+/** Quiet frames a message must hold before its source is frozen. */
+const SETTLE_DELAY_FRAMES = 2;
+
 const incremarkParserOptions = { gfm: true, math: { tex: true }, htmlTree: true, containers: true };
 type RendererContext = {
   definitions: () => Record<string, Definition>;
@@ -26,10 +30,9 @@ type RendererContext = {
   requestExternalLink: (url: string, trigger?: HTMLElement) => void;
   deferMath: () => boolean;
   mathRenderPolicy: () => MathRenderPolicy;
-  syntheticMath: () => boolean;
   rendererId: () => string;
-  pendingInlineBlockId: () => string | null;
   onMathBusyChange: (busy: boolean) => void;
+  onPendingPlaceholderChange: (delta: number) => void;
 };
 
 function restoreParsedBlock(block: ParsedBlock, sentinel: string | null, originalSource: string) {
@@ -51,12 +54,31 @@ function restoreParsedBlock(block: ParsedBlock, sentinel: string | null, origina
   } as ParsedBlock;
 }
 
+function sameDefinitions(previous: Record<string, Definition>, next: Record<string, Definition>) {
+  const previousKeys = Object.keys(previous);
+  if (previousKeys.length !== Object.keys(next).length) return false;
+  return previousKeys.every((key) => {
+    const left = previous[key];
+    const right = next[key];
+    return Boolean(left) && Boolean(right) && left!.url === right!.url && left!.title === right!.title;
+  });
+}
+
 function safeUrl(value: unknown): { href: string; external: boolean } | null {
   return resolveMarkdownUrl(value);
 }
 
 function inlineText(nodes: MarkdownNode[]) {
-  return nodes.map((node) => node.value || node.children?.map((child: MarkdownNode) => child.value || "").join("") || "").join("");
+  let text = "";
+  for (const node of nodes) {
+    if (node.value) {
+      text += node.value;
+      continue;
+    }
+    if (!Array.isArray(node.children)) continue;
+    for (const child of node.children) text += child.value || "";
+  }
+  return text;
 }
 
 function summarizeTableAst(blocks: ParsedBlock[]) {
@@ -78,6 +100,9 @@ function summarizeTableAst(blocks: ParsedBlock[]) {
     tables,
   };
 }
+
+const sameBlockList = (previous: ParsedBlock[], next: ParsedBlock[]) =>
+  previous.length === next.length && previous.every((block, index) => block === next[index]);
 
 type NodeAccessor = () => MarkdownNode;
 type NodeList = MarkdownNode[] | (() => MarkdownNode[]);
@@ -121,8 +146,8 @@ function appendPendingInlineMath(node: MarkdownNode): MarkdownNode {
   return node;
 }
 
-function renderBlockNode(blockId: string, node: MarkdownNode, context: RendererContext) {
-  if (blockId !== context.pendingInlineBlockId() || !node || typeof node !== "object") return node;
+function renderBlockNode(node: MarkdownNode) {
+  if (!node || typeof node !== "object") return node;
   const cached = pendingInlineNodeCache.get(node);
   if (cached) return cached;
   const next = appendPendingInlineMath(node);
@@ -130,13 +155,38 @@ function renderBlockNode(blockId: string, node: MarkdownNode, context: RendererC
   return next;
 }
 
+const sameIdList = (previous: string[], next: string[]) =>
+  previous.length === next.length && previous.every((id, index) => id === next[index]);
+
+/**
+ * Index a keyed block list once per update.
+ *
+ * These lists are re-read for every row on every streamed frame, so a linear
+ * scan per row made each frame quadratic in the number of blocks on screen. The
+ * id list keeps value equality, so an update that only changes a block's
+ * contents does not re-run the keyed list reconciliation as well.
+ */
+function createBlockIndex<T extends { id: string }>(blocks: () => T[]) {
+  const index = createMemo(() => {
+    const map = new Map<string, T>();
+    for (const block of blocks()) map.set(block.id, block);
+    return map;
+  });
+  const ids = createMemo(() => [...index().keys()], [], { equals: sameIdList });
+  return { ids, lookup: (id: string) => index().get(id) };
+}
+
 function ParsedBlockNodes(props: { blocks: () => ParsedBlock[]; context: RendererContext }) {
-  return <For each={props.blocks().map((block) => block.id)}>{(id) => {
-    const block = () => props.blocks().find((entry) => entry.id === id);
-    return <Show when={block()}>{(value) => <AstNode node={() => {
-      const current = value();
-      return current ? renderBlockNode(current.id, current.node, props.context) : undefined;
-    }} context={props.context} />}</Show>;
+  const list = createBlockIndex(() => props.blocks());
+  return <For each={list.ids()}>{(id) => {
+    const block = () => list.lookup(id);
+    // Seeded blocks are complete by definition -- a persisted message, or the
+    // finished prefix of a live one -- so no caret placeholder belongs here.
+    // Adding one left three permanent markers in every restored message, and
+    // the settled-message check looks for exactly that marker, so a transcript
+    // loaded from history could never settle.
+    const node = createMemo(() => block()?.node);
+    return <Show when={block()}><AstNode node={node} context={props.context} /></Show>;
   }}</For>;
 }
 
@@ -185,7 +235,8 @@ function DisplayBlockNodes(props: { blocks: () => DisplayBlock[]; context: Rende
     let currentNode = block.displayNode as MarkdownNode;
     if (sourceNode && currentNode && typeof sourceNode === "object" && typeof currentNode === "object") {
       currentNode = { ...currentNode };
-      for (const [key, value] of Object.entries(sourceNode)) {
+      for (const key in sourceNode) {
+        const value = sourceNode[key];
         if (key !== "children" && currentNode[key] == null && value != null) currentNode[key] = value;
       }
     }
@@ -201,32 +252,61 @@ function DisplayBlockNodes(props: { blocks: () => DisplayBlock[]; context: Rende
   // Keep completed blocks and the one active transformer block in one keyed
   // list. Moving the active block between separate Solid branches would
   // remove and recreate its DOM when it completes.
-  return <For each={props.blocks().map((block) => block.id)}>{(id) => {
-    const block = () => props.blocks().find((entry) => entry.id === id);
-    return <Show when={block()}>{(value) => <AstNode node={() => {
-      const current = value();
-      return current ? renderBlockNode(current.id, displayNode(current), props.context) : undefined;
-    }} context={props.context} />}</Show>;
+  const list = createBlockIndex(() => props.blocks());
+  return <For each={list.ids()}>{(id) => {
+    const block = () => list.lookup(id);
+    // displayNode rebuilds the node and appendPendingInlineMath clones its
+    // spine. Without the memo the accessor recomputes both for every JSX
+    // position that reads it, and the clone cache -- keyed on node identity --
+    // never hits, so every frame re-clones every visible block. The memo makes
+    // both run once per update; preserveAppendOnly is idempotent, so the node
+    // the history ends up holding is the same either way.
+    const node = createMemo(() => {
+      const current = block();
+      if (!current) return undefined;
+      const display = displayNode(current);
+      // The placeholder reserves the line box for math that is about to appear
+      // at the caret, so it belongs only to a block still being typed. Left on
+      // finished blocks it was a permanent zero-width span in every paragraph,
+      // and the settled-message check -- which looks for exactly this marker --
+      // could therefore never pass.
+      return current.isDisplayComplete ? display : renderBlockNode(display);
+    });
+    return <Show when={block()}><AstNode node={node} context={props.context} /></Show>;
   }}</For>;
 }
 
 function LinkNode(props: { node: MarkdownNode | NodeAccessor; context: RendererContext; reference?: () => Definition | undefined }) {
   const node = () => readNode(props.node);
   const reference = () => props.reference?.();
-  const target = () => safeUrl(reference()?.url || node()?.url);
+  const target = createMemo(() => safeUrl(reference()?.url || node()?.url));
+  // The citation test walks the link's inline children. It is read from four
+  // attribute positions below, so it is computed once rather than per read.
+  const labelText = createMemo(() => inlineText(node()?.children || []));
+  // Same rule as the string renderers: a link whose visible text is its own URL
+  // is a citation and shows its host; anything the model gave a real label to
+  // renders untouched. Keeping the test in one shared helper is what stops the
+  // renderers drifting apart on it.
+  const host = createMemo(() => {
+    const resolved = target();
+    return resolved ? citationHost(resolved.href, labelText()) : null;
+  });
   const label = () => reference() === undefined && node()?.type === "linkReference"
-    ? `[${inlineText(node()?.children || [])}][${node()?.identifier || node()?.label || ""}]`
+    ? `[${labelText()}][${node()?.identifier || node()?.label || ""}]`
     : <InlineNodes nodes={() => node()?.children || []} context={props.context} />;
+  const content = () => host() ?? label();
   return <Show when={target()} fallback={label()}>
     {(resolved) => <Show when={!props.context.inline} fallback={label()}>
-      <Show when={resolved().external} fallback={<a href={resolved().href} title={reference()?.title || node()?.title || undefined}>{label()}</a>}>
+      <Show when={resolved().external} fallback={<a href={resolved().href} data-citation={host() ? "true" : undefined} title={host() ? resolved().href : (reference()?.title || node()?.title || undefined)}>{content()}</a>}>
         <button
           type="button"
           class="external-markdown-link"
+          data-citation={host() ? "true" : undefined}
+          title={host() ? resolved().href : undefined}
           data-external-url={resolved().href}
-          aria-label={inlineText(node()?.children || []) || resolved().href}
+          aria-label={labelText() || resolved().href}
           onClick={(event) => props.context.requestExternalLink(resolved().href, event.currentTarget as HTMLElement)}
-        >{label()}</button>
+        >{content()}</button>
       </Show>
     </Show>}
   </Show>;
@@ -252,16 +332,26 @@ const mathRenderQueue = new MathRenderQueue({
   },
 });
 
-function mathCacheKey(node: MarkdownNode, source: string, synthetic: boolean) {
-  return `${node?.type === "math" ? "display" : "inline"}\u0000${synthetic ? `synthetic\u0000${source}` : source}`;
+function mathCacheKey(node: MarkdownNode, source: string) {
+  return `${node?.type === "math" ? "display" : "inline"}\u0000${source}`;
 }
 
-function getCachedMathHtml(node: MarkdownNode, source: string, synthetic: boolean) {
-  return mathHtmlCache.get(mathCacheKey(node, source, synthetic));
+function getCachedMathHtml(node: MarkdownNode, source: string) {
+  return mathHtmlCache.get(mathCacheKey(node, source));
 }
 
-function cacheMathHtml(node: MarkdownNode, source: string, html: string, synthetic: boolean) {
-  const key = mathCacheKey(node, source, synthetic);
+/**
+ * Store a formula, never a partial.
+ *
+ * Every streamed delta produces a different candidate string, so a live
+ * formula writes one dead entry per delta -- thirty or more for one equation
+ * -- and none of them is ever read again. Left uncapped by policy they evicted
+ * the finished formulas that re-render on remount, scrollback and settle, so
+ * the cache had a hit rate near zero exactly where it was supposed to pay.
+ * Writes are therefore gated on the message being complete.
+ */
+function cacheMathHtml(node: MarkdownNode, source: string, html: string) {
+  const key = mathCacheKey(node, source);
   if (!mathHtmlCache.has(key) && mathHtmlCache.size >= MATH_HTML_CACHE_LIMIT) {
     const oldest = mathHtmlCache.keys().next().value;
     if (oldest) mathHtmlCache.delete(oldest);
@@ -274,7 +364,7 @@ function scheduleMathRender(run: () => void, policy: MathRenderPolicy) {
   return mathRenderQueue.enqueue(run, policy);
 }
 
-function MathNode(props: { node: MarkdownNode | NodeAccessor; defer?: () => boolean; policy?: () => MathRenderPolicy; preview?: () => boolean; renderer?: () => string; onBusyChange?: (busy: boolean) => void }) {
+function MathNode(props: { node: MarkdownNode | NodeAccessor; defer?: () => boolean; policy?: () => MathRenderPolicy; renderer?: () => string; onBusyChange?: (busy: boolean) => void }) {
   const node = () => readNode(props.node);
   const [html, setHtml] = createSignal("");
   const [type, setType] = createSignal<string | undefined>();
@@ -284,14 +374,16 @@ function MathNode(props: { node: MarkdownNode | NodeAccessor; defer?: () => bool
   let busy = false;
   let renderVersion = 0;
   let lastValidHtml = "";
-  let fallbackHtml = "";
+  // A settled message never streams another partial, so its formulas are the
+  // only candidates worth keeping in the shared cache.
+  const complete = () => (props.policy?.() || "stream") === "reattach";
   const setBusy = (next: boolean) => {
     if (next === busy) return;
     busy = next;
     props.onBusyChange?.(next);
   };
-  const samplePreviewHeight = (synthetic: boolean, current: MarkdownNode) => {
-    if (!synthetic || current?.type !== "math") return;
+  const samplePreviewHeight = (current: MarkdownNode) => {
+    if (current?.type !== "math") return;
     queueMicrotask(() => {
       const height = wrapper?.getBoundingClientRect().height || 0;
       if (height > previewMinHeight()) setPreviewMinHeight(height);
@@ -299,14 +391,13 @@ function MathNode(props: { node: MarkdownNode | NodeAccessor; defer?: () => bool
   };
   const renderCurrent = (current: MarkdownNode, source: string, version: number) => {
     if (version !== renderVersion) return;
-    const synthetic = Boolean(props.preview?.());
-    const candidate = synthetic ? repairSyntheticMathSource(source) : source;
-    const cached = getCachedMathHtml(current, candidate, synthetic);
+    const candidate = repairSyntheticMathSource(source);
+    const cached = getCachedMathHtml(current, candidate);
     if (cached !== undefined) {
       lastValidHtml = cached;
       setHtml(cached);
       setBusy(false);
-      samplePreviewHeight(synthetic, current);
+      samplePreviewHeight(current);
       return;
     }
     let renderedHtml: string | null = null;
@@ -316,34 +407,18 @@ function MathNode(props: { node: MarkdownNode | NodeAccessor; defer?: () => bool
     try {
       renderedHtml = katex.renderToString(candidate, {
         displayMode: current?.type === "math",
-        throwOnError: synthetic,
+        throwOnError: true,
       });
-      if (synthetic && renderedHtml.includes("katex-error")) renderedHtml = null;
+      if (renderedHtml.includes("katex-error")) renderedHtml = null;
       else valid = true;
     } catch {
       renderedHtml = null;
     }
     if (renderedHtml == null) {
-      if (lastValidHtml) {
-        renderedHtml = lastValidHtml;
-      } else if (synthetic) {
-        // A first invalid partial must not reserve a larger fallback box than
-        // the valid preview that follows it. Keep the stable wrapper mounted,
-        // but let the cell grow when KaTeX first accepts the candidate.
-        renderedHtml = "";
-      } else if (!fallbackHtml) {
-        try {
-          fallbackHtml = katex.renderToString(current?.type === "math" ? "\\vphantom{\\displaystyle x}" : "\\vphantom{x}", {
-            displayMode: current?.type === "math",
-            throwOnError: true,
-          });
-        } catch {
-          fallbackHtml = "";
-        }
-        renderedHtml = fallbackHtml;
-      } else {
-        renderedHtml = fallbackHtml;
-      }
+      // A first invalid partial must not reserve a larger fallback box than
+      // the valid preview that follows it. Keep the stable wrapper mounted,
+      // but let the cell grow when KaTeX first accepts the candidate.
+      renderedHtml = lastValidHtml;
     }
     if (recorder) {
       recordHarnessMetric(recorder, {
@@ -357,10 +432,10 @@ function MathNode(props: { node: MarkdownNode | NodeAccessor; defer?: () => bool
     }
     if (valid) {
       lastValidHtml = renderedHtml;
-      cacheMathHtml(current, candidate, renderedHtml, synthetic);
+      if (complete()) cacheMathHtml(current, candidate, renderedHtml);
     }
     if (renderedHtml !== html()) setHtml(renderedHtml);
-    samplePreviewHeight(synthetic, current);
+    samplePreviewHeight(current);
     setBusy(false);
   };
   const initial = node();
@@ -382,12 +457,10 @@ function MathNode(props: { node: MarkdownNode | NodeAccessor; defer?: () => bool
     if (!current || !source) {
       setHtml("");
       lastValidHtml = "";
-      fallbackHtml = "";
       setPreviewMinHeight(0);
       return;
     }
-    const synthetic = Boolean(props.preview?.());
-    const cached = getCachedMathHtml(current, synthetic ? repairSyntheticMathSource(source) : source, synthetic);
+    const cached = getCachedMathHtml(current, repairSyntheticMathSource(source));
     if (cached !== undefined) {
       lastValidHtml = cached;
       setHtml(cached);
@@ -401,7 +474,6 @@ function MathNode(props: { node: MarkdownNode | NodeAccessor; defer?: () => bool
       // Keep the last valid formula in place while the replacement render is
       // queued. Clearing the span here makes every streamed partial flash
       // blank before KaTeX completes, which is most visible on mobile.
-      if (!lastValidHtml && html() === "") setHtml(fallbackHtml);
       setBusy(true);
       cancelJob = scheduleMathRender(() => renderCurrent(current, source, version), props.policy?.() || "stream");
       return;
@@ -412,7 +484,7 @@ function MathNode(props: { node: MarkdownNode | NodeAccessor; defer?: () => bool
     cancelJob?.();
     setBusy(false);
   });
-  return <span ref={wrapper} class={type() === "math" ? "incremark-math-block" : "incremark-math-inline"} data-synthetic-math-preview={props.preview?.() ? "true" : undefined} style={{ "min-height": props.preview?.() && type() === "math" && previewMinHeight() > 0 ? `${previewMinHeight()}px` : undefined }} innerHTML={html()} />;
+  return <span ref={wrapper} class={type() === "math" ? "incremark-math-block" : "incremark-math-inline"} style={{ "min-height": type() === "math" && previewMinHeight() > 0 ? `${previewMinHeight()}px` : undefined }} innerHTML={html()} />;
 }
 
 function CodeNode(props: { node: MarkdownNode | NodeAccessor }) {
@@ -525,7 +597,19 @@ function PendingConstruct(props: { pending: StreamingPending; streaming: boolean
     : <span class={className()} data-streaming-pending={props.streaming ? pending().kind : undefined} aria-hidden="true" />;
 }
 
-function PendingInlineMathPlaceholder() {
+/**
+ * Register while mounted so settlement can see this without reading the DOM.
+ *
+ * Everything else that holds a message open -- an unfinished stream, an
+ * in-flight display frame, a queued KaTeX render -- is already a signal. This
+ * placeholder was the one exception, and polling for it is why settlement used
+ * to need a MutationObserver over the whole subtree.
+ */
+function PendingInlineMathPlaceholder(props: { context: RendererContext }) {
+  onMount(() => {
+    props.context.onPendingPlaceholderChange(1);
+    onCleanup(() => props.context.onPendingPlaceholderChange(-1));
+  });
   return <span
     class="streaming-pending streaming-pending-math-inline"
     data-streaming-pending="math-inline"
@@ -584,8 +668,8 @@ function AstNodeContent(props: { node: NodeAccessor; context: RendererContext })
     case "delete": return <del><InlineNodes nodes={() => node()?.children || []} context={props.context} /></del>;
     case "inlineCode": return <code>{node()?.value || ""}</code>;
     case "inlineMath":
-    case "math": return <MathNode node={node} defer={props.context.deferMath} policy={props.context.mathRenderPolicy} preview={props.context.syntheticMath} renderer={props.context.rendererId} onBusyChange={props.context.onMathBusyChange} />;
-    case PENDING_INLINE_MATH_NODE: return <PendingInlineMathPlaceholder />;
+    case "math": return <MathNode node={node} defer={props.context.deferMath} policy={props.context.mathRenderPolicy} renderer={props.context.rendererId} onBusyChange={props.context.onMathBusyChange} />;
+    case PENDING_INLINE_MATH_NODE: return <PendingInlineMathPlaceholder context={props.context} />;
     case "break": return <br />;
     case "link": return <LinkNode node={node} context={props.context} />;
     case "linkReference": return <LinkNode node={node} context={props.context} reference={() => props.context.definitions()[node()?.identifier]} />;
@@ -625,16 +709,16 @@ function AstNodeContent(props: { node: NodeAccessor; context: RendererContext })
  */
 export function IncremarkMarkdown(props: ChatMarkdownProps) {
   const parser = createIncremarkParser(incremarkParserOptions);
-  const [blocks, setBlocks] = createSignal<ParsedBlock[]>([]);
-  const [pendingBlocks, setPendingBlocks] = createSignal<ParsedBlock[]>([]);
-  const [seededBlocks, setSeededBlocks] = createSignal<ParsedBlock[]>([]);
+  const [seededBlocks, setSeededBlocks] = createSignal<ParsedBlock[]>([], { equals: sameBlockList });
   const [displayBlockStore, setDisplayBlockStore] = createStore<{ items: DisplayBlock[] }>({ items: [] });
   const [displayBusy, setDisplayBusy] = createSignal(false);
   const [pendingMathRenders, setPendingMathRenders] = createSignal(0);
   const [inlineAst, setInlineAst] = createSignal<MarkdownNode>({ type: "root", children: [] });
   const [pending, setPending] = createSignal<StreamingPending | null>(null);
-  const [pendingInlineBlockId, setPendingInlineBlockId] = createSignal<string | null>(null);
   const [definitions, setDefinitions] = createSignal<Record<string, Definition>>({});
+  const [pendingPlaceholders, setPendingPlaceholders] = createSignal(0);
+  const [frozenSource, setFrozenSource] = createSignal<string | null>(null);
+  const [settled, setSettled] = createSignal(false);
   const external = createExternalLinkController();
   const displayHistory = new Map<string, MarkdownNode>();
   const completedById = new Map<string, ParsedBlock>();
@@ -645,9 +729,62 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
   let previousTableMathSentinel = "";
   let finalised = false;
   let previousTypewriter: boolean | null = null;
-  let previousSyntheticMath: boolean | null = null;
-  const typewriter = () => Boolean(props.typewriter && !props.inline);
-  const rendererId = () => props.syntheticMath ? "incremark-synthetic" : typewriter() ? "incremark-typewriter" : "incremark";
+  // Block-by-block reveal is what this renderer is; only an inline preview,
+  // which is a single line inside a summary, skips it.
+  const typewriter = () => !props.inline;
+  // Freezing is a message-level guarantee. A one-line preview inside a summary
+  // has no settled state worth protecting, and giving it one would fight the
+  // summary's own sizing.
+  const freezes = () => !props.inline;
+  // Both memos deliberately preserve value equality across settlement. When
+  // frozenSource changes from null to the already-rendered final string, and
+  // settled changes while streaming is already false, everything downstream
+  // sees no value change and so takes no terminal render pulse. The memo also
+  // drops its live props.children dependency once frozen, so later upstream
+  // churn -- a checkpoint reload re-delivering the same text -- can no longer
+  // reach a message that is already on screen.
+  const source = createMemo(() => frozenSource() ?? String(props.children || ""));
+  const streaming = createMemo(() => settled() ? false : Boolean(props.streaming));
+  // Nothing is left in flight that could still change the layout.
+  const quiet = () => !props.streaming
+    && !displayBusy()
+    && pendingMathRenders() === 0
+    && pendingPlaceholders() === 0;
+  let settleFrame: number | null = null;
+  let settleFramesRemaining = 0;
+  const cancelSettlement = () => {
+    if (settleFrame != null) cancelAnimationFrame(settleFrame);
+    settleFrame = null;
+    settleFramesRemaining = 0;
+  };
+  const advanceSettlement = () => {
+    settleFrame = null;
+    if (settled() || !quiet()) {
+      settleFramesRemaining = 0;
+      return;
+    }
+    if (settleFramesRemaining > 1) {
+      settleFramesRemaining -= 1;
+      settleFrame = requestAnimationFrame(advanceSettlement);
+      return;
+    }
+    // The mounted DOM is not cloned, serialised, replaced or reparsed. Only the
+    // source branch becomes local.
+    setFrozenSource(String(props.children || ""));
+    setSettled(true);
+  };
+  createEffect(() => {
+    if (!freezes() || settled()) return;
+    if (!quiet()) {
+      cancelSettlement();
+      return;
+    }
+    if (settleFrame != null) return;
+    settleFramesRemaining = SETTLE_DELAY_FRAMES;
+    settleFrame = requestAnimationFrame(advanceSettlement);
+  });
+  onCleanup(cancelSettlement);
+  const rendererId = () => "incremark";
   const displayBlocks = () => displayBlockStore.items;
   const setDisplayBlocks = (next: DisplayBlock[]) => {
     setDisplayBlockStore("items", reconcile(next, { key: "id", merge: true }));
@@ -689,10 +826,9 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
   const blockContainsOffset = (block: ParsedBlock, offset: number) => offset >= block.startOffset && offset <= block.endOffset;
 
   createEffect(() => {
-    const source = String(props.children || "");
-    const syntheticMath = Boolean(props.syntheticMath);
+    const source = frozenSource() ?? String(props.children || "");
     const tableMath = !props.inline;
-    const split = splitStreamingMarkdown(source, { tableMath, allowUnclosedMath: Boolean(props.streaming) });
+    const split = splitStreamingMarkdown(source, { tableMath, allowUnclosedMath: streaming() });
     const projection = tableMath
       ? projectTableMathSource(source, {
         convertTexDisplayDelimiters: true,
@@ -706,13 +842,11 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
     let parserMode = "none";
     let update: ReturnType<typeof parser.append> | undefined;
     const updates: Array<ReturnType<typeof parser.append>> = [];
-    const syntheticMathModeChanged = previousSyntheticMath !== null && previousSyntheticMath !== syntheticMath;
-    const preserveTypewriterState = Boolean(props.typewriter && !props.inline)
+    const preserveTypewriterState = typewriter()
       && previousTypewriter === true
-      && !syntheticMathModeChanged
       && source.startsWith(previousSource);
-    if (source !== previousSource || (tableMath && parserSource !== previousParserSource) || syntheticMathModeChanged) {
-      const canAppend = !syntheticMathModeChanged
+    if (source !== previousSource || (tableMath && parserSource !== previousParserSource)) {
+      const canAppend = true
         && source.startsWith(previousSource)
         && parserSource.startsWith(previousParserSource)
         && (!projection || projection.sentinel === previousTableMathSentinel);
@@ -737,7 +871,7 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
       previousTableMathSentinel = projection?.sentinel || "";
       finalised = false;
     }
-    if (!props.streaming && !finalised && !split.pending) {
+    if (!streaming() && !finalised && !split.pending) {
       parserMode = parserMode === "none" ? "finalize" : `${parserMode}+finalize`;
       update = parser.finalize();
       updates.push(update);
@@ -757,7 +891,7 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
       if (!split.pending || props.inline) return null;
       const currentBlock = [...pendingUpdateBlocks.values()].find((block) => blockContainsOffset(block, split.pending!.start));
       if (!currentBlock) return null;
-      if (props.syntheticMath && (split.pending.kind === "math-inline" || split.pending.kind === "math-block")) {
+      if (split.pending.kind === "math-inline" || split.pending.kind === "math-block") {
         const previewNode = createSyntheticMathPreviewNode(currentBlock.node, {
           kind: split.pending.kind,
           body: split.pending.body,
@@ -824,9 +958,9 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
         rawText: prefix,
       };
     })();
-    setDefinitions({ ...parser.getDefinitionMap() });
+    const nextDefinitions = parser.getDefinitionMap();
+    setDefinitions((previous) => sameDefinitions(previous, nextDefinitions) ? previous : { ...nextDefinitions });
     setPending(split.pending);
-    setPendingInlineBlockId(!props.syntheticMath && split.pending?.kind === "math-inline" ? pendingPrefixBlock?.id || null : null);
     if (updates.length) {
       for (const entry of updates) {
         for (const block of entry.updated) completedById.delete(normalizeBlock(block).id);
@@ -846,8 +980,6 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
       const nextPendingBlocks = split.pending
         ? (pendingPrefixBlock ? [pendingPrefixBlock] : [])
         : [...pendingUpdateBlocks.values()].filter((block) => !completedIds.has(block.id));
-      setBlocks(nextBlocks);
-      setPendingBlocks(nextPendingBlocks);
       currentBlocks = nextBlocks
         .concat(nextPendingBlocks)
         .sort((left, right) => left.startOffset - right.startOffset);
@@ -864,7 +996,7 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
       setDisplayBlocks([]);
     } else if (enabled && currentBlocks.length && (
       previousTypewriter === false
-      || (previousTypewriter === null && !props.streaming)
+      || (previousTypewriter === null && !streaming())
       || (parserMode === "render" && previousTypewriter === true && !preserveTypewriterState)
     )) {
       displayHistory.clear();
@@ -883,12 +1015,12 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
       const animated = currentBlocks.filter((block) => !seededById.has(block.id));
       const seededRoot = { type: "root", children: seeded.map((block) => block.node) };
       typewriterController.setBaselineCharacters(visibleAstCharacters(seededRoot));
+      // observeSource already hands the blocks to the scheduler; pushing the
+      // same array again only repeated the diff.
       typewriterController.observeSource(animated);
-      typewriterController.push(animated);
       if (animated.length === 0 && currentBlocks.length > 0) typewriterController.completeSeeded();
     }
     previousTypewriter = enabled;
-    previousSyntheticMath = syntheticMath;
 
     if (props.inline) {
       const inlineParser = createIncremarkParser(incremarkParserOptions);
@@ -932,33 +1064,25 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
     inline: Boolean(props.inline),
     requestExternalLink: external.request,
     deferMath: () => typewriter(),
-    mathRenderPolicy: () => props.streaming ? "stream" : "reattach",
-    syntheticMath: () => Boolean(props.syntheticMath),
+    mathRenderPolicy: () => streaming() ? "stream" : "reattach",
     rendererId,
-    pendingInlineBlockId,
     onMathBusyChange: (busy) => setPendingMathRenders((count) => Math.max(0, count + (busy ? 1 : -1))),
-  };
-  const displayedBlocks = () => {
-    const byId = new Map(blocks().map((block) => [block.id, block]));
-    for (const block of pendingBlocks()) if (!byId.has(block.id)) byId.set(block.id, block);
-    return [...byId.values()].sort((left, right) => left.startOffset - right.startOffset);
+    onPendingPlaceholderChange: (delta) => setPendingPlaceholders((count) => Math.max(0, count + delta)),
   };
   return <>
-    <div class="chat-markdown" data-renderer={rendererId()} data-synthetic-math={props.syntheticMath ? "true" : undefined} data-streaming={props.streaming || undefined} data-display-busy={displayBusy() || pendingMathRenders() > 0 ? "true" : undefined} data-display-animation-busy={displayBusy() ? "true" : undefined} data-pending-math-renders={pendingMathRenders() > 0 ? String(pendingMathRenders()) : undefined} data-display-key={props.displayKey || undefined}>
+    <div class="chat-markdown" data-renderer={rendererId()} data-inline={props.inline ? "true" : undefined} data-streaming={streaming() || undefined} data-display-busy={displayBusy() || pendingMathRenders() > 0 ? "true" : undefined} data-display-animation-busy={displayBusy() ? "true" : undefined} data-pending-math-renders={pendingMathRenders() > 0 ? String(pendingMathRenders()) : undefined} data-display-key={props.displayKey || undefined} data-settled={settled() ? "true" : undefined}>
       <div class="incremark" data-incremark-core="true">
         <Show when={props.inline} fallback={<>
-          <Show when={typewriter()} fallback={<ParsedBlockNodes blocks={displayedBlocks} context={context} />}>
-            <ParsedBlockNodes blocks={seededBlocks} context={context} />
-            <DisplayBlockNodes blocks={displayBlocks} context={context} history={displayHistory} />
-          </Show>
+          <ParsedBlockNodes blocks={seededBlocks} context={context} />
+          <DisplayBlockNodes blocks={displayBlocks} context={context} history={displayHistory} />
           <Show when={pending()}>
-            {(value) => <Show when={value().kind === "fence" || (!props.syntheticMath && (value().kind !== "math-inline" || !pendingInlineBlockId()))}>
-              <PendingConstruct pending={value()} streaming={Boolean(props.streaming)} />
+            {(value) => <Show when={value().kind === "fence"}>
+              <PendingConstruct pending={value()} streaming={streaming()} />
             </Show>}
           </Show>
         </>}>
           <AstNode node={inlineAst()} context={context} />
-          <Show when={pending()}>{(value) => <Show when={value().kind === "fence" || (!props.syntheticMath && (value().kind !== "math-inline" || !pendingInlineBlockId()))}><PendingConstruct pending={value()} streaming={Boolean(props.streaming)} /></Show>}</Show>
+          <Show when={pending()}>{(value) => <Show when={value().kind === "fence"}><PendingConstruct pending={value()} streaming={streaming()} /></Show>}</Show>
         </Show>
       </div>
     </div>

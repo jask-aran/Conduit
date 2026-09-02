@@ -40,6 +40,7 @@ function TraceError(props: { message: Message; profileLabel?: string }) {
 }
 
 function TraceSegmentRow(props: {
+  onRendered?: () => void;
   segment: () => TraceSegment;
   sessionId: string | null;
   renderer?: MarkdownRendererId;
@@ -65,7 +66,7 @@ function TraceSegmentRow(props: {
   return <Show when={tool()} fallback={
     <Show when={error()} fallback={
       <div class="turn-trace-text" data-kind={props.segment().kind}>
-        <Suspense fallback={<div class="markdown-skeleton" />}><ChatMarkdown streaming={live()} renderer={props.renderer} pacing={props.pacing}>{text()}</ChatMarkdown></Suspense>
+        <Suspense fallback={<div class="markdown-skeleton" />}><ChatMarkdown streaming={live()} renderer={props.renderer} pacing={props.pacing} onRendered={props.onRendered}>{text()}</ChatMarkdown></Suspense>
       </div>
     }>
       {(message) => <TraceError message={message()} profileLabel={props.profileLabel} />}
@@ -101,7 +102,7 @@ function previewOf(trace: TurnTraceData): { text: string; counters: string } {
   return { text: clipped, counters };
 }
 
-export function TurnTrace(props: { trace: TurnTraceData; sessionId: string | null; renderer?: MarkdownRendererId; pacing?: IncremarkPacingMode; profileLabel?: string }) {
+export function TurnTrace(props: { trace: TurnTraceData; sessionId: string | null; renderer?: MarkdownRendererId; pacing?: IncremarkPacingMode; profileLabel?: string; onRendered?: () => void }) {
   const [open, setOpen] = createSignal(false);
   return <div class="turn-trace" data-active={props.trace.active ? "true" : "false"}>
     <button type="button" class="turn-trace-header" aria-expanded={open()} onClick={() => setOpen(!open())}>
@@ -115,7 +116,7 @@ export function TurnTrace(props: { trace: TurnTraceData; sessionId: string | nul
     <Show when={open()}>
       <div class="turn-trace-body">
           <Index each={props.trace.segments}>{(segment) =>
-          <TraceSegmentRow segment={segment} sessionId={props.sessionId} renderer={props.renderer} pacing={props.pacing} profileLabel={props.profileLabel} />
+          <TraceSegmentRow segment={segment} sessionId={props.sessionId} renderer={props.renderer} pacing={props.pacing} profileLabel={props.profileLabel} onRendered={props.onRendered} />
         }</Index>
       </div>
     </Show>
