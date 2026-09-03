@@ -624,13 +624,29 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
   };
   const copy = (value?: string) => { if (value) void navigator.clipboard.writeText(value); };
   const clampWidth = (next: number) => Math.max(240, Math.min(Math.floor(window.innerWidth * 0.65), next));
-  const saveWidth = (next: number) => {
+  // Every atomic width commit has to announce itself. The transcript learns its
+  // own width only from geometry motion, so a commit that skips the event
+  // leaves it laid out for the panel's previous size until something unrelated
+  // nudges it. The drag has its own begin/change/end; this is for the commits
+  // that land in one step -- keyboard resize and the project-change reset.
+  const commitWidth = (next: number) => {
     const value = clampWidth(next);
+    const startSize = shellWidth() + shellGap();
     batch(() => {
       setWidth(value);
       if (props.open()) setShellWidth(value);
     });
-    localStorage.setItem(widthKey(), String(value));
+    if (!props.open()) return value;
+    const targetSize = value + shellGap();
+    if (Math.abs(targetSize - startSize) > 0.5) {
+      const id = ++panelMotionId;
+      dispatchPanelGeometryMotion({ phase: "begin", id, source: "workspace", size: startSize, targetSize, duration: 0 });
+      dispatchPanelGeometryMotion({ phase: "end", id, source: "workspace", size: targetSize });
+    }
+    return value;
+  };
+  const saveWidth = (next: number) => {
+    localStorage.setItem(widthKey(), String(commitWidth(next)));
   };
   let stopResize: (() => void) | undefined;
   createEffect(() => {
@@ -748,14 +764,13 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
       geometryProjectId = props.projectId();
       stopResize?.();
     }
+    let pendingWidthCommit: number | null = null;
     batch(() => {
       setDetailOpen(detailOpenFor(nextTab) === "true");
       setDiffDetailOpen(detailOpenFor("diff") === "true");
       setDetailHeight(Math.max(MIN_DETAIL_HEIGHT, Number(localStorage.getItem(`conduit:workspace-panel:${props.chatId()}:${nextTab}:detail-height`)) || 288));
       if (projectChanged) {
-        const nextWidth = clampWidth(Number(localStorage.getItem(widthKey())) || 336);
-        setWidth(nextWidth);
-        if (props.open()) setShellWidth(nextWidth);
+        pendingWidthCommit = Number(localStorage.getItem(widthKey())) || 336;
         setTreeWidth(Math.max(MIN_TREE_WIDTH, Math.min(MAX_TREE_WIDTH, Number(localStorage.getItem(treeWidthKey())) || DEFAULT_TREE_WIDTH)));
         setTreeCollapsed(localStorage.getItem(treeCollapsedKey()) === "true");
         setSplitRatio(Math.max(25, Math.min(75, Number(localStorage.getItem(splitRatioKey())) || 50)));
@@ -764,6 +779,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
       }
       setTab(nextTab);
     });
+    if (pendingWidthCommit != null) commitWidth(pendingWidthCommit);
   }));
   createEffect(on(() => props.requestedTab?.(), (next) => {
     if (next) selectTab(next.tab);
