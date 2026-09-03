@@ -440,18 +440,15 @@ test("workspace panel previews files, shows diff, and persists per chat", async 
   await expect(panel.getByRole("region", { name: "File preview" })).toHaveCount(0);
   await panel.getByRole("button", { name: /File preview/ }).click();
   await panel.getByRole("tab", { name: "Source Control" }).click();
-  await expect(panel.getByText("1 changed file")).toBeVisible();
+  await expect(panel.getByRole("button", { name: /Changes/ })).toBeVisible();
   await expect(panel.getByText("src/main.ts")).toBeVisible();
   await expect(panel.getByText("agent/rhs-panel-mvp", { exact: true })).toBeVisible();
+  // Graph is the default detail mode; Patch is the other half of the same tablist.
   await expect(panel.getByText("Add workspace panel")).toBeVisible();
-  await panel.getByRole("button", { name: /Working tree patch/ }).click();
-  const patchHandle = panel.getByRole("separator", { name: "Resize working tree patch" });
-  await expect(patchHandle).toBeVisible();
-  const originalPatchHeight = Number(await patchHandle.getAttribute("aria-valuenow"));
-  await patchHandle.focus();
-  await page.keyboard.press("ArrowUp");
-  await expect.poll(async () => Number(await patchHandle.getAttribute("aria-valuenow")))
-    .toBeGreaterThan(originalPatchHeight);
+  await panel.getByRole("tab", { name: "Patch" }).click();
+  await expect(panel.getByText("@@ -1 +1 @@")).toBeVisible();
+  await panel.getByRole("tab", { name: "Graph" }).click();
+  await expect(panel.getByText("Add workspace panel")).toBeVisible();
   await panel.getByRole("tab", { name: "Artifacts" }).click();
   await expect(panel.getByText("No artifacts in the loaded transcript")).toBeVisible();
   await panel.getByRole("radio", { name: "Interactive UI" }).click();
@@ -1131,6 +1128,90 @@ test("keeps a math-heavy answer steady and followed while it streams", async ({ 
   await expect.poll(async () => page.locator('[data-slot="message-scroller-viewport"]')
     .evaluate((element) => element.scrollHeight - element.clientHeight - element.scrollTop),
   { timeout: 10000 }).toBeLessThan(24);
+});
+
+// Streaming cost is dominated by how much DOM each delta touches, and that is a
+// number no frame-time assertion can pin down on a loaded machine. Count the
+// mutations instead: a renderer that patches the tail touches a handful of nodes
+// per character, one that rebuilds the message touches the whole tree every
+// delta, and the ratio separates them by an order of magnitude regardless of how
+// fast the machine is.
+test("streams by patching the tail rather than rebuilding the message", async ({ page }) => {
+  const paragraph = "The derivation proceeds one clause at a time, and each sentence adds enough prose that the renderer has to lay out a fresh line rather than merely extending the last word on the current one.";
+  const finalContent = Array.from({ length: 6 }, (_, index) => `### Part ${index + 1}\n\n${paragraph}`).join("\n\n");
+
+  await page.addInitScript((content) => {
+    const deltas = [];
+    for (let cursor = 0; cursor < content.length; cursor += 8) deltas.push(content.slice(cursor, cursor + 8));
+
+    class MockWebSocket extends EventTarget {
+      static OPEN = 1;
+
+      constructor() {
+        super();
+        this.readyState = 0;
+        queueMicrotask(() => {
+          this.readyState = MockWebSocket.OPEN;
+          this.dispatchEvent(new Event("open"));
+        });
+      }
+
+      close() { this.readyState = 3; }
+
+      send(data) {
+        const request = JSON.parse(data);
+        if (request.type !== "prompt") return;
+        const emit = (payload, delay) => setTimeout(() => this.onmessage?.({ data: JSON.stringify(payload) }), delay);
+        emit({ type: "generation_started", generationId: "g1", seq: 1 }, 0);
+        emit({ type: "assistant_message_started", generationId: "g1", seq: 2, messageId: "m1" }, 0);
+        emit({ type: "content_block_started", generationId: "g1", seq: 3, messageId: "m1", block: { type: "text", contentIndex: 0, text: "" } }, 0);
+        let seq = 4;
+        deltas.forEach((delta, index) => {
+          emit({ type: "content_block_delta", generationId: "g1", seq: seq += 1, messageId: "m1", blockType: "text", contentIndex: 0, delta }, index * 10);
+        });
+        const settledAt = deltas.length * 10 + 40;
+        emit({ type: "assistant_message_completed", generationId: "g1", seq: seq += 1, messageId: "m1", stopReason: "stop", blocks: [{ type: "text", contentIndex: 0, text: content }] }, settledAt);
+        emit({ type: "generation_settled", generationId: "g1", seq: seq += 1 }, settledAt + 40);
+      }
+    }
+
+    Object.defineProperty(window, "WebSocket", { configurable: true, value: MockWebSocket });
+
+    window.__domWatch = { mutations: 0, characters: content.length, attached: false };
+    const attach = () => {
+      const markdown = document.querySelector(".chat-markdown");
+      if (!markdown) return requestAnimationFrame(attach);
+      window.__domWatch.attached = true;
+      new MutationObserver((records) => {
+        for (const record of records) {
+          window.__domWatch.mutations += record.type === "childList"
+            ? record.addedNodes.length + record.removedNodes.length
+            : 1;
+        }
+      }).observe(markdown, { childList: true, subtree: true, characterData: true });
+    };
+    requestAnimationFrame(attach);
+  }, finalContent);
+
+  await page.route("**/v0/live-sessions", async (route) => {
+    await route.fulfill({ status: 201, json: { id: "live_dom", chatId: "550e8400-e29b-41d4-a716-446655440099", streamUrl: "/v0/live-sessions/live_dom/stream" } });
+  });
+
+  await openChatSurface(page);
+  await page.getByRole("textbox", { name: "Message Pi" }).fill("Explain it");
+  const send = page.getByRole("button", { name: "Send message" });
+  await expect(send).toBeEnabled({ timeout: 20000 });
+  await send.click();
+
+  await expect(page.getByRole("heading", { name: "Part 6" })).toBeVisible({ timeout: 20000 });
+  await expect(page.locator(".chat-markdown[data-settled='true']")).toHaveCount(1, { timeout: 10000 });
+
+  const watch = await page.evaluate(() => window.__domWatch);
+  expect(watch.attached).toBe(true);
+  // Ceiling, not a target. Patching the tail measures ~0.12 mutations per
+  // streamed character; rebuilding the message on each delta puts it two orders
+  // of magnitude higher. 0.5 leaves room for markup churn without going blind.
+  expect(watch.mutations / watch.characters).toBeLessThan(0.5);
 });
 
 // This is the shape that was silently broken for months. A message containing

@@ -111,6 +111,19 @@ node ../scripts/run-windows-chrome-devtools.mjs stop-cli
 `stop-cli` leaves Chrome and its profile running. Agent Browser is not a native
 performance surface.
 
+The dev server registers a service worker with `autoUpdate`/`skipWaiting`, so a
+page opened in that profile can keep serving the previous bundle after a
+rebuild. Anything that measures a build must clear it first, or the numbers
+describe code that is not running:
+
+```js
+navigator.serviceWorker.getRegistrations().then((rs) => rs.forEach((r) => r.unregister()));
+caches.keys().then((ks) => ks.forEach((k) => caches.delete(k)));
+location.reload();
+```
+
+Confirm by checking the hashed chunk name in the network log actually changed.
+
 Wrapper and `cli` commands:
 
 - Lifecycle: `status`, `start`, `stop-cli`

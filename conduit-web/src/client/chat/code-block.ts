@@ -63,9 +63,10 @@ export function countCodeLines(text: string) {
 /**
  * Whether a block starts collapsed.
  *
- * A block that is still streaming always stays open -- collapsing text as it
- * arrives would hide the very thing the user is watching -- so the decision is
- * re-taken once the fence closes.
+ * The line count is the whole rule, and it applies while the fence is still
+ * open. Waiting for the closing fence meant a ten-line limit did nothing until
+ * the block had run to whatever length it was going to reach, then folded it
+ * all at once; folding at the threshold is what the limit says.
  */
 export function shouldCollapseCodeBlock(
   lines: number,
@@ -73,7 +74,7 @@ export function shouldCollapseCodeBlock(
   threshold: number,
   streaming: boolean,
 ) {
-  if (streaming || mode === "off") return false;
+  if (mode === "off") return false;
   if (mode === "all") return lines > 1;
   return lines > threshold;
 }
