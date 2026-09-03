@@ -4,10 +4,12 @@ import { Button, ContextMenu, ContextMenuContent, ContextMenuGroup, ContextMenuI
 import { api, asList } from "../api/client";
 import { authorizedFetch } from "../api/native-auth-client";
 import { httpUrl } from "../api/transport";
+import { COMMAND_IDS } from "../commands/command-registry";
 import { focusFirst, isMobileLayout, restoreFocus } from "../navigation/mobile-layout";
 import { ownsWorkspaceRequest, type WorkspaceRequest } from "./request-ownership";
 import { TerminalPane } from "../remotes/terminal-pane";
 import { dispatchPanelGeometryMotion, PANEL_MOTION_DURATION_MS } from "../panel-motion";
+import type { ShortcutManager } from "../shortcuts/shortcut-manager";
 import { FileTypeIcon } from "./file-type-icon";
 import "./workspace.css";
 
@@ -113,7 +115,7 @@ function cacheWorkspace(projectId: string, patch: Partial<WorkspaceCacheEntry>) 
   while (workspaceCache.size > MAX_CACHED_WORKSPACES) workspaceCache.delete(workspaceCache.keys().next().value!);
 }
 
-export default function WorkspacePanel(props: { projectId: Accessor<string>; chatId: Accessor<string>; open: Accessor<boolean>; expanded: Accessor<boolean>; requestedTab?: Accessor<{ tab: PanelTab; terminalId?: string; nonce: number } | null>; onToggleExpanded: () => void; onClose: () => void }) {
+export default function WorkspacePanel(props: { projectId: Accessor<string>; chatId: Accessor<string>; open: Accessor<boolean>; expanded: Accessor<boolean>; requestedTab?: Accessor<{ tab: PanelTab; terminalId?: string; nonce: number } | null>; onToggleExpanded: () => void; onClose: () => void; shortcuts: ShortcutManager }) {
   migrateWorkspaceGeometry();
   let projectGeneration = 0;
   let requestVersion = 0;
@@ -384,6 +386,28 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
     if (!directories()[""]) void loadDirectory();
     queueMicrotask(() => fileFilterInput?.focus());
   };
+  const workspaceShortcutAvailable = () => !document.querySelector(
+    '.command-dialog[data-state="open"], .settings-dialog[data-state="open"], .conduit-modal[data-state="open"], .external-link-dialog[data-state="open"]',
+  );
+  const focusTabControl = (next: PanelTab) => {
+    const control = props.expanded()
+      ? panelRoot?.querySelector<HTMLSelectElement>('select[aria-label="Left workspace pane"]')
+      : panelRoot?.querySelector<HTMLElement>(`[data-workspace-tab="${next}"]`);
+    control?.focus({ preventScroll: true });
+  };
+  const selectShortcutTab = (next: PanelTab) => {
+    if (props.expanded()) setPaneTab("left", next);
+    else selectTab(next);
+    if (next === "files" && !directories()[""]) void loadDirectory();
+    queueMicrotask(() => focusTabControl(next));
+  };
+  const releaseShortcutHandlers = [
+    props.shortcuts.registerHandler(COMMAND_IDS.workspaceFiles, "workspace-panel", () => selectShortcutTab("files"), { when: workspaceShortcutAvailable }),
+    props.shortcuts.registerHandler(COMMAND_IDS.workspaceSourceControl, "workspace-panel", () => selectShortcutTab("diff"), { when: workspaceShortcutAvailable }),
+    props.shortcuts.registerHandler(COMMAND_IDS.workspaceArtifacts, "workspace-panel", () => selectShortcutTab("artifacts"), { when: workspaceShortcutAvailable }),
+    props.shortcuts.registerHandler(COMMAND_IDS.workspaceTerminal, "workspace-panel", () => selectShortcutTab("terminal"), { when: workspaceShortcutAvailable }),
+  ];
+  onCleanup(() => releaseShortcutHandlers.forEach((release) => release()));
   const toggleDetail = () => {
     const next = !detailOpen();
     setDetailOpen(next);
@@ -1050,7 +1074,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
     <Show when={props.open()}>
       <button type="button" class="mobile-panel-backdrop" data-mobile-backdrop="workspace" data-for="workspace" aria-label="Dismiss workspace panel" onClick={props.onClose} />
     </Show>
-    <aside ref={panelRoot} class="workspace-panel" classList={{ "workspace-panel-open": props.open() || shellWidth() > 0.5, "workspace-panel-expanded": props.expanded() }} aria-label="Workspace panel" aria-hidden={!props.open()} inert={!props.open()} style={{ "--workspace-panel-width": `${width()}px`, "--workspace-shell-width": `${shellWidth()}px`, width: `${shellWidth()}px`, "margin-right": `${shellGap()}px` }}>
+    <aside ref={panelRoot} class="workspace-panel" data-shortcut-scope="workspace" classList={{ "workspace-panel-open": props.open() || shellWidth() > 0.5, "workspace-panel-expanded": props.expanded() }} aria-label="Workspace panel" aria-hidden={!props.open()} inert={!props.open()} style={{ "--workspace-panel-width": `${width()}px`, "--workspace-shell-width": `${shellWidth()}px`, width: `${shellWidth()}px`, "margin-right": `${shellGap()}px` }}>
     <div ref={resizeHandle} class="workspace-resize-handle" role="separator" aria-label="Resize workspace panel" aria-orientation="vertical" aria-valuemin="240" aria-valuemax={Math.floor(window.innerWidth * 0.65)} aria-valuenow={width()} tabIndex={0} onPointerDown={startResize} onKeyDown={(event) => { if (event.key === "ArrowLeft") saveWidth(width() + 16); if (event.key === "ArrowRight") saveWidth(width() - 16); }} />
     <div ref={panelSurface} class="workspace-panel-surface">
     <header class="workspace-panel-header">
@@ -1059,10 +1083,10 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
         <Show when={props.expanded()} fallback={<Maximize2Icon />}><Minimize2Icon /></Show>
       </Button>
       <Show when={props.expanded()} fallback={<div class="workspace-panel-tabs" role="toolbar" aria-label="Workspace views">
-        <button type="button" role="tab" aria-label="Files" aria-selected={tab() === "files"} onClick={selectFilesTab}><FolderIcon /><span>Files</span></button>
-        <button type="button" role="tab" aria-label="Source Control" aria-selected={tab() === "diff"} onClick={() => activateTab("diff")}><GitCompareArrowsIcon /><span>Source Control</span></button>
-        <button type="button" role="tab" aria-label="Artifacts" aria-selected={tab() === "artifacts"} onClick={() => activateTab("artifacts")}><BoxesIcon /><span>Artifacts</span></button>
-        <button type="button" role="tab" aria-label="Terminal" aria-selected={tab() === "terminal"} onClick={() => activateTab("terminal")}><TerminalIcon /><span>Terminal</span></button>
+        <button type="button" role="tab" data-workspace-tab="files" aria-label="Files" aria-selected={tab() === "files"} onClick={selectFilesTab}><FolderIcon /><span>Files</span></button>
+        <button type="button" role="tab" data-workspace-tab="diff" aria-label="Source Control" aria-selected={tab() === "diff"} onClick={() => activateTab("diff")}><GitCompareArrowsIcon /><span>Source Control</span></button>
+        <button type="button" role="tab" data-workspace-tab="artifacts" aria-label="Artifacts" aria-selected={tab() === "artifacts"} onClick={() => activateTab("artifacts")}><BoxesIcon /><span>Artifacts</span></button>
+        <button type="button" role="tab" data-workspace-tab="terminal" aria-label="Terminal" aria-selected={tab() === "terminal"} onClick={() => activateTab("terminal")}><TerminalIcon /><span>Terminal</span></button>
       </div>}>
         <div class="workspace-pane-selectors" aria-label="Expanded workspace panes">
           <label><span>Left</span><select aria-label="Left workspace pane" value={tab()} onChange={(event) => changePaneTab("left", event.currentTarget.value)}><For each={["files", "diff", "artifacts", "terminal"] satisfies PanelTab[]}>{(item) => <option value={item}>{tabLabel(item)}</option>}</For></select></label>

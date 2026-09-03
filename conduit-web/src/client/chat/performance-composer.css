@@ -5,6 +5,7 @@
    composer overlays its bottom edge without becoming part of the scroll or
    panel-motion subtree. */
 .work-area-conversation { position: relative; }
+.chat-main:has(.work-area-conversation[data-shortcut-scope="chat"]:focus-within) .chat-header-title strong { color: var(--shortcut-focus); }
 .transcript { position: relative; z-index: 1; }
 .chat-main:not(.chat-main-empty) .thread { padding-bottom: 147.2px; }
 .chat-main:not(.chat-main-empty) .composer-stack {

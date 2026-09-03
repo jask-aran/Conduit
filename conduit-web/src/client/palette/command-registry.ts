@@ -33,6 +33,7 @@ export interface PaletteContext {
   canRegenerate: boolean;
   canContinue: boolean;
   canCopy: boolean;
+  chatSort?: "latest" | "created";
 }
 
 export interface PaletteActions {
@@ -46,6 +47,9 @@ export interface PaletteActions {
   toggleSidebar: () => void;
   toggleWorkspacePanel: () => void;
   maximizeWorkspacePanel: () => void;
+  focusComposer: () => void;
+  focusWorkspacePanel: () => void;
+  toggleChatWorkspaceFocus: () => void;
   openWorkspaceView: (view: "files" | "diff" | "artifacts" | "terminal") => void;
   copyTranscript: () => void;
   rename: () => void;
@@ -186,6 +190,9 @@ const paletteCommandRuntime: Record<string, PaletteCommandRuntime> = {
   [COMMAND_IDS.toggleSidebar]: { isAvailable: () => true, run: (actions) => actions.toggleSidebar() },
   [COMMAND_IDS.toggleWorkspacePanel]: { isAvailable: hasChat, run: (actions) => actions.toggleWorkspacePanel() },
   [COMMAND_IDS.maximizeWorkspacePanel]: { isAvailable: hasChat, run: (actions) => actions.maximizeWorkspacePanel() },
+  [COMMAND_IDS.focusComposer]: { isAvailable: hasChat, run: (actions) => actions.focusComposer() },
+  [COMMAND_IDS.focusWorkspacePanel]: { isAvailable: hasChat, run: (actions) => actions.focusWorkspacePanel() },
+  [COMMAND_IDS.toggleChatWorkspaceFocus]: { isAvailable: hasChat, run: (actions) => actions.toggleChatWorkspaceFocus() },
   [COMMAND_IDS.copyTranscript]: { isAvailable: hasChat, run: (actions) => actions.copyTranscript() },
   [COMMAND_IDS.renameChat]: { isAvailable: hasChat, run: (actions) => actions.rename() },
   [COMMAND_IDS.autoNameChat]: {
@@ -246,15 +253,15 @@ function settingsSectionCommands(context: PaletteContext): PaletteCommand[] {
 }
 
 const WORKSPACE_VIEWS = [
-  { id: "files", label: "Files", description: "Browse the project files", icon: "workspace-panel", keywords: ["tree", "folder", "project"] },
-  { id: "diff", label: "Source Control", description: "Inspect working-tree changes", icon: "workspace-panel", keywords: ["git", "diff", "changes"] },
-  { id: "artifacts", label: "Artifacts", description: "Browse outputs and interactive artifacts", icon: "workspace-panel", keywords: ["outputs", "preview"] },
-  { id: "terminal", label: "Terminal", description: "Open a server-owned shell for this session", icon: "terminal", keywords: ["shell", "console", "pty"] },
+  { id: COMMAND_IDS.workspaceFiles, view: "files", label: "Files", description: "Browse the project files", icon: "workspace-panel", keywords: ["tree", "folder", "project"] },
+  { id: COMMAND_IDS.workspaceSourceControl, view: "diff", label: "Source Control", description: "Inspect working-tree changes", icon: "workspace-panel", keywords: ["git", "diff", "changes"] },
+  { id: COMMAND_IDS.workspaceArtifacts, view: "artifacts", label: "Artifacts", description: "Browse outputs and interactive artifacts", icon: "workspace-panel", keywords: ["outputs", "preview"] },
+  { id: COMMAND_IDS.workspaceTerminal, view: "terminal", label: "Terminal", description: "Open a server-owned shell for this session", icon: "terminal", keywords: ["shell", "console", "pty"] },
 ] as const;
 
 function workspaceViewCommands(): PaletteCommand[] {
   return WORKSPACE_VIEWS.map((view) => ({
-    id: `workspace:${view.id}`,
+    id: view.id,
     group: "navigation",
     page: "workspace",
     label: view.label,
@@ -263,11 +270,15 @@ function workspaceViewCommands(): PaletteCommand[] {
     keywords: ["workspace", view.label, ...view.keywords],
     searchValue: `workspace ${view.label} ${view.keywords.join(" ")}`,
     isAvailable: hasChat,
-    run: (actions) => actions.openWorkspaceView(view.id),
+    run: (actions) => actions.openWorkspaceView(view.view),
   }));
 }
 
 function chatCommands(context: PaletteContext): PaletteCommand[] {
+  const sort = context.chatSort === "created" ? "created" : "latest";
+  const stamp = (session: ChatSummary) => sort === "created"
+    ? session.createdAt || ""
+    : session.updatedAt || session.createdAt || "";
   const projects = Array.isArray(context.projects) ? context.projects : [];
   const rows: { project: Project; session: ChatSummary }[] = [];
   for (const project of projects) {
@@ -275,7 +286,7 @@ function chatCommands(context: PaletteContext): PaletteCommand[] {
       rows.push({ project, session });
     }
   }
-  rows.sort((left, right) => String(right.session.createdAt || "").localeCompare(String(left.session.createdAt || ""))
+  rows.sort((left, right) => stamp(right.session).localeCompare(stamp(left.session))
     || String(right.session.id || "").localeCompare(String(left.session.id || "")));
   return rows.map(({ project, session }) => ({
     id: `open-chat:${session.id}`,
@@ -284,7 +295,7 @@ function chatCommands(context: PaletteContext): PaletteCommand[] {
     entity: "chat",
     chat: session,
     project,
-    section: chatDateSection(session.createdAt),
+    section: chatDateSection(stamp(session)),
     label: session.title || "Untitled chat",
     detail: project.name,
     description: `Open chat in ${project.name}`,

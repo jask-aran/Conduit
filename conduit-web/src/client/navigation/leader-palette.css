@@ -1,0 +1,123 @@
+.leader-palette {
+  position: fixed;
+  right: 50%;
+  bottom: calc(7.5rem + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)));
+  z-index: 75;
+  display: flex;
+  max-width: min(900px, calc(100vw - 24px));
+  align-items: center;
+  gap: 10px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: color-mix(in oklch, var(--popover), transparent 4%);
+  padding: 8px 10px;
+  box-shadow: 0 14px 40px rgb(0 0 0 / 32%);
+  transform: translateX(50%);
+  color: var(--popover-foreground);
+  pointer-events: none;
+  user-select: none;
+}
+
+.leader-palette-heading,
+.leader-palette-target,
+.leader-palette-cancel {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 24px;
+  white-space: nowrap;
+}
+
+.leader-palette-heading,
+.leader-palette-cancel {
+  color: var(--muted-foreground);
+  font-size: 10px;
+}
+
+.leader-palette-title {
+  color: var(--foreground);
+  font-weight: 650;
+}
+
+.leader-palette-context {
+  color: var(--muted-foreground);
+}
+
+.leader-palette-targets {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+}
+
+.leader-palette-target {
+  color: var(--foreground);
+  font-size: 10px;
+}
+
+.leader-palette-keys {
+  display: inline-flex;
+  gap: 3px;
+}
+
+.leader-palette kbd {
+  display: inline-grid;
+  min-width: 20px;
+  height: 20px;
+  place-items: center;
+  border: 1px solid color-mix(in oklch, var(--border), var(--foreground) 14%);
+  border-radius: 4px;
+  background: var(--background);
+  padding: 0 5px;
+  color: var(--muted-foreground);
+  font: 550 10px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.leader-palette-heading kbd {
+  border-color: color-mix(in oklch, var(--border), var(--foreground) 22%);
+  color: var(--foreground);
+}
+
+.leader-palette-target-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.leader-palette-cancel {
+  margin-left: auto;
+}
+
+@media (max-width: 760px) {
+  .leader-palette {
+    right: 12px;
+    bottom: calc(6rem + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)));
+    left: 12px;
+    max-width: none;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: 5px 8px;
+    padding: 7px 8px;
+    transform: none;
+  }
+
+  .leader-palette-heading {
+    width: 100%;
+  }
+
+  .leader-palette-targets {
+    flex: 1 1 auto;
+  }
+}
+
+@media (max-width: 420px) {
+  .leader-palette {
+    right: 8px;
+    bottom: calc(5.5rem + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)));
+    left: 8px;
+  }
+
+  .leader-palette-target {
+    font-size: 9px;
+  }
+}

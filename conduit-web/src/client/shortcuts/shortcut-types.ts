@@ -9,6 +9,9 @@ export const SHORTCUT_CONTEXT_PRIORITY = [
   "palette.page",
   "palette.root",
   "settings",
+  "workspace-panel",
+  "composer",
+  "chat",
   "application",
 ] as const;
 
@@ -52,6 +55,7 @@ export interface ShortcutCommandDefinition {
   defaultBindings: ShortcutBinding[];
   configurable: boolean;
   allowRepeat?: boolean;
+  allowInExclusiveTarget?: boolean;
   destructive?: boolean;
   palette?: boolean;
 }
@@ -72,5 +76,4 @@ export interface PendingShortcutSequence {
   context: ShortcutContext;
   firstStroke: ShortcutStroke;
   commandIds: string[];
-  expiresAt: number;
 }

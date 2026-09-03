@@ -68,6 +68,21 @@ async function openChatSurface(page) {
   await page.getByRole("button", { name: "New chat", exact: true }).click();
 }
 
+async function runPaletteCommand(page, label) {
+  await page.getByRole("button", { name: "Open command palette", exact: true }).click({ force: true });
+  const palette = page.getByRole("dialog", { name: "Command Palette" });
+  await expect(palette).toBeVisible();
+  await palette.getByRole("option").filter({ hasText: label }).first().click();
+}
+
+async function runWorkspaceViewCommand(page, label) {
+  await page.getByRole("button", { name: "Open command palette", exact: true }).click({ force: true });
+  const palette = page.getByRole("dialog", { name: "Command Palette" });
+  await expect(palette).toBeVisible();
+  await palette.getByRole("option").filter({ hasText: "Workspace views…" }).click();
+  await palette.getByRole("option").filter({ hasText: label }).click();
+}
+
 test.beforeEach(async ({ page }) => {
   if (process.env.CONDUIT_TEST_MARKDOWN_RENDERER) {
     await page.addInitScript((renderer) => {
@@ -485,8 +500,37 @@ test("workspace panel previews files, shows diff, and persists per chat", async 
   await page.reload();
   await expect(page.getByRole("complementary", { name: "Workspace panel" })).toBeVisible();
   await expect(page.getByRole("tab", { name: "Source Control" })).toHaveAttribute("aria-selected", "true");
-  await page.keyboard.press(process.platform === "darwin" ? "Meta+." : "Control+.");
+  await runPaletteCommand(page, "Toggle workspace panel");
   await expect(page.getByRole("complementary", { name: "Workspace panel" })).toHaveCount(0);
+});
+
+test("maximized workspace command toggles the workspace panel", async ({ page }) => {
+  await openChatSurface(page);
+  const panel = page.getByRole("complementary", { name: "Workspace panel" });
+  const main = page.locator('[data-slot="sidebar-inset"]');
+
+  await runPaletteCommand(page, "Toggle maximized workspace panel");
+  await expect(panel).toHaveAttribute("aria-hidden", "false");
+  await expect(main).toHaveClass(/workspace-expanded/);
+
+  await runPaletteCommand(page, "Toggle maximized workspace panel");
+  await expect(panel).toHaveCount(0);
+});
+
+test("navigation commands move focus and select workspace views", async ({ page }) => {
+  await openChatSurface(page);
+  const composer = page.getByRole("textbox", { name: "Message Pi" });
+  const panel = page.getByRole("complementary", { name: "Workspace panel" });
+  const panelFocus = panel.locator(".workspace-expand-toggle");
+
+  await runPaletteCommand(page, "Focus composer");
+  await expect(composer).toBeFocused();
+  await runPaletteCommand(page, "Focus workspace panel");
+  await expect(panel).toHaveAttribute("aria-hidden", "false");
+  await expect(panelFocus).toBeFocused();
+
+  await runWorkspaceViewCommand(page, "Source Control");
+  await expect(panel.getByRole("tab", { name: "Source Control" })).toHaveAttribute("aria-selected", "true");
 });
 
 test("rapid panel reversals continue from rendered geometry and release transcript locks", async ({ page }, testInfo) => {
@@ -649,7 +693,8 @@ test("Workspace views use the nested palette page and terminal lives in the Work
 
   await page.goto("/chat/session_conduit");
   await expect(page.getByRole("region", { name: "Terminal pane" })).toHaveCount(0);
-  await page.keyboard.press(process.platform === "darwin" ? "Meta+K" : "Control+K");
+  await page.getByRole("button", { name: "Open command palette", exact: true }).click({ force: true });
+  await expect(page.getByRole("dialog", { name: "Command Palette" })).toBeVisible();
   await page.getByRole("option", { name: "Workspace views…" }).click();
   await expect(page.getByText("Workspace ›")).toBeVisible();
   await page.getByRole("option", { name: "Terminal" }).click();
@@ -1296,5 +1341,3 @@ test("virtualizes a settled math-heavy transcript loaded from history", async ({
   });
   expect(virtualizedMathMessages).toBeGreaterThan(5);
 });
-
-
