@@ -11,6 +11,7 @@ import { COMPOSER_SURFACE_CHANGE_EVENT, COMPOSER_SURFACE_OPTIONS, saveComposerSu
 import { isIncremarkRenderer, MARKDOWN_RENDERER_OPTIONS, saveMarkdownRenderer, selectedMarkdownRenderer } from "./markdown-settings";
 import "./transcript-renderer.css";
 import { INCREMARK_PACING_OPTIONS, saveIncremarkPacing, selectedIncremarkPacing, type IncremarkPacingMode } from "./incremark-pacing";
+import { PANEL_MOTION_OPTIONS, savePanelMotion, selectedPanelMotion, type PanelMotionMode } from "./transcript-appearance";
 import { UI_PREFERENCE_CHANGE_EVENT } from "../preferences/ui-preferences";
 import { copyWithFeedback } from "./markdown-actions";
 import { CODE_BLOCK_TOGGLE_EVENT, publishCodeBlockToggle, syncCodeBlockCollapse } from "./code-block";
@@ -176,6 +177,7 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
   const [composerSurface, setComposerSurface] = createSignal<ComposerSurfaceMode>(selectedComposerSurface());
   const [markdownRenderer, setMarkdownRenderer] = createSignal<MarkdownRendererId>(selectedMarkdownRenderer());
   const [incremarkPacing, setIncremarkPacing] = createSignal<IncremarkPacingMode>(selectedIncremarkPacing());
+  const [panelDrag, setPanelDrag] = createSignal<PanelMotionMode>(selectedPanelMotion());
   const switchComposerSurface = (next: ComposerSurfaceMode) => setComposerSurface(saveComposerSurface(next));
   // A reset relays out every managed block, so hold the reading position across
   // it rather than letting the height changes settle wherever they land.
@@ -187,6 +189,7 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
   };
   const switchMarkdownRenderer = (next: MarkdownRendererId) => setMarkdownRenderer(saveMarkdownRenderer(next));
   const switchIncremarkPacing = (next: IncremarkPacingMode) => setIncremarkPacing(saveIncremarkPacing(next));
+  const switchPanelDrag = (next: PanelMotionMode) => setPanelDrag(savePanelMotion(next));
   // Only Incremark reveals a message block by block, and only that reveal needs
   // the tail to be followed by a spring rather than pinned to the bottom.
   const rendererUsesTypewriter = () => isIncremarkRenderer(markdownRenderer());
@@ -561,6 +564,9 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
       } else if (detail?.key === "incremarkPacing" && typeof detail.value === "string"
         && !params.has("incremarkPacing") && !params.has("adaptivePacing")) {
         setIncremarkPacing(detail.value as IncremarkPacingMode);
+      } else if (detail?.key === "panelMotion" && typeof detail.value === "string"
+        && !params.has("panelMotion")) {
+        setPanelDrag(detail.value as PanelMotionMode);
       } else if (isCodeBlockCollapseMode(detail?.value) && detail?.key === "codeBlockCollapse") {
         resyncCodeBlocks();
         resetVisibilityPreservingPosition();
@@ -774,6 +780,9 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
         </select></label>
         <label>Transcript renderer<select aria-label="Transcript renderer" title="Transcript renderer" value={markdownRenderer()} onChange={(event) => switchMarkdownRenderer(event.currentTarget.value as MarkdownRendererId)}>
           <For each={MARKDOWN_RENDERER_OPTIONS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
+        </select></label>
+        <label>Panel drag<select aria-label="Panel drag" title="Panel drag" value={panelDrag()} onChange={(event) => switchPanelDrag(event.currentTarget.value as PanelMotionMode)}>
+          <For each={PANEL_MOTION_OPTIONS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
         </select></label>
         <Show when={rendererUsesTypewriter()}>
           <label>Typewriter pacing<select aria-label="Typewriter pacing" title="Typewriter pacing" value={incremarkPacing()} onChange={(event) => switchIncremarkPacing(event.currentTarget.value as IncremarkPacingMode)}>
