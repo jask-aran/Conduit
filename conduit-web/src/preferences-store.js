@@ -21,6 +21,7 @@ const DEFAULTS = {
   codeBlockCollapse: null,
   codeBlockCollapseLines: null,
   codeBlockWidth: null,
+  panelMotion: null,
   userMessageCollapse: null,
   shortcutOverrides: null,
   voicePreferences: null,
@@ -48,7 +49,7 @@ const UI_PREFERENCE_KEYS = new Set([
   "sidebarChatLimit", "collapsedProjectIds", "sidebarCollapsed", "markdownRenderer",
   "rendererControlsVisible", "composerSurface", "contextMetrics",
   "meteorField", "incremarkPacing", "transcriptWidth", "transcriptWideBlocks",
-  "codeBlockCollapse", "codeBlockCollapseLines", "codeBlockWidth",
+  "codeBlockCollapse", "codeBlockCollapseLines", "codeBlockWidth", "panelMotion",
   "userMessageCollapse",
   "shortcutOverrides", "voicePreferences",
 ]);
@@ -60,6 +61,7 @@ const TRANSCRIPT_WIDE_BLOCKS = ["off", "default", "wider", "full"];
 const CODE_BLOCK_COLLAPSE_MODES = ["off", "long", "all"];
 const CODE_BLOCK_COLLAPSE_LINES = [10, 15, 25, 50];
 const CODE_BLOCK_WIDTHS = ["column", "wide"];
+const PANEL_MOTIONS = ["translate", "reflow"];
 // The retired ids -- marked-stable, incremark, incremark-typewriter,
 // incremark-synthetic, incremark-fast -- are deliberately absent. A stored value that is no
 // longer a renderer normalizes to null, and the client falls back to its
@@ -100,6 +102,7 @@ export function validUiPreferencePatch(input = {}) {
     if (key === "codeBlockCollapse") return oneOf(value, CODE_BLOCK_COLLAPSE_MODES);
     if (key === "codeBlockCollapseLines") return CODE_BLOCK_COLLAPSE_LINES.includes(value);
     if (key === "codeBlockWidth") return oneOf(value, CODE_BLOCK_WIDTHS);
+    if (key === "panelMotion") return oneOf(value, PANEL_MOTIONS);
     if (key === "userMessageCollapse") return oneOf(value, USER_MESSAGE_COLLAPSE);
     if (key === "shortcutOverrides") return validShortcutOverrides(value);
     if (key === "voicePreferences") return validVoicePreferences(value);
@@ -185,6 +188,7 @@ export function normalizePreferences(input = {}, fallback = DEFAULTS, knownTempl
     codeBlockCollapseLines: nullable("codeBlockCollapseLines", (value) =>
       CODE_BLOCK_COLLAPSE_LINES.includes(value) ? value : null),
     codeBlockWidth: nullable("codeBlockWidth", choice(CODE_BLOCK_WIDTHS)),
+    panelMotion: nullable("panelMotion", choice(PANEL_MOTIONS)),
     userMessageCollapse: nullable("userMessageCollapse", choice(USER_MESSAGE_COLLAPSE)),
     shortcutOverrides: nullable("shortcutOverrides", (value) => validShortcutOverrides(value) ? plainObject(value) : null),
     voicePreferences: nullable("voicePreferences", (value) => validVoicePreferences(value) ? plainObject(value) : null),

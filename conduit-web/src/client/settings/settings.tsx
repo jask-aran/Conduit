@@ -15,6 +15,9 @@ import {
   saveCodeBlockWidth,
   selectedCodeBlockWidth,
   type CodeBlockWidthMode,
+  savePanelMotion,
+  selectedPanelMotion,
+  type PanelMotionMode,
   saveUserMessageCollapse,
   selectedUserMessageCollapse,
   type UserMessageCollapseMode,
@@ -39,6 +42,7 @@ type SettingsProps = Omit<CoreProps,
   | "codeBlockCollapse" | "onCodeBlockCollapseChange"
   | "codeBlockCollapseLines" | "onCodeBlockCollapseLinesChange"
   | "codeBlockWidth" | "onCodeBlockWidthChange"
+  | "panelMotion" | "onPanelMotionChange"
   | "userMessageCollapse" | "onUserMessageCollapseChange"
   | "voiceSettings"> & {
   voiceSettings: VoiceDictationSettings;
@@ -55,6 +59,7 @@ export function Settings(props: SettingsProps) {
   const [codeBlockCollapse, setCodeBlockCollapse] = createSignal<CodeBlockCollapseMode>(selectedCodeBlockCollapse());
   const [codeBlockCollapseLines, setCodeBlockCollapseLines] = createSignal(selectedCodeBlockCollapseLines());
   const [codeBlockWidth, setCodeBlockWidth] = createSignal<CodeBlockWidthMode>(selectedCodeBlockWidth());
+  const [panelMotion, setPanelMotion] = createSignal<PanelMotionMode>(selectedPanelMotion());
   const [userMessageCollapse, setUserMessageCollapse] = createSignal<UserMessageCollapseMode>(selectedUserMessageCollapse());
 
   createEffect(() => {
@@ -96,6 +101,9 @@ export function Settings(props: SettingsProps) {
     const next = setCodeBlockWidth(saveCodeBlockWidth(mode));
     applyTranscriptAppearance({ codeWidth: next });
   };
+  // Nothing to stamp on the root: the drag path subscribes to the published
+  // preference directly.
+  const updatePanelMotion = (mode: PanelMotionMode) => setPanelMotion(savePanelMotion(mode));
   const updateUserMessageCollapse = (mode: UserMessageCollapseMode) => {
     const next = setUserMessageCollapse(saveUserMessageCollapse(mode));
     applyTranscriptAppearance({ userMessageCollapse: next });
@@ -117,6 +125,8 @@ export function Settings(props: SettingsProps) {
       onCodeBlockCollapseLinesChange={updateCodeBlockCollapseLines}
       codeBlockWidth={codeBlockWidth()}
       onCodeBlockWidthChange={updateCodeBlockWidth}
+      panelMotion={panelMotion()}
+      onPanelMotionChange={updatePanelMotion}
       userMessageCollapse={userMessageCollapse()}
       onUserMessageCollapseChange={updateUserMessageCollapse}
       voiceSettings={props.voiceSettings}

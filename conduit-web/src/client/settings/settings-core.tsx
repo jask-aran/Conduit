@@ -23,6 +23,8 @@ import {
   CODE_BLOCK_COLLAPSE_OPTIONS,
   CODE_BLOCK_WIDTH_OPTIONS,
   type CodeBlockWidthMode,
+  PANEL_MOTION_OPTIONS,
+  type PanelMotionMode,
   TRANSCRIPT_WIDE_BLOCKS_OPTIONS,
   TRANSCRIPT_WIDTH_OPTIONS,
   USER_MESSAGE_COLLAPSE_OPTIONS,
@@ -196,6 +198,8 @@ export function Settings(props: {
   onCodeBlockCollapseLinesChange: (lines: number) => void;
   codeBlockWidth: CodeBlockWidthMode;
   onCodeBlockWidthChange: (mode: CodeBlockWidthMode) => void;
+  panelMotion: PanelMotionMode;
+  onPanelMotionChange: (mode: PanelMotionMode) => void;
   userMessageCollapse: UserMessageCollapseMode;
   onUserMessageCollapseChange: (mode: UserMessageCollapseMode) => void;
   composerSurface: ComposerSurfaceMode;
@@ -1027,6 +1031,13 @@ export function Settings(props: {
                   <For each={CODE_BLOCK_WIDTH_OPTIONS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
                 </select>
                 <small>Keep code in the reading column, or let it use the wide-block width alongside tables.</small>
+              </Field>
+              <Field>
+                <FieldLabel for="panel-motion">Panel drag</FieldLabel>
+                <select id="panel-motion" aria-label="Panel drag" value={props.panelMotion} onChange={(event) => props.onPanelMotionChange(event.currentTarget.value as PanelMotionMode)}>
+                  <For each={PANEL_MOTION_OPTIONS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
+                </select>
+                <small>How the transcript answers a workspace panel drag. Translate slides the column and commits its real width on release. Live reflow rewraps under the pointer, which a long answer full of formulas cannot yet do at full frame rate.</small>
               </Field>
               <Field>
                 <FieldLabel for="code-block-collapse">Collapse code blocks</FieldLabel>

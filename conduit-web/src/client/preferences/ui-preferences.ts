@@ -17,6 +17,7 @@ export interface UiPreferences {
   codeBlockCollapse: string | null;
   codeBlockCollapseLines: number | null;
   codeBlockWidth: string | null;
+  panelMotion: string | null;
   userMessageCollapse: string | null;
   shortcutOverrides: Record<string, unknown> | null;
   voicePreferences: Record<string, unknown> | null;

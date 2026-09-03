@@ -18,3 +18,20 @@
 .chat-markdown[data-renderer="incremark"]:not([data-inline]) > .incremark {
   contain: inline-size;
 }
+
+/* A live panel drag commits a new transcript width every frame, and without
+   this each frame re-records the display items of every visible block. Traced
+   on a 143Hz display against a formula-heavy answer with 66 formulas on
+   screen: 11.5ms a frame, of which Paint was 6.2ms and PrePaint 3.4ms, against
+   a 6.94ms budget. Paint containment makes each block its own paint chunk, so
+   a width change moves chunks instead of re-recording them: 7.0ms a frame, no
+   frame over budget. Neither layout nor style containment moves the number,
+   and `overflow: clip` does not either -- the isolation is what earns it.
+
+   Scoped to the motion rather than left on, because paint containment also
+   clips and opens a stacking context per block. Nothing is hovered or open
+   mid-drag, so the restriction costs nothing and keeps menus, focus rings and
+   wide-block bleed exactly as they are the rest of the time. */
+.transcript[data-panel-motion] .chat-markdown[data-renderer="incremark"] > .incremark > * {
+  contain: paint;
+}
