@@ -97,7 +97,7 @@ body.workspace-resizing .workspace-panel { transition: none !important; }
 .workspace-tree-empty { padding: 12px 6.4px; color: var(--muted-foreground); font-size: 8.8px; text-align: center; }
 .workspace-preview, .workspace-diff { display: flex; min-height: 0; flex: 1; flex-direction: column; overflow: hidden; }
 .workspace-preview { flex: none; }
-.workspace-diff { container: source-control / inline-size; }
+.workspace-diff { min-width: 0; }
 .workspace-preview pre, .workspace-diff-content { min-height: 0; margin: 0; font: 9.2px/1.55 ui-monospace, SFMono-Regular, Consolas, monospace; tab-size: 2; white-space: pre; }
 .workspace-diff-content { flex: 1; overflow: auto; padding: 9.6px; }
 .workspace-preview-header { display: flex; min-height: 28px; flex: none; align-items: center; gap: 6.4px; padding: 3.2px 4.8px 3.2px 8px; border-bottom: 1px solid var(--border); background: color-mix(in oklch, var(--background), var(--accent) 24%); }
@@ -160,7 +160,7 @@ body.workspace-resizing .workspace-panel { transition: none !important; }
 .workspace-change-section { min-height: 72px; flex: 1; }
 .workspace-change-section:first-child { max-height: 38%; }
 .workspace-change-section[data-open="false"] { min-height: 25.6px; flex: none; }
-@container source-control (min-width: 440px) {
+@container workspace-surface (min-width: 440px) {
   .workspace-change-ledger {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -236,7 +236,7 @@ body.workspace-resizing .workspace-panel { transition: none !important; }
 .workspace-source-actions button:disabled { opacity: .35; }
 .workspace-source-workbench .workspace-history, .workspace-source-workbench .workspace-patch { max-height: none; flex: 1; border: 0; }
 .workspace-source-workbench .workspace-history-list { flex: 1; }
-@container source-control (max-width: 430px) {
+@container workspace-surface (max-width: 430px) {
   .workspace-source-workbench > header > small, .workspace-source-actions span { display: none; }
   .workspace-source-actions button { width: 21px; padding: 0; }
   .workspace-commit-refs code { max-width: 72px; }
