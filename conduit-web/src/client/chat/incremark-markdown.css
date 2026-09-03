@@ -35,3 +35,16 @@
 .transcript[data-panel-motion] .chat-markdown[data-renderer="incremark"] > .incremark > * {
   contain: paint;
 }
+
+/* A display formula sits in its own horizontally scrolling box, so a narrower
+   column changes that box but never the formula: KaTeX has already resolved
+   every glyph position, and none of them depend on the space available. Blink
+   cannot know that, and re-lays-out the whole span tree each frame. Measured
+   against the same drag, cost tracked visible display-math blocks and nothing
+   else -- 9 of them 10.5ms a frame, 2 of them 7.1ms -- and containing the
+   formula inside its scroller took the 9-block case to 7.3ms. Containment goes
+   on the formula rather than the scroller; on the scroller it does nothing,
+   because the box really is the part that has to change. */
+.transcript[data-panel-motion] .chat-markdown .katex-display > .katex {
+  contain: layout paint;
+}
