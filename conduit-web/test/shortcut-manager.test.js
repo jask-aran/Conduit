@@ -47,6 +47,16 @@ function keyEvent(key, code, options = {}) {
   };
 }
 
+function keyEventForStroke(stroke, environment = windowsChrome) {
+  const modifiers = new Set(stroke.modifiers);
+  return keyEvent(stroke.key, stroke.code, {
+    ctrlKey: modifiers.has("control") || (modifiers.has("primary") && environment.platform !== "macos"),
+    metaKey: modifiers.has("primary") && environment.platform === "macos",
+    altKey: modifiers.has("alt"),
+    shiftKey: modifiers.has("shift"),
+  });
+}
+
 function memoryStorage(seed = {}) {
   const values = new Map(Object.entries(seed));
   return {
@@ -128,7 +138,8 @@ test("classifies known browser conflicts and exact Conduit context conflicts", (
   assert.equal(browserShortcutConflicts(searchChats, windowsChrome).length, 0);
   assert.equal(browserShortcutConflicts(searchChats, windowsFirefox)[0]?.action, "Open Web Console");
   const modelSelector = getCommandDefinition(COMMAND_IDS.openModelSelector);
-  assert.equal(formatShortcutBinding(modelSelector.defaultBindings[0], windowsChrome), "Ctrl X");
+  const scopedLeader = getCommandDefinition(COMMAND_IDS.focusWorkspacePanel).defaultBindings[0].strokes[0];
+  assert.notEqual(bindingIdentity(modelSelector.defaultBindings[0]), bindingIdentity(shortcutBinding(scopedLeader)));
   assert.deepEqual(modelSelector.contexts, ["application", "model-selector"]);
 
   const candidate = shortcutBinding(shortcutStroke("KeyX", "X", ["primary"]));
@@ -178,7 +189,6 @@ test("dispatches the highest active context and completes two-stroke sequences",
     commands: commandRegistry,
     environment: windowsChrome,
     storage: null,
-    sequenceTimeoutMs: 60_000,
   });
   const ran = [];
   const releaseApplication = manager.activateContext("application");
@@ -205,30 +215,123 @@ test("dispatches the highest active context and completes two-stroke sequences",
   releaseApplication();
 });
 
-test("clears an expired or unmatched sequence without consuming the second stroke", () => {
-  let now = 10;
+test("dispatches registry commands from their focused scopes", () => {
   const manager = new ShortcutManager({
     commands: commandRegistry,
     environment: windowsChrome,
     storage: null,
-    sequenceTimeoutMs: 100,
-    now: () => now,
+  });
+  const ran = [];
+  const releaseApplication = manager.activateContext("application");
+  const scopedContexts = ["application", "chat", "composer", "workspace-panel"];
+  const scopedCommands = commandRegistry.filter((command) => command.contexts.some((context) => scopedContexts.includes(context)));
+  for (const command of scopedCommands) {
+    for (const context of command.contexts.filter((value) => scopedContexts.includes(value))) {
+      manager.registerHandler(command.id, context, () => ran.push(`${context}:${command.id}`));
+    }
+  }
+  manager.registerHandler(COMMAND_IDS.openCommandPalette, "application", () => ran.push(`application:${COMMAND_IDS.openCommandPalette}`));
+  manager.registerHandler(COMMAND_IDS.maximizeWorkspacePanel, "application", () => ran.push(`application:${COMMAND_IDS.maximizeWorkspacePanel}`));
+  const runFromBinding = (commandId) => {
+    const binding = getCommandDefinition(commandId).defaultBindings[0];
+    for (const stroke of binding.strokes) assert.equal(manager.handleKeydown(keyEventForStroke(stroke)), true);
+  };
+  const composerRelease = manager.activateContext("composer");
+  runFromBinding(COMMAND_IDS.openCommandPalette);
+  runFromBinding(COMMAND_IDS.maximizeWorkspacePanel);
+  runFromBinding(COMMAND_IDS.focusWorkspacePanel);
+  runFromBinding(COMMAND_IDS.toggleChatWorkspaceFocus);
+  composerRelease();
+
+  const chatRelease = manager.activateContext("chat");
+  runFromBinding(COMMAND_IDS.focusComposer);
+  runFromBinding(COMMAND_IDS.focusWorkspacePanel);
+  runFromBinding(COMMAND_IDS.toggleChatWorkspaceFocus);
+  chatRelease();
+
+  const workspaceRelease = manager.activateContext("workspace-panel");
+  assert.throws(
+    () => manager.registerHandler(COMMAND_IDS.focusComposer, "workspace-panel", () => {}),
+    /does not declare the workspace-panel context/,
+  );
+  assert.throws(
+    () => manager.registerHandler(COMMAND_IDS.focusWorkspacePanel, "workspace-panel", () => {}),
+    /does not declare the workspace-panel context/,
+  );
+  runFromBinding(COMMAND_IDS.toggleChatWorkspaceFocus);
+  runFromBinding(COMMAND_IDS.workspaceFiles);
+  runFromBinding(COMMAND_IDS.workspaceSourceControl);
+  runFromBinding(COMMAND_IDS.workspaceArtifacts);
+  runFromBinding(COMMAND_IDS.workspaceTerminal);
+  runFromBinding(COMMAND_IDS.openCommandPalette);
+  workspaceRelease();
+
+  runFromBinding(COMMAND_IDS.focusComposer);
+  runFromBinding(COMMAND_IDS.focusWorkspacePanel);
+  runFromBinding(COMMAND_IDS.toggleChatWorkspaceFocus);
+  releaseApplication();
+
+  assert.deepEqual(ran, [
+    `application:${COMMAND_IDS.openCommandPalette}`,
+    `application:${COMMAND_IDS.maximizeWorkspacePanel}`,
+    `composer:${COMMAND_IDS.focusWorkspacePanel}`,
+    `composer:${COMMAND_IDS.toggleChatWorkspaceFocus}`,
+    `chat:${COMMAND_IDS.focusComposer}`,
+    `chat:${COMMAND_IDS.focusWorkspacePanel}`,
+    `chat:${COMMAND_IDS.toggleChatWorkspaceFocus}`,
+    `workspace-panel:${COMMAND_IDS.toggleChatWorkspaceFocus}`,
+    `workspace-panel:${COMMAND_IDS.workspaceFiles}`,
+    `workspace-panel:${COMMAND_IDS.workspaceSourceControl}`,
+    `workspace-panel:${COMMAND_IDS.workspaceArtifacts}`,
+    `workspace-panel:${COMMAND_IDS.workspaceTerminal}`,
+    `application:${COMMAND_IDS.openCommandPalette}`,
+    `application:${COMMAND_IDS.focusComposer}`,
+    `application:${COMMAND_IDS.focusWorkspacePanel}`,
+    `application:${COMMAND_IDS.toggleChatWorkspaceFocus}`,
+  ]);
+});
+
+test("clears an unmatched sequence without consuming the second stroke", () => {
+  const manager = new ShortcutManager({
+    commands: commandRegistry,
+    environment: windowsChrome,
+    storage: null,
   });
   const release = manager.activateContext("chat-search.browse");
-  manager.registerHandler(COMMAND_IDS.renameHighlightedChat, "chat-search.browse", () => assert.fail("expired sequence ran"));
+  manager.registerHandler(COMMAND_IDS.renameHighlightedChat, "chat-search.browse", () => assert.fail("unmatched sequence ran"));
 
-  assert.equal(manager.handleKeydown(keyEvent("k", "KeyK", { ctrlKey: true })), true);
-  now = 111;
-  const expired = keyEvent("r", "KeyR");
-  assert.equal(manager.handleKeydown(expired), false);
-  assert.equal(expired.prevented, false);
-
-  now = 200;
   assert.equal(manager.handleKeydown(keyEvent("k", "KeyK", { ctrlKey: true })), true);
   const unmatched = keyEvent("x", "KeyX");
   assert.equal(manager.handleKeydown(unmatched), false);
   assert.equal(unmatched.prevented, false);
-  manager.clearPendingSequence();
+  assert.equal(manager.pendingSequence(), null);
+  release();
+});
+
+test("keeps a leader sequence pending until a second action or pointer input", () => {
+  const manager = new ShortcutManager({
+    commands: commandRegistry,
+    environment: windowsChrome,
+    storage: null,
+  });
+  const listeners = new Map();
+  const target = {
+    addEventListener(type, listener) { listeners.set(type, listener); },
+    removeEventListener(type, listener) {
+      if (listeners.get(type) === listener) listeners.delete(type);
+    },
+  };
+  const uninstall = manager.install(target);
+  const release = manager.activateContext("chat");
+  manager.registerHandler(COMMAND_IDS.focusComposer, "chat", () => {});
+  const leader = getCommandDefinition(COMMAND_IDS.focusComposer).defaultBindings[0].strokes[0];
+
+  assert.equal(manager.handleKeydown(keyEventForStroke(leader)), true);
+  assert.ok(manager.pendingSequence());
+  listeners.get("pointerdown")();
+  assert.equal(manager.pendingSequence(), null);
+
+  uninstall();
   release();
 });
 

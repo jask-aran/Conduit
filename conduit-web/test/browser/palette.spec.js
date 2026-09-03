@@ -83,7 +83,7 @@ async function openChatSurface(page) {
 
 async function openPalette(page) {
   await expect(page.getByRole("textbox", { name: "Message Pi" })).toBeVisible();
-  await page.keyboard.press("Control+k");
+  await page.getByRole("button", { name: "Open command palette", exact: true }).click();
   await expect(page.getByRole("dialog", { name: "Command Palette" })).toBeVisible();
 }
 
@@ -109,4 +109,3 @@ test("browses grouped commands and models", async ({ page }) => {
   await expect(hints).toContainText("Open");
   await expect(hints).toContainText("Esc");
 });
-

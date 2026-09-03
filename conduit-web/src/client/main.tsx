@@ -35,11 +35,13 @@ import { loadVoiceDictationSettings, saveVoiceDictationSettings, VOICE_DICTATION
 import { Transcript } from "./chat/transcript";
 import { COMMAND_IDS, commandRegistry } from "./commands/command-registry";
 import { CommandMenu } from "./navigation/command-menu";
+import { LeaderPalette } from "./navigation/leader-palette";
 import type { PaletteActions, PaletteContext } from "./palette/command-registry";
 import { bindVisualViewportShell, isMobileLayout, MOBILE_LAYOUT_QUERY, setMobileOverlayKind } from "./navigation/mobile-layout";
 import { mobileSwipeAction } from "./navigation/mobile-swipe";
 import { Sidebar, type SidebarCommand } from "./navigation/sidebar";
 import { clampSidebarChatLimit, selectedSidebarChatLimit, SIDEBAR_CHAT_LIMIT_STORAGE_KEY } from "./navigation/sidebar-preferences";
+import { CHAT_SORT_STORAGE_KEY, selectedChatSort, useChatSort } from "./preferences/chat-sort";
 import { WorkspaceAppearanceEditor } from "./project/workspace-appearance-editor";
 import { checkForPwaUpdate, forcePwaUpdate, rememberPwaRegistration, resetPwaAppCache } from "./pwa-update";
 import { createActiveChat, type ActiveChatStore } from "./state/active-chat";
@@ -395,6 +397,7 @@ function App() {
   const [rendererControlsVisible, setRendererControlsVisible] = createSignal(selectedRendererControlsVisible());
   const [meteorField, setMeteorField] = createSignal(selectedMeteorField());
   const [sidebarChatLimit, setSidebarChatLimit] = createSignal(selectedSidebarChatLimit());
+  const chatSort = useChatSort();
   const [contextMetrics, setContextMetrics] = createSignal<ContextMetricId[]>(selectedContextMetrics());
   const [settingsOpen, setSettingsOpen] = createSignal(false);
   const [sidebarPins, setSidebarPins] = createSignal<string[]>([]);
@@ -836,6 +839,49 @@ function App() {
     }
   };
 
+  const focusChatSurface = (event: PointerEvent) => {
+    const target = event.target instanceof Element ? event.target : null;
+    if (target?.closest(".composer,button,a,input,textarea,select,[contenteditable='true'],[role='button'],[role='link'],[role='option']")) return;
+    if (!(event.currentTarget instanceof HTMLElement)) return;
+    event.currentTarget.focus({ preventScroll: true });
+  };
+  const hasComposer = () => Boolean(document.querySelector(".composer textarea:not([disabled])"));
+  const focusComposer = () => {
+    document.querySelector<HTMLTextAreaElement>(".composer textarea:not([disabled])")?.focus({ preventScroll: true });
+  };
+  const focusChatPane = () => {
+    const target = document.querySelector<HTMLElement>('.work-area-conversation[data-shortcut-scope="chat"]');
+    if (target) {
+      target.focus({ preventScroll: true });
+      return;
+    }
+    focusComposer();
+  };
+  const focusWorkspacePanel = () => {
+    if (!workspacePanelScope()) return;
+    if (isMobileLayout()) setMobileSidebarOpen(false);
+    if (!panelOpen()) setPanelOpenForChat(true);
+    let attempts = 0;
+    const focus = () => {
+      const target = [...document.querySelectorAll<HTMLElement>(".workspace-panel .workspace-expand-toggle, .workspace-panel [data-workspace-tab], .workspace-panel select, .workspace-panel [aria-label='Close workspace panel']")]
+        .find((candidate) => candidate.getClientRects().length > 0);
+      if (target) {
+        target.focus({ preventScroll: true });
+        return;
+      }
+      if (panelOpen() && attempts++ < 10) requestAnimationFrame(focus);
+    };
+    requestAnimationFrame(() => {
+      focus();
+    });
+  };
+  const toggleChatWorkspaceFocus = () => {
+    const inWorkspacePanel = document.activeElement instanceof Element && Boolean(document.activeElement.closest(".workspace-panel"));
+    if (inWorkspacePanel) focusChatPane();
+    else if (panelOpen()) focusWorkspacePanel();
+    else focusChatPane();
+  };
+
   const switchProfile = async (id: string) => {
     const selectedId = catalogue.selectedId();
     if (!selectedId || chat.status() !== "draft") return;
@@ -1025,6 +1071,10 @@ function App() {
   };
   const maximizeWorkspacePanel = () => {
     if (!workspacePanelScope()) return;
+    if (panelOpen() && workspaceExpanded()) {
+      togglePanel();
+      return;
+    }
     if (isMobileLayout()) setMobileSidebarOpen(false);
     setPanelOpenForChat(true);
     setWorkspaceExpanded(true);
@@ -1118,6 +1168,7 @@ function App() {
     canRegenerate: Boolean(lastUserEntryId()) && !chat.streaming() && !chat.stopping(),
     canContinue: partialContinue() && Boolean(lastAssistant()?.stopped) && !chat.streaming(),
     canCopy: Boolean(lastAssistant()?.content),
+    chatSort: chatSort(),
   }));
 
   const paletteActions: PaletteActions = {
@@ -1131,6 +1182,9 @@ function App() {
     toggleSidebar: () => runSidebar("toggle-sidebar"),
     toggleWorkspacePanel: togglePanel,
     maximizeWorkspacePanel,
+    focusComposer,
+    focusWorkspacePanel,
+    toggleChatWorkspaceFocus,
     openWorkspaceView,
     copyTranscript: () => { const id = catalogue.selectedId(); if (id) void copyTranscript({ id } as ChatSummary); },
     rename: () => runSidebar("rename-chat"),
@@ -1210,6 +1264,7 @@ function App() {
       codeBlockWidth: selectedCodeBlockWidth(),
       panelMotion: selectedPanelMotion(),
       userMessageCollapse: selectedUserMessageCollapse(),
+      chatSort: selectedChatSort(),
       shortcutOverrides: shortcutManager.shortcutOverrides(),
       sidebarPins: [],
       voicePreferences: {
@@ -1236,6 +1291,7 @@ function App() {
       codeBlockWidth: CODE_BLOCK_WIDTH_STORAGE_KEY,
       panelMotion: PANEL_MOTION_STORAGE_KEY,
       userMessageCollapse: USER_MESSAGE_COLLAPSE_STORAGE_KEY,
+      chatSort: CHAT_SORT_STORAGE_KEY,
     };
     // A URL override is a deliberate per-tab experiment, and server preferences
     // arrive after first paint. Applying one here silently undid the override,
@@ -1308,11 +1364,38 @@ function App() {
       shortcutManager.registerHandler(COMMAND_IDS.toggleSidebar, "application", () => runSidebar("toggle-sidebar")),
       shortcutManager.registerHandler(COMMAND_IDS.toggleWorkspacePanel, "application", togglePanel),
       shortcutManager.registerHandler(COMMAND_IDS.maximizeWorkspacePanel, "application", maximizeWorkspacePanel),
+      shortcutManager.registerHandler(COMMAND_IDS.focusComposer, "application", focusComposer, { when: hasComposer }),
+      shortcutManager.registerHandler(COMMAND_IDS.focusComposer, "chat", focusComposer, { when: hasComposer }),
+      shortcutManager.registerHandler(COMMAND_IDS.focusWorkspacePanel, "application", focusWorkspacePanel, { when: () => Boolean(workspacePanelScope()) }),
+      shortcutManager.registerHandler(COMMAND_IDS.focusWorkspacePanel, "chat", focusWorkspacePanel, { when: () => Boolean(workspacePanelScope()) }),
+      shortcutManager.registerHandler(COMMAND_IDS.focusWorkspacePanel, "composer", focusWorkspacePanel),
+      shortcutManager.registerHandler(COMMAND_IDS.toggleChatWorkspaceFocus, "application", toggleChatWorkspaceFocus, { when: () => Boolean(workspacePanelScope()) && hasComposer() }),
+      shortcutManager.registerHandler(COMMAND_IDS.toggleChatWorkspaceFocus, "chat", toggleChatWorkspaceFocus, { when: () => Boolean(workspacePanelScope()) && hasComposer() }),
+      shortcutManager.registerHandler(COMMAND_IDS.toggleChatWorkspaceFocus, "composer", toggleChatWorkspaceFocus),
+      shortcutManager.registerHandler(COMMAND_IDS.toggleChatWorkspaceFocus, "workspace-panel", toggleChatWorkspaceFocus),
     ];
     const uninstallShortcuts = shortcutManager.install(window);
     window.addEventListener("keydown", dismissOpenLayer, { capture: true });
+    let releaseFocusedContext: (() => void) | undefined;
+    const syncFocusedShortcutContext = (target: EventTarget | null) => {
+      releaseFocusedContext?.();
+      releaseFocusedContext = undefined;
+      if (!(target instanceof Element)) return;
+      if (target.closest(".workspace-panel") && panelOpen()) {
+        releaseFocusedContext = shortcutManager.activateContext("workspace-panel");
+      } else if (target.closest(".composer")) {
+        releaseFocusedContext = shortcutManager.activateContext("composer");
+      } else if (target.closest('.work-area-conversation[data-shortcut-scope="chat"]')) {
+        releaseFocusedContext = shortcutManager.activateContext("chat");
+      }
+    };
+    const onFocusIn = (event: FocusEvent) => syncFocusedShortcutContext(event.target);
+    window.addEventListener("focusin", onFocusIn);
+    syncFocusedShortcutContext(document.activeElement);
     onCleanup(() => {
       window.removeEventListener("keydown", dismissOpenLayer, true);
+      window.removeEventListener("focusin", onFocusIn);
+      releaseFocusedContext?.();
       uninstallShortcuts();
       for (const release of releaseShortcutHandlers) release();
       releaseApplicationContext();
@@ -1560,7 +1643,7 @@ function App() {
           <ChatHeader project={selectedProject()} title={chat.title() || (chat.status() === "active" ? "Untitled chat" : "New chat")} profile={activeProfile()} runtime={chat.runtimeIdentity()} live={chat.live() as unknown as Record<string, unknown>} chat={chat} contextMetrics={contextMetrics} composerStatus={composerStatus()} connectivity={runtime.connectivity()} panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onNewChat={() => void createChat()} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={() => void shareChat()} onRename={() => runSidebar("rename-chat")} onDelete={() => runSidebar("delete-chat")} onUpdatePwa={() => void runPwaUpdate()} pwaUpdating={pwaUpdating} />
           <Show when={selectedProject()?.kind === "workspace" && [...runtime.processes().values()].some((process) => process.chatId !== catalogue.selectedId() && process.active)}><div class="workspace-warning"><TriangleAlertIcon /><div><strong>Another chat is working in this Workspace</strong><p>Both agents can edit the same files. Conduit does not lock the Workspace or create worktrees automatically.</p></div></div></Show>
           <div class="work-area">
-            <section class="work-area-conversation" aria-label="Conversation">
+            <section class="work-area-conversation" data-shortcut-scope="chat" aria-label="Conversation" tabIndex={-1} onPointerDown={focusChatSurface}>
               <Transcript chat={chat} partialContinue={partialContinue()} markdownRenderer={markdownRenderer()} rendererControlsVisible={rendererControlsVisible()} profileLabel={activeProfile()?.label || activeProfile()?.id || chat.templateId() || undefined} />
               <div class="composer-stack"><HostUiRequests requests={chat.hostUiRequests()} onRespond={chat.respondHostUi} />
                 <Composer chat={chat} attachments={attachments} models={models} profiles={profiles()} activeProfile={activeProfile()} serverOnline={runtime.connectivity() === "online"} voiceSettings={voiceSettings()} onChooseProfile={(id) => void switchProfile(id)} onOpenSettings={openSettings} onOpenAttachments={() => attachFileInput?.click()} onStatusChange={setComposerStatus} /></div>
@@ -1610,13 +1693,14 @@ function App() {
         </Show>
       </Show>
     </main>
-    <Show when={["chat", "project", "dashboard"].includes(routeKind()) && Boolean(selectedProject()) && Boolean(workspacePanelScope())}><WorkspacePanel projectId={() => selectedProject()!.id} chatId={() => workspacePanelScope()!} open={panelOpen} expanded={workspaceExpanded} requestedTab={workspaceViewRequest} onToggleExpanded={() => setWorkspaceExpanded(!workspaceExpanded())} onClose={togglePanel} /></Show>
+    <Show when={["chat", "project", "dashboard"].includes(routeKind()) && Boolean(selectedProject()) && Boolean(workspacePanelScope())}><WorkspacePanel projectId={() => selectedProject()!.id} chatId={() => workspacePanelScope()!} open={panelOpen} expanded={workspaceExpanded} requestedTab={workspaceViewRequest} onToggleExpanded={() => setWorkspaceExpanded(!workspaceExpanded())} onClose={togglePanel} shortcuts={shortcutManager} /></Show>
     </Show>
     <Show when={routeKind() === "terminal" && routeBootstrap() === "ready"}>
       <TerminalRoute onOpenConduit={() => openDashboard()} />
     </Show>
     <CommandMenu open={paletteOpen()} onOpenChange={setPaletteOpen} onPageChange={setPalettePage} initialPage={palettePage()} initialQuery={paletteInitialQuery()} launchNonce={paletteNonce()} directLaunch={paletteDirectLaunch()}
       context={paletteContext()} actions={paletteActions} onChooseModel={(spec) => void models.chooseModel(spec)} scopeModels={models.allModels()} enabledModelSpecs={models.enabledModels()} onToggleModelScope={(spec) => { const enabled = models.enabledModels(); void models.saveScope(enabled.includes(spec) ? enabled.filter((item) => item !== spec) : [...enabled, spec]); }} shortcuts={shortcutManager} />
+    <LeaderPalette shortcuts={shortcutManager} />
     <Show when={settingsLoaded()}>
       <Settings open={settingsOpen()} initialSection={settingsSection()} initialWorkspaceId={settingsWorkspaceId()} onOpenChange={setSettingsOpen} models={models} templates={templates()} templatesLoading={templatesLoading()} defaultTemplateId={defaultTemplateId()} projects={catalogue.projects()} installations={installations()} installationsLoading={installationsLoading()} onInstallationsChange={setInstallations} onDefaultTemplateChange={saveDefaultTemplate} onWorkspaceDefaultChange={saveWorkspaceDefault} markdownRenderer={markdownRenderer()} onMarkdownRendererChange={switchMarkdownRenderer} rendererControlsVisible={rendererControlsVisible()} onRendererControlsVisibleChange={switchRendererControlsVisible} meteorField={meteorField()} onMeteorFieldChange={switchMeteorField} voiceSettings={voiceSettings()} onVoiceSettingsSave={updateVoiceSettings} sidebarChatLimit={sidebarChatLimit()} onSidebarChatLimitChange={switchSidebarChatLimit} contextMetrics={contextMetrics()} onContextMetricsChange={switchContextMetrics} onOpenModelSelector={openModelSelector} shortcuts={shortcutManager} />
     </Show>

@@ -17,8 +17,6 @@ import {
   type ShortcutStroke,
 } from "./shortcut-types.ts";
 
-const DEFAULT_SEQUENCE_TIMEOUT_MS = 1500;
-
 export interface ShortcutContextOptions {
   exclusive?: boolean;
   onEscape?: () => void;
@@ -40,16 +38,10 @@ interface RegisteredHandler {
   order: number;
 }
 
-interface PendingState extends PendingShortcutSequence {
-  timer: ReturnType<typeof setTimeout>;
-}
-
 export interface ShortcutManagerOptions {
   commands: ShortcutCommandDefinition[];
   environment: ShortcutEnvironment;
   storage?: ShortcutStorage | null;
-  sequenceTimeoutMs?: number;
-  now?: () => number;
 }
 
 export interface RegisterShortcutHandlerOptions {
@@ -80,13 +72,11 @@ export class ShortcutManager {
 
   private readonly commandById: Map<string, ShortcutCommandDefinition>;
   private readonly storage: ShortcutStorage | null;
-  private readonly sequenceTimeoutMs: number;
-  private readonly now: () => number;
   private readonly activeContexts = new Map<symbol, ActiveContext>();
   private readonly handlers = new Map<symbol, RegisteredHandler>();
   private readonly listeners = new Set<() => void>();
   private overrides: ShortcutOverrides;
-  private pending: PendingState | null = null;
+  private pending: PendingShortcutSequence | null = null;
   private registrationOrder = 0;
   private installedWindow: Window | null = null;
 
@@ -100,8 +90,6 @@ export class ShortcutManager {
       ? (typeof localStorage === "undefined" ? null : localStorage)
       : options.storage;
     this.overrides = readShortcutOverrides(this.storage);
-    this.sequenceTimeoutMs = options.sequenceTimeoutMs ?? DEFAULT_SEQUENCE_TIMEOUT_MS;
-    this.now = options.now || Date.now;
   }
 
   activateContext(context: ShortcutContext, options: ShortcutContextOptions = {}): () => void {
@@ -142,6 +130,7 @@ export class ShortcutManager {
     this.installedWindow = target;
     target.addEventListener("keydown", this.handleKeydown, { capture: true });
     target.addEventListener("blur", this.handleBlur);
+    target.addEventListener("pointerdown", this.handlePointerDown, { capture: true });
     return () => this.uninstall(target);
   }
 
@@ -149,6 +138,7 @@ export class ShortcutManager {
     if (this.installedWindow !== target) return;
     target.removeEventListener("keydown", this.handleKeydown, true);
     target.removeEventListener("blur", this.handleBlur);
+    target.removeEventListener("pointerdown", this.handlePointerDown, true);
     this.installedWindow = null;
     this.clearPendingSequence();
   }
@@ -204,8 +194,7 @@ export class ShortcutManager {
 
   pendingSequence(): PendingShortcutSequence | null {
     if (!this.pending) return null;
-    const { timer: _timer, ...pending } = this.pending;
-    return pending;
+    return { ...this.pending, commandIds: [...this.pending.commandIds] };
   }
 
   isContextActive(context: ShortcutContext): boolean {
@@ -219,13 +208,12 @@ export class ShortcutManager {
 
   clearPendingSequence(): void {
     if (!this.pending) return;
-    clearTimeout(this.pending.timer);
     this.pending = null;
     this.emit();
   }
 
   handleKeydown = (event: KeyboardEvent): boolean => {
-    if (event.defaultPrevented || event.isComposing || isExclusiveTerminalEvent(event)) return false;
+    if (event.defaultPrevented || event.isComposing) return false;
     const stroke = normalizeKeyboardEvent(event, this.environment);
     if (!stroke) return false;
 
@@ -236,19 +224,16 @@ export class ShortcutManager {
         this.clearPendingSequence();
         return true;
       }
-      if (this.pending.expiresAt <= this.now()) {
-        this.clearPendingSequence();
-      } else {
-        const pending = this.pending;
-        const matches = this.matchesForContext(pending.context)
-          .filter((match) => match.binding.strokes.length === 2
-            && sameStroke(match.binding.strokes[0], pending.firstStroke)
-            && sameStroke(match.binding.strokes[1], stroke));
-        this.clearPendingSequence();
-        const match = matches[0];
-        if (!match) return false;
-        return this.executeMatch(event, match);
-      }
+      const pending = this.pending;
+      const matches = this.matchesForContext(pending.context)
+        .filter((match) => match.binding.strokes.length === 2
+          && sameStroke(match.binding.strokes[0], pending.firstStroke)
+          && sameStroke(match.binding.strokes[1], stroke)
+          && (!isExclusiveTerminalEvent(event) || match.command.allowInExclusiveTarget));
+      this.clearPendingSequence();
+      const match = matches[0];
+      if (!match) return false;
+      return this.executeMatch(event, match);
     }
 
     const contexts = this.orderedActiveContexts();
@@ -271,14 +256,10 @@ export class ShortcutManager {
       if (sequences.length) {
         event.preventDefault();
         event.stopPropagation();
-        const expiresAt = this.now() + this.sequenceTimeoutMs;
-        const timer = setTimeout(() => this.clearPendingSequence(), this.sequenceTimeoutMs);
         this.pending = {
           context: active.context,
           firstStroke: stroke,
           commandIds: [...new Set(sequences.map((match) => match.command.id))],
-          expiresAt,
-          timer,
         };
         this.emit();
         return true;
@@ -289,6 +270,7 @@ export class ShortcutManager {
   };
 
   private handleBlur = () => this.clearPendingSequence();
+  private handlePointerDown = () => this.clearPendingSequence();
 
   private orderedActiveContexts(): ActiveContext[] {
     const newestByContext = new Map<ShortcutContext, ActiveContext>();
@@ -329,6 +311,7 @@ export class ShortcutManager {
     command: ShortcutCommandDefinition,
   ): boolean {
     if (event.repeat && !command.allowRepeat) return false;
+    if (isExclusiveTerminalEvent(event) && !command.allowInExclusiveTarget) return false;
     if (isEditableTarget(event.target) && stroke.modifiers.length === 0 && !active.options.ownsEditableTarget) return false;
     return true;
   }

@@ -20,6 +20,8 @@ const GROUP_LABELS: Record<string, string> = {
   commands: "Application",
   "chat-management": "Chat search",
   danger: "Danger zone",
+  navigation: "Navigation",
+  "workspace-panel": "Workspace panel",
 };
 
 interface RecordingTarget {
