@@ -166,3 +166,18 @@
 .chat-markdown .artifact-expand { padding: 7px 10px; font-size: 12px; }
 [data-copy-flash="true"] { border-radius: 10px; }
 }
+
+/* A fence that folds while it is still being written leaves the transcript
+   still: the block stops growing, the thread stops scrolling, and nothing on
+   screen says the model is still typing into it. The expand label already
+   counts the hidden lines up as they arrive; this gives the card a pulse to
+   match, so the stillness reads as folded rather than finished. */
+@keyframes artifact-streaming-pulse {
+  50% { opacity: 0.45; }
+}
+.chat-markdown .artifact.streaming-pending-fence[data-collapsed="true"] .artifact-expand {
+  animation: artifact-streaming-pulse 1.6s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .chat-markdown .artifact.streaming-pending-fence[data-collapsed="true"] .artifact-expand { animation: none; }
+}

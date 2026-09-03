@@ -20,9 +20,10 @@ test("countCodeLines ignores the trailing newline a fence always carries", () =>
   assert.equal(countCodeLines("one\n\nthree\n"), 3);
 });
 
-test("a block still streaming never collapses", () => {
-  assert.equal(shouldCollapseCodeBlock(400, "long", 15, true), false);
-  assert.equal(shouldCollapseCodeBlock(400, "all", 15, true), false);
+test("a block folds at the threshold whether or not it is still streaming", () => {
+  assert.equal(shouldCollapseCodeBlock(400, "long", 15, true), true);
+  assert.equal(shouldCollapseCodeBlock(400, "all", 15, true), true);
+  assert.equal(shouldCollapseCodeBlock(15, "long", 15, true), false);
 });
 
 test("long mode folds only past the threshold", () => {
@@ -90,7 +91,7 @@ test("a collapsed card carries the attributes the delegated handler toggles", ()
   assert.ok(html.includes('aria-label="Expand code"'));
 });
 
-test("a streaming fence renders open with no expander", () => {
+test("a streaming fence past the threshold folds and keeps its expander", () => {
   const text = "x\n".repeat(40);
   const html = codeBlockMarkup({
     language: "ts",
@@ -100,7 +101,21 @@ test("a streaming fence renders open with no expander", () => {
     state: codeBlockState(text, "long", 15, true),
   });
   assert.ok(html.includes('data-streaming-pending="fence"'));
+  assert.ok(html.includes('data-collapsed="true"'));
+  assert.ok(html.includes("data-expand-code"));
+  assert.ok(html.includes("artifact-toggle"));
+  // The label is the activity: it counts the hidden lines as they arrive.
+  assert.ok(html.includes("Show 25 more lines"));
+});
+
+test("a streaming fence under the threshold stays open", () => {
+  const text = "x\n".repeat(4);
+  const html = codeBlockMarkup({
+    language: "ts",
+    text,
+    streaming: true,
+    pending: true,
+    state: codeBlockState(text, "long", 15, true),
+  });
   assert.ok(!html.includes('data-collapsed="true"'));
-  assert.ok(!html.includes("data-expand-code"));
-  assert.ok(!html.includes("artifact-toggle"));
 });

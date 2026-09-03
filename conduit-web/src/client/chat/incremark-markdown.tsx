@@ -578,17 +578,50 @@ function PendingConstruct(props: { pending: StreamingPending; streaming: boolean
       highlighterReady();
       return highlighter.render(pending().body, language(), props.streaming);
     });
-    // A fence still being written stays open: collapsing the text as it arrives
-    // would hide exactly what the reader is watching. The settled CodeNode that
-    // replaces it re-takes the collapse decision.
+    // A growing fence folds on the same rule as a settled one, and at the same
+    // moment it crosses the threshold -- waiting for the closing fence let a
+    // ten-line limit run to fifty before it took effect. Folded, the card is
+    // the only thing still moving on a transcript that has stopped scrolling,
+    // so the expand label counts the hidden lines as they arrive.
+    const collapse = useCodeBlockCollapse();
+    const [userExpanded, setUserExpanded] = createSignal(false);
+    const state = createMemo(() => codeBlockState(pending().body, collapse.mode(), collapse.threshold(), false));
+    const collapsed = () => state().collapsed && !userExpanded();
+    const toggle = (control: HTMLElement) => {
+      const card = control.closest<HTMLElement>(".artifact");
+      const previousTop = card?.getBoundingClientRect().top ?? 0;
+      setUserExpanded((value) => !value);
+      if (card) queueMicrotask(() => publishCodeBlockToggle(card, previousTop));
+    };
     return <div
       class={props.streaming ? "artifact streaming-pending streaming-pending-fence" : "artifact"}
       data-language={language()}
       data-streaming-pending={props.streaming ? "fence" : undefined}
-      data-lines={countCodeLines(pending().body)}
+      data-lines={state().lines}
+      data-collapsible={state().collapsible ? "true" : undefined}
+      data-collapsed={collapsed() ? "true" : undefined}
     >
-      <div class="artifact-header"><span>{language()}</span><CodeCopyButton text={() => pending().body} /></div>
+      <div class="artifact-header">
+        <span>{language()}</span>
+        <span class="artifact-actions">
+          <CodeCopyButton text={() => pending().body} />
+          <Show when={state().collapsible}>
+            <button
+              type="button"
+              class="artifact-toggle"
+              aria-label={collapsed() ? "Expand code" : "Collapse code"}
+              aria-expanded={collapsed() ? "false" : "true"}
+              onClick={(event) => toggle(event.currentTarget)}
+            />
+          </Show>
+        </span>
+      </div>
       <pre><code innerHTML={highlighted()} /></pre>
+      <Show when={state().collapsible}>
+        <button type="button" class="artifact-expand" onClick={(event) => toggle(event.currentTarget)}>
+          {collapsed() ? state().expandLabel : codeBlockCollapseLabel()}
+        </button>
+      </Show>
     </div>;
   }
   const className = () => `streaming-pending ${pending().kind === "math-block" ? "streaming-pending-math-block" : "streaming-pending-math-inline"}`;

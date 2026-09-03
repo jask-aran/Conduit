@@ -753,7 +753,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
       setDiffDetailOpen(detailOpenFor("diff") === "true");
       setDetailHeight(Math.max(MIN_DETAIL_HEIGHT, Number(localStorage.getItem(`conduit:workspace-panel:${props.chatId()}:${nextTab}:detail-height`)) || 288));
       if (projectChanged) {
-        const nextWidth = Math.max(256, Math.min(496, Number(localStorage.getItem(widthKey())) || 336));
+        const nextWidth = clampWidth(Number(localStorage.getItem(widthKey())) || 336);
         setWidth(nextWidth);
         if (props.open()) setShellWidth(nextWidth);
         setTreeWidth(Math.max(MIN_TREE_WIDTH, Math.min(MAX_TREE_WIDTH, Number(localStorage.getItem(treeWidthKey())) || DEFAULT_TREE_WIDTH)));
