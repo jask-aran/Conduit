@@ -1237,6 +1237,13 @@ function App() {
       panelMotion: PANEL_MOTION_STORAGE_KEY,
       userMessageCollapse: USER_MESSAGE_COLLAPSE_STORAGE_KEY,
     };
+    // A URL override is a deliberate per-tab experiment, and server preferences
+    // arrive after first paint. Applying one here silently undid the override,
+    // which is why only markdownRenderer used to survive a reload with a query
+    // string on it. Storage still mirrors the server; only the applied value is
+    // held back.
+    const overrideParams = new URLSearchParams(location.search);
+    const overridden = (key: UiPreferenceKey) => overrideParams.has(key);
     const applyPreference = (key: UiPreferenceKey, value: UiPreferences[UiPreferenceKey]) => {
       const storageKey = storageKeys[key];
       if (storageKey) localStorage.setItem(storageKey, key === "sidebarCollapsed"
@@ -1244,17 +1251,17 @@ function App() {
         : Array.isArray(value) ? JSON.stringify(value) : String(value));
       if (key === "sidebarChatLimit" && typeof value === "number") setSidebarChatLimit(clampSidebarChatLimit(value));
       else if (key === "sidebarPins" && Array.isArray(value)) setSidebarPins(value.filter((item): item is string => typeof item === "string"));
-      else if (key === "markdownRenderer" && typeof value === "string" && !new URLSearchParams(location.search).has("markdownRenderer")) setMarkdownRenderer(value as MarkdownRendererId);
+      else if (key === "markdownRenderer" && typeof value === "string" && !overridden(key)) setMarkdownRenderer(value as MarkdownRendererId);
       else if (key === "rendererControlsVisible" && typeof value === "boolean") setRendererControlsVisible(value);
       else if (key === "contextMetrics" && Array.isArray(value)) setContextMetrics(selectedContextMetrics());
       else if (key === "meteorField" && typeof value === "boolean") setMeteorField(value);
-      else if (key === "transcriptWidth" && isTranscriptWidthMode(value)) applyTranscriptAppearance({ width: value });
-      else if (key === "transcriptWideBlocks" && isTranscriptWideBlocksMode(value)) applyTranscriptAppearance({ wideBlocks: value });
-      else if (key === "codeBlockCollapse" && isCodeBlockCollapseMode(value)) applyTranscriptAppearance({ collapse: value });
-      else if (key === "codeBlockCollapseLines" && isCodeBlockCollapseLines(value)) applyTranscriptAppearance({ collapseLines: value });
-      else if (key === "codeBlockWidth" && isCodeBlockWidthMode(value)) applyTranscriptAppearance({ codeWidth: value });
-      else if (key === "panelMotion" && isPanelMotionMode(value)) publishUiPreference("panelMotion", value);
-      else if (key === "userMessageCollapse" && isUserMessageCollapseMode(value)) applyTranscriptAppearance({ userMessageCollapse: value });
+      else if (key === "transcriptWidth" && isTranscriptWidthMode(value) && !overridden(key)) applyTranscriptAppearance({ width: value });
+      else if (key === "transcriptWideBlocks" && isTranscriptWideBlocksMode(value) && !overridden(key)) applyTranscriptAppearance({ wideBlocks: value });
+      else if (key === "codeBlockCollapse" && isCodeBlockCollapseMode(value) && !overridden(key)) applyTranscriptAppearance({ collapse: value });
+      else if (key === "codeBlockCollapseLines" && isCodeBlockCollapseLines(value) && !overridden(key)) applyTranscriptAppearance({ collapseLines: value });
+      else if (key === "codeBlockWidth" && isCodeBlockWidthMode(value) && !overridden(key)) applyTranscriptAppearance({ codeWidth: value });
+      else if (key === "panelMotion" && isPanelMotionMode(value) && !overridden(key)) publishUiPreference("panelMotion", value);
+      else if (key === "userMessageCollapse" && isUserMessageCollapseMode(value) && !overridden(key)) applyTranscriptAppearance({ userMessageCollapse: value });
       else if (key === "shortcutOverrides" && value && typeof value === "object" && !Array.isArray(value)) {
         shortcutManager.replaceOverrides(value as ReturnType<ShortcutManager["shortcutOverrides"]>);
       } else if (key === "voicePreferences" && value && typeof value === "object" && !Array.isArray(value)) {

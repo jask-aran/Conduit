@@ -3,6 +3,7 @@ import {
   type PanelGeometryMotionDetail,
   type PanelGeometryMotionSource,
 } from "../panel-motion";
+import { usePanelMotion } from "./transcript-appearance";
 
 const VISIBILITY_ATTRIBUTE = "data-transcript-visibility";
 const INTRINSIC_SIZE_PROPERTY = "contain-intrinsic-block-size";
@@ -67,6 +68,7 @@ export function mountTranscriptVisibility(
   const resizeIds = new Map<PanelGeometryMotionSource, number>();
   const managed = new Set<HTMLElement>();
   let tableLocks: TableLock[] = [];
+  const panelMotionMode = usePanelMotion();
   let measureFrame: number | null = null;
   let measureIdle: number | null = null;
   let syncFrame: number | null = null;
@@ -316,7 +318,12 @@ export function mountTranscriptVisibility(
       activeIds.set(detail.source, detail.id);
       if (detail.source === "workspace" && detail.targetSize == null) {
         resizeIds.set(detail.source, detail.id);
-        lockTables();
+        // Pinning a table to its pre-drag pixel width only holds while the
+        // column is frozen. Under live reflow the column genuinely narrows and
+        // a pinned table cannot follow it: it overruns the column mid-drag,
+        // each table stranded at a different width because each was locked to
+        // its own, and they all jump back when the lock releases on pointer-up.
+        if (panelMotionMode() !== "reflow") lockTables();
       }
       return;
     }

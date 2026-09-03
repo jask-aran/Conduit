@@ -51,6 +51,29 @@
     max-width: min(var(--transcript-wide-scale), var(--transcript-wide-max));
   }
 }
+/* A table is the one block that cannot honour the clamp above. max-width is
+   advice; a table's min-content width is a floor, so once the column is
+   narrower than the widest row demands, the table simply overruns it -- off the
+   left edge too, because justify-self centres it. Each table stops at its own
+   floor, so they also stop agreeing with each other, which is how this reads on
+   screen: several tables at several different widths, none of them the column's.
+
+   Making it a block with its own horizontal scroll moves the floor inside: the
+   box takes the column width and the rows scroll within it, the same bargain
+   code blocks and display math already make. min-width keeps a narrow table
+   stretched to the measure, and above the reading column nothing changes --
+   measured identical at a 1705px viewport, and three tables that sat at 458,
+   393 and 550 in a 379px column all sit at 302 with room to spare. */
+.chat-markdown[data-renderer^="incremark"]:not([data-inline]) > .incremark > table,
+.chat-markdown[data-renderer^="marked"]:not([data-inline]) > table {
+  display: block;
+  /* The clamp has to be repeated here, not left to the wide-chat query above:
+     below that breakpoint there is no max-width at all. Width is deliberately
+     not set, so the bleed the query grants above it still applies. */
+  max-width: min(var(--transcript-wide-scale), var(--transcript-wide-max));
+  overflow-x: auto;
+}
+
 .chat-markdown th, .chat-markdown td { padding: 5.6px 7.2px; border: 1px solid var(--border); text-align: left; }
 .chat-markdown[data-renderer^="incremark"] th, .chat-markdown[data-renderer^="incremark"] td { vertical-align: top; }
 .chat-markdown :not(pre) > code { border-radius: 3.2px; background: var(--muted); padding: 0.12em 0.35em; font-family: ui-monospace, monospace; }
