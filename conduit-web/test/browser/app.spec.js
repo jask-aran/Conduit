@@ -295,6 +295,34 @@ test.beforeEach(async ({ page }) => {
   });
 });
 
+// A width commit that lands in one step -- restoring a stored width when the
+// project changes -- used its own 256..496 clamp while drag and keyboard used
+// clampWidth (240..65% of the viewport). A panel dragged wider than 496 came
+// back narrower, and the commit dispatched no geometry motion, so the
+// transcript stayed laid out for the width it never learned had changed.
+test("restores a stored panel width past the old clamp and announces the commit", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop-chromium", "resizable side panel is desktop chrome");
+  await page.addInitScript(() => {
+    // The compact-UI migration rescales stored widths by 0.8 exactly once.
+    // Claim it, or the seeded width arrives as 480 and proves nothing.
+    localStorage.setItem("conduit:compact-ui-v2", "true");
+    localStorage.setItem("conduit:workspace-panel:project_chat:width", "600");
+    window.__geometry = [];
+    window.addEventListener("conduit:panel-geometry-motion", (event) => {
+      window.__geometry.push({ phase: event.detail.phase, source: event.detail.source, size: event.detail.size, targetSize: event.detail.targetSize ?? null });
+    });
+  });
+  await openChatSurface(page);
+  await page.getByRole("button", { name: "Toggle workspace panel" }).click();
+  const panel = page.getByRole("complementary", { name: "Workspace panel" });
+  await expect(panel).toBeVisible();
+  await expect.poll(async () => Math.round((await panel.boundingBox()).width)).toBe(600);
+
+  const commits = await page.evaluate(() => window.__geometry.filter((entry) => entry.source === "workspace" && entry.targetSize != null));
+  expect(commits.length).toBeGreaterThan(0);
+  expect(commits.at(-1).targetSize).toBeGreaterThan(600);
+});
+
 test("workspace panel previews files, shows diff, and persists per chat", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "desktop-chromium", "resizable side panel is desktop chrome");
   await openChatSurface(page);
