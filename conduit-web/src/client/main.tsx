@@ -67,6 +67,9 @@ import {
   selectedCodeBlockWidth,
   isCodeBlockWidthMode,
   CODE_BLOCK_WIDTH_STORAGE_KEY,
+  selectedPanelMotion,
+  isPanelMotionMode,
+  PANEL_MOTION_STORAGE_KEY,
   isUserMessageCollapseMode,
   selectedUserMessageCollapse,
   USER_MESSAGE_COLLAPSE_STORAGE_KEY,
@@ -1205,6 +1208,7 @@ function App() {
       codeBlockCollapse: selectedCodeBlockCollapse(),
       codeBlockCollapseLines: selectedCodeBlockCollapseLines(),
       codeBlockWidth: selectedCodeBlockWidth(),
+      panelMotion: selectedPanelMotion(),
       userMessageCollapse: selectedUserMessageCollapse(),
       shortcutOverrides: shortcutManager.shortcutOverrides(),
       sidebarPins: [],
@@ -1230,6 +1234,7 @@ function App() {
       codeBlockCollapse: CODE_BLOCK_COLLAPSE_STORAGE_KEY,
       codeBlockCollapseLines: CODE_BLOCK_COLLAPSE_LINES_STORAGE_KEY,
       codeBlockWidth: CODE_BLOCK_WIDTH_STORAGE_KEY,
+      panelMotion: PANEL_MOTION_STORAGE_KEY,
       userMessageCollapse: USER_MESSAGE_COLLAPSE_STORAGE_KEY,
     };
     const applyPreference = (key: UiPreferenceKey, value: UiPreferences[UiPreferenceKey]) => {
@@ -1248,6 +1253,7 @@ function App() {
       else if (key === "codeBlockCollapse" && isCodeBlockCollapseMode(value)) applyTranscriptAppearance({ collapse: value });
       else if (key === "codeBlockCollapseLines" && isCodeBlockCollapseLines(value)) applyTranscriptAppearance({ collapseLines: value });
       else if (key === "codeBlockWidth" && isCodeBlockWidthMode(value)) applyTranscriptAppearance({ codeWidth: value });
+      else if (key === "panelMotion" && isPanelMotionMode(value)) publishUiPreference("panelMotion", value);
       else if (key === "userMessageCollapse" && isUserMessageCollapseMode(value)) applyTranscriptAppearance({ userMessageCollapse: value });
       else if (key === "shortcutOverrides" && value && typeof value === "object" && !Array.isArray(value)) {
         shortcutManager.replaceOverrides(value as ReturnType<ShortcutManager["shortcutOverrides"]>);

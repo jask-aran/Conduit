@@ -27,12 +27,14 @@ export type { UserMessageCollapseMode } from "./user-message-collapse";
 export type TranscriptWidthMode = "compact" | "default" | "wide" | "full";
 export type TranscriptWideBlocksMode = "off" | "default" | "wider" | "full";
 export type CodeBlockWidthMode = "column" | "wide";
+export type PanelMotionMode = "translate" | "reflow";
 
 export const TRANSCRIPT_WIDTH_STORAGE_KEY = "conduit:transcript-width";
 export const TRANSCRIPT_WIDE_BLOCKS_STORAGE_KEY = "conduit:transcript-wide-blocks";
 export const CODE_BLOCK_COLLAPSE_STORAGE_KEY = "conduit:code-block-collapse";
 export const CODE_BLOCK_COLLAPSE_LINES_STORAGE_KEY = "conduit:code-block-collapse-lines";
 export const CODE_BLOCK_WIDTH_STORAGE_KEY = "conduit:code-block-width";
+export const PANEL_MOTION_STORAGE_KEY = "conduit:panel-motion";
 
 export const TRANSCRIPT_WIDTH_OPTIONS: ReadonlyArray<{ value: TranscriptWidthMode; label: string }> = [
   { value: "compact", label: "Compact" },
@@ -61,10 +63,16 @@ export const CODE_BLOCK_WIDTH_OPTIONS: ReadonlyArray<{ value: CodeBlockWidthMode
   { value: "wide", label: "Wide" },
 ];
 
+export const PANEL_MOTION_OPTIONS: ReadonlyArray<{ value: PanelMotionMode; label: string }> = [
+  { value: "translate", label: "Translate" },
+  { value: "reflow", label: "Live reflow" },
+];
+
 const TRANSCRIPT_WIDTHS = new Set<string>(TRANSCRIPT_WIDTH_OPTIONS.map((option) => option.value));
 const CODE_BLOCK_WIDTHS = new Set<string>(CODE_BLOCK_WIDTH_OPTIONS.map((option) => option.value));
 const WIDE_BLOCKS = new Set<string>(TRANSCRIPT_WIDE_BLOCKS_OPTIONS.map((option) => option.value));
 const COLLAPSE_MODES = new Set<string>(CODE_BLOCK_COLLAPSE_OPTIONS.map((option) => option.value));
+const PANEL_MOTIONS = new Set<string>(PANEL_MOTION_OPTIONS.map((option) => option.value));
 
 const publish = (key: string, value: unknown) => {
   if (typeof window === "undefined") return;
@@ -113,6 +121,38 @@ export function saveCodeBlockWidth(
 
 export function isCodeBlockCollapseLines(value: unknown): value is number {
   return typeof value === "number" && (CODE_BLOCK_COLLAPSE_LINE_OPTIONS as readonly number[]).includes(value);
+}
+
+export function isPanelMotionMode(value: unknown): value is PanelMotionMode {
+  return typeof value === "string" && PANEL_MOTIONS.has(value);
+}
+
+/**
+ * How the transcript answers a workspace-panel drag.
+ *
+ * "reflow" is the honest layout: the column takes its real width every frame,
+ * so text rewraps under the pointer. It costs a full paint of the visible
+ * surface per frame, which a formula-heavy answer cannot afford yet.
+ * "translate" pins the width and moves the shell on the compositor, committing
+ * the real width once on release. Translate is the default until reflow fits
+ * the frame budget; the preference exists so the two can be compared on the
+ * same transcript without rebuilding.
+ */
+export function selectedPanelMotion(storage: Pick<Storage, "getItem"> = localStorage): PanelMotionMode {
+  const override = param("panelMotion");
+  if (isPanelMotionMode(override)) return override;
+  const stored = storage.getItem(PANEL_MOTION_STORAGE_KEY);
+  return isPanelMotionMode(stored) ? stored : "translate";
+}
+
+export function savePanelMotion(
+  mode: PanelMotionMode,
+  storage: Pick<Storage, "setItem"> = localStorage,
+): PanelMotionMode {
+  const selected = isPanelMotionMode(mode) ? mode : "translate";
+  storage.setItem(PANEL_MOTION_STORAGE_KEY, selected);
+  publish("panelMotion", selected);
+  return selected;
 }
 
 export function selectedTranscriptWidth(storage: Pick<Storage, "getItem"> = localStorage): TranscriptWidthMode {
@@ -223,6 +263,7 @@ export function applyTranscriptAppearance(options: {
 const [collapseMode, setCollapseMode] = createSignal<CodeBlockCollapseMode>(selectedCodeBlockCollapse());
 const [collapseThreshold, setCollapseThreshold] = createSignal(selectedCodeBlockCollapseLines());
 const [userCollapse, setUserCollapse] = createSignal<UserMessageCollapseMode>(selectedUserMessageCollapse());
+const [panelMotion, setPanelMotion] = createSignal<PanelMotionMode>(selectedPanelMotion());
 
 /**
  * Bumped whenever the reading measure may have changed.
@@ -240,6 +281,7 @@ if (typeof window !== "undefined") {
     if (detail?.key === "codeBlockCollapse" && isCodeBlockCollapseMode(detail.value)) setCollapseMode(detail.value);
     else if (detail?.key === "codeBlockCollapseLines" && isCodeBlockCollapseLines(detail.value)) setCollapseThreshold(detail.value);
     else if (detail?.key === "userMessageCollapse" && isUserMessageCollapseMode(detail.value)) setUserCollapse(detail.value);
+    else if (detail?.key === "panelMotion" && isPanelMotionMode(detail.value)) setPanelMotion(detail.value);
     else if (detail?.key === "transcriptWidth") setReadingWidthVersion((version) => version + 1);
   });
   let resizeFrame: number | null = null;
@@ -257,6 +299,10 @@ if (typeof window !== "undefined") {
 
 export function useCodeBlockCollapse() {
   return { mode: collapseMode, threshold: collapseThreshold };
+}
+
+export function usePanelMotion() {
+  return panelMotion;
 }
 
 export function useUserMessageCollapse() {

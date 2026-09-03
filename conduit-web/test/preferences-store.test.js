@@ -20,6 +20,7 @@ const emptyUiPreferences = {
   codeBlockCollapse: null,
   codeBlockCollapseLines: null,
   codeBlockWidth: null,
+  panelMotion: null,
   userMessageCollapse: null,
   shortcutOverrides: null,
   voicePreferences: null,
@@ -64,6 +65,7 @@ test("preferences store persists general settings", async () => {
     codeBlockCollapse: "all",
     codeBlockCollapseLines: 25,
     codeBlockWidth: "wide",
+    panelMotion: "reflow",
     userMessageCollapse: "25",
     shortcutOverrides: {
       "open-command-palette": [{ strokes: [{ code: "KeyK", key: "K", modifiers: ["primary"] }] }],
@@ -87,6 +89,7 @@ test("preferences store persists general settings", async () => {
   assert.equal(restored.get().codeBlockCollapse, "all");
   assert.equal(restored.get().codeBlockCollapseLines, 25);
   assert.equal(restored.get().codeBlockWidth, "wide");
+  assert.equal(restored.get().panelMotion, "reflow");
   assert.equal(restored.get().userMessageCollapse, "25");
   assert.deepEqual(restored.get().voicePreferences, { shortcut: "Ctrl+Shift+D", activation: "toggle", autoSend: true, captureProfile: "processed" });
   assert.equal(validTerminalShortcuts(restored.get().terminalShortcuts), true);
@@ -114,6 +117,8 @@ test("reading-surface preferences round-trip and reject values outside their pre
   assert.equal(validUiPreferencePatch({ codeBlockCollapseLines: "25" }), false);
   assert.equal(validUiPreferencePatch({ codeBlockWidth: "wide" }), true);
   assert.equal(validUiPreferencePatch({ codeBlockWidth: "full" }), false);
+  assert.equal(validUiPreferencePatch({ panelMotion: "reflow" }), true);
+  assert.equal(validUiPreferencePatch({ panelMotion: "freeze" }), false);
   assert.equal(validUiPreferencePatch({ userMessageCollapse: "15" }), true);
   assert.equal(validUiPreferencePatch({ userMessageCollapse: 15 }), false);
   assert.equal(validUiPreferencePatch({ userMessageCollapse: "12" }), false);

@@ -3,6 +3,7 @@ import {
   type PanelGeometryMotionDetail,
   type PanelGeometryMotionSource,
 } from "../panel-motion";
+import { usePanelMotion } from "./transcript-appearance";
 
 function transformX(element: HTMLElement) {
   const transform = getComputedStyle(element).transform;
@@ -21,6 +22,7 @@ export function mountTranscriptPanelMotion(
   // heavy transcript does not take natural flex width on every frame.
   const edgeStarts = new Map<PanelGeometryMotionSource, { size: number; width: number; shift: number }>();
   let transformSource: PanelGeometryMotionSource | null = null;
+  const panelMotionMode = usePanelMotion();
 
   const cancelRelease = () => {
     if (releaseFrame != null) cancelAnimationFrame(releaseFrame);
@@ -106,7 +108,7 @@ export function mountTranscriptPanelMotion(
       const start = edgeStarts.get(detail.source);
       if (!start) return;
       const delta = detail.size - start.size;
-      if (detail.source !== "workspace") {
+      if (detail.source !== "workspace" || panelMotionMode() === "reflow") {
         // The sidebar eases over a fixed distance, so it keeps taking real
         // width: the transcript is meant to fill the space as the rail
         // collapses, and freezing it leaves the thread visually static for the
@@ -120,7 +122,8 @@ export function mountTranscriptPanelMotion(
       // scrolling KaTeX block, each code card. Measured on a 143Hz display
       // against a formula-heavy answer that was 20.8ms a frame, every frame
       // over budget. The shell keeps its width and moves on the compositor
-      // instead; the real width is committed once, on release.
+      // instead; the real width is committed once, on release. The "reflow"
+      // panel-motion preference opts back into taking real width every frame.
       start.shift = -delta / 2;
       let shift = 0;
       for (const entry of edgeStarts.values()) shift += entry.shift;
