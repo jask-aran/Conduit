@@ -599,6 +599,12 @@ test("workspace files open two slots side by side", async ({ page }, testInfo) =
   await expect(tree.getByRole("treeitem", { name: "app.js" })).toHaveAttribute("aria-selected", "true");
   await expect(tree.getByRole("treeitem", { name: "README.md" })).toHaveAttribute("aria-selected", "true");
 
+  await page.setViewportSize({ width: 500, height: 900 });
+  await expect(primary).toBeVisible();
+  await expect(secondary).toBeVisible();
+  const [primaryBox, secondaryBox] = await Promise.all([primary.boundingBox(), secondary.boundingBox()]);
+  expect(secondaryBox.y).toBeGreaterThanOrEqual(primaryBox.y + primaryBox.height);
+
   // A plain click lands in the focused slot and leaves the other one alone.
   await tree.getByRole("treeitem", { name: "src" }).click();
   await tree.getByRole("treeitem", { name: "main.ts" }).click();
@@ -636,6 +642,79 @@ test("an unsaved draft in one file slot survives opening another file", async ({
   await tree.getByRole("treeitem", { name: "README.md" }).click({ modifiers: ["Alt"] });
   await expect(secondary.locator(".workspace-preview-file")).toHaveText("README.md");
   await expect(primary.locator(".workspace-preview-header small")).toHaveText("Unsaved");
+});
+
+test("workspace file controls create, rename, move, and delete folders", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop-chromium", "opens the panel from the desktop header button");
+  let rootEntries = [];
+  let draftEntries = [];
+  await page.unroute("**/v0/projects/*/tree?*");
+  await page.unroute("**/v0/projects/*/file?*");
+  await page.route("**/v0/projects/*/tree?*", (route) => {
+    const directory = new URL(route.request().url()).searchParams.get("path") || "";
+    return route.fulfill({ json: { path: directory, entries: directory === "drafts" ? draftEntries : rootEntries, truncated: false } });
+  });
+  await page.route("**/v0/projects/*/file?*", (route) => {
+    const request = route.request();
+    const file = new URL(request.url()).searchParams.get("path");
+    if (request.method() === "PUT") {
+      rootEntries = [{ name: "drafts", path: "drafts", type: "directory" }, { name: "notes.txt", path: "notes.txt", type: "file" }];
+      return route.fulfill({ status: 201, json: { path: file, size: 0, modifiedAt: 1, revision: "empty" } });
+    }
+    return route.fulfill({ json: { path: file, size: 0, modifiedAt: 1, revision: "empty", content: "" } });
+  });
+  await page.route("**/v0/projects/*/directory*", (route) => {
+    const request = route.request();
+    if (request.method() === "POST") {
+      rootEntries = [{ name: "drafts", path: "drafts", type: "directory" }];
+      return route.fulfill({ status: 201, json: { path: "drafts" } });
+    }
+    rootEntries = [];
+    draftEntries = [];
+    return route.fulfill({ status: 204, body: "" });
+  });
+  await page.route("**/v0/projects/*/entry", (route) => {
+    const { path, destination } = route.request().postDataJSON();
+    if (path === "notes.txt") {
+      rootEntries = [{ name: "drafts", path: "drafts", type: "directory" }, { name: "ideas.txt", path: "ideas.txt", type: "file" }];
+    } else {
+      rootEntries = [{ name: "drafts", path: "drafts", type: "directory" }];
+      draftEntries = [{ name: "ideas.txt", path: "drafts/ideas.txt", type: "file" }];
+    }
+    return route.fulfill({ json: { path, destination, type: "file" } });
+  });
+
+  await openChatSurface(page);
+  await page.getByRole("button", { name: "Toggle workspace panel" }).click();
+  const panel = page.getByRole("complementary", { name: "Workspace panel" });
+  const tree = panel.getByRole("tree", { name: "Project files" });
+
+  page.once("dialog", (dialog) => dialog.accept("drafts"));
+  await panel.getByRole("button", { name: "New folder" }).click();
+  await expect(tree.getByRole("treeitem", { name: "drafts" })).toBeVisible();
+
+  page.once("dialog", (dialog) => dialog.accept("notes.txt"));
+  await panel.getByRole("button", { name: "New file" }).click();
+  const notes = tree.getByRole("treeitem", { name: "notes.txt" });
+  await expect(notes).toBeVisible();
+
+  await notes.click({ button: "right" });
+  page.once("dialog", (dialog) => dialog.accept("ideas.txt"));
+  await page.getByRole("menuitem", { name: "Rename…" }).click();
+  const ideas = tree.getByRole("treeitem", { name: "ideas.txt" });
+  await expect(ideas).toBeVisible();
+
+  await ideas.click({ button: "right" });
+  page.once("dialog", (dialog) => dialog.accept("drafts"));
+  await page.getByRole("menuitem", { name: "Move…" }).click();
+  await expect(ideas).toHaveCount(0);
+  await tree.getByRole("treeitem", { name: "drafts" }).click();
+  await expect(tree.getByRole("treeitem", { name: "ideas.txt" })).toBeVisible();
+
+  await tree.getByRole("treeitem", { name: "drafts" }).click({ button: "right" });
+  page.once("dialog", (dialog) => dialog.accept());
+  await page.getByRole("menuitem", { name: "Delete folder" }).click();
+  await expect(tree.getByRole("treeitem", { name: "drafts" })).toHaveCount(0);
 });
 
 test("workspace file menu replaces, deletes, and polls selected files", async ({ page }, testInfo) => {
@@ -1089,6 +1168,81 @@ test("Workspace views use the nested palette page and terminal lives in the Work
   await page.getByRole("button", { name: "Conduit work" }).click({ button: "right" });
   await page.getByRole("menuitem", { name: "Open terminal" }).click();
   await expect(terminal).toBeVisible();
+});
+
+test("dashboard routes restore the workspace panel state for their project scope", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop-chromium", "workspace panel geometry is desktop state");
+  await page.addInitScript(() => {
+    localStorage.setItem("conduit:workspace-panel:project:project_chat:open", "true");
+    localStorage.setItem("conduit:workspace-panel:project:project_chat:expanded", "false");
+    localStorage.setItem("conduit:workspace-panel:project:project_research:open", "true");
+    localStorage.setItem("conduit:workspace-panel:project:project_research:expanded", "true");
+  });
+  await page.route("**/v0/projects/*/dashboard", (route) => route.fulfill({ json: {
+    identity: { path: "/tmp/research" },
+    stats: { activeChats: 0, liveChats: 0, lastActivityAt: null },
+    git: null,
+  } }));
+
+  await page.goto("/project/project_research");
+  const panel = page.getByRole("complementary", { name: "Workspace panel" });
+  const main = page.locator('[data-slot="sidebar-inset"]');
+  await expect(page.getByRole("region", { name: "Research dashboard" })).toBeVisible();
+  await expect(panel).toBeVisible();
+  await expect(main).toHaveClass(/workspace-expanded/);
+
+  await page.locator(".sidebar-dashboard").click();
+  await expect(page).toHaveURL("/");
+  await expect(page.getByRole("heading", { name: "Start where the work is." })).toBeVisible();
+  await expect(panel).toBeVisible();
+  await expect(main).not.toHaveClass(/workspace-expanded/);
+
+  await page.locator(".sidebar-project-link").filter({ hasText: "Research" }).click();
+  await expect(page).toHaveURL("/project/project_research");
+  await expect(panel).toBeVisible();
+  await expect(main).toHaveClass(/workspace-expanded/);
+});
+
+test("workspace context menu opens its dashboard with the Workspace maximized", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop-chromium", "workspace panel geometry is desktop state");
+  const workspace = {
+    id: "project_conduit",
+    slug: "conduit",
+    name: "Conduit",
+    kind: "workspace",
+    origin: "linked",
+    path: "/tmp/conduit",
+    sessions: [],
+  };
+  await page.unroute("**/v0/projects");
+  await page.route("**/v0/projects", (route) => route.fulfill({ json: { projects: [...projects, workspace] } }));
+  await page.route("**/v0/projects/*/dashboard", (route) => route.fulfill({ json: {
+    identity: { path: "/tmp/conduit" },
+    stats: { activeChats: 0, liveChats: 0, lastActivityAt: null },
+    git: null,
+  } }));
+
+  await page.goto("/");
+  const workspaceRow = page.locator(".sidebar-project-block").filter({ hasText: "Conduit" }).first();
+  await workspaceRow.locator(".sidebar-project-link").click({ button: "right" });
+  await page.getByRole("menuitem", { name: "Open maximized Workspace" }).click();
+
+  const panel = page.getByRole("complementary", { name: "Workspace panel" });
+  const main = page.locator('[data-slot="sidebar-inset"]');
+  await expect.poll(() => page.evaluate(() => ({
+    open: localStorage.getItem("conduit:workspace-panel:project:project_conduit:open"),
+    expanded: localStorage.getItem("conduit:workspace-panel:project:project_conduit:expanded"),
+  }))).toEqual({ open: "true", expanded: "true" });
+  await expect(page).toHaveURL("/workspace/project_conduit");
+  await expect(panel).toBeVisible();
+  await expect(main).toHaveClass(/workspace-expanded/);
+
+  await page.reload();
+  await expect(panel).toBeVisible();
+  await expect(main).toHaveClass(/workspace-expanded/);
+  await panel.getByRole("button", { name: "Restore split view" }).click();
+  await expect(main).not.toHaveClass(/workspace-expanded/);
+  await expect(page.getByRole("region", { name: "Conduit dashboard" })).toBeVisible();
 });
 
 test("uses compact sidebar groups and preserves a useful desktop rail", async ({ page }, testInfo) => {

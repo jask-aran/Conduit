@@ -382,6 +382,12 @@ function App() {
     commands: commandRegistry,
     environment: browserShortcutEnvironmentProvider.detect(),
   });
+  const catalogue = createCatalogueStore();
+  const workspacePanelScope = createMemo(() => catalogue.projectId() ? `project:${catalogue.projectId()}` : null);
+  const workspacePanelStateKey = (state: "open" | "expanded") => {
+    const scope = workspacePanelScope();
+    return scope ? `conduit:workspace-panel:${scope}:${state}` : null;
+  };
   const [templates, setTemplates] = createSignal<Template[]>([]);
   const [templatesLoading, setTemplatesLoading] = createSignal(true);
   const [installations, setInstallations] = createSignal<Installation[]>([]);
@@ -416,7 +422,9 @@ function App() {
   const [panelOpen, setPanelOpen] = createSignal(false);
   const [workspaceExpanded, setWorkspaceExpandedState] = createSignal(false);
   let workspaceExpansionMotionTimer: number | undefined;
-  const setWorkspaceExpanded = (next: boolean) => {
+  const setWorkspaceExpanded = (next: boolean, persist = true) => {
+    const key = workspacePanelStateKey("expanded");
+    if (persist && key) localStorage.setItem(key, String(next));
     if (next === workspaceExpanded()) return;
     if (workspaceExpansionMotionTimer != null) window.clearTimeout(workspaceExpansionMotionTimer);
     workspaceExpansionMotionTimer = undefined;
@@ -481,7 +489,6 @@ function App() {
       showError(error);
     }
   };
-  const catalogue = createCatalogueStore();
   const runtime = createRuntimeStore();
   let hasConnected = false;
   createEffect(() => {
@@ -559,8 +566,6 @@ function App() {
     ? profiles().find((item) => item.id === "host-pi")
     : templates().find((item) => item.id === chat.templateId()) || templates().find((item) => item.id === defaultTemplateId()) || null);
   const emptyChat = createMemo(() => chat.loadedId() === catalogue.selectedId() && !chat.messages().length && !chat.tools().length && !chat.activity()?.label);
-  const workspacePanelScope = createMemo(() => catalogue.projectId() ? `project:${catalogue.projectId()}` : null);
-
   diagnosticContext = () => {
     const identity = chat.runtimeIdentity();
     return {
@@ -579,9 +584,11 @@ function App() {
   };
 
   createEffect(() => {
-    const id = workspacePanelScope();
-    if (!id) return;
-    setPanelOpen(localStorage.getItem(`conduit:workspace-panel:${id}:open`) === "true");
+    const openKey = workspacePanelStateKey("open");
+    const expandedKey = workspacePanelStateKey("expanded");
+    if (!openKey || !expandedKey) return;
+    setPanelOpen(localStorage.getItem(openKey) === "true");
+    setWorkspaceExpanded(localStorage.getItem(expandedKey) === "true", false);
   });
 
   createEffect(() => {
@@ -598,10 +605,10 @@ function App() {
     if (!next && document.activeElement instanceof HTMLElement && document.activeElement.closest(".workspace-panel")) {
       document.querySelector<HTMLElement>(".chat-header [aria-label='Toggle workspace panel']")?.focus({ preventScroll: true });
     }
-    const id = workspacePanelScope();
+    const key = workspacePanelStateKey("open");
     if (!next) setWorkspaceExpanded(false);
     setPanelOpen(next);
-    if (id) localStorage.setItem(`conduit:workspace-panel:${id}:open`, String(next));
+    if (key) localStorage.setItem(key, String(next));
   };
 
   /** Phone overlays are exclusive: opening one closes the other. */
@@ -752,7 +759,8 @@ function App() {
 
   const openDashboard = (historyMode: "push" | "replace" | "none" = "push") => {
     chat.reset();
-    setPanelOpenForChat(false);
+    const chatRoot = catalogue.projects().find((project) => project.slug === "chat");
+    if (chatRoot) catalogue.selectProject(chatRoot);
     setMobileSidebarOpen(false);
     setRouteKind("dashboard");
     setRouteBootstrapError("");
@@ -822,7 +830,6 @@ function App() {
     setRouteKind("project");
     setRouteBootstrapError("");
     setRouteBootstrap("ready");
-    setPanelOpen(false);
     if (historyMode === "push") history.pushState({}, "", projectPath(target));
     else if (historyMode === "replace") history.replaceState({}, "", projectPath(target));
     // A history traversal may return to this draft with Forward. Keep it in
@@ -838,6 +845,11 @@ function App() {
       const detail = error as Error & { error?: string };
       if (detail.error !== "chat_not_found") showError(`Opened ${target.name}, but the abandoned draft could not be removed: ${detail.message}`);
     }
+  };
+  const openProjectWithMaximizedWorkspace = (target: Project) => {
+    void openProject(target);
+    setPanelOpenForChat(true);
+    setWorkspaceExpanded(true);
   };
 
   const focusChatSurface = (event: PointerEvent) => {
@@ -1554,6 +1566,7 @@ function App() {
       mobileOpen={mobileSidebarOpen()} onMobileOpenChange={setMobileSidebar}
       onWorkspaceSuggestionsNeeded={() => void loadWorkspaceSuggestions()}
       onNewChat={async (project) => { await createChat(project); }} onPrefetchChat={chat.prefetch} onOpenChat={openChat} onOpenProject={openProject} onAddProject={addProject} onRenameChat={renameChat} onRenameProject={renameProject}
+      onOpenProjectMaximized={openProjectWithMaximizedWorkspace}
       onMoveChat={moveChat} onMoveChats={moveChats} onMoveProjectChats={moveProjectChats} onCopyTranscript={copyTranscript} onCopyChatLinks={copyChatLinks}
       onDeleteChat={deleteChat} onDeleteChats={deleteChats} onDeleteProject={deleteProject}
       onOpenTerminal={(target, project) => { void openChat(target, project).then(() => openWorkspaceView("terminal")); }}

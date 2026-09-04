@@ -179,13 +179,28 @@ Relevant code: tree keyboard handling in `conduit-web/src/client/workspace/works
 
 Suspected direction: complete the tree focus model and give each pane an explicit tablist and tabpanel relationship.
 
-### In progress — Dashboard workspace-panel continuity
+### Complete — Dashboard workspace-panel continuity
 
-Workspace and folder dashboard routes do not restore the workspace panel state that their chats use. This breaks the dashboard as an entry point for workspace work: opening a workspace dashboard can hide or restore a different panel state even though the selected workspace has an established panel layout.
+Workspace and folder dashboards now use the same project-scoped open and expanded
+state as chats in that project. Navigation to a project dashboard no longer closes
+the panel. Navigation to the Conduit dashboard selects the Chats project before it
+restores that project's panel state.
 
-Relevant code: panel state and route scope in `conduit-web/src/client/main.tsx`; workspace navigation and context menus in `conduit-web/src/client/navigation/sidebar.tsx`; dashboard rendering in `conduit-web/src/client/project/dashboard.tsx`.
+Workspace rows and pinned workspaces in the sidebar now have an **Open maximized
+Workspace** context-menu action. The action opens the workspace dashboard, opens
+the panel, and stores its maximized state. Restoring the split view reveals the
+dashboard.
 
-The requested behavior also needs a workspace context-menu action that opens the dashboard with the workspace panel maximized. Restoring or changing the panel after that navigation must reveal the dashboard, not a chat.
+Relevant code: state ownership and dashboard navigation in
+`conduit-web/src/client/main.tsx:385-441`, `:586-612`, `:760-769`, and `:825-853`;
+workspace context menus in `conduit-web/src/client/navigation/sidebar.tsx:145-162`,
+`:784-794`, and `:845-852`.
+
+**Verified.** The desktop Chromium browser tests in
+`conduit-web/test/browser/app.spec.js:1173-1246` cover folder, Conduit, and
+workspace dashboard state restoration, pointer activation of the context-menu
+action, persistence across reload, and restoration from maximized to the
+workspace dashboard.
 
 ### Open — Persisted panel state grows without bound and is unguarded
 
