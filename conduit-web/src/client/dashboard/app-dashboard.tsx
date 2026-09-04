@@ -9,6 +9,7 @@ import { WorkspaceGlyph } from "../project/workspace-appearance";
 import type { RuntimeStore } from "../state/runtime";
 import type { SidebarCommand } from "../navigation/sidebar";
 import { COMMAND_IDS, commandLabel } from "../commands/command-registry";
+import { compareChatsBySort, saveChatSort, useChatSort } from "../preferences/chat-sort";
 import "./app-dashboard.css";
 
 function latestActivity(project: Project) {
@@ -61,18 +62,21 @@ export function AppDashboard(props: {
   const [loading, setLoading] = createSignal(true);
   const [now, setNow] = createSignal(Date.now());
   const [chatScope, setChatScope] = createSignal<"unscoped" | "all">("unscoped");
+  const chatSort = useChatSort();
   const workspaces = createMemo(() => props.projects
     .filter((project) => project.kind === "workspace" || ["linked", "created", "cloned"].includes(project.origin || ""))
     .sort((left, right) => latestActivity(right) - latestActivity(left))
     .slice(0, 6));
-  const chats = createMemo(() => props.projects
-    .filter((project) => chatScope() === "all" || project.slug === "chat")
-    .flatMap((project) => project.sessions
-      .filter((chat) => chat.status === "active")
-      .map((chat) => ({ chat, project })))
-    .sort((left, right) => String(right.chat.updatedAt || right.chat.createdAt || "")
-      .localeCompare(String(left.chat.updatedAt || left.chat.createdAt || "")))
-    .slice(0, 10));
+  const chats = createMemo(() => {
+    const sort = chatSort();
+    return props.projects
+      .filter((project) => chatScope() === "all" || project.slug === "chat")
+      .flatMap((project) => project.sessions
+        .filter((chat) => chat.status === "active")
+        .map((chat) => ({ chat, project })))
+      .sort((left, right) => compareChatsBySort(left.chat, right.chat, sort))
+      .slice(0, 10);
+  });
 
   const refresh = async () => {
     try {
@@ -131,6 +135,10 @@ export function AppDashboard(props: {
             <div class="app-dashboard-scope-toggle" role="group" aria-label="Recent chat scope">
               <button type="button" aria-pressed={chatScope() === "unscoped"} onClick={() => setChatScope("unscoped")}>Unscoped</button>
               <button type="button" aria-pressed={chatScope() === "all"} onClick={() => setChatScope("all")}>All</button>
+            </div>
+            <div class="app-dashboard-scope-toggle" role="group" aria-label="Recent chat sort">
+              <button type="button" aria-pressed={chatSort() === "latest"} onClick={() => saveChatSort("latest")}>Latest</button>
+              <button type="button" aria-pressed={chatSort() === "created"} onClick={() => saveChatSort("created")}>Created</button>
             </div>
             <button type="button" class="app-dashboard-chat-search" aria-label="Search Chats" title="Search Chats" onClick={() => props.onSearchChats(chatScope())}>
               <SearchIcon />

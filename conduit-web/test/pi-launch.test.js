@@ -42,6 +42,7 @@ test("Isolated Pi profile launch uses the pinned installation and isolated agent
   assert.equal(launch.command, "/opt/conduit/pi/0.84.1/pi");
   assert.equal(launch.cwd, path.resolve(project.path));
   assert.equal(launch.env.PI_CODING_AGENT_DIR, path.resolve("/var/lib/conduit/pi"));
+  assert.match(launch.env.PATH, /^.*working-files[/\\]\.venv[/\\]bin:/);
   assert.ok(launch.args.includes("--system-prompt"));
   assert.ok(launch.args.includes("--no-extensions"));
   assert.ok(launch.args.includes("--session"));
@@ -95,7 +96,7 @@ test("Host Pi launch uses host state, a draft model, and only the additive Condu
   });
   assert.equal(launch.command, "/home/user/.local/bin/pi");
   assert.equal("PI_CODING_AGENT_DIR" in launch.env, false);
-  assert.equal(launch.env.PATH, "/home/user/bin:/usr/bin");
+  assert.match(launch.env.PATH, /^.*working-files[/\\]\.venv[/\\]bin:\/home\/user\/bin:\/usr\/bin$/);
   assert.equal(launch.env.TOOL_TOKEN, "keep");
   assert.equal("CONDUIT_SECRET" in launch.env, false);
   assert.equal(launch.args.includes("--approve"), false);

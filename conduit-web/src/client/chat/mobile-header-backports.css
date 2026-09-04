@@ -6,8 +6,8 @@
 .chat-header-menu-context-values { overflow-wrap: anywhere; color: var(--foreground); font: 8.8px/1.5 ui-monospace, SFMono-Regular, Consolas, monospace; }
 
 
-/* Mobile retains v0.5.2 density. */
-@media (--conduit-mobile-layout) {
+/* Phone mode retains the larger touch density. */
+@media (--conduit-phone-layout) {
 .pwa-update-icon-active { animation: pwa-update-spin .8s linear infinite; }
 @keyframes pwa-update-spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .pwa-update-icon-active { animation: none; } }

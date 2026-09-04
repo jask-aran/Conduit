@@ -1,6 +1,6 @@
 import { createEffect, createMemo, createSignal, For, lazy, on, onCleanup, onMount, Show } from "solid-js";
 import * as KDialog from "@kobalte/core/dialog";
-import { ActivityIcon, BotIcon, KeyboardIcon, Mic2Icon, MonitorIcon, SearchIcon } from "lucide-solid";
+import { ActivityIcon, BotIcon, ChevronRightIcon, KeyboardIcon, Mic2Icon, MonitorIcon, SearchIcon } from "lucide-solid";
 import { toast } from "solid-sonner";
 import { Button, Field, FieldGroup, FieldLabel, Input, Spinner } from "@/components/primitives";
 import { api } from "../api/client";
@@ -934,15 +934,6 @@ export function Settings(props: {
         </div>
         <main class="settings-content" data-section={section()}>
           <header><div><h2>{label(section())}</h2><p>{sectionDescriptions[section()]}</p></div><Button variant="ghost" size="icon-sm" aria-label="Close" onClick={() => props.onOpenChange(false)}>×</Button></header>
-          <div class="settings-status-strip">
-            <Show when={section() === "models"}><BotIcon /><strong>{props.models.enabledModels().length} models</strong><span>{authProviders().filter((provider) => provider.auth.configured).length} accounts connected</span><Button variant="outline" size="sm" onClick={props.onOpenModelSelector}>Choose models</Button></Show>
-            <Show when={section() === "runtime"}><ActivityIcon /><strong>{runtime()?.liveCount || 0} warm</strong><span>{runtime()?.generatingCount || 0} generating</span><span>{props.installations.filter((item) => item.available).length} Pi installations ready</span></Show>
-            <Show when={section() === "ui"}><MonitorIcon /><strong>{Math.round(props.interfaceScale * 100)}% scale</strong><span>{TRANSCRIPT_WIDTH_OPTIONS.find((option) => option.value === props.transcriptWidth)?.label} transcript · {MARKDOWN_RENDERER_OPTIONS.find((option) => option.value === props.markdownRenderer)?.label} renderer</span></Show>
-            <Show when={section() === "shortcuts"}><KeyboardIcon /><strong>Keyboard first</strong><span>Search, edit, and restore bindings here.</span></Show>
-            <Show when={section() === "voice"}><Mic2Icon /><strong>{voiceServerSettings()?.mode && voiceServerSettings()?.mode !== "off" ? "Voice ready" : "Voice off"}</strong><span>{props.voiceSettings.inputDeviceId ? "Custom input selected" : "Default audio input"}</span></Show>
-            <Show when={section() === "search"}><SearchIcon /><strong>{searchSettings()?.providers.filter((provider) => provider.configured).length || 0} providers ready</strong><span>Native provider search remains automatic.</span></Show>
-            <Show when={section() === "workspaces" && workspaceProjects().find((workspace) => workspace.id === workspaceId())}>{(workspace) => <><BotIcon /><strong>{workspace().name}</strong><span>{workspaceDefaultLabel(workspace())}</span></>}</Show>
-          </div>
           <Show when={section() === "models"}><Show when={!props.templatesLoading} fallback={<div class="settings-loading"><Spinner /><span>Loading profiles…</span></div>}><section class="settings-section-block"><h3>Model defaults</h3><FieldGroup>
             <Field><FieldLabel for="default-profile">Default profile</FieldLabel><select id="default-profile" value={props.defaultTemplateId} onChange={(event) => void props.onDefaultTemplateChange(event.currentTarget.value)}><For each={props.templates.filter((item) => item.defaultable !== false)}>{(item) => <option value={item.id}>{item.label}</option>}</For></select></Field>
             <Field>
@@ -968,125 +959,109 @@ export function Settings(props: {
             </Field>
           </FieldGroup></section></Show></Show>
           <Show when={section() === "ui"}>
-           <FieldGroup class="settings-appearance-grid">
-             <details class="settings-disclosure settings-grid-wide">
-               <summary><span><MonitorIcon /><strong>Graphics performance</strong><small>Hardware acceleration recommended</small></span></summary>
-               <div class="settings-disclosure-content" role="note">For smooth animations, backdrop blur, and high-refresh-rate rendering, enable <em>Use graphics acceleration when available</em> in your browser settings, then relaunch the browser.</div>
-             </details>
-             <Field>
-               <label class="settings-toggle">
-                 <input type="checkbox" aria-label="Show renderer controls" checked={props.rendererControlsVisible} onChange={(event) => props.onRendererControlsVisibleChange(event.currentTarget.checked)} />
-                 <span><strong>Show renderer controls</strong><small>Show the Composer renderer, Transcript renderer, and Typewriter pacing dropdowns above the transcript.</small></span>
-               </label>
-             </Field>
-             <Field>
-                <FieldLabel for="markdown-renderer">Markdown renderer</FieldLabel>
-                <select id="markdown-renderer" aria-label="Markdown renderer" value={props.markdownRenderer} onChange={(event) => props.onMarkdownRendererChange(event.currentTarget.value as MarkdownRendererId)}>
-                  <For each={MARKDOWN_RENDERER_OPTIONS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
-                </select>
-                <small>{MARKDOWN_RENDERER_OPTIONS.find((option) => option.value === props.markdownRenderer)?.description}</small>
-              </Field>
-              <Field>
-                <FieldLabel for="sidebar-chat-limit">Chats shown in sidebar</FieldLabel>
-                <Input id="sidebar-chat-limit" type="number" min={MIN_SIDEBAR_CHAT_LIMIT} max={MAX_SIDEBAR_CHAT_LIMIT} step="1" value={props.sidebarChatLimit} onChange={(event) => props.onSidebarChatLimitChange(Number(event.currentTarget.value))} onBlur={(event) => props.onSidebarChatLimitChange(Number(event.currentTarget.value))} />
-                <small>Show this many recent chats in the Chats group. Use View all chats to search older chats.</small>
-              </Field>
-              <Field>
-                <FieldLabel for="interface-scale">Interface scale</FieldLabel>
-                <select id="interface-scale" aria-label="Interface scale" value={props.interfaceScale} onChange={(event) => props.onInterfaceScaleChange(parseUiScale(event.currentTarget.value))}>
-                  <For each={UI_SCALE_OPTIONS}>{(scale) => <option value={scale}>{Math.round(scale * 100)}%</option>}</For>
-                </select>
-                <small>Scale this browser without changing settings on other devices.</small>
-              </Field>
-              <Field>
-                <FieldLabel for="composer-surface-mode">Composer material</FieldLabel>
-                <select id="composer-surface-mode" aria-label="Composer material" value={props.composerSurface} onChange={(event) => props.onComposerSurfaceChange(event.currentTarget.value as ComposerSurfaceMode)}>
-                  <For each={COMPOSER_SURFACE_OPTIONS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
-                </select>
-                <small>{COMPOSER_SURFACE_OPTIONS.find((option) => option.value === props.composerSurface)?.description}</small>
-              </Field>
-              <Field>
-                <label class="settings-toggle">
-                  <input type="checkbox" aria-label="Ambient meteor field" checked={props.meteorField} onChange={(event) => props.onMeteorFieldChange(event.currentTarget.checked)} />
-                  <span><strong>Ambient meteor field</strong><small>Show the animated meteor field behind chat surfaces.</small></span>
-                </label>
-              </Field>
-              <Field>
-                <FieldLabel for="transcript-width">Transcript width</FieldLabel>
-                <select id="transcript-width" aria-label="Transcript width" value={props.transcriptWidth} onChange={(event) => props.onTranscriptWidthChange(event.currentTarget.value as TranscriptWidthMode)}>
-                  <For each={TRANSCRIPT_WIDTH_OPTIONS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
-                </select>
-                <small>How wide the reading column is. A wider transcript means less scrolling; the composer keeps its own width.</small>
-              </Field>
-              <Field>
-                <FieldLabel for="transcript-wide-blocks">Wide blocks</FieldLabel>
-                <select id="transcript-wide-blocks" aria-label="Wide blocks" value={props.transcriptWideBlocks} onChange={(event) => props.onTranscriptWideBlocksChange(event.currentTarget.value as TranscriptWideBlocksMode)}>
-                  <For each={TRANSCRIPT_WIDE_BLOCKS_OPTIONS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
-                </select>
-                <small>How far tables and code blocks may extend past the reading column when there is room.</small>
-              </Field>
-              <Field>
-                <FieldLabel for="code-block-width">Code block width</FieldLabel>
-                <select id="code-block-width" aria-label="Code block width" value={props.codeBlockWidth} onChange={(event) => props.onCodeBlockWidthChange(event.currentTarget.value as CodeBlockWidthMode)}>
-                  <For each={CODE_BLOCK_WIDTH_OPTIONS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
-                </select>
-                <small>Keep code in the reading column, or let it use the wide-block width alongside tables.</small>
-              </Field>
-              <Field>
-                <FieldLabel for="panel-motion">Panel drag</FieldLabel>
-                <select id="panel-motion" aria-label="Panel drag" value={props.panelMotion} onChange={(event) => props.onPanelMotionChange(event.currentTarget.value as PanelMotionMode)}>
-                  <For each={PANEL_MOTION_OPTIONS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
-                </select>
-                <small>How the transcript answers a workspace panel drag. Translate slides the column and commits its real width on release. Live reflow rewraps under the pointer, which a long answer full of formulas cannot yet do at full frame rate.</small>
-              </Field>
-              <Field>
-                <FieldLabel for="code-block-collapse">Collapse code blocks</FieldLabel>
-                <select id="code-block-collapse" aria-label="Collapse code blocks" value={props.codeBlockCollapse} onChange={(event) => props.onCodeBlockCollapseChange(event.currentTarget.value as CodeBlockCollapseMode)}>
-                  <For each={CODE_BLOCK_COLLAPSE_OPTIONS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
-                </select>
-                <small>Long code blocks start folded to a preview. A block still streaming always stays open.</small>
-              </Field>
-              <Field>
-                <FieldLabel for="code-block-collapse-lines">Collapse over</FieldLabel>
-                <select id="code-block-collapse-lines" aria-label="Collapse code blocks over" disabled={props.codeBlockCollapse === "off"} value={props.codeBlockCollapseLines} onChange={(event) => props.onCodeBlockCollapseLinesChange(Number(event.currentTarget.value))}>
-                  <For each={CODE_BLOCK_COLLAPSE_LINE_CHOICES}>{(lines) => <option value={lines}>{lines} lines</option>}</For>
-                </select>
-                <small>Blocks longer than this fold; shorter ones always render in full.</small>
-              </Field>
-              <Field>
-                <FieldLabel for="user-message-collapse">Collapse your messages</FieldLabel>
-                <select id="user-message-collapse" aria-label="Collapse your messages" value={props.userMessageCollapse} onChange={(event) => props.onUserMessageCollapseChange(event.currentTarget.value as UserMessageCollapseMode)}>
-                  <For each={USER_MESSAGE_COLLAPSE_OPTIONS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
-                </select>
-                <small>A long prompt folds to a preview so the answer stays on screen. Only messages that actually exceed the fold get a control.</small>
-              </Field>
-              <details class="settings-disclosure settings-grid-wide">
-                <summary><span><ActivityIcon /><strong>Composer context metrics</strong><small>{contextMetricPreset(props.contextMetrics) === "custom" ? "Custom selection" : CONTEXT_METRIC_PRESETS.find((preset) => preset.id === contextMetricPreset(props.contextMetrics))?.label}</small></span></summary>
-                <div class="settings-disclosure-content">
-                <Field>
-                  <FieldLabel for="context-metric-preset">Preset</FieldLabel>
-                  <select id="context-metric-preset" aria-label="Composer context metric preset" value={contextMetricPreset(props.contextMetrics)} onChange={(event) => {
-                    const value = event.currentTarget.value as ContextMetricPresetId | "custom";
-                    if (value !== "custom") props.onContextMetricsChange(metricsForContextMetricPreset(value));
-                  }}>
-                    <option value="custom">Custom</option>
-                    <For each={CONTEXT_METRIC_PRESETS}>{(preset) => <option value={preset.id}>{preset.label}</option>}</For>
-                  </select>
-                  <small><For each={CONTEXT_METRIC_PRESETS.filter((preset) => preset.id === contextMetricPreset(props.contextMetrics))}>{(preset) => preset.description}</For></small>
-                </Field>
-                <div class="flex flex-col gap-2" role="group" aria-label="Composer context metrics">
-                  <For each={CONTEXT_METRIC_GROUPS}>{(group) => <fieldset class="flex flex-col gap-2">
-                    <legend class="text-sm font-medium">{group.label}</legend>
-                    <For each={CONTEXT_METRIC_OPTIONS.filter((option) => option.group === group.id)}>{(option) => <label class="flex items-start gap-2 text-sm">
-                      <input type="checkbox" aria-label={option.label} checked={props.contextMetrics.includes(option.id)} onChange={(event) => toggleContextMetric(option.id, event.currentTarget.checked)} />
-                      <span class="flex flex-col"><strong>{option.label}</strong><small>{option.description}</small></span>
-                    </label>}</For>
-                  </fieldset>}</For>
-                </div>
-                <small>Choose a preset or adjust individual measures. Manual changes use Custom. The line keeps canonical order and wraps when needed.</small>
+            <div class="settings-stack">
+              <details class="settings-tile" open>
+                <summary><span><strong>Interface</strong><small>Scale, chrome, and composer material for this browser.</small></span><ChevronRightIcon class="settings-chevron" aria-hidden="true" /></summary>
+                <div class="settings-rows">
+                  <label class="settings-row" for="interface-scale"><span>Scale</span>
+                    <select id="interface-scale" aria-label="Interface scale" value={props.interfaceScale} onChange={(event) => props.onInterfaceScaleChange(parseUiScale(event.currentTarget.value))}>
+                      <For each={UI_SCALE_OPTIONS}>{(scale) => <option value={scale}>{Math.round(scale * 100)}%</option>}</For>
+                    </select>
+                  </label>
+                  <label class="settings-row" for="sidebar-chat-limit"><span>Sidebar chats</span>
+                    <Input id="sidebar-chat-limit" type="number" min={MIN_SIDEBAR_CHAT_LIMIT} max={MAX_SIDEBAR_CHAT_LIMIT} step="1" value={props.sidebarChatLimit} onChange={(event) => props.onSidebarChatLimitChange(Number(event.currentTarget.value))} onBlur={(event) => props.onSidebarChatLimitChange(Number(event.currentTarget.value))} />
+                  </label>
+                  <label class="settings-row" for="composer-surface-mode"><span>Composer</span>
+                    <select id="composer-surface-mode" aria-label="Composer material" title={COMPOSER_SURFACE_OPTIONS.find((option) => option.value === props.composerSurface)?.description} value={props.composerSurface} onChange={(event) => props.onComposerSurfaceChange(event.currentTarget.value as ComposerSurfaceMode)}>
+                      <For each={COMPOSER_SURFACE_OPTIONS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
+                    </select>
+                  </label>
+                  <label class="settings-row" for="markdown-renderer"><span>Markdown</span>
+                    <select id="markdown-renderer" aria-label="Markdown renderer" title={MARKDOWN_RENDERER_OPTIONS.find((option) => option.value === props.markdownRenderer)?.description} value={props.markdownRenderer} onChange={(event) => props.onMarkdownRendererChange(event.currentTarget.value as MarkdownRendererId)}>
+                      <For each={MARKDOWN_RENDERER_OPTIONS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
+                    </select>
+                  </label>
+                  <label class="settings-row" for="renderer-controls"><span>Renderer probes</span>
+                    <input id="renderer-controls" type="checkbox" aria-label="Show renderer controls" checked={props.rendererControlsVisible} onChange={(event) => props.onRendererControlsVisibleChange(event.currentTarget.checked)} />
+                  </label>
+                  <label class="settings-row" for="meteor-field"><span>Meteor field</span>
+                    <input id="meteor-field" type="checkbox" aria-label="Ambient meteor field" checked={props.meteorField} onChange={(event) => props.onMeteorFieldChange(event.currentTarget.checked)} />
+                  </label>
                 </div>
               </details>
-            </FieldGroup>
+              <details class="settings-tile" open>
+                <summary><span><strong>Reading</strong><small>Transcript column, wide blocks, and panel drag.</small></span><ChevronRightIcon class="settings-chevron" aria-hidden="true" /></summary>
+                <div class="settings-rows">
+                  <label class="settings-row" for="transcript-width"><span>Transcript width</span>
+                    <select id="transcript-width" aria-label="Transcript width" value={props.transcriptWidth} onChange={(event) => props.onTranscriptWidthChange(event.currentTarget.value as TranscriptWidthMode)}>
+                      <For each={TRANSCRIPT_WIDTH_OPTIONS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
+                    </select>
+                  </label>
+                  <label class="settings-row" for="transcript-wide-blocks"><span>Wide blocks</span>
+                    <select id="transcript-wide-blocks" aria-label="Wide blocks" value={props.transcriptWideBlocks} onChange={(event) => props.onTranscriptWideBlocksChange(event.currentTarget.value as TranscriptWideBlocksMode)}>
+                      <For each={TRANSCRIPT_WIDE_BLOCKS_OPTIONS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
+                    </select>
+                  </label>
+                  <label class="settings-row" for="code-block-width"><span>Code width</span>
+                    <select id="code-block-width" aria-label="Code block width" value={props.codeBlockWidth} onChange={(event) => props.onCodeBlockWidthChange(event.currentTarget.value as CodeBlockWidthMode)}>
+                      <For each={CODE_BLOCK_WIDTH_OPTIONS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
+                    </select>
+                  </label>
+                  <label class="settings-row" for="panel-motion"><span>Panel drag</span>
+                    <select id="panel-motion" aria-label="Panel drag" title={PANEL_MOTION_OPTIONS.find((option) => option.value === props.panelMotion)?.label} value={props.panelMotion} onChange={(event) => props.onPanelMotionChange(event.currentTarget.value as PanelMotionMode)}>
+                      <For each={PANEL_MOTION_OPTIONS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
+                    </select>
+                  </label>
+                </div>
+              </details>
+              <details class="settings-tile" open>
+                <summary><span><strong>Collapse</strong><small>Fold long code and prompts so the answer stays on screen.</small></span><ChevronRightIcon class="settings-chevron" aria-hidden="true" /></summary>
+                <div class="settings-rows">
+                  <label class="settings-row" for="code-block-collapse"><span>Code blocks</span>
+                    <select id="code-block-collapse" aria-label="Collapse code blocks" value={props.codeBlockCollapse} onChange={(event) => props.onCodeBlockCollapseChange(event.currentTarget.value as CodeBlockCollapseMode)}>
+                      <For each={CODE_BLOCK_COLLAPSE_OPTIONS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
+                    </select>
+                  </label>
+                  <label class="settings-row" for="code-block-collapse-lines"><span>Fold over</span>
+                    <select id="code-block-collapse-lines" aria-label="Collapse code blocks over" disabled={props.codeBlockCollapse === "off"} value={props.codeBlockCollapseLines} onChange={(event) => props.onCodeBlockCollapseLinesChange(Number(event.currentTarget.value))}>
+                      <For each={CODE_BLOCK_COLLAPSE_LINE_CHOICES}>{(lines) => <option value={lines}>{lines} lines</option>}</For>
+                    </select>
+                  </label>
+                  <label class="settings-row" for="user-message-collapse"><span>Your messages</span>
+                    <select id="user-message-collapse" aria-label="Collapse your messages" value={props.userMessageCollapse} onChange={(event) => props.onUserMessageCollapseChange(event.currentTarget.value as UserMessageCollapseMode)}>
+                      <For each={USER_MESSAGE_COLLAPSE_OPTIONS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
+                    </select>
+                  </label>
+                </div>
+              </details>
+              <details class="settings-tile">
+                <summary><span><MonitorIcon /><strong>Graphics</strong><small>Hardware acceleration recommended</small></span><ChevronRightIcon class="settings-chevron" aria-hidden="true" /></summary>
+                <div class="settings-disclosure-content" role="note">For smooth animations, backdrop blur, and high-refresh-rate rendering, enable <em>Use graphics acceleration when available</em> in your browser settings, then relaunch the browser.</div>
+              </details>
+              <details class="settings-tile">
+                <summary><span><ActivityIcon /><strong>Context metrics</strong><small>{contextMetricPreset(props.contextMetrics) === "custom" ? "Custom selection" : CONTEXT_METRIC_PRESETS.find((preset) => preset.id === contextMetricPreset(props.contextMetrics))?.label}</small></span><ChevronRightIcon class="settings-chevron" aria-hidden="true" /></summary>
+                <div class="settings-disclosure-content">
+                  <label class="settings-row" for="context-metric-preset"><span>Preset</span>
+                    <select id="context-metric-preset" aria-label="Composer context metric preset" value={contextMetricPreset(props.contextMetrics)} onChange={(event) => {
+                      const value = event.currentTarget.value as ContextMetricPresetId | "custom";
+                      if (value !== "custom") props.onContextMetricsChange(metricsForContextMetricPreset(value));
+                    }}>
+                      <option value="custom">Custom</option>
+                      <For each={CONTEXT_METRIC_PRESETS}>{(preset) => <option value={preset.id}>{preset.label}</option>}</For>
+                    </select>
+                  </label>
+                  <div class="settings-metric-groups" role="group" aria-label="Composer context metrics">
+                    <For each={CONTEXT_METRIC_GROUPS}>{(group) => <fieldset>
+                      <legend>{group.label}</legend>
+                      <For each={CONTEXT_METRIC_OPTIONS.filter((option) => option.group === group.id)}>{(option) => <label class="settings-row" for={`context-metric-${option.id}`}>
+                        <span>{option.label}</span>
+                        <input id={`context-metric-${option.id}`} type="checkbox" aria-label={option.label} checked={props.contextMetrics.includes(option.id)} onChange={(event) => toggleContextMetric(option.id, event.currentTarget.checked)} />
+                      </label>}</For>
+                    </fieldset>}</For>
+                  </div>
+                </div>
+              </details>
+            </div>
           </Show>
           <Show when={section() === "shortcuts"}><ShortcutsSettings manager={props.shortcuts} /></Show>
           <Show when={section() === "runtime"}>
@@ -1099,7 +1074,7 @@ export function Settings(props: {
                 <Button variant="outline" disabled={!runtimeDirty() || runtimeSaving()} onClick={() => void saveRuntime()}>{runtimeSaving() ? <Spinner /> : null}Save runtime settings</Button>
               </FieldGroup>
             </Show>
-            <details class="settings-disclosure"><summary><span><ActivityIcon /><strong>Pi installations</strong><small>{props.installations.filter((item) => item.available).length} ready on this server</small></span></summary><Show when={!props.installationsLoading} fallback={<div class="settings-loading"><Spinner /><span>Loading Pi installations…</span></div>}><div class="installations"><For each={props.installations}>{(item) => <article><h3>{item.label}</h3><p>{item.available ? item.version ? `Pi ${item.version}` : "Available" : item.reason || (item as Installation & { error?: string }).error || "Unavailable"}</p></article>}</For><Button variant="outline" disabled={detecting()} onClick={() => void redetect()}>{detecting() ? <Spinner /> : null}Re-detect Host Pi</Button></div></Show></details>
+            <details class="settings-disclosure"><summary><span><ActivityIcon /><strong>Pi installations</strong><small>{props.installations.filter((item) => item.available).length} ready on this server</small></span><ChevronRightIcon class="settings-chevron" aria-hidden="true" /></summary><Show when={!props.installationsLoading} fallback={<div class="settings-loading"><Spinner /><span>Loading Pi installations…</span></div>}><div class="installations"><For each={props.installations}>{(item) => <article><h3>{item.label}</h3><p>{item.available ? item.version ? `Pi ${item.version}` : "Available" : item.reason || (item as Installation & { error?: string }).error || "Unavailable"}</p></article>}</For><Button variant="outline" disabled={detecting()} onClick={() => void redetect()}>{detecting() ? <Spinner /> : null}Re-detect Host Pi</Button></div></Show></details>
           </Show>
           <Show when={section() === "workspaces"}>
             <Show when={!props.templatesLoading && !props.installationsLoading} fallback={<div class="settings-loading"><Spinner /><span>Loading workspace settings…</span></div>}><Show when={workspaceProjects().find((workspace) => workspace.id === workspaceId())} fallback={<p>This workspace is not available.</p>}>{(workspace) => <div class="workspace-settings-card" data-current="true"><h3>{workspace().name}</h3><p>{workspace().path || workspace().externalPath}</p><p>Override: {workspaceDefaultLabel(workspace()).startsWith("Inherit") ? "None" : workspaceDefaultLabel(workspace())}</p>
@@ -1146,7 +1121,7 @@ export function Settings(props: {
                 />}</Show>
                 <Show when={voiceServerSettings()!.mode === "remote"}>
                   <details class="settings-disclosure voice-backend-disclosure">
-                    <summary><span><Mic2Icon /><strong>Cloud transcription</strong><small>{selectedVoiceProvider()?.label} · {selectedVoiceProvider()?.models.find((model) => model.id === voiceServerSettings()!.model)?.label || voiceServerSettings()!.model}</small></span></summary>
+                    <summary><span><Mic2Icon /><strong>Cloud transcription</strong><small>{selectedVoiceProvider()?.label} · {selectedVoiceProvider()?.models.find((model) => model.id === voiceServerSettings()!.model)?.label || voiceServerSettings()!.model}</small></span><ChevronRightIcon class="settings-chevron" aria-hidden="true" /></summary>
                     <div class="voice-card">
                     <FieldGroup>
                       <Field><FieldLabel for="voice-provider">Provider</FieldLabel><select id="voice-provider" disabled={voiceBusy()} value={voiceServerSettings()!.provider} onChange={(event) => {
@@ -1177,7 +1152,7 @@ export function Settings(props: {
                 </Show>
 
                 <details class="voice-advanced" id="voice-advanced">
-                  <summary id="voice-advanced-summary"><span>Advanced</span><small>Input and capture behaviour</small></summary>
+                  <summary id="voice-advanced-summary"><span>Advanced</span><small>Input and capture behaviour</small><ChevronRightIcon class="settings-chevron" aria-hidden="true" /></summary>
                   <FieldGroup>
                   <div class="voice-advanced-heading"><h3>Input</h3><p>These controls affect capture and draft delivery. They do not change the selected runtime.</p></div>
                   <div class="voice-input-test">
@@ -1249,12 +1224,12 @@ export function Settings(props: {
                   </div>
                 </FieldGroup>
                 <Show when={searchError()}><p role="alert" class="settings-inline-error">{searchError()}</p></Show>
-                <details class="settings-disclosure"><summary><span><SearchIcon /><strong>More providers</strong><small>{searchSettings()!.providers.filter((provider) => !provider.enabled).length} planned integrations</small></span></summary><div class="search-provider-list"><For each={searchSettings()!.providers.filter((provider) => !provider.enabled)}>{(provider) => <article class="search-provider-card" data-disabled="true"><div><h3>{provider.label}<span>Coming later</span></h3><p>{provider.description}</p><a href={provider.docsUrl} target="_blank" rel="noreferrer">Provider documentation</a></div><Input type="password" disabled placeholder="Configuration not enabled yet" aria-label={`${provider.label} API key`} /></article>}</For></div></details>
+                <details class="settings-disclosure"><summary><span><SearchIcon /><strong>More providers</strong><small>{searchSettings()!.providers.filter((provider) => !provider.enabled).length} planned integrations</small></span><ChevronRightIcon class="settings-chevron" aria-hidden="true" /></summary><div class="search-provider-list"><For each={searchSettings()!.providers.filter((provider) => !provider.enabled)}>{(provider) => <article class="search-provider-card" data-disabled="true"><div><h3>{provider.label}<span>Coming later</span></h3><p>{provider.description}</p><a href={provider.docsUrl} target="_blank" rel="noreferrer">Provider documentation</a></div><Input type="password" disabled placeholder="Configuration not enabled yet" aria-label={`${provider.label} API key`} /></article>}</For></div></details>
               </div>
             </Show>
           </Show>
           <Show when={section() === "models"}>
-            <details class="settings-disclosure"><summary><span><BotIcon /><strong>Provider accounts</strong><small>{authProviders().filter((provider) => provider.auth.configured).length} connected</small></span></summary><div class="pi-auth-panel">
+            <details class="settings-disclosure"><summary><span><BotIcon /><strong>Provider accounts</strong><small>{authProviders().filter((provider) => provider.auth.configured).length} connected</small></span><ChevronRightIcon class="settings-chevron" aria-hidden="true" /></summary><div class="pi-auth-panel">
               <p>Credentials are stored only in the Isolated Pi runtime. Host Pi accounts and environment credentials are never exposed or changed here.</p>
               <Show when={authUnavailable()}><p role="alert" class="settings-inline-error">Set a Conduit password with <code>node scripts/conduit-auth.mjs set-password</code>, then sign in to manage Pi credentials here.</p></Show>
               <Show when={authError() && !authUnavailable()}><p role="alert" class="settings-inline-error">{authError()}</p></Show>

@@ -5,7 +5,8 @@
    composer overlays its bottom edge without becoming part of the scroll or
    panel-motion subtree. */
 .work-area-conversation { position: relative; }
-.chat-main:has(.work-area-conversation[data-shortcut-scope="chat"]:focus-within) .chat-header-title strong { color: var(--shortcut-focus); }
+.chat-main[data-shortcut-scope="chat"] { outline: none; }
+.chat-main[data-shortcut-scope="chat"]:focus-within .chat-header-title strong { color: var(--shortcut-focus); }
 .transcript { position: relative; z-index: 1; }
 .chat-main:not(.chat-main-empty) .thread { padding-bottom: 147.2px; }
 .chat-main:not(.chat-main-empty) .composer-stack {
@@ -35,7 +36,7 @@
 .composer textarea,
 .composer-actions { position: relative; z-index: 2; }
 
-@media (--conduit-mobile-layout) {
+@media (--conduit-phone-layout) {
   .chat-main:not(.chat-main-empty) .thread { padding-bottom: 128px; }
   .composer-stack,
   .chat-main-empty .composer-stack { background: transparent; }
@@ -46,8 +47,8 @@
 }
 
 
-/* Mobile retains v0.5.2 density. */
-@media (--conduit-mobile-layout) {
+/* Phone mode retains the larger touch density. */
+@media (--conduit-phone-layout) {
 
 /* Performance rebuild: keep the composer as a later-painted sibling of the
    transcript. The transcript remains the v0.4.7 layout/paint island while the
@@ -83,7 +84,7 @@
 .composer textarea,
 .composer-actions { position: relative; z-index: 2; }
 
-@media (--conduit-mobile-layout) {
+@media (--conduit-phone-layout) {
   .chat-main:not(.chat-main-empty) .thread { padding-bottom: 160px; }
   .composer-stack,
   .chat-main-empty .composer-stack { background: transparent; }

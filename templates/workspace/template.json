@@ -1,6 +1,6 @@
 {
   "id": "workspace",
-  "version": "5",
+  "version": "6",
   "label": "Coding",
   "description": "Development Pi with filesystem, shell, Git/GitHub, and web research skills.",
   "posture": "read / edit / shell / web search / source fetch",

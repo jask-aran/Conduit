@@ -63,7 +63,7 @@ function sessionMetadata(record: Pty) {
 type StandaloneTerminalControls = { onOpenConduit: () => void };
 type KeyboardLockNavigator = Navigator & { keyboard?: { lock?: (codes?: string[]) => Promise<void>; unlock?: () => void } };
 
-export function TerminalPane(props: { projectId: string; terminalId?: string; active?: boolean; autoStart?: boolean; standaloneControls?: StandaloneTerminalControls }) {
+export function TerminalPane(props: { projectId: string; terminalId?: string; active?: boolean; autoStart?: boolean; focusRequest?: number; standaloneControls?: StandaloneTerminalControls }) {
   const [pty, setPty] = createSignal<Pty | null>(null);
   const [sessions, setSessions] = createSignal<Pty[]>([]);
   const [error, setError] = createSignal("");
@@ -779,6 +779,11 @@ export function TerminalPane(props: { projectId: string; terminalId?: string; ac
         if (record) return attachSession(record);
       })
       .catch((cause) => setError((cause as Error).message));
+  }));
+
+  createEffect(on(() => props.focusRequest, (request, previous) => {
+    if (!mounted || !request || request === previous || props.active === false) return;
+    queueMicrotask(focusActiveTerminal);
   }));
 
   createEffect(() => {

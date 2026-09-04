@@ -40,6 +40,27 @@ test("chat search includes every catalogue chat, including the selected chat", (
   assert.equal(chats[0]?.chat?.id, "session_0");
 });
 
+test("chat search sorts by latest activity by default and by created when asked", () => {
+  const projects = [{
+    id: "project_chat", slug: "chat", name: "Chats",
+    sessions: [{
+      id: "older-active", projectId: "project_chat", status: "active", title: "Older",
+      createdAt: "2026-01-01T00:00:00.000Z", updatedAt: "2026-08-01T00:00:00.000Z",
+    }, {
+      id: "newer-quiet", projectId: "project_chat", status: "active", title: "Newer",
+      createdAt: "2026-07-01T00:00:00.000Z", updatedAt: "2026-07-01T00:00:00.000Z",
+    }],
+  }];
+  const latest = resolvePaletteCommands(context(projects), { page: "chat-search" })
+    .filter((command) => command.entity === "chat")
+    .map((command) => command.chat?.id);
+  const created = resolvePaletteCommands({ ...context(projects), chatSort: "created" }, { page: "chat-search" })
+    .filter((command) => command.entity === "chat")
+    .map((command) => command.chat?.id);
+  assert.deepEqual(latest, ["older-active", "newer-quiet"]);
+  assert.deepEqual(created, ["newer-quiet", "older-active"]);
+});
+
 test("Go to remains an alias for the first-class chat search source", () => {
   const projects = [{
     id: "project_chat", slug: "chat", name: "Chats",

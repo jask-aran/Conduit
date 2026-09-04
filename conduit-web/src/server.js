@@ -678,12 +678,13 @@ async function shutdown(signal) {
   server.closeIdleConnections?.();
   server.closeAllConnections?.();
   const stoppedProcesses = await manager.shutdown();
-  await terminals.stopAll();
+  const stoppedTerminals = await terminals.stopAll();
   await voiceModel.stop();
   await closed;
   const archiveResult = await archiveDrain;
   console.log(JSON.stringify({ type: "conduit.voice-archive-drain", ...archiveResult }));
   console.log(`Conduit stopped ${stoppedProcesses} Pi process${stoppedProcesses === 1 ? "" : "es"}`);
+  console.log(`Conduit stopped ${stoppedTerminals} terminal session${stoppedTerminals === 1 ? "" : "s"}`);
 }
 
 for (const signal of ["SIGTERM", "SIGINT"]) {

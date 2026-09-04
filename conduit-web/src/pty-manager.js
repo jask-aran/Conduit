@@ -479,15 +479,17 @@ export class PtyManager extends EventEmitter {
 
   async stopAll() {
     this.stopping = true;
+    const runningCount = [...this.records.values()].filter((item) => item.status === "running").length;
     for (const id of [...this.attachments.keys()]) this.killAttachment(id);
     try {
-      if (this.tmuxReady || [...this.records.values()].some((item) => item.status === "running")) {
+      if (this.tmuxReady || runningCount > 0) {
         await this.ensureTmux();
         await this.invokeTmux(["kill-server"], { tolerateMissingServer: true });
       }
     } catch (error) {
       if (error?.code !== "pty_tmux_unavailable" && error?.code !== "pty_tmux_version") throw error;
     }
+    return runningCount;
   }
 
   persist() {

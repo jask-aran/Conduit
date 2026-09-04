@@ -1,5 +1,8 @@
 import fs from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 function requireString(value, name) {
   if (typeof value !== "string" || !value.trim()) throw new Error(`Pi template requires ${name}`);
@@ -132,13 +135,31 @@ export function loadPiModelPatterns(agentDir, fallbackModels = []) {
   }
 }
 
-export function buildPiEnvironment(agentDir, env = process.env) {
+export function buildManagedToolEnvironment(
+  env = process.env,
+  { root = repositoryRoot, delimiter = path.delimiter, platform = process.platform } = {},
+) {
+  const runtimeEnv = { ...env };
+  const pathKey = Object.keys(runtimeEnv).find((key) => key.toLowerCase() === "path") || "PATH";
+  const managedBin = path.join(
+    path.resolve(root),
+    "working-files",
+    ".venv",
+    platform === "win32" ? "Scripts" : "bin",
+  );
+  runtimeEnv[pathKey] = runtimeEnv[pathKey]
+    ? `${managedBin}${delimiter}${runtimeEnv[pathKey]}`
+    : managedBin;
+  return runtimeEnv;
+}
+
+export function buildPiEnvironment(agentDir, env = process.env, options = {}) {
   const resolvedAgentDir = path.resolve(requireString(agentDir, "agent directory"));
   const { PI_CODING_AGENT_SESSION_DIR: _sessionDir, ...runtimeEnv } = env;
-  return {
+  return buildManagedToolEnvironment({
     ...runtimeEnv,
     PI_CODING_AGENT_DIR: resolvedAgentDir,
-  };
+  }, options);
 }
 
 export function resolvePiProcess(command, args = [], { platform = process.platform, nodePath = process.execPath } = {}) {

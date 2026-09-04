@@ -84,6 +84,16 @@ by Brave, and other models use Brave. The derived routing file lives under
 in the canonical `data/pi` directory. Conduit sets the extension workflow to
 `none` so research does not open Pi's curator UI.
 
+Assistant, Coding, and Host Pi sessions receive the `bin` directory from the
+shared uv environment under `working-files/.venv` at the front of `PATH`.
+Agents use the normal `python` command in the session working directory.
+Conduit builds the environment during setup or image creation. It is shared by
+all Workspaces and does not create files inside them.
+
+Non-Docker setup installs pinned uv and its managed Python under
+`data/toolchains/`; neither tool must exist on the host. The production image
+copies the same uv release into the image and installs Python from Debian.
+
 The Code Mode profile explicitly loads the pinned `pi-code-tool` extension. Its
 Python workspace mount is read-only, and its bridged `bash`, `edit`, and `write`
 calls retain the package's approval gate. Conduit RPC has no native approval

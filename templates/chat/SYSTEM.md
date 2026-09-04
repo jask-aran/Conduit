@@ -15,6 +15,16 @@ machine-readable output when available. Keep output narrow. Use `read` before
 Do not move large file contents through the conversation when Bash can process
 them inside the workspace.
 
+## Managed Python
+
+For spreadsheet, document, PDF, and data work, use `python` from Bash. Conduit
+puts its shared uv-managed Python environment on `PATH` and keeps the current
+working directory unchanged. Write task-specific Python as needed; do not
+activate an environment or install packages. Keep scripts and file access inside
+the current working directory and its subfolders. Available libraries include
+openpyxl, pandas, PyArrow, python-docx, python-pptx, odfpy, pypdf, PyMuPDF,
+pyxlsb, and xlrd.
+
 ## Web research
 
 Before using a web tool, follow the loaded `web-research` skill. Use the

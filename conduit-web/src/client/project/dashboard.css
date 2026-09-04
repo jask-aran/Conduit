@@ -375,6 +375,11 @@
 .workspace-dashboard-section-heading > button:hover { color: var(--foreground); }
 .workspace-dashboard-section-heading > button:focus-visible { outline: 2px solid var(--ring); outline-offset: 1px; }
 .workspace-dashboard-section-heading > button svg { width: 11px; height: 11px; }
+.workspace-dashboard-chat-actions { display: flex; flex: none; align-items: center; gap: 6px; }
+.workspace-dashboard-scope-toggle { display: flex; flex: none; align-items: center; gap: 2px; border: 1px solid var(--border); border-radius: 7px; padding: 2px; }
+.workspace-dashboard-scope-toggle button { min-height: 20px; border: 0; border-radius: 5px; background: transparent; padding: 2px 6px; color: var(--muted-foreground); font-size: 8.5px; }
+.workspace-dashboard-scope-toggle button[aria-pressed="true"] { background: var(--accent); color: var(--foreground); }
+.workspace-dashboard-scope-toggle button:focus-visible { outline: 2px solid var(--ring); outline-offset: 1px; }
 .workspace-dashboard-search { display: grid !important; width: 26px; height: 26px; place-items: center; border: 1px solid var(--border) !important; border-radius: 7px; }
 .workspace-dashboard-empty { display: flex; min-height: 74px; align-items: center; justify-content: center; gap: 7px; color: var(--muted-foreground); font-size: 9.5px; }
 .workspace-dashboard .project-chat-list { border: 0; border-radius: 0; }

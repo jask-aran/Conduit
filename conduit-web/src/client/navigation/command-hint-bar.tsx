@@ -1,5 +1,6 @@
 import { createMemo, createSignal, For, onCleanup, Show } from "solid-js";
 import { COMMAND_IDS, getCommandDefinition } from "../commands/command-registry";
+import { saveChatSort, useChatSort } from "../preferences/chat-sort";
 import type { ShortcutManager } from "../shortcuts/shortcut-manager";
 import {
   formatShortcutBinding, formatShortcutStroke, sameStroke,
@@ -51,6 +52,7 @@ export function CommandHintBar(props: {
   onDeleteSelected?: () => void;
   onMoveSelected?: () => void;
 }) {
+  const chatSort = useChatSort();
   const [shortcutRevision, setShortcutRevision] = createSignal(0);
   onCleanup(props.shortcuts.subscribe(() => setShortcutRevision((value) => value + 1)));
 
@@ -138,6 +140,12 @@ export function CommandHintBar(props: {
   };
 
   return <div class="command-hint-bar" role="note" aria-label="Keyboard shortcuts" data-mode={props.mode}>
+    <Show when={props.context === "chat" && props.mode === "browse"}>
+      <div class="command-sort-toggle" role="group" aria-label="Chat sort">
+        <button type="button" aria-pressed={chatSort() === "latest"} onClick={() => saveChatSort("latest")}>Latest</button>
+        <button type="button" aria-pressed={chatSort() === "created"} onClick={() => saveChatSort("created")}>Created</button>
+      </div>
+    </Show>
     <div class="command-hint-items command-hint-primary">
       <For each={primary()}>{(hint) => <HintItem hint={hint} onClick={hintAction(hint)} />}</For>
     </div>

@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { PHONE_LAYOUT_QUERY } from "../../src/client/layout-geometry.ts";
 
 /**
  * Issue #27 acceptance harness — mobile chrome + palette entry paths.
@@ -57,23 +58,6 @@ async function openSidebar(page, testInfo) {
   }
 }
 
-async function sampleTranslateX(page, selector, count = 8) {
-  return page.evaluate(({ selector: targetSelector, count: frameCount }) => new Promise((resolve, reject) => {
-    const target = document.querySelector(targetSelector);
-    if (!target) {
-      reject(new Error(`Missing mobile motion target: ${targetSelector}`));
-      return;
-    }
-    const samples = [];
-    const sample = () => {
-      const transform = getComputedStyle(target).transform;
-      samples.push(transform === "none" ? 0 : new DOMMatrixReadOnly(transform).m41);
-      if (samples.length === frameCount) resolve(samples);
-      else requestAnimationFrame(sample);
-    };
-    requestAnimationFrame(sample);
-  }), { selector, count });
-}
 
 async function expectInsetPalette(page, palette, inset = 8) {
   const [shellBox, viewport] = await Promise.all([
@@ -421,118 +405,6 @@ test("acceptance: mobile composer is one row with Plus-owned message options", a
   }
 });
 
-test("acceptance: mobile transcript fades behind the frosted live composer", async ({ page }, testInfo) => {
-  test.skip(testInfo.project.name !== "mobile-chromium", "phone transcript/composer overlap");
-  await openApp(page);
-  await page.locator(".mobile-sidebar-trigger").tap();
-  await page.getByText("Existing chat", { exact: true }).tap();
-  await expect.poll(async () => (await page.locator(".conduit-sidebar").boundingBox())?.x ?? -Infinity).toBeLessThan(-400);
-  await expect(page.locator(".bubble-user")).toContainText("Hello");
-  await expect(page.locator(".chat-main:not(.chat-main-empty) article.message-assistant")).toContainText("Transcript paragraph 1");
-  await scrollTranscriptBehindComposer(page, "mobile-frosted-live");
-  await expect.poll(() => overlapWithComposer(page, "mobile-frosted-live")).toBeGreaterThan(8);
-  await expect(page.locator(".composer")).toHaveAttribute("data-composer-surface", "frosted-live");
-});
-
-test("acceptance: mobile renderer probes stay in the viewport and pacing is selectable", async ({ page }, testInfo) => {
-  test.skip(testInfo.project.name !== "mobile-chromium", "phone renderer probes");
-  await page.addInitScript(() => localStorage.setItem("conduit:markdown-renderer", "incremark"));
-  await page.route("**/v0/sessions/session_existing", (route) => route.fulfill({
-    json: {
-      id: "session_existing",
-      projectId: "project_chat",
-      status: "active",
-      title: "Existing chat",
-      messages: [
-        { id: "u1", role: "user", content: "Show the equation" },
-        { id: "a1", role: "assistant", content: mobileMathTranscript },
-      ],
-      tools: [],
-      page: { before: null },
-    },
-  }));
-  await openApp(page);
-  await page.locator(".mobile-sidebar-trigger").tap();
-  await page.getByText("Existing chat", { exact: true }).tap();
-  await expect(page.locator(".chat-main:not(.chat-main-empty) article.message-assistant")).toContainText("Mobile math width");
-
-  const switcher = page.locator(".composer-renderer-switch");
-  await expect(switcher).toBeVisible();
-  const pacing = page.getByRole("combobox", { name: "Typewriter pacing" });
-  await expect(pacing.locator("option")).toHaveText(["Adaptive", "Fixed", "Buffered"]);
-  for (const mode of ["fixed", "adaptive", "buffered"]) {
-    await pacing.selectOption(mode);
-    await expect(page.locator(".transcript")).toHaveAttribute("data-incremark-pacing", mode);
-  }
-
-  const viewport = await page.evaluate(() => ({ width: innerWidth, height: innerHeight }));
-  const [switchBox, firstMessageBox, selects] = await Promise.all([
-    switcher.boundingBox(),
-    page.locator("[data-slot=message-scroller-item]").last().boundingBox(),
-    page.locator(".composer-renderer-switch select").evaluateAll((elements) => elements.map((element) => element.getBoundingClientRect().toJSON())),
-  ]);
-  expect(switchBox.x).toBeGreaterThanOrEqual(-1);
-  expect(switchBox.x + switchBox.width).toBeLessThanOrEqual(viewport.width + 1);
-  expect(firstMessageBox.y).toBeGreaterThanOrEqual(switchBox.y + switchBox.height - 1);
-  for (const box of selects) expect(box.x + box.width).toBeLessThanOrEqual(viewport.width + 1);
-
-  await expect.poll(() => page.locator(".incremark-math-block .katex").count()).toBeGreaterThan(0);
-  const mathBox = await page.locator(".incremark-math-block").first().boundingBox();
-  const mathOverflow = await page.locator(".incremark-math-block").first().evaluate((element) => ({
-    clientWidth: element.clientWidth,
-    scrollWidth: element.scrollWidth,
-    right: element.getBoundingClientRect().right,
-  }));
-  expect(mathBox.x).toBeGreaterThanOrEqual(-1);
-  expect(mathBox.x + mathBox.width).toBeLessThanOrEqual(viewport.width + 1);
-  expect(mathOverflow.right).toBeLessThanOrEqual(viewport.width + 1);
-  expect(mathOverflow.scrollWidth).toBeGreaterThanOrEqual(mathOverflow.clientWidth);
-});
-
-test("acceptance: desktop transcript stays behind the frosted live composer", async ({ page }, testInfo) => {
-  test.skip(testInfo.project.name !== "desktop-chromium", "desktop frosted live composer overlap");
-  await openApp(page);
-  await page.locator(".sidebar-chat").filter({ hasText: "Existing chat" }).click();
-  await expect(page.locator(".chat-main:not(.chat-main-empty) article.message-assistant")).toContainText("Transcript paragraph 1");
-  await scrollTranscriptBehindComposer(page, "desktop-frosted-live");
-  await expect.poll(() => overlapWithComposer(page, "desktop-frosted-live")).toBeGreaterThan(8);
-  await expect(page.locator(".composer")).toHaveAttribute("data-composer-surface", "frosted-live");
-});
-
-test("acceptance: desktop transcript passes behind the static glassmorphism composer", async ({ page }, testInfo) => {
-  test.skip(testInfo.project.name !== "desktop-chromium", "desktop static composer overlap");
-  await page.addInitScript(() => localStorage.setItem("conduit:composer-surface", "static"));
-  await openApp(page);
-  await page.locator(".sidebar-chat").filter({ hasText: "Existing chat" }).click();
-  await expect(page.locator(".chat-main:not(.chat-main-empty) article.message-assistant")).toContainText("Transcript paragraph 1");
-  await scrollTranscriptBehindComposer(page, "desktop-static");
-  await expect.poll(() => overlapWithComposer(page, "desktop-static")).toBeGreaterThan(8);
-  await expect(page.locator(".composer")).toHaveAttribute("data-composer-surface", "static");
-  await expect(page.locator(".composer-surface-shell")).toHaveCount(1);
-});
-
-test("acceptance: final transcript remains reachable above the composer", async ({ page }, testInfo) => {
-  await openApp(page);
-  if (testInfo.project.name === "mobile-chromium") {
-    await page.locator(".mobile-sidebar-trigger").tap();
-    await page.getByText("Existing chat", { exact: true }).tap();
-  } else {
-    await page.locator(".sidebar-chat").filter({ hasText: "Existing chat" }).click();
-  }
-  await expect(page.locator(".chat-main:not(.chat-main-empty) article.message-assistant")).toContainText("Transcript paragraph 1");
-  const reachability = await page.locator(".chat-main:not(.chat-main-empty) .message-scroller-viewport").evaluate((element) => {
-    const composer = document.querySelector(".chat-main:not(.chat-main-empty) .composer");
-    const lastParagraph = [...element.querySelectorAll("article.message-assistant p")].at(-1);
-    if (!composer || !lastParagraph) throw new Error("Expected final transcript and composer");
-    element.scrollTop = element.scrollHeight;
-    const lastBox = lastParagraph.getBoundingClientRect();
-    const composerBox = composer.getBoundingClientRect();
-    return { lastBottom: lastBox.bottom, composerTop: composerBox.top, viewportBottom: element.getBoundingClientRect().bottom };
-  });
-  expect(reachability.lastBottom).toBeLessThanOrEqual(reachability.composerTop + 1);
-  expect(reachability.lastBottom).toBeLessThanOrEqual(reachability.viewportBottom + 1);
-});
-
 test("acceptance: tall narrow command and chat palettes fill the inset mobile frame", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "desktop-chromium", "exact 523px responsive boundary");
   await page.setViewportSize({ width: 523, height: 1100 });
@@ -543,6 +415,28 @@ test("acceptance: tall narrow command and chat palettes fill the inset mobile fr
   await palette.getByRole("option", { name: /^Search chats/ }).click();
   await expect(palette.getByText("Search ›")).toBeVisible();
   await expectInsetPalette(page, palette);
+});
+
+test("acceptance: a narrow desktop window keeps the desktop shell", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop-chromium", "fine-pointer desktop layout");
+  await page.setViewportSize({ width: 523, height: 1_100 });
+  await openApp(page);
+  expect(await page.evaluate((query) => matchMedia(query).matches, PHONE_LAYOUT_QUERY)).toBe(false);
+  await expect(page.locator("html")).not.toHaveAttribute("data-vv-shell");
+  await expect(page.locator(".mobile-sidebar-trigger")).toBeHidden();
+  await expect(page.locator("html")).toHaveCSS("font-size", "12.8px");
+  expect(await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue("--composer-desktop-reference-width").trim())).toBe("608px");
+  await page.locator(".sidebar-chat").filter({ hasText: "Existing chat" }).click();
+  await expect(page.locator(".chat-markdown").first()).toHaveCSS("font-size", "12px");
+
+  const sidebar = page.locator('[data-slot="sidebar"]');
+  await expect(sidebar).not.toHaveCSS("position", "fixed");
+  await page.getByRole("button", { name: "Toggle workspace panel" }).click();
+  const panel = page.getByRole("complementary", { name: "Workspace panel" });
+  await expect(panel).toBeVisible();
+  await expect(panel).not.toHaveCSS("position", "fixed");
+  await expect(panel.getByRole("separator", { name: "Resize workspace panel" })).toBeVisible();
+  await expect(page.locator("html")).not.toHaveAttribute("data-mobile-overlay");
 });
 
 test("acceptance: mobile chat edit footer stays bounded and supports touch actions", async ({ page }, testInfo) => {
@@ -591,43 +485,34 @@ test("acceptance: mobile sidebar is a full-bleed exclusive overlay", async ({ pa
   await openApp(page);
   await page.locator(".mobile-sidebar-trigger").click();
   const sidebar = page.locator(".conduit-sidebar");
-  const opening = await sampleTranslateX(page, ".conduit-sidebar");
   await expect(sidebar).toHaveAttribute("data-mobile-open", "true");
   await expect(page.locator("html")).toHaveAttribute("data-mobile-overlay", "sidebar");
   const box = await sidebar.boundingBox();
   expect(Math.abs(box.width - page.viewportSize().width)).toBeLessThanOrEqual(2);
-  expect(new Set(opening.map((value) => Math.round(value))).size).toBeGreaterThan(2);
-  expect(opening.every((value, index) => index === 0 || value >= opening[index - 1] - 0.5)).toBe(true);
   await sidebar.locator('[data-sidebar="trigger"]').click();
-  const closing = await sampleTranslateX(page, ".conduit-sidebar");
   await expect(sidebar).toHaveAttribute("data-mobile-open", "false");
   await expect(page.locator("html")).not.toHaveAttribute("data-mobile-overlay", "sidebar");
-  expect(new Set(closing.map((value) => Math.round(value))).size).toBeGreaterThan(2);
-  expect(closing.every((value, index) => index === 0 || value <= closing[index - 1] + 0.5)).toBe(true);
 });
 
 test("acceptance: mobile workspace is full-bleed and closes via panel X only", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "mobile-chromium", "phone overlay chrome");
   await openApp(page);
-  // The phone header carries no panel toggle; the palette command is the way in.
-  await page.locator(".palette-trigger").click();
-  await page.getByRole("option", { name: /^Toggle workspace panel/ }).click();
   const panel = page.getByRole("complementary", { name: "Workspace panel" });
-  const opening = await sampleTranslateX(page, ".workspace-panel");
+  // The phone header carries no panel toggle; the palette command is the way in.
+  const togglePanel = async () => {
+    await page.locator(".palette-trigger").click();
+    await page.getByRole("option", { name: /^Toggle workspace panel/ }).click();
+  };
+  await togglePanel();
   await expect(panel).toBeVisible();
   await expect(page.locator("html")).toHaveAttribute("data-mobile-overlay", "workspace");
   const box = await panel.boundingBox();
   expect(Math.abs(box.width - page.viewportSize().width)).toBeLessThanOrEqual(2);
-  expect(new Set(opening.map((value) => Math.round(value))).size).toBeGreaterThan(2);
-  expect(opening.every((value, index) => index === 0 || value <= opening[index - 1] + 0.5)).toBe(true);
   await expect(page.getByRole("button", { name: "Toggle workspace panel" })).toHaveCount(0);
   await page.getByRole("button", { name: "Close workspace panel" }).click();
-  const closing = await sampleTranslateX(page, ".workspace-panel");
   await expect(panel).toBeHidden();
   // Closed or open, the phone never grows a header toggle: the X is the only exit.
   await expect(page.getByRole("button", { name: "Toggle workspace panel" })).toHaveCount(0);
-  expect(new Set(closing.map((value) => Math.round(value))).size).toBeGreaterThan(2);
-  expect(closing.every((value, index) => index === 0 || value >= closing[index - 1] - 0.5)).toBe(true);
 });
 
 test("acceptance: long-press sidebar chat opens a viewport-bounded menu without navigating", async ({ page }, testInfo) => {

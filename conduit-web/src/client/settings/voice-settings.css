@@ -1,7 +1,7 @@
 /* Current-main Voice settings additions retained by the performance rebuild. */
 
 /* Current Voice lifecycle names, rendered by the rebuild composer. */
-.dictation-trigger[data-state="listening"] { box-shadow: 0 0 0 2.4px color-mix(in oklch, var(--accent-cool), transparent 78%); }
+.dictation-trigger[data-state="listening"] { box-shadow: 0 0 0 2.4px color-mix(in oklch, var(--ring), transparent 70%); }
 
 .settings-content[data-section="voice"] { padding: 11.2px 14.4px; }
 .settings-content[data-section="voice"] > header { margin-bottom: 9.6px; }
@@ -10,7 +10,7 @@
 .voice-settings-intro { margin: 0; color: var(--muted-foreground); font-size: 9.6px; line-height: 1.4; }
 .voice-settings .dictation-auto-send { padding: 7.2px 8px; }
 .voice-input-test { gap: 6.4px; padding: 8px; }
-.voice-input-playback { display: grid; gap: 6.4px; border-left: 1px solid var(--accent-cool); background: color-mix(in oklch, var(--accent-cool), transparent 94%); padding: 6.4px 8px; color: var(--muted-foreground); font-size: 10.4px; }
+.voice-input-playback { display: grid; gap: 6.4px; border-left: 1px solid var(--border); background: var(--muted); padding: 6.4px 8px; color: var(--muted-foreground); font-size: 10.4px; }
 .voice-input-playback-error { margin: 0; border-left: 1px solid var(--muted-foreground); background: var(--muted); padding: 6.4px 8px; color: var(--muted-foreground); font-size: 10.4px; }
 .voice-card { display: grid; gap: 8px; padding: 8px; border: 0.8px solid var(--border); border-radius: var(--radius); background: var(--card); }
 .voice-card h3, .voice-card p { margin: 0; }
@@ -18,7 +18,7 @@
 .voice-model-kicker { color: var(--muted-foreground); font-size: 8px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
 .voice-draft-state { color: var(--muted-foreground); font-size: 8.8px; white-space: nowrap; }
 .voice-draft-state[data-dirty="true"] { color: var(--primary); }
-.voice-local-catalogue { border-left: 1px solid var(--accent-cool); }
+.voice-local-catalogue { border-left: 1px solid var(--border); }
 .voice-selection-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 9.6px; }
 .voice-selection-heading > div { display: grid; min-width: 0; gap: 1.6px; }
 .voice-selection-heading strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -37,7 +37,7 @@
 .voice-advanced { border: 0.8px solid var(--border); border-radius: var(--radius); background: color-mix(in oklch, var(--card), var(--background) 18%); }
 .voice-advanced summary { display: flex; align-items: center; justify-content: space-between; gap: 9.6px; min-height: 33.6px; padding: 7.2px 8.8px; cursor: pointer; list-style: none; }
 .voice-advanced summary::-webkit-details-marker { display: none; }
-.voice-advanced summary::before { content: "⌄"; flex: none; color: var(--accent-cool); font-size: 12px; line-height: 1; transform: rotate(-90deg); transition: transform 140ms ease; }
+.voice-advanced summary::before { content: none; }
 .voice-advanced[open] summary::before { transform: rotate(0deg); }
 .voice-advanced summary small { color: var(--muted-foreground); font-size: 8.8px; text-align: right; }
 .voice-advanced > [data-slot="field-group"] { border-top: 1px solid var(--border); padding: 8px 8.8px 8.8px; }
@@ -53,7 +53,7 @@
 /* Current-main Voice settings additions retained by the performance rebuild. */
 
 /* Current Voice lifecycle names, rendered by the rebuild composer. */
-.dictation-trigger[data-state="listening"] { box-shadow: 0 0 0 3px color-mix(in oklch, var(--accent-cool), transparent 78%); }
+.dictation-trigger[data-state="listening"] { box-shadow: 0 0 0 3px color-mix(in oklch, var(--ring), transparent 70%); }
 
 .settings-content[data-section="voice"] { padding: 14px 18px; }
 .settings-content[data-section="voice"] > header { margin-bottom: 12px; }
@@ -62,7 +62,7 @@
 .voice-settings-intro { margin: 0; color: var(--muted-foreground); font-size: 12px; line-height: 1.4; }
 .voice-settings .dictation-auto-send { padding: 9px 10px; }
 .voice-input-test { gap: 8px; padding: 10px; }
-.voice-input-playback { display: grid; gap: 8px; border-left: 2px solid var(--accent-cool); background: color-mix(in oklch, var(--accent-cool), transparent 94%); padding: 8px 10px; color: var(--muted-foreground); font-size: 13px; }
+.voice-input-playback { display: grid; gap: 8px; border-left: 2px solid var(--border); background: var(--muted); padding: 8px 10px; color: var(--muted-foreground); font-size: 13px; }
 .voice-input-playback-error { margin: 0; border-left: 2px solid var(--muted-foreground); background: var(--muted); padding: 8px 10px; color: var(--muted-foreground); font-size: 13px; }
 .voice-card { display: grid; gap: 10px; padding: 10px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--card); }
 .voice-card h3, .voice-card p { margin: 0; }
@@ -70,7 +70,7 @@
 .voice-model-kicker { color: var(--muted-foreground); font-size: 10px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
 .voice-draft-state { color: var(--muted-foreground); font-size: 11px; white-space: nowrap; }
 .voice-draft-state[data-dirty="true"] { color: var(--primary); }
-.voice-local-catalogue { border-left: 2px solid var(--accent-cool); }
+.voice-local-catalogue { border-left: 2px solid var(--border); }
 .voice-selection-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
 .voice-selection-heading > div { display: grid; min-width: 0; gap: 2px; }
 .voice-selection-heading strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -89,7 +89,7 @@
 .voice-advanced { border: 1px solid var(--border); border-radius: var(--radius); background: color-mix(in oklch, var(--card), var(--background) 18%); }
 .voice-advanced summary { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 42px; padding: 9px 11px; cursor: pointer; list-style: none; }
 .voice-advanced summary::-webkit-details-marker { display: none; }
-.voice-advanced summary::before { content: "⌄"; flex: none; color: var(--accent-cool); font-size: 15px; line-height: 1; transform: rotate(-90deg); transition: transform 140ms ease; }
+.voice-advanced summary::before { content: none; }
 .voice-advanced[open] summary::before { transform: rotate(0deg); }
 .voice-advanced summary small { color: var(--muted-foreground); font-size: 11px; text-align: right; }
 .voice-advanced > [data-slot="field-group"] { border-top: 1px solid var(--border); padding: 10px 11px 11px; }

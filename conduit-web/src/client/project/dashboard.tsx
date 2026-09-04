@@ -45,6 +45,7 @@ import type { SidebarCommand } from "../navigation/sidebar";
 import { COMMAND_IDS, commandLabel } from "../commands/command-registry";
 import type { Pty } from "../remotes/terminal-pane";
 import type { RuntimeStore } from "../state/runtime";
+import { compareChatsBySort, saveChatSort, useChatSort } from "../preferences/chat-sort";
 import { WorkspaceGlyph } from "./workspace-appearance";
 import { WorkspaceAppearanceEditor } from "./workspace-appearance-editor";
 import "./dashboard.css";
@@ -137,6 +138,7 @@ export function ProjectDashboard(props: {
   const [destroyOpen, setDestroyOpen] = createSignal(false);
   const [destroyConfirmation, setDestroyConfirmation] = createSignal("");
   const [destroying, setDestroying] = createSignal(false);
+  const chatSort = useChatSort();
   const projectId = createMemo(() => props.project.id);
   const isWorkspace = createMemo(() => workspaceProject(props.project));
   const cloning = createMemo(() => props.project.state === "cloning" && Boolean(props.project.cloneOperationId));
@@ -147,12 +149,10 @@ export function ProjectDashboard(props: {
     return payload()?.identity.workspaceAppearance ?? props.project.workspaceAppearance ?? null;
   });
   const visibleChats = createMemo<DashboardChat[]>(() => {
-    const loaded = payload();
-    if (loaded) return loaded.recentChats.slice(0, 10);
+    const sort = chatSort();
     return [...props.project.sessions]
       .filter((chat) => chat.status === "active")
-      .sort((left, right) => String(right.updatedAt || right.createdAt || "")
-        .localeCompare(String(left.updatedAt || left.createdAt || "")))
+      .sort((left, right) => compareChatsBySort(left, right, sort))
       .slice(0, 10);
   });
   const activeChatCount = createMemo(() => payload()?.stats.activeChats
@@ -377,7 +377,13 @@ export function ProjectDashboard(props: {
                 <h2 id="workspace-recent-chats">Recent chats</h2>
                 <p>{activeChatCount() > 10 ? "10 most recent in this workspace" : "Conversations in this workspace"}</p>
               </div>
-              <button type="button" class="workspace-dashboard-search" aria-label={`Search chats in ${props.project.name}`} title="Search workspace chats" onClick={props.onSearchChats}><SearchIcon /></button>
+              <div class="workspace-dashboard-chat-actions">
+                <div class="workspace-dashboard-scope-toggle" role="group" aria-label="Recent chat sort">
+                  <button type="button" aria-pressed={chatSort() === "latest"} onClick={() => saveChatSort("latest")}>Latest</button>
+                  <button type="button" aria-pressed={chatSort() === "created"} onClick={() => saveChatSort("created")}>Created</button>
+                </div>
+                <button type="button" class="workspace-dashboard-search" aria-label={`Search chats in ${props.project.name}`} title="Search workspace chats" onClick={props.onSearchChats}><SearchIcon /></button>
+              </div>
             </div>
             <Show when={visibleChats().length} fallback={<div class="workspace-dashboard-empty">No chats yet. Start one above.</div>}>
               <div class="project-chat-list">

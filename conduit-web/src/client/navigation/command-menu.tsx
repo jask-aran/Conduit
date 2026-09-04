@@ -20,6 +20,7 @@ import {
 } from "../palette/chat-query";
 import type { ChatQueryFilter } from "../palette/chat-query";
 import { COMMAND_IDS, commandRegistry } from "../commands/command-registry";
+import { chatSortStamp, useChatSort } from "../preferences/chat-sort";
 import type { ShortcutManager } from "../shortcuts/shortcut-manager";
 import type { ShortcutContext } from "../shortcuts/shortcut-types";
 import { CommandHintBar } from "./command-hint-bar";
@@ -67,6 +68,18 @@ const BACK_COMMAND: PaletteCommand = {
   id: "page-back", label: "Back", icon: "back", group: "commands", keywords: [], run: () => {},
 };
 
+const FOCUS_MOVING_COMMAND_IDS = new Set<string>([
+  COMMAND_IDS.toggleWorkspacePanel,
+  COMMAND_IDS.maximizeWorkspacePanel,
+  COMMAND_IDS.focusComposer,
+  COMMAND_IDS.focusWorkspacePanel,
+  COMMAND_IDS.toggleChatWorkspaceFocus,
+  COMMAND_IDS.workspaceFiles,
+  COMMAND_IDS.workspaceSourceControl,
+  COMMAND_IDS.workspaceArtifacts,
+  COMMAND_IDS.workspaceTerminal,
+]);
+
 type Row =
   | { type: "heading"; key: string; label: string }
   | { type: "command"; key: string; index: number; command: PaletteCommand }
@@ -112,6 +125,7 @@ export function CommandMenu(props: {
   onPageChange?: (page: string | null) => void;
   details?: JSX.Element;
 }) {
+  const chatSort = useChatSort();
   const [query, setQuery] = createSignal("");
   const [page, setPage] = createSignal<string | null>(null);
   const [active, setActive] = createSignal(0);
@@ -340,6 +354,11 @@ export function CommandMenu(props: {
   });
 
   const close = () => { resetTransient(); props.onOpenChange(false); };
+  const runCommand = (command: PaletteCommand) => {
+    if (FOCUS_MOVING_COMMAND_IDS.has(command.id)) returnFocus = null;
+    close();
+    requestAnimationFrame(() => command.run(props.actions));
+  };
   const goBack = () => {
     if (moveMode()) {
       setMoveMode(false);
@@ -462,8 +481,7 @@ export function CommandMenu(props: {
       openPalettePage(canonicalPage(command.page)!, command.id === COMMAND_IDS.searchChats);
       return;
     }
-    close();
-    requestAnimationFrame(() => command.run(props.actions));
+    runCommand(command);
   };
 
   const paletteRootCommandIds = commandRegistry
@@ -538,8 +556,7 @@ export function CommandMenu(props: {
     if (command.kind === "page" && command.page) {
       setPage(canonicalPage(command.page)); setQuery(""); setMoveMode(false); setSelectionMode(false); setSelectedChatIds(new Set<string>()); directMode = false; return;
     }
-    close();
-    requestAnimationFrame(() => command.run(props.actions));
+    runCommand(command);
   };
 
   const runPointerRow = (row: SelectableRow, event: MouseEvent) => {
@@ -656,7 +673,7 @@ export function CommandMenu(props: {
         <Show when={editing()} fallback={<span class="command-label">{command.label}</span>}>
           <input ref={renameInput} class="command-rename-input" value={editingValue()} onInput={(event) => setEditingValue(event.currentTarget.value)} onKeyDown={renameKeydown} onClick={(event) => event.stopPropagation()} aria-label={`Rename ${command.label}`} />
         </Show>
-        <Show when={!editing() && command.detail}><small>{command.detail}{command.chat ? ` · ${formatChatDate(command.chat.createdAt)}` : ""}</small></Show>
+        <Show when={!editing() && command.detail}><small>{command.detail}{command.chat ? ` · ${formatChatDate(chatSortStamp(command.chat, chatSort()))}` : ""}</small></Show>
         <Show when={editing()}><small>Enter to save · Escape to cancel</small></Show>
       </span>
       <Show when={command.kind === "page"}><ChevronRightIcon class="command-chevron" /></Show>

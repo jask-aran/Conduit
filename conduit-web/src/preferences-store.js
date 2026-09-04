@@ -23,6 +23,7 @@ const DEFAULTS = {
   codeBlockWidth: null,
   panelMotion: null,
   userMessageCollapse: null,
+  chatSort: null,
   shortcutOverrides: null,
   voicePreferences: null,
 };
@@ -50,7 +51,7 @@ const UI_PREFERENCE_KEYS = new Set([
   "rendererControlsVisible", "composerSurface", "contextMetrics",
   "meteorField", "incremarkPacing", "transcriptWidth", "transcriptWideBlocks",
   "codeBlockCollapse", "codeBlockCollapseLines", "codeBlockWidth", "panelMotion",
-  "userMessageCollapse",
+  "userMessageCollapse", "chatSort",
   "shortcutOverrides", "voicePreferences",
 ]);
 // Reading-surface presets. Free pixel values are deliberately not accepted: the
@@ -68,6 +69,7 @@ const PANEL_MOTIONS = ["translate", "reflow"];
 // default rather than asking for something that no longer exists.
 const MARKDOWN_RENDERERS = ["incremark", "marked"];
 const USER_MESSAGE_COLLAPSE = ["off", "6", "10", "15", "25"];
+const CHAT_SORTS = ["latest", "created"];
 const stringList = (value, limit) => Array.isArray(value) && value.length <= limit
   && value.every((item) => typeof item === "string" && item.length <= 200);
 const oneOf = (value, choices) => typeof value === "string" && choices.includes(value);
@@ -104,6 +106,7 @@ export function validUiPreferencePatch(input = {}) {
     if (key === "codeBlockWidth") return oneOf(value, CODE_BLOCK_WIDTHS);
     if (key === "panelMotion") return oneOf(value, PANEL_MOTIONS);
     if (key === "userMessageCollapse") return oneOf(value, USER_MESSAGE_COLLAPSE);
+    if (key === "chatSort") return oneOf(value, CHAT_SORTS);
     if (key === "shortcutOverrides") return validShortcutOverrides(value);
     if (key === "voicePreferences") return validVoicePreferences(value);
     return false;
@@ -190,6 +193,7 @@ export function normalizePreferences(input = {}, fallback = DEFAULTS, knownTempl
     codeBlockWidth: nullable("codeBlockWidth", choice(CODE_BLOCK_WIDTHS)),
     panelMotion: nullable("panelMotion", choice(PANEL_MOTIONS)),
     userMessageCollapse: nullable("userMessageCollapse", choice(USER_MESSAGE_COLLAPSE)),
+    chatSort: nullable("chatSort", choice(CHAT_SORTS)),
     shortcutOverrides: nullable("shortcutOverrides", (value) => validShortcutOverrides(value) ? plainObject(value) : null),
     voicePreferences: nullable("voicePreferences", (value) => validVoicePreferences(value) ? plainObject(value) : null),
   };

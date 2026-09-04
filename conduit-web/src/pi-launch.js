@@ -1,5 +1,10 @@
 import path from "node:path";
-import { buildPiEnvironment, buildPiResourceArgs, resolvePiProcess } from "../../scripts/pi-runtime.mjs";
+import {
+  buildManagedToolEnvironment,
+  buildPiEnvironment,
+  buildPiResourceArgs,
+  resolvePiProcess,
+} from "../../scripts/pi-runtime.mjs";
 
 const SENSITIVE_ENV = /^(?:CONDUIT_|COOKIE|SESSION|BROKER|EDGE_AUTH|AUTH_TOKEN|GITHUB_TOKEN|GH_TOKEN$)/i;
 
@@ -13,7 +18,7 @@ function nativeEnvironment(installation) {
   delete filtered.PI_CODING_AGENT_SESSION_DIR;
   if (installation.agentDirExplicit) filtered.PI_CODING_AGENT_DIR = installation.agentDir;
   else delete filtered.PI_CODING_AGENT_DIR;
-  return filtered;
+  return buildManagedToolEnvironment(filtered);
 }
 
 function sessionArgs(sessionFile, model, thinkingLevel) {
@@ -88,4 +93,3 @@ export function resolvePiLaunch({
     modelProfile,
   };
 }
-

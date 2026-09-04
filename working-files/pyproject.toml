@@ -1,0 +1,19 @@
+[project]
+name = "conduit-working-files"
+version = "0.1.0"
+requires-python = ">=3.13,<3.14"
+dependencies = [
+  "odfpy",
+  "openpyxl",
+  "pandas",
+  "pyarrow",
+  "pymupdf",
+  "pypdf",
+  "python-docx",
+  "python-pptx",
+  "pyxlsb",
+  "xlrd",
+]
+
+[tool.uv]
+package = false

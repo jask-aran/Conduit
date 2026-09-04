@@ -12,12 +12,12 @@
 .shortcut-command-list { overflow: hidden; border: 0.8px solid var(--border); border-radius: 8px; background: var(--card); }
 .shortcut-command { display: grid; grid-template-columns: minmax(152px, 1fr) minmax(176px, auto); gap: 11.2px; align-items: center; padding: 9.6px 10.4px; border-bottom: 1px solid var(--border); }
 .shortcut-command:last-child { border-bottom: 0; }
-.shortcut-command[data-recording] { background: color-mix(in oklch, var(--accent-cool), transparent 94%); box-shadow: inset 1.6px 0 0 color-mix(in oklch, var(--accent-cool), var(--foreground) 25%); }
+.shortcut-command[data-recording] { background: var(--accent); box-shadow: none; }
 .shortcut-command-copy { min-width: 0; }
 .shortcut-command-title { display: flex; min-width: 0; align-items: center; gap: 5.6px; }
 .shortcut-command-title strong { min-width: 0; overflow: hidden; font-size: 10.4px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
 .shortcut-command-copy > p { margin: 2.4px 0 4.8px; color: var(--muted-foreground); font-size: 9.6px; line-height: 1.35; }
-.shortcut-override-badge { border: 0.8px solid color-mix(in oklch, var(--accent-cool), var(--border) 55%); border-radius: 999px; padding: 0.8px 4px; color: color-mix(in oklch, var(--accent-cool), var(--foreground) 38%); font-size: 7.2px; font-weight: 650; letter-spacing: 0.04em; text-transform: uppercase; }
+.shortcut-override-badge { border: 0.8px solid var(--border); border-radius: 999px; padding: 0.8px 4px; color: var(--muted-foreground); font-size: 7.2px; font-weight: 650; letter-spacing: 0.04em; text-transform: uppercase; }
 .shortcut-contexts { display: flex; flex-wrap: wrap; gap: 3.2px; }
 .shortcut-contexts span { border-radius: 3.2px; background: var(--muted); padding: 1.6px 4px; color: var(--muted-foreground); font: 500 7.2px/1.25 ui-monospace, SFMono-Regular, Menlo, monospace; }
 .shortcut-bindings { display: flex; max-width: 280px; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 4px; }
@@ -32,9 +32,9 @@
 .shortcut-keycap:focus-visible, .shortcut-clear:focus-visible, .shortcut-add:focus-visible, .shortcut-reset:focus-visible, .shortcut-recorder-capture:focus-visible { outline: 1px solid var(--ring); outline-offset: 1.6px; }
 .shortcut-unassigned { color: var(--muted-foreground); font-size: 8.8px; }
 .shortcut-recorder-panel { display: grid; grid-column: 1 / -1; gap: 6.4px; padding-top: 8.8px; border-top: 1px solid var(--border); }
-.shortcut-recorder-capture { display: flex; min-height: 44.8px; align-items: center; justify-content: center; gap: 7.2px; border: 0.8px dashed color-mix(in oklch, var(--accent-cool), var(--border) 45%); border-radius: 6.4px; background: var(--background); color: var(--muted-foreground); font-size: 10.4px; }
+.shortcut-recorder-capture { display: flex; min-height: 44.8px; align-items: center; justify-content: center; gap: 7.2px; border: 0.8px dashed var(--border); border-radius: 6.4px; background: var(--background); color: var(--muted-foreground); font-size: 10.4px; }
 .shortcut-recorder-capture kbd { border: 0.8px solid color-mix(in oklch, var(--border), var(--foreground) 18%); border-radius: 4px; background: var(--popover); padding: 4px 7.2px; color: var(--foreground); font: 600 9.6px/1 ui-monospace, SFMono-Regular, Menlo, monospace; }
-.shortcut-recorder-dot { width: 5.6px; height: 5.6px; border-radius: 50%; background: var(--accent-cool); box-shadow: 0 0 0 3.2px color-mix(in oklch, var(--accent-cool), transparent 82%); }
+.shortcut-recorder-dot { width: 5.6px; height: 5.6px; border-radius: 50%; background: var(--destructive); box-shadow: 0 0 0 3.2px color-mix(in oklch, var(--destructive), transparent 82%); }
 .shortcut-recorder-help { margin: 0; color: var(--muted-foreground); font-size: 8.8px; }
 .shortcut-conflict { display: flex; align-items: flex-start; gap: 4.8px; margin: 0; color: var(--muted-foreground); font-size: 8.8px; line-height: 1.4; }
 .shortcut-conflict svg { width: 10.4px; height: 10.4px; flex: none; margin-top: 0.8px; }
@@ -67,12 +67,12 @@
 .shortcut-command-list { overflow: hidden; border: 1px solid var(--border); border-radius: 10px; background: var(--card); }
 .shortcut-command { display: grid; grid-template-columns: minmax(190px, 1fr) minmax(220px, auto); gap: 14px; align-items: center; padding: 12px 13px; border-bottom: 1px solid var(--border); }
 .shortcut-command:last-child { border-bottom: 0; }
-.shortcut-command[data-recording] { background: color-mix(in oklch, var(--accent-cool), transparent 94%); box-shadow: inset 2px 0 0 color-mix(in oklch, var(--accent-cool), var(--foreground) 25%); }
+.shortcut-command[data-recording] { background: var(--accent); box-shadow: none; }
 .shortcut-command-copy { min-width: 0; }
 .shortcut-command-title { display: flex; min-width: 0; align-items: center; gap: 7px; }
 .shortcut-command-title strong { min-width: 0; overflow: hidden; font-size: 13px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
 .shortcut-command-copy > p { margin: 3px 0 6px; color: var(--muted-foreground); font-size: 12px; line-height: 1.35; }
-.shortcut-override-badge { border: 1px solid color-mix(in oklch, var(--accent-cool), var(--border) 55%); border-radius: 999px; padding: 1px 5px; color: color-mix(in oklch, var(--accent-cool), var(--foreground) 38%); font-size: 9px; font-weight: 650; letter-spacing: 0.04em; text-transform: uppercase; }
+.shortcut-override-badge { border: 1px solid var(--border); border-radius: 999px; padding: 1px 5px; color: var(--muted-foreground); font-size: 9px; font-weight: 650; letter-spacing: 0.04em; text-transform: uppercase; }
 .shortcut-contexts { display: flex; flex-wrap: wrap; gap: 4px; }
 .shortcut-contexts span { border-radius: 4px; background: var(--muted); padding: 2px 5px; color: var(--muted-foreground); font: 500 9px/1.25 ui-monospace, SFMono-Regular, Menlo, monospace; }
 .shortcut-bindings { display: flex; max-width: 350px; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 5px; }
@@ -87,9 +87,9 @@
 .shortcut-keycap:focus-visible, .shortcut-clear:focus-visible, .shortcut-add:focus-visible, .shortcut-reset:focus-visible, .shortcut-recorder-capture:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
 .shortcut-unassigned { color: var(--muted-foreground); font-size: 11px; }
 .shortcut-recorder-panel { display: grid; grid-column: 1 / -1; gap: 8px; padding-top: 11px; border-top: 1px solid var(--border); }
-.shortcut-recorder-capture { display: flex; min-height: 56px; align-items: center; justify-content: center; gap: 9px; border: 1px dashed color-mix(in oklch, var(--accent-cool), var(--border) 45%); border-radius: 8px; background: var(--background); color: var(--muted-foreground); font-size: 13px; }
+.shortcut-recorder-capture { display: flex; min-height: 56px; align-items: center; justify-content: center; gap: 9px; border: 1px dashed var(--border); border-radius: 8px; background: var(--background); color: var(--muted-foreground); font-size: 13px; }
 .shortcut-recorder-capture kbd { border: 1px solid color-mix(in oklch, var(--border), var(--foreground) 18%); border-radius: 5px; background: var(--popover); padding: 5px 9px; color: var(--foreground); font: 600 12px/1 ui-monospace, SFMono-Regular, Menlo, monospace; }
-.shortcut-recorder-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent-cool); box-shadow: 0 0 0 4px color-mix(in oklch, var(--accent-cool), transparent 82%); }
+.shortcut-recorder-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--destructive); box-shadow: 0 0 0 4px color-mix(in oklch, var(--destructive), transparent 82%); }
 .shortcut-recorder-help { margin: 0; color: var(--muted-foreground); font-size: 11px; }
 .shortcut-conflict { display: flex; align-items: flex-start; gap: 6px; margin: 0; color: var(--muted-foreground); font-size: 11px; line-height: 1.4; }
 .shortcut-conflict svg { width: 13px; height: 13px; flex: none; margin-top: 1px; }

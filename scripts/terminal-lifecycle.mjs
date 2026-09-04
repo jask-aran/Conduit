@@ -40,9 +40,13 @@ export async function stopTerminalSessions({
   }
 }
 
+export function terminalCleanupMessage(stopped) {
+  return stopped ? "Stopped leftover Conduit terminal sessions." : "Terminal cleanup found no leftover tmux server to stop.";
+}
+
 async function main() {
   const stopped = await stopTerminalSessions();
-  console.log(stopped ? "Stopped Conduit terminal sessions." : "No Conduit terminal sessions were running.");
+  console.log(terminalCleanupMessage(stopped));
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

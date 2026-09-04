@@ -1,5 +1,6 @@
-import { batch, createEffect, createMemo, createSignal, For, lazy, on, onCleanup, Show, Suspense, type Accessor } from "solid-js";
-import { BoxesIcon, CheckIcon, ChevronsUpIcon, ChevronDownIcon, ChevronRightIcon, CirclePlusIcon, CopyIcon, DownloadIcon, EyeIcon, EyeOffIcon, FileDiffIcon, FolderIcon, GitBranchIcon, GitCommitHorizontalIcon, GitCompareArrowsIcon, Maximize2Icon, Minimize2Icon, PanelLeftCloseIcon, PanelLeftOpenIcon, PencilIcon, PinIcon, PinOffIcon, RefreshCwIcon, SaveIcon, SearchIcon, SendIcon, TerminalIcon, Undo2Icon, UploadIcon, WrapTextIcon, XIcon } from "lucide-solid";
+import { batch, createEffect, createMemo, createSignal, For, on, onCleanup, Show, type Accessor } from "solid-js";
+import { BoxesIcon, Columns2Icon, CheckIcon, ChevronsUpIcon, ChevronDownIcon, ChevronRightIcon, CirclePlusIcon, CopyIcon, DownloadIcon, EyeIcon, EyeOffIcon, FileDiffIcon, FolderIcon, GitBranchIcon, GitCommitHorizontalIcon, GitCompareArrowsIcon, Maximize2Icon, Minimize2Icon, PanelLeftCloseIcon, PanelLeftOpenIcon, PencilIcon, PinIcon, PinOffIcon, RefreshCwIcon, SearchIcon, SendIcon, TerminalIcon, Trash2Icon, Undo2Icon, UploadIcon, XIcon } from "lucide-solid";
+import { toast } from "solid-sonner";
 import { Button, ContextMenu, ContextMenuContent, ContextMenuGroup, ContextMenuItem, ContextMenuSeparator, ContextMenuTrigger, Spinner } from "@/components/primitives";
 import { api, asList } from "../api/client";
 import { authorizedFetch } from "../api/native-auth-client";
@@ -10,13 +11,13 @@ import { ownsWorkspaceRequest, type WorkspaceRequest } from "./request-ownership
 import { TerminalPane } from "../remotes/terminal-pane";
 import { dispatchPanelGeometryMotion, PANEL_MOTION_DURATION_MS } from "../panel-motion";
 import type { ShortcutManager } from "../shortcuts/shortcut-manager";
-import { FileTypeIcon } from "./file-type-icon";
+import { FileTypeIcon, FolderTypeIcon } from "./file-type-icon";
+import WorkspaceFileSlot, { type FilePreview, type FileSlotHandle } from "./workspace-file-slot";
 import "./workspace.css";
 
 interface TreeEntry { name: string; path: string; type: "directory" | "file" | "other"; }
 interface DirectoryListing { entries: TreeEntry[]; truncated: boolean; }
-interface FilePreview { path: string; size: number; revision: string; content: string; }
-interface FileWriteResult { path: string; size: number; revision: string; }
+interface FileWriteResult { path: string; size: number; modifiedAt: number; revision: string; }
 interface GitActionResult { ok: true; output?: string; }
 interface GitCommit { graph: string; hash: string; shortHash: string; subject: string; author: string; authoredAt: string; }
 interface GitRef { name: string; hash: string; upstream: string | null; kind: "local" | "remote" | "tag"; }
@@ -24,6 +25,11 @@ interface DiffPayload { repository: boolean; branch?: string; upstream?: string 
 type PanelTab = "files" | "diff" | "artifacts" | "terminal";
 type ArtifactMode = "outputs" | "interactive";
 type GitAction = "stage" | "stage-all" | "unstage" | "unstage-all" | "commit" | "fetch" | "pull" | "push";
+type FileSlotId = "primary" | "secondary";
+type OpenFiles = { primary: string | null; secondary: string | null };
+type UploadTarget = { kind: "directory"; path: string } | { kind: "replacement"; path: string };
+
+const PANEL_TABS = ["files", "diff", "artifacts", "terminal"] satisfies PanelTab[];
 
 function isPanelTab(value: string): value is PanelTab {
   return value === "files" || value === "diff" || value === "artifacts" || value === "terminal";
@@ -33,7 +39,6 @@ interface WorkspaceCacheEntry {
   directories: Record<string, DirectoryListing>;
   diff: DiffPayload | null;
   expanded: Set<string>;
-  preview: FilePreview | null;
   treeScrollTop: number;
 }
 
@@ -41,12 +46,28 @@ const MAX_CACHED_WORKSPACES = 6;
 const workspaceCache = new Map<string, WorkspaceCacheEntry>();
 const COMPACT_UI_MIGRATION_KEY = "conduit:compact-ui-v2";
 const MIN_DETAIL_HEIGHT = 32;
+const MIN_WORKSPACE_PANE_WIDTH = 240;
+const WORKSPACE_SPLIT_GUTTER_WIDTH = 9;
 const WIDE_FILES_MIN_WIDTH = 720;
 const DEFAULT_TREE_WIDTH = 160;
 const MIN_TREE_WIDTH = 128;
 const MAX_TREE_WIDTH = 320;
 const WRAP_LINES_KEY = "conduit:workspace:wrap-lines";
-const WorkspaceEditor = lazy(() => import("./workspace-editor"));
+const FILE_POLL_INTERVAL_MS = 1_500;
+
+function directoryListingsEqual(left: DirectoryListing | undefined, right: DirectoryListing): boolean {
+  return Boolean(left
+    && left.truncated === right.truncated
+    && left.entries.length === right.entries.length
+    && left.entries.every((entry, index) => {
+      const other = right.entries[index];
+      return entry.name === other?.name && entry.path === other.path && entry.type === other.type;
+    }));
+}
+
+function errorCode(cause: unknown): string {
+  return cause && typeof cause === "object" && "error" in cause && typeof cause.error === "string" ? cause.error : "";
+}
 
 function CommitHistory(props: { commits: GitCommit[]; refs: GitRef[]; branch?: string; onCopy: (hash: string) => void; labelled?: boolean }) {
   return <section class="workspace-history">
@@ -109,13 +130,13 @@ function cachedWorkspace(projectId: string) {
 }
 
 function cacheWorkspace(projectId: string, patch: Partial<WorkspaceCacheEntry>) {
-  const current = workspaceCache.get(projectId) || { directories: {}, diff: null, expanded: new Set<string>(), preview: null, treeScrollTop: 0 };
+  const current = workspaceCache.get(projectId) || { directories: {}, diff: null, expanded: new Set<string>(), treeScrollTop: 0 };
   workspaceCache.delete(projectId);
   workspaceCache.set(projectId, { ...current, ...patch });
   while (workspaceCache.size > MAX_CACHED_WORKSPACES) workspaceCache.delete(workspaceCache.keys().next().value!);
 }
 
-export default function WorkspacePanel(props: { projectId: Accessor<string>; chatId: Accessor<string>; open: Accessor<boolean>; expanded: Accessor<boolean>; requestedTab?: Accessor<{ tab: PanelTab; terminalId?: string; nonce: number } | null>; onToggleExpanded: () => void; onClose: () => void; shortcuts: ShortcutManager }) {
+export default function WorkspacePanel(props: { projectId: Accessor<string>; chatId: Accessor<string>; open: Accessor<boolean>; expanded: Accessor<boolean>; focusRequest: Accessor<number>; requestedTab?: Accessor<{ tab: PanelTab; terminalId?: string; nonce: number } | null>; onToggleExpanded: () => void; onClose: () => void; shortcuts: ShortcutManager }) {
   migrateWorkspaceGeometry();
   let projectGeneration = 0;
   let requestVersion = 0;
@@ -126,12 +147,14 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
   let panelSurface: HTMLDivElement | undefined;
   let resizeHandle: HTMLDivElement | undefined;
   let detailHost: HTMLElement | undefined;
+  let filesHost: HTMLElement | undefined;
   let treeElement: HTMLElement | undefined;
   let treeResizeHandle: HTMLDivElement | undefined;
   let splitHost: HTMLElement | undefined;
   let fileFilterInput: HTMLInputElement | undefined;
   let fileUploadInput: HTMLInputElement | undefined;
   let filesResizeObserver: ResizeObserver | undefined;
+  let splitResizeObserver: ResizeObserver | undefined;
   let panelEdgeMotionId: number | null = null;
   let panelMotionId = 0;
   let panelEdgeRaf = 0;
@@ -143,21 +166,26 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
   let mobileWasOpen = false;
   const [pending, setPending] = createSignal(new Map<number, { foreground: boolean }>());
   const storageKey = () => `conduit:workspace-panel:${props.chatId()}:tab`;
+  const secondaryKey = () => `conduit:workspace-panel:${props.chatId()}:secondary-tab`;
+  const storedSecondary = () => {
+    const stored = localStorage.getItem(secondaryKey()) || "";
+    return isPanelTab(stored) ? stored : null;
+  };
   const [tab, setTab] = createSignal<PanelTab>((localStorage.getItem(storageKey()) as PanelTab) || "files");
-  const [secondaryTab, setSecondaryTab] = createSignal<PanelTab | null>(null);
+  const [secondaryTab, setSecondaryTab] = createSignal<PanelTab | null>(storedSecondary());
   const [directories, setDirectories] = createSignal<Record<string, DirectoryListing>>({});
   const [expanded, setExpanded] = createSignal<Set<string>>(new Set());
-  const [preview, setPreview] = createSignal<FilePreview | null>(null);
   const [fileFilter, setFileFilter] = createSignal("");
   const [treeFocusPath, setTreeFocusPath] = createSignal("");
   const [showHidden, setShowHidden] = createSignal(false);
   const [keptVisible, setKeptVisible] = createSignal(new Set<string>());
   const [filesWide, setFilesWide] = createSignal(false);
-  const [editing, setEditing] = createSignal(false);
-  const [draft, setDraft] = createSignal("");
-  const [saving, setSaving] = createSignal(false);
   const [uploading, setUploading] = createSignal(false);
-  const [uploadDirectory, setUploadDirectory] = createSignal("");
+  const [uploadTarget, setUploadTarget] = createSignal<UploadTarget>({ kind: "directory", path: "" });
+  const [primaryFile, setPrimaryFile] = createSignal<FilePreview | null>(null);
+  const [openPaths, setOpenPaths] = createSignal<OpenFiles>({ primary: localStorage.getItem(`conduit:workspace-panel:${props.chatId()}:file`), secondary: localStorage.getItem(`conduit:workspace-panel:${props.chatId()}:file-secondary`) });
+  const [focusedSlot, setFocusedSlot] = createSignal<FileSlotId>("primary");
+  const slotHandles = new Map<FileSlotId, FileSlotHandle>();
   const [wrapLines, setWrapLines] = createSignal(localStorage.getItem(WRAP_LINES_KEY) === "true");
   const [diff, setDiff] = createSignal<DiffPayload | null>(null);
   const [commitMessage, setCommitMessage] = createSignal("");
@@ -171,13 +199,19 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
   const treeWidthKey = () => `conduit:workspace-panel:${props.projectId()}:tree-width`;
   const treeCollapsedKey = () => `conduit:workspace-panel:${props.projectId()}:tree-collapsed`;
   const splitRatioKey = () => `conduit:workspace-panel:${props.projectId()}:split-ratio`;
-  const [width, setWidth] = createSignal(Math.max(256, Math.min(496, Number(localStorage.getItem(widthKey())) || 336)));
+  const fileSplitRatioKey = () => `conduit:workspace-panel:${props.projectId()}:file-split-ratio`;
+  const fileKey = (slot: FileSlotId) => `conduit:workspace-panel:${props.chatId()}:${slot === "primary" ? "file" : "file-secondary"}`;
+  const storedOpenFiles = (): OpenFiles => ({ primary: localStorage.getItem(fileKey("primary")), secondary: localStorage.getItem(fileKey("secondary")) });
+  const [width, setWidth] = createSignal(Math.max(MIN_WORKSPACE_PANE_WIDTH, Math.min(496, Number(localStorage.getItem(widthKey())) || 336)));
   const [shellWidth, setShellWidth] = createSignal(props.open() ? width() : 0);
   const [shellGap, setShellGap] = createSignal(props.open() && !isMobileLayout() ? 8 : 0);
   const [treeWidth, setTreeWidth] = createSignal(Math.max(MIN_TREE_WIDTH, Math.min(MAX_TREE_WIDTH, Number(localStorage.getItem(treeWidthKey())) || DEFAULT_TREE_WIDTH)));
   const [treeCollapsed, setTreeCollapsed] = createSignal(localStorage.getItem(treeCollapsedKey()) === "true");
-  const [splitRatio, setSplitRatio] = createSignal(Math.max(25, Math.min(75, Number(localStorage.getItem(splitRatioKey())) || 50)));
+  const [splitRatio, setSplitRatio] = createSignal(Math.max(0, Math.min(100, Number(localStorage.getItem(splitRatioKey())) || 50)));
+  const [splitWidth, setSplitWidth] = createSignal(0);
+  const [fileSplitRatio, setFileSplitRatio] = createSignal(Math.max(25, Math.min(75, Number(localStorage.getItem(fileSplitRatioKey())) || 50)));
   const [artifactMode, setArtifactMode] = createSignal<ArtifactMode>("outputs");
+  const [terminalFocusRequest, setTerminalFocusRequest] = createSignal(0);
   const detailOpenKey = () => `conduit:workspace-panel:${props.chatId()}:${tab()}:detail-open`;
   const detailHeightKey = () => `conduit:workspace-panel:${props.chatId()}:${tab()}:detail-height`;
   const detailOpenFor = (nextTab: PanelTab) => localStorage.getItem(`conduit:workspace-panel:${props.chatId()}:${nextTab}:detail-open`) ?? (nextTab === "diff" ? "false" : "true");
@@ -188,7 +222,6 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
   const diffLoading = () => hasPending("diff");
   const filesLoading = () => [...requests.keys()].some((operation) => operation.startsWith("directory:") && hasPending(operation));
   const loading = () => [...pending().values()].some((entry) => entry.foreground);
-  const hasUnsavedChanges = () => Boolean(preview() && draft() !== preview()!.content);
   const stagedFiles = createMemo(() => (diff()?.files || []).filter((file) => file.status[0] !== " " && file.status[0] !== "?"));
   const unstagedFiles = createMemo(() => (diff()?.files || []).filter((file) => file.status[1] !== " " || file.status === "??"));
 
@@ -350,62 +383,107 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
     setTab(next);
     localStorage.setItem(storageKey(), next);
   };
+  const splitActive = () => props.expanded() && secondaryTab() !== null;
+  const saveSecondaryTab = (next: PanelTab | null) => {
+    setSecondaryTab(next);
+    if (next) localStorage.setItem(secondaryKey(), next);
+    else localStorage.removeItem(secondaryKey());
+  };
+  const toggleSplit = () => {
+    if (!props.expanded()) return;
+    if (splitActive()) {
+      saveSecondaryTab(null);
+      focusTabDefault(tab());
+      return;
+    }
+    const next: PanelTab = tab() === "files" ? "diff" : "files";
+    saveSecondaryTab(next);
+    focusTabDefault(next, "right");
+  };
+  // Keyboard retargets whichever pane holds focus: unlike a click, focus already
+  // says which half you are working in.
+  const focusedPane = (): "left" | "right" => {
+    if (!splitActive()) return "left";
+    const active = document.activeElement;
+    if (!(active instanceof Element)) return "left";
+    const owner = active.closest("[data-pane],[data-position]");
+    const side = owner?.getAttribute("data-pane") || owner?.getAttribute("data-position");
+    return side === "right" ? "right" : "left";
+  };
   const tabVisible = (candidate: PanelTab) => tab() === candidate || (props.expanded() && secondaryTab() === candidate);
   const panePosition = (candidate: PanelTab) => tab() === candidate ? "left" : secondaryTab() === candidate ? "right" : undefined;
   const tabLabel = (candidate: PanelTab) => candidate === "files" ? "Files" : candidate === "diff" ? "Source Control" : candidate === "artifacts" ? "Artifacts" : "Terminal";
   const setPaneTab = (side: "left" | "right", next: PanelTab) => {
+    if (!splitActive()) {
+      selectTab(next);
+      return;
+    }
     const left = tab();
     const right = secondaryTab() || (left === "files" ? "diff" : "files");
     if (side === "left") {
-      if (next === right) setSecondaryTab(left);
+      if (next === right) saveSecondaryTab(left);
       selectTab(next);
     } else if (next === left) {
       selectTab(right);
-      setSecondaryTab(left);
+      saveSecondaryTab(left);
     } else {
-      setSecondaryTab(next);
+      saveSecondaryTab(next);
     }
   };
+  const focusTabControl = (next: PanelTab, side: "left" | "right" = "left") => {
+    const control = panelRoot?.querySelector<HTMLElement>(`[data-pane="${side}"][data-workspace-tab="${next}"]`);
+    control?.focus({ preventScroll: true });
+  };
+  const focusTabDefault = (next: PanelTab, side: "left" | "right" = "left") => {
+    if (next === "files") {
+      if (!directories()[""]) void loadDirectory();
+      queueMicrotask(() => fileFilterInput?.focus({ preventScroll: true }));
+      return;
+    }
+    queueMicrotask(() => {
+      focusTabControl(next, side);
+      if (next === "terminal") setTerminalFocusRequest((request) => request + 1);
+    });
+  };
+  const tabIcon = (candidate: PanelTab) => candidate === "files" ? <FolderIcon />
+    : candidate === "diff" ? <GitCompareArrowsIcon />
+    : candidate === "artifacts" ? <BoxesIcon />
+    : <TerminalIcon />;
+  // One strip per pane: the tabs you click always belong to the pane below them,
+  // so a split needs no notion of an "active" pane.
+  const paneTabs = (side: "left" | "right") => (
+    <div class="workspace-panel-tabs" role="toolbar" aria-label={splitActive() ? `${side === "left" ? "Left" : "Right"} workspace pane views` : "Workspace views"}>
+      <For each={PANEL_TABS}>{(item) => {
+        const label = () => splitActive() ? `${tabLabel(item)} (${side === "left" ? "left" : "right"} pane)` : tabLabel(item);
+        return <button type="button" role="tab" data-pane={side} data-workspace-tab={item} aria-label={label()} title={label()} aria-selected={(side === "left" ? tab() : secondaryTab()) === item} onClick={() => changePaneTab(side, item)}>{tabIcon(item)}<span>{tabLabel(item)}</span></button>;
+      }}</For>
+    </div>
+  );
   const changePaneTab = (side: "left" | "right", value: string) => {
-    if (isPanelTab(value)) setPaneTab(side, value);
-  };
-  const activateTab = (next: PanelTab) => {
-    if (!props.expanded()) {
-      setSecondaryTab(null);
-      selectTab(next);
-      return;
-    }
-    if (next === tab()) {
-      setSecondaryTab(null);
-      return;
-    }
-    setSecondaryTab(secondaryTab() === next ? null : next);
-  };
-  const selectFilesTab = () => {
-    activateTab("files");
-    if (!directories()[""]) void loadDirectory();
-    queueMicrotask(() => fileFilterInput?.focus());
+    if (!isPanelTab(value)) return;
+    setPaneTab(side, value);
+    focusTabDefault(value, side);
   };
   const workspaceShortcutAvailable = () => !document.querySelector(
     '.command-dialog[data-state="open"], .settings-dialog[data-state="open"], .conduit-modal[data-state="open"], .external-link-dialog[data-state="open"]',
   );
-  const focusTabControl = (next: PanelTab) => {
-    const control = props.expanded()
-      ? panelRoot?.querySelector<HTMLSelectElement>('select[aria-label="Left workspace pane"]')
-      : panelRoot?.querySelector<HTMLElement>(`[data-workspace-tab="${next}"]`);
-    control?.focus({ preventScroll: true });
-  };
   const selectShortcutTab = (next: PanelTab) => {
-    if (props.expanded()) setPaneTab("left", next);
-    else selectTab(next);
-    if (next === "files" && !directories()[""]) void loadDirectory();
-    queueMicrotask(() => focusTabControl(next));
+    const side = focusedPane();
+    setPaneTab(side, next);
+    focusTabDefault(next, side);
+  };
+  const focusWorkspaceSurface = (event: PointerEvent) => {
+    const target = event.target instanceof Element ? event.target : null;
+    if (target?.closest("button,a,input,textarea,select,[contenteditable='true'],[role='button'],[role='link'],[role='option'],[role='treeitem'],[role='menu'],[role^='menuitem']")) return;
+    event.preventDefault();
+    queueMicrotask(() => focusTabDefault(tab()));
   };
   const releaseShortcutHandlers = [
     props.shortcuts.registerHandler(COMMAND_IDS.workspaceFiles, "workspace-panel", () => selectShortcutTab("files"), { when: workspaceShortcutAvailable }),
     props.shortcuts.registerHandler(COMMAND_IDS.workspaceSourceControl, "workspace-panel", () => selectShortcutTab("diff"), { when: workspaceShortcutAvailable }),
     props.shortcuts.registerHandler(COMMAND_IDS.workspaceArtifacts, "workspace-panel", () => selectShortcutTab("artifacts"), { when: workspaceShortcutAvailable }),
     props.shortcuts.registerHandler(COMMAND_IDS.workspaceTerminal, "workspace-panel", () => selectShortcutTab("terminal"), { when: workspaceShortcutAvailable }),
+    props.shortcuts.registerHandler(COMMAND_IDS.workspaceSplit, "workspace-panel", toggleSplit, { when: workspaceShortcutAvailable }),
   ];
   onCleanup(() => releaseShortcutHandlers.forEach((release) => release()));
   const toggleDetail = () => {
@@ -469,20 +547,26 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
   };
   const loadDirectory = async (directory = "", background = false) => {
     const { request, controller } = startRequest(`directory:${directory}`, !background);
-    setError("");
+    if (!background) setError("");
     try {
       const payload = await api<{ entries?: unknown; truncated?: boolean }>(`/v0/projects/${encodeURIComponent(request.projectId)}/tree?path=${encodeURIComponent(directory)}`, { signal: controller.signal });
-      if (!ownsRequest(request)) return;
+      if (!ownsRequest(request)) return false;
+      let changed = false;
       setDirectories((current) => {
-        const next = { ...current, [directory]: { entries: asList<TreeEntry>(payload.entries), truncated: payload.truncated === true } };
+        const listing = { entries: asList<TreeEntry>(payload.entries), truncated: payload.truncated === true };
+        if (directoryListingsEqual(current[directory], listing)) return current;
+        changed = Boolean(current[directory]);
+        const next = { ...current, [directory]: listing };
         cacheWorkspace(request.projectId, { directories: next });
         return next;
       });
+      return changed;
     } catch (cause) {
-      if (ownsRequest(request) && !wasAborted(cause)) setError((cause as Error).message);
+      if (ownsRequest(request) && !background && !wasAborted(cause)) setError((cause as Error).message);
     } finally {
       finishRequest(request);
     }
+    return false;
   };
   const toggleDirectory = async (directory: string) => {
     const next = new Set(expanded());
@@ -491,71 +575,103 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
     setExpanded(next);
     cacheWorkspace(props.projectId(), { expanded: next });
   };
-  const loadFile = async (file: string, background = false) => {
-    const { request, controller } = startRequest("file", !background);
-    setError("");
-    try {
-      const payload = await api<FilePreview>(`/v0/projects/${encodeURIComponent(request.projectId)}/file?path=${encodeURIComponent(file)}`, { signal: controller.signal });
-      if (ownsRequest(request)) {
-        batch(() => {
-          setPreview(payload);
-          setDraft(payload.content);
-        });
-        cacheWorkspace(request.projectId, { preview: payload });
-        return payload;
-      }
-    } catch (cause) {
-      if (ownsRequest(request) && !wasAborted(cause)) {
-        batch(() => {
-          setPreview(null);
-          setDraft("");
-          setEditing(false);
-        });
-        cacheWorkspace(request.projectId, { preview: null });
-        setError((cause as Error).message);
-      }
-    } finally {
-      finishRequest(request);
+  const isFileOpen = (path: string) => openPaths().primary === path || openPaths().secondary === path;
+  const slotForPath = (path: string): FileSlotId | null =>
+    openPaths().primary === path ? "primary" : openPaths().secondary === path ? "secondary" : null;
+  const setSlotPath = (slot: FileSlotId, path: string | null) => {
+    setOpenPaths((current) => ({ ...current, [slot]: path }));
+    if (path) localStorage.setItem(fileKey(slot), path);
+    else localStorage.removeItem(fileKey(slot));
+  };
+  // Only the slot being retargeted can lose a draft, so editing on one side is
+  // never discarded by opening a file on the other.
+  const openInSlot = (slot: FileSlotId, path: string) => {
+    const handle = slotHandles.get(slot);
+    if (openPaths()[slot] === path) {
+      setFocusedSlot(slot);
+      return;
     }
-    return null;
+    if (handle?.hasUnsavedChanges() && !window.confirm("Discard unsaved changes and open another file?")) return;
+    setSlotPath(slot, path);
+    setFocusedSlot(slot);
   };
-  const openFile = async (file: string) => {
-    if (preview()?.path === file) return preview();
-    if (preview()?.path !== file && hasUnsavedChanges() && !window.confirm("Discard unsaved changes and open another file?")) return null;
-    setEditing(false);
-    return loadFile(file);
+  const openFile = (path: string) => openInSlot(focusedSlot(), path);
+  const openFileToSide = (path: string) => openInSlot(filesWide() ? "secondary" : focusedSlot(), path);
+  let pendingEdit: string | null = null;
+  const editFile = (path: string) => {
+    const slot = slotForPath(path);
+    if (slot) {
+      setFocusedSlot(slot);
+      slotHandles.get(slot)?.edit();
+      return;
+    }
+    pendingEdit = path;
+    openFile(path);
   };
-  const editFile = async (file = preview()?.path) => {
-    if (!file) return;
-    const opened = preview()?.path === file ? preview() : await openFile(file);
-    if (!opened) return;
-    setEditing(true);
-  };
-  const saveFile = async () => {
-    const file = preview();
-    if (!file || !hasUnsavedChanges() || saving()) return;
-    setSaving(true);
-    setError("");
-    try {
-      const written = await api<FileWriteResult>(`/v0/projects/${encodeURIComponent(props.projectId())}/file?path=${encodeURIComponent(file.path)}`, {
-        method: "PUT",
-        headers: { "content-type": "application/octet-stream", "if-match": file.revision },
-        body: draft(),
-      });
-      const next = { ...file, ...written, content: draft() };
-      setPreview(next);
-      cacheWorkspace(props.projectId(), { preview: next });
-    } catch (cause) {
-      setError((cause as Error).message);
-    } finally {
-      setSaving(false);
+  const noteSlotLoaded = (slot: FileSlotId, file: FilePreview | null) => {
+    if (slot === "primary") setPrimaryFile(file);
+    if (file && pendingEdit === file.path) {
+      pendingEdit = null;
+      slotHandles.get(slot)?.edit();
     }
   };
-  const downloadFile = async (file = preview()?.path) => {
-    if (!file) return;
+  // Closing the left slot promotes the right one so the layout never holds a gap.
+  const closeSlot = (slot: FileSlotId) => {
+    if (slot === "secondary") {
+      if (slotHandles.get("secondary")?.hasUnsavedChanges() && !window.confirm("Discard unsaved changes and close this file?")) return;
+      setSlotPath("secondary", null);
+      setFocusedSlot("primary");
+      return;
+    }
+    const promoted = openPaths().secondary;
+    const losesDraft = slotHandles.get("primary")?.hasUnsavedChanges() || (promoted && slotHandles.get("secondary")?.hasUnsavedChanges());
+    if (losesDraft && !window.confirm("Discard unsaved changes and close this file?")) return;
+    setSlotPath("primary", promoted);
+    setSlotPath("secondary", null);
+    setFocusedSlot("primary");
+  };
+  const dropOpenPath = (path: string) => {
+    if (openPaths().secondary === path) setSlotPath("secondary", null);
+    if (openPaths().primary === path) {
+      const promoted = openPaths().secondary;
+      setSlotPath("primary", promoted);
+      if (promoted) setSlotPath("secondary", null);
+      setFocusedSlot("primary");
+    }
+  };
+  const openSlotHandles = () => [...slotHandles.entries()]
+    .filter(([slot]) => Boolean(openPaths()[slot]))
+    .map(([, handle]) => handle);
+  const saveFileSplitRatio = (next: number) => {
+    const value = Math.max(25, Math.min(75, Math.round(next)));
+    setFileSplitRatio(value);
+    localStorage.setItem(fileSplitRatioKey(), String(value));
+  };
+  const startFileSplitResize = (event: PointerEvent) => {
+    const primary = filesHost?.querySelector<HTMLElement>('.workspace-preview[data-slot="primary"]');
+    const secondary = filesHost?.querySelector<HTMLElement>('.workspace-preview[data-slot="secondary"]');
+    if (!primary || !secondary) return;
+    event.preventDefault();
+    const left = primary.getBoundingClientRect().left;
+    const width = secondary.getBoundingClientRect().right - left;
+    if (width <= 0) return;
+    const move = (moveEvent: PointerEvent) => saveFileSplitRatio(((moveEvent.clientX - left) / width) * 100);
+    const stop = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", stop);
+      window.removeEventListener("pointercancel", stop);
+      document.body.classList.remove("workspace-split-resizing");
+    };
+    document.body.classList.add("workspace-split-resizing");
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", stop, { once: true });
+    window.addEventListener("pointercancel", stop, { once: true });
+  };
+  // Downloading works on any tree entry, open or not, so it stays in the panel.
+  const downloadPath = async (path: string) => {
     setError("");
     try {
-      const response = await authorizedFetch(httpUrl(`/v0/projects/${encodeURIComponent(props.projectId())}/file?path=${encodeURIComponent(file)}&download=1`));
+      const response = await authorizedFetch(httpUrl(`/v0/projects/${encodeURIComponent(props.projectId())}/file?path=${encodeURIComponent(path)}&download=1`));
       if (!response.ok) {
         const body: unknown = await response.json().catch(() => ({}));
         const message = body && typeof body === "object" && "message" in body ? String(body.message) : "Download failed";
@@ -564,15 +680,15 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
       const url = URL.createObjectURL(await response.blob());
       const link = document.createElement("a");
       link.href = url;
-      link.download = file.split("/").at(-1) || "download";
+      link.download = path.split("/").at(-1) || "download";
       link.click();
       window.setTimeout(() => URL.revokeObjectURL(url), 0);
     } catch (cause) {
       setError((cause as Error).message);
     }
   };
-  const chooseUpload = (directory = "") => {
-    setUploadDirectory(directory);
+  const chooseUpload = (target: UploadTarget = { kind: "directory", path: "" }) => {
+    setUploadTarget(target);
     if (fileUploadInput) {
       fileUploadInput.value = "";
       fileUploadInput.click();
@@ -580,31 +696,82 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
   };
   const uploadFiles = async (files: FileList | null) => {
     if (!files?.length) return;
-    const directory = uploadDirectory();
+    const target = uploadTarget();
+    const replacement = files.item(0);
+    if (!replacement) return;
+    if (target.kind === "replacement" && !window.confirm(`Replace "${target.path}" with "${replacement.name}"?`)) return;
     setUploading(true);
     setError("");
     try {
+      if (target.kind === "replacement") {
+        await api<FileWriteResult>(`/v0/projects/${encodeURIComponent(props.projectId())}/file?path=${encodeURIComponent(target.path)}`, {
+          method: "PUT",
+          headers: { "content-type": "application/octet-stream", "if-match": "*" },
+          body: replacement,
+        });
+        await loadDirectory(target.path.split("/").slice(0, -1).join("/"), true);
+        const reloading = slotForPath(target.path);
+        if (reloading) await slotHandles.get(reloading)?.reload();
+        toast.success(`Replaced ${target.path}`);
+        return;
+      }
       for (const file of files) {
-        const target = directory ? `${directory}/${file.name}` : file.name;
-        await api<FileWriteResult>(`/v0/projects/${encodeURIComponent(props.projectId())}/file?path=${encodeURIComponent(target)}`, {
+        const path = target.path ? `${target.path}/${file.name}` : file.name;
+        await api<FileWriteResult>(`/v0/projects/${encodeURIComponent(props.projectId())}/file?path=${encodeURIComponent(path)}`, {
           method: "PUT",
           headers: { "content-type": "application/octet-stream" },
           body: file,
         });
       }
-      await loadDirectory(directory, true);
+      await loadDirectory(target.path, true);
     } catch (cause) {
       setError((cause as Error).message);
-      await loadDirectory(directory, true);
+      await loadDirectory(target.kind === "directory" ? target.path : target.path.split("/").slice(0, -1).join("/"), true);
+    } finally {
+      setUploading(false);
+    }
+  };
+  const deleteFile = async (path: string) => {
+    if (!window.confirm(`Delete "${path}"? This action cannot be undone.`)) return;
+    setUploading(true);
+    setError("");
+    try {
+      await api<void>(`/v0/projects/${encodeURIComponent(props.projectId())}/file?path=${encodeURIComponent(path)}`, { method: "DELETE" });
+      await loadDirectory(path.split("/").slice(0, -1).join("/"), true);
+      dropOpenPath(path);
+      toast.success(`Deleted ${path}`);
+    } catch (cause) {
+      setError((cause as Error).message);
     } finally {
       setUploading(false);
     }
   };
   const refreshFiles = async () => {
+    setError("");
     const loaded = Object.keys(directories());
     for (const directory of loaded.length ? loaded : [""]) await loadDirectory(directory, true);
-    const selected = preview()?.path;
-    if (selected && !hasUnsavedChanges()) await loadFile(selected, true);
+    await Promise.all(openSlotHandles().map((handle) => handle.reload()));
+  };
+  let pollingFiles = false;
+  const pollFiles = async () => {
+    if (pollingFiles || uploading()) return;
+    pollingFiles = true;
+    const projectId = props.projectId();
+    try {
+      let treeChanged = false;
+      const visibleDirectories = ["", ...expanded()].filter((directory) => directory === "" || Boolean(directories()[directory]));
+      for (const directory of visibleDirectories) {
+        if (await loadDirectory(directory, true)) treeChanged = true;
+      }
+      // Each open slot checks its own file; the slot announces its own reload.
+      for (const handle of openSlotHandles()) await handle.poll();
+      if (props.projectId() !== projectId) return;
+      if (treeChanged) toast.info("Workspace files updated");
+    } catch (cause) {
+      if (props.projectId() === projectId && !wasAborted(cause)) setError((cause as Error).message);
+    } finally {
+      pollingFiles = false;
+    }
   };
   const loadDiff = async (includePatch = false, reuse = false, background = false) => {
     const { request, controller } = startRequest("diff", !background);
@@ -647,7 +814,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
     }
   };
   const copy = (value?: string) => { if (value) void navigator.clipboard.writeText(value); };
-  const clampWidth = (next: number) => Math.max(240, Math.min(Math.floor(window.innerWidth * 0.65), next));
+  const clampWidth = (next: number) => Math.max(MIN_WORKSPACE_PANE_WIDTH, Math.min(Math.floor(window.innerWidth * 0.65), next));
   // Every atomic width commit has to announce itself. The transcript learns its
   // own width only from geometry motion, so a commit that skips the event
   // leaves it laid out for the panel's previous size until something unrelated
@@ -682,10 +849,6 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
     panelWasOpen = open;
   });
   createEffect(() => {
-    if (props.expanded() && !secondaryTab()) setSecondaryTab(tab() === "files" ? "diff" : "files");
-    if (!props.expanded()) setSecondaryTab(null);
-  });
-  createEffect(() => {
     const open = props.open() && isMobileLayout();
     if (open && !mobileWasOpen) {
       mobileReturnFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
@@ -696,6 +859,11 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
       queueMicrotask(() => restoreFocus(previous, [".composer textarea", 'button[aria-label="Toggle workspace panel"]', ".mobile-sidebar-trigger"]));
     }
     mobileWasOpen = open;
+  });
+  createEffect(() => {
+    if (!props.open() || !tabVisible("files")) return;
+    const timer = window.setInterval(() => void pollFiles(), FILE_POLL_INTERVAL_MS);
+    onCleanup(() => window.clearInterval(timer));
   });
   const startResize = (event: PointerEvent) => {
     if (isMobileLayout()) return;
@@ -771,6 +939,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
     stopResize?.();
     stopDetailResize?.();
     filesResizeObserver?.disconnect();
+    splitResizeObserver?.disconnect();
     if (treeScrollRaf) cancelAnimationFrame(treeScrollRaf);
     if (treeTypeaheadTimer) window.clearTimeout(treeTypeaheadTimer);
     document.body.classList.remove("workspace-resizing");
@@ -797,16 +966,23 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
         pendingWidthCommit = Number(localStorage.getItem(widthKey())) || 336;
         setTreeWidth(Math.max(MIN_TREE_WIDTH, Math.min(MAX_TREE_WIDTH, Number(localStorage.getItem(treeWidthKey())) || DEFAULT_TREE_WIDTH)));
         setTreeCollapsed(localStorage.getItem(treeCollapsedKey()) === "true");
-        setSplitRatio(Math.max(25, Math.min(75, Number(localStorage.getItem(splitRatioKey())) || 50)));
+        setSplitRatio(Math.max(0, Math.min(100, Number(localStorage.getItem(splitRatioKey())) || 50)));
+        setFileSplitRatio(Math.max(25, Math.min(75, Number(localStorage.getItem(fileSplitRatioKey())) || 50)));
         setShowHidden(localStorage.getItem(showHiddenKey()) === "true");
         setKeptVisible(storedPaths(keptVisibleKey()));
       }
       setTab(nextTab);
+      setSecondaryTab(storedSecondary());
+      setOpenPaths(storedOpenFiles());
+      setFocusedSlot("primary");
     });
     if (pendingWidthCommit != null) commitWidth(pendingWidthCommit);
   }));
   createEffect(on(() => props.requestedTab?.(), (next) => {
-    if (next) selectTab(next.tab);
+    if (next) selectShortcutTab(next.tab);
+  }));
+  createEffect(on(() => props.focusRequest(), (request, previous) => {
+    if (request && request !== previous && props.open()) focusTabDefault(tab());
   }));
   createEffect(on(
     () => [props.projectId(), tab(), secondaryTab(), props.open(), props.expanded(), diffDetailOpen()] as const,
@@ -820,11 +996,8 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
         batch(() => {
           setDirectories(cached?.directories || {});
           setExpanded(cached?.expanded || new Set<string>());
-          setPreview(cached?.preview || null);
-          setDraft(cached?.preview?.content || "");
-          setEditing(false);
           setFileFilter("");
-          setTreeFocusPath(cached?.preview?.path || "");
+          setTreeFocusPath(openPaths().primary || "");
           setDiff(cached?.diff || null);
           setError("");
         });
@@ -868,7 +1041,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
   const treeTabStop = () => {
     const visible = visibleTreePaths();
     if (visible.includes(treeFocusPath())) return treeFocusPath();
-    const selected = preview()?.path;
+    const selected = openPaths()[focusedSlot()];
     return selected && visible.includes(selected) ? selected : visible[0] || "";
   };
   const onTreeKeyDown = (event: KeyboardEvent & { currentTarget: HTMLButtonElement }) => {
@@ -961,16 +1134,37 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
     setTreeCollapsed(next);
     localStorage.setItem(treeCollapsedKey(), String(next));
   };
-  const saveSplitRatio = (next: number) => {
-    const value = Math.max(25, Math.min(75, next));
+  const splitRatioBounds = (hostWidth = splitWidth()) => {
+    if (hostWidth <= MIN_WORKSPACE_PANE_WIDTH * 2 + WORKSPACE_SPLIT_GUTTER_WIDTH) {
+      const middle = hostWidth > 0
+        ? ((hostWidth - WORKSPACE_SPLIT_GUTTER_WIDTH) / 2 / hostWidth) * 100
+        : 50;
+      return { minimum: middle, maximum: middle };
+    }
+    return {
+      minimum: (MIN_WORKSPACE_PANE_WIDTH / hostWidth) * 100,
+      maximum: ((hostWidth - WORKSPACE_SPLIT_GUTTER_WIDTH - MIN_WORKSPACE_PANE_WIDTH) / hostWidth) * 100,
+    };
+  };
+  const clampSplitRatio = (next: number, hostWidth = splitWidth()) => {
+    const bounds = splitRatioBounds(hostWidth);
+    return Math.max(bounds.minimum, Math.min(bounds.maximum, next));
+  };
+  const saveSplitRatio = (next: number, hostWidth = splitWidth()) => {
+    const value = clampSplitRatio(next, hostWidth);
     setSplitRatio(value);
     localStorage.setItem(splitRatioKey(), String(value));
   };
+  createEffect(() => {
+    if (!splitActive() || splitWidth() <= 0) return;
+    const value = clampSplitRatio(splitRatio());
+    if (Math.abs(value - splitRatio()) > 0.001) saveSplitRatio(value);
+  });
   const startSplitResize = (event: PointerEvent) => {
     if (!splitHost) return;
     event.preventDefault();
     const bounds = splitHost.getBoundingClientRect();
-    const move = (moveEvent: PointerEvent) => saveSplitRatio(((moveEvent.clientX - bounds.left) / bounds.width) * 100);
+    const move = (moveEvent: PointerEvent) => saveSplitRatio(((moveEvent.clientX - bounds.left) / bounds.width) * 100, bounds.width);
     const stop = () => {
       window.removeEventListener("pointermove", move);
       window.removeEventListener("pointerup", stop);
@@ -1025,32 +1219,38 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
             aria-level={depth() + 1}
             aria-posinset={index() + 1}
             aria-setsize={visibleEntries(treeProps.directory).length}
-            aria-selected={preview()?.path === entry.path}
+            aria-selected={isFileOpen(entry.path)}
             class="workspace-tree-row"
             style={{ "padding-left": `${4 + depth() * 11.2}px` }}
             data-name={entry.name.toLowerCase()}
             data-path={entry.path}
-            data-selected={preview()?.path === entry.path}
+            data-selected={isFileOpen(entry.path)}
+            data-focused-file={openPaths()[focusedSlot()] === entry.path}
             tabIndex={treeTabStop() === entry.path ? 0 : -1}
             onFocus={() => setTreeFocusPath(entry.path)}
             onKeyDown={onTreeKeyDown}
-            onClick={() => entry.type === "directory" ? void toggleDirectory(entry.path) : entry.type === "file" ? void openFile(entry.path) : undefined}
+            onClick={(event) => entry.type === "directory" ? void toggleDirectory(entry.path) : entry.type === "file" ? (event.altKey ? openFileToSide(entry.path) : openFile(entry.path)) : undefined}
           >
             <Show when={entry.type === "directory"} fallback={<><span class="workspace-tree-chevron-placeholder" /><FileTypeIcon name={entry.name} /></>}>
-              <ChevronRightIcon class="workspace-tree-chevron" data-open={directoryIsOpen(entry.path)} /><FolderIcon />
+              <ChevronRightIcon class="workspace-tree-chevron" data-open={directoryIsOpen(entry.path)} /><FolderTypeIcon name={entry.name} expanded={directoryIsOpen(entry.path)} />
             </Show>
             <span>{entry.name}</span>
             <Show when={keptVisible().has(entry.path)}><PinIcon class="workspace-tree-kept" aria-label="Always visible" /></Show>
           </ContextMenuTrigger>
-          <ContextMenuContent class="w-48 workspace-file-menu">
+          <ContextMenuContent shortcutScope="workspace-panel" class="w-48 workspace-file-menu">
             <ContextMenuGroup>
               <Show when={entry.type === "file"}>
-                <ContextMenuItem onSelect={() => void openFile(entry.path)}><FileTypeIcon name={entry.name} />Open preview</ContextMenuItem>
-                <ContextMenuItem onSelect={() => void editFile(entry.path)}><PencilIcon />Edit</ContextMenuItem>
-                <ContextMenuItem onSelect={() => void downloadFile(entry.path)}><DownloadIcon />Download</ContextMenuItem>
+                <ContextMenuItem onSelect={() => openFile(entry.path)}><FileTypeIcon name={entry.name} />Open preview</ContextMenuItem>
+                <Show when={filesWide()}>
+                  <ContextMenuItem onSelect={() => openFileToSide(entry.path)}><Columns2Icon />Open to the side</ContextMenuItem>
+                </Show>
+                <ContextMenuItem onSelect={() => editFile(entry.path)}><PencilIcon />Edit</ContextMenuItem>
+                <ContextMenuItem onSelect={() => void downloadPath(entry.path)}><DownloadIcon />Download</ContextMenuItem>
+
+                <ContextMenuItem disabled={uploading()} onSelect={() => chooseUpload({ kind: "replacement", path: entry.path })}><UploadIcon />Replace with upload…</ContextMenuItem>
               </Show>
               <Show when={entry.type === "directory"}>
-                <ContextMenuItem onSelect={() => chooseUpload(entry.path)}><UploadIcon />Upload files here</ContextMenuItem>
+                <ContextMenuItem onSelect={() => chooseUpload({ kind: "directory", path: entry.path })}><UploadIcon />Upload files here</ContextMenuItem>
               </Show>
               <ContextMenuItem onSelect={() => copy(entry.path)}><CopyIcon />Copy path</ContextMenuItem>
             </ContextMenuGroup>
@@ -1059,6 +1259,10 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
               <ContextMenuItem onSelect={() => toggleKeptVisible(entry.path)}>
                 <Show when={keptVisible().has(entry.path)} fallback={<><PinIcon />Keep visible</>}><PinOffIcon />Stop keeping visible</Show>
               </ContextMenuItem>
+            </Show>
+            <Show when={entry.type === "file"}>
+              <ContextMenuSeparator />
+              <ContextMenuItem variant="destructive" disabled={uploading()} onSelect={() => void deleteFile(entry.path)}><Trash2Icon />Delete file</ContextMenuItem>
             </Show>
           </ContextMenuContent>
         </ContextMenu>
@@ -1074,35 +1278,44 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
     <Show when={props.open()}>
       <button type="button" class="mobile-panel-backdrop" data-mobile-backdrop="workspace" data-for="workspace" aria-label="Dismiss workspace panel" onClick={props.onClose} />
     </Show>
-    <aside ref={panelRoot} class="workspace-panel" data-shortcut-scope="workspace" classList={{ "workspace-panel-open": props.open() || shellWidth() > 0.5, "workspace-panel-expanded": props.expanded() }} aria-label="Workspace panel" aria-hidden={!props.open()} inert={!props.open()} style={{ "--workspace-panel-width": `${width()}px`, "--workspace-shell-width": `${shellWidth()}px`, width: `${shellWidth()}px`, "margin-right": `${shellGap()}px` }}>
-    <div ref={resizeHandle} class="workspace-resize-handle" role="separator" aria-label="Resize workspace panel" aria-orientation="vertical" aria-valuemin="240" aria-valuemax={Math.floor(window.innerWidth * 0.65)} aria-valuenow={width()} tabIndex={0} onPointerDown={startResize} onKeyDown={(event) => { if (event.key === "ArrowLeft") saveWidth(width() + 16); if (event.key === "ArrowRight") saveWidth(width() - 16); }} />
-    <div ref={panelSurface} class="workspace-panel-surface">
-    <header class="workspace-panel-header">
-      <strong>Workspace</strong>
-      <Button variant="ghost" size="icon-sm" class="workspace-expand-toggle" title={props.expanded() ? "Restore split view" : "Expand Workspace"} aria-label={props.expanded() ? "Restore split view" : "Expand Workspace"} aria-pressed={props.expanded()} onClick={props.onToggleExpanded}>
-        <Show when={props.expanded()} fallback={<Maximize2Icon />}><Minimize2Icon /></Show>
-      </Button>
-      <Show when={props.expanded()} fallback={<div class="workspace-panel-tabs" role="toolbar" aria-label="Workspace views">
-        <button type="button" role="tab" data-workspace-tab="files" aria-label="Files" aria-selected={tab() === "files"} onClick={selectFilesTab}><FolderIcon /><span>Files</span></button>
-        <button type="button" role="tab" data-workspace-tab="diff" aria-label="Source Control" aria-selected={tab() === "diff"} onClick={() => activateTab("diff")}><GitCompareArrowsIcon /><span>Source Control</span></button>
-        <button type="button" role="tab" data-workspace-tab="artifacts" aria-label="Artifacts" aria-selected={tab() === "artifacts"} onClick={() => activateTab("artifacts")}><BoxesIcon /><span>Artifacts</span></button>
-        <button type="button" role="tab" data-workspace-tab="terminal" aria-label="Terminal" aria-selected={tab() === "terminal"} onClick={() => activateTab("terminal")}><TerminalIcon /><span>Terminal</span></button>
-      </div>}>
-        <div class="workspace-pane-selectors" aria-label="Expanded workspace panes">
-          <label><span>Left</span><select aria-label="Left workspace pane" value={tab()} onChange={(event) => changePaneTab("left", event.currentTarget.value)}><For each={["files", "diff", "artifacts", "terminal"] satisfies PanelTab[]}>{(item) => <option value={item}>{tabLabel(item)}</option>}</For></select></label>
-          <label><span>Right</span><select aria-label="Right workspace pane" value={secondaryTab() || "diff"} onChange={(event) => changePaneTab("right", event.currentTarget.value)}><For each={["files", "diff", "artifacts", "terminal"] satisfies PanelTab[]}>{(item) => <option value={item}>{tabLabel(item)}</option>}</For></select></label>
+    <aside ref={panelRoot} class="workspace-panel" data-shortcut-scope="workspace-panel" classList={{ "workspace-panel-open": props.open() || shellWidth() > 0.5, "workspace-panel-expanded": props.expanded() }} aria-label="Workspace panel" aria-hidden={!props.open()} inert={!props.open()} style={{ "--workspace-panel-width": `${width()}px`, "--workspace-shell-width": `${shellWidth()}px`, width: `${shellWidth()}px`, "margin-right": `${shellGap()}px` }}>
+    <div ref={resizeHandle} class="workspace-resize-handle" role="separator" aria-label="Resize workspace panel" aria-orientation="vertical" aria-valuemin={MIN_WORKSPACE_PANE_WIDTH} aria-valuemax={Math.floor(window.innerWidth * 0.65)} aria-valuenow={width()} tabIndex={0} onPointerDown={startResize} onKeyDown={(event) => { if (event.key === "ArrowLeft") saveWidth(width() + 16); if (event.key === "ArrowRight") saveWidth(width() - 16); }} />
+    <div ref={panelSurface} class="workspace-panel-surface" onPointerDown={focusWorkspaceSurface}>
+    <header class="workspace-panel-header" data-split={splitActive() ? "true" : undefined} style={{ "--workspace-split-ratio": `${splitRatio()}%` }}>
+      <div class="workspace-pane-strip" data-position="left"><strong>Workspace</strong>{paneTabs("left")}</div>
+      <div class="workspace-pane-strip" data-position="right">
+        <Show when={splitActive()}>{paneTabs("right")}</Show>
+        <div class="workspace-panel-header-actions">
+          <Show when={props.expanded()}>
+            <Button variant="ghost" size="icon-sm" class="workspace-split-toggle" title={splitActive() ? "Close second pane" : "Split into two panes"} aria-label={splitActive() ? "Close second pane" : "Split into two panes"} aria-pressed={splitActive()} onClick={toggleSplit}><Columns2Icon /></Button>
+          </Show>
+          <Button variant="ghost" size="icon-sm" class="workspace-expand-toggle" title={props.expanded() ? "Restore split view" : "Expand Workspace"} aria-label={props.expanded() ? "Restore split view" : "Expand Workspace"} aria-pressed={props.expanded()} onClick={props.onToggleExpanded}>
+            <Show when={props.expanded()} fallback={<Maximize2Icon />}><Minimize2Icon /></Show>
+          </Button>
+          <Button variant="ghost" size="icon-sm" aria-label="Close workspace panel" onClick={props.onClose}><XIcon /></Button>
         </div>
-      </Show>
-      <Button variant="ghost" size="icon-sm" aria-label="Close workspace panel" onClick={props.onClose}><XIcon /></Button>
+      </div>
     </header>
     <Show when={error()}><div class="workspace-panel-error">{error()}</div></Show>
-    <main ref={splitHost} class="workspace-panel-content" data-split={props.expanded() && secondaryTab() !== null} style={{ "--workspace-split-ratio": `${splitRatio()}%` }}>
+    <main ref={(element) => {
+      splitHost = element;
+      splitResizeObserver?.disconnect();
+      const updateSplitWidth = (nextWidth: number) => {
+        setSplitWidth(nextWidth);
+      };
+      updateSplitWidth(element.clientWidth);
+      splitResizeObserver = new ResizeObserver((entries) => {
+        const box = entries[entries.length - 1]?.contentBoxSize?.[0];
+        updateSplitWidth(box ? box.inlineSize : element.clientWidth);
+      });
+      splitResizeObserver.observe(element);
+    }} class="workspace-panel-content" data-split={splitActive()} style={{ "--workspace-split-ratio": `${splitRatio()}%` }}>
     <Show when={props.expanded() && secondaryTab()}>
-      <div class="workspace-split-resize-handle" role="separator" aria-label="Resize workspace panes" aria-orientation="vertical" aria-valuemin="25" aria-valuemax="75" aria-valuenow={splitRatio()} tabIndex={0} onPointerDown={startSplitResize} onKeyDown={(event) => {
+      <div class="workspace-split-resize-handle" role="separator" aria-label="Resize workspace panes" aria-orientation="vertical" aria-valuemin={Math.round(splitRatioBounds().minimum)} aria-valuemax={Math.round(splitRatioBounds().maximum)} aria-valuenow={Math.round(splitRatio())} tabIndex={0} onPointerDown={startSplitResize} onKeyDown={(event) => {
         if (event.key === "ArrowLeft") saveSplitRatio(splitRatio() - 2);
         else if (event.key === "ArrowRight") saveSplitRatio(splitRatio() + 2);
-        else if (event.key === "Home") saveSplitRatio(25);
-        else if (event.key === "End") saveSplitRatio(75);
+        else if (event.key === "Home") saveSplitRatio(splitRatioBounds().minimum);
+        else if (event.key === "End") saveSplitRatio(splitRatioBounds().maximum);
         else return;
         event.preventDefault();
       }} />
@@ -1113,7 +1326,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
           detailHost = element;
           filesResizeObserver?.disconnect();
           const updateWideState = (width: number) =>
-            setFilesWide(!isMobileLayout() && width >= (props.expanded() ? 480 : WIDE_FILES_MIN_WIDTH));
+            setFilesWide(!isMobileLayout() && width >= (props.expanded() ? 520 : WIDE_FILES_MIN_WIDTH));
           updateWideState(element.clientWidth);
           // The entry already carries the new size. Reading clientWidth back
           // inside the callback instead forces a synchronous layout, and a
@@ -1126,12 +1339,18 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
             updateWideState(box ? box.inlineSize : element.clientWidth);
           });
           filesResizeObserver.observe(element);
+          filesHost = element;
         }}
         class="workspace-files"
         data-position={panePosition("files")}
         data-wide={filesWide()}
+        data-files={filesWide() && openPaths().secondary ? "2" : "1"}
         data-tree-collapsed={treeCollapsed()}
-        style={{ "--workspace-tree-width": `${treeWidth()}px` }}
+        style={{
+          "--workspace-tree-width": `${treeWidth()}px`,
+          "--workspace-file-a": `${fileSplitRatio()}fr`,
+          "--workspace-file-b": `${100 - fileSplitRatio()}fr`,
+        }}
       >
         <Show when={filesWide() && treeCollapsed()}>
           <div class="workspace-tree-collapsed-rail"><button type="button" aria-label="Show file tree" title="Show file tree" onClick={toggleTreeCollapsed}><PanelLeftOpenIcon /></button></div>
@@ -1158,7 +1377,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
             <button type="button" aria-label="Upload files" title="Upload files to workspace root" disabled={uploading()} onClick={() => chooseUpload()}><Show when={uploading()} fallback={<UploadIcon />}><Spinner /></Show></button>
             <button type="button" aria-label="Refresh files" title="Refresh files" disabled={filesLoading()} onClick={() => void refreshFiles()}><RefreshCwIcon /></button>
             <Show when={filesWide()}><button type="button" aria-label="Hide file tree" title="Hide file tree" onClick={toggleTreeCollapsed}><PanelLeftCloseIcon /></button></Show>
-            <input ref={fileUploadInput} class="workspace-file-input" type="file" multiple onChange={(event) => void uploadFiles(event.currentTarget.files)} />
+            <input ref={fileUploadInput} class="workspace-file-input" type="file" multiple={uploadTarget().kind === "directory"} onChange={(event) => void uploadFiles(event.currentTarget.files)} />
           </div>
           <nav ref={(element) => {
             treeElement = element;
@@ -1187,43 +1406,59 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
           />
         </Show>
         <Show when={!filesWide()}>
-          <div class="workspace-detail-toggle"><button aria-expanded={detailOpen()} onClick={toggleDetail}><ChevronDownIcon data-open={detailOpen()} /><span>File preview</span><Show when={preview()}><small>{preview()!.path} · {formatFileSize(preview()!.size)}</small></Show></button></div>
+          <div class="workspace-detail-toggle"><button aria-expanded={detailOpen()} onClick={toggleDetail}><ChevronDownIcon data-open={detailOpen()} /><span>File preview</span><Show when={primaryFile()}>{(file) => <small>{file().path} · {formatFileSize(file().size)}</small>}</Show></button></div>
         </Show>
         <Show when={filesWide() || detailOpen()}><>
           <Show when={!filesWide()}><div class="workspace-detail-resize-handle" role="separator" aria-label="Resize file preview" aria-orientation="horizontal" aria-valuemin={MIN_DETAIL_HEIGHT} aria-valuemax={maxDetailHeight()} aria-valuenow={detailHeight()} tabIndex={0} onPointerDown={startDetailResize} onKeyDown={resizeDetailByKey} /></Show>
-          <ContextMenu>
-          <ContextMenuTrigger as="section" class="workspace-preview" aria-label="File preview" style={{ height: filesWide() ? "auto" : `${detailHeight()}px` }}>
-            <Show when={preview()} fallback={<div class="workspace-panel-empty">Select a text file to preview it.</div>}>{(file) => <>
-              <header class="workspace-preview-header">
-                <div class="workspace-preview-file" title={file().path}><FileTypeIcon name={file().path} /><span>{file().path}</span></div>
-                <small>{hasUnsavedChanges() ? "Unsaved" : formatFileSize(file().size)}</small>
-                <button type="button" class="workspace-preview-action" aria-label={wrapLines() ? "Disable line wrapping" : "Enable line wrapping"} title={wrapLines() ? "Disable line wrapping" : "Enable line wrapping"} aria-pressed={wrapLines()} onClick={toggleWrapLines}><WrapTextIcon /></button>
-                <button type="button" class="workspace-preview-action" aria-label={editing() ? "Close editor" : "Edit file"} title={editing() ? "Close editor" : "Edit file"} aria-pressed={editing()} onClick={() => editing() ? setEditing(false) : void editFile()}><Show when={editing()} fallback={<PencilIcon />}><XIcon /></Show></button>
-                <button type="button" class="workspace-preview-action" aria-label="Save file" title="Save file (Ctrl+S)" disabled={!hasUnsavedChanges() || saving()} onClick={() => void saveFile()}><Show when={saving()} fallback={<SaveIcon />}><Spinner /></Show></button>
-                <button type="button" class="workspace-preview-action" aria-label="Download file" title="Download file" onClick={() => void downloadFile()}><DownloadIcon /></button>
-                <button type="button" class="workspace-preview-copy" aria-label="Copy file contents" title="Copy file contents" onClick={() => copy(draft())}><CopyIcon /></button>
-              </header>
-              <div class="workspace-preview-editor" data-editing={editing()} data-wrap={wrapLines()}>
-                <Show when={file().path} keyed>{(path) =>
-                  <Suspense fallback={<div class="workspace-panel-empty">Loading preview…</div>}>
-                    <WorkspaceEditor path={path} value={draft()} wrap={wrapLines()} editable={editing()} onInput={setDraft} onSave={() => void saveFile()} />
-                  </Suspense>
-                }</Show>
-              </div>
-            </>}</Show>
-          </ContextMenuTrigger>
-          <Show when={preview()}>{(file) =>
-            <ContextMenuContent class="w-48 workspace-file-menu">
-              <ContextMenuGroup>
-                <ContextMenuItem onSelect={() => void editFile()}><PencilIcon />Edit</ContextMenuItem>
-                <ContextMenuItem disabled={!hasUnsavedChanges() || saving()} onSelect={() => void saveFile()}><SaveIcon />Save</ContextMenuItem>
-                <ContextMenuItem onSelect={() => void downloadFile()}><DownloadIcon />Download</ContextMenuItem>
-                <ContextMenuItem onSelect={() => copy(draft())}><CopyIcon />Copy contents</ContextMenuItem>
-                <ContextMenuItem onSelect={() => copy(file().path)}><CopyIcon />Copy path</ContextMenuItem>
-              </ContextMenuGroup>
-            </ContextMenuContent>
-          }</Show>
-          </ContextMenu>
+          <WorkspaceFileSlot
+            projectId={props.projectId()}
+            path={openPaths().primary}
+            slot="primary"
+            focused={focusedSlot() === "primary" && Boolean(openPaths().secondary)}
+            closable={Boolean(openPaths().primary)}
+            busy={uploading()}
+            wrap={wrapLines()}
+            height={filesWide() ? undefined : `${detailHeight()}px`}
+            onToggleWrap={toggleWrapLines}
+            onFocus={() => setFocusedSlot("primary")}
+            onClose={() => closeSlot("primary")}
+            onError={setError}
+            onRemoved={(path) => { dropOpenPath(path); toast.info(`${path} was removed`); }}
+            onReplace={(path) => chooseUpload({ kind: "replacement", path })}
+            onDelete={(path) => void deleteFile(path)}
+            onLoaded={(file) => noteSlotLoaded("primary", file)}
+            ref={(handle) => slotHandles.set("primary", handle)}
+            onDispose={() => slotHandles.delete("primary")}
+          />
+          <Show when={filesWide() && openPaths().secondary}>
+            <div class="workspace-file-split-handle" role="separator" aria-label="Resize open files" aria-orientation="vertical" aria-valuemin="25" aria-valuemax="75" aria-valuenow={fileSplitRatio()} tabIndex={0} onPointerDown={startFileSplitResize} onKeyDown={(event) => {
+              if (event.key === "ArrowLeft") saveFileSplitRatio(fileSplitRatio() - 2);
+              else if (event.key === "ArrowRight") saveFileSplitRatio(fileSplitRatio() + 2);
+              else if (event.key === "Home") saveFileSplitRatio(25);
+              else if (event.key === "End") saveFileSplitRatio(75);
+              else return;
+              event.preventDefault();
+            }} />
+            <WorkspaceFileSlot
+              projectId={props.projectId()}
+              path={openPaths().secondary}
+              slot="secondary"
+              focused={focusedSlot() === "secondary"}
+              closable
+              busy={uploading()}
+              wrap={wrapLines()}
+              onToggleWrap={toggleWrapLines}
+              onFocus={() => setFocusedSlot("secondary")}
+              onClose={() => closeSlot("secondary")}
+              onError={setError}
+              onRemoved={(path) => { dropOpenPath(path); toast.info(`${path} was removed`); }}
+              onReplace={(path) => chooseUpload({ kind: "replacement", path })}
+              onDelete={(path) => void deleteFile(path)}
+              onLoaded={(file) => noteSlotLoaded("secondary", file)}
+              ref={(handle) => slotHandles.set("secondary", handle)}
+              onDispose={() => slotHandles.delete("secondary")}
+            />
+          </Show>
         </></Show>
       </div>
     </Show>
@@ -1243,7 +1478,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
             <header><button type="button" class="workspace-change-disclosure" aria-expanded={stagedOpen()} onClick={() => setStagedOpen((open) => !open)}><ChevronRightIcon /><CheckIcon /><span>Staged changes</span><small>{stagedFiles().length}</small></button><button type="button" aria-label="Unstage all" title="Unstage all" disabled={!stagedFiles().length || Boolean(gitAction())} onClick={() => void runGitAction("unstage-all")}><Undo2Icon /></button></header>
             <Show when={stagedOpen()}><Show when={stagedFiles().length} fallback={<div class="workspace-clean-state">No staged changes</div>}>
               <div class="workspace-changes"><For each={stagedFiles()}>{(file) =>
-                <div class="workspace-change-row"><button type="button" title={`Open ${file.path}`} onClick={() => { if (props.expanded()) setPaneTab(panePosition("diff") === "left" ? "right" : "left", "files"); else selectTab("files"); void openFile(file.path); }}><code data-status={file.status[0]}>{file.status[0]}</code><span>{file.path}</span></button><button type="button" class="workspace-change-action" aria-label={`Unstage ${file.path}`} title="Unstage" disabled={Boolean(gitAction())} onClick={() => void runGitAction("unstage", file.path)}><Undo2Icon /></button></div>
+                <div class="workspace-change-row"><button type="button" title={`Open ${file.path}`} onClick={() => { if (splitActive()) setPaneTab(panePosition("diff") === "left" ? "right" : "left", "files"); else selectTab("files"); openFile(file.path); }}><code data-status={file.status[0]}>{file.status[0]}</code><span>{file.path}</span></button><button type="button" class="workspace-change-action" aria-label={`Unstage ${file.path}`} title="Unstage" disabled={Boolean(gitAction())} onClick={() => void runGitAction("unstage", file.path)}><Undo2Icon /></button></div>
               }</For></div>
             </Show></Show>
           </section>
@@ -1251,7 +1486,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
             <header><button type="button" class="workspace-change-disclosure" aria-expanded={changesOpen()} onClick={() => setChangesOpen((open) => !open)}><ChevronRightIcon /><FileDiffIcon /><span>Changes</span><small>{unstagedFiles().length}</small></button><button type="button" aria-label="Stage all" title="Stage all" disabled={!unstagedFiles().length || Boolean(gitAction())} onClick={() => void runGitAction("stage-all")}><CirclePlusIcon /></button></header>
             <Show when={changesOpen()}><Show when={unstagedFiles().length} fallback={<div class="workspace-clean-state">Working tree clean</div>}>
               <div class="workspace-changes"><For each={unstagedFiles()}>{(file) =>
-                <div class="workspace-change-row"><button type="button" title={`Open ${file.path}`} onClick={() => { if (props.expanded()) setPaneTab(panePosition("diff") === "left" ? "right" : "left", "files"); else selectTab("files"); void openFile(file.path); }}><code data-status={file.status[1] === " " ? "?" : file.status[1]}>{file.status[1] === " " ? "?" : file.status[1]}</code><span>{file.path}</span></button><button type="button" class="workspace-change-action" aria-label={`Stage ${file.path}`} title="Stage" disabled={Boolean(gitAction())} onClick={() => void runGitAction("stage", file.path)}><CirclePlusIcon /></button></div>
+                <div class="workspace-change-row"><button type="button" title={`Open ${file.path}`} onClick={() => { if (splitActive()) setPaneTab(panePosition("diff") === "left" ? "right" : "left", "files"); else selectTab("files"); openFile(file.path); }}><code data-status={file.status[1] === " " ? "?" : file.status[1]}>{file.status[1] === " " ? "?" : file.status[1]}</code><span>{file.path}</span></button><button type="button" class="workspace-change-action" aria-label={`Stage ${file.path}`} title="Stage" disabled={Boolean(gitAction())} onClick={() => void runGitAction("stage", file.path)}><CirclePlusIcon /></button></div>
               }</For></div>
             </Show></Show>
           </section>
@@ -1280,7 +1515,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
       <div class="workspace-artifact-modes" role="radiogroup" aria-label="Artifact modality"><button role="radio" aria-checked={artifactMode() === "outputs"} onClick={() => setArtifactMode("outputs")}>Outputs</button><button role="radio" aria-checked={artifactMode() === "interactive"} onClick={() => setArtifactMode("interactive")}>Interactive UI</button></div>
       <div class="workspace-panel-empty"><div><BoxesIcon /><strong>{artifactMode() === "outputs" ? "No artifacts in the loaded transcript" : "Interactive artifacts are not enabled"}</strong><p>{artifactMode() === "outputs" ? "Code blocks and file outputs will appear here as transcript artifact projection lands." : "This boundary is reserved for sandboxed, explicitly trusted generated interfaces."}</p></div></div>
     </section></Show>
-    <Show when={tabVisible("terminal")}><section class="workspace-terminal-slot" data-position={panePosition("terminal")}><TerminalPane projectId={props.projectId()} terminalId={props.requestedTab?.()?.terminalId} /></section></Show>
+    <Show when={tabVisible("terminal")}><section class="workspace-terminal-slot" data-position={panePosition("terminal")}><TerminalPane projectId={props.projectId()} terminalId={props.requestedTab?.()?.terminalId} focusRequest={terminalFocusRequest()} /></section></Show>
     </main>
     <Show when={loading()}><div class="workspace-panel-loading"><Spinner /><span>Loading workspace</span></div></Show>
     </div>

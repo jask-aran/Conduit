@@ -11,6 +11,14 @@ changing it. When the user asks for implementation work:
 3. Run tests or checks proportional to the risk, and report results inline.
 4. Keep ordinary conversation available — Workspace is not a coding-only mode.
 
+For spreadsheet, document, PDF, and data work, use `python` from Bash. Conduit
+puts its shared uv-managed Python environment on `PATH` and keeps the current
+working directory unchanged. Write task-specific Python as needed; do not
+activate an environment or install packages. Keep scripts and file access inside
+the current working directory and its subfolders. Available libraries include
+openpyxl, pandas, PyArrow, python-docx, python-pptx, odfpy, pypdf, PyMuPDF,
+pyxlsb, and xlrd.
+
 Use progressive skills when they match the task (`git-github`, `web-research`,
 `develop-loop`). Before using a web tool, follow the loaded `web-research`
 skill. Use the configured web tools for ordinary research; do not use Bash or
