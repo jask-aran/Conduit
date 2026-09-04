@@ -4,7 +4,14 @@ import express from "express";
 import { resolveTemplate } from "../../config.js";
 import { chatView } from "../../chat-store.js";
 import { removeProjectSessions, removeSession } from "../../session-store.js";
-import { deleteWorkspaceFile, resolveInspectorPath, writeWorkspaceFile } from "../../workspace-inspector.js";
+import {
+  createWorkspaceDirectory,
+  deleteWorkspaceDirectory,
+  deleteWorkspaceFile,
+  moveWorkspaceEntry,
+  resolveInspectorPath,
+  writeWorkspaceFile,
+} from "../../workspace-inspector.js";
 import {
   findDeletableSession,
   moveRegisteredChat,
@@ -279,6 +286,39 @@ export function registerProjectRoutes(app, {
       if (!request.query.path) return response.status(400).json({ error: "workspace_path_required" });
       await projects.validate(project);
       await deleteWorkspaceFile(project.path, request.query.path);
+      response.status(204).end();
+    } catch (error) { next(error); }
+  });
+
+  app.post("/v0/projects/:id/directory", async (request, response, next) => {
+    try {
+      const project = await projects.get(request.params.id);
+      if (!project) return response.status(404).json({ error: "project_not_found" });
+      if (!request.body?.path) return response.status(400).json({ error: "workspace_path_required" });
+      await projects.validate(project);
+      response.status(201).json(await createWorkspaceDirectory(project.path, request.body.path));
+    } catch (error) { next(error); }
+  });
+
+  app.patch("/v0/projects/:id/entry", async (request, response, next) => {
+    try {
+      const project = await projects.get(request.params.id);
+      if (!project) return response.status(404).json({ error: "project_not_found" });
+      if (!request.body?.path || !request.body?.destination) {
+        return response.status(400).json({ error: "workspace_path_required" });
+      }
+      await projects.validate(project);
+      response.json(await moveWorkspaceEntry(project.path, request.body.path, request.body.destination));
+    } catch (error) { next(error); }
+  });
+
+  app.delete("/v0/projects/:id/directory", async (request, response, next) => {
+    try {
+      const project = await projects.get(request.params.id);
+      if (!project) return response.status(404).json({ error: "project_not_found" });
+      if (!request.query.path) return response.status(400).json({ error: "workspace_path_required" });
+      await projects.validate(project);
+      await deleteWorkspaceDirectory(project.path, request.query.path);
       response.status(204).end();
     } catch (error) { next(error); }
   });

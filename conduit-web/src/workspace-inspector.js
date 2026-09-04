@@ -224,6 +224,49 @@ export async function deleteWorkspaceFile(root, relativePath) {
   return { path: resolved.relativePath };
 }
 
+async function resolveNewWorkspacePath(root, relativePath) {
+  const segments = safeSegments(relativePath);
+  if (!segments.length) throw inspectorError("invalid_workspace_path", "The requested path is invalid");
+  const parent = await resolveInspectorPath(root, segments.slice(0, -1).join("/"), { kind: "directory" });
+  const target = path.join(parent.path, segments.at(-1));
+  const existing = await fs.lstat(target).catch((error) => {
+    if (error.code === "ENOENT") return null;
+    throw error;
+  });
+  if (existing) {
+    throw Object.assign(inspectorError("workspace_entry_exists", "A file or folder with this name already exists"), { status: 409 });
+  }
+  return { path: target, relativePath: segments.join("/") };
+}
+
+export async function createWorkspaceDirectory(root, relativePath) {
+  const target = await resolveNewWorkspacePath(root, relativePath);
+  await fs.mkdir(target.path);
+  return { path: target.relativePath };
+}
+
+export async function moveWorkspaceEntry(root, relativePath, destinationPath) {
+  const source = await resolveInspectorPath(root, relativePath);
+  if (!source.relativePath) throw inspectorError("invalid_workspace_path", "The workspace root cannot be moved");
+  const destination = await resolveNewWorkspacePath(root, destinationPath);
+  if (source.stat.isDirectory() && destination.relativePath.startsWith(`${source.relativePath}/`)) {
+    throw inspectorError("invalid_workspace_move", "A folder cannot be moved inside itself");
+  }
+  await fs.rename(source.path, destination.path);
+  return {
+    path: source.relativePath,
+    destination: destination.relativePath,
+    type: source.stat.isDirectory() ? "directory" : source.stat.isFile() ? "file" : "other",
+  };
+}
+
+export async function deleteWorkspaceDirectory(root, relativePath) {
+  const resolved = await resolveInspectorPath(root, relativePath, { kind: "directory" });
+  if (!resolved.relativePath) throw inspectorError("invalid_workspace_path", "The workspace root cannot be deleted");
+  await fs.rm(resolved.path, { recursive: true });
+  return { path: resolved.relativePath };
+}
+
 export async function runWorkspaceGitAction(root, { action, relativePath, message }) {
   const resolved = await resolveInspectorPath(root, "", { kind: "directory" });
   await runBoundedGit(resolved.path, ["rev-parse", "--is-inside-work-tree"]);

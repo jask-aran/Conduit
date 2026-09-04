@@ -5,7 +5,18 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { promisify } from "node:util";
-import { deleteWorkspaceFile, listWorkspaceDirectory, readWorkspaceDiff, readWorkspaceFile, runBoundedGit, runWorkspaceGitAction, writeWorkspaceFile } from "../src/workspace-inspector.js";
+import {
+  createWorkspaceDirectory,
+  deleteWorkspaceDirectory,
+  deleteWorkspaceFile,
+  listWorkspaceDirectory,
+  moveWorkspaceEntry,
+  readWorkspaceDiff,
+  readWorkspaceFile,
+  runBoundedGit,
+  runWorkspaceGitAction,
+  writeWorkspaceFile,
+} from "../src/workspace-inspector.js";
 
 const run = promisify(execFile);
 
@@ -61,6 +72,24 @@ test("workspace writes create files and reject stale or implicit overwrites", as
   await assert.rejects(writeWorkspaceFile(root, "src/new.txt", Buffer.from("missing\n"), { expectedRevision: "*" }), { code: "workspace_file_changed" });
   await assert.rejects(deleteWorkspaceFile(root, "src"), { code: "path_not_file" });
   await assert.rejects(writeWorkspaceFile(root, ".conduit/private.txt", Buffer.from("no\n")), { code: "hidden_workspace_path" });
+});
+
+test("workspace folders can be created, moved, renamed, and deleted within the root", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-inspector-folders-"));
+  await fs.mkdir(path.join(root, "src"));
+  await fs.writeFile(path.join(root, "src", "main.js"), "content\n");
+
+  assert.deepEqual(await createWorkspaceDirectory(root, "archive"), { path: "archive" });
+  await moveWorkspaceEntry(root, "src/main.js", "archive/main.js");
+  assert.equal(await fs.readFile(path.join(root, "archive", "main.js"), "utf8"), "content\n");
+  await moveWorkspaceEntry(root, "archive", "saved");
+  assert.equal(await fs.readFile(path.join(root, "saved", "main.js"), "utf8"), "content\n");
+
+  await assert.rejects(createWorkspaceDirectory(root, "saved"), { code: "workspace_entry_exists" });
+  await assert.rejects(moveWorkspaceEntry(root, "saved", "saved/nested"), { code: "invalid_workspace_move" });
+  await assert.rejects(deleteWorkspaceDirectory(root, ""), { code: "invalid_workspace_path" });
+  await deleteWorkspaceDirectory(root, "saved");
+  await assert.rejects(fs.access(path.join(root, "saved")), { code: "ENOENT" });
 });
 
 test("workspace diff reports clean, dirty, staged, and non-git roots", async () => {
