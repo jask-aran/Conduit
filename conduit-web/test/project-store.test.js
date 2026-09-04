@@ -40,11 +40,15 @@ test("stores project metadata centrally and keeps working directories clean", as
   const chat = await store.get("chat");
   assert.equal(chat.name, "Chats");
   assert.equal(chat.path, filesRoot);
+  assert.equal(chat.workingRoot, filesRoot);
+  assert.equal(store.workingRoot(chat), filesRoot);
   assert.equal(chat.sessionsDir, sessionDirectoryFor(filesRoot, piAgentDir));
 
   const project = await store.create({ name: "Conduit Core" });
   assert.equal(project.slug, "conduit-core");
   assert.equal(project.path, path.join(filesRoot, "conduit-core"));
+  assert.equal(project.workingRoot, project.path);
+  assert.equal(store.workingRoot(project), project.path);
   assert.deepEqual(await fs.readdir(project.path), []);
 
   const renamed = await store.rename(project.id, "Conduit Platform");

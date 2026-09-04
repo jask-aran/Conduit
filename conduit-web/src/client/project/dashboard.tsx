@@ -438,7 +438,7 @@ export function ProjectDashboard(props: {
 
               <section class="workspace-dashboard-section workspace-dashboard-terminals" aria-labelledby="workspace-terminals-title">
                 <div class="workspace-dashboard-section-heading">
-                  <div><h2 id="workspace-terminals-title">Live terminals</h2><p>{scopedTerminals().length || "No"} running in this workspace</p></div>
+                  <div><h2 id="workspace-terminals-title">Live terminals</h2><p>{scopedTerminals().length || "No"} running in {props.project.name}</p></div>
                 </div>
                 <Show when={!terminalsLoading()} fallback={<div class="workspace-dashboard-empty"><Spinner /><span>Loading terminals…</span></div>}>
                   <Show when={liveTerminals().length} fallback={<div class="workspace-dashboard-empty">No live terminals.</div>}>

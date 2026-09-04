@@ -137,7 +137,7 @@ function cacheWorkspace(projectId: string, patch: Partial<WorkspaceCacheEntry>) 
   while (workspaceCache.size > MAX_CACHED_WORKSPACES) workspaceCache.delete(workspaceCache.keys().next().value!);
 }
 
-export default function WorkspacePanel(props: { projectId: Accessor<string>; chatId: Accessor<string>; open: Accessor<boolean>; expanded: Accessor<boolean>; focusRequest: Accessor<number>; requestedTab?: Accessor<{ tab: PanelTab; terminalId?: string; nonce: number } | null>; onToggleExpanded: () => void; onClose: () => void; shortcuts: ShortcutManager }) {
+export default function WorkspacePanel(props: { projectId: Accessor<string>; projectName: Accessor<string>; workingRoot: Accessor<string>; chatId: Accessor<string>; open: Accessor<boolean>; expanded: Accessor<boolean>; focusRequest: Accessor<number>; requestedTab?: Accessor<{ tab: PanelTab; terminalId?: string; nonce: number } | null>; onToggleExpanded: () => void; onClose: () => void; shortcuts: ShortcutManager }) {
   migrateWorkspaceGeometry();
   let projectGeneration = 0;
   let requestVersion = 0;
@@ -1412,7 +1412,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
     <div ref={resizeHandle} class="workspace-resize-handle" role="separator" aria-label="Resize workspace panel" aria-orientation="vertical" aria-valuemin={MIN_WORKSPACE_PANE_WIDTH} aria-valuemax={Math.floor(window.innerWidth * 0.65)} aria-valuenow={width()} tabIndex={0} onPointerDown={startResize} onKeyDown={(event) => { if (event.key === "ArrowLeft") saveWidth(width() + 16); if (event.key === "ArrowRight") saveWidth(width() - 16); }} />
     <div ref={panelSurface} class="workspace-panel-surface" onPointerDown={focusWorkspaceSurface}>
     <header class="workspace-panel-header" data-split={splitActive() ? "true" : undefined} style={{ "--workspace-split-ratio": `${splitRatio()}%` }}>
-      <div class="workspace-pane-strip" data-position="left"><strong>Workspace</strong>{paneTabs("left")}</div>
+      <div class="workspace-pane-strip" data-position="left"><strong title={props.workingRoot()}>Workspace</strong>{paneTabs("left")}</div>
       <div class="workspace-pane-strip" data-position="right">
         <Show when={splitActive()}>{paneTabs("right")}</Show>
         <div class="workspace-panel-header-actions">
@@ -1647,7 +1647,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
       <div class="workspace-artifact-modes" role="radiogroup" aria-label="Artifact modality"><button role="radio" aria-checked={artifactMode() === "outputs"} onClick={() => setArtifactMode("outputs")}>Outputs</button><button role="radio" aria-checked={artifactMode() === "interactive"} onClick={() => setArtifactMode("interactive")}>Interactive UI</button></div>
       <div class="workspace-panel-empty"><div><BoxesIcon /><strong>{artifactMode() === "outputs" ? "No artifacts in the loaded transcript" : "Interactive artifacts are not enabled"}</strong><p>{artifactMode() === "outputs" ? "Code blocks and file outputs will appear here as transcript artifact projection lands." : "This boundary is reserved for sandboxed, explicitly trusted generated interfaces."}</p></div></div>
     </section></Show>
-    <Show when={tabVisible("terminal")}><section class="workspace-terminal-slot" data-position={panePosition("terminal")}><TerminalPane projectId={props.projectId()} terminalId={props.requestedTab?.()?.terminalId} focusRequest={terminalFocusRequest()} /></section></Show>
+    <Show when={tabVisible("terminal")}><section class="workspace-terminal-slot" data-position={panePosition("terminal")}><TerminalPane projectId={props.projectId()} projectName={props.projectName()} terminalId={props.requestedTab?.()?.terminalId} focusRequest={terminalFocusRequest()} /></section></Show>
     </main>
     <Show when={loading()}><div class="workspace-panel-loading"><Spinner /><span>Loading workspace</span></div></Show>
     </div>

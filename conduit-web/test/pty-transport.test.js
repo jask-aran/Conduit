@@ -236,7 +236,7 @@ tmuxTest("PTY API supports multiple active Project terminals and scoped session 
   }
 });
 
-tmuxTest("PTY API uses a linked Workspace root or the server home directory, never a browser path", async () => {
+tmuxTest("PTY API uses each project's working root and never a browser path", async () => {
   const harness = await startConduitHarness({ env: { SHELL: "sh" } });
   try {
     const workspacePath = path.join(harness.root, "terminal-workspace");
@@ -244,18 +244,20 @@ tmuxTest("PTY API uses a linked Workspace root or the server home directory, nev
     const linked = await (await harness.request("/v0/projects", { method: "POST", body: JSON.stringify({ mode: "linked", path: workspacePath }) })).json();
     const ordinary = await (await harness.request("/v0/projects", { method: "POST", body: JSON.stringify({ name: "Ordinary project" }) })).json();
     const workspaceTerminal = await (await harness.request("/v0/ptys", { method: "POST", body: JSON.stringify({ projectId: linked.id }) })).json();
-    const homeTerminal = await (await harness.request("/v0/ptys", { method: "POST", body: JSON.stringify({ projectId: ordinary.id, cwd: "/browser-supplied-path" }) })).json();
+    const managedTerminal = await (await harness.request("/v0/ptys", { method: "POST", body: JSON.stringify({ projectId: ordinary.id, cwd: "/browser-supplied-path" }) })).json();
     assert.equal(workspaceTerminal.cwd, workspacePath);
-    assert.equal(homeTerminal.cwd, harness.root);
+    assert.equal(workspaceTerminal.cwd, linked.workingRoot);
+    assert.equal(managedTerminal.cwd, ordinary.workingRoot);
+    assert.notEqual(managedTerminal.cwd, harness.root);
     const workspaceStream = openTerminal(harness.origin, workspaceTerminal.id);
-    const homeStream = openTerminal(harness.origin, homeTerminal.id);
-    await Promise.all([workspaceStream.opened, homeStream.opened]);
-    await Promise.all([waitWritable(workspaceStream), waitWritable(homeStream)]);
+    const managedStream = openTerminal(harness.origin, managedTerminal.id);
+    await Promise.all([workspaceStream.opened, managedStream.opened]);
+    await Promise.all([waitWritable(workspaceStream), waitWritable(managedStream)]);
     workspaceStream.socket.send(Buffer.from("pwd\n"));
-    homeStream.socket.send(Buffer.from("pwd\n"));
-    await Promise.all([workspaceStream.outputIncludes(workspacePath), homeStream.outputIncludes(harness.root)]);
+    managedStream.socket.send(Buffer.from("pwd\n"));
+    await Promise.all([workspaceStream.outputIncludes(linked.workingRoot), managedStream.outputIncludes(ordinary.workingRoot)]);
     workspaceStream.socket.close();
-    homeStream.socket.close();
+    managedStream.socket.close();
   } finally {
     await harness.stop();
   }

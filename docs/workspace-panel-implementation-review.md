@@ -11,6 +11,11 @@ Status values:
 - **Open**: observed risk or incomplete subsystem.
 - **Complete**: implemented and verified in this review.
 
+Each open finding carries a **Solution** section: the shape of the fix, the
+concrete edits it implies, and what the implementer should be able to observe
+once it is done. The solutions are specified, not implemented. Where a solution
+depends on another finding landing first, it says so.
+
 ## P0
 
 ### Open — Working-root consistency
@@ -19,7 +24,29 @@ The Files and Source Control views use the selected project's resolved path. A g
 
 Relevant code: `conduit-web/src/project-store.js:196-199`, `conduit-web/src/server/routes/ptys.js:4-23`, and the project resolution used by the routes in `conduit-web/src/server/routes/projects.js`.
 
-Suspected direction: define one server-owned working-root contract for each chat and use it for Files, Source Control, Terminal, and agent launch.
+**Solution.** Make the working root a single server-owned value derived once per
+project, and have every consumer read it rather than compute its own.
+
+1. Add `workingRoot(project)` to `project-store.js`, beside `managedPath`. It
+   returns `project.path` for `kind: "workspace"` and `this.managedPath(project.slug)`
+   otherwise, so a generic chat resolves to `filesRoot` — the same root the Files
+   view already uses. It never returns the home directory.
+2. Change `terminalContext` in `ptys.js:4-23` to call it instead of
+   `fs.realpath(os.homedir())`. Keep the existing `projects.validate` call and the
+   `workspace_identity_changed` handling for workspace projects; for managed
+   projects, create the root if it is missing before spawning, so a first terminal
+   in a fresh project does not fail.
+3. Route the agent launch path through the same function. Grep the rest of
+   `src/server` for `os.homedir()` and direct `project.path` uses and convert
+   them; the function should be the only place a root is decided.
+4. Expose the resolved root on the project payload the client already fetches (a
+   `workingRoot` string) and show it as the panel header's title attribute, so the
+   user can see what the panel is pointed at.
+
+Acceptance: open a generic chat, run `pwd` in the Terminal tab, and it prints the
+directory the Files tree is showing. Add a server test asserting `terminalContext`
+and the file-listing route resolve to the same absolute path for both project
+kinds.
 
 ### Open — Editor state ownership
 
@@ -39,7 +66,34 @@ a reload or tab close loses a draft too.
 
 Relevant code: conditional slot rendering in `conduit-web/src/client/workspace/workspace-panel.tsx:1542-1592`; local draft state in `conduit-web/src/client/workspace/workspace-file-slot.tsx`.
 
-Suspected direction: keep file-session state above the rendered slot, keyed by project, chat, slot, and path. Add an unload guard while any slot holds a draft.
+**Solution.** Lift the draft out of the component and leave everything else where
+it is. The slot keeps owning load, save and viewer state; only the edited text and
+its base revision move, so the two-slot independence the file's own comment
+describes is preserved.
+
+1. Add a module-level draft store, `workspace-file-drafts.ts`, holding
+   `Map<string, { text: string; baseRevision: string; savedAt: number }>` keyed by
+   project id plus path — path-keyed rather than slot-keyed, so a draft follows a
+   file when the secondary slot is promoted. Export `readDraft`, `writeDraft`,
+   `clearDraft` and `hasAnyDraft`.
+2. In `workspace-file-slot.tsx`, seed the local `draft` signal from `readDraft` in
+   the same `createEffect(on(...))` that calls `load()`, and mirror every edit into
+   `writeDraft`. Call `clearDraft` on a successful save and on an explicit discard
+   only. Do not clear in `onCleanup` — that unmount is exactly the case this
+   finding is about.
+3. If the revision returned by `load()` differs from the stored `baseRevision`,
+   keep the draft and mark the slot conflicted rather than silently rebasing:
+   reuse the conflict affordance defined under *Save acknowledgement race*.
+4. Register one `beforeunload` listener where the panel mounts
+   (`workspace-panel.tsx`, alongside `migrateWorkspaceGeometry`) that calls
+   `event.preventDefault()` while `hasAnyDraft()` is true, removed in `onCleanup`.
+5. Evict entries when a project is deleted and after a bounded idle period
+   (checked on read, say 24 hours), so the map does not become the in-memory twin
+   of the localStorage growth problem below.
+
+Acceptance: the verified reproduction (edit, `Ctrl+X 2`, `Ctrl+X 1`) returns to the
+file still showing `Unsaved` with the edited text intact, and reloading the tab
+prompts. Cover both with browser tests.
 
 ### Open — Save acknowledgement race
 
@@ -53,7 +107,30 @@ reload.
 
 Relevant code: `conduit-web/src/client/workspace/workspace-file-slot.tsx:194-205`.
 
-Suspected direction: capture the submitted text with its revision and only acknowledge that captured version.
+**Solution.** The submitted text is already captured in `submittedContent`
+(`:196`); the defect is that the success path then treats the *current* draft as
+clean. Compare rather than assume.
+
+1. In the success branch, keep setting `preview` to
+   `{ ...file, ...written, content: submittedContent }` as it does now, and do not
+   touch the draft. `hasUnsavedChanges()` derives from
+   `draft() !== preview().content`, so text typed during the flight stays dirty and
+   the Save button stays enabled — the correct outcome.
+2. Guard against a response landing after the slot moved: capture `file.path` and
+   the current `loadedKey` before the request, and abandon the result if either
+   changed by the time it resolves.
+3. Serialise saves per slot with a `pendingSave: Promise | null`. A save issued
+   while one is in flight awaits it, then re-reads `preview().revision`, so the
+   second `if-match` carries the revision the first write produced and a rapid
+   double-save cannot manufacture a 409.
+4. On a real 409 (`workspace_file_changed`), keep the draft, mark the slot
+   conflicted, and offer two named choices — *Reload and discard* and *Overwrite*.
+   Neither branch clears the draft until the user has chosen. This is the shared
+   conflict affordance the other two P0 findings refer to.
+
+Acceptance: with a delayed `PUT` and typing mid-flight, the Save button remains
+enabled and the header still reads `Unsaved` after the response. Add a browser test
+that stubs the route with a delay.
 
 ### Open — Durable file replacement
 
@@ -61,7 +138,30 @@ File save writes directly to the target. A process or machine failure can leave 
 
 Relevant code: `conduit-web/src/workspace-inspector.js:190-218`.
 
-Suspected direction: write a sibling temporary file, sync it when required, then replace the target atomically. Keep the revision conflict check in the same server operation.
+**Solution.** Write a sibling temporary file and rename it over the target. A
+rename within a directory is atomic on POSIX, so a reader sees the old file or the
+new one and never a truncated one.
+
+1. In `writeWorkspaceFile`, after the existing symlink, type and revision checks,
+   write to a sibling temporary named with a `.conduit-tmp-` prefix and a random
+   suffix, at mode `0o600`; fsync the handle, close it, then `fs.rename` onto the
+   target. Unlink the temporary in a `catch` so a failed write leaves no debris.
+2. Preserve the target's mode: read `existing.mode` and apply it to the temporary
+   before the rename, or an executable script silently loses its bit.
+3. Keep the create-exclusive semantics for the new-file case. That check belongs
+   on the target path, so retain the current `existing == null` branch and let the
+   rename publish the result.
+4. Narrow the check-then-write window: open the target once (`r+`), read and hash
+   from that descriptor, and hold it until the rename. This is not atomic against
+   an external editor, so also add a short per-path mutex in the inspector — a
+   `Map<string, Promise>` keyed by absolute path — that serialises this module's
+   own writes, which is where concurrent saves actually originate.
+5. Exclude the `.conduit-tmp-` prefix from `listWorkspaceDirectory` alongside
+   `.conduit`.
+
+Acceptance: extend `test/workspace-inspector.test.js` with cases asserting no
+temporary survives a successful write, a stale `if-match` still returns 409, and
+the target's mode is preserved across a save.
 
 ### Open — Panel expansion animation and transcript reflow
 
@@ -113,14 +213,43 @@ inset shadow and rounded corners each frame while shrinking.
 
 Relevant code: `conduit-web/src/client/workspace/workspace.css:14-18`, `conduit-web/src/client/styles.css:119`, `conduit-web/src/client/styles.css:164`, and `conduit-web/src/client/main.tsx:419-431`.
 
-Suspected direction: drive both sides from one animated value rather than two
-transitions -- animate the panel shell's width (or a registered custom property
-both sides read) and leave `.chat-main` as a plain `flex: 1` that absorbs the
-remainder. Make the surface fill its shell (`inset: 0`) so it cannot desynchronize.
-Replace `content-visibility: hidden` with a technique that preserves layout and
-scroll offset, or drop the hiding entirely once the width animation no longer
-reflows the transcript, and key any remaining reveal off `transitionend` rather
-than a duration constant.
+**Solution.** One animated value, one owner, no un-rendering. Take the four causes
+in order; each step is independently observable.
+
+1. **Animate the panel only.** `.workspace-panel` already transitions `width`
+   (`workspace.css:2`). Give it a single width source — `var(--workspace-panel-width)`
+   docked, `100%` expanded — and delete `flex-grow: 1; flex-shrink: 1` from
+   `.workspace-panel-expanded` (`:17`).
+2. **Make `.chat-main` passive.** Remove its transition list entirely (`:14`) and
+   give it `flex: 1 1 auto; min-width: 0`, so it absorbs whatever the panel does
+   not take, on the same frame, from the same curve. Keep `margin-inline: 0` on
+   `.workspace-expanded` but fold the margin change into the panel's existing
+   `margin-right` transition rather than animating it on `.chat-main`.
+3. **Make the surface fill its shell.** Change `.workspace-panel-surface` (`:9`)
+   from `right: 0; width: var(--workspace-panel-width)` to `inset: 0; width: auto`,
+   and delete the expanded width override (`:18`). The surface then cannot
+   desynchronise from the shell in either direction, which removes the restore-time
+   gap. Add `overflow: hidden` to `.workspace-panel` so nothing paints outside the
+   animating box.
+4. **Stop discarding the transcript.** Delete the `content-visibility: hidden`
+   rule (`:16`) and, in `main.tsx:419-431`, the `data-workspace-expansion-motion`
+   attribute and `workspaceExpansionMotionTimer`. With `flex-grow` no longer
+   interpolating, the remaining per-frame cost is the container-query
+   re-evaluation; if that is still too expensive, move `container-type: inline-size`
+   off `.chat-main` (`styles.css:119`) onto an inner wrapper whose width does not
+   change during the transition, and add `contain: layout paint` to
+   `.transcript-motion-shell`. Do not reintroduce a duration constant in
+   JavaScript; if any reveal step survives, key it off `transitionend` filtered to
+   `propertyName === "width"` on the panel element.
+5. **Drop the permanent `will-change`.** `styles.css:164` should apply
+   `will-change: transform` only while a motion attribute is present, or not at all.
+6. Keep the `prefers-reduced-motion` branch and
+   `.workspace-panel[data-edge-instant="true"]` working — after this change both
+   simply mean "no width transition".
+
+Acceptance: record a trace of one expand and one restore; `.transcript-motion-shell`
+should show no layout thrash, and its `scrollTop` should be unchanged across the
+flip. Add a browser test asserting scroll position survives maximise and restore.
 
 ### Open — Replace-with-upload bypasses the revision contract
 
@@ -134,8 +263,26 @@ shortest route to losing a file's contents.
 
 Relevant code: `conduit-web/src/client/workspace/workspace-panel.tsx:730` and `conduit-web/src/workspace-inspector.js:190-218`.
 
-Suspected direction: send the current revision, surface the 409 the same way a save
-conflict is surfaced, and apply the existing unsaved-changes guard.
+**Solution.** Route the replacement through the same contract as a save.
+
+1. Before the `PUT`, run the unsaved-changes guard that `openFile` (`:596`) and
+   `closeSlot` (`:623`) already use, against `slotForPath(target.path)`, and abort
+   the replacement if the user declines.
+2. Resolve the current revision — the loaded slot's `preview().revision` when
+   there is one, otherwise a metadata `GET` first — and send it as `if-match`
+   instead of `"*"`.
+3. On a 409, surface the shared conflict affordance from *Save acknowledgement
+   race*, where *Overwrite* re-issues the request with `if-match: "*"`. The force
+   path stays available but becomes a deliberate act rather than the default.
+4. On success, `clearDraft` for that path — the draft is genuinely superseded —
+   before calling `slotHandles.get(reloading)?.reload()`.
+
+Depends on the draft store from *Editor state ownership* and the conflict
+affordance from *Save acknowledgement race*; land those two first.
+
+Acceptance: a browser test where the file changes on disk between the tree listing
+and the replacement gets a conflict prompt rather than a silent overwrite, and one
+where a slot holds a draft confirms the guard fires.
 
 ## P1
 
@@ -145,7 +292,27 @@ The server accepts the first 500 entries returned by the file system and sorts o
 
 Relevant code: `conduit-web/src/workspace-inspector.js:161-179`, filter and tree traversal in `conduit-web/src/client/workspace/workspace-panel.tsx:1141-1165`.
 
-Suspected direction: stable server-side sorting with pagination or cursor-based loading, plus explicit filter scope.
+**Solution.** Sort the whole directory, then page; and make the client honest about
+what its filter covers.
+
+1. In `listWorkspaceDirectory`, keep draining `opendir` past the display limit but
+   collect only name and type — cheap even for very large directories — up to a
+   hard ceiling (say 50 000 entries), beyond which the directory is reported as
+   oversize and the view says so. Sort the full set with the existing comparator,
+   then slice.
+2. Return `{ entries, total, truncated, cursor }`, where `cursor` is the last
+   returned entry's sort key (type then name), and accept an `after` query
+   parameter that resumes from it. Because the sort is total and stable, paging is
+   deterministic regardless of `readdir` order.
+3. Render a **Show more** row in the tree when `truncated` is set, loading the next
+   page in place. Do not auto-load on scroll — the directory poll would fight it.
+4. Label the filter input **Filter loaded files**, and when a filter is active while
+   any visible directory is truncated, show a one-line note saying the filter covers
+   loaded entries only, linking to content search once that exists.
+
+Acceptance: an inspector test that builds a directory of 1 200 entries with names
+that defeat insertion order, then asserts two successive pages are disjoint, each
+sorted, and their union is the whole directory.
 
 ### Open — File and Source Control freshness
 
@@ -153,7 +320,26 @@ The Files view polls each expanded directory and each open file every 1.5 second
 
 Relevant code: `conduit-web/src/client/workspace/workspace-panel.tsx:57`, `conduit-web/src/client/workspace/workspace-panel.tsx:876-898`, and `conduit-web/src/client/workspace/workspace-panel.tsx:988`.
 
-Suspected direction: one project change stream or one version endpoint that invalidates both views.
+**Solution.** Replace N polls with one cheap version probe that both views
+invalidate from.
+
+1. Add `GET /v0/projects/:id/workspace/version` returning `{ version, changedPaths }`.
+   Implement it with a single recursive `fs.watch` per project, held in the
+   inspector behind a reference count, incrementing a counter and accumulating
+   changed relative paths; cap the accumulation and return `changedPaths: null` on
+   overflow, meaning "assume everything". Fall back to an mtime scan of the open
+   directories where recursive watch is unsupported.
+2. The client polls that one endpoint. On a version change it refetches only the
+   expanded directories and open files intersecting `changedPaths`, or all of them
+   when it is `null`. Source Control subscribes to the same signal and refreshes
+   its status on any change — the link that is missing today.
+3. Keep the 1.5 s interval for the version probe only; per-resource polling goes
+   away entirely.
+4. Ignore `.conduit` and the `.conduit-tmp-` prefix in the watcher, or every save
+   wakes the whole tree twice.
+
+Implement together with *Polling ignores document visibility* — that finding
+schedules the poll this one rewrites.
 
 ### Open — Source Control scale
 
@@ -161,7 +347,21 @@ Patch content is requested and rendered as individual lines. Large combined diff
 
 Relevant code: Git slot release in `conduit-web/src/workspace-inspector.js:48-50`, bounded patch work near `conduit-web/src/workspace-inspector.js:411`, and patch rendering in `conduit-web/src/client/workspace/workspace-panel.tsx`.
 
-Suspected direction: correct slot transfer accounting, then bound or virtualize patch rendering and cache data at file or hunk granularity.
+**Solution.** Three separable changes; the semaphore is a two-line fix and should
+land first.
+
+1. **Slot transfer.** `releaseGitSlot` (`:48-50`) decrements `gitSlots.active` and
+   then resolves a waiter that does not re-increment, so the counter drifts below
+   the real process count and the limit stops binding. Transfer the slot instead:
+   when a waiter exists, shift and resolve it *without* decrementing; decrement
+   only when the queue is empty. Add a unit test running 20 concurrent git calls
+   against a limit of 4 and asserting observed peak concurrency never exceeds 4.
+2. **Bound the work.** Drive the file list from `git diff --numstat`, which gives
+   the summary the list needs with no patch text, and request a patch only when a
+   file is expanded. Cache patches keyed by path plus blob revision.
+3. **Bound the DOM.** Render at most the first N hunks with an explicit *Show
+   remaining hunks* control, virtualise the line list above a threshold, and offer
+   download rather than inline rendering for a patch past a size ceiling.
 
 ### Open — Terminal recovery states
 
@@ -169,7 +369,20 @@ The terminal retries a short sequence for network loss. A lease or control confl
 
 Relevant code: `conduit-web/src/client/remotes/terminal-pane.tsx:74`, retry control at `conduit-web/src/client/remotes/terminal-pane.tsx:277-288`, and the takeover action near `conduit-web/src/client/remotes/terminal-pane.tsx:1018`.
 
-Suspected direction: model offline, reconnecting, stopped, and control-conflict states separately.
+**Solution.** Replace the recovery flags with one explicit state machine and render
+exactly one affordance per state.
+
+1. Define a single signal of type
+   `"connecting" | "live" | "reconnecting" | "offline" | "stopped" | "conflict"`,
+   and derive the banner, the retry button and the takeover button from it. Delete
+   `ownershipConflict` as an independent signal — it becomes the `conflict` state.
+2. Assign the transitions explicitly: transport error to `reconnecting`; retry
+   budget exhausted to `offline` (action *Retry*); process exited to `stopped`
+   (action *Start a new terminal*); lease conflict to `conflict` (action *Take
+   control*, naming the current holder). Only `reconnecting` auto-retries;
+   `conflict` must never auto-retry, which is the present defect.
+3. Give each state one sentence of copy and one primary action, and announce
+   transitions through a polite live region so the change is not visual only.
 
 ### Open — Keyboard and screen-reader model
 
@@ -177,7 +390,24 @@ The file tree implements part of the ARIA tree keyboard model. The panel tab are
 
 Relevant code: tree keyboard handling in `conduit-web/src/client/workspace/workspace-panel.tsx:1168-1220`; pane tabs and labels near `conduit-web/src/client/workspace/workspace-panel.tsx:418-460`.
 
-Suspected direction: complete the tree focus model and give each pane an explicit tablist and tabpanel relationship.
+**Solution.** Complete both patterns to the APG — mostly filling gaps rather than
+rewriting.
+
+1. **Tree.** Add the missing keys: `Home` and `End` to the first and last visible
+   node, `*` to expand all siblings, `ArrowLeft` on a collapsed node to move to the
+   parent, and wrap the existing typeahead. Adopt roving `tabindex` so the tree is
+   one tab stop, and set `aria-level`, `aria-setsize`, `aria-posinset` and
+   `aria-expanded` on each node.
+2. **Tabs.** Wrap each pane's tab buttons in `role="tablist"` with an `aria-label`
+   naming the pane, give each button `aria-controls` pointing at its panel, and give
+   each panel `role="tabpanel"`, `tabindex="0"` and `aria-labelledby` pointing back.
+   Remove the toolbar role where it wraps tabs, and implement
+   `ArrowLeft`/`ArrowRight` within a tablist with roving `tabindex`.
+3. Give each split pane's panel a distinct accessible name — two panes can show the
+   same view — by suffixing with the pane name.
+
+Acceptance: add an axe pass over the open panel to the browser suite, plus a
+keyboard test that reaches every tab and every tree node without a pointer.
 
 ### Complete — Dashboard workspace-panel continuity
 
@@ -216,8 +446,28 @@ place to sweep these keys.
 
 Relevant code: key construction throughout `conduit-web/src/client/workspace/workspace-panel.tsx`, and the existing migration pass in the same file.
 
-Suspected direction: namespace the keys by scope, evict a chat's entries when the
-chat is deleted, and route writes through one helper that tolerates failure.
+**Solution.** One storage module, one key shape, one sweep.
+
+1. Add `workspace-panel-storage.ts` exporting `readSetting(scopeId, name)`,
+   `writeSetting(scopeId, name, value)` and `dropScope(scopeId)`. Every write goes
+   through a `try/catch` that warns once per session and then degrades to an
+   in-memory map, so a quota error or a storage-blocking browser can never throw
+   inside a tab selection. Replace all 19 `localStorage.setItem` call sites in
+   `workspace-panel.tsx` with it.
+2. Keep the existing `conduit:workspace-panel:<scopeId>:<name>` prefix — it is
+   already scope-first, so `dropScope` is a prefix scan and delete. Do not rename
+   keys; that discards everyone's current geometry for no gain.
+3. Collapse the eleven keys into one JSON object per scope, migrating inside the
+   existing `migrateWorkspaceGeometry` pass (rename it
+   `migrateWorkspacePanelStorage` and bump its sentinel key). One object per scope
+   makes eviction and quota accounting trivial.
+4. Call `dropScope` wherever a chat or project is deleted in `main.tsx`, and add a
+   startup sweep in the same migration pass that deletes any scope id absent from
+   the loaded project and chat lists, plus an LRU cap keeping the 100
+   most-recently-written scopes.
+
+Acceptance: a unit test that fills the store, deletes a chat and asserts its keys
+are gone; and one that makes `setItem` throw and asserts tab selection still works.
 
 ### Open — Polling ignores document visibility and never backs off
 
@@ -231,8 +481,23 @@ that is simply unchanged.
 
 Relevant code: `conduit-web/src/client/workspace/workspace-panel.tsx:986-989` and the poll body above it.
 
-Suspected direction: gate on visibility, back off on repeated failure, and give the
-view an explicit stale state rather than silence.
+**Solution.** Gate, back off, and make the failure visible.
+
+1. Add `document.visibilityState === "visible"` to the polling effect's guard
+   (`:986-989`) and subscribe to `visibilitychange` so the effect re-runs. On
+   becoming visible, poll once immediately rather than waiting out the interval.
+2. Replace the fixed interval with a self-rescheduling `setTimeout` holding a
+   `failures` counter: the delay is `FILE_POLL_INTERVAL_MS` doubled per consecutive
+   failure, capped at 30 s and reset to zero on any success. A self-rescheduling
+   timer also stops a slow response overlapping the next tick.
+3. After two consecutive failures, set a `stale` signal rendering a persistent
+   inline strip in the Files and Source Control headers — *Not updating · Retry* —
+   cleared on the next success. The condition is ongoing rather than momentary, so
+   it is a strip and not a toast. Keep the `console.warn`.
+4. Pause on `navigator.onLine === false` and resume on `online`.
+
+Best implemented together with *File and Source Control freshness*, which replaces
+the poll body this finding schedules.
 
 ### Open — Binary and media handling stops at images
 
@@ -247,8 +512,34 @@ null byte or for one past the 1 MiB text ceiling.
 
 Relevant code: `conduit-web/src/client/workspace/workspace-file-slot.tsx` (image branch and `MAX_INLINE_IMAGE_BYTES`), and `conduit-web/src/workspace-inspector.js:182-188`.
 
-Suspected direction: give the slot an explicit viewer contract keyed by detected
-type, with a fallback viewer and an "open anyway" path for near-text files.
+**Solution.** Let the server classify the file and let the slot dispatch on the
+classification, so adding a viewer becomes a table entry rather than a new branch.
+
+1. Server: return `{ path, size, modifiedAt, revision, kind, mime }` from the file
+   metadata response, where `kind` is one of `text`, `image`, `pdf`, `audio`,
+   `video`, `binary`. Classify from a sniffed magic-number prefix of the first
+   4 KiB, falling back to the extension. Have the `file_not_text` rejection in
+   `readWorkspaceFile` (`:182-188`) carry `kind` and `mime` too, so the client can
+   offer the right fallback instead of a dead end.
+2. Client: replace `imageExtension` with a viewer table keyed by kind — text
+   editor, image, PDF through `<object>` on the blob URL, media through
+   `<audio>`/`<video>`, and a binary fallback showing size, type, a hex head and a
+   Download button. Each viewer receives a blob URL the slot still owns and revokes
+   in `onCleanup`, exactly as the image branch does today.
+3. Add *Open as text anyway* on the binary fallback, re-requesting with a
+   `?force=text` flag, for the file rejected over a single null byte; and *Load
+   first 1 MiB* for a file past the text ceiling — a `Range` request rendered
+   read-only behind a banner saying it is truncated.
+4. Revalidate rather than re-download: send `if-none-match` with the known revision
+   on the image fetch and treat 304 as unchanged, which removes the full
+   re-download per poll.
+5. Give the image viewer a *Fit* / *1:1* toggle with scroll-to-pan when zoomed,
+   stored per slot and not persisted.
+6. Make `MAX_INLINE_IMAGE_BYTES` govern inline rendering only. It should never
+   block downloading the file.
+
+The PDF and media viewers depend on the CSP finding; agree `object-src` and
+`media-src` before adding them.
 
 ### Open — No workspace content search
 
@@ -260,8 +551,32 @@ to work around.
 
 Relevant code: the route surface in `conduit-web/src/server/routes/projects.js`, and the client filter in `conduit-web/src/client/workspace/workspace-panel.tsx`.
 
-Suspected direction: a bounded server-side content search with the same path
-boundary as the other file routes, surfaced as its own view or as a filter mode.
+**Solution.** A bounded server-side search sharing the existing path boundary,
+surfaced as a filter mode in the Files view rather than as a new tab.
+
+1. Add `GET /v0/projects/:id/search?q=&regex=&case=&glob=&limit=` in `projects.js`,
+   implemented in `workspace-inspector.js` beside the directory listing so it
+   reuses `resolveInspectorPath`, the `.conduit` exclusion and the symlink
+   rejection. Every returned path must pass the same `safeSegments` check as the
+   file routes.
+2. Implement it as a bounded walk: skip symlinks and `.conduit`, skip files failing
+   the null-byte text check, cap at 200 matching files and 2 000 matches total,
+   cap per-file size at the existing 1 MiB preview limit, and enforce a 2 s
+   wall-clock deadline after which the response returns `truncated: true`. Run it
+   under the same concurrency-semaphore pattern as the git calls so a search cannot
+   starve the server.
+3. Return `{ matches: [{ path, line, column, preview }], truncated, scanned }`,
+   with the preview line clipped to roughly 200 characters around the match.
+4. Client: add a mode toggle beside the existing filter input — *Filter names* and
+   *Search contents* — rendering results grouped by file. Selecting a result opens
+   the file in the focused slot and scrolls to the line. Debounce at 250 ms and
+   cancel the in-flight request through the existing `requestControllers`
+   machinery.
+5. If `rg` is on `PATH`, shell out to it with `--json` and the caps above;
+   otherwise use the JavaScript walk. The response shape is the same either way.
+
+Acceptance: an inspector test asserting the traversal boundary holds — a match
+outside the root or behind a symlink is never returned — and that the caps apply.
 
 ### Open — Source Control capability set is thin
 
@@ -274,8 +589,25 @@ line in the terminal tab.
 
 Relevant code: `conduit-web/src/client/workspace/workspace-panel.tsx:28` and `conduit-web/src/workspace-inspector.js:270`.
 
-Suspected direction: add discard and branch operations first, behind the same
-confirmation discipline the destructive file operations already use.
+**Solution.** Add discard first, then branch operations, both through the existing
+git action plumbing so the semaphore, timeouts and output limits apply unchanged.
+
+1. **Discard.** Add `discard` to the action set: `git restore --` for a tracked
+   modified file, `git restore --staged --worktree --` for a staged one, and the
+   existing delete path for an untracked one. The three cases need different
+   commands and the confirmation should say which it will run. Require an explicit
+   confirmation naming the file, matching the discipline the destructive file
+   operations already use, and refuse while a slot holds an unsaved draft for that
+   path.
+2. Offer discard per file and across a selection, never a bare "discard everything"
+   button without an itemised confirmation.
+3. **Branches.** Add list, switch and create-from-current. Switch refuses while any
+   slot holds a draft, and must surface git's own refusal rather than forcing when
+   git reports it would overwrite local changes.
+4. Leave stash, amend, per-hunk staging and conflict resolution to a follow-up so
+   this pass stays reviewable.
+5. Refresh every new action through the change signal from *File and Source Control
+   freshness* rather than its own refetch.
 
 ## P2
 
@@ -285,7 +617,18 @@ The Artifacts view exposes Outputs and Interactive UI modes but has no backing a
 
 Relevant code: `conduit-web/src/client/workspace/workspace-panel.tsx:1646-1651`.
 
-Suspected direction: connect it to transcript outputs and interactive resources, or remove the inactive modes until that contract exists.
+**Solution.** Remove the inactive modes now; design the contract before rebuilding
+them.
+
+1. Short term: delete the Interactive UI mode and the mode switcher, and either
+   hide the Artifacts tab for a project with no artifacts or render one explicit
+   empty state saying artifacts are not yet available. Controls implying an absent
+   subsystem are worse than an absent tab.
+2. When it returns, the contract should be: an artifact is produced by a transcript
+   output; it has an id, a mime type, a producing message, and a lifetime tied to
+   the chat. The view lists them and opens each through the viewer table from
+   *Binary and media handling*. Interactive artifacts need the CSP and a sandboxed
+   frame settled first — see below.
 
 ### Complete — File operations and narrow two-file layout
 
@@ -310,7 +653,12 @@ The server uses an `unstructured` project kind for generic chats, but the client
 
 Relevant code: `conduit-web/src/project-store.js:193` and `conduit-web/src/client/api/contracts.ts:34-40`.
 
-Suspected direction: use one shared project-kind contract or include the server value in the client union.
+**Solution.** Add `"unstructured"` to the `Project.kind` union in
+`contracts.ts:34-40`, then fix the exhaustiveness errors `npm run typecheck`
+reports — each is a place the client silently assumed a generic chat was a
+`project`. Export the kind list as a `const` array from `contracts.ts` and import
+it into the server store so the two cannot drift, with a server test asserting
+every kind the store can write appears in that list.
 
 ### Open — Workspace panel size
 
@@ -318,7 +666,21 @@ Suspected direction: use one shared project-kind contract or include the server 
 
 Relevant code: `conduit-web/src/client/workspace/workspace-panel.tsx` and the repeated mobile block beginning at `conduit-web/src/client/workspace/workspace.css:319`.
 
-Suspected direction: split by subsystem after the state-ownership issues are resolved; remove copied mobile declarations when their required differences are explicit.
+**Solution.** Split along the seams the other findings already create, after they
+land — splitting first means moving the same code twice.
+
+1. Extract in this order, each a pure move with no behaviour change:
+   `workspace-file-drafts.ts` and `workspace-panel-storage.ts` (from the P0 and P1
+   work above), then `workspace-tree.tsx` (tree render plus keyboard model),
+   `workspace-source-control.tsx`, `workspace-artifacts.tsx`, and
+   `workspace-geometry.ts` (resize handlers, split ratios, wide/narrow thresholds).
+   `workspace-panel.tsx` keeps tab composition and the panel shell.
+2. CSS: derive the mobile block from custom properties rather than duplicating
+   declarations. Define the density tokens once on `.workspace-panel`, redefine
+   only the tokens inside the mobile query, and delete any mobile declaration that
+   merely restates its desktop value.
+3. Run `npm run typecheck` and the browser suite after each extraction, and keep
+   each extraction in its own commit so a regression bisects cleanly.
 
 ### Open — No Content-Security-Policy
 
@@ -330,8 +692,26 @@ the policy also governs the `blob:` image rendering that exists today.
 
 Relevant code: the server setup in `conduit-web/src/server.js`, and the artifact boundary copy in `conduit-web/src/client/workspace/workspace-panel.tsx`.
 
-Suspected direction: define the policy before the interactive artifact contract,
-not after.
+**Solution.** Ship a policy for what exists today, report-only first and then
+enforced; design the artifact frame only after that.
+
+1. Add a policy header for document responses in `server.js`. Starting point:
+   `default-src 'self'; img-src 'self' blob: data:; media-src 'self' blob:;
+   object-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline';
+   connect-src 'self' ws: wss:; frame-ancestors 'none'; base-uri 'none';
+   form-action 'none'`.
+2. Deploy it as `Content-Security-Policy-Report-Only` with a report endpoint first,
+   run the browser suite and the native builds against it, then remove
+   `'unsafe-inline'` from `style-src` by moving inline styles to nonces or classes.
+   The native builds may need their own origin in `connect-src` — check before
+   enforcing.
+3. SVG images already render through `<img>` on a blob URL, which cannot execute
+   script. Keep that invariant explicit in a comment, and never move an SVG to
+   `<object>` or to inline injection.
+4. Only then define the artifact boundary: an `<iframe sandbox="allow-scripts">`
+   served from a distinct origin with its own stricter policy delivered as a header
+   on that origin, and a `postMessage` contract validated against an allowlist.
+   Never grant `allow-same-origin` together with `allow-scripts`.
 
 ### Open — The failure surface has fragmented
 
@@ -342,8 +722,22 @@ transient or blocking, so each surface has picked one.
 
 Relevant code: toast reporting in `conduit-web/src/client/workspace/workspace-panel.tsx`, terminal recovery in `conduit-web/src/client/remotes/terminal-pane.tsx`.
 
-Suspected direction: classify failures into a small set of modalities and route
-every surface through it.
+**Solution.** Three modalities, one router, written down.
+
+1. Define them. **Transient**: a user-initiated action failed and the state is
+   otherwise fine — a toast. **Persistent**: a subsystem is degraded until
+   something changes — an inline strip in that view's header with a retry action,
+   cleared on success. **Blocking**: the user must choose before work continues —
+   save conflict, ownership conflict, unsaved-changes guard — a dialog with named
+   choices. Nothing is silent; anything reaching only `console.warn` today is
+   persistent.
+2. Add `reportFailure(error, { modality, scope, retry? })` in one module and route
+   every existing surface through it: panel toasts, the poll's `console.warn`, git
+   inline errors, terminal recovery, and the mobile overlay. The mobile difference
+   becomes a rendering choice inside the router rather than a separate decision at
+   each call site.
+3. Record the rule in this repo's docs beside this review, so future surfaces
+   inherit it instead of re-deciding.
 
 ### Open — Focus is unmanaged after destructive actions
 
@@ -354,8 +748,20 @@ static roles.
 
 Relevant code: slot close and promotion in `conduit-web/src/client/workspace/workspace-panel.tsx:614-645`.
 
-Suspected direction: move focus to a defined target for each destructive action and
-announce the result.
+**Solution.** Name a focus target for each action and announce the result once.
+
+1. Targets: closing the secondary slot moves focus to the primary slot's editor;
+   closing the primary while a secondary is open moves it to the promoted slot's
+   editor; closing the last slot moves it to the tree node for the file that was
+   open, or the tree itself when that node is gone; deleting a file moves it to the
+   sibling node after the deleted one, else the parent; renaming or moving moves it
+   to the node at its new path.
+2. Reuse the `restoreFocus` and `focusFirst` helpers already used for the mobile
+   overlay (`workspace-panel.tsx:975-985`) rather than adding new ones, and move
+   focus in a `queueMicrotask` after the state update as that code does.
+3. Add one polite `aria-live` region in the panel and announce the outcome:
+   "Closed notes.md", "Deleted notes.md", "notes.md moved to docs/notes.md".
+4. Cover both in the keyboard test added for the ARIA finding.
 
 ### Open — Test coverage map
 
@@ -368,9 +774,23 @@ effectively unverified rather than green.
 
 Relevant code: `conduit-web/test/browser/app.spec.js` and `conduit-web/playwright.config.js`.
 
-Suspected direction: cover the mutation paths first, since those are where the P0
-items above live, and decide whether the setpieces run somewhere with the headroom
-to be trusted.
+**Solution.** Cover the mutation paths first, since that is where the P0 items
+live, and decide where the setpieces run.
+
+1. Write each test alongside the fix it guards rather than as a separate pass —
+   every P0 solution above names its acceptance test. Priority order: save conflict
+   and mid-flight typing, replace-with-upload conflict, draft survival across tab
+   change and reload, then upload, git actions against a fixture repository,
+   poll-driven refresh, terminal lifecycle inside the panel, and tree keyboard
+   navigation.
+2. Prefer server-side tests where they are cheaper than browser ones: atomic write,
+   directory paging, search boundary, git semaphore concurrency.
+3. For `@setpiece`, measure before changing: run the group with `--workers=1` and
+   tracing on to find whether the failure is contention or a genuine ordering
+   dependency. If contention, pin the project to one worker and raise the per-test
+   timeout in `playwright.config.js`; if ordering, isolate the shared fixture.
+   Either way the group must run in CI on a machine with headroom, and until it
+   does, report it as unverified rather than green.
 
 ## Existing strengths
 

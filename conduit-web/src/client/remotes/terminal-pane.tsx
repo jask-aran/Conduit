@@ -63,7 +63,7 @@ function sessionMetadata(record: Pty) {
 type StandaloneTerminalControls = { onOpenConduit: () => void };
 type KeyboardLockNavigator = Navigator & { keyboard?: { lock?: (codes?: string[]) => Promise<void>; unlock?: () => void } };
 
-export function TerminalPane(props: { projectId: string; terminalId?: string; active?: boolean; autoStart?: boolean; focusRequest?: number; standaloneControls?: StandaloneTerminalControls }) {
+export function TerminalPane(props: { projectId: string; projectName?: string; terminalId?: string; active?: boolean; autoStart?: boolean; focusRequest?: number; standaloneControls?: StandaloneTerminalControls }) {
   const [pty, setPty] = createSignal<Pty | null>(null);
   const [sessions, setSessions] = createSignal<Pty[]>([]);
   const [error, setError] = createSignal("");
@@ -897,6 +897,7 @@ export function TerminalPane(props: { projectId: string; terminalId?: string; ac
       </Show>
       <div class="terminal-pane-identity">
         <Show when={pty()?.title}><strong>{pty()!.title}</strong></Show>
+        <span class="terminal-header-scope">{props.projectName || "Chats"}</span>
         <Show when={pty()?.currentCommand}><span class="terminal-header-command">{pty()!.currentCommand}</span></Show>
         <span class="terminal-header-status">{statusLabel()}</span>
       </div>
@@ -918,8 +919,8 @@ export function TerminalPane(props: { projectId: string; terminalId?: string; ac
           </MenuTrigger>
           <MenuContent class="terminal-sessions-menu">
             <MenuGroup>
-              <MenuLabel>Active terminals</MenuLabel>
-              <Show when={sessions().length > 0} fallback={<div class="terminal-session-empty">No active terminals in this Workspace.</div>}>
+              <MenuLabel>Active terminals in {props.projectName || "Chats"}</MenuLabel>
+              <Show when={sessions().length > 0} fallback={<div class="terminal-session-empty">No active terminals in {props.projectName || "Chats"}.</div>}>
                 <For each={sessions()}>{(session) => <>
                   <div class="terminal-session-row">
                     <MenuItem class="terminal-session-item" onSelect={() => void attachSession(session)}>

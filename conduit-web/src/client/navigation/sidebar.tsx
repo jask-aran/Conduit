@@ -451,6 +451,7 @@ export function Sidebar(props: {
     if (seconds < 86_400) return `${Math.floor(seconds / 3600)}h ago`;
     return `${Math.floor(seconds / 86_400)}d ago`;
   };
+  const terminalScope = (terminal: Pty) => props.projects.find((project) => project.id === terminal.projectId)?.name || "Unknown workspace";
   const selectedTargets = createMemo<ChatTarget[]>(() => props.projects.flatMap((project) =>
     project.sessions.filter((chat) => selectedChatIds().has(chat.id)).map((chat) => ({ chat, project }))));
   const clearSelection = () => setSelectedChatIds(new Set<string>());
@@ -865,7 +866,7 @@ export function Sidebar(props: {
       <span class="sidebar-terminal-status" aria-hidden="true" />
       <span class="sidebar-terminal-copy">
         <strong>{rowProps.terminal.title || "Shell"}</strong>
-        <small>{rowProps.terminal.currentCommand || "shell"} · {terminalActivity(rowProps.terminal)}</small>
+        <small>{terminalScope(rowProps.terminal)} · {rowProps.terminal.currentCommand || "shell"} · {terminalActivity(rowProps.terminal)}</small>
       </span>
     </ContextMenuTrigger>
     <ContextMenuContent class="w-48 sidebar-context-menu">

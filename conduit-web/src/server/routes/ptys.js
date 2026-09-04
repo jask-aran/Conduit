@@ -1,4 +1,3 @@
-import os from "node:os";
 import fs from "node:fs/promises";
 
 async function terminalContext(projects, id) {
@@ -17,10 +16,11 @@ async function terminalContext(projects, id) {
       }
       throw error;
     }
-    return { project, cwd: project.path };
+    return { project, cwd: projects.workingRoot(project) };
   }
-  const cwd = await fs.realpath(os.homedir());
-  if (!(await fs.stat(cwd)).isDirectory()) throw Object.assign(new Error("Terminal home directory is unavailable"), { code: "pty_home_unavailable" });
+  await fs.mkdir(projects.workingRoot(project), { recursive: true });
+  const cwd = await fs.realpath(projects.workingRoot(project));
+  if (!(await fs.stat(cwd)).isDirectory()) throw Object.assign(new Error("Terminal working directory is unavailable"), { code: "pty_cwd_unavailable" });
   return { project, cwd };
 }
 

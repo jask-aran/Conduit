@@ -38,6 +38,7 @@ export interface Project {
   origin?: "managed" | "linked" | "created" | "cloned";
   kind?: "project" | "workspace";
   path?: string;
+  workingRoot?: string;
   externalPath?: string;
   state?: "ready" | "cloning";
   cloneOperationId?: string | null;
