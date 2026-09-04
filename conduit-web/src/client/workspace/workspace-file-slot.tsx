@@ -194,13 +194,14 @@ export default function WorkspaceFileSlot(props: {
   const save = async () => {
     const file = preview();
     if (!file || !hasUnsavedChanges() || saving()) return;
+    const submittedContent = draft();
     setSaving(true);
     try {
       const written = await api<FileWriteResult>(
         `/v0/projects/${encodeURIComponent(props.projectId)}/file?path=${encodeURIComponent(file.path)}`,
-        { method: "PUT", headers: { "content-type": "application/octet-stream", "if-match": file.revision }, body: draft() },
+        { method: "PUT", headers: { "content-type": "application/octet-stream", "if-match": file.revision }, body: submittedContent },
       );
-      const next = { ...file, ...written, content: draft() };
+      const next = { ...file, ...written, content: submittedContent };
       setPreview(next);
       props.onLoaded?.(next);
     } catch (cause) {

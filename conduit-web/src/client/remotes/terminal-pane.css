@@ -77,6 +77,8 @@
   white-space: nowrap;
 }
 
+.terminal-header-scope { color: var(--muted-foreground); }
+
 .terminal-shortcuts {
   display: flex;
   min-width: 0;

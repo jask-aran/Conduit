@@ -198,6 +198,11 @@ export class ProjectStore {
     return slug === "chat" ? this.filesRoot : path.join(this.filesRoot, slug);
   }
 
+  workingRoot(project) {
+    if (project.kind === "workspace") return project.path ? path.resolve(project.path) : this.resolvePath(project);
+    return this.managedPath(project.slug);
+  }
+
   async readCatalog() {
     const catalog = await readJson(this.catalogFile, { version: 2, projects: [] });
     return {
@@ -214,7 +219,7 @@ export class ProjectStore {
   }
 
   projectView(project) {
-    const projectPath = this.resolvePath(project);
+    const projectPath = this.workingRoot(project);
     return {
       id: project.id,
       slug: project.slug,
@@ -229,6 +234,7 @@ export class ProjectStore {
       workspaceAppearance: project.workspaceAppearance || null,
       createdAt: project.createdAt,
       path: projectPath,
+      workingRoot: projectPath,
       sessionsDir: sessionDirectoryFor(projectPath, this.piAgentDir),
       deletesFilesOnRemove: (project.origin || "managed") === "managed",
     };

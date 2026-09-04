@@ -644,6 +644,62 @@ test("an unsaved draft in one file slot survives opening another file", async ({
   await expect(primary.locator(".workspace-preview-header small")).toHaveText("Unsaved");
 });
 
+test("a save acknowledges only the draft submitted before a later edit", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop-chromium", "CodeMirror save race needs the desktop workspace editor");
+  const initialContent = "export function startConduit() {}\n";
+  const firstDraft = `${initialContent}v1`;
+  let savedBody = "";
+  let savedRevision = "";
+  let resolveSaveStarted;
+  const saveStarted = new Promise((resolve) => { resolveSaveStarted = resolve; });
+  let releaseSave;
+  const saveGate = new Promise((resolve) => { releaseSave = resolve; });
+  await page.unroute("**/v0/projects/*/file?*");
+  await page.route("**/v0/projects/*/file?*", async (route) => {
+    const request = route.request();
+    const url = new URL(request.url());
+    if (request.method() === "PUT") {
+      savedBody = request.postData() || "";
+      savedRevision = request.headers()["if-match"] || "";
+      resolveSaveStarted();
+      await saveGate;
+      return route.fulfill({ json: { path: "app.js", size: firstDraft.length, modifiedAt: 2, revision: "revision-2" } });
+    }
+    if (url.searchParams.get("metadata") === "1") {
+      return route.fulfill({ json: { path: "app.js", size: initialContent.length, modifiedAt: 1 } });
+    }
+    return route.fulfill({ json: { path: "app.js", size: initialContent.length, modifiedAt: 1, revision: "revision-1", content: initialContent } });
+  });
+
+  await openChatSurface(page);
+  await page.getByRole("button", { name: "Toggle workspace panel" }).click();
+  const panel = page.getByRole("complementary", { name: "Workspace panel" });
+  const primary = panel.getByRole("region", { name: "File preview", exact: true });
+  await panel.getByRole("treeitem", { name: "app.js" }).click();
+  await expect(primary.getByRole("button", { name: "Edit file" })).toBeVisible();
+  await primary.getByRole("button", { name: "Edit file" }).click();
+  const editor = primary.locator(".cm-content");
+  await expect(editor).toBeVisible();
+  await editor.click();
+  await page.keyboard.press("Control+End");
+  await page.keyboard.type("v1");
+  await expect(primary.getByRole("button", { name: "Save file" })).toBeEnabled();
+  await primary.getByRole("button", { name: "Save file" }).click();
+  await saveStarted;
+
+  await editor.click();
+  await page.keyboard.press("Control+End");
+  await page.keyboard.type("v2");
+  await expect(primary.locator(".workspace-preview-header small")).toHaveText("Unsaved");
+  releaseSave();
+
+  await expect(primary.getByRole("button", { name: "Save file" })).toBeEnabled();
+  await expect(primary.locator(".workspace-preview-header small")).toHaveText("Unsaved");
+  expect(savedRevision).toBe("revision-1");
+  expect(savedBody).toBe(firstDraft);
+  await expect(editor).toContainText("v1v2");
+});
+
 test("workspace file controls create, rename, move, and delete folders", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "desktop-chromium", "opens the panel from the desktop header button");
   let rootEntries = [];
@@ -973,6 +1029,8 @@ test("terminal workspace commands focus the attached shell", async ({ page }, te
   });
 
   await runWorkspaceViewCommand(page, "Terminal");
+  await expect(page.locator(".terminal-header-scope")).toHaveText("Chats");
+  await expect(page.locator(".sidebar-terminal-copy small")).toContainText("Chats · zsh");
   const shellFocused = () => page.evaluate(() => Boolean(document.activeElement?.closest(".terminal-canvas")));
   await expect.poll(shellFocused).toBe(true);
 
