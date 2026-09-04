@@ -11,6 +11,7 @@ import {
   LayoutDashboardIcon,
   MessageSquareIcon,
   MessageSquarePlusIcon,
+  Maximize2Icon,
   PanelLeftIcon,
   PaletteIcon,
   PencilIcon,
@@ -152,6 +153,7 @@ export function Sidebar(props: {
   onPrefetchChat: (chat: ChatSummary) => void;
   onOpenChat: (chat: ChatSummary, project: Project) => Promise<void>;
   onOpenProject: (project: Project) => Promise<void>;
+  onOpenProjectMaximized: (project: Project) => void;
   onAddProject: (input: ProjectInput) => Promise<boolean>;
   onRenameChat: (chat: ChatSummary, project: Project, name: string) => Promise<boolean>;
   onRenameProject: (project: Project, name: string) => Promise<boolean>;
@@ -783,6 +785,7 @@ export function Sidebar(props: {
           <Show when={cloning()} fallback={<>
             <ContextMenuGroup>
               <ContextMenuItem onSelect={() => startNewChat(blockProps.project)}><MessageSquarePlusIcon />{commandLabel(COMMAND_IDS.newChat)}</ContextMenuItem>
+              <Show when={isWorkspace()}><ContextMenuItem onSelect={() => { closeMobile(); props.onOpenProjectMaximized(blockProps.project); }}><Maximize2Icon />Open maximized Workspace</ContextMenuItem></Show>
               <ContextMenuItem onSelect={() => requestRenameProject(blockProps.project)}><PencilIcon />Rename {blockProps.workspace ? "workspace" : "folder"}</ContextMenuItem>
               <ContextMenuItem onSelect={() => void togglePin("project", blockProps.project.id)}>
                 <Show when={isPinned("project", blockProps.project.id)} fallback={<><PinIcon />Pin to sidebar</>}><PinOffIcon />Unpin</Show>
@@ -840,6 +843,13 @@ export function Sidebar(props: {
         <span>{label()}</span>
       </ContextMenuTrigger>
       <ContextMenuContent class="w-48 sidebar-context-menu">
+        <Show when={item.type === "project" && workspaces().some((project) => project.id === item.project.id)}>
+          <ContextMenuItem onSelect={() => {
+            if (item.type !== "project") return;
+            closeMobile();
+            props.onOpenProjectMaximized(item.project);
+          }}><Maximize2Icon />Open maximized Workspace</ContextMenuItem>
+        </Show>
         <ContextMenuItem onSelect={() => void togglePin(item.type, item.type === "chat" ? item.chat.id : item.type === "project" ? item.project.id : item.terminal.id)}>
           <PinOffIcon />Unpin
         </ContextMenuItem>

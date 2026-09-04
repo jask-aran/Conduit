@@ -186,6 +186,40 @@ exit 0
     const rejectedDirectoryDelete = await fetch(`${origin}/v0/projects/${linked.id}/file?path=00-directory`, { method: "DELETE" });
     assert.equal(rejectedDirectoryDelete.status, 400);
     assert.equal((await rejectedDirectoryDelete.json()).error, "path_not_file");
+    const createdDirectory = await fetch(`${origin}/v0/projects/${linked.id}/directory`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ path: "00-directory/nested" }),
+    });
+    assert.equal(createdDirectory.status, 201);
+    assert.deepEqual(await createdDirectory.json(), { path: "00-directory/nested" });
+    const movableFileUrl = `${origin}/v0/projects/${linked.id}/file?path=00-directory%2Fmove-me.txt`;
+    assert.equal((await fetch(movableFileUrl, {
+      method: "PUT",
+      headers: { "content-type": "application/octet-stream" },
+      body: "move\n",
+    })).status, 201);
+    const movedEntry = await fetch(`${origin}/v0/projects/${linked.id}/entry`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ path: "00-directory/move-me.txt", destination: "00-directory/nested/moved.txt" }),
+    });
+    assert.equal(movedEntry.status, 200);
+    assert.deepEqual(await movedEntry.json(), {
+      path: "00-directory/move-me.txt",
+      destination: "00-directory/nested/moved.txt",
+      type: "file",
+    });
+    assert.equal(await fs.readFile(path.join(workspace, "00-directory", "nested", "moved.txt"), "utf8"), "move\n");
+    const renamedDirectory = await fetch(`${origin}/v0/projects/${linked.id}/entry`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ path: "00-directory/nested", destination: "00-directory/archive" }),
+    });
+    assert.equal(renamedDirectory.status, 200);
+    assert.equal((await renamedDirectory.json()).type, "directory");
+    assert.equal((await fetch(`${origin}/v0/projects/${linked.id}/directory?path=00-directory%2Farchive`, { method: "DELETE" })).status, 204);
+    await assert.rejects(fs.access(path.join(workspace, "00-directory", "archive")), { code: "ENOENT" });
     const diffRequest = http.get(`${origin}/v0/projects/${linked.id}/diff`);
     for (let attempt = 0; attempt < 80; attempt += 1) {
       try {
