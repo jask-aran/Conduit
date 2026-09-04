@@ -1,5 +1,5 @@
 import { batch, createEffect, createMemo, createSignal, For, on, onCleanup, Show, type Accessor } from "solid-js";
-import { BoxesIcon, Columns2Icon, CheckIcon, ChevronsUpIcon, ChevronDownIcon, ChevronRightIcon, CirclePlusIcon, CopyIcon, DownloadIcon, EyeIcon, EyeOffIcon, FileDiffIcon, FolderIcon, GitBranchIcon, GitCommitHorizontalIcon, GitCompareArrowsIcon, Maximize2Icon, Minimize2Icon, PanelLeftCloseIcon, PanelLeftOpenIcon, PencilIcon, PinIcon, PinOffIcon, RefreshCwIcon, SearchIcon, SendIcon, TerminalIcon, Trash2Icon, Undo2Icon, UploadIcon, XIcon } from "lucide-solid";
+import { BoxesIcon, Columns2Icon, CheckIcon, ChevronsUpIcon, ChevronDownIcon, ChevronRightIcon, CirclePlusIcon, CopyIcon, DownloadIcon, EyeIcon, EyeOffIcon, FileDiffIcon, FilePlusIcon, FolderIcon, FolderPlusIcon, GitBranchIcon, GitCommitHorizontalIcon, GitCompareArrowsIcon, Maximize2Icon, Minimize2Icon, MoveIcon, PanelLeftCloseIcon, PanelLeftOpenIcon, PencilIcon, PinIcon, PinOffIcon, RefreshCwIcon, SearchIcon, SendIcon, TerminalIcon, Trash2Icon, Undo2Icon, UploadIcon, XIcon } from "lucide-solid";
 import { toast } from "solid-sonner";
 import { Button, ContextMenu, ContextMenuContent, ContextMenuGroup, ContextMenuItem, ContextMenuSeparator, ContextMenuTrigger, Spinner } from "@/components/primitives";
 import { api, asList } from "../api/client";
@@ -18,6 +18,7 @@ import "./workspace.css";
 interface TreeEntry { name: string; path: string; type: "directory" | "file" | "other"; }
 interface DirectoryListing { entries: TreeEntry[]; truncated: boolean; }
 interface FileWriteResult { path: string; size: number; modifiedAt: number; revision: string; }
+interface MovedEntry { path: string; destination: string; type: TreeEntry["type"]; }
 interface GitActionResult { ok: true; output?: string; }
 interface GitCommit { graph: string; hash: string; shortHash: string; subject: string; author: string; authoredAt: string; }
 interface GitRef { name: string; hash: string; upstream: string | null; kind: "local" | "remote" | "tag"; }
@@ -597,7 +598,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
     setFocusedSlot(slot);
   };
   const openFile = (path: string) => openInSlot(focusedSlot(), path);
-  const openFileToSide = (path: string) => openInSlot(filesWide() ? "secondary" : focusedSlot(), path);
+  const openFileToSide = (path: string) => openInSlot("secondary", path);
   let pendingEdit: string | null = null;
   const editFile = (path: string) => {
     const slot = slotForPath(path);
@@ -639,6 +640,27 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
       if (promoted) setSlotPath("secondary", null);
       setFocusedSlot("primary");
     }
+  };
+  const pathIsWithin = (candidate: string | null, parent: string) =>
+    Boolean(candidate && (candidate === parent || candidate.startsWith(`${parent}/`)));
+  const hasUnsavedPath = (path: string) => [...slotHandles.entries()]
+    .some(([slot, handle]) => pathIsWithin(openPaths()[slot], path) && handle.hasUnsavedChanges());
+  const remapWorkspacePath = (candidate: string | null, source: string, destination: string) =>
+    pathIsWithin(candidate, source) ? `${destination}${candidate!.slice(source.length)}` : candidate;
+  const resetFileTree = async () => {
+    const nextExpanded = new Set<string>();
+    setDirectories({});
+    setExpanded(nextExpanded);
+    cacheWorkspace(props.projectId(), { directories: {}, expanded: nextExpanded });
+    await loadDirectory("", true);
+  };
+  const remapOpenPaths = (source: string, destination: string) => {
+    const current = openPaths();
+    setSlotPath("primary", remapWorkspacePath(current.primary, source, destination));
+    setSlotPath("secondary", remapWorkspacePath(current.secondary, source, destination));
+    const nextKept = new Set([...keptVisible()].map((path) => remapWorkspacePath(path, source, destination) || path));
+    setKeptVisible(nextKept);
+    localStorage.setItem(keptVisibleKey(), JSON.stringify([...nextKept]));
   };
   const openSlotHandles = () => [...slotHandles.entries()]
     .filter(([slot]) => Boolean(openPaths()[slot]))
@@ -740,6 +762,112 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
       toast.success(`Deleted ${path}`);
     } catch (cause) {
       reportError((cause as Error).message);
+    } finally {
+      setUploading(false);
+    }
+  };
+  const requestedName = (label: string, initial = "") => {
+    const value = window.prompt(label, initial);
+    if (value == null) return null;
+    const name = value.trim();
+    if (!name || name === "." || name === ".." || name.includes("/") || name.includes("\\")) {
+      reportError("Enter one file or folder name without slashes");
+      return null;
+    }
+    return name;
+  };
+  const joinPath = (parent: string, name: string) => parent ? `${parent}/${name}` : name;
+  const createFile = async (parent = "") => {
+    const name = requestedName("New file name:");
+    if (!name) return;
+    const path = joinPath(parent, name);
+    setUploading(true);
+    try {
+      await api<FileWriteResult>(`/v0/projects/${encodeURIComponent(props.projectId())}/file?path=${encodeURIComponent(path)}`, {
+        method: "PUT",
+        headers: { "content-type": "application/octet-stream" },
+        body: new Blob([]),
+      });
+      await loadDirectory(parent, true);
+      openFile(path);
+      toast.success(`Created ${path}`);
+    } catch (cause) {
+      reportError((cause as Error).message);
+      await loadDirectory(parent, true);
+    } finally {
+      setUploading(false);
+    }
+  };
+  const createDirectory = async (parent = "") => {
+    const name = requestedName("New folder name:");
+    if (!name) return;
+    const path = joinPath(parent, name);
+    setUploading(true);
+    try {
+      await api<{ path: string }>(`/v0/projects/${encodeURIComponent(props.projectId())}/directory`, {
+        method: "POST",
+        body: JSON.stringify({ path }),
+      });
+      await loadDirectory(parent, true);
+      toast.success(`Created ${path}`);
+    } catch (cause) {
+      reportError((cause as Error).message);
+      await loadDirectory(parent, true);
+    } finally {
+      setUploading(false);
+    }
+  };
+  const moveEntry = async (entry: TreeEntry, destination: string) => {
+    if (destination === entry.path) return;
+    if (hasUnsavedPath(entry.path)) {
+      reportError("Save or discard changes in this item before moving it");
+      return;
+    }
+    setUploading(true);
+    try {
+      const moved = await api<MovedEntry>(`/v0/projects/${encodeURIComponent(props.projectId())}/entry`, {
+        method: "PATCH",
+        body: JSON.stringify({ path: entry.path, destination }),
+      });
+      remapOpenPaths(moved.path, moved.destination);
+      await resetFileTree();
+      toast.success(`Moved ${moved.path} to ${moved.destination}`);
+    } catch (cause) {
+      reportError((cause as Error).message);
+      await resetFileTree();
+    } finally {
+      setUploading(false);
+    }
+  };
+  const renameEntry = (entry: TreeEntry) => {
+    const name = requestedName(`Rename "${entry.name}" to:`, entry.name);
+    if (!name || name === entry.name) return;
+    const parent = entry.path.split("/").slice(0, -1).join("/");
+    void moveEntry(entry, joinPath(parent, name));
+  };
+  const moveEntryToFolder = (entry: TreeEntry) => {
+    const currentParent = entry.path.split("/").slice(0, -1).join("/");
+    const value = window.prompt(`Move "${entry.name}" to folder (relative to workspace root; leave blank for root):`, currentParent);
+    if (value == null) return;
+    const parent = value.trim().replaceAll("\\", "/").replace(/^\/+|\/+$/g, "");
+    void moveEntry(entry, joinPath(parent, entry.name));
+  };
+  const deleteDirectory = async (path: string) => {
+    if (hasUnsavedPath(path)) {
+      reportError("Save or discard changes in this folder before deleting it");
+      return;
+    }
+    if (!window.confirm(`Delete folder "${path}" and all its contents? This action cannot be undone.`)) return;
+    setUploading(true);
+    try {
+      await api<void>(`/v0/projects/${encodeURIComponent(props.projectId())}/directory?path=${encodeURIComponent(path)}`, { method: "DELETE" });
+      if (pathIsWithin(openPaths().secondary, path)) setSlotPath("secondary", null);
+      if (pathIsWithin(openPaths().primary, path)) dropOpenPath(openPaths().primary!);
+      await resetFileTree();
+      toast.success(`Deleted ${path}`);
+    } catch (cause) {
+      reportError((cause as Error).message);
+      await resetFileTree();
     } finally {
       setUploading(false);
     }
@@ -1235,16 +1363,20 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
             <ContextMenuGroup>
               <Show when={entry.type === "file"}>
                 <ContextMenuItem onSelect={() => openFile(entry.path)}><FileTypeIcon name={entry.name} />Open preview</ContextMenuItem>
-                <Show when={filesWide()}>
-                  <ContextMenuItem onSelect={() => openFileToSide(entry.path)}><Columns2Icon />Open to the side</ContextMenuItem>
-                </Show>
+                <ContextMenuItem onSelect={() => openFileToSide(entry.path)}><Columns2Icon />Open as second file</ContextMenuItem>
                 <ContextMenuItem onSelect={() => editFile(entry.path)}><PencilIcon />Edit</ContextMenuItem>
                 <ContextMenuItem onSelect={() => void downloadPath(entry.path)}><DownloadIcon />Download</ContextMenuItem>
 
                 <ContextMenuItem disabled={uploading()} onSelect={() => chooseUpload({ kind: "replacement", path: entry.path })}><UploadIcon />Replace with upload…</ContextMenuItem>
               </Show>
               <Show when={entry.type === "directory"}>
+                <ContextMenuItem disabled={uploading()} onSelect={() => void createFile(entry.path)}><FilePlusIcon />New file…</ContextMenuItem>
+                <ContextMenuItem disabled={uploading()} onSelect={() => void createDirectory(entry.path)}><FolderPlusIcon />New folder…</ContextMenuItem>
                 <ContextMenuItem onSelect={() => chooseUpload({ kind: "directory", path: entry.path })}><UploadIcon />Upload files here</ContextMenuItem>
+              </Show>
+              <Show when={entry.type === "file" || entry.type === "directory"}>
+                <ContextMenuItem disabled={uploading()} onSelect={() => renameEntry(entry)}><PencilIcon />Rename…</ContextMenuItem>
+                <ContextMenuItem disabled={uploading()} onSelect={() => moveEntryToFolder(entry)}><MoveIcon />Move…</ContextMenuItem>
               </Show>
               <ContextMenuItem onSelect={() => copy(entry.path)}><CopyIcon />Copy path</ContextMenuItem>
             </ContextMenuGroup>
@@ -1257,6 +1389,10 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
             <Show when={entry.type === "file"}>
               <ContextMenuSeparator />
               <ContextMenuItem variant="destructive" disabled={uploading()} onSelect={() => void deleteFile(entry.path)}><Trash2Icon />Delete file</ContextMenuItem>
+            </Show>
+            <Show when={entry.type === "directory"}>
+              <ContextMenuSeparator />
+              <ContextMenuItem variant="destructive" disabled={uploading()} onSelect={() => void deleteDirectory(entry.path)}><Trash2Icon />Delete folder</ContextMenuItem>
             </Show>
           </ContextMenuContent>
         </ContextMenu>
@@ -1337,7 +1473,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
         class="workspace-files"
         data-position={panePosition("files")}
         data-wide={filesWide()}
-        data-files={filesWide() && openPaths().secondary ? "2" : "1"}
+        data-files={openPaths().secondary ? "2" : "1"}
         data-tree-collapsed={treeCollapsed()}
         style={{
           "--workspace-tree-width": `${treeWidth()}px`,
@@ -1363,6 +1499,8 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
                 onKeyDown={onFileFilterKeyDown}
               />
             </label>
+            <button type="button" aria-label="New file" title="Create a file in the workspace root" disabled={uploading()} onClick={() => void createFile()}><FilePlusIcon /></button>
+            <button type="button" aria-label="New folder" title="Create a folder in the workspace root" disabled={uploading()} onClick={() => void createDirectory()}><FolderPlusIcon /></button>
             <button type="button" aria-label="Collapse all folders" title="Collapse all folders" onClick={collapseTree}><ChevronsUpIcon /></button>
             <button type="button" aria-label={showHidden() ? "Hide hidden files" : "Show hidden files"} title={showHidden() ? "Hide hidden files" : "Show hidden files"} aria-pressed={showHidden()} onClick={toggleHidden}>
               <Show when={showHidden()} fallback={<EyeOffIcon />}><EyeIcon /></Show>
@@ -1411,7 +1549,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
             closable={Boolean(openPaths().primary)}
             busy={uploading()}
             wrap={wrapLines()}
-            height={filesWide() ? undefined : `${detailHeight()}px`}
+            height={filesWide() ? undefined : `${detailHeight() / (openPaths().secondary ? 2 : 1)}px`}
             onToggleWrap={toggleWrapLines}
             onFocus={() => setFocusedSlot("primary")}
             onClose={() => closeSlot("primary")}
@@ -1423,15 +1561,15 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
             ref={(handle) => slotHandles.set("primary", handle)}
             onDispose={() => slotHandles.delete("primary")}
           />
-          <Show when={filesWide() && openPaths().secondary}>
-            <div class="workspace-file-split-handle" role="separator" aria-label="Resize open files" aria-orientation="vertical" aria-valuemin="25" aria-valuemax="75" aria-valuenow={fileSplitRatio()} tabIndex={0} onPointerDown={startFileSplitResize} onKeyDown={(event) => {
+          <Show when={openPaths().secondary}>
+            <Show when={filesWide()}><div class="workspace-file-split-handle" role="separator" aria-label="Resize open files" aria-orientation="vertical" aria-valuemin="25" aria-valuemax="75" aria-valuenow={fileSplitRatio()} tabIndex={0} onPointerDown={startFileSplitResize} onKeyDown={(event) => {
               if (event.key === "ArrowLeft") saveFileSplitRatio(fileSplitRatio() - 2);
               else if (event.key === "ArrowRight") saveFileSplitRatio(fileSplitRatio() + 2);
               else if (event.key === "Home") saveFileSplitRatio(25);
               else if (event.key === "End") saveFileSplitRatio(75);
               else return;
               event.preventDefault();
-            }} />
+            }} /></Show>
             <WorkspaceFileSlot
               projectId={props.projectId()}
               path={openPaths().secondary}
@@ -1440,6 +1578,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
               closable
               busy={uploading()}
               wrap={wrapLines()}
+              height={filesWide() ? undefined : `${detailHeight() / 2}px`}
               onToggleWrap={toggleWrapLines}
               onFocus={() => setFocusedSlot("secondary")}
               onClose={() => closeSlot("secondary")}

@@ -557,6 +557,7 @@ app.use((error, _request, response, _next) => {
       "hidden_workspace_path",
       "workspace_path_symlink",
       "workspace_path_required",
+      "invalid_workspace_move",
       "path_not_file",
       "file_too_large",
       "file_not_text",

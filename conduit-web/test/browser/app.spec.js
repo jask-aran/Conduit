@@ -733,6 +733,53 @@ test("maximized workspace command toggles the workspace panel", async ({ page })
   await expect(panel).toHaveCount(0);
 });
 
+test("two shortcuts reach docked, maximized and closed from any state", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop-chromium", "docked panel geometry is desktop chrome");
+  await openChatSurface(page);
+  const panel = page.getByRole("complementary", { name: "Workspace panel" });
+  const main = page.locator('[data-slot="sidebar-inset"]');
+  const maximized = () => expect(main).toHaveClass(/workspace-expanded/);
+  const docked = () => expect(main).not.toHaveClass(/workspace-expanded/);
+
+  // closed -> docked -> closed
+  await runRegisteredCommand(page, COMMAND_IDS.toggleWorkspacePanel);
+  await expect(panel).toHaveAttribute("aria-hidden", "false");
+  await docked();
+  await runRegisteredCommand(page, COMMAND_IDS.toggleWorkspacePanel);
+  await expect(panel).toHaveCount(0);
+
+  // closed -> maximized, and toggle steps down to docked rather than closing
+  await runRegisteredCommand(page, COMMAND_IDS.maximizeWorkspacePanel);
+  await maximized();
+  await runRegisteredCommand(page, COMMAND_IDS.toggleWorkspacePanel);
+  await expect(panel).toHaveAttribute("aria-hidden", "false");
+  await docked();
+
+  // docked -> maximized -> closed, and reopening lands docked, never maximized
+  await runRegisteredCommand(page, COMMAND_IDS.maximizeWorkspacePanel);
+  await maximized();
+  await runRegisteredCommand(page, COMMAND_IDS.maximizeWorkspacePanel);
+  await expect(panel).toHaveCount(0);
+  await runRegisteredCommand(page, COMMAND_IDS.toggleWorkspacePanel);
+  await docked();
+});
+
+test("escape leaves the workspace panel open", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop-chromium", "desktop panel chrome");
+  await openChatSurface(page);
+  const panel = page.getByRole("complementary", { name: "Workspace panel" });
+
+  await runRegisteredCommand(page, COMMAND_IDS.toggleWorkspacePanel);
+  await expect(panel).toHaveAttribute("aria-hidden", "false");
+  await panel.getByRole("searchbox", { name: "Filter files" }).press("Escape");
+  await expect(panel).toHaveAttribute("aria-hidden", "false");
+
+  await runRegisteredCommand(page, COMMAND_IDS.maximizeWorkspacePanel);
+  await page.keyboard.press("Escape");
+  await expect(panel).toHaveAttribute("aria-hidden", "false");
+  await expect(page.locator('[data-slot="sidebar-inset"]')).toHaveClass(/workspace-expanded/);
+});
+
 test("maximized workspace opens an optional second pane", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "desktop-chromium", "split panes are desktop chrome");
   await page.setViewportSize({ width: 2_200, height: 1_000 });

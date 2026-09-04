@@ -1053,14 +1053,27 @@ function App() {
     if (paletteOpen() && palettePage() === "model-selector") setPaletteOpen(false);
     else openPalette("model-selector", "", true);
   };
+  // Closing drops the maximised flag so reopening always lands docked; without
+  // that, "closed -> toggle" would reopen full width and the two shortcuts
+  // could no longer reach all three states predictably.
+  const closePanel = () => {
+    if (!panelOpen()) return;
+    setPanelOpenForChat(false);
+    setWorkspaceExpanded(false);
+  };
   const togglePanel = () => {
-    if (panelOpen()) setPanelOpenForChat(false);
+    if (panelOpen() && workspaceExpanded()) {
+      setWorkspaceExpanded(false);
+      focusWorkspacePanel();
+      return;
+    }
+    if (panelOpen()) closePanel();
     else focusWorkspacePanel();
   };
   const maximizeWorkspacePanel = () => {
     if (!workspacePanelScope()) return;
     if (panelOpen() && workspaceExpanded()) {
-      togglePanel();
+      closePanel();
       return;
     }
     setWorkspaceExpanded(true);
@@ -1210,8 +1223,6 @@ function App() {
     const target = event.target instanceof Element ? event.target : null;
     if (target?.closest("[data-shortcut-exclusive='terminal']")) return;
     if (event.key === "Escape" && !paletteOpen() && !settingsOpen()) {
-      if (panelOpen() && workspaceExpanded()) return;
-      if (panelOpen()) { event.preventDefault(); togglePanel(); return; }
       if (mobileSidebarOpen()) { event.preventDefault(); setMobileSidebarOpen(false); return; }
     }
   };
@@ -1685,7 +1696,7 @@ function App() {
         </Show>
       </Show>
     </main>
-    <Show when={["chat", "project", "dashboard"].includes(routeKind()) && Boolean(selectedProject()) && Boolean(workspacePanelScope())}><WorkspacePanel projectId={() => selectedProject()!.id} chatId={() => workspacePanelScope()!} open={panelOpen} expanded={workspaceExpanded} focusRequest={workspaceFocusRequest} requestedTab={workspaceViewRequest} onToggleExpanded={toggleWorkspaceExpanded} onClose={togglePanel} shortcuts={shortcutManager} /></Show>
+    <Show when={["chat", "project", "dashboard"].includes(routeKind()) && Boolean(selectedProject()) && Boolean(workspacePanelScope())}><WorkspacePanel projectId={() => selectedProject()!.id} chatId={() => workspacePanelScope()!} open={panelOpen} expanded={workspaceExpanded} focusRequest={workspaceFocusRequest} requestedTab={workspaceViewRequest} onToggleExpanded={toggleWorkspaceExpanded} onClose={closePanel} shortcuts={shortcutManager} /></Show>
     </Show>
     <Show when={routeKind() === "terminal" && routeBootstrap() === "ready"}>
       <TerminalRoute onOpenConduit={() => openDashboard()} />
