@@ -14,6 +14,9 @@ test("production image is pinned, unprivileged, read-only compatible, and self-c
   assert.match(dockerfile, /AS dependency-build-base/);
   assert.match(dockerfile, /g\+\+ make python3/);
   assert.match(dockerfile, /npm ci --omit=dev/);
+  assert.match(dockerfile, /ghcr\.io\/astral-sh\/uv:0\.11\.29/);
+  assert.match(dockerfile, /uv sync --project \/app\/working-files --locked --no-dev --no-install-project/);
+  assert.match(dockerfile, /openssh-client python3 tar tmux/);
   assert.match(dockerfile, /^USER node$/m);
   assert.match(dockerfile, /^STOPSIGNAL SIGTERM$/m);
   assert.match(dockerfile, /^HEALTHCHECK /m);

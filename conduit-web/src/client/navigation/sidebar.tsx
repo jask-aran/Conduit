@@ -58,6 +58,7 @@ import type { RuntimeStore } from "../state/runtime";
 import { focusFirst, isMobileLayout, MOBILE_LAYOUT_QUERY, restoreFocus } from "./mobile-layout";
 import { ProjectActivityIndicator, RuntimeIndicator } from "./runtime-indicator";
 import { dispatchPanelGeometryMotion, PANEL_MOTION_DURATION_MS } from "../panel-motion";
+import { compareChatsBySort, sortChats, useChatSort } from "../preferences/chat-sort";
 import { publishUiPreference, UI_PREFERENCE_CHANGE_EVENT } from "../preferences/ui-preferences";
 import { COMMAND_IDS, commandLabel } from "../commands/command-registry";
 import "./sidebar.css";
@@ -327,6 +328,7 @@ export function Sidebar(props: {
   const [previewError, setPreviewError] = createSignal("");
   const [submitting, setSubmitting] = createSignal(false);
   const renderedChatTitles = new Map<string, string>();
+  const chatSort = useChatSort();
   const [rename, setRename] = createSignal<{ type: "chat"; chat: ChatSummary; project: Project } | { type: "project"; project: Project } | { type: "terminal"; terminal: Pty } | null>(null);
   const [renameValue, setRenameValue] = createSignal("");
   const [deleting, setDeleting] = createSignal<DeleteTarget | null>(null);
@@ -490,7 +492,7 @@ export function Sidebar(props: {
     .sort((left, right) => {
       const selected = Number(right.chat.id === props.selectedId) - Number(left.chat.id === props.selectedId);
       if (selected) return selected;
-      return (right.chat.updatedAt || right.chat.createdAt || "").localeCompare(left.chat.updatedAt || left.chat.createdAt || "");
+      return compareChatsBySort(left.chat, right.chat, chatSort());
     })
     .slice(0, 5);
   const railFolders = () => folders().slice(0, 5);
@@ -806,7 +808,7 @@ export function Sidebar(props: {
         </ContextMenuContent>
       </ContextMenu>
       <Show when={open()}>
-        <For each={blockProps.project.sessions}>{(chat) => <ChatMenu chat={chat} project={blockProps.project} />}</For>
+        <For each={sortChats(blockProps.project.sessions, chatSort())}>{(chat) => <ChatMenu chat={chat} project={blockProps.project} />}</For>
         <Show when={!blockProps.project.sessions.length}><div class="sidebar-empty">No chats</div></Show>
       </Show>
     </div>;
@@ -864,7 +866,7 @@ export function Sidebar(props: {
   </ContextMenu>;
 
   const Group = (groupProps: { label: string; projects: Project[]; chatRoot?: Project; workspace?: boolean; emptyLabel?: string; onAdd?: () => void; addLabel?: string }) => {
-    const allChats = () => groupProps.chatRoot?.sessions.filter((chat) => chat.status !== "draft" || chat.id !== props.selectedId || chat.pinned || Boolean(props.runtime.getProcess(chat.id))) || [];
+    const allChats = () => sortChats(groupProps.chatRoot?.sessions.filter((chat) => chat.status !== "draft" || chat.id !== props.selectedId || chat.pinned || Boolean(props.runtime.getProcess(chat.id))) || [], chatSort());
     const visibleChats = () => {
       const chats = allChats();
       if (chats.length <= props.chatLimit) return chats;

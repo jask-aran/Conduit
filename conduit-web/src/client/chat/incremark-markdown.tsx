@@ -10,6 +10,7 @@ import { codeBlockCollapseLabel, codeBlockState, countCodeLines, normalizeCodeLa
 import { useCodeBlockCollapse } from "./transcript-appearance";
 import { highlighterReady, StreamingCodeHighlighter } from "./code-highlight";
 import { createSyntheticMathPreviewNode, repairSyntheticMathSource } from "./incremark-synthetic-math";
+import { conduitMathPlugin } from "./incremark-math-extension";
 import { BufferedIncremarkTypewriter, visibleAstCharacters } from "./incremark-typewriter";
 import { MathRenderQueue, type MathRenderPolicy } from "./incremark-math-queue";
 import { citationHost, resolveMarkdownUrl } from "./markdown-security";
@@ -23,7 +24,7 @@ type Definition = { url?: string; title?: string | null };
 /** Quiet frames a message must hold before its source is frozen. */
 const SETTLE_DELAY_FRAMES = 2;
 
-const incremarkParserOptions = { gfm: true, math: { tex: true }, htmlTree: true, containers: true };
+const incremarkParserOptions = { gfm: true, plugins: [conduitMathPlugin({ tex: true })], htmlTree: true, containers: true };
 type RendererContext = {
   definitions: () => Record<string, Definition>;
   inline: boolean;

@@ -467,7 +467,13 @@ starting, and browser-attached processes remain resident.
   returning a bounded selection of at most 500 visible entries in
   directory-first/name order plus `truncated: true` when additional visible
   entries exist; `.conduit` and symlinks are excluded before applying the bound
-- `GET /v0/projects/:id/file?path=…` returns a size-capped text preview
+- `GET /v0/projects/:id/file?path=…` returns a size-capped text preview;
+  `&metadata=1` returns only file size and modification time for low-cost
+  polling
+- `PUT /v0/projects/:id/file?path=…` creates a file; `If-Match` with the
+  current revision saves an open file, while `If-Match: *` replaces an
+  existing file
+- `DELETE /v0/projects/:id/file?path=…` deletes one validated regular file
 - `GET /v0/projects/:id/diff` returns bounded Git status; `?patch=1&reuse=1` reuses the short-lived status inspection and additionally returns staged/unstaged unified diff after the patch disclosure opens
 - `POST /v0/projects/:id/move-sessions`
 - `GET /v0/workspaces/policy` returns the server-owned allowlist, default

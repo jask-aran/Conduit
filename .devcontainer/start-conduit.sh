@@ -3,7 +3,15 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 WEB_DIR="$ROOT/conduit-web"
+WORKING_FILES_DIR="$ROOT/working-files"
+UV_VERSION="0.11.29"
 STATE_DIR="${CONDUIT_STATE_DIR:-$HOME/.conduit}"
+DATA_ROOT="${CONDUIT_DATA_ROOT:-$ROOT/data}"
+TOOLCHAIN_ROOT="$DATA_ROOT/toolchains"
+UV_INSTALL_DIR="$TOOLCHAIN_ROOT/uv/$UV_VERSION"
+UV_COMMAND="$UV_INSTALL_DIR/uv"
+UV_CACHE_DIR="$TOOLCHAIN_ROOT/uv-cache"
+UV_PYTHON_INSTALL_DIR="$TOOLCHAIN_ROOT/python"
 PID_FILE="$STATE_DIR/conduit.pid"
 LOG_FILE="$STATE_DIR/conduit.log"
 VITE_PID_FILE="$STATE_DIR/conduit-vite.pid"
@@ -101,12 +109,40 @@ require_dependencies() {
     echo "Conduit dependencies are not installed. Run: bash .devcontainer/start-conduit.sh setup" >&2
     exit 1
   fi
+  if [[ ! -x "$WORKING_FILES_DIR/.venv/bin/python" ]]; then
+    echo "Conduit's managed Python environment is not installed. Run: bash .devcontainer/start-conduit.sh setup" >&2
+    exit 1
+  fi
 }
 
 setup() {
   prepare_dirs || return
-  echo "Installing Conduit's web and bundled Isolated Pi dependencies."
-  (cd "$WEB_DIR" && npm ci)
+  if [[ ! -x "$UV_COMMAND" ]]; then
+    command -v curl >/dev/null 2>&1 || {
+      echo "curl is required to install Conduit's managed Python runtime." >&2
+      exit 1
+    }
+    echo "Installing Conduit's pinned uv $UV_VERSION runtime."
+    mkdir -p "$UV_INSTALL_DIR"
+    curl --proto '=https' --tlsv1.2 -LsSf "https://astral.sh/uv/$UV_VERSION/install.sh" \
+      | env UV_UNMANAGED_INSTALL="$UV_INSTALL_DIR" sh
+  fi
+  [[ -x "$UV_COMMAND" ]] || {
+    echo "Conduit's managed uv installation is missing: $UV_COMMAND" >&2
+    exit 1
+  }
+  echo "Installing Conduit's web, bundled Isolated Pi, and managed Python dependencies."
+  env \
+    UV_CACHE_DIR="$UV_CACHE_DIR" \
+    UV_PYTHON_INSTALL_DIR="$UV_PYTHON_INSTALL_DIR" \
+    "$UV_COMMAND" sync \
+      --project "$WORKING_FILES_DIR" \
+      --locked \
+      --no-dev \
+      --no-install-project \
+      --python 3.13 \
+      --managed-python
+  (cd "$WEB_DIR" && PATH="$WORKING_FILES_DIR/.venv/bin:$PATH" npm ci)
 }
 
 build() {

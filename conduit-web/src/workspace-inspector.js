@@ -184,7 +184,7 @@ export async function readWorkspaceFile(root, relativePath) {
   if (resolved.stat.size > MAX_PREVIEW_BYTES) throw inspectorError("file_too_large", "File is larger than the 1 MiB preview limit");
   const content = await fs.readFile(resolved.path);
   if (content.includes(0)) throw inspectorError("file_not_text", "Binary files cannot be previewed");
-  return { path: resolved.relativePath, size: resolved.stat.size, revision: fileRevision(content), content: content.toString("utf8") };
+  return { path: resolved.relativePath, size: resolved.stat.size, modifiedAt: resolved.stat.mtimeMs, revision: fileRevision(content), content: content.toString("utf8") };
 }
 
 export async function writeWorkspaceFile(root, relativePath, content, { expectedRevision = null } = {}) {
@@ -207,14 +207,21 @@ export async function writeWorkspaceFile(root, relativePath, content, { expected
   if (expectedRevision != null && !existing) {
     throw Object.assign(inspectorError("workspace_file_changed", "The file changed or was removed before it could be saved"), { status: 409 });
   }
-  if (existing) {
+  if (existing && expectedRevision !== "*") {
     const current = await fs.readFile(target);
     if (fileRevision(current) !== expectedRevision) {
       throw Object.assign(inspectorError("workspace_file_changed", "The file changed before it could be saved"), { status: 409 });
     }
   }
   await fs.writeFile(target, content, existing ? undefined : { flag: "wx" });
-  return { path: segments.join("/"), size: content.byteLength, revision: fileRevision(content) };
+  const written = await fs.stat(target);
+  return { path: segments.join("/"), size: content.byteLength, modifiedAt: written.mtimeMs, revision: fileRevision(content) };
+}
+
+export async function deleteWorkspaceFile(root, relativePath) {
+  const resolved = await resolveInspectorPath(root, relativePath, { kind: "file" });
+  await fs.unlink(resolved.path);
+  return { path: resolved.relativePath };
 }
 
 export async function runWorkspaceGitAction(root, { action, relativePath, message }) {

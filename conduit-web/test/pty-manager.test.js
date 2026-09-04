@@ -195,7 +195,7 @@ test("PTY manager serializes creation so concurrent requests cannot exceed capac
   const rejection = results.find((item) => item.status === "rejected");
   assert.equal(rejection?.reason?.code, "pty_capacity_reached");
   assert.equal(manager.list().filter((item) => item.status === "running").length, 1);
-  await manager.stopAll();
+  assert.equal(await manager.stopAll(), 1);
   await fs.rm(root, { recursive: true, force: true });
 });
 

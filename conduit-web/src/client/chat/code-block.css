@@ -154,8 +154,8 @@
   .chat-markdown .artifact-expand { transition: none; }
 }
 
-/* Mobile retains v0.5.2 density. */
-@media (--conduit-mobile-layout) {
+/* Phone mode retains the larger touch density. */
+@media (--conduit-phone-layout) {
 .chat-markdown .artifact-copy { border-radius: 5px; padding: 2px 6px; }
 .chat-markdown .artifact-actions { gap: 4px; }
 .chat-markdown .artifact-toggle { width: 20px; height: 20px; border-radius: 5px; }

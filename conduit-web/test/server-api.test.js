@@ -87,6 +87,7 @@ exit 0
       CONDUIT_FILES_ROOT: path.join(root, "files"),
       CONDUIT_CATALOG_FILE: path.join(root, "conduit.json"),
       CONDUIT_SESSION_REGISTRY_FILE: path.join(root, "sessions.json"),
+      CONDUIT_REMOTES_FILE: path.join(root, "remotes.json"),
       CONDUIT_PREFERENCES_FILE: path.join(root, "preferences.json"),
       CONDUIT_AUTH_FILE: path.join(root, "auth.json"),
       CONDUIT_PI_AGENT_DIR: path.join(root, "pi"),
@@ -165,6 +166,26 @@ exit 0
     assert.equal(tree.entries[0].name, "00-directory");
     assert.deepEqual([...tree.entries].sort((left, right) => left.type === right.type ? left.name.localeCompare(right.name) : left.type === "directory" ? -1 : 1), tree.entries);
     assert.equal(tree.entries.some((entry) => [".conduit", "symlinked"].includes(entry.name)), false);
+    const managedFilePath = path.join(workspace, "00-directory", "managed.txt");
+    await fs.writeFile(managedFilePath, "before\n");
+    const managedFileUrl = `${origin}/v0/projects/${linked.id}/file?path=00-directory%2Fmanaged.txt`;
+    const managedPreview = await (await fetch(managedFileUrl)).json();
+    assert.equal(managedPreview.content, "before\n");
+    assert.equal(typeof managedPreview.modifiedAt, "number");
+    const managedMetadata = await (await fetch(`${managedFileUrl}&metadata=1`)).json();
+    assert.deepEqual(managedMetadata, { path: "00-directory/managed.txt", size: 7, modifiedAt: managedPreview.modifiedAt });
+    const replacedFile = await fetch(managedFileUrl, {
+      method: "PUT",
+      headers: { "content-type": "application/octet-stream", "if-match": "*" },
+      body: "after\n",
+    });
+    assert.equal(replacedFile.status, 200);
+    assert.equal((await (await fetch(managedFileUrl)).json()).content, "after\n");
+    assert.equal((await fetch(managedFileUrl, { method: "DELETE" })).status, 204);
+    await assert.rejects(fs.access(managedFilePath), { code: "ENOENT" });
+    const rejectedDirectoryDelete = await fetch(`${origin}/v0/projects/${linked.id}/file?path=00-directory`, { method: "DELETE" });
+    assert.equal(rejectedDirectoryDelete.status, 400);
+    assert.equal((await rejectedDirectoryDelete.json()).error, "path_not_file");
     const diffRequest = http.get(`${origin}/v0/projects/${linked.id}/diff`);
     for (let attempt = 0; attempt < 80; attempt += 1) {
       try {

@@ -50,7 +50,9 @@ function appendPendingMarkup(fragment: DocumentFragment, pending: StreamingPendi
   fragment.append(...[...pendingFragment.childNodes]);
 }
 
-marked.use(markedKatex({ nonStandard: true, throwOnError: false }));
+// `nonStandard` drops the currency guards, which turns "$145,474.66 ... $18,236.68"
+// and "$174k ... **$**" into formulas that swallow the prose between them.
+marked.use(markedKatex({ throwOnError: false }));
 marked.use({
   extensions: [
     {

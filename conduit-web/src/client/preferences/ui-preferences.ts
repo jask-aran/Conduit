@@ -19,6 +19,7 @@ export interface UiPreferences {
   codeBlockWidth: string | null;
   panelMotion: string | null;
   userMessageCollapse: string | null;
+  chatSort: string | null;
   shortcutOverrides: Record<string, unknown> | null;
   voicePreferences: Record<string, unknown> | null;
   sidebarPins: string[] | null;

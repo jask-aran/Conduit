@@ -90,7 +90,7 @@
 .sidebar-context-menu svg { width: 14.4px; height: 14.4px; }
 .sidebar-context-menu .menu-chevron { width: 12px; height: 12px; }
 
-@media (--conduit-mobile-layout) {
+@media (--conduit-phone-layout) {
   .sidebar-container { height: var(--app-height, 100dvh); }
   .sidebar-context-menu { width: 11rem; max-height: min(70dvh, calc(var(--app-height, 100dvh) - 19.2px)); }
   [data-slot="context-menu-sub-content"].sidebar-context-menu { width: 7rem; }
@@ -131,7 +131,7 @@
 
 
 /* Mobile retains v0.5.2 density. */
-@media (--conduit-mobile-layout) {
+@media (--conduit-phone-layout) {
 /* Sidebar owns its chrome and responsive drawer rules. */
 .conduit-sidebar { position: relative; z-index: 20; width: 244px; contain: layout; flex: none; overflow: hidden; transition: width var(--panel-motion-duration) var(--panel-motion-easing); }
 .sidebar-container { position: absolute; top: 0; right: 0; bottom: 0; display: flex; width: 244px; flex-direction: column; overflow: hidden; background: var(--sidebar); color: var(--sidebar-foreground); }
@@ -218,7 +218,7 @@
 .sidebar-context-menu svg { width: 18px; height: 18px; }
 .sidebar-context-menu .menu-chevron { width: 15px; height: 15px; }
 
-@media (--conduit-mobile-layout) {
+@media (--conduit-phone-layout) {
   .sidebar-container { height: var(--app-height, 100dvh); }
   .sidebar-context-menu { width: 11rem; max-height: min(70dvh, calc(var(--app-height, 100dvh) - 24px)); }
   [data-slot="context-menu-sub-content"].sidebar-context-menu { width: 7rem; }

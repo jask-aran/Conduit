@@ -12,6 +12,8 @@ $ErrorActionPreference = "Stop"
 $launcherDir = Split-Path -Parent $MyInvocation.MyCommand.Definition
 $root = Split-Path -Parent $launcherDir
 $webDir = Join-Path $root "conduit-web"
+$workingFilesDir = Join-Path $root "working-files"
+$uvVersion = "0.11.29"
 $userProfile = [Environment]::GetFolderPath("UserProfile")
 $stateDir = if ([string]::IsNullOrWhiteSpace($env:CONDUIT_STATE_DIR)) {
   Join-Path $userProfile ".conduit"
@@ -26,6 +28,16 @@ $vitePidFile = Join-Path $stateDir "conduit-vite.pid"
 $viteLogFile = Join-Path $stateDir "conduit-vite.log"
 $viteErrorLogFile = Join-Path $stateDir "conduit-vite-error.log"
 $solidComponentsStateFile = Join-Path $stateDir "solid-components-workbench.json"
+$dataRoot = if ([string]::IsNullOrWhiteSpace($env:CONDUIT_DATA_ROOT)) {
+  Join-Path $root "data"
+} else {
+  $env:CONDUIT_DATA_ROOT
+}
+$toolchainRoot = Join-Path $dataRoot "toolchains"
+$uvInstallDir = Join-Path $toolchainRoot "uv\$uvVersion"
+$uvCommand = Join-Path $uvInstallDir "uv.exe"
+$uvCacheDir = Join-Path $toolchainRoot "uv-cache"
+$uvPythonInstallDir = Join-Path $toolchainRoot "python"
 
 function Show-ExecutionPolicyGuidance {
   $currentUserPolicy = Get-ExecutionPolicy -Scope CurrentUser
@@ -115,6 +127,9 @@ function Invoke-Npm {
 function Require-Dependencies {
   if (-not (Test-Path -LiteralPath (Join-Path $webDir "node_modules\.bin\vite.cmd"))) {
     throw "Conduit dependencies are not installed. Run: .\.devcontainer\win-start-conduit.ps1 setup"
+  }
+  if (-not (Test-Path -LiteralPath (Join-Path $workingFilesDir ".venv\Scripts\python.exe"))) {
+    throw "Conduit's managed Python environment is not installed. Run: .\.devcontainer\win-start-conduit.ps1 setup"
   }
 }
 
@@ -329,8 +344,42 @@ function Build-IfNeeded {
 
 function Setup {
   Prepare-Directories
-  Write-Output "Installing Conduit's web and bundled Isolated Pi dependencies."
-  Invoke-Npm @("ci")
+  if (-not (Test-Path -LiteralPath $uvCommand)) {
+    Write-Output "Installing Conduit's pinned uv $uvVersion runtime."
+    New-Item -ItemType Directory -Force -Path $uvInstallDir | Out-Null
+    $previousInstallDir = [Environment]::GetEnvironmentVariable("UV_UNMANAGED_INSTALL", "Process")
+    try {
+      [Environment]::SetEnvironmentVariable("UV_UNMANAGED_INSTALL", $uvInstallDir, "Process")
+      $installer = Invoke-RestMethod -Uri "https://astral.sh/uv/$uvVersion/install.ps1"
+      $null = Invoke-Expression $installer
+    } finally {
+      [Environment]::SetEnvironmentVariable("UV_UNMANAGED_INSTALL", $previousInstallDir, "Process")
+    }
+  }
+  if (-not (Test-Path -LiteralPath $uvCommand)) {
+    throw "Conduit's managed uv installation is missing: $uvCommand"
+  }
+  Write-Output "Installing Conduit's web, bundled Isolated Pi, and managed Python dependencies."
+  $previousCacheDir = [Environment]::GetEnvironmentVariable("UV_CACHE_DIR", "Process")
+  $previousPythonInstallDir = [Environment]::GetEnvironmentVariable("UV_PYTHON_INSTALL_DIR", "Process")
+  try {
+    [Environment]::SetEnvironmentVariable("UV_CACHE_DIR", $uvCacheDir, "Process")
+    [Environment]::SetEnvironmentVariable("UV_PYTHON_INSTALL_DIR", $uvPythonInstallDir, "Process")
+    & $uvCommand sync --project $workingFilesDir --locked --no-dev --no-install-project --python 3.13 --managed-python
+    if ($LASTEXITCODE -ne 0) {
+      throw "uv sync failed with exit code $LASTEXITCODE."
+    }
+  } finally {
+    [Environment]::SetEnvironmentVariable("UV_CACHE_DIR", $previousCacheDir, "Process")
+    [Environment]::SetEnvironmentVariable("UV_PYTHON_INSTALL_DIR", $previousPythonInstallDir, "Process")
+  }
+  $previousPath = $env:Path
+  try {
+    $env:Path = "$(Join-Path $workingFilesDir '.venv\Scripts')$([IO.Path]::PathSeparator)$previousPath"
+    Invoke-Npm @("ci")
+  } finally {
+    $env:Path = $previousPath
+  }
 }
 
 function Show-Status {

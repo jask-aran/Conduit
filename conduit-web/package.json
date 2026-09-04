@@ -21,7 +21,7 @@
     "android:build": "npm run cap:sync && cd android && ./gradlew assembleDebug",
     "android:open": "cap open android",
     "android:run": "npm run cap:sync && cap run android",
-    "test:setpieces": "playwright test --workers=1",
+    "test:setpieces": "CONDUIT_SETPIECES=1 playwright test",
     "bench:renderer": "node scripts/bench-renderer.mjs"
   },
   "dependencies": {
@@ -61,6 +61,7 @@
     "lucide-solid": "1.25.0",
     "marked": "18.0.6",
     "marked-katex-extension": "5.1.10",
+    "material-icon-theme": "^5.38.1",
     "node-pty": "1.1.0",
     "pi-code-tool": "0.6.1",
     "pi-web-access": "0.15.0",

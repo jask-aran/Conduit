@@ -4,7 +4,7 @@ import express from "express";
 import { resolveTemplate } from "../../config.js";
 import { chatView } from "../../chat-store.js";
 import { removeProjectSessions, removeSession } from "../../session-store.js";
-import { resolveInspectorPath, writeWorkspaceFile } from "../../workspace-inspector.js";
+import { deleteWorkspaceFile, resolveInspectorPath, writeWorkspaceFile } from "../../workspace-inspector.js";
 import {
   findDeletableSession,
   moveRegisteredChat,
@@ -251,6 +251,10 @@ export function registerProjectRoutes(app, {
         response.setHeader("Content-Disposition", `attachment; filename*=UTF-8''${downloadName}`);
         return response.sendFile(resolved.path);
       }
+      if (request.query.metadata === "1") {
+        const resolved = await resolveInspectorPath(project.path, request.query.path, { kind: "file" });
+        return response.json({ path: resolved.relativePath, size: resolved.stat.size, modifiedAt: resolved.stat.mtimeMs });
+      }
       response.json(await readWorkspaceFile(project.path, request.query.path));
     } catch (error) { next(error); }
   });
@@ -265,6 +269,17 @@ export function registerProjectRoutes(app, {
       const content = Buffer.isBuffer(request.body) ? request.body : Buffer.alloc(0);
       const written = await writeWorkspaceFile(project.path, request.query.path, content, { expectedRevision });
       response.status(expectedRevision == null ? 201 : 200).json(written);
+    } catch (error) { next(error); }
+  });
+
+  app.delete("/v0/projects/:id/file", async (request, response, next) => {
+    try {
+      const project = await projects.get(request.params.id);
+      if (!project) return response.status(404).json({ error: "project_not_found" });
+      if (!request.query.path) return response.status(400).json({ error: "workspace_path_required" });
+      await projects.validate(project);
+      await deleteWorkspaceFile(project.path, request.query.path);
+      response.status(204).end();
     } catch (error) { next(error); }
   });
 

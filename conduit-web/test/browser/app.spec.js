@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { COMMAND_IDS, getCommandDefinition } from "../../src/client/commands/command-registry.ts";
 
 const projects = [{
   id: "project_chat",
@@ -81,6 +82,25 @@ async function runWorkspaceViewCommand(page, label) {
   await expect(palette).toBeVisible();
   await palette.getByRole("option").filter({ hasText: "Workspace views…" }).click();
   await palette.getByRole("option").filter({ hasText: label }).click();
+}
+
+async function runRegisteredCommand(page, commandId) {
+  const command = getCommandDefinition(commandId);
+  const binding = command.defaultBindings[0];
+  expect(binding, `${commandId} must have a default binding`).toBeTruthy();
+  for (const stroke of binding.strokes) {
+    const keys = [];
+    if (stroke.modifiers.includes("primary")) keys.push(process.platform === "darwin" ? "Meta" : "Control");
+    if (stroke.modifiers.includes("control") && !keys.includes("Control")) keys.push("Control");
+    if (stroke.modifiers.includes("alt")) keys.push("Alt");
+    if (stroke.modifiers.includes("shift")) keys.push("Shift");
+    const key = stroke.code.startsWith("Key")
+      ? stroke.code.slice(3).toLowerCase()
+      : stroke.code.startsWith("Digit")
+        ? stroke.code.slice(5)
+        : stroke.code === "Period" ? "." : stroke.key;
+    await page.keyboard.press([...keys, key].join("+"));
+  }
 }
 
 test.beforeEach(async ({ page }) => {
@@ -315,7 +335,7 @@ test.beforeEach(async ({ page }) => {
 // clampWidth (240..65% of the viewport). A panel dragged wider than 496 came
 // back narrower, and the commit dispatched no geometry motion, so the
 // transcript stayed laid out for the width it never learned had changed.
-test("restores a stored panel width past the old clamp and announces the commit", async ({ page }, testInfo) => {
+test("restores a stored panel width past the old clamp and announces the commit @setpiece", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "desktop-chromium", "resizable side panel is desktop chrome");
   await page.addInitScript(() => {
     // The compact-UI migration rescales stored widths by 0.8 exactly once.
@@ -504,6 +524,146 @@ test("workspace panel previews files, shows diff, and persists per chat", async 
   await expect(page.getByRole("complementary", { name: "Workspace panel" })).toHaveCount(0);
 });
 
+test("workspace files open two slots side by side", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop-chromium", "two file slots need the wide desktop layout");
+  await openChatSurface(page);
+  await runPaletteCommand(page, "Toggle maximized workspace panel");
+  const panel = page.getByRole("complementary", { name: "Workspace panel" });
+  const tree = panel.getByRole("tree", { name: "Project files" });
+  const primary = panel.getByRole("region", { name: "File preview", exact: true });
+  const secondary = panel.getByRole("region", { name: "Second file preview" });
+
+  await tree.getByRole("treeitem", { name: "app.js" }).click();
+  await expect(primary.locator(".workspace-preview-file")).toHaveText("app.js");
+  await expect(secondary).toHaveCount(0);
+
+  // Alt-click opens to the side and focuses the new slot.
+  await tree.getByRole("treeitem", { name: "README.md" }).click({ modifiers: ["Alt"] });
+  await expect(secondary.locator(".workspace-preview-file")).toHaveText("README.md");
+  await expect(primary.locator(".workspace-preview-file")).toHaveText("app.js");
+  await expect(tree.getByRole("treeitem", { name: "app.js" })).toHaveAttribute("aria-selected", "true");
+  await expect(tree.getByRole("treeitem", { name: "README.md" })).toHaveAttribute("aria-selected", "true");
+
+  // A plain click lands in the focused slot and leaves the other one alone.
+  await tree.getByRole("treeitem", { name: "src" }).click();
+  await tree.getByRole("treeitem", { name: "main.ts" }).click();
+  await expect(secondary.locator(".workspace-preview-file")).toHaveText("src/main.ts");
+  await expect(primary.locator(".workspace-preview-file")).toHaveText("app.js");
+
+  const storedFiles = () => page.evaluate(() => Object.fromEntries(Object.entries(localStorage)
+    .filter(([key]) => key.endsWith(":file") || key.endsWith(":file-secondary"))
+    .map(([key, value]) => [key.split(":").at(-1), value])));
+  expect(await storedFiles()).toEqual({ file: "app.js", "file-secondary": "src/main.ts" });
+
+  await secondary.getByRole("button", { name: "Close second file" }).click();
+  await expect(secondary).toHaveCount(0);
+  await expect(primary.locator(".workspace-preview-file")).toHaveText("app.js");
+  expect(await storedFiles()).toEqual({ file: "app.js" });
+});
+
+test("an unsaved draft in one file slot survives opening another file", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop-chromium", "two file slots need the wide desktop layout");
+  await openChatSurface(page);
+  await runPaletteCommand(page, "Toggle maximized workspace panel");
+  const panel = page.getByRole("complementary", { name: "Workspace panel" });
+  const tree = panel.getByRole("tree", { name: "Project files" });
+  const primary = panel.getByRole("region", { name: "File preview", exact: true });
+  const secondary = panel.getByRole("region", { name: "Second file preview" });
+
+  await tree.getByRole("treeitem", { name: "app.js" }).click();
+  await primary.getByRole("button", { name: "Edit file" }).click();
+  await primary.locator(".cm-content").click();
+  await page.keyboard.type("// draft");
+  await expect(primary.locator(".workspace-preview-header small")).toHaveText("Unsaved");
+
+  // An unanswered confirm() dismisses by default in Playwright, so the second
+  // slot appearing at all proves no discard prompt gated the other slot.
+  await tree.getByRole("treeitem", { name: "README.md" }).click({ modifiers: ["Alt"] });
+  await expect(secondary.locator(".workspace-preview-file")).toHaveText("README.md");
+  await expect(primary.locator(".workspace-preview-header small")).toHaveText("Unsaved");
+});
+
+test("workspace file menu replaces, deletes, and polls selected files", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop-chromium", "opens the panel from the desktop header button; mobile reaches it through the More menu");
+  let entries = [{ name: "app.js", path: "app.js", type: "file" }];
+  let content = "export const version = 1;\n";
+  let modifiedAt = 1;
+  let revision = "revision-1";
+  let replacementIfMatch = "";
+  await page.unroute("**/v0/projects/*/tree?*");
+  await page.unroute("**/v0/projects/*/file?*");
+  await page.route("**/v0/projects/*/tree?*", (route) => route.fulfill({ json: { path: "", entries, truncated: false } }));
+  await page.route("**/v0/projects/*/file?*", async (route) => {
+    const request = route.request();
+    const url = new URL(request.url());
+    if (request.method() === "DELETE") {
+      entries = [];
+      return route.fulfill({ status: 204, body: "" });
+    }
+    if (request.method() === "PUT") {
+      replacementIfMatch = request.headers()["if-match"] || "";
+      content = request.postData() || "";
+      modifiedAt += 1;
+      revision = "revision-2";
+      return route.fulfill({ json: { path: "app.js", size: content.length, modifiedAt, revision } });
+    }
+    if (url.searchParams.get("metadata") === "1") {
+      return route.fulfill({ json: { path: "app.js", size: content.length, modifiedAt } });
+    }
+    return route.fulfill({ json: { path: "app.js", size: content.length, modifiedAt, revision, content } });
+  });
+
+  await openChatSurface(page);
+  await page.getByRole("button", { name: "Toggle workspace panel" }).click();
+  const panel = page.getByRole("complementary", { name: "Workspace panel" });
+  const fileFilter = panel.getByRole("searchbox", { name: "Filter files" });
+  await fileFilter.focus();
+  await panel.evaluate((element) => {
+    window.__workspaceFocusLeaves = 0;
+    element.addEventListener("focusout", (event) => {
+      if (!(event.relatedTarget instanceof Element) || !event.relatedTarget.closest('[data-shortcut-scope="workspace-panel"]')) {
+        window.__workspaceFocusLeaves += 1;
+      }
+    });
+  });
+  await panel.getByText("Select a text file to preview it.").click();
+  await expect(fileFilter).toBeFocused();
+  expect(await page.evaluate(() => window.__workspaceFocusLeaves)).toBe(0);
+
+  const file = panel.getByRole("treeitem", { name: "app.js" });
+  await file.click();
+  await expect(panel.getByText("export const version = 1;")).toBeVisible();
+
+  await file.click({ button: "right" });
+  await expect(page.getByRole("menuitem", { name: "Replace with upload…" })).toBeVisible();
+  await expect(page.getByRole("menuitem", { name: "Delete file" })).toBeVisible();
+  await expect(page.getByRole("menu")).toHaveAttribute("data-shortcut-scope", "workspace-panel");
+  expect(await page.evaluate(() => document.activeElement instanceof Element
+    && Boolean(document.activeElement.closest('[data-shortcut-scope="workspace-panel"]')))).toBe(true);
+  await page.waitForTimeout(3_200);
+  await expect(page.getByRole("menuitem", { name: "Replace with upload…" })).toBeVisible();
+  const chooserPromise = page.waitForEvent("filechooser");
+  await page.getByRole("menuitem", { name: "Replace with upload…" }).click();
+  const chooser = await chooserPromise;
+  page.once("dialog", (dialog) => dialog.accept());
+  await chooser.setFiles({ name: "replacement.js", mimeType: "text/javascript", buffer: Buffer.from("export const version = 2;\n") });
+  await expect.poll(() => replacementIfMatch).toBe("*");
+  await expect(panel.getByText("export const version = 2;")).toBeVisible();
+  await expect(page.getByText("Replaced app.js")).toBeVisible();
+
+  content = "export const version = 3;\n";
+  modifiedAt += 1;
+  revision = "revision-3";
+  await expect(panel.getByText("export const version = 3;"), "selected file refreshes after the polling interval").toBeVisible({ timeout: 5_000 });
+  await expect(page.getByText("app.js updated")).toBeVisible();
+
+  await file.click({ button: "right" });
+  page.once("dialog", (dialog) => dialog.accept());
+  await page.getByRole("menuitem", { name: "Delete file" }).click();
+  await expect(file).toHaveCount(0);
+  await expect(page.getByText("Deleted app.js")).toBeVisible();
+});
+
 test("maximized workspace command toggles the workspace panel", async ({ page }) => {
   await openChatSurface(page);
   const panel = page.getByRole("complementary", { name: "Workspace panel" });
@@ -512,28 +672,136 @@ test("maximized workspace command toggles the workspace panel", async ({ page })
   await runPaletteCommand(page, "Toggle maximized workspace panel");
   await expect(panel).toHaveAttribute("aria-hidden", "false");
   await expect(main).toHaveClass(/workspace-expanded/);
+  await expect(panel.getByRole("searchbox", { name: "Filter files" })).toBeFocused();
 
-  await runPaletteCommand(page, "Toggle maximized workspace panel");
+  await runRegisteredCommand(page, COMMAND_IDS.maximizeWorkspacePanel);
   await expect(panel).toHaveCount(0);
 });
 
-test("navigation commands move focus and select workspace views", async ({ page }) => {
+test("maximized workspace opens an optional second pane", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop-chromium", "split panes are desktop chrome");
+  await page.setViewportSize({ width: 2_200, height: 1_000 });
+  await openChatSurface(page);
+  const panel = page.getByRole("complementary", { name: "Workspace panel" });
+  const header = panel.locator(".workspace-panel-header");
+
+  await runPaletteCommand(page, "Toggle maximized workspace panel");
+  await expect(panel).toHaveAttribute("aria-hidden", "false");
+  await expect(header).not.toHaveAttribute("data-split", "true");
+  await expect(header.getByRole("toolbar")).toHaveCount(1);
+
+  await panel.getByRole("button", { name: "Split into two panes" }).click();
+  await expect(header).toHaveAttribute("data-split", "true");
+  await expect(header.getByRole("toolbar")).toHaveCount(2);
+  const rightTabs = header.getByRole("toolbar", { name: "Right workspace pane views" });
+  await expect(rightTabs.getByRole("tab", { name: "Source Control (right pane)" })).toHaveAttribute("aria-selected", "true");
+
+  const sourcePane = panel.locator('.workspace-diff[data-position="right"]');
+  const ledger = sourcePane.locator(".workspace-change-ledger");
+  const sourceActionLabel = sourcePane.locator(".workspace-source-actions span").first();
+  const sourceTabLabel = rightTabs.getByRole("tab", { name: "Source Control (right pane)" }).locator("span");
+  await expect.poll(async () => (await sourcePane.boundingBox())?.width || 0).toBeGreaterThan(520);
+  await expect(ledger).toHaveCSS("display", "grid");
+  await expect(sourceTabLabel).toBeVisible();
+
+  const divider = panel.getByRole("separator", { name: "Resize workspace panes" });
+  await divider.press("End");
+  await expect.poll(async () => Math.round((await sourcePane.boundingBox())?.width || 0)).toBe(240);
+  await expect.poll(async () => Math.round((await panel.locator('.workspace-files[data-position="left"]').boundingBox())?.width || 0)).toBeGreaterThan(240);
+  await expect(ledger).toHaveCSS("display", "flex");
+  await expect(sourceActionLabel).toBeHidden();
+  await expect(sourceTabLabel).toBeHidden();
+
+  await divider.press("Home");
+  await expect.poll(async () => Math.round((await panel.locator('.workspace-files[data-position="left"]').boundingBox())?.width || 0)).toBe(240);
+  await expect.poll(async () => Math.round((await sourcePane.boundingBox())?.width || 0)).toBeGreaterThan(240);
+
+  // Each strip drives its own pane, so the right strip retargets only the right half.
+  await rightTabs.getByRole("tab", { name: "Terminal (right pane)" }).click();
+  await expect(rightTabs.getByRole("tab", { name: "Terminal (right pane)" })).toHaveAttribute("aria-selected", "true");
+  await expect(header.getByRole("toolbar", { name: "Left workspace pane views" }).getByRole("tab", { name: "Files (left pane)" })).toHaveAttribute("aria-selected", "true");
+  const storedSplit = () => page.evaluate(() => Object.entries(localStorage).find(([key]) => key.endsWith(":secondary-tab"))?.[1] ?? null);
+  expect(await storedSplit()).toBe("terminal");
+
+  await runRegisteredCommand(page, COMMAND_IDS.workspaceSplit);
+  await expect(header).not.toHaveAttribute("data-split", "true");
+  await expect(header.getByRole("toolbar")).toHaveCount(1);
+  expect(await storedSplit()).toBeNull();
+});
+
+test("navigation commands move focus and select workspace views", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop-chromium", "keyboard navigation over desktop header chrome");
   await openChatSurface(page);
   const composer = page.getByRole("textbox", { name: "Message Pi" });
   const panel = page.getByRole("complementary", { name: "Workspace panel" });
-  const panelFocus = panel.locator(".workspace-expand-toggle");
+  const fileFilter = panel.getByRole("searchbox", { name: "Filter files" });
+  const chatPane = page.locator(".chat-main");
 
   await runPaletteCommand(page, "Focus composer");
   await expect(composer).toBeFocused();
+  await page.locator(".chat-header-title").click();
+  await expect(chatPane).toBeFocused();
+  await expect(chatPane).toHaveCSS("outline-style", "none");
   await runPaletteCommand(page, "Focus workspace panel");
   await expect(panel).toHaveAttribute("aria-hidden", "false");
-  await expect(panelFocus).toBeFocused();
+  await expect(fileFilter).toBeFocused();
 
   await runWorkspaceViewCommand(page, "Source Control");
-  await expect(panel.getByRole("tab", { name: "Source Control" })).toHaveAttribute("aria-selected", "true");
+  const sourceControl = panel.getByRole("tab", { name: "Source Control" });
+  await expect(sourceControl).toHaveAttribute("aria-selected", "true");
+  await expect(sourceControl).toBeFocused();
+  await panel.locator(".workspace-panel-header strong").click();
+  await expect(sourceControl).toBeFocused();
 });
 
-test("rapid panel reversals continue from rendered geometry and release transcript locks", async ({ page }, testInfo) => {
+test("terminal workspace commands focus the attached shell", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop-chromium", "keyboard navigation over desktop header chrome");
+  const shell = {
+    id: "terminal_focus",
+    projectId: "project_chat",
+    status: "running",
+    title: "Focus shell",
+    currentCommand: "zsh",
+  };
+  await page.unroute("**/v0/ptys*");
+  await page.route("**/v0/ptys*", (route) => route.fulfill({ json: { ptys: [shell] } }));
+  await openChatSurface(page);
+  await page.evaluate(() => {
+    class TerminalWebSocket extends EventTarget {
+      static OPEN = 1;
+      readyState = 0;
+      binaryType = "arraybuffer";
+      onopen = null;
+      onmessage = null;
+      onerror = null;
+      onclose = null;
+      constructor() {
+        super();
+        queueMicrotask(() => {
+          this.readyState = TerminalWebSocket.OPEN;
+          this.onopen?.(new Event("open"));
+          this.onmessage?.(new MessageEvent("message", {
+            data: JSON.stringify({ type: "control", writable: true }),
+          }));
+        });
+      }
+      send() {}
+      close() { this.readyState = 3; }
+    }
+    Object.defineProperty(window, "WebSocket", { configurable: true, value: TerminalWebSocket });
+  });
+
+  await runWorkspaceViewCommand(page, "Terminal");
+  const shellFocused = () => page.evaluate(() => Boolean(document.activeElement?.closest(".terminal-canvas")));
+  await expect.poll(shellFocused).toBe(true);
+
+  await page.locator(".chat-header-title").click();
+  await expect(page.locator(".chat-main")).toBeFocused();
+  await runPaletteCommand(page, "Focus workspace panel");
+  await expect.poll(shellFocused).toBe(true);
+});
+
+test("rapid panel reversals continue from rendered geometry and release transcript locks @setpiece", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "desktop-chromium");
   await openChatSurface(page);
   const sidebar = page.locator(".conduit-sidebar");
@@ -623,7 +891,7 @@ test("rapid panel reversals continue from rendered geometry and release transcri
   await expect(page.locator(".transcript")).not.toHaveAttribute("data-panel-motion");
 });
 
-test("desktop panel surfaces settle immediately with reduced motion", async ({ page }, testInfo) => {
+test("desktop panel surfaces settle immediately with reduced motion @setpiece", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "desktop-chromium");
   await page.emulateMedia({ reducedMotion: "reduce" });
   await openChatSurface(page);
@@ -927,7 +1195,7 @@ test("renders persisted assistant Markdown with safe interactive controls", asyn
   await expect(dialog).toHaveCount(0);
 });
 
-test("repairs unfinished Markdown while an assistant response streams", async ({ page }) => {
+test("repairs unfinished Markdown while an assistant response streams @setpiece", async ({ page }) => {
   const streamedContent = "## Live response\n\n**still streaming**\n\nRead [the documentation][docs].\n\n```javascript\nconst answer = 42;\n```\n\n$$\nE = mc^2\n$$\n\n- **first item**\n\n  continued first item\n\n- `second item`\n\n[docs]: https://example.com/docs";
   await page.addInitScript((finalContent) => {
     class MockWebSocket extends EventTarget {
@@ -1080,7 +1348,7 @@ test("repairs unfinished Markdown while an assistant response streams", async ({
 // for exactly that: content that shrinks under the reader, and a tail that
 // stops tracking the bottom. It asserts nothing about how many times KaTeX runs
 // or in what order, so it survives any change that keeps the page steady.
-test("keeps a math-heavy answer steady and followed while it streams", async ({ page }) => {
+test("keeps a math-heavy answer steady and followed while it streams @setpiece", async ({ page }) => {
   const formulas = [
     "\\frac{\\partial u}{\\partial t} = \\alpha \\nabla^{2} u",
     "\\int_{-\\infty}^{\\infty} e^{-x^{2}}\\,dx = \\sqrt{\\pi}",
@@ -1209,7 +1477,7 @@ test("keeps a math-heavy answer steady and followed while it streams", async ({ 
 // per character, one that rebuilds the message touches the whole tree every
 // delta, and the ratio separates them by an order of magnitude regardless of how
 // fast the machine is.
-test("streams by patching the tail rather than rebuilding the message", async ({ page }) => {
+test("streams by patching the tail rather than rebuilding the message @setpiece", async ({ page }) => {
   const paragraph = "The derivation proceeds one clause at a time, and each sentence adds enough prose that the renderer has to lay out a fresh line rather than merely extending the last word on the current one.";
   const finalContent = Array.from({ length: 6 }, (_, index) => `### Part ${index + 1}\n\n${paragraph}`).join("\n\n");
 
@@ -1296,7 +1564,7 @@ test("streams by patching the tail rather than rebuilding the message", async ({
 // again. Text-only transcripts were unaffected, which is exactly how it stayed
 // hidden. Assert the structure rather than a frame time: a loaded transcript
 // settles, and its offscreen math blocks are virtualised.
-test("virtualizes a settled math-heavy transcript loaded from history", async ({ page }, testInfo) => {
+test("virtualizes a settled math-heavy transcript loaded from history @setpiece", async ({ page }, testInfo) => {
   const heavy = (index) => [
     "## Section " + index,
     "",

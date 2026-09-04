@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { promisify } from "node:util";
-import { listWorkspaceDirectory, readWorkspaceDiff, readWorkspaceFile, runBoundedGit, runWorkspaceGitAction, writeWorkspaceFile } from "../src/workspace-inspector.js";
+import { deleteWorkspaceFile, listWorkspaceDirectory, readWorkspaceDiff, readWorkspaceFile, runBoundedGit, runWorkspaceGitAction, writeWorkspaceFile } from "../src/workspace-inspector.js";
 
 const run = promisify(execFile);
 
@@ -54,6 +54,12 @@ test("workspace writes create files and reject stale or implicit overwrites", as
   await assert.rejects(writeWorkspaceFile(root, "src/main.js", Buffer.from("stale\n"), { expectedRevision: current.revision }), { code: "workspace_file_changed" });
   await writeWorkspaceFile(root, "src/new.txt", Buffer.from("new\n"));
   await assert.rejects(writeWorkspaceFile(root, "src/new.txt", Buffer.from("replace\n")), { code: "workspace_file_exists" });
+  await writeWorkspaceFile(root, "src/new.txt", Buffer.from("replace\n"), { expectedRevision: "*" });
+  assert.equal((await readWorkspaceFile(root, "src/new.txt")).content, "replace\n");
+  await deleteWorkspaceFile(root, "src/new.txt");
+  await assert.rejects(fs.access(path.join(root, "src", "new.txt")), { code: "ENOENT" });
+  await assert.rejects(writeWorkspaceFile(root, "src/new.txt", Buffer.from("missing\n"), { expectedRevision: "*" }), { code: "workspace_file_changed" });
+  await assert.rejects(deleteWorkspaceFile(root, "src"), { code: "path_not_file" });
   await assert.rejects(writeWorkspaceFile(root, ".conduit/private.txt", Buffer.from("no\n")), { code: "hidden_workspace_path" });
 });
 

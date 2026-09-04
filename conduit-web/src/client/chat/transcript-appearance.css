@@ -32,8 +32,8 @@
 :root[data-transcript-wide="wider"] { --transcript-wide-scale: 200%; }
 :root[data-transcript-wide="full"] { --transcript-wide-scale: var(--transcript-wide-max); }
 
-/* Mobile retains v0.5.2 density. */
-@media (--conduit-mobile-layout) {
+/* Phone mode retains the larger touch density. */
+@media (--conduit-phone-layout) {
 :root {
   --transcript-column-width: var(--composer-desktop-reference-width);
   --transcript-column-gutter: 48px;

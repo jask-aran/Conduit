@@ -4,12 +4,13 @@ import tailwindcss from "@tailwindcss/vite";
 import { VitePWA } from "vite-plugin-pwa";
 import path from "node:path";
 import { solidComponentsViteOptions } from "./scripts/solid-components-mode.mjs";
-import { MOBILE_LAYOUT_BREAKPOINT_PX } from "./src/client/layout-geometry.ts";
+import { MOBILE_LAYOUT_BREAKPOINT_PX, NON_PHONE_LAYOUT_QUERY, PHONE_LAYOUT_QUERY } from "./src/client/layout-geometry.ts";
 
 function sharedGeometryCssPlugin() {
   const replacements = [
     ["@media (--conduit-mobile-layout)", `@media (max-width: ${MOBILE_LAYOUT_BREAKPOINT_PX}px)`],
-    ["@media (--conduit-wide-layout)", `@media (min-width: ${MOBILE_LAYOUT_BREAKPOINT_PX + 1}px)`],
+    ["@media (--conduit-phone-layout)", `@media ${PHONE_LAYOUT_QUERY}`],
+    ["@media (--conduit-wide-layout)", `@media ${NON_PHONE_LAYOUT_QUERY}`],
     ["@container chat-main (--conduit-wide-chat)", `@container chat-main (min-width: ${MOBILE_LAYOUT_BREAKPOINT_PX}px)`],
   ];
   return {

@@ -22,6 +22,7 @@ const emptyUiPreferences = {
   codeBlockWidth: null,
   panelMotion: null,
   userMessageCollapse: null,
+  chatSort: null,
   shortcutOverrides: null,
   voicePreferences: null,
 };
@@ -67,6 +68,7 @@ test("preferences store persists general settings", async () => {
     codeBlockWidth: "wide",
     panelMotion: "reflow",
     userMessageCollapse: "25",
+    chatSort: "created",
     shortcutOverrides: {
       "open-command-palette": [{ strokes: [{ code: "KeyK", key: "K", modifiers: ["primary"] }] }],
     },
@@ -91,13 +93,16 @@ test("preferences store persists general settings", async () => {
   assert.equal(restored.get().codeBlockWidth, "wide");
   assert.equal(restored.get().panelMotion, "reflow");
   assert.equal(restored.get().userMessageCollapse, "25");
+  assert.equal(restored.get().chatSort, "created");
   assert.deepEqual(restored.get().voicePreferences, { shortcut: "Ctrl+Shift+D", activation: "toggle", autoSend: true, captureProfile: "processed" });
   assert.equal(validTerminalShortcuts(restored.get().terminalShortcuts), true);
   assert.equal(validTerminalShortcuts([{ id: "bad", label: "", command: "pwd", target: "current" }]), false);
   assert.equal(validSidebarPins(restored.get().sidebarPins), true);
   assert.equal(validSidebarPins(["chat:one", "chat:one"]), false);
   assert.equal(validSidebarPins(["unknown:one"]), false);
-  assert.equal(validUiPreferencePatch({ sidebarChatLimit: 45, rendererControlsVisible: false }), true);
+  assert.equal(validUiPreferencePatch({ sidebarChatLimit: 45, rendererControlsVisible: false, chatSort: "latest" }), true);
+  assert.equal(validUiPreferencePatch({ chatSort: "created" }), true);
+  assert.equal(validUiPreferencePatch({ chatSort: "updated" }), false);
   assert.equal(validUiPreferencePatch({ sidebarChatLimit: 4 }), false);
   assert.equal(validUiPreferencePatch({ voicePreferences: { shortcut: "Ctrl+D" } }), false);
   await fs.rm(root, { recursive: true, force: true });

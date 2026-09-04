@@ -133,7 +133,7 @@ export function registerRuntimeRoutes(app, {
         "rendererControlsVisible", "composerSurface", "contextMetrics",
         "meteorField", "incremarkPacing", "transcriptWidth", "transcriptWideBlocks",
         "codeBlockCollapse", "codeBlockCollapseLines", "codeBlockWidth",
-        "userMessageCollapse",
+        "userMessageCollapse", "chatSort",
         "shortcutOverrides", "voicePreferences",
       ];
       const uiPatch = Object.fromEntries(uiKeys

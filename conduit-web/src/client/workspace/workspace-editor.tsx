@@ -26,6 +26,7 @@ import {
   taskExtension,
 } from "@prosemark/core";
 import { createEffect, onCleanup, onMount } from "solid-js";
+import { csvLanguage, isCsvFile } from "./csv-language";
 
 export function isVisualMarkdownFile(path: string) {
   return /\.(?:md|markdown)$/i.test(path);
@@ -153,13 +154,22 @@ export default function WorkspaceEditor(props: {
     if (nextEditable) view.focus();
   });
 
+  createEffect(() => {
+    const value = props.value;
+    if (!view || view.state.doc.toString() === value) return;
+    view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: value } });
+  });
+
   onMount(() => {
     let disposed = false;
     const markdownFile = isVisualMarkdownFile(props.path);
+    const csvFile = isCsvFile(props.path);
     const setup = async () => {
       const language = markdownFile
         ? markdown({ codeLanguages: languages, extensions: [GFM, prosemarkMarkdownSyntaxExtensions] })
-        : await LanguageDescription.matchFilename(languages, props.path)?.load();
+        : csvFile
+          ? csvLanguage
+          : await LanguageDescription.matchFilename(languages, props.path)?.load();
       if (disposed || !host) return;
       view = new EditorView({
         parent: host,

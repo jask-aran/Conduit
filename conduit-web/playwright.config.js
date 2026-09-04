@@ -6,13 +6,25 @@ const reuseExistingServer = process.env.PLAYWRIGHT_REUSE_SERVER === "1"
     ? false
     : !process.env.CI;
 
+// Setpieces are the motion, geometry, streaming-cadence and virtualization
+// tests. They measure timing, so CPU contention makes them lie: they run
+// serialized, in their own pass, and never as part of the default run.
+const setpieces = process.env.CONDUIT_SETPIECES === "1";
+const SETPIECE = /@setpiece/;
+const scope = setpieces ? { grep: SETPIECE } : { grepInvert: SETPIECE };
+
 export default defineConfig({
   testDir: "./test/browser",
-  timeout: 45_000,
-  fullyParallel: true,
+  // Setpieces render heavy math transcripts back to back; the deadline is the
+  // harness's patience, not a measurement, and their own budget assertions are
+  // unchanged by it.
+  timeout: setpieces ? 120_000 : 45_000,
+  fullyParallel: !setpieces,
   forbidOnly: Boolean(process.env.CI),
   retries: process.env.CI ? 1 : 0,
-  workers: process.env.CI ? 2 : undefined,
+  // Each worker is a Chromium; the default (half the cores) over-subscribes
+  // memory on a dev box and turns real passes into timeouts.
+  workers: setpieces ? 1 : 2,
   reporter: "line",
   use: {
     baseURL: "http://127.0.0.1:4173",
@@ -30,8 +42,8 @@ export default defineConfig({
     video: "off",
   },
   projects: [
-    { name: "desktop-chromium", use: { ...devices["Desktop Chrome"] } },
-    { name: "mobile-chromium", use: { ...devices["Pixel 7"] } },
+    { name: "desktop-chromium", ...scope, use: { ...devices["Desktop Chrome"] } },
+    { name: "mobile-chromium", ...scope, use: { ...devices["Pixel 7"] } },
   ],
   webServer: {
     command: "npx vite --host 127.0.0.1 --port 4173",

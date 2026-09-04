@@ -6,8 +6,8 @@
 }
 
 
-/* Mobile retains v0.5.2 density. */
-@media (--conduit-mobile-layout) {
+/* Phone mode retains the larger touch density. */
+@media (--conduit-phone-layout) {
 /* Shared composer geometry tokens. */
 :root {
   --composer-desktop-reference-width: 760px;

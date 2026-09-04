@@ -105,7 +105,7 @@ export function ContextMenu(props: ParentProps<{ onOpenChange?: (open: boolean) 
 }
 export const ContextMenuTrigger = KContextMenu.Trigger;
 export const ContextMenuGroup = KContextMenu.Group;
-export function ContextMenuContent(props: ParentProps<{ class?: string }>) { return <KContextMenu.Portal><KContextMenu.Content data-slot="context-menu-content" class={cn(menuContentClass, props.class)}>{props.children}</KContextMenu.Content></KContextMenu.Portal>; }
+export function ContextMenuContent(props: ParentProps<{ class?: string; shortcutScope?: string }>) { return <KContextMenu.Portal><KContextMenu.Content data-slot="context-menu-content" data-shortcut-scope={props.shortcutScope} class={cn(menuContentClass, props.class)}>{props.children}</KContextMenu.Content></KContextMenu.Portal>; }
 export function ContextMenuItem(props: ParentProps<{ disabled?: boolean; variant?: "destructive"; onSelect?: () => void; class?: string }>) { return <KContextMenu.Item disabled={props.disabled} onSelect={props.onSelect} data-variant={props.variant} class={cn(menuItemClass, props.class)}>{props.children}</KContextMenu.Item>; }
 export const ContextMenuSub = KContextMenu.Sub;
 export function ContextMenuSubTrigger(props: ParentProps<{ disabled?: boolean }>) { return <KContextMenu.SubTrigger disabled={props.disabled} class={cn(menuItemClass, "data-[expanded]:bg-accent")}>{props.children}<ChevronRightIcon class="menu-chevron" /></KContextMenu.SubTrigger>; }

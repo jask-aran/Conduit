@@ -8,6 +8,7 @@ import test from "node:test";
 import { buildPiArgs, PiManager } from "../src/pi-manager.js";
 import { fileURLToPath } from "node:url";
 import {
+  buildManagedToolEnvironment,
   buildPiEnvironment,
   listPiTemplates,
   loadPiModelPatterns,
@@ -25,7 +26,7 @@ test("repository templates are discoverable launch presets", () => {
   const general = templates.find((template) => template.id === "chat");
   const view = templatePublicView(workspace);
   assert.equal(view.label, "Coding");
-  assert.equal(workspace.version, "5");
+  assert.equal(workspace.version, "6");
   assert.equal(view.defaultable, true);
   assert.deepEqual(workspace.tools, ["read", "bash", "edit", "write", "web_search", "fetch_content", "get_search_content", "source_check"]);
   assert.deepEqual(workspace.extensions, [path.resolve(root, "../conduit-web/node_modules/pi-web-access")]);
@@ -34,13 +35,14 @@ test("repository templates are discoverable launch presets", () => {
   assert.ok(view.skillCount >= 1);
   assert.deepEqual(workspace.skills, [path.resolve(root, "workspace/skills/git-github"), path.resolve(root, "workspace/skills/web-research"), path.resolve(root, "workspace/skills/develop-loop")]);
   assert.equal(general.label, "Assistant");
-  assert.equal(general.version, "8");
+  assert.equal(general.version, "9");
   assert.deepEqual(general.runtimeOverlays, ["web-search"]);
   assert.deepEqual(general.skills, [path.resolve(root, "workspace/skills/web-research")]);
   assert.deepEqual(general.tools, ["read", "bash", "edit", "write", "web_search", "fetch_content", "get_search_content", "source_check"]);
   assert.deepEqual(general.extensions, [path.resolve(root, "../conduit-web/node_modules/pi-web-access")]);
   const systemPrompt = fs.readFileSync(general.systemPrompt, "utf8");
   assert.match(systemPrompt, /Bash is your code-mode runtime/);
+  assert.match(systemPrompt, /use `python` from Bash/);
   assert.match(systemPrompt, /Use this sequence:/);
   assert.match(systemPrompt, /fetch_content.*selected pages/s);
   const codemode = templates.find((template) => template.id === "codemode");
@@ -111,7 +113,16 @@ test("Pi runtime environment uses the Conduit-owned agent directory", () => {
   });
   assert.equal(env.PI_CODING_AGENT_DIR, path.resolve("/repo/data/pi"));
   assert.equal("PI_CODING_AGENT_SESSION_DIR" in env, false);
-  assert.equal(env.PATH, "/bin");
+  assert.match(env.PATH, /^.*working-files[/\\]\.venv[/\\]bin:\/bin$/);
+});
+
+test("managed tools preserve the host PATH key and delimiter", () => {
+  const env = buildManagedToolEnvironment(
+    { Path: "C:\\Windows\\System32" },
+    { root: "C:\\Conduit", delimiter: ";", platform: "win32" },
+  );
+  assert.match(env.Path, /working-files[/\\]\.venv[/\\]Scripts;C:\\Windows\\System32$/);
+  assert.equal("PATH" in env, false);
 });
 
 test("Pi launch arguments can narrow the template model scope", () => {

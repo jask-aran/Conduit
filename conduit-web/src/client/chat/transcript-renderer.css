@@ -25,8 +25,8 @@
 }
 
 
-/* Mobile retains v0.5.2 density. */
-@media (--conduit-mobile-layout) {
+/* Phone mode retains the larger touch density. */
+@media (--conduit-phone-layout) {
 .composer-renderer-switch { display: flex; align-items: center; gap: 10px; }
 .composer-renderer-switch label { flex: none; }
 

@@ -33,25 +33,30 @@ RUN npm ci --omit=dev
 
 FROM node:24.14.0-trixie-slim@sha256:8c8f12cedb96c3b59642cf30d713943c2b223990c9919b96a141681f62e6e292 AS runtime
 
+COPY --from=ghcr.io/astral-sh/uv:0.11.29 /uv /uvx /bin/
+
 ARG CONDUIT_RELEASE=development
 LABEL org.opencontainers.image.title="Conduit" \
       org.opencontainers.image.description="Self-hosted personal agent interface" \
       org.opencontainers.image.revision="${CONDUIT_RELEASE}"
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends bash ca-certificates git libgomp1 openssh-client tar tmux \
+    && apt-get install -y --no-install-recommends bash ca-certificates git libgomp1 openssh-client python3 tar tmux \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 COPY --chown=node:node scripts ./scripts
 COPY --chown=node:node templates ./templates
+COPY --chown=node:node working-files ./working-files
 COPY --chown=node:node conduit-web/package.json ./conduit-web/package.json
 COPY --chown=node:node conduit-web/src ./conduit-web/src
 COPY --from=production-dependencies --chown=node:node /build/conduit-web/node_modules ./conduit-web/node_modules
 COPY --from=client-build --chown=node:node /build/conduit-web/dist ./conduit-web/dist
 COPY --from=transcribe-rs-build --chown=node:node /build/transcribe-rs-worker/target/release/conduit-transcribe-rs-worker ./conduit-web/native/transcribe-rs-worker/target/release/conduit-transcribe-rs-worker
 
-RUN mkdir -p /data/home /workspaces && chown -R node:node /data /workspaces
+RUN uv sync --project /app/working-files --locked --no-dev --no-install-project \
+    && mkdir -p /data/home /workspaces \
+    && chown -R node:node /data /workspaces
 
 ENV NODE_ENV=production \
     HOME=/data/home \

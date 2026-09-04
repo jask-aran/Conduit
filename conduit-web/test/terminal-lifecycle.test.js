@@ -4,6 +4,7 @@ import path from "node:path";
 import test from "node:test";
 import {
   stopTerminalSessions,
+  terminalCleanupMessage,
   terminalRegistryFile,
   terminalSocketName,
 } from "../../scripts/terminal-lifecycle.mjs";
@@ -32,6 +33,11 @@ test("terminal lifecycle cleanup tolerates an absent tmux server or executable",
   ]) {
     assert.equal(await stopTerminalSessions({ run: async () => { throw error; } }), false);
   }
+});
+
+test("terminal lifecycle output distinguishes managed shutdown from leftover cleanup", () => {
+  assert.equal(terminalCleanupMessage(true), "Stopped leftover Conduit terminal sessions.");
+  assert.equal(terminalCleanupMessage(false), "Terminal cleanup found no leftover tmux server to stop.");
 });
 
 test("managed launchers clean terminal sessions after stopping Conduit", async () => {

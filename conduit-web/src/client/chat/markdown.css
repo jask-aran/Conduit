@@ -131,8 +131,8 @@
 }
 
 
-/* Mobile retains v0.5.2 density. */
-@media (--conduit-mobile-layout) {
+/* Phone mode retains the larger touch density. */
+@media (--conduit-phone-layout) {
 .chat-markdown { width: 100%; font-size: 15px; line-height: 1.66; overflow-wrap: anywhere; }
 .chat-markdown > :first-child { margin-top: 0; }
 .chat-markdown > :last-child { margin-bottom: 0; }
