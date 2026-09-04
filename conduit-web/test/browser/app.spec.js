@@ -524,6 +524,44 @@ test("workspace panel previews files, shows diff, and persists per chat", async 
   await expect(page.getByRole("complementary", { name: "Workspace panel" })).toHaveCount(0);
 });
 
+// 1x1 transparent PNG.
+const PNG_FIXTURE = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==",
+  "base64",
+);
+
+test("workspace previews an image instead of refusing it as binary", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop-chromium", "wide file preview is desktop chrome");
+  await page.route("**/v0/projects/*/tree?*", async (route) => {
+    await route.fulfill({ json: { path: "", entries: [{ name: "logo.png", path: "logo.png", type: "file" }] } });
+  });
+  await page.route("**/v0/projects/*/file?*", async (route) => {
+    const url = new URL(route.request().url());
+    if (url.searchParams.get("metadata") === "1") {
+      return route.fulfill({ json: { path: "logo.png", size: PNG_FIXTURE.length, modifiedAt: 1 } });
+    }
+    if (url.searchParams.get("download") === "1") {
+      return route.fulfill({ body: PNG_FIXTURE, contentType: "application/octet-stream" });
+    }
+    // The text endpoint refuses binaries; the image path must never reach it.
+    return route.fulfill({ status: 415, json: { error: "file_not_text", message: "Binary files cannot be previewed" } });
+  });
+
+  await openChatSurface(page);
+  await runPaletteCommand(page, "Toggle maximized workspace panel");
+  const panel = page.getByRole("complementary", { name: "Workspace panel" });
+  await panel.getByRole("treeitem", { name: "logo.png" }).click();
+
+  const image = panel.getByRole("img", { name: "logo.png" });
+  await expect(image).toBeVisible();
+  await expect(image).toHaveJSProperty("naturalWidth", 1);
+  await expect(panel.getByText("Binary files cannot be previewed")).toHaveCount(0);
+  // Editing and saving are meaningless for an image and must not be offered.
+  await expect(panel.getByRole("button", { name: "Edit file" })).toHaveCount(0);
+  await expect(panel.getByRole("button", { name: "Save file" })).toHaveCount(0);
+  await expect(panel.getByRole("button", { name: "Download file" })).toBeVisible();
+});
+
 test("workspace files open two slots side by side", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "desktop-chromium", "two file slots need the wide desktop layout");
   await openChatSurface(page);
