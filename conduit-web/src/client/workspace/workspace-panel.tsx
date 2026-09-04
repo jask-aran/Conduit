@@ -12,7 +12,7 @@ import { TerminalPane } from "../remotes/terminal-pane";
 import { dispatchPanelGeometryMotion, PANEL_MOTION_DURATION_MS } from "../panel-motion";
 import type { ShortcutManager } from "../shortcuts/shortcut-manager";
 import { FileTypeIcon, FolderTypeIcon } from "./file-type-icon";
-import WorkspaceFileSlot, { type FilePreview, type FileSlotHandle } from "./workspace-file-slot";
+import WorkspaceFileSlot, { type FileSlotHandle, type FileSummary } from "./workspace-file-slot";
 import "./workspace.css";
 
 interface TreeEntry { name: string; path: string; type: "directory" | "file" | "other"; }
@@ -182,7 +182,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
   const [filesWide, setFilesWide] = createSignal(false);
   const [uploading, setUploading] = createSignal(false);
   const [uploadTarget, setUploadTarget] = createSignal<UploadTarget>({ kind: "directory", path: "" });
-  const [primaryFile, setPrimaryFile] = createSignal<FilePreview | null>(null);
+  const [primaryFile, setPrimaryFile] = createSignal<FileSummary | null>(null);
   const [openPaths, setOpenPaths] = createSignal<OpenFiles>({ primary: localStorage.getItem(`conduit:workspace-panel:${props.chatId()}:file`), secondary: localStorage.getItem(`conduit:workspace-panel:${props.chatId()}:file-secondary`) });
   const [focusedSlot, setFocusedSlot] = createSignal<FileSlotId>("primary");
   const slotHandles = new Map<FileSlotId, FileSlotHandle>();
@@ -192,7 +192,9 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
   const [gitAction, setGitAction] = createSignal("");
   const [stagedOpen, setStagedOpen] = createSignal(true);
   const [changesOpen, setChangesOpen] = createSignal(true);
-  const [error, setError] = createSignal("");
+  // Foreground failures surface as toasts; background refreshes stay silent so a
+  // failing file cannot spam the corner every poll.
+  const reportError = (message: string) => { if (message) toast.error(message); };
   const widthKey = () => `conduit:workspace-panel:${props.projectId()}:width`;
   const showHiddenKey = () => `conduit:workspace-panel:${props.projectId()}:show-hidden`;
   const keptVisibleKey = () => `conduit:workspace-panel:${props.projectId()}:kept-visible`;
@@ -547,7 +549,6 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
   };
   const loadDirectory = async (directory = "", background = false) => {
     const { request, controller } = startRequest(`directory:${directory}`, !background);
-    if (!background) setError("");
     try {
       const payload = await api<{ entries?: unknown; truncated?: boolean }>(`/v0/projects/${encodeURIComponent(request.projectId)}/tree?path=${encodeURIComponent(directory)}`, { signal: controller.signal });
       if (!ownsRequest(request)) return false;
@@ -562,7 +563,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
       });
       return changed;
     } catch (cause) {
-      if (ownsRequest(request) && !background && !wasAborted(cause)) setError((cause as Error).message);
+      if (ownsRequest(request) && !background && !wasAborted(cause)) reportError((cause as Error).message);
     } finally {
       finishRequest(request);
     }
@@ -608,7 +609,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
     pendingEdit = path;
     openFile(path);
   };
-  const noteSlotLoaded = (slot: FileSlotId, file: FilePreview | null) => {
+  const noteSlotLoaded = (slot: FileSlotId, file: FileSummary | null) => {
     if (slot === "primary") setPrimaryFile(file);
     if (file && pendingEdit === file.path) {
       pendingEdit = null;
@@ -669,7 +670,6 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
   };
   // Downloading works on any tree entry, open or not, so it stays in the panel.
   const downloadPath = async (path: string) => {
-    setError("");
     try {
       const response = await authorizedFetch(httpUrl(`/v0/projects/${encodeURIComponent(props.projectId())}/file?path=${encodeURIComponent(path)}&download=1`));
       if (!response.ok) {
@@ -684,7 +684,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
       link.click();
       window.setTimeout(() => URL.revokeObjectURL(url), 0);
     } catch (cause) {
-      setError((cause as Error).message);
+      reportError((cause as Error).message);
     }
   };
   const chooseUpload = (target: UploadTarget = { kind: "directory", path: "" }) => {
@@ -701,7 +701,6 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
     if (!replacement) return;
     if (target.kind === "replacement" && !window.confirm(`Replace "${target.path}" with "${replacement.name}"?`)) return;
     setUploading(true);
-    setError("");
     try {
       if (target.kind === "replacement") {
         await api<FileWriteResult>(`/v0/projects/${encodeURIComponent(props.projectId())}/file?path=${encodeURIComponent(target.path)}`, {
@@ -725,7 +724,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
       }
       await loadDirectory(target.path, true);
     } catch (cause) {
-      setError((cause as Error).message);
+      reportError((cause as Error).message);
       await loadDirectory(target.kind === "directory" ? target.path : target.path.split("/").slice(0, -1).join("/"), true);
     } finally {
       setUploading(false);
@@ -734,20 +733,18 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
   const deleteFile = async (path: string) => {
     if (!window.confirm(`Delete "${path}"? This action cannot be undone.`)) return;
     setUploading(true);
-    setError("");
     try {
       await api<void>(`/v0/projects/${encodeURIComponent(props.projectId())}/file?path=${encodeURIComponent(path)}`, { method: "DELETE" });
       await loadDirectory(path.split("/").slice(0, -1).join("/"), true);
       dropOpenPath(path);
       toast.success(`Deleted ${path}`);
     } catch (cause) {
-      setError((cause as Error).message);
+      reportError((cause as Error).message);
     } finally {
       setUploading(false);
     }
   };
   const refreshFiles = async () => {
-    setError("");
     const loaded = Object.keys(directories());
     for (const directory of loaded.length ? loaded : [""]) await loadDirectory(directory, true);
     await Promise.all(openSlotHandles().map((handle) => handle.reload()));
@@ -768,14 +765,13 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
       if (props.projectId() !== projectId) return;
       if (treeChanged) toast.info("Workspace files updated");
     } catch (cause) {
-      if (props.projectId() === projectId && !wasAborted(cause)) setError((cause as Error).message);
+      if (props.projectId() === projectId && !wasAborted(cause)) console.warn("workspace poll failed", cause);
     } finally {
       pollingFiles = false;
     }
   };
   const loadDiff = async (includePatch = false, reuse = false, background = false) => {
     const { request, controller } = startRequest("diff", !background);
-    setError("");
     try {
       const query = new URLSearchParams();
       if (includePatch) query.set("patch", "1");
@@ -787,7 +783,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
       }
     }
     catch (cause) {
-      if (ownsRequest(request) && !wasAborted(cause)) setError((cause as Error).message);
+      if (ownsRequest(request) && !wasAborted(cause)) reportError((cause as Error).message);
     }
     finally {
       finishRequest(request);
@@ -798,7 +794,6 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
     if (action === "commit" && !commitMessage().trim()) return;
     if (action === "push" && !window.confirm(`Push ${diff()?.branch || "the current branch"} to its configured remote?`)) return;
     setGitAction(action);
-    setError("");
     try {
       await api<GitActionResult>(`/v0/projects/${encodeURIComponent(props.projectId())}/git`, {
         method: "POST",
@@ -808,7 +803,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
       if (action === "commit") setCommitMessage("");
       await loadDiff(diffDetailOpen());
     } catch (cause) {
-      setError((cause as Error).message);
+      reportError((cause as Error).message);
     } finally {
       setGitAction("");
     }
@@ -999,7 +994,6 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
           setFileFilter("");
           setTreeFocusPath(openPaths().primary || "");
           setDiff(cached?.diff || null);
-          setError("");
         });
         queueMicrotask(() => {
           if (treeElement) treeElement.scrollTop = cached?.treeScrollTop || 0;
@@ -1296,7 +1290,6 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
         </div>
       </div>
     </header>
-    <Show when={error()}><div class="workspace-panel-error">{error()}</div></Show>
     <main ref={(element) => {
       splitHost = element;
       splitResizeObserver?.disconnect();
@@ -1422,8 +1415,8 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
             onToggleWrap={toggleWrapLines}
             onFocus={() => setFocusedSlot("primary")}
             onClose={() => closeSlot("primary")}
-            onError={setError}
-            onRemoved={(path) => { dropOpenPath(path); toast.info(`${path} was removed`); }}
+            onError={reportError}
+            onRemoved={(path, announce) => { dropOpenPath(path); if (announce) toast.info(`${path} was removed`); }}
             onReplace={(path) => chooseUpload({ kind: "replacement", path })}
             onDelete={(path) => void deleteFile(path)}
             onLoaded={(file) => noteSlotLoaded("primary", file)}
@@ -1450,8 +1443,8 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; cha
               onToggleWrap={toggleWrapLines}
               onFocus={() => setFocusedSlot("secondary")}
               onClose={() => closeSlot("secondary")}
-              onError={setError}
-              onRemoved={(path) => { dropOpenPath(path); toast.info(`${path} was removed`); }}
+              onError={reportError}
+              onRemoved={(path, announce) => { dropOpenPath(path); if (announce) toast.info(`${path} was removed`); }}
               onReplace={(path) => chooseUpload({ kind: "replacement", path })}
               onDelete={(path) => void deleteFile(path)}
               onLoaded={(file) => noteSlotLoaded("secondary", file)}
