@@ -533,7 +533,10 @@ const PNG_FIXTURE = Buffer.from(
 test("workspace previews an image instead of refusing it as binary", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "desktop-chromium", "wide file preview is desktop chrome");
   await page.route("**/v0/projects/*/tree?*", async (route) => {
-    await route.fulfill({ json: { path: "", entries: [{ name: "logo.png", path: "logo.png", type: "file" }] } });
+    await route.fulfill({ json: { path: "", entries: [
+      { name: "logo.png", path: "logo.png", type: "file" },
+      { name: "notes.txt", path: "notes.txt", type: "file" },
+    ] } });
   });
   await page.route("**/v0/projects/*/file?*", async (route) => {
     const url = new URL(route.request().url());
@@ -542,6 +545,9 @@ test("workspace previews an image instead of refusing it as binary", async ({ pa
     }
     if (url.searchParams.get("download") === "1") {
       return route.fulfill({ body: PNG_FIXTURE, contentType: "application/octet-stream" });
+    }
+    if (url.searchParams.get("path") === "notes.txt") {
+      return route.fulfill({ json: { path: "notes.txt", size: 5, modifiedAt: 1, revision: "r1", content: "hello" } });
     }
     // The text endpoint refuses binaries; the image path must never reach it.
     return route.fulfill({ status: 415, json: { error: "file_not_text", message: "Binary files cannot be previewed" } });
@@ -560,6 +566,17 @@ test("workspace previews an image instead of refusing it as binary", async ({ pa
   await expect(panel.getByRole("button", { name: "Edit file" })).toHaveCount(0);
   await expect(panel.getByRole("button", { name: "Save file" })).toHaveCount(0);
   await expect(panel.getByRole("button", { name: "Download file" })).toBeVisible();
+
+  // Jumping straight from an image to a text file, with no close in between.
+  await panel.getByRole("treeitem", { name: "notes.txt" }).click();
+  await expect(image).toHaveCount(0);
+  await expect(panel.locator(".workspace-preview-file")).toHaveText("notes.txt");
+  await expect(panel.getByRole("button", { name: "Edit file" })).toBeVisible();
+
+  // ...and straight back again.
+  await panel.getByRole("treeitem", { name: "logo.png" }).click();
+  await expect(image).toBeVisible();
+  await expect(panel.getByRole("button", { name: "Edit file" })).toHaveCount(0);
 });
 
 test("workspace files open two slots side by side", async ({ page }, testInfo) => {

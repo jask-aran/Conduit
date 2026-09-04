@@ -162,7 +162,12 @@ export default function WorkspaceFileSlot(props: {
         { signal: controller.signal },
       );
       if (!owns()) return;
+      // The render checks the image branch first, so a text file replacing an
+      // image must drop the image or the slot would keep showing the picture.
+      releaseImage();
       batch(() => {
+        setImage(null);
+        setImageDimensions(null);
         setPreview(payload);
         setDraft(payload.content);
       });
