@@ -8,7 +8,8 @@ const project = {
   name: "Workspace",
   kind: "workspace",
   origin: "linked",
-  path: "/srv/workspace",
+  path: "/srv/stale-workspace",
+  workingRoot: "/srv/workspace",
   externalPath: "/srv/workspace",
   createdAt: "2026-07-01T00:00:00.000Z",
   defaultTemplateId: "workspace",
@@ -79,7 +80,8 @@ test("project dashboard stays registry-bounded and enriches only recent active c
     }),
   });
 
-  assert.equal(dashboard.identity.path, project.path);
+  assert.equal(dashboard.identity.path, project.workingRoot);
+  assert.equal(dashboard.identity.workingRoot, project.workingRoot);
   assert.deepEqual(dashboard.stats, {
     totalChats: 3,
     activeChats: 2,

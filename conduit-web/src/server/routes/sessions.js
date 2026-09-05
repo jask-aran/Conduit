@@ -101,7 +101,7 @@ export function registerSessionRoutes(app, {
       });
       await sessionNames.run({
         chatId: context.chat.id,
-        cwd: context.project.path,
+        cwd: context.project.workingRoot,
         source: "command",
         message: transcript,
         apply: async (name) => {

@@ -58,11 +58,11 @@ export function createLiveSessionLauncher({
     if (runtime.kind === "native_pi") {
       const preflight = await nativePreflight(context.project);
       if (!preflight.available) throw launchError("native_pi_unavailable", preflight.error, 409);
-      new ProjectTrustStore(installation.agentDir).set(context.project.path, true);
+      new ProjectTrustStore(installation.agentDir).set(context.project.workingRoot, true);
     }
 
     const runtimeCatalog = catalogFor(runtime, template);
-    const catalogView = await runtimeCatalog.list(context.project.path);
+    const catalogView = await runtimeCatalog.list(context.project.workingRoot);
     const requestedModel = text(model);
     const requestedThinkingLevel = text(thinkingLevel);
     const persistedModel = context.chat.piSessionFile ? text(persisted?.model) : "";
@@ -122,7 +122,7 @@ export function createLiveSessionLauncher({
       project: context.project,
       installation,
       template: runtime.kind === "conduit_profile" ? template : null,
-      models: runtime.kind === "conduit_profile" ? runtimeCatalog.getLaunchModels(context.project.path) : null,
+      models: runtime.kind === "conduit_profile" ? runtimeCatalog.getLaunchModels(context.project.workingRoot) : null,
       model: processModel,
       thinkingLevel: processThinkingLevel,
       bridgeSystemPrompt: config.bridgeSystemPrompt,

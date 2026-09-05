@@ -235,7 +235,7 @@ export function ProjectDashboard(props: {
   });
 
   const copyPath = async () => {
-    const path = payload()?.identity.path || props.project.path;
+    const path = payload()?.identity.workingRoot || props.project.workingRoot;
     if (!path) return;
     try {
       await navigator.clipboard.writeText(path);
@@ -296,7 +296,7 @@ export function ProjectDashboard(props: {
     terminal.lastActivityAt || terminal.updatedAt || terminal.createdAt,
     now(),
   );
-  const terminalCwd = (terminal: Pty) => terminal.cwd || props.project.path || props.project.externalPath || "Working directory unavailable";
+  const terminalCwd = (terminal: Pty) => terminal.cwd || props.project.workingRoot || "Working directory unavailable";
   const git = createMemo(() => payload()?.git || null);
 
   return <section class="project-dashboard workspace-dashboard" aria-label={`${props.project.name} dashboard`}>
@@ -312,7 +312,7 @@ export function ProjectDashboard(props: {
               <span>{kindLabel(props.project)}</span>
             </div>
             <button type="button" class="workspace-dashboard-path" title="Copy working path" onClick={() => void copyPath()}>
-              <code>{payload()?.identity.path || props.project.path || "Working path unavailable"}</code>
+              <code>{payload()?.identity.workingRoot || props.project.workingRoot || "Working path unavailable"}</code>
               <CopyIcon />
               <Show when={copied()}><em>Copied</em></Show>
             </button>
@@ -336,7 +336,7 @@ export function ProjectDashboard(props: {
       <Show when={cloning()}>
         <section class="clone-progress" aria-live="polite">
           <div class="clone-progress-heading"><Spinner /><div><strong>{operation()?.state === "cancelling" ? "Cancelling clone" : "Cloning workspace"}</strong><p>Closing this tab does not stop the operation.</p></div></div>
-          <div class="clone-progress-path"><span>Destination</span><code>{props.project.path || props.project.externalPath}</code></div>
+          <div class="clone-progress-path"><span>Destination</span><code>{props.project.workingRoot}</code></div>
           <pre aria-label="Clone output preview">{operation()?.diagnostic || "Preparing clone…"}</pre>
           <Button variant="destructive" size="sm" disabled={cancellingClone()} onClick={() => void cancelClone()}><XIcon />{cancellingClone() ? "Cancelling…" : "Cancel clone"}</Button>
         </section>

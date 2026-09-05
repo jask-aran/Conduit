@@ -178,6 +178,7 @@ export class ProjectStore {
 
   async initialize() {
     await fs.mkdir(this.filesRoot, { recursive: true });
+    this.filesRoot = await fs.realpath(this.filesRoot);
     await fs.mkdir(this.piAgentDir, { recursive: true });
     const catalog = await readJson(this.catalogFile, { version: 2, projects: [] });
     if ((catalog.version || 1) < 2) {
@@ -199,7 +200,7 @@ export class ProjectStore {
   }
 
   workingRoot(project) {
-    if (project.kind === "workspace") return project.path ? path.resolve(project.path) : this.resolvePath(project);
+    if (project?.externalPath) return path.resolve(project.externalPath);
     return this.managedPath(project.slug);
   }
 
@@ -209,13 +210,6 @@ export class ProjectStore {
       version: 2,
       projects: Array.isArray(catalog.projects) ? catalog.projects : [],
     };
-  }
-
-  resolvePath(project) {
-    if (project.externalPath) {
-      return path.resolve(project.externalPath);
-    }
-    return this.managedPath(project.slug);
   }
 
   projectView(project) {
@@ -261,7 +255,7 @@ export class ProjectStore {
       await this.writeCatalog(this.catalogFile, catalog);
     }
     if ((project.origin || "managed") !== "linked") {
-      await fs.mkdir(this.managedPath(slug), { recursive: true });
+      await fs.mkdir(this.workingRoot(project), { recursive: true });
     }
     return this.projectView(project);
   }
@@ -297,7 +291,7 @@ export class ProjectStore {
         createdAt: new Date().toISOString(),
       };
       catalog.projects.push(project);
-      const target = this.managedPath(slug);
+      const target = this.workingRoot(project);
       await fs.mkdir(target, { recursive: false });
       try { await this.writeCatalog(this.catalogFile, catalog); }
       catch (error) {
@@ -314,7 +308,7 @@ export class ProjectStore {
       const slugBase = name || path.basename(externalPath);
       const slug = await this.uniqueSlug(slugBase);
       const catalog = await this.readCatalog();
-      if (catalog.projects.some((item) => path.resolve(this.resolvePath(item)) === externalPath)) {
+      if (catalog.projects.some((item) => this.workingRoot(item) === externalPath)) {
         const error = new Error("That directory is already registered");
         error.code = "workspace_already_linked";
         throw error;
@@ -331,7 +325,7 @@ export class ProjectStore {
         createdAt: new Date().toISOString(),
       };
       catalog.projects.push(project);
-      await ensureConduitRoot({ path: externalPath, origin: "linked" });
+      await ensureConduitRoot({ workingRoot: externalPath, externalPath, origin: "linked" });
       await this.writeCatalog(this.catalogFile, catalog);
       return this.projectView(project);
     });
@@ -344,7 +338,7 @@ export class ProjectStore {
       ? await resolveNewWorkspaceDirectory(inputPath, directoryName, this.workspaceAllowlist, { dataRoot: this.dataRoot })
       : await resolveExistingDirectory(inputPath, this.workspaceAllowlist, { dataRoot: this.dataRoot });
     const catalog = await this.readCatalog();
-    if (catalog.projects.some((item) => path.resolve(this.resolvePath(item)) === externalPath)) {
+    if (catalog.projects.some((item) => this.workingRoot(item) === externalPath)) {
       const error = new Error("That directory is already registered");
       error.code = "workspace_already_linked";
       throw error;
@@ -363,7 +357,7 @@ export class ProjectStore {
       const target = await resolveNewWorkspaceDirectory(parentPath, directoryName, this.workspaceAllowlist, { dataRoot: this.dataRoot });
       const slug = await this.uniqueSlug(name || directoryName);
       const catalog = await this.readCatalog();
-      if (catalog.projects.some((item) => path.resolve(this.resolvePath(item)) === target)) {
+      if (catalog.projects.some((item) => this.workingRoot(item) === target)) {
         const error = new Error("That directory is already registered");
         error.code = "workspace_already_linked";
         throw error;
@@ -381,7 +375,7 @@ export class ProjectStore {
       };
       await fs.mkdir(target);
       try {
-        await ensureConduitRoot({ path: target, externalPath: target, origin: "created" });
+        await ensureConduitRoot({ workingRoot: target, externalPath: target, origin: "created" });
         catalog.projects.push(project);
         await this.writeCatalog(this.catalogFile, catalog);
       } catch (error) {
@@ -438,7 +432,7 @@ export class ProjectStore {
         const resolved = await resolveExistingDirectory(reservation.target, this.workspaceAllowlist, { dataRoot: this.dataRoot });
         if (resolved !== reservation.target) throw cloneError("workspace_identity_changed", "Published clone path identity changed");
         const catalog = await this.readCatalog();
-        const registered = catalog.projects.find((project) => project.id === reservation.project.id || path.resolve(this.resolvePath(project)) === reservation.target);
+        const registered = catalog.projects.find((project) => project.id === reservation.project.id || this.workingRoot(project) === reservation.target);
         if (registered) {
           if (registered.id !== reservation.project.id) {
             this.logger.error(`Published clone needs manual recovery; project identity conflicts: ${reservation.target} (marker: ${marker})`);
@@ -489,7 +483,7 @@ export class ProjectStore {
     return this.runExclusive(async () => {
       if (this.cloneReservations.has(target)) throw cloneError("clone_target_reserved", "Clone target is already being prepared");
       const catalog = await this.readCatalog();
-      if (catalog.projects.some((item) => path.resolve(this.resolvePath(item)) === target)) {
+      if (catalog.projects.some((item) => this.workingRoot(item) === target)) {
         throw cloneError("workspace_already_linked", "That directory is already registered");
       }
       try {
@@ -681,7 +675,7 @@ export class ProjectStore {
         this.appendCloneDiagnostic(operation, `Running git clone --progress ${gitSource}…\n`);
         await this.runCommand("git", ["clone", "--progress", "--", gitSource, reservation.staging], options);
       }
-      await ensureConduitRoot({ path: reservation.staging, origin: "linked" });
+      await ensureConduitRoot({ workingRoot: reservation.staging, externalPath: reservation.staging, origin: "linked" });
       await this.runExclusive(async () => {
         if (this.cloneReservations.get(reservation.target)?.id !== reservation.id) throw cloneError("clone_reservation_lost", "Clone reservation was lost");
         try {
@@ -693,7 +687,7 @@ export class ProjectStore {
         }
         const catalog = await this.readCatalog();
         const project = catalog.projects.find((item) => item.id === reservation.project.id);
-        if (!project || catalog.projects.some((item) => item.id !== reservation.project.id && (item.slug === reservation.project.slug || path.resolve(this.resolvePath(item)) === reservation.target))) {
+        if (!project || catalog.projects.some((item) => item.id !== reservation.project.id && (item.slug === reservation.project.slug || this.workingRoot(item) === reservation.target))) {
           throw cloneError("clone_reservation_lost", "Clone reservation conflicts with the current catalogue");
         }
         reservation.phase = "publishing";
@@ -818,16 +812,16 @@ export class ProjectStore {
     // registered root is still the same real directory before touching it.
     if (!skipWorkingTree) await this.validate(view);
     if (!skipWorkingTree && deleteWorkspaceFiles) {
-      await fs.rm(view.path, { recursive: true, force: true });
+      await fs.rm(this.workingRoot(view), { recursive: true, force: true });
     } else if (!skipWorkingTree && (project.origin || "managed") === "managed") {
-      await fs.rm(view.path, { recursive: true, force: true });
+      await fs.rm(this.workingRoot(view), { recursive: true, force: true });
     } else if (!skipWorkingTree) {
       // Chat deletion removes Conduit's owned trees. Unregister only prunes empty
       // parents so unrelated .conduit metadata is never removed.
-      await fs.rmdir(path.join(view.path, ".conduit", "chats")).catch((error) => {
+      await fs.rmdir(path.join(this.workingRoot(view), ".conduit", "chats")).catch((error) => {
         if (!["ENOENT", "ENOTEMPTY"].includes(error.code)) throw error;
       });
-      await fs.rmdir(path.join(view.path, ".conduit")).catch((error) => {
+      await fs.rmdir(path.join(this.workingRoot(view), ".conduit")).catch((error) => {
         if (!["ENOENT", "ENOTEMPTY"].includes(error.code)) throw error;
       });
     }
@@ -836,28 +830,41 @@ export class ProjectStore {
     return view;
   }
 
-  async validate(project) {
+  async validate(project, { createManaged = false } = {}) {
     if (project?.state === "cloning") {
       throw cloneError("workspace_cloning", "This Workspace is still cloning");
     }
-    if (!project?.externalPath) return project;
-    const expected = path.resolve(project.externalPath);
+    const expected = this.workingRoot(project);
     let stat;
     try { stat = await fs.lstat(expected); }
     catch (error) {
-      if (error.code === "ENOENT") {
+      if (error.code === "ENOENT" && createManaged && !project?.externalPath) {
+        await fs.mkdir(expected);
+        stat = await fs.lstat(expected);
+      } else if (["ENOENT", "ENOTDIR"].includes(error.code)) {
         const missing = new Error("Workspace path identity changed");
         missing.code = "workspace_identity_changed";
         throw missing;
-      }
-      throw error;
+      } else throw error;
     }
     if (!stat.isDirectory() || stat.isSymbolicLink()) {
       const error = new Error("Workspace path identity changed");
       error.code = "workspace_identity_changed";
       throw error;
     }
-    const current = await resolveExistingDirectory(expected, this.workspaceAllowlist, { dataRoot: this.dataRoot });
+    let current;
+    try {
+      current = project?.externalPath
+        ? await resolveExistingDirectory(expected, this.workspaceAllowlist, { dataRoot: this.dataRoot })
+        : await fs.realpath(expected);
+    } catch (error) {
+      if (["ENOENT", "ENOTDIR"].includes(error.code)) {
+        const missing = new Error("Workspace path identity changed");
+        missing.code = "workspace_identity_changed";
+        throw missing;
+      }
+      throw error;
+    }
     if (current !== expected) {
       const error = new Error("Workspace path identity changed");
       error.code = "workspace_identity_changed";

@@ -23,8 +23,9 @@ export function registerChatRoutes(app, {
     try {
       const project = await projects.get(request.query.projectId || "chat");
       if (!project) return response.status(404).json({ error: "project_not_found" });
+      await projects.validate(project);
       if (request.query.refresh === "true") await modelCatalog.refreshFromNetwork();
-      response.json({ installationId: "conduit-pinned", runtimeKind: "conduit_profile", ...await modelCatalog.list(project.path) });
+      response.json({ installationId: "conduit-pinned", runtimeKind: "conduit_profile", ...await modelCatalog.list(project.workingRoot) });
     } catch (error) {
       next(error);
     }
@@ -34,7 +35,8 @@ export function registerChatRoutes(app, {
     try {
       const project = await projects.get(request.query.projectId || "chat");
       if (!project) return response.status(404).json({ error: "project_not_found" });
-      response.json({ installationId: "conduit-pinned", runtimeKind: "conduit_profile", ...await modelCatalog.getSettings(project.path) });
+      await projects.validate(project);
+      response.json({ installationId: "conduit-pinned", runtimeKind: "conduit_profile", ...await modelCatalog.getSettings(project.workingRoot) });
     } catch (error) {
       next(error);
     }
@@ -45,7 +47,7 @@ export function registerChatRoutes(app, {
       const project = await projects.get(request.body?.projectId || "chat");
       if (!project) return response.status(404).json({ error: "project_not_found" });
       await projects.validate(project);
-      response.json({ installationId: "conduit-pinned", runtimeKind: "conduit_profile", ...await modelCatalog.updateSettings(project.path, request.body) });
+      response.json({ installationId: "conduit-pinned", runtimeKind: "conduit_profile", ...await modelCatalog.updateSettings(project.workingRoot, request.body) });
     } catch (error) {
       next(error);
     }
@@ -223,7 +225,7 @@ export function registerChatRoutes(app, {
             modelThinkingLevels: chat?.modelThinkingLevels || {},
           });
         }
-        if (spec) await catalogFor(runtime, template).updateDefault(context.project.path, spec, thinkingLevel);
+        if (spec) await catalogFor(runtime, template).updateDefault(context.project.workingRoot, spec, thinkingLevel);
       }
       await saveThinkingPreference();
       response.json(await chatModelView(context));

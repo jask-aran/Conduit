@@ -226,6 +226,45 @@ test("a replaced cloned root cannot be inspected or launched, and unlink does no
   }
 });
 
+test("a replaced managed root rejects every root-consuming action", async () => {
+  const harness = await startConduitHarness();
+  try {
+    const project = await harness.createProject("Managed root");
+    const chat = await harness.createChat(project.id);
+    const outside = path.join(harness.root, "outside");
+    const displaced = path.join(harness.root, "displaced");
+    await fs.mkdir(outside);
+    await fs.writeFile(path.join(outside, "keep.txt"), "outside");
+    await fs.rename(project.workingRoot, displaced);
+    await fs.symlink(outside, project.workingRoot);
+
+    const attachmentId = "550e8400-e29b-41d4-a716-446655440000";
+    const responses = await Promise.all([
+      harness.request(`/v0/projects/${project.id}/tree`),
+      harness.request(`/v0/projects/${project.id}/diff`),
+      harness.request("/v0/ptys", { method: "POST", body: JSON.stringify({ projectId: project.id }) }),
+      harness.request(`/v0/models?projectId=${project.id}`),
+      harness.request(`/v0/settings?projectId=${project.id}`),
+      harness.request(`/v0/chats/${chat.id}/models`),
+      harness.request(`/v0/chats/${chat.id}/attachments/${attachmentId}?name=blocked.txt`, {
+        method: "PUT",
+        headers: { "content-type": "application/octet-stream" },
+        body: "blocked",
+      }),
+      harness.request("/v0/live-sessions", {
+        method: "POST",
+        body: JSON.stringify({ chatId: chat.id, projectId: project.id }),
+      }),
+    ]);
+    for (const response of responses) assert.equal(response.status, 409);
+    assert.equal((await harness.pi.commands()).length, 0);
+    assert.equal(await fs.readFile(path.join(outside, "keep.txt"), "utf8"), "outside");
+    await assert.rejects(fs.access(path.join(outside, ".conduit")), { code: "ENOENT" });
+  } finally {
+    await harness.stop();
+  }
+});
+
 test("Host Pi chat deletion removes its runtime-owned transcript", async () => {
   const harness = await startConduitHarness();
   try {

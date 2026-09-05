@@ -436,9 +436,9 @@ export class PiManager extends EventEmitter {
     if (!launchSpec && !launchTemplate) throw new Error("PiManager.create requires a template or launch specification");
     const args = launchSpec?.args || buildPiArgs({ sessionFile: resolvedFile, model, thinkingLevel, models, template: launchTemplate });
     const processSpec = resolvePiProcess(launchSpec?.command || this.command, args);
-    const restoredCache = restoreCacheStats(resolvedFile, launchSpec?.cwd || project.path);
+    const restoredCache = restoreCacheStats(resolvedFile, launchSpec?.cwd || project.workingRoot);
     const child = this.spawnImpl(processSpec.command, processSpec.args, {
-      cwd: launchSpec?.cwd || project.path,
+      cwd: launchSpec?.cwd || project.workingRoot,
       stdio: ["pipe", "pipe", "pipe"],
       env: launchSpec?.env || buildPiEnvironment(this.agentDir),
     });
@@ -448,7 +448,7 @@ export class PiManager extends EventEmitter {
       chatId,
       projectId: project.id,
       projectSlug: project.slug,
-      cwd: launchSpec?.cwd || project.path,
+      cwd: launchSpec?.cwd || project.workingRoot,
       sessionDir: project.sessionsDir,
       sessionFile: resolvedFile,
       model: model.trim() || null,

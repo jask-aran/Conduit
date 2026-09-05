@@ -63,6 +63,35 @@ test("stores project metadata centrally and keeps working directories clean", as
   await fs.rm(root, { recursive: true, force: true });
 });
 
+test("managed roots reject replacement symlinks and terminals may recreate only missing managed roots", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-project-managed-root-"));
+  const filesRoot = path.join(root, "data/chat/files");
+  const store = new ProjectStore({
+    filesRoot,
+    catalogFile: path.join(root, "data/conduit.json"),
+    piAgentDir: path.join(root, "data/pi"),
+  });
+  await store.initialize();
+  const project = await store.create({ name: "Managed" });
+  const outside = path.join(root, "outside");
+  await fs.mkdir(outside);
+  await fs.writeFile(path.join(outside, "keep.txt"), "outside");
+  await fs.rename(project.workingRoot, path.join(root, "displaced"));
+  await fs.symlink(outside, project.workingRoot);
+  await assert.rejects(store.validate(project), { code: "workspace_identity_changed" });
+  assert.equal(await fs.readFile(path.join(outside, "keep.txt"), "utf8"), "outside");
+  await fs.unlink(project.workingRoot);
+
+  const missing = await store.create({ name: "Missing terminal root" });
+  await fs.rmdir(missing.workingRoot);
+  await assert.rejects(store.validate(missing), { code: "workspace_identity_changed" });
+  await store.validate(missing, { createManaged: true });
+  const stat = await fs.lstat(missing.workingRoot);
+  assert.equal(stat.isDirectory(), true);
+  assert.equal(stat.isSymbolicLink(), false);
+  await fs.rm(root, { recursive: true, force: true });
+});
+
 test("deletes named project files and catalog metadata without touching colliding session storage", async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-project-delete-test-"));
   const store = new ProjectStore({

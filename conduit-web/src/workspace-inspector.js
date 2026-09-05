@@ -150,7 +150,15 @@ function safeSegments(relativePath = "") {
 }
 
 export async function resolveInspectorPath(root, relativePath = "", { kind = null } = {}) {
-  const rootPath = await fs.realpath(path.resolve(root));
+  const expectedRoot = path.resolve(root);
+  const rootStat = await fs.lstat(expectedRoot).catch((error) => {
+    if (error.code === "ENOENT") throw inspectorError("path_not_found", "The requested path does not exist");
+    throw error;
+  });
+  if (!rootStat.isDirectory() || rootStat.isSymbolicLink()) {
+    throw inspectorError("unsafe_workspace_root", "The workspace root must be a real directory");
+  }
+  const rootPath = await fs.realpath(expectedRoot);
   const segments = safeSegments(relativePath);
   let current = rootPath;
   for (const segment of segments) {

@@ -181,7 +181,7 @@ async function chatModelView(context) {
   const template = templateForChat(context.chat, context.project);
   const runtime = context.chat.runtime || runtimeFor({ runtimeKind: "conduit_profile", template });
   const catalog = catalogFor(runtime, template);
-  const catalogView = await catalog.list(context.project.path);
+  const catalogView = await catalog.list(context.project.workingRoot);
   let model = catalogView.defaultModel;
   let thinkingLevel = catalogView.defaultThinkingLevel;
   let source = "runtime_default";
@@ -251,7 +251,8 @@ async function installationViews() {
       : { kind: "conduit_profile", installationId: installation.id };
     const catalog = catalogFor(runtime, config.piTemplate);
     try {
-      const view = await catalog.list(project.path);
+      await projects.validate(project);
+      const view = await catalog.list(project.workingRoot);
       return {
         ...installation,
         models: {
@@ -333,10 +334,10 @@ async function nativePreflight(project) {
     return { available: false, error: installation.error, version: installation.version, trustRequired: false, resources: [] };
   }
   const trustStore = new ProjectTrustStore(installation.agentDir);
-  const decision = trustStore.get(project.path);
-  const requiresResources = hasTrustRequiringProjectResources(project.path);
-  const resources = requiresResources ? await nativeResourceClasses(project.path) : [];
-  if (requiresResources) await validateNativeProjectResources(project.path);
+  const decision = trustStore.get(project.workingRoot);
+  const requiresResources = hasTrustRequiringProjectResources(project.workingRoot);
+  const resources = requiresResources ? await nativeResourceClasses(project.workingRoot) : [];
+  if (requiresResources) await validateNativeProjectResources(project.workingRoot);
   if (requiresResources && resources.length === 0) resources.push("inherited project resources");
   return {
     available: true,
@@ -613,7 +614,7 @@ const liveSessionStream = createLiveSessionStream({
   async autoNameSession(record, context, message) {
     const task = sessionNames.run({
       chatId: context.chat.id,
-      cwd: context.project.path,
+      cwd: context.project.workingRoot,
       source: "first_prompt",
       message,
       apply: async (name) => {

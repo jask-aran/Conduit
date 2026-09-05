@@ -12,7 +12,7 @@ const profiles = loadModelProfiles(path.join(repositoryRoot, "templates", "model
 const chatId = "c".repeat(24);
 const runtime = { kind: "conduit_profile", installationId: "conduit-pinned" };
 const template = { id: "chat", version: "7", runtimeOverlays: ["web-search"] };
-const project = { id: "project_test", slug: "test", path: "/tmp/test" };
+const project = { id: "project_test", slug: "test", path: "/tmp/test", workingRoot: "/tmp/test" };
 
 async function routeFixture({ busy = false } = {}) {
   const app = express();

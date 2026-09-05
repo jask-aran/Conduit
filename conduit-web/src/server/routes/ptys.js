@@ -1,27 +1,20 @@
-import fs from "node:fs/promises";
-
 async function terminalContext(projects, id) {
   const project = await projects.get(id);
   if (!project) throw Object.assign(new Error("Terminal project was not found"), { code: "pty_project_not_found" });
-  if (project.kind === "workspace") {
-    try { await projects.validate(project); }
-    catch (error) {
-      if (error.code === "workspace_identity_changed") {
-        throw Object.assign(new Error(`Terminal working directory is unavailable to this Conduit server: ${project.path}`), {
-          code: "pty_cwd_unavailable",
-          status: 409,
-          path: project.path,
-          cause: error,
-        });
-      }
-      throw error;
+  try { await projects.validate(project, { createManaged: !project.externalPath }); }
+  catch (error) {
+    if (error.code === "workspace_identity_changed") {
+      const root = projects.workingRoot(project);
+      throw Object.assign(new Error(`Terminal working directory is unavailable to this Conduit server: ${root}`), {
+        code: "pty_cwd_unavailable",
+        status: 409,
+        path: root,
+        cause: error,
+      });
     }
-    return { project, cwd: projects.workingRoot(project) };
+    throw error;
   }
-  await fs.mkdir(projects.workingRoot(project), { recursive: true });
-  const cwd = await fs.realpath(projects.workingRoot(project));
-  if (!(await fs.stat(cwd)).isDirectory()) throw Object.assign(new Error("Terminal working directory is unavailable"), { code: "pty_cwd_unavailable" });
-  return { project, cwd };
+  return { project, cwd: projects.workingRoot(project) };
 }
 
 export function registerPtyRoutes(app, { projects, terminals }) {

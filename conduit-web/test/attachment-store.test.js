@@ -9,7 +9,7 @@ import { ChatStore, chatDirectory } from "../src/chat-store.js";
 
 async function fixture() {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-attachments-"));
-  const project = { id: "project_test", slug: "test", path: path.join(root, "files"), sessionsDir: path.join(root, "sessions") };
+  const project = { id: "project_test", slug: "test", path: path.join(root, "stale-files"), workingRoot: path.join(root, "files"), sessionsDir: path.join(root, "sessions") };
   const chats = new ChatStore(path.join(root, "registry.json"));
   await chats.initialize([project]);
   const chat = await chats.create(project);
@@ -88,10 +88,10 @@ test("attachment access is scoped to one chat and rejects symlinked owned parent
 test("first attachment keeps Conduit metadata out of Git status locally", async () => {
   const { root, project, chat, store } = await fixture();
   const { spawnSync } = await import("node:child_process");
-  const initialized = spawnSync("git", ["init"], { cwd: project.path, encoding: "utf8" });
+  const initialized = spawnSync("git", ["init"], { cwd: project.workingRoot, encoding: "utf8" });
   assert.equal(initialized.status, 0, initialized.stderr);
   await store.write(project, chat.id, crypto.randomUUID(), "note.txt", Readable.from(["hello"]));
-  const excluded = await fs.readFile(path.join(project.path, ".git", "info", "exclude"), "utf8");
+  const excluded = await fs.readFile(path.join(project.workingRoot, ".git", "info", "exclude"), "utf8");
   assert.match(excluded, /# Conduit chat attachments\n\.conduit\//);
   await fs.rm(root, { recursive: true, force: true });
 });
