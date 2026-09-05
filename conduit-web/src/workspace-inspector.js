@@ -50,8 +50,12 @@ function acquireGitSlot(signal) {
 }
 
 function releaseGitSlot() {
+  const waiter = gitSlots.waiters.shift();
+  if (waiter) {
+    waiter.resolve();
+    return;
+  }
   gitSlots.active -= 1;
-  gitSlots.waiters.shift()?.resolve();
 }
 
 function terminateProcess(child) {
@@ -69,7 +73,7 @@ function terminateProcess(child) {
 }
 
 /** Run one Git command with a process cap, hard deadline, bounded output, and cancellation. */
-export async function runBoundedGit(root, args, { signal, maxBuffer = 64 * 1024, timeoutMs = GIT_COMMAND_TIMEOUT_MS } = {}) {
+export async function runBoundedGit(root, args, { signal, maxBuffer = 64 * 1024, timeoutMs = GIT_COMMAND_TIMEOUT_MS, onSpawn } = {}) {
   await acquireGitSlot(signal);
   try {
     if (signal?.aborted) throw abortError();
@@ -79,6 +83,7 @@ export async function runBoundedGit(root, args, { signal, maxBuffer = 64 * 1024,
         detached: process.platform !== "win32",
         stdio: ["ignore", "pipe", "pipe"],
       });
+      onSpawn?.(child);
       let stdout = "";
       let stderr = "";
       let terminalError = null;
@@ -440,11 +445,9 @@ async function inspectOverview(root, { signal, runGit }) {
     if (isAbort(error)) throw error;
     return { repository: false, files: [], diff: "" };
   }
-  const [{ stdout: status }, { stdout: branch }, { stdout: log }, { stdout: refs }] = await Promise.all([
+  const [{ stdout: status }, { stdout: branch }] = await Promise.all([
     runGit(root, ["status", "--porcelain=v1", "-z", "--no-renames", "--untracked-files=all"], { signal, maxBuffer: 2 * 1024 * 1024 }),
     runGit(root, ["branch", "--show-current"], { signal }),
-    runGit(root, ["log", "--all", "--graph", "-30", "--pretty=format:%x1f%H%x1f%h%x1f%s%x1f%an%x1f%aI"], { signal, maxBuffer: 512 * 1024 }).catch((error) => isAbort(error) ? Promise.reject(error) : { stdout: "" }),
-    runGit(root, ["for-each-ref", "--format=%(refname)%00%(refname:short)%00%(objectname)%00%(upstream:short)", "refs/heads", "refs/remotes", "refs/tags"], { signal, maxBuffer: 512 * 1024 }).catch((error) => isAbort(error) ? Promise.reject(error) : { stdout: "" }),
   ]);
   let upstream = null;
   let ahead = 0;
@@ -462,11 +465,17 @@ async function inspectOverview(root, { signal, runGit }) {
     upstream,
     ahead,
     behind,
-    commits: parseLog(log),
-    refs: parseRefs(refs),
     files: parseStatus(status),
     diff: "",
   };
+}
+
+async function inspectHistory(root, { signal, runGit }) {
+  const [{ stdout: log }, { stdout: refs }] = await Promise.all([
+    runGit(root, ["log", "--all", "--graph", "-30", "--pretty=format:%x1f%H%x1f%h%x1f%s%x1f%an%x1f%aI"], { signal, maxBuffer: 512 * 1024 }),
+    runGit(root, ["for-each-ref", "--format=%(refname)%00%(refname:short)%00%(objectname)%00%(upstream:short)", "refs/heads", "refs/remotes", "refs/tags"], { signal, maxBuffer: 512 * 1024 }),
+  ]);
+  return { commits: parseLog(log), refs: parseRefs(refs) };
 }
 
 async function inspectPatch(root, { signal, runGit }) {
@@ -517,7 +526,7 @@ function inspectionFor(root, runGit, { reuse = false } = {}) {
   if (record && record.controller.signal.aborted) record = null;
   if (record) return record;
   const controller = new AbortController();
-  record = { root, controller, consumers: 0, active: 1, evictTimer: null, overview: null, patch: null };
+  record = { root, controller, consumers: 0, active: 1, evictTimer: null, overview: null, history: null, patch: null };
   record.overview = inspectOverview(root, { signal: controller.signal, runGit }).finally(() => {
     record.active -= 1;
     scheduleEviction(record);
@@ -526,11 +535,19 @@ function inspectionFor(root, runGit, { reuse = false } = {}) {
   return record;
 }
 
-export async function readWorkspaceDiff(root, { includePatch = false, reuse = false, signal, runGit = runBoundedGit } = {}) {
+export async function readWorkspaceDiff(root, { includePatch = false, includeHistory = true, reuse = false, signal, runGit = runBoundedGit } = {}) {
   const resolved = await resolveInspectorPath(root, "", { kind: "directory" });
   const record = inspectionFor(resolved.path, runGit, { reuse });
-  if (!includePatch) return track(record, record.overview, signal);
-  if (!record.patch) {
+  if (includeHistory && !record.history) {
+    record.active += 1;
+    record.history = record.overview.then((overview) => overview.repository
+      ? inspectHistory(resolved.path, { signal: record.controller.signal, runGit })
+      : {}).finally(() => {
+      record.active -= 1;
+      scheduleEviction(record);
+    });
+  }
+  if (includePatch && !record.patch) {
     record.active += 1;
     record.patch = record.overview.then(async (overview) => ({
       ...overview,
@@ -540,5 +557,19 @@ export async function readWorkspaceDiff(root, { includePatch = false, reuse = fa
       scheduleEviction(record);
     });
   }
-  return track(record, record.patch, signal);
+  const overview = includePatch ? record.patch : record.overview;
+  if (!includeHistory) return track(record, overview, signal);
+  return track(record, Promise.all([overview, record.history]).then(([summary, history]) => ({ ...summary, ...history })), signal);
+}
+
+export async function readWorkspaceCommit(root, hash, { signal, runGit = runBoundedGit } = {}) {
+  if (!/^[0-9a-f]{40}$/i.test(hash)) throw inspectorError("invalid_workspace_commit", "The requested commit is invalid");
+  const resolved = await resolveInspectorPath(root, "", { kind: "directory" });
+  try {
+    const result = await runGit(resolved.path, ["show", "--format=fuller", "--stat", "--patch", "--no-ext-diff", "--no-color", hash], { signal, maxBuffer: 4 * 1024 * 1024 });
+    return { hash: hash.toLowerCase(), content: result.stdout };
+  } catch (error) {
+    if (isAbort(error)) throw error;
+    throw inspectorError("workspace_commit_not_found", "The requested commit is not available");
+  }
 }

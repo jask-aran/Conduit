@@ -77,6 +77,12 @@
 }
 
 * { box-sizing: border-box; }
+/* Native scrollbars are part of the charcoal control plane, not browser chrome. */
+:where(.dark) { scrollbar-color: color-mix(in oklch, var(--muted-foreground), transparent 42%) transparent; scrollbar-width: thin; }
+:where(.dark) ::-webkit-scrollbar { width: 5px; height: 5px; }
+:where(.dark) ::-webkit-scrollbar-track, :where(.dark) ::-webkit-scrollbar-corner { background: transparent; }
+:where(.dark) ::-webkit-scrollbar-thumb { border-radius: 999px; background: color-mix(in oklch, var(--muted-foreground), transparent 42%); }
+:where(.dark) ::-webkit-scrollbar-thumb:hover { background: var(--muted-foreground); }
 html, body { height: 100%; }
 body {
   width: 100%;

@@ -112,9 +112,9 @@ The composer slash Popover contains only `/attach`. A project-aware breadcrumb
 identifies where each chat belongs.
 
 The chat header, Cmd/Ctrl+., and Workspace views… open a per-chat Workspace
-panel. Files and Source Control are read-only: the lazy directory API hides
-`.conduit`, rejects symlinks and traversal, and caps text previews at 1 MiB;
-Git controls only refresh and copy branch/commit IDs. Terminal is available for
+panel. The lazy directory API hides `.conduit`, rejects symlinks and traversal,
+and caps text previews at 1 MiB. Source Control can stage, unstage, commit,
+fetch, pull, push, and inspect one historical commit on demand. Terminal is available for
 every chat, starts at the validated Workspace root for Workspace chats and the
 server home directory otherwise, and remains server-owned after the browser
 leaves its tab. The terminal header can store up to 12 server-persisted command
@@ -478,7 +478,8 @@ starting, and browser-attached processes remain resident.
   current revision saves an open file, while `If-Match: *` replaces an
   existing file
 - `DELETE /v0/projects/:id/file?path=…` deletes one validated regular file
-- `GET /v0/projects/:id/diff` returns bounded Git status; `?patch=1&reuse=1` reuses the short-lived status inspection and additionally returns staged/unstaged unified diff after the patch disclosure opens
+- `GET /v0/projects/:id/diff` returns bounded Git status; `?history=0` defers the graph and refs until the Graph detail opens, while `?patch=1&reuse=1` reuses the short-lived status inspection and additionally returns staged/unstaged unified diff
+- `GET /v0/projects/:id/commits/:hash` returns one validated full commit patch, bounded to 4 MiB
 - `POST /v0/projects/:id/move-sessions`
 - `GET /v0/workspaces/policy` returns the server-owned allowlist, default
   Workspace parent, and input-safe default path

@@ -24,6 +24,7 @@ interface GitActionResult { ok: true; output?: string; }
 interface GitCommit { graph: string; hash: string; shortHash: string; subject: string; author: string; authoredAt: string; }
 interface GitRef { name: string; hash: string; upstream: string | null; kind: "local" | "remote" | "tag"; }
 interface DiffPayload { repository: boolean; branch?: string; upstream?: string | null; ahead?: number; behind?: number; commits?: GitCommit[]; refs?: GitRef[]; files: { status: string; path: string }[]; diff: string; }
+interface GitCommitDetail { hash: string; content: string; }
 type PanelTab = "files" | "diff" | "artifacts" | "terminal";
 type ArtifactMode = "outputs" | "interactive";
 type GitAction = "stage" | "stage-all" | "unstage" | "unstage-all" | "commit" | "fetch" | "pull" | "push";
@@ -48,6 +49,7 @@ const MAX_CACHED_WORKSPACES = 6;
 const workspaceCache = new Map<string, WorkspaceCacheEntry>();
 const COMPACT_UI_MIGRATION_KEY = "conduit:compact-ui-v2";
 const MIN_DETAIL_HEIGHT = 32;
+const MIN_SOURCE_DETAIL_HEIGHT = 96;
 const MIN_WORKSPACE_PANE_WIDTH = 240;
 const WORKSPACE_SPLIT_GUTTER_WIDTH = 9;
 const WIDE_FILES_MIN_WIDTH = 720;
@@ -72,18 +74,24 @@ function errorCode(cause: unknown): string {
   return cause && typeof cause === "object" && "error" in cause && typeof cause.error === "string" ? cause.error : "";
 }
 
-function CommitHistory(props: { commits: GitCommit[]; refs: GitRef[]; branch?: string; onCopy: (hash: string) => void; labelled?: boolean }) {
+function CommitHistory(props: { commits: GitCommit[]; refs: GitRef[]; branch?: string; onCopy: (hash: string) => void; onInspect: (commit: GitCommit) => void; labelled?: boolean }) {
   return <section class="workspace-history">
     <Show when={props.labelled}><header><div><GitCommitHorizontalIcon /><span>History</span></div><small>{props.commits.length} recent</small></header></Show>
     <div class="workspace-history-list">
       <For each={props.commits}>{(commit) =>
         <div class="workspace-commit">
           <code class="workspace-graph-rail" aria-hidden="true">{commit.graph || "*"}</code>
-          <button type="button" title={`Copy ${commit.hash} · ${commit.author} · ${new Date(commit.authoredAt).toLocaleString()}`} onClick={() => props.onCopy(commit.hash)}>
+          <ContextMenu>
+          <ContextMenuTrigger as="button" type="button" title={`Copy ${commit.hash} · ${commit.author} · ${new Date(commit.authoredAt).toLocaleString()}`} onClick={() => props.onCopy(commit.hash)}>
             <div class="workspace-commit-copy"><span>{commit.subject}</span><Show when={props.refs.some((ref) => ref.hash === commit.hash)}><div class="workspace-commit-refs"><For each={props.refs.filter((ref) => ref.hash === commit.hash)}>{(ref) => <code data-kind={ref.kind} data-current={ref.kind === "local" && ref.name === props.branch}>{ref.kind === "local" && ref.name === props.branch ? `HEAD · ${ref.name}` : ref.name}</code>}</For></div></Show></div>
             <small>{commit.author}</small>
             <code>{commit.shortHash}</code>
-          </button>
+          </ContextMenuTrigger>
+          <ContextMenuContent shortcutScope="workspace-panel" class="w-48 workspace-file-menu"><ContextMenuGroup>
+            <ContextMenuItem onSelect={() => props.onInspect(commit)}><EyeIcon />Inspect commit</ContextMenuItem>
+            <ContextMenuItem onSelect={() => props.onCopy(commit.hash)}><CopyIcon />Copy commit ID</ContextMenuItem>
+          </ContextMenuGroup></ContextMenuContent>
+          </ContextMenu>
         </div>
       }</For>
     </div>
@@ -150,6 +158,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
   let panelSurface: HTMLDivElement | undefined;
   let resizeHandle: HTMLDivElement | undefined;
   let detailHost: HTMLElement | undefined;
+  let sourceDetailHost: HTMLElement | undefined;
   let filesHost: HTMLElement | undefined;
   let treeElement: HTMLElement | undefined;
   let treeResizeHandle: HTMLDivElement | undefined;
@@ -191,6 +200,8 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
   const slotHandles = new Map<FileSlotId, FileSlotHandle>();
   const [wrapLines, setWrapLines] = createSignal(localStorage.getItem(WRAP_LINES_KEY) === "true");
   const [diff, setDiff] = createSignal<DiffPayload | null>(null);
+  const [commitDetail, setCommitDetail] = createSignal<GitCommitDetail | null>(null);
+  const [commitDetailLoading, setCommitDetailLoading] = createSignal(false);
   const [commitMessage, setCommitMessage] = createSignal("");
   const [gitAction, setGitAction] = createSignal("");
   const [stagedOpen, setStagedOpen] = createSignal(true);
@@ -223,10 +234,14 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
   const [terminalFocusRequest, setTerminalFocusRequest] = createSignal(0);
   const detailOpenKey = () => `conduit:workspace-panel:${props.chatId()}:${tab()}:detail-open`;
   const detailHeightKey = () => `conduit:workspace-panel:${props.chatId()}:${tab()}:detail-height`;
+  const sourceDetailOpenKey = () => `conduit:workspace-panel:${props.chatId()}:diff:source-detail-open`;
+  const sourceDetailHeightKey = () => `conduit:workspace-panel:${props.chatId()}:diff:source-detail-height`;
   const detailOpenFor = (nextTab: PanelTab) => localStorage.getItem(`conduit:workspace-panel:${props.chatId()}:${nextTab}:detail-open`) ?? (nextTab === "diff" ? "false" : "true");
   const [detailOpen, setDetailOpen] = createSignal(detailOpenFor(tab()) === "true");
   const [diffDetailOpen, setDiffDetailOpen] = createSignal(detailOpenFor("diff") === "true");
+  const [sourceDetailOpen, setSourceDetailOpen] = createSignal(localStorage.getItem(sourceDetailOpenKey()) === "true");
   const [detailHeight, setDetailHeight] = createSignal(Math.max(128, Number(localStorage.getItem(detailHeightKey())) || 288));
+  const [sourceDetailHeight, setSourceDetailHeight] = createSignal(Math.max(MIN_SOURCE_DETAIL_HEIGHT, Number(localStorage.getItem(sourceDetailHeightKey())) || 224));
   const hasPending = (operation?: string) => [...pending().keys()].some((version) => !operation || requests.get(operation)?.version === version);
   const diffLoading = () => hasPending("diff");
   const filesLoading = () => [...requests.keys()].some((operation) => operation.startsWith("directory:") && hasPending(operation));
@@ -511,15 +526,23 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
     setDetailOpen(next);
     localStorage.setItem(detailOpenKey(), String(next));
   };
+  const setSourceDetailVisible = (open: boolean) => {
+    setSourceDetailOpen(open);
+    localStorage.setItem(sourceDetailOpenKey(), String(open));
+  };
+  const toggleSourceDetail = () => setSourceDetailVisible(!sourceDetailOpen());
   const selectSourceDetail = (patch: boolean) => {
+    setSourceDetailVisible(true);
+    setCommitDetail(null);
     setDiffDetailOpen(patch);
     localStorage.setItem(`conduit:workspace-panel:${props.chatId()}:diff:detail-open`, String(patch));
-    if (patch && !diff()?.diff) void loadDiff(true, true);
+    if (patch && !diff()?.diff) void loadDiff(true, false, true);
+    if (!patch && !diff()?.commits) void loadDiff(false, true, true);
   };
   let stopDetailResize: (() => void) | undefined;
+  let stopSourceDetailResize: (() => void) | undefined;
   const maxDetailHeight = () => Math.max(MIN_DETAIL_HEIGHT, (detailHost?.clientHeight || window.innerHeight) -
-    (detailHost?.querySelector<HTMLElement>(".workspace-detail-toggle")?.offsetHeight || 32) -
-    (detailHost?.querySelector<HTMLElement>(".workspace-detail-resize-handle")?.offsetHeight || 12) -
+    (detailHost?.querySelector<HTMLElement>(".workspace-detail-dock-header, .workspace-preview-header")?.offsetHeight || 32) -
     MIN_DETAIL_HEIGHT);
   const clampDetailHeight = (value: number) => Math.max(MIN_DETAIL_HEIGHT, Math.min(maxDetailHeight(), value));
   const startDetailResize = (event: PointerEvent) => {
@@ -564,6 +587,46 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
         : clampDetailHeight(detailHeight() + (event.key === "ArrowUp" ? 16 : -16));
     setDetailHeight(next);
     localStorage.setItem(detailHeightKey(), String(next));
+  };
+  const maxSourceDetailHeight = () => Math.max(MIN_SOURCE_DETAIL_HEIGHT, (sourceDetailHost?.clientHeight || window.innerHeight) - 112);
+  const clampSourceDetailHeight = (value: number) => Math.max(MIN_SOURCE_DETAIL_HEIGHT, Math.min(maxSourceDetailHeight(), value));
+  const startSourceDetailResize = (event: PointerEvent) => {
+    stopSourceDetailResize?.();
+    event.preventDefault();
+    const startY = event.clientY;
+    const startHeight = sourceDetailHeight();
+    let pendingHeight = startHeight;
+    let frame = 0;
+    const apply = () => { frame = 0; setSourceDetailHeight(clampSourceDetailHeight(pendingHeight)); };
+    const move = (moveEvent: PointerEvent) => {
+      pendingHeight = startHeight + startY - moveEvent.clientY;
+      if (!frame) frame = requestAnimationFrame(apply);
+    };
+    const stop = () => {
+      if (frame) cancelAnimationFrame(frame);
+      const next = clampSourceDetailHeight(pendingHeight);
+      setSourceDetailHeight(next);
+      localStorage.setItem(sourceDetailHeightKey(), String(next));
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", stop);
+      window.removeEventListener("pointercancel", stop);
+      document.body.classList.remove("workspace-detail-resizing");
+      stopSourceDetailResize = undefined;
+    };
+    stopSourceDetailResize = stop;
+    document.body.classList.add("workspace-detail-resizing");
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", stop, { once: true });
+    window.addEventListener("pointercancel", stop, { once: true });
+  };
+  const resizeSourceDetailByKey = (event: KeyboardEvent) => {
+    if (!["ArrowUp", "ArrowDown", "Home", "End"].includes(event.key)) return;
+    event.preventDefault();
+    const next = event.key === "Home" ? MIN_SOURCE_DETAIL_HEIGHT : event.key === "End"
+      ? maxSourceDetailHeight()
+      : clampSourceDetailHeight(sourceDetailHeight() + (event.key === "ArrowUp" ? 16 : -16));
+    setSourceDetailHeight(next);
+    localStorage.setItem(sourceDetailHeightKey(), String(next));
   };
   const loadDirectory = async (directory = "", background = false, more = false) => {
     if (background && requests.has(`directory:${directory}`)) return false;
@@ -939,7 +1002,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
     await Promise.all(slotsToRefresh.map((handle) => handle.reload()));
     if (props.projectId() !== projectId) return;
     if (treeChanged) toast.info("Workspace files updated");
-    await loadDiff(tabVisible("diff") && diffDetailOpen(), false, true);
+    await loadDiff(tabVisible("diff") && sourceDetailOpen() && diffDetailOpen(), tabVisible("diff") && sourceDetailOpen() && !diffDetailOpen(), false, true);
   };
   const pollWorkspace = async () => {
     if (pollingWorkspace || uploading()) return true;
@@ -983,22 +1046,41 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
     setWorkspaceStale(false);
     setPollRetry((attempt) => attempt + 1);
   };
-  const loadDiff = async (includePatch = false, reuse = false, background = false) => {
+  const loadDiff = async (includePatch = false, includeHistory = false, reuse = false, background = false) => {
     const { request, controller } = startRequest("diff", !background);
     try {
       const query = new URLSearchParams();
       if (includePatch) query.set("patch", "1");
+      if (!includeHistory) query.set("history", "0");
       if (reuse) query.set("reuse", "1");
       const payload = await api<DiffPayload>(`/v0/projects/${encodeURIComponent(request.projectId)}/diff${query.size ? `?${query}` : ""}`, { signal: controller.signal });
       if (ownsRequest(request)) {
-        setDiff(payload);
-        cacheWorkspace(request.projectId, { diff: payload });
+        const next = includeHistory ? payload : { ...payload, commits: undefined, refs: undefined };
+        setDiff(next);
+        cacheWorkspace(request.projectId, { diff: next });
       }
     }
     catch (cause) {
       if (ownsRequest(request) && !wasAborted(cause)) reportError((cause as Error).message);
     }
     finally {
+      finishRequest(request);
+    }
+  };
+  const inspectCommit = async (commit: GitCommit) => {
+    setSourceDetailVisible(true);
+    setDiffDetailOpen(true);
+    localStorage.setItem(`conduit:workspace-panel:${props.chatId()}:diff:detail-open`, "true");
+    setCommitDetail(null);
+    setCommitDetailLoading(true);
+    const { request, controller } = startRequest("commit", true);
+    try {
+      const payload = await api<GitCommitDetail>(`/v0/projects/${encodeURIComponent(request.projectId)}/commits/${encodeURIComponent(commit.hash)}`, { signal: controller.signal });
+      if (ownsRequest(request)) setCommitDetail(payload);
+    } catch (cause) {
+      if (ownsRequest(request) && !wasAborted(cause)) reportError((cause as Error).message);
+    } finally {
+      if (ownsRequest(request)) setCommitDetailLoading(false);
       finishRequest(request);
     }
   };
@@ -1014,7 +1096,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
         body: JSON.stringify({ action, path, message: action === "commit" ? commitMessage().trim() : undefined }),
       });
       if (action === "commit") setCommitMessage("");
-      await loadDiff(diffDetailOpen());
+      await loadDiff(sourceDetailOpen() && diffDetailOpen(), sourceDetailOpen() && !diffDetailOpen());
     } catch (cause) {
       reportError((cause as Error).message);
     } finally {
@@ -1162,7 +1244,8 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
     cancelPanelEdgeMotion();
     clearPanelSurfaceMotion();
     stopResize?.();
-    stopDetailResize?.();
+      stopDetailResize?.();
+      stopSourceDetailResize?.();
     filesResizeObserver?.disconnect();
     splitResizeObserver?.disconnect();
     document.removeEventListener("visibilitychange", updateDocumentVisibility);
@@ -1189,7 +1272,10 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
     batch(() => {
       setDetailOpen(detailOpenFor(nextTab) === "true");
       setDiffDetailOpen(detailOpenFor("diff") === "true");
+      setSourceDetailOpen(localStorage.getItem(sourceDetailOpenKey()) === "true");
       setDetailHeight(Math.max(MIN_DETAIL_HEIGHT, Number(localStorage.getItem(`conduit:workspace-panel:${props.chatId()}:${nextTab}:detail-height`)) || 288));
+      setSourceDetailHeight(Math.max(MIN_SOURCE_DETAIL_HEIGHT, Number(localStorage.getItem(sourceDetailHeightKey())) || 224));
+      setCommitDetail(null);
       if (projectChanged) {
         pendingWidthCommit = Number(localStorage.getItem(widthKey())) || 336;
         setTreeWidth(Math.max(MIN_TREE_WIDTH, Math.min(MAX_TREE_WIDTH, Number(localStorage.getItem(treeWidthKey())) || DEFAULT_TREE_WIDTH)));
@@ -1213,7 +1299,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
     if (request && request !== previous && props.open()) focusTabDefault(tab());
   }));
   createEffect(on(
-    () => [props.projectId(), tab(), secondaryTab(), props.open(), props.expanded(), diffDetailOpen()] as const,
+    () => [props.projectId(), tab(), secondaryTab(), props.open(), props.expanded(), diffDetailOpen(), sourceDetailOpen()] as const,
     ([projectId, activeTab, companionTab, open, panelExpanded]) => {
       if (!open) return;
       const projectChanged = loadedProjectId !== projectId;
@@ -1236,10 +1322,12 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
       const diffVisible = activeTab === "diff" || (panelExpanded && companionTab === "diff");
       if (filesVisible && !directories()[""] && !filesLoading()) void loadDirectory("", false);
       if (diffVisible) {
-        const includePatch = diffDetailOpen();
+        const includePatch = sourceDetailOpen() && diffDetailOpen();
+        const includeHistory = sourceDetailOpen() && !diffDetailOpen();
         const current = diff();
         const needsPatch = diffVisible && includePatch;
-        if (!current || (needsPatch && !current.diff)) void loadDiff(needsPatch, false, Boolean(current));
+        const needsHistory = diffVisible && includeHistory;
+        if (!current || (needsPatch && !current.diff) || (needsHistory && !current.commits)) void loadDiff(needsPatch, needsHistory, Boolean(current));
       }
     }));
 
@@ -1647,11 +1735,12 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
             }}
           />
         </Show>
-        <Show when={!filesWide()}>
-          <div class="workspace-detail-toggle"><button aria-expanded={detailOpen()} onClick={toggleDetail}><ChevronDownIcon data-open={detailOpen()} /><span>File preview</span><Show when={primaryFile()}>{(file) => <small>{file().path} · {formatFileSize(file().size)}</small>}</Show></button></div>
+        <Show when={!filesWide() && !detailOpen()}>
+          <div class="workspace-detail-dock-header">
+            <button type="button" class="workspace-detail-disclosure" aria-expanded={false} onClick={toggleDetail}><ChevronDownIcon data-open={false} /><span>File preview</span></button>
+          </div>
         </Show>
         <Show when={filesWide() || detailOpen()}><>
-          <Show when={!filesWide()}><div class="workspace-detail-resize-handle" role="separator" aria-label="Resize file preview" aria-orientation="horizontal" aria-valuemin={MIN_DETAIL_HEIGHT} aria-valuemax={maxDetailHeight()} aria-valuenow={detailHeight()} tabIndex={0} onPointerDown={startDetailResize} onKeyDown={resizeDetailByKey} /></Show>
           <WorkspaceFileSlot
             projectId={props.projectId()}
             path={openPaths().primary}
@@ -1660,6 +1749,10 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
             closable={Boolean(openPaths().primary)}
             busy={uploading()}
             wrap={wrapLines()}
+            headerPrefix={!filesWide() ? <div class="workspace-detail-dock-prefix">
+              <div class="workspace-detail-resize-handle" role="separator" aria-label="Resize file preview" aria-orientation="horizontal" aria-valuemin={MIN_DETAIL_HEIGHT} aria-valuemax={maxDetailHeight()} aria-valuenow={detailHeight()} tabIndex={0} onPointerDown={startDetailResize} onKeyDown={resizeDetailByKey} />
+              <button type="button" class="workspace-detail-disclosure" aria-expanded={detailOpen()} onClick={toggleDetail}><ChevronDownIcon data-open={detailOpen()} /><span>File preview</span></button>
+            </div> : undefined}
             height={filesWide() ? undefined : `${detailHeight() / (openPaths().secondary ? 2 : 1)}px`}
             onToggleWrap={toggleWrapLines}
             onFocus={() => setFocusedSlot("primary")}
@@ -1705,11 +1798,11 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
         </></Show>
       </div>
     </Show>
-    <Show when={tabVisible("diff")}><section ref={(element) => { detailHost = element; }} class="workspace-diff" data-position={panePosition("diff")}>
+    <Show when={tabVisible("diff")}><section ref={(element) => { sourceDetailHost = element; }} class="workspace-diff" data-position={panePosition("diff")}>
       <div class="workspace-diff-overview">
       <div class="workspace-status-strip">
         <div><GitBranchIcon /><strong>{diff() ? diff()!.repository ? diff()!.branch : "Not a Git repository" : "Loading Git status…"}</strong><Show when={diff()?.upstream}><small>{diff()?.upstream}</small></Show></div>
-        <div><Show when={diff()?.ahead || diff()?.behind}><span class="workspace-sync-state">↑ {diff()?.ahead || 0} ↓ {diff()?.behind || 0}</span></Show><Button variant="ghost" size="icon-sm" aria-label="Copy branch name" disabled={!diff()?.branch} onClick={() => copy(diff()?.branch)}><CopyIcon /></Button><Button variant="ghost" size="icon-sm" aria-label="Refresh Git status" disabled={diffLoading()} onClick={() => void loadDiff(diffDetailOpen())}><RefreshCwIcon /></Button></div>
+        <div><Show when={diff()?.ahead || diff()?.behind}><span class="workspace-sync-state">↑ {diff()?.ahead || 0} ↓ {diff()?.behind || 0}</span></Show><Button variant="ghost" size="icon-sm" aria-label="Copy branch name" disabled={!diff()?.branch} onClick={() => copy(diff()?.branch)}><CopyIcon /></Button><Button variant="ghost" size="icon-sm" aria-label="Refresh Git status" disabled={diffLoading()} onClick={() => void loadDiff(sourceDetailOpen() && diffDetailOpen(), sourceDetailOpen() && !diffDetailOpen())}><RefreshCwIcon /></Button></div>
       </div>
       <Show when={workspaceStale()}><div class="workspace-freshness-notice" role="status" aria-live="polite"><span>Not updating</span><span aria-hidden="true">·</span><button type="button" onClick={retryWorkspacePoll}>Retry</button></div></Show>
       <Show when={diff()?.repository}>
@@ -1737,8 +1830,10 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
         </div>
       </Show>
       </div>
-      <section class="workspace-source-workbench">
-        <header>
+      <section class="workspace-source-workbench" data-open={sourceDetailOpen()} style={sourceDetailOpen() ? { height: `${sourceDetailHeight()}px` } : undefined}>
+        <header class="workspace-detail-dock-header">
+          <Show when={sourceDetailOpen()}><div class="workspace-source-resize-handle" role="separator" aria-label="Resize details" aria-orientation="horizontal" aria-valuemin={MIN_SOURCE_DETAIL_HEIGHT} aria-valuemax={maxSourceDetailHeight()} aria-valuenow={sourceDetailHeight()} tabIndex={0} onPointerDown={startSourceDetailResize} onKeyDown={resizeSourceDetailByKey} /></Show>
+          <button type="button" class="workspace-detail-disclosure" aria-expanded={sourceDetailOpen()} onClick={toggleSourceDetail}><ChevronDownIcon data-open={sourceDetailOpen()} /><span>Details</span></button>
           <div class="workspace-source-modes" role="tablist" aria-label="Source Control detail">
             <button type="button" role="tab" aria-selected={!diffDetailOpen()} onClick={() => selectSourceDetail(false)}><GitCommitHorizontalIcon />Graph</button>
             <button type="button" role="tab" aria-selected={diffDetailOpen()} onClick={() => selectSourceDetail(true)}><FileDiffIcon />Patch</button>
@@ -1750,9 +1845,9 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
             <button type="button" aria-label="Push current branch" title="Push current branch" disabled={!diff()?.upstream || Boolean(gitAction())} onClick={() => void runGitAction("push")}><SendIcon /><span>Push</span></button>
           </div>
         </header>
-        <Show when={diffDetailOpen()} fallback={<Show when={Boolean(diff()?.commits?.length)} fallback={<div class="workspace-panel-empty">No commit history available.</div>}><CommitHistory commits={diff()?.commits || []} refs={diff()?.refs || []} branch={diff()?.branch} onCopy={copy} /></Show>}>
-          <div class="workspace-patch"><Show when={diff()?.diff} fallback={<div class="workspace-panel-empty">{diff()?.repository ? "Working tree is clean." : "Diff is available for Git projects."}</div>}>{(content) => <PatchView content={content()} />}</Show></div>
-        </Show>
+        <Show when={sourceDetailOpen()}><Show when={diffDetailOpen()} fallback={<Show when={Boolean(diff()?.commits?.length)} fallback={<div class="workspace-panel-empty">No commit history available.</div>}><CommitHistory commits={diff()?.commits || []} refs={diff()?.refs || []} branch={diff()?.branch} onCopy={copy} onInspect={inspectCommit} /></Show>}>
+          <div class="workspace-patch"><Show when={commitDetailLoading()} fallback={<Show when={commitDetail()} fallback={<Show when={diff()?.diff} fallback={<div class="workspace-panel-empty">{diff()?.repository ? "Working tree is clean." : "Diff is available for Git projects."}</div>}>{(content) => <PatchView content={content()} />}</Show>}>{(detail) => <PatchView content={detail().content} />}</Show>}><div class="workspace-panel-empty">Loading commit…</div></Show></div>
+        </Show></Show>
       </section>
     </section></Show>
     <Show when={tabVisible("artifacts")}><section class="workspace-artifacts" data-position={panePosition("artifacts")}>
