@@ -39,6 +39,7 @@ import { LeaderPalette } from "./navigation/leader-palette";
 import type { PaletteActions, PaletteContext } from "./palette/command-registry";
 import { bindVisualViewportShell, isMobileLayout, MOBILE_LAYOUT_QUERY, setMobileOverlayKind } from "./navigation/mobile-layout";
 import { mobileSwipeAction } from "./navigation/mobile-swipe";
+import { bindOverlayScrollbars } from "./navigation/overlay-scrollbars";
 import { Sidebar, type SidebarCommand } from "./navigation/sidebar";
 import { clampSidebarChatLimit, selectedSidebarChatLimit, SIDEBAR_CHAT_LIMIT_STORAGE_KEY } from "./navigation/sidebar-preferences";
 import { CHAT_SORT_STORAGE_KEY, selectedChatSort, useChatSort } from "./preferences/chat-sort";
@@ -1415,6 +1416,7 @@ function App() {
       releaseApplicationContext();
     });
     onCleanup(bindVisualViewportShell());
+    onCleanup(bindOverlayScrollbars());
     const media = typeof matchMedia === "function" ? matchMedia(MOBILE_LAYOUT_QUERY) : null;
     const onViewportChange = () => {
       if (!media?.matches) {

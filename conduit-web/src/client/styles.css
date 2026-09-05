@@ -77,12 +77,16 @@
 }
 
 * { box-sizing: border-box; }
-/* Native scrollbars are part of the charcoal control plane, not browser chrome. */
-:where(.dark) { scrollbar-color: color-mix(in oklch, var(--muted-foreground), transparent 42%) transparent; scrollbar-width: thin; }
-:where(.dark) ::-webkit-scrollbar { width: 5px; height: 5px; }
-:where(.dark) ::-webkit-scrollbar-track, :where(.dark) ::-webkit-scrollbar-corner { background: transparent; }
-:where(.dark) ::-webkit-scrollbar-thumb { border-radius: 999px; background: color-mix(in oklch, var(--muted-foreground), transparent 42%); }
-:where(.dark) ::-webkit-scrollbar-thumb:hover { background: var(--muted-foreground); }
+/* Standard properties override WebKit pseudo-element painting when non-auto.
+   Keep Firefox's thin fallback, but let Chrome/Safari use the shared thumb. */
+:root {
+  --native-scrollbar-width: thin;
+  --native-scrollbar-color: color-mix(in oklch, var(--muted-foreground), transparent 42%) transparent;
+}
+@supports selector(::-webkit-scrollbar) {
+  :root { --native-scrollbar-width: auto; --native-scrollbar-color: auto; }
+}
+:where(.dark) { scrollbar-color: var(--native-scrollbar-color); scrollbar-width: var(--native-scrollbar-width); }
 html, body { height: 100%; }
 body {
   width: 100%;
@@ -542,7 +546,7 @@ svg { stroke-width: 1.5; }
 .command-close { flex: none; color: var(--muted-foreground); }
 .command-close svg { width: 12.8px; height: 12.8px; }
 .command-selection-count { flex: none; color: var(--muted-foreground); font-size: 9.6px; white-space: nowrap; }
-.command-list { min-height: 0; flex: 1; overflow-y: auto; padding: 5.6px; scrollbar-width: thin; }
+.command-list { min-height: 0; flex: 1; overflow-y: auto; padding: 5.6px; scrollbar-width: var(--native-scrollbar-width); }
 .command-list:focus-visible { outline: none; }
 .command-list[data-mode-focus] { box-shadow: inset 0 0 0 0.8px color-mix(in oklch, var(--ring), transparent 72%); }
 .command-hint-bar { display: flex; min-width: 0; min-height: 28.8px; align-items: center; gap: 8px; border-top: 1px solid var(--border); background: var(--popover); padding: 5.6px 9.6px; color: var(--muted-foreground); font-size: 8.8px; }
@@ -567,7 +571,7 @@ svg { stroke-width: 1.5; }
 .command-hint-more summary::after { content: "▾"; margin-left: 4px; color: var(--muted-foreground); }
 .command-hint-more[open] summary::after { content: "▴"; }
 .command-hint-more-list { display: flex; flex-wrap: wrap; gap: 4.8px 9.6px; margin-top: 6.4px; border-top: 1px solid var(--border); padding-top: 6.4px; }
-.command-list, .model-scope-list, .settings-content, .artifact pre, .tool-card pre, .composer textarea, .attachment-tray, .external-link-url, .conduit-modal-card, .workspace-tree, .workspace-preview pre, .workspace-changes, .workspace-git-graph, .workspace-diff-content { scrollbar-color: color-mix(in oklch, var(--foreground), transparent 72%) transparent; scrollbar-width: thin; }
+.command-list, .model-scope-list, .settings-content, .artifact pre, .tool-card pre, .composer textarea, .attachment-tray, .external-link-url, .conduit-modal-card, .workspace-tree, .workspace-preview pre, .workspace-changes, .workspace-git-graph, .workspace-diff-content { scrollbar-color: var(--native-scrollbar-color); scrollbar-width: var(--native-scrollbar-width); }
 .command-list::-webkit-scrollbar, .model-scope-list::-webkit-scrollbar, .settings-content::-webkit-scrollbar, .artifact pre::-webkit-scrollbar, .tool-card pre::-webkit-scrollbar, .composer textarea::-webkit-scrollbar, .attachment-tray::-webkit-scrollbar, .external-link-url::-webkit-scrollbar, .conduit-modal-card::-webkit-scrollbar, .workspace-tree::-webkit-scrollbar, .workspace-preview pre::-webkit-scrollbar, .workspace-changes::-webkit-scrollbar, .workspace-git-graph::-webkit-scrollbar, .workspace-diff-content::-webkit-scrollbar { width: 5.6px; height: 5.6px; }
 .command-list::-webkit-scrollbar-thumb, .model-scope-list::-webkit-scrollbar-thumb, .settings-content::-webkit-scrollbar-thumb, .artifact pre::-webkit-scrollbar-thumb, .tool-card pre::-webkit-scrollbar-thumb, .composer textarea::-webkit-scrollbar-thumb, .attachment-tray::-webkit-scrollbar-thumb, .external-link-url::-webkit-scrollbar-thumb, .conduit-modal-card::-webkit-scrollbar-thumb, .workspace-tree::-webkit-scrollbar-thumb, .workspace-preview pre::-webkit-scrollbar-thumb, .workspace-changes::-webkit-scrollbar-thumb, .workspace-git-graph::-webkit-scrollbar-thumb, .workspace-diff-content::-webkit-scrollbar-thumb { border: 1.6px solid transparent; border-radius: 999px; background: color-mix(in oklch, var(--foreground), transparent 72%); background-clip: padding-box; }
 .command-empty { padding: 14.4px 9.6px; color: var(--muted-foreground); font-size: 11.2px; text-align: center; }
@@ -1338,7 +1342,7 @@ svg { stroke-width: 1.5; }
 .command-close { flex: none; color: var(--muted-foreground); }
 .command-close svg { width: 16px; height: 16px; }
 .command-selection-count { flex: none; color: var(--muted-foreground); font-size: 12px; white-space: nowrap; }
-.command-list { min-height: 0; flex: 1; overflow-y: auto; padding: 7px; scrollbar-width: thin; }
+.command-list { min-height: 0; flex: 1; overflow-y: auto; padding: 7px; scrollbar-width: var(--native-scrollbar-width); }
 .command-list:focus-visible { outline: none; }
 .command-list[data-mode-focus] { box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--ring), transparent 72%); }
 .command-hint-bar { display: flex; min-width: 0; min-height: 36px; align-items: center; gap: 10px; border-top: 1px solid var(--border); background: var(--popover); padding: 7px 12px; color: var(--muted-foreground); font-size: 11px; }
@@ -1363,7 +1367,7 @@ svg { stroke-width: 1.5; }
 .command-hint-more summary::after { content: "▾"; margin-left: 5px; color: var(--muted-foreground); }
 .command-hint-more[open] summary::after { content: "▴"; }
 .command-hint-more-list { display: flex; flex-wrap: wrap; gap: 6px 12px; margin-top: 8px; border-top: 1px solid var(--border); padding-top: 8px; }
-.command-list, .model-scope-list, .settings-content, .artifact pre, .tool-card pre, .composer textarea, .attachment-tray, .external-link-url, .conduit-modal-card, .workspace-tree, .workspace-preview pre, .workspace-changes, .workspace-git-graph, .workspace-diff-content { scrollbar-color: color-mix(in oklch, var(--foreground), transparent 72%) transparent; scrollbar-width: thin; }
+.command-list, .model-scope-list, .settings-content, .artifact pre, .tool-card pre, .composer textarea, .attachment-tray, .external-link-url, .conduit-modal-card, .workspace-tree, .workspace-preview pre, .workspace-changes, .workspace-git-graph, .workspace-diff-content { scrollbar-color: var(--native-scrollbar-color); scrollbar-width: var(--native-scrollbar-width); }
 .command-list::-webkit-scrollbar, .model-scope-list::-webkit-scrollbar, .settings-content::-webkit-scrollbar, .artifact pre::-webkit-scrollbar, .tool-card pre::-webkit-scrollbar, .composer textarea::-webkit-scrollbar, .attachment-tray::-webkit-scrollbar, .external-link-url::-webkit-scrollbar, .conduit-modal-card::-webkit-scrollbar, .workspace-tree::-webkit-scrollbar, .workspace-preview pre::-webkit-scrollbar, .workspace-changes::-webkit-scrollbar, .workspace-git-graph::-webkit-scrollbar, .workspace-diff-content::-webkit-scrollbar { width: 7px; height: 7px; }
 .command-list::-webkit-scrollbar-thumb, .model-scope-list::-webkit-scrollbar-thumb, .settings-content::-webkit-scrollbar-thumb, .artifact pre::-webkit-scrollbar-thumb, .tool-card pre::-webkit-scrollbar-thumb, .composer textarea::-webkit-scrollbar-thumb, .attachment-tray::-webkit-scrollbar-thumb, .external-link-url::-webkit-scrollbar-thumb, .conduit-modal-card::-webkit-scrollbar-thumb, .workspace-tree::-webkit-scrollbar-thumb, .workspace-preview pre::-webkit-scrollbar-thumb, .workspace-changes::-webkit-scrollbar-thumb, .workspace-git-graph::-webkit-scrollbar-thumb, .workspace-diff-content::-webkit-scrollbar-thumb { border: 2px solid transparent; border-radius: 999px; background: color-mix(in oklch, var(--foreground), transparent 72%); background-clip: padding-box; }
 .command-empty { padding: 18px 12px; color: var(--muted-foreground); font-size: 14px; text-align: center; }
@@ -1859,6 +1863,39 @@ details[open] > summary .settings-chevron { transform: rotate(90deg); }
 .settings-dialog .settings-disclosure > .search-provider-list { margin: 0; border-top: 1px solid var(--border); padding: 12px; }
 .settings-dialog .voice-backend-disclosure { margin-top: 0; }
 .settings-dialog .voice-backend-disclosure > .voice-card { border: 0; border-top: 1px solid var(--border); border-radius: 0; }
+
+/* Native fallback for touch, forced colours, and browsers without popovers. */
+:where(.dark) ::-webkit-scrollbar { width: 8px !important; height: 8px !important; }
+:where(.dark) ::-webkit-scrollbar-track, :where(.dark) ::-webkit-scrollbar-corner { background: transparent !important; }
+:where(.dark) ::-webkit-scrollbar-button { display: none !important; width: 0 !important; height: 0 !important; }
+:where(.dark) ::-webkit-scrollbar-thumb {
+  border: 3px solid transparent !important;
+  border-radius: 999px !important;
+  background: color-mix(in oklch, var(--muted-foreground), transparent 42%) !important;
+  background-clip: padding-box !important;
+}
+:where(.dark) ::-webkit-scrollbar-thumb:hover, :where(.dark) ::-webkit-scrollbar-thumb:active {
+  border-width: 0 !important;
+  background-color: var(--muted-foreground) !important;
+}
+
+/* Mouse overlays never reserve a gutter or intercept input while hidden. */
+:root[data-overlay-scrollbars], :root[data-overlay-scrollbars] * { scrollbar-width: none !important; scrollbar-gutter: auto !important; }
+:root[data-overlay-scrollbars] ::-webkit-scrollbar { display: none !important; }
+.overlay-scrollbar {
+  position: fixed; inset: auto; margin: 0; padding: 0; border: 0;
+  background: transparent; overflow: hidden; box-sizing: border-box;
+  touch-action: none; user-select: none; cursor: default;
+}
+.overlay-scrollbar::backdrop { background: transparent; pointer-events: none; }
+.overlay-scrollbar-thumb {
+  position: absolute; border-radius: 999px;
+  background: var(--muted-foreground); opacity: 0.8;
+  box-shadow: 0 0 0 1px color-mix(in oklch, var(--background), transparent 30%);
+}
+.overlay-scrollbar[data-axis="y"] .overlay-scrollbar-thumb { left: 2px; top: 0; }
+.overlay-scrollbar[data-axis="x"] .overlay-scrollbar-thumb { left: 0; top: 2px; }
+.overlay-scrollbar-thumb:hover, .overlay-scrollbar-thumb:active { opacity: 1; }
 
 @media (max-width: 760px) {
   .settings-dialog .settings-shell { width: calc(100vw - 12px); height: calc(100dvh - 12px); }

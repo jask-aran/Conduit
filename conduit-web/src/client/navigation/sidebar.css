@@ -17,7 +17,7 @@
 [data-sidebar="header"] > [data-sidebar="brand"] { display: flex; order: 1; min-width: 0; height: 33.6px; flex: 1; align-items: stretch; justify-content: flex-start; gap: 8px; border: 0; border-radius: var(--radius-md); background: transparent; padding: 0 4.8px; color: inherit; }
 [data-sidebar="header"] > [data-sidebar="trigger"] { order: 2; margin-left: auto; }
 [data-sidebar="header"] span { display: flex; height: 100%; align-items: center; font-family: Georgia, "Times New Roman", serif; font-size: 25.6px; font-weight: 500; letter-spacing: -0.035em; line-height: 1; }
-.sidebar-content { min-height: 0; flex: 1; overflow-y: auto; padding: 5.6px 6.4px; scrollbar-color: color-mix(in oklch, var(--foreground), transparent 72%) transparent; scrollbar-width: thin; }
+.sidebar-content { min-height: 0; flex: 1; overflow-y: auto; padding: 5.6px 6.4px; scrollbar-color: var(--native-scrollbar-color); scrollbar-width: var(--native-scrollbar-width); }
 .sidebar-content::-webkit-scrollbar { width: 5.6px; height: 5.6px; }
 .sidebar-content::-webkit-scrollbar-thumb { border: 1.6px solid transparent; border-radius: 999px; background: color-mix(in oklch, var(--foreground), transparent 72%); background-clip: padding-box; }
 .sidebar-group { display: flex; flex-direction: column; gap: 0.8px; margin-top: 9.6px; }
@@ -151,7 +151,7 @@
 [data-sidebar="header"] > [data-sidebar="brand"] { display: flex; order: 1; min-width: 0; height: 42px; flex: 1; align-items: stretch; justify-content: flex-start; gap: 10px; border: 0; border-radius: var(--radius-md); background: transparent; padding: 0 6px; color: inherit; }
 [data-sidebar="header"] > [data-sidebar="trigger"] { order: 2; margin-left: auto; }
 [data-sidebar="header"] span { display: flex; height: 100%; align-items: center; font-family: Georgia, "Times New Roman", serif; font-size: 32px; font-weight: 500; letter-spacing: -0.035em; line-height: 1; }
-.sidebar-content { min-height: 0; flex: 1; overflow-y: auto; padding: 7px 8px; scrollbar-color: color-mix(in oklch, var(--foreground), transparent 72%) transparent; scrollbar-width: thin; }
+.sidebar-content { min-height: 0; flex: 1; overflow-y: auto; padding: 7px 8px; scrollbar-color: var(--native-scrollbar-color); scrollbar-width: var(--native-scrollbar-width); }
 .sidebar-content::-webkit-scrollbar { width: 7px; height: 7px; }
 .sidebar-content::-webkit-scrollbar-thumb { border: 2px solid transparent; border-radius: 999px; background: color-mix(in oklch, var(--foreground), transparent 72%); background-clip: padding-box; }
 .sidebar-group { display: flex; flex-direction: column; gap: 1px; margin-top: 12px; }
