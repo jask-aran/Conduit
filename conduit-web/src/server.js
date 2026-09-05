@@ -32,7 +32,7 @@ import {
   validateSession,
 } from "./auth-middleware.js";
 import { NATIVE_APP_ORIGIN, SocketTicketStore } from "./native-auth.js";
-import { listWorkspaceDirectory, readWorkspaceDiff, readWorkspaceFile, readWorkspaceVersion, runWorkspaceGitAction } from "./workspace-inspector.js";
+import { listWorkspaceDirectory, readWorkspaceCommit, readWorkspaceDiff, readWorkspaceFile, readWorkspaceVersion, runWorkspaceGitAction } from "./workspace-inspector.js";
 import { currentMagicDnsOrigin } from "./tailscale-share.js";
 import { buildProjectDashboard } from "./project-dashboard.js";
 import { PtyManager } from "./pty-manager.js";
@@ -459,6 +459,7 @@ registerProjectRoutes(app, {
   preferences,
   projects,
   readSessionPage,
+  readWorkspaceCommit,
   readWorkspaceDiff,
   readWorkspaceFile,
   readWorkspaceVersion,

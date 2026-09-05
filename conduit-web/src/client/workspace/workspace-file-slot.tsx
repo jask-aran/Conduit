@@ -1,4 +1,4 @@
-import { batch, createEffect, createSignal, lazy, on, onCleanup, Show, Suspense } from "solid-js";
+import { batch, createEffect, createSignal, lazy, on, onCleanup, Show, Suspense, type JSX } from "solid-js";
 import { CopyIcon, DownloadIcon, PencilIcon, SaveIcon, Trash2Icon, UploadIcon, WrapTextIcon, XIcon } from "lucide-solid";
 import { toast } from "solid-sonner";
 import { ContextMenu, ContextMenuContent, ContextMenuGroup, ContextMenuItem, ContextMenuSeparator, ContextMenuTrigger, Spinner } from "@/components/primitives";
@@ -62,6 +62,7 @@ export default function WorkspaceFileSlot(props: {
   closable: boolean;
   busy: boolean;
   wrap: boolean;
+  headerPrefix?: JSX.Element;
   height?: string;
   onToggleWrap: () => void;
   onFocus: () => void;
@@ -265,6 +266,7 @@ export default function WorkspaceFileSlot(props: {
     >
       <Show when={image()}>{(file) => <>
         <header class="workspace-preview-header">
+          <Show when={props.headerPrefix}>{props.headerPrefix}</Show>
           <div class="workspace-preview-file" title={file().path}><FileTypeIcon name={file().path} /><span>{file().path}</span></div>
           <small>{[imageDimensions() && `${imageDimensions()!.width} × ${imageDimensions()!.height}`, formatFileSize(file().size)].filter(Boolean).join(" · ")}</small>
           <button type="button" class="workspace-preview-action" aria-label="Download file" title="Download file" onClick={() => void download()}><DownloadIcon /></button>
@@ -287,8 +289,12 @@ export default function WorkspaceFileSlot(props: {
         </Show>
       </>}</Show>
       <Show when={!image()}>
-      <Show when={preview()} fallback={<div class="workspace-panel-empty">Select a text file to preview it.</div>}>{(file) => <>
+      <Show when={preview()} fallback={<>
+        <Show when={props.headerPrefix}><header class="workspace-preview-header">{props.headerPrefix}</header></Show>
+        <div class="workspace-panel-empty">Select a text file to preview it.</div>
+      </>}>{(file) => <>
         <header class="workspace-preview-header">
+          <Show when={props.headerPrefix}>{props.headerPrefix}</Show>
           <div class="workspace-preview-file" title={file().path}><FileTypeIcon name={file().path} /><span>{file().path}</span></div>
           <small>{hasUnsavedChanges() ? "Unsaved" : formatFileSize(file().size)}</small>
           <button type="button" class="workspace-preview-action" aria-label={props.wrap ? "Disable line wrapping" : "Enable line wrapping"} title={props.wrap ? "Disable line wrapping" : "Enable line wrapping"} aria-pressed={props.wrap} onClick={props.onToggleWrap}><WrapTextIcon /></button>

@@ -91,7 +91,7 @@ body.workspace-resizing .workspace-panel { transition: none !important; }
 .workspace-diff-content { flex: 1; overflow: auto; padding: 9.6px; }
 .workspace-preview[data-focused="true"] .workspace-preview-header { background: color-mix(in oklch, var(--background), var(--accent) 48%); box-shadow: inset 0 1.6px 0 0 var(--ring); }
 .workspace-files[data-wide="false"] .workspace-preview[data-slot="secondary"] { border-top: 1px solid var(--border); }
-.workspace-preview-header { display: flex; min-height: 28px; flex: none; align-items: center; gap: 6.4px; padding: 3.2px 4.8px 3.2px 8px; border-bottom: 1px solid var(--border); background: color-mix(in oklch, var(--background), var(--accent) 24%); }
+.workspace-preview-header { position: relative; display: flex; min-height: 28px; flex: none; align-items: center; gap: 6.4px; padding: 3.2px 4.8px 3.2px 8px; border-bottom: 1px solid var(--border); background: color-mix(in oklch, var(--background), var(--accent) 24%); }
 .workspace-preview-file { display: flex; min-width: 0; flex: 1; align-items: center; gap: 5.6px; }
 .workspace-preview-file span { overflow: hidden; color: var(--foreground); font-size: 8.8px; text-overflow: ellipsis; white-space: nowrap; }
 .workspace-preview-header small { flex: none; color: var(--muted-foreground); font-size: 8px; white-space: nowrap; }
@@ -185,6 +185,11 @@ body.workspace-resizing .workspace-panel { transition: none !important; }
 .workspace-change-section > header svg, .workspace-history > header svg { width: 11.2px; height: 11.2px; }
 .workspace-change-section > header small, .workspace-history > header small { font: 8px ui-monospace, SFMono-Regular, Consolas, monospace; }
 .workspace-changes, .workspace-history-list { min-height: 0; overflow: auto; padding: 2.4px 4.8px 4.8px; }
+.workspace-history-list { color-scheme: dark; scrollbar-color: color-mix(in oklch, var(--muted-foreground), transparent 42%) transparent; scrollbar-width: thin; }
+.workspace-history-list::-webkit-scrollbar { width: 5.6px; height: 5.6px; }
+.workspace-history-list::-webkit-scrollbar-track { background: transparent; }
+.workspace-history-list::-webkit-scrollbar-thumb { border-radius: 999px; background: color-mix(in oklch, var(--muted-foreground), transparent 42%); }
+.workspace-history-list::-webkit-scrollbar-thumb:hover { background: var(--muted-foreground); }
 .workspace-change-row { display: flex; min-width: 0; align-items: center; border-radius: 4.8px; }
 .workspace-change-row:hover, .workspace-change-row:focus-within { background: var(--accent); }
 .workspace-change-row > button:first-child { display: flex; min-width: 0; min-height: 23.2px; flex: 1; align-items: center; gap: 6.4px; border: 0; background: transparent; padding: 3.2px 4.8px; color: var(--muted-foreground); font-size: 8.8px; text-align: left; }
@@ -223,8 +228,8 @@ body.workspace-resizing .workspace-panel { transition: none !important; }
 .workspace-history-disclosure .workspace-history > header { display: none; }
 .workspace-diff-overview { display: flex; min-height: 112px; flex: 1 1 56%; flex-direction: column; overflow: hidden; }
 .workspace-patch { display: flex; min-height: 0; max-height: 42%; flex: none; flex-direction: column; overflow: hidden; }
-.workspace-source-workbench { display: flex; min-height: 176px; flex: 1 1 44%; flex-direction: column; overflow: hidden; border-top: 1px solid var(--border); }
-.workspace-source-workbench > header { display: flex; min-height: 28px; flex: none; align-items: center; gap: 5px; padding: 3px 5px 3px 7px; border-bottom: 1px solid var(--border); background: color-mix(in oklch, var(--background), var(--accent) 18%); }
+.workspace-source-workbench { display: flex; min-height: 0; flex: none; flex-direction: column; overflow: hidden; }
+.workspace-source-workbench[data-open="false"] { height: 28px; min-height: 28px; }
 .workspace-source-modes { display: flex; min-width: 0; flex: 1; align-items: center; gap: 2px; }
 .workspace-source-modes button, .workspace-source-actions button { display: flex; min-height: 21px; align-items: center; justify-content: center; gap: 4px; border: 0; border-radius: 4px; background: transparent; padding: 3px 6px; color: var(--muted-foreground); font-size: 8px; }
 .workspace-source-modes button:hover, .workspace-source-modes button:focus-visible, .workspace-source-modes button[aria-selected="true"], .workspace-source-actions button:hover:not(:disabled), .workspace-source-actions button:focus-visible { background: var(--accent); color: var(--foreground); }
@@ -246,16 +251,16 @@ body.workspace-resizing .workspace-panel { transition: none !important; }
 .workspace-patch-line[data-kind="hunk"] { color: var(--warn); }
 .workspace-patch-line[data-kind="heading"] { color: var(--foreground); font-weight: 600; }
 .workspace-terminal-slot { display: flex; min-width: 0; min-height: 0; overflow: hidden; }
-.workspace-detail-toggle { flex: none; border-top: 1px solid var(--border); background: color-mix(in oklch, var(--background), var(--accent) 28%); }
-.workspace-detail-toggle button { display: flex; width: 100%; min-height: 25.6px; align-items: center; gap: 5.6px; border: 0; background: transparent; padding: 4px 8px; color: var(--muted-foreground); font-size: 8.8px; text-align: left; }
-.workspace-detail-toggle button:hover { background: var(--accent); color: var(--foreground); }
-.workspace-detail-toggle svg { width: 11.2px; height: 11.2px; flex: none; transform: rotate(-90deg); transition: transform 120ms ease; }
-.workspace-detail-toggle svg[data-open="true"] { transform: rotate(0); }
-.workspace-detail-toggle span { flex: none; color: var(--foreground); font-weight: 600; }
-.workspace-detail-toggle small { min-width: 0; margin-left: auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.workspace-detail-resize-handle { position: relative; z-index: 5; height: 12px; flex: none; cursor: row-resize; touch-action: none; }
-.workspace-detail-resize-handle::after { content: ""; position: absolute; top: 50%; left: 50%; width: 32px; height: 2px; border-radius: 999px; background: var(--border); transform: translate(-50%, -50%); transition: background 120ms; }
-.workspace-detail-resize-handle:hover::after, .workspace-detail-resize-handle:focus-visible::after, .workspace-detail-resizing .workspace-detail-resize-handle::after { background: var(--ring); }
+.workspace-detail-dock-header { position: relative; display: flex; min-height: 28px; flex: none; align-items: center; gap: 5px; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); background: color-mix(in oklch, var(--background), var(--accent) 18%); padding: 3px 5px 3px 7px; }
+.workspace-detail-dock-prefix { display: flex; min-width: 0; flex: none; align-items: center; }
+.workspace-detail-disclosure { display: flex; min-width: 0; min-height: 21px; align-items: center; gap: 5px; border: 0; border-radius: 4px; background: transparent; padding: 3px 4px; color: var(--muted-foreground); font-size: 8px; text-align: left; }
+.workspace-detail-disclosure:hover, .workspace-detail-disclosure:focus-visible { background: var(--accent); color: var(--foreground); }
+.workspace-detail-disclosure svg { width: 11px; height: 11px; flex: none; transform: rotate(-90deg); transition: transform 120ms ease; }
+.workspace-detail-disclosure svg[data-open="true"] { transform: rotate(0); }
+.workspace-detail-disclosure span { flex: none; color: var(--foreground); font-weight: 600; }
+.workspace-detail-disclosure small { min-width: 0; overflow: hidden; color: var(--muted-foreground); font-size: 8px; text-overflow: ellipsis; white-space: nowrap; }
+.workspace-detail-resize-handle, .workspace-source-resize-handle { position: absolute; z-index: 6; inset: -4px 0 auto; height: 8px; cursor: row-resize; touch-action: none; }
+.workspace-detail-resize-handle:focus-visible, .workspace-source-resize-handle:focus-visible { outline: 1px solid var(--ring); outline-offset: -1px; }
 .workspace-panel-empty { display: grid; min-height: 96px; flex: 1; place-items: center; padding: 16px; color: var(--muted-foreground); font-size: 9.6px; text-align: center; }
 .workspace-panel-loading { position: absolute; inset: auto 9.6px 9.6px auto; display: flex; align-items: center; gap: 5.6px; padding: 4.8px 7.2px; border: 0.8px solid var(--border); border-radius: 999px; background: var(--popover); color: var(--muted-foreground); font-size: 8.8px; box-shadow: 0 6.4px 19.2px rgb(0 0 0 / 25%); }
 /* 19.2px hit target centered on the gap between chat-main and the panel edge. */
@@ -395,14 +400,10 @@ body.workspace-resizing .workspace-panel { transition: none !important; }
 .workspace-commit button code { color: var(--muted-foreground); font-size: 10px; }
 .workspace-diff-overview { display: flex; min-height: 100px; flex: 1; flex-direction: column; overflow: hidden; }
 .workspace-patch { display: flex; min-height: 0; flex: none; flex-direction: column; overflow: hidden; }
-.workspace-detail-toggle { flex: none; border-top: 1px solid var(--border); background: color-mix(in oklch, var(--background), var(--accent) 28%); }
-.workspace-detail-toggle button { display: flex; width: 100%; min-height: 32px; align-items: center; gap: 7px; border: 0; background: transparent; padding: 5px 10px; color: var(--muted-foreground); font-size: 11px; text-align: left; }
-.workspace-detail-toggle button:hover { background: var(--accent); color: var(--foreground); }
-.workspace-detail-toggle svg { width: 14px; height: 14px; flex: none; transform: rotate(-90deg); transition: transform 120ms ease; }
-.workspace-detail-toggle svg[data-open="true"] { transform: rotate(0); }
-.workspace-detail-toggle span { flex: none; color: var(--foreground); font-weight: 600; }
-.workspace-detail-toggle small { min-width: 0; margin-left: auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.workspace-detail-resize-handle { height: 16px; }
+.workspace-detail-dock-header { min-height: 35px; gap: 7px; padding: 4px 6px 4px 10px; }
+.workspace-detail-disclosure { min-height: 28px; gap: 7px; padding: 4px 5px; font-size: 11px; }
+.workspace-detail-disclosure svg { width: 14px; height: 14px; }
+.workspace-detail-disclosure small { font-size: 10px; }
 .workspace-panel-empty { display: grid; min-height: 120px; flex: 1; place-items: center; padding: 20px; color: var(--muted-foreground); font-size: 12px; text-align: center; }
 .workspace-panel-loading { position: absolute; inset: auto 12px 12px auto; display: flex; align-items: center; gap: 7px; padding: 6px 9px; border: 1px solid var(--border); border-radius: 999px; background: var(--popover); color: var(--muted-foreground); font-size: 11px; box-shadow: 0 8px 24px rgb(0 0 0 / 25%); }
 /* 24px hit target centered on the gap between chat-main and the panel edge. */

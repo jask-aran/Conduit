@@ -13,8 +13,10 @@ import {
   listWorkspaceDirectory,
   moveWorkspaceEntry,
   readWorkspaceDiff,
+  readWorkspaceCommit,
   readWorkspaceFile,
   readWorkspaceVersion,
+  MAX_CONCURRENT_GIT_PROCESSES,
   runBoundedGit,
   runWorkspaceGitAction,
   writeWorkspaceFile,
@@ -170,7 +172,7 @@ test("workspace diff reports clean, dirty, staged, and non-git roots", async () 
   await fs.writeFile(path.join(root, "tracked.txt"), "one\n");
   await run("git", ["add", "tracked.txt"], { cwd: root });
   await run("git", ["commit", "-qm", "fixture"], { cwd: root });
-  let result = await readWorkspaceDiff(root);
+  let result = await readWorkspaceDiff(root, { includeHistory: true });
   assert.equal(result.repository, true);
   assert.ok(result.branch);
   assert.equal(result.files.length, 0);
@@ -201,6 +203,22 @@ test("workspace Git actions stage, unstage, and commit without changing file con
   await runWorkspaceGitAction(root, { action: "unstage-all" });
   assert.equal((await readWorkspaceDiff(root)).files[0].status, " M");
   assert.equal(await fs.readFile(path.join(root, "tracked.txt"), "utf8"), "two\n");
+});
+
+test("workspace commit inspection returns one bounded historical patch", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-git-commit-"));
+  await run("git", ["init", "-q"], { cwd: root });
+  await run("git", ["config", "user.email", "test@conduit.local"], { cwd: root });
+  await run("git", ["config", "user.name", "Conduit Test"], { cwd: root });
+  await fs.writeFile(path.join(root, "tracked.txt"), "one\n");
+  await run("git", ["add", "tracked.txt"], { cwd: root });
+  await run("git", ["commit", "-qm", "Inspect this commit"], { cwd: root });
+  const { commits } = await readWorkspaceDiff(root, { includeHistory: true });
+  const detail = await readWorkspaceCommit(root, commits[0].hash);
+  assert.equal(detail.hash, commits[0].hash);
+  assert.match(detail.content, /Inspect this commit/);
+  assert.match(detail.content, /tracked\.txt/);
+  await assert.rejects(readWorkspaceCommit(root, "HEAD"), { code: "invalid_workspace_commit" });
 });
 
 test("workspace Git actions fetch and fast-forward the current branch", async () => {
@@ -243,8 +261,8 @@ test("workspace inspection shares active overview work and defers patch commands
     if (args.includes("@{upstream}")) throw new Error("no upstream");
     return { stdout: "true\n" };
   };
-  const first = readWorkspaceDiff(root, { runGit });
-  const second = readWorkspaceDiff(root, { runGit });
+  const first = readWorkspaceDiff(root, { includeHistory: false, runGit });
+  const second = readWorkspaceDiff(root, { includeHistory: false, runGit });
   await new Promise((resolve) => setTimeout(resolve, 10));
   releaseOverview();
   const [left, right] = await Promise.all([first, second]);
@@ -253,7 +271,7 @@ test("workspace inspection shares active overview work and defers patch commands
   assert.equal(calls.filter((call) => call.includes("--is-inside-work-tree")).length, 1);
   assert.equal(calls.filter((call) => call.startsWith("diff ")).length, 0);
 
-  const patch = await readWorkspaceDiff(root, { includePatch: true, reuse: true, runGit });
+  const patch = await readWorkspaceDiff(root, { includePatch: true, includeHistory: false, reuse: true, runGit });
   assert.match(patch.diff, /# Staged/);
   assert.match(patch.diff, /# Working tree/);
   assert.equal(calls.filter((call) => call.startsWith("diff ")).length, 2);
@@ -266,4 +284,29 @@ test("bounded Git commands honour cancellation", async () => {
   const pending = runBoundedGit(root, ["-c", "alias.wait=!sleep 5", "wait"], { signal: controller.signal, timeoutMs: 5_000 });
   setTimeout(() => controller.abort(), 25);
   await assert.rejects(pending, { code: "workspace_inspection_aborted" });
+});
+
+test("bounded Git transfers each released slot without exceeding its process cap", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-git-slots-"));
+  let active = 0;
+  let peak = 0;
+  let started = 0;
+  let fifthStart;
+  const fifthStarted = new Promise((resolve) => { fifthStart = resolve; });
+  const options = {
+    timeoutMs: 5_000,
+    onSpawn: (child) => {
+      active += 1;
+      peak = Math.max(peak, active);
+      if (++started === 5) fifthStart();
+      child.once("close", () => { active -= 1; });
+    },
+  };
+  const args = ["-c", "alias.wait=!sleep 0.08", "wait"];
+  const queued = Array.from({ length: 8 }, () => runBoundedGit(root, args, options));
+  await fifthStarted;
+  const later = Array.from({ length: 12 }, () => runBoundedGit(root, args, options));
+  await Promise.all([...queued, ...later]);
+  assert.equal(peak, MAX_CONCURRENT_GIT_PROCESSES);
+  assert.equal(active, 0);
 });

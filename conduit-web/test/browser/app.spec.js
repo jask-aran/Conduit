@@ -534,8 +534,16 @@ test("workspace panel previews files, shows diff, and persists per chat", async 
   await expect(panel.getByRole("button", { name: /Changes/ })).toBeVisible();
   await expect(panel.getByText("src/main.ts")).toBeVisible();
   await expect(panel.getByText("agent/rhs-panel-mvp", { exact: true })).toBeVisible();
-  // Graph is the default detail mode; Patch is the other half of the same tablist.
+  // Detail starts closed so graph work does not compete with panel motion.
+  await expect(panel.getByText("Add workspace panel")).toHaveCount(0);
+  await panel.getByRole("button", { name: "Show Details" }).click();
   await expect(panel.getByText("Add workspace panel")).toBeVisible();
+  const sourceDetailHandle = panel.getByRole("separator", { name: "Resize details" });
+  await sourceDetailHandle.focus();
+  await page.keyboard.press("Home");
+  await expect(sourceDetailHandle).toHaveAttribute("aria-valuenow", "96");
+  await page.keyboard.press("End");
+  await expect(sourceDetailHandle).toHaveAttribute("aria-valuenow", await sourceDetailHandle.getAttribute("aria-valuemax"));
   await panel.getByRole("tab", { name: "Patch" }).click();
   await expect(panel.getByText("@@ -1 +1 @@")).toBeVisible();
   await panel.getByRole("tab", { name: "Graph" }).click();
