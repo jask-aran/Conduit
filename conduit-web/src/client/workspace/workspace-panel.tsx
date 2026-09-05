@@ -262,7 +262,9 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
     setPending(new Map());
   };
   const wasAborted = (cause: unknown) => (cause as { name?: string })?.name === "AbortError";
-  let panelWasOpen = props.open();
+  // The lazy panel can mount already open when invoked from the shortcut.
+  // Its first visible state still needs the same entrance animation.
+  let panelWasOpen = false;
   const cancelPanelEdgeMotion = () => {
     if (panelEdgeRaf) {
       cancelAnimationFrame(panelEdgeRaf);
@@ -310,7 +312,10 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
     const targetGap = open && !mobile ? 8 : 0;
     const startSize = startWidth + startGap;
     const targetSize = targetWidth + targetGap;
-    const surfaceWidth = panelSurface?.getBoundingClientRect().width || width();
+    // A direct maximized open slides the full surface, not the docked width.
+    const surfaceWidth = open && props.expanded() && panelRoot?.parentElement
+      ? panelRoot.parentElement.clientWidth - targetGap
+      : panelSurface?.getBoundingClientRect().width || width();
     const currentSurfaceX = cancelPanelSurfaceMotion();
     cancelPanelEdgeMotion();
     clearPanelSurfaceMotion();

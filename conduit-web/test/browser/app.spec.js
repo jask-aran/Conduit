@@ -854,6 +854,73 @@ test("workspace file menu replaces, deletes, and polls selected files", async ({
   await expect(page.getByText("Deleted app.js")).toBeVisible();
 });
 
+test("workspace expansion preserves transcript geometry and scroll position", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop-chromium", "desktop expansion geometry");
+  await page.route("**/v0/sessions/session_existing", (route) => route.fulfill({ json: {
+    id: "session_existing", projectId: "project_chat", status: "active", title: "Existing chat", model: model.spec,
+    messages: [{ id: "long_answer", role: "assistant", content: Array.from({ length: 80 }, (_, i) => `Paragraph ${i}: This transcript must keep its width and reading position while the workspace expands and restores.`).join("\n\n") }], tools: [],
+  } }));
+  await page.goto("/chat/session_existing");
+  await page.getByRole("button", { name: "Toggle workspace panel" }).click();
+  const panel = page.getByRole("complementary", { name: "Workspace panel" });
+  await expect(panel.getByRole("button", { name: "Expand Workspace" })).toBeVisible();
+  await page.evaluate(() => new Promise((resolve) => setTimeout(resolve, 250)));
+  const viewport = page.locator(".message-scroller-viewport");
+  await viewport.evaluate((element) => { element.scrollTop = 400; });
+  await expect.poll(() => viewport.evaluate((element) => element.scrollTop)).toBe(400);
+  const initialWidth = await page.locator(".transcript-motion-shell").evaluate((element) => element.getBoundingClientRect().width);
+  for (const label of ["Expand Workspace", "Restore split view"]) {
+    const samples = await panel.getByRole("button", { name: label }).evaluate((button) => new Promise((resolve) => {
+      const samples = [];
+      button.click();
+      const frame = () => {
+        const panel = document.querySelector(".workspace-panel").getBoundingClientRect();
+        const surface = document.querySelector(".workspace-panel-surface").getBoundingClientRect();
+        const shell = document.querySelector(".transcript-motion-shell");
+        samples.push({ width: shell.getBoundingClientRect().width, scroll: document.querySelector(".message-scroller-viewport").scrollTop,
+          visibility: getComputedStyle(shell).contentVisibility, gap: surface.left - panel.left, panelWidth: panel.width });
+        if (samples.length < 25) requestAnimationFrame(frame); else resolve(samples);
+      };
+      requestAnimationFrame(frame);
+    }));
+    expect(samples.every((sample) => Math.abs(sample.width - initialWidth) < 1)).toBe(true);
+    expect(samples.every((sample) => Math.abs(sample.scroll - 400) < 1)).toBe(true);
+    expect(samples.every((sample) => sample.visibility !== "hidden" && Math.abs(sample.gap) < 1)).toBe(true);
+    expect(new Set(samples.map((sample) => Math.round(sample.panelWidth))).size).toBeGreaterThan(2);
+    await testInfo.attach(label, { body: JSON.stringify(samples), contentType: "application/json" });
+  }
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await panel.getByRole("button", { name: "Expand Workspace" }).click();
+  await panel.getByRole("button", { name: "Restore split view" }).click();
+  await expect.poll(() => viewport.evaluate((element) => element.scrollTop)).toBe(400);
+  await expect.poll(() => page.locator(".transcript-motion-shell").evaluate((element) => element.style.getPropertyValue("--workspace-transcript-width"))).toBe("");
+});
+
+test("closed workspace shortcut animates the full maximized surface", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop-chromium", "desktop maximized motion");
+  await openChatSurface(page);
+  await page.evaluate(() => {
+    window.__maximizedFrames = [];
+    const sample = () => {
+      const panel = document.querySelector(".workspace-panel-expanded");
+      if (panel) {
+        const surface = panel.querySelector(".workspace-panel-surface");
+        const box = surface.getBoundingClientRect();
+        window.__maximizedFrames.push({ width: box.width, left: box.left, panelWidth: panel.getBoundingClientRect().width });
+      }
+      if (window.__maximizedFrames.length < 30) requestAnimationFrame(sample);
+    };
+    requestAnimationFrame(sample);
+  });
+  await runRegisteredCommand(page, COMMAND_IDS.maximizeWorkspacePanel);
+  await expect.poll(() => page.evaluate(() => window.__maximizedFrames.length)).toBe(30);
+  const frames = await page.evaluate(() => window.__maximizedFrames);
+  expect(frames.every((frame) => Math.abs(frame.width - frame.panelWidth) < 1)).toBe(true);
+  expect(new Set(frames.map((frame) => Math.round(frame.left))).size).toBeGreaterThan(3);
+  expect(frames.every((frame, index) => index === 0 || frame.left <= frames[index - 1].left + 1)).toBe(true);
+  expect(frames[0].left - frames.at(-1).left).toBeGreaterThan(frames.at(-1).width / 2);
+});
+
 test("maximized workspace command toggles the workspace panel", async ({ page }) => {
   await openChatSurface(page);
   const panel = page.getByRole("complementary", { name: "Workspace panel" });

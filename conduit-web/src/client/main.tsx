@@ -55,7 +55,6 @@ import { ShortcutManager } from "./shortcuts/shortcut-manager";
 import { publishUiPreference, saveUiPreference, UI_PREFERENCE_CHANGE_EVENT, type UiPreferenceKey, type UiPreferences } from "./preferences/ui-preferences";
 import { applyUiScale, selectedUiScale } from "./preferences/ui-scale";
 import { INCREMARK_PACING_STORAGE_KEY } from "./chat/incremark-pacing";
-import { PANEL_MOTION_DURATION_MS } from "./panel-motion";
 import {
   applyTranscriptAppearance,
   CODE_BLOCK_COLLAPSE_LINES_STORAGE_KEY,
@@ -421,24 +420,24 @@ function App() {
   const [dropActive, setDropActive] = createSignal(false);
   const [panelOpen, setPanelOpen] = createSignal(false);
   const [workspaceExpanded, setWorkspaceExpandedState] = createSignal(false);
-  let workspaceExpansionMotionTimer: number | undefined;
+  const releaseExpansionWidth = () => {
+    if (!workspaceExpanded()) document.querySelector<HTMLElement>(".transcript-motion-shell")?.style.removeProperty("--workspace-transcript-width");
+  };
   const setWorkspaceExpanded = (next: boolean, persist = true) => {
     const key = workspacePanelStateKey("expanded");
     if (persist && key) localStorage.setItem(key, String(next));
     if (next === workspaceExpanded()) return;
-    if (workspaceExpansionMotionTimer != null) window.clearTimeout(workspaceExpansionMotionTimer);
-    workspaceExpansionMotionTimer = undefined;
-    const main = document.querySelector<HTMLElement>('[data-slot="sidebar-inset"]');
-    if (!isMobileLayout() && !matchMedia("(prefers-reduced-motion: reduce)").matches) {
-      main?.setAttribute("data-workspace-expansion-motion", "true");
-      workspaceExpansionMotionTimer = window.setTimeout(() => {
-        main?.removeAttribute("data-workspace-expansion-motion");
-        workspaceExpansionMotionTimer = undefined;
-      }, PANEL_MOTION_DURATION_MS + 32);
-    } else {
-      main?.removeAttribute("data-workspace-expansion-motion");
+    if (next && !isMobileLayout()) {
+      const shell = document.querySelector<HTMLElement>(".transcript-motion-shell");
+      if (shell && !shell.style.getPropertyValue("--workspace-transcript-width")) {
+        shell.style.setProperty("--workspace-transcript-width", `${shell.getBoundingClientRect().width}px`);
+      }
     }
     setWorkspaceExpandedState(next);
+    requestAnimationFrame(() => {
+      // Instant geometry changes (close, reduced motion) have no transitionend.
+      if (!document.querySelector(".workspace-panel")?.getAnimations().length) releaseExpansionWidth();
+    });
   };
   const [workspaceViewRequest, setWorkspaceViewRequest] = createSignal<{ tab: WorkspaceView; terminalId?: string; nonce: number } | null>(null);
   const [workspaceFocusRequest, setWorkspaceFocusRequest] = createSignal(0);
@@ -1581,6 +1580,9 @@ function App() {
       onOpenWorkspaceIdentity={openWorkspaceIdentity} onOpenSettings={openSettings} onOpenPalette={(page, initialQuery) => openPalette(page || null, initialQuery || "", page === "chat-search")}
       onChangeServer={nativeApp ? () => { void clearNativeBearerToken().finally(() => { clearServerOrigin(); location.reload(); }); } : undefined}
       onLogout={() => void logout()} />
+    <div class="workspace-layout" onTransitionEnd={(event) => {
+      if (event.propertyName === "width" && event.target instanceof HTMLElement && event.target.classList.contains("workspace-panel")) releaseExpansionWidth();
+    }}>
     <main data-slot="sidebar-inset" data-shortcut-scope="chat" tabIndex={-1} onPointerDown={focusChatSurface} class={`chat-main${routeKind() === "chat" && emptyChat() ? " chat-main-empty" : ""}${workspaceExpanded() ? " workspace-expanded" : ""}`} {...(routeKind() === "chat" ? dropHandlers : {})}>
       <Show when={routeBootstrap() === "ready"} fallback={<div class="chat-bootstrap" role={routeBootstrap() === "error" ? "alert" : "status"}>{routeBootstrap() === "error"
         ? routeBootstrapError() || (routeKind() === "project" ? "This project could not be loaded." : "This chat could not be loaded.")
@@ -1710,6 +1712,7 @@ function App() {
       </Show>
     </main>
     <Show when={["chat", "project", "dashboard"].includes(routeKind()) && Boolean(selectedProject()) && Boolean(workspacePanelScope())}><WorkspacePanel projectId={() => selectedProject()!.id} projectName={() => selectedProject()!.name} workingRoot={() => selectedProject()!.workingRoot || selectedProject()!.path || ""} chatId={() => workspacePanelScope()!} open={panelOpen} expanded={workspaceExpanded} focusRequest={workspaceFocusRequest} requestedTab={workspaceViewRequest} onToggleExpanded={toggleWorkspaceExpanded} onClose={closePanel} shortcuts={shortcutManager} /></Show>
+    </div>
     </Show>
     <Show when={routeKind() === "terminal" && routeBootstrap() === "ready"}>
       <TerminalRoute onOpenConduit={() => openDashboard()} />
