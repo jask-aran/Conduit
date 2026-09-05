@@ -3,7 +3,7 @@ import path from "node:path";
 import test from "node:test";
 import { resolvePiLaunch } from "../src/pi-launch.js";
 
-const project = { id: "project_workspace", path: "/tmp/workspace" };
+const project = { id: "project_workspace", path: "/tmp/stale-workspace", workingRoot: "/tmp/workspace" };
 const template = {
   id: "workspace",
   version: "2",
@@ -40,7 +40,7 @@ test("Isolated Pi profile launch uses the pinned installation and isolated agent
     model: "openai/gpt",
   });
   assert.equal(launch.command, "/opt/conduit/pi/0.84.1/pi");
-  assert.equal(launch.cwd, path.resolve(project.path));
+  assert.equal(launch.cwd, path.resolve(project.workingRoot));
   assert.equal(launch.env.PI_CODING_AGENT_DIR, path.resolve("/var/lib/conduit/pi"));
   assert.match(launch.env.PATH, /^.*working-files[/\\]\.venv[/\\]bin:/);
   assert.ok(launch.args.includes("--system-prompt"));

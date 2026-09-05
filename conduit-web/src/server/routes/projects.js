@@ -251,7 +251,7 @@ export function registerProjectRoutes(app, {
       const project = await projects.get(request.params.id);
       if (!project) return response.status(404).json({ error: "project_not_found" });
       await projects.validate(project);
-      const listing = await listWorkspaceDirectory(project.path, request.query.path, { after: request.query.after });
+      const listing = await listWorkspaceDirectory(project.workingRoot, request.query.path, { after: request.query.after });
       response.json({ path: String(request.query.path || ""), ...listing });
     } catch (error) { next(error); }
   });
@@ -261,7 +261,7 @@ export function registerProjectRoutes(app, {
       const project = await projects.get(request.params.id);
       if (!project) return response.status(404).json({ error: "project_not_found" });
       await projects.validate(project);
-      response.json(await readWorkspaceVersion(project.path, { paths: workspaceVersionPaths(request.query.paths) }));
+      response.json(await readWorkspaceVersion(project.workingRoot, { paths: workspaceVersionPaths(request.query.paths) }));
     } catch (error) { next(error); }
   });
 
@@ -272,7 +272,7 @@ export function registerProjectRoutes(app, {
       if (!request.query.path) return response.status(400).json({ error: "workspace_path_required" });
       await projects.validate(project);
       if (request.query.download === "1") {
-        const resolved = await resolveInspectorPath(project.path, request.query.path, { kind: "file" });
+        const resolved = await resolveInspectorPath(project.workingRoot, request.query.path, { kind: "file" });
         const downloadName = encodeURIComponent(path.basename(resolved.relativePath)).replace(/[!'()*]/g, (character) => `%${character.charCodeAt(0).toString(16).toUpperCase()}`);
         response.setHeader("Content-Type", "application/octet-stream");
         response.setHeader("X-Content-Type-Options", "nosniff");
@@ -281,10 +281,10 @@ export function registerProjectRoutes(app, {
         return response.sendFile(resolved.path);
       }
       if (request.query.metadata === "1") {
-        const resolved = await resolveInspectorPath(project.path, request.query.path, { kind: "file" });
+        const resolved = await resolveInspectorPath(project.workingRoot, request.query.path, { kind: "file" });
         return response.json({ path: resolved.relativePath, size: resolved.stat.size, modifiedAt: resolved.stat.mtimeMs });
       }
-      response.json(await readWorkspaceFile(project.path, request.query.path));
+      response.json(await readWorkspaceFile(project.workingRoot, request.query.path));
     } catch (error) { next(error); }
   });
 
@@ -296,7 +296,7 @@ export function registerProjectRoutes(app, {
       await projects.validate(project);
       const expectedRevision = typeof request.headers["if-match"] === "string" ? request.headers["if-match"] : null;
       const content = Buffer.isBuffer(request.body) ? request.body : Buffer.alloc(0);
-      const written = await writeWorkspaceFile(project.path, request.query.path, content, { expectedRevision });
+      const written = await writeWorkspaceFile(project.workingRoot, request.query.path, content, { expectedRevision });
       response.status(expectedRevision == null ? 201 : 200).json(written);
     } catch (error) { next(error); }
   });
@@ -307,7 +307,7 @@ export function registerProjectRoutes(app, {
       if (!project) return response.status(404).json({ error: "project_not_found" });
       if (!request.query.path) return response.status(400).json({ error: "workspace_path_required" });
       await projects.validate(project);
-      await deleteWorkspaceFile(project.path, request.query.path);
+      await deleteWorkspaceFile(project.workingRoot, request.query.path);
       response.status(204).end();
     } catch (error) { next(error); }
   });
@@ -318,7 +318,7 @@ export function registerProjectRoutes(app, {
       if (!project) return response.status(404).json({ error: "project_not_found" });
       if (!request.body?.path) return response.status(400).json({ error: "workspace_path_required" });
       await projects.validate(project);
-      response.status(201).json(await createWorkspaceDirectory(project.path, request.body.path));
+      response.status(201).json(await createWorkspaceDirectory(project.workingRoot, request.body.path));
     } catch (error) { next(error); }
   });
 
@@ -330,7 +330,7 @@ export function registerProjectRoutes(app, {
         return response.status(400).json({ error: "workspace_path_required" });
       }
       await projects.validate(project);
-      response.json(await moveWorkspaceEntry(project.path, request.body.path, request.body.destination));
+      response.json(await moveWorkspaceEntry(project.workingRoot, request.body.path, request.body.destination));
     } catch (error) { next(error); }
   });
 
@@ -340,7 +340,7 @@ export function registerProjectRoutes(app, {
       if (!project) return response.status(404).json({ error: "project_not_found" });
       if (!request.query.path) return response.status(400).json({ error: "workspace_path_required" });
       await projects.validate(project);
-      await deleteWorkspaceDirectory(project.path, request.query.path);
+      await deleteWorkspaceDirectory(project.workingRoot, request.query.path);
       response.status(204).end();
     } catch (error) { next(error); }
   });
@@ -355,7 +355,7 @@ export function registerProjectRoutes(app, {
       const project = await projects.get(request.params.id);
       if (!project) return response.status(404).json({ error: "project_not_found" });
       await projects.validate(project);
-      response.json(await readWorkspaceDiff(project.path, { includePatch: request.query.patch === "1", includeHistory: request.query.history !== "0", reuse: request.query.reuse === "1", signal: controller.signal }));
+      response.json(await readWorkspaceDiff(project.workingRoot, { includePatch: request.query.patch === "1", includeHistory: request.query.history !== "0", reuse: request.query.reuse === "1", signal: controller.signal }));
     } catch (error) {
       if (!request.aborted && !response.destroyed) next(error);
     } finally {
@@ -374,7 +374,7 @@ export function registerProjectRoutes(app, {
       const project = await projects.get(request.params.id);
       if (!project) return response.status(404).json({ error: "project_not_found" });
       await projects.validate(project);
-      response.json(await readWorkspaceCommit(project.path, request.params.hash, { signal: controller.signal }));
+      response.json(await readWorkspaceCommit(project.workingRoot, request.params.hash, { signal: controller.signal }));
     } catch (error) {
       if (!request.aborted && !response.destroyed) next(error);
     } finally {
@@ -388,7 +388,7 @@ export function registerProjectRoutes(app, {
       const project = await projects.get(request.params.id);
       if (!project) return response.status(404).json({ error: "project_not_found" });
       await projects.validate(project);
-      response.json(await runWorkspaceGitAction(project.path, {
+      response.json(await runWorkspaceGitAction(project.workingRoot, {
         action: request.body?.action,
         relativePath: request.body?.path,
         message: request.body?.message,
@@ -446,7 +446,7 @@ export function registerProjectRoutes(app, {
       try { await projects.validate(project); }
       catch (error) {
         if (deleteWorkspaceFiles) {
-          try { await fs.lstat(project.path); }
+          try { await fs.lstat(project.workingRoot); }
           catch (statError) {
             if (statError.code !== "ENOENT") throw statError;
             skipWorkingTree = true;

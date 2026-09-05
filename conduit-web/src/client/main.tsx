@@ -1713,7 +1713,7 @@ function App() {
         </Show>
       </Show>
     </main>
-    <Show when={["chat", "project", "dashboard"].includes(routeKind()) && Boolean(selectedProject()) && Boolean(workspacePanelScope())}><WorkspacePanel projectId={() => selectedProject()!.id} projectName={() => selectedProject()!.name} workingRoot={() => selectedProject()!.workingRoot || selectedProject()!.path || ""} chatId={() => workspacePanelScope()!} open={panelOpen} expanded={workspaceExpanded} focusRequest={workspaceFocusRequest} requestedTab={workspaceViewRequest} onToggleExpanded={toggleWorkspaceExpanded} onClose={closePanel} shortcuts={shortcutManager} /></Show>
+    <Show when={["chat", "project", "dashboard"].includes(routeKind()) && Boolean(selectedProject()) && Boolean(workspacePanelScope())}><WorkspacePanel projectId={() => selectedProject()!.id} projectName={() => selectedProject()!.name} workingRoot={() => selectedProject()!.workingRoot} chatId={() => workspacePanelScope()!} open={panelOpen} expanded={workspaceExpanded} focusRequest={workspaceFocusRequest} requestedTab={workspaceViewRequest} onToggleExpanded={toggleWorkspaceExpanded} onClose={closePanel} shortcuts={shortcutManager} /></Show>
     </div>
     </Show>
     <Show when={routeKind() === "terminal" && routeBootstrap() === "ready"}>

@@ -75,7 +75,7 @@ export async function buildProjectDashboard({
   let git = null;
   if (isWorkspace(project)) {
     try {
-      const overview = await inspectWorkspace(project.path, { signal });
+      const overview = await inspectWorkspace(project.workingRoot, { signal });
       if (overview.repository) {
         git = {
           branch: overview.branch || "detached HEAD",
@@ -108,7 +108,8 @@ export async function buildProjectDashboard({
       name: project.name,
       kind: project.kind,
       origin: project.origin,
-      path: project.path,
+      path: project.workingRoot,
+      workingRoot: project.workingRoot,
       externalPath: project.externalPath || null,
       createdAt: project.createdAt,
       defaultTemplateId: project.defaultTemplateId || null,

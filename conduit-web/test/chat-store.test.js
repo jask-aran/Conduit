@@ -10,7 +10,7 @@ async function fixture() {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-chat-store-"));
   const projectPath = path.join(root, "files");
   const sessionsDir = sessionDirectoryFor(projectPath, path.join(root, "pi"));
-  const project = { id: "project_test", slug: "test", path: projectPath, sessionsDir };
+  const project = { id: "project_test", slug: "test", path: path.join(root, "stale-files"), workingRoot: projectPath, sessionsDir };
   await fs.mkdir(sessionsDir, { recursive: true });
   return { root, project, registryFile: path.join(root, "sessions.json") };
 }
@@ -19,7 +19,7 @@ test("migrates Pi sessions behind stable Conduit chat metadata", async () => {
   const { root, project, registryFile } = await fixture();
   const sessionFile = path.join(project.sessionsDir, "session.jsonl");
   await fs.writeFile(sessionFile, [
-    JSON.stringify({ type: "session", id: "session-test", cwd: project.path, timestamp: "2026-01-01T00:00:00Z" }),
+    JSON.stringify({ type: "session", id: "session-test", cwd: project.workingRoot, timestamp: "2026-01-01T00:00:00Z" }),
     JSON.stringify({ type: "message", message: { role: "user", content: "Registry title" } }),
   ].join("\n"));
   await fs.writeFile(registryFile, `${JSON.stringify({ version: 1, sessions: [{
@@ -47,8 +47,8 @@ test("discovers sessions by canonical cwd when Pi directory encodings collide", 
   const sessionsDir = sessionDirectoryFor(firstPath, piAgentDir);
   assert.equal(sessionsDir, sessionDirectoryFor(secondPath, piAgentDir));
   const projects = [
-    { id: "project_first", slug: "first", path: firstPath, sessionsDir },
-    { id: "project_second", slug: "second", path: secondPath, sessionsDir },
+    { id: "project_first", slug: "first", path: firstPath, workingRoot: firstPath, sessionsDir },
+    { id: "project_second", slug: "second", path: secondPath, workingRoot: secondPath, sessionsDir },
   ];
   await fs.mkdir(sessionsDir, { recursive: true });
   await fs.writeFile(path.join(sessionsDir, "first.jsonl"), `${JSON.stringify({ type: "session", id: "session-first", cwd: firstPath })}\n`);
@@ -144,8 +144,8 @@ test("sidebar list keeps creation order when a rename bumps updatedAt", async ()
   const { root, project, registryFile } = await fixture();
   const olderFile = path.join(project.sessionsDir, "older.jsonl");
   const newerFile = path.join(project.sessionsDir, "newer.jsonl");
-  await fs.writeFile(olderFile, `${JSON.stringify({ type: "session", id: "session-older", cwd: project.path, timestamp: "2026-01-01T00:00:00Z" })}\n`);
-  await fs.writeFile(newerFile, `${JSON.stringify({ type: "session", id: "session-newer", cwd: project.path, timestamp: "2026-02-01T00:00:00Z" })}\n`);
+  await fs.writeFile(olderFile, `${JSON.stringify({ type: "session", id: "session-older", cwd: project.workingRoot, timestamp: "2026-01-01T00:00:00Z" })}\n`);
+  await fs.writeFile(newerFile, `${JSON.stringify({ type: "session", id: "session-newer", cwd: project.workingRoot, timestamp: "2026-02-01T00:00:00Z" })}\n`);
   await fs.writeFile(registryFile, `${JSON.stringify({ version: 2, chats: [{
     id: "chat-older", projectId: project.id, status: "active", title: "Older",
     piSessionId: "session-older", piSessionFile: olderFile,
@@ -189,7 +189,7 @@ test("checkpoint title fallback fills only an empty Conduit title", async () => 
 test("keeps a pre-prompt Pi mapping as a draft across startup", async () => {
   const { root, project, registryFile } = await fixture();
   const piSessionFile = path.join(project.sessionsDir, "draft.jsonl");
-  await fs.writeFile(piSessionFile, `${JSON.stringify({ type: "session", id: "native-draft", cwd: project.path })}\n`);
+  await fs.writeFile(piSessionFile, `${JSON.stringify({ type: "session", id: "native-draft", cwd: project.workingRoot })}\n`);
   const id = "550e8400-e29b-41d4-a716-446655440090";
   const now = new Date().toISOString();
   await fs.writeFile(registryFile, `${JSON.stringify({ version: 2, chats: [{
@@ -217,7 +217,7 @@ test("waits for a newly reported fork file before checkpointing it", async () =>
     fs.writeFile(forkFile, `${JSON.stringify({
       type: "session",
       id: "delayed-native",
-      cwd: project.path,
+      cwd: project.workingRoot,
       timestamp: "2026-07-16T00:00:00Z",
     })}\n`).then(resolve, reject);
   }, 50));
@@ -236,14 +236,14 @@ test("startup keeps regenerated branches attached to their durable Conduit chat"
   const firstForkFile = path.join(project.sessionsDir, "first-fork.jsonl");
   const currentForkFile = path.join(project.sessionsDir, "current-fork.jsonl");
   await fs.writeFile(originalFile, [
-    JSON.stringify({ type: "session", id: "session-original", cwd: project.path, timestamp: "2026-07-23T12:00:00Z" }),
+    JSON.stringify({ type: "session", id: "session-original", cwd: project.workingRoot, timestamp: "2026-07-23T12:00:00Z" }),
     JSON.stringify({ type: "message", message: { role: "user", content: "Tell me about this repo" } }),
   ].join("\n"));
   await fs.writeFile(firstForkFile, [
     JSON.stringify({
       type: "session",
       id: "session-first-fork",
-      cwd: project.path,
+      cwd: project.workingRoot,
       timestamp: "2026-07-23T12:01:00Z",
       parentSession: originalFile,
     }),
@@ -252,7 +252,7 @@ test("startup keeps regenerated branches attached to their durable Conduit chat"
     JSON.stringify({
       type: "session",
       id: "session-current-fork",
-      cwd: project.path,
+      cwd: project.workingRoot,
       timestamp: "2026-07-23T12:02:00Z",
       parentSession: originalFile,
     }),
@@ -298,7 +298,7 @@ test("startup removes stale empty drafts and orphan partial files only", async (
   }));
   rows[0].piSessionId = "stale-native";
   rows[0].piSessionFile = stalePiFile;
-  await fs.writeFile(stalePiFile, `${JSON.stringify({ type: "session", id: "stale-native", cwd: project.path })}\n`);
+  await fs.writeFile(stalePiFile, `${JSON.stringify({ type: "session", id: "stale-native", cwd: project.workingRoot })}\n`);
   await fs.writeFile(registryFile, `${JSON.stringify({ version: 2, chats: rows })}\n`);
   for (const id of [old, kept]) {
     await fs.mkdir(path.join(chatDirectory(project, id), "attachments"), { recursive: true });

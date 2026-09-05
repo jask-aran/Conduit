@@ -175,7 +175,7 @@ export class AttachmentStore {
       await pipeline(readable, limitedReadable(this.maxBytes), stream);
       await fsp.rename(partPath, finalPath);
       const workspaceWarning = existingAttachments.length === 0
-        ? await excludeConduitFromGit(project.path).catch(() => "Could not add .conduit/ to Git's local exclude file")
+        ? await excludeConduitFromGit(project.workingRoot).catch(() => "Could not add .conduit/ to Git's local exclude file")
         : null;
       this.chatStore.markAttachments(chatId, true);
       const stat = await fsp.stat(finalPath);
@@ -220,4 +220,3 @@ export class AttachmentStore {
     };
   }
 }
-

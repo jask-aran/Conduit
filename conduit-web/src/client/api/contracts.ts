@@ -36,9 +36,9 @@ export interface Project {
   slug: string;
   name: string;
   origin?: "managed" | "linked" | "created" | "cloned";
-  kind?: "project" | "workspace";
+  kind?: "unstructured" | "project" | "workspace";
   path?: string;
-  workingRoot?: string;
+  workingRoot: string;
   externalPath?: string;
   state?: "ready" | "cloning";
   cloneOperationId?: string | null;

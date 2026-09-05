@@ -19,7 +19,7 @@ test("live session launcher selects and materializes the model profile before Pi
   await fs.writeFile(searchConfigFile, JSON.stringify({ braveApiKey: "BSA-test-key", webSearch: { enabled: true } }), { mode: 0o600 });
 
   const chatId = "a".repeat(24);
-  const project = { id: "project_test", slug: "test", path: path.join(root, "workspace") };
+  const project = { id: "project_test", slug: "test", path: path.join(root, "workspace"), workingRoot: path.join(root, "workspace") };
   const chat = {
     id: chatId,
     status: "draft",
@@ -128,7 +128,7 @@ test("live session launcher repairs an obsolete persisted thinking level", async
   ].map((entry) => JSON.stringify(entry)).join("\n") + "\n");
 
   const chatId = "r".repeat(24);
-  const project = { id: "project_recovery", slug: "recovery", path: workspace };
+  const project = { id: "project_recovery", slug: "recovery", path: workspace, workingRoot: workspace };
   const chat = {
     id: chatId,
     status: "active",
@@ -208,7 +208,7 @@ test("live session launcher recovers an out-of-scope persisted model", async () 
   ].map((entry) => JSON.stringify(entry)).join("\n") + "\n");
 
   const chatId = "m".repeat(24);
-  const project = { id: "project_recovery", slug: "recovery", path: workspace };
+  const project = { id: "project_recovery", slug: "recovery", path: workspace, workingRoot: workspace };
   const chat = {
     id: chatId,
     status: "active",

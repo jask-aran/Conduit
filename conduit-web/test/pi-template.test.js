@@ -171,7 +171,7 @@ test("a stopped persisted session can be resumed in a fresh Pi process", async (
     spawnImpl,
     template: { id: "test", version: "1", models: [], tools: [], extensions: [], skills: [], promptTemplates: [] },
   });
-  const project = { id: "project_test", slug: "test", path: "/tmp/project", sessionsDir: "/tmp/sessions" };
+  const project = { id: "project_test", slug: "test", path: "/tmp/project", workingRoot: "/tmp/project", sessionsDir: "/tmp/sessions" };
   const first = manager.create({ project, sessionFile: "/tmp/sessions/session.jsonl" });
   await manager.stopAndWait(first.id);
   const second = manager.create({ project, sessionFile: "/tmp/sessions/session.jsonl" });
@@ -196,7 +196,7 @@ test("one Conduit chat cannot start two live Pi writers", () => {
     },
     template: { id: "test", version: "1", models: [], tools: [], extensions: [], skills: [], promptTemplates: [] },
   });
-  const project = { id: "project_test", slug: "test", path: "/tmp/project", sessionsDir: "/tmp/sessions" };
+  const project = { id: "project_test", slug: "test", path: "/tmp/project", workingRoot: "/tmp/project", sessionsDir: "/tmp/sessions" };
   const first = manager.create({ project, chatId: "chat-stable" });
   const second = manager.create({ project, chatId: "chat-stable" });
   assert.equal(second, first);
@@ -226,7 +226,7 @@ test("create can launch a non-default template and exposes it on the process vie
       systemPrompt: "/tmp/SYSTEM.md",
     },
   });
-  const project = { id: "project_test", slug: "test", path: "/tmp/project", sessionsDir: "/tmp/sessions" };
+  const project = { id: "project_test", slug: "test", path: "/tmp/project", workingRoot: "/tmp/project", sessionsDir: "/tmp/sessions" };
   const workspace = {
     id: "workspace",
     version: "1",
@@ -261,7 +261,7 @@ test("one manager launches a resolved Native Pi specification under shared proce
     },
     template: { id: "chat", version: "3", models: [], tools: [], extensions: [], skills: [], promptTemplates: [] },
   });
-  const project = { id: "project_workspace", slug: "workspace", path: "/tmp/workspace", sessionsDir: "/tmp/native-sessions" };
+  const project = { id: "project_workspace", slug: "workspace", path: "/tmp/workspace", workingRoot: "/tmp/workspace", sessionsDir: "/tmp/native-sessions" };
   const runtime = { kind: "native_pi", installationId: "host-pi", binaryVersion: "0.80.10" };
   const record = manager.create({
     project,
@@ -269,7 +269,7 @@ test("one manager launches a resolved Native Pi specification under shared proce
     launchSpec: {
       command: "/home/user/bin/pi",
       args: ["--mode", "rpc", "--no-approve"],
-      cwd: project.path,
+      cwd: project.workingRoot,
       env: { HOME: "/home/user" },
       sessionFile: null,
       runtime,
@@ -279,7 +279,7 @@ test("one manager launches a resolved Native Pi specification under shared proce
   });
   assert.equal(invocation.command, "/home/user/bin/pi");
   assert.deepEqual(invocation.args, ["--mode", "rpc", "--no-approve"]);
-  assert.equal(invocation.options.cwd, project.path);
+  assert.equal(invocation.options.cwd, project.workingRoot);
   assert.equal(invocation.options.env.PI_CODING_AGENT_DIR, undefined);
   assert.equal(manager.view(record).runtime.kind, "native_pi");
   assert.equal(manager.view(record).binaryVersion, "0.80.10");
@@ -300,13 +300,13 @@ test("an existing writer cannot be reused through a different runtime", () => {
     },
     template: { id: "chat", version: "3", models: [], tools: [], extensions: [], skills: [], promptTemplates: [] },
   });
-  const project = { id: "project_workspace", slug: "workspace", path: "/tmp/workspace", sessionsDir: "/tmp/sessions" };
+  const project = { id: "project_workspace", slug: "workspace", path: "/tmp/workspace", workingRoot: "/tmp/workspace", sessionsDir: "/tmp/sessions" };
   manager.create({
     project,
     chatId: "chat-runtime-conflict",
     launchSpec: {
       command: "/tmp/conduit-pi",
-      args: [], cwd: project.path, env: {}, sessionFile: null,
+      args: [], cwd: project.workingRoot, env: {}, sessionFile: null,
       runtime: { kind: "conduit_profile" },
     },
   });
@@ -315,7 +315,7 @@ test("an existing writer cannot be reused through a different runtime", () => {
     chatId: "chat-runtime-conflict",
     launchSpec: {
       command: "/tmp/native-pi",
-      args: [], cwd: project.path, env: {}, sessionFile: null,
+      args: [], cwd: project.workingRoot, env: {}, sessionFile: null,
       runtime: { kind: "native_pi" },
     },
   }), { code: "session_writer_conflict" });
@@ -526,7 +526,7 @@ function rpcFixture(onCommand) {
     spawnImpl: () => child,
     template: { id: "test", version: "1", models: [], tools: [], extensions: [], skills: [], promptTemplates: [] },
   });
-  const project = { id: "project_test", slug: "test", path: "/tmp/project", sessionsDir: "/tmp/sessions" };
+  const project = { id: "project_test", slug: "test", path: "/tmp/project", workingRoot: "/tmp/project", sessionsDir: "/tmp/sessions" };
   const record = manager.create({ project, chatId: "chat-test", sessionFile: "/tmp/sessions/original.jsonl" });
   child.emit("spawn");
   return { manager, child, record };
@@ -754,7 +754,7 @@ test("restores cumulative eligible cache-hit rate from the persisted Pi session"
     template: { id: "test", version: "1", models: [], tools: [], extensions: [], skills: [], promptTemplates: [] },
   });
   const record = manager.create({
-    project: { id: "project_test", slug: "test", path: root, sessionsDir: root },
+    project: { id: "project_test", slug: "test", path: root, workingRoot: root, sessionsDir: root },
     chatId: "chat-cache-stats",
     sessionFile,
   });

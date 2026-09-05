@@ -18,13 +18,19 @@ depends on another finding landing first, it says so.
 
 ## P0
 
-### Open — Working-root consistency
+### Complete — Working-root consistency
 
 The Files and Source Control views use the selected project's resolved path. A generic chat maps to the shared `filesRoot` in `conduit-web/src/project-store.js:196-199`, while a non-workspace terminal starts in the server user's home directory in `conduit-web/src/server/routes/ptys.js:4-23`. The agent runtime can also have a different working directory. A user can therefore inspect one root and run commands in another root from the same panel.
 
 Relevant code: `conduit-web/src/project-store.js:196-199`, `conduit-web/src/server/routes/ptys.js:4-23`, and the project resolution used by the routes in `conduit-web/src/server/routes/projects.js`.
 
-**Solution.** Make the working root a single server-owned value derived once per
+**Completed.** `workingRoot` is now the server-owned action root for files,
+Git, terminals, models, sessions, attachments and Pi. Managed roots are
+anchored below `filesRoot` and reject missing, symlinked or changed roots;
+only terminal creation can recreate a missing managed root. The shared Chats
+tree intentionally continues to show managed project folders below `filesRoot`.
+
+**Original solution.** Make the working root a single server-owned value derived once per
 project, and have every consumer read it rather than compute its own.
 
 1. Add `workingRoot(project)` to `project-store.js`, beside `managedPath`. It

@@ -167,7 +167,7 @@ function sessionMetadata(file, project, stat, index) {
     title: index.name || index.firstMessage.slice(0, 72) || "New chat",
     createdAt: index.header?.timestamp || stat.birthtime.toISOString(),
     updatedAt: stat.mtime.toISOString(),
-    cwd: index.header?.cwd || project.path,
+    cwd: index.header?.cwd || project.workingRoot,
     file,
     model: index.model,
     thinkingLevel: index.thinkingLevel,
@@ -180,7 +180,7 @@ async function assertSessionMapping(file, project, header) {
     error.code = "invalid_session_mapping";
     throw error;
   }
-  if (path.resolve(header.cwd) !== path.resolve(project.path)) {
+  if (path.resolve(header.cwd) !== path.resolve(project.workingRoot)) {
     const error = new Error("Pi session working directory does not match its Conduit workspace");
     error.code = "session_cwd_mismatch";
     throw error;
@@ -332,7 +332,7 @@ export async function parseSession(file, project) {
     title: name || firstMessage.slice(0, 72) || "New chat",
     createdAt: header?.timestamp || stat.birthtime.toISOString(),
     updatedAt: stat.mtime.toISOString(),
-    cwd: header?.cwd || project.path,
+    cwd: header?.cwd || project.workingRoot,
     file,
     entries,
   };
@@ -353,7 +353,7 @@ export async function validateSessionFile(file, project) {
     error.code = "invalid_session_mapping";
     throw error;
   }
-  if (path.resolve(header.cwd) !== path.resolve(project.path)) {
+  if (path.resolve(header.cwd) !== path.resolve(project.workingRoot)) {
     const error = new Error("Pi session working directory does not match its Conduit workspace");
     error.code = "session_cwd_mismatch";
     throw error;
@@ -469,13 +469,13 @@ export async function removeSessionFamily(file, project, options = {}) {
 }
 
 export async function renameSession(session, project, name) {
-  const manager = SessionManager.open(session.file, project.sessionsDir, project.path);
+  const manager = SessionManager.open(session.file, project.sessionsDir, project.workingRoot);
   manager.appendSessionInfo(name);
   return parseSession(session.file, project);
 }
 
 export async function duplicateSession(session, targetProject, name = "") {
-  const manager = SessionManager.forkFrom(session.file, targetProject.path, targetProject.sessionsDir);
+  const manager = SessionManager.forkFrom(session.file, targetProject.workingRoot, targetProject.sessionsDir);
   if (name.trim()) manager.appendSessionInfo(name);
   return parseSession(manager.getSessionFile(), targetProject);
 }

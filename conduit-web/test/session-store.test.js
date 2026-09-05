@@ -129,7 +129,7 @@ test("indexed session pages remain bounded and converge across append and replac
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-indexed-session-test-"));
   const projectPath = path.join(root, "project");
   const file = path.join(root, "session.jsonl");
-  const project = { id: "project_indexed", slug: "indexed", path: projectPath };
+  const project = { id: "project_indexed", slug: "indexed", path: projectPath, workingRoot: projectPath };
   const entries = [
     { type: "session", id: "session-indexed", timestamp: "2026-01-01T00:00:00Z", cwd: projectPath },
     { type: "model_change", provider: "anthropic", modelId: "haiku" },
@@ -174,7 +174,7 @@ test("concurrent index refreshes share one immutable successor across append and
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-session-index-race-"));
   const projectPath = path.join(root, "project");
   const file = path.join(root, "session.jsonl");
-  const project = { id: "project_race", slug: "race", path: projectPath };
+  const project = { id: "project_race", slug: "race", path: projectPath, workingRoot: projectPath };
   const header = { type: "session", id: "session-race", timestamp: "2026-01-01T00:00:00Z", cwd: projectPath };
   const initial = { type: "message", id: "initial", message: { role: "user", content: "Initial" } };
   await fs.writeFile(file, `${JSON.stringify(header)}\n${JSON.stringify(initial)}\n`);
@@ -224,7 +224,7 @@ test("discovers cwd-matched sessions in Pi's native agent-home layout", async ()
     JSON.stringify({ type: "session", id: "session-native-1", timestamp: "2026-01-01T00:00:00Z", cwd: projectRoot }),
     JSON.stringify({ type: "message", message: { role: "user", content: [{ type: "text", text: "Hello Pi" }] } }),
   ].join("\n"));
-  const projects = [{ id: "project_example", slug: "example", path: projectRoot, sessionsDir }];
+  const projects = [{ id: "project_example", slug: "example", path: projectRoot, workingRoot: projectRoot, sessionsDir }];
   const sessions = await discoverSessions(projects);
   assert.equal(sessions[0].title, "Hello Pi");
   assert.equal((await findSession(projects, sessions[0].id)).file, file);
@@ -244,7 +244,7 @@ test("filters cwd collisions from Pi's encoded session directories", async () =>
   await fs.writeFile(path.join(sessionsDir, "first.jsonl"), `${JSON.stringify({ type: "session", id: "session-first", cwd: firstPath })}\n`);
   await fs.writeFile(path.join(sessionsDir, "second.jsonl"), `${JSON.stringify({ type: "session", id: "session-second", cwd: secondPath })}\n`);
 
-  const projects = [{ id: "project_first", slug: "first", path: firstPath, sessionsDir }];
+  const projects = [{ id: "project_first", slug: "first", path: firstPath, workingRoot: firstPath, sessionsDir }];
   const sessions = await discoverSessions(projects);
   assert.deepEqual(sessions.map((session) => session.id), ["session-first"]);
   await fs.rm(root, { recursive: true, force: true });
@@ -263,7 +263,7 @@ test("deletes a Pi fork family without touching unrelated session trees", async 
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-session-family-delete-test-"));
   const projectPath = path.join(root, "project");
   const sessionsDir = sessionDirectoryFor(projectPath, path.join(root, "pi"));
-  const project = { id: "project_family", slug: "family", path: projectPath, sessionsDir };
+  const project = { id: "project_family", slug: "family", path: projectPath, workingRoot: projectPath, sessionsDir };
   await fs.mkdir(sessionsDir, { recursive: true });
   const original = path.join(sessionsDir, "original.jsonl");
   const branch = path.join(sessionsDir, "branch.jsonl");
@@ -292,7 +292,7 @@ test("deletes profile-overlay sessions only under the installation root", async 
   const installationRoot = path.join(root, "pi");
   const profileAgentDir = path.join(installationRoot, "model-profiles", "search");
   const sessionsDir = sessionDirectoryFor(projectPath, profileAgentDir);
-  const project = { id: "project_profile", slug: "profile", path: projectPath, sessionsDir };
+  const project = { id: "project_profile", slug: "profile", path: projectPath, workingRoot: projectPath, sessionsDir };
   await fs.mkdir(sessionsDir, { recursive: true });
   const file = path.join(sessionsDir, "profile-session.jsonl");
   await fs.writeFile(file, `${JSON.stringify({ type: "session", id: "profile-session", timestamp: "2026-01-01T00:00:00Z", cwd: projectPath })}\n`);
@@ -309,7 +309,7 @@ test("discoverSessions keeps creation order after rename updates mtime", async (
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-session-order-test-"));
   const projectPath = path.join(root, "project");
   const sessionsDir = sessionDirectoryFor(projectPath, path.join(root, "pi"));
-  const project = { id: "project_order", slug: "order", path: projectPath, sessionsDir };
+  const project = { id: "project_order", slug: "order", path: projectPath, workingRoot: projectPath, sessionsDir };
   await fs.mkdir(sessionsDir, { recursive: true });
   const older = path.join(sessionsDir, "older.jsonl");
   const newer = path.join(sessionsDir, "newer.jsonl");
@@ -343,19 +343,21 @@ test("renames, duplicates, and moves sessions through Pi's native session manage
     id: "project_source",
     slug: "source",
     path: path.join(root, "source"),
+    workingRoot: path.join(root, "source"),
     sessionsDir: sessionDirectoryFor(path.join(root, "source"), piAgentDir),
   };
   const target = {
     id: "project_target",
     slug: "target",
     path: path.join(root, "target"),
+    workingRoot: path.join(root, "target"),
     sessionsDir: sessionDirectoryFor(path.join(root, "target"), piAgentDir),
   };
   await fs.mkdir(source.sessionsDir, { recursive: true });
   await fs.mkdir(target.sessionsDir, { recursive: true });
   const file = path.join(source.sessionsDir, "session.jsonl");
   await fs.writeFile(file, [
-    JSON.stringify({ type: "session", version: 3, id: "session-source", timestamp: "2026-01-01T00:00:00Z", cwd: source.path }),
+    JSON.stringify({ type: "session", version: 3, id: "session-source", timestamp: "2026-01-01T00:00:00Z", cwd: source.workingRoot }),
     JSON.stringify({ type: "message", id: "entry-user", parentId: null, timestamp: "2026-01-01T00:00:01Z", message: { role: "user", content: [{ type: "text", text: "Original question" }] } }),
     JSON.stringify({ type: "message", id: "entry-assistant", parentId: "entry-user", timestamp: "2026-01-01T00:00:02Z", message: { role: "assistant", content: [{ type: "text", text: "Original answer" }] } }),
   ].join("\n") + "\n");
@@ -367,12 +369,12 @@ test("renames, duplicates, and moves sessions through Pi's native session manage
   const duplicate = await duplicateSession(renamed, source, "Research notes copy");
   assert.notEqual(duplicate.id, renamed.id);
   assert.equal(duplicate.title, "Research notes copy");
-  assert.equal(duplicate.cwd, source.path);
+  assert.equal(duplicate.cwd, source.workingRoot);
 
   const moved = await moveSession(renamed, target);
   assert.notEqual(moved.id, renamed.id);
   assert.equal(moved.title, "Research notes");
-  assert.equal(moved.cwd, target.path);
+  assert.equal(moved.cwd, target.workingRoot);
   await assert.rejects(fs.access(file), { code: "ENOENT" });
   assert.equal((await discoverSessions([target]))[0].id, moved.id);
   assert.equal(transcriptFromEntries(moved.entries), "## User\n\nOriginal question\n\n## Assistant\n\nOriginal answer");

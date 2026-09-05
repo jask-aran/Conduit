@@ -47,7 +47,7 @@ export function resolvePiLaunch({
     error.code = chat?.runtime?.kind === "native_pi" ? "native_pi_unavailable" : "runtime_version_unavailable";
     throw error;
   }
-  const cwd = path.resolve(project.workingRoot || project.path);
+  const cwd = path.resolve(project.workingRoot);
   const runtime = chat.runtime;
   const processSpec = resolvePiProcess(installation.command, installation.commandArgs || []);
   if (runtime.kind === "native_pi") {

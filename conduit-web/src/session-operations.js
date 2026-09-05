@@ -21,7 +21,7 @@ export async function stopSessionFamilyProcesses(manager, chat, files) {
 
 export function sessionDirectoryForChat(config, chat, project) {
   const installation = config.installations.get(chat.runtime?.installationId || "conduit-pinned");
-  return installation ? sessionDirectoryFor(project.path, installation.agentDir) : project.sessionsDir;
+  return installation ? sessionDirectoryFor(project.workingRoot, installation.agentDir) : project.sessionsDir;
 }
 
 export function sessionDirectoryRootForChat(config, chat) {

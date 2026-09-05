@@ -39,6 +39,17 @@ test("workspace tree and text preview hide internals and fail closed on unsafe p
   await assert.rejects(readWorkspaceFile(root, "escape"), { code: "workspace_path_symlink" });
 });
 
+test("direct inspector calls reject a symlinked workspace root", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-inspector-root-link-"));
+  const outside = path.join(root, "outside");
+  const linked = path.join(root, "linked");
+  await fs.mkdir(outside);
+  await fs.writeFile(path.join(outside, "secret.txt"), "outside");
+  await fs.symlink(outside, linked);
+  await assert.rejects(listWorkspaceDirectory(linked), { code: "unsafe_workspace_root" });
+  assert.equal(await fs.readFile(path.join(outside, "secret.txt"), "utf8"), "outside");
+});
+
 test("oversize directories report the limit without an arbitrary partial listing", async (t) => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-directory-oversize-"));
   t.mock.method(fs, "opendir", async () => ({

@@ -26,8 +26,8 @@ export function isChatId(value) {
 }
 
 export function chatDirectory(project, chatId) {
-  if (!project?.path || !isChatId(chatId)) throw new Error("Invalid chat path");
-  return path.join(path.resolve(project.path), ".conduit", "chats", chatId);
+  if (!project?.workingRoot || !isChatId(chatId)) throw new Error("Invalid chat path");
+  return path.join(path.resolve(project.workingRoot), ".conduit", "chats", chatId);
 }
 
 export function chatView(chat) {

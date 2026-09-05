@@ -103,7 +103,7 @@ export function AppDashboard(props: {
     const value = Date.parse(terminal.lastActivityAt || terminal.updatedAt || terminal.createdAt || "") || 0;
     return value ? relativeActivity(value, now()) : "Activity unavailable";
   };
-  const terminalCwd = (terminal: Pty) => terminal.cwd || terminalScope(terminal)?.path || terminalScope(terminal)?.externalPath || "Working directory unavailable";
+  const terminalCwd = (terminal: Pty) => terminal.cwd || terminalScope(terminal)?.workingRoot || "Working directory unavailable";
 
   return <section class="app-dashboard" aria-labelledby="app-dashboard-title">
     <div class="app-dashboard-intro">
