@@ -163,93 +163,49 @@ Acceptance: extend `test/workspace-inspector.test.js` with cases asserting no
 temporary survives a successful write, a stale `if-match` still returns 409, and
 the target's mode is preserved across a save.
 
-### Open — Panel expansion animation and transcript reflow
+### Complete — Panel expansion animation and transcript reflow
 
-Entering or leaving the maximized state is visibly unsteady: content flashes
-across the full width including the area beside the left sidebar, and the
-transcript appears to re-render from below rather than staying in place. Four
-independent causes are visible in the layout rules.
+Expansion now has one width animation, owned by the Workspace panel. A
+`workspace-layout` container bounds the panel to the space beside the Sidebar.
+The chat pane absorbs the remaining width without its own flex, margin, or
+opacity transition. The panel surface fills its shell during expansion and
+restore, so it cannot leave a gap inside the shell.
 
-**The transition animates a layout property.** `.chat-main` transitions
-`flex-grow` and `margin` (`conduit-web/src/client/workspace/workspace.css:14-15`).
-Interpolating `flex-grow` re-solves the flex line every frame on the main thread.
-`.chat-main` also declares `container-type: inline-size`
-(`conduit-web/src/client/styles.css:119`), so every frame changes a query
-container's inline size and re-evaluates every container query inside the
-transcript. None of this can move to the compositor.
+The transcript keeps its rendered width while expanded and during restoration.
+It stays mounted and rendered, with its scroll position intact. Restoration
+releases the width on the panel's `width` transition end; instant changes have
+a separate release path. The old hide/reveal timer and permanent
+`will-change: transform` declarations are removed.
 
-**The two sides of the animation are governed by different clocks.** `.chat-main`
-transitions its `flex-grow` from 1 to 0, while `.workspace-panel-expanded` sets
-`flex-grow: 1` with no transition (`workspace.css:17`), so the panel claims the
-free space on the first frame while the chat gives it up gradually. The width
-curve is the sum of one stepped and one eased change.
+The implementation preserves the existing open/close transform animation and
+immediate resize path. Clipping belongs to the shared layout container, so the
+panel's resize handle can still extend into the gap beside the chat. Reduced
+motion retains the immediate transition behaviour.
 
-**The panel surface does not track its shell.** The surface is absolutely
-positioned, right-anchored, and sized `var(--workspace-panel-width)`, switching to
-`width: 100%` only through the expanded class (`workspace.css:9,18`), with no
-transition of its own. On restore the class drops instantly, so the surface snaps
-back to the docked width while the shell is still wide and shrinking, leaving a
-full-height gap on the shell's left for the whole duration. The shell is
-`overflow: visible`, and `.chat-main` has not grown back yet because its opacity
-and flex-grow are still animating. That gap is the flash that appears to span the
-screen.
+Relevant code: `conduit-web/src/client/main.tsx`,
+`conduit-web/src/client/workspace/workspace.css`, and
+`conduit-web/src/client/styles.css`.
 
-**The transcript is un-rendered mid-transition and restored on a timer.**
-`content-visibility: hidden` is applied to `.transcript-motion-shell`
-(`workspace.css:16`) for `PANEL_MOTION_DURATION_MS + 32`, set from JavaScript in
-`conduit-web/src/client/main.tsx:419-431`. `content-visibility: hidden` discards
-the subtree's rendering state, so the reveal re-lays out the whole transcript in a
-single frame at the end of the animation, and the scroll offset inside it is not
-preserved across the flip -- which is the "renders from below" behaviour. Because
-the reveal is driven by a timer rather than `transitionend`, any drift between the
-JavaScript constant and `--panel-motion-duration`, or one busy frame, un-hides the
-transcript at an intermediate width and forces a second full re-render. The shell
-also carries a permanent `will-change: transform` (`styles.css:164`), so the
-composited layer is torn down and rebuilt around each flip.
+**Verified on 2026-09-05.** The focused browser regression samples expand and
+restore frame by frame: transcript width stays constant, scroll position stays
+at 400, and the panel surface matches the shell. Reduced-motion restoration,
+desktop and mobile maximization commands, file-panel resizing, shortcut state
+transitions, and rapid open/close reversals pass their focused browser checks.
+Typecheck and production build pass.
 
-Note that `opacity: 0` on the expanded `.chat-main` does not avoid any of this: the
-subtree still participates in layout, and the element still paints its background,
-inset shadow and rounded corners each frame while shrinking.
+Native Windows Chrome loaded production bundle `index-DYEY8FI-.js`. Across
+40 sampled frames per direction, transcript width stayed at 1730.497 px,
+scroll position stayed at 400, and the shell/surface gap stayed at zero.
+A separate trace without per-frame geometry reads recorded 24 layout events
+per direction, one forced layout at the start of each direction, and no
+transcript layout roots. Total layout time was 37.906 ms for expansion and
+34.349 ms for restoration; the longest layout was 3.156 ms. These are current
+observations, not a comparison against a matched baseline.
 
-Relevant code: `conduit-web/src/client/workspace/workspace.css:14-18`, `conduit-web/src/client/styles.css:119`, `conduit-web/src/client/styles.css:164`, and `conduit-web/src/client/main.tsx:419-431`.
-
-**Solution.** One animated value, one owner, no un-rendering. Take the four causes
-in order; each step is independently observable.
-
-1. **Animate the panel only.** `.workspace-panel` already transitions `width`
-   (`workspace.css:2`). Give it a single width source — `var(--workspace-panel-width)`
-   docked, `100%` expanded — and delete `flex-grow: 1; flex-shrink: 1` from
-   `.workspace-panel-expanded` (`:17`).
-2. **Make `.chat-main` passive.** Remove its transition list entirely (`:14`) and
-   give it `flex: 1 1 auto; min-width: 0`, so it absorbs whatever the panel does
-   not take, on the same frame, from the same curve. Keep `margin-inline: 0` on
-   `.workspace-expanded` but fold the margin change into the panel's existing
-   `margin-right` transition rather than animating it on `.chat-main`.
-3. **Make the surface fill its shell.** Change `.workspace-panel-surface` (`:9`)
-   from `right: 0; width: var(--workspace-panel-width)` to `inset: 0; width: auto`,
-   and delete the expanded width override (`:18`). The surface then cannot
-   desynchronise from the shell in either direction, which removes the restore-time
-   gap. Add `overflow: hidden` to `.workspace-panel` so nothing paints outside the
-   animating box.
-4. **Stop discarding the transcript.** Delete the `content-visibility: hidden`
-   rule (`:16`) and, in `main.tsx:419-431`, the `data-workspace-expansion-motion`
-   attribute and `workspaceExpansionMotionTimer`. With `flex-grow` no longer
-   interpolating, the remaining per-frame cost is the container-query
-   re-evaluation; if that is still too expensive, move `container-type: inline-size`
-   off `.chat-main` (`styles.css:119`) onto an inner wrapper whose width does not
-   change during the transition, and add `contain: layout paint` to
-   `.transcript-motion-shell`. Do not reintroduce a duration constant in
-   JavaScript; if any reveal step survives, key it off `transitionend` filtered to
-   `propertyName === "width"` on the panel element.
-5. **Drop the permanent `will-change`.** `styles.css:164` should apply
-   `will-change: transform` only while a motion attribute is present, or not at all.
-6. Keep the `prefers-reduced-motion` branch and
-   `.workspace-panel[data-edge-instant="true"]` working — after this change both
-   simply mean "no width transition".
-
-Acceptance: record a trace of one expand and one restore; `.transcript-motion-shell`
-should show no layout thrash, and its `scrollTop` should be unchanged across the
-flip. Add a browser test asserting scroll position survives maximise and restore.
+The closed-to-maximized shortcut also animates on the panel's first lazy mount.
+Its entrance uses the full maximized surface width throughout the slide.
+A focused frame-sampling regression covers this path; docked expansion and
+rapid open/close reversal checks also pass after this correction.
 
 ### Open — Replace-with-upload bypasses the revision contract
 
