@@ -36,7 +36,6 @@ export interface FileSlotHandle {
   hasUnsavedChanges: () => boolean;
   reload: () => Promise<void>;
   edit: () => void;
-  poll: () => Promise<void>;
   save: () => Promise<void>;
 }
 
@@ -237,55 +236,11 @@ export default function WorkspaceFileSlot(props: {
     }
   };
 
-  // Staleness check driven by the panel's shared poll timer.
-  const poll = async () => {
-    const shown = image();
-    if (shown) {
-      const projectId = props.projectId;
-      try {
-        const metadata = await api<FileMetadata>(
-          `/v0/projects/${encodeURIComponent(projectId)}/file?path=${encodeURIComponent(shown.path)}&metadata=1`,
-        );
-        if (props.projectId !== projectId || image()?.path !== shown.path) return;
-        if (metadata.modifiedAt !== shown.modifiedAt || metadata.size !== shown.size) await load(true);
-      } catch (cause) {
-        if (errorCode(cause) !== "path_not_found") throw cause;
-        if (props.projectId === projectId && image()?.path === shown.path) {
-          clear();
-          props.onRemoved(shown.path, true);
-        }
-      }
-      return;
-    }
-    const file = preview();
-    if (!file || hasUnsavedChanges() || saving()) return;
-    const projectId = props.projectId;
-    try {
-      const metadata = await api<FileMetadata>(
-        `/v0/projects/${encodeURIComponent(projectId)}/file?path=${encodeURIComponent(file.path)}&metadata=1`,
-      );
-      if (props.projectId !== projectId || preview()?.path !== file.path) return;
-      if (typeof file.modifiedAt === "number" && typeof metadata.modifiedAt === "number"
-        && (file.modifiedAt !== metadata.modifiedAt || file.size !== metadata.size)) {
-        const before = file.revision;
-        await load(true);
-        if (preview()?.revision !== before) toast.info(`${file.path} updated`);
-      }
-    } catch (cause) {
-      if (errorCode(cause) !== "path_not_found") throw cause;
-      if (props.projectId === projectId && preview()?.path === file.path) {
-        clear();
-        props.onRemoved(file.path, true);
-      }
-    }
-  };
-
   props.ref?.({
     path: () => props.path,
     hasUnsavedChanges,
     reload: async () => { if (!hasUnsavedChanges()) await load(true); },
     edit: () => { if (preview()) setEditing(true); },
-    poll,
     save,
   });
 

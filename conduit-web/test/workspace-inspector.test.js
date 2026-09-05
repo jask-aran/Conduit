@@ -7,12 +7,14 @@ import test from "node:test";
 import { promisify } from "node:util";
 import {
   createWorkspaceDirectory,
+  closeWorkspaceVersionWatch,
   deleteWorkspaceDirectory,
   deleteWorkspaceFile,
   listWorkspaceDirectory,
   moveWorkspaceEntry,
   readWorkspaceDiff,
   readWorkspaceFile,
+  readWorkspaceVersion,
   runBoundedGit,
   runWorkspaceGitAction,
   writeWorkspaceFile,
@@ -35,6 +37,40 @@ test("workspace tree and text preview hide internals and fail closed on unsafe p
   await assert.rejects(readWorkspaceFile(root, "escape"), { code: "workspace_path_symlink" });
 });
 
+test("oversize directories report the limit without an arbitrary partial listing", async (t) => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-directory-oversize-"));
+  t.mock.method(fs, "opendir", async () => ({
+    async *[Symbol.asyncIterator]() {
+      for (let index = 0; index <= 50_000; index += 1) yield {
+        name: `file-${index}`, isSymbolicLink: () => false, isDirectory: () => false, isFile: () => true,
+      };
+    },
+  }));
+  assert.deepEqual(await listWorkspaceDirectory(root), { entries: [], total: null, truncated: false, cursor: null, oversize: true });
+});
+
+test("workspace tree pages all 1200 entries in stable order without overlap", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-directory-pages-"));
+  for (let index = 1199; index >= 0; index -= 1) {
+    await fs.writeFile(path.join(root, `file-${String(index).padStart(4, "0")}`), "");
+  }
+  const names = [];
+  let after;
+  do {
+    const page = await listWorkspaceDirectory(root, "", { after });
+    assert.equal(page.total, 1200);
+    assert.equal(page.oversize, false);
+    const batch = page.entries.map((entry) => entry.name);
+    assert.deepEqual(batch, [...batch].sort());
+    assert.equal(batch.length, after ? Math.min(500, 1200 - names.length) : 500);
+    names.push(...batch);
+    after = page.cursor;
+  } while (after);
+  assert.equal(new Set(names).size, 1200);
+  assert.deepEqual(names, Array.from({ length: 1200 }, (_, index) => `file-${String(index).padStart(4, "0")}`));
+  await assert.rejects(listWorkspaceDirectory(root, "", { after: "not-json" }), { code: "invalid_workspace_path" });
+});
+
 test("workspace tree bounds accepted entries after filtering hidden and symlinked names", async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-inspector-bound-"));
   await fs.mkdir(path.join(root, "00-directory"));
@@ -52,6 +88,39 @@ test("workspace tree bounds accepted entries after filtering hidden and symlinke
   assert.deepEqual([...listing.entries].sort((left, right) => left.type === right.type ? left.name.localeCompare(right.name) : left.type === "directory" ? -1 : 1), listing.entries);
   assert.equal(listing.entries.some((entry) => entry.name === ".conduit"), false);
   assert.equal(listing.entries.some((entry) => entry.name === "symlinked"), false);
+});
+
+test("workspace version reports one shared change signal and ignores Conduit internals", async (t) => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-workspace-version-"));
+  t.after(() => closeWorkspaceVersionWatch(root));
+  await fs.mkdir(path.join(root, ".conduit"));
+  await fs.writeFile(path.join(root, "notes.txt"), "before\n");
+  const first = await readWorkspaceVersion(root, { paths: ["", "notes.txt"] });
+  assert.equal(first.changedPaths, null);
+  await fs.writeFile(path.join(root, ".conduit", "state.json"), "ignored\n");
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  const ignored = await readWorkspaceVersion(root, { paths: ["", "notes.txt"] });
+  assert.equal(ignored.version, first.version);
+  await fs.writeFile(path.join(root, "notes.txt"), "after and larger\n");
+  let changed = ignored;
+  for (let attempt = 0; attempt < 20 && changed.version === ignored.version; attempt += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    changed = await readWorkspaceVersion(root, { paths: ["", "notes.txt"] });
+  }
+  assert.ok(changed.version > ignored.version);
+  assert.ok(changed.changedPaths?.includes("notes.txt"));
+});
+
+test("workspace version falls back to visible-path mtime checks", async (t) => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-workspace-version-fallback-"));
+  t.after(() => closeWorkspaceVersionWatch(root));
+  await fs.writeFile(path.join(root, "notes.txt"), "before\n");
+  const unavailableWatch = () => { throw new Error("Recursive watch is unavailable"); };
+  const first = await readWorkspaceVersion(root, { paths: ["notes.txt"], watchImpl: unavailableWatch });
+  await fs.writeFile(path.join(root, "notes.txt"), "after and larger\n");
+  const changed = await readWorkspaceVersion(root, { paths: ["notes.txt"], watchImpl: unavailableWatch });
+  assert.ok(changed.version > first.version);
+  assert.ok(changed.changedPaths?.includes("notes.txt"));
 });
 
 test("workspace writes create files and reject stale or implicit overwrites", async () => {

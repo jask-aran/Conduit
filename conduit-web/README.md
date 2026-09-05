@@ -463,13 +463,17 @@ starting, and browser-attached processes remain resident.
   and live-process stats, up to ten recent active chats, and bounded Git
   overview data for Workspaces. It does not walk the working tree for disk
   usage or read every transcript.
-- `GET /v0/projects/:id/tree?path=…` lists one validated directory level,
-  returning a bounded selection of at most 500 visible entries in
-  directory-first/name order plus `truncated: true` when additional visible
-  entries exist; `.conduit` and symlinks are excluded before applying the bound
+- `GET /v0/projects/:id/tree?path=…&after=…` lists one validated directory level.
+  It sorts the complete directory by type (directories first) and name, then
+  returns up to 500 entries with `total`, `truncated`, and `cursor`. Pass the
+  returned cursor as `after` for the next page. `.conduit` and symlinks are
+  excluded. Above 50,000 scanned entries it returns `oversize: true`, an empty
+  page, and `total: null`. The file-tree filter covers loaded entries only.
+- `GET /v0/projects/:id/workspace/version?paths=…` returns the shared workspace
+  change version and changed relative paths for a JSON array of visible paths.
+  `changedPaths: null` means refresh all visible data.
 - `GET /v0/projects/:id/file?path=…` returns a size-capped text preview;
-  `&metadata=1` returns only file size and modification time for low-cost
-  polling
+  `&metadata=1` returns only file size and modification time
 - `PUT /v0/projects/:id/file?path=…` creates a file; `If-Match` with the
   current revision saves an open file, while `If-Match: *` replaces an
   existing file

@@ -242,60 +242,41 @@ where a slot holds a draft confirms the guard fires.
 
 ## P1
 
-### Open — Large directory correctness
+### Complete — Large directory correctness
 
-The server accepts the first 500 entries returned by the file system and sorts only that subset. The result is stable only when the file-system iteration order is stable. The client filter searches loaded directory data, so it can report no match when a matching item exists outside the loaded subset.
+The tree now scans and sorts the complete visible directory before it returns a
+page. Each response contains up to 500 directory-first/name-ordered entries,
+the visible total, and an opaque cursor for the next page. The browser appends
+pages through **Show more**. Refreshes reload the same number of pages, so they
+do not make previously visible tree entries disappear.
 
-Relevant code: `conduit-web/src/workspace-inspector.js:161-179`, filter and tree traversal in `conduit-web/src/client/workspace/workspace-panel.tsx:1141-1165`.
+Directories with more than 50,000 scanned entries return an explicit oversize
+result instead of an arbitrary partial list. `.conduit` and symlinks remain
+excluded. The input is named **Filter loaded files**; while a truncated listing
+is filtered, the tree says that the filter only covers loaded entries.
 
-**Solution.** Sort the whole directory, then page; and make the client honest about
-what its filter covers.
+Relevant code: `conduit-web/src/workspace-inspector.js`,
+`conduit-web/src/server/routes/projects.js`, and
+`conduit-web/src/client/workspace/workspace-panel.tsx`.
 
-1. In `listWorkspaceDirectory`, keep draining `opendir` past the display limit but
-   collect only name and type — cheap even for very large directories — up to a
-   hard ceiling (say 50 000 entries), beyond which the directory is reported as
-   oversize and the view says so. Sort the full set with the existing comparator,
-   then slice.
-2. Return `{ entries, total, truncated, cursor }`, where `cursor` is the last
-   returned entry's sort key (type then name), and accept an `after` query
-   parameter that resumes from it. Because the sort is total and stable, paging is
-   deterministic regardless of `readdir` order.
-3. Render a **Show more** row in the tree when `truncated` is set, loading the next
-   page in place. Do not auto-load on scroll — the directory poll would fight it.
-4. Label the filter input **Filter loaded files**, and when a filter is active while
-   any visible directory is truncated, show a one-line note saying the filter covers
-   loaded entries only, linking to content search once that exists.
+**Verified on 2026-09-05.** Inspector tests create 1,200 reverse-created files,
+then prove the three sorted pages are disjoint and their union is complete. They
+also prove the 50,000-entry limit. API coverage proves the second `after` page
+contains the otherwise omitted late entry. The browser test proves **Show more**,
+filter disclosure, and refresh retention. Typecheck and production build pass.
 
-Acceptance: an inspector test that builds a directory of 1 200 entries with names
-that defeat insertion order, then asserts two successive pages are disjoint, each
-sorted, and their union is the whole directory.
+### Complete — File and Source Control freshness
 
-### Open — File and Source Control freshness
-
-The Files view polls each expanded directory and each open file every 1.5 seconds. Requests grow with the number of expanded directories and open slots. Source Control does not use the same change signal, so its state can remain stale.
-
-Relevant code: `conduit-web/src/client/workspace/workspace-panel.tsx:57`, `conduit-web/src/client/workspace/workspace-panel.tsx:876-898`, and `conduit-web/src/client/workspace/workspace-panel.tsx:988`.
-
-**Solution.** Replace N polls with one cheap version probe that both views
-invalidate from.
-
-1. Add `GET /v0/projects/:id/workspace/version` returning `{ version, changedPaths }`.
-   Implement it with a single recursive `fs.watch` per project, held in the
-   inspector behind a reference count, incrementing a counter and accumulating
-   changed relative paths; cap the accumulation and return `changedPaths: null` on
-   overflow, meaning "assume everything". Fall back to an mtime scan of the open
-   directories where recursive watch is unsupported.
-2. The client polls that one endpoint. On a version change it refetches only the
-   expanded directories and open files intersecting `changedPaths`, or all of them
-   when it is `null`. Source Control subscribes to the same signal and refreshes
-   its status on any change — the link that is missing today.
-3. Keep the 1.5 s interval for the version probe only; per-resource polling goes
-   away entirely.
-4. Ignore `.conduit` and the `.conduit-tmp-` prefix in the watcher, or every save
-   wakes the whole tree twice.
-
-Implement together with *Polling ignores document visibility* — that finding
-schedules the poll this one rewrites.
+The Files and Source Control views now share `GET
+/v0/projects/:id/workspace/version`. The inspector holds one recursive watcher
+while a panel is active, reference-counts probes, and closes it after a short
+idle period. It reports changed relative paths up to a 1,000-path cap; initial,
+overflow, and unavailable-recursive-watch responses return `changedPaths: null`.
+The client then reloads only affected expanded directories and open files, or all
+visible data for `null`, and refreshes Git status after every workspace change.
+`.conduit` and `.conduit-tmp-*` events do not wake the panel. Platforms without
+recursive watch compare mtime and size for the visible paths supplied by the
+client.
 
 ### Open — Source Control scale
 
@@ -425,35 +406,14 @@ Relevant code: key construction throughout `conduit-web/src/client/workspace/wor
 Acceptance: a unit test that fills the store, deletes a chat and asserts its keys
 are gone; and one that makes `setItem` throw and asserts tab selection still works.
 
-### Open — Polling ignores document visibility and never backs off
+### Complete — Polling ignores document visibility and never backs off
 
-Complementing the freshness item above: the 1.5 second poll is gated on the panel
-being open and the Files tab being visible, but not on `document.visibilityState`,
-so a backgrounded tab keeps requesting every expanded directory and every open file
-indefinitely. A poll that fails keeps retrying at the same rate forever, and since
-panel failures moved to toasts, a background failure now only reaches
-`console.warn` -- so a workspace that has become unreachable looks identical to one
-that is simply unchanged.
-
-Relevant code: `conduit-web/src/client/workspace/workspace-panel.tsx:986-989` and the poll body above it.
-
-**Solution.** Gate, back off, and make the failure visible.
-
-1. Add `document.visibilityState === "visible"` to the polling effect's guard
-   (`:986-989`) and subscribe to `visibilitychange` so the effect re-runs. On
-   becoming visible, poll once immediately rather than waiting out the interval.
-2. Replace the fixed interval with a self-rescheduling `setTimeout` holding a
-   `failures` counter: the delay is `FILE_POLL_INTERVAL_MS` doubled per consecutive
-   failure, capped at 30 s and reset to zero on any success. A self-rescheduling
-   timer also stops a slow response overlapping the next tick.
-3. After two consecutive failures, set a `stale` signal rendering a persistent
-   inline strip in the Files and Source Control headers — *Not updating · Retry* —
-   cleared on the next success. The condition is ongoing rather than momentary, so
-   it is a strip and not a toast. Keep the `console.warn`.
-4. Pause on `navigator.onLine === false` and resume on `online`.
-
-Best implemented together with *File and Source Control freshness*, which replaces
-the poll body this finding schedules.
+The shared probe runs only while the panel is open, Files or Source Control is
+visible, the document is visible, and the browser is online. It polls immediately
+on visibility or network return. A self-scheduled timer prevents overlap, doubles
+the delay for consecutive failures up to 30 seconds, and resets after success.
+After two failures, both headers show `Not updating · Retry`; Retry starts a new
+probe immediately, and the strip clears on the next successful response.
 
 ### Open — Binary and media handling stops at images
 

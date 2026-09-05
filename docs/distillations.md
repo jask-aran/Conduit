@@ -254,6 +254,13 @@ Add an entry through `$tacit-knowledge` after explicit approval or validated rep
 - **Scope:** Client workspace navigation and preloading. Pi processes own execution and transcripts; the UI cache owns only recent presentation data.
 - **Evidence:** Slice 1 restored recent workspace status without coupling it to process lifetime, avoiding both remount flash and a second source of session ownership.
 
+### Drive workspace freshness from one version signal
+
+- **Type:** Invariant.
+- **Rule:** Use one workspace version probe and its changed paths to refresh Files and Source Control. Do not poll every loaded directory or open file. Treat `changedPaths: null` as a full visible refresh, and run the probe only while the panel is visible and online.
+- **Scope:** `WorkspacePanel` freshness scheduling and `workspace-inspector` change tracking.
+- **Evidence:** Focused native-watch and fallback tests cover change detection; live manual validation confirmed external, user, and model updates appear immediately.
+
 ### Bound Git inspection and make patch text opt-in
 
 - **Type:** Invariant.
