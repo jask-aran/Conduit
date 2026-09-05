@@ -139,6 +139,10 @@ manager.on("process_changed", ({ record, reason }) => {
 manager.on("process_removed", ({ id, chatId }) => {
   runtimeHub.publishProcessRemoved(id, chatId);
 });
+terminals.on("created", (record) => runtimeHub.publishTerminal(record, "created"));
+terminals.on("updated", (record) => runtimeHub.publishTerminal(record, "updated"));
+terminals.on("exit", (record) => runtimeHub.publishTerminal(record, "exit"));
+terminals.on("removed", ({ id, projectId }) => runtimeHub.publishTerminalRemoved(id, projectId));
 const modelCatalog = new PiModelCatalog({ agentDir: config.piAgentDir, modelPatterns: config.piTemplate.models });
 await modelCatalog.ready();
 const sessionNames = new SessionNameService({

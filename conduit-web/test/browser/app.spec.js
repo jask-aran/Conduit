@@ -1143,6 +1143,101 @@ test("terminal workspace commands focus the attached shell", async ({ page }, te
   await expect.poll(shellFocused).toBe(true);
 });
 
+test("terminal recovery states expose one action for conflict, stop, and network loss", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop-chromium", "terminal recovery flow runs once on desktop");
+  const shell = {
+    id: "terminal_recovery",
+    projectId: "project_chat",
+    status: "running",
+    title: "Recovery shell",
+    currentCommand: "zsh",
+  };
+  const replacement = { ...shell, id: "terminal_replacement", title: "Replacement shell" };
+  let ptys = [shell];
+  await page.unroute("**/v0/ptys*");
+  await page.route("**/v0/ptys*", async (route) => {
+    if (route.request().method() === "POST") {
+      ptys = [replacement];
+      return route.fulfill({ status: 201, json: replacement });
+    }
+    return route.fulfill({ json: { ptys } });
+  });
+  await openChatSurface(page);
+  await page.evaluate(() => {
+    window.__terminalRecoveryBehavior = "conflict";
+    window.__terminalRecoverySockets = [];
+    class RecoveryWebSocket {
+      static OPEN = 1;
+      static CONNECTING = 0;
+      static CLOSED = 3;
+      constructor(url) {
+        this.url = String(url);
+        this.readyState = RecoveryWebSocket.CONNECTING;
+        window.__terminalRecoverySockets.push(this);
+        queueMicrotask(() => {
+          if (this.readyState === RecoveryWebSocket.CLOSED) return;
+          this.readyState = RecoveryWebSocket.OPEN;
+          this.onopen?.(new Event("open"));
+          if (window.__terminalRecoveryBehavior === "conflict") {
+            this.message({ type: "client_error", code: "pty_in_use", message: "Terminal is attached in another Conduit client." });
+          } else if (window.__terminalRecoveryBehavior === "stopped") {
+            this.message({ type: "control", writable: true });
+            this.message({ type: "status", status: "exited", exitCode: 1 });
+          } else if (window.__terminalRecoveryBehavior === "live") {
+            this.message({ type: "control", writable: true });
+          } else if (window.__terminalRecoveryBehavior === "close") {
+            this.close(1006);
+          }
+        });
+      }
+      send() {}
+      message(payload) { this.onmessage?.({ data: JSON.stringify(payload) }); }
+      close(code = 1000) {
+        if (this.readyState === RecoveryWebSocket.CLOSED) return;
+        this.readyState = RecoveryWebSocket.CLOSED;
+        this.onclose?.({ code, reason: "" });
+      }
+    }
+    Object.defineProperty(window, "WebSocket", { configurable: true, value: RecoveryWebSocket });
+  });
+
+  await runWorkspaceViewCommand(page, "Terminal");
+  const terminal = page.getByRole("region", { name: "Terminal pane" });
+  await expect(terminal.getByRole("status")).toContainText("Terminal in use");
+  await expect(terminal.getByRole("button", { name: "Take control" })).toBeVisible();
+  await expect(terminal.getByRole("button", { name: "Retry" })).toHaveCount(0);
+  const conflictSocketCount = await page.evaluate(() => window.__terminalRecoverySockets.length);
+  await expect.poll(() => page.evaluate(() => window.__terminalRecoverySockets.length)).toBe(conflictSocketCount);
+
+  await page.evaluate(() => { window.__terminalRecoveryBehavior = "live"; });
+  await terminal.getByRole("button", { name: "Take control" }).click();
+  await expect.poll(() => page.evaluate(() => window.__terminalRecoverySockets.at(-1)?.url || "")).toContain("takeover=1");
+  await expect(terminal.locator(".terminal-header-status")).toHaveText("Active Now");
+
+  await page.evaluate(() => {
+    window.__terminalRecoveryBehavior = "stopped";
+    window.__terminalRecoverySockets.at(-1)?.message({ type: "status", status: "exited", exitCode: 1 });
+  });
+  await expect(terminal.getByRole("status")).toContainText("Terminal stopped");
+  await expect(terminal.getByRole("button", { name: "Start new terminal" })).toBeVisible();
+
+  await page.evaluate(() => { window.__terminalRecoveryBehavior = "live"; });
+  await terminal.getByRole("button", { name: "Start new terminal" }).click();
+  await expect(terminal.locator(".terminal-header-status")).toHaveText("Active Now");
+
+  await page.evaluate(() => {
+    window.__terminalRecoveryBehavior = "close";
+    window.__terminalRecoverySockets.at(-1)?.close(1006);
+  });
+  await expect(terminal.getByRole("status")).toContainText("Reconnecting to terminal");
+  await expect(terminal.getByRole("status")).toContainText("Terminal offline", { timeout: 5_000 });
+  await expect(terminal.getByRole("button", { name: "Retry" })).toBeVisible();
+
+  await page.evaluate(() => { window.__terminalRecoveryBehavior = "live"; });
+  await terminal.getByRole("button", { name: "Retry" }).click();
+  await expect(terminal.locator(".terminal-header-status")).toHaveText("Active Now");
+});
+
 test("rapid panel reversals continue from rendered geometry and release transcript locks @setpiece", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "desktop-chromium");
   await openChatSurface(page);

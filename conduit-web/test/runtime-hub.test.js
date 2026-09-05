@@ -27,7 +27,16 @@ test("runtime hub sends snapshot on attach and process updates to all clients", 
   assert.equal(writes.length, 3);
   assert.match(writes[2], /runtime_process_removed/);
 
+  hub.publishTerminal({ id: "t1", projectId: "project", status: "exited" }, "exit");
+  assert.equal(writes.length, 4);
+  assert.match(writes[3], /terminal_changed/);
+  assert.match(writes[3], /"status":"exited"/);
+
+  hub.publishTerminalRemoved("t1", "project");
+  assert.equal(writes.length, 5);
+  assert.match(writes[4], /terminal_removed/);
+
   detach();
   hub.publishProcess({ id: "p2", chatId: "c2", status: "running", activity: "idle" });
-  assert.equal(writes.length, 3);
+  assert.equal(writes.length, 5);
 });

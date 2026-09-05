@@ -1,5 +1,6 @@
 import { createEffect, createSignal, For, Index, on, onCleanup, onMount, Show } from "solid-js";
 import { ArrowDownIcon, ArrowLeftIcon, ArrowUpIcon, CheckIcon, ChevronDownIcon, FocusIcon, KeyboardIcon, Maximize2Icon, Minimize2Icon, PencilIcon, PlusIcon, Settings2Icon, TerminalIcon, Trash2Icon, UnplugIcon } from "lucide-solid";
+import { toast } from "solid-sonner";
 import {
   Button,
   Dialog,
@@ -22,6 +23,7 @@ import {
 import { api } from "../api/client";
 import { terminalSocketUrl } from "../api/transport";
 import { createTerminalRenderer, selectedTerminalRenderer, type TerminalRenderer, type TerminalRendererId } from "./terminal-renderer";
+import { terminalRecoveryView, type TerminalConnectionState } from "./terminal-recovery";
 import { LEGACY_TERMINAL_SHORTCUTS_STORAGE_KEY, normalizeTerminalShortcuts, readLegacyTerminalShortcuts, type TerminalShortcut } from "./terminal-shortcuts";
 
 export type Pty = {
@@ -39,7 +41,6 @@ export type Pty = {
   lastActivityAt?: string | null;
   paneDead?: boolean;
 };
-type ConnectionState = "idle" | "connecting" | "attached" | "disconnected" | "exited";
 const PTY_IN_USE_CLOSE_CODE = 4009;
 const PTY_TAKEN_OVER_CLOSE_CODE = 4010;
 const MOBILE_KEYS_STORAGE_KEY = "conduit:terminal-mobile-keys";
@@ -71,8 +72,7 @@ export function TerminalPane(props: { projectId: string; projectName?: string; t
   const [sessionBusy, setSessionBusy] = createSignal("");
   const [renameSession, setRenameSession] = createSignal<Pty | null>(null);
   const [renameValue, setRenameValue] = createSignal("");
-  const [ownershipConflict, setOwnershipConflict] = createSignal(false);
-  const [connectionState, setConnectionState] = createSignal<ConnectionState>("idle");
+  const [connectionState, setConnectionState] = createSignal<TerminalConnectionState>("idle");
   const [writable, setWritable] = createSignal(false);
   const [terminalFocused, setTerminalFocused] = createSignal(false);
   const [rendererId, setRendererId] = createSignal<TerminalRendererId>(selectedTerminalRenderer());
@@ -95,6 +95,7 @@ export function TerminalPane(props: { projectId: string; projectName?: string; t
   let reconnectAttempts = 0;
   let connectionGeneration = 0;
   let mounted = false;
+  let wasInactive = false;
   let activeProjectId = "";
   let ptyChangeListener: (() => void) | undefined;
   const encoder = new TextEncoder();
@@ -277,10 +278,11 @@ export function TerminalPane(props: { projectId: string; projectName?: string; t
       || reconnectAttempts >= 3
       || activeProjectId !== record.projectId
       || props.active === false
-    ) return;
+    ) return false;
     const delay = 250 * (2 ** reconnectAttempts);
     reconnectAttempts += 1;
     clearReconnect();
+    setConnectionState("reconnecting");
     reconnectTimer = window.setTimeout(() => {
       reconnectTimer = undefined;
       void connect(record, renderer, {
@@ -288,6 +290,7 @@ export function TerminalPane(props: { projectId: string; projectName?: string; t
         retrying: true,
       });
     }, delay);
+    return true;
   };
 
   const connect = async (
@@ -298,7 +301,6 @@ export function TerminalPane(props: { projectId: string; projectName?: string; t
     const generation = ++connectionGeneration;
     closeConnection();
     setError("");
-    setOwnershipConflict(false);
     if (!retrying) reconnectAttempts = 0;
     setConnectionState("connecting");
     const activeTerminal = await ensureRenderer(renderer, { fresh: freshRenderer });
@@ -343,7 +345,8 @@ export function TerminalPane(props: { projectId: string; projectName?: string; t
           if (message.type === "control") {
             setWritable(message.writable === true);
             if (host) host.dataset.terminalReady = "true";
-            setConnectionState("attached");
+            reconnectAttempts = 0;
+            setConnectionState("live");
             if (message.writable !== true) setTerminalFocused(false);
             if (message.writable === true) {
               // tmux already owns the current screen. Fit only to the actual
@@ -366,7 +369,7 @@ export function TerminalPane(props: { projectId: string; projectName?: string; t
             if (status === "exited") {
               setWritable(false);
               setTerminalFocused(false);
-              setConnectionState("exited");
+              setConnectionState("stopped");
               intentionallyClosed = true;
               connection.close(1000, "Terminal exited");
             }
@@ -374,16 +377,14 @@ export function TerminalPane(props: { projectId: string; projectName?: string; t
           }
           if (message.type === "client_error") {
             if (message.code === "pty_in_use") {
-              setOwnershipConflict(true);
               setWritable(false);
               setTerminalFocused(false);
-              setConnectionState("disconnected");
+              setConnectionState("conflict");
               setError("Terminal is attached in another Conduit client.");
             } else if (message.code === "pty_taken_over") {
-              setOwnershipConflict(true);
               setWritable(false);
               setTerminalFocused(false);
-              setConnectionState("disconnected");
+              setConnectionState("conflict");
               setError("Another Conduit client took control of this terminal.");
             } else {
               setError(message.message || "Terminal control failed");
@@ -426,27 +427,33 @@ export function TerminalPane(props: { projectId: string; projectName?: string; t
     const removeResize = activeTerminal.onResize(() => sendResize());
 
     connection.onerror = () => {
-      if (generation === connectionGeneration && connectionState() !== "exited") setError("Terminal connection failed");
+      if (generation === connectionGeneration && connectionState() !== "stopped" && connectionState() !== "conflict") {
+        setConnectionState("reconnecting");
+        setError("Terminal connection failed.");
+      }
     };
     connection.onclose = (event) => {
       if (generation !== connectionGeneration || intentionallyClosed) return;
       setWritable(false);
       setTerminalFocused(false);
-      if (event.code === PTY_IN_USE_CLOSE_CODE || event.code === PTY_TAKEN_OVER_CLOSE_CODE) setOwnershipConflict(true);
-      if (pty()?.status === "exited") {
-        setConnectionState("exited");
+      const isOwnershipConflict = event.code === PTY_IN_USE_CLOSE_CODE || event.code === PTY_TAKEN_OVER_CLOSE_CODE;
+      if (isOwnershipConflict) {
+        setConnectionState("conflict");
+        setError(event.code === PTY_IN_USE_CLOSE_CODE
+          ? "Terminal is attached in another Conduit client."
+          : "Another Conduit client took control of this terminal.");
         return;
       }
-      setConnectionState("disconnected");
-      const reason = event.code === PTY_IN_USE_CLOSE_CODE
-        ? "Terminal is attached in another Conduit client."
-        : event.code === PTY_TAKEN_OVER_CLOSE_CODE
-          ? "Another Conduit client took control of this terminal."
-        : event.code === 1013
+      if (pty()?.status === "exited") {
+        setConnectionState("stopped");
+        return;
+      }
+      if (connectionState() === "conflict") return;
+      const reason = event.code === 1013
           ? "Terminal connection was closed because this browser could not keep up with output."
           : "Terminal connection was interrupted.";
       setError(reason);
-      scheduleReconnect({ ...record, status: "running" }, renderer, event.code);
+      if (!scheduleReconnect({ ...record, status: "running" }, renderer, event.code)) setConnectionState("offline");
     };
 
     disposeConnection = () => {
@@ -467,8 +474,20 @@ export function TerminalPane(props: { projectId: string; projectName?: string; t
     const running = ptys.filter((item) => item.projectId === projectId && item.status === "running");
     if (projectId === activeProjectId) {
       setSessions(running);
-      const selected = running.find((item) => item.id === pty()?.id);
-      if (selected) setPty(selected);
+      const current = pty();
+      const selected = ptys.find((item) => item.id === current?.id);
+      if (selected?.status === "running") {
+        setPty(selected);
+      } else if (current && (!selected || ["conflict", "offline", "reconnecting"].includes(connectionState()))) {
+        discardSelectedTerminal(selected ? "The terminal ended in another Conduit client." : "The terminal is no longer available.");
+      } else if (selected?.status === "exited" && connectionState() !== "stopped") {
+        connectionGeneration += 1;
+        reconnectAttempts = 0;
+        closeConnection();
+        disposeRenderer();
+        setPty(selected);
+        setConnectionState("stopped");
+      }
     }
     return running;
   };
@@ -504,7 +523,7 @@ export function TerminalPane(props: { projectId: string; projectName?: string; t
   const attachSession = async (record: Pty) => {
     if (record.projectId !== activeProjectId || record.status !== "running") return;
     if (pty()?.id === record.id) {
-      if (socket && connectionState() === "attached") focusActiveTerminal();
+      if (socket && connectionState() === "live") focusActiveTerminal();
       else {
         try { await connect(record, rendererId(), { freshRenderer: true }); }
         catch (cause) { setError((cause as Error).message); }
@@ -607,11 +626,30 @@ export function TerminalPane(props: { projectId: string; projectName?: string; t
     inputTerminal(`${shortcut.command}\r`, false);
   };
 
-  const reconnect = async () => {
+  const retryConnection = async () => {
+    const record = pty();
+    if (!record || record.status !== "running") return;
+    reconnectAttempts = 0;
+    await connect(record, rendererId(), { freshRenderer: true });
+  };
+
+  const takeControl = async () => {
     const record = pty();
     if (!record || record.status !== "running") return;
     reconnectAttempts = 0;
     await connect(record, rendererId(), { freshRenderer: true, takeover: true });
+  };
+
+  const discardSelectedTerminal = (message: string) => {
+    if (!pty()) return;
+    connectionGeneration += 1;
+    reconnectAttempts = 0;
+    closeConnection();
+    disposeRenderer();
+    setPty(null);
+    setConnectionState("idle");
+    setError("");
+    toast.info(message, { duration: 6_000 });
   };
 
   const removeSession = async (record: Pty) => {
@@ -652,7 +690,7 @@ export function TerminalPane(props: { projectId: string; projectName?: string; t
         try { await connect(record, rendererId(), { freshRenderer: true }); }
         catch (reconnectCause) {
           setError((reconnectCause as Error).message);
-          setConnectionState("disconnected");
+          setConnectionState("offline");
         }
       }
     } finally {
@@ -666,9 +704,8 @@ export function TerminalPane(props: { projectId: string; projectName?: string; t
     reconnectAttempts = 0;
     closeConnection();
     disposeRenderer();
-    setOwnershipConflict(false);
     setError("");
-    setConnectionState("disconnected");
+    setConnectionState("offline");
   };
 
   const requestRename = (record: Pty) => {
@@ -717,7 +754,7 @@ export function TerminalPane(props: { projectId: string; projectName?: string; t
       connectionGeneration += 1;
       closeConnection();
       disposeRenderer();
-      if (record?.status === "running") setConnectionState("disconnected");
+      if (record?.status === "running") setConnectionState("offline");
       return;
     }
     try { await connect(record, next, { freshRenderer: true }); }
@@ -726,12 +763,16 @@ export function TerminalPane(props: { projectId: string; projectName?: string; t
 
   const statusLabel = () => {
     if (connectionState() === "connecting") return "Connecting";
-    if (connectionState() === "disconnected") return "Disconnected";
-    if (connectionState() === "exited") return "Exited";
-    if (connectionState() === "attached" && !writable()) return "Read only";
-    if (connectionState() === "attached") return "Active Now";
+    if (connectionState() === "reconnecting") return "Reconnecting";
+    if (connectionState() === "offline") return "Offline";
+    if (connectionState() === "stopped") return "Stopped";
+    if (connectionState() === "conflict") return "In use";
+    if (connectionState() === "live" && !writable()) return "Read only";
+    if (connectionState() === "live") return "Active Now";
     return "Idle";
   };
+
+  const recovery = () => terminalRecoveryView(connectionState(), error());
 
   onMount(() => {
     mounted = true;
@@ -795,17 +836,18 @@ export function TerminalPane(props: { projectId: string; projectName?: string; t
       // terminal stream and immediately releases its per-terminal lease.
       connectionGeneration += 1;
       reconnectAttempts = 0;
+      wasInactive = true;
       closeConnection();
       disposeRenderer();
-      if (pty()?.status === "running") setConnectionState("disconnected");
+      if (pty()?.status === "running") setConnectionState("offline");
       return;
     }
+    const reattach = wasInactive;
+    wasInactive = false;
     queueMicrotask(() => {
       const record = pty();
-      if (record?.status === "running") {
-        if (!socket && connectionState() !== "connecting") {
-          void connect(record, rendererId(), { freshRenderer: true }).catch((cause) => setError((cause as Error).message));
-        }
+      if (reattach && record?.status === "running" && !socket) {
+        void connect(record, rendererId(), { freshRenderer: true }).catch((cause) => setError((cause as Error).message));
       } else if (!record && !starting()) {
         void attachExisting(activeProjectId);
       }
@@ -943,7 +985,7 @@ export function TerminalPane(props: { projectId: string; projectName?: string; t
                       <TooltipTrigger as="div" class="terminal-session-action-wrap">
                         <MenuItem class="terminal-session-action" aria-label={`Detach from ${session.title || "terminal"}`}
                           textValue={`Detach from ${session.title || "terminal"}`}
-                          disabled={pty()?.id !== session.id || connectionState() !== "attached"}
+                          disabled={pty()?.id !== session.id || connectionState() !== "live"}
                           onSelect={() => detachSession(session)}>
                           <UnplugIcon />
                         </MenuItem>
@@ -984,7 +1026,7 @@ export function TerminalPane(props: { projectId: string; projectName?: string; t
             aria-label={terminalFocused() ? "Terminal focused" : "Focus terminal"}
             aria-pressed={terminalFocused()}
             title="Focus terminal to capture keyboard shortcuts"
-            disabled={!writable() || connectionState() !== "attached"}
+            disabled={!writable() || connectionState() !== "live"}
             onClick={focusActiveTerminal}
           >
             <FocusIcon /><span class="terminal-action-label">{terminalFocused() ? "Focused" : "Focus"}</span>
@@ -1015,13 +1057,22 @@ export function TerminalPane(props: { projectId: string; projectName?: string; t
           <Button disabled={starting()} onClick={() => void start()}>{starting() ? <Spinner /> : "Start terminal"}</Button>
         </div>
       </Show>
-      <Show when={pty() && connectionState() === "disconnected"}>
-        <div class="terminal-pane-state"><strong>Terminal available</strong><Button onClick={() => void reconnect()}>Take control</Button></div>
+      <Show when={recovery()}>
+        {(view) => <div class="terminal-pane-state" role="status" aria-live="polite">
+          <strong>{view().title}</strong>
+          <p>{view().message}</p>
+          <Show when={view().action === "retry"}>
+            <Button onClick={() => void retryConnection()}>Retry</Button>
+          </Show>
+          <Show when={view().action === "takeover"}>
+            <Button onClick={() => void takeControl()}>Take control</Button>
+          </Show>
+          <Show when={view().action === "restart"}>
+            <Button onClick={() => void restart()}>Start new terminal</Button>
+          </Show>
+        </div>}
       </Show>
-      <Show when={pty() && connectionState() === "exited"}>
-        <div class="terminal-pane-state"><strong>Terminal exited</strong><Button onClick={() => void restart()}>Start new terminal</Button></div>
-      </Show>
-      <Show when={error()}><p class="terminal-pane-error" role="alert">{error()}</p></Show>
+      <Show when={error() && !recovery()}><p class="terminal-pane-error" role="alert">{error()}</p></Show>
     </div>
     <Show when={coarseInput() && mobileKeysVisible()}>
       <div class="terminal-mobile-keys" role="toolbar" aria-label="Terminal keys" data-mobile-swipe-ignore

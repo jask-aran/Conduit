@@ -48,6 +48,25 @@ export class RuntimeHub {
     });
   }
 
+  publishTerminal(view, reason = "update") {
+    if (!view) return;
+    this.publish({
+      type: "terminal_changed",
+      reason,
+      terminal: view,
+      at: new Date().toISOString(),
+    });
+  }
+
+  publishTerminalRemoved(id, projectId = null) {
+    this.publish({
+      type: "terminal_removed",
+      id,
+      projectId,
+      at: new Date().toISOString(),
+    });
+  }
+
   close() {
     for (const client of this.clients) {
       try {

@@ -54,6 +54,8 @@ export function createRuntimeStore() {
           upsert(event.process as RuntimeProcess);
         } else if (event.type === "runtime_process_removed") {
           remove(event.id as string | undefined, event.chatId as string | undefined);
+        } else if (event.type === "terminal_changed" || event.type === "terminal_removed") {
+          window.dispatchEvent(new Event("conduit:ptys-changed"));
         }
       } catch {
         // A malformed global update must not take the app down.

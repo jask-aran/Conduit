@@ -293,6 +293,14 @@
   font-weight: 560;
 }
 
+.terminal-pane-state p {
+  max-width: min(420px, 100%);
+  margin: 0;
+  color: var(--muted-foreground);
+  font-size: 9.6px;
+  line-height: 1.45;
+}
+
 .terminal-pane-warning,
 .terminal-pane-error {
   position: absolute;
@@ -496,6 +504,14 @@
   color: var(--foreground);
   font-size: 13px;
   font-weight: 560;
+}
+
+.terminal-pane-state p {
+  max-width: min(520px, 100%);
+  margin: 0;
+  color: var(--muted-foreground);
+  font-size: 11px;
+  line-height: 1.45;
 }
 
 .terminal-pane-warning,
