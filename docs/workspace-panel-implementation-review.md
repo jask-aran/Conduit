@@ -398,45 +398,20 @@ workspace dashboard state restoration, pointer activation of the context-menu
 action, persistence across reload, and restoration from maximized to the
 workspace dashboard.
 
-### Open — Persisted panel state grows without bound and is unguarded
+### Complete — Persisted panel state grows without bound and is unguarded
 
-**Planning note.** Prioritise this item for a focused follow-up. Safe storage,
-cleanup, and size limits should not wait for the file-tab refresh.
+`conduit-web/src/client/workspace/workspace-panel-storage.ts` now owns all
+workspace-panel persistence. It migrates the existing
+`conduit:workspace-panel:<scopeId>:<name>` keys into one JSON state object per
+scope, preserves current project and chat scope IDs, warns once, and falls back
+to memory when browser storage fails. Deleted chat and project scopes are
+removed explicitly; startup cleanup removes unknown scopes and keeps the 100
+most recently written valid scopes.
 
-The panel persists roughly eleven key shapes per chat or project: `:tab`,
-`:secondary-tab`, `:file`, `:file-secondary`, per-tab `:detail-open` and
-`:detail-height`, plus `:width`, `:tree-width`, `:tree-collapsed`, `:show-hidden`,
-`:kept-visible`, `:split-ratio` and `:file-split-ratio`. Nothing removes them when
-the owning chat or project is deleted, so the store grows for the life of the
-installation. Every write is a bare `localStorage.setItem`, so a quota error, or a
-browser that refuses storage, throws inside ordinary interactions such as selecting
-a tab or opening a second file. `migrateWorkspaceGeometry` shows there is already a
-place to sweep these keys.
-
-Relevant code: key construction throughout `conduit-web/src/client/workspace/workspace-panel.tsx`, and the existing migration pass in the same file.
-
-**Solution.** One storage module, one key shape, one sweep.
-
-1. Add `workspace-panel-storage.ts` exporting `readSetting(scopeId, name)`,
-   `writeSetting(scopeId, name, value)` and `dropScope(scopeId)`. Every write goes
-   through a `try/catch` that warns once per session and then degrades to an
-   in-memory map, so a quota error or a storage-blocking browser can never throw
-   inside a tab selection. Replace all 19 `localStorage.setItem` call sites in
-   `workspace-panel.tsx` with it.
-2. Keep the existing `conduit:workspace-panel:<scopeId>:<name>` prefix — it is
-   already scope-first, so `dropScope` is a prefix scan and delete. Do not rename
-   keys; that discards everyone's current geometry for no gain.
-3. Collapse the eleven keys into one JSON object per scope, migrating inside the
-   existing `migrateWorkspaceGeometry` pass (rename it
-   `migrateWorkspacePanelStorage` and bump its sentinel key). One object per scope
-   makes eviction and quota accounting trivial.
-4. Call `dropScope` wherever a chat or project is deleted in `main.tsx`, and add a
-   startup sweep in the same migration pass that deletes any scope id absent from
-   the loaded project and chat lists, plus an LRU cap keeping the 100
-   most-recently-written scopes.
-
-Acceptance: a unit test that fills the store, deletes a chat and asserts its keys
-are gone; and one that makes `setItem` throw and asserts tab selection still works.
+`conduit-web/src/client/workspace/workspace-panel.tsx` and the panel open state in
+`conduit-web/src/client/main.tsx` no longer call `localStorage` directly. Focused
+tests cover migration, geometry preservation, cleanup, quota failure, warning
+deduplication, and the scope cap.
 
 ### Complete — Polling ignores document visibility and never backs off
 

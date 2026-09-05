@@ -13,6 +13,7 @@ import { dispatchPanelGeometryMotion, PANEL_MOTION_DURATION_MS } from "../panel-
 import type { ShortcutManager } from "../shortcuts/shortcut-manager";
 import { FileTypeIcon, FolderTypeIcon } from "./file-type-icon";
 import WorkspaceFileSlot, { type FileSlotHandle, type FileSummary } from "./workspace-file-slot";
+import { readSetting, WORKSPACE_PANEL_GLOBAL_SCOPE, writeSetting } from "./workspace-panel-storage";
 import "./workspace.css";
 
 interface TreeEntry { name: string; path: string; type: "directory" | "file" | "other"; }
@@ -47,7 +48,6 @@ interface WorkspaceCacheEntry {
 
 const MAX_CACHED_WORKSPACES = 6;
 const workspaceCache = new Map<string, WorkspaceCacheEntry>();
-const COMPACT_UI_MIGRATION_KEY = "conduit:compact-ui-v2";
 const MIN_DETAIL_HEIGHT = 32;
 const MIN_SOURCE_DETAIL_HEIGHT = 96;
 const MIN_WORKSPACE_PANE_WIDTH = 240;
@@ -56,7 +56,6 @@ const WIDE_FILES_MIN_WIDTH = 720;
 const DEFAULT_TREE_WIDTH = 160;
 const MIN_TREE_WIDTH = 128;
 const MAX_TREE_WIDTH = 320;
-const WRAP_LINES_KEY = "conduit:workspace:wrap-lines";
 const FILE_POLL_INTERVAL_MS = 1_500;
 
 function directoryListingsEqual(left: DirectoryListing | undefined, right: DirectoryListing): boolean {
@@ -104,9 +103,9 @@ function PatchView(props: { content: string }) {
   }</For></code></pre>;
 }
 
-function storedPaths(key: string) {
+function storedPaths(scopeId: string, name: string) {
   try {
-    const value: unknown = JSON.parse(localStorage.getItem(key) || "[]");
+    const value: unknown = JSON.parse(readSetting(scopeId, name) || "[]");
     return new Set(Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : []);
   } catch {
     return new Set<string>();
@@ -119,17 +118,6 @@ function formatFileSize(bytes: number) {
   const unit = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)) - 1, units.length - 1);
   const value = bytes / 1024 ** (unit + 1);
   return `${new Intl.NumberFormat(undefined, { maximumFractionDigits: value < 10 ? 1 : 0 }).format(value)} ${units[unit]}`;
-}
-
-function migrateWorkspaceGeometry() {
-  if (localStorage.getItem(COMPACT_UI_MIGRATION_KEY) === "true") return;
-  for (let index = 0; index < localStorage.length; index += 1) {
-    const key = localStorage.key(index);
-    if (!key || !/^conduit:workspace-panel:.*:(width|detail-height)$/.test(key)) continue;
-    const value = Number(localStorage.getItem(key));
-    if (Number.isFinite(value) && value > 0) localStorage.setItem(key, String(Math.round(value * 8) / 10));
-  }
-  localStorage.setItem(COMPACT_UI_MIGRATION_KEY, "true");
 }
 
 function cachedWorkspace(projectId: string) {
@@ -148,7 +136,6 @@ function cacheWorkspace(projectId: string, patch: Partial<WorkspaceCacheEntry>) 
 }
 
 export default function WorkspacePanel(props: { projectId: Accessor<string>; projectName: Accessor<string>; workingRoot: Accessor<string>; chatId: Accessor<string>; open: Accessor<boolean>; expanded: Accessor<boolean>; focusRequest: Accessor<number>; requestedTab?: Accessor<{ tab: PanelTab; terminalId?: string; nonce: number } | null>; onToggleExpanded: () => void; onClose: () => void; shortcuts: ShortcutManager }) {
-  migrateWorkspaceGeometry();
   let projectGeneration = 0;
   let requestVersion = 0;
   let projectController = new AbortController();
@@ -177,13 +164,17 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
   let mobileReturnFocus: HTMLElement | null = null;
   let mobileWasOpen = false;
   const [pending, setPending] = createSignal(new Map<number, { foreground: boolean }>());
-  const storageKey = () => `conduit:workspace-panel:${props.chatId()}:tab`;
-  const secondaryKey = () => `conduit:workspace-panel:${props.chatId()}:secondary-tab`;
+  const panelScope = () => props.chatId();
+  const projectScope = () => props.projectId();
+  const storedTab = () => {
+    const value = readSetting(panelScope(), "tab") || "";
+    return isPanelTab(value) ? value : "files";
+  };
   const storedSecondary = () => {
-    const stored = localStorage.getItem(secondaryKey()) || "";
+    const stored = readSetting(panelScope(), "secondary-tab") || "";
     return isPanelTab(stored) ? stored : null;
   };
-  const [tab, setTab] = createSignal<PanelTab>((localStorage.getItem(storageKey()) as PanelTab) || "files");
+  const [tab, setTab] = createSignal<PanelTab>(storedTab());
   const [secondaryTab, setSecondaryTab] = createSignal<PanelTab | null>(storedSecondary());
   const [directories, setDirectories] = createSignal<Record<string, DirectoryListing>>({});
   const [expanded, setExpanded] = createSignal<Set<string>>(new Set());
@@ -195,10 +186,10 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
   const [uploading, setUploading] = createSignal(false);
   const [uploadTarget, setUploadTarget] = createSignal<UploadTarget>({ kind: "directory", path: "" });
   const [primaryFile, setPrimaryFile] = createSignal<FileSummary | null>(null);
-  const [openPaths, setOpenPaths] = createSignal<OpenFiles>({ primary: localStorage.getItem(`conduit:workspace-panel:${props.chatId()}:file`), secondary: localStorage.getItem(`conduit:workspace-panel:${props.chatId()}:file-secondary`) });
+  const [openPaths, setOpenPaths] = createSignal<OpenFiles>({ primary: readSetting(panelScope(), "file"), secondary: readSetting(panelScope(), "file-secondary") });
   const [focusedSlot, setFocusedSlot] = createSignal<FileSlotId>("primary");
   const slotHandles = new Map<FileSlotId, FileSlotHandle>();
-  const [wrapLines, setWrapLines] = createSignal(localStorage.getItem(WRAP_LINES_KEY) === "true");
+  const [wrapLines, setWrapLines] = createSignal(readSetting(WORKSPACE_PANEL_GLOBAL_SCOPE, "wrap-lines") === "true");
   const [diff, setDiff] = createSignal<DiffPayload | null>(null);
   const [commitDetail, setCommitDetail] = createSignal<GitCommitDetail | null>(null);
   const [commitDetailLoading, setCommitDetailLoading] = createSignal(false);
@@ -213,35 +204,27 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
   // Foreground failures surface as toasts; background refreshes stay silent so a
   // failing file cannot spam the corner every poll.
   const reportError = (message: string) => { if (message) toast.error(message); };
-  const widthKey = () => `conduit:workspace-panel:${props.projectId()}:width`;
-  const showHiddenKey = () => `conduit:workspace-panel:${props.projectId()}:show-hidden`;
-  const keptVisibleKey = () => `conduit:workspace-panel:${props.projectId()}:kept-visible`;
-  const treeWidthKey = () => `conduit:workspace-panel:${props.projectId()}:tree-width`;
-  const treeCollapsedKey = () => `conduit:workspace-panel:${props.projectId()}:tree-collapsed`;
-  const splitRatioKey = () => `conduit:workspace-panel:${props.projectId()}:split-ratio`;
-  const fileSplitRatioKey = () => `conduit:workspace-panel:${props.projectId()}:file-split-ratio`;
-  const fileKey = (slot: FileSlotId) => `conduit:workspace-panel:${props.chatId()}:${slot === "primary" ? "file" : "file-secondary"}`;
-  const storedOpenFiles = (): OpenFiles => ({ primary: localStorage.getItem(fileKey("primary")), secondary: localStorage.getItem(fileKey("secondary")) });
-  const [width, setWidth] = createSignal(Math.max(MIN_WORKSPACE_PANE_WIDTH, Math.min(496, Number(localStorage.getItem(widthKey())) || 336)));
+  const storedOpenFiles = (): OpenFiles => ({ primary: readSetting(panelScope(), "file"), secondary: readSetting(panelScope(), "file-secondary") });
+  const [width, setWidth] = createSignal(Math.max(MIN_WORKSPACE_PANE_WIDTH, Math.min(496, Number(readSetting(projectScope(), "width")) || 336)));
   const [shellWidth, setShellWidth] = createSignal(props.open() ? width() : 0);
   const [shellGap, setShellGap] = createSignal(props.open() && !isMobileLayout() ? 8 : 0);
-  const [treeWidth, setTreeWidth] = createSignal(Math.max(MIN_TREE_WIDTH, Math.min(MAX_TREE_WIDTH, Number(localStorage.getItem(treeWidthKey())) || DEFAULT_TREE_WIDTH)));
-  const [treeCollapsed, setTreeCollapsed] = createSignal(localStorage.getItem(treeCollapsedKey()) === "true");
-  const [splitRatio, setSplitRatio] = createSignal(Math.max(0, Math.min(100, Number(localStorage.getItem(splitRatioKey())) || 50)));
+  const [treeWidth, setTreeWidth] = createSignal(Math.max(MIN_TREE_WIDTH, Math.min(MAX_TREE_WIDTH, Number(readSetting(projectScope(), "tree-width")) || DEFAULT_TREE_WIDTH)));
+  const [treeCollapsed, setTreeCollapsed] = createSignal(readSetting(projectScope(), "tree-collapsed") === "true");
+  const [splitRatio, setSplitRatio] = createSignal(Math.max(0, Math.min(100, Number(readSetting(projectScope(), "split-ratio")) || 50)));
   const [splitWidth, setSplitWidth] = createSignal(0);
-  const [fileSplitRatio, setFileSplitRatio] = createSignal(Math.max(25, Math.min(75, Number(localStorage.getItem(fileSplitRatioKey())) || 50)));
+  const [fileSplitRatio, setFileSplitRatio] = createSignal(Math.max(25, Math.min(75, Number(readSetting(projectScope(), "file-split-ratio")) || 50)));
   const [artifactMode, setArtifactMode] = createSignal<ArtifactMode>("outputs");
   const [terminalFocusRequest, setTerminalFocusRequest] = createSignal(0);
-  const detailOpenKey = () => `conduit:workspace-panel:${props.chatId()}:${tab()}:detail-open`;
-  const detailHeightKey = () => `conduit:workspace-panel:${props.chatId()}:${tab()}:detail-height`;
-  const sourceDetailOpenKey = () => `conduit:workspace-panel:${props.chatId()}:diff:source-detail-open`;
-  const sourceDetailHeightKey = () => `conduit:workspace-panel:${props.chatId()}:diff:source-detail-height`;
-  const detailOpenFor = (nextTab: PanelTab) => localStorage.getItem(`conduit:workspace-panel:${props.chatId()}:${nextTab}:detail-open`) ?? (nextTab === "diff" ? "false" : "true");
+  const detailOpenName = () => `${tab()}:detail-open`;
+  const detailHeightName = () => `${tab()}:detail-height`;
+  const sourceDetailOpenName = "diff:source-detail-open";
+  const sourceDetailHeightName = "diff:source-detail-height";
+  const detailOpenFor = (nextTab: PanelTab) => readSetting(panelScope(), `${nextTab}:detail-open`) ?? (nextTab === "diff" ? "false" : "true");
   const [detailOpen, setDetailOpen] = createSignal(detailOpenFor(tab()) === "true");
   const [diffDetailOpen, setDiffDetailOpen] = createSignal(detailOpenFor("diff") === "true");
-  const [sourceDetailOpen, setSourceDetailOpen] = createSignal(localStorage.getItem(sourceDetailOpenKey()) === "true");
-  const [detailHeight, setDetailHeight] = createSignal(Math.max(128, Number(localStorage.getItem(detailHeightKey())) || 288));
-  const [sourceDetailHeight, setSourceDetailHeight] = createSignal(Math.max(MIN_SOURCE_DETAIL_HEIGHT, Number(localStorage.getItem(sourceDetailHeightKey())) || 224));
+  const [sourceDetailOpen, setSourceDetailOpen] = createSignal(readSetting(panelScope(), sourceDetailOpenName) === "true");
+  const [detailHeight, setDetailHeight] = createSignal(Math.max(128, Number(readSetting(panelScope(), detailHeightName())) || 288));
+  const [sourceDetailHeight, setSourceDetailHeight] = createSignal(Math.max(MIN_SOURCE_DETAIL_HEIGHT, Number(readSetting(panelScope(), sourceDetailHeightName)) || 224));
   const hasPending = (operation?: string) => [...pending().keys()].some((version) => !operation || requests.get(operation)?.version === version);
   const diffLoading = () => hasPending("diff");
   const filesLoading = () => [...requests.keys()].some((operation) => operation.startsWith("directory:") && hasPending(operation));
@@ -414,15 +397,14 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
 
   const selectTab = (next: PanelTab) => {
     setDetailOpen(detailOpenFor(next) === "true");
-    setDetailHeight(Math.max(MIN_DETAIL_HEIGHT, Number(localStorage.getItem(`conduit:workspace-panel:${props.chatId()}:${next}:detail-height`)) || 288));
+    setDetailHeight(Math.max(MIN_DETAIL_HEIGHT, Number(readSetting(panelScope(), `${next}:detail-height`)) || 288));
     setTab(next);
-    localStorage.setItem(storageKey(), next);
+    writeSetting(panelScope(), "tab", next);
   };
   const splitActive = () => props.expanded() && secondaryTab() !== null;
   const saveSecondaryTab = (next: PanelTab | null) => {
     setSecondaryTab(next);
-    if (next) localStorage.setItem(secondaryKey(), next);
-    else localStorage.removeItem(secondaryKey());
+    writeSetting(panelScope(), "secondary-tab", next);
   };
   const toggleSplit = () => {
     if (!props.expanded()) return;
@@ -524,18 +506,18 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
   const toggleDetail = () => {
     const next = !detailOpen();
     setDetailOpen(next);
-    localStorage.setItem(detailOpenKey(), String(next));
+    writeSetting(panelScope(), detailOpenName(), String(next));
   };
   const setSourceDetailVisible = (open: boolean) => {
     setSourceDetailOpen(open);
-    localStorage.setItem(sourceDetailOpenKey(), String(open));
+    writeSetting(panelScope(), sourceDetailOpenName, String(open));
   };
   const toggleSourceDetail = () => setSourceDetailVisible(!sourceDetailOpen());
   const selectSourceDetail = (patch: boolean) => {
     setSourceDetailVisible(true);
     setCommitDetail(null);
     setDiffDetailOpen(patch);
-    localStorage.setItem(`conduit:workspace-panel:${props.chatId()}:diff:detail-open`, String(patch));
+    writeSetting(panelScope(), "diff:detail-open", String(patch));
     if (patch && !diff()?.diff) void loadDiff(true, false, true);
     if (!patch && !diff()?.commits) void loadDiff(false, true, true);
   };
@@ -564,7 +546,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
       if (frame) cancelAnimationFrame(frame);
       const next = clampDetailHeight(pendingHeight);
       setDetailHeight(next);
-      localStorage.setItem(detailHeightKey(), String(next));
+      writeSetting(panelScope(), detailHeightName(), String(next));
       window.removeEventListener("pointermove", move);
       window.removeEventListener("pointerup", stop);
       window.removeEventListener("pointercancel", stop);
@@ -586,7 +568,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
         ? maxDetailHeight()
         : clampDetailHeight(detailHeight() + (event.key === "ArrowUp" ? 16 : -16));
     setDetailHeight(next);
-    localStorage.setItem(detailHeightKey(), String(next));
+    writeSetting(panelScope(), detailHeightName(), String(next));
   };
   const maxSourceDetailHeight = () => Math.max(MIN_SOURCE_DETAIL_HEIGHT, (sourceDetailHost?.clientHeight || window.innerHeight) - 112);
   const clampSourceDetailHeight = (value: number) => Math.max(MIN_SOURCE_DETAIL_HEIGHT, Math.min(maxSourceDetailHeight(), value));
@@ -606,7 +588,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
       if (frame) cancelAnimationFrame(frame);
       const next = clampSourceDetailHeight(pendingHeight);
       setSourceDetailHeight(next);
-      localStorage.setItem(sourceDetailHeightKey(), String(next));
+      writeSetting(panelScope(), sourceDetailHeightName, String(next));
       window.removeEventListener("pointermove", move);
       window.removeEventListener("pointerup", stop);
       window.removeEventListener("pointercancel", stop);
@@ -626,7 +608,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
       ? maxSourceDetailHeight()
       : clampSourceDetailHeight(sourceDetailHeight() + (event.key === "ArrowUp" ? 16 : -16));
     setSourceDetailHeight(next);
-    localStorage.setItem(sourceDetailHeightKey(), String(next));
+    writeSetting(panelScope(), sourceDetailHeightName, String(next));
   };
   const loadDirectory = async (directory = "", background = false, more = false) => {
     if (background && requests.has(`directory:${directory}`)) return false;
@@ -675,8 +657,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
     openPaths().primary === path ? "primary" : openPaths().secondary === path ? "secondary" : null;
   const setSlotPath = (slot: FileSlotId, path: string | null) => {
     setOpenPaths((current) => ({ ...current, [slot]: path }));
-    if (path) localStorage.setItem(fileKey(slot), path);
-    else localStorage.removeItem(fileKey(slot));
+    writeSetting(panelScope(), slot === "primary" ? "file" : "file-secondary", path);
   };
   // Only the slot being retargeted can lose a draft, so editing on one side is
   // never discarded by opening a file on the other.
@@ -753,7 +734,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
     setSlotPath("secondary", remapWorkspacePath(current.secondary, source, destination));
     const nextKept = new Set([...keptVisible()].map((path) => remapWorkspacePath(path, source, destination) || path));
     setKeptVisible(nextKept);
-    localStorage.setItem(keptVisibleKey(), JSON.stringify([...nextKept]));
+    writeSetting(projectScope(), "kept-visible", JSON.stringify([...nextKept]));
   };
   const openSlotHandles = () => [...slotHandles.entries()]
     .filter(([slot]) => Boolean(openPaths()[slot]))
@@ -761,7 +742,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
   const saveFileSplitRatio = (next: number) => {
     const value = Math.max(25, Math.min(75, Math.round(next)));
     setFileSplitRatio(value);
-    localStorage.setItem(fileSplitRatioKey(), String(value));
+    writeSetting(projectScope(), "file-split-ratio", String(value));
   };
   const startFileSplitResize = (event: PointerEvent) => {
     const primary = filesHost?.querySelector<HTMLElement>('.workspace-preview[data-slot="primary"]');
@@ -1070,7 +1051,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
   const inspectCommit = async (commit: GitCommit) => {
     setSourceDetailVisible(true);
     setDiffDetailOpen(true);
-    localStorage.setItem(`conduit:workspace-panel:${props.chatId()}:diff:detail-open`, "true");
+    writeSetting(panelScope(), "diff:detail-open", "true");
     setCommitDetail(null);
     setCommitDetailLoading(true);
     const { request, controller } = startRequest("commit", true);
@@ -1127,7 +1108,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
     return value;
   };
   const saveWidth = (next: number) => {
-    localStorage.setItem(widthKey(), String(commitWidth(next)));
+    writeSetting(projectScope(), "width", String(commitWidth(next)));
   };
   let stopResize: (() => void) | undefined;
   createEffect(() => {
@@ -1180,7 +1161,6 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
     const pointerId = event.pointerId;
     const startX = event.clientX;
     const startWidth = width();
-    const resizeStorageKey = widthKey();
     let pendingWidth = startWidth;
     let frame = 0;
     let stopped = false;
@@ -1218,7 +1198,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
         setWidth(nextWidth);
         setShellWidth(nextWidth);
       });
-      localStorage.setItem(resizeStorageKey, String(nextWidth));
+      writeSetting(projectScope(), "width", String(nextWidth));
       dispatchPanelGeometryMotion({ phase: "end", id, source: "workspace", size: nextWidth + shellGap() });
       window.removeEventListener("pointermove", move);
       window.removeEventListener("pointerup", stop);
@@ -1262,7 +1242,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
   let loadedProjectId = "";
   let geometryProjectId = "";
   createEffect(on(() => [props.chatId(), props.projectId()] as const, () => {
-    const nextTab = (localStorage.getItem(storageKey()) as PanelTab) || "files";
+    const nextTab = storedTab();
     const projectChanged = geometryProjectId !== props.projectId();
     if (projectChanged) {
       geometryProjectId = props.projectId();
@@ -1272,18 +1252,18 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
     batch(() => {
       setDetailOpen(detailOpenFor(nextTab) === "true");
       setDiffDetailOpen(detailOpenFor("diff") === "true");
-      setSourceDetailOpen(localStorage.getItem(sourceDetailOpenKey()) === "true");
-      setDetailHeight(Math.max(MIN_DETAIL_HEIGHT, Number(localStorage.getItem(`conduit:workspace-panel:${props.chatId()}:${nextTab}:detail-height`)) || 288));
-      setSourceDetailHeight(Math.max(MIN_SOURCE_DETAIL_HEIGHT, Number(localStorage.getItem(sourceDetailHeightKey())) || 224));
+      setSourceDetailOpen(readSetting(panelScope(), sourceDetailOpenName) === "true");
+      setDetailHeight(Math.max(MIN_DETAIL_HEIGHT, Number(readSetting(panelScope(), `${nextTab}:detail-height`)) || 288));
+      setSourceDetailHeight(Math.max(MIN_SOURCE_DETAIL_HEIGHT, Number(readSetting(panelScope(), sourceDetailHeightName)) || 224));
       setCommitDetail(null);
       if (projectChanged) {
-        pendingWidthCommit = Number(localStorage.getItem(widthKey())) || 336;
-        setTreeWidth(Math.max(MIN_TREE_WIDTH, Math.min(MAX_TREE_WIDTH, Number(localStorage.getItem(treeWidthKey())) || DEFAULT_TREE_WIDTH)));
-        setTreeCollapsed(localStorage.getItem(treeCollapsedKey()) === "true");
-        setSplitRatio(Math.max(0, Math.min(100, Number(localStorage.getItem(splitRatioKey())) || 50)));
-        setFileSplitRatio(Math.max(25, Math.min(75, Number(localStorage.getItem(fileSplitRatioKey())) || 50)));
-        setShowHidden(localStorage.getItem(showHiddenKey()) === "true");
-        setKeptVisible(storedPaths(keptVisibleKey()));
+        pendingWidthCommit = Number(readSetting(projectScope(), "width")) || 336;
+        setTreeWidth(Math.max(MIN_TREE_WIDTH, Math.min(MAX_TREE_WIDTH, Number(readSetting(projectScope(), "tree-width")) || DEFAULT_TREE_WIDTH)));
+        setTreeCollapsed(readSetting(projectScope(), "tree-collapsed") === "true");
+        setSplitRatio(Math.max(0, Math.min(100, Number(readSetting(projectScope(), "split-ratio")) || 50)));
+        setFileSplitRatio(Math.max(25, Math.min(75, Number(readSetting(projectScope(), "file-split-ratio")) || 50)));
+        setShowHidden(readSetting(projectScope(), "show-hidden") === "true");
+        setKeptVisible(storedPaths(projectScope(), "kept-visible"));
       }
       setTab(nextTab);
       setSecondaryTab(storedSecondary());
@@ -1432,22 +1412,22 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
   const toggleHidden = () => {
     const next = !showHidden();
     setShowHidden(next);
-    localStorage.setItem(showHiddenKey(), String(next));
+    writeSetting(projectScope(), "show-hidden", String(next));
   };
   const toggleWrapLines = () => {
     const next = !wrapLines();
     setWrapLines(next);
-    localStorage.setItem(WRAP_LINES_KEY, String(next));
+    writeSetting(WORKSPACE_PANEL_GLOBAL_SCOPE, "wrap-lines", String(next));
   };
   const saveTreeWidth = (next: number) => {
     const value = Math.max(MIN_TREE_WIDTH, Math.min(MAX_TREE_WIDTH, next));
     setTreeWidth(value);
-    localStorage.setItem(treeWidthKey(), String(value));
+    writeSetting(projectScope(), "tree-width", String(value));
   };
   const toggleTreeCollapsed = () => {
     const next = !treeCollapsed();
     setTreeCollapsed(next);
-    localStorage.setItem(treeCollapsedKey(), String(next));
+    writeSetting(projectScope(), "tree-collapsed", String(next));
   };
   const splitRatioBounds = (hostWidth = splitWidth()) => {
     if (hostWidth <= MIN_WORKSPACE_PANE_WIDTH * 2 + WORKSPACE_SPLIT_GUTTER_WIDTH) {
@@ -1468,7 +1448,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
   const saveSplitRatio = (next: number, hostWidth = splitWidth()) => {
     const value = clampSplitRatio(next, hostWidth);
     setSplitRatio(value);
-    localStorage.setItem(splitRatioKey(), String(value));
+    writeSetting(projectScope(), "split-ratio", String(value));
   };
   createEffect(() => {
     if (!splitActive() || splitWidth() <= 0) return;
@@ -1513,7 +1493,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
     if (next.has(path)) next.delete(path);
     else next.add(path);
     setKeptVisible(next);
-    localStorage.setItem(keptVisibleKey(), JSON.stringify([...next]));
+    writeSetting(projectScope(), "kept-visible", JSON.stringify([...next]));
   };
   const collapseTree = () => {
     const next = new Set<string>();
