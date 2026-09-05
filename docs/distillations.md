@@ -113,6 +113,13 @@ Add an entry through `$tacit-knowledge` after explicit approval or validated rep
 
 ## UI and component heuristics
 
+### Prove scrollbar behaviour with native pixels and input
+
+- **Type:** Gotcha.
+- **Rule:** Check hidden and revealed screenshots plus wheel and drag input; do not accept computed scrollbar pseudo-element styles as paint evidence. Non-auto standard scrollbar properties can override WebKit painting. Keep delayed edge reveal in the shared overlay rather than adding per-pane scrollbar rules.
+- **Scope:** `navigation/overlay-scrollbars.ts`, native scrollbar fallbacks, and scrollable workspace panes.
+- **Evidence:** Native thumbs kept arrows and showed no hover change despite the reported pseudo-element styles. The accepted overlay passed `scripts/check-overlay-scrollbars.mjs` on the sidebar, graph, file tree, and both preview axes: cancelled pass-through, visible reveal, wheel, drag, and unchanged pane dimensions.
+
 ### Edit shortcuts inline and save explicitly
 
 - **Type:** Preference.
