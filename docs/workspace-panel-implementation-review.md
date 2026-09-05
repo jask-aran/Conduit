@@ -11,6 +11,20 @@ Status values:
 - **Open**: observed risk or incomplete subsystem.
 - **Complete**: implemented and verified in this review.
 
+## Current planning disposition
+
+Prioritise four follow-ups: Terminal recovery states, Persisted panel state,
+Binary and media handling, and Source Control scale.
+
+Defer Editor state ownership, Save acknowledgement race, Durable file
+replacement, Replace-with-upload bypasses the revision contract, Workspace
+content search, and Source Control capability set. Roll these items into a
+future GitHub Feature or Roadmap for a full file-tab refresh and text-editor
+system. Do not implement them as separate fixes before that work.
+
+Track the failure-surface finding as a separate GitHub Feature. Keep the
+other open findings as review context; they are not part of the current plan.
+
 Each open finding carries a **Solution** section: the shape of the fix, the
 concrete edits it implies, and what the implementer should be able to observe
 once it is done. The solutions are specified, not implemented. Where a solution
@@ -55,6 +69,9 @@ and the file-listing route resolve to the same absolute path for both project
 kinds.
 
 ### Open — Editor state ownership
+
+**Planning note.** Defer this item. Roll it into the future file-tab refresh and
+full text-editor system described above.
 
 Each `WorkspaceFileSlot` owns its draft. `WorkspacePanel` conditionally mounts the file views when tabs, split panes, detail collapse state, and panel geometry change. A mount transition can discard a draft even when the user did not close the file.
 
@@ -103,6 +120,9 @@ prompts. Cover both with browser tests.
 
 ### Open — Save acknowledgement race
 
+**Planning note.** Defer this item. Roll it into the future file-tab refresh and
+full text-editor system described above.
+
 The save request sends the current `draft()`, but the success path reads `draft()` again. If the user types while the request is active, the response can mark newer text as saved even though the server received the older text.
 
 **Verified.** With the `PUT` delayed 900 ms and three characters typed while it was
@@ -139,6 +159,9 @@ enabled and the header still reads `Unsaved` after the response. Add a browser t
 that stubs the route with a delay.
 
 ### Open — Durable file replacement
+
+**Planning note.** Defer this item. Roll it into the future file-tab refresh and
+full text-editor system described above.
 
 File save writes directly to the target. A process or machine failure can leave a truncated file. The revision check and the write are also separate operations.
 
@@ -215,6 +238,9 @@ rapid open/close reversal checks also pass after this correction.
 
 ### Open — Replace-with-upload bypasses the revision contract
 
+**Planning note.** Defer this item. Roll it into the future file-tab refresh and
+full text-editor system described above.
+
 Replacing a file through the tree sends `if-match: "*"`
 (`conduit-web/src/client/workspace/workspace-panel.tsx:730`), so the write
 overwrites whatever is on disk regardless of concurrent modification, unlike the
@@ -286,6 +312,9 @@ client.
 
 ### Open — Source Control scale
 
+**Planning note.** Prioritise this item for a focused follow-up. Keep it
+separate from the deferred full text-editor system work.
+
 Patch content is requested and rendered as individual lines. Large combined diffs can create a large DOM and repeat Git work. The Git semaphore releases a slot before assigning it to a waiter, so the active counter can fall below the real process count.
 
 Relevant code: Git slot release in `conduit-web/src/workspace-inspector.js:48-50`, bounded patch work near `conduit-web/src/workspace-inspector.js:411`, and patch rendering in `conduit-web/src/client/workspace/workspace-panel.tsx`.
@@ -307,6 +336,9 @@ land first.
    download rather than inline rendering for a patch past a size ceiling.
 
 ### Open — Terminal recovery states
+
+**Planning note.** Prioritise this item for a focused follow-up. Each terminal
+state should have one clear message and one primary action.
 
 The terminal retries a short sequence for network loss. A lease or control conflict ends at the same broad recovery surface, although it needs a different user choice. The `ownershipConflict` signal is present but does not fully drive the rendered state.
 
@@ -377,6 +409,9 @@ workspace dashboard.
 
 ### Open — Persisted panel state grows without bound and is unguarded
 
+**Planning note.** Prioritise this item for a focused follow-up. Safe storage,
+cleanup, and size limits should not wait for the file-tab refresh.
+
 The panel persists roughly eleven key shapes per chat or project: `:tab`,
 `:secondary-tab`, `:file`, `:file-secondary`, per-tab `:detail-open` and
 `:detail-height`, plus `:width`, `:tree-width`, `:tree-collapsed`, `:show-hidden`,
@@ -423,6 +458,9 @@ probe immediately, and the strip clears on the next successful response.
 
 ### Open — Binary and media handling stops at images
 
+**Planning note.** Prioritise this item for a focused follow-up. Keep the
+viewer boundary separate from the deferred text-editor system work.
+
 Image files are detected by extension, capped at 25 MB inline, fetched as a blob
 and rendered through an object URL whose lifetime the slot owns. Everything else
 binary still reaches the text reader and returns "Binary files cannot be
@@ -465,6 +503,9 @@ The PDF and media viewers depend on the CSP finding; agree `object-src` and
 
 ### Open — No workspace content search
 
+**Planning note.** Defer this item. Roll it into the future file-tab refresh and
+full text-editor system described above.
+
 No server route searches file contents, and the tree filter matches only
 directories already loaded into the client. For a panel whose purpose is to work
 alongside an agent that writes files, find-in-files is the most conspicuous absent
@@ -502,6 +543,9 @@ outside the root or behind a symlink is never returned — and that the caps app
 
 ### Open — Source Control capability set is thin
 
+**Planning note.** Defer this item. Roll it into the future file-tab refresh and
+full text-editor system described above.
+
 The available actions are stage, unstage, commit, fetch, pull and push
 (`conduit-web/src/client/workspace/workspace-panel.tsx:28`). There is no discard or
 restore, no branch switch or create, no stash, no amend, no per-hunk staging and no
@@ -534,6 +578,9 @@ git action plumbing so the semaphore, timeouts and output limits apply unchanged
 ## P2
 
 ### Open — Artifacts contract
+
+**Planning note.** No current work is planned. Keep this as review context until
+the artifact product contract is defined.
 
 The Artifacts view exposes Outputs and Interactive UI modes but has no backing artifact data or lifecycle. Its controls imply a subsystem that is not present.
 
@@ -571,6 +618,10 @@ Verification:
 
 ### Open — Client project contract
 
+**Planning note.** No separate work is planned. The main `unstructured` type
+gap was fixed with the canonical-root change; keep the remaining shared-kind
+list and drift test as review context.
+
 The server uses an `unstructured` project kind for generic chats, but the client `Project.kind` union accepts only `project` and `workspace`. This hides a real runtime value from TypeScript.
 
 Relevant code: `conduit-web/src/project-store.js:193` and `conduit-web/src/client/api/contracts.ts:34-40`.
@@ -583,6 +634,9 @@ it into the server store so the two cannot drift, with a server test asserting
 every kind the store can write appears in that list.
 
 ### Open — Workspace panel size
+
+**Planning note.** No current work is planned. Revisit only after the selected
+features create stable extraction boundaries.
 
 `WorkspacePanel` contains file management, editor-slot orchestration, Git controls, artifacts, terminal composition, keyboard behavior, caching, polling, and geometry in one file. Its CSS also carries a full mobile density copy.
 
@@ -605,6 +659,9 @@ land — splitting first means moving the same code twice.
    each extraction in its own commit so a regression bisects cleanly.
 
 ### Open — No Content-Security-Policy
+
+**Planning note.** No current work is planned in this review. Revisit before
+shipping interactive artifacts or additional embedded media.
 
 Nothing in the server sets a Content-Security-Policy. The panel already renders
 workspace file content, markdown and blob-backed images, and the Artifacts view
@@ -637,6 +694,9 @@ enforced; design the artifact frame only after that.
 
 ### Open — The failure surface has fragmented
 
+**Planning note.** Track this as a separate GitHub Feature. It should align
+errors across the panel, Git, polling, terminal, and mobile surfaces.
+
 Panel failures are now toasts, background poll failures reach only the console, git
 action errors render inline, terminal recovery has its own banner, and the mobile
 overlay differs again. There is no stated rule for which failures are silent,
@@ -663,6 +723,9 @@ Relevant code: toast reporting in `conduit-web/src/client/workspace/workspace-pa
 
 ### Open — Focus is unmanaged after destructive actions
 
+**Planning note.** No current work is planned. Revisit with the broader
+accessibility pass if that work is scheduled.
+
 Closing a slot, deleting an open file, or promoting the secondary slot into the
 primary leaves focus wherever it was and announces nothing. This is adjacent to the
 ARIA item above but distinct: it concerns what happens after state changes, not the
@@ -686,6 +749,10 @@ Relevant code: slot close and promotion in `conduit-web/src/client/workspace/wor
 4. Cover both in the keyboard test added for the ARIA finding.
 
 ### Open — Test coverage map
+
+**Planning note.** No separate work is planned. Add tests with each selected
+feature and with the future file-tab refresh rather than treating coverage as
+an independent implementation slice.
 
 Browser coverage of the panel is tabs, split panes, two file slots, image preview
 and the file menu. Not covered: save conflicts, git actions, poll-driven refresh,
