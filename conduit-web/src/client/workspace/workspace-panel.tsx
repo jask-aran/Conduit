@@ -509,12 +509,22 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
   // One strip per pane: the tabs you click always belong to the pane below them,
   // so a split needs no notion of an "active" pane.
   const paneTabs = (side: "left" | "right") => (
-    <div class="workspace-panel-tabs" role="toolbar" aria-label={splitActive() ? `${side === "left" ? "Left" : "Right"} workspace pane views` : "Workspace views"}>
-      <For each={PANEL_TABS}>{(item) => {
-        const label = () => splitActive() ? `${tabLabel(item)} (${side === "left" ? "left" : "right"} pane)` : tabLabel(item);
-        const disabled = () => item === "diff" && !props.sourceControlEnabled();
-        return <button type="button" role="tab" data-pane={side} data-workspace-tab={item} disabled={disabled()} aria-label={disabled() ? `${label()}: unavailable for Chats and managed projects` : label()} title={disabled() ? "Source Control is available only for Workspaces" : label()} aria-selected={(side === "left" ? tab() : secondaryTab()) === item} onClick={() => changePaneTab(side, item)}>{tabIcon(item)}<span>{tabLabel(item)}</span></button>;
-      }}</For>
+    <div class="workspace-panel-tabs-space" ref={(element) => {
+      const observer = new ResizeObserver(() => {
+        element.removeAttribute("data-icons-only");
+        const tabs = element.firstElementChild;
+        if (tabs && tabs.scrollWidth > element.clientWidth) element.setAttribute("data-icons-only", "true");
+      });
+      observer.observe(element);
+      onCleanup(() => observer.disconnect());
+    }}>
+      <div class="workspace-panel-tabs" role="toolbar" aria-label={splitActive() ? `${side === "left" ? "Left" : "Right"} workspace pane views` : "Workspace views"}>
+        <For each={PANEL_TABS}>{(item) => {
+          const label = () => splitActive() ? `${tabLabel(item)} (${side === "left" ? "left" : "right"} pane)` : tabLabel(item);
+          const disabled = () => item === "diff" && !props.sourceControlEnabled();
+          return <button type="button" role="tab" data-pane={side} data-workspace-tab={item} disabled={disabled()} aria-label={disabled() ? `${label()}: unavailable for Chats and managed projects` : label()} title={disabled() ? "Source Control is available only for Workspaces" : label()} aria-selected={(side === "left" ? tab() : secondaryTab()) === item} onClick={() => changePaneTab(side, item)}>{tabIcon(item)}<span>{tabLabel(item)}</span></button>;
+        }}</For>
+      </div>
     </div>
   );
   const changePaneTab = (side: "left" | "right", value: string) => {
@@ -1073,11 +1083,21 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
     if (!props.sourceControlEnabled()) return;
     const { request, controller } = startRequest("diff", !background);
     try {
+      const endpoint = `/v0/projects/${encodeURIComponent(request.projectId)}/diff`;
+      // Show the first status before waiting for history or a full patch.
+      if (!diff() && (includePatch || includeHistory)) {
+        const overview = await api<DiffPayload>(`${endpoint}?history=0${reuse ? "&reuse=1" : ""}`, { signal: controller.signal });
+        if (!ownsRequest(request)) return;
+        setDiff(overview);
+        cacheWorkspace(request.projectId, { diff: overview });
+        if (!overview.repository) return;
+        reuse = true;
+      }
       const query = new URLSearchParams();
       if (includePatch) query.set("patch", "1");
       if (!includeHistory) query.set("history", "0");
       if (reuse) query.set("reuse", "1");
-      const payload = await api<DiffPayload>(`/v0/projects/${encodeURIComponent(request.projectId)}/diff${query.size ? `?${query}` : ""}`, { signal: controller.signal });
+      const payload = await api<DiffPayload>(`${endpoint}${query.size ? `?${query}` : ""}`, { signal: controller.signal });
       if (ownsRequest(request)) {
         const next = includeHistory ? payload : { ...payload, commits: undefined, refs: undefined };
         setDiff(next);
@@ -1707,7 +1727,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
           <div class="workspace-tree-collapsed-rail"><button type="button" aria-label="Show file tree" title="Show file tree" onClick={toggleTreeCollapsed}><PanelLeftOpenIcon /></button></div>
         </Show>
         <div class="workspace-tree-pane">
-          <div class="workspace-tree-tools">
+          <div class="workspace-tree-tools workspace-tree-search">
             <label class="workspace-tree-filter">
               <SearchIcon />
               <input
@@ -1721,6 +1741,16 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
                 onKeyDown={onFileFilterKeyDown}
               />
             </label>
+          </div>
+          <Show when={workspaceStale()}><div class="workspace-freshness-notice" role="status" aria-live="polite"><span>Not updating</span><span aria-hidden="true">·</span><button type="button" onClick={retryWorkspacePoll}>Retry</button></div></Show>
+          <nav ref={(element) => {
+            treeElement = element;
+            queueMicrotask(() => { element.scrollTop = workspaceCache.get(props.projectId())?.treeScrollTop || 0; });
+          }} aria-label="Project files" role="tree" aria-busy={filesLoading()} class="workspace-tree" onScroll={saveTreeScroll}>
+            <Tree directory="" />
+            <Show when={directories()[""] && !directories()[""]?.oversize && visibleEntries("").length === 0}><div class="workspace-tree-empty">{fileFilter() ? "No loaded files match this filter." : "No files to show."}</div></Show>
+          </nav>
+          <div class="workspace-tree-tools workspace-tree-actions" role="toolbar" aria-label="File tree actions">
             <button type="button" aria-label="New file" title="Create a file in the workspace root" disabled={uploading()} onClick={() => void createFile()}><FilePlusIcon /></button>
             <button type="button" aria-label="New folder" title="Create a folder in the workspace root" disabled={uploading()} onClick={() => void createDirectory()}><FolderPlusIcon /></button>
             <button type="button" aria-label="Collapse all folders" title="Collapse all folders" onClick={collapseTree}><ChevronsUpIcon /></button>
@@ -1732,14 +1762,6 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
             <Show when={filesWide()}><button type="button" aria-label="Hide file tree" title="Hide file tree" onClick={toggleTreeCollapsed}><PanelLeftCloseIcon /></button></Show>
             <input ref={fileUploadInput} class="workspace-file-input" type="file" multiple={uploadTarget().kind === "directory"} onChange={(event) => void uploadFiles(event.currentTarget.files)} />
           </div>
-          <Show when={workspaceStale()}><div class="workspace-freshness-notice" role="status" aria-live="polite"><span>Not updating</span><span aria-hidden="true">·</span><button type="button" onClick={retryWorkspacePoll}>Retry</button></div></Show>
-          <nav ref={(element) => {
-            treeElement = element;
-            queueMicrotask(() => { element.scrollTop = workspaceCache.get(props.projectId())?.treeScrollTop || 0; });
-          }} aria-label="Project files" role="tree" aria-busy={filesLoading()} class="workspace-tree" onScroll={saveTreeScroll}>
-            <Tree directory="" />
-            <Show when={directories()[""] && !directories()[""]?.oversize && visibleEntries("").length === 0}><div class="workspace-tree-empty">{fileFilter() ? "No loaded files match this filter." : "No files to show."}</div></Show>
-          </nav>
         </div>
         <Show when={filesWide()}>
           <div
