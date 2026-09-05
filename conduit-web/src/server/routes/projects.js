@@ -83,6 +83,7 @@ export function registerProjectRoutes(app, {
   readWorkspaceCommit,
   readWorkspaceDiff,
   readWorkspaceFile,
+  readWorkspaceFileMetadata,
   runWorkspaceGitAction,
   registry,
   terminals,
@@ -271,20 +272,31 @@ export function registerProjectRoutes(app, {
       if (!project) return response.status(404).json({ error: "project_not_found" });
       if (!request.query.path) return response.status(400).json({ error: "workspace_path_required" });
       await projects.validate(project);
-      if (request.query.download === "1") {
+      if (request.query.download === "1" || request.query.inline === "1") {
         const resolved = await resolveInspectorPath(project.workingRoot, request.query.path, { kind: "file" });
+        const metadata = await readWorkspaceFileMetadata(project.workingRoot, request.query.path);
+        const inline = request.query.inline === "1";
+        if (inline && !["image", "pdf", "audio", "video"].includes(metadata.kind)) {
+          return response.status(415).json({ error: "unsupported_inline_type" });
+        }
+        if (inline && metadata.mime === "image/svg+xml") response.setHeader("Content-Security-Policy", "sandbox");
+        const etag = `"${metadata.revision}"`;
+        response.setHeader("ETag", etag);
+        if (request.headers["if-none-match"] === etag) return response.status(304).end();
         const downloadName = encodeURIComponent(path.basename(resolved.relativePath)).replace(/[!'()*]/g, (character) => `%${character.charCodeAt(0).toString(16).toUpperCase()}`);
-        response.setHeader("Content-Type", "application/octet-stream");
+        response.setHeader("Content-Type", metadata.mime);
         response.setHeader("X-Content-Type-Options", "nosniff");
         response.setHeader("Cache-Control", "private, no-cache");
-        response.setHeader("Content-Disposition", `attachment; filename*=UTF-8''${downloadName}`);
+        response.setHeader("Content-Disposition", `${inline ? "inline" : "attachment"}; filename*=UTF-8''${downloadName}`);
         return response.sendFile(resolved.path);
       }
       if (request.query.metadata === "1") {
-        const resolved = await resolveInspectorPath(project.workingRoot, request.query.path, { kind: "file" });
-        return response.json({ path: resolved.relativePath, size: resolved.stat.size, modifiedAt: resolved.stat.mtimeMs });
+        return response.json(await readWorkspaceFileMetadata(project.workingRoot, request.query.path));
       }
-      response.json(await readWorkspaceFile(project.workingRoot, request.query.path));
+      response.json(await readWorkspaceFile(project.workingRoot, request.query.path, {
+        forceText: request.query.force === "text",
+        preview: request.query.preview === "1",
+      }));
     } catch (error) { next(error); }
   });
 

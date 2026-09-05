@@ -32,7 +32,7 @@ import {
   validateSession,
 } from "./auth-middleware.js";
 import { NATIVE_APP_ORIGIN, SocketTicketStore } from "./native-auth.js";
-import { listWorkspaceDirectory, readWorkspaceCommit, readWorkspaceDiff, readWorkspaceFile, readWorkspaceVersion, runWorkspaceGitAction } from "./workspace-inspector.js";
+import { listWorkspaceDirectory, readWorkspaceCommit, readWorkspaceDiff, readWorkspaceFile, readWorkspaceFileMetadata, readWorkspaceVersion, runWorkspaceGitAction } from "./workspace-inspector.js";
 import { currentMagicDnsOrigin } from "./tailscale-share.js";
 import { buildProjectDashboard } from "./project-dashboard.js";
 import { PtyManager } from "./pty-manager.js";
@@ -467,6 +467,7 @@ registerProjectRoutes(app, {
   readWorkspaceCommit,
   readWorkspaceDiff,
   readWorkspaceFile,
+  readWorkspaceFileMetadata,
   readWorkspaceVersion,
   runWorkspaceGitAction,
   registry,
@@ -588,6 +589,12 @@ app.use((error, _request, response, _next) => {
     error: error.code || "runtime_error",
     message: error.message,
     path: error.path,
+    kind: error.kind,
+    mime: error.mime,
+    size: error.size,
+    modifiedAt: error.modifiedAt,
+    revision: error.revision,
+    head: error.head,
     allowlist: error.allowlist,
     maxBytes: error.maxBytes,
   });

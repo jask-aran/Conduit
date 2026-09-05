@@ -184,7 +184,24 @@ exit 0
     assert.equal(managedPreview.content, "before\n");
     assert.equal(typeof managedPreview.modifiedAt, "number");
     const managedMetadata = await (await fetch(`${managedFileUrl}&metadata=1`)).json();
-    assert.deepEqual(managedMetadata, { path: "00-directory/managed.txt", size: 7, modifiedAt: managedPreview.modifiedAt });
+    assert.equal(managedMetadata.path, "00-directory/managed.txt");
+    assert.equal(managedMetadata.size, 7);
+    assert.equal(managedMetadata.modifiedAt, managedPreview.modifiedAt);
+    assert.equal(managedMetadata.kind, "text");
+    assert.equal(managedMetadata.mime, "text/plain");
+    assert.equal(typeof managedMetadata.revision, "string");
+    assert.equal(managedMetadata.head, Buffer.from("before\n").toString("hex"));
+    const mediaPath = path.join(workspace, "manual.pdf");
+    await fs.writeFile(mediaPath, "%PDF-1.7\n");
+    const mediaUrl = `${origin}/v0/projects/${linked.id}/file?path=manual.pdf`;
+    const mediaMetadata = await (await fetch(`${mediaUrl}&metadata=1`)).json();
+    assert.deepEqual({ kind: mediaMetadata.kind, mime: mediaMetadata.mime }, { kind: "pdf", mime: "application/pdf" });
+    const mediaDownload = await fetch(`${mediaUrl}&download=1`);
+    assert.equal(mediaDownload.status, 200);
+    assert.equal(mediaDownload.headers.get("content-type"), "application/pdf");
+    const mediaEtag = mediaDownload.headers.get("etag");
+    assert.ok(mediaEtag);
+    assert.equal((await fetch(`${mediaUrl}&download=1`, { headers: { "if-none-match": mediaEtag } })).status, 304);
     const replacedFile = await fetch(managedFileUrl, {
       method: "PUT",
       headers: { "content-type": "application/octet-stream", "if-match": "*" },

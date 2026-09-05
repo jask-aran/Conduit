@@ -422,50 +422,40 @@ the delay for consecutive failures up to 30 seconds, and resets after success.
 After two failures, both headers show `Not updating · Retry`; Retry starts a new
 probe immediately, and the strip clears on the next successful response.
 
-### Open — Binary and media handling stops at images
+### Complete — Binary and media handling stops at images
 
-**Planning note.** Prioritise this item for a focused follow-up. Keep the
-viewer boundary separate from the deferred text-editor system work.
+The server now classifies file metadata from a bounded 4 KiB sniff with an
+extension fallback. Metadata returns `kind`, `mime`, size, modification time,
+revision, and a short hexadecimal prefix. `file_not_text` and `file_too_large`
+errors carry the same classification, so binary files do not fall through the
+text reader without a useful response.
 
-Image files are detected by extension, capped at 25 MB inline, fetched as a blob
-and rendered through an object URL whose lifetime the slot owns. Everything else
-binary still reaches the text reader and returns "Binary files cannot be
-previewed": PDFs, audio, video and notebooks among them. Detection trusts the
-extension rather than the content. A changed image re-downloads in full on each
-poll rather than revalidating. There is no zoom or one-to-one view for an image
-larger than its pane, and no escape hatch for a text file rejected over a single
-null byte or for one past the 1 MiB text ceiling.
+`WorkspaceFileSlot` dispatches by classification. Images retain the owned blob
+URL viewer and release URLs during cleanup. PDFs use the browser PDF viewer;
+audio and video use native playback controls. Media previews load authenticated
+inline URLs in browsers, allowing range requests. Native clients retain
+authenticated blobs up to 100 MiB before playback. Unknown binary
+files show their size, MIME type, hex prefix, download action, and *Open as text
+anyway*. Large text files offer a bounded 25 MiB read-only preview. Downloads use
+the complete file path without the inline limit; image refreshes use the file
+revision and accept `304 Not Modified`.
 
-Relevant code: `conduit-web/src/client/workspace/workspace-file-slot.tsx` (image branch and `MAX_INLINE_IMAGE_BYTES`), and `conduit-web/src/workspace-inspector.js:182-188`.
+The separate CSP finding remains open. No current server CSP blocks these viewers.
+Future policy must permit the blob media and PDF sources. Native viewers depend
+on browser format support. The operator accepted playback, PDF display, and
+progressive browser loading on 2026-09-06;
+no tests or build were run for the viewer addition, at the user's request.
 
-**Solution.** Let the server classify the file and let the slot dispatch on the
-classification, so adding a viewer becomes a table entry rather than a new branch.
+Relevant code: `conduit-web/src/workspace-inspector.js`,
+`conduit-web/src/server/routes/projects.js`,
+`conduit-web/src/client/workspace/workspace-file-slot.tsx`, and
+`conduit-web/src/client/workspace/workspace.css`.
 
-1. Server: return `{ path, size, modifiedAt, revision, kind, mime }` from the file
-   metadata response, where `kind` is one of `text`, `image`, `pdf`, `audio`,
-   `video`, `binary`. Classify from a sniffed magic-number prefix of the first
-   4 KiB, falling back to the extension. Have the `file_not_text` rejection in
-   `readWorkspaceFile` (`:182-188`) carry `kind` and `mime` too, so the client can
-   offer the right fallback instead of a dead end.
-2. Client: replace `imageExtension` with a viewer table keyed by kind — text
-   editor, image, PDF through `<object>` on the blob URL, media through
-   `<audio>`/`<video>`, and a binary fallback showing size, type, a hex head and a
-   Download button. Each viewer receives a blob URL the slot still owns and revokes
-   in `onCleanup`, exactly as the image branch does today.
-3. Add *Open as text anyway* on the binary fallback, re-requesting with a
-   `?force=text` flag, for the file rejected over a single null byte; and *Load
-   first 1 MiB* for a file past the text ceiling — a `Range` request rendered
-   read-only behind a banner saying it is truncated.
-4. Revalidate rather than re-download: send `if-none-match` with the known revision
-   on the image fetch and treat 304 as unchanged, which removes the full
-   re-download per poll.
-5. Give the image viewer a *Fit* / *1:1* toggle with scroll-to-pan when zoomed,
-   stored per slot and not persisted.
-6. Make `MAX_INLINE_IMAGE_BYTES` govern inline rendering only. It should never
-   block downloading the file.
-
-The PDF and media viewers depend on the CSP finding; agree `object-src` and
-`media-src` before adding them.
+Focused coverage in `conduit-web/test/workspace-inspector.test.js` and
+`conduit-web/test/server-api.test.js` covers all six classifications, bounded
+reads, error metadata, workspace boundaries, and download MIME/ETag behavior.
+Browser fixtures cover image compatibility, media fallback, and the binary
+fallback.
 
 ### Open — No workspace content search
 
