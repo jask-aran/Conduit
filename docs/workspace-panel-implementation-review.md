@@ -310,30 +310,23 @@ visible data for `null`, and refreshes Git status after every workspace change.
 recursive watch compare mtime and size for the visible paths supplied by the
 client.
 
-### Open — Source Control scale
+### Complete — Source Control scale (accepted scope)
 
-**Planning note.** Prioritise this item for a focused follow-up. Keep it
-separate from the deferred full text-editor system work.
-
-Patch content is requested and rendered as individual lines. Large combined diffs can create a large DOM and repeat Git work. The Git semaphore releases a slot before assigning it to a waiter, so the active counter can fall below the real process count.
+Patch retains the combined staged and working-tree Git output, with 400-line
+pagination. Clicking a file in Changes or Staged changes opens its corresponding
+comparison in the separate Diff tab. Per-file requests have a 512 KiB output
+limit. Individual staging uses literal repository-root paths. Source Control
+is disabled in Chats and managed projects, including at the API boundary.
+The operator accepted this revised scope on 2026-09-06. Per-file cache and diff
+counts from the original plan are not implemented. The current semaphore already
+transfers slots correctly. No tests or build were run for the final changes,
+at the operator's request.
 
 Relevant code: Git slot release in `conduit-web/src/workspace-inspector.js:48-50`, bounded patch work near `conduit-web/src/workspace-inspector.js:411`, and patch rendering in `conduit-web/src/client/workspace/workspace-panel.tsx`.
 
-**Solution.** Three separable changes; the semaphore is a two-line fix and should
-land first.
-
-1. **Slot transfer.** `releaseGitSlot` (`:48-50`) decrements `gitSlots.active` and
-   then resolves a waiter that does not re-increment, so the counter drifts below
-   the real process count and the limit stops binding. Transfer the slot instead:
-   when a waiter exists, shift and resolve it *without* decrementing; decrement
-   only when the queue is empty. Add a unit test running 20 concurrent git calls
-   against a limit of 4 and asserting observed peak concurrency never exceeds 4.
-2. **Bound the work.** Drive the file list from `git diff --numstat`, which gives
-   the summary the list needs with no patch text, and request a patch only when a
-   file is expanded. Cache patches keyed by path plus blob revision.
-3. **Bound the DOM.** Render at most the first N hunks with an explicit *Show
-   remaining hunks* control, virtualise the line list above a threshold, and offer
-   download rather than inline rendering for a patch past a size ceiling.
+Managed processes set a Git discovery ceiling, but shell prompts may still
+discover Conduit's enclosing repository. Moving runtime data to `~/.conduit`
+is deferred; no migration is part of this work.
 
 ### Complete — Terminal recovery states
 

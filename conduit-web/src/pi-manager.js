@@ -2,6 +2,7 @@ import { EventEmitter } from "node:events";
 import { spawn } from "node:child_process";
 import crypto from "node:crypto";
 import path from "node:path";
+import { projectEnvironment } from "./project-environment.js";
 import { SessionManager } from "@earendil-works/pi-coding-agent";
 import { buildPiEnvironment, buildPiResourceArgs, resolvePiProcess } from "../../scripts/pi-runtime.mjs";
 import {
@@ -440,7 +441,7 @@ export class PiManager extends EventEmitter {
     const child = this.spawnImpl(processSpec.command, processSpec.args, {
       cwd: launchSpec?.cwd || project.workingRoot,
       stdio: ["pipe", "pipe", "pipe"],
-      env: launchSpec?.env || buildPiEnvironment(this.agentDir),
+      env: projectEnvironment(project, launchSpec?.cwd || project.workingRoot, launchSpec?.env || buildPiEnvironment(this.agentDir)),
     });
     const createdAtMs = this.now();
     const record = {

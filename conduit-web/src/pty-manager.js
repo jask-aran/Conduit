@@ -3,6 +3,7 @@ import { execFile as execFileCallback } from "node:child_process";
 import { EventEmitter } from "node:events";
 import fs from "node:fs/promises";
 import path from "node:path";
+import { projectEnvironment } from "./project-environment.js";
 import { StringDecoder } from "node:string_decoder";
 import { promisify } from "node:util";
 import nodePty from "node-pty";
@@ -286,9 +287,11 @@ export class PtyManager extends EventEmitter {
       throw failure("pty_title_invalid", "Terminal title must be between 1 and 80 characters");
     }
     const title = customTitle || nextTerminalTitle([...this.records.values()], project.id, template.title);
+    const environment = projectEnvironment(project, cwd, process.env);
     const args = [
       "new-session", "-d", "-s", tmuxSession, "-c", cwd,
       "-n", title, "-x", String(width), "-y", String(height),
+      ...(project.kind !== "workspace" ? ["-e", `GIT_CEILING_DIRECTORIES=${environment.GIT_CEILING_DIRECTORIES}`] : []),
       template.command, ...template.args,
     ];
     await this.invokeTmux(args);

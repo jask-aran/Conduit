@@ -581,7 +581,7 @@ export async function runWorkspaceGitAction(root, { action, relativePath, messag
   const gitPath = () => {
     const value = safeSegments(relativePath).join("/");
     if (!value) throw inspectorError("invalid_workspace_path", "The requested path is invalid");
-    return value;
+    return `:(top,literal)${value}`;
   };
   let args;
   if (action === "stage") args = ["add", "--", gitPath()];
@@ -720,8 +720,14 @@ function inspectionFor(root, runGit, { reuse = false } = {}) {
   return record;
 }
 
-export async function readWorkspaceDiff(root, { includePatch = false, includeHistory = true, reuse = false, signal, runGit = runBoundedGit } = {}) {
+export async function readWorkspaceDiff(root, { includePatch = false, includeHistory = true, reuse = false, filePath = null, staged = false, signal, runGit = runBoundedGit } = {}) {
   const resolved = await resolveInspectorPath(root, "", { kind: "directory" });
+  if (filePath !== null) {
+    const value = safeSegments(filePath).join("/");
+    if (!value) throw inspectorError("invalid_workspace_path", "The requested path is invalid");
+    const { stdout } = await runGit(resolved.path, ["diff", ...(staged ? ["--cached"] : []), "--no-ext-diff", "--no-textconv", "--no-color", "--", `:(top,literal)${value}`], { signal, maxBuffer: 512 * 1024 });
+    return { diff: stdout };
+  }
   const record = inspectionFor(resolved.path, runGit, { reuse });
   if (includeHistory && !record.history) {
     record.active += 1;

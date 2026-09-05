@@ -98,9 +98,16 @@ function CommitHistory(props: { commits: GitCommit[]; refs: GitRef[]; branch?: s
 }
 
 function PatchView(props: { content: string }) {
-  return <pre class="workspace-diff-content"><code><For each={props.content.split("\n")}>{(line) =>
+  const [page, setPage] = createSignal(0);
+  const lines = createMemo(() => props.content.split("\n"));
+  createEffect(on(() => props.content, () => setPage(0)));
+  return <><Show when={lines().length > 400}><div>
+    <button type="button" disabled={page() === 0} onClick={() => setPage(page() - 1)}>Previous lines</button>
+    <span> · Lines {page() * 400 + 1}–{Math.min((page() + 1) * 400, lines().length)} of {lines().length} · </span>
+    <button type="button" disabled={(page() + 1) * 400 >= lines().length} onClick={() => setPage(page() + 1)}>Next lines</button>
+  </div></Show><pre class="workspace-diff-content"><code><For each={lines().slice(page() * 400, (page() + 1) * 400)}>{(line) =>
     <span class="workspace-patch-line" data-kind={line.startsWith("+") && !line.startsWith("+++") ? "addition" : line.startsWith("-") && !line.startsWith("---") ? "deletion" : line.startsWith("@@") ? "hunk" : line.startsWith("# ") || line.startsWith("diff ") ? "heading" : "context"}>{line || " "}</span>
-  }</For></code></pre>;
+  }</For></code></pre></>;
 }
 
 function storedPaths(scopeId: string, name: string) {
@@ -135,7 +142,7 @@ function cacheWorkspace(projectId: string, patch: Partial<WorkspaceCacheEntry>) 
   while (workspaceCache.size > MAX_CACHED_WORKSPACES) workspaceCache.delete(workspaceCache.keys().next().value!);
 }
 
-export default function WorkspacePanel(props: { projectId: Accessor<string>; projectName: Accessor<string>; workingRoot: Accessor<string>; chatId: Accessor<string>; open: Accessor<boolean>; expanded: Accessor<boolean>; focusRequest: Accessor<number>; requestedTab?: Accessor<{ tab: PanelTab; terminalId?: string; nonce: number } | null>; onToggleExpanded: () => void; onClose: () => void; shortcuts: ShortcutManager }) {
+export default function WorkspacePanel(props: { projectId: Accessor<string>; projectName: Accessor<string>; sourceControlEnabled: Accessor<boolean>; workingRoot: Accessor<string>; chatId: Accessor<string>; open: Accessor<boolean>; expanded: Accessor<boolean>; focusRequest: Accessor<number>; requestedTab?: Accessor<{ tab: PanelTab; terminalId?: string; nonce: number } | null>; onToggleExpanded: () => void; onClose: () => void; shortcuts: ShortcutManager }) {
   let projectGeneration = 0;
   let requestVersion = 0;
   let projectController = new AbortController();
@@ -222,6 +229,30 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
   const detailOpenFor = (nextTab: PanelTab) => readSetting(panelScope(), `${nextTab}:detail-open`) ?? (nextTab === "diff" ? "false" : "true");
   const [detailOpen, setDetailOpen] = createSignal(detailOpenFor(tab()) === "true");
   const [diffDetailOpen, setDiffDetailOpen] = createSignal(detailOpenFor("diff") === "true");
+  const [fileDiffMode, setFileDiffMode] = createSignal(false);
+  const [selectedDiff, setSelectedDiff] = createSignal<{ path: string; staged: boolean } | null>(null);
+  const [fileDiffText, setFileDiffText] = createSignal("");
+  const [fileDiffBusy, setFileDiffBusy] = createSignal(false);
+  const inspectFileDiff = (path: string, staged: boolean) => {
+    setSelectedDiff({ path, staged });
+    setFileDiffMode(true);
+    setSourceDetailVisible(true);
+  };
+  createEffect(on(() => props.projectId(), () => { setSelectedDiff(null); setFileDiffMode(false); }));
+  createEffect(() => {
+    const selected = selectedDiff();
+    const projectId = props.projectId();
+    diff();
+    if (!fileDiffMode() || !selected) return;
+    const controller = new AbortController();
+    setFileDiffBusy(true);
+    setFileDiffText("");
+    void api<{ diff: string }>(`/v0/projects/${encodeURIComponent(projectId)}/diff?path=${encodeURIComponent(selected.path)}&staged=${selected.staged ? "1" : "0"}`, { signal: controller.signal })
+      .then((result) => { if (!controller.signal.aborted) setFileDiffText(result.diff || "No tracked changes in this section. Untracked files can be viewed in Files."); })
+      .catch((cause) => { if (!controller.signal.aborted) setFileDiffText((cause as Error).message); })
+      .finally(() => { if (!controller.signal.aborted) setFileDiffBusy(false); });
+    onCleanup(() => controller.abort());
+  });
   const [sourceDetailOpen, setSourceDetailOpen] = createSignal(readSetting(panelScope(), sourceDetailOpenName) === "true");
   const [detailHeight, setDetailHeight] = createSignal(Math.max(128, Number(readSetting(panelScope(), detailHeightName())) || 288));
   const [sourceDetailHeight, setSourceDetailHeight] = createSignal(Math.max(MIN_SOURCE_DETAIL_HEIGHT, Number(readSetting(panelScope(), sourceDetailHeightName)) || 224));
@@ -427,10 +458,19 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
     const side = owner?.getAttribute("data-pane") || owner?.getAttribute("data-position");
     return side === "right" ? "right" : "left";
   };
-  const tabVisible = (candidate: PanelTab) => tab() === candidate || (props.expanded() && secondaryTab() === candidate);
+  createEffect(() => {
+    if (props.sourceControlEnabled()) return;
+    if (tab() === "diff") setTab("files");
+    if (secondaryTab() === "diff") setSecondaryTab("terminal");
+    setFileDiffMode(false);
+    setSelectedDiff(null);
+    setDiff(null);
+  });
+  const tabVisible = (candidate: PanelTab) => (candidate !== "diff" || props.sourceControlEnabled()) && (tab() === candidate || (props.expanded() && secondaryTab() === candidate));
   const panePosition = (candidate: PanelTab) => tab() === candidate ? "left" : secondaryTab() === candidate ? "right" : undefined;
   const tabLabel = (candidate: PanelTab) => candidate === "files" ? "Files" : candidate === "diff" ? "Source Control" : candidate === "artifacts" ? "Artifacts" : "Terminal";
   const setPaneTab = (side: "left" | "right", next: PanelTab) => {
+    if (next === "diff" && !props.sourceControlEnabled()) next = "files";
     if (!splitActive()) {
       selectTab(next);
       return;
@@ -472,7 +512,8 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
     <div class="workspace-panel-tabs" role="toolbar" aria-label={splitActive() ? `${side === "left" ? "Left" : "Right"} workspace pane views` : "Workspace views"}>
       <For each={PANEL_TABS}>{(item) => {
         const label = () => splitActive() ? `${tabLabel(item)} (${side === "left" ? "left" : "right"} pane)` : tabLabel(item);
-        return <button type="button" role="tab" data-pane={side} data-workspace-tab={item} aria-label={label()} title={label()} aria-selected={(side === "left" ? tab() : secondaryTab()) === item} onClick={() => changePaneTab(side, item)}>{tabIcon(item)}<span>{tabLabel(item)}</span></button>;
+        const disabled = () => item === "diff" && !props.sourceControlEnabled();
+        return <button type="button" role="tab" data-pane={side} data-workspace-tab={item} disabled={disabled()} aria-label={disabled() ? `${label()}: unavailable for Chats and managed projects` : label()} title={disabled() ? "Source Control is available only for Workspaces" : label()} aria-selected={(side === "left" ? tab() : secondaryTab()) === item} onClick={() => changePaneTab(side, item)}>{tabIcon(item)}<span>{tabLabel(item)}</span></button>;
       }}</For>
     </div>
   );
@@ -514,6 +555,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
   };
   const toggleSourceDetail = () => setSourceDetailVisible(!sourceDetailOpen());
   const selectSourceDetail = (patch: boolean) => {
+    setFileDiffMode(false);
     setSourceDetailVisible(true);
     setCommitDetail(null);
     setDiffDetailOpen(patch);
@@ -1028,6 +1070,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
     setPollRetry((attempt) => attempt + 1);
   };
   const loadDiff = async (includePatch = false, includeHistory = false, reuse = false, background = false) => {
+    if (!props.sourceControlEnabled()) return;
     const { request, controller } = startRequest("diff", !background);
     try {
       const query = new URLSearchParams();
@@ -1049,6 +1092,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
     }
   };
   const inspectCommit = async (commit: GitCommit) => {
+    setFileDiffMode(false);
     setSourceDetailVisible(true);
     setDiffDetailOpen(true);
     writeSetting(panelScope(), "diff:detail-open", "true");
@@ -1795,7 +1839,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
             <header><button type="button" class="workspace-change-disclosure" aria-expanded={stagedOpen()} onClick={() => setStagedOpen((open) => !open)}><ChevronRightIcon /><CheckIcon /><span>Staged changes</span><small>{stagedFiles().length}</small></button><button type="button" aria-label="Unstage all" title="Unstage all" disabled={!stagedFiles().length || Boolean(gitAction())} onClick={() => void runGitAction("unstage-all")}><Undo2Icon /></button></header>
             <Show when={stagedOpen()}><Show when={stagedFiles().length} fallback={<div class="workspace-clean-state">No staged changes</div>}>
               <div class="workspace-changes"><For each={stagedFiles()}>{(file) =>
-                <div class="workspace-change-row"><button type="button" title={`Open ${file.path}`} onClick={() => { if (splitActive()) setPaneTab(panePosition("diff") === "left" ? "right" : "left", "files"); else selectTab("files"); openFile(file.path); }}><code data-status={file.status[0]}>{file.status[0]}</code><span>{file.path}</span></button><button type="button" class="workspace-change-action" aria-label={`Unstage ${file.path}`} title="Unstage" disabled={Boolean(gitAction())} onClick={() => void runGitAction("unstage", file.path)}><Undo2Icon /></button></div>
+<div class="workspace-change-row"><button type="button" title={`Inspect changes in ${file.path}`} onClick={() => inspectFileDiff(file.path, true)}><code data-status={file.status[0]}>{file.status[0]}</code><span>{file.path}</span></button><button type="button" class="workspace-change-action" aria-label={`Unstage ${file.path}`} title="Unstage" disabled={Boolean(gitAction())} onClick={() => void runGitAction("unstage", file.path)}><Undo2Icon /></button></div>
               }</For></div>
             </Show></Show>
           </section>
@@ -1803,7 +1847,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
             <header><button type="button" class="workspace-change-disclosure" aria-expanded={changesOpen()} onClick={() => setChangesOpen((open) => !open)}><ChevronRightIcon /><FileDiffIcon /><span>Changes</span><small>{unstagedFiles().length}</small></button><button type="button" aria-label="Stage all" title="Stage all" disabled={!unstagedFiles().length || Boolean(gitAction())} onClick={() => void runGitAction("stage-all")}><CirclePlusIcon /></button></header>
             <Show when={changesOpen()}><Show when={unstagedFiles().length} fallback={<div class="workspace-clean-state">Working tree clean</div>}>
               <div class="workspace-changes"><For each={unstagedFiles()}>{(file) =>
-                <div class="workspace-change-row"><button type="button" title={`Open ${file.path}`} onClick={() => { if (splitActive()) setPaneTab(panePosition("diff") === "left" ? "right" : "left", "files"); else selectTab("files"); openFile(file.path); }}><code data-status={file.status[1] === " " ? "?" : file.status[1]}>{file.status[1] === " " ? "?" : file.status[1]}</code><span>{file.path}</span></button><button type="button" class="workspace-change-action" aria-label={`Stage ${file.path}`} title="Stage" disabled={Boolean(gitAction())} onClick={() => void runGitAction("stage", file.path)}><CirclePlusIcon /></button></div>
+                <div class="workspace-change-row"><button type="button" title={`Inspect changes in ${file.path}`} onClick={() => inspectFileDiff(file.path, false)}><code data-status={file.status[1] === " " ? "?" : file.status[1]}>{file.status[1] === " " ? "?" : file.status[1]}</code><span>{file.path}</span></button><button type="button" class="workspace-change-action" aria-label={`Stage ${file.path}`} title="Stage" disabled={Boolean(gitAction())} onClick={() => void runGitAction("stage", file.path)}><CirclePlusIcon /></button></div>
               }</For></div>
             </Show></Show>
           </section>
@@ -1815,8 +1859,9 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
           <Show when={sourceDetailOpen()}><div class="workspace-source-resize-handle" role="separator" aria-label="Resize details" aria-orientation="horizontal" aria-valuemin={MIN_SOURCE_DETAIL_HEIGHT} aria-valuemax={maxSourceDetailHeight()} aria-valuenow={sourceDetailHeight()} tabIndex={0} onPointerDown={startSourceDetailResize} onKeyDown={resizeSourceDetailByKey} /></Show>
           <button type="button" class="workspace-detail-disclosure" aria-expanded={sourceDetailOpen()} onClick={toggleSourceDetail}><ChevronDownIcon data-open={sourceDetailOpen()} /><span>Details</span></button>
           <div class="workspace-source-modes" role="tablist" aria-label="Source Control detail">
-            <button type="button" role="tab" aria-selected={!diffDetailOpen()} onClick={() => selectSourceDetail(false)}><GitCommitHorizontalIcon />Graph</button>
-            <button type="button" role="tab" aria-selected={diffDetailOpen()} onClick={() => selectSourceDetail(true)}><FileDiffIcon />Patch</button>
+            <button type="button" role="tab" aria-selected={!fileDiffMode() && !diffDetailOpen()} onClick={() => selectSourceDetail(false)}><GitCommitHorizontalIcon />Graph</button>
+            <button type="button" role="tab" aria-selected={!fileDiffMode() && diffDetailOpen()} onClick={() => selectSourceDetail(true)}><FileDiffIcon />Patch</button>
+            <button type="button" role="tab" aria-selected={fileDiffMode()} onClick={() => { setFileDiffMode(true); setSourceDetailVisible(true); }}><GitCompareArrowsIcon />Diff</button>
           </div>
           <small>{diffDetailOpen() ? `${diff()?.files.length || 0} changed` : `${diff()?.commits?.length || 0} recent`}</small>
           <div class="workspace-source-actions">
@@ -1825,7 +1870,13 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
             <button type="button" aria-label="Push current branch" title="Push current branch" disabled={!diff()?.upstream || Boolean(gitAction())} onClick={() => void runGitAction("push")}><SendIcon /><span>Push</span></button>
           </div>
         </header>
-        <Show when={sourceDetailOpen()}><Show when={diffDetailOpen()} fallback={<Show when={Boolean(diff()?.commits?.length)} fallback={<div class="workspace-panel-empty">No commit history available.</div>}><CommitHistory commits={diff()?.commits || []} refs={diff()?.refs || []} branch={diff()?.branch} onCopy={copy} onInspect={inspectCommit} /></Show>}>
+        <Show when={sourceDetailOpen() && fileDiffMode()}><div class="workspace-patch">
+          <Show when={selectedDiff()} fallback={<div class="workspace-panel-empty">Select a file in Changes or Staged changes.</div>}>
+            <header>{selectedDiff()?.path} · {selectedDiff()?.staged ? "Staged" : "Working tree"}</header>
+            <Show when={!fileDiffBusy()} fallback={<div role="status">Loading diff…</div>}><PatchView content={fileDiffText()} /></Show>
+          </Show>
+        </div></Show>
+        <Show when={sourceDetailOpen() && !fileDiffMode()}><Show when={diffDetailOpen()} fallback={<Show when={Boolean(diff()?.commits?.length)} fallback={<div class="workspace-panel-empty">No commit history available.</div>}><CommitHistory commits={diff()?.commits || []} refs={diff()?.refs || []} branch={diff()?.branch} onCopy={copy} onInspect={inspectCommit} /></Show>}>
           <div class="workspace-patch"><Show when={commitDetailLoading()} fallback={<Show when={commitDetail()} fallback={<Show when={diff()?.diff} fallback={<div class="workspace-panel-empty">{diff()?.repository ? "Working tree is clean." : "Diff is available for Git projects."}</div>}>{(content) => <PatchView content={content()} />}</Show>}>{(detail) => <PatchView content={detail().content} />}</Show>}><div class="workspace-panel-empty">Loading commit…</div></Show></div>
         </Show></Show>
       </section>
