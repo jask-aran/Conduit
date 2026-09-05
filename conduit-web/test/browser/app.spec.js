@@ -615,6 +615,46 @@ test("workspace previews an image instead of refusing it as binary", async ({ pa
   await expect(panel.getByRole("button", { name: "Edit file" })).toHaveCount(0);
 });
 
+test("workspace classifies media and binary files with safe download fallbacks", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop-chromium", "wide file preview is desktop chrome");
+  await page.route("**/v0/projects/*/tree?*", async (route) => {
+    await route.fulfill({ json: { path: "", entries: [
+      { name: "manual.pdf", path: "manual.pdf", type: "file" },
+      { name: "sound.mp3", path: "sound.mp3", type: "file" },
+      { name: "unknown.bin", path: "unknown.bin", type: "file" },
+    ] } });
+  });
+  await page.route("**/v0/projects/*/file?*", async (route) => {
+    const url = new URL(route.request().url());
+    const filePath = url.searchParams.get("path");
+    const metadata = {
+      "manual.pdf": { path: "manual.pdf", size: 16, modifiedAt: 1, revision: "pdf-r1", kind: "pdf", mime: "application/pdf", head: "255044462d312e37" },
+      "sound.mp3": { path: "sound.mp3", size: 32, modifiedAt: 1, revision: "mp3-r1", kind: "audio", mime: "audio/mpeg", head: "494433040000" },
+      "unknown.bin": { path: "unknown.bin", size: 4, modifiedAt: 1, revision: "bin-r1", kind: "binary", mime: "application/octet-stream", head: "00010203" },
+    }[filePath];
+    if (url.searchParams.get("metadata") === "1") return route.fulfill({ json: metadata });
+    if (url.searchParams.get("force") === "text") return route.fulfill({ json: { ...metadata, kind: "text", mime: "text/plain", content: "raw bytes", readOnly: true, truncated: false } });
+    if (url.searchParams.get("download") === "1") return route.fulfill({ body: Buffer.from("file"), contentType: metadata?.mime || "application/octet-stream" });
+    return route.fulfill({ status: 400, json: { error: "file_not_text", message: "Binary files cannot be previewed" } });
+  });
+
+  await openChatSurface(page);
+  await runPaletteCommand(page, "Toggle maximized workspace panel");
+  const panel = page.getByRole("complementary", { name: "Workspace panel" });
+
+  await panel.getByRole("treeitem", { name: "manual.pdf" }).click();
+  await expect(panel.getByText("PDF file")).toBeVisible();
+  await expect(panel.getByText("Inline media preview is disabled until the workspace Content-Security-Policy allows embedded media.")).toBeVisible();
+  await expect(panel.getByRole("button", { name: "Download file" })).toBeVisible();
+
+  await panel.getByRole("treeitem", { name: "unknown.bin" }).click();
+  await expect(panel.getByText("Binary file")).toBeVisible();
+  await expect(panel.getByText("00 01 02 03")).toBeVisible();
+  await panel.getByRole("button", { name: "Open as text anyway" }).click();
+  await expect(panel.getByText("Opened as text. Editing is disabled.")).toBeVisible();
+  await expect(panel.getByRole("button", { name: "Edit file" })).toHaveCount(0);
+});
+
 test("workspace files open two slots side by side", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "desktop-chromium", "two file slots need the wide desktop layout");
   await openChatSurface(page);

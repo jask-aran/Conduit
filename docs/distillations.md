@@ -113,6 +113,13 @@ Add an entry through `$tacit-knowledge` after explicit approval or validated rep
 
 ## UI and component heuristics
 
+### Let browser media request file ranges directly
+
+- **Type:** Gotcha.
+- **Rule:** Mount the selected media state immediately and use authenticated inline URLs for browser players. Do not wait for `arrayBuffer()` before displaying them. Keep the bounded blob fallback for native clients that require bearer headers.
+- **Scope:** `WorkspaceFileSlot` and the project file route.
+- **Evidence:** Full-file buffering appeared fast on loopback but delayed players through Cloudflare. The operator accepted direct URLs and immediate loading states on 2026-09-06.
+
 ### Prove scrollbar behaviour with native pixels and input
 
 - **Type:** Gotcha.

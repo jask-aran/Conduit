@@ -4,10 +4,12 @@ import { watch } from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
 
-export const MAX_PREVIEW_BYTES = 1024 * 1024;
+export const MAX_PREVIEW_BYTES = 25 * 1024 * 1024;
 export const GIT_COMMAND_TIMEOUT_MS = 10_000;
 export const MAX_CONCURRENT_GIT_PROCESSES = 4;
+export const WORKSPACE_FILE_KINDS = ["text", "image", "pdf", "audio", "video", "binary"];
 const MAX_DIRECTORY_ENTRIES = 500;
+const MAX_FILE_SNIFF_BYTES = 4 * 1024;
 const INSPECTION_CACHE_MS = 2_000;
 const WORKSPACE_WATCH_IDLE_MS = 3_000;
 const MAX_CHANGED_WORKSPACE_PATHS = 1_000;
@@ -15,12 +17,165 @@ const gitSlots = { active: 0, waiters: [] };
 const inspections = new Map();
 const workspaceWatches = new Map();
 
+const EXTENSION_TYPES = new Map([
+  ["png", { kind: "image", mime: "image/png" }],
+  ["jpg", { kind: "image", mime: "image/jpeg" }],
+  ["jpeg", { kind: "image", mime: "image/jpeg" }],
+  ["gif", { kind: "image", mime: "image/gif" }],
+  ["webp", { kind: "image", mime: "image/webp" }],
+  ["avif", { kind: "image", mime: "image/avif" }],
+  ["bmp", { kind: "image", mime: "image/bmp" }],
+  ["ico", { kind: "image", mime: "image/x-icon" }],
+  ["svg", { kind: "image", mime: "image/svg+xml" }],
+  ["pdf", { kind: "pdf", mime: "application/pdf" }],
+  ["mp3", { kind: "audio", mime: "audio/mpeg" }],
+  ["m4a", { kind: "audio", mime: "audio/mp4" }],
+  ["wav", { kind: "audio", mime: "audio/wav" }],
+  ["ogg", { kind: "audio", mime: "audio/ogg" }],
+  ["oga", { kind: "audio", mime: "audio/ogg" }],
+  ["flac", { kind: "audio", mime: "audio/flac" }],
+  ["aac", { kind: "audio", mime: "audio/aac" }],
+  ["opus", { kind: "audio", mime: "audio/opus" }],
+  ["mid", { kind: "audio", mime: "audio/midi" }],
+  ["midi", { kind: "audio", mime: "audio/midi" }],
+  ["mp4", { kind: "video", mime: "video/mp4" }],
+  ["m4v", { kind: "video", mime: "video/mp4" }],
+  ["webm", { kind: "video", mime: "video/webm" }],
+  ["mov", { kind: "video", mime: "video/quicktime" }],
+  ["avi", { kind: "video", mime: "video/x-msvideo" }],
+  ["mkv", { kind: "video", mime: "video/x-matroska" }],
+  ["ogv", { kind: "video", mime: "video/ogg" }],
+  ["js", { kind: "text", mime: "text/javascript" }],
+  ["mjs", { kind: "text", mime: "text/javascript" }],
+  ["cjs", { kind: "text", mime: "text/javascript" }],
+  ["ts", { kind: "text", mime: "text/typescript" }],
+  ["tsx", { kind: "text", mime: "text/typescript" }],
+  ["jsx", { kind: "text", mime: "text/javascript" }],
+  ["json", { kind: "text", mime: "application/json" }],
+  ["jsonl", { kind: "text", mime: "application/jsonl" }],
+  ["css", { kind: "text", mime: "text/css" }],
+  ["html", { kind: "text", mime: "text/html" }],
+  ["htm", { kind: "text", mime: "text/html" }],
+  ["xml", { kind: "text", mime: "application/xml" }],
+  ["yaml", { kind: "text", mime: "application/yaml" }],
+  ["yml", { kind: "text", mime: "application/yaml" }],
+  ["toml", { kind: "text", mime: "application/toml" }],
+  ["csv", { kind: "text", mime: "text/csv" }],
+  ["md", { kind: "text", mime: "text/markdown" }],
+  ["txt", { kind: "text", mime: "text/plain" }],
+  ["log", { kind: "text", mime: "text/plain" }],
+  ["sh", { kind: "text", mime: "text/x-shellscript" }],
+  ["bash", { kind: "text", mime: "text/x-shellscript" }],
+  ["py", { kind: "text", mime: "text/x-python" }],
+  ["rb", { kind: "text", mime: "text/x-ruby" }],
+  ["go", { kind: "text", mime: "text/x-go" }],
+  ["rs", { kind: "text", mime: "text/x-rust" }],
+  ["java", { kind: "text", mime: "text/x-java-source" }],
+  ["c", { kind: "text", mime: "text/x-c" }],
+  ["h", { kind: "text", mime: "text/x-c" }],
+  ["cpp", { kind: "text", mime: "text/x-c++src" }],
+  ["hpp", { kind: "text", mime: "text/x-c++src" }],
+  ["sql", { kind: "text", mime: "application/sql" }],
+  ["env", { kind: "text", mime: "text/plain" }],
+  ["ini", { kind: "text", mime: "text/plain" }],
+  ["conf", { kind: "text", mime: "text/plain" }],
+]);
+
 function inspectorError(code, message) {
   return Object.assign(new Error(message), { code });
 }
 
 function fileRevision(content) {
   return createHash("sha256").update(content).digest("hex");
+}
+
+function metadataRevision(stat) {
+  return fileRevision(Buffer.from(`${stat.dev}:${stat.ino}:${stat.size}:${stat.mtimeMs}`));
+}
+
+function hasBytes(prefix, bytes, offset = 0) {
+  if (prefix.length < offset + bytes.length) return false;
+  return bytes.every((value, index) => prefix[offset + index] === value);
+}
+
+function extensionOf(relativePath) {
+  return relativePath.split("/").at(-1)?.split(".").at(-1)?.toLowerCase() || "";
+}
+
+function prefixText(prefix) {
+  if (!prefix.length || prefix.includes(0)) return null;
+  try {
+    return new TextDecoder("utf-8", { fatal: true }).decode(prefix).replace(/^\uFEFF/, "");
+  } catch {
+    return null;
+  }
+}
+
+/** Classify a bounded prefix, using a known extension only when magic is absent. */
+export function classifyWorkspaceFile(relativePath, prefix = Buffer.alloc(0)) {
+  const lower = prefix.toString("latin1").toLowerCase();
+  if (hasBytes(prefix, Buffer.from("%PDF-"))) return { kind: "pdf", mime: "application/pdf" };
+  if (hasBytes(prefix, Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) return { kind: "image", mime: "image/png" };
+  if (hasBytes(prefix, Buffer.from([0xff, 0xd8, 0xff]))) return { kind: "image", mime: "image/jpeg" };
+  if (lower.startsWith("gif87a") || lower.startsWith("gif89a")) return { kind: "image", mime: "image/gif" };
+  if (lower.startsWith("riff") && lower.slice(8, 12) === "webp") return { kind: "image", mime: "image/webp" };
+  if (lower.startsWith("bm")) return { kind: "image", mime: "image/bmp" };
+  if (hasBytes(prefix, Buffer.from([0x00, 0x00, 0x01, 0x00]))) return { kind: "image", mime: "image/x-icon" };
+  if (lower.startsWith("riff") && lower.slice(8, 12) === "wave") return { kind: "audio", mime: "audio/wav" };
+  if (lower.startsWith("id3") || (prefix[0] === 0xff && (prefix[1] & 0xe0) === 0xe0)) return { kind: "audio", mime: "audio/mpeg" };
+  if (lower.startsWith("ogg")) return { kind: "audio", mime: "audio/ogg" };
+  if (lower.startsWith("flac")) return { kind: "audio", mime: "audio/flac" };
+  if (hasBytes(prefix, Buffer.from("MThd"))) return { kind: "audio", mime: "audio/midi" };
+  if (lower.startsWith("riff") && lower.slice(8, 12) === "avi ") return { kind: "video", mime: "video/x-msvideo" };
+  if (hasBytes(prefix, Buffer.from([0x1a, 0x45, 0xdf, 0xa3]))) return { kind: "video", mime: "video/webm" };
+  if (lower.slice(4, 8) === "ftyp") {
+    const brand = lower.slice(8, 12);
+    if (["avif", "avis"].includes(brand)) return { kind: "image", mime: "image/avif" };
+    if (["qt  ", "mjp2"].includes(brand)) return { kind: "video", mime: "video/quicktime" };
+    if (["isom", "iso2", "mp41", "mp42", "m4v ", "3gp4", "3g2a"].includes(brand)) return { kind: "video", mime: "video/mp4" };
+  }
+  const text = prefixText(prefix);
+  if (text && /^\s*(?:<\?xml[^>]*>\s*)?<svg(?:\s|>)/i.test(text)) return { kind: "image", mime: "image/svg+xml" };
+  const extensionType = EXTENSION_TYPES.get(extensionOf(relativePath));
+  if (extensionType) return extensionType;
+  if (text != null) return { kind: "text", mime: "text/plain" };
+  return { kind: "binary", mime: "application/octet-stream" };
+}
+
+async function readWorkspacePrefix(filePath) {
+  const handle = await fs.open(filePath, "r");
+  try {
+    const prefix = Buffer.alloc(MAX_FILE_SNIFF_BYTES);
+    const { bytesRead } = await handle.read(prefix, 0, prefix.length, 0);
+    return prefix.subarray(0, bytesRead);
+  } finally {
+    await handle.close();
+  }
+}
+
+async function readWorkspaceFileMetadataAt(resolved) {
+  const prefix = await readWorkspacePrefix(resolved.path);
+  const classification = classifyWorkspaceFile(resolved.relativePath, prefix);
+  return {
+    path: resolved.relativePath,
+    size: resolved.stat.size,
+    modifiedAt: resolved.stat.mtimeMs,
+    revision: metadataRevision(resolved.stat),
+    ...classification,
+    head: prefix.subarray(0, 32).toString("hex"),
+  };
+}
+
+async function readWorkspaceBytes(filePath, maxBytes = null) {
+  if (maxBytes == null) return fs.readFile(filePath);
+  const handle = await fs.open(filePath, "r");
+  try {
+    const content = Buffer.alloc(maxBytes);
+    const { bytesRead } = await handle.read(content, 0, content.length, 0);
+    return content.subarray(0, bytesRead);
+  } finally {
+    await handle.close();
+  }
 }
 
 function abortError() {
@@ -310,12 +465,34 @@ export function closeWorkspaceVersionWatch(root) {
   if (record) closeWorkspaceWatch(record);
 }
 
-export async function readWorkspaceFile(root, relativePath) {
+export async function readWorkspaceFileMetadata(root, relativePath) {
   const resolved = await resolveInspectorPath(root, relativePath, { kind: "file" });
-  if (resolved.stat.size > MAX_PREVIEW_BYTES) throw inspectorError("file_too_large", "File is larger than the 1 MiB preview limit");
-  const content = await fs.readFile(resolved.path);
-  if (content.includes(0)) throw inspectorError("file_not_text", "Binary files cannot be previewed");
-  return { path: resolved.relativePath, size: resolved.stat.size, modifiedAt: resolved.stat.mtimeMs, revision: fileRevision(content), content: content.toString("utf8") };
+  return readWorkspaceFileMetadataAt(resolved);
+}
+
+export async function readWorkspaceFile(root, relativePath, { forceText = false, preview = false } = {}) {
+  const resolved = await resolveInspectorPath(root, relativePath, { kind: "file" });
+  const metadata = await readWorkspaceFileMetadataAt(resolved);
+  if (!forceText && metadata.kind !== "text") {
+    throw Object.assign(inspectorError("file_not_text", "Binary files cannot be previewed"), metadata);
+  }
+  if (metadata.size > MAX_PREVIEW_BYTES && !preview && !forceText) {
+    throw Object.assign(inspectorError("file_too_large", "File is larger than the 25 MiB preview limit"), metadata);
+  }
+  const content = await readWorkspaceBytes(resolved.path, preview || (forceText && metadata.size > MAX_PREVIEW_BYTES) ? MAX_PREVIEW_BYTES : null);
+  const classification = classifyWorkspaceFile(metadata.path, content.subarray(0, MAX_FILE_SNIFF_BYTES));
+  if ((!forceText && classification.kind !== "text") || (!forceText && content.includes(0))) {
+    throw Object.assign(inspectorError("file_not_text", "Binary files cannot be previewed"), { ...metadata, ...classification });
+  }
+  const truncated = content.length > MAX_PREVIEW_BYTES;
+  return {
+    ...metadata,
+    ...classification,
+    revision: fileRevision(content),
+    content: content.toString("utf8"),
+    truncated: truncated || metadata.size > MAX_PREVIEW_BYTES,
+    readOnly: forceText || truncated || metadata.size > MAX_PREVIEW_BYTES,
+  };
 }
 
 export async function writeWorkspaceFile(root, relativePath, content, { expectedRevision = null } = {}) {

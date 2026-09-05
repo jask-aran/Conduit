@@ -10,13 +10,16 @@ import {
   closeWorkspaceVersionWatch,
   deleteWorkspaceDirectory,
   deleteWorkspaceFile,
+  classifyWorkspaceFile,
   listWorkspaceDirectory,
   moveWorkspaceEntry,
   readWorkspaceDiff,
   readWorkspaceCommit,
   readWorkspaceFile,
+  readWorkspaceFileMetadata,
   readWorkspaceVersion,
   MAX_CONCURRENT_GIT_PROCESSES,
+  MAX_PREVIEW_BYTES,
   runBoundedGit,
   runWorkspaceGitAction,
   writeWorkspaceFile,
@@ -37,6 +40,40 @@ test("workspace tree and text preview hide internals and fail closed on unsafe p
   await assert.rejects(readWorkspaceFile(root, "../secret"), { code: "invalid_workspace_path" });
   await assert.rejects(readWorkspaceFile(root, ".conduit/private"), { code: "hidden_workspace_path" });
   await assert.rejects(readWorkspaceFile(root, "escape"), { code: "workspace_path_symlink" });
+});
+
+test("workspace metadata classifies bounded file kinds and keeps binary reads fail-closed", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-inspector-kinds-"));
+  await fs.writeFile(path.join(root, "notes.data"), "plain text\n");
+  await fs.writeFile(path.join(root, "manual.dat"), "%PDF-1.7\n");
+  await fs.writeFile(path.join(root, "sound.dat"), Buffer.from("ID3\u0004\u0000\u0000"));
+  await fs.writeFile(path.join(root, "movie.dat"), Buffer.concat([Buffer.alloc(4), Buffer.from("ftypisom")]))
+  await fs.writeFile(path.join(root, "unknown.bin"), Buffer.from([0x00, 0x01, 0x02, 0x03]));
+
+  assert.deepEqual(classifyWorkspaceFile("manual.dat", Buffer.from("%PDF-1.7")), { kind: "pdf", mime: "application/pdf" });
+  assert.deepEqual(classifyWorkspaceFile("image.dat", Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])), { kind: "image", mime: "image/png" });
+  assert.deepEqual(classifyWorkspaceFile("sound.dat", Buffer.from("ID3")), { kind: "audio", mime: "audio/mpeg" });
+  assert.deepEqual(classifyWorkspaceFile("movie.dat", Buffer.concat([Buffer.alloc(4), Buffer.from("ftypisom")])) , { kind: "video", mime: "video/mp4" });
+
+  const textMetadata = await readWorkspaceFileMetadata(root, "notes.data");
+  assert.equal(textMetadata.kind, "text");
+  assert.equal(textMetadata.mime, "text/plain");
+  assert.equal(typeof textMetadata.revision, "string");
+  assert.equal(textMetadata.head, Buffer.from("plain text\n").toString("hex"));
+
+  const binaryMetadata = await readWorkspaceFileMetadata(root, "unknown.bin");
+  assert.deepEqual({ kind: binaryMetadata.kind, mime: binaryMetadata.mime }, { kind: "binary", mime: "application/octet-stream" });
+  await assert.rejects(readWorkspaceFile(root, "manual.dat"), (error) => error.code === "file_not_text" && error.kind === "pdf" && error.mime === "application/pdf");
+  const forced = await readWorkspaceFile(root, "manual.dat", { forceText: true });
+  assert.equal(forced.readOnly, true);
+  assert.equal(forced.content, "%PDF-1.7\n");
+
+  await fs.writeFile(path.join(root, "large.txt"), Buffer.alloc(MAX_PREVIEW_BYTES + 10, 0x61));
+  await assert.rejects(readWorkspaceFile(root, "large.txt"), (error) => error.code === "file_too_large" && error.kind === "text");
+  const bounded = await readWorkspaceFile(root, "large.txt", { preview: true });
+  assert.equal(bounded.truncated, true);
+  assert.equal(bounded.content.length, MAX_PREVIEW_BYTES);
+  assert.equal(bounded.readOnly, true);
 });
 
 test("direct inspector calls reject a symlinked workspace root", async () => {

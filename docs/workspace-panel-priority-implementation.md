@@ -83,30 +83,33 @@ Acceptance:
 - Focused unit tests cover migration, cleanup, quota failure, and the scope cap.
 
 Implemented in `conduit-web/src/client/workspace/workspace-panel-storage.ts`.
-The review finding is marked **Complete**. Validation remains paused until the
-focused test results are handed to the operator.
+The review finding is marked **Complete**. The operator accepted the viewers
+and progressive browser loading on 2026-09-06. Final changes were not tested or
+built by the agent, at the operator's request.
 
-## 3. Binary and media handling
+## 3. Binary and media handling — implemented
 
 Source finding: **P1 — Binary and media handling stops at images**.
 
 Extend file metadata with `kind` and `mime`, plus the existing size, revision,
 and modification data. Classify from a bounded content sniff with an extension
-fallback. Use these client viewer kinds:
+fallback. Use these client file kinds:
 
 - `text`: text editor or read-only text view
 - `image`: existing image viewer
-- `pdf`: PDF viewer
-- `audio`: audio controls
-- `video`: video controls
+- `pdf`: browser PDF viewer
+- `audio`: native audio controls
+- `video`: native video player
 - `binary`: bounded type and size preview with download
 
-Keep object URL ownership in the file slot and revoke URLs during cleanup. Keep
-the inline size limit separate from the download path. Revalidate unchanged
-media instead of downloading it on every refresh.
+Keep object URL ownership in the image file slot and revoke URLs during cleanup.
+Keep the inline size limit separate from the download path. Revalidate unchanged
+images instead of downloading them on every refresh. Binary files show a bounded
+hex prefix and offer *Open as text anyway*. Large text files offer a bounded,
+read-only first 25 MiB view. Media previews have a separate 100 MiB limit.
 
-Validate the CSP needed for `blob:` PDF and media viewers before enabling those
-viewers. If that policy is not ready, ship safe download-only fallbacks first.
+No current server CSP blocks embedding. The separate CSP work must preserve
+blob PDF and media support. Unsupported browser formats retain download access.
 
 Acceptance:
 
@@ -114,7 +117,14 @@ Acceptance:
   files.
 - Symlink and workspace-root boundaries still fail closed.
 - Large files remain downloadable even when they are not shown inline.
-- Browser tests cover every viewer and the binary fallback.
+- User validation must confirm PDF display, audio/video playback, and the binary
+  fallback. Viewer changes have not been tested or built, at the user's request.
+
+Implemented in `conduit-web/src/workspace-inspector.js`,
+`conduit-web/src/server/routes/projects.js`, and
+`conduit-web/src/client/workspace/workspace-file-slot.tsx`.
+The review finding is marked **Complete**. Validation remains paused until the
+focused test results are handed to the operator.
 
 ## 4. Source Control scale
 
