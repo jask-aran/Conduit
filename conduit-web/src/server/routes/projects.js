@@ -9,6 +9,7 @@ import {
   deleteWorkspaceDirectory,
   deleteWorkspaceFile,
   moveWorkspaceEntry,
+  readWorkspaceVersion,
   resolveInspectorPath,
   writeWorkspaceFile,
 } from "../../workspace-inspector.js";
@@ -86,6 +87,17 @@ export function registerProjectRoutes(app, {
   terminals,
   lifecycle,
 }) {
+  const workspaceVersionPaths = (value) => {
+    if (value == null) return [];
+    if (typeof value !== "string") throw Object.assign(new Error("Workspace version paths are invalid"), { code: "invalid_workspace_path", status: 400 });
+    try {
+      const paths = JSON.parse(value);
+      if (!Array.isArray(paths) || paths.length > 128 || paths.some((item) => typeof item !== "string" || item.length > 4_096)) throw new Error();
+      return paths;
+    } catch {
+      throw Object.assign(new Error("Workspace version paths are invalid"), { code: "invalid_workspace_path", status: 400 });
+    }
+  };
   app.get("/v0/projects", async (_request, response, next) => {
     try {
       const items = await projects.list();
@@ -238,8 +250,17 @@ export function registerProjectRoutes(app, {
       const project = await projects.get(request.params.id);
       if (!project) return response.status(404).json({ error: "project_not_found" });
       await projects.validate(project);
-      const listing = await listWorkspaceDirectory(project.path, request.query.path);
+      const listing = await listWorkspaceDirectory(project.path, request.query.path, { after: request.query.after });
       response.json({ path: String(request.query.path || ""), ...listing });
+    } catch (error) { next(error); }
+  });
+
+  app.get("/v0/projects/:id/workspace/version", async (request, response, next) => {
+    try {
+      const project = await projects.get(request.params.id);
+      if (!project) return response.status(404).json({ error: "project_not_found" });
+      await projects.validate(project);
+      response.json(await readWorkspaceVersion(project.path, { paths: workspaceVersionPaths(request.query.paths) }));
     } catch (error) { next(error); }
   });
 

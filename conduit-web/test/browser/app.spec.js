@@ -358,6 +358,34 @@ test("restores a stored panel width past the old clamp and announces the commit 
   expect(commits.at(-1).targetSize).toBeGreaterThan(600);
 });
 
+test("workspace directory pages append and survive refresh with honest filtering", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop-chromium", "desktop file tree");
+  let nextPageRequests = 0;
+  await page.route("**/v0/projects/*/tree?*", (route) => {
+    const more = new URL(route.request().url()).searchParams.has("after");
+    if (more) nextPageRequests += 1;
+    return route.fulfill({ json: { entries: [{ name: more ? "zebra.txt" : "alpha.txt", path: more ? "zebra.txt" : "alpha.txt", type: "file" }], total: 2, truncated: !more, cursor: more ? null : '["file","alpha.txt"]' } });
+  });
+  await openChatSurface(page);
+  await page.getByRole("button", { name: "Toggle workspace panel" }).click();
+  const panel = page.getByRole("complementary", { name: "Workspace panel" });
+  const filter = panel.getByRole("searchbox", { name: "Filter loaded files" });
+  await expect(panel.getByRole("treeitem", { name: "alpha.txt" })).toBeVisible();
+  await filter.fill("zebra");
+  await expect(panel.getByText("Filter covers loaded entries only.")).toBeVisible();
+  await panel.getByRole("button", { name: "Show more", exact: true }).click();
+  await expect(panel.getByRole("treeitem", { name: "zebra.txt" })).toBeVisible();
+  await expect(panel.getByText("Filter covers loaded entries only.")).toHaveCount(0);
+  await filter.clear();
+  const beforeRefresh = nextPageRequests;
+  await panel.getByRole("button", { name: "Refresh files", exact: true }).click();
+  await expect.poll(() => nextPageRequests).toBeGreaterThan(beforeRefresh);
+  await expect(panel.getByRole("button", { name: "Refresh files", exact: true })).toBeEnabled();
+  await expect(panel.getByRole("treeitem", { name: "alpha.txt" })).toBeVisible();
+  await expect(panel.getByRole("treeitem", { name: "zebra.txt" })).toBeVisible();
+  await expect(panel.getByRole("button", { name: "Show more", exact: true })).toHaveCount(0);
+});
+
 test("workspace panel previews files, shows diff, and persists per chat", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "desktop-chromium", "resizable side panel is desktop chrome");
   await openChatSurface(page);
@@ -806,7 +834,7 @@ test("workspace file menu replaces, deletes, and polls selected files", async ({
   await openChatSurface(page);
   await page.getByRole("button", { name: "Toggle workspace panel" }).click();
   const panel = page.getByRole("complementary", { name: "Workspace panel" });
-  const fileFilter = panel.getByRole("searchbox", { name: "Filter files" });
+  const fileFilter = panel.getByRole("searchbox", { name: "Filter loaded files" });
   await fileFilter.focus();
   await panel.evaluate((element) => {
     window.__workspaceFocusLeaves = 0;
@@ -929,7 +957,7 @@ test("maximized workspace command toggles the workspace panel", async ({ page })
   await runPaletteCommand(page, "Toggle maximized workspace panel");
   await expect(panel).toHaveAttribute("aria-hidden", "false");
   await expect(main).toHaveClass(/workspace-expanded/);
-  await expect(panel.getByRole("searchbox", { name: "Filter files" })).toBeFocused();
+  await expect(panel.getByRole("searchbox", { name: "Filter loaded files" })).toBeFocused();
 
   await runRegisteredCommand(page, COMMAND_IDS.maximizeWorkspacePanel);
   await expect(panel).toHaveCount(0);
@@ -973,7 +1001,7 @@ test("escape leaves the workspace panel open", async ({ page }, testInfo) => {
 
   await runRegisteredCommand(page, COMMAND_IDS.toggleWorkspacePanel);
   await expect(panel).toHaveAttribute("aria-hidden", "false");
-  await panel.getByRole("searchbox", { name: "Filter files" }).press("Escape");
+  await panel.getByRole("searchbox", { name: "Filter loaded files" }).press("Escape");
   await expect(panel).toHaveAttribute("aria-hidden", "false");
 
   await runRegisteredCommand(page, COMMAND_IDS.maximizeWorkspacePanel);
@@ -1038,7 +1066,7 @@ test("navigation commands move focus and select workspace views", async ({ page 
   await openChatSurface(page);
   const composer = page.getByRole("textbox", { name: "Message Pi" });
   const panel = page.getByRole("complementary", { name: "Workspace panel" });
-  const fileFilter = panel.getByRole("searchbox", { name: "Filter files" });
+  const fileFilter = panel.getByRole("searchbox", { name: "Filter loaded files" });
   const chatPane = page.locator(".chat-main");
 
   await runPaletteCommand(page, "Focus composer");

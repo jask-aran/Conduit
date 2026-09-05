@@ -16,8 +16,9 @@ import WorkspaceFileSlot, { type FileSlotHandle, type FileSummary } from "./work
 import "./workspace.css";
 
 interface TreeEntry { name: string; path: string; type: "directory" | "file" | "other"; }
-interface DirectoryListing { entries: TreeEntry[]; truncated: boolean; }
+interface DirectoryListing { entries: TreeEntry[]; truncated: boolean; cursor?: string | null; total?: number | null; oversize?: boolean; }
 interface FileWriteResult { path: string; size: number; modifiedAt: number; revision: string; }
+interface WorkspaceVersion { version: number; changedPaths: string[] | null; }
 interface MovedEntry { path: string; destination: string; type: TreeEntry["type"]; }
 interface GitActionResult { ok: true; output?: string; }
 interface GitCommit { graph: string; hash: string; shortHash: string; subject: string; author: string; authoredAt: string; }
@@ -59,6 +60,7 @@ const FILE_POLL_INTERVAL_MS = 1_500;
 function directoryListingsEqual(left: DirectoryListing | undefined, right: DirectoryListing): boolean {
   return Boolean(left
     && left.truncated === right.truncated
+    && left.cursor === right.cursor && left.total === right.total && left.oversize === right.oversize
     && left.entries.length === right.entries.length
     && left.entries.every((entry, index) => {
       const other = right.entries[index];
@@ -193,6 +195,10 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
   const [gitAction, setGitAction] = createSignal("");
   const [stagedOpen, setStagedOpen] = createSignal(true);
   const [changesOpen, setChangesOpen] = createSignal(true);
+  const [documentVisible, setDocumentVisible] = createSignal(document.visibilityState === "visible");
+  const [networkOnline, setNetworkOnline] = createSignal(navigator.onLine);
+  const [workspaceStale, setWorkspaceStale] = createSignal(false);
+  const [pollRetry, setPollRetry] = createSignal(0);
   // Foreground failures surface as toasts; background refreshes stay silent so a
   // failing file cannot spam the corner every poll.
   const reportError = (message: string) => { if (message) toast.error(message); };
@@ -262,6 +268,12 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
     setPending(new Map());
   };
   const wasAborted = (cause: unknown) => (cause as { name?: string })?.name === "AbortError";
+  const updateDocumentVisibility = () => setDocumentVisible(document.visibilityState === "visible");
+  const updateNetworkOnline = () => setNetworkOnline(true);
+  const updateNetworkOffline = () => setNetworkOnline(false);
+  document.addEventListener("visibilitychange", updateDocumentVisibility);
+  window.addEventListener("online", updateNetworkOnline);
+  window.addEventListener("offline", updateNetworkOffline);
   // The lazy panel can mount already open when invoked from the shortcut.
   // Its first visible state still needs the same entrance animation.
   let panelWasOpen = false;
@@ -553,14 +565,27 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
     setDetailHeight(next);
     localStorage.setItem(detailHeightKey(), String(next));
   };
-  const loadDirectory = async (directory = "", background = false) => {
+  const loadDirectory = async (directory = "", background = false, more = false) => {
+    if (background && requests.has(`directory:${directory}`)) return false;
+    const previous = directories()[directory];
+    if (more && !previous?.cursor) return false;
     const { request, controller } = startRequest(`directory:${directory}`, !background);
     try {
-      const payload = await api<{ entries?: unknown; truncated?: boolean }>(`/v0/projects/${encodeURIComponent(request.projectId)}/tree?path=${encodeURIComponent(directory)}`, { signal: controller.signal });
+      let cursor = more ? previous?.cursor : null;
+      let entries = more ? [...(previous?.entries || [])] : [];
+      let listing: DirectoryListing;
+      do {
+        const payload = await api<DirectoryListing>(`/v0/projects/${encodeURIComponent(request.projectId)}/tree?path=${encodeURIComponent(directory)}${cursor ? `&after=${encodeURIComponent(cursor)}` : ""}`, { signal: controller.signal });
+        if (!ownsRequest(request)) return false;
+        entries = [...entries, ...asList<TreeEntry>(payload.entries)];
+        listing = { ...payload, entries, truncated: payload.truncated === true };
+        const nextCursor = payload.cursor;
+        if (!nextCursor || nextCursor === cursor) break;
+        cursor = nextCursor;
+      } while (!more && entries.length < (previous?.entries.length || 0));
       if (!ownsRequest(request)) return false;
       let changed = false;
       setDirectories((current) => {
-        const listing = { entries: asList<TreeEntry>(payload.entries), truncated: payload.truncated === true };
         if (directoryListingsEqual(current[directory], listing)) return current;
         changed = Boolean(current[directory]);
         const next = { ...current, [directory]: listing };
@@ -882,26 +907,81 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
     for (const directory of loaded.length ? loaded : [""]) await loadDirectory(directory, true);
     await Promise.all(openSlotHandles().map((handle) => handle.reload()));
   };
-  let pollingFiles = false;
-  const pollFiles = async () => {
-    if (pollingFiles || uploading()) return;
-    pollingFiles = true;
-    const projectId = props.projectId();
-    try {
-      let treeChanged = false;
-      const visibleDirectories = ["", ...expanded()].filter((directory) => directory === "" || Boolean(directories()[directory]));
-      for (const directory of visibleDirectories) {
-        if (await loadDirectory(directory, true)) treeChanged = true;
-      }
-      // Each open slot checks its own file; the slot announces its own reload.
-      for (const handle of openSlotHandles()) await handle.poll();
-      if (props.projectId() !== projectId) return;
-      if (treeChanged) toast.info("Workspace files updated");
-    } catch (cause) {
-      if (props.projectId() === projectId && !wasAborted(cause)) console.warn("workspace poll failed", cause);
-    } finally {
-      pollingFiles = false;
+  const visibleWorkspacePaths = () => [...new Set([
+    "",
+    ...expanded(),
+    ...Object.values(openPaths()).filter((path): path is string => Boolean(path)),
+  ])];
+  const changedDirectory = (directory: string, changedPath: string) => {
+    const parent = changedPath.slice(0, Math.max(0, changedPath.lastIndexOf("/")));
+    return directory === changedPath || directory === parent;
+  };
+  const changedFile = (file: string | null, changedPath: string) => Boolean(file
+    && (file === changedPath || file.startsWith(`${changedPath}/`)));
+  let pollingWorkspace = false;
+  let workspacePollFailures = 0;
+  let workspaceVersionProjectId = "";
+  let workspaceVersion: number | null = null;
+  const refreshChangedWorkspace = async (changedPaths: string[] | null, projectId: string) => {
+    const visibleDirectories = ["", ...expanded()].filter((directory) => directory === "" || Boolean(directories()[directory]));
+    const directoriesToRefresh = changedPaths === null
+      ? visibleDirectories
+      : visibleDirectories.filter((directory) => changedPaths.some((changedPath) => changedDirectory(directory, changedPath)));
+    let treeChanged = false;
+    for (const directory of directoriesToRefresh) {
+      if (await loadDirectory(directory, true)) treeChanged = true;
     }
+    const slotsToRefresh = changedPaths === null
+      ? openSlotHandles()
+      : [...slotHandles.entries()]
+        .filter(([slot]) => changedPaths.some((changedPath) => changedFile(openPaths()[slot], changedPath)))
+        .map(([, handle]) => handle);
+    await Promise.all(slotsToRefresh.map((handle) => handle.reload()));
+    if (props.projectId() !== projectId) return;
+    if (treeChanged) toast.info("Workspace files updated");
+    await loadDiff(tabVisible("diff") && diffDetailOpen(), false, true);
+  };
+  const pollWorkspace = async () => {
+    if (pollingWorkspace || uploading()) return true;
+    pollingWorkspace = true;
+    const projectId = props.projectId();
+    if (workspaceVersionProjectId !== projectId) {
+      workspaceVersionProjectId = projectId;
+      workspaceVersion = null;
+      workspacePollFailures = 0;
+      setWorkspaceStale(false);
+    }
+    const { request, controller } = startRequest("workspace-version", false);
+    try {
+      const query = new URLSearchParams({ paths: JSON.stringify(visibleWorkspacePaths()) });
+      const payload = await api<WorkspaceVersion>(`/v0/projects/${encodeURIComponent(projectId)}/workspace/version?${query}`, { signal: controller.signal });
+      if (!ownsRequest(request)) return true;
+      const initialProbe = workspaceVersion === null;
+      const changed = workspaceVersion !== payload.version;
+      workspaceVersion = payload.version;
+      if ((!initialProbe || Object.keys(directories()).length || diff() || openSlotHandles().length) && changed) {
+        await refreshChangedWorkspace(payload.changedPaths, projectId);
+      }
+      workspacePollFailures = 0;
+      setWorkspaceStale(false);
+      return true;
+    } catch (cause) {
+      if (props.projectId() === projectId && !wasAborted(cause)) {
+        workspacePollFailures += 1;
+        if (workspacePollFailures >= 2) setWorkspaceStale(true);
+        console.warn("workspace poll failed", cause);
+        return false;
+      }
+      return true;
+    } finally {
+      finishRequest(request);
+      pollingWorkspace = false;
+    }
+  };
+  const retryWorkspacePoll = () => {
+    workspacePollFailures = 0;
+    setWorkspaceStale(false);
+    setPollRetry((attempt) => attempt + 1);
   };
   const loadDiff = async (includePatch = false, reuse = false, background = false) => {
     const { request, controller } = startRequest("diff", !background);
@@ -989,9 +1069,26 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
     mobileWasOpen = open;
   });
   createEffect(() => {
-    if (!props.open() || !tabVisible("files")) return;
-    const timer = window.setInterval(() => void pollFiles(), FILE_POLL_INTERVAL_MS);
-    onCleanup(() => window.clearInterval(timer));
+    const projectId = props.projectId();
+    const active = Boolean(projectId) && props.open() && (tabVisible("files") || tabVisible("diff")) && documentVisible() && networkOnline();
+    pollRetry();
+    if (!active) {
+      workspaceVersion = null;
+      return;
+    }
+    let cancelled = false;
+    let timer = 0;
+    const schedule = (delay: number) => {
+      timer = window.setTimeout(async () => {
+        const success = await pollWorkspace();
+        if (!cancelled) schedule(success ? FILE_POLL_INTERVAL_MS : Math.min(30_000, FILE_POLL_INTERVAL_MS * 2 ** workspacePollFailures));
+      }, delay);
+    };
+    schedule(0);
+    onCleanup(() => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    });
   });
   const startResize = (event: PointerEvent) => {
     if (isMobileLayout()) return;
@@ -1068,6 +1165,9 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
     stopDetailResize?.();
     filesResizeObserver?.disconnect();
     splitResizeObserver?.disconnect();
+    document.removeEventListener("visibilitychange", updateDocumentVisibility);
+    window.removeEventListener("online", updateNetworkOnline);
+    window.removeEventListener("offline", updateNetworkOffline);
     if (treeScrollRaf) cancelAnimationFrame(treeScrollRaf);
     if (treeTypeaheadTimer) window.clearTimeout(treeTypeaheadTimer);
     document.body.classList.remove("workspace-resizing");
@@ -1405,7 +1505,12 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
           <div role="group"><Tree directory={entry.path} depth={depth() + 1} /></div>
         </Show>
       </div>}</For>
-      <Show when={directories()[treeProps.directory]?.truncated}><div class="workspace-tree-notice">Showing a bounded selection of 500 items from this directory.</div></Show>
+      <Show when={directories()[treeProps.directory]?.oversize}><div class="workspace-tree-notice">Directory exceeds the 50,000-entry limit. Open a smaller directory.</div></Show>
+      <Show when={directories()[treeProps.directory]?.truncated}><div class="workspace-tree-notice">
+        <Show when={fileFilter().trim()}>Filter covers loaded entries only. </Show>
+        <span>{directories()[treeProps.directory]?.entries.length} of {directories()[treeProps.directory]?.total ?? "more"} entries loaded. </span>
+        <button type="button" disabled={filesLoading()} onClick={() => void loadDirectory(treeProps.directory, false, true)}>Show more</button>
+      </div></Show>
     </>;
   };
 
@@ -1496,8 +1601,8 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
               <input
                 ref={fileFilterInput}
                 type="search"
-                aria-label="Filter files"
-                placeholder="Filter files"
+                aria-label="Filter loaded files"
+                placeholder="Filter loaded files"
                 title="Filter loaded files and folders"
                 value={fileFilter()}
                 onInput={(event) => setFileFilter(event.currentTarget.value)}
@@ -1515,12 +1620,13 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
             <Show when={filesWide()}><button type="button" aria-label="Hide file tree" title="Hide file tree" onClick={toggleTreeCollapsed}><PanelLeftCloseIcon /></button></Show>
             <input ref={fileUploadInput} class="workspace-file-input" type="file" multiple={uploadTarget().kind === "directory"} onChange={(event) => void uploadFiles(event.currentTarget.files)} />
           </div>
+          <Show when={workspaceStale()}><div class="workspace-freshness-notice" role="status" aria-live="polite"><span>Not updating</span><span aria-hidden="true">·</span><button type="button" onClick={retryWorkspacePoll}>Retry</button></div></Show>
           <nav ref={(element) => {
             treeElement = element;
             queueMicrotask(() => { element.scrollTop = workspaceCache.get(props.projectId())?.treeScrollTop || 0; });
           }} aria-label="Project files" role="tree" aria-busy={filesLoading()} class="workspace-tree" onScroll={saveTreeScroll}>
             <Tree directory="" />
-            <Show when={directories()[""] && visibleEntries("").length === 0}><div class="workspace-tree-empty">{fileFilter() ? "No loaded files match this filter." : "No files to show."}</div></Show>
+            <Show when={directories()[""] && !directories()[""]?.oversize && visibleEntries("").length === 0}><div class="workspace-tree-empty">{fileFilter() ? "No loaded files match this filter." : "No files to show."}</div></Show>
           </nav>
         </div>
         <Show when={filesWide()}>
@@ -1605,6 +1711,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
         <div><GitBranchIcon /><strong>{diff() ? diff()!.repository ? diff()!.branch : "Not a Git repository" : "Loading Git status…"}</strong><Show when={diff()?.upstream}><small>{diff()?.upstream}</small></Show></div>
         <div><Show when={diff()?.ahead || diff()?.behind}><span class="workspace-sync-state">↑ {diff()?.ahead || 0} ↓ {diff()?.behind || 0}</span></Show><Button variant="ghost" size="icon-sm" aria-label="Copy branch name" disabled={!diff()?.branch} onClick={() => copy(diff()?.branch)}><CopyIcon /></Button><Button variant="ghost" size="icon-sm" aria-label="Refresh Git status" disabled={diffLoading()} onClick={() => void loadDiff(diffDetailOpen())}><RefreshCwIcon /></Button></div>
       </div>
+      <Show when={workspaceStale()}><div class="workspace-freshness-notice" role="status" aria-live="polite"><span>Not updating</span><span aria-hidden="true">·</span><button type="button" onClick={retryWorkspacePoll}>Retry</button></div></Show>
       <Show when={diff()?.repository}>
         <form class="workspace-commit-composer" onSubmit={(event) => { event.preventDefault(); void runGitAction("commit"); }}>
           <textarea aria-label="Commit message" placeholder="Message (Ctrl+Enter to commit)" rows="1" value={commitMessage()} onInput={(event) => { const input = event.currentTarget; setCommitMessage(input.value); input.style.height = "auto"; input.style.height = `${input.scrollHeight}px`; }} onKeyDown={(event) => { if (event.key === "Enter" && event.ctrlKey) { event.preventDefault(); event.currentTarget.form?.requestSubmit(); } }} />

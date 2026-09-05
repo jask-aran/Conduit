@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
+import { watch } from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
 
@@ -8,8 +9,11 @@ export const GIT_COMMAND_TIMEOUT_MS = 10_000;
 export const MAX_CONCURRENT_GIT_PROCESSES = 4;
 const MAX_DIRECTORY_ENTRIES = 500;
 const INSPECTION_CACHE_MS = 2_000;
+const WORKSPACE_WATCH_IDLE_MS = 3_000;
+const MAX_CHANGED_WORKSPACE_PATHS = 1_000;
 const gitSlots = { active: 0, waiters: [] };
 const inspections = new Map();
+const workspaceWatches = new Map();
 
 function inspectorError(code, message) {
   return Object.assign(new Error(message), { code });
@@ -158,25 +162,139 @@ export async function resolveInspectorPath(root, relativePath = "", { kind = nul
   return { path: current, stat, relativePath: segments.join("/") };
 }
 
-export async function listWorkspaceDirectory(root, relativePath = "") {
+export async function listWorkspaceDirectory(root, relativePath = "", { after = null } = {}) {
+  let cursorKey = null;
+  if (after != null) {
+    try {
+      cursorKey = JSON.parse(after);
+      if (!Array.isArray(cursorKey) || cursorKey.length !== 2 || !["directory", "file", "other"].includes(cursorKey[0]) || typeof cursorKey[1] !== "string") throw new Error();
+    } catch { throw inspectorError("invalid_workspace_path", "Invalid directory cursor"); }
+  }
   const resolved = await resolveInspectorPath(root, relativePath, { kind: "directory" });
   const directory = await fs.opendir(resolved.path);
   const accepted = [];
-  let truncated = false;
+  let scanned = 0;
   for await (const entry of directory) {
+    if (++scanned > 50_000) return { entries: [], total: null, truncated: false, cursor: null, oversize: true };
     if (entry.name === ".conduit" || entry.isSymbolicLink()) continue;
-    accepted.push(entry);
-    if (accepted.length > MAX_DIRECTORY_ENTRIES) {
-      truncated = true;
-      break;
+    accepted.push({ name: entry.name, type: entry.isDirectory() ? "directory" : entry.isFile() ? "file" : "other" });
+  }
+  const compare = (left, right) => {
+    const ranks = { directory: 0, file: 1, other: 2 };
+    return ranks[left.type] - ranks[right.type] || left.name.localeCompare(right.name) || (left.name < right.name ? -1 : left.name > right.name ? 1 : 0);
+  };
+  accepted.sort(compare);
+  const remaining = cursorKey ? accepted.filter((entry) => compare(entry, { type: cursorKey[0], name: cursorKey[1] }) > 0) : accepted;
+  const entries = remaining.slice(0, MAX_DIRECTORY_ENTRIES).map((entry) => ({ ...entry,
+    path: resolved.relativePath ? `${resolved.relativePath}/${entry.name}` : entry.name,
+  }));
+  const truncated = remaining.length > entries.length;
+  const last = entries.at(-1);
+  return { entries, total: accepted.length, truncated, cursor: truncated ? JSON.stringify([last.type, last.name]) : null, oversize: false };
+}
+
+function ignoredWorkspaceWatchPath(relativePath) {
+  return !relativePath || relativePath.split("/").some((segment) => segment === ".conduit" || segment.startsWith(".conduit-tmp-"));
+}
+
+function noteWorkspaceChange(record, relativePath = null) {
+  if (relativePath && ignoredWorkspaceWatchPath(relativePath)) return;
+  record.version += 1;
+  if (record.changedPaths === null || !relativePath) {
+    if (!relativePath) {
+      record.changedPaths = null;
+      record.fullRefresh = true;
+    }
+    return;
+  }
+  record.changedPaths.add(relativePath);
+  if (record.changedPaths.size > MAX_CHANGED_WORKSPACE_PATHS) record.changedPaths = null;
+}
+
+function closeWorkspaceWatch(record) {
+  clearTimeout(record.closeTimer);
+  record.closeTimer = null;
+  record.watcher?.close();
+  record.watcher = null;
+  workspaceWatches.delete(record.root);
+}
+
+function scheduleWorkspaceWatchClose(record) {
+  if (record.references || record.closeTimer) return;
+  record.closeTimer = setTimeout(() => {
+    if (!record.references) closeWorkspaceWatch(record);
+  }, WORKSPACE_WATCH_IDLE_MS);
+  record.closeTimer.unref();
+}
+
+function startWorkspaceWatch(record) {
+  if (record.watcher || record.fallback) return;
+  try {
+    record.watcher = record.watchImpl(record.root, { recursive: true }, (_event, filename) => {
+      const relativePath = typeof filename === "string" ? filename.replaceAll("\\", "/") : null;
+      noteWorkspaceChange(record, relativePath);
+    });
+    record.watcher.on("error", () => {
+      record.watcher?.close();
+      record.watcher = null;
+      record.fallback = true;
+      noteWorkspaceChange(record);
+    });
+    record.watcher.unref();
+  } catch {
+    record.fallback = true;
+  }
+  noteWorkspaceChange(record);
+}
+
+async function scanWorkspacePaths(record, paths) {
+  const next = new Map();
+  for (const relativePath of paths) {
+    try {
+      const resolved = await resolveInspectorPath(record.root, relativePath);
+      next.set(resolved.relativePath, `${resolved.stat.mtimeMs}:${resolved.stat.size}:${resolved.stat.isDirectory()}`);
+    } catch (error) {
+      if (error.code !== "path_not_found") throw error;
+      next.set(relativePath, "missing");
     }
   }
-  const entries = accepted.slice(0, MAX_DIRECTORY_ENTRIES).map((entry) => ({
-    name: entry.name,
-    path: resolved.relativePath ? `${resolved.relativePath}/${entry.name}` : entry.name,
-    type: entry.isDirectory() ? "directory" : entry.isFile() ? "file" : "other",
-  })).sort((left, right) => left.type === right.type ? left.name.localeCompare(right.name) : left.type === "directory" ? -1 : 1);
-  return { entries, truncated };
+  if (record.pathStats) {
+    for (const [relativePath, value] of next) {
+      if (record.pathStats.get(relativePath) !== value) noteWorkspaceChange(record, relativePath);
+    }
+  }
+  record.pathStats = next;
+}
+
+/** Return one shared workspace-change version for the currently visible paths. */
+export async function readWorkspaceVersion(root, { paths = [], watchImpl = watch } = {}) {
+  const resolved = await resolveInspectorPath(root, "", { kind: "directory" });
+  let record = workspaceWatches.get(resolved.path);
+  if (!record) {
+    record = { root: resolved.path, watchImpl, watcher: null, fallback: false, references: 0, closeTimer: null, version: 0, changedPaths: new Set(), fullRefresh: false, pathStats: null };
+    workspaceWatches.set(resolved.path, record);
+  }
+  record.references += 1;
+  clearTimeout(record.closeTimer);
+  record.closeTimer = null;
+  try {
+    startWorkspaceWatch(record);
+    if (record.fallback) await scanWorkspacePaths(record, paths);
+    const changedPaths = record.fullRefresh || record.changedPaths === null ? null : [...record.changedPaths];
+    if (record.fullRefresh) {
+      record.fullRefresh = false;
+      record.changedPaths = new Set();
+    }
+    return { version: record.version, changedPaths };
+  } finally {
+    record.references -= 1;
+    scheduleWorkspaceWatchClose(record);
+  }
+}
+
+export function closeWorkspaceVersionWatch(root) {
+  const record = workspaceWatches.get(root);
+  if (record) closeWorkspaceWatch(record);
 }
 
 export async function readWorkspaceFile(root, relativePath) {

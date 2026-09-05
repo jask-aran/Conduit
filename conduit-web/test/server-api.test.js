@@ -150,6 +150,9 @@ exit 0
     assert.equal(linkedResponse.status, 201);
     const linked = await linkedResponse.json();
     assert.equal(linked.defaultTemplateId, null);
+    const workspaceVersion = await (await fetch(`${origin}/v0/projects/${linked.id}/workspace/version?paths=${encodeURIComponent(JSON.stringify([""]))}`)).json();
+    assert.equal(typeof workspaceVersion.version, "number");
+    assert.equal(workspaceVersion.changedPaths, null);
     await fs.mkdir(path.join(workspace, "00-directory"));
     for (let index = 0; index < 500; index += 1) {
       await fs.writeFile(path.join(workspace, `file-${String(index).padStart(3, "0")}`), "content\n");
@@ -166,6 +169,14 @@ exit 0
     assert.equal(tree.entries[0].name, "00-directory");
     assert.deepEqual([...tree.entries].sort((left, right) => left.type === right.type ? left.name.localeCompare(right.name) : left.type === "directory" ? -1 : 1), tree.entries);
     assert.equal(tree.entries.some((entry) => [".conduit", "symlinked"].includes(entry.name)), false);
+    const nextTreeResponse = await fetch(`${origin}/v0/projects/${linked.id}/tree?after=${encodeURIComponent(tree.cursor)}`);
+    assert.equal(nextTreeResponse.status, 200);
+    const nextTree = await nextTreeResponse.json();
+    assert.equal(nextTree.total, tree.total);
+    assert.equal(nextTree.truncated, false);
+    assert.equal(nextTree.cursor, null);
+    assert.equal(new Set([...tree.entries, ...nextTree.entries].map((entry) => entry.path)).size, tree.total);
+    assert.ok(nextTree.entries.some((entry) => entry.name === "zzz-late"));
     const managedFilePath = path.join(workspace, "00-directory", "managed.txt");
     await fs.writeFile(managedFilePath, "before\n");
     const managedFileUrl = `${origin}/v0/projects/${linked.id}/file?path=00-directory%2Fmanaged.txt`;
