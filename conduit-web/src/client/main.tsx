@@ -53,6 +53,7 @@ import { createRuntimeStore } from "./state/runtime";
 import { VoiceWaveform } from "./chat/voice-waveform";
 import { browserShortcutEnvironmentProvider } from "./shortcuts/shortcut-environment";
 import { ShortcutManager } from "./shortcuts/shortcut-manager";
+import { dropScope, migrateWorkspacePanelStorage, readSetting, writeSetting } from "./workspace/workspace-panel-storage";
 import { publishUiPreference, saveUiPreference, UI_PREFERENCE_CHANGE_EVENT, type UiPreferenceKey, type UiPreferences } from "./preferences/ui-preferences";
 import { applyUiScale, selectedUiScale } from "./preferences/ui-scale";
 import { INCREMARK_PACING_STORAGE_KEY } from "./chat/incremark-pacing";
@@ -384,9 +385,14 @@ function App() {
   });
   const catalogue = createCatalogueStore();
   const workspacePanelScope = createMemo(() => catalogue.projectId() ? `project:${catalogue.projectId()}` : null);
-  const workspacePanelStateKey = (state: "open" | "expanded") => {
-    const scope = workspacePanelScope();
-    return scope ? `conduit:workspace-panel:${scope}:${state}` : null;
+  const workspacePanelScopes = (projects: Project[]) => {
+    const scopes = new Set<string>();
+    for (const project of projects) {
+      scopes.add(project.id);
+      scopes.add(`project:${project.id}`);
+      for (const chat of project.sessions) scopes.add(chat.id);
+    }
+    return scopes;
   };
   const [templates, setTemplates] = createSignal<Template[]>([]);
   const [templatesLoading, setTemplatesLoading] = createSignal(true);
@@ -425,8 +431,8 @@ function App() {
     if (!workspaceExpanded()) document.querySelector<HTMLElement>(".transcript-motion-shell")?.style.removeProperty("--workspace-transcript-width");
   };
   const setWorkspaceExpanded = (next: boolean, persist = true) => {
-    const key = workspacePanelStateKey("expanded");
-    if (persist && key) localStorage.setItem(key, String(next));
+    const scope = workspacePanelScope();
+    if (persist && scope) writeSetting(scope, "expanded", String(next));
     if (next === workspaceExpanded()) return;
     if (next && !isMobileLayout()) {
       const shell = document.querySelector<HTMLElement>(".transcript-motion-shell");
@@ -584,11 +590,10 @@ function App() {
   };
 
   createEffect(() => {
-    const openKey = workspacePanelStateKey("open");
-    const expandedKey = workspacePanelStateKey("expanded");
-    if (!openKey || !expandedKey) return;
-    setPanelOpen(localStorage.getItem(openKey) === "true");
-    setWorkspaceExpanded(localStorage.getItem(expandedKey) === "true", false);
+    const scope = workspacePanelScope();
+    if (!scope) return;
+    setPanelOpen(readSetting(scope, "open") === "true");
+    setWorkspaceExpanded(readSetting(scope, "expanded") === "true", false);
   });
 
   createEffect(() => {
@@ -605,10 +610,10 @@ function App() {
     if (!next && document.activeElement instanceof HTMLElement && document.activeElement.closest(".workspace-panel")) {
       document.querySelector<HTMLElement>(".chat-header [aria-label='Toggle workspace panel']")?.focus({ preventScroll: true });
     }
-    const key = workspacePanelStateKey("open");
+    const scope = workspacePanelScope();
     if (!next) setWorkspaceExpanded(false);
     setPanelOpen(next);
-    if (key) localStorage.setItem(key, String(next));
+    if (scope) writeSetting(scope, "open", String(next));
   };
 
   /** Phone overlays are exclusive: opening one closes the other. */
@@ -658,7 +663,10 @@ function App() {
   const currentDraftId = () => chat.status() === "draft" ? catalogue.selectedId() : null;
 
   const discardDraft = async (id = currentDraftId()) => {
-    if (id) await api(`/v0/chats/${encodeURIComponent(id)}?ifEmpty=true`, { method: "DELETE" });
+    if (id) {
+      await api(`/v0/chats/${encodeURIComponent(id)}?ifEmpty=true`, { method: "DELETE" });
+      dropScope(id);
+    }
   };
 
   const createChat = async (target?: Project, launch: { templateId?: string; runtimeKind?: string } = {}, options: { reportFailure?: boolean } = {}) => {
@@ -740,6 +748,7 @@ function App() {
       if (routeKind() !== expectedRoute || (expectedRoute === "project" && selectedProject()?.id !== expectedProjectId)) {
         scopeChanged = true;
         await api(`/v0/chats/${encodeURIComponent(created.id)}?ifEmpty=true`, { method: "DELETE" });
+        dropScope(created.id);
         return;
       }
       chat.initialize({ ...created, templateId: created.templateId || templateId }, project);
@@ -897,7 +906,11 @@ function App() {
     await models.reloadChat(selectedId);
   };
 
-  const refresh = () => catalogue.refresh();
+  const refresh = async () => {
+    const projects = await catalogue.refresh();
+    migrateWorkspacePanelStorage(workspacePanelScopes(projects));
+    return projects;
+  };
   const addProject = async (input: { mode: string; name?: string; path?: string; directoryName?: string; cloneUrl?: string; cloneParentPath?: string; cloneDirectoryName?: string }) => {
     try {
       const result = await api<Project | { project: Project; operation: { id: string; state: string } }>("/v0/projects", { method: "POST", body: JSON.stringify(input) });
@@ -979,7 +992,7 @@ function App() {
     }
   };
   const deleteChat = async (target: ChatSummary, project: Project) => {
-    try { await api(`/v0/sessions/${target.id}`, { method: "DELETE" }); if (catalogue.selectedId() === target.id) await createChat(project); await refresh(); }
+    try { await api(`/v0/sessions/${target.id}`, { method: "DELETE" }); dropScope(target.id); if (catalogue.selectedId() === target.id) await createChat(project); await refresh(); }
     catch (error) { showError(error); }
   };
   const deleteChats = async (targets: Array<{ chat: ChatSummary; project: Project }>) => {
@@ -988,6 +1001,7 @@ function App() {
     const results = await Promise.all(targets.map(async (target) => {
       try {
         await api(`/v0/sessions/${target.chat.id}`, { method: "DELETE" });
+        dropScope(target.chat.id);
         return null;
       } catch (error) {
         return { id: target.chat.id, error };
@@ -1006,13 +1020,19 @@ function App() {
     }
     return failures.map((failure) => failure.id);
   };
+  const dropProjectPanelState = (target: Project) => {
+    dropScope(target.id);
+    dropScope(`project:${target.id}`);
+    for (const chat of target.sessions) dropScope(chat.id);
+  };
   const deleteProject = async (target: Project) => {
-    try { await api(`/v0/projects/${target.id}`, { method: "DELETE" }); if (catalogue.projectId() === target.id) await createChat(catalogue.projects().find((item) => item.slug === "chat")); await refresh(); }
+    try { await api(`/v0/projects/${target.id}`, { method: "DELETE" }); dropProjectPanelState(target); if (catalogue.projectId() === target.id) await createChat(catalogue.projects().find((item) => item.slug === "chat")); await refresh(); }
     catch (error) { showError(error); }
   };
   const destroyWorkspace = async (target: Project, confirmation: string) => {
     try {
       await api(`/v0/projects/${encodeURIComponent(target.id)}`, { method: "DELETE", body: JSON.stringify({ mode: "destroy_workspace", confirmation }) });
+      dropProjectPanelState(target);
       if (catalogue.projectId() === target.id) await createChat(catalogue.projects().find((item) => item.slug === "chat"));
       await refresh();
       return true;
@@ -1495,6 +1515,7 @@ function App() {
         selectedChatRequest || Promise.resolve(null),
       ]);
       const projects = asList<Project>(cataloguePayload.projects).map((project) => ({ ...project, sessions: asList<ChatSummary>(project.sessions) }));
+      migrateWorkspacePanelStorage(workspacePanelScopes(projects));
       catalogue.setProjects(projects);
       if (selectedChat) {
         const [target, detail] = selectedChat;

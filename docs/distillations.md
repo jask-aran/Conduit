@@ -261,6 +261,13 @@ Add an entry through `$tacit-knowledge` after explicit approval or validated rep
 - **Scope:** Client workspace navigation and preloading. Pi processes own execution and transcripts; the UI cache owns only recent presentation data.
 - **Evidence:** Slice 1 restored recent workspace status without coupling it to process lifetime, avoiding both remount flash and a second source of session ownership.
 
+### Keep Workspace panel state project-scoped
+
+- **Type:** Invariant.
+- **Rule:** Store Workspace panel visibility and contents under `project:<projectId>` and geometry under the raw project ID for compatibility; do not key current panel state by the selected chat. Keep `wrap-lines` global and remove both project scopes plus session scopes when a project is deleted.
+- **Scope:** `main.tsx`, `workspace-panel.tsx`, and `workspace-panel-storage.ts`.
+- **Evidence:** Accepted persisted-panel-state slice; `workspace-panel-storage.test.js` covers migration, scope removal, storage failure fallback, and the 100-scope cap.
+
 ### Drive workspace freshness from one version signal
 
 - **Type:** Invariant.

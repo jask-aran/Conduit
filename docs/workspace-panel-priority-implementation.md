@@ -60,7 +60,7 @@ Acceptance:
 - Ownership conflict enters `conflict`, names the holder, and does not retry.
 - Focused unit and browser tests cover each state and action.
 
-## 2. Persisted panel state
+## 2. Persisted panel state — implemented
 
 Source finding: **P1 — Persisted panel state grows without bound and is
 unguarded**.
@@ -81,6 +81,10 @@ Acceptance:
 - Deleting a chat or project removes its stored panel state.
 - Unknown scopes are removed at startup.
 - Focused unit tests cover migration, cleanup, quota failure, and the scope cap.
+
+Implemented in `conduit-web/src/client/workspace/workspace-panel-storage.ts`.
+The review finding is marked **Complete**. Validation remains paused until the
+focused test results are handed to the operator.
 
 ## 3. Binary and media handling
 
