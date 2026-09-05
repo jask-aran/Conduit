@@ -907,3 +907,13 @@ installed Android SDK.
 Use [`../docs/testing.md`](../docs/testing.md) as the
 single source of truth for fast checks, deterministic harnesses, browser QA,
 Playwright canaries, live transport measurements, and deployment proof.
+# Managed-scope Git discovery
+
+New terminals and agent processes in Chats and managed projects set
+`GIT_CEILING_DIRECTORIES` to the parent of their working root. This prevents
+automatic discovery of Conduit's enclosing repository while allowing repositories
+created inside the managed scope. Linked Workspaces retain their environment.
+Existing processes need a restart to inherit this setting. Shell prompts with
+their own discovery may still show the enclosing repository. This is a discovery
+boundary, not a restriction on explicit Git paths. Moving runtime data to
+`~/.conduit` is deferred.

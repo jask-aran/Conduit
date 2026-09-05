@@ -113,6 +113,13 @@ Add an entry through `$tacit-knowledge` after explicit approval or validated rep
 
 ## UI and component heuristics
 
+### Keep combined Patch and selected-file Diff separate
+
+- **Type:** Preference.
+- **Rule:** Preserve combined Git output in Patch. Open the separate Diff tab when a user clicks a file in Changes or Staged changes, and compare the selected section. Keep Source Control visible but disabled in managed scopes.
+- **Scope:** Workspace Source Control.
+- **Evidence:** The operator rejected replacing Patch with file disclosures and accepted the separate Diff tab and managed-scope restriction on 2026-09-06.
+
 ### Let browser media request file ranges directly
 
 - **Type:** Gotcha.

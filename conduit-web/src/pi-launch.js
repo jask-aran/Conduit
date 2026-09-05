@@ -1,4 +1,5 @@
 import path from "node:path";
+import { projectEnvironment } from "./project-environment.js";
 import {
   buildManagedToolEnvironment,
   buildPiEnvironment,
@@ -62,7 +63,7 @@ export function resolvePiLaunch({
         ...sessionArgs(chat.piSessionFile, model, thinkingLevel),
       ],
       cwd,
-      env: nativeEnvironment(installation),
+      env: projectEnvironment(project, cwd, nativeEnvironment(installation)),
       sessionFile: chat.piSessionFile ? path.resolve(chat.piSessionFile) : null,
       runtime,
       binaryVersion: installation.version,
@@ -85,7 +86,7 @@ export function resolvePiLaunch({
       ...sessionArgs(chat.piSessionFile, model, thinkingLevel),
     ],
     cwd,
-    env: buildPiEnvironment(runtimeAgentDir || installation.agentDir, filteredEnvironment(installation.environment || process.env)),
+    env: projectEnvironment(project, cwd, buildPiEnvironment(runtimeAgentDir || installation.agentDir, filteredEnvironment(installation.environment || process.env))),
     sessionFile: chat.piSessionFile ? path.resolve(chat.piSessionFile) : null,
     runtime,
     binaryVersion: installation.version,
