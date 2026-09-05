@@ -19,15 +19,15 @@ body.workspace-resizing .workspace-panel { transition: none !important; }
 .workspace-panel-expanded .workspace-panel-surface { inset: 0; width: auto; }
 .workspace-layout { overflow: hidden; }
 .workspace-panel-expanded .workspace-resize-handle { display: none; }
-.workspace-panel-tabs { display: flex; min-width: 0; flex: 1; justify-content: flex-end; }
+.workspace-panel-tabs-space { display: flex; min-width: 0; flex: 1; justify-content: flex-end; overflow: hidden; }
+.workspace-panel-tabs { display: flex; width: max-content; flex: none; }
+.workspace-panel-tabs button { flex: none; }
+.workspace-panel-tabs-space[data-icons-only] .workspace-panel-tabs span { display: none; }
 .workspace-panel-tabs button { display: flex; min-height: 22.4px; align-items: center; justify-content: center; gap: 4.8px; border: 0; border-radius: 4.8px; background: transparent; padding-inline: 8px; color: var(--muted-foreground); font-size: 8.8px; }
 .workspace-panel-tabs button[aria-selected="true"] { background: var(--accent); color: var(--foreground); box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--foreground), transparent 88%); }
 .workspace-panel-tabs span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .workspace-panel-tabs button:disabled { opacity: .4; cursor: not-allowed; }
 .workspace-panel-tabs svg, .workspace-panel-header svg, .workspace-status-strip svg { width: 12px; height: 12px; }
-@container (max-width: 519px) {
-  .workspace-panel-tabs span { display: none; }
-}
 .workspace-panel-content { position: relative; display: flex; min-width: 0; min-height: 0; flex: 1; overflow: hidden; }
 .workspace-panel-content > * { min-width: 0; flex: 1; }
 .workspace-panel-expanded .workspace-panel-content[data-split="true"] { display: grid; grid-template-columns: minmax(0, var(--workspace-split-ratio)) 9px minmax(0, calc(100% - var(--workspace-split-ratio) - 9px)); }
@@ -41,10 +41,8 @@ body.workspace-resizing .workspace-panel { transition: none !important; }
 .workspace-panel-header[data-split="true"] { display: grid; padding-inline: 0; grid-template-columns: minmax(0, var(--workspace-split-ratio)) 9px minmax(0, calc(100% - var(--workspace-split-ratio) - 9px)); }
 .workspace-panel-header[data-split="true"] > [data-position="left"] { grid-column: 1; padding-left: 11.2px; }
 .workspace-panel-header[data-split="true"] > [data-position="right"] { grid-column: 3; padding-right: 6.4px; }
-/* Each strip becomes the container for the icon-only fallback below, so a
-   narrow half degrades to icons on its own. */
-.workspace-panel-header[data-split="true"] .workspace-pane-strip { container-type: inline-size; }
-.workspace-panel-header[data-split="true"] .workspace-panel-tabs { justify-content: flex-start; }
+.workspace-panel-header[data-split="true"] .workspace-panel-tabs-space { justify-content: flex-start; }
+.workspace-pane-strip > strong { flex: none; }
 .workspace-split-resize-handle { position: relative; z-index: 5; grid-column: 2; grid-row: 1; cursor: col-resize; touch-action: none; }
 .workspace-split-resize-handle::after { content: ""; position: absolute; inset-block: 0; left: 4px; width: 1px; background: var(--border); transition: background 120ms; }
 .workspace-split-resize-handle:hover::after, .workspace-split-resize-handle:focus-visible::after, .workspace-split-resizing .workspace-split-resize-handle::after { background: var(--ring); }
@@ -53,6 +51,7 @@ body.workspace-resizing .workspace-panel { transition: none !important; }
 .workspace-tree-pane { display: flex; min-width: 0; min-height: 0; flex: 1; flex-direction: column; overflow: hidden; }
 .workspace-tree-collapsed-rail { display: none; }
 .workspace-tree-tools { display: flex; min-height: 28px; flex: none; align-items: center; gap: 2.4px; padding: 3.2px 4.8px; border-bottom: 1px solid var(--border); }
+.workspace-tree-actions { border-top: 1px solid var(--border); border-bottom: 0; flex-wrap: wrap; }
 .workspace-tree-tools > button { display: grid; width: 22.4px; height: 22.4px; flex: none; place-items: center; border: 0; border-radius: 4.8px; background: transparent; color: var(--muted-foreground); }
 .workspace-tree-tools > button:hover, .workspace-tree-tools > button:focus-visible, .workspace-tree-tools > button[aria-pressed="true"] { background: var(--accent); color: var(--foreground); }
 .workspace-tree-tools > button:focus-visible { outline: 1px solid var(--ring); outline-offset: -1px; }
