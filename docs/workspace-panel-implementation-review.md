@@ -335,29 +335,20 @@ land first.
    remaining hunks* control, virtualise the line list above a threshold, and offer
    download rather than inline rendering for a patch past a size ceiling.
 
-### Open — Terminal recovery states
+### Complete — Terminal recovery states
 
-**Planning note.** Prioritise this item for a focused follow-up. Each terminal
-state should have one clear message and one primary action.
+The terminal now uses one connection state for recovery: `reconnecting`,
+`offline`, `stopped`, or `conflict`, with `idle`, `connecting`, and `live` for
+the normal lifecycle. Network loss retries automatically within the existing
+budget, then shows **Retry**. Process exit shows **Start new terminal**.
+Ownership conflicts show **Take control** and never retry automatically.
+PTY lifecycle changes also travel through the runtime SSE, so a remote exit or
+removal clears stale terminal selections and sidebar rows.
 
-The terminal retries a short sequence for network loss. A lease or control conflict ends at the same broad recovery surface, although it needs a different user choice. The `ownershipConflict` signal is present but does not fully drive the rendered state.
-
-Relevant code: `conduit-web/src/client/remotes/terminal-pane.tsx:74`, retry control at `conduit-web/src/client/remotes/terminal-pane.tsx:277-288`, and the takeover action near `conduit-web/src/client/remotes/terminal-pane.tsx:1018`.
-
-**Solution.** Replace the recovery flags with one explicit state machine and render
-exactly one affordance per state.
-
-1. Define a single signal of type
-   `"connecting" | "live" | "reconnecting" | "offline" | "stopped" | "conflict"`,
-   and derive the banner, the retry button and the takeover button from it. Delete
-   `ownershipConflict` as an independent signal — it becomes the `conflict` state.
-2. Assign the transitions explicitly: transport error to `reconnecting`; retry
-   budget exhausted to `offline` (action *Retry*); process exited to `stopped`
-   (action *Start a new terminal*); lease conflict to `conflict` (action *Take
-   control*, naming the current holder). Only `reconnecting` auto-retries;
-   `conflict` must never auto-retry, which is the present defect.
-3. Give each state one sentence of copy and one primary action, and announce
-   transitions through a polite live region so the change is not visual only.
+Relevant code: `conduit-web/src/client/remotes/terminal-pane.tsx` and the
+state copy/action mapping in `conduit-web/src/client/remotes/terminal-recovery.ts`.
+Recovery changes use one polite live region. Focused tests cover the state
+mapping and each recovery action.
 
 ### Open — Keyboard and screen-reader model
 

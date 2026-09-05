@@ -275,6 +275,13 @@ Add an entry through `$tacit-knowledge` after explicit approval or validated rep
 - **Scope:** `readWorkspaceDiff` and the Source Control panel. Treat patch generation as detail work, never as a prerequisite for branch/status rendering.
 - **Evidence:** Slice 1 added a four-process cap, timeout/cancellation, overview→patch reuse, and focused tests for shared inspection and cancellation.
 
+### Fan out terminal lifecycle changes
+
+- **Type:** Invariant.
+- **Rule:** Publish PTY creation, exit, update, and removal through the shared runtime stream; on each event, refresh the server terminal list and clear any selected terminal that no longer runs. Do not rely on the attached terminal WebSocket or a local window event to synchronize other clients.
+- **Scope:** Runtime SSE, terminal panes, sidebar terminal rows, and dashboard terminal lists.
+- **Evidence:** The two-client takeover reproduction left the original pane showing a dead terminal until it opened the sessions menu. Runtime lifecycle events, server reconciliation, and focused runtime/recovery tests close that stale-selection path.
+
 ### Separate resize mechanics from panel presentation
 
 - **Type:** Gotcha.
