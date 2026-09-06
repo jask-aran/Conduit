@@ -1,3 +1,4 @@
+import { isConduitManagedProject } from "../navigation/sidebar-preferences";
 import { createMemo, createSignal, For, onCleanup, onMount, Show, type JSX } from "solid-js";
 import { ArrowRightIcon, ClipboardCopyIcon, FolderInputIcon, MessageSquarePlusIcon, PaletteIcon, PencilIcon, PinIcon, PinOffIcon, SearchIcon, Settings2Icon, TerminalIcon, Trash2Icon } from "lucide-solid";
 import { ContextMenu, ContextMenuContent, ContextMenuGroup, ContextMenuItem, ContextMenuSeparator, ContextMenuSub, ContextMenuSubContent, ContextMenuSubTrigger, ContextMenuTrigger, Spinner } from "@/components/primitives";
@@ -161,7 +162,7 @@ export function AppDashboard(props: {
                 <ContextMenuItem onSelect={() => props.onContextAction("move-chat", { chat, project })}><FolderInputIcon />Move to folder…</ContextMenuItem>
                 <ContextMenuItem onSelect={() => props.onContextAction("copy-chat", { chat })}><ClipboardCopyIcon />{commandLabel(COMMAND_IDS.copyTranscript)}</ContextMenuItem>
                 <ContextMenuItem onSelect={() => props.onOpenChatTerminal(chat, project)}><TerminalIcon />Open terminal</ContextMenuItem>
-                <ContextMenuItem onSelect={() => props.onContextAction("pin-chat", { chat })}><Show when={props.isPinned("chat", chat.id)} fallback={<><PinIcon />Pin to sidebar</>}><PinOffIcon />Unpin</Show></ContextMenuItem>
+                <Show when={isConduitManagedProject(project)}><ContextMenuItem onSelect={() => props.onContextAction("pin-chat", { chat })}><Show when={props.isPinned("chat", chat.id)} fallback={<><PinIcon />Pin to sidebar</>}><PinOffIcon />Unpin</Show></ContextMenuItem></Show>
               </ContextMenuGroup><ContextMenuSeparator /><ContextMenuItem variant="destructive" onSelect={() => props.onContextAction("delete-chat", { chat, project })}><Trash2Icon />{commandLabel(COMMAND_IDS.deleteChat)}</ContextMenuItem></ContextMenuContent></ContextMenu>}
             </For>
           </div>
@@ -182,7 +183,6 @@ export function AppDashboard(props: {
               </ContextMenuTrigger><ContextMenuContent class="w-60 sidebar-context-menu"><ContextMenuGroup>
                 <ContextMenuItem onSelect={() => props.onNewChat(project)}><MessageSquarePlusIcon />{commandLabel(COMMAND_IDS.newChat)}</ContextMenuItem>
                 <ContextMenuItem onSelect={() => props.onContextAction("rename-folder", { project })}><PencilIcon />Rename workspace</ContextMenuItem>
-                <ContextMenuItem onSelect={() => props.onContextAction("pin-project", { project })}><Show when={props.isPinned("project", project.id)} fallback={<><PinIcon />Pin to sidebar</>}><PinOffIcon />Unpin</Show></ContextMenuItem>
                 <ContextMenuItem onSelect={() => props.onOpenWorkspaceIdentity(project)}><PaletteIcon />Identity</ContextMenuItem>
                 <ContextMenuItem onSelect={() => props.onOpenWorkspaceSettings(project)}><Settings2Icon />Workspace settings</ContextMenuItem>
                 <ContextMenuSub>
@@ -222,7 +222,6 @@ export function AppDashboard(props: {
                 </ContextMenuTrigger><ContextMenuContent class="w-52 sidebar-context-menu"><ContextMenuGroup>
                   <ContextMenuItem onSelect={() => props.onOpenTerminalMaximized(terminal)}><TerminalIcon />Open maximized</ContextMenuItem>
                   <ContextMenuItem onSelect={() => props.onContextAction("rename-terminal", { terminal })}><PencilIcon />Rename</ContextMenuItem>
-                  <ContextMenuItem onSelect={() => props.onContextAction("pin-terminal", { terminal })}><Show when={props.isPinned("terminal", terminal.id)} fallback={<><PinIcon />Pin to sidebar</>}><PinOffIcon />Unpin</Show></ContextMenuItem>
                 </ContextMenuGroup><ContextMenuSeparator /><ContextMenuItem variant="destructive" onSelect={() => props.onContextAction("delete-terminal", { terminal })}><Trash2Icon />Destroy shell</ContextMenuItem></ContextMenuContent></ContextMenu>}
               </For>
             </div>

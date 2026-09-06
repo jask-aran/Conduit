@@ -43,10 +43,10 @@
       }
 
       window.__terminalPerf = {
-        async prepare(rendererId) {
+        async prepare() {
           renderer?.dispose();
           host.replaceChildren();
-          renderer = await createTerminalRenderer(host, rendererId);
+          renderer = await createTerminalRenderer(host);
           renderer.fit();
           renderer.focus();
           renderer.onData((data) => {

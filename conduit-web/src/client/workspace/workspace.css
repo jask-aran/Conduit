@@ -456,3 +456,8 @@ body.workspace-resizing .workspace-panel { transition: none !important; }
 }
 
 }
+
+.workspace-computer-path { display: flex; min-width: 0; align-items: center; gap: 6px; padding: 3.2px 4.8px; border-bottom: 1px solid var(--border); }
+.workspace-computer-path button { width: 22.4px; height: 22.4px; flex: none; border: 0; border-radius: 4.8px; background: transparent; color: var(--muted-foreground); }
+.workspace-computer-path button:hover { background: var(--accent); }
+.workspace-computer-path span { overflow: hidden; color: var(--muted-foreground); font: 9px ui-monospace, monospace; text-overflow: ellipsis; white-space: nowrap; }

@@ -1,3 +1,4 @@
+import { isConduitManagedProject } from "./sidebar-preferences";
 import { batch, createEffect, createMemo, createSignal, For, onCleanup, onMount, Show } from "solid-js";
 import * as KAlertDialog from "@kobalte/core/alert-dialog";
 import * as KDialog from "@kobalte/core/dialog";
@@ -9,6 +10,7 @@ import {
   FolderInputIcon,
   FolderPlusIcon,
   LayoutDashboardIcon,
+  MonitorIcon,
   MessageSquareIcon,
   MessageSquarePlusIcon,
   Maximize2Icon,
@@ -144,6 +146,7 @@ export function Sidebar(props: {
   projectId: string;
   selectedId: string | null;
   dashboard: boolean;
+  computer: boolean;
   runtime: RuntimeStore;
   connectivity: string;
   workspaceSuggestions: WorkspaceSuggestion[];
@@ -168,6 +171,7 @@ export function Sidebar(props: {
   onOpenTerminal: (chat: ChatSummary, project: Project) => void;
   onOpenPty: (terminal: Pty) => void;
   onOpenDashboard: () => void;
+  onOpenComputer: () => void;
   onOpenWorkspaceIdentity: (project: Project) => void;
   onOpenSettings: (section?: string, workspaceId?: string | null) => void;
   onOpenPalette: (page?: string | null, initialQuery?: string | null) => void;
@@ -431,13 +435,10 @@ export function Sidebar(props: {
       if (type === "chat") {
         const project = props.projects.find((item) => item.sessions.some((chat) => chat.id === id));
         const chat = project?.sessions.find((item) => item.id === id);
-        if (project && chat) resolved.push({ ref, type, project, chat });
+        if (project && chat && isConduitManagedProject(project)) resolved.push({ ref, type, project, chat });
       } else if (type === "project") {
         const project = props.projects.find((item) => item.id === id);
-        if (project) resolved.push({ ref, type, project });
-      } else if (type === "terminal") {
-        const terminal = terminals().find((item) => item.id === id);
-        if (terminal) resolved.push({ ref, type, terminal });
+        if (project && isConduitManagedProject(project)) resolved.push({ ref, type, project });
       }
     }
     return resolved;
@@ -451,7 +452,7 @@ export function Sidebar(props: {
     if (seconds < 86_400) return `${Math.floor(seconds / 3600)}h ago`;
     return `${Math.floor(seconds / 86_400)}d ago`;
   };
-  const terminalScope = (terminal: Pty) => props.projects.find((project) => project.id === terminal.projectId)?.name || "Unknown workspace";
+  const terminalScope = (terminal: Pty) => props.projects.find((project) => project.id === terminal.projectId)?.name || ((terminal.projectId === "computer" || terminal.projectId.startsWith("computer:")) ? terminal.cwd || "Computer" : "Unknown workspace");
   const selectedTargets = createMemo<ChatTarget[]>(() => props.projects.flatMap((project) =>
     project.sessions.filter((chat) => selectedChatIds().has(chat.id)).map((chat) => ({ chat, project }))));
   const clearSelection = () => setSelectedChatIds(new Set<string>());
@@ -723,9 +724,9 @@ export function Sidebar(props: {
           </ContextMenuSub>
           <ContextMenuItem onSelect={() => void props.onCopyTranscript(menuProps.chat)}><ClipboardCopyIcon />{commandLabel(COMMAND_IDS.copyTranscript)}</ContextMenuItem>
           <ContextMenuItem onSelect={() => props.onOpenTerminal(menuProps.chat, menuProps.project)}><TerminalIcon />Open terminal</ContextMenuItem>
-          <ContextMenuItem onSelect={() => void togglePin("chat", menuProps.chat.id)}>
+          <Show when={isConduitManagedProject(menuProps.project)}><ContextMenuItem onSelect={() => void togglePin("chat", menuProps.chat.id)}>
             <Show when={isPinned("chat", menuProps.chat.id)} fallback={<><PinIcon />Pin to sidebar</>}><PinOffIcon />Unpin</Show>
-          </ContextMenuItem>
+          </ContextMenuItem></Show>
         </ContextMenuGroup>
         <ContextMenuSeparator />
         <ContextMenuGroup>
@@ -788,9 +789,9 @@ export function Sidebar(props: {
               <ContextMenuItem onSelect={() => startNewChat(blockProps.project)}><MessageSquarePlusIcon />{commandLabel(COMMAND_IDS.newChat)}</ContextMenuItem>
               <Show when={isWorkspace()}><ContextMenuItem onSelect={() => { closeMobile(); props.onOpenProjectMaximized(blockProps.project); }}><Maximize2Icon />Open maximized Workspace</ContextMenuItem></Show>
               <ContextMenuItem onSelect={() => requestRenameProject(blockProps.project)}><PencilIcon />Rename {blockProps.workspace ? "workspace" : "folder"}</ContextMenuItem>
-              <ContextMenuItem onSelect={() => void togglePin("project", blockProps.project.id)}>
+              <Show when={isConduitManagedProject(blockProps.project)}><ContextMenuItem onSelect={() => void togglePin("project", blockProps.project.id)}>
                 <Show when={isPinned("project", blockProps.project.id)} fallback={<><PinIcon />Pin to sidebar</>}><PinOffIcon />Unpin</Show>
-              </ContextMenuItem>
+              </ContextMenuItem></Show>
               <Show when={blockProps.workspace}><ContextMenuItem onSelect={() => { closeMobile(); props.onOpenWorkspaceIdentity(blockProps.project); }}><PaletteIcon />Identity</ContextMenuItem></Show>
               <Show when={blockProps.workspace}><ContextMenuItem onSelect={() => props.onOpenSettings("workspaces", blockProps.project.id)}><Settings2Icon />Workspace settings</ContextMenuItem></Show>
               <ContextMenuSub>
@@ -858,8 +859,7 @@ export function Sidebar(props: {
     </ContextMenu>;
   };
 
-  const TerminalRow = (rowProps: { terminal: Pty }) => <ContextMenu placement={phoneLayout() ? "bottom-start" : "right-start"}>
-    <ContextMenuTrigger as="button" type="button" class="sidebar-row sidebar-terminal" onClick={() => {
+  const TerminalRow = (rowProps: { terminal: Pty }) => <button type="button" class="sidebar-row sidebar-terminal" onClick={() => {
       closeMobile();
       props.onOpenPty(rowProps.terminal);
     }}>
@@ -868,13 +868,7 @@ export function Sidebar(props: {
         <strong>{rowProps.terminal.title || "Shell"}</strong>
         <small>{terminalScope(rowProps.terminal)} · {rowProps.terminal.currentCommand || "shell"} · {terminalActivity(rowProps.terminal)}</small>
       </span>
-    </ContextMenuTrigger>
-    <ContextMenuContent class="w-48 sidebar-context-menu">
-      <ContextMenuItem onSelect={() => void togglePin("terminal", rowProps.terminal.id)}>
-        <Show when={isPinned("terminal", rowProps.terminal.id)} fallback={<><PinIcon />Pin to sidebar</>}><PinOffIcon />Unpin</Show>
-      </ContextMenuItem>
-    </ContextMenuContent>
-  </ContextMenu>;
+    </button>;
 
   const Group = (groupProps: { label: string; projects: Project[]; chatRoot?: Project; workspace?: boolean; emptyLabel?: string; onAdd?: () => void; addLabel?: string }) => {
     const allChats = () => sortChats(groupProps.chatRoot?.sessions.filter((chat) => chat.status !== "draft" || chat.id !== props.selectedId || chat.pinned || Boolean(props.runtime.getProcess(chat.id))) || [], chatSort());
@@ -930,7 +924,7 @@ export function Sidebar(props: {
         </div>
         <div data-sidebar="content" class="sidebar-content">
           <div data-sidebar="rail-actions" class="sidebar-rail-actions" aria-label="Quick navigation">
-            <RailAction label="Dashboard" current={props.dashboard} onClick={() => { closeMobile(); props.onOpenDashboard(); }}><LayoutDashboardIcon /></RailAction>
+            <RailAction label="Conduit Dashboard" current={props.dashboard} onClick={() => { closeMobile(); props.onOpenDashboard(); }}><LayoutDashboardIcon /></RailAction>
             <div data-sidebar="rail-section" data-sidebar-section="chats" class="sidebar-rail-section">
               <RailAction label="New chat" onClick={() => startNewChat()}><MessageSquarePlusIcon /></RailAction>
               <For each={railChats()}>{(item) => <RailAction
@@ -951,6 +945,8 @@ export function Sidebar(props: {
                 ><FolderIcon /></RailAction>}</For>
               </div>
             </Show>
+            <div data-sidebar="rail-divider" aria-hidden="true" />
+            <RailAction label="Computer" current={props.computer} onClick={() => { closeMobile(); props.onOpenComputer(); }}><MonitorIcon /></RailAction>
             <Show when={railWorkspaces().length}>
               <div data-sidebar="rail-divider" aria-hidden="true" />
               <div data-sidebar="rail-section" data-sidebar-section="workspaces" class="sidebar-rail-section">
@@ -963,9 +959,10 @@ export function Sidebar(props: {
               </div>
             </Show>
           </div>
+          <div class="sidebar-area-label">Conduit App</div>
           <button type="button" class="sidebar-row sidebar-dashboard" aria-current={props.dashboard ? "page" : undefined} onClick={() => { closeMobile(); props.onOpenDashboard(); }}>
             <LayoutDashboardIcon />
-            <span>Dashboard</span>
+            <span>Conduit Dashboard</span>
           </button>
           <Show when={pinnedItems().length}>
             <section class="sidebar-group">
@@ -975,6 +972,8 @@ export function Sidebar(props: {
           </Show>
           <Group label="Chats" projects={[]} chatRoot={chats()} addLabel="New chat" onAdd={() => startNewChat()} />
           <Group label="Projects" projects={folders()} emptyLabel="No projects" addLabel="New folder" onAdd={() => openNewDialog("folder")} />
+          <div class="sidebar-area-label sidebar-area-divider" aria-hidden="true" />
+          <button type="button" class="sidebar-row sidebar-dashboard" aria-current={props.computer ? "page" : undefined} onClick={() => { closeMobile(); props.onOpenComputer(); }}><MonitorIcon /><span>Computer</span></button>
           <Group label="Workspaces" projects={workspaces()} workspace emptyLabel="No workspaces" addLabel="New workspace" onAdd={() => openNewDialog("workspace")} />
           <section class="sidebar-group">
             <div class="sidebar-group-header"><div data-sidebar="group-label">Terminals</div></div>

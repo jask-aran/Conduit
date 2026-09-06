@@ -1,3 +1,5 @@
+import type { Project } from "../api/contracts";
+
 export const SIDEBAR_CHAT_LIMIT_STORAGE_KEY = "conduit:sidebar-chat-limit";
 export const DEFAULT_SIDEBAR_CHAT_LIMIT = 20;
 export const MIN_SIDEBAR_CHAT_LIMIT = 5;
@@ -13,4 +15,8 @@ export function clampSidebarChatLimit(value: unknown): number {
 export function selectedSidebarChatLimit(): number {
   if (typeof localStorage === "undefined") return DEFAULT_SIDEBAR_CHAT_LIMIT;
   return clampSidebarChatLimit(localStorage.getItem(SIDEBAR_CHAT_LIMIT_STORAGE_KEY));
+}
+
+export function isConduitManagedProject(project: Project): boolean {
+  return project.kind !== "workspace" && !["linked", "created", "cloned"].includes(project.origin || "");
 }

@@ -1,3 +1,5 @@
+import os from "node:os";
+import { computerContext, findComputerGitRoot, resolveComputerContext } from "../../computer-context.js";
 import path from "node:path";
 import fs from "node:fs/promises";
 import express from "express";
@@ -100,6 +102,49 @@ export function registerProjectRoutes(app, {
       throw Object.assign(new Error("Workspace version paths are invalid"), { code: "invalid_workspace_path", status: 400 });
     }
   };
+  const inspectionContext = async (id, git = false) => {
+    const computer = await resolveComputerContext(id);
+    if (computer) {
+      if (!git) return computer;
+      const root = await findComputerGitRoot(computer.workingRoot);
+      if (!root) throw Object.assign(new Error("No Git repository in this Computer context"), { status: 403, code: "source_control_disabled" });
+      return computerContext(root);
+    }
+    const project = await projects.get(id);
+    if (project) await projects.validate(project);
+    return project;
+  };
+  const readComputerLocation = async (project) => {
+    const [gitRoot, listing] = await Promise.all([
+      findComputerGitRoot(project.workingRoot),
+      listWorkspaceDirectory(project.workingRoot),
+    ]);
+    return { project, home: os.homedir(), parent: path.dirname(project.workingRoot), repository: Boolean(gitRoot), listing };
+  };
+  app.get("/v0/computer", async (request, response, next) => {
+    try {
+      const project = await computerContext(request.query.path === undefined ? os.homedir() : request.query.path);
+      response.json(await readComputerLocation(project));
+    } catch (error) { next(error); }
+  });
+
+  app.post("/v0/computer/prefetch", async (request, response, next) => {
+    try {
+      const project = await resolveComputerContext(String(request.body?.id || ""));
+      const paths = request.body?.paths;
+      if (!project || !Array.isArray(paths) || paths.length > 8 || paths.some((item) => typeof item !== "string")) {
+        return response.status(400).json({ error: "computer_prefetch_invalid" });
+      }
+      const locations = await Promise.all(paths.map(async (relativePath) => {
+        try {
+          const resolved = await resolveInspectorPath(project.workingRoot, relativePath, { kind: "directory" });
+          return await readComputerLocation(await computerContext(resolved.path));
+        } catch { return null; }
+      }));
+      response.json({ locations: locations.filter(Boolean) });
+    } catch (error) { next(error); }
+  });
+
   app.get("/v0/projects", async (_request, response, next) => {
     try {
       const items = await projects.list();
@@ -249,9 +294,8 @@ export function registerProjectRoutes(app, {
 
   app.get("/v0/projects/:id/tree", async (request, response, next) => {
     try {
-      const project = await projects.get(request.params.id);
+      const project = await inspectionContext(request.params.id);
       if (!project) return response.status(404).json({ error: "project_not_found" });
-      await projects.validate(project);
       const listing = await listWorkspaceDirectory(project.workingRoot, request.query.path, { after: request.query.after });
       response.json({ path: String(request.query.path || ""), ...listing });
     } catch (error) { next(error); }
@@ -259,19 +303,17 @@ export function registerProjectRoutes(app, {
 
   app.get("/v0/projects/:id/workspace/version", async (request, response, next) => {
     try {
-      const project = await projects.get(request.params.id);
+      const project = await inspectionContext(request.params.id);
       if (!project) return response.status(404).json({ error: "project_not_found" });
-      await projects.validate(project);
       response.json(await readWorkspaceVersion(project.workingRoot, { paths: workspaceVersionPaths(request.query.paths) }));
     } catch (error) { next(error); }
   });
 
   app.get("/v0/projects/:id/file", async (request, response, next) => {
     try {
-      const project = await projects.get(request.params.id);
+      const project = await inspectionContext(request.params.id);
       if (!project) return response.status(404).json({ error: "project_not_found" });
       if (!request.query.path) return response.status(400).json({ error: "workspace_path_required" });
-      await projects.validate(project);
       if (request.query.download === "1" || request.query.inline === "1") {
         const resolved = await resolveInspectorPath(project.workingRoot, request.query.path, { kind: "file" });
         const metadata = await readWorkspaceFileMetadata(project.workingRoot, request.query.path);
@@ -302,10 +344,9 @@ export function registerProjectRoutes(app, {
 
   app.put("/v0/projects/:id/file", express.raw({ type: "application/octet-stream", limit: config.maxAttachmentBytes }), async (request, response, next) => {
     try {
-      const project = await projects.get(request.params.id);
+      const project = await inspectionContext(request.params.id);
       if (!project) return response.status(404).json({ error: "project_not_found" });
       if (!request.query.path) return response.status(400).json({ error: "workspace_path_required" });
-      await projects.validate(project);
       const expectedRevision = typeof request.headers["if-match"] === "string" ? request.headers["if-match"] : null;
       const content = Buffer.isBuffer(request.body) ? request.body : Buffer.alloc(0);
       const written = await writeWorkspaceFile(project.workingRoot, request.query.path, content, { expectedRevision });
@@ -315,10 +356,9 @@ export function registerProjectRoutes(app, {
 
   app.delete("/v0/projects/:id/file", async (request, response, next) => {
     try {
-      const project = await projects.get(request.params.id);
+      const project = await inspectionContext(request.params.id);
       if (!project) return response.status(404).json({ error: "project_not_found" });
       if (!request.query.path) return response.status(400).json({ error: "workspace_path_required" });
-      await projects.validate(project);
       await deleteWorkspaceFile(project.workingRoot, request.query.path);
       response.status(204).end();
     } catch (error) { next(error); }
@@ -326,32 +366,29 @@ export function registerProjectRoutes(app, {
 
   app.post("/v0/projects/:id/directory", async (request, response, next) => {
     try {
-      const project = await projects.get(request.params.id);
+      const project = await inspectionContext(request.params.id);
       if (!project) return response.status(404).json({ error: "project_not_found" });
       if (!request.body?.path) return response.status(400).json({ error: "workspace_path_required" });
-      await projects.validate(project);
       response.status(201).json(await createWorkspaceDirectory(project.workingRoot, request.body.path));
     } catch (error) { next(error); }
   });
 
   app.patch("/v0/projects/:id/entry", async (request, response, next) => {
     try {
-      const project = await projects.get(request.params.id);
+      const project = await inspectionContext(request.params.id);
       if (!project) return response.status(404).json({ error: "project_not_found" });
       if (!request.body?.path || !request.body?.destination) {
         return response.status(400).json({ error: "workspace_path_required" });
       }
-      await projects.validate(project);
       response.json(await moveWorkspaceEntry(project.workingRoot, request.body.path, request.body.destination));
     } catch (error) { next(error); }
   });
 
   app.delete("/v0/projects/:id/directory", async (request, response, next) => {
     try {
-      const project = await projects.get(request.params.id);
+      const project = await inspectionContext(request.params.id);
       if (!project) return response.status(404).json({ error: "project_not_found" });
       if (!request.query.path) return response.status(400).json({ error: "workspace_path_required" });
-      await projects.validate(project);
       await deleteWorkspaceDirectory(project.workingRoot, request.query.path);
       response.status(204).end();
     } catch (error) { next(error); }
@@ -364,9 +401,8 @@ export function registerProjectRoutes(app, {
     const close = () => { if (!response.writableEnded) abort(); };
     response.once("close", close);
     try {
-      const project = await projects.get(request.params.id);
+      const project = await inspectionContext(request.params.id, true);
       if (!project) return response.status(404).json({ error: "project_not_found" });
-      await projects.validate(project);
       if (project.kind !== "workspace") return response.status(403).json({ error: "source_control_disabled", message: "Source Control is available only for Workspaces." });
       response.json(await readWorkspaceDiff(project.workingRoot, { filePath: typeof request.query.path === "string" ? request.query.path : null, staged: request.query.staged === "1", includePatch: request.query.patch === "1", includeHistory: request.query.history !== "0", reuse: request.query.reuse === "1", signal: controller.signal }));
     } catch (error) {
@@ -384,9 +420,8 @@ export function registerProjectRoutes(app, {
     const close = () => { if (!response.writableEnded) abort(); };
     response.once("close", close);
     try {
-      const project = await projects.get(request.params.id);
+      const project = await inspectionContext(request.params.id, true);
       if (!project) return response.status(404).json({ error: "project_not_found" });
-      await projects.validate(project);
       if (project.kind !== "workspace") return response.status(403).json({ error: "source_control_disabled", message: "Source Control is available only for Workspaces." });
       response.json(await readWorkspaceCommit(project.workingRoot, request.params.hash, { signal: controller.signal }));
     } catch (error) {
@@ -399,9 +434,8 @@ export function registerProjectRoutes(app, {
 
   app.post("/v0/projects/:id/git", async (request, response, next) => {
     try {
-      const project = await projects.get(request.params.id);
+      const project = await inspectionContext(request.params.id, true);
       if (!project) return response.status(404).json({ error: "project_not_found" });
-      await projects.validate(project);
       if (project.kind !== "workspace") return response.status(403).json({ error: "source_control_disabled", message: "Source Control is available only for Workspaces." });
       response.json(await runWorkspaceGitAction(project.workingRoot, {
         action: request.body?.action,

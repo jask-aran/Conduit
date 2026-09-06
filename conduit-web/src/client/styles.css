@@ -151,13 +151,12 @@ svg { stroke-width: 1.5; }
 .work-area { position: relative; z-index: 1; display: flex; min-height: 0; flex: 1; }
 .work-area-conversation { display: flex; min-width: 0; flex: 1; flex-direction: column; }
 .terminal-pane { display: flex; min-width: 0; min-height: 0; flex: 1; flex-direction: column; overflow: hidden; background: color-mix(in oklch, var(--background), black 9%); }
-.terminal-pane-header { display: flex; min-height: 38.4px; align-items: center; justify-content: space-between; padding: 4.8px 6.4px 4.8px 11.2px; border-bottom: 1px solid var(--border); }
+.terminal-pane-header { display: flex; min-height: 28px; flex: none; align-items: center; justify-content: space-between; gap: 6.4px; padding: 3.2px 4.8px 3.2px 8px; border-bottom: 1px solid var(--border); }
 .terminal-pane-header > div { display: flex; min-width: 0; align-items: center; gap: 6.4px; }
 .terminal-pane-actions { display: flex; flex: none; align-items: center; gap: 4.8px; }
-.terminal-pane-actions select { min-height: 20.8px; border: 0.8px solid var(--border); border-radius: 4px; background: var(--background); padding: 1.6px 4px; color: var(--muted-foreground); font: 8.8px ui-monospace, SFMono-Regular, Consolas, monospace; }
-.terminal-pane-header svg { width: 12.8px; height: 12.8px; color: var(--accent-cool); }
+.terminal-pane-header svg { width: 11.2px; height: 11.2px; color: var(--muted-foreground); }
 .terminal-pane-header strong { font-size: 10.4px; font-weight: 600; }
-.terminal-pane-header span { padding-left: 6.4px; border-left: 1px solid var(--border); color: var(--muted-foreground); font: 8px ui-monospace, SFMono-Regular, Consolas, monospace; text-transform: uppercase; letter-spacing: .08em; }
+.terminal-pane-identity span { padding-left: 6.4px; border-left: 1px solid var(--border); color: var(--muted-foreground); font: 8px ui-monospace, SFMono-Regular, Consolas, monospace; text-transform: uppercase; letter-spacing: .08em; }
 .terminal-pane-empty { display: grid; min-height: 0; flex: 1; place-content: center; justify-items: center; gap: 7.2px; padding: 25.6px; color: var(--muted-foreground); text-align: center; }
 .terminal-pane-empty > svg { width: 22.4px; height: 22.4px; color: var(--accent-cool); opacity: .8; }
 .terminal-pane-empty strong { color: var(--foreground); font-size: 11.2px; font-weight: 550; }
@@ -955,13 +954,12 @@ svg { stroke-width: 1.5; }
 .work-area { position: relative; z-index: 1; display: flex; min-height: 0; flex: 1; }
 .work-area-conversation { display: flex; min-width: 0; flex: 1; flex-direction: column; }
 .terminal-pane { display: flex; min-width: 0; min-height: 0; flex: 1; flex-direction: column; overflow: hidden; background: color-mix(in oklch, var(--background), black 9%); }
-.terminal-pane-header { display: flex; min-height: 48px; align-items: center; justify-content: space-between; padding: 6px 8px 6px 14px; border-bottom: 1px solid var(--border); }
+.terminal-pane-header { display: flex; min-height: 35px; flex: none; align-items: center; justify-content: space-between; gap: 8px; padding: 4px 6px 4px 10px; border-bottom: 1px solid var(--border); }
 .terminal-pane-header > div { display: flex; min-width: 0; align-items: center; gap: 8px; }
 .terminal-pane-actions { display: flex; flex: none; align-items: center; gap: 6px; }
-.terminal-pane-actions select { min-height: 26px; border: 1px solid var(--border); border-radius: 5px; background: var(--background); padding: 2px 5px; color: var(--muted-foreground); font: 11px ui-monospace, SFMono-Regular, Consolas, monospace; }
-.terminal-pane-header svg { width: 16px; height: 16px; color: var(--accent-cool); }
+.terminal-pane-header svg { width: 14px; height: 14px; color: var(--muted-foreground); }
 .terminal-pane-header strong { font-size: 13px; font-weight: 600; }
-.terminal-pane-header span { padding-left: 8px; border-left: 1px solid var(--border); color: var(--muted-foreground); font: 10px ui-monospace, SFMono-Regular, Consolas, monospace; text-transform: uppercase; letter-spacing: .08em; }
+.terminal-pane-identity span { padding-left: 8px; border-left: 1px solid var(--border); color: var(--muted-foreground); font: 10px ui-monospace, SFMono-Regular, Consolas, monospace; text-transform: uppercase; letter-spacing: .08em; }
 .terminal-pane-empty { display: grid; min-height: 0; flex: 1; place-content: center; justify-items: center; gap: 9px; padding: 32px; color: var(--muted-foreground); text-align: center; }
 .terminal-pane-empty > svg { width: 28px; height: 28px; color: var(--accent-cool); opacity: .8; }
 .terminal-pane-empty strong { color: var(--foreground); font-size: 14px; font-weight: 550; }
