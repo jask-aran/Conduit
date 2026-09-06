@@ -142,7 +142,7 @@ function cacheWorkspace(projectId: string, patch: Partial<WorkspaceCacheEntry>) 
   while (workspaceCache.size > MAX_CACHED_WORKSPACES) workspaceCache.delete(workspaceCache.keys().next().value!);
 }
 
-export default function WorkspacePanel(props: { projectId: Accessor<string>; projectName: Accessor<string>; sourceControlEnabled: Accessor<boolean>; workingRoot: Accessor<string>; chatId: Accessor<string>; open: Accessor<boolean>; expanded: Accessor<boolean>; focusRequest: Accessor<number>; requestedTab?: Accessor<{ tab: PanelTab; terminalId?: string; nonce: number } | null>; onToggleExpanded: () => void; onClose: () => void; shortcuts: ShortcutManager }) {
+export default function WorkspacePanel(props: { projectId: Accessor<string>; projectName: Accessor<string>; sourceControlEnabled: Accessor<boolean>; workingRoot: Accessor<string>; chatId: Accessor<string>; open: Accessor<boolean>; expanded: Accessor<boolean>; focusRequest: Accessor<number>; requestedTab?: Accessor<{ tab: PanelTab; terminalId?: string; nonce: number } | null>; onToggleExpanded: () => void; onClose: () => void; shortcuts: ShortcutManager; onBrowseDirectory?: (path: string) => void; onBrowseParent?: () => void; requestedFile?: Accessor<{ path: string } | null>; settingsScope?: Accessor<string>; initialDirectory?: Accessor<DirectoryListing> }) {
   let projectGeneration = 0;
   let requestVersion = 0;
   let projectController = new AbortController();
@@ -172,7 +172,8 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
   let mobileWasOpen = false;
   const [pending, setPending] = createSignal(new Map<number, { foreground: boolean }>());
   const panelScope = () => props.chatId();
-  const projectScope = () => props.projectId();
+  const projectScope = () => props.settingsScope?.() || props.projectId();
+  const fileScope = () => props.settingsScope ? props.projectId() : panelScope();
   const storedTab = () => {
     const value = readSetting(panelScope(), "tab") || "";
     return isPanelTab(value) ? value : "files";
@@ -193,7 +194,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
   const [uploading, setUploading] = createSignal(false);
   const [uploadTarget, setUploadTarget] = createSignal<UploadTarget>({ kind: "directory", path: "" });
   const [primaryFile, setPrimaryFile] = createSignal<FileSummary | null>(null);
-  const [openPaths, setOpenPaths] = createSignal<OpenFiles>({ primary: readSetting(panelScope(), "file"), secondary: readSetting(panelScope(), "file-secondary") });
+  const [openPaths, setOpenPaths] = createSignal<OpenFiles>({ primary: readSetting(fileScope(), "file"), secondary: readSetting(fileScope(), "file-secondary") });
   const [focusedSlot, setFocusedSlot] = createSignal<FileSlotId>("primary");
   const slotHandles = new Map<FileSlotId, FileSlotHandle>();
   const [wrapLines, setWrapLines] = createSignal(readSetting(WORKSPACE_PANEL_GLOBAL_SCOPE, "wrap-lines") === "true");
@@ -211,7 +212,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
   // Foreground failures surface as toasts; background refreshes stay silent so a
   // failing file cannot spam the corner every poll.
   const reportError = (message: string) => { if (message) toast.error(message); };
-  const storedOpenFiles = (): OpenFiles => ({ primary: readSetting(panelScope(), "file"), secondary: readSetting(panelScope(), "file-secondary") });
+  const storedOpenFiles = (): OpenFiles => ({ primary: readSetting(fileScope(), "file"), secondary: readSetting(fileScope(), "file-secondary") });
   const [width, setWidth] = createSignal(Math.max(MIN_WORKSPACE_PANE_WIDTH, Math.min(496, Number(readSetting(projectScope(), "width")) || 336)));
   const [shellWidth, setShellWidth] = createSignal(props.open() ? width() : 0);
   const [shellGap, setShellGap] = createSignal(props.open() && !isMobileLayout() ? 8 : 0);
@@ -522,7 +523,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
         <For each={PANEL_TABS}>{(item) => {
           const label = () => splitActive() ? `${tabLabel(item)} (${side === "left" ? "left" : "right"} pane)` : tabLabel(item);
           const disabled = () => item === "diff" && !props.sourceControlEnabled();
-          return <button type="button" role="tab" data-pane={side} data-workspace-tab={item} disabled={disabled()} aria-label={disabled() ? `${label()}: unavailable for Chats and managed projects` : label()} title={disabled() ? "Source Control is available only for Workspaces" : label()} aria-selected={(side === "left" ? tab() : secondaryTab()) === item} onClick={() => changePaneTab(side, item)}>{tabIcon(item)}<span>{tabLabel(item)}</span></button>;
+          return <button type="button" role="tab" data-pane={side} data-workspace-tab={item} disabled={disabled()} aria-label={disabled() ? `${label()}: ${props.onBrowseDirectory ? "open a Git folder" : "unavailable for Chats and managed projects"}` : label()} title={disabled() ? (props.onBrowseDirectory ? "Open a Git folder to use Source Control" : "Source Control is available only for Workspaces") : label()} aria-selected={(side === "left" ? tab() : secondaryTab()) === item} onClick={() => changePaneTab(side, item)}>{tabIcon(item)}<span>{tabLabel(item)}</span></button>;
         }}</For>
       </div>
     </div>
@@ -709,7 +710,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
     openPaths().primary === path ? "primary" : openPaths().secondary === path ? "secondary" : null;
   const setSlotPath = (slot: FileSlotId, path: string | null) => {
     setOpenPaths((current) => ({ ...current, [slot]: path }));
-    writeSetting(panelScope(), slot === "primary" ? "file" : "file-secondary", path);
+    writeSetting(fileScope(), slot === "primary" ? "file" : "file-secondary", path);
   };
   // Only the slot being retargeted can lose a draft, so editing on one side is
   // never discarded by opening a file on the other.
@@ -786,7 +787,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
     setSlotPath("secondary", remapWorkspacePath(current.secondary, source, destination));
     const nextKept = new Set([...keptVisible()].map((path) => remapWorkspacePath(path, source, destination) || path));
     setKeptVisible(nextKept);
-    writeSetting(projectScope(), "kept-visible", JSON.stringify([...nextKept]));
+    writeSetting(props.projectId(), "kept-visible", JSON.stringify([...nextKept]));
   };
   const openSlotHandles = () => [...slotHandles.entries()]
     .filter(([slot]) => Boolean(openPaths()[slot]))
@@ -1035,7 +1036,12 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
     await Promise.all(slotsToRefresh.map((handle) => handle.reload()));
     if (props.projectId() !== projectId) return;
     if (treeChanged) toast.info("Workspace files updated");
-    await loadDiff(tabVisible("diff") && sourceDetailOpen() && diffDetailOpen(), tabVisible("diff") && sourceDetailOpen() && !diffDetailOpen(), false, true);
+    if (tabVisible("diff")) await loadDiff(sourceDetailOpen() && diffDetailOpen(), sourceDetailOpen() && !diffDetailOpen(), false, true);
+    else {
+      // Hidden Git data is stale; refresh it only when Source Control opens.
+      setDiff(null);
+      cacheWorkspace(projectId, { diff: null });
+    }
   };
   const pollWorkspace = async () => {
     if (pollingWorkspace || uploading()) return true;
@@ -1055,7 +1061,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
       const initialProbe = workspaceVersion === null;
       const changed = workspaceVersion !== payload.version;
       workspaceVersion = payload.version;
-      if ((!initialProbe || Object.keys(directories()).length || diff() || openSlotHandles().length) && changed) {
+      if ((!initialProbe || (!props.initialDirectory && (Object.keys(directories()).length || diff() || openSlotHandles().length))) && changed) {
         await refreshChangedWorkspace(payload.changedPaths, projectId);
       }
       workspacePollFailures = 0;
@@ -1197,7 +1203,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
   });
   createEffect(() => {
     const projectId = props.projectId();
-    const active = Boolean(projectId) && props.open() && (tabVisible("files") || tabVisible("diff")) && documentVisible() && networkOnline();
+    const active = !props.initialDirectory && Boolean(projectId) && props.open() && (tabVisible("files") || tabVisible("diff")) && documentVisible() && networkOnline();
     pollRetry();
     if (!active) {
       workspaceVersion = null;
@@ -1307,9 +1313,9 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
   let geometryProjectId = "";
   createEffect(on(() => [props.chatId(), props.projectId()] as const, () => {
     const nextTab = storedTab();
-    const projectChanged = geometryProjectId !== props.projectId();
+    const projectChanged = geometryProjectId !== projectScope();
     if (projectChanged) {
-      geometryProjectId = props.projectId();
+      geometryProjectId = projectScope();
       stopResize?.();
     }
     let pendingWidthCommit: number | null = null;
@@ -1327,10 +1333,10 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
         setSplitRatio(Math.max(0, Math.min(100, Number(readSetting(projectScope(), "split-ratio")) || 50)));
         setFileSplitRatio(Math.max(25, Math.min(75, Number(readSetting(projectScope(), "file-split-ratio")) || 50)));
         setShowHidden(readSetting(projectScope(), "show-hidden") === "true");
-        setKeptVisible(storedPaths(projectScope(), "kept-visible"));
       }
       setTab(nextTab);
       setSecondaryTab(storedSecondary());
+      setKeptVisible(storedPaths(props.projectId(), "kept-visible"));
       setOpenPaths(storedOpenFiles());
       setFocusedSlot("primary");
     });
@@ -1352,7 +1358,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
         loadedProjectId = projectId;
         const cached = cachedWorkspace(projectId);
         batch(() => {
-          setDirectories(cached?.directories || {});
+          setDirectories(props.initialDirectory ? { ...cached?.directories, "": props.initialDirectory() } : cached?.directories || {});
           setExpanded(cached?.expanded || new Set<string>());
           setFileFilter("");
           setTreeFocusPath(openPaths().primary || "");
@@ -1374,6 +1380,16 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
         if (!current || (needsPatch && !current.diff) || (needsHistory && !current.commits)) void loadDiff(needsPatch, needsHistory, Boolean(current));
       }
     }));
+
+  createEffect(on(() => props.initialDirectory?.(), (listing) => {
+    if (!listing) return;
+    setDirectories((current) => ({ ...current, "": listing }));
+    cacheWorkspace(props.projectId(), { directories: directories() });
+  }));
+
+  createEffect(on(() => [props.projectId(), props.requestedFile?.(), props.open()] as const, ([, file, open]) => {
+    if (file && open) openFile(file.path);
+  }));
 
   function entryMatchesFilter(entry: TreeEntry, query: string): boolean {
     const kept = [...keptVisible()].some((path) => path === entry.path || path.startsWith(`${entry.path}/`));
@@ -1557,7 +1573,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
     if (next.has(path)) next.delete(path);
     else next.add(path);
     setKeptVisible(next);
-    writeSetting(projectScope(), "kept-visible", JSON.stringify([...next]));
+    writeSetting(props.projectId(), "kept-visible", JSON.stringify([...next]));
   };
   const collapseTree = () => {
     const next = new Set<string>();
@@ -1588,6 +1604,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
             tabIndex={treeTabStop() === entry.path ? 0 : -1}
             onFocus={() => setTreeFocusPath(entry.path)}
             onKeyDown={onTreeKeyDown}
+            onDblClick={() => { if (entry.type === "directory") props.onBrowseDirectory?.(entry.path); }}
             onClick={(event) => entry.type === "directory" ? void toggleDirectory(entry.path) : entry.type === "file" ? (event.altKey ? openFileToSide(entry.path) : openFile(entry.path)) : undefined}
           >
             <Show when={entry.type === "directory"} fallback={<><span class="workspace-tree-chevron-placeholder" /><FileTypeIcon name={entry.name} /></>}>
@@ -1607,6 +1624,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
                 <ContextMenuItem disabled={uploading()} onSelect={() => chooseUpload({ kind: "replacement", path: entry.path })}><UploadIcon />Replace with upload…</ContextMenuItem>
               </Show>
               <Show when={entry.type === "directory"}>
+                <Show when={props.onBrowseDirectory}><ContextMenuItem onSelect={() => props.onBrowseDirectory?.(entry.path)}><FolderIcon />Open folder</ContextMenuItem></Show>
                 <ContextMenuItem disabled={uploading()} onSelect={() => void createFile(entry.path)}><FilePlusIcon />New file…</ContextMenuItem>
                 <ContextMenuItem disabled={uploading()} onSelect={() => void createDirectory(entry.path)}><FolderPlusIcon />New folder…</ContextMenuItem>
                 <ContextMenuItem onSelect={() => chooseUpload({ kind: "directory", path: entry.path })}><UploadIcon />Upload files here</ContextMenuItem>
@@ -1727,6 +1745,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
           <div class="workspace-tree-collapsed-rail"><button type="button" aria-label="Show file tree" title="Show file tree" onClick={toggleTreeCollapsed}><PanelLeftOpenIcon /></button></div>
         </Show>
         <div class="workspace-tree-pane">
+          <Show when={props.onBrowseParent}><div class="workspace-computer-path"><button type="button" onClick={props.onBrowseParent} aria-label="Parent folder" title="Parent folder">↑</button><span title={props.workingRoot()}>{props.workingRoot()}</span></div></Show>
           <div class="workspace-tree-tools workspace-tree-search">
             <label class="workspace-tree-filter">
               <SearchIcon />
@@ -1867,6 +1886,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
           </section>
           <section class="workspace-change-section" data-open={changesOpen()}>
             <header><button type="button" class="workspace-change-disclosure" aria-expanded={changesOpen()} onClick={() => setChangesOpen((open) => !open)}><ChevronRightIcon /><FileDiffIcon /><span>Changes</span><small>{unstagedFiles().length}</small></button><button type="button" aria-label="Stage all" title="Stage all" disabled={!unstagedFiles().length || Boolean(gitAction())} onClick={() => void runGitAction("stage-all")}><CirclePlusIcon /></button></header>
+            <Show when={changesOpen() && unstagedFiles().some((file) => file.status === "??" && file.path.endsWith("/"))}><div class="workspace-tree-notice">Untracked folders are grouped. Staging a folder includes its contents.</div></Show>
             <Show when={changesOpen()}><Show when={unstagedFiles().length} fallback={<div class="workspace-clean-state">Working tree clean</div>}>
               <div class="workspace-changes"><For each={unstagedFiles()}>{(file) =>
                 <div class="workspace-change-row"><button type="button" title={`Inspect changes in ${file.path}`} onClick={() => inspectFileDiff(file.path, false)}><code data-status={file.status[1] === " " ? "?" : file.status[1]}>{file.status[1] === " " ? "?" : file.status[1]}</code><span>{file.path}</span></button><button type="button" class="workspace-change-action" aria-label={`Stage ${file.path}`} title="Stage" disabled={Boolean(gitAction())} onClick={() => void runGitAction("stage", file.path)}><CirclePlusIcon /></button></div>
@@ -1907,7 +1927,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
       <div class="workspace-artifact-modes" role="radiogroup" aria-label="Artifact modality"><button role="radio" aria-checked={artifactMode() === "outputs"} onClick={() => setArtifactMode("outputs")}>Outputs</button><button role="radio" aria-checked={artifactMode() === "interactive"} onClick={() => setArtifactMode("interactive")}>Interactive UI</button></div>
       <div class="workspace-panel-empty"><div><BoxesIcon /><strong>{artifactMode() === "outputs" ? "No artifacts in the loaded transcript" : "Interactive artifacts are not enabled"}</strong><p>{artifactMode() === "outputs" ? "Code blocks and file outputs will appear here as transcript artifact projection lands." : "This boundary is reserved for sandboxed, explicitly trusted generated interfaces."}</p></div></div>
     </section></Show>
-    <Show when={tabVisible("terminal")}><section class="workspace-terminal-slot" data-position={panePosition("terminal")}><TerminalPane projectId={props.projectId()} projectName={props.projectName()} terminalId={props.requestedTab?.()?.terminalId} focusRequest={terminalFocusRequest()} /></section></Show>
+    <Show when={tabVisible("terminal")}><section class="workspace-terminal-slot" data-position={panePosition("terminal")}><TerminalPane projectId={props.settingsScope?.() === "computer" ? "computer" : props.projectId()} projectName={props.settingsScope?.() === "computer" ? "Computer" : props.projectName()} workingRoot={props.settingsScope?.() === "computer" ? props.workingRoot() : undefined} terminalId={props.requestedTab?.()?.terminalId} focusRequest={terminalFocusRequest()} /></section></Show>
     </main>
     <Show when={loading()}><div class="workspace-panel-loading"><Spinner /><span>Loading workspace</span></div></Show>
     </div>

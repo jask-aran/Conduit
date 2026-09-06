@@ -1,4 +1,12 @@
-async function terminalContext(projects, id) {
+import { computerContext, resolveComputerContext } from "../../computer-context.js";
+
+async function terminalContext(projects, id, cwd) {
+  if (id === "computer") {
+    const context = await computerContext(cwd);
+    return { project: { ...context, id: "computer" }, cwd: context.workingRoot };
+  }
+  const computer = await resolveComputerContext(id);
+  if (computer) return { project: computer, cwd: computer.workingRoot };
   const project = await projects.get(id);
   if (!project) throw Object.assign(new Error("Terminal project was not found"), { code: "pty_project_not_found" });
   try { await projects.validate(project, { createManaged: !project.externalPath }); }
@@ -29,7 +37,7 @@ export function registerPtyRoutes(app, { projects, terminals }) {
 
   app.post("/v0/ptys", async (request, response, next) => {
     try {
-      const { project, cwd } = await terminalContext(projects, String(request.body?.projectId || ""));
+      const { project, cwd } = await terminalContext(projects, String(request.body?.projectId || ""), request.body?.cwd);
       response.status(201).json(await terminals.create({ project, cwd, templateId: String(request.body?.templateId || "shell"), title: request.body?.title, cols: request.body?.cols, rows: request.body?.rows }));
     }
     catch (error) { next(error); }

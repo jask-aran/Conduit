@@ -1,4 +1,6 @@
 /// <reference types="vite-plugin-pwa/client" />
+import { isConduitManagedProject } from "./navigation/sidebar-preferences";
+import type { ComputerLocation, ComputerPrefetchPayload } from "./api/contracts";
 import { batch, createEffect, createMemo, createSignal, ErrorBoundary, lazy, onCleanup, onMount, Show, type JSX } from "solid-js";
 import { render } from "solid-js/web";
 import { Capacitor } from "@capacitor/core";
@@ -104,6 +106,7 @@ type WorkspaceView = "files" | "diff" | "artifacts" | "terminal";
 const METEOR_FIELD_STORAGE_KEY = "conduit:meteor-field";
 const selectedMeteorField = () => localStorage.getItem(METEOR_FIELD_STORAGE_KEY) !== "false";
 const WorkspacePanel = lazy(() => import("./workspace/workspace-panel"));
+const ComputerDashboard = lazy(() => import("./dashboard/computer-dashboard").then((module) => ({ default: module.ComputerDashboard })));
 const ProjectDashboard = lazy(() => import("./project/dashboard"));
 const TerminalRoute = lazy(() => import("./remotes/terminal-route").then((module) => ({ default: module.TerminalRoute })));
 const Settings = lazy(() => import("./settings/settings").then((module) => ({ default: module.Settings })));
@@ -384,9 +387,12 @@ function App() {
     environment: browserShortcutEnvironmentProvider.detect(),
   });
   const catalogue = createCatalogueStore();
-  const workspacePanelScope = createMemo(() => catalogue.projectId() ? `project:${catalogue.projectId()}` : null);
+  const [computerLocation, setComputerLocation] = createSignal<ComputerLocation | null>(null);
+  const [computerFile, setComputerFile] = createSignal<{ path: string } | null>(null);
+  const [computerLoading, setComputerLoading] = createSignal(false);
+  const [computerError, setComputerError] = createSignal("");
   const workspacePanelScopes = (projects: Project[]) => {
-    const scopes = new Set<string>();
+    const scopes = new Set<string>(["computer"]);
     for (const project of projects) {
       scopes.add(project.id);
       scopes.add(`project:${project.id}`);
@@ -452,10 +458,12 @@ function App() {
   const initialRouteId = pathChatId();
   const initialProjectRouteId = pathProjectId();
   const initialTerminalRoute = location.pathname === "/terminal";
+  const initialComputerRoute = location.pathname === "/computer";
   const initialDashboardRoute = location.pathname === "/";
-  const [routeKind, setRouteKind] = createSignal<"chat" | "project" | "dashboard" | "terminal">(
-    initialTerminalRoute ? "terminal" : initialDashboardRoute ? "dashboard" : initialProjectRouteId ? "project" : "chat",
+  const [routeKind, setRouteKind] = createSignal<"chat" | "project" | "dashboard" | "terminal" | "computer">(
+    initialComputerRoute ? "computer" : initialTerminalRoute ? "terminal" : initialDashboardRoute ? "dashboard" : initialProjectRouteId ? "project" : "chat",
   );
+  const workspacePanelScope = createMemo(() => routeKind() === "computer" ? "computer" : catalogue.projectId() ? `project:${catalogue.projectId()}` : null);
   const [routeBootstrap, setRouteBootstrap] = createSignal<"loading" | "ready" | "error">("loading");
   const [routeBootstrapError, setRouteBootstrapError] = createSignal("");
   let dragDepth = 0;
@@ -592,7 +600,8 @@ function App() {
   createEffect(() => {
     const scope = workspacePanelScope();
     if (!scope) return;
-    setPanelOpen(readSetting(scope, "open") === "true");
+    const storedOpen = readSetting(scope, "open");
+    setPanelOpen(scope === "computer" ? storedOpen !== "false" : storedOpen === "true");
     setWorkspaceExpanded(readSetting(scope, "expanded") === "true", false);
   });
 
@@ -674,7 +683,7 @@ function App() {
     const project = target || selectedProject() || catalogue.projects().find((item) => item.slug === "chat") || catalogue.projects()[0];
     if (!project) return null;
     const replacedDraftId = currentDraftId();
-    const fromDashboard = routeKind() === "project" || routeKind() === "dashboard";
+    const fromDashboard = routeKind() === "project" || routeKind() === "dashboard" || routeKind() === "computer";
     try {
       const hostDefault = project.defaultTemplateId === "host-pi" && !launch.templateId && !launch.runtimeKind;
       const profileId = launch.templateId || (project.defaultTemplateId === "host-pi" ? null : project.defaultTemplateId) || defaultTemplateId() || "chat";
@@ -776,6 +785,89 @@ function App() {
     setRouteBootstrap("ready");
     if (historyMode === "push") history.pushState({}, "", "/");
     else if (historyMode === "replace") history.replaceState({}, "", "/");
+  };
+
+  let computerRequest = 0;
+  let computerController: AbortController | undefined;
+  let computerPrefetchController: AbortController | undefined;
+  const computerFolders = new Map<string, ComputerLocation>();
+  onCleanup(() => { computerController?.abort(); computerPrefetchController?.abort(); });
+  const cacheComputerFolder = (location: ComputerLocation) => {
+    computerFolders.delete(location.project.workingRoot);
+    computerFolders.set(location.project.workingRoot, location);
+    while (computerFolders.size > 24) computerFolders.delete(computerFolders.keys().next().value!);
+  };
+  const prefetchComputerFolders = (location: ComputerLocation) => {
+    const paths = location.listing.entries
+      .filter((entry) => entry.type === "directory" && !entry.name.startsWith("."))
+      .filter((entry) => !computerFolders.has(`${location.project.workingRoot}/${entry.path}`))
+      .slice(0, 8)
+      .map((entry) => entry.path);
+    computerPrefetchController?.abort();
+    if (!paths.length) return;
+    computerPrefetchController = new AbortController();
+    void api<ComputerPrefetchPayload>("/v0/computer/prefetch", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ id: location.project.id, paths }),
+      signal: computerPrefetchController.signal,
+    }).then((payload) => payload.locations.forEach(cacheComputerFolder)).catch((error) => {
+      if ((error as { name?: string }).name !== "AbortError") console.warn("Computer prefetch failed", error);
+    });
+  };
+  const browseComputer = async (path?: string) => {
+    const request = ++computerRequest;
+    computerController?.abort();
+    computerController = new AbortController();
+    const cached = computerFolders.get(path || computerLocation()?.home || "");
+    if (cached) {
+      batch(() => { setComputerFile(null); setComputerLocation(cached); });
+    }
+    setComputerLoading(!cached);
+    setComputerError("");
+    try {
+      const location = await api<ComputerLocation>(`/v0/computer${path ? `?path=${encodeURIComponent(path)}` : ""}`, { signal: computerController.signal });
+      if (request !== computerRequest) return;
+      cacheComputerFolder(location);
+      batch(() => { setComputerFile(null); setComputerLocation(location); });
+      prefetchComputerFolders(location);
+      if (routeKind() === "computer") {
+        toast.dismiss("computer-workspace-prompt");
+        const workspace = catalogue.projects().find((project) => !isConduitManagedProject(project) && project.workingRoot === location.project.workingRoot);
+        if (workspace) toast.info(`This folder is the ${workspace.name} workspace.`, {
+          id: "computer-workspace-prompt",
+          action: { label: "Open workspace", onClick: () => void openProject(workspace) },
+        });
+      }
+    } catch (error) {
+      if (request === computerRequest) setComputerError(error instanceof Error ? error.message : "Folder could not be opened");
+    } finally {
+      if (request === computerRequest) setComputerLoading(false);
+    }
+  };
+  const designateComputerWorkspace = async () => {
+    const location = computerLocation();
+    if (!location) return;
+    const existing = catalogue.projects().find((project) => !isConduitManagedProject(project) && project.workingRoot === location.project.workingRoot);
+    if (existing) { await openProject(existing); return; }
+    try {
+      const created = await api<Project>("/v0/projects", { method: "POST", body: JSON.stringify({ mode: "linked", path: location.project.workingRoot }) });
+      const projects = await catalogue.refresh();
+      await openProject(projects.find((project) => project.id === created.id) || { ...created, sessions: [] });
+    } catch (error) { showError(error); }
+  };
+
+  const openComputer = (historyMode: "push" | "none" = "push") => {
+    chat.reset();
+    const chatRoot = catalogue.projects().find((project) => project.slug === "chat");
+    if (chatRoot) catalogue.selectProject(chatRoot);
+    setMobileSidebarOpen(false);
+    setWorkspaceViewRequest(null);
+    setRouteKind("computer");
+    setRouteBootstrapError("");
+    setRouteBootstrap("ready");
+    if (!computerLocation()) void browseComputer();
+    if (historyMode === "push") history.pushState({}, "", "/computer");
   };
 
   const openTerminalRoute = (historyMode: "push" | "replace" | "none" = "push") => {
@@ -1146,6 +1238,8 @@ function App() {
   const pinRef = (type: "chat" | "project" | "terminal", id: string) => `${type}:${id}`;
   const isSidebarPinned = (type: "chat" | "project" | "terminal", id: string) => sidebarPins().includes(pinRef(type, id));
   const toggleSidebarPin = async (type: "chat" | "project" | "terminal", id: string) => {
+    const project = catalogue.projects().find((item) => type === "project" ? item.id === id : item.sessions.some((chat) => chat.id === id));
+    if (type === "terminal" || !project || !isConduitManagedProject(project)) return;
     const ref = pinRef(type, id);
     const previous = sidebarPins();
     const next = previous.includes(ref) ? previous.filter((item) => item !== ref) : [...previous, ref];
@@ -1453,6 +1547,10 @@ function App() {
           openDashboard("none");
           return;
         }
+        if (location.pathname === "/computer") {
+          openComputer("none");
+          return;
+        }
         if (location.pathname === "/terminal") {
           openTerminalRoute("none");
           return;
@@ -1537,6 +1635,8 @@ function App() {
         catalogue.selectProject(project);
         setRouteKind("project");
         setRouteBootstrap("ready");
+      } else if (initialComputerRoute) {
+        openComputer("none");
       } else if (initialTerminalRoute) {
         setRouteKind("terminal");
         setRouteBootstrap("ready");
@@ -1582,7 +1682,7 @@ function App() {
       </DialogContent>
     </Dialog>
     <Show when={routeKind() !== "terminal"}>
-    <Sidebar projects={catalogue.projects()} projectId={catalogue.projectId()} selectedId={catalogue.selectedId()} dashboard={routeKind() === "dashboard"} runtime={runtime} chatLimit={sidebarChatLimit()}
+    <Sidebar projects={catalogue.projects()} projectId={catalogue.projectId()} selectedId={catalogue.selectedId()} dashboard={routeKind() === "dashboard"} computer={routeKind() === "computer"} runtime={runtime} chatLimit={sidebarChatLimit()}
       connectivity={runtime.connectivity()} workspaceSuggestions={workspaceSuggestions()} workspacePolicy={workspacePolicy()} command={sidebarCommand()}
       sidebarPins={sidebarPins()} onTogglePin={toggleSidebarPin}
       mobileOpen={mobileSidebarOpen()} onMobileOpenChange={setMobileSidebar}
@@ -1593,12 +1693,18 @@ function App() {
       onDeleteChat={deleteChat} onDeleteChats={deleteChats} onDeleteProject={deleteProject}
       onOpenTerminal={(target, project) => { void openChat(target, project).then(() => openWorkspaceView("terminal")); }}
       onOpenPty={(terminal) => {
+        if ((terminal.projectId === "computer" || terminal.projectId.startsWith("computer:")) && terminal.cwd) {
+          openComputer();
+          void browseComputer(terminal.cwd).then(() => openWorkspaceView("terminal", terminal.id));
+          return;
+        }
         const project = catalogue.projects().find((item) => item.id === terminal.projectId);
         if (!project) return showError("The terminal scope is no longer available.");
         void createChat(project).then((created) => {
           if (created) openWorkspaceView("terminal", terminal.id);
         });
       }}
+      onOpenComputer={() => openComputer()}
       onOpenDashboard={() => openDashboard()}
       onOpenWorkspaceIdentity={openWorkspaceIdentity} onOpenSettings={openSettings} onOpenPalette={(page, initialQuery) => openPalette(page || null, initialQuery || "", page === "chat-search")}
       onChangeServer={nativeApp ? () => { void clearNativeBearerToken().finally(() => { clearServerOrigin(); location.reload(); }); } : undefined}
@@ -1611,7 +1717,7 @@ function App() {
         ? routeBootstrapError() || (routeKind() === "project" ? "This project could not be loaded." : "This chat could not be loaded.")
         : routeKind() === "project" ? "Loading project…" : routeKind() === "dashboard" ? "Loading Conduit…" : "Loading chat…"}</div>}>
         <Show when={routeKind() === "dashboard"}>
-          <ChatHeader title="Dashboard" panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onNewChat={() => void createChat()} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={() => {}} onUpdatePwa={() => void runPwaUpdate()} pwaUpdating={pwaUpdating} appDashboard />
+          <ChatHeader title="Conduit Dashboard" panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onNewChat={() => void createChat()} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={() => {}} onUpdatePwa={() => void runPwaUpdate()} pwaUpdating={pwaUpdating} appDashboard />
           <AppDashboard
             projects={catalogue.projects()}
             composer={<Composer
@@ -1655,6 +1761,11 @@ function App() {
             onOpenChatTerminal={(target, project) => { void openChat(target, project).then(() => openWorkspaceView("terminal")); }}
             onSearchChats={(scope) => openPalette("chat-search", scope === "unscoped" ? "scope:chats " : "", true)}
             onOpenTerminal={(terminal) => {
+              if ((terminal.projectId === "computer" || terminal.projectId.startsWith("computer:")) && terminal.cwd) {
+                openComputer();
+                void browseComputer(terminal.cwd).then(() => openWorkspaceView("terminal", terminal.id));
+                return;
+              }
               const project = catalogue.projects().find((item) => item.id === terminal.projectId);
               if (!project) return showError("The terminal scope is no longer available.");
               void createChat(project).then((created) => {
@@ -1662,6 +1773,11 @@ function App() {
               });
             }}
             onOpenTerminalMaximized={(terminal) => {
+              if ((terminal.projectId === "computer" || terminal.projectId.startsWith("computer:")) && terminal.cwd) {
+                openComputer();
+                void browseComputer(terminal.cwd).then(() => { openWorkspaceView("terminal", terminal.id); setWorkspaceExpanded(true); });
+                return;
+              }
               const project = catalogue.projects().find((item) => item.id === terminal.projectId);
               if (!project) return showError("The terminal scope is no longer available.");
               void createChat(project).then((created) => {
@@ -1673,7 +1789,11 @@ function App() {
             onPrefetchTerminal={prefetchWorkspaceTerminal}
           />
         </Show>
-        <Show when={routeKind() !== "dashboard"}>
+        <Show when={routeKind() === "computer"}>
+          <ChatHeader title="Computer" panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onNewChat={() => void createChat()} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={() => {}} onUpdatePwa={() => void runPwaUpdate()} pwaUpdating={pwaUpdating} appDashboard />
+          <ComputerDashboard projects={catalogue.projects()} location={computerLocation()} loading={computerLoading()} error={computerError()} onBrowse={(path) => void browseComputer(path)} onMakeWorkspace={() => void designateComputerWorkspace()} onOpenWorkspace={(project) => void openProject(project)} onOpenView={openWorkspaceView} onOpenFile={(path) => { setComputerFile({ path }); openWorkspaceView("files"); }} />
+        </Show>
+        <Show when={routeKind() !== "dashboard" && routeKind() !== "computer"}>
         <Show when={routeKind() === "chat" && meteorField()}>
           <div class="chat-meteors" aria-hidden="true">
             <DefaultMeteorShower />
@@ -1734,6 +1854,7 @@ function App() {
         </Show>
       </Show>
     </main>
+    <Show when={routeKind() === "computer" && computerLocation()}><WorkspacePanel projectId={() => computerLocation()!.project.id} projectName={() => computerLocation()!.project.name} sourceControlEnabled={() => computerLocation()!.repository} workingRoot={() => computerLocation()!.project.workingRoot} chatId={() => "computer"} settingsScope={() => "computer"} initialDirectory={() => computerLocation()!.listing} requestedFile={computerFile} open={panelOpen} expanded={workspaceExpanded} focusRequest={workspaceFocusRequest} requestedTab={workspaceViewRequest} onToggleExpanded={toggleWorkspaceExpanded} onClose={closePanel} shortcuts={shortcutManager} onBrowseDirectory={(path) => void browseComputer(`${computerLocation()!.project.workingRoot}/${path}`)} onBrowseParent={() => void browseComputer(computerLocation()!.parent)} /></Show>
     <Show when={["chat", "project", "dashboard"].includes(routeKind()) && Boolean(selectedProject()) && Boolean(workspacePanelScope())}><WorkspacePanel projectId={() => selectedProject()!.id} projectName={() => selectedProject()!.name} sourceControlEnabled={() => selectedProject()!.kind === "workspace"} workingRoot={() => selectedProject()!.workingRoot} chatId={() => workspacePanelScope()!} open={panelOpen} expanded={workspaceExpanded} focusRequest={workspaceFocusRequest} requestedTab={workspaceViewRequest} onToggleExpanded={toggleWorkspaceExpanded} onClose={closePanel} shortcuts={shortcutManager} /></Show>
     </div>
     </Show>

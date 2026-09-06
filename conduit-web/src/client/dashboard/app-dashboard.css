@@ -82,3 +82,19 @@
   .app-dashboard .project-chat-row time { display: none; }
   .app-dashboard-list > button, .app-dashboard-list > a { min-height: 52px; }
 }
+
+.computer-dashboard { overflow-y: auto; }
+.computer-dashboard .app-dashboard-intro p { margin: 0 0 20px; color: var(--muted-foreground); font-size: 12px; }
+.computer-dashboard > .app-dashboard-section + .app-dashboard-section { margin-top: 14px; }
+
+.computer-location-bar, .computer-folder-actions { display: flex; min-width: 0; align-items: center; gap: 6px; padding: 8px; border-bottom: 1px solid var(--border); }
+.computer-location-bar input { min-width: 0; flex: 1; height: 28px; border: 1px solid var(--border); border-radius: 6px; background: transparent; padding: 4px 8px; color: var(--foreground); font: 10px ui-monospace, monospace; }
+.computer-folder-actions { flex-wrap: wrap; }
+.computer-location-bar button, .computer-folder-actions button { display: inline-flex; min-height: 28px; align-items: center; gap: 5px; border: 0; border-radius: 6px; padding: 4px 8px; background: transparent; color: var(--muted-foreground); font-size: 10px; }
+.computer-location-bar button:hover, .computer-folder-actions button:hover, .computer-folder-actions button[aria-pressed="true"] { background: var(--accent); color: var(--foreground); }
+.computer-dashboard button:disabled { opacity: .4; cursor: not-allowed; }
+.computer-dashboard button:focus-visible { outline: 1px solid var(--ring); outline-offset: -1px; }
+.computer-folder-actions svg { width: 12px; height: 12px; }
+.computer-error { margin: 0; padding: 10px; color: var(--destructive); font-size: 11px; }
+.computer-dashboard .app-dashboard-section-heading > div { min-width: 0; }
+.computer-dashboard .app-dashboard-section-heading p { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

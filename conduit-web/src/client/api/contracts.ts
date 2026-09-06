@@ -435,3 +435,23 @@ export interface VoiceServerSettings {
     models: VoiceLocalModel[];
   } | null;
 }
+
+export interface ComputerDirectoryListing {
+  entries: { name: string; path: string; type: "directory" | "file" | "other" }[];
+  cursor?: string | null;
+  truncated: boolean;
+  total?: number | null;
+  oversize?: boolean;
+}
+
+export interface ComputerLocation {
+  project: Project;
+  home: string;
+  parent: string;
+  repository: boolean;
+  listing: ComputerDirectoryListing;
+}
+
+export interface ComputerPrefetchPayload {
+  locations: ComputerLocation[];
+}

@@ -631,7 +631,7 @@ async function inspectOverview(root, { signal, runGit }) {
     return { repository: false, files: [], diff: "" };
   }
   const [{ stdout: status }, { stdout: branch }] = await Promise.all([
-    runGit(root, ["status", "--porcelain=v1", "-z", "--no-renames", "--untracked-files=all"], { signal, maxBuffer: 2 * 1024 * 1024 }),
+    runGit(root, ["status", "--porcelain=v1", "-z", "--no-renames", "--untracked-files=normal"], { signal, maxBuffer: 2 * 1024 * 1024 }),
     runGit(root, ["branch", "--show-current"], { signal }),
   ]);
   let upstream = null;

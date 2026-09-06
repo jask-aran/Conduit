@@ -22,7 +22,7 @@ import {
 } from "@/components/primitives";
 import { api } from "../api/client";
 import { terminalSocketUrl } from "../api/transport";
-import { createTerminalRenderer, selectedTerminalRenderer, type TerminalRenderer, type TerminalRendererId } from "./terminal-renderer";
+import { createTerminalRenderer, type TerminalRenderer } from "./terminal-renderer";
 import { terminalRecoveryView, type TerminalConnectionState } from "./terminal-recovery";
 import { LEGACY_TERMINAL_SHORTCUTS_STORAGE_KEY, normalizeTerminalShortcuts, readLegacyTerminalShortcuts, type TerminalShortcut } from "./terminal-shortcuts";
 
@@ -64,7 +64,7 @@ function sessionMetadata(record: Pty) {
 type StandaloneTerminalControls = { onOpenConduit: () => void };
 type KeyboardLockNavigator = Navigator & { keyboard?: { lock?: (codes?: string[]) => Promise<void>; unlock?: () => void } };
 
-export function TerminalPane(props: { projectId: string; projectName?: string; terminalId?: string; active?: boolean; autoStart?: boolean; focusRequest?: number; standaloneControls?: StandaloneTerminalControls }) {
+export function TerminalPane(props: { projectId: string; projectName?: string; workingRoot?: string; terminalId?: string; active?: boolean; autoStart?: boolean; focusRequest?: number; standaloneControls?: StandaloneTerminalControls }) {
   const [pty, setPty] = createSignal<Pty | null>(null);
   const [sessions, setSessions] = createSignal<Pty[]>([]);
   const [error, setError] = createSignal("");
@@ -75,7 +75,6 @@ export function TerminalPane(props: { projectId: string; projectName?: string; t
   const [connectionState, setConnectionState] = createSignal<TerminalConnectionState>("idle");
   const [writable, setWritable] = createSignal(false);
   const [terminalFocused, setTerminalFocused] = createSignal(false);
-  const [rendererId, setRendererId] = createSignal<TerminalRendererId>(selectedTerminalRenderer());
   const [fullscreen, setFullscreen] = createSignal(false);
   const [coarseInput, setCoarseInput] = createSignal(false);
   const [mobileKeysVisible, setMobileKeysVisible] = createSignal(localStorage.getItem(MOBILE_KEYS_STORAGE_KEY) !== "false");
@@ -251,13 +250,13 @@ export function TerminalPane(props: { projectId: string; projectName?: string; t
     setConnectionState("idle");
   };
 
-  const ensureRenderer = async (renderer = rendererId(), { fresh = false } = {}) => {
+  const ensureRenderer = async ({ fresh = false } = {}) => {
     if (!host) throw new Error("Terminal surface is unavailable");
-    if (terminal && terminal.id === renderer && !fresh) return terminal;
+    if (terminal && !fresh) return terminal;
     disposeRenderer();
     host.dataset.terminalReady = "false";
     const startedAt = performance.now();
-    const created = await createTerminalRenderer(host, renderer);
+    const created = await createTerminalRenderer(host);
     if (!host || activeProjectId !== props.projectId) {
       created.dispose();
       throw new Error("Terminal Workspace changed while the renderer was loading");
@@ -268,7 +267,7 @@ export function TerminalPane(props: { projectId: string; projectName?: string; t
     return created;
   };
 
-  const scheduleReconnect = (record: Pty, renderer: TerminalRendererId, closeCode: number) => {
+  const scheduleReconnect = (record: Pty, closeCode: number) => {
     if (
       record.status !== "running"
       || closeCode === PTY_IN_USE_CLOSE_CODE
@@ -285,7 +284,7 @@ export function TerminalPane(props: { projectId: string; projectName?: string; t
     setConnectionState("reconnecting");
     reconnectTimer = window.setTimeout(() => {
       reconnectTimer = undefined;
-      void connect(record, renderer, {
+      void connect(record, {
         freshRenderer: true,
         retrying: true,
       });
@@ -295,7 +294,6 @@ export function TerminalPane(props: { projectId: string; projectName?: string; t
 
   const connect = async (
     record: Pty,
-    renderer = rendererId(),
     { freshRenderer = false, retrying = false, takeover = false, initialInput }: { freshRenderer?: boolean; retrying?: boolean; takeover?: boolean; initialInput?: string } = {},
   ) => {
     const generation = ++connectionGeneration;
@@ -303,7 +301,7 @@ export function TerminalPane(props: { projectId: string; projectName?: string; t
     setError("");
     if (!retrying) reconnectAttempts = 0;
     setConnectionState("connecting");
-    const activeTerminal = await ensureRenderer(renderer, { fresh: freshRenderer });
+    const activeTerminal = await ensureRenderer({ fresh: freshRenderer });
     activeTerminal.fit();
     if (generation !== connectionGeneration || activeProjectId !== record.projectId || props.active === false) {
       if (props.active === false) disposeRenderer();
@@ -453,7 +451,7 @@ export function TerminalPane(props: { projectId: string; projectName?: string; t
           ? "Terminal connection was closed because this browser could not keep up with output."
           : "Terminal connection was interrupted.";
       setError(reason);
-      if (!scheduleReconnect({ ...record, status: "running" }, renderer, event.code)) setConnectionState("offline");
+      if (!scheduleReconnect({ ...record, status: "running" }, event.code)) setConnectionState("offline");
     };
 
     disposeConnection = () => {
@@ -496,7 +494,7 @@ export function TerminalPane(props: { projectId: string; projectName?: string; t
     if (projectId !== activeProjectId || props.active === false) return;
     const selected = pty();
     if (selected?.status === "running") {
-      if (!socket) await connect(selected, rendererId(), { freshRenderer: true });
+      if (!socket) await connect(selected, { freshRenderer: true });
       return;
     }
     if (selected) return;
@@ -525,14 +523,14 @@ export function TerminalPane(props: { projectId: string; projectName?: string; t
     if (pty()?.id === record.id) {
       if (socket && connectionState() === "live") focusActiveTerminal();
       else {
-        try { await connect(record, rendererId(), { freshRenderer: true }); }
+        try { await connect(record, { freshRenderer: true }); }
         catch (cause) { setError((cause as Error).message); }
       }
       return;
     }
     setPty(record);
     notifyPtyChange();
-    try { await connect(record, rendererId(), { freshRenderer: true }); }
+    try { await connect(record, { freshRenderer: true }); }
     catch (cause) { setError((cause as Error).message); }
   };
 
@@ -542,13 +540,14 @@ export function TerminalPane(props: { projectId: string; projectName?: string; t
     setStarting(true);
     setError("");
     try {
-      const activeTerminal = await ensureRenderer(rendererId());
+      const activeTerminal = await ensureRenderer();
       activeTerminal.fit();
       if (projectId !== activeProjectId) return;
       const record = await api<Pty>("/v0/ptys", {
         method: "POST",
         body: JSON.stringify({
           projectId,
+          ...(props.workingRoot ? { cwd: props.workingRoot } : {}),
           ...(title ? { title } : {}),
           cols: activeTerminal.cols(),
           rows: activeTerminal.rows(),
@@ -558,7 +557,7 @@ export function TerminalPane(props: { projectId: string; projectName?: string; t
       setPty(record);
       notifyPtyChange();
       await refreshSessions(projectId);
-      await connect(record, rendererId(), { freshRenderer: true, initialInput });
+      await connect(record, { freshRenderer: true, initialInput });
     } catch (cause) {
       if (projectId === activeProjectId) setError((cause as Error).message);
     } finally {
@@ -630,14 +629,14 @@ export function TerminalPane(props: { projectId: string; projectName?: string; t
     const record = pty();
     if (!record || record.status !== "running") return;
     reconnectAttempts = 0;
-    await connect(record, rendererId(), { freshRenderer: true });
+    await connect(record, { freshRenderer: true });
   };
 
   const takeControl = async () => {
     const record = pty();
     if (!record || record.status !== "running") return;
     reconnectAttempts = 0;
-    await connect(record, rendererId(), { freshRenderer: true, takeover: true });
+    await connect(record, { freshRenderer: true, takeover: true });
   };
 
   const discardSelectedTerminal = (message: string) => {
@@ -687,7 +686,7 @@ export function TerminalPane(props: { projectId: string; projectName?: string; t
       }
       setError((cause as Error).message);
       if (current && pty()?.id === id && props.active !== false) {
-        try { await connect(record, rendererId(), { freshRenderer: true }); }
+        try { await connect(record, { freshRenderer: true }); }
         catch (reconnectCause) {
           setError((reconnectCause as Error).message);
           setConnectionState("offline");
@@ -743,22 +742,6 @@ export function TerminalPane(props: { projectId: string; projectName?: string; t
     setConnectionState("idle");
     setError("");
     await start();
-  };
-
-  const switchRenderer = async (next: TerminalRendererId) => {
-    if (next === rendererId()) return;
-    setRendererId(next);
-    localStorage.setItem("conduit:terminal-renderer", next);
-    const record = pty();
-    if (!record || !host || props.active === false) {
-      connectionGeneration += 1;
-      closeConnection();
-      disposeRenderer();
-      if (record?.status === "running") setConnectionState("offline");
-      return;
-    }
-    try { await connect(record, next, { freshRenderer: true }); }
-    catch (cause) { setError((cause as Error).message); }
   };
 
   const statusLabel = () => {
@@ -847,7 +830,7 @@ export function TerminalPane(props: { projectId: string; projectName?: string; t
     queueMicrotask(() => {
       const record = pty();
       if (reattach && record?.status === "running" && !socket) {
-        void connect(record, rendererId(), { freshRenderer: true }).catch((cause) => setError((cause as Error).message));
+        void connect(record, { freshRenderer: true }).catch((cause) => setError((cause as Error).message));
       } else if (!record && !starting()) {
         void attachExisting(activeProjectId);
       }
@@ -1032,10 +1015,6 @@ export function TerminalPane(props: { projectId: string; projectName?: string; t
             <FocusIcon /><span class="terminal-action-label">{terminalFocused() ? "Focused" : "Focus"}</span>
           </Button>
         </Show>
-        <select aria-label="Terminal renderer" value={rendererId()} onChange={(event) => void switchRenderer(event.currentTarget.value as TerminalRendererId)}>
-          <option value="xterm">xterm</option>
-          <option value="ghostty">Ghostty</option>
-        </select>
       </div>
     </header>
     <div class="terminal-pane-body">
@@ -1044,7 +1023,7 @@ export function TerminalPane(props: { projectId: string; projectName?: string; t
         class="terminal-canvas"
         data-shortcut-exclusive="terminal"
         data-active={pty() ? "true" : "false"}
-        data-renderer={rendererId()}
+        data-renderer="xterm"
         onClick={() => focusActiveTerminal()}
         onFocusIn={handleTerminalFocusIn}
         onFocusOut={handleTerminalFocusOut}

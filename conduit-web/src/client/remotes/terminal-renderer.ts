@@ -2,10 +2,8 @@ import terminalFontUrl from "../assets/MesloLGSNerdFontMono-Regular.ttf";
 import { isMobileLayout } from "../navigation/mobile-layout";
 import "./terminal-pane.css";
 
-export type TerminalRendererId = "ghostty" | "xterm";
-
 export type TerminalRenderer = {
-  id: TerminalRendererId;
+  id: "xterm";
   cols: () => number;
   rows: () => number;
   write: (bytes: Uint8Array) => void;
@@ -20,9 +18,7 @@ export type TerminalRenderer = {
   dispose: () => void;
 };
 
-// Keep the terminal palette owned by Conduit rather than inheriting renderer
-// defaults. Both renderers receive exactly the same ANSI/default colours so TUI
-// output does not change merely because the browser renderer changed.
+// Keep the terminal palette owned by Conduit rather than inheriting xterm defaults.
 export const CONDUIT_TERMINAL_THEME = {
   background: "#121315",
   foreground: "#e6e8ea",
@@ -61,16 +57,10 @@ async function loadTerminalFont() {
   return fontPromise;
 }
 
-export function selectedTerminalRenderer(): TerminalRendererId {
-  const value = new URLSearchParams(location.search).get("terminalRenderer") || localStorage.getItem("conduit:terminal-renderer");
-  return value === "ghostty" ? "ghostty" : "xterm";
-}
-
-export async function createTerminalRenderer(host: HTMLElement, id = selectedTerminalRenderer()): Promise<TerminalRenderer> {
+export async function createTerminalRenderer(host: HTMLElement): Promise<TerminalRenderer> {
   await loadTerminalFont();
   host.style.setProperty("--conduit-terminal-background", CONDUIT_TERMINAL_THEME.background);
-  if (id === "xterm") return createXtermRenderer(host);
-  return createGhosttyRenderer(host);
+  return createXtermRenderer(host);
 }
 
 type TerminalFit = {
@@ -174,39 +164,6 @@ function installClipboardShortcuts(terminal: ClipboardTerminal) {
     }
     return true;
   });
-}
-
-async function createGhosttyRenderer(host: HTMLElement): Promise<TerminalRenderer> {
-  const { init, Terminal, FitAddon } = await import("ghostty-web");
-  await init();
-  const terminal = new Terminal({
-    fontSize: terminalFontSize(),
-    fontFamily: '"Conduit Terminal Font", monospace',
-    cursorBlink: false,
-    theme: CONDUIT_TERMINAL_THEME,
-  });
-  terminal.open(host);
-  const fit = new FitAddon();
-  terminal.loadAddon(fit);
-  terminal.reset();
-  installClipboardShortcuts(terminal as unknown as ClipboardTerminal);
-  const refreshable = terminal as unknown as ResizableTerminal & RefreshableTerminal;
-  const stopObservingHost = observeHostSize(host, refreshable, fit);
-  return {
-    id: "ghostty",
-    cols: () => terminal.cols,
-    rows: () => terminal.rows,
-    write: (bytes) => writeTerminal(terminal as unknown as WritableTerminal, bytes),
-    input: (data) => terminal.input(data),
-    focus: () => terminal.focus(),
-    fit: () => applyFit(fit),
-    setFontSize: (fontSize) => { terminal.options.fontSize = fontSize; applyFit(fit); },
-    repaint: () => repaintTerminal(refreshable),
-    resize: (cols, rows) => resizeTerminal(terminal, cols, rows),
-    onData: (listener) => { const subscription = terminal.onData(listener); return () => subscription.dispose(); },
-    onResize: (listener) => { const subscription = terminal.onResize(listener); return () => subscription.dispose(); },
-    dispose: () => { stopObservingHost(); fit.dispose?.(); terminal.dispose(); },
-  };
 }
 
 async function createXtermRenderer(host: HTMLElement): Promise<TerminalRenderer> {
