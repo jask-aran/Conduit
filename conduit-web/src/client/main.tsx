@@ -815,6 +815,19 @@ function App() {
       if ((error as { name?: string }).name !== "AbortError") console.warn("Computer prefetch failed", error);
     });
   };
+  const computerPrefetching = new Set<string>();
+  const prefetchComputerFolder = (relativePath: string) => {
+    const location = computerLocation();
+    if (!location) return;
+    const absolutePath = `${location.project.workingRoot}/${relativePath}`;
+    if (computerFolders.has(absolutePath) || computerPrefetching.has(absolutePath)) return;
+    computerPrefetching.add(absolutePath);
+    void api<ComputerPrefetchPayload>("/v0/computer/prefetch", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ id: location.project.id, paths: [relativePath] }),
+    }).then((payload) => payload.locations.forEach(cacheComputerFolder)).catch(() => {}).finally(() => computerPrefetching.delete(absolutePath));
+  };
   const browseComputer = async (path?: string) => {
     const request = ++computerRequest;
     computerController?.abort();
@@ -854,6 +867,15 @@ function App() {
       const created = await api<Project>("/v0/projects", { method: "POST", body: JSON.stringify({ mode: "linked", path: location.project.workingRoot }) });
       const projects = await catalogue.refresh();
       await openProject(projects.find((project) => project.id === created.id) || { ...created, sessions: [] });
+    } catch (error) { showError(error); }
+  };
+  const createComputerWorkspace = async (path: string) => {
+    const existing = catalogue.projects().find((project) => !isConduitManagedProject(project) && project.workingRoot === path);
+    if (existing) return;
+    try {
+      const created = await api<Project>("/v0/projects", { method: "POST", body: JSON.stringify({ mode: "linked", path }) });
+      await refresh();
+      toast.success(`${created.name} is now a workspace`);
     } catch (error) { showError(error); }
   };
 
@@ -1791,7 +1813,7 @@ function App() {
         </Show>
         <Show when={routeKind() === "computer"}>
           <ChatHeader title="Computer" panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onNewChat={() => void createChat()} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={() => {}} onUpdatePwa={() => void runPwaUpdate()} pwaUpdating={pwaUpdating} appDashboard />
-          <ComputerDashboard projects={catalogue.projects()} location={computerLocation()} loading={computerLoading()} error={computerError()} onBrowse={(path) => void browseComputer(path)} onMakeWorkspace={() => void designateComputerWorkspace()} onOpenView={openWorkspaceView} onOpenFile={(path) => { setComputerFile({ path }); openWorkspaceView("files"); }} />
+          <ComputerDashboard projects={catalogue.projects()} location={computerLocation()} loading={computerLoading()} error={computerError()} onBrowse={(path) => void browseComputer(path)} onPrefetch={prefetchComputerFolder} onMakeWorkspace={() => void designateComputerWorkspace()} onCreateWorkspace={(path) => void createComputerWorkspace(path)} onOpenWorkspace={(project) => void openProject(project)} onManageWorkspace={(action, project) => { if (action === "rename") runSidebar("rename-folder", { project }); else if (action === "identity") openWorkspaceIdentity(project); else runSidebar("delete-project", { project }); }} onOpenView={openWorkspaceView} onOpenFile={(path) => { setComputerFile({ path }); openWorkspaceView("files"); }} />
         </Show>
         <Show when={routeKind() !== "dashboard" && routeKind() !== "computer"}>
         <Show when={routeKind() === "chat" && meteorField()}>

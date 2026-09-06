@@ -993,10 +993,11 @@ export function Sidebar(props: {
 
     <Modal open={Boolean(newKind())} title={newKind() === "workspace" ? "Add workspace" : "New folder"}
       description={newKind() === "workspace"
-        ? "Choose exactly how Conduit should use a folder. The path and ownership stay visible before anything changes."
+        ? "Choose a folder in Computer, create one, or clone a repository."
         : "Create a separate managed working directory and chat scope."}
       onClose={closeNewDialog}>
       <form onSubmit={submitNew}><FieldGroup>
+        <Show when={newKind() === "workspace"}><button type="button" class="computer-workspace-picker" disabled={submitting()} onClick={() => { closeNewDialog(); closeMobile(); props.onOpenComputer(); }}><MonitorIcon /><span><strong>Choose in Computer</strong><small>Browse the host, then use Make workspace on any folder.</small></span><ChevronRightIcon /></button></Show>
         <Show when={newKind() === "workspace"}><div class="workspace-mode-picker" role="radiogroup" aria-label="Workspace action">
           <button type="button" role="radio" aria-checked={mode() === "linked"} data-selected={mode() === "linked"} disabled={submitting()} onClick={() => selectWorkspaceMode("linked")}><strong>Link existing</strong><small>Use a folder already on this machine. Unlinking keeps it.</small></button>
           <button type="button" role="radio" aria-checked={mode() === "created"} data-selected={mode() === "created"} disabled={submitting()} onClick={() => selectWorkspaceMode("created")}><strong>Create folder</strong><small>Make an empty folder in an allowed location. It remains yours.</small></button>
