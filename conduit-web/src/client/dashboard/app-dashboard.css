@@ -84,15 +84,18 @@
 }
 
 .computer-dashboard { width: 100%; min-height: 0; flex: 1; overflow: hidden; padding: 10px; }
-.computer-explorer { display: grid; width: 100%; height: 100%; min-height: 0; grid-template-columns: 168px minmax(0, 1fr); overflow: hidden; border: 1px solid var(--border); border-radius: 10px; }
-.computer-explorer-sidebar { min-width: 0; overflow-y: auto; padding: 8px 6px; border-right: 1px solid var(--border); background: color-mix(in oklch, var(--background), var(--accent) 18%); }
+.computer-explorer { display: grid; width: 100%; height: 100%; min-height: 0; grid-template-columns: var(--computer-sidebar-width) 5px minmax(0, 1fr); overflow: hidden; border: 1px solid var(--border); border-radius: 10px; }
+.computer-explorer-sidebar { min-width: 0; overflow-y: auto; padding: 8px 6px; background: color-mix(in oklch, var(--background), var(--accent) 18%); }
 .computer-explorer-sidebar h2 { margin: 10px 7px 4px; color: var(--muted-foreground); font-size: 8.5px; font-weight: 620; text-transform: uppercase; }
 .computer-explorer-sidebar > button, .computer-workspace-shortcuts button { display: flex; width: 100%; min-width: 0; min-height: 27px; align-items: center; gap: 7px; border: 0; border-radius: 5px; background: transparent; padding: 4px 7px; color: var(--muted-foreground); text-align: left; }
 .computer-explorer-sidebar button:hover, .computer-explorer-sidebar button[data-active="true"] { background: var(--accent); color: var(--foreground); }
 .computer-explorer-sidebar button span { overflow: hidden; font-size: 9.5px; text-overflow: ellipsis; white-space: nowrap; }
 .computer-explorer-sidebar svg, .computer-explorer-sidebar .workspace-glyph { width: 13px; height: 13px; flex: none; }
 .computer-explorer-sidebar p { margin: 6px 7px; color: var(--muted-foreground); font-size: 9px; }
-.computer-explorer-main { position: relative; display: flex; min-width: 0; min-height: 0; flex-direction: column; overflow: hidden; }
+.computer-sidebar-resize { position: relative; cursor: col-resize; touch-action: none; }
+.computer-sidebar-resize::after { content: ""; position: absolute; inset-block: 0; left: 2px; width: 1px; background: var(--border); }
+.computer-sidebar-resize:hover::after { background: var(--ring); }
+.computer-explorer-main { position: relative; display: flex; min-width: 0; min-height: 0; flex-direction: column; overflow: hidden; container-name: computer-explorer-main; container-type: inline-size; }
 .computer-explorer-toolbar { display: flex; min-width: 0; min-height: 36px; align-items: center; gap: 4px; padding: 5px 6px; border-bottom: 1px solid var(--border); }
 .computer-explorer-toolbar > button { display: grid; width: 24px; height: 24px; flex: none; place-items: center; border: 0; border-radius: 5px; background: transparent; color: var(--muted-foreground); }
 .computer-explorer-toolbar > button:hover, .computer-explorer-toolbar > button[aria-pressed="true"] { background: var(--accent); color: var(--foreground); }
@@ -102,18 +105,26 @@
 .computer-search { position: relative; display: flex; width: min(180px, 25%); align-items: center; }
 .computer-search svg { position: absolute; left: 6px; color: var(--muted-foreground); }
 .computer-search input { width: 100%; min-width: 0; border: 0; outline: 0; background: transparent; padding: 3px 6px 3px 21px; color: inherit; font-size: 9px; }
-.computer-explorer-actions { display: flex; min-width: 0; min-height: 30px; align-items: center; gap: 5px; padding: 4px 8px; border-bottom: 1px solid var(--border); }
-.computer-explorer-actions strong { overflow: hidden; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
-.computer-explorer-actions > span { margin-right: auto; color: var(--muted-foreground); font-size: 8.5px; white-space: nowrap; }
-.computer-explorer-actions button { display: inline-flex; min-height: 22px; align-items: center; gap: 4px; border: 0; border-radius: 5px; background: transparent; padding: 3px 6px; color: var(--muted-foreground); font-size: 8.5px; white-space: nowrap; }
-.computer-explorer-actions button:hover { background: var(--accent); color: var(--foreground); }
-.computer-explorer-actions svg { width: 11px; height: 11px; }
-.computer-file-grid { display: grid; min-height: 0; flex: 1; grid-template-columns: repeat(auto-fill, minmax(82px, 1fr)); grid-auto-rows: 72px; align-content: start; gap: 3px; overflow-y: auto; padding: 8px; }
-.computer-file-grid > button { display: flex; min-width: 0; flex-direction: column; align-items: center; justify-content: center; gap: 5px; border: 0; border-radius: 6px; background: transparent; padding: 6px; color: var(--foreground); }
+.computer-explorer-toolbar select { height: 24px; max-width: 88px; border: 1px solid var(--border); border-radius: 5px; background: var(--background); padding: 2px 4px; color: var(--muted-foreground); font-size: 8.5px; }
+.computer-folder-summary { display: none; }
+.computer-explorer-toolbar > button:not([aria-label]) { display: inline-flex; width: auto; min-height: 24px; gap: 4px; padding-inline: 6px; font-size: 8.5px; white-space: nowrap; }
+.computer-file-grid { display: grid; min-height: 0; flex: 1; grid-template-columns: repeat(auto-fill, minmax(74px, 1fr)); grid-auto-rows: 62px; align-content: start; gap: 2px; overflow-y: auto; padding: 6px; }
+.computer-file-grid > button { position: relative; display: flex; min-width: 0; flex-direction: column; align-items: center; justify-content: center; gap: 5px; border: 0; border-radius: 6px; background: transparent; padding: 6px; color: var(--foreground); }
 .computer-file-grid > button:hover, .computer-file-grid > button:focus-visible { background: var(--accent); }
-.computer-file-grid > button > svg, .computer-file-grid .workspace-file-icon { width: 24px; height: 24px; }
+.computer-file-grid > button > svg, .computer-file-grid .workspace-file-icon { width: 20px; height: 20px; }
 .computer-file-grid > button > svg { color: var(--muted-foreground); }
 .computer-file-grid > button > span { width: 100%; overflow: hidden; font-size: 9px; text-align: center; text-overflow: ellipsis; white-space: nowrap; }
+.computer-file-grid > button > .computer-file-workspace-mark { position: absolute; top: 4px; right: 4px; display: grid; width: 14px; height: 14px; place-items: center; overflow: visible; }
+.computer-file-workspace-mark .workspace-glyph { width: 12px; height: 12px; font-size: 7px; }
+.computer-file-grid[data-view="details"] { display: block; padding: 4px; }
+.computer-detail-heading, .computer-file-grid[data-view="details"] > button { display: grid; width: 100%; min-height: 25px; grid-template-columns: minmax(0, 1fr) 90px; align-items: center; border-radius: 4px; }
+.computer-detail-heading { min-height: 22px; padding: 2px 8px 2px 27px; color: var(--muted-foreground); font-size: 8px; }
+.computer-file-grid[data-view="details"] > button { position: relative; padding: 3px 8px 3px 27px; }
+.computer-file-grid[data-view="details"] > button > svg, .computer-file-grid[data-view="details"] .workspace-file-icon { position: absolute; left: 8px; width: 12px; height: 12px; }
+.computer-file-grid[data-view="details"] > button > span { text-align: left; }
+.computer-file-grid[data-view="details"] > button > .computer-file-workspace-mark { top: 5px; right: auto; left: 8px; }
+.computer-file-grid[data-view="details"] > button:has(.computer-file-workspace-mark) > svg { display: none; }
+.computer-file-grid[data-view="details"] > button > small { overflow: hidden; color: var(--muted-foreground); font-size: 8.5px; text-align: left; text-overflow: ellipsis; white-space: nowrap; }
 .computer-folder-empty { grid-column: 1 / -1; align-self: center; color: var(--muted-foreground); font-size: 10px; text-align: center; }
 .computer-loading { position: absolute; right: 10px; bottom: 8px; color: var(--muted-foreground); font-size: 9px; }
 .computer-load-more { flex: none; min-height: 26px; border: 0; border-top: 1px solid var(--border); background: transparent; color: var(--muted-foreground); font-size: 9px; }
@@ -121,11 +132,20 @@
 .computer-error { margin: 0; padding: 7px 9px; border-bottom: 1px solid var(--border); color: var(--destructive); font-size: 9px; }
 .computer-dashboard button:disabled { opacity: .4; cursor: not-allowed; }
 .computer-dashboard button:focus-visible, .computer-dashboard input:focus-visible { outline: 1px solid var(--ring); outline-offset: -1px; }
+@container computer-explorer-main (max-width: 720px) {
+  .computer-search { width: 28px; }
+  .computer-search input { padding-inline: 21px 0; }
+  .computer-explorer-toolbar > button:not([aria-label]) { width: 24px; padding-inline: 0; font-size: 0; }
+}
+@container computer-explorer-main (max-width: 520px) {
+  .computer-explorer-toolbar select { display: none; }
+}
 @media (--conduit-mobile-layout) {
   .computer-dashboard { padding: calc(45px + var(--safe-area-inset-top, env(safe-area-inset-top, 0px))) 6px 6px; }
   .computer-explorer { grid-template-columns: 1fr; }
   .computer-explorer-sidebar { display: none; }
+  .computer-sidebar-resize { display: none; }
   .computer-search { width: 28px; }
   .computer-search input { padding-inline: 21px 0; }
-  .computer-explorer-actions button { font-size: 0; }
+  .computer-explorer-toolbar > button:not([aria-label]) { font-size: 0; }
 }
