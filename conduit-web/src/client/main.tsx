@@ -1791,7 +1791,7 @@ function App() {
         </Show>
         <Show when={routeKind() === "computer"}>
           <ChatHeader title="Computer" panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onNewChat={() => void createChat()} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={() => {}} onUpdatePwa={() => void runPwaUpdate()} pwaUpdating={pwaUpdating} appDashboard />
-          <ComputerDashboard projects={catalogue.projects()} location={computerLocation()} loading={computerLoading()} error={computerError()} onBrowse={(path) => void browseComputer(path)} onMakeWorkspace={() => void designateComputerWorkspace()} onOpenWorkspace={(project) => void openProject(project)} onOpenView={openWorkspaceView} onOpenFile={(path) => { setComputerFile({ path }); openWorkspaceView("files"); }} />
+          <ComputerDashboard projects={catalogue.projects()} location={computerLocation()} loading={computerLoading()} error={computerError()} onBrowse={(path) => void browseComputer(path)} onMakeWorkspace={() => void designateComputerWorkspace()} onOpenView={openWorkspaceView} onOpenFile={(path) => { setComputerFile({ path }); openWorkspaceView("files"); }} />
         </Show>
         <Show when={routeKind() !== "dashboard" && routeKind() !== "computer"}>
         <Show when={routeKind() === "chat" && meteorField()}>

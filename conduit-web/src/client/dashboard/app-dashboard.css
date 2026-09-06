@@ -83,18 +83,49 @@
   .app-dashboard-list > button, .app-dashboard-list > a { min-height: 52px; }
 }
 
-.computer-dashboard { overflow-y: auto; }
-.computer-dashboard .app-dashboard-intro p { margin: 0 0 20px; color: var(--muted-foreground); font-size: 12px; }
-.computer-dashboard > .app-dashboard-section + .app-dashboard-section { margin-top: 14px; }
-
-.computer-location-bar, .computer-folder-actions { display: flex; min-width: 0; align-items: center; gap: 6px; padding: 8px; border-bottom: 1px solid var(--border); }
-.computer-location-bar input { min-width: 0; flex: 1; height: 28px; border: 1px solid var(--border); border-radius: 6px; background: transparent; padding: 4px 8px; color: var(--foreground); font: 10px ui-monospace, monospace; }
-.computer-folder-actions { flex-wrap: wrap; }
-.computer-location-bar button, .computer-folder-actions button { display: inline-flex; min-height: 28px; align-items: center; gap: 5px; border: 0; border-radius: 6px; padding: 4px 8px; background: transparent; color: var(--muted-foreground); font-size: 10px; }
-.computer-location-bar button:hover, .computer-folder-actions button:hover, .computer-folder-actions button[aria-pressed="true"] { background: var(--accent); color: var(--foreground); }
+.computer-dashboard { width: 100%; min-height: 0; flex: 1; overflow: hidden; padding: 10px; }
+.computer-explorer { display: grid; width: 100%; height: 100%; min-height: 0; grid-template-columns: 168px minmax(0, 1fr); overflow: hidden; border: 1px solid var(--border); border-radius: 10px; }
+.computer-explorer-sidebar { min-width: 0; overflow-y: auto; padding: 8px 6px; border-right: 1px solid var(--border); background: color-mix(in oklch, var(--background), var(--accent) 18%); }
+.computer-explorer-sidebar h2 { margin: 10px 7px 4px; color: var(--muted-foreground); font-size: 8.5px; font-weight: 620; text-transform: uppercase; }
+.computer-explorer-sidebar > button, .computer-workspace-shortcuts button { display: flex; width: 100%; min-width: 0; min-height: 27px; align-items: center; gap: 7px; border: 0; border-radius: 5px; background: transparent; padding: 4px 7px; color: var(--muted-foreground); text-align: left; }
+.computer-explorer-sidebar button:hover, .computer-explorer-sidebar button[data-active="true"] { background: var(--accent); color: var(--foreground); }
+.computer-explorer-sidebar button span { overflow: hidden; font-size: 9.5px; text-overflow: ellipsis; white-space: nowrap; }
+.computer-explorer-sidebar svg, .computer-explorer-sidebar .workspace-glyph { width: 13px; height: 13px; flex: none; }
+.computer-explorer-sidebar p { margin: 6px 7px; color: var(--muted-foreground); font-size: 9px; }
+.computer-explorer-main { position: relative; display: flex; min-width: 0; min-height: 0; flex-direction: column; overflow: hidden; }
+.computer-explorer-toolbar { display: flex; min-width: 0; min-height: 36px; align-items: center; gap: 4px; padding: 5px 6px; border-bottom: 1px solid var(--border); }
+.computer-explorer-toolbar > button { display: grid; width: 24px; height: 24px; flex: none; place-items: center; border: 0; border-radius: 5px; background: transparent; color: var(--muted-foreground); }
+.computer-explorer-toolbar > button:hover, .computer-explorer-toolbar > button[aria-pressed="true"] { background: var(--accent); color: var(--foreground); }
+.computer-explorer-toolbar svg { width: 12px; height: 12px; }
+.computer-address, .computer-search { height: 24px; min-width: 0; border: 1px solid var(--border); border-radius: 5px; background: var(--background); color: var(--foreground); }
+.computer-address { flex: 1; padding: 3px 7px; font: 9px ui-monospace, monospace; }
+.computer-search { position: relative; display: flex; width: min(180px, 25%); align-items: center; }
+.computer-search svg { position: absolute; left: 6px; color: var(--muted-foreground); }
+.computer-search input { width: 100%; min-width: 0; border: 0; outline: 0; background: transparent; padding: 3px 6px 3px 21px; color: inherit; font-size: 9px; }
+.computer-explorer-actions { display: flex; min-width: 0; min-height: 30px; align-items: center; gap: 5px; padding: 4px 8px; border-bottom: 1px solid var(--border); }
+.computer-explorer-actions strong { overflow: hidden; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.computer-explorer-actions > span { margin-right: auto; color: var(--muted-foreground); font-size: 8.5px; white-space: nowrap; }
+.computer-explorer-actions button { display: inline-flex; min-height: 22px; align-items: center; gap: 4px; border: 0; border-radius: 5px; background: transparent; padding: 3px 6px; color: var(--muted-foreground); font-size: 8.5px; white-space: nowrap; }
+.computer-explorer-actions button:hover { background: var(--accent); color: var(--foreground); }
+.computer-explorer-actions svg { width: 11px; height: 11px; }
+.computer-file-grid { display: grid; min-height: 0; flex: 1; grid-template-columns: repeat(auto-fill, minmax(82px, 1fr)); grid-auto-rows: 72px; align-content: start; gap: 3px; overflow-y: auto; padding: 8px; }
+.computer-file-grid > button { display: flex; min-width: 0; flex-direction: column; align-items: center; justify-content: center; gap: 5px; border: 0; border-radius: 6px; background: transparent; padding: 6px; color: var(--foreground); }
+.computer-file-grid > button:hover, .computer-file-grid > button:focus-visible { background: var(--accent); }
+.computer-file-grid > button > svg, .computer-file-grid .workspace-file-icon { width: 24px; height: 24px; }
+.computer-file-grid > button > svg { color: var(--muted-foreground); }
+.computer-file-grid > button > span { width: 100%; overflow: hidden; font-size: 9px; text-align: center; text-overflow: ellipsis; white-space: nowrap; }
+.computer-folder-empty { grid-column: 1 / -1; align-self: center; color: var(--muted-foreground); font-size: 10px; text-align: center; }
+.computer-loading { position: absolute; right: 10px; bottom: 8px; color: var(--muted-foreground); font-size: 9px; }
+.computer-load-more { flex: none; min-height: 26px; border: 0; border-top: 1px solid var(--border); background: transparent; color: var(--muted-foreground); font-size: 9px; }
+.computer-load-more:hover { background: var(--accent); color: var(--foreground); }
+.computer-error { margin: 0; padding: 7px 9px; border-bottom: 1px solid var(--border); color: var(--destructive); font-size: 9px; }
 .computer-dashboard button:disabled { opacity: .4; cursor: not-allowed; }
-.computer-dashboard button:focus-visible { outline: 1px solid var(--ring); outline-offset: -1px; }
-.computer-folder-actions svg { width: 12px; height: 12px; }
-.computer-error { margin: 0; padding: 10px; color: var(--destructive); font-size: 11px; }
-.computer-dashboard .app-dashboard-section-heading > div { min-width: 0; }
-.computer-dashboard .app-dashboard-section-heading p { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.computer-dashboard button:focus-visible, .computer-dashboard input:focus-visible { outline: 1px solid var(--ring); outline-offset: -1px; }
+@media (--conduit-mobile-layout) {
+  .computer-dashboard { padding: calc(45px + var(--safe-area-inset-top, env(safe-area-inset-top, 0px))) 6px 6px; }
+  .computer-explorer { grid-template-columns: 1fr; }
+  .computer-explorer-sidebar { display: none; }
+  .computer-search { width: 28px; }
+  .computer-search input { padding-inline: 21px 0; }
+  .computer-explorer-actions button { font-size: 0; }
+}
