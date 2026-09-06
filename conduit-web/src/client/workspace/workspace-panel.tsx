@@ -1,5 +1,5 @@
 import { batch, createEffect, createMemo, createSignal, For, on, onCleanup, Show, type Accessor } from "solid-js";
-import { BoxesIcon, Columns2Icon, CheckIcon, ChevronsUpIcon, ChevronDownIcon, ChevronRightIcon, CirclePlusIcon, CopyIcon, DownloadIcon, EyeIcon, EyeOffIcon, FileDiffIcon, FilePlusIcon, FolderIcon, FolderPlusIcon, GitBranchIcon, GitCommitHorizontalIcon, GitCompareArrowsIcon, Maximize2Icon, Minimize2Icon, MoveIcon, PanelLeftCloseIcon, PanelLeftOpenIcon, PencilIcon, PinIcon, PinOffIcon, RefreshCwIcon, SearchIcon, SendIcon, TerminalIcon, Trash2Icon, Undo2Icon, UploadIcon, XIcon } from "lucide-solid";
+import { BoxesIcon, Columns2Icon, CheckIcon, ChevronsUpIcon, ChevronDownIcon, ChevronRightIcon, CirclePlusIcon, CopyIcon, DownloadIcon, EyeIcon, EyeOffIcon, FileDiffIcon, FilePlusIcon, FolderIcon, FolderPlusIcon, FolderUpIcon, GitBranchIcon, GitCommitHorizontalIcon, GitCompareArrowsIcon, Maximize2Icon, Minimize2Icon, MoveIcon, PanelLeftCloseIcon, PanelLeftOpenIcon, PencilIcon, PinIcon, PinOffIcon, RefreshCwIcon, SearchIcon, SendIcon, TerminalIcon, Trash2Icon, Undo2Icon, UploadIcon, XIcon } from "lucide-solid";
 import { toast } from "solid-sonner";
 import { Button, ContextMenu, ContextMenuContent, ContextMenuGroup, ContextMenuItem, ContextMenuSeparator, ContextMenuTrigger, Spinner } from "@/components/primitives";
 import { api, asList } from "../api/client";
@@ -1745,7 +1745,6 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
           <div class="workspace-tree-collapsed-rail"><button type="button" aria-label="Show file tree" title="Show file tree" onClick={toggleTreeCollapsed}><PanelLeftOpenIcon /></button></div>
         </Show>
         <div class="workspace-tree-pane">
-          <Show when={props.onBrowseParent}><div class="workspace-computer-path"><button type="button" onClick={props.onBrowseParent} aria-label="Parent folder" title="Parent folder">↑</button><span title={props.workingRoot()}>{props.workingRoot()}</span></div></Show>
           <div class="workspace-tree-tools workspace-tree-search">
             <label class="workspace-tree-filter">
               <SearchIcon />
@@ -1766,6 +1765,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
             treeElement = element;
             queueMicrotask(() => { element.scrollTop = workspaceCache.get(props.projectId())?.treeScrollTop || 0; });
           }} aria-label="Project files" role="tree" aria-busy={filesLoading()} class="workspace-tree" onScroll={saveTreeScroll}>
+            <Show when={props.onBrowseParent}><button type="button" class="workspace-tree-row workspace-tree-parent" onClick={props.onBrowseParent} title={`Open parent of ${props.workingRoot()}`}><span class="workspace-tree-chevron-placeholder" /><FolderUpIcon /><span>..</span></button></Show>
             <Tree directory="" />
             <Show when={directories()[""] && !directories()[""]?.oversize && visibleEntries("").length === 0}><div class="workspace-tree-empty">{fileFilter() ? "No loaded files match this filter." : "No files to show."}</div></Show>
           </nav>

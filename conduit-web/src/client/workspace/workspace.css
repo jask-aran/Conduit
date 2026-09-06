@@ -71,6 +71,7 @@ body.workspace-resizing .workspace-panel { transition: none !important; }
 .workspace-tree-row svg { width: 11.2px; height: 11.2px; flex: none; }
 .workspace-tree-row span { min-width: 0; overflow: hidden; font-size: 9.6px; text-overflow: ellipsis; white-space: nowrap; }
 .workspace-tree-row .workspace-tree-kept { width: 9.6px; height: 9.6px; margin-left: auto; color: var(--muted-foreground); }
+.workspace-tree-parent { color: var(--muted-foreground); }
 .workspace-tree-chevron { margin-right: -4px; transition: transform 120ms ease; }
 .workspace-tree-chevron[data-open="true"] { transform: rotate(90deg); }
 .workspace-tree-chevron-placeholder { width: 11.2px; height: 11.2px; margin-right: -4px; flex: none; }
@@ -456,8 +457,3 @@ body.workspace-resizing .workspace-panel { transition: none !important; }
 }
 
 }
-
-.workspace-computer-path { display: flex; min-width: 0; align-items: center; gap: 6px; padding: 3.2px 4.8px; border-bottom: 1px solid var(--border); }
-.workspace-computer-path button { width: 22.4px; height: 22.4px; flex: none; border: 0; border-radius: 4.8px; background: transparent; color: var(--muted-foreground); }
-.workspace-computer-path button:hover { background: var(--accent); }
-.workspace-computer-path span { overflow: hidden; color: var(--muted-foreground); font: 9px ui-monospace, monospace; text-overflow: ellipsis; white-space: nowrap; }
