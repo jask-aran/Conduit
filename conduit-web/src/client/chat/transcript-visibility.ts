@@ -313,8 +313,11 @@ export function mountTranscriptVisibility(
   const onMotion = (event: Event) => {
     const detail = (event as CustomEvent<PanelGeometryMotionDetail>).detail;
     if (detail.phase === "begin") {
+      // A panel gesture freezes virtualization; it does not reconcile it.
+      // refresh() writes content-visibility and intrinsic placeholder sizes,
+      // which can change thread height on pointer-down. Keep the current
+      // membership and measurements until the single idle pass after motion.
       cancelRefresh();
-      if (!activeIds.size) refresh();
       activeIds.set(detail.source, detail.id);
       if (detail.source === "workspace" && detail.targetSize == null) {
         resizeIds.set(detail.source, detail.id);
@@ -380,6 +383,9 @@ export function mountTranscriptVisibility(
   return {
     reset,
     refreshing: () => refreshing,
+    // Transcript tail-follow must distinguish real content growth from the
+    // temporary height changes caused by a panel reflow.
+    moving: () => activeIds.size > 0,
     /** Re-measure now, discarding anything already queued. */
     refreshNow: () => {
       cancelRefresh();

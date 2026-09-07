@@ -252,8 +252,10 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
       requestTypewriterTailFollow("user-idle");
     }, 120);
   };
-  const setViewportScrollTop = (next: number) => {
-    viewport.scrollTop = Math.round(next);
+  // Normal tail movement uses whole pixels. Panel reflow anchoring must retain
+  // fractional scroll positions or each resize frame accumulates visible drift.
+  const setViewportScrollTop = (next: number, round = true) => {
+    viewport.scrollTop = round ? Math.round(next) : next;
     programmaticScrollTop = viewport.scrollTop;
     previousScrollTop = viewport.scrollTop;
     previousMaxScrollTop = viewportMaxScrollTop();
@@ -647,7 +649,11 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
     window.addEventListener("resize", scheduleLatestButtonAnchor);
     visualViewport?.addEventListener("resize", scheduleLatestButtonAnchor);
     scheduleLatestButtonAnchor();
-    panelMotion = mountTranscriptPanelMotion(transcriptRoot, motionShell);
+    panelMotion = mountTranscriptPanelMotion(
+      transcriptRoot,
+      motionShell,
+      (next) => setViewportScrollTop(next, false),
+    );
     transcriptVisibility = mountTranscriptVisibility(transcriptRoot, viewport, thread);
     const claimUserScroll = () => {
       if (empty()) return;
@@ -738,7 +744,10 @@ export function Transcript(props: { chat: ActiveChatStore; partialContinue: bool
       // Hiding and showing blocks resizes the thread. Chasing the tail on those
       // is a feedback loop: the scroll write changes what is in the overscan
       // band, which toggles more blocks, which resizes the thread again.
-      if (transcriptVisibility?.refreshing()) return;
+      // Panel reflow can resize the thread on every pointer frame. The motion
+      // layer already preserves a visible anchor; tail-following the same
+      // resize would move scrollTop a second time and make blocks jump.
+      if (transcriptVisibility?.refreshing() || transcriptVisibility?.moving()) return;
       if (rendererUsesInertialTailFollow()) requestTypewriterTailFollow("resize");
       else scrollBottom();
     });
