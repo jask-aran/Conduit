@@ -487,7 +487,10 @@ function App() {
     if (pwaUpdating()) return;
     setPwaUpdating(true);
     try {
-      await forcePwaUpdate();
+      if (!await forcePwaUpdate()) {
+        setPwaUpdating(false);
+        toast.success("Conduit is up to date");
+      }
     } catch (error) {
       setPwaUpdating(false);
       showError(error);
@@ -1744,6 +1747,7 @@ function App() {
       onOpenTerminalView={() => openTerminalRoute()}
       onOpenDashboard={() => openDashboard()}
       onOpenWorkspaceIdentity={openWorkspaceIdentity} onOpenSettings={openSettings} onOpenPalette={(page, initialQuery) => openPalette(page || null, initialQuery || "", page === "chat-search")}
+      onUpdatePwa={() => void runPwaUpdate()} pwaUpdating={pwaUpdating()}
       onChangeServer={nativeApp ? () => { void clearNativeBearerToken().finally(() => { clearServerOrigin(); location.reload(); }); } : undefined}
       onLogout={() => void logout()} />
     <div class="workspace-layout" onTransitionEnd={(event) => {

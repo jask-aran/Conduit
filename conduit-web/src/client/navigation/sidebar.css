@@ -43,13 +43,14 @@
 .sidebar-chat[data-selected="true"] { background: var(--sidebar-accent); box-shadow: inset 1.6px 0 var(--accent-cool); color: var(--sidebar-accent-foreground); }
 .sidebar-row > svg { width: 12px; height: 12px; flex: none; color: var(--muted-foreground); }
 .sidebar-row:hover > svg, .sidebar-row[aria-current="page"] > svg { color: var(--sidebar-accent-foreground); }
-.sidebar-row > .sidebar-route-indicator { width: 10px; height: 10px; margin-left: auto; color: color-mix(in oklch, var(--sidebar-foreground), transparent 35%); }
+.sidebar-action-slot { display: grid; width: 17.6px; height: 17.6px; min-width: 17.6px !important; flex: none !important; margin-right: -4.8px; place-items: center; overflow: visible !important; }
+.sidebar-route-indicator { width: 10px; height: 10px; color: color-mix(in oklch, var(--sidebar-foreground), transparent 35%); }
 .sidebar-row span { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sidebar-row span.runtime-indicator { min-width: 0; flex: none; width: 12.8px; overflow: visible; }
 .sidebar-project { font-weight: 500; }
 .sidebar-project-link { display: flex; min-width: 0; min-height: 16px; flex: 1; align-items: center; gap: 6.4px; border: 0; background: transparent; padding: 0; color: inherit; text-align: left; }
 .sidebar-project-link > svg, .sidebar-project-link > .workspace-glyph { width: 12px; height: 12px; flex: none; color: var(--muted-foreground); }
-.sidebar-project-toggle { display: grid; width: 19.2px; height: 19.2px; flex: none; cursor: pointer; place-items: center; border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--muted-foreground); }
+.sidebar-project-toggle { display: grid; width: 17.6px; height: 17.6px; flex: none; margin-right: -4.8px; cursor: pointer; place-items: center; border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--muted-foreground); }
 .sidebar-project-toggle:hover { color: var(--sidebar-accent-foreground); }
 .sidebar-project-toggle:focus-visible { outline: 1px solid var(--ring); outline-offset: -2px; }
 .sidebar-project-toggle svg { width: 12px; height: 12px; }
@@ -81,7 +82,6 @@
 .workspace-glyph { display: inline-grid; flex: none; place-items: center; font-size: 7.2px; font-weight: 750; letter-spacing: -.04em; line-height: 1; }
 .workspace-glyph[data-mode="monogram"] { font-size: 6.4px; }
 .workspace-glyph svg { width: 100%; height: 100%; }
-[data-sidebar="rail"] { position: absolute; inset-block: 0; right: 0; width: 4.8px; border: 0; background: transparent; }
 [data-sidebar="trigger"] { display: inline-flex; width: 25.6px; height: 25.6px; flex: none; }
 [data-sidebar="trigger"] svg { width: 12.8px; height: 12.8px; }
 .conduit-sidebar[data-visual-state="collapsed"]:not([data-mobile-open="true"]) [data-sidebar="header"] { justify-content: flex-end; padding-inline: 8px; }
@@ -178,12 +178,14 @@
 .sidebar-chat[data-selected="true"] { background: var(--sidebar-accent); box-shadow: inset 2px 0 var(--accent-cool); color: var(--sidebar-accent-foreground); }
 .sidebar-row > svg { width: 15px; height: 15px; flex: none; color: var(--muted-foreground); }
 .sidebar-row:hover > svg, .sidebar-row[aria-current="page"] > svg { color: var(--sidebar-accent-foreground); }
+.sidebar-action-slot { display: grid; width: 22px; height: 22px; min-width: 22px !important; flex: none !important; margin-right: -6px; place-items: center; overflow: visible !important; }
+.sidebar-route-indicator { width: 12px; height: 12px; color: color-mix(in oklch, var(--sidebar-foreground), transparent 35%); }
 .sidebar-row span { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sidebar-row span.runtime-indicator { min-width: 0; flex: none; width: 16px; overflow: visible; }
 .sidebar-project { font-weight: 500; }
 .sidebar-project-link { display: flex; min-width: 0; min-height: 20px; flex: 1; align-items: center; gap: 8px; border: 0; background: transparent; padding: 0; color: inherit; text-align: left; }
 .sidebar-project-link > svg, .sidebar-project-link > .workspace-glyph { width: 15px; height: 15px; flex: none; color: var(--muted-foreground); }
-.sidebar-project-toggle { display: grid; width: 24px; height: 24px; flex: none; cursor: pointer; place-items: center; border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--muted-foreground); }
+.sidebar-project-toggle { display: grid; width: 22px; height: 22px; flex: none; margin-right: -6px; cursor: pointer; place-items: center; border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--muted-foreground); }
 .sidebar-project-toggle:hover { color: var(--sidebar-accent-foreground); }
 .sidebar-project-toggle:focus-visible { outline: 2px solid var(--ring); outline-offset: -2px; }
 .sidebar-project-toggle svg { width: 15px; height: 15px; }
@@ -209,7 +211,6 @@
 .workspace-glyph { display: inline-grid; flex: none; place-items: center; font-size: 9px; font-weight: 750; letter-spacing: -.04em; line-height: 1; }
 .workspace-glyph[data-mode="monogram"] { font-size: 8px; }
 .workspace-glyph svg { width: 100%; height: 100%; }
-[data-sidebar="rail"] { position: absolute; inset-block: 0; right: 0; width: 6px; border: 0; background: transparent; }
 [data-sidebar="trigger"] { display: inline-flex; width: 32px; height: 32px; flex: none; }
 [data-sidebar="trigger"] svg { width: 16px; height: 16px; }
 .conduit-sidebar[data-visual-state="collapsed"]:not([data-mobile-open="true"]) [data-sidebar="header"] { justify-content: flex-end; padding-inline: 10px; }

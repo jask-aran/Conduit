@@ -21,6 +21,7 @@ import {
   PinIcon,
   PinOffIcon,
   PlusIcon,
+  RefreshCwIcon,
   SearchIcon,
   Settings2Icon,
   TerminalIcon,
@@ -182,6 +183,8 @@ export function Sidebar(props: {
   onOpenWorkspaceIdentity: (project: Project) => void;
   onOpenSettings: (section?: string, workspaceId?: string | null) => void;
   onOpenPalette: (page?: string | null, initialQuery?: string | null) => void;
+  onUpdatePwa: () => void;
+  pwaUpdating: boolean;
   onChangeServer?: () => void;
   onLogout?: () => void;
   sidebarPins: string[];
@@ -998,7 +1001,7 @@ export function Sidebar(props: {
           </div>
           <div class="sidebar-area-label">Computer</div>
           <button type="button" class="sidebar-row sidebar-dashboard" aria-current={props.computer ? "page" : undefined} onClick={() => { closeMobile(); props.onOpenComputer(); }}><MonitorIcon /><span>Files</span></button>
-          <button type="button" class="sidebar-row sidebar-dashboard" aria-current={props.terminal ? "page" : undefined} onClick={() => { closeMobile(); props.onOpenTerminalView(); }}><TerminalIcon /><span>Terminal View</span><ExternalLinkIcon class="sidebar-route-indicator" /></button>
+          <button type="button" class="sidebar-row sidebar-dashboard" aria-current={props.terminal ? "page" : undefined} onClick={() => { closeMobile(); props.onOpenTerminalView(); }}><TerminalIcon /><span>Terminal View</span><span class="sidebar-action-slot"><ExternalLinkIcon class="sidebar-route-indicator" /></span></button>
           <Group label="Workspaces" projects={workspaces()} workspace emptyLabel="No workspaces" addLabel="New workspace" onAdd={() => openNewDialog("workspace")} />
           <section class="sidebar-group">
             <div class="sidebar-group-header"><div data-sidebar="group-label">Terminals</div></div>
@@ -1021,11 +1024,10 @@ export function Sidebar(props: {
         </div>
         <div data-sidebar="footer"><Menu><MenuTrigger class="sidebar-user" aria-label={`Conduit · ${connectionLabel()}`} title={connectionLabel()}><CableIcon /><span><strong>Conduit</strong><small>{connectionLabel()}</small></span><span class={`server-status-indicator runtime-indicator runtime-indicator-${connectionTone()}`} aria-hidden="true"><Show when={props.connectivity === "connecting" || props.connectivity === "reconnecting"} fallback={<span class="runtime-indicator-dot" />}><Spinner class="size-3" /></Show></span></MenuTrigger><MenuContent>
           <MenuItem onSelect={() => { closeMobile(); props.onOpenSettings("models"); }}>Manage settings</MenuItem>
-          <MenuItem onSelect={() => { closeMobile(); props.onOpenPalette(); }}>Command Palette</MenuItem>
+          <MenuItem disabled={props.pwaUpdating} onSelect={() => { closeMobile(); props.onUpdatePwa(); }}><RefreshCwIcon class={props.pwaUpdating ? "pwa-update-icon pwa-update-icon-active" : "pwa-update-icon"} />{props.pwaUpdating ? "Checking for updates…" : "Check for updates"}</MenuItem>
           <Show when={props.onChangeServer}><MenuItem onSelect={() => props.onChangeServer?.()}>Change server</MenuItem></Show>
           <MenuItem onSelect={() => props.onLogout?.()}>Sign out</MenuItem>
         </MenuContent></Menu></div>
-        <button data-sidebar="rail" aria-hidden="true" tabIndex={-1} onClick={toggleSidebar} />
       </div>
     </aside>
 
