@@ -113,6 +113,13 @@ Add an entry through `$tacit-knowledge` after explicit approval or validated rep
 
 ## UI and component heuristics
 
+### Animate panel layout through its flex shell
+
+- **Type:** Invariant.
+- **Rule:** Animate docked workspace open and close through the panel shell's real flex width so the main pane changes size with it. Do not commit the final shell width instantly and animate only the panel surface. Keep instant shell geometry only for pointer resizing.
+- **Scope:** Desktop workspace panel open, close, maximize, restore, and resize motion.
+- **Evidence:** The surface-only open and close path made the main pane snap to its final width underneath the sliding panel. The accepted shell-width transition moves both panes together and preserves instant pointer tracking during resize.
+
 ### Keep combined Patch and selected-file Diff separate
 
 - **Type:** Preference.

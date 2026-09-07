@@ -17,20 +17,20 @@ export function selectedChatSort(): ChatSort {
   return parseChatSort(localStorage.getItem(CHAT_SORT_STORAGE_KEY));
 }
 
-export function chatSortStamp(chat: { createdAt?: string; updatedAt?: string }, sort: ChatSort) {
-  return sort === "created" ? chat.createdAt || "" : chat.updatedAt || chat.createdAt || "";
+export function chatSortStamp(chat: { createdAt?: string; lastMessageAt?: string | null }, sort: ChatSort) {
+  return sort === "created" ? chat.createdAt || "" : chat.lastMessageAt || chat.createdAt || "";
 }
 
 export function compareChatsBySort(
-  left: { id?: string; createdAt?: string; updatedAt?: string },
-  right: { id?: string; createdAt?: string; updatedAt?: string },
+  left: { id?: string; createdAt?: string; lastMessageAt?: string | null },
+  right: { id?: string; createdAt?: string; lastMessageAt?: string | null },
   sort: ChatSort,
 ) {
   return chatSortStamp(right, sort).localeCompare(chatSortStamp(left, sort))
     || String(right.id || "").localeCompare(String(left.id || ""));
 }
 
-export function sortChats<T extends { id?: string; createdAt?: string; updatedAt?: string }>(chats: T[], sort: ChatSort) {
+export function sortChats<T extends { id?: string; createdAt?: string; lastMessageAt?: string | null }>(chats: T[], sort: ChatSort) {
   return [...chats].sort((left, right) => compareChatsBySort(left, right, sort));
 }
 

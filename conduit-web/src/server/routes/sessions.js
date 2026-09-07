@@ -64,6 +64,15 @@ export function registerSessionRoutes(app, {
     } catch (error) { next(error); }
   });
 
+  app.post("/v0/sessions/:id/read", async (request, response, next) => {
+    try {
+      const context = await findChatContext(request.params.id);
+      if (!context) return response.status(404).json({ error: "chat_not_found" });
+      await registry.markRead(context.chat.id);
+      response.json(chatView(registry.metadata(context.chat.id)));
+    } catch (error) { next(error); }
+  });
+
   app.get("/v0/sessions/:id/tools/:toolId", async (request, response, next) => {
     try {
       const session = await findRegisteredSession(request.params.id);

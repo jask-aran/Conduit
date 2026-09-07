@@ -731,7 +731,7 @@ export function Sidebar(props: {
       class="sidebar-row sidebar-chat"
       data-chat-id={menuProps.chat.id}
       aria-current={props.selectedId === menuProps.chat.id ? "page" : undefined}
-      aria-label={`${chatTitle(menuProps.chat)}${selected() ? ", selected" : ""}`}
+      aria-label={`${chatTitle(menuProps.chat)}${menuProps.chat.unread ? ", unread" : ""}${selected() ? ", selected" : ""}`}
       data-selected={selected() ? "true" : undefined}
       onPointerEnter={() => props.onPrefetchChat(menuProps.chat)}
       onFocus={() => props.onPrefetchChat(menuProps.chat)}
@@ -748,7 +748,7 @@ export function Sidebar(props: {
         void props.onOpenChat(menuProps.chat, menuProps.project);
       }}
     >
-      <RuntimeIndicator process={processFor(menuProps.chat)} stale={props.runtime.stale()} />
+      <RuntimeIndicator process={processFor(menuProps.chat)} stale={props.runtime.stale()} unread={menuProps.chat.unread} />
       <SidebarChatTitle title={title} animate={animateTitle} />
     </ContextMenuTrigger>
     <ContextMenuContent class="w-60 sidebar-context-menu">
@@ -813,7 +813,7 @@ export function Sidebar(props: {
             void props.onOpenProject(blockProps.project);
           }}>
             <Show when={isWorkspace()} fallback={<FolderIcon />}><WorkspaceGlyph appearance={blockProps.project.workspaceAppearance} /></Show>
-            <ProjectActivityIndicator sessions={blockProps.project.sessions} processFor={processFor} stale={props.runtime.stale()} />
+            <ProjectActivityIndicator sessions={blockProps.project.sessions} />
             <span>{blockProps.project.name}</span>
             <Show when={cloning()}><span class="workspace-cloning-badge"><LoaderCircleIcon />Cloning</span></Show>
           </button>

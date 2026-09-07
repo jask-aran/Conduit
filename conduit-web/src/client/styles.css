@@ -324,6 +324,7 @@ svg { stroke-width: 1.5; }
 .runtime-indicator-warn { color: oklch(0.75 0.15 75); }
 .runtime-indicator-danger { color: var(--destructive); }
 .runtime-indicator-muted { color: var(--muted-foreground); }
+.runtime-indicator-unread { color: oklch(0.68 0.17 250); }
 .runtime-indicator-stale { opacity: 0.55; }
 .runtime-indicator-count { min-width: 11.2px; color: var(--accent-cool); font-size: 8px; font-weight: 600; line-height: 1; text-align: center; }
 
@@ -1125,6 +1126,7 @@ svg { stroke-width: 1.5; }
 .runtime-indicator-warn { color: oklch(0.75 0.15 75); }
 .runtime-indicator-danger { color: var(--destructive); }
 .runtime-indicator-muted { color: var(--muted-foreground); }
+.runtime-indicator-unread { color: oklch(0.68 0.17 250); }
 .runtime-indicator-stale { opacity: 0.55; }
 .runtime-indicator-count { min-width: 14px; color: var(--accent-cool); font-size: 10px; font-weight: 600; line-height: 1; text-align: center; }
 

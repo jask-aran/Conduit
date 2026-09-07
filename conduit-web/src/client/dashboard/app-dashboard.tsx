@@ -14,7 +14,7 @@ import { compareChatsBySort, saveChatSort, useChatSort } from "../preferences/ch
 import "./app-dashboard.css";
 
 function latestActivity(project: Project) {
-  return Math.max(0, ...project.sessions.map((chat) => Date.parse(chat.updatedAt || chat.createdAt || "") || 0));
+  return Math.max(0, ...project.sessions.map((chat) => Date.parse(chat.lastMessageAt || chat.createdAt || "") || 0));
 }
 
 function relativeActivity(value: number, currentTime = Date.now()) {
@@ -61,6 +61,7 @@ export function AppDashboard(props: {
   const [loading, setLoading] = createSignal(true);
   const [now, setNow] = createSignal(Date.now());
   const [chatScope, setChatScope] = createSignal<"unscoped" | "all">("unscoped");
+  const [chatVisibility, setChatVisibility] = createSignal<"all" | "unread">("all");
   const chatSort = useChatSort();
   const workspaces = createMemo(() => props.projects
     .filter((project) => project.kind === "workspace" || ["linked", "created", "cloned"].includes(project.origin || ""))
@@ -72,6 +73,7 @@ export function AppDashboard(props: {
       .filter((project) => chatScope() === "all" || project.slug === "chat")
       .flatMap((project) => project.sessions
         .filter((chat) => chat.status === "active")
+        .filter((chat) => chatVisibility() === "all" || chat.unread)
         .map((chat) => ({ chat, project })))
       .sort((left, right) => compareChatsBySort(left.chat, right.chat, sort))
       .slice(0, 10);
@@ -134,6 +136,10 @@ export function AppDashboard(props: {
               <button type="button" aria-pressed={chatSort() === "latest"} onClick={() => saveChatSort("latest")}>Latest</button>
               <button type="button" aria-pressed={chatSort() === "created"} onClick={() => saveChatSort("created")}>Created</button>
             </div>
+            <div class="app-dashboard-scope-toggle" role="group" aria-label="Recent chat visibility">
+              <button type="button" aria-pressed={chatVisibility() === "unread"} onClick={() => setChatVisibility("unread")}>Unread</button>
+              <button type="button" aria-pressed={chatVisibility() === "all"} onClick={() => setChatVisibility("all")}>All</button>
+            </div>
             <button type="button" class="app-dashboard-chat-search" aria-label="Search Chats" title="Search Chats" onClick={() => props.onSearchChats(chatScope())}>
               <SearchIcon />
             </button>
@@ -143,12 +149,12 @@ export function AppDashboard(props: {
           <div class="project-chat-list">
             <For each={chats()}>{({ chat, project }) =>
               <ContextMenu><ContextMenuTrigger as="button" class="project-chat-row" onPointerEnter={() => props.onPrefetchChat(chat)} onFocus={() => props.onPrefetchChat(chat)} onClick={() => props.onOpenChat(chat, project)}>
-                <span class="project-chat-runtime"><RuntimeIndicator process={props.runtime.getProcess(chat.id)} stale={props.runtime.stale()} /></span>
+                <span class="project-chat-runtime"><RuntimeIndicator process={props.runtime.getProcess(chat.id)} stale={props.runtime.stale()} unread={chat.unread} /></span>
                 <span class="project-chat-copy">
                   <strong>{chat.title || "Untitled chat"}</strong>
                   <small>{project.name}{compactDate(chat.createdAt) ? ` · ${compactDate(chat.createdAt)}` : ""}</small>
                 </span>
-                <time dateTime={chat.updatedAt || chat.createdAt}>{relativeActivity(Date.parse(chat.updatedAt || chat.createdAt || "") || 0)}</time>
+                <time dateTime={chat.lastMessageAt || chat.createdAt}>{relativeActivity(Date.parse(chat.lastMessageAt || chat.createdAt || "") || 0)}</time>
                 <ArrowRightIcon />
               </ContextMenuTrigger><ContextMenuContent class="w-60 sidebar-context-menu"><ContextMenuGroup>
                 <ContextMenuItem onSelect={() => props.onContextAction("rename-chat", { chat, project })}><PencilIcon />{commandLabel(COMMAND_IDS.renameChat)}</ContextMenuItem>
