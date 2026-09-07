@@ -1,11 +1,6 @@
 import assert from "node:assert/strict";
-import fs from "node:fs/promises";
-import { stripTypeScriptTypes } from "node:module";
 import test from "node:test";
-
-const source = await fs.readFile(new URL("../src/client/navigation/mobile-swipe.ts", import.meta.url), "utf8");
-const compiled = stripTypeScriptTypes(source);
-const { mobileSwipeAction } = await import(`data:text/javascript;base64,${Buffer.from(compiled).toString("base64")}`);
+import { mobileSwipeAction } from "../src/client/navigation/mobile-swipe.ts";
 const swipe = (overrides = {}) => mobileSwipeAction({
   startX: 100, startY: 100, endX: 180, endY: 104,
   sidebarOpen: false, workspaceOpen: false, ...overrides,

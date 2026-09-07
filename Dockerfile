@@ -35,11 +35,6 @@ FROM node:24.14.0-trixie-slim@sha256:8c8f12cedb96c3b59642cf30d713943c2b223990c99
 
 COPY --from=ghcr.io/astral-sh/uv:0.11.29 /uv /uvx /bin/
 
-ARG CONDUIT_RELEASE=development
-LABEL org.opencontainers.image.title="Conduit" \
-      org.opencontainers.image.description="Self-hosted personal agent interface" \
-      org.opencontainers.image.revision="${CONDUIT_RELEASE}"
-
 RUN apt-get update \
     && apt-get install -y --no-install-recommends bash ca-certificates git libgomp1 openssh-client python3 tar tmux \
     && rm -rf /var/lib/apt/lists/*
@@ -67,8 +62,13 @@ ENV NODE_ENV=production \
     CONDUIT_TEMPLATES_ROOT=/app/templates \
     CONDUIT_WORKSPACE_ALLOWLIST=/workspaces \
     CONDUIT_WORKSPACE_DEFAULT_ROOT=/workspaces \
-    CONDUIT_WORKSPACE_SUGGESTION_ROOT=/workspaces \
-    CONDUIT_RELEASE=${CONDUIT_RELEASE}
+    CONDUIT_WORKSPACE_SUGGESTION_ROOT=/workspaces
+
+ARG CONDUIT_RELEASE=development
+LABEL org.opencontainers.image.title="Conduit" \
+      org.opencontainers.image.description="Self-hosted personal agent interface" \
+      org.opencontainers.image.revision="${CONDUIT_RELEASE}"
+ENV CONDUIT_RELEASE=${CONDUIT_RELEASE}
 
 USER node
 EXPOSE 4310

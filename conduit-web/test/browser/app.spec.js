@@ -335,8 +335,7 @@ test.beforeEach(async ({ page }) => {
 // clampWidth (240..65% of the viewport). A panel dragged wider than 496 came
 // back narrower, and the commit dispatched no geometry motion, so the
 // transcript stayed laid out for the width it never learned had changed.
-test("restores a stored panel width past the old clamp and announces the commit @setpiece", async ({ page }, testInfo) => {
-  test.skip(testInfo.project.name !== "desktop-chromium", "resizable side panel is desktop chrome");
+test("restores a stored panel width past the old clamp and announces the commit @desktop @setpiece", async ({ page }, testInfo) => {
   await page.addInitScript(() => {
     // The compact-UI migration rescales stored widths by 0.8 exactly once.
     // Claim it, or the seeded width arrives as 480 and proves nothing.
@@ -358,8 +357,7 @@ test("restores a stored panel width past the old clamp and announces the commit 
   expect(commits.at(-1).targetSize).toBeGreaterThan(600);
 });
 
-test("workspace directory pages append and survive refresh with honest filtering", async ({ page }, testInfo) => {
-  test.skip(testInfo.project.name !== "desktop-chromium", "desktop file tree");
+test("workspace directory pages append and survive refresh with honest filtering @desktop", async ({ page }, testInfo) => {
   let nextPageRequests = 0;
   await page.route("**/v0/projects/*/tree?*", (route) => {
     const more = new URL(route.request().url()).searchParams.has("after");
@@ -386,8 +384,7 @@ test("workspace directory pages append and survive refresh with honest filtering
   await expect(panel.getByRole("button", { name: "Show more", exact: true })).toHaveCount(0);
 });
 
-test("workspace panel previews files, shows diff, and persists per chat", async ({ page }, testInfo) => {
-  test.skip(testInfo.project.name !== "desktop-chromium", "resizable side panel is desktop chrome");
+test("workspace panel previews files, shows diff, and persists per chat @desktop", async ({ page }, testInfo) => {
   await openChatSurface(page);
   await page.getByRole("button", { name: "Toggle workspace panel" }).click();
   const panel = page.getByRole("complementary", { name: "Workspace panel" });
@@ -566,8 +563,7 @@ const PNG_FIXTURE = Buffer.from(
   "base64",
 );
 
-test("workspace previews an image instead of refusing it as binary", async ({ page }, testInfo) => {
-  test.skip(testInfo.project.name !== "desktop-chromium", "wide file preview is desktop chrome");
+test("workspace previews an image instead of refusing it as binary @desktop", async ({ page }, testInfo) => {
   await page.route("**/v0/projects/*/tree?*", async (route) => {
     await route.fulfill({ json: { path: "", entries: [
       { name: "logo.png", path: "logo.png", type: "file" },
@@ -615,8 +611,7 @@ test("workspace previews an image instead of refusing it as binary", async ({ pa
   await expect(panel.getByRole("button", { name: "Edit file" })).toHaveCount(0);
 });
 
-test("workspace classifies media and binary files with safe download fallbacks", async ({ page }, testInfo) => {
-  test.skip(testInfo.project.name !== "desktop-chromium", "wide file preview is desktop chrome");
+test("workspace classifies media and binary files with safe download fallbacks @desktop", async ({ page }, testInfo) => {
   await page.route("**/v0/projects/*/tree?*", async (route) => {
     await route.fulfill({ json: { path: "", entries: [
       { name: "manual.pdf", path: "manual.pdf", type: "file" },
@@ -655,8 +650,7 @@ test("workspace classifies media and binary files with safe download fallbacks",
   await expect(panel.getByRole("button", { name: "Edit file" })).toHaveCount(0);
 });
 
-test("workspace files open two slots side by side", async ({ page }, testInfo) => {
-  test.skip(testInfo.project.name !== "desktop-chromium", "two file slots need the wide desktop layout");
+test("workspace files open two slots side by side @desktop", async ({ page }, testInfo) => {
   await openChatSurface(page);
   await runPaletteCommand(page, "Toggle maximized workspace panel");
   const panel = page.getByRole("complementary", { name: "Workspace panel" });
@@ -698,8 +692,7 @@ test("workspace files open two slots side by side", async ({ page }, testInfo) =
   expect(await storedFiles()).toEqual({ file: "app.js" });
 });
 
-test("an unsaved draft in one file slot survives opening another file", async ({ page }, testInfo) => {
-  test.skip(testInfo.project.name !== "desktop-chromium", "two file slots need the wide desktop layout");
+test("an unsaved draft in one file slot survives opening another file @desktop", async ({ page }, testInfo) => {
   await openChatSurface(page);
   await runPaletteCommand(page, "Toggle maximized workspace panel");
   const panel = page.getByRole("complementary", { name: "Workspace panel" });
@@ -720,8 +713,7 @@ test("an unsaved draft in one file slot survives opening another file", async ({
   await expect(primary.locator(".workspace-preview-header small")).toHaveText("Unsaved");
 });
 
-test("a save acknowledges only the draft submitted before a later edit", async ({ page }, testInfo) => {
-  test.skip(testInfo.project.name !== "desktop-chromium", "CodeMirror save race needs the desktop workspace editor");
+test("a save acknowledges only the draft submitted before a later edit @desktop", async ({ page }, testInfo) => {
   const initialContent = "export function startConduit() {}\n";
   const firstDraft = `${initialContent}v1`;
   let savedBody = "";
@@ -776,8 +768,7 @@ test("a save acknowledges only the draft submitted before a later edit", async (
   await expect(editor).toContainText("v1v2");
 });
 
-test("workspace file controls create, rename, move, and delete folders", async ({ page }, testInfo) => {
-  test.skip(testInfo.project.name !== "desktop-chromium", "opens the panel from the desktop header button");
+test("workspace file controls create, rename, move, and delete folders @desktop", async ({ page }, testInfo) => {
   let rootEntries = [];
   let draftEntries = [];
   await page.unroute("**/v0/projects/*/tree?*");
@@ -849,8 +840,7 @@ test("workspace file controls create, rename, move, and delete folders", async (
   await expect(tree.getByRole("treeitem", { name: "drafts" })).toHaveCount(0);
 });
 
-test("workspace file menu replaces, deletes, and polls selected files", async ({ page }, testInfo) => {
-  test.skip(testInfo.project.name !== "desktop-chromium", "opens the panel from the desktop header button; mobile reaches it through the More menu");
+test("workspace file menu replaces, deletes, and polls selected files @desktop", async ({ page }, testInfo) => {
   let entries = [{ name: "app.js", path: "app.js", type: "file" }];
   let content = "export const version = 1;\n";
   let modifiedAt = 1;
@@ -930,8 +920,7 @@ test("workspace file menu replaces, deletes, and polls selected files", async ({
   await expect(page.getByText("Deleted app.js")).toBeVisible();
 });
 
-test("workspace expansion preserves transcript geometry and scroll position", async ({ page }, testInfo) => {
-  test.skip(testInfo.project.name !== "desktop-chromium", "desktop expansion geometry");
+test("workspace expansion preserves transcript geometry and scroll position @desktop", async ({ page }, testInfo) => {
   await page.route("**/v0/sessions/session_existing", (route) => route.fulfill({ json: {
     id: "session_existing", projectId: "project_chat", status: "active", title: "Existing chat", model: model.spec,
     messages: [{ id: "long_answer", role: "assistant", content: Array.from({ length: 80 }, (_, i) => `Paragraph ${i}: This transcript must keep its width and reading position while the workspace expands and restores.`).join("\n\n") }], tools: [],
@@ -972,8 +961,7 @@ test("workspace expansion preserves transcript geometry and scroll position", as
   await expect.poll(() => page.locator(".transcript-motion-shell").evaluate((element) => element.style.getPropertyValue("--workspace-transcript-width"))).toBe("");
 });
 
-test("closed workspace shortcut animates the full maximized surface", async ({ page }, testInfo) => {
-  test.skip(testInfo.project.name !== "desktop-chromium", "desktop maximized motion");
+test("closed workspace shortcut animates the full maximized surface @desktop", async ({ page }, testInfo) => {
   await openChatSurface(page);
   await page.evaluate(() => {
     window.__maximizedFrames = [];
@@ -1011,8 +999,7 @@ test("maximized workspace command toggles the workspace panel", async ({ page })
   await expect(panel).toHaveCount(0);
 });
 
-test("two shortcuts reach docked, maximized and closed from any state", async ({ page }, testInfo) => {
-  test.skip(testInfo.project.name !== "desktop-chromium", "docked panel geometry is desktop chrome");
+test("two shortcuts reach docked, maximized and closed from any state @desktop", async ({ page }, testInfo) => {
   await openChatSurface(page);
   const panel = page.getByRole("complementary", { name: "Workspace panel" });
   const main = page.locator('[data-slot="sidebar-inset"]');
@@ -1042,8 +1029,7 @@ test("two shortcuts reach docked, maximized and closed from any state", async ({
   await docked();
 });
 
-test("escape leaves the workspace panel open", async ({ page }, testInfo) => {
-  test.skip(testInfo.project.name !== "desktop-chromium", "desktop panel chrome");
+test("escape leaves the workspace panel open @desktop", async ({ page }, testInfo) => {
   await openChatSurface(page);
   const panel = page.getByRole("complementary", { name: "Workspace panel" });
 
@@ -1058,8 +1044,7 @@ test("escape leaves the workspace panel open", async ({ page }, testInfo) => {
   await expect(page.locator('[data-slot="sidebar-inset"]')).toHaveClass(/workspace-expanded/);
 });
 
-test("maximized workspace opens an optional second pane", async ({ page }, testInfo) => {
-  test.skip(testInfo.project.name !== "desktop-chromium", "split panes are desktop chrome");
+test("maximized workspace opens an optional second pane @desktop", async ({ page }, testInfo) => {
   await page.setViewportSize({ width: 2_200, height: 1_000 });
   await openChatSurface(page);
   const panel = page.getByRole("complementary", { name: "Workspace panel" });
@@ -1109,8 +1094,7 @@ test("maximized workspace opens an optional second pane", async ({ page }, testI
   expect(await storedSplit()).toBeNull();
 });
 
-test("navigation commands move focus and select workspace views", async ({ page }, testInfo) => {
-  test.skip(testInfo.project.name !== "desktop-chromium", "keyboard navigation over desktop header chrome");
+test("navigation commands move focus and select workspace views @desktop", async ({ page }, testInfo) => {
   await openChatSurface(page);
   const composer = page.getByRole("textbox", { name: "Message Pi" });
   const panel = page.getByRole("complementary", { name: "Workspace panel" });
@@ -1134,8 +1118,7 @@ test("navigation commands move focus and select workspace views", async ({ page 
   await expect(sourceControl).toBeFocused();
 });
 
-test("terminal workspace commands focus the attached shell", async ({ page }, testInfo) => {
-  test.skip(testInfo.project.name !== "desktop-chromium", "keyboard navigation over desktop header chrome");
+test("terminal workspace commands focus the attached shell @desktop", async ({ page }, testInfo) => {
   const shell = {
     id: "terminal_focus",
     projectId: "project_chat",
@@ -1183,8 +1166,7 @@ test("terminal workspace commands focus the attached shell", async ({ page }, te
   await expect.poll(shellFocused).toBe(true);
 });
 
-test("terminal recovery states expose one action for conflict, stop, and network loss", async ({ page }, testInfo) => {
-  test.skip(testInfo.project.name !== "desktop-chromium", "terminal recovery flow runs once on desktop");
+test("terminal recovery states expose one action for conflict, stop, and network loss @desktop", async ({ page }, testInfo) => {
   const shell = {
     id: "terminal_recovery",
     projectId: "project_chat",
@@ -1278,8 +1260,7 @@ test("terminal recovery states expose one action for conflict, stop, and network
   await expect(terminal.locator(".terminal-header-status")).toHaveText("Active Now");
 });
 
-test("rapid panel reversals continue from rendered geometry and release transcript locks @setpiece", async ({ page }, testInfo) => {
-  test.skip(testInfo.project.name !== "desktop-chromium");
+test("rapid panel reversals continue from rendered geometry and release transcript locks @desktop @setpiece", async ({ page }, testInfo) => {
   await openChatSurface(page);
   const sidebar = page.locator(".conduit-sidebar");
   await expect(sidebar).toHaveAttribute("data-state", "expanded");
@@ -1347,8 +1328,7 @@ test("rapid panel reversals continue from rendered geometry and release transcri
   await expect(page.locator(".transcript")).not.toHaveAttribute("data-panel-motion");
 });
 
-test("desktop panel surfaces settle immediately with reduced motion @setpiece", async ({ page }, testInfo) => {
-  test.skip(testInfo.project.name !== "desktop-chromium");
+test("desktop panel surfaces settle immediately with reduced motion @desktop @setpiece", async ({ page }, testInfo) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
   await openChatSurface(page);
   const sidebar = page.locator(".conduit-sidebar");
@@ -1464,8 +1444,7 @@ test("Workspace views use the nested palette page and terminal lives in the Work
   await expect(terminal).toBeVisible();
 });
 
-test("dashboard routes restore the workspace panel state for their project scope", async ({ page }, testInfo) => {
-  test.skip(testInfo.project.name !== "desktop-chromium", "workspace panel geometry is desktop state");
+test("dashboard routes restore the workspace panel state for their project scope @desktop", async ({ page }, testInfo) => {
   await page.addInitScript(() => {
     localStorage.setItem("conduit:workspace-panel:project:project_chat:open", "true");
     localStorage.setItem("conduit:workspace-panel:project:project_chat:expanded", "false");
@@ -1497,8 +1476,7 @@ test("dashboard routes restore the workspace panel state for their project scope
   await expect(main).toHaveClass(/workspace-expanded/);
 });
 
-test("workspace context menu opens its dashboard with the Workspace maximized", async ({ page }, testInfo) => {
-  test.skip(testInfo.project.name !== "desktop-chromium", "workspace panel geometry is desktop state");
+test("workspace context menu opens its dashboard with the Workspace maximized @desktop", async ({ page }, testInfo) => {
   const workspace = {
     id: "project_conduit",
     slug: "conduit",
@@ -1539,8 +1517,7 @@ test("workspace context menu opens its dashboard with the Workspace maximized", 
   await expect(page.getByRole("region", { name: "Conduit dashboard" })).toBeVisible();
 });
 
-test("uses compact sidebar groups and preserves a useful desktop rail", async ({ page }, testInfo) => {
-  test.skip(testInfo.project.name !== "desktop-chromium");
+test("uses compact sidebar groups and preserves a useful desktop rail @desktop", async ({ page }, testInfo) => {
   await openChatSurface(page);
   const sidebar = page.locator('[data-slot="sidebar"][data-state]');
   const main = page.locator('[data-slot="sidebar-inset"]');

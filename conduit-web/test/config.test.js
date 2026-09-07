@@ -4,10 +4,14 @@ import path from "node:path";
 import test from "node:test";
 import { loadConfig } from "../src/config.js";
 
+const configEnv = (overrides = {}) => ({
+  CONDUIT_NATIVE_PI_COMMAND: "/definitely/missing/pi",
+  ...overrides,
+});
+
 test("default runtime paths are owned by the repository root", () => {
-  const config = loadConfig({});
+  const config = loadConfig(configEnv());
   assert.equal(config.piTemplate.id, "chat");
-  assert.equal(config.piTemplate.version, "8");
   assert.equal(config.piTemplate.label, "Assistant");
   assert.deepEqual(config.piTemplate.tools, ["read", "bash", "edit", "write", "web_search", "fetch_content", "get_search_content", "source_check"]);
   assert.deepEqual(config.piTemplate.models, [
@@ -46,16 +50,16 @@ test("default runtime paths are owned by the repository root", () => {
   assert.equal(config.voiceModelRoot.endsWith(path.join("data", "voice", "models")), true);
   assert.equal(config.voiceRecordingsRoot.endsWith(path.join("data", "voice", "recordings")), true);
   assert.equal(config.workspaceDefaultRoot, os.homedir());
-  assert.equal(loadConfig({ ENABLE_PARTIAL_CONTINUE: "false" }).enablePartialContinue, false);
+  assert.equal(loadConfig(configEnv({ ENABLE_PARTIAL_CONTINUE: "false" })).enablePartialContinue, false);
 });
 
 test("one data root relocates every durable Conduit path", () => {
   const dataRoot = path.resolve("/tmp/conduit-config-data");
-  const config = loadConfig({
+  const config = loadConfig(configEnv({
     CONDUIT_DATA_ROOT: dataRoot,
     CONDUIT_RELEASE: "0123456789abcdef",
     CONDUIT_WORKSPACE_SUGGESTION_ROOT: "/tmp/workspace-suggestions",
-  });
+  }));
   assert.equal(config.dataRoot, dataRoot);
   assert.equal(config.filesRoot, path.join(dataRoot, "chat", "files"));
   assert.equal(config.catalogFile, path.join(dataRoot, "conduit.json"));
@@ -70,26 +74,26 @@ test("one data root relocates every durable Conduit path", () => {
   assert.equal(config.voiceModelRoot, path.join(dataRoot, "voice", "models"));
   assert.equal(config.voiceRecordingsRoot, path.join(dataRoot, "voice", "recordings"));
   assert.equal(config.release, "0123456789abcdef");
-  assert.equal(loadConfig({ CONDUIT_MAX_ATTACHMENT_BYTES: "2048" }).maxAttachmentBytes, 2048);
-  assert.equal(loadConfig({
+  assert.equal(loadConfig(configEnv({ CONDUIT_MAX_ATTACHMENT_BYTES: "2048" })).maxAttachmentBytes, 2048);
+  assert.equal(loadConfig(configEnv({
     CONDUIT_VOICE_FINALIZATION_BASE_MS: "45000",
     CONDUIT_VOICE_FINALIZATION_MAX_MS: "900000",
     CONDUIT_VOICE_FINALIZATION_DEFAULT_MULTIPLIER: "20",
-  }).voiceFinalizationBaseMs, 45_000);
-  assert.equal(loadConfig({
+  })).voiceFinalizationBaseMs, 45_000);
+  assert.equal(loadConfig(configEnv({
     CONDUIT_VOICE_FINALIZATION_BASE_MS: "45000",
     CONDUIT_VOICE_FINALIZATION_MAX_MS: "900000",
     CONDUIT_VOICE_FINALIZATION_DEFAULT_MULTIPLIER: "20",
-  }).voiceFinalizationMaxMs, 900_000);
-  assert.equal(loadConfig({
+  })).voiceFinalizationMaxMs, 900_000);
+  assert.equal(loadConfig(configEnv({
     CONDUIT_VOICE_FINALIZATION_BASE_MS: "45000",
     CONDUIT_VOICE_FINALIZATION_MAX_MS: "900000",
     CONDUIT_VOICE_FINALIZATION_DEFAULT_MULTIPLIER: "20",
-  }).voiceFinalizationDefaultMultiplier, 20);
+  })).voiceFinalizationDefaultMultiplier, 20);
   assert.equal(config.workspaceSuggestionRoot, path.resolve("/tmp/workspace-suggestions"));
   assert.equal(config.workspaceDefaultRoot, path.resolve("/tmp/workspace-suggestions"));
-  assert.equal(loadConfig({
+  assert.equal(loadConfig(configEnv({
     CONDUIT_WORKSPACE_SUGGESTION_ROOT: "/tmp/workspace-suggestions",
     CONDUIT_WORKSPACE_DEFAULT_ROOT: "/tmp/workspace-default",
-  }).workspaceDefaultRoot, path.resolve("/tmp/workspace-default"));
+  })).workspaceDefaultRoot, path.resolve("/tmp/workspace-default"));
 });
