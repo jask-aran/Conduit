@@ -449,6 +449,7 @@ export interface ComputerLocation {
   home: string;
   parent: string;
   repository: boolean;
+  repositoryRoot?: string | null;
   listing: ComputerDirectoryListing;
 }
 

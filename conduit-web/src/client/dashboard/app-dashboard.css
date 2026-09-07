@@ -84,6 +84,15 @@
 }
 
 .computer-dashboard { width: 100%; min-height: 0; flex: 1; overflow: hidden; padding: 10px; }
+.computer-dashboard[data-dialog="true"] { height: min(52dvh, 500px); min-height: 360px; flex: none; padding: 0; }
+.computer-dashboard[data-dialog="true"] .computer-explorer { grid-template-columns: minmax(0, 1fr); border: 0; border-radius: 0; }
+.computer-dashboard[data-dialog="true"] .computer-explorer-sidebar,
+.computer-dashboard[data-dialog="true"] .computer-sidebar-resize { display: none; }
+.computer-dashboard[data-dialog="true"] .computer-file-grid { grid-template-columns: repeat(auto-fill, minmax(68px, 1fr)); grid-auto-rows: 58px; }
+.computer-dashboard[data-dialog="true"] .computer-repository-summary,
+.computer-dashboard[data-dialog="true"] .computer-actions-spacer { display: none; }
+.computer-dashboard[data-dialog="true"] .computer-explorer-actions { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.computer-dashboard[data-dialog="true"] .computer-explorer-actions > button { width: 100%; justify-content: center; padding-inline: 8px; font-size: 9px; }
 .computer-explorer { display: grid; width: 100%; height: 100%; min-height: 0; grid-template-columns: var(--computer-sidebar-width) 5px minmax(0, 1fr); overflow: hidden; border: 1px solid var(--border); border-radius: 10px; }
 .computer-explorer-sidebar { min-width: 0; overflow-y: auto; padding: 8px 6px; background: color-mix(in oklch, var(--background), var(--accent) 18%); }
 .computer-explorer-sidebar h2 { margin: 10px 7px 4px; color: var(--muted-foreground); font-size: 8.5px; font-weight: 620; text-transform: uppercase; }
@@ -105,9 +114,19 @@
 .computer-search { position: relative; display: flex; width: min(180px, 25%); align-items: center; }
 .computer-search svg { position: absolute; left: 6px; color: var(--muted-foreground); }
 .computer-search input { width: 100%; min-width: 0; border: 0; outline: 0; background: transparent; padding: 3px 6px 3px 21px; color: inherit; font-size: 9px; }
-.computer-explorer-toolbar select { height: 24px; max-width: 88px; border: 1px solid var(--border); border-radius: 5px; background: var(--background); padding: 2px 4px; color: var(--muted-foreground); font-size: 8.5px; }
-.computer-folder-summary { display: none; }
-.computer-explorer-toolbar > button:not([aria-label]) { display: inline-flex; width: auto; min-height: 24px; gap: 4px; padding-inline: 6px; font-size: 8.5px; white-space: nowrap; }
+.computer-dashboard .computer-explorer-toolbar select { width: auto; height: 24px; min-height: 24px; max-width: 88px; border: 1px solid var(--border); border-radius: 5px; background: var(--background); padding: 2px 4px; color: var(--muted-foreground); font-size: 8.5px; }
+.computer-item-count { flex: none; color: var(--muted-foreground); font-size: 8px; white-space: nowrap; }
+.computer-explorer-actions { display: flex; min-width: 0; min-height: 32px; align-items: center; gap: 4px; padding: 4px 6px; border-bottom: 1px solid var(--border); }
+.computer-folder-summary { display: grid; min-width: 0; margin-right: auto; gap: 1px; }
+.computer-folder-summary strong, .computer-folder-summary small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.computer-folder-summary strong { font-size: 9px; }
+.computer-folder-summary small { color: var(--muted-foreground); font-size: 8px; }
+.computer-explorer-actions > button { display: inline-flex; width: auto; min-height: 24px; flex: none; align-items: center; gap: 4px; border: 0; border-radius: 5px; background: transparent; padding: 3px 6px; color: var(--muted-foreground); font-size: 8.5px; white-space: nowrap; }
+.computer-explorer-actions > button:hover { background: var(--accent); color: var(--foreground); }
+.computer-explorer-actions svg { width: 11px; height: 11px; }
+.computer-actions-spacer { flex: 1; }
+.computer-repository-summary { display: inline-flex; min-width: 0; align-items: center; gap: 4px; color: var(--muted-foreground); font-size: 8.5px; }
+.computer-repository-summary svg { flex: none; }
 .computer-file-grid { display: grid; min-height: 0; flex: 1; grid-template-columns: repeat(auto-fill, minmax(74px, 1fr)); grid-auto-rows: 62px; align-content: start; gap: 2px; overflow-y: auto; padding: 6px; }
 .computer-file-grid > button { position: relative; display: flex; min-width: 0; flex-direction: column; align-items: center; justify-content: center; gap: 5px; border: 0; border-radius: 6px; background: transparent; padding: 6px; color: var(--foreground); }
 .computer-file-grid > button:hover, .computer-file-grid > button:focus-visible { background: var(--accent); }
@@ -135,7 +154,7 @@
 @container computer-explorer-main (max-width: 720px) {
   .computer-search { width: 28px; }
   .computer-search input { padding-inline: 21px 0; }
-  .computer-explorer-toolbar > button:not([aria-label]) { width: 24px; padding-inline: 0; font-size: 0; }
+  .computer-explorer-actions > button { width: 24px; justify-content: center; padding-inline: 0; font-size: 0; }
 }
 @container computer-explorer-main (max-width: 520px) {
   .computer-explorer-toolbar select { display: none; }
@@ -147,5 +166,23 @@
   .computer-sidebar-resize { display: none; }
   .computer-search { width: 28px; }
   .computer-search input { padding-inline: 21px 0; }
-  .computer-explorer-toolbar > button:not([aria-label]) { font-size: 0; }
+  .computer-explorer-actions > button { width: 28px; justify-content: center; padding-inline: 0; font-size: 0; }
+  .computer-dashboard[data-dialog="true"] { height: calc(100% - 55px); min-height: 0; padding: 0; }
+  .computer-dashboard[data-dialog="true"] .computer-explorer { grid-template-columns: 1fr; }
+  .computer-dashboard[data-dialog="true"] .computer-explorer-toolbar { min-height: 48px; gap: 5px; padding: 6px; }
+  .computer-dashboard[data-dialog="true"] .computer-explorer-toolbar > button { width: 36px; height: 36px; }
+  .computer-dashboard[data-dialog="true"] .computer-explorer-toolbar svg { width: 16px; height: 16px; }
+  .computer-dashboard[data-dialog="true"] .computer-address,
+  .computer-dashboard[data-dialog="true"] .computer-search { height: 36px; }
+  .computer-dashboard[data-dialog="true"] .computer-address { padding-inline: 10px; font-size: 12px; }
+  .computer-dashboard[data-dialog="true"] .computer-search { width: 36px; }
+  .computer-dashboard[data-dialog="true"] .computer-search svg { left: 10px; }
+  .computer-dashboard[data-dialog="true"] .computer-item-count { font-size: 10px; }
+  .computer-dashboard[data-dialog="true"] .computer-explorer-actions { min-height: 48px; gap: 5px; padding: 5px 6px; }
+  .computer-dashboard[data-dialog="true"] .computer-explorer-actions > button { min-height: 38px; gap: 6px; padding-inline: 7px; font-size: 11px; }
+  .computer-dashboard[data-dialog="true"] .computer-explorer-actions svg { width: 15px; height: 15px; }
+  .computer-dashboard[data-dialog="true"] .computer-file-grid { grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); grid-auto-rows: 82px; gap: 4px; padding: 8px; }
+  .computer-dashboard[data-dialog="true"] .computer-file-grid[data-view="tiles"] > button { gap: 5px; font-size: 11px; }
+  .computer-dashboard[data-dialog="true"] .computer-file-grid[data-view="tiles"] > button > svg,
+  .computer-dashboard[data-dialog="true"] .computer-file-grid[data-view="tiles"] .workspace-file-icon { width: 25px; height: 25px; }
 }

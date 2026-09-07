@@ -1,5 +1,5 @@
 import { isConduitManagedProject } from "./sidebar-preferences";
-import { batch, createEffect, createMemo, createSignal, For, onCleanup, onMount, Show } from "solid-js";
+import { batch, createEffect, createMemo, createSignal, For, lazy, onCleanup, onMount, Show } from "solid-js";
 import * as KAlertDialog from "@kobalte/core/alert-dialog";
 import * as KDialog from "@kobalte/core/dialog";
 import {
@@ -53,7 +53,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/primitives";
-import type { ChatSummary, Project, RuntimeProcess, WorkspacePolicy, WorkspaceSuggestion } from "../api/contracts";
+import type { ChatSummary, ComputerLocation, Project, RuntimeProcess, WorkspacePolicy, WorkspaceSuggestion } from "../api/contracts";
 import { api } from "../api/client";
 import { WorkspaceGlyph } from "../project/workspace-appearance";
 import type { Pty } from "../remotes/terminal-pane";
@@ -66,6 +66,8 @@ import { publishUiPreference, UI_PREFERENCE_CHANGE_EVENT } from "../preferences/
 import { COMMAND_IDS, commandLabel } from "../commands/command-registry";
 import "./sidebar.css";
 
+const ComputerExplorer = lazy(() => import("../dashboard/computer-dashboard").then((module) => ({ default: module.ComputerExplorer })));
+
 type WorkspaceMode = "linked" | "created" | "cloned";
 type ProjectInput = { mode: string; name?: string; path?: string; directoryName?: string; cloneUrl?: string; cloneParentPath?: string; cloneDirectoryName?: string };
 type WorkspacePreview = { key: string; path: string; ownership: string };
@@ -76,6 +78,7 @@ export type SidebarCommand = {
   chat?: ChatSummary;
   project?: Project;
   terminal?: Pty;
+  path?: string;
 };
 type PinnedItem = { ref: string; type: "chat"; chat: ChatSummary; project: Project }
   | { ref: string; type: "project"; project: Project }
@@ -112,7 +115,7 @@ function storedCollapsedProjects(): Set<string> {
   }
 }
 
-function Modal(props: { open: boolean; title: string; description?: string; children: unknown; onClose: () => void; class?: string }) {
+function Modal(props: { open: boolean; title: string; description?: string; children: unknown; onClose: () => void; class?: string; closeButton?: boolean }) {
   let returnFocus: HTMLElement | null = null;
   let wasOpen = false;
   createEffect(() => { if (props.open && !wasOpen) returnFocus = document.activeElement as HTMLElement | null; wasOpen = props.open; });
@@ -120,6 +123,7 @@ function Modal(props: { open: boolean; title: string; description?: string; chil
     <KDialog.Portal><KDialog.Content data-state={props.open ? "open" : "closed"} class="conduit-modal" onEscapeKeyDown={(event) => { event.preventDefault(); event.stopPropagation(); props.onClose(); }} onCloseAutoFocus={(event) => { event.preventDefault(); if (returnFocus?.isConnected) returnFocus.focus(); returnFocus = null; }}>
       <div class={`conduit-modal-card ${props.class || ""}`}>
         <KDialog.Title>{props.title}</KDialog.Title><Show when={props.description}><KDialog.Description class="text-muted-foreground">{props.description}</KDialog.Description></Show>
+        <Show when={props.closeButton}><KDialog.CloseButton class="conduit-modal-close" aria-label="Close dialog"><XIcon /></KDialog.CloseButton></Show>
         {props.children as never}
       </div>
     </KDialog.Content></KDialog.Portal>
@@ -325,6 +329,7 @@ export function Sidebar(props: {
     });
   });
   const [mode, setMode] = createSignal<"managed" | WorkspaceMode>("managed");
+  const [workspaceStep, setWorkspaceStep] = createSignal<"explore" | "details">("explore");
   const [name, setName] = createSignal("");
   const [path, setPath] = createSignal("");
   const [cloneUrl, setCloneUrl] = createSignal("");
@@ -333,6 +338,9 @@ export function Sidebar(props: {
   const [workspacePreview, setWorkspacePreview] = createSignal<WorkspacePreview | null>(null);
   const [previewError, setPreviewError] = createSignal("");
   const [submitting, setSubmitting] = createSignal(false);
+  const [computerPicker, setComputerPicker] = createSignal<ComputerLocation | null>(null);
+  const [computerPickerLoading, setComputerPickerLoading] = createSignal(false);
+  const [computerPickerError, setComputerPickerError] = createSignal("");
   const renderedChatTitles = new Map<string, string>();
   const chatSort = useChatSort();
   const [rename, setRename] = createSignal<{ type: "chat"; chat: ChatSummary; project: Project } | { type: "project"; project: Project } | { type: "terminal"; terminal: Pty } | null>(null);
@@ -354,6 +362,12 @@ export function Sidebar(props: {
     handledCommandNonce = command.nonce;
     if (command.type === "new-folder") openNewDialog("folder");
     if (command.type === "new-workspace") openNewDialog("workspace");
+    if (command.type === "new-workspace-created" || command.type === "new-workspace-cloned") {
+      openNewDialog("workspace");
+      selectWorkspaceMode(command.type === "new-workspace-created" ? "created" : "cloned");
+      setWorkspaceStep("details");
+      if (command.path) { setPath(command.path); appliedDefaultWorkspacePath = ""; }
+    }
     if (command.type === "toggle-sidebar") toggleSidebar();
     if (command.type === "delete-chat") {
       const project = command.project || currentProject();
@@ -513,9 +527,11 @@ export function Sidebar(props: {
   const openNewDialog = (kind: "folder" | "workspace") => {
     if (kind === "workspace") props.onWorkspaceSuggestionsNeeded();
     setMode(kind === "workspace" ? "linked" : "managed");
+    setWorkspaceStep(kind === "workspace" ? "explore" : "details");
     setNewKind(kind);
   };
   const selectWorkspaceMode = (next: WorkspaceMode) => {
+    if (next === "linked") setComputerPickerError("");
     if (next === "linked" && path().trim() === appliedDefaultWorkspacePath) {
       setPath("");
       appliedDefaultWorkspacePath = "";
@@ -533,6 +549,7 @@ export function Sidebar(props: {
     if (submitting()) return;
     setNewKind(null);
     setMode("managed");
+    setWorkspaceStep("explore");
     setName("");
     setPath("");
     setDirectoryName("");
@@ -540,8 +557,26 @@ export function Sidebar(props: {
     setCloneDirectoryName("");
     setWorkspacePreview(null);
     setPreviewError("");
+    setComputerPicker(null);
+    setComputerPickerError("");
     appliedDefaultWorkspacePath = "";
   };
+
+  const browseComputerPicker = async (target?: string) => {
+    setComputerPickerLoading(true);
+    setComputerPickerError("");
+    try {
+      const location = await api<ComputerLocation>(`/v0/computer${target ? `?path=${encodeURIComponent(target)}` : ""}`);
+      setComputerPicker(location);
+      setPath(location.project.workingRoot);
+      appliedDefaultWorkspacePath = "";
+    } catch (error) {
+      setComputerPickerError(error instanceof Error ? error.message : "Folder could not be opened");
+    } finally { setComputerPickerLoading(false); }
+  };
+  createEffect(() => {
+    if (newKind() === "workspace" && !computerPicker() && !computerPickerLoading() && !computerPickerError()) void browseComputerPicker(path() || undefined);
+  });
 
   createEffect(() => {
     const defaultPath = props.workspacePolicy?.defaultInputPath;
@@ -991,28 +1026,20 @@ export function Sidebar(props: {
       </div>
     </aside>
 
-    <Modal open={Boolean(newKind())} title={newKind() === "workspace" ? "Add workspace" : "New folder"}
-      description={newKind() === "workspace"
-        ? "Choose a folder in Computer, create one, or clone a repository."
-        : "Create a separate managed working directory and chat scope."}
-      onClose={closeNewDialog}>
+    <Modal open={Boolean(newKind())} title={newKind() === "workspace" ? (workspaceStep() === "explore" ? "Add workspace" : mode() === "created" ? "Create workspace folder" : mode() === "cloned" ? "Clone repository" : "Workspace details") : "New folder"}
+      description={newKind() === "workspace" && workspaceStep() === "details" ? `Selected location: ${path()}` : newKind() === "folder" ? "Create a separate managed working directory and chat scope." : undefined}
+      onClose={closeNewDialog} closeButton={newKind() === "workspace"} class={newKind() === "workspace" ? `workspace-add-dialog workspace-add-dialog-${workspaceStep()}` : undefined}>
       <form onSubmit={submitNew}><FieldGroup>
-        <Show when={newKind() === "workspace"}><button type="button" class="computer-workspace-picker" disabled={submitting()} onClick={() => { closeNewDialog(); closeMobile(); props.onOpenComputer(); }}><MonitorIcon /><span><strong>Choose in Computer</strong><small>Browse the host, then use Make workspace on any folder.</small></span><ChevronRightIcon /></button></Show>
-        <Show when={newKind() === "workspace"}><div class="workspace-mode-picker" role="radiogroup" aria-label="Workspace action">
-          <button type="button" role="radio" aria-checked={mode() === "linked"} data-selected={mode() === "linked"} disabled={submitting()} onClick={() => selectWorkspaceMode("linked")}><strong>Link existing</strong><small>Use a folder already on this machine. Unlinking keeps it.</small></button>
-          <button type="button" role="radio" aria-checked={mode() === "created"} data-selected={mode() === "created"} disabled={submitting()} onClick={() => selectWorkspaceMode("created")}><strong>Create folder</strong><small>Make an empty folder in an allowed location. It remains yours.</small></button>
-          <button type="button" role="radio" aria-checked={mode() === "cloned"} data-selected={mode() === "cloned"} disabled={submitting()} onClick={() => selectWorkspaceMode("cloned")}><strong>Clone repository</strong><small>Check out a repository into a chosen parent folder.</small></button>
-        </div></Show>
-        <Show when={mode() === "cloned"}><Field><FieldLabel for="folder-clone">GitHub repository or Git URL</FieldLabel><Input id="folder-clone" value={cloneUrl()} disabled={submitting()} placeholder="react/react or https://github.com/org/repo.git" onInput={(event) => setCloneUrl(event.currentTarget.value)} /></Field></Show>
-        <Field><FieldLabel for="folder-name">{mode() === "managed" ? "Display name" : "Display name (optional)"}</FieldLabel><Input id="folder-name" value={name()} disabled={submitting()} placeholder={mode() === "managed" ? "Research" : "My project"} onInput={(event) => setName(event.currentTarget.value)} /></Field>
-        <Show when={mode() === "linked" || mode() === "created" || mode() === "cloned"}><Field><FieldLabel for="folder-path">{mode() === "cloned" || mode() === "created" ? "Parent directory" : "Existing folder"}</FieldLabel><Input id="folder-path" value={path()} disabled={submitting()} list="workspace-path-suggestions" placeholder={workspacePathPlaceholder()} onInput={(event) => { appliedDefaultWorkspacePath = ""; setPath(event.currentTarget.value); }} /><datalist id="workspace-path-suggestions"><For each={props.workspaceSuggestions}>{(item) => <option value={item.displayPath || item.path} label={item.name} />}</For></datalist></Field><p class="workspace-path-hint" role="note">{workspacePathDescription()}</p></Show>
-        <Show when={mode() === "created"}><Field><FieldLabel for="workspace-directory-name">New folder name</FieldLabel><Input id="workspace-directory-name" value={directoryName()} disabled={submitting()} placeholder="my-project" onInput={(event) => setDirectoryName(event.currentTarget.value)} /></Field></Show>
-        <Show when={mode() === "cloned"}><Field><FieldLabel for="clone-directory-name">Folder name (optional)</FieldLabel><Input id="clone-directory-name" value={cloneDirectoryName()} disabled={submitting()} placeholder="Defaults to the repository name" onInput={(event) => setCloneDirectoryName(event.currentTarget.value)} /></Field></Show>
-        <Show when={workspacePreview()}>{(preview) => <div class="workspace-path-preview"><strong>{preview().path}</strong><small>{preview().ownership}</small></div>}</Show>
-        <Show when={previewError()}><p class="workspace-preview-error" role="alert">{previewError()}</p></Show>
-        <div class="flex justify-end gap-2"><Button type="button" variant="outline" disabled={submitting()} onClick={closeNewDialog}>Cancel</Button><Button type="submit" disabled={!canCreate()}>{submitting()
-          ? (mode() === "cloned" ? "Cloning…" : "Creating…")
-          : mode() === "cloned" ? "Clone workspace" : mode() === "linked" ? "Link workspace" : mode() === "created" ? "Create workspace" : "Create folder"}</Button></div>
+        <Show when={newKind() === "workspace" && workspaceStep() === "explore"}><ComputerExplorer dialog projects={props.projects} location={computerPicker()} loading={computerPickerLoading()} error={computerPickerError()} onBrowse={(target) => void browseComputerPicker(target)} onPrefetch={() => {}} onMakeWorkspace={() => {}} onCreateWorkspace={() => {}} onOpenWorkspace={props.onOpenProject} onManageWorkspace={() => {}} onStartWorkspaceAction={() => {}} onOpenView={() => {}} onOpenFile={() => {}} onSelectFolder={() => { selectWorkspaceMode("linked"); setWorkspaceStep("details"); }} onCreateFolder={() => { selectWorkspaceMode("created"); setWorkspaceStep("details"); }} onCloneRepository={() => { selectWorkspaceMode("cloned"); setWorkspaceStep("details"); }} /></Show>
+        <Show when={newKind() === "folder" || workspaceStep() === "details"}>
+          <Show when={mode() === "cloned"}><Field><FieldLabel for="folder-clone">GitHub repository or Git URL</FieldLabel><Input id="folder-clone" value={cloneUrl()} disabled={submitting()} placeholder="react/react or https://github.com/org/repo.git" onInput={(event) => setCloneUrl(event.currentTarget.value)} /></Field></Show>
+          <Field><FieldLabel for="folder-name">{mode() === "managed" ? "Display name" : "Display name (optional)"}</FieldLabel><Input id="folder-name" value={name()} disabled={submitting()} placeholder={mode() === "managed" ? "Research" : "My project"} onInput={(event) => setName(event.currentTarget.value)} /></Field>
+          <Show when={mode() === "created"}><Field><FieldLabel for="workspace-directory-name">New folder name</FieldLabel><Input id="workspace-directory-name" value={directoryName()} disabled={submitting()} placeholder="my-project" onInput={(event) => setDirectoryName(event.currentTarget.value)} /></Field></Show>
+          <Show when={mode() === "cloned"}><Field><FieldLabel for="clone-directory-name">Folder name (optional)</FieldLabel><Input id="clone-directory-name" value={cloneDirectoryName()} disabled={submitting()} placeholder="Defaults to the repository name" onInput={(event) => setCloneDirectoryName(event.currentTarget.value)} /></Field></Show>
+          <Show when={mode() !== "linked" ? workspacePreview() : null}>{(preview) => <div class="workspace-path-preview"><strong>{preview().path}</strong><small>{preview().ownership}</small></div>}</Show>
+          <Show when={previewError()}><p class="workspace-preview-error" role="alert">{previewError()}</p></Show>
+          <div class="flex justify-end gap-2"><Show when={newKind() === "workspace"}><Button type="button" variant="outline" disabled={submitting()} onClick={() => setWorkspaceStep("explore")}>Back</Button></Show><Button type="button" variant="outline" disabled={submitting()} onClick={closeNewDialog}>Cancel</Button><Button type="submit" disabled={!canCreate()}>{submitting() ? (mode() === "cloned" ? "Cloning…" : "Creating…") : mode() === "cloned" ? "Clone workspace" : mode() === "linked" ? "Add workspace" : mode() === "created" ? "Create workspace" : "Create folder"}</Button></div>
+        </Show>
       </FieldGroup></form>
     </Modal>
 

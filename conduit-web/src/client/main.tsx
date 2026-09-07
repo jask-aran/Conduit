@@ -878,6 +878,15 @@ function App() {
       toast.success(`${created.name} is now a workspace`);
     } catch (error) { showError(error); }
   };
+  const openComputerTerminalHere = async () => {
+    const location = computerLocation();
+    if (!location) return;
+    try {
+      const terminal = await api<{ id: string }>("/v0/ptys", { method: "POST", body: JSON.stringify({ projectId: "computer", cwd: location.project.workingRoot }) });
+      window.dispatchEvent(new Event("conduit:ptys-changed"));
+      openWorkspaceView("terminal", terminal.id);
+    } catch (error) { showError(error); }
+  };
 
   const openComputer = (historyMode: "push" | "none" = "push") => {
     chat.reset();
@@ -1813,7 +1822,7 @@ function App() {
         </Show>
         <Show when={routeKind() === "computer"}>
           <ChatHeader title="Computer" panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onNewChat={() => void createChat()} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={() => {}} onUpdatePwa={() => void runPwaUpdate()} pwaUpdating={pwaUpdating} appDashboard />
-          <ComputerDashboard projects={catalogue.projects()} location={computerLocation()} loading={computerLoading()} error={computerError()} onBrowse={(path) => void browseComputer(path)} onPrefetch={prefetchComputerFolder} onMakeWorkspace={() => void designateComputerWorkspace()} onCreateWorkspace={(path) => void createComputerWorkspace(path)} onOpenWorkspace={(project) => void openProject(project)} onManageWorkspace={(action, project) => { if (action === "rename") runSidebar("rename-folder", { project }); else if (action === "identity") openWorkspaceIdentity(project); else runSidebar("delete-project", { project }); }} onOpenView={openWorkspaceView} onOpenFile={(path) => { setComputerFile({ path }); openWorkspaceView("files"); }} />
+          <ComputerDashboard projects={catalogue.projects()} location={computerLocation()} loading={computerLoading()} error={computerError()} onBrowse={(path) => void browseComputer(path)} onPrefetch={prefetchComputerFolder} onMakeWorkspace={() => void designateComputerWorkspace()} onCreateWorkspace={(path) => void createComputerWorkspace(path)} onOpenWorkspace={(project) => void openProject(project)} onManageWorkspace={(action, project) => { if (action === "rename") runSidebar("rename-folder", { project }); else if (action === "identity") openWorkspaceIdentity(project); else runSidebar("delete-project", { project }); }} onStartWorkspaceAction={(action, path) => runSidebar(action === "created" ? "new-workspace-created" : "new-workspace-cloned", { path })} onOpenView={openWorkspaceView} onOpenTerminalHere={() => void openComputerTerminalHere()} onOpenFile={(path) => { setComputerFile({ path }); openWorkspaceView("files"); }} />
         </Show>
         <Show when={routeKind() !== "dashboard" && routeKind() !== "computer"}>
         <Show when={routeKind() === "chat" && meteorField()}>
