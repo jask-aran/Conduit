@@ -116,9 +116,16 @@ Add an entry through `$tacit-knowledge` after explicit approval or validated rep
 ### Animate panel layout through its flex shell
 
 - **Type:** Invariant.
-- **Rule:** Animate docked workspace open and close through the panel shell's real flex width so the main pane changes size with it. Do not commit the final shell width instantly and animate only the panel surface. Keep instant shell geometry only for pointer resizing.
-- **Scope:** Desktop workspace panel open, close, maximize, restore, and resize motion.
-- **Evidence:** The surface-only open and close path made the main pane snap to its final width underneath the sliding panel. The accepted shell-width transition moves both panes together and preserves instant pointer tracking during resize.
+- **Rule:** Animate docked panel open and close through the panel shell's real flex width so adjacent panes change size with it. Capture rendered start geometry before changing reactive state or publishing preferences, then sample the real edge through the transition and finish at its rendered position. Do not commit final shell width first and animate only the surface. Keep instant shell geometry only for pointer resizing.
+- **Scope:** Desktop Workspace and navigation sidebar open, close, maximize, restore, and resize motion.
+- **Evidence:** Surface-only Workspace motion made the main pane snap under the sliding panel. The navigation sidebar published its preference synchronously before capturing its edge, so its own listener replaced the start width and made the transcript overshoot. User validation accepted real shell transitions with rendered-edge sampling on 2026-09-08.
+
+### Persist navigation state before route teardown
+
+- **Type:** Gotcha.
+- **Rule:** Write user-controlled navigation state to its synchronous local owner before publishing or navigating. Ignore the component's synchronous preference-event echo, but continue to apply external preference events. Do not rely on a deferred reactive persistence effect when the route can unmount the owner in the same interaction.
+- **Scope:** Sidebar collapse state and other persisted UI controls whose components unmount across routes.
+- **Evidence:** Returning from `/terminal` rebuilt the sidebar from stale `localStorage` because preference publication preceded local ownership and the persistence effect could lose the teardown race. Immediate local persistence plus self-event suppression preserved the accepted state on 2026-09-08.
 
 ### Keep combined Patch and selected-file Diff separate
 
