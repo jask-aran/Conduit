@@ -208,6 +208,7 @@ export function Sidebar(props: {
   let sidebarEdgeMotionId: number | null = null;
   let sidebarEdgeRaf = 0;
   let finishSidebarMotion: (() => void) | null = null;
+  let publishingSidebarPreference = false;
   let mobileReturnFocus: HTMLElement | null = null;
   let mobileWasOpen = false;
   const cancelSidebarEdgeMotion = () => {
@@ -221,12 +222,21 @@ export function Sidebar(props: {
     sidebarRoot?.removeAttribute("data-edge-instant");
     if (id != null) dispatchPanelGeometryMotion({ phase: "end", id, source: "sidebar", size: shellWidth() });
   };
+  const publishSidebarPreference = (value: boolean) => {
+    localStorage.setItem("conduit.sidebar", value ? "collapsed" : "expanded");
+    publishingSidebarPreference = true;
+    try {
+      publishUiPreference("sidebarCollapsed", value);
+    } finally {
+      publishingSidebarPreference = false;
+    }
+  };
   const toggleSidebar = () => {
     const nextCollapsed = !collapsed();
-    publishUiPreference("sidebarCollapsed", nextCollapsed);
-    const startWidth = shellWidth();
+    const startWidth = sidebarRoot?.getBoundingClientRect().width ?? shellWidth();
     const targetWidth = nextCollapsed ? 41.6 : 195.2;
     cancelSidebarEdgeMotion();
+    publishSidebarPreference(nextCollapsed);
     if (isMobileLayout()) {
       batch(() => {
         setCollapsed(nextCollapsed);
@@ -274,11 +284,13 @@ export function Sidebar(props: {
     finishSidebarMotion = () => {
       if (sidebarEdgeMotionId !== id) return;
       if (sidebarEdgeRaf) cancelAnimationFrame(sidebarEdgeRaf);
+      const finalWidth = sidebarRoot?.getBoundingClientRect().width ?? targetWidth;
+      dispatchPanelGeometryMotion({ phase: "change", id, source: "sidebar", size: finalWidth });
       sidebarEdgeRaf = 0;
       sidebarEdgeMotionId = null;
       finishSidebarMotion = null;
       setVisualCollapsed(nextCollapsed);
-      dispatchPanelGeometryMotion({ phase: "end", id, source: "sidebar", size: targetWidth });
+      dispatchPanelGeometryMotion({ phase: "end", id, source: "sidebar", size: finalWidth });
     };
     sidebarEdgeRaf = requestAnimationFrame(sampleEdge);
   };
@@ -289,6 +301,9 @@ export function Sidebar(props: {
     const syncPreferences = (event: Event) => {
       const detail = (event as CustomEvent<{ key?: string; value?: unknown }>).detail;
       if (detail?.key === "sidebarCollapsed" && typeof detail.value === "boolean") {
+        if (publishingSidebarPreference) return;
+        cancelSidebarEdgeMotion();
+        localStorage.setItem("conduit.sidebar", detail.value ? "collapsed" : "expanded");
         setCollapsed(detail.value);
         setVisualCollapsed(detail.value);
         setShellWidth(detail.value ? 41.6 : 195.2);
