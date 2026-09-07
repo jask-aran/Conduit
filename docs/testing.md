@@ -3,6 +3,17 @@
 Run authenticated and native browser tests against `http://127.0.0.1:4310`.
 Run `npm` commands from `conduit-web/`.
 
+## Verification Tiers & Cost
+
+Always pick the lowest tier that can prove the change. Do not escalate to Tier 3 or Tier 4 during iterative coding turns.
+
+| Tier | Latency | Token Cost | Commands | When to Use |
+| :--- | :--- | :--- | :--- | :--- |
+| **Tier 1: Static & Isolated** | < 2s | **Minimal** (clean exit) | `npm run typecheck`<br>`node --test test/<file>.test.js` | Contract changes, types, server routes, isolated logic. |
+| **Tier 2: Fast Deterministic Harnesses** | < 1s | **Low** (compact JSON) | `node scripts/run-harness.mjs [--profile ...]`<br>`node scripts/bench-renderer.mjs`<br>`curl` with `conduit-auth.mjs mint-session` | WebSocket lifecycles, streaming backpressure, KaTeX/markdown parser, live server HTTP headers. |
+| **Tier 3: Targeted Browser** | 3–8s | **Moderate** | `npx playwright test <file>.js -g "<name>" --project desktop-chromium` | Real DOM interactions, focus/keyboard traps, CSS layout regressions. |
+| **Tier 4: Broad Sweeps & Canaries** | 30s–2m+ | **Prohibitive** (context poison) | `npm test`<br>`npm run test:browser`<br>`npm run test:browser:setpieces` | Release verification only. **Do not run during iterative coding turns.** |
+
 ## Local authentication
 
 Mint a session without using the password:

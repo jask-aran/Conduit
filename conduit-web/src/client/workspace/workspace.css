@@ -1,13 +1,12 @@
 /* Workspace panel geometry, file views, and artifact surfaces. */
-.workspace-panel { position: relative; display: flex; width: 0; height: calc(100dvh - 12.8px); margin: 6.4px 0 6.4px 0; flex: none; overflow: visible; pointer-events: none; border-radius: 12.8px; transition: width var(--panel-motion-duration) var(--panel-motion-easing), margin-right var(--panel-motion-duration) var(--panel-motion-easing); }
+.workspace-panel { position: relative; display: flex; width: 0; height: calc(100dvh - 12.8px); margin: 6.4px 0 6.4px 0; flex: none; overflow: visible; pointer-events: none; border-radius: 12.8px; transition: width 220ms var(--panel-motion-easing), margin-right 220ms var(--panel-motion-easing); }
 .workspace-panel[data-shortcut-scope="workspace-panel"]:focus-within .workspace-panel-header strong,
 body:has(.workspace-file-menu[data-expanded]) .workspace-panel[data-shortcut-scope="workspace-panel"] .workspace-panel-header strong { color: var(--shortcut-focus); }
 .workspace-panel.workspace-panel-open { pointer-events: auto; background: var(--background); }
 .workspace-panel[data-edge-instant="true"],
 body.workspace-resizing .workspace-panel { transition: none !important; }
 /* Surface keeps settled panel width, right-anchored inside the shell. */
-.workspace-panel-surface { position: absolute; top: 0; right: 0; display: flex; width: var(--workspace-panel-width); min-width: 0; height: 100%; contain: layout paint; container-name: workspace-surface; container-type: inline-size; flex: none; flex-direction: column; overflow: hidden; border: 0.8px solid transparent; border-radius: 12.8px; background: var(--background); opacity: 0; transform: translateX(100%); }
-.workspace-panel-open .workspace-panel-surface { border-color: var(--border); opacity: 1; transform: translateX(0); }
+.workspace-panel-surface { position: absolute; inset: 0; display: flex; min-width: 0; height: 100%; contain: layout paint; container-name: workspace-surface; container-type: inline-size; flex: none; flex-direction: column; overflow: hidden; border: 0.8px solid var(--border); border-radius: 12.8px; background: var(--background); }
 .workspace-panel-surface > * { max-width: 100%; }
 .workspace-panel-header { display: flex; min-height: 32px; flex: none; align-items: center; gap: 6.4px; padding: 3.2px 6.4px 3.2px 11.2px; border-bottom: 1px solid var(--border); container-type: inline-size; }
 .workspace-panel-header strong { font-size: 11.2px; }
@@ -15,7 +14,6 @@ body.workspace-resizing .workspace-panel { transition: none !important; }
 .chat-main.workspace-expanded { margin-inline: 0; pointer-events: none; }
 .workspace-panel.workspace-panel-expanded { width: calc(100% - 8px) !important; }
 /* Match the shell during expansion; retain the fixed surface for open/close. */
-.workspace-panel:not([data-edge-instant="true"]) .workspace-panel-surface { inset: 0; width: auto; }
 .workspace-panel-expanded .workspace-panel-surface { inset: 0; width: auto; }
 .workspace-layout { overflow: hidden; }
 .workspace-panel-expanded .workspace-resize-handle { display: none; }
@@ -343,13 +341,12 @@ body.workspace-resizing .workspace-panel { transition: none !important; }
 /* Mobile retains v0.5.2 density. */
 @media (--conduit-phone-layout) {
 /* Workspace panel geometry, file views, and artifact surfaces. */
-.workspace-panel { position: relative; display: flex; width: 0; height: calc(100dvh - 16px); margin: 8px 0 8px 0; flex: none; overflow: visible; pointer-events: none; border-radius: 16px; transition: width var(--panel-motion-duration) var(--panel-motion-easing), margin-right var(--panel-motion-duration) var(--panel-motion-easing); }
+.workspace-panel { position: relative; display: flex; width: 0; height: calc(100dvh - 16px); margin: 8px 0 8px 0; flex: none; overflow: visible; pointer-events: none; border-radius: 16px; transition: width 220ms var(--panel-motion-easing), margin-right 220ms var(--panel-motion-easing); }
 .workspace-panel.workspace-panel-open { pointer-events: auto; background: var(--background); }
 .workspace-panel[data-edge-instant="true"],
 body.workspace-resizing .workspace-panel { transition: none !important; }
 /* Surface keeps settled panel width, right-anchored inside the shell. */
-.workspace-panel-surface { position: absolute; top: 0; right: 0; display: flex; width: var(--workspace-panel-width); min-width: 0; height: 100%; contain: layout paint; flex: none; flex-direction: column; overflow: hidden; border: 1px solid transparent; border-radius: 16px; background: var(--background); opacity: 0; transform: translateX(100%); }
-.workspace-panel-open .workspace-panel-surface { border-color: var(--border); opacity: 1; transform: translateX(0); }
+.workspace-panel-surface { position: absolute; inset: 0; display: flex; min-width: 0; height: 100%; contain: layout paint; flex: none; flex-direction: column; overflow: hidden; border: 1px solid var(--border); border-radius: 16px; background: var(--background); }
 .workspace-panel-surface > * { max-width: 100%; }
 .workspace-panel-header { display: flex; min-height: 40px; flex: none; align-items: center; justify-content: space-between; padding: 4px 8px 4px 14px; border-bottom: 1px solid var(--border); }
 .workspace-panel-header strong { font-size: 14px; }

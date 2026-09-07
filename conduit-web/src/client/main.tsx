@@ -931,6 +931,10 @@ function App() {
   };
 
   const openChat = async (target: ChatSummary, project: Project) => {
+    if (target.unread) {
+      catalogue.patchChat(target.id, { unread: false });
+      void api<ChatSummary>(`/v0/sessions/${encodeURIComponent(target.id)}/read`, { method: "POST" }).catch(showError);
+    }
     if (target.id === catalogue.selectedId() && routeKind() === "chat") return;
     const abandonedDraftId = currentDraftId();
     try {
@@ -1400,7 +1404,15 @@ function App() {
         .catch((error) => { showError(error); });
     };
     window.addEventListener(UI_PREFERENCE_CHANGE_EVENT, persistUiPreference);
-    onCleanup(() => window.removeEventListener(UI_PREFERENCE_CHANGE_EVENT, persistUiPreference));
+    const applyChangedChat = (event: Event) => {
+      const changed = (event as CustomEvent<ChatSummary>).detail;
+      if (changed?.id) catalogue.patchChat(changed.id, changed);
+    };
+    window.addEventListener("conduit:chat-changed", applyChangedChat);
+    onCleanup(() => {
+      window.removeEventListener(UI_PREFERENCE_CHANGE_EVENT, persistUiPreference);
+      window.removeEventListener("conduit:chat-changed", applyChangedChat);
+    });
 
     const localVoice = loadVoiceDictationSettings();
     const parseStringArray = (key: string) => {

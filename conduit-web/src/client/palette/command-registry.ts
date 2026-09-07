@@ -278,7 +278,7 @@ function chatCommands(context: PaletteContext): PaletteCommand[] {
   const sort = context.chatSort === "created" ? "created" : "latest";
   const stamp = (session: ChatSummary) => sort === "created"
     ? session.createdAt || ""
-    : session.updatedAt || session.createdAt || "";
+    : session.lastMessageAt || session.createdAt || "";
   const projects = Array.isArray(context.projects) ? context.projects : [];
   const rows: { project: Project; session: ChatSummary }[] = [];
   for (const project of projects) {

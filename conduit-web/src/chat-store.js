@@ -164,8 +164,9 @@ export class ChatStore {
         ? item.status === "active" || item.status === "persisted" || Boolean(item.file)
         : item.status === "active";
       if (active && (!piSessionFile || !await fileExists(piSessionFile)) && !nativeRuntime) continue;
+      let sessionMetadata = null;
       if (piSessionFile && await fileExists(piSessionFile)) {
-        try { await readSessionMetadata(piSessionFile, project); }
+        try { sessionMetadata = await readSessionMetadata(piSessionFile, project); }
         catch { if (!nativeRuntime) continue; }
       }
       if (!active && piSessionFile && !await fileExists(piSessionFile)) piSessionFile = null;
@@ -185,6 +186,10 @@ export class ChatStore {
         modelThinkingLevels: modelThinkingLevelsFor(item),
         createdAt,
         updatedAt: item.updatedAt || createdAt,
+        lastUserMessageAt: item.lastUserMessageAt || sessionMetadata?.lastUserMessageAt || null,
+        lastAssistantCompletedAt: item.lastAssistantCompletedAt || sessionMetadata?.lastAssistantCompletedAt || null,
+        lastMessageAt: item.lastMessageAt || sessionMetadata?.lastMessageAt || null,
+        unread: Boolean(item.unread),
       };
       let hasAttachments = false;
       try {
@@ -236,6 +241,10 @@ export class ChatStore {
               modelThinkingLevels: {},
               createdAt: session.createdAt,
               updatedAt: session.updatedAt,
+              lastUserMessageAt: session.lastUserMessageAt || null,
+              lastAssistantCompletedAt: session.lastAssistantCompletedAt || null,
+              lastMessageAt: session.lastMessageAt || null,
+              unread: false,
             };
             await this.ensureDirectories(project, id);
             await this.removePartials(project, id);
@@ -338,6 +347,10 @@ export class ChatStore {
       modelThinkingLevels: {},
       createdAt: timestamp,
       updatedAt: timestamp,
+      lastUserMessageAt: null,
+      lastAssistantCompletedAt: null,
+      lastMessageAt: null,
+      unread: false,
     };
     await this.ensureDirectories(project, chat.id);
     this.chats.push(chat);
@@ -345,15 +358,21 @@ export class ChatStore {
     return chat;
   }
 
-  async commitSession(chatId, session) {
+  async commitSession(chatId, session, { markUnread = false } = {}) {
     const chat = this.metadata(chatId);
     if (!chat) return null;
+    const previousAssistantCompletedAt = chat.lastAssistantCompletedAt;
     Object.assign(chat, {
       status: "active",
       piSessionId: session.nativeId || session.id || chat.piSessionId,
       piSessionFile: path.resolve(session.file),
       updatedAt: session.updatedAt || new Date(this.now()).toISOString(),
+      lastUserMessageAt: session.lastUserMessageAt || chat.lastUserMessageAt || null,
+      lastAssistantCompletedAt: session.lastAssistantCompletedAt || chat.lastAssistantCompletedAt || null,
+      lastMessageAt: session.lastMessageAt || chat.lastMessageAt || null,
     });
+    if (markUnread && session.lastAssistantCompletedAt
+      && session.lastAssistantCompletedAt !== previousAssistantCompletedAt) chat.unread = true;
     await this.flush();
     return chat;
   }
@@ -367,7 +386,7 @@ export class ChatStore {
     return true;
   }
 
-  async syncFile(chatId, file, project, { waitForFileMs = 0 } = {}) {
+  async syncFile(chatId, file, project, { waitForFileMs = 0, markUnread = false } = {}) {
     const deadline = Date.now() + waitForFileMs;
     let session;
     while (!session) {
@@ -379,7 +398,7 @@ export class ChatStore {
         await new Promise((resolve) => setTimeout(resolve, 20));
       }
     }
-    await this.commitSession(chatId, session);
+    await this.commitSession(chatId, session, { markUnread });
     return session;
   }
 
@@ -396,6 +415,10 @@ export class ChatStore {
       "piSessionFile",
       "modelThinkingLevels",
       "updatedAt",
+      "lastUserMessageAt",
+      "lastAssistantCompletedAt",
+      "lastMessageAt",
+      "unread",
     ];
     for (const key of allowed) if (Object.hasOwn(patch, key)) chat[key] = patch[key];
     chat.modelThinkingLevels = modelThinkingLevelsFor(chat);
@@ -407,6 +430,19 @@ export class ChatStore {
     if (patch.status === "draft" || patch.status === "active") chat.status = patch.status;
     if (chat.piSessionFile) chat.piSessionFile = path.resolve(chat.piSessionFile);
     if (!patch.updatedAt) chat.updatedAt = new Date(this.now()).toISOString();
+    await this.flush();
+    return chat;
+  }
+
+  async markUserMessage(chatId) {
+    const timestamp = new Date(this.now()).toISOString();
+    return this.update(chatId, { lastUserMessageAt: timestamp, lastMessageAt: timestamp });
+  }
+
+  async markRead(chatId) {
+    const chat = this.metadata(chatId);
+    if (!chat || !chat.unread) return chat;
+    chat.unread = false;
     await this.flush();
     return chat;
   }

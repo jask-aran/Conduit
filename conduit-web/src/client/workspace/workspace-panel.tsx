@@ -9,7 +9,7 @@ import { COMMAND_IDS } from "../commands/command-registry";
 import { focusFirst, isMobileLayout, restoreFocus } from "../navigation/mobile-layout";
 import { ownsWorkspaceRequest, type WorkspaceRequest } from "./request-ownership";
 import { TerminalPane } from "../remotes/terminal-pane";
-import { dispatchPanelGeometryMotion, PANEL_MOTION_DURATION_MS } from "../panel-motion";
+import { dispatchPanelGeometryMotion } from "../panel-motion";
 import type { ShortcutManager } from "../shortcuts/shortcut-manager";
 import { FileTypeIcon, FolderTypeIcon } from "./file-type-icon";
 import WorkspaceFileSlot, { type FileSlotHandle, type FileSummary } from "./workspace-file-slot";
@@ -149,7 +149,6 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
   const requests = new Map<string, WorkspaceRequest>();
   const requestControllers = new Map<number, AbortController>();
   let panelRoot: HTMLElement | undefined;
-  let panelSurface: HTMLDivElement | undefined;
   let resizeHandle: HTMLDivElement | undefined;
   let detailHost: HTMLElement | undefined;
   let sourceDetailHost: HTMLElement | undefined;
@@ -161,13 +160,10 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
   let fileUploadInput: HTMLInputElement | undefined;
   let filesResizeObserver: ResizeObserver | undefined;
   let splitResizeObserver: ResizeObserver | undefined;
-  let panelEdgeMotionId: number | null = null;
   let panelMotionId = 0;
-  let panelEdgeRaf = 0;
   let treeScrollRaf = 0;
   let treeTypeaheadTimer = 0;
   let treeTypeahead = "";
-  let panelSurfaceMotion: Animation | null = null;
   let mobileReturnFocus: HTMLElement | null = null;
   let mobileWasOpen = false;
   const [pending, setPending] = createSignal(new Map<number, { foreground: boolean }>());
@@ -304,127 +300,15 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
   document.addEventListener("visibilitychange", updateDocumentVisibility);
   window.addEventListener("online", updateNetworkOnline);
   window.addEventListener("offline", updateNetworkOffline);
-  // The lazy panel can mount already open when invoked from the shortcut.
-  // Its first visible state still needs the same entrance animation.
   let panelWasOpen = false;
-  const cancelPanelEdgeMotion = () => {
-    if (panelEdgeRaf) {
-      cancelAnimationFrame(panelEdgeRaf);
-      panelEdgeRaf = 0;
-    }
-    panelRoot?.removeAttribute("data-edge-instant");
-  };
-  const surfaceTranslateX = () => {
-    if (!panelSurface) return 0;
-    const transform = getComputedStyle(panelSurface).transform;
-    if (transform === "none") return 0;
-    return new DOMMatrixReadOnly(transform).m41;
-  };
-  const cancelPanelSurfaceMotion = () => {
-    const current = panelSurfaceMotion ? surfaceTranslateX() : null;
-    panelSurfaceMotion?.cancel();
-    panelSurfaceMotion = null;
-    return current;
-  };
-  const clearPanelSurfaceMotion = () => {
-    panelSurfaceMotion?.cancel();
-    panelSurfaceMotion = null;
-    panelSurface?.style.removeProperty("transform");
-    panelSurface?.style.removeProperty("opacity");
-    panelSurface?.style.removeProperty("will-change");
-  };
-  const settlePanelEdgeMotion = () => {
-    if (panelEdgeMotionId == null) return;
-    const id = panelEdgeMotionId;
-    cancelPanelEdgeMotion();
-    panelEdgeMotionId = null;
-    clearPanelSurfaceMotion();
-    dispatchPanelGeometryMotion({
-      phase: "end",
-      id,
-      source: "workspace",
-      size: shellWidth() + shellGap(),
-    });
-  };
   const animatePanelGeometry = (open: boolean) => {
     const mobile = isMobileLayout();
-    const startWidth = shellWidth();
-    const startGap = shellGap();
     const targetWidth = open ? width() : 0;
     const targetGap = open && !mobile ? 8 : 0;
-    const startSize = startWidth + startGap;
-    const targetSize = targetWidth + targetGap;
-    // A direct maximized open slides the full surface, not the docked width.
-    const surfaceWidth = open && props.expanded() && panelRoot?.parentElement
-      ? panelRoot.parentElement.clientWidth - targetGap
-      : panelSurface?.getBoundingClientRect().width || width();
-    const currentSurfaceX = cancelPanelSurfaceMotion();
-    cancelPanelEdgeMotion();
-    clearPanelSurfaceMotion();
-    if (mobile) {
-      panelEdgeMotionId = null;
-      batch(() => {
-        setShellWidth(targetWidth);
-        setShellGap(targetGap);
-      });
-      return;
-    }
-    if (!panelRoot || !panelSurface || matchMedia("(prefers-reduced-motion: reduce)").matches) {
-      panelEdgeMotionId = null;
-      panelRoot?.setAttribute("data-edge-instant", "true");
-      batch(() => {
-        setShellWidth(targetWidth);
-        setShellGap(targetGap);
-      });
-      requestAnimationFrame(() => panelRoot?.removeAttribute("data-edge-instant"));
-      return;
-    }
-    const id = ++panelMotionId;
-    panelEdgeMotionId = id;
-    const startSurfaceX = currentSurfaceX ?? (panelWasOpen ? 0 : surfaceWidth);
-    const targetSurfaceX = open ? 0 : surfaceWidth;
-    panelRoot.setAttribute("data-edge-instant", "true");
-    dispatchPanelGeometryMotion({
-      phase: "begin",
-      id,
-      source: "workspace",
-      size: startSize,
-      targetSize,
-      duration: PANEL_MOTION_DURATION_MS,
-      easing: "ease",
-    });
-    panelSurface.style.opacity = "1";
-    panelSurface.style.willChange = "transform";
-    panelSurface.style.transform = `translateX(${startSurfaceX}px)`;
     batch(() => {
       setShellWidth(targetWidth);
       setShellGap(targetGap);
     });
-    const animation = panelSurface.animate([
-      { transform: `translateX(${startSurfaceX}px)` },
-      { transform: `translateX(${targetSurfaceX}px)` },
-    ], {
-      duration: PANEL_MOTION_DURATION_MS,
-      easing: "ease",
-      fill: "forwards",
-    });
-    panelSurfaceMotion = animation;
-    animation.onfinish = () => {
-      if (panelSurfaceMotion !== animation || panelEdgeMotionId !== id) return;
-      panelSurfaceMotion = null;
-      panelEdgeMotionId = null;
-      panelSurface.style.removeProperty("transform");
-      panelSurface.style.removeProperty("opacity");
-      panelSurface.style.removeProperty("will-change");
-      dispatchPanelGeometryMotion({
-        phase: "end",
-        id,
-        source: "workspace",
-        size: targetSize,
-        targetSize,
-      });
-      panelRoot.removeAttribute("data-edge-instant");
-    };
   };
 
   const selectTab = (next: PanelTab) => {
@@ -1235,7 +1119,6 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
     let frame = 0;
     let stopped = false;
     const id = ++panelMotionId;
-    settlePanelEdgeMotion();
     // Open/close uses CSS width transition; resize must not, or the shell lags
     // the pointer and the gutter/transcript fight the ease.
     panelRoot?.setAttribute("data-edge-instant", "true");
@@ -1291,8 +1174,6 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
   };
   onCleanup(() => {
     resetRequestScope();
-    cancelPanelEdgeMotion();
-    clearPanelSurfaceMotion();
     stopResize?.();
       stopDetailResize?.();
       stopSourceDetailResize?.();
@@ -1670,7 +1551,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
     </Show>
     <aside ref={panelRoot} class="workspace-panel" data-shortcut-scope="workspace-panel" classList={{ "workspace-panel-open": props.open() || shellWidth() > 0.5, "workspace-panel-expanded": props.expanded() }} aria-label="Workspace panel" aria-hidden={!props.open()} inert={!props.open()} style={{ "--workspace-panel-width": `${width()}px`, "--workspace-shell-width": `${shellWidth()}px`, width: `${shellWidth()}px`, "margin-right": `${shellGap()}px` }}>
     <div ref={resizeHandle} class="workspace-resize-handle" role="separator" aria-label="Resize workspace panel" aria-orientation="vertical" aria-valuemin={MIN_WORKSPACE_PANE_WIDTH} aria-valuemax={Math.floor(window.innerWidth * 0.65)} aria-valuenow={width()} tabIndex={0} onPointerDown={startResize} onKeyDown={(event) => { if (event.key === "ArrowLeft") saveWidth(width() + 16); if (event.key === "ArrowRight") saveWidth(width() - 16); }} />
-    <div ref={panelSurface} class="workspace-panel-surface" onPointerDown={focusWorkspaceSurface}>
+    <div class="workspace-panel-surface" onPointerDown={focusWorkspaceSurface}>
     <header class="workspace-panel-header" data-split={splitActive() ? "true" : undefined} style={{ "--workspace-split-ratio": `${splitRatio()}%` }}>
       <div class="workspace-pane-strip" data-position="left"><strong title={props.workingRoot()}>Workspace</strong>{paneTabs("left")}</div>
       <div class="workspace-pane-strip" data-position="right">

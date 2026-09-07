@@ -27,6 +27,7 @@ export function createLiveSessionStream({
   async function sendPrompt(record, prepared, options) {
     const needsName = !prepared.context.chat.title && !namingChats.has(prepared.context.chat.id);
     const generationId = await manager.promptAccepted(record.id, prepared.prompt, options);
+    await registry.markUserMessage(prepared.context.chat.id);
     if (prepared.context.chat.status === "draft") {
       await registry.update(prepared.context.chat.id, {
         status: "active",

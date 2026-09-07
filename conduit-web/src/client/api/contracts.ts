@@ -16,6 +16,10 @@ export interface ChatSummary {
   runtime?: RuntimeIdentity;
   createdAt?: string;
   updatedAt?: string;
+  lastUserMessageAt?: string | null;
+  lastAssistantCompletedAt?: string | null;
+  lastMessageAt?: string | null;
+  unread?: boolean;
   /** Server-side live snapshot for offline indicator fallback (SSE owns truth while online). */
   liveStatus?: string | null;
   liveActivity?: string | null;

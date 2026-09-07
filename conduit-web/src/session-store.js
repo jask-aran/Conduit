@@ -27,6 +27,7 @@ const sessionIndexRefreshes = new Map();
 
 function consumeIndexedEntry(index, entry, offset, end) {
   const content = entry.type === "message" ? textContent(entry.message?.content) : "";
+  const timestamp = typeof entry.timestamp === "string" ? entry.timestamp : null;
   index.records.push({
     offset,
     end,
@@ -42,6 +43,7 @@ function consumeIndexedEntry(index, entry, offset, end) {
     if (prompt !== CONTINUE_PROMPT) index.firstMessage = parseAttachmentEnvelope(prompt).message.trim();
   }
   if (entry.type === "message" && entry.message?.role === "user") {
+    if (content.trim() !== CONTINUE_PROMPT && timestamp) index.lastUserMessageAt = timestamp;
     for (const attachment of parseAttachmentEnvelope(content).attachments) {
       if (attachment.id) index.announcedAttachmentIds.add(attachment.id);
     }
@@ -54,6 +56,7 @@ function consumeIndexedEntry(index, entry, offset, end) {
     && entry.message.provider && entry.message.model) {
     index.model = `${entry.message.provider}/${entry.message.model}`;
   }
+  if (entry.type === "message" && entry.message?.role === "assistant" && timestamp) index.lastAssistantCompletedAt = timestamp;
 }
 
 function parseIndexedBuffer(index, buffer, baseOffset) {
@@ -92,6 +95,8 @@ async function buildSessionIndex(file, stat) {
     firstMessage: "",
     model: null,
     thinkingLevel: "",
+    lastUserMessageAt: null,
+    lastAssistantCompletedAt: null,
     announcedAttachmentIds: new Set(),
     prefixLength: Math.min(buffer.length, 4096),
     prefixHash: crypto.createHash("sha256").update(buffer.subarray(0, 4096)).digest("hex"),
@@ -157,6 +162,7 @@ async function sessionIndex(file) {
 }
 
 function sessionMetadata(file, project, stat, index) {
+  const lastMessageAt = [index.lastUserMessageAt, index.lastAssistantCompletedAt].filter(Boolean).sort().at(-1) || null;
   return {
     id: sessionIdFor(file, index.header?.id),
     nativeId: index.header?.id || null,
@@ -167,6 +173,9 @@ function sessionMetadata(file, project, stat, index) {
     title: index.name || index.firstMessage.slice(0, 72) || "New chat",
     createdAt: index.header?.timestamp || stat.birthtime.toISOString(),
     updatedAt: stat.mtime.toISOString(),
+    lastUserMessageAt: index.lastUserMessageAt,
+    lastAssistantCompletedAt: index.lastAssistantCompletedAt,
+    lastMessageAt,
     cwd: index.header?.cwd || project.workingRoot,
     file,
     model: index.model,
@@ -308,6 +317,8 @@ export async function parseSession(file, project) {
   let header = null;
   let name = null;
   let firstMessage = "";
+  let lastUserMessageAt = null;
+  let lastAssistantCompletedAt = null;
   for (const line of raw.split("\n")) {
     if (!line.trim()) continue;
     try {
@@ -319,9 +330,13 @@ export async function parseSession(file, project) {
         const content = textContent(entry.message.content).trim();
         if (content !== CONTINUE_PROMPT) firstMessage = parseAttachmentEnvelope(content).message.trim();
       }
+      if (entry.type === "message" && entry.message?.role === "user"
+        && textContent(entry.message.content).trim() !== CONTINUE_PROMPT && typeof entry.timestamp === "string") lastUserMessageAt = entry.timestamp;
+      if (entry.type === "message" && entry.message?.role === "assistant" && typeof entry.timestamp === "string") lastAssistantCompletedAt = entry.timestamp;
     } catch {}
   }
   const stat = await fs.stat(file);
+  const lastMessageAt = [lastUserMessageAt, lastAssistantCompletedAt].filter(Boolean).sort().at(-1) || null;
   return {
     id: sessionIdFor(file, header?.id),
     nativeId: header?.id || null,
@@ -332,6 +347,9 @@ export async function parseSession(file, project) {
     title: name || firstMessage.slice(0, 72) || "New chat",
     createdAt: header?.timestamp || stat.birthtime.toISOString(),
     updatedAt: stat.mtime.toISOString(),
+    lastUserMessageAt,
+    lastAssistantCompletedAt,
+    lastMessageAt,
     cwd: header?.cwd || project.workingRoot,
     file,
     entries,

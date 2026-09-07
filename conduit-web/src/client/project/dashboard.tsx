@@ -395,7 +395,7 @@ export function ProjectDashboard(props: {
                       <strong>{item.title || "Untitled chat"}</strong>
                       <small>{props.project.name}{compactDate(item.createdAt) ? ` · ${compactDate(item.createdAt)}` : ""}</small>
                     </span>
-                    <time dateTime={item.updatedAt || item.createdAt}>{relativeActivity(item.updatedAt || item.createdAt, now())}</time>
+                    <time dateTime={item.lastMessageAt || item.createdAt}>{relativeActivity(item.lastMessageAt || item.createdAt, now())}</time>
                     <ArrowRightIcon />
                   </ContextMenuTrigger><ContextMenuContent class="w-60 sidebar-context-menu"><ContextMenuGroup>
                     <ContextMenuItem onSelect={() => props.onContextAction("rename-chat", { chat: item, project: props.project })}><PencilIcon />{commandLabel(COMMAND_IDS.renameChat)}</ContextMenuItem>

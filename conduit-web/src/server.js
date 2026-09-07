@@ -404,7 +404,7 @@ manager.on("event", ({ record, event }) => {
   pendingCheckpoints.add(checkpointId);
   setTimeout(() => {
     projects.get(record.projectId)
-      .then((project) => project && registry.syncFile(record.chatId, record.sessionFile, project, { waitForFileMs: 2000 }))
+      .then((project) => project && registry.syncFile(record.chatId, record.sessionFile, project, { waitForFileMs: 2000, markUnread: true }))
       .then(async (session) => {
         if (!session) return null;
         await sessionNameTasks.get(record.chatId)?.catch(() => {});
@@ -418,6 +418,7 @@ manager.on("event", ({ record, event }) => {
           chat: chatView(registry.metadata(record.chatId)),
         };
         manager.publish(record, record.lastCheckpoint);
+        runtimeHub.publish({ type: "chat_changed", chat: record.lastCheckpoint.chat, at: new Date().toISOString() });
         return session;
       })
       .catch((error) => console.error("Could not checkpoint the session registry", error))
